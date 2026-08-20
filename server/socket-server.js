@@ -1856,44 +1856,22 @@ async function requireSocketUser(socket, errorEvent = 'authError') {
   return user
 }
 
-/* ────────────────────────────────────────────────────────────
- *  Discord chat relay — /chat namespace
- *
- *  A NAMESPACE, not a second connection: socket.io-client multiplexes
- *  namespaces over one engine.io transport, so on a page that already has a
- *  game socket open the chat rides it for free, and on any other page it costs
- *  one connection. A second io() would instead register all ~49 game handlers
- *  from io.on('connection') on a socket that needs three of them, and would pay
- *  a fresh 5-request polling handshake every time the panel is opened.
- *
- *  The gateway itself lives in server/workers/discord-chat.worker.js — see that
- *  file's header for why it is a separate process. This side only fans out what
- *  that process publishes, and relays sends outbound.
- * ────────────────────────────────────────────────────────── */
+/* ── Discord chat relay — /chat namespace ─────────────────────────────────
+ * A namespace, not a second connection, so it rides an existing game socket's
+ * transport for free. Gateway lives in server/workers/discord-chat.worker.js;
+ * this side fans out what that process publishes and relays sends outbound. */
 const chatNsp = io.of('/chat')
 const CHAT_ROOM = 'discord-chat'
 const CHAT_JOIN_COOLDOWN_MS = 2000
 const GUILD_CHECK_TTL_SECONDS = 300
 
 const chatRedis = getRedis()
-// Subscriber connections cannot issue ordinary commands, so this is its own.
-const chatSub = chatRedis.duplicate()
+const chatSub = chatRedis.duplicate() // subscriber mode can't serve ordinary commands
 
-/**
- * Confirms the user is still in the Discord guild.
- *
- * This deliberately does NOT trust User.inGuild. That column defaults to true
- * and is only refreshed by the hourly guild-sync cron, because
- * server/middleware/guild-check.js calls refreshDiscordTokenAndRoles(prisma,
- * user, config) against a (user, config) signature — the arguments are shifted,
- * so the function early-returns and the live re-check has never run. That is a
- * pre-existing bug and fixing it is out of scope here (it would put two Discord
- * API calls on every authenticated request), but it does mean the flag cannot
- * be the gate for writing into Discord.
- *
- * Cached in Redis so a chatty user costs at most one membership check per five
- * minutes.
- */
+// Live-checks membership rather than trusting User.inGuild, which is only
+// refreshed by the hourly guild-sync cron (see refreshDiscordTokenAndRoles —
+// its call sites pass the wrong arg order and the refresh never actually
+// runs). Cached in Redis so a chatty user costs one check per 5 minutes.
 async function verifyGuildMembership(discordId) {
   const guildId = process.env.DISCORD_GUILD_ID
   const token = rawBotToken()
@@ -1903,38 +1881,22 @@ async function verifyGuildMembership(discordId) {
   try {
     const cached = await chatRedis.get(key)
     if (cached !== null) return cached === '1'
-  } catch {
-    // fall through to a live check
-  }
+  } catch {}
 
   let member = false
   try {
-    const res = await discordFetch(`/guilds/${guildId}/members/${discordId}`, {
-      auth: botAuth(token),
-      attempts: 1
-    })
+    const res = await discordFetch(`/guilds/${guildId}/members/${discordId}`, { auth: botAuth(token), attempts: 1 })
     member = Boolean(res?.user?.id || res?.roles)
   } catch {
-    // 404 means not a member; anything else is treated as "not verified" so the
-    // relay fails closed.
-    member = false
+    member = false // 404 = not a member; anything else fails closed
   }
-  try {
-    await chatRedis.set(key, member ? '1' : '0', 'EX', GUILD_CHECK_TTL_SECONDS)
-  } catch {
-    // best effort
-  }
+  try { await chatRedis.set(key, member ? '1' : '0', 'EX', GUILD_CHECK_TTL_SECONDS) } catch {}
   return member
 }
 
-/**
- * Resolves the caller and re-reads the fields that gate chat.
- *
- * resolveSocketUser() selects only {id, username, banned} and caches the result
- * for the life of the connection, which is right for game handlers but wrong
- * here: a chat panel stays open for hours, so a user banned or muted mid-session
- * would keep posting into Discord until they closed the tab.
- */
+// resolveSocketUser() caches {id, username, banned} for the connection's
+// life, which is fine for game handlers but not for a panel open for hours —
+// a user banned or muted mid-session must be caught on their next message.
 async function resolveChatMember(socket, { forSending }) {
   const base = await requireSocketUser(socket, 'chat:error')
   if (!base) return null
@@ -1964,10 +1926,8 @@ async function resolveChatMember(socket, { forSending }) {
     return null
   }
 
-  // Reading is gated on the cached flag only. Every /newsite page already
-  // redirects a non-member away (middleware/newsite.js), so this is a
-  // belt-and-braces check rather than the primary control, and it must not put
-  // a Discord API call on every panel open.
+  // Belt-and-braces on read (middleware/newsite.js already gates the page);
+  // live-verified on send, since that's the side that can cause real harm.
   if (!row.inGuild) {
     socket.emit('chat:error', { reason: 'not_in_guild' })
     return null
@@ -1978,8 +1938,6 @@ async function resolveChatMember(socket, { forSending }) {
       socket.emit('chat:error', { reason: 'muted' })
       return null
     }
-    // Writing into Discord gets the live check, because this is the side that
-    // can cause harm in someone else's community.
     const stillMember = await verifyGuildMembership(row.discordId)
     if (!stillMember) {
       socket.emit('chat:error', { reason: 'not_in_guild' })
@@ -2012,8 +1970,7 @@ async function emitChatState(target) {
 
 chatNsp.on('connection', (socket) => {
   socket.on('chat:join', async () => {
-    // Cheap guard against a client looping join to farm buffer snapshots.
-    const now = Date.now()
+    const now = Date.now() // cooldown guards against a client looping join
     if (socket.data.lastChatJoin && now - socket.data.lastChatJoin < CHAT_JOIN_COOLDOWN_MS) return
     socket.data.lastChatJoin = now
 
@@ -2028,8 +1985,7 @@ chatNsp.on('connection', (socket) => {
 
     socket.join(CHAT_ROOM)
     await emitChatState(socket)
-    // A full snapshot the client REPLACES rather than merges, so a client that
-    // missed a delete while disconnected self-heals on rejoin.
+    // Client REPLACES its list from this, so it self-heals a missed delete.
     socket.emit('chat:snapshot', { messages: await bufferSnapshot(chatRedis) })
   })
 
@@ -2053,41 +2009,18 @@ chatNsp.on('connection', (socket) => {
       return
     }
 
-    // Hashed, never raw. encryptIp is deterministic, which is exactly what a
-    // rate-limit key needs, and it returns null rather than the plaintext if the
-    // key is missing.
-    const rawIp =
-      socket.handshake.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
-      socket.handshake.address
+    // Hashed via encryptIp (deterministic) for the alt-account rate-limit key.
+    const rawIp = socket.handshake.headers['x-forwarded-for']?.split(',')[0]?.trim() || socket.handshake.address
     let ipHash = null
-    try {
-      ipHash = encryptIp(rawIp)
-    } catch {
-      ipHash = null
-    }
+    try { ipHash = encryptIp(rawIp) } catch { ipHash = null }
 
     try {
-      const messageId = await relayMessage(chatRedis, {
-        user: member,
-        rawContent: content,
-        config,
-        webhook,
-        baseUrl: chatBaseUrl(),
-        ipHash
-      })
-      // The id lets the client reconcile its optimistic bubble against the
-      // gateway echo. Matching on content instead would collide whenever two
-      // people send the same text in the same second.
+      const messageId = await relayMessage(chatRedis, { user: member, rawContent: content, config, webhook, baseUrl: chatBaseUrl(), ipHash })
+      // id lets the client dedupe its optimistic bubble against the gateway echo.
       socket.emit('chat:sent', { messageId })
     } catch (err) {
       if (err instanceof ChatContentError || err instanceof ChatRateError) {
-        // `reason` is a fixed enum and `message` is composed from our own
-        // strings, never from other users' data.
-        socket.emit('chat:error', {
-          reason: err.reason,
-          message: err.message,
-          retryAfterMs: err.retryAfterMs ?? 0
-        })
+        socket.emit('chat:error', { reason: err.reason, message: err.message, retryAfterMs: err.retryAfterMs ?? 0 })
         return
       }
       console.error('[DiscordChat] relay failed:', err?.message || err)
@@ -2096,40 +2029,19 @@ chatNsp.on('connection', (socket) => {
   })
 })
 
-// Fan out what the gateway process publishes. Deliberately no per-message DB or
-// Discord work here — this is the only room that will contain every online
-// user, so nothing high-frequency (typing indicators, presence) belongs in it.
-chatSub.subscribe(CHAT_CHANNELS.events).catch((err) => {
-  console.error('[DiscordChat] subscribe failed:', err?.message || err)
-})
+// Fans out what the gateway publishes. No per-message DB/Discord work here —
+// this room holds every online user, so nothing high-frequency belongs in it.
+chatSub.subscribe(CHAT_CHANNELS.events).catch((err) => console.error('[DiscordChat] subscribe failed:', err?.message || err))
 chatSub.on('message', (channel, raw) => {
   if (channel !== CHAT_CHANNELS.events) return
   let event
-  try {
-    event = JSON.parse(raw)
-  } catch {
-    return
-  }
+  try { event = JSON.parse(raw) } catch { return }
   switch (event.kind) {
-    case 'message':
-      chatNsp.to(CHAT_ROOM).emit('chat:message', event.message)
-      break
-    case 'update':
-      chatNsp.to(CHAT_ROOM).emit('chat:update', { id: event.id, patch: event.patch })
-      break
-    case 'delete':
-      // Emitted unconditionally: clients hold more messages than the server
-      // buffers, so a moderator's delete must reach them either way.
-      chatNsp.to(CHAT_ROOM).emit('chat:delete', { ids: event.ids })
-      break
-    case 'reseed':
-      chatNsp.to(CHAT_ROOM).emit('chat:snapshot', { messages: event.messages })
-      break
-    case 'state':
-      chatNsp.to(CHAT_ROOM).emit('chat:gateway', event.state)
-      break
-    default:
-      break
+    case 'message': chatNsp.to(CHAT_ROOM).emit('chat:message', event.message); break
+    case 'update': chatNsp.to(CHAT_ROOM).emit('chat:update', { id: event.id, patch: event.patch }); break
+    case 'delete': chatNsp.to(CHAT_ROOM).emit('chat:delete', { ids: event.ids }); break // unconditional — clients hold more than the buffer
+    case 'reseed': chatNsp.to(CHAT_ROOM).emit('chat:snapshot', { messages: event.messages }); break
+    case 'state': chatNsp.to(CHAT_ROOM).emit('chat:gateway', event.state); break
   }
 })
 
@@ -2882,16 +2794,10 @@ io.on('connection', socket => {
     }
   })
 
-  // NOTE: the old `join-zone` / `visitor-count` / `chat-message` cZone handlers
-  // were removed when the Discord chat relay was added. They were dead — no Vue
-  // file emitted or listened for any of them — and `chat-message` in particular
-  // was a broadcast primitive with no authentication at all: it took both the
-  // room name AND the display name from the client, so any anonymous socket
-  // could emit into any room as any user. It survived only because nothing
-  // listened. Adding a real chat feature next to a generically-named
-  // `chat-message` relay is precisely how something eventually gets pointed at
-  // it, so it is gone rather than fixed. The relay's own handlers are in the
-  // `/chat` namespace below and resolve identity with requireSocketUser.
+  // Removed: the old cZone `join-zone`/`visitor-count`/`chat-message` handlers.
+  // Dead code, but `chat-message` had no auth and took the room + display name
+  // from the client — a spoofable broadcast primitive not worth keeping next
+  // to a real chat feature. Its replacement is the `/chat` namespace below.
 
   // ── Reconnect rejoin handlers ──────────────────────────────────────────────
   // Emitted by clients on socket reconnect to restore their session.

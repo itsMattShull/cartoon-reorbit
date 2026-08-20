@@ -1,14 +1,6 @@
-// server/api/admin/users/[id]/chat-mute.post.js
-//
-// Times a user out of the Discord chat relay without touching the rest of their
-// account.
-//
-// This exists because the relay is asymmetric. Every message the site sends
-// reaches Discord through one webhook identity, so a Discord moderator's own
-// tools — timeout, kick, ban, per-user AutoMod — cannot single out a site user.
-// Without this endpoint the only lever a moderator could ask for is banning the
-// whole account, which is wildly disproportionate for someone being annoying in
-// chat.
+// Times a user out of the Discord chat relay without banning the account.
+// Needed because relayed messages post as one webhook identity, so Discord's
+// own per-user moderation tools can't single out a site user.
 import { defineEventHandler, getRequestHeader, readBody, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'

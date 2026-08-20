@@ -129,13 +129,10 @@ test('the socket server does not allow every origin with credentials', () => {
   assert.ok(SERVER.includes('credentials: true'), 'socket.io CORS does not allow credentials')
 })
 
-// ── Discord chat relay ───────────────────────────────────────────────────────
-// The chat handlers deliberately do NOT call requireSocketUser directly. They go
-// through resolveChatMember(), which calls it and then re-reads the row, because
-// resolveSocketUser caches {id, username, banned} for the life of the connection
-// and knows nothing about inGuild, active, or chatMutedUntil. A chat panel stays
-// open for hours, so a user banned or muted mid-session would otherwise keep
-// posting into Discord until they closed the tab.
+// ── Discord chat relay ────────────────────────────────────────────────────
+// Chat handlers go through resolveChatMember() rather than requireSocketUser
+// directly, since resolveSocketUser caches {id, username, banned} for the
+// connection's life and knows nothing about inGuild/active/chatMutedUntil.
 const CHAT_HANDLERS = ['chat:join', 'chat:send']
 
 test('chat handlers do not take a user id from the payload', () => {
@@ -178,12 +175,9 @@ test('resolveChatMember authenticates and re-reads the gating fields', () => {
 })
 
 test('sending into Discord verifies guild membership live, not from the cached flag', () => {
-  // User.inGuild defaults to true and is only refreshed by the hourly guild-sync
-  // cron: server/middleware/guild-check.js calls
-  // refreshDiscordTokenAndRoles(prisma, user, config) against a (user, config)
-  // signature, so the arguments are shifted and the live re-check never runs.
-  // That is a pre-existing bug, but it means the flag cannot be the gate for
-  // writing into someone else's Discord community.
+  // User.inGuild is only refreshed by the hourly guild-sync cron (a bug in
+  // refreshDiscordTokenAndRoles's call sites means the live re-check never
+  // runs), so it can't be the gate for writing into someone else's community.
   const start = SERVER.indexOf('async function resolveChatMember')
   const src = SERVER.slice(start, start + 2500)
   assert.ok(
@@ -193,10 +187,8 @@ test('sending into Discord verifies guild membership live, not from the cached f
 })
 
 test('the unauthenticated cZone chat-message relay is gone', () => {
-  // It took both the room name and the display name from the client, so any
-  // anonymous socket could broadcast into any room as any user. It was dead
-  // code, but shipping a chat feature beside it is how something gets pointed
-  // at it later.
+  // It took the room name and display name from the client — any anonymous
+  // socket could broadcast into any room as any user.
   assert.ok(
     !/socket\.on\(\s*'chat-message'/.test(SERVER),
     "the unauthenticated 'chat-message' handler is back — it must not be reintroduced"

@@ -265,13 +265,8 @@ html.newsite-active body {
       </button>
       <template v-if="!isMobile || !mobileSidebarCollapsed">
         <div class="sidebar-top"    :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto' } : {}"><UserInfo /></div>
-        <!-- Desktop chat replaces the middle + bottom regions. It is deliberately
-             NOT given a fixed height: `--sidebar-middle-height` is overridden by
-             five pages (384px on newcmart, 490px on trade, 504px on cmart), and
-             `.sidebar-bottom` pins itself with `margin-top: auto`, so any
-             hard-coded number would gap on some routes and be clipped on others.
-             `flex: 1 1 auto; min-height: 0` takes exactly the space left after
-             UserInfo, on every page, automatically. -->
+        <!-- No fixed height: --sidebar-middle-height varies per page, so
+             .sidebar-chat flexes to fill what's left after UserInfo instead. -->
         <div v-if="showChatInSidebar" class="sidebar-chat"><LazyDiscordChat /></div>
         <template v-else>
           <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}">
@@ -289,16 +284,11 @@ html.newsite-active body {
         </template>
       </template>
     </div>
-    <!-- Mobile chat is a teleported sheet, not a sidebar region, for two
-         reasons. The sidebar body above sits behind a `v-if` keyed on
-         `mobileSidebarCollapsed`, so a panel inside it would be UNMOUNTED —
-         dropping the socket and the scrollback — whenever someone used the
-         existing "Hide Sidebar" button, and the two toggles would fight over
-         one piece of visible state. And `position: fixed` resolves against the
-         real viewport here precisely because `scaleStyle` drops the transform
-         below 768px; on desktop the transform makes `.site-container` the
-         containing block, which is the trap documented above the Onboarding
-         component below. -->
+    <!-- Teleported sheet, not a sidebar region: the sidebar body above sits
+         behind a v-if keyed on mobileSidebarCollapsed, so a panel inside it
+         would be unmounted (dropping the socket) by the "Hide Sidebar" button.
+         position:fixed resolves against the real viewport here because the
+         chrome's transform is dropped below 768px. -->
     <Teleport to="body">
       <div v-if="showChatSheet" class="chat-sheet" role="dialog" aria-modal="true" aria-label="Discord chat">
         <LazyDiscordChat sheet @close="chatOpen = false" />
@@ -378,9 +368,7 @@ const showNav = computed(() => route.meta.showNav !== false)
 const showSidebar = computed(() => route.meta.showSidebar !== false)
 const showFooter = computed(() => route.meta.showFooter !== false)
 
-// Chat only exists where the sidebar does. Seven pages set `showSidebar: false`
-// (the games and the admin console), and the layout hides `.sidebar` outright
-// on those, so the nav button is hidden there too rather than being a no-op.
+// Chat only exists where the sidebar does (hidden on the games + admin console).
 const chatAvailable = computed(() => showSidebar.value && !fluidLayout.value)
 const showChatInSidebar = computed(() => chatOpen.value && chatAvailable.value && !isMobile.value)
 const showChatSheet = computed(() => chatOpen.value && chatAvailable.value && isMobile.value)
@@ -485,19 +473,9 @@ onUnmounted(() => {
   releaseChatSheet()
 })
 
-// ── Mobile chat sheet: keyboard + pull-to-refresh ──────────────────────────
-// `100dvh` tracks the URL bar but does NOT shrink for the iOS keyboard, which
-// changes only the visual viewport — so a dvh-sized sheet puts the composer
-// behind the keyboard. visualViewport reports the height actually visible and
-// fires on both resize and scroll (iOS scrolls the visual viewport, not the
-// layout one). Same instrument pages/newsite/blackjack.vue uses, for the same
-// reason.
-//
-// The body pin is separate and also necessary: on mobile the DOCUMENT scrolls,
-// so `overscroll-behavior` on an inner element does nothing and dragging up
-// past the top of the scrollback triggers pull-to-refresh — which would reload
-// the page and discard the socket, the history, and any half-typed message.
-// pages/newsite/flappypowerpuff.vue documents the same trap.
+// Mobile chat sheet: visualViewport sizes it around the iOS keyboard (100dvh
+// doesn't shrink for it), and the body-pin defeats pull-to-refresh, which
+// would otherwise reload the page and drop the socket + scrollback.
 let sheetScrollY = 0
 let sheetPinned = false
 
@@ -569,11 +547,8 @@ const scaleStyle = computed(() => {
     transform: `scale(${scale.value})`,
     transformOrigin: 'top center',
     marginBottom: `${scaleMarginBottom(scale.value)}px`,
-    // Published so descendants can counter-scale. The chat panel is the first
-    // surface here anyone actually READS rather than glances at, and the scale
-    // floors at (768-20)/1040 = 0.719 on a narrow desktop window — which would
-    // render 12.5px type at ~9 physical px, grayscale-antialiased. Everything
-    // else in the chrome is short labels and is fine shrinking.
+    // Lets the chat panel counter-scale so its text stays readable at small
+    // window widths, where scale can floor near 0.72.
     '--site-scale': String(scale.value)
   }
 })
@@ -819,12 +794,8 @@ const scaleStyle = computed(() => {
   align-self: center;
 }
 
-/* Takes whatever vertical space is left after `.sidebar-top`, rather than a
-   fixed height — see the template comment. `min-height: 0` is required, not
-   cosmetic: a flex item's automatic minimum size is its content size, so
-   without it the panel refuses to shrink, grows past the 682px sidebar, and
-   `.sidebar { overflow: hidden }` clips the composer off the bottom with no
-   scrollbar anywhere to reach it. */
+/* min-height:0 required — without it a flex item's auto min-size refuses to
+   shrink, and .sidebar { overflow: hidden } clips the composer off. */
 .sidebar-chat {
   flex: 1 1 auto;
   min-height: 0;
@@ -835,12 +806,8 @@ const scaleStyle = computed(() => {
   overflow: hidden;
 }
 
-/* Mobile-only full-screen sheet, teleported to body. Safe here and only here:
-   `scaleStyle` applies no transform below 768px, so `position: fixed` resolves
-   against the real viewport instead of against `.site-container`.
-   z-index clears Onboarding's z-50. The height is a pre-JS fallback; the
-   visualViewport handler in the script sets the real value so the composer
-   stays above the soft keyboard. */
+/* Mobile-only full-screen sheet, teleported to body. height:100dvh is a pre-JS
+   fallback — the visualViewport handler sets the real value above the keyboard. */
 .chat-sheet {
   position: fixed;
   top: 0;

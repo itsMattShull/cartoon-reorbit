@@ -1,28 +1,12 @@
-// Discord Gateway v10 client for the chat relay.
+// Discord Gateway v10 client for the chat relay. Uses Node 22's global
+// WebSocket — one shard, JSON, no compression, receive-only, one guild/channel.
 //
-// See constants.js for the import rules. Uses Node's global WebSocket (Node 22),
-// so there is no new dependency.
-//
-// ── Scope ────────────────────────────────────────────────────────────────────
-// One shard, JSON encoding, no compression, receive-only, one guild, one
-// channel. That is small enough to own outright, and owning it means the
-// reconnect policy is ours and is boring. If this ever grows a zlib inflater,
-// sharding, or a generic event dispatcher, replace it with @discordjs/ws
-// instead of continuing.
-//
-// ── The failure that actually matters ────────────────────────────────────────
-// Discord terminates every session AND RESETS THE BOT TOKEN if an app exceeds
-// 1000 IDENTIFYs in 24 hours. BOT_TOKEN in this repo is load-bearing for OAuth
-// guild-join, DMs, achievement and auction announcements, and the guild-sync
-// cron — so an IDENTIFY loop here would take down Discord login for the whole
-// site, silently, and recovery is a manual token rotation.
-//
-// Three things guard that, and none of them are optional:
-//   1. A persisted IDENTIFY budget (Redis, so a crash-loop cannot reset it).
-//   2. RESUME is preferred everywhere it is legal; RESUMEs are not counted.
-//   3. Zombie and reconnect closes use code 4000. Closing with 1000/1001
-//      INVALIDATES the session server-side and forces a fresh IDENTIFY, which
-//      would turn every routine reconnect into budget spend.
+// The critical constraint: exceeding 1000 IDENTIFYs/24h makes Discord reset
+// the bot token, breaking OAuth login, DMs, and every announcement path on
+// the site. So: RESUME is preferred everywhere legal (RESUMEs aren't
+// counted), a persisted IDENTIFY budget guards the reconnect loop, and
+// zombie/reconnect closes use code 4000 — never 1000/1001, which invalidate
+// the session and force a fresh IDENTIFY.
 
 import {
   CHAT_KEYS,
@@ -66,23 +50,14 @@ export class DiscordChatGateway {
     this.backoffAttempt = 0
     this.wantResume = false
 
-    // Populated from GUILD_CREATE so <#id> and <@&id> render as names without
-    // a REST call per message.
+    // <#id>/<@&id> name caches, populated from GUILD_CREATE.
     this.nameCache = { channels: new Map(), roles: new Map() }
-
     this.config = null
     this.emptyContentStreak = 0
   }
 
-  log(...args) {
-    console.log('[DiscordChat]', ...args)
-  }
-
-  error(...args) {
-    console.error('[DiscordChat]', ...args)
-  }
-
-  // ── IDENTIFY budget ────────────────────────────────────────────────────────
+  log(...args) { console.log('[DiscordChat]', ...args) }
+  error(...args) { console.error('[DiscordChat]', ...args) }
 
   async mayIdentify() {
     const now = Date.now()
@@ -95,10 +70,7 @@ export class DiscordChatGateway {
       await this.redis.set(CHAT_KEYS.identifyLog, JSON.stringify(recent), 'PX', IDENTIFY_WINDOW_MS * 2)
       return true
     } catch {
-      // If Redis is unreachable we cannot prove we are within budget. Refusing
-      // is the safe answer: a chat outage is recoverable, a reset bot token is
-      // a manual incident.
-      return false
+      return false // can't prove we're in budget — refuse rather than risk it
     }
   }
 
@@ -110,44 +82,28 @@ export class DiscordChatGateway {
       this.sessionId = s.sessionId ?? null
       this.resumeUrl = s.resumeUrl ?? null
       this.lastSeq = s.lastSeq ?? null
-    } catch {
-      // start fresh
-    }
+    } catch {}
   }
 
   async saveSession() {
     try {
-      await this.redis.set(
-        CHAT_KEYS.session,
+      await this.redis.set(CHAT_KEYS.session,
         JSON.stringify({ sessionId: this.sessionId, resumeUrl: this.resumeUrl, lastSeq: this.lastSeq }),
-        'EX',
-        3600
-      )
-    } catch {
-      // best effort
-    }
+        'EX', 3600)
+    } catch {}
   }
 
   async clearSession() {
     this.sessionId = null
     this.resumeUrl = null
     this.lastSeq = null
-    try {
-      await this.redis.del(CHAT_KEYS.session)
-    } catch {
-      // best effort
-    }
+    try { await this.redis.del(CHAT_KEYS.session) } catch {}
   }
-
-  // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   async start() {
     this.stopped = false
     await this.loadSession()
     await this.connect()
-    // Periodic re-seed. Two jobs: it closes the gap where a delete or edit was
-    // missed during a disconnect, and it refreshes attachment CDN signatures,
-    // which expire after roughly a day and would otherwise serve dead images.
     this.reseedTimer = setInterval(() => {
       this.reseed().catch((err) => this.error('reseed failed:', err?.message || err))
     }, RESEED_INTERVAL_MS)
@@ -159,14 +115,7 @@ export class DiscordChatGateway {
     this.clearTimers()
     if (this.reseedTimer) clearInterval(this.reseedTimer)
     await this.saveSession()
-    // 4000, never 1000/1001: this keeps the session alive server-side for a few
-    // minutes so the next boot RESUMEs — costing no IDENTIFY and replaying the
-    // messages sent during the restart.
-    try {
-      this.ws?.close(4000, 'shutdown')
-    } catch {
-      // already gone
-    }
+    try { this.ws?.close(4000, 'shutdown') } catch {}
     this.ws = null
   }
 
@@ -183,27 +132,15 @@ export class DiscordChatGateway {
     this.fatal = { code, reason, at: Date.now() }
     this.stopped = true
     this.clearTimers()
-    this.error(`FATAL gateway close ${code}: ${reason}. Chat relay stopped and will not retry.`)
+    this.error(`FATAL gateway close ${code}: ${reason}. Relay stopped, will not retry.`)
     if (code === 4014) {
-      this.error(
-        'Close 4014 means the MESSAGE CONTENT privileged intent is not enabled for this bot. ' +
-          'Enable it at Discord Developer Portal > your app > Bot > Privileged Gateway Intents. ' +
-          'There is deliberately no REST polling fallback: the intent gates the message DATA, ' +
-          'not just the gateway, so REST would return messages with empty content and the ' +
-          'sidebar would render blank rows instead of failing visibly.'
-      )
+      this.error('4014 = MESSAGE CONTENT intent not enabled (Developer Portal > Bot). No REST fallback: that intent gates the message data too, so polling would just render blank rows.')
     }
     try {
       await this.redis.set(CHAT_KEYS.fatal, JSON.stringify(this.fatal), 'EX', 86400)
       await this.publishState()
-    } catch {
-      // best effort
-    }
-    try {
-      this.ws?.close(4000, 'fatal')
-    } catch {
-      // already gone
-    }
+    } catch {}
+    try { this.ws?.close(4000, 'fatal') } catch {}
   }
 
   async connect() {
@@ -221,10 +158,6 @@ export class DiscordChatGateway {
       return
     }
 
-    // RESUME uses the url Discord handed us at READY; a fresh session uses the
-    // discovery endpoint. Either way the query string must be appended by us —
-    // resume_gateway_url comes back without one, and resuming requires the same
-    // version and encoding as the original connection.
     this.wantResume = Boolean(this.sessionId && this.lastSeq !== null)
     let base = this.wantResume && this.resumeUrl ? this.resumeUrl : null
     if (!base) {
@@ -240,12 +173,7 @@ export class DiscordChatGateway {
     if (!this.wantResume) {
       const allowed = await this.mayIdentify()
       if (!allowed) {
-        await this.goFatal(
-          0,
-          `IDENTIFY budget exceeded (>${IDENTIFY_LIMIT_PER_HOUR}/hour). Refusing to reconnect: ` +
-            'exceeding 1000 IDENTIFYs in 24h causes Discord to reset the bot token, which would ' +
-            'break OAuth login, DMs and every announcement path on the site.'
-        )
+        await this.goFatal(0, `IDENTIFY budget exceeded (>${IDENTIFY_LIMIT_PER_HOUR}/hour)`)
         return
       }
     }
@@ -254,109 +182,52 @@ export class DiscordChatGateway {
     this.log(`connecting (${this.wantResume ? 'resume' : 'identify'})`)
 
     let ws
-    try {
-      ws = new WebSocket(url)
-    } catch (err) {
-      this.error('socket construction failed:', err?.message || err)
-      this.scheduleReconnect()
-      return
-    }
+    try { ws = new WebSocket(url) }
+    catch (err) { this.error('socket construction failed:', err?.message || err); this.scheduleReconnect(); return }
     this.ws = ws
 
-    this.connectTimer = setTimeout(() => {
-      this.error('no HELLO within timeout; reconnecting')
-      this.hardReconnect()
-    }, CONNECT_TIMEOUT_MS)
+    this.connectTimer = setTimeout(() => { this.error('no HELLO within timeout'); this.hardReconnect() }, CONNECT_TIMEOUT_MS)
     this.connectTimer.unref?.()
 
-    // Every callback is wrapped. An unhandled rejection is fatal under Node 22,
-    // and while this runs in its own process, a crash still costs an IDENTIFY
-    // on restart — which is the budget above.
-    ws.onmessage = (event) => {
-      this.onMessage(event).catch((err) => this.error('message handler:', err?.message || err))
-    }
-    ws.onclose = (event) => {
-      this.onClose(event).catch((err) => this.error('close handler:', err?.message || err))
-    }
-    ws.onerror = (event) => {
-      this.error('socket error:', event?.message || 'unknown')
-    }
+    ws.onmessage = (event) => this.onMessage(event).catch((err) => this.error('message handler:', err?.message || err))
+    ws.onclose = (event) => this.onClose(event).catch((err) => this.error('close handler:', err?.message || err))
+    ws.onerror = (event) => this.error('socket error:', event?.message || 'unknown')
   }
 
   scheduleReconnect() {
     if (this.stopped) return
-    // Full jitter. Reset only on READY/RESUMED, never merely on TCP connect —
-    // otherwise a gateway that accepts the socket and immediately closes it
-    // produces an infinite fast loop.
     const base = Math.min(1000 * 2 ** this.backoffAttempt, 60_000)
     const delay = Math.random() * base
     this.backoffAttempt = Math.min(this.backoffAttempt + 1, 6)
-    this.log(`reconnecting in ${Math.round(delay)}ms`)
-    setTimeout(() => {
-      this.connect().catch((err) => this.error('reconnect failed:', err?.message || err))
-    }, delay).unref?.()
+    setTimeout(() => this.connect().catch((err) => this.error('reconnect failed:', err?.message || err)), delay).unref?.()
   }
 
   hardReconnect() {
     this.clearTimers()
-    try {
-      // 4000 preserves the session for a RESUME. See the class header.
-      this.ws?.close(4000, 'reconnect')
-    } catch {
-      // already gone
-    }
-    // The close frame may never flush if the socket is genuinely wedged, and
-    // Node's WebSocket has no terminate(). This guarantees forward progress.
+    try { this.ws?.close(4000, 'reconnect') } catch {}
+    // No .terminate() on Node's WebSocket — the close frame may never flush.
     setTimeout(() => {
       if (!this.stopped && (!this.ws || this.ws.readyState !== 1)) this.scheduleReconnect()
     }, 5000).unref?.()
   }
 
   send(payload) {
-    try {
-      if (this.ws?.readyState === 1) this.ws.send(JSON.stringify(payload))
-    } catch (err) {
-      this.error('send failed:', err?.message || err)
-    }
+    try { if (this.ws?.readyState === 1) this.ws.send(JSON.stringify(payload)) }
+    catch (err) { this.error('send failed:', err?.message || err) }
   }
-
-  // ── Protocol ───────────────────────────────────────────────────────────────
 
   async onMessage(event) {
     let payload
-    try {
-      payload = JSON.parse(event.data)
-    } catch {
-      return
-    }
+    try { payload = JSON.parse(event.data) } catch { return }
     if (payload.s !== null && payload.s !== undefined) this.lastSeq = payload.s
 
     switch (payload.op) {
-      case 10:
-        await this.onHello(payload.d)
-        break
-      case 11:
-        this.ackPending = false
-        break
-      case 1:
-        // Discord asking for a beat out of band. Answer immediately and restart
-        // the interval so we do not double-beat.
-        this.beat()
-        this.restartHeartbeat()
-        break
-      case 7:
-        // Routine load-shedding, not an error: do not count it against backoff.
-        this.log('op 7 RECONNECT')
-        this.hardReconnect()
-        break
-      case 9:
-        await this.onInvalidSession(payload.d)
-        break
-      case 0:
-        await this.onDispatch(payload.t, payload.d)
-        break
-      default:
-        break
+      case 10: await this.onHello(payload.d); break
+      case 11: this.ackPending = false; break
+      case 1: this.beat(); this.restartHeartbeat(); break
+      case 7: this.log('op 7 RECONNECT'); this.hardReconnect(); break
+      case 9: await this.onInvalidSession(payload.d); break
+      case 0: await this.onDispatch(payload.t, payload.d); break
     }
   }
 
@@ -366,11 +237,7 @@ export class DiscordChatGateway {
     this.heartbeatMs = Number(d?.heartbeat_interval) || 41250
     this.ackPending = false
 
-    // The jitter is a FIRST-BEAT offset only, not a per-beat wobble.
-    this.firstBeatTimer = setTimeout(() => {
-      this.beat()
-      this.restartHeartbeat()
-    }, this.heartbeatMs * Math.random())
+    this.firstBeatTimer = setTimeout(() => { this.beat(); this.restartHeartbeat() }, this.heartbeatMs * Math.random())
     this.firstBeatTimer.unref?.()
 
     if (this.wantResume && this.sessionId && this.lastSeq !== null) {
@@ -382,8 +249,6 @@ export class DiscordChatGateway {
           token: this.rawToken,
           intents: INTENTS,
           properties: { os: 'linux', browser: 'cartoon-reorbit', device: 'cartoon-reorbit' },
-          // The bot has been REST-only until now, so it has always rendered as
-          // offline in the member list. Staying invisible keeps that true.
           presence: { since: null, activities: [], status: 'invisible', afk: false }
         }
       })
@@ -397,12 +262,7 @@ export class DiscordChatGateway {
   }
 
   beat() {
-    if (this.ackPending) {
-      // Zombie connection: the socket is open but Discord is not answering.
-      this.error('heartbeat not acked; reconnecting')
-      this.hardReconnect()
-      return
-    }
+    if (this.ackPending) { this.error('heartbeat not acked; reconnecting'); this.hardReconnect(); return }
     this.ackPending = true
     this.send({ op: 1, d: this.lastSeq })
   }
@@ -411,34 +271,22 @@ export class DiscordChatGateway {
     this.log(`op 9 INVALID_SESSION (resumable=${resumable === true})`)
     if (resumable !== true) await this.clearSession()
     this.clearTimers()
-    try {
-      this.ws?.close(4000, 'invalid session')
-    } catch {
-      // already gone
-    }
-    // The 1-5s wait is convention rather than spec, but it exists because
-    // IDENTIFY is concurrency-capped and hammering earns another op 9.
-    setTimeout(() => {
-      this.connect().catch((err) => this.error('reconnect failed:', err?.message || err))
-    }, 1000 + Math.random() * 4000).unref?.()
+    try { this.ws?.close(4000, 'invalid session') } catch {}
+    setTimeout(() => this.connect().catch((err) => this.error('reconnect failed:', err?.message || err)), 1000 + Math.random() * 4000).unref?.()
   }
 
   async onClose(event) {
     const code = event?.code
-    const reason = event?.reason || ''
     this.clearTimers()
     this.ws = null
     if (this.stopped) return
 
-    this.log(`socket closed ${code} ${reason}`)
+    this.log(`socket closed ${code} ${event?.reason || ''}`)
 
     if (FATAL_CLOSE_CODES.has(code)) {
-      let hint = reason
-      if (code === 4004) {
-        hint =
-          'authentication failed. The most common cause here is the "Bot " prefix: .env stores ' +
-          'BOT_TOKEN with it for REST calls, but the gateway IDENTIFY needs the bare token.'
-      }
+      const hint = code === 4004
+        ? 'authentication failed — check for a stray "Bot " prefix on the token'
+        : event?.reason
       await this.goFatal(code, hint)
       return
     }
@@ -446,19 +294,13 @@ export class DiscordChatGateway {
     if (SESSION_INVALIDATING_CLOSE_CODES.has(code)) await this.clearSession()
     else await this.saveSession()
 
-    // 4008 means the 120-events-per-60s command budget was blown. Nothing here
-    // should ever approach that, so treat it as a real problem and wait.
-    if (code === 4008) {
-      setTimeout(() => {
-        this.connect().catch((err) => this.error('reconnect failed:', err?.message || err))
-      }, 30_000).unref?.()
+    if (code === 4008) { // command rate limit blown
+      setTimeout(() => this.connect().catch((err) => this.error('reconnect failed:', err?.message || err)), 30_000).unref?.()
       return
     }
 
     this.scheduleReconnect()
   }
-
-  // ── Dispatch ───────────────────────────────────────────────────────────────
 
   async onDispatch(type, d) {
     switch (type) {
@@ -467,24 +309,18 @@ export class DiscordChatGateway {
         this.resumeUrl = d?.resume_gateway_url ?? null
         this.backoffAttempt = 0
         await this.saveSession()
-        this.log('READY')
         await this.publishState()
         break
-
       case 'RESUMED':
         this.backoffAttempt = 0
-        this.log('RESUMED')
         await this.publishState()
         break
-
       case 'GUILD_CREATE':
         if (String(d?.id) === String(this.guildId)) await this.onGuildCreate(d)
         break
-
       case 'CHANNEL_UPDATE':
         if (d?.id && d?.name) this.nameCache.channels.set(String(d.id), String(d.name))
         break
-
       case 'CHANNEL_DELETE':
         if (d?.id) {
           this.nameCache.channels.delete(String(d.id))
@@ -494,34 +330,24 @@ export class DiscordChatGateway {
           }
         }
         break
-
       case 'GUILD_ROLE_CREATE':
       case 'GUILD_ROLE_UPDATE':
         if (d?.role?.id) this.nameCache.roles.set(String(d.role.id), String(d.role.name || 'role'))
         break
-
       case 'GUILD_ROLE_DELETE':
         if (d?.role_id) this.nameCache.roles.delete(String(d.role_id))
         break
-
       case 'MESSAGE_CREATE':
         await this.onMessageCreate(d)
         break
-
       case 'MESSAGE_UPDATE':
         await this.onMessageUpdate(d)
         break
-
       case 'MESSAGE_DELETE':
         if (this.isOurChannel(d?.channel_id)) await this.onMessageDelete([d?.id])
         break
-
       case 'MESSAGE_DELETE_BULK':
-        // A moderator purge. `ids` is an array.
         if (this.isOurChannel(d?.channel_id)) await this.onMessageDelete(d?.ids || [])
-        break
-
-      default:
         break
     }
   }
@@ -531,27 +357,16 @@ export class DiscordChatGateway {
   }
 
   async onGuildCreate(d) {
-    // Extract the two name caches and the permission signal, then drop the
-    // payload — it can be a megabyte and none of the rest is needed.
     this.nameCache.channels.clear()
     this.nameCache.roles.clear()
-    for (const c of d?.channels || []) {
-      if (c?.id && c?.name) this.nameCache.channels.set(String(c.id), String(c.name))
-    }
-    for (const r of d?.roles || []) {
-      if (r?.id && r?.name) this.nameCache.roles.set(String(r.id), String(r.name))
-    }
+    for (const c of d?.channels || []) if (c?.id && c?.name) this.nameCache.channels.set(String(c.id), String(c.name))
+    for (const r of d?.roles || []) if (r?.id && r?.name) this.nameCache.roles.set(String(r.id), String(r.name))
 
-    // The configured channel being absent is the ONLY signal that the bot has
-    // lost VIEW_CHANNEL. Without this check, losing that permission presents as
-    // "connected, but nobody is talking" — which is undiagnosable from logs.
+    // Channel absent from GUILD_CREATE is the only signal we lost VIEW_CHANNEL.
     const channelId = this.config?.discordChatChannelId
     const visible = channelId ? this.nameCache.channels.has(String(channelId)) : false
     if (channelId && !visible) {
-      this.error(
-        `the bot cannot see channel ${channelId}. Check that it has VIEW_CHANNEL (and ` +
-          'READ_MESSAGE_HISTORY for backfill) on that channel.'
-      )
+      this.error(`bot cannot see channel ${channelId} — check VIEW_CHANNEL and READ_MESSAGE_HISTORY`)
     }
     await this.publishState({ channelMissing: Boolean(channelId) && !visible })
     await this.reseed()
@@ -560,25 +375,13 @@ export class DiscordChatGateway {
   async onMessageCreate(raw) {
     if (!this.isOurChannel(raw?.channel_id)) return
 
-    // Detects a silently mis-scoped intent. Our own relayed messages always
-    // have readable content (an app can always see content in messages it
-    // sent), so a run of empty inbound messages from real users means
-    // MESSAGE_CONTENT is off even though the connection succeeded.
-    if (
-      raw?.content === '' &&
-      !raw?.webhook_id &&
-      !raw?.attachments?.length &&
-      !raw?.embeds?.length &&
-      !raw?.sticker_items?.length &&
-      Number(raw?.type ?? 0) === 0
-    ) {
+    // Our own relayed messages always have readable content, so a run of
+    // empty content from real users means MESSAGE_CONTENT is off despite a
+    // successful connection.
+    if (raw?.content === '' && !raw?.webhook_id && !raw?.attachments?.length &&
+        !raw?.embeds?.length && !raw?.sticker_items?.length && Number(raw?.type ?? 0) === 0) {
       this.emptyContentStreak++
-      if (this.emptyContentStreak === 5) {
-        this.error(
-          'five consecutive inbound messages had empty content. The MESSAGE CONTENT ' +
-            'privileged intent is probably disabled for this bot.'
-        )
-      }
+      if (this.emptyContentStreak === 5) this.error('5 consecutive empty messages — MESSAGE CONTENT intent is probably disabled')
     } else if (raw?.content) {
       this.emptyContentStreak = 0
     }
@@ -594,26 +397,16 @@ export class DiscordChatGateway {
     const id = String(raw?.id ?? '')
     if (!id) return
 
-    // Build a patch of only the keys this payload actually carries. An
-    // embed-unfurl update carries neither author nor content, so normalizing it
-    // wholesale would blank the message.
     const patch = {}
-    if ('content' in raw) {
+    if ('content' in raw || 'attachments' in raw) {
       const full = this.normalize({ ...raw, type: raw.type ?? 0, author: raw.author ?? { id: '0' } })
-      if (full) patch.tokens = full.tokens
+      if ('content' in raw && full) patch.tokens = full.tokens
+      if ('attachments' in raw) patch.attachments = full ? full.attachments : []
     }
-    if ('attachments' in raw) {
-      const full = this.normalize({ ...raw, type: raw.type ?? 0, author: raw.author ?? { id: '0' } })
-      patch.attachments = full ? full.attachments : []
-    }
-    if ('edited_timestamp' in raw) {
-      patch.editedAt = raw.edited_timestamp ? Date.parse(raw.edited_timestamp) : null
-    }
+    if ('edited_timestamp' in raw) patch.editedAt = raw.edited_timestamp ? Date.parse(raw.edited_timestamp) : null
     if (!Object.keys(patch).length) return
 
     const updated = await bufferMerge(this.redis, id, patch)
-    // Emitted even when the id has scrolled out of the server buffer: clients
-    // hold more messages than the buffer does.
     await this.publish({ kind: 'update', id, patch, message: updated })
   }
 
@@ -621,8 +414,6 @@ export class DiscordChatGateway {
     const list = (Array.isArray(ids) ? ids : [ids]).filter(Boolean).map(String)
     if (!list.length) return
     await bufferDelete(this.redis, list)
-    // Unconditional. A moderator removing something must see it disappear from
-    // the site whether or not the server still has it buffered.
     await this.publish({ kind: 'delete', ids: list })
   }
 
@@ -635,12 +426,8 @@ export class DiscordChatGateway {
     })
   }
 
-  /**
-   * Re-seeds the buffer from REST.
-   *
-   * Runs on connect (so a restart never leaves clients with an empty panel) and
-   * hourly (so missed deletes converge and attachment signatures stay fresh).
-   */
+  // Runs on connect and hourly: converges any missed deletes and refreshes
+  // attachment CDN signatures, which expire after ~a day.
   async reseed() {
     const channelId = this.config?.discordChatChannelId
     if (!channelId) return
@@ -654,18 +441,13 @@ export class DiscordChatGateway {
       await bufferReplace(this.redis, messages)
       await this.publish({ kind: 'reseed', messages })
     } catch (err) {
-      // Never block on Discord. An empty buffer is a worse-looking panel, not a
-      // broken one.
       this.error('reseed failed:', err?.message || err)
     }
   }
 
   async publish(event) {
-    try {
-      await this.redis.publish(CHAT_CHANNELS.events, JSON.stringify(event))
-    } catch (err) {
-      this.error('publish failed:', err?.message || err)
-    }
+    try { await this.redis.publish(CHAT_CHANNELS.events, JSON.stringify(event)) }
+    catch (err) { this.error('publish failed:', err?.message || err) }
   }
 
   async publishState(extra = {}) {
@@ -680,14 +462,11 @@ export class DiscordChatGateway {
     })
   }
 
-  /** Called when an admin saves new config. */
   async onConfigChanged() {
     const previous = this.config
     this.config = await this.loadConfig()
 
-    const channelChanged = previous?.discordChatChannelId !== this.config?.discordChatChannelId
-    if (channelChanged) {
-      // Otherwise the panel would show a mixed history from two channels.
+    if (previous?.discordChatChannelId !== this.config?.discordChatChannelId) {
       await bufferClear(this.redis)
       await this.reseed()
     }

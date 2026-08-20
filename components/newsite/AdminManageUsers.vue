@@ -90,11 +90,7 @@
                     class="w-full text-left px-2 py-1 text-[11px] text-emerald-700 hover:bg-emerald-50"
                     @click="openActionModal(u, 'UNBAN'); closeMenu()"
                   >Unban user</button>
-                  <!-- Chat relay timeout. Narrower than a ban: it blocks posting
-                       into Discord and nothing else. Needed because a relayed
-                       message reaches Discord as a single webhook identity, so
-                       Discord's own per-user moderation cannot reach a site
-                       user. -->
+                  <!-- Chat relay timeout — narrower than a ban, see chat-mute.post.js -->
                   <button
                     v-if="!u.isAdmin && !isChatMuted(u)"
                     class="w-full text-left px-2 py-1 text-[11px] text-amber-700 hover:bg-amber-50"

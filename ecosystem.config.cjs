@@ -177,26 +177,16 @@ module.exports = {
     },
 
     // ── Discord chat relay: gateway connection ────────────────────────────
-    // Holds the single Discord Gateway WebSocket and republishes messages onto
-    // Redis for socket-server to fan out. Its own process, not part of
-    // socket-server, for the reasons in the header of the worker file — chiefly
-    // that socket-server has no uncaughtException handler and does not persist
-    // live Clash matches on a crash, so gateway code must not be able to take
-    // it down.
-    //
-    // instances: 1 is load-bearing: it is what guarantees a single gateway
-    // connection, so there is no distributed lock anywhere in this feature.
+    // Own process (see the worker file's header for why). instances:1
+    // guarantees a single gateway connection with no distributed lock needed.
     {
       name:      'discord-chat',
       script:    'server/workers/discord-chat.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      // The only PM2 app here with backoff, and it needs it. Discord resets the
-      // bot token if an app exceeds 1000 IDENTIFYs in 24h, and PM2's default is
-      // to restart a crashing process immediately — which would burn that budget
-      // in under an hour and break OAuth login, DMs and every announcement path
-      // site-wide. The worker also keeps its own persisted IDENTIFY counter;
-      // this is the outer guard.
+      // Backoff matters here: Discord resets the bot token past 1000
+      // IDENTIFYs/24h, and PM2's default immediate-restart would burn that
+      // budget in under an hour on a crash loop.
       exp_backoff_restart_delay: 1000,
       max_restarts: 20,
       wait_ready:     true,

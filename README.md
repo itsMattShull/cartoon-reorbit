@@ -249,73 +249,29 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
 
 ### Discord chat relay (sidebar "Chat" panel)
 
-Mirrors one Discord channel into the site sidebar and lets signed-in members post back into
-it. It is **off by default** and has to be switched on deliberately in
-**Admin → Global Settings → Discord**.
-
-How it fits together:
+Mirrors one Discord channel into the sidebar and lets signed-in members post back into it.
+**Off by default** — enable in Admin → Global Settings → Discord.
 
 | Piece | Where |
 |---|---|
-| Gateway connection (Discord → site) | `discord-chat` PM2 app / `npm run discord-chat` |
-| Fan-out to browsers, and sends (site → Discord) | `socket-server`, `/chat` namespace |
-| Rendering | `components/newsite/DiscordChat.vue` |
+| Gateway (Discord → site) | `discord-chat` PM2 app / `npm run discord-chat` |
+| Fan-out + sends (site → Discord) | `socket-server`, `/chat` namespace |
 | Shared logic | `server/utils/discordChat/` |
 
-The gateway runs as its **own process** rather than inside `socket-server`. `socket-server`
-has no `uncaughtException` handler and does not persist live Clash matches when it crashes, so
-a stray rejection from reconnect code would destroy every in-progress match on the site; it
-also runs a 60Hz physics loop that must not compete with a gateway heartbeat.
+Setup:
+1. Enable the **Message Content** privileged intent (Developer Portal → Bot → Privileged
+   Gateway Intents). Without it the gateway refuses to connect (close code 4014).
+2. Give the bot `View Channel` + `Read Message History` on the chat channel.
+3. Create a webhook on that channel and set `DISCORD_CHAT_WEBHOOK_URL` in `.env`. It is not
+   stored in the database — the admin config endpoint returns that row to the browser, and a
+   webhook token is a bearer credential you don't want leaked.
+4. Enable the relay and set the channel ID in Admin → Global Settings → Discord.
 
-#### Setup
-
-1. **Enable the MESSAGE CONTENT privileged intent.** Developer Portal → your app → Bot →
-   *Privileged Gateway Intents* → **Message Content Intent**.
-
-   Without it the gateway is refused with close code `4014` and the relay stops with a loud
-   log. There is deliberately **no REST polling fallback**: that intent gates the message
-   *data* as well as the gateway, so polling would return messages with empty `content` and
-   the sidebar would quietly render blank rows instead of failing visibly.
-
-2. **Give the bot channel permissions** on the chat channel: `View Channel` and
-   `Read Message History`. Losing `View Channel` is otherwise invisible — the relay reports
-   "connected" while no messages arrive — so the worker checks for it on connect and logs.
-
-3. **Create a webhook** on that channel (Channel Settings → Integrations → Webhooks) and put
-   its URL in `.env`:
-
-   ```
-   DISCORD_CHAT_WEBHOOK_URL=https://discord.com/api/webhooks/…/…
-   ```
-
-   This is **not** stored in the database, on purpose: the admin config endpoints return the
-   `GlobalGameConfig` row wholesale to the browser, and a webhook token is an unauthenticated
-   bearer credential — anyone holding it can post to the channel under any name and avatar,
-   and the only way to revoke it is to delete the webhook (rotating `BOT_TOKEN` does nothing).
-
-4. **Turn it on** in Admin → Global Settings → Discord and set the channel ID. The channel is
-   verified on save: it must be a standard text channel in this guild.
-
-#### Things worth knowing
-
-- **Messages sent from the site are posted by a webhook**, shown as
-  `Username · ReOrbit` with the player's site avatar and Discord's `APP` tag. Discord has no
-  API that lets a site post *as* a user. The `·` suffix cannot appear in a site username, so
-  it cannot be forged — which matters because setting a site username also sets that user's
-  Discord guild nickname.
-- **Tell the channel it is being mirrored.** Its members did not sign up for a website.
-  A dedicated channel is a better fit than `#general` for exactly this reason.
-- **Moderation is asymmetric.** Every relayed message reaches Discord as one webhook identity,
-  so Discord's per-user tools (timeout, kick, AutoMod) cannot single out a site user. The site
-  side has two levers: per-user **Mute chat** in Admin → Manage Users, and the global
-  **Enable the chat relay** switch, which takes effect immediately and clears the buffer.
-- Deletes and edits made in Discord propagate to the site, and the buffer is re-seeded hourly
-  so anything missed during a disconnect converges.
-- Image attachments are **off by default**. Turning them on lets any guild member put an image
-  on the website, and Discord's attachment URLs are signed and expire after about a day.
-- Rate limits are layered: a per-user slowmode plus a global token bucket. The global one is
-  not redundant — Discord's limit is per *webhook*, so twenty users each obeying a 5-second
-  personal slowmode would still exceed it.
+Notes: messages sent from the site post via the webhook as `Username · ReOrbit`, since Discord
+has no API to post as a real user. Moderation is asymmetric — every relayed message is one
+webhook identity, so Discord's per-user tools can't reach a site user; use **Mute chat** in
+Manage Users, or the kill switch, instead. Consider a dedicated channel rather than `#general`,
+since its members didn't sign up for a website mirror.
 
 ### Quick troubleshooting
 - If Prisma cannot connect, verify `DATABASE_URL` and that PostgreSQL is running.

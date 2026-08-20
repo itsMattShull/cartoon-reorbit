@@ -71,14 +71,8 @@ export default defineEventHandler(async (event) => {
     czoneContestDiscordChannelIdValue = trimmed || null
   }
 
-  // ── Discord chat relay ──────────────────────────────────────────────────────
-  // The channel id gets a stronger check than the announcement channels above:
-  // this one is a live two-way bridge, so pointing it at the wrong place would
-  // both republish that channel onto the website and open a write path into it.
-  // The snowflake shape is necessary but not sufficient — the channel must also
-  // be a plain text channel IN THIS GUILD. Note webhook execution outright fails
-  // on forum/media channels, and an announcement channel behaves differently, so
-  // type 0 is also a correctness requirement, not just a safety one.
+  // Discord chat relay: stronger check than the announcement channels above,
+  // since this is a live two-way bridge — verify it's a text channel in this guild.
   let discordChatChannelIdValue
   if (discordChatChannelId !== undefined) {
     const trimmed = typeof discordChatChannelId === 'string' ? discordChatChannelId.trim() : ''
@@ -230,11 +224,7 @@ export default defineEventHandler(async (event) => {
       'packPriceFloor',
       'packMaxDefaultBuysPerUser',
       'czoneContestDiscordChannelId',
-      // Every new field is listed here or the change is silently unaudited.
-      // Note there is deliberately no webhook token among them: that secret
-      // lives in env, so it can never reach AdminChangeLog (which admins can
-      // browse) or the JSON this endpoint returns.
-      'discordChatEnabled',
+      'discordChatEnabled', // no webhook token here — that stays in env, never logged
       'discordChatChannelId',
       'discordChatSlowmodeSeconds',
       'discordChatMaxLength',
@@ -263,9 +253,7 @@ export default defineEventHandler(async (event) => {
         newValue: result?.timeBasedPurchaseLimits ?? null
       })
     }
-    // Push the change to the socket server and the gateway worker straight
-    // away. Without this the kill switch would wait out a cache TTL, or need a
-    // PM2 restart -- which is exactly what a kill switch must not require.
+    // Push to the socket server + gateway worker so the kill switch is immediate.
     try { await invalidateChatConfig(getRedis()) } catch {}
 
     return result

@@ -1,19 +1,8 @@
 // Discord chat relay configuration.
 //
-// See server/utils/discordChat/constants.js for the import rules that apply to
-// every module in this directory. Prisma is a parameter, never an import.
-//
-// Config lives in two places on purpose:
-//   • Tunables (enabled, channel, slowmode, length, attachments) are on the
-//     singleton GlobalGameConfig row, edited from Admin > Global Settings >
-//     Discord, and cached in Redis so neither hot path reads Postgres per
-//     message.
-//   • The webhook credential is in env ONLY. Both admin config endpoints return
-//     the GlobalGameConfig row wholesale, so a token stored there would be
-//     serialized into every admin's browser on every settings load. A webhook
-//     token is an unauthenticated bearer credential: anyone holding it can post
-//     to the channel under any name and avatar, and it cannot be revoked by
-//     rotating BOT_TOKEN — only by deleting the webhook.
+// Tunables live on GlobalGameConfig (cached in Redis). The webhook credential
+// lives in env ONLY — the admin config endpoints return that row wholesale to
+// the browser, so a token column there would leak into every admin's devtools.
 
 import { CHAT_KEYS, CHAT_CHANNELS } from './constants.js'
 
@@ -27,28 +16,12 @@ export const CHAT_CONFIG_DEFAULTS = {
   discordChatShowAttachments: false
 }
 
-/**
- * The bot token with any `Bot ` prefix removed.
- *
- * This matters more than it looks. .env.template ships BOT_TOKEN *with* the
- * prefix ("Bot xxx") because every REST caller in this repo passes it straight
- * through as an Authorization header. The gateway IDENTIFY payload is not an
- * HTTP header: it wants the bare token, and sending the prefixed value is
- * rejected with close code 4004 — which is `Reconnect: false`, so it presents
- * as a permanent authentication failure indistinguishable from a bad token.
- */
+// Gateway IDENTIFY needs the bare token; .env stores it "Bot xxx" for REST use.
 export function rawBotToken() {
   const token = process.env.DISCORD_CHAT_BOT_TOKEN || process.env.BOT_TOKEN || ''
   return token.trim().replace(/^bot\s+/i, '')
 }
 
-/**
- * Webhook credentials, from env only.
- *
- * Accepts either the full URL (what the Discord UI gives you when you click
- * "Copy Webhook URL") or the id/token pair, because operators will paste
- * whichever they have.
- */
 export function webhookCredentials() {
   const url = (process.env.DISCORD_CHAT_WEBHOOK_URL || '').trim()
   if (url) {
@@ -59,6 +32,12 @@ export function webhookCredentials() {
   const token = (process.env.DISCORD_CHAT_WEBHOOK_TOKEN || '').trim()
   if (/^\d{17,20}$/.test(id) && token) return { id, token }
   return null
+}
+
+function clampInt(value, min, max, fallback) {
+  const n = Number(value)
+  if (!Number.isInteger(n)) return fallback
+  return Math.min(max, Math.max(min, n))
 }
 
 function coerce(row) {
@@ -74,26 +53,11 @@ function coerce(row) {
   }
 }
 
-function clampInt(value, min, max, fallback) {
-  const n = Number(value)
-  if (!Number.isInteger(n)) return fallback
-  return Math.min(max, Math.max(min, n))
-}
-
-/**
- * Reads the relay config, preferring a short-lived Redis cache.
- *
- * Falls back to the DB on a cache miss and to CHAT_CONFIG_DEFAULTS (i.e. disabled) if both
- * fail. Failing closed is deliberate: an unreadable config must never leave the
- * relay running with a stale channel id.
- */
 export async function loadChatConfig(redis, prisma) {
   try {
     const cached = await redis.get(CHAT_KEYS.config)
     if (cached) return { ...CHAT_CONFIG_DEFAULTS, ...JSON.parse(cached) }
-  } catch {
-    // fall through to the DB
-  }
+  } catch {}
 
   let row = null
   try {
@@ -115,19 +79,12 @@ export async function loadChatConfig(redis, prisma) {
   const config = coerce(row)
   try {
     await redis.set(CHAT_KEYS.config, JSON.stringify(config), 'EX', CONFIG_TTL_SECONDS)
-  } catch {
-    // caching is best-effort
-  }
+  } catch {}
   return config
 }
 
-/**
- * Drops the cache and tells the other two processes to re-read.
- *
- * Called from the admin save handler. Without this the kill switch would only
- * take effect after the cache expired, or after a PM2 restart — which is
- * exactly when you least want to be restarting things.
- */
+// Called after an admin save so the kill switch takes effect immediately
+// instead of waiting out the cache TTL or a restart.
 export async function invalidateChatConfig(redis) {
   try {
     await redis.del(CHAT_KEYS.config)
