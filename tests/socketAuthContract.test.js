@@ -128,3 +128,73 @@ test('the socket server does not allow every origin with credentials', () => {
   )
   assert.ok(SERVER.includes('credentials: true'), 'socket.io CORS does not allow credentials')
 })
+
+// ── Discord chat relay ────────────────────────────────────────────────────
+// Chat handlers go through resolveChatMember() rather than requireSocketUser
+// directly, since resolveSocketUser caches {id, username, banned} for the
+// connection's life and knows nothing about inGuild/active/chatMutedUntil.
+const CHAT_HANDLERS = ['chat:join', 'chat:send']
+
+test('chat handlers do not take a user id from the payload', () => {
+  const paramList = /socket\.on\(\s*'[^']+'\s*,\s*(?:async\s*)?\(\s*\{([^}]*)\}/
+  for (const name of CHAT_HANDLERS) {
+    const src = handlerSource(name)
+    const params = paramList.exec(src)?.[1] ?? ''
+    const offenders = params
+      .split(',')
+      .map(s => s.trim().split(':')[0].trim())
+      .filter(k => /^(userId|username|uid|user)$/i.test(k))
+    assert.deepEqual(
+      offenders, [],
+      `${name} destructures ${offenders.join(', ')} from its payload — the relay posts into a ` +
+      'real Discord community under that name, so identity must come from the session cookie'
+    )
+  }
+})
+
+test('chat handlers resolve the caller through resolveChatMember', () => {
+  for (const name of CHAT_HANDLERS) {
+    const src = handlerSource(name)
+    assert.ok(
+      src.includes('resolveChatMember(socket'),
+      `${name} never calls resolveChatMember — it cannot know who is calling`
+    )
+  }
+})
+
+test('resolveChatMember authenticates and re-reads the gating fields', () => {
+  const start = SERVER.indexOf('async function resolveChatMember')
+  assert.notEqual(start, -1, 'resolveChatMember not found — was it renamed?')
+  const src = SERVER.slice(start, start + 2500)
+
+  assert.ok(src.includes('requireSocketUser(socket'), 'resolveChatMember does not authenticate')
+  assert.ok(src.includes('db.user.findUnique'), 'resolveChatMember does not re-read the user row')
+  for (const field of ['banned', 'active', 'inGuild', 'chatMutedUntil']) {
+    assert.ok(src.includes(field), `resolveChatMember does not check ${field}`)
+  }
+})
+
+test('sending into Discord verifies guild membership live, not from the cached flag', () => {
+  // User.inGuild is only refreshed by the hourly guild-sync cron (a bug in
+  // refreshDiscordTokenAndRoles's call sites means the live re-check never
+  // runs), so it can't be the gate for writing into someone else's community.
+  const start = SERVER.indexOf('async function resolveChatMember')
+  const src = SERVER.slice(start, start + 2500)
+  assert.ok(
+    src.includes('verifyGuildMembership'),
+    'the send path does not verify guild membership against Discord'
+  )
+})
+
+test('the unauthenticated cZone chat-message relay is gone', () => {
+  // It took the room name and display name from the client — any anonymous
+  // socket could broadcast into any room as any user.
+  assert.ok(
+    !/socket\.on\(\s*'chat-message'/.test(SERVER),
+    "the unauthenticated 'chat-message' handler is back — it must not be reintroduced"
+  )
+  assert.ok(
+    !/socket\.on\(\s*'join-zone'/.test(SERVER),
+    "the unauthenticated 'join-zone' handler is back — it let a client pick any room name"
+  )
+})

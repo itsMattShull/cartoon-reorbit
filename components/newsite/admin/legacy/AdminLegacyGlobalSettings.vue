@@ -464,6 +464,88 @@
             Leave blank to use the DISCORD_ANNOUNCEMENTS_CHANNEL environment variable.
           </p>
         </div>
+
+        <hr class="my-4" />
+
+        <h3 class="text-sm font-semibold">Live Chat Relay</h3>
+        <p class="text-xs text-gray-600">
+          Mirrors a Discord channel into the site sidebar and lets signed-in members post back
+          into it. Messages sent from the site arrive in Discord through a webhook, shown under
+          the player's site username with an <span class="font-mono">APP</span> tag.
+        </p>
+        <p class="text-[10px] text-gray-500">
+          Requires two things that are not set here: the <span class="font-mono">MESSAGE CONTENT</span>
+          privileged intent enabled on the bot (Developer Portal → Bot → Privileged Gateway Intents),
+          and <span class="font-mono">DISCORD_CHAT_WEBHOOK_URL</span> in the server environment.
+          The webhook credential is deliberately not stored in the database.
+        </p>
+
+        <label class="flex items-center gap-2 text-xs font-medium">
+          <input v-model="discordChatEnabled" type="checkbox" class="h-4 w-4" />
+          Enable the chat relay
+        </label>
+        <p class="text-[10px] text-gray-500 -mt-2">
+          Turning this off takes effect immediately, stops the feed, and clears the buffered
+          history. Use it as the kill switch if the channel is being abused.
+        </p>
+
+        <div class="max-w-md flex flex-col gap-1">
+          <label for="discordChatChannelId" class="text-xs font-medium">Chat Channel ID</label>
+          <input
+            id="discordChatChannelId"
+            v-model.trim="discordChatChannelId"
+            type="text"
+            inputmode="numeric"
+            pattern="[0-9]*"
+            class="border rounded-md px-2 py-1.5 text-sm"
+            placeholder="123456789012345678"
+          />
+          <p class="text-[10px] text-gray-500">
+            Must be a standard text channel in this Discord server; it is verified on save. The
+            bot needs View Channel and Read Message History on it. Everyone in the channel should
+            be told their messages appear on the website — consider a dedicated channel rather
+            than #general.
+          </p>
+        </div>
+
+        <div class="max-w-md grid grid-cols-2 gap-3">
+          <div class="flex flex-col gap-1">
+            <label for="discordChatSlowmodeSeconds" class="text-xs font-medium">Slowmode (seconds)</label>
+            <input
+              id="discordChatSlowmodeSeconds"
+              v-model.number="discordChatSlowmodeSeconds"
+              type="number"
+              min="0"
+              max="300"
+              class="border rounded-md px-2 py-1.5 text-sm"
+            />
+          </div>
+          <div class="flex flex-col gap-1">
+            <label for="discordChatMaxLength" class="text-xs font-medium">Max message length</label>
+            <input
+              id="discordChatMaxLength"
+              v-model.number="discordChatMaxLength"
+              type="number"
+              min="1"
+              max="2000"
+              class="border rounded-md px-2 py-1.5 text-sm"
+            />
+          </div>
+        </div>
+        <p class="text-[10px] text-gray-500 -mt-1">
+          Slowmode is per player. A separate global limit protects the webhook itself, because
+          Discord caps requests per webhook regardless of how many different people are sending.
+        </p>
+
+        <label class="flex items-center gap-2 text-xs font-medium">
+          <input v-model="discordChatShowAttachments" type="checkbox" class="h-4 w-4" />
+          Show image attachments in the site feed
+        </label>
+        <p class="text-[10px] text-gray-500 -mt-2">
+          Off by default. Any guild member can put an image on the website this way, and Discord's
+          attachment links expire after about a day, so older buffered images stop loading.
+        </p>
+
         <div>
           <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="savingDiscord" @click="saveDiscord">
             {{ savingDiscord ? 'Saving…' : 'Save' }}
@@ -492,6 +574,11 @@ const savingAuctions = ref(false)
 const savingCmart = ref(false)
 const savingDiscord = ref(false)
 const czoneContestDiscordChannelId = ref('')
+const discordChatEnabled           = ref(false)
+const discordChatChannelId         = ref('')
+const discordChatSlowmodeSeconds   = ref(5)
+const discordChatMaxLength         = ref(400)
+const discordChatShowAttachments   = ref(false)
 
 // cMart state
 const firstAdditionalCzoneCost      = ref(25000)
@@ -604,6 +691,11 @@ async function loadGlobal() {
     secondEditionOverlayWidth.value  = g?.secondEditionOverlayWidth  ?? null
     secondEditionOverlayHeight.value = g?.secondEditionOverlayHeight ?? null
     czoneContestDiscordChannelId.value = g?.czoneContestDiscordChannelId ?? ''
+    discordChatEnabled.value           = g?.discordChatEnabled === true
+    discordChatChannelId.value         = g?.discordChatChannelId ?? ''
+    discordChatSlowmodeSeconds.value   = Number(g?.discordChatSlowmodeSeconds ?? 5)
+    discordChatMaxLength.value         = Number(g?.discordChatMaxLength ?? 400)
+    discordChatShowAttachments.value   = g?.discordChatShowAttachments === true
     if (g?.timeBasedPurchaseLimits) {
       for (const r of timeBasedRarities) {
         const def = g.timeBasedPurchaseLimits[r]
@@ -776,7 +868,12 @@ async function saveDiscord() {
       method: 'POST',
       body: {
         dailyPointLimit: Number(dailyPointLimit.value),
-        czoneContestDiscordChannelId: czoneContestDiscordChannelId.value
+        czoneContestDiscordChannelId: czoneContestDiscordChannelId.value,
+        discordChatEnabled: discordChatEnabled.value,
+        discordChatChannelId: discordChatChannelId.value,
+        discordChatSlowmodeSeconds: Number(discordChatSlowmodeSeconds.value),
+        discordChatMaxLength: Number(discordChatMaxLength.value),
+        discordChatShowAttachments: discordChatShowAttachments.value
       }
     })
     toast.value = { type: 'ok', msg: 'Discord settings saved.' }

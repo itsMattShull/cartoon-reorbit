@@ -8,6 +8,9 @@ import {
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { clearUpgradesConfigCache } from '@/server/utils/upgradesConfigCache'
+import { fetchChannel } from '@/server/utils/discordChat/rest'
+import { rawBotToken, invalidateChatConfig } from '@/server/utils/discordChat/config'
+import { getRedis } from '@/server/utils/redis'
 
 export default defineEventHandler(async (event) => {
   // 1) Authenticate & authorize
@@ -43,7 +46,12 @@ export default defineEventHandler(async (event) => {
     packPriceDecayDays,
     packPriceFloor,
     packMaxDefaultBuysPerUser,
-    czoneContestDiscordChannelId
+    czoneContestDiscordChannelId,
+    discordChatEnabled,
+    discordChatChannelId,
+    discordChatSlowmodeSeconds,
+    discordChatMaxLength,
+    discordChatShowAttachments
   } = body
 
   // minimally require the existing cap; other fields optional with defaults
@@ -61,6 +69,40 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'Discord Channel ID must be a numeric channel/snowflake ID' })
     }
     czoneContestDiscordChannelIdValue = trimmed || null
+  }
+
+  // Discord chat relay: stronger check than the announcement channels above,
+  // since this is a live two-way bridge — verify it's a text channel in this guild.
+  let discordChatChannelIdValue
+  if (discordChatChannelId !== undefined) {
+    const trimmed = typeof discordChatChannelId === 'string' ? discordChatChannelId.trim() : ''
+    if (trimmed && !/^\d{17,20}$/.test(trimmed)) {
+      throw createError({ statusCode: 400, statusMessage: 'Chat Channel ID must be a numeric channel/snowflake ID' })
+    }
+    if (trimmed) {
+      let channel = null
+      try {
+        channel = await fetchChannel(trimmed, rawBotToken())
+      } catch {
+        throw createError({
+          statusCode: 400,
+          statusMessage: 'Could not read that channel. Check the ID and that the bot can see it.'
+        })
+      }
+      if (!channel || String(channel.guild_id || '') !== String(process.env.DISCORD_GUILD_ID || '')) {
+        throw createError({ statusCode: 400, statusMessage: 'That channel is not in this Discord server.' })
+      }
+      if (Number(channel.type) !== 0) {
+        throw createError({ statusCode: 400, statusMessage: 'Chat channel must be a standard text channel.' })
+      }
+    }
+    discordChatChannelIdValue = trimmed || null
+  }
+
+  const clampInt = (value, min, max) => {
+    const n = Number(value)
+    if (!Number.isInteger(n)) return undefined
+    return Math.min(max, Math.max(min, n))
   }
 
   const payload = {
@@ -87,7 +129,12 @@ export default defineEventHandler(async (event) => {
     packPriceDecayDays:        (typeof packPriceDecayDays        === 'number') ? Math.max(1, packPriceDecayDays)        : undefined,
     packPriceFloor:            (typeof packPriceFloor            === 'number') ? Math.max(0, packPriceFloor)            : undefined,
     packMaxDefaultBuysPerUser: (typeof packMaxDefaultBuysPerUser === 'number') ? Math.max(1, packMaxDefaultBuysPerUser) : undefined,
-    czoneContestDiscordChannelId: czoneContestDiscordChannelIdValue
+    czoneContestDiscordChannelId: czoneContestDiscordChannelIdValue,
+    discordChatEnabled: (typeof discordChatEnabled === 'boolean') ? discordChatEnabled : undefined,
+    discordChatChannelId: discordChatChannelIdValue,
+    discordChatSlowmodeSeconds: (discordChatSlowmodeSeconds !== undefined) ? clampInt(discordChatSlowmodeSeconds, 0, 300) : undefined,
+    discordChatMaxLength: (discordChatMaxLength !== undefined) ? clampInt(discordChatMaxLength, 1, 2000) : undefined,
+    discordChatShowAttachments: (typeof discordChatShowAttachments === 'boolean') ? discordChatShowAttachments : undefined
   }
 
   // 3) Upsert the singleton global config row
@@ -121,7 +168,12 @@ export default defineEventHandler(async (event) => {
         packPriceDecayDays:        payload.packPriceDecayDays        ?? 7,
         packPriceFloor:            payload.packPriceFloor            ?? 700,
         packMaxDefaultBuysPerUser: payload.packMaxDefaultBuysPerUser ?? 5,
-        czoneContestDiscordChannelId: payload.czoneContestDiscordChannelId ?? null
+        czoneContestDiscordChannelId: payload.czoneContestDiscordChannelId ?? null,
+        discordChatEnabled:         payload.discordChatEnabled         ?? false,
+        discordChatChannelId:       payload.discordChatChannelId       ?? null,
+        discordChatSlowmodeSeconds: payload.discordChatSlowmodeSeconds ?? 5,
+        discordChatMaxLength:       payload.discordChatMaxLength       ?? 400,
+        discordChatShowAttachments: payload.discordChatShowAttachments ?? false
       },
       update: {
         dailyPointLimit: payload.dailyPointLimit,
@@ -143,7 +195,12 @@ export default defineEventHandler(async (event) => {
         ...(payload.packPriceDecayDays        !== undefined ? { packPriceDecayDays:        payload.packPriceDecayDays }        : {}),
         ...(payload.packPriceFloor            !== undefined ? { packPriceFloor:            payload.packPriceFloor }            : {}),
         ...(payload.packMaxDefaultBuysPerUser !== undefined ? { packMaxDefaultBuysPerUser: payload.packMaxDefaultBuysPerUser } : {}),
-        ...(payload.czoneContestDiscordChannelId !== undefined ? { czoneContestDiscordChannelId: payload.czoneContestDiscordChannelId } : {})
+        ...(payload.czoneContestDiscordChannelId !== undefined ? { czoneContestDiscordChannelId: payload.czoneContestDiscordChannelId } : {}),
+        ...(payload.discordChatEnabled         !== undefined ? { discordChatEnabled:         payload.discordChatEnabled }         : {}),
+        ...(payload.discordChatChannelId       !== undefined ? { discordChatChannelId:       payload.discordChatChannelId }       : {}),
+        ...(payload.discordChatSlowmodeSeconds !== undefined ? { discordChatSlowmodeSeconds: payload.discordChatSlowmodeSeconds } : {}),
+        ...(payload.discordChatMaxLength       !== undefined ? { discordChatMaxLength:       payload.discordChatMaxLength }       : {}),
+        ...(payload.discordChatShowAttachments !== undefined ? { discordChatShowAttachments: payload.discordChatShowAttachments } : {})
       }
     })
     clearUpgradesConfigCache()
@@ -166,7 +223,12 @@ export default defineEventHandler(async (event) => {
       'packPriceDecayDays',
       'packPriceFloor',
       'packMaxDefaultBuysPerUser',
-      'czoneContestDiscordChannelId'
+      'czoneContestDiscordChannelId',
+      'discordChatEnabled', // no webhook token here — that stays in env, never logged
+      'discordChatChannelId',
+      'discordChatSlowmodeSeconds',
+      'discordChatMaxLength',
+      'discordChatShowAttachments'
     ]
     for (const k of fields) {
       const prevVal = before ? before[k] : undefined
@@ -191,6 +253,9 @@ export default defineEventHandler(async (event) => {
         newValue: result?.timeBasedPurchaseLimits ?? null
       })
     }
+    // Push to the socket server + gateway worker so the kill switch is immediate.
+    try { await invalidateChatConfig(getRedis()) } catch {}
+
     return result
   } catch (err) {
     console.error('Error upserting GlobalGameConfig:', err)

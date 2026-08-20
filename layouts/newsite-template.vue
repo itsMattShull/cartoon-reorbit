@@ -265,20 +265,35 @@ html.newsite-active body {
       </button>
       <template v-if="!isMobile || !mobileSidebarCollapsed">
         <div class="sidebar-top"    :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto' } : {}"><UserInfo /></div>
-        <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}">
-          <MiddleSidebarImages v-show="!sidebarMiddleComponent" />
-          <CmartSidebar        v-show="sidebarMiddleComponent === 'CmartSidebar'" />
-          <NewcmartSidebar     v-show="sidebarMiddleComponent === 'NewcmartSidebar'" />
-          <AuctionHouseSidebar v-show="sidebarMiddleComponent === 'AuctionHouseSidebar'" />
-          <MyCollectionSidebar v-show="sidebarMiddleComponent === 'MyCollectionSidebar'" />
-          <AllCtoonsSidebar    v-show="sidebarMiddleComponent === 'AllCtoonsSidebar'" />
-          <MyWishlistSidebar   v-show="sidebarMiddleComponent === 'MyWishlistSidebar'" />
-          <TradeSidebarWrapper v-show="sidebarMiddleComponent === 'TradeSidebarWrapper'" />
-          <CzoneSidebarMiddle  v-show="sidebarMiddleComponent === 'CzoneSidebarMiddle'" />
-        </div>
-        <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-bottom-mt)' } : {}"><WinballPromo /></div>
+        <!-- No fixed height: --sidebar-middle-height varies per page, so
+             .sidebar-chat flexes to fill what's left after UserInfo instead. -->
+        <div v-if="showChatInSidebar" class="sidebar-chat"><LazyDiscordChat /></div>
+        <template v-else>
+          <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}">
+            <MiddleSidebarImages v-show="!sidebarMiddleComponent" />
+            <CmartSidebar        v-show="sidebarMiddleComponent === 'CmartSidebar'" />
+            <NewcmartSidebar     v-show="sidebarMiddleComponent === 'NewcmartSidebar'" />
+            <AuctionHouseSidebar v-show="sidebarMiddleComponent === 'AuctionHouseSidebar'" />
+            <MyCollectionSidebar v-show="sidebarMiddleComponent === 'MyCollectionSidebar'" />
+            <AllCtoonsSidebar    v-show="sidebarMiddleComponent === 'AllCtoonsSidebar'" />
+            <MyWishlistSidebar   v-show="sidebarMiddleComponent === 'MyWishlistSidebar'" />
+            <TradeSidebarWrapper v-show="sidebarMiddleComponent === 'TradeSidebarWrapper'" />
+            <CzoneSidebarMiddle  v-show="sidebarMiddleComponent === 'CzoneSidebarMiddle'" />
+          </div>
+          <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-bottom-mt)' } : {}"><WinballPromo /></div>
+        </template>
       </template>
     </div>
+    <!-- Teleported sheet, not a sidebar region: the sidebar body above sits
+         behind a v-if keyed on mobileSidebarCollapsed, so a panel inside it
+         would be unmounted (dropping the socket) by the "Hide Sidebar" button.
+         position:fixed resolves against the real viewport here because the
+         chrome's transform is dropped below 768px. -->
+    <Teleport to="body">
+      <div v-if="showChatSheet" class="chat-sheet" role="dialog" aria-modal="true" aria-label="Discord chat">
+        <LazyDiscordChat sheet @close="chatOpen = false" />
+      </div>
+    </Teleport>
     <div class="main-content" :class="{ 'main-content-full': !showSidebar && !isMobile, 'main-content-expand': !showFooter }" :style="[{ border: mainContentBorder }, mainContentMobileStyle]"><slot /></div>
     <div class="footer" :style="[{ display: showFooter ? '' : 'none' }, isMobile ? { width: '100%', height: 'auto', aspectRatio: '800 / 60' } : {}]"><slot name="footer" /></div>
     <CtoonInfoCard v-if="ctoonModalIsOpen" />
@@ -318,7 +333,7 @@ const {
 function onAuctionCreated(userCtoonId) {
   notifyAuctionCreated(userCtoonId)
 }
-const { sidebarMiddleComponent, mobileSidebarCollapsed } = useNewsiteLayout()
+const { sidebarMiddleComponent, mobileSidebarCollapsed, chatOpen } = useNewsiteLayout()
 const czoneState = useNewSiteCzoneState()
 
 const siteName = 'Cartoon ReOrbit'
@@ -352,6 +367,11 @@ const showAdbar = computed(() => route.meta.showAdbar !== false)
 const showNav = computed(() => route.meta.showNav !== false)
 const showSidebar = computed(() => route.meta.showSidebar !== false)
 const showFooter = computed(() => route.meta.showFooter !== false)
+
+// Chat only exists where the sidebar does (hidden on the games + admin console).
+const chatAvailable = computed(() => showSidebar.value && !fluidLayout.value)
+const showChatInSidebar = computed(() => chatOpen.value && chatAvailable.value && !isMobile.value)
+const showChatSheet = computed(() => chatOpen.value && chatAvailable.value && isMobile.value)
 const mainContentBorder = computed(() => route.meta.mainContentBorder === false ? 'none' : undefined)
 
 
@@ -450,6 +470,51 @@ onUnmounted(() => {
   if (frame !== null) cancelAnimationFrame(frame)
   mql?.removeEventListener('change', applyMobile)
   window.removeEventListener('resize', computeLayout)
+  releaseChatSheet()
+})
+
+// Mobile chat sheet: visualViewport sizes it around the iOS keyboard (100dvh
+// doesn't shrink for it), and the body-pin defeats pull-to-refresh, which
+// would otherwise reload the page and drop the socket + scrollback.
+let sheetScrollY = 0
+let sheetPinned = false
+
+const syncChatSheet = () => {
+  const el = document.querySelector('.chat-sheet')
+  const vv = window.visualViewport
+  if (!el || !vv) return
+  el.style.height = `${vv.height}px`
+  el.style.transform = `translateY(${vv.offsetTop}px)`
+}
+
+function holdChatSheet() {
+  if (sheetPinned) return
+  sheetPinned = true
+  sheetScrollY = window.scrollY
+  document.body.style.position = 'fixed'
+  document.body.style.top = `-${sheetScrollY}px`
+  document.body.style.width = '100%'
+  document.documentElement.style.overscrollBehaviorY = 'none'
+  window.visualViewport?.addEventListener('resize', syncChatSheet)
+  window.visualViewport?.addEventListener('scroll', syncChatSheet)
+  nextTick(syncChatSheet)
+}
+
+function releaseChatSheet() {
+  if (!sheetPinned) return
+  sheetPinned = false
+  document.body.style.position = ''
+  document.body.style.top = ''
+  document.body.style.width = ''
+  document.documentElement.style.overscrollBehaviorY = ''
+  window.visualViewport?.removeEventListener('resize', syncChatSheet)
+  window.visualViewport?.removeEventListener('scroll', syncChatSheet)
+  window.scrollTo(0, sheetScrollY)
+}
+
+watch(showChatSheet, (open) => {
+  if (open) holdChatSheet()
+  else releaseChatSheet()
 })
 
 const mainContentMobileStyle = computed(() => {
@@ -481,7 +546,10 @@ const scaleStyle = computed(() => {
   return {
     transform: `scale(${scale.value})`,
     transformOrigin: 'top center',
-    marginBottom: `${scaleMarginBottom(scale.value)}px`
+    marginBottom: `${scaleMarginBottom(scale.value)}px`,
+    // Lets the chat panel counter-scale so its text stays readable at small
+    // window widths, where scale can floor near 0.72.
+    '--site-scale': String(scale.value)
   }
 })
 </script>
@@ -724,6 +792,32 @@ const scaleStyle = computed(() => {
   flex-shrink: 0;
   overflow: hidden;
   align-self: center;
+}
+
+/* min-height:0 required — without it a flex item's auto min-size refuses to
+   shrink, and .sidebar { overflow: hidden } clips the composer off. */
+.sidebar-chat {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: var(--sidebar-middle-width);
+  align-self: center;
+  margin-top: var(--sidebar-middle-mt);
+  margin-bottom: var(--sidebar-bottom-mb);
+  overflow: hidden;
+}
+
+/* Mobile-only full-screen sheet, teleported to body. height:100dvh is a pre-JS
+   fallback — the visualViewport handler sets the real value above the keyboard. */
+.chat-sheet {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100dvh;
+  z-index: 60;
+  background: var(--sidebar-bg);
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar-bottom {

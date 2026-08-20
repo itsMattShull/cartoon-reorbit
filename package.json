@@ -18,7 +18,8 @@
     "start": "nuxt start",
     "lint": "eslint .",
     "seed": "node prisma/seed.js",
-    "socket": "node server/socket-server.js"
+    "socket": "node server/socket-server.js",
+    "discord-chat": "node server/workers/discord-chat.worker.js"
   },
   "keywords": [],
   "author": "",

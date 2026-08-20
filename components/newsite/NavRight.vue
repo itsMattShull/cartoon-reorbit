@@ -24,6 +24,15 @@
     <NuxtLink v-if="!isMobile" to="/newsite/settings" class="nav-link">
       <BlueButton :style="{ height: buttonHeight }">Settings</BlueButton>
     </NuxtLink>
+    <!-- "Chat", not "Toggle Chat" — nav-right clips overflow, and the longer
+         label would eat into Settings on an admin's wider nav-left. Hidden
+         where the sidebar itself is hidden (games + admin console). -->
+    <BlueButton
+      v-if="chatAvailable"
+      :style="{ height: buttonHeight }"
+      :aria-pressed="chatOpen ? 'true' : 'false'"
+      @click="toggleChat"
+    >Chat</BlueButton>
   </div>
 </template>
 
@@ -38,6 +47,10 @@ const props = defineProps({
     default: false
   }
 })
+
+const route = useRoute()
+const { chatOpen, toggleChat } = useNewsiteLayout()
+const chatAvailable = computed(() => route.meta.showSidebar !== false && route.meta.fluidLayout !== true)
 </script>
 
 <style scoped>

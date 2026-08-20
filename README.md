@@ -210,6 +210,12 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
   node server/socket-server.js
   ```
 
+- The sidebar Discord chat is off by default and needs no local setup. If you want to
+  run it, start its gateway process in another terminal (see the section below):
+  ```bash
+  npm run discord-chat
+  ```
+
 - If you are NOT using `npm run dev`, start the worker manually in a third terminal:
   ```bash
   npm run worker
@@ -240,6 +246,32 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
     ```
 - Set OFFICIAL_USERNAME in `.env` to be your username, this is so features like Auction insta-bidding and Auction Only cToons work.
 
+
+### Discord chat relay (sidebar "Chat" panel)
+
+Mirrors one Discord channel into the sidebar and lets signed-in members post back into it.
+**Off by default** — enable in Admin → Global Settings → Discord.
+
+| Piece | Where |
+|---|---|
+| Gateway (Discord → site) | `discord-chat` PM2 app / `npm run discord-chat` |
+| Fan-out + sends (site → Discord) | `socket-server`, `/chat` namespace |
+| Shared logic | `server/utils/discordChat/` |
+
+Setup:
+1. Enable the **Message Content** privileged intent (Developer Portal → Bot → Privileged
+   Gateway Intents). Without it the gateway refuses to connect (close code 4014).
+2. Give the bot `View Channel` + `Read Message History` on the chat channel.
+3. Create a webhook on that channel and set `DISCORD_CHAT_WEBHOOK_URL` in `.env`. It is not
+   stored in the database — the admin config endpoint returns that row to the browser, and a
+   webhook token is a bearer credential you don't want leaked.
+4. Enable the relay and set the channel ID in Admin → Global Settings → Discord.
+
+Notes: messages sent from the site post via the webhook as `Username · ReOrbit`, since Discord
+has no API to post as a real user. Moderation is asymmetric — every relayed message is one
+webhook identity, so Discord's per-user tools can't reach a site user; use **Mute chat** in
+Manage Users, or the kill switch, instead. Consider a dedicated channel rather than `#general`,
+since its members didn't sign up for a website mirror.
 
 ### Quick troubleshooting
 - If Prisma cannot connect, verify `DATABASE_URL` and that PostgreSQL is running.
