@@ -1,19 +1,20 @@
 // server/api/admin/cmoons.post.js
-import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
+import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { isValidHexColor, isValidDiscordSnowflake } from '@/server/utils/cmoon'
+import { invalidateCMoonList } from '@/server/api/cmoons.get'
+import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 
 export default defineEventHandler(async (event) => {
-  const cookie = getRequestHeader(event, 'cookie') || ''
-  let me
-  try { me = await $fetch('/api/auth/me', { headers: { cookie } }) } catch { throw createError({ statusCode: 401, statusMessage: 'Unauthorized' }) }
-  if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
+  const me = await requireAdmin(event)
+  assertSameOrigin(event)
 
   const body = await readBody(event)
   const name = typeof body?.name === 'string' ? body.name.trim() : ''
   const color = typeof body?.color === 'string' ? body.color.trim() : ''
   const discordRoleId = typeof body?.discordRoleId === 'string' ? body.discordRoleId.trim() : ''
+  const pageDescription = typeof body?.pageDescription === 'string' ? body.pageDescription.trim().slice(0, 2000) || null : null
   const captainIds = Array.isArray(body?.captainIds) ? [...new Set(body.captainIds.filter(x => typeof x === 'string'))] : []
   const prizeCtoons = Array.isArray(body?.prizeCtoons) ? body.prizeCtoons : []
 
@@ -46,12 +47,14 @@ export default defineEventHandler(async (event) => {
       name,
       color,
       discordRoleId: discordRoleId || null,
+      pageDescription,
       captains: { create: captainIds.map(userId => ({ userId })) },
       prizeCtoons: { create: prizeCtoonRows },
     },
   })
 
   await logAdminChange(db, { userId: me.id, area: 'cMoon', key: `create:${created.id}`, prevValue: null, newValue: { id: created.id, name } })
+  invalidateCMoonList()
 
   return { id: created.id }
 })

@@ -2,11 +2,12 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
-import { requireAdmin } from '@/server/utils/adminAuth'
+import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 import { isValidDiscordSnowflake } from '@/server/utils/cmoon'
 
 export default defineEventHandler(async (event) => {
   const me = await requireAdmin(event)
+  assertSameOrigin(event)
 
   const cMoonId = event.context.params?.id
   const cmoon = await db.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true } })

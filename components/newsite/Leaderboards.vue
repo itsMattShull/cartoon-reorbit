@@ -12,6 +12,47 @@
       </div>
     </div>
 
+    <!-- cMoons Tab: weekly team-score standings, plus each cMoon's top individual point
+         contributors (a different, complementary metric — see the script section) -->
+    <div v-if="activeTab === 'cmoons'" class="lb-content">
+      <div class="lb-card lb-cmoons-card">
+        <div class="lb-card-header lb-card-header--cmoons">cMoon Team Leaderboard</div>
+        <div v-if="cmoonsPending" class="lb-loading">Loading…</div>
+        <ul v-else class="lb-list">
+          <li v-for="row in cmoonsData" :key="row.id" class="lb-row">
+            <span class="lb-rank">{{ row.rank }}</span>
+            <span class="lb-cmoon-swatch" :style="{ background: safeCMoonColor(row.color) }"></span>
+            <div class="lb-user-col">
+              <NuxtLink :to="`/newsite/cmoon/${row.id}`" class="lb-username">{{ row.name }}</NuxtLink>
+              <span class="lb-cmoon-members">{{ row.memberCount }} member{{ row.memberCount === 1 ? '' : 's' }}</span>
+            </div>
+            <span class="lb-value">{{ Number(row.teamScore).toLocaleString() }}</span>
+          </li>
+          <li v-if="!cmoonsData?.length" class="lb-empty">No cMoons yet</li>
+        </ul>
+      </div>
+
+      <div v-if="cmoonsData?.length" class="cmoon-contributors">
+        <div v-for="team in cmoonsData" :key="'contrib-' + team.id" class="lb-card cmoon-team-card">
+          <div class="lb-card-header cmoon-team-header" :style="cMoonPillStyle(team.color)">
+            <span class="cmoon-team-name">{{ team.name }} — Top Contributors</span>
+          </div>
+          <ul v-if="contributorsByCMoonId[team.id]?.length" class="lb-list">
+            <li v-for="(row, ci) in contributorsByCMoonId[team.id]" :key="row.username" class="lb-row">
+              <span class="lb-rank">{{ ci + 1 }}</span>
+              <img class="lb-avatar" :src="`/avatars/${row.avatar || 'default.png'}`" alt="" />
+              <div class="lb-user-col">
+                <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
+                <span v-if="row.rankName" class="cmoon-rank-badge">{{ row.rankName }}</span>
+              </div>
+              <span class="lb-value">{{ row.points.toLocaleString() }}</span>
+            </li>
+          </ul>
+          <div v-else class="lb-empty">No contributions yet</div>
+        </div>
+      </div>
+    </div>
+
     <!-- Users Tab -->
     <div v-if="activeTab === 'users'" class="lb-content">
       <div class="lb-grid">
@@ -77,42 +118,29 @@
         </div>
       </div>
     </div>
-
-    <!-- cMoons Tab: team standings + each cMoon's top individual contributors -->
-    <div v-else-if="activeTab === 'cmoons'" class="lb-content">
-      <div v-if="cMoonStandingsPending" class="lb-loading">Loading…</div>
-      <div v-else class="cmoon-standings">
-        <div v-for="(team, i) in cMoonStandingsData?.standings" :key="team.id" class="lb-card cmoon-team-card">
-          <div class="lb-card-header cmoon-team-header" :style="cMoonPillStyle(team.color)">
-            <span class="cmoon-team-rank">#{{ i + 1 }}</span>
-            <span class="cmoon-team-name">{{ team.name }}</span>
-            <span class="cmoon-team-total">{{ team.totalPoints.toLocaleString() }} pts</span>
-          </div>
-          <div class="cmoon-team-sub">{{ team.memberCount }} member{{ team.memberCount === 1 ? '' : 's' }}</div>
-          <ul v-if="team.topContributors.length" class="lb-list">
-            <li v-for="(row, ci) in team.topContributors" :key="row.username" class="lb-row">
-              <span class="lb-rank">{{ ci + 1 }}</span>
-              <img class="lb-avatar" :src="`/avatars/${row.avatar || 'default.png'}`" alt="" />
-              <div class="lb-user-col">
-                <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
-                <span v-if="row.rankName" class="cmoon-rank-badge">{{ row.rankName }}</span>
-              </div>
-              <span class="lb-value">{{ row.points.toLocaleString() }}</span>
-            </li>
-          </ul>
-          <div v-else class="lb-empty">No contributions yet</div>
-        </div>
-        <div v-if="!cMoonStandingsData?.standings?.length" class="lb-empty">No cMoons yet</div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
 import { useRequestHeaders } from '#app'
+import { isSafeCMoonColor } from '~/utils/cmoonColor'
 
 const activeTab = ref('users')
 const headers = process.server ? useRequestHeaders(['cookie']) : undefined
+
+const cMoonEnabled = ref(false)
+const { data: cmoonsData, pending: cmoonsPending } = useFetch('/api/leaderboard/cmoons', { default: () => [], headers })
+onMounted(async () => {
+  try {
+    const data = await $fetch('/api/cmoons')
+    cMoonEnabled.value = !!data?.cMoonEnabled
+  } catch {
+    cMoonEnabled.value = false
+  }
+})
+function safeCMoonColor(color) {
+  return isSafeCMoonColor(color) ? color : '#3a4a63'
+}
 
 const { data: pointsData, pending: pointsPending } = useFetch('/api/points-leaderboard', { default: () => [], headers })
 const { data: earnersData, pending: earnersPending } = useFetch('/api/leaderboard/trending-earners', { default: () => [], headers })
@@ -244,12 +272,12 @@ function cMoonForRow(row) {
   return cMoonBadges.value[row.username] || null
 }
 
-// cMoons tab: fetched eagerly like the Users tab boards above (cheap — reads the
-// denormalized User.cMoonPoints column, not a live PointsLog aggregate), both to render the
-// tab immediately when selected and to know whether to show the tab button at all (hidden
-// entirely when the feature is off, rather than showing an empty "cMoons" tab).
-const { data: cMoonStandingsData, pending: cMoonStandingsPending } = useFetch('/api/leaderboard/cmoon-standings', { default: () => ({ cMoonEnabled: false, standings: [] }), headers })
-const cMoonEnabled = computed(() => cMoonStandingsData.value?.cMoonEnabled ?? false)
+// Top individual point contributors per cMoon — a different, complementary metric from the
+// team-score standings above (row.teamScore, from weekly bonus categories): this is each
+// member's own lifetime point contribution (User.cMoonPoints, feeds the cMoon rank/achievement
+// system). Fetched eagerly like the boards above — cheap, reads a denormalized column.
+const { data: cMoonContributorsData } = useFetch('/api/leaderboard/cmoon-standings', { default: () => ({ cMoonEnabled: false, contributorsByCMoonId: {} }), headers })
+const contributorsByCMoonId = computed(() => cMoonContributorsData.value?.contributorsByCMoonId || {})
 </script>
 
 <style scoped>
@@ -353,6 +381,22 @@ const cMoonEnabled = computed(() => cMoonStandingsData.value?.cMoonEnabled ?? fa
 .lb-card-header--alltime  { background: linear-gradient(90deg, #5a4a00 0%, transparent 100%); border-bottom: 1px solid rgba(226,200,0,0.3); }
 .lb-card-header--monthly  { background: linear-gradient(90deg, #1a4a5a 0%, transparent 100%); border-bottom: 1px solid rgba(74,200,226,0.3); }
 .lb-card-header--weekly   { background: linear-gradient(90deg, #1a3a4a 0%, transparent 100%); border-bottom: 1px solid rgba(74,150,200,0.3); }
+.lb-card-header--cmoons   { background: linear-gradient(90deg, #3a1a5a 0%, transparent 100%); border-bottom: 1px solid rgba(180,74,226,0.3); }
+
+.lb-cmoons-card { max-width: 420px; margin: 0 auto; }
+
+.lb-cmoon-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.lb-cmoon-members {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.5);
+}
 
 .lb-list {
   list-style: none;
@@ -452,15 +496,16 @@ const cMoonEnabled = computed(() => cMoonStandingsData.value?.cMoonEnabled ?? fa
   }
 }
 
-.cmoon-standings {
+.cmoon-contributors {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  margin-top: 10px;
 }
 
 .cmoon-team-card {
-  /* cMoonPillStyle sets background+color inline on the header for the team's own color;
-     everything else here matches .lb-card-header's existing look. */
+  /* Inline style sets background+color for the team's own color; everything else here
+     matches .lb-card-header's existing look. */
 }
 
 .cmoon-team-header {
@@ -470,29 +515,12 @@ const cMoonEnabled = computed(() => cMoonStandingsData.value?.cMoonEnabled ?? fa
   border-bottom: none !important;
 }
 
-.cmoon-team-rank {
-  font-size: 0.68rem;
-  opacity: 0.8;
-  flex-shrink: 0;
-}
-
 .cmoon-team-name {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.cmoon-team-total {
-  flex-shrink: 0;
-}
-
-.cmoon-team-sub {
-  padding: 4px 10px;
-  font-size: 0.68rem;
-  color: rgba(255, 255, 255, 0.4);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 .cmoon-rank-badge {

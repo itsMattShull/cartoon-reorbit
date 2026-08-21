@@ -6,10 +6,11 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
-import { requireAdmin } from '@/server/utils/adminAuth'
+import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 
 export default defineEventHandler(async (event) => {
   const me = await requireAdmin(event)
+  assertSameOrigin(event)
 
   const cMoonId = event.context.params?.id
   const rankId = event.context.params?.rankId

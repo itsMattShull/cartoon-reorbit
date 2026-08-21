@@ -1,14 +1,13 @@
 // /api/admin/ctoon/[id].get.js
-import { defineEventHandler, getRequestHeader, createError } from 'h3'
+import { defineEventHandler, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { requireAdmin } from '@/server/utils/requireAdmin'
 
 export default defineEventHandler(async (event) => {
   const id = event.context.params.id
 
   /* ── Admin check ─────────────────────────────────────────── */
-  const cookie = getRequestHeader(event, 'cookie') || ''
-  const me = await $fetch('/api/auth/me', { headers: { cookie } }).catch(() => null)
-  if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Admins only' })
+  await requireAdmin(event)
 
   /* ── Fetch the cToon ─────────────────────────────────────── */
   try {
@@ -21,6 +20,7 @@ export default defineEventHandler(async (event) => {
         price: true, inCmart: true, codeOnly: true,
         quantity: true, initialQuantity: true, perUserLimit: true,
         characters: true, description: true, soundPath: true,
+        cMoonId: true,
 
         // NEW G-toon fields
         isGtoon:    true,

@@ -19,6 +19,8 @@ import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/aucti
 import { logCronError } from '../utils/cronErrorLog.js'
 import { autoAssignExpiredCMoonUsers } from '../utils/cmoon.js'
 import { runCMoonPointsAggregate } from './cmoon-points-aggregate.js'
+import { runRecordDailyTaskCompletions } from './record-daily-task-completions.js'
+import { runCMoonWeeklyScore } from './cmoon-weekly-score.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
 const ANNOUNCEMENTS_BOT_TOKEN = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || BOT_TOKEN
@@ -999,6 +1001,17 @@ await runJob('autoAssignExpiredCMoonUsers', autoAssignExpiredCMoonUsers)
 await runJob('syncCMoonDiscordRoles', syncCMoonDiscordRoles)
 cron.schedule('40 2 * * *', () => runJob('autoAssignExpiredCMoonUsers', autoAssignExpiredCMoonUsers), { timezone: 'America/Chicago' }) // 02:40 CST daily
 cron.schedule('45 2 * * *', () => runJob('syncCMoonDiscordRoles', syncCMoonDiscordRoles), { timezone: 'America/Chicago' }) // 02:45 CST daily
+
+// cMoon team leaderboard: record which cMoon members completed at least one daily task,
+// then once a week roll the past week's completions plus current game-leaderboard standings
+// into each cMoon's team score. Both no-op immediately when GlobalGameConfig.cMoonEnabled is
+// off. The completion check runs every 4 hours rather than once daily — the underlying daily
+// tasks reset at two different times (8pm Chicago for most, 8am for Winwheel/Lotto/monster
+// scans; see server/utils/dailyTaskWindows.js), so a single daily run would leave a ~12-hour
+// dead zone where activity in the 8am-reset window could go unrecorded. Re-checking an
+// already-recorded day is a no-op (UserDailyTaskCompletion is unique on userId+date).
+cron.schedule('15 */4 * * *', () => runJob('recordDailyTaskCompletions', runRecordDailyTaskCompletions), { timezone: 'America/Chicago' }) // every 4h at :15
+cron.schedule('50 2 * * 1', () => runJob('cmoonWeeklyScore', runCMoonWeeklyScore), { timezone: 'America/Chicago' }) // 02:50 CST Monday
 
 await runJob('recomputeLastActivity', recomputeLastActivity)
 cron.schedule('0 4 * * *', () => runJob('recomputeLastActivity', recomputeLastActivity), { timezone: 'America/Chicago' })  // 04:00 CST daily
