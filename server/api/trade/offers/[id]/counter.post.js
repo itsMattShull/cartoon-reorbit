@@ -27,6 +27,7 @@ import {
   MAX_COUNTER_CHAIN_DEPTH
 } from '@/server/utils/tradeOffer'
 import { notifyTradeOfferReceived } from '@/server/utils/notifications'
+import { checkTradeOfferRateLimit } from '@/server/utils/tradeOfferRateLimit'
 
 /// One response for every "you may not counter this" case. Distinguishing
 /// "no such offer" from "not yours" from "already settled" would make this
@@ -55,8 +56,11 @@ export default defineEventHandler(async (event) => {
   const {
     ctoonIdsRequested = [],
     ctoonIdsOffered = [],
-    pointsOffered = 0
+    pointsOffered = 0,
+    pointsRequested = 0
   } = await readBody(event)
+
+  await checkTradeOfferRateLimit(event, callerId)
 
   // 3) Load the offer being countered
   const original = await prisma.tradeOffer.findUnique({
@@ -94,7 +98,7 @@ export default defineEventHandler(async (event) => {
     ctoonIdsOffered,
     ctoonIdsRequested
   })
-  assertOfferHasContent({ resolvedOffered, resolvedRequested, pointsOffered })
+  assertOfferHasContent({ resolvedOffered, resolvedRequested, pointsOffered, pointsRequested })
 
   // 4) Ownership, availability and funding.
   //
@@ -102,12 +106,13 @@ export default defineEventHandler(async (event) => {
   // the very cToons committed to the offer it replaces, which the pending-trade
   // guard would otherwise reject. The exemption is scoped to this one offer, so
   // a cToon that is ALSO in some unrelated pending offer still fails.
-  await validateTradeOfferInputs({
+  const { existingPendingCount } = await validateTradeOfferInputs({
     initiatorId: callerId,
     recipient,
     resolvedOffered,
     resolvedRequested,
     pointsOffered,
+    pointsRequested,
     excludeOfferIds: [original.id]
   })
 
@@ -145,6 +150,7 @@ export default defineEventHandler(async (event) => {
       initiatorId: callerId,
       recipientId: recipient.id,
       pointsOffered,
+      pointsRequested,
       resolvedOffered,
       resolvedRequested,
       counteredOfferId: original.id
@@ -153,15 +159,19 @@ export default defineEventHandler(async (event) => {
 
   // 6) One DM, with counter wording. Not awaited, and reject.post.js is
   // deliberately never involved — otherwise the other party would get both a
-  // "rejected your offer" and a "countered your offer" message.
-  sendTradeOfferDM({
-    recipientDiscordId: recipient.discordId,
-    fromUsername: me.username,
-    pointsOffered,
-    offeredCount: resolvedOffered.length,
-    requestedCount: resolvedRequested.length,
-    isCounter: true
-  }).catch(() => {})
+  // "rejected your offer" and a "countered your offer" message. Same
+  // first-pending-offer-only gate as offers.post.js.
+  if (existingPendingCount === 0) {
+    sendTradeOfferDM({
+      recipientDiscordId: recipient.discordId,
+      fromUsername: me.username,
+      pointsOffered,
+      pointsRequested,
+      offeredCount: resolvedOffered.length,
+      requestedCount: resolvedRequested.length,
+      isCounter: true
+    }).catch(() => {})
+  }
 
   // Exactly one in-app notification too, mirroring the DM rule above. The
   // countered party IS this recipient — emitting a separate "your offer was

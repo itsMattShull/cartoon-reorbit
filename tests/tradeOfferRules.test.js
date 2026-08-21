@@ -5,12 +5,16 @@ import {
   isUuid,
   normalizeCtoonIdList,
   assertOfferHasContent,
+  assertValidPointsAmount,
+  pendingOfferPairLimitExceeded,
   assertNoCrossSideOverlap,
   pendingTradeGuardWhere,
   counterAuthorizationError,
   exceedsCounterChainDepth,
   MAX_CTOONS_PER_SIDE,
-  MAX_COUNTER_CHAIN_DEPTH
+  MAX_COUNTER_CHAIN_DEPTH,
+  MAX_TRADE_POINTS,
+  MAX_PENDING_OFFERS_PER_PAIR
 } from '../server/utils/tradeOfferRules.js'
 
 const OFFER_A = '11111111-1111-4111-8111-111111111111'
@@ -195,13 +199,53 @@ test('an offer with nothing in it is rejected', () => {
   )
 })
 
-test('any one of cToons, requests or points is enough content', () => {
+test('any one of cToons, requests, offered points or requested points is enough content', () => {
   const cases = [
     { resolvedOffered: ['a'], resolvedRequested: [], pointsOffered: 0 },
     { resolvedOffered: [], resolvedRequested: ['a'], pointsOffered: 0 },
-    { resolvedOffered: [], resolvedRequested: [], pointsOffered: 5 }
+    { resolvedOffered: [], resolvedRequested: [], pointsOffered: 5 },
+    { resolvedOffered: [], resolvedRequested: [], pointsOffered: 0, pointsRequested: 5 }
   ]
   for (const c of cases) assert.equal(statusOf(() => assertOfferHasContent(c)), null)
+})
+
+test('a pure points request with nothing else is still content', () => {
+  // The realistic "just send me some points" case: no cToons on either side,
+  // nothing offered, only a request. This must not fall through to the
+  // empty-offer rejection.
+  assert.equal(
+    statusOf(() => assertOfferHasContent({
+      resolvedOffered: [], resolvedRequested: [], pointsOffered: 0, pointsRequested: 100
+    })),
+    null
+  )
+})
+
+// ── assertValidPointsAmount ────────────────────────────────────────
+
+test('assertValidPointsAmount accepts zero and the ceiling itself', () => {
+  assert.equal(statusOf(() => assertValidPointsAmount(0, 'pointsRequested')), null)
+  assert.equal(statusOf(() => assertValidPointsAmount(MAX_TRADE_POINTS, 'pointsRequested')), null)
+})
+
+test('assertValidPointsAmount rejects negative, non-integer and non-number values', () => {
+  for (const bad of [-1, 1.5, NaN, Infinity, '100', null, undefined, {}, []]) {
+    assert.equal(statusOf(() => assertValidPointsAmount(bad, 'x')), 400, `expected ${JSON.stringify(bad)} to be rejected`)
+  }
+})
+
+test('assertValidPointsAmount rejects anything over the ceiling', () => {
+  assert.equal(statusOf(() => assertValidPointsAmount(MAX_TRADE_POINTS + 1, 'x')), 400)
+  assert.equal(statusOf(() => assertValidPointsAmount(Number.MAX_SAFE_INTEGER, 'x')), 400)
+})
+
+// ── pendingOfferPairLimitExceeded ────────────────────────────────────
+
+test('pendingOfferPairLimitExceeded allows up to the cap and blocks at it', () => {
+  assert.equal(pendingOfferPairLimitExceeded(MAX_PENDING_OFFERS_PER_PAIR - 1), false)
+  assert.equal(pendingOfferPairLimitExceeded(MAX_PENDING_OFFERS_PER_PAIR), true)
+  assert.equal(pendingOfferPairLimitExceeded(MAX_PENDING_OFFERS_PER_PAIR + 1), true)
+  assert.equal(pendingOfferPairLimitExceeded(0), false)
 })
 
 test('the same cToon cannot be on both sides of one offer', () => {

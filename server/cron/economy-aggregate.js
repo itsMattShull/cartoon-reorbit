@@ -128,6 +128,7 @@ async function aggregateTrades(sinceDate) {
     select: {
       updatedAt: true,
       pointsOffered: true,
+      pointsRequested: true,
       ctoons: { select: { userCtoon: { select: { ctoonId: true } } } }
     }
   })
@@ -147,7 +148,10 @@ async function aggregateTrades(sinceDate) {
     const ctoonIds = offer.ctoons.map(c => c.userCtoon.ctoonId)
     if (!ctoonIds.length) continue
 
-    let knownValueSum = offer.pointsOffered || 0
+    // Both directions count toward the trade's imputed value -- pointsRequested
+    // is real value moving from recipient to initiator in the same trade, not
+    // a discount on pointsOffered.
+    let knownValueSum = (offer.pointsOffered || 0) + (offer.pointsRequested || 0)
     let knownCount = 0
     for (const ctoonId of ctoonIds) {
       const ref = pickReferenceValue(ctoonId, auctionRefs, cmartPrices)

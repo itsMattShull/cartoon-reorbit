@@ -42,6 +42,7 @@ export default defineEventHandler(async (event) => {
     initiator: o.initiator,
     recipient: o.recipient,
     pointsOffered: o.pointsOffered,
+    pointsRequested: o.pointsRequested,
     ctoonsOffered: o.ctoons.filter(x => x.role === 'OFFERED').map(x => x.userCtoon.ctoon),
     ctoonsRequested: o.ctoons.filter(x => x.role === 'REQUESTED').map(x => x.userCtoon.ctoon),
     createdAt: o.createdAt

@@ -207,13 +207,14 @@
               <!-- Requested cToons -->
               <div>
                 <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Requested</div>
+                <div v-if="trade.pointsRequested" class="mb-2 text-sm font-medium text-blue-700">{{ trade.pointsRequested }} pts</div>
                 <div v-if="trade.ctoonsRequested.length" class="flex flex-wrap gap-2">
                   <div v-for="ctoon in trade.ctoonsRequested" :key="ctoon.id" class="flex flex-col items-center gap-1">
                     <img :src="ctoon.assetPath" :alt="ctoon.name" class="w-16 h-16 object-contain rounded border" />
                     <span class="text-xs text-center text-gray-700 max-w-[4rem] leading-tight">{{ ctoon.name }}</span>
                   </div>
                 </div>
-                <div v-if="!trade.ctoonsRequested.length" class="text-xs text-gray-400 italic">Nothing</div>
+                <div v-if="!trade.ctoonsRequested.length && !trade.pointsRequested" class="text-xs text-gray-400 italic">Nothing</div>
               </div>
             </div>
           </div>
