@@ -29,6 +29,7 @@ export default defineEventHandler(async (event) => {
       pageImageWidth: true,
       pageImageHeight: true,
       pageDescription: true,
+      bannerImagePath: true,
       _count: { select: { displayedCtoons: true } }
     }
   })
@@ -51,6 +52,7 @@ export default defineEventHandler(async (event) => {
     pageImageWidth: cmoon.pageImageWidth,
     pageImageHeight: cmoon.pageImageHeight,
     pageDescription: cmoon.pageDescription,
+    bannerImagePath: cmoon.bannerImagePath,
     ctoonCount,
     ctoons,
     ctoonsTruncated: ctoonCount > ctoons.length

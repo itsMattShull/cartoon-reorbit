@@ -1,16 +1,11 @@
-// server/api/admin/cmoons/[id]/page-image.post.js
+// server/api/admin/cmoons/[id]/banner-image.post.js
 //
-// Uploads a cMoon page image, normalized to exactly 800x600 (the same
-// resolution as a cZone background). Rather than rejecting anything that
-// isn't already pixel-exact (which a phone camera essentially never is),
-// this auto-orients (EXIF) and center-crops/resizes to 800x600 server-side
-// via sharp, then re-encodes — which also means the stored file is never the
-// attacker-controlled bytes as-uploaded.
-//
-// Deliberately NOT a copy of server/api/admin/backgrounds.post.js: that file
-// imports sniffImageType/MAX_IMAGE_BYTES but never calls them, and has no
-// size cap or path-containment check. This endpoint calls every primitive
-// itemized below, in order, before any file I/O.
+// Uploads the small wide banner graphic shown on a themed cToon modal in
+// place of the plain "cWorld" text tile. Same normalize-then-store approach
+// as page-image.post.js (auto-orient, cover-crop to a fixed size, re-encode
+// via sharp) rather than trusting/storing the upload as-is — see that file's
+// header comment for why this deliberately isn't a copy of
+// server/api/admin/backgrounds.post.js.
 import { defineEventHandler, readMultipartFormData, createError } from 'h3'
 import { mkdir, writeFile } from 'node:fs/promises'
 import sharp from 'sharp'
@@ -18,10 +13,13 @@ import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 import { sniffImageType, sanitizePathSegment, assertInside, MAX_IMAGE_BYTES } from '@/server/utils/imageUploadValidation'
-import { cmoonPageUploadDir, cmoonPageFsPath, cmoonPagePublicPath } from '@/server/utils/cmoonImageStorage'
+import { cmoonBannerUploadDir, cmoonBannerFsPath, cmoonBannerPublicPath } from '@/server/utils/cmoonImageStorage'
 
-const PAGE_IMAGE_WIDTH = 800
-const PAGE_IMAGE_HEIGHT = 600
+// Wide banner strip (4:1) — big enough to look crisp across the modal's
+// full-width tile on desktop, small enough that it's clearly a "small
+// banner graphic" and not competing with the 800x600 cMoon page image.
+const BANNER_WIDTH = 800
+const BANNER_HEIGHT = 200
 
 export default defineEventHandler(async (event) => {
   const me = await requireAdmin(event)
@@ -39,8 +37,6 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 413, statusMessage: 'Image must be 5MB or smaller.' })
   }
 
-  // The multipart "type" field is client-supplied and spoofable — verify
-  // from the actual bytes before doing anything with the file.
   const sniffed = sniffImageType(filePart.data)
   if (!sniffed) {
     throw createError({ statusCode: 400, statusMessage: 'Only PNG, JPEG, GIF, or WebP images are allowed.' })
@@ -49,38 +45,34 @@ export default defineEventHandler(async (event) => {
   let output
   try {
     output = await sharp(filePart.data)
-      .rotate() // auto-orient per EXIF before anything else touches pixel data
-      .resize(PAGE_IMAGE_WIDTH, PAGE_IMAGE_HEIGHT, { fit: 'cover', position: 'centre' })
+      .rotate()
+      .resize(BANNER_WIDTH, BANNER_HEIGHT, { fit: 'cover', position: 'centre' })
       .webp({ quality: 88 })
       .toBuffer()
   } catch {
     throw createError({ statusCode: 400, statusMessage: 'Could not process that image.' })
   }
 
-  const uploadDir = cmoonPageUploadDir()
+  const uploadDir = cmoonBannerUploadDir()
   await mkdir(uploadDir, { recursive: true })
   const filename = `${sanitizePathSegment(id, 'cmoon')}-${Date.now()}.webp`
-  const outPath = assertInside(uploadDir, cmoonPageFsPath(filename))
+  const outPath = assertInside(uploadDir, cmoonBannerFsPath(filename))
   await writeFile(outPath, output)
 
-  const imagePath = cmoonPagePublicPath(filename)
+  const imagePath = cmoonBannerPublicPath(filename)
 
   await db.cMoon.update({
     where: { id },
-    data: {
-      pageImagePath: imagePath,
-      pageImageWidth: PAGE_IMAGE_WIDTH,
-      pageImageHeight: PAGE_IMAGE_HEIGHT
-    }
+    data: { bannerImagePath: imagePath }
   })
 
   await logAdminChange(db, {
     userId: me.id,
     area: `cMoon:${id}`,
-    key: 'pageImagePath',
-    prevValue: cmoon.pageImagePath,
+    key: 'bannerImagePath',
+    prevValue: cmoon.bannerImagePath,
     newValue: imagePath
   }).catch(() => {})
 
-  return { pageImagePath: imagePath }
+  return { bannerImagePath: imagePath }
 })
