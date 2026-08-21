@@ -12,8 +12,16 @@ export function useCtoonModal() {
   const holidaySignal = useState('ctoon-modal-holiday-signal', () => 0)
   const holidayRedeem = useState('ctoon-modal-holiday-redeem', () => null)
 
-  async function open({ ctoonId, userCtoonId, assetPath, name } = {}) {
+  // `context` resets to neutral on every open() unless the caller passes one
+  // explicitly (context: { source: 'market', ... }) — context is a shared
+  // singleton, so resetting it here (rather than requiring every caller to
+  // remember a separate clearContext() call beforehand) is what keeps a
+  // stale source from a previous modal open (e.g. 'market') from silently
+  // leaking into an unrelated one opened later from a different page.
+  async function open({ ctoonId, userCtoonId, assetPath, name, context: nextContext } = {}) {
     if (!ctoonId && !userCtoonId) return
+
+    context.value = { source: '', isOwner: false, username: '', ...(nextContext || {}) }
 
     const token = requestToken.value + 1
     requestToken.value = token

@@ -1,7 +1,6 @@
 import {
   defineEventHandler,
   readMultipartFormData,
-  getRequestHeader,
   createError
 } from 'h3'
 import { mkdir, writeFile } from 'node:fs/promises'
@@ -13,6 +12,7 @@ import { computeMultiHash, bucketFromHash } from '@/server/utils/multiHash'
 import { scheduleMintEnd } from '@/server/utils/queues'
 import { parseSecondEditionFields } from '@/server/utils/secondEdition'
 import { sanitizePathSegment, sanitizeFilename, assertInside, sniffImageType, MAX_IMAGE_BYTES } from '@/server/utils/imageUploadValidation'
+import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 
 // ── path helpers ──────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -22,9 +22,8 @@ const baseDir = process.env.NODE_ENV === 'production'
 
 export default defineEventHandler(async (event) => {
   /* 1. Auth / admin check ------------------------------------ */
-  const cookie = getRequestHeader(event, 'cookie') || ''
-  const me = await $fetch('/api/auth/me', { headers: { cookie } }).catch(() => null)
-  if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Admins only' })
+  const me = await requireAdmin(event)
+  assertSameOrigin(event)
 
   /* 2. Parse multipart form ---------------------------------- */
   const parts  = await readMultipartFormData(event)
@@ -48,6 +47,7 @@ export default defineEventHandler(async (event) => {
     name, series, rarity, releaseDate: releaseRaw,
     totalQuantity, initialQuantity, perUserLimit,
     codeOnly, inCmart, price, set: setField, characters: charsRaw, type,
+    cMoonId: cMoonIdRaw,
 
     /* NEW G-toon fields */
     isGtoon, cost, power, abilityKey, abilityData, gtoonType,
@@ -71,6 +71,14 @@ export default defineEventHandler(async (event) => {
   if (!series?.trim()) throw createError({ statusCode: 400, statusMessage: 'Series is required.' })
   if (!rarity)         throw createError({ statusCode: 400, statusMessage: 'Rarity is required.' })
   if (!setField)       throw createError({ statusCode: 400, statusMessage: 'Set is required.' })
+
+  // Validated before any file I/O so a bad cMoonId never leaves an orphaned
+  // uploaded image on disk with no DB row to point to.
+  const cMoonId = cMoonIdRaw && String(cMoonIdRaw).trim() ? String(cMoonIdRaw).trim() : null
+  if (cMoonId) {
+    const cMoonExists = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true } })
+    if (!cMoonExists) throw createError({ statusCode: 400, statusMessage: 'Selected cMoon does not exist.' })
+  }
 
   const releaseDate = new Date(releaseRaw)
   if (isNaN(releaseDate)) throw createError({ statusCode: 400, statusMessage: 'Invalid release date.' })
@@ -197,6 +205,7 @@ export default defineEventHandler(async (event) => {
       set: setField,
       characters: charactersArr,
       type: type.trim(),
+      cMoonId,
 
       soundPath,
 

@@ -68,6 +68,13 @@
           </select>
         </div>
 
+        <!-- cMoon -->
+        <div>
+          <label class="block mb-1 font-medium">cMoon (optional)</label>
+          <CtoonCMoonSelect v-model="cMoonId" />
+          <p class="text-sm text-gray-500">If set, this cToon's modal (outside cMart/Auction) is redesigned in this cMoon's colors, with a link to its cMoon page.</p>
+        </div>
+
         <!-- Price -->
         <div>
           <label class="block mb-1 font-medium">Price</label>
@@ -303,6 +310,7 @@ const id = route.params.id
 /* core refs */
 const name = ref(''); const type = ref('')
 const series = ref(''); const rarity = ref('')
+const cMoonId = ref(null)
 const price = ref(0); const releaseDate = ref('')
 const rarityDefaults = ref(null)
 const ctoonLoaded = ref(false)
@@ -446,6 +454,7 @@ onMounted(async ()=>{
     type.value = ctoon.type
     series.value = ctoon.series
     rarity.value = ctoon.rarity
+    cMoonId.value = ctoon.cMoonId || null
     price.value = ctoon.price
     releaseDate.value = toDateTimeLocal(ctoon.releaseDate)
     perUserLimit.value = ctoon.perUserLimit
@@ -573,6 +582,7 @@ async function submitForm(){
     fd.append('name', name.value.trim())
     fd.append('series', series.value.trim())
     fd.append('rarity', rarity.value)
+    fd.append('cMoonId', cMoonId.value || '')
     fd.append('price', String(price.value))
     fd.append('releaseDate', localToUtcIso(releaseDate.value))
     fd.append('mintLimitType', mintLimitType.value)
@@ -630,6 +640,7 @@ async function submitForm(){
     name:            name.value.trim(),
     series:          series.value.trim(),
     rarity:          rarity.value,
+    cMoonId:         cMoonId.value || null,
     price:           price.value,
     releaseDate:     localToUtcIso(releaseDate.value),
 

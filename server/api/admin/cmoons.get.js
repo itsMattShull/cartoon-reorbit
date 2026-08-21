@@ -1,12 +1,10 @@
 // server/api/admin/cmoons.get.js
-import { defineEventHandler, getRequestHeader, createError } from 'h3'
+import { defineEventHandler } from 'h3'
 import { prisma as db } from '@/server/prisma'
+import { requireAdmin } from '@/server/utils/requireAdmin'
 
 export default defineEventHandler(async (event) => {
-  const cookie = getRequestHeader(event, 'cookie') || ''
-  let me
-  try { me = await $fetch('/api/auth/me', { headers: { cookie } }) } catch { throw createError({ statusCode: 401, statusMessage: 'Unauthorized' }) }
-  if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
+  await requireAdmin(event)
 
   const [cmoons, config] = await Promise.all([
     db.cMoon.findMany({
@@ -14,6 +12,8 @@ export default defineEventHandler(async (event) => {
       include: {
         captains: { include: { user: { select: { id: true, username: true } } } },
         prizeCtoons: { include: { ctoon: { select: { id: true, name: true, assetPath: true } } } },
+        // Single grouped query, not a per-cMoon count() loop.
+        _count: { select: { displayedCtoons: true } },
       },
     }),
     db.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { cMoonEnabled: true, cMoonEnabledAt: true, cMoonSelectionDeadlineAt: true } }),
@@ -29,6 +29,9 @@ export default defineEventHandler(async (event) => {
       color: c.color,
       discordRoleId: c.discordRoleId,
       memberCount: c.memberCount,
+      pageImagePath: c.pageImagePath,
+      pageDescription: c.pageDescription,
+      displayedCtoonCount: c._count?.displayedCtoons ?? 0,
       captains: c.captains.map(cap => ({ userId: cap.userId, username: cap.user?.username || '' })),
       prizeCtoons: c.prizeCtoons.map(pc => ({ ctoonId: pc.ctoonId, quantity: pc.quantity, name: pc.ctoon?.name || '', assetPath: pc.ctoon?.assetPath || null })),
     })),
