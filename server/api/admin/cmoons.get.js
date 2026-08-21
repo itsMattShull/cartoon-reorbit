@@ -27,6 +27,7 @@ export default defineEventHandler(async (event) => {
       id: c.id,
       name: c.name,
       color: c.color,
+      imagePath: c.imagePath,
       discordRoleId: c.discordRoleId,
       memberCount: c.memberCount,
       captains: c.captains.map(cap => ({ userId: cap.userId, username: cap.user?.username || '' })),

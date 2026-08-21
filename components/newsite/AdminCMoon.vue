@@ -26,12 +26,22 @@
       <div class="space-y-3 mb-4">
         <div v-for="c in cmoons" :key="c.id" class="bg-white rounded border p-3">
           <div class="flex items-center flex-wrap gap-x-2 gap-y-1 mb-2">
-            <span class="inline-block w-4 h-4 rounded-full border flex-shrink-0" :style="{ background: safeColor(c.color) }"></span>
+            <img
+              v-if="c.imagePath" :src="c.imagePath" alt=""
+              class="w-6 h-9 object-cover rounded border flex-shrink-0"
+            />
+            <span v-else class="inline-block w-4 h-4 rounded-full border flex-shrink-0" :style="{ background: safeColor(c.color) }"></span>
             <span class="font-semibold break-words min-w-0">{{ c.name }}</span>
             <span class="text-xs text-gray-600">{{ c.memberCount }} member{{ c.memberCount === 1 ? '' : 's' }}</span>
             <!-- Kept together so they travel as a unit when the row wraps on narrow screens. -->
             <div class="ml-auto flex items-center gap-3 flex-shrink-0">
               <button class="cm-tap text-xs text-indigo-600 hover:underline" @click="startEdit(c)">Edit</button>
+              <button
+                v-if="c.imagePath"
+                class="cm-tap text-xs text-gray-600 hover:underline disabled:opacity-40"
+                :disabled="imageBusyId === c.id"
+                @click="removeImage(c)"
+              >{{ imageBusyId === c.id ? 'Removing…' : 'Remove graphic' }}</button>
               <button
                 class="cm-tap text-xs text-red-600 hover:underline disabled:opacity-40"
                 :disabled="c.memberCount > 0"
@@ -138,6 +148,25 @@
           </div>
         </div>
 
+        <div class="mt-3">
+          <label class="block text-xs font-medium mb-1">Starter choice graphic (selection-screen poster)</label>
+          <p class="text-xs text-gray-600 mb-2">
+            Shown as the choice for this cMoon on the "Choose your cMoon" screen new and existing
+            players see. Portrait images work best (about a 2:3 ratio, e.g. 600×900) — it's
+            automatically resized and cropped to fit. PNG, JPEG, or WebP, up to 5MB. Leave empty
+            to keep showing the color swatch instead.
+          </p>
+          <div class="flex items-center gap-3 flex-wrap">
+            <img
+              v-if="imagePreviewUrl || currentImagePath"
+              :src="imagePreviewUrl || currentImagePath" alt=""
+              class="w-16 h-24 object-cover rounded border flex-shrink-0"
+            />
+            <input type="file" accept="image/png,image/jpeg,image/webp" class="cm-field text-xs" @change="onImageFileChange" />
+          </div>
+          <p v-if="imageError" class="text-xs text-red-600 mt-1">{{ imageError }}</p>
+        </div>
+
         <div v-if="formError" class="text-xs text-red-600 mt-2">{{ formError }}</div>
 
         <div class="mt-3 flex gap-2">
@@ -153,6 +182,8 @@
 
 <script setup>
 import { cMoonPillStyle, isSafeCMoonColor, cMoonContrastRatio } from '~/utils/cmoonColor'
+
+const rs = useAdminResources()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -170,6 +201,53 @@ const emptyForm = () => ({ name: '', color: '', discordRoleId: '', captainIds: [
 const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
+
+// Starter-graphic upload state. Kept separate from `form` — the image is a separate multipart
+// request (POST/DELETE .../[id]/image), sent only after the name/color/etc save succeeds.
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024
+const IMAGE_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+const selectedImageFile = ref(null)
+const imagePreviewUrl = ref('')
+const currentImagePath = ref('')
+const imageError = ref('')
+const imageBusyId = ref('')
+
+function onImageFileChange(e) {
+  const file = e.target.files?.[0] || null
+  e.target.value = ''
+  imageError.value = ''
+  if (!file) return
+  if (!IMAGE_MIME_TYPES.includes(file.type)) {
+    imageError.value = 'Only PNG, JPEG, or WebP images are allowed'
+    return
+  }
+  if (file.size > IMAGE_MAX_BYTES) {
+    imageError.value = 'Image must be 5MB or smaller'
+    return
+  }
+  if (imagePreviewUrl.value) rs.revokeObjectUrl(imagePreviewUrl.value)
+  selectedImageFile.value = file
+  imagePreviewUrl.value = rs.objectUrl(file)
+}
+
+async function uploadImageIfNeeded(id) {
+  if (!selectedImageFile.value) return
+  const fd = new FormData()
+  fd.append('image', selectedImageFile.value)
+  await $fetch(`/api/admin/cmoons/${id}/image`, { method: 'POST', body: fd })
+}
+
+async function removeImage(c) {
+  imageBusyId.value = c.id
+  try {
+    await $fetch(`/api/admin/cmoons/${c.id}/image`, { method: 'DELETE' })
+    await load()
+  } catch (e) {
+    alert(e?.data?.statusMessage || 'Failed to remove graphic')
+  } finally {
+    imageBusyId.value = ''
+  }
+}
 
 // Share the validation/contrast helpers with the player-facing badges so the admin
 // preview here matches exactly what renders on leaderboards and cZones.
@@ -247,12 +325,23 @@ function startEdit(c) {
     prizeCtoons: c.prizeCtoons.map(p => ({ ctoonId: p.ctoonId, quantity: p.quantity })),
   })
   formError.value = ''
+  clearImageSelection()
+  currentImagePath.value = c.imagePath || ''
+}
+
+function clearImageSelection() {
+  if (imagePreviewUrl.value) rs.revokeObjectUrl(imagePreviewUrl.value)
+  selectedImageFile.value = null
+  imagePreviewUrl.value = ''
+  imageError.value = ''
 }
 
 function resetForm() {
   Object.assign(form, emptyForm())
   editId.value = ''
   formError.value = ''
+  clearImageSelection()
+  currentImagePath.value = ''
 }
 
 async function load() {
@@ -303,11 +392,16 @@ async function save() {
       captainIds: form.captainIds,
       prizeCtoons: form.prizeCtoons,
     }
-    if (!editId.value) {
-      await $fetch('/api/admin/cmoons', { method: 'POST', body })
+    let id = editId.value
+    if (!id) {
+      const res = await $fetch('/api/admin/cmoons', { method: 'POST', body })
+      id = res.id
     } else {
-      await $fetch(`/api/admin/cmoons/${editId.value}`, { method: 'PUT', body })
+      await $fetch(`/api/admin/cmoons/${id}`, { method: 'PUT', body })
     }
+    // Runs after the main save succeeds so a rejected image never blocks name/color/etc from
+    // saving; a failure here surfaces as formError below without undoing the save that already went through.
+    await uploadImageIfNeeded(id)
     resetForm()
     await load()
   } catch (e) {
