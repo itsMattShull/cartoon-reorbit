@@ -3,6 +3,7 @@ import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { isValidHexColor, isValidDiscordSnowflake } from '@/server/utils/cmoon'
+import { invalidateCMoonList } from '@/server/api/cmoons.get'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 
 export default defineEventHandler(async (event) => {
@@ -68,6 +69,7 @@ export default defineEventHandler(async (event) => {
   })
 
   await logAdminChange(db, { userId: me.id, area: 'cMoon', key: `update:${id}`, prevValue: { name: cmoon.name, color: cmoon.color }, newValue: { name, color } })
+  invalidateCMoonList()
 
   return { ok: true }
 })

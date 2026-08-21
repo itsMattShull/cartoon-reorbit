@@ -2817,6 +2817,9 @@ model CMoon {
   color         String // "#RRGGBB", validated server-side; used as text color, and as the base
   // color a palette is derived from for the cMoon page + themed cToon modals (see utils/cmoonPalette.js).
   discordRoleId String? // Discord role snowflake granted to members (add-only sync)
+  // Public "choose your cMoon" poster art. Server-normalized to a fixed 2:3 webp on upload
+  // (see server/api/admin/cmoons/[id]/image.post.js) — null falls back to the color swatch.
+  imagePath     String?
   // Denormalized to avoid COUNT(*) races/scans on every selection + the daily auto-assign job.
   memberCount   Int      @default(0)
   createdAt     DateTime @default(now())
