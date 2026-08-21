@@ -32,6 +32,7 @@ export default defineEventHandler(async (event) => {
       memberCount: c.memberCount,
       pageImagePath: c.pageImagePath,
       pageDescription: c.pageDescription,
+      bannerImagePath: c.bannerImagePath,
       displayedCtoonCount: c._count?.displayedCtoons ?? 0,
       captains: c.captains.map(cap => ({ userId: cap.userId, username: cap.user?.username || '' })),
       prizeCtoons: c.prizeCtoons.map(pc => ({ ctoonId: pc.ctoonId, quantity: pc.quantity, name: pc.ctoon?.name || '', assetPath: pc.ctoon?.assetPath || null })),

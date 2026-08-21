@@ -2831,6 +2831,9 @@ model CMoon {
   pageImageWidth  Int?
   pageImageHeight Int?
   pageDescription String?
+  // Small wide banner graphic (normalized to 800x200) shown on a themed cToon
+  // modal in place of the plain "cWorld" text tile, linking to the page above.
+  bannerImagePath String?
 
   members         User[]
   captains        CMoonCaptain[]

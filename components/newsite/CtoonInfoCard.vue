@@ -106,14 +106,29 @@
               <p>{{ ctoonDescription }}</p>
             </div>
             <div class="ctic-grid">
-              <div v-if="showCMoonTheme" class="ctic-tile ctic-tile-wide">
-                <div class="ctic-label">cWorld</div>
+              <div
+                v-if="showCMoonTheme"
+                class="ctic-tile ctic-tile-wide"
+                :class="{ 'ctic-tile--banner': !!ctoon.cMoon.bannerImagePath }"
+              >
                 <NuxtLink
+                  v-if="ctoon.cMoon.bannerImagePath"
                   :to="`/newsite/cmoon/${ctoon.cMoon.id}`"
-                  class="ctic-value ctic-value--link ctic-value--wrap"
+                  class="ctic-cmoon-banner-link"
                   :aria-label="`View the ${ctoon.cMoon.name} cMoon page`"
                   @click="close"
-                >{{ ctoon.cMoon.name }} <span aria-hidden="true">&rsaquo;</span></NuxtLink>
+                >
+                  <img :src="ctoon.cMoon.bannerImagePath" :alt="`${ctoon.cMoon.name} cMoon`" class="ctic-cmoon-banner-img" />
+                </NuxtLink>
+                <template v-else>
+                  <div class="ctic-label">cWorld</div>
+                  <NuxtLink
+                    :to="`/newsite/cmoon/${ctoon.cMoon.id}`"
+                    class="ctic-value ctic-value--link ctic-value--wrap"
+                    :aria-label="`View the ${ctoon.cMoon.name} cMoon page`"
+                    @click="close"
+                  >{{ ctoon.cMoon.name }} <span aria-hidden="true">&rsaquo;</span></NuxtLink>
+                </template>
               </div>
               <div class="ctic-tile">
                 <div class="ctic-label">Highest Mint</div>
@@ -1172,6 +1187,30 @@ function formatDate(value) {
   grid-column: 1 / -1;
 }
 
+/* ── cMoon banner tile ──────────────────────────────────────── */
+.ctic-tile--banner {
+  padding: 0;
+  overflow: hidden;
+}
+
+.ctic-cmoon-banner-link {
+  display: block;
+  line-height: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.ctic-cmoon-banner-link:focus-visible {
+  outline: 2px solid var(--OrbitLightBlue);
+  outline-offset: -2px;
+}
+
+.ctic-cmoon-banner-img {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 4 / 1;
+  object-fit: cover;
+}
+
 .ctic-desc {
   margin-bottom: 0;
 }
@@ -1563,6 +1602,7 @@ function formatDate(value) {
 .ctic-panel--cmoon .ctic-value--link:hover,
 .ctic-panel--cmoon .ctic-value--link:active { opacity: 0.82; }
 .ctic-panel--cmoon .ctic-value--link:focus-visible { outline-color: var(--cm-focus-ring); }
+.ctic-panel--cmoon .ctic-cmoon-banner-link:focus-visible { outline-color: var(--cm-focus-ring); }
 .ctic-panel--cmoon .ctic-sub { color: var(--cm-text-muted); }
 
 .ctic-panel--cmoon .ctic-mint-title { color: var(--cm-text-muted); }

@@ -143,6 +143,27 @@
         </div>
 
         <div class="mt-3">
+          <label class="block text-xs font-medium mb-1">cToon modal banner (small wide graphic, replaces the "cWorld" text link)</label>
+          <template v-if="!editId">
+            <p class="text-xs text-gray-600">Save this cMoon first, then Edit it to upload a banner.</p>
+          </template>
+          <template v-else>
+            <img v-if="bannerImagePreview" :src="bannerImagePreview" class="cm-banner-image-preview" alt="Selected banner preview" />
+            <img v-else-if="currentBannerImagePath" :src="currentBannerImagePath" class="cm-banner-image-preview" alt="Current cMoon modal banner" />
+            <p v-else class="text-xs text-gray-600 mb-1">No banner uploaded yet — the modal shows a plain text link instead.</p>
+            <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" class="cm-field" @change="handleBannerImageFile" />
+            <p class="text-xs text-gray-500 mt-1">Any image works — it's auto-cropped/resized to a wide 800×200 banner on upload.</p>
+            <button
+              type="button"
+              class="cm-tap mt-2 px-3 border rounded bg-white"
+              :disabled="!bannerImageFile || bannerImageUploading"
+              @click="uploadBannerImage"
+            >{{ bannerImageUploading ? 'Uploading…' : 'Upload banner' }}</button>
+            <p v-if="bannerImageError" class="text-xs text-red-600 mt-1">{{ bannerImageError }}</p>
+          </template>
+        </div>
+
+        <div class="mt-3">
           <label class="block text-xs font-medium mb-1">Captains (from admins)</label>
           <div class="flex flex-wrap gap-2">
             <button
@@ -307,6 +328,13 @@ const pageImageUploading = ref(false)
 const pageImageError = ref('')
 const currentPageImagePath = ref('')
 
+// ── cToon modal banner (separate step — needs an existing cMoon row) ───
+const bannerImageFile = ref(null)
+const bannerImagePreview = ref('')
+const bannerImageUploading = ref(false)
+const bannerImageError = ref('')
+const currentBannerImagePath = ref('')
+
 const palettePreview = computed(() => isValidColor(form.color) ? cMoonPalette(form.color) : null)
 
 function handlePageImageFile(e) {
@@ -334,6 +362,34 @@ async function uploadPageImage() {
     pageImageError.value = e?.data?.statusMessage || 'Upload failed'
   } finally {
     pageImageUploading.value = false
+  }
+}
+
+function handleBannerImageFile(e) {
+  const file = e.target.files?.[0] || null
+  bannerImageFile.value = file
+  bannerImageError.value = ''
+  if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
+  bannerImagePreview.value = file ? URL.createObjectURL(file) : ''
+}
+
+async function uploadBannerImage() {
+  if (!editId.value || !bannerImageFile.value || bannerImageUploading.value) return
+  bannerImageUploading.value = true
+  bannerImageError.value = ''
+  try {
+    const body = new FormData()
+    body.append('image', bannerImageFile.value)
+    const res = await $fetch(`/api/admin/cmoons/${editId.value}/banner-image`, { method: 'POST', body })
+    currentBannerImagePath.value = res.bannerImagePath
+    bannerImageFile.value = null
+    if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
+    bannerImagePreview.value = ''
+    await load()
+  } catch (e) {
+    bannerImageError.value = e?.data?.statusMessage || 'Upload failed'
+  } finally {
+    bannerImageUploading.value = false
   }
 }
 
@@ -418,6 +474,11 @@ function startEdit(c) {
   if (pageImagePreview.value) URL.revokeObjectURL(pageImagePreview.value)
   pageImagePreview.value = ''
   pageImageError.value = ''
+  currentBannerImagePath.value = c.bannerImagePath || ''
+  bannerImageFile.value = null
+  if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
+  bannerImagePreview.value = ''
+  bannerImageError.value = ''
   formError.value = ''
   clearImageSelection()
   currentImagePath.value = c.imagePath || ''
@@ -441,6 +502,11 @@ function resetForm() {
   if (pageImagePreview.value) URL.revokeObjectURL(pageImagePreview.value)
   pageImagePreview.value = ''
   pageImageError.value = ''
+  currentBannerImagePath.value = ''
+  bannerImageFile.value = null
+  if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
+  bannerImagePreview.value = ''
+  bannerImageError.value = ''
 }
 
 async function load() {
@@ -615,6 +681,16 @@ onMounted(load)
   width: 100%;
   max-width: 320px;
   aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+
+.cm-banner-image-preview {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 4 / 1;
   object-fit: cover;
   border-radius: 4px;
   margin-bottom: 6px;
