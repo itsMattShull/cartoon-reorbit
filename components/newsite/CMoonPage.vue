@@ -5,9 +5,21 @@
     <template v-else-if="cmoon">
       <div class="cmp-banner">
         <h1 class="cmp-title">{{ cmoon.name }}</h1>
+        <p class="cmp-member-count">{{ cmoon.memberCount.toLocaleString() }} member{{ cmoon.memberCount === 1 ? '' : 's' }}</p>
       </div>
 
       <div class="cmp-body">
+        <div class="cmp-stats">
+          <div class="cmp-stat">
+            <span class="cmp-stat-label">Team Rank</span>
+            <span class="cmp-stat-value">#{{ cmoon.rank }}</span>
+          </div>
+          <div class="cmp-stat">
+            <span class="cmp-stat-label">Team Score</span>
+            <span class="cmp-stat-value">{{ cmoon.teamScore.toLocaleString() }}</span>
+          </div>
+        </div>
+
         <div class="cmp-image-wrap">
           <img
             v-if="cmoon.pageImagePath"
@@ -37,6 +49,35 @@
         <p v-if="cmoon.ctoonsTruncated" class="cmp-truncated-note">
           Showing the first {{ cmoon.ctoons.length.toLocaleString() }} of {{ cmoon.ctoonCount.toLocaleString() }} cToons.
         </p>
+
+        <template v-if="cmoon.captains.length">
+          <h2 class="cmp-section-title">Captains</h2>
+          <p class="cmp-captains">{{ cmoon.captains.join(', ') }}</p>
+        </template>
+
+        <template v-if="cmoon.prizeCtoons.length">
+          <h2 class="cmp-section-title">Prize cToons</h2>
+          <div class="cmp-grid">
+            <div v-for="(p, i) in cmoon.prizeCtoons" :key="i" class="cmp-card cmp-card--static">
+              <img v-if="p.assetPath" :src="p.assetPath" :alt="p.name" class="cmp-card-img" loading="lazy" />
+              <span class="cmp-card-name">{{ p.name }} × {{ p.quantity }}</span>
+            </div>
+          </div>
+        </template>
+
+        <h2 class="cmp-section-title">Top Members</h2>
+        <div v-if="!cmoon.topMembers.length" class="cmp-empty">No members yet.</div>
+        <div v-else class="cmp-members">
+          <NuxtLink
+            v-for="m in cmoon.topMembers" :key="m.username"
+            :to="`/newsite/czone/${m.username}`"
+            class="cmp-member"
+          >
+            <img :src="`/avatars/${m.avatar || 'default.png'}`" class="cmp-member-avatar" alt="" />
+            <span class="cmp-member-name">{{ m.username }}</span>
+            <span class="cmp-member-points">{{ m.points.toLocaleString() }} pts</span>
+          </NuxtLink>
+        </div>
       </div>
     </template>
   </div>
@@ -109,11 +150,38 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   overflow-wrap: anywhere;
 }
 
+.cmp-member-count {
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+  opacity: 0.85;
+}
+
 .cmp-body {
   padding: 16px;
   background: var(--cm-bg, transparent);
   color: var(--cm-text, #ffffff);
   box-sizing: border-box;
+}
+
+.cmp-stats {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 16px;
+}
+.cmp-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cmp-stat-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cm-text-muted, rgba(255,255,255,0.6));
+}
+.cmp-stat-value {
+  font-size: 1.3rem;
+  font-weight: 800;
 }
 
 /* 800x600 (4:3), same resolution as a cZone background. */
@@ -213,5 +281,65 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   margin-top: 12px;
   font-size: 0.8rem;
   color: var(--cm-text-muted, rgba(255,255,255,0.6));
+}
+
+.cmp-card--static {
+  cursor: default;
+}
+.cmp-card--static:hover { opacity: 1; }
+
+.cmp-captains {
+  margin: 0 0 20px;
+  font-size: 0.95rem;
+}
+
+.cmp-members {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+.cmp-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border-radius: 6px;
+  text-decoration: none;
+  color: var(--cm-link-text, #ffffff);
+  min-width: 0;
+}
+.cmp-member:hover { background: var(--cm-tile-bg, rgba(255,255,255,0.08)); }
+.cmp-member:focus-visible { outline: 2px solid var(--cm-focus-ring, var(--OrbitLightBlue)); outline-offset: 1px; }
+
+.cmp-member-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--cm-tile-bg, rgba(255,255,255,0.08));
+}
+
+.cmp-member-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.cmp-member-points {
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+@media (max-width: 480px) {
+  .cmp-stats { gap: 16px; }
 }
 </style>
