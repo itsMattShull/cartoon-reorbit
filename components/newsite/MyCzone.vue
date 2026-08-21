@@ -213,7 +213,7 @@
                   <img
                     :src="item.ctoon.assetPath" :alt="item.ctoon.name"
                     class="cz-wl-img cz-wl-img--clickable"
-                    @click="openCtoonModal({ ctoonId: item.ctoon.id, assetPath: item.ctoon.assetPath, name: item.ctoon.name })"
+                    @click="openCtoonModal({ ctoonId: item.ctoon.id, assetPath: item.ctoon.assetPath, name: item.ctoon.name, context: { source: 'czone', isOwner: isOwnZone, username: viewedUsername || '' } })"
                   />
                   <p class="cz-wl-name">{{ item.ctoon.name }}</p>
                   <p class="cz-wl-pts">Offer: {{ item.offeredPoints.toLocaleString() }} pts</p>
@@ -335,7 +335,7 @@ function canvasH() { return CANVAS_H }
 
 const { user, fetchSelf } = useAuth()
 const cz = useNewSiteCzoneState()
-const { open: openCtoonModal, setContext, clearContext, holidaySignal, holidayRedeem } = useCtoonModal()
+const { open: openCtoonModal, holidaySignal, holidayRedeem } = useCtoonModal()
 const { mobileSidebarCollapsed } = useNewsiteLayout()
 const route  = useRoute()
 const router = useRouter()
@@ -722,11 +722,6 @@ function goToTradeWithCtoon(item) {
 const currentZone = computed(() => cz.value.zones?.[cz.value.activeZone] ?? { background: '', toons: [] })
 const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user.value.username)
 
-// Keep ctoon modal context in sync so the "Open cToon" button appears on owned zones
-watch([isOwnZone, viewedUsername], ([own, uname]) => {
-  setContext({ source: 'czone', isOwner: own, username: uname || '' })
-}, { immediate: true })
-
 watch(holidaySignal, async () => {
   if (holidayRedeem.value?.reward?.name) {
     showSearchToast(`Opened! You received ${holidayRedeem.value.reward.name} 🎉`, 'success')
@@ -940,7 +935,8 @@ function onToonClick(toon) {
     ctoonId: toon.ctoonId,
     userCtoonId: isOwnZone.value ? toon.id : undefined,
     assetPath: toon.assetPath,
-    name: toon.name
+    name: toon.name,
+    context: { source: 'czone', isOwner: isOwnZone.value, username: viewedUsername.value || '' }
   })
 }
 

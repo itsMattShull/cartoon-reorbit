@@ -13,21 +13,23 @@ export function isSafeCMoonColor(color) {
   return typeof color === 'string' && HEX_RE.test(color)
 }
 
-function relativeLuminance(hex) {
+// Exported so other palette math (utils/cmoonPalette.js) shares one WCAG
+// implementation instead of re-deriving it.
+export function relativeLuminance(hex) {
   const channels = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255)
   const lin = (c) => (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4))
   const [r, g, b] = channels.map(lin)
   return 0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 
-function contrast(l1, l2) {
+export function contrast(l1, l2) {
   return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05)
 }
 
 // Compare both candidates rather than guessing from a luminance threshold. A
 // fixed threshold mispicks across a wide band of ordinary mid-tone colors —
 // e.g. #b8860b and #808080 got white text at ~3.3:1 and ~3.9:1.
-function contrastTextColor(hex) {
+export function contrastTextColor(hex) {
   const bg = relativeLuminance(hex)
   const dark = contrast(relativeLuminance(DARK_TEXT), bg)
   const light = contrast(relativeLuminance(LIGHT_TEXT), bg)

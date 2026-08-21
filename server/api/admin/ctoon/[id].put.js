@@ -1,7 +1,6 @@
 // /api/admin/ctoon/[id].put.js
 import {
   defineEventHandler,
-  getRequestHeader,
   createError,
   readBody,
   readMultipartFormData
@@ -15,6 +14,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname, extname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { sanitizePathSegment, sanitizeFilename, assertInside, sniffImageType, MAX_IMAGE_BYTES } from '@/server/utils/imageUploadValidation'
+import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 
 // paths
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -26,9 +26,8 @@ export default defineEventHandler(async (event) => {
   const id = event.context.params.id
 
   // 1) Admin check
-  const cookie = getRequestHeader(event, 'cookie') || ''
-  const me = await $fetch('/api/auth/me', { headers: { cookie } }).catch(() => null)
-  if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Admins only' })
+  const me = await requireAdmin(event)
+  assertSameOrigin(event)
 
   // 2) Accept JSON or multipart
   const contentType = (getRequestHeader(event, 'content-type') || '').toLowerCase()
@@ -51,6 +50,7 @@ export default defineEventHandler(async (event) => {
   const {
     name, series, rarity, price, releaseDate, perUserLimit,
     quantity, initialQuantity, inCmart, set, description, characters,
+    cMoonId: cMoonIdRaw,
     isGtoon, cost, power, abilityKey, abilityData, gtoonType,
     initialReleaseAt, finalReleaseAt, initialReleaseQty, finalReleaseQty,
     clearSound,
@@ -69,6 +69,14 @@ export default defineEventHandler(async (event) => {
 
   const newReleaseDate = new Date(releaseDate)
   if (isNaN(newReleaseDate)) throw createError({ statusCode: 400, statusMessage: 'Invalid release date.' })
+
+  // Validated before any file I/O so a bad cMoonId never leaves an orphaned
+  // uploaded image on disk with no successful update to point to.
+  const cMoonId = cMoonIdRaw && String(cMoonIdRaw).trim() ? String(cMoonIdRaw).trim() : null
+  if (cMoonId) {
+    const cMoonExists = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true } })
+    if (!cMoonExists) throw createError({ statusCode: 400, statusMessage: 'Selected cMoon does not exist.' })
+  }
 
   // 5) Normalizations
   const priceInt    = price == null || price === '' ? 0 : Number(price)
@@ -149,6 +157,7 @@ export default defineEventHandler(async (event) => {
     set,
     description: description?.trim() || null,
     characters: charactersArr,
+    cMoonId,
 
     isGtoon:    isGtoonBool,
     gtoonType:  isGtoonBool ? (gtoonType?.toString().trim() || null) : null,
@@ -261,7 +270,7 @@ export default defineEventHandler(async (event) => {
   try {
     const area = `Ctoon:${id}`
     const keys = [
-      'name','series','description','rarity','price','releaseDate','perUserLimit','quantity','initialQuantity','inCmart','set','characters',
+      'name','series','description','rarity','price','releaseDate','perUserLimit','quantity','initialQuantity','inCmart','set','characters','cMoonId',
       'isGtoon','gtoonType','cost','power','abilityKey','abilityData','assetPath','type','soundPath',
       'initialReleaseAt','finalReleaseAt','initialReleaseQty','finalReleaseQty',
       'mintLimitType','mintEndDate',

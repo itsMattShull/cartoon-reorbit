@@ -264,6 +264,7 @@ function openInfoModal() {
     userCtoonId: auction.value.ctoon.userCtoonId || null,
     assetPath:   auction.value.ctoon.assetPath   || null,
     name:        auction.value.ctoon.name        || null,
+    context:     { source: 'auction' },
   })
 }
 
