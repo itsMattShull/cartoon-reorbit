@@ -1,26 +1,7 @@
 import { defineEventHandler, createError } from 'h3'
-import { DateTime } from 'luxon'
 import { prisma as db } from '@/server/prisma'
 import { COMBAT_POOL_GAME_NAMES } from '@/server/utils/gamePoints'
-
-const getChicagoDailyBoundary = () => {
-  const chicagoNow = DateTime.now().setZone('America/Chicago')
-  let boundaryLocal = chicagoNow.set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
-  if (chicagoNow < boundaryLocal) boundaryLocal = boundaryLocal.minus({ days: 1 })
-  return boundaryLocal.toUTC().toJSDate()
-}
-
-const getChicagoMorningWindowStart = () => {
-  const now = new Date()
-  const chicagoNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' }))
-  const offsetMs = now.getTime() - chicagoNow.getTime()
-  const y = chicagoNow.getFullYear()
-  const m = chicagoNow.getMonth()
-  const d = chicagoNow.getDate()
-  let resetUtcMs = new Date(y, m, d, 8, 0, 0).getTime() + offsetMs
-  if (now.getTime() < resetUtcMs) resetUtcMs -= 24 * 60 * 60 * 1000
-  return new Date(resetUtcMs)
-}
+import { getChicagoDailyBoundary, getChicagoMorningWindowStart } from '@/server/utils/dailyTaskWindows'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId

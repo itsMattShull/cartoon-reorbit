@@ -6,11 +6,14 @@
       <GreenButton @click="$router.push('/newsite/allCtoons')">All cToons</GreenButton>
       <GreenButton @click="$router.push('/newsite/myachievements')">Achievements</GreenButton>
       <GreenButton @click="openWishlist">My Wishlist</GreenButton>
+      <GreenButton v-if="cMoonEnabled" @click="cMoonNavVisible = true">cMoons</GreenButton>
     </div>
     <div class="mcw-content">
       <MyWishlist v-if="showWishlist" />
       <CzoneContest v-else />
     </div>
+
+    <CMoonNavModal :visible="cMoonNavVisible" @close="cMoonNavVisible = false" />
   </div>
 </template>
 
@@ -20,6 +23,8 @@ const router = useRouter()
 const { setSidebarMiddle, clearSidebarMiddle } = useNewsiteLayout()
 
 const showWishlist = ref(false)
+const cMoonEnabled = ref(false)
+const cMoonNavVisible = ref(false)
 
 function goToCzone() {
   showWishlist.value = false
@@ -33,6 +38,15 @@ function openWishlist() {
   showWishlist.value = true
   setSidebarMiddle('MyWishlistSidebar')
 }
+
+onMounted(async () => {
+  try {
+    const data = await $fetch('/api/cmoons')
+    cMoonEnabled.value = !!data?.cMoonEnabled
+  } catch {
+    cMoonEnabled.value = false
+  }
+})
 </script>
 
 <style scoped>
