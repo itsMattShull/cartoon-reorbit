@@ -37,7 +37,12 @@ export default defineEventHandler(async (event) => {
   // For cz: tokens fall through to the ctoonId-only path so the modal still opens.
   const editionInclude = {
     relatedFirstEdition:  { select: { id: true, name: true, assetPath: true } },
-    relatedSecondEdition: { select: { id: true, name: true, assetPath: true } }
+    relatedSecondEdition: { select: { id: true, name: true, assetPath: true } },
+    // Explicit select, never a bare `cMoon: true` — CMoon also has `members`/
+    // `captains` relations that pull full User rows (Discord tokens, email);
+    // this endpoint must only ever expose the same public-safe fields as the
+    // cMoon-themed modal card needs.
+    cMoon: { select: { id: true, name: true, color: true } }
   }
 
   if (userCtoonId?.startsWith('uc|')) {
@@ -220,7 +225,8 @@ export default defineEventHandler(async (event) => {
       relatedFirstEdition: ctoon.relatedFirstEdition ?? null,
       relatedSecondEdition: ctoon.relatedSecondEdition ?? null,
       saleImagePath,
-      czoneDisplayCount: ctoon.czoneDisplayCount ?? 0
+      czoneDisplayCount: ctoon.czoneDisplayCount ?? 0,
+      cMoon: ctoon.cMoon ?? null
     },
     userCtoon: userStats,
     ownedCount,

@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
   <div class="ctic-overlay" @click.self="close">
-    <div class="ctic-panel">
+    <div class="ctic-panel" :class="{ 'ctic-panel--cmoon': showCMoonTheme }" :style="cMoonStyle">
       <!-- Status banner image -->
       <img
         v-if="activeTab === 'info' && statusImage"
@@ -106,6 +106,15 @@
               <p>{{ ctoonDescription }}</p>
             </div>
             <div class="ctic-grid">
+              <div v-if="showCMoonTheme" class="ctic-tile ctic-tile-wide">
+                <div class="ctic-label">cWorld</div>
+                <NuxtLink
+                  :to="`/newsite/cmoon/${ctoon.cMoon.id}`"
+                  class="ctic-value ctic-value--link ctic-value--wrap"
+                  :aria-label="`View the ${ctoon.cMoon.name} cMoon page`"
+                  @click="close"
+                >{{ ctoon.cMoon.name }} <span aria-hidden="true">&rsaquo;</span></NuxtLink>
+              </div>
               <div class="ctic-tile">
                 <div class="ctic-label">Highest Mint</div>
                 <div class="ctic-value">{{ formatValue(ctoon.highestMint) }}</div>
@@ -421,9 +430,21 @@ import abilities from '@/data/abilities.json'
 import { useCtoonModal } from '@/composables/useCtoonModal'
 import { useAuth } from '@/composables/useAuth'
 import { formatQuantity, TIME_BASED_CAP } from '@/utils/formatQuantity'
+import { cMoonPaletteStyle } from '@/utils/cmoonPalette'
 
 const { isAdmin } = useAuth()
 const { isOpen, loading, error, data, context, close, open, notifyHolidayRedeem } = useCtoonModal()
+
+// cMart and Auction House/Details modals must stay pixel-identical to today —
+// this is the one flag that suppresses the cMoon-themed variant everywhere else
+// (My Collection, AllCtoons, Trade, Wishlist, cZone all get it by default).
+const isMarketContext = computed(() => ['market', 'auction'].includes(context.value?.source))
+// Wait for `loading` to clear before ever applying the theme: the skeleton
+// always renders in the standard (untheme) look, so there is exactly one
+// clean transition into the cMoon palette once real data lands, never a
+// flash of the wrong color while loading.
+const showCMoonTheme = computed(() => !isMarketContext.value && !loading.value && !!ctoon.value?.cMoon)
+const cMoonStyle = computed(() => showCMoonTheme.value ? cMoonPaletteStyle(ctoon.value.cMoon.color) : {})
 
 function openRelatedEdition(ctoonId) {
   if (!ctoonId) return
@@ -1183,7 +1204,8 @@ function formatDate(value) {
   border-radius: 4px;
   padding: 5px 8px;
   margin: -5px -8px;
-  min-height: 28px;
+  /* Real touch target, matching the 44px convention used elsewhere (e.g. AdminCMoon.vue's .cm-tap). */
+  min-height: 44px;
   box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
 }
@@ -1201,6 +1223,19 @@ function formatDate(value) {
 .ctic-value--link:focus-visible {
   outline: 2px solid var(--OrbitLightBlue);
   outline-offset: 1px;
+}
+/* A cMoon name has no length limit, so this variant wraps as normal text
+   instead of staying on one inline-flex line — the trailing "›" is real text
+   content (not a positioned ::after) precisely so it flows with the wrap
+   instead of floating beside the middle of a two-line block. */
+.ctic-value--wrap {
+  display: block;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  align-items: flex-start;
+}
+.ctic-value--wrap::after {
+  content: none;
 }
 
 .ctic-sub {
@@ -1485,4 +1520,82 @@ function formatDate(value) {
 }
 .ctic-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .ctic-submit-btn:hover:not(:disabled) { background: #2288bb; }
+
+/* ── cMoon-themed variant ────────────────────────────────────────────────
+   Applied only in non-market contexts (My Collection, AllCtoons, Trade,
+   Wishlist, cZone) once a cToon's assigned cMoon has loaded — never in
+   cMart/Auction, and never during the loading skeleton (see showCMoonTheme
+   in the script), so there is one clean transition into the palette instead
+   of a flash of the wrong color. Every rule below reads a --cm-* custom
+   property set by utils/cmoonPalette.js's cMoonPaletteStyle(), which is
+   always bound through Vue's :style object binding (never a raw string), so
+   an admin-chosen color can never smuggle extra CSS declarations. Status/
+   semantic colors (sold/locked-amber, 2nd-edition badge, tradeable badge)
+   are intentionally left alone below — those are self-contained bg+text
+   pairs whose own internal contrast doesn't depend on the panel background. */
+.ctic-panel--cmoon {
+  background: var(--cm-bg);
+  border-color: var(--cm-border);
+  color: var(--cm-text);
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+.ctic-panel--cmoon .ctic-head { border-bottom-color: var(--cm-hairline); }
+.ctic-panel--cmoon .ctic-thumb { background: var(--cm-thumb-bg); }
+.ctic-panel--cmoon .ctic-subtitle { color: var(--cm-text-muted); }
+.ctic-panel--cmoon .ctic-edition-link { color: var(--cm-link-text); }
+.ctic-panel--cmoon .ctic-edition-link:hover { opacity: 0.8; }
+.ctic-panel--cmoon .ctic-sound-btn { color: var(--cm-link-text); }
+.ctic-panel--cmoon .ctic-sound-btn:hover { opacity: 0.8; }
+.ctic-panel--cmoon .ctic-close-x { color: var(--cm-text-muted); }
+.ctic-panel--cmoon .ctic-close-x:hover { color: var(--cm-text); }
+
+.ctic-panel--cmoon .ctic-tabs { border-bottom-color: var(--cm-hairline); }
+.ctic-panel--cmoon .ctic-tab { background: var(--cm-tile-bg); color: var(--cm-text-muted); }
+.ctic-panel--cmoon .ctic-tab:hover { color: var(--cm-text); }
+.ctic-panel--cmoon .ctic-tab--active { background: var(--cm-banner); color: var(--cm-banner-text); }
+
+.ctic-panel--cmoon .ctic-body { scrollbar-color: var(--cm-border) transparent; }
+.ctic-panel--cmoon .ctic-tile { background: var(--cm-tile-bg); }
+.ctic-panel--cmoon .ctic-desc p { color: var(--cm-text); }
+.ctic-panel--cmoon .ctic-label { color: var(--cm-text-muted); }
+.ctic-panel--cmoon .ctic-value { color: var(--cm-text); }
+.ctic-panel--cmoon .ctic-value--link { color: var(--cm-link-text); background: var(--cm-link-bg); }
+.ctic-panel--cmoon .ctic-value--link:hover,
+.ctic-panel--cmoon .ctic-value--link:active { opacity: 0.82; }
+.ctic-panel--cmoon .ctic-value--link:focus-visible { outline-color: var(--cm-focus-ring); }
+.ctic-panel--cmoon .ctic-sub { color: var(--cm-text-muted); }
+
+.ctic-panel--cmoon .ctic-mint-title { color: var(--cm-text-muted); }
+/* :not(.ctic-lock-row--on) so the amber "locked" state (a semantic warning
+   color) is never overridden by the themed default/off state below it. */
+.ctic-panel--cmoon .ctic-lock-row:not(.ctic-lock-row--on) {
+  background: var(--cm-tile-bg);
+  border-color: var(--cm-border);
+  color: var(--cm-text-muted);
+}
+.ctic-panel--cmoon .ctic-lock-row:not(.ctic-lock-row--on) .ctic-lock-glyph { color: var(--cm-text-muted); }
+.ctic-panel--cmoon .ctic-lock-error { color: var(--cm-danger); }
+
+.ctic-panel--cmoon .ctic-owner-row { background: var(--cm-tile-bg); }
+.ctic-panel--cmoon .ctic-owner-mint { color: var(--cm-text-muted); }
+.ctic-panel--cmoon .ctic-owner-link { color: var(--cm-link-text); }
+.ctic-panel--cmoon .ctic-owner-link:hover { opacity: 0.82; }
+.ctic-panel--cmoon .ctic-owner-value { color: var(--cm-success); }
+
+.ctic-panel--cmoon .ctic-suggest-intro { color: var(--cm-text-muted); }
+.ctic-panel--cmoon .ctic-input {
+  background: var(--cm-tile-bg);
+  border-color: var(--cm-border);
+  color: var(--cm-text);
+}
+.ctic-panel--cmoon .ctic-input:focus { outline-color: var(--cm-focus-ring); }
+.ctic-panel--cmoon .ctic-success { color: var(--cm-success); }
+.ctic-panel--cmoon .ctic-no-change { color: var(--cm-text-muted); }
+.ctic-panel--cmoon .ctic-error { color: var(--cm-danger); }
+.ctic-panel--cmoon .ctic-empty { color: var(--cm-text-muted); }
+
+.ctic-panel--cmoon .ctic-countdown { color: var(--cm-text-muted); }
+.ctic-panel--cmoon .ctic-countdown-time { color: var(--cm-text); }
+
+.ctic-panel--cmoon .ctic-foot { border-top-color: var(--cm-hairline); }
 </style>

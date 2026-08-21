@@ -56,6 +56,10 @@
             Prize cToons: {{ c.prizeCtoons.map(p => `${p.name} ×${p.quantity}`).join(', ') || 'none' }}
           </div>
           <div class="text-xs text-gray-600 break-words">Discord role ID: {{ c.discordRoleId || 'none' }}</div>
+          <div class="text-xs text-gray-600 break-words">
+            cToons displayed: {{ c.displayedCtoonCount }}
+            <NuxtLink :to="`/newsite/cmoon/${c.id}`" class="text-indigo-600 hover:underline ml-1">View cMoon page</NuxtLink>
+          </div>
           <p v-if="c.memberCount > 0" class="text-xs text-gray-600 mt-1">
             Reassign members before this cMoon can be deleted.
           </p>
@@ -85,11 +89,57 @@
                 Badge contrast {{ colorContrast.toFixed(1) }}:1{{ colorContrast >= 4.5 ? '' : ' — below the 4.5:1 minimum, pick a darker or lighter color' }}
               </span>
             </p>
+            <!-- This color now also drives an entire cToon-modal/cMoon-page theme (not just the
+                 small badge above), so preview it in that actual context rather than a swatch alone. -->
+            <div v-if="palettePreview" class="cm-theme-preview" :style="{ background: palettePreview.bg, color: palettePreview.text }">
+              <div class="cm-theme-preview-banner" :style="{ background: palettePreview.banner, color: palettePreview.bannerText }">
+                {{ form.name || 'cMoon name' }}
+              </div>
+              <div class="cm-theme-preview-tile" :style="{ background: palettePreview.tileBg }">
+                <div style="font-size:0.65rem;opacity:0.8;">cWorld</div>
+                <div :style="{ color: palettePreview.linkText }">{{ form.name || 'cMoon name' }} ›</div>
+              </div>
+              <p style="font-size:0.72rem;" :style="{ color: palettePreview.textMuted }">This is how the themed cToon modal &amp; cMoon page will look.</p>
+            </div>
           </div>
           <div>
             <label class="block text-xs font-medium mb-1">Discord Role ID (optional)</label>
             <input v-model="form.discordRoleId" class="w-full border rounded px-2 py-1" style="font-size:16px" inputmode="numeric" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="123456789012345678" />
           </div>
+        </div>
+
+        <div class="mt-3">
+          <label class="block text-xs font-medium mb-1">cMoon page description (optional)</label>
+          <textarea
+            v-model="form.pageDescription"
+            rows="3"
+            maxlength="2000"
+            class="w-full border rounded px-2 py-1"
+            style="font-size:16px"
+            placeholder="Shown on this cMoon's public page"
+          ></textarea>
+        </div>
+
+        <div class="mt-3">
+          <label class="block text-xs font-medium mb-1">cMoon page image (exactly 800×600 after processing)</label>
+          <template v-if="!editId">
+            <p class="text-xs text-gray-600">Save this cMoon first, then Edit it to upload a page image.</p>
+          </template>
+          <template v-else>
+            <img v-if="pageImagePreview" :src="pageImagePreview" class="cm-page-image-preview" alt="Selected image preview" />
+            <img v-else-if="currentPageImagePath" :src="currentPageImagePath" class="cm-page-image-preview" alt="Current cMoon page image" />
+            <p v-else class="text-xs text-gray-600 mb-1">No image uploaded yet.</p>
+            <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" class="cm-field" @change="handlePageImageFile" />
+            <p class="text-xs text-gray-500 mt-1">Any photo works — it's auto-cropped/resized to 800×600 on upload.</p>
+            <button
+              type="button"
+              class="cm-tap mt-2 px-3 border rounded bg-white"
+              :disabled="!pageImageFile || pageImageUploading"
+              @click="uploadPageImage"
+            >{{ pageImageUploading ? 'Uploading…' : 'Upload image' }}</button>
+            <p v-if="pageImageError" class="text-xs text-red-600 mt-1">{{ pageImageError }}</p>
+            <NuxtLink :to="`/newsite/cmoon/${editId}`" class="block text-xs text-indigo-600 hover:underline mt-2">View cMoon page</NuxtLink>
+          </template>
         </div>
 
         <div class="mt-3">
@@ -182,6 +232,7 @@
 
 <script setup>
 import { cMoonPillStyle, isSafeCMoonColor, cMoonContrastRatio } from '~/utils/cmoonColor'
+import { cMoonPalette } from '~/utils/cmoonPalette'
 
 const rs = useAdminResources()
 
@@ -197,7 +248,7 @@ const cMoonEnabledAt = ref(null)
 const cMoonSelectionDeadlineAt = ref(null)
 
 const editId = ref('')
-const emptyForm = () => ({ name: '', color: '', discordRoleId: '', captainIds: [], prizeCtoons: [] })
+const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', captainIds: [], prizeCtoons: [] })
 const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
@@ -246,6 +297,43 @@ async function removeImage(c) {
     alert(e?.data?.statusMessage || 'Failed to remove graphic')
   } finally {
     imageBusyId.value = ''
+  }
+}
+
+// ── cMoon page image (separate step — needs an existing cMoon row) ─────
+const pageImageFile = ref(null)
+const pageImagePreview = ref('')
+const pageImageUploading = ref(false)
+const pageImageError = ref('')
+const currentPageImagePath = ref('')
+
+const palettePreview = computed(() => isValidColor(form.color) ? cMoonPalette(form.color) : null)
+
+function handlePageImageFile(e) {
+  const file = e.target.files?.[0] || null
+  pageImageFile.value = file
+  pageImageError.value = ''
+  if (pageImagePreview.value) URL.revokeObjectURL(pageImagePreview.value)
+  pageImagePreview.value = file ? URL.createObjectURL(file) : ''
+}
+
+async function uploadPageImage() {
+  if (!editId.value || !pageImageFile.value || pageImageUploading.value) return
+  pageImageUploading.value = true
+  pageImageError.value = ''
+  try {
+    const body = new FormData()
+    body.append('image', pageImageFile.value)
+    const res = await $fetch(`/api/admin/cmoons/${editId.value}/page-image`, { method: 'POST', body })
+    currentPageImagePath.value = res.pageImagePath
+    pageImageFile.value = null
+    if (pageImagePreview.value) URL.revokeObjectURL(pageImagePreview.value)
+    pageImagePreview.value = ''
+    await load()
+  } catch (e) {
+    pageImageError.value = e?.data?.statusMessage || 'Upload failed'
+  } finally {
+    pageImageUploading.value = false
   }
 }
 
@@ -321,9 +409,15 @@ function startEdit(c) {
     name: c.name,
     color: c.color,
     discordRoleId: c.discordRoleId || '',
+    pageDescription: c.pageDescription || '',
     captainIds: c.captains.map(cap => cap.userId),
     prizeCtoons: c.prizeCtoons.map(p => ({ ctoonId: p.ctoonId, quantity: p.quantity })),
   })
+  currentPageImagePath.value = c.pageImagePath || ''
+  pageImageFile.value = null
+  if (pageImagePreview.value) URL.revokeObjectURL(pageImagePreview.value)
+  pageImagePreview.value = ''
+  pageImageError.value = ''
   formError.value = ''
   clearImageSelection()
   currentImagePath.value = c.imagePath || ''
@@ -342,6 +436,11 @@ function resetForm() {
   formError.value = ''
   clearImageSelection()
   currentImagePath.value = ''
+  currentPageImagePath.value = ''
+  pageImageFile.value = null
+  if (pageImagePreview.value) URL.revokeObjectURL(pageImagePreview.value)
+  pageImagePreview.value = ''
+  pageImageError.value = ''
 }
 
 async function load() {
@@ -389,6 +488,7 @@ async function save() {
       name: form.name.trim(),
       color: form.color,
       discordRoleId: form.discordRoleId.trim(),
+      pageDescription: form.pageDescription,
       captainIds: form.captainIds,
       prizeCtoons: form.prizeCtoons,
     }
@@ -488,5 +588,35 @@ onMounted(load)
   border-radius: 999px;
   font-size: 0.7rem;
   font-weight: 700;
+}
+
+.cm-theme-preview {
+  margin-top: 8px;
+  border-radius: 6px;
+  overflow: hidden;
+  max-width: 320px;
+}
+.cm-theme-preview-banner {
+  padding: 8px 10px;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.cm-theme-preview-tile {
+  margin: 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.cm-theme-preview p { margin: 0 8px 8px; }
+
+.cm-page-image-preview {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 6px;
 }
 </style>

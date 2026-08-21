@@ -564,6 +564,7 @@ function openInfoModal(item) {
     userCtoonId: item.userCtoonId || null,
     assetPath:   item.assetPath  || null,
     name:        item.name       || null,
+    context:     { source: 'auction' },
   })
 }
 
