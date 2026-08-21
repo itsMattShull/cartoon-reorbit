@@ -20,3 +20,19 @@ export const MAX_CTOONS_PER_SIDE = 250
 /// How many counters deep one negotiation may go. A counter is cheap to send and
 /// DMs the other party, so an unbounded chain is a notification-spam vector.
 export const MAX_COUNTER_CHAIN_DEPTH = 20
+
+/// Ceiling on pointsOffered and pointsRequested alike. pointsOffered is already
+/// bounded in practice by the sender's real balance, but pointsRequested is not
+/// checked against anyone's balance at creation on purpose (see the schema
+/// comment on TradeOffer.pointsRequested) — nothing else stops a client sending
+/// Number.MAX_SAFE_INTEGER. Well under Postgres' int4 max (2,147,483,647) so a
+/// single offer can never get close to it on its own; accept.post.js still
+/// checks the actual resulting balances before moving anything, since this
+/// ceiling alone can't rule out overflow against a large existing balance.
+export const MAX_TRADE_POINTS = 1_000_000_000
+
+/// Cap on simultaneous PENDING offers from one initiator to one recipient.
+/// A points-request offer costs the sender nothing to send — no cToon, no
+/// locked points — so without this a recipient's incoming list is an
+/// unbounded, free-to-fill mailbox for one attacker to spam.
+export const MAX_PENDING_OFFERS_PER_PAIR = 5

@@ -102,6 +102,7 @@ export default defineEventHandler(async (event) => {
       initiator: o.initiator,
       recipient: o.recipient,
       pointsOffered: o.pointsOffered,
+      pointsRequested: o.pointsRequested,
       ctoonsOffered,
       ctoonsRequested,
       status: o.status,

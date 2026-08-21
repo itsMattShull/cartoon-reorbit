@@ -58,7 +58,8 @@
                 <th class="px-1.5 py-1 text-left">Status</th>
                 <th class="px-1.5 py-1 text-left">Created (CST)</th>
                 <th class="px-1.5 py-1 text-left">Accepted/Denied (CST)</th>
-                <th class="px-1.5 py-1 text-right">Pts</th>
+                <th class="px-1.5 py-1 text-right">Pts Off</th>
+                <th class="px-1.5 py-1 text-right">Pts Req</th>
                 <th class="px-1.5 py-1 text-right"># Off</th>
                 <th class="px-1.5 py-1 text-right"># Req</th>
                 <th class="px-1.5 py-1 text-right">Off Val</th>
@@ -73,8 +74,8 @@
                 class="border-t"
                 :class="{
                   'bg-yellow-100':
-                    computeTotalValue(trade.ctoonsOffered) <
-                    (trade.pointsOffered + computeTotalValue(trade.ctoonsRequested)) * 0.8
+                    (trade.pointsOffered + computeTotalValue(trade.ctoonsOffered)) <
+                    ((trade.pointsRequested || 0) + computeTotalValue(trade.ctoonsRequested)) * 0.8
                 }"
               >
                 <td class="px-1.5 py-1 align-top">
@@ -91,13 +92,14 @@
                   <span v-else>-</span>
                 </td>
                 <td class="px-1.5 py-1 text-right tabular-nums">{{ trade.pointsOffered }}</td>
+                <td class="px-1.5 py-1 text-right tabular-nums">{{ trade.pointsRequested || 0 }}</td>
                 <td class="px-1.5 py-1 text-right tabular-nums">{{ trade.ctoonsOffered.length }}</td>
                 <td class="px-1.5 py-1 text-right tabular-nums">{{ trade.ctoonsRequested.length }}</td>
                 <td class="px-1.5 py-1 text-right tabular-nums">
                   {{ trade.pointsOffered + computeTotalValue(trade.ctoonsOffered) }}
                 </td>
                 <td class="px-1.5 py-1 text-right tabular-nums">
-                  {{ computeTotalValue(trade.ctoonsRequested) }}
+                  {{ (trade.pointsRequested || 0) + computeTotalValue(trade.ctoonsRequested) }}
                 </td>
                 <td class="px-1.5 py-1">
                   <button @click="openModal(trade)" class="bg-blue-500 text-white px-2 py-0.5 rounded text-[11px]">
@@ -117,8 +119,8 @@
             class="border rounded p-2 shadow break-words text-[11px]"
             :class="{
               'bg-yellow-100':
-                computeTotalValue(trade.ctoonsOffered) <
-                (trade.pointsOffered + computeTotalValue(trade.ctoonsRequested)) * 0.8
+                (trade.pointsOffered + computeTotalValue(trade.ctoonsOffered)) <
+                ((trade.pointsRequested || 0) + computeTotalValue(trade.ctoonsRequested)) * 0.8
             }"
           >
             <div class="mb-1">
@@ -138,11 +140,12 @@
             </div>
 
             <div class="space-y-0.5">
-              <div><span class="font-medium">Points:</span> {{ trade.pointsOffered }}</div>
+              <div><span class="font-medium">Points Offered:</span> {{ trade.pointsOffered }}</div>
+              <div><span class="font-medium">Points Requested:</span> {{ trade.pointsRequested || 0 }}</div>
               <div><span class="font-medium">Offered:</span> {{ trade.ctoonsOffered.length }}</div>
               <div><span class="font-medium">Requested:</span> {{ trade.ctoonsRequested.length }}</div>
               <div><span class="font-medium">Total Offered Value:</span> {{ trade.pointsOffered + computeTotalValue(trade.ctoonsOffered) }}</div>
-              <div><span class="font-medium">Total Requested Value:</span> {{ computeTotalValue(trade.ctoonsRequested) }}</div>
+              <div><span class="font-medium">Total Requested Value:</span> {{ (trade.pointsRequested || 0) + computeTotalValue(trade.ctoonsRequested) }}</div>
             </div>
 
             <button @click="openModal(trade)" class="mt-2 bg-blue-500 text-white px-2 py-0.5 rounded text-[11px]">
@@ -200,6 +203,7 @@
             <!-- Recipient & Requests -->
             <div class="p-2 border rounded">
               <div><span class="font-medium">Recipient:</span> {{ selectedTrade.recipient.username }}</div>
+              <div class="mt-1"><span class="font-medium">Points Requested:</span> {{ selectedTrade.pointsRequested || 0 }}</div>
               <div class="font-medium mt-2">cToons Requested:</div>
               <div class="grid grid-cols-4 gap-2 mt-1">
                 <div v-for="item in selectedTrade.ctoonsRequested" :key="item.id" class="text-center">
@@ -208,7 +212,7 @@
                   <div class="text-[10px] text-gray-600">{{ item.rarity }}</div>
                 </div>
               </div>
-              <div class="mt-2"><span class="font-medium">Total Requested Value:</span> {{ computeTotalValue(selectedTrade.ctoonsRequested) }}</div>
+              <div class="mt-2"><span class="font-medium">Total Requested Value:</span> {{ (selectedTrade.pointsRequested || 0) + computeTotalValue(selectedTrade.ctoonsRequested) }}</div>
             </div>
           </div>
         </div>

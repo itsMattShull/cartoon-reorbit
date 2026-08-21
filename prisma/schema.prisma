@@ -1480,6 +1480,13 @@ model TradeOffer {
   initiatorId   String // who is making the offer
   recipientId   String // who will receive the offer
   pointsOffered Int      @default(0)
+  /// Points the initiator is asking the recipient to include, in the
+  /// opposite direction of pointsOffered. Unlike pointsOffered, this never
+  /// gets a LockedPoints row — the recipient's balance is never touched or
+  /// even queried until they try to accept, so a request can never be used
+  /// to fish for how many points someone else has. See accept.post.js for
+  /// the funds check this implies at accept time instead of creation time.
+  pointsRequested Int    @default(0)
   status        String   @default("PENDING") // e.g. PENDING, ACCEPTED, REJECTED, WITHDRAWN, COUNTERED
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

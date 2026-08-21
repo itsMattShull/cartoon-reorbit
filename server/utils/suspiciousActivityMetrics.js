@@ -168,6 +168,7 @@ async function computeAllUserMetrics(prisma, metricKeys, sinceDate) {
         initiatorId: true,
         recipientId: true,
         pointsOffered: true,
+        pointsRequested: true,
       },
     })
 
@@ -177,7 +178,7 @@ async function computeAllUserMetrics(prisma, metricKeys, sinceDate) {
     const pointsRx      = new Map() // userId → points received as recipient
 
     for (const offer of offers) {
-      const { initiatorId, recipientId, pointsOffered } = offer
+      const { initiatorId, recipientId, pointsOffered, pointsRequested } = offer
 
       // initiator side
       if (!partnerCounts.has(initiatorId)) partnerCounts.set(initiatorId, new Map())
@@ -191,9 +192,15 @@ async function computeAllUserMetrics(prisma, metricKeys, sinceDate) {
       rMap.set(initiatorId, (rMap.get(initiatorId) ?? 0) + 1)
       tradeTotal.set(recipientId, (tradeTotal.get(recipientId) ?? 0) + 1)
 
-      // points received by recipient
-      if (pointsOffered > 0) {
-        pointsRx.set(recipientId, (pointsRx.get(recipientId) ?? 0) + pointsOffered)
+      // Net points received, whichever side actually nets a gain -- with
+      // pointsRequested this trade system can now also move points recipient
+      // -> initiator in the same accepted offer, so pointsOffered alone
+      // understates (or points the wrong way for) what either party received.
+      const netToRecipient = (pointsOffered || 0) - (pointsRequested || 0)
+      if (netToRecipient > 0) {
+        pointsRx.set(recipientId, (pointsRx.get(recipientId) ?? 0) + netToRecipient)
+      } else if (netToRecipient < 0) {
+        pointsRx.set(initiatorId, (pointsRx.get(initiatorId) ?? 0) + (-netToRecipient))
       }
     }
 

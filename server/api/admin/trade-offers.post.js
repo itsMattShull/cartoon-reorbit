@@ -39,7 +39,8 @@ export default defineEventHandler(async (event) => {
     recipientUsername,
     ctoonIdsRequested = [],
     ctoonIdsOffered = [],
-    pointsOffered = 0
+    pointsOffered = 0,
+    pointsRequested = 0
   } = await readBody(event)
 
   if (!recipientUsername) {
@@ -51,7 +52,7 @@ export default defineEventHandler(async (event) => {
       statusMessage: 'ctoonIdsRequested and ctoonIdsOffered must be arrays'
     })
   }
-  if (Number(pointsOffered) > 0) {
+  if (Number(pointsOffered) > 0 || Number(pointsRequested) > 0) {
     throw createError({ statusCode: 400, statusMessage: 'Points are not supported for admin-initiated trades.' })
   }
   if (ctoonIdsOffered.length + ctoonIdsRequested.length === 0) {

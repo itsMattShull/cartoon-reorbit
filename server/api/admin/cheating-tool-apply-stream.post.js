@@ -129,7 +129,7 @@ export default defineEventHandler(async (event) => {
       const offersInitBySuspect = await prisma.tradeOffer.findMany({
         where: { status: 'ACCEPTED', initiatorId: { in: suspectIds }, recipientId: targetId },
         select: {
-          id: true, pointsOffered: true,
+          id: true, pointsOffered: true, pointsRequested: true,
           ctoons: { where: { role: 'OFFERED' }, select: { userCtoonId: true } }
         }
       })
@@ -142,7 +142,12 @@ export default defineEventHandler(async (event) => {
         }
       })
 
-      const tradeOfferPointsToTarget = offersInitBySuspect.reduce((sum, o) => sum + (o.pointsOffered ?? 0), 0)
+      // Net of both directions -- see the identical comment in
+      // cheating-tool-report.post.js.
+      const tradeOfferPointsToTarget = offersInitBySuspect.reduce(
+        (sum, o) => sum + (o.pointsOffered ?? 0) - (o.pointsRequested ?? 0),
+        0
+      )
 
       const tradedToTarget = new Map()
       for (const tc of tradeRoomCtoons) tradedToTarget.set(tc.userCtoonId, true)

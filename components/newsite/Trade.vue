@@ -47,7 +47,7 @@
               <span class="tr-col-user">
                 <NuxtLink :to="`/newsite/czone/${offer.initiator.username}`" class="tr-link">{{ offer.initiator.username }}</NuxtLink>
               </span>
-              <span class="tr-col-pts">{{ Number(offer.pointsOffered).toLocaleString() }}</span>
+              <span class="tr-col-pts" :title="pointsCellTitle(offer)">{{ pointsCellText(offer) }}</span>
               <span class="tr-col-ct tr-col-off">{{ countByRole(offer, 'OFFERED') }}</span>
               <span class="tr-col-ct tr-col-req">{{ countByRole(offer, 'REQUESTED') }}</span>
               <span class="tr-col-stat"><span class="tr-badge" :class="statusBadgeClass(offer.status)">{{ offer.status.toLowerCase() }}</span></span>
@@ -81,7 +81,7 @@
               <span class="tr-col-user">
                 <NuxtLink :to="`/newsite/czone/${offer.recipient.username}`" class="tr-link">{{ offer.recipient.username }}</NuxtLink>
               </span>
-              <span class="tr-col-pts">{{ Number(offer.pointsOffered).toLocaleString() }}</span>
+              <span class="tr-col-pts" :title="pointsCellTitle(offer)">{{ pointsCellText(offer) }}</span>
               <span class="tr-col-ct tr-col-off">{{ countByRole(offer, 'OFFERED') }}</span>
               <span class="tr-col-ct tr-col-req">{{ countByRole(offer, 'REQUESTED') }}</span>
               <span class="tr-col-stat"><span class="tr-badge" :class="statusBadgeClass(offer.status)">{{ offer.status.toLowerCase() }}</span></span>
@@ -105,8 +105,12 @@
               Sending this will decline their original offer.
             </span>
             <span v-if="tradeCounterSummary?.theirPointsOffered" class="tr-counter-warn">
-              Their {{ tradeCounterSummary.theirPointsOffered.toLocaleString() }} pts can't be
-              requested back — points only travel from the sender of an offer.
+              They offered {{ tradeCounterSummary.theirPointsOffered.toLocaleString() }} pts —
+              not carried over automatically. Add it under "Points to request" if you still want it.
+            </span>
+            <span v-if="tradeCounterSummary?.theirPointsRequested" class="tr-counter-warn">
+              They asked you for {{ tradeCounterSummary.theirPointsRequested.toLocaleString() }} pts —
+              also not carried over. Add it under "Points to offer" if you're still willing to send it.
             </span>
             <span v-if="counterTrimmedCount" class="tr-counter-warn">
               {{ counterTrimmedCount }} cToon{{ counterTrimmedCount === 1 ? '' : 's' }} from the
@@ -236,19 +240,34 @@
           <div class="tr-step-header">
             <div class="tr-step-title-group">
               <span class="tr-step-title">{{ tradeTargetUser.username }}'s Collection</span>
-              <span class="tr-step-hint">Select cToons to request</span>
+              <span class="tr-step-hint">Select cToons and/or points to request</span>
+              <div class="tr-points-row">
+                <label class="tr-suggest-dim">Points to request:</label>
+                <input
+                  type="number"
+                  v-model.number="pointsToRequest"
+                  min="0"
+                  :max="MAX_TRADE_POINTS"
+                  @input="pointsToRequest = clampPoints(pointsToRequest)"
+                  class="tr-points-input"
+                  placeholder="0"
+                />
+              </div>
             </div>
-            <div v-if="selectedTargetCtoons.length" class="tr-sel-total">
+            <div v-if="selectedTargetCtoons.length || pointsToRequest > 0" class="tr-sel-total">
               <span class="tr-sel-total-label">Selected value</span>
-              <span v-if="isLoadingCreateValuations" class="tr-sel-total-val tr-sel-total-dim">…</span>
+              <span v-if="isLoadingCreateValuations && step1SelectedTotal == null" class="tr-sel-total-val tr-sel-total-dim">…</span>
               <span v-else-if="step1SelectedTotal != null" class="tr-sel-total-val">~{{ step1SelectedTotal.toLocaleString() }} pts</span>
             </div>
             <!--
               Countering an offer that was points-only leaves nothing to mirror
               into the request side, so requiring a selection here would dead-end
-              the flow. The server still rejects a wholly empty offer.
+              the flow. A pure points request (no cToons at all) is also allowed
+              through for the same reason: the server only rejects a wholly empty
+              offer, and gating on cToons alone would trap "just send me points"
+              on this step forever.
             -->
-            <button class="tr-btn-primary" :disabled="!selectedTargetCtoons.length && !isCounterMode" @click="tradeCurrentStep = 2">
+            <button class="tr-btn-primary" :disabled="!selectedTargetCtoons.length && pointsToRequest === 0 && !isCounterMode" @click="tradeCurrentStep = 2">
               Next →
             </button>
           </div>
@@ -305,12 +324,8 @@
           </template>
 
           <div class="tr-step-footer">
-            <!--
-              Countering an offer that was points-only leaves nothing to mirror
-              into the request side, so requiring a selection here would dead-end
-              the flow. The server still rejects a wholly empty offer.
-            -->
-            <button class="tr-btn-primary" :disabled="!selectedTargetCtoons.length && !isCounterMode" @click="tradeCurrentStep = 2">
+            <!-- Same gating as the header's Next button above. -->
+            <button class="tr-btn-primary" :disabled="!selectedTargetCtoons.length && pointsToRequest === 0 && !isCounterMode" @click="tradeCurrentStep = 2">
               Next →
             </button>
           </div>
@@ -328,7 +343,7 @@
                   v-model.number="pointsToOffer"
                   :max="user?.availablePoints ?? user?.points ?? 0"
                   min="0"
-                  @input="pointsToOffer = Math.max(0, pointsToOffer)"
+                  @input="pointsToOffer = Math.min(clampPoints(pointsToOffer), user?.availablePoints ?? user?.points ?? 0)"
                   class="tr-points-input"
                   placeholder="0"
                 />
@@ -441,7 +456,7 @@
             <template v-else-if="createFairnessData">
               <div class="tm-val-row">
                 <div class="tm-val-side">
-                  <div class="tm-val-label">You receive (cToons)</div>
+                  <div class="tm-val-label">You receive (cToons + pts)</div>
                   <div class="tm-val-amount">~{{ createFairnessData.requestedTotal.toLocaleString() }} pts</div>
                 </div>
                 <div class="tm-val-bar-wrap">
@@ -488,6 +503,7 @@
           <div class="tr-confirm-grid">
             <div class="tr-confirm-col">
               <div class="tr-confirm-label">Requesting from {{ tradeTargetUser.username }}</div>
+              <div v-if="pointsToRequest > 0" class="tr-confirm-points">Points: {{ Number(pointsToRequest).toLocaleString() }}</div>
               <div v-if="!selectedTargetCtoons.length" class="tr-suggest-dim tr-confirm-empty">No cToons selected.</div>
               <div v-else class="tr-confirm-cards">
                 <div v-for="c in selectedTargetCtoons" :key="c.id" class="tr-confirm-card">
@@ -536,7 +552,8 @@
                 <NuxtLink :to="`/newsite/czone/${currentOffer.recipient.username}`" class="tm-link">{{ currentOffer.recipient.username }}</NuxtLink>
               </div>
               <div class="tm-head-meta">
-                <span>Points: {{ Number(currentOffer.pointsOffered).toLocaleString() }}</span>
+                <span>Offered: {{ Number(currentOffer.pointsOffered).toLocaleString() }} pts</span>
+                <span v-if="currentOffer.pointsRequested">Requested: {{ Number(currentOffer.pointsRequested).toLocaleString() }} pts</span>
                 <span class="tr-badge" :class="statusBadgeClass(currentOffer.status)">{{ currentOffer.status.toLowerCase() }}</span>
                 <span class="tm-dim">{{ formatDateTime(currentOffer.createdAt) }}</span>
               </div>
@@ -572,7 +589,7 @@
                   </div>
                   <!-- Requested side total -->
                   <div class="tm-val-side tm-val-side-right">
-                    <div class="tm-val-label">Requested (cToons)</div>
+                    <div class="tm-val-label">Requested (cToons + pts)</div>
                     <div class="tm-val-amount">~{{ fairnessData.requestedTotal.toLocaleString() }} pts</div>
                   </div>
                 </div>
@@ -626,6 +643,10 @@
               <!-- Requested cToons -->
               <div class="tm-col">
                 <div class="tm-col-title">Requested cToons</div>
+                <div v-if="currentOffer.pointsRequested" class="tm-points-row">
+                  <span class="tm-points-label">Points Requested</span>
+                  <span class="tm-points-value">{{ Number(currentOffer.pointsRequested).toLocaleString() }}</span>
+                </div>
                 <div class="tm-cards">
                   <div
                     v-for="tc in currentOffer.ctoons.filter(c => c.role === 'REQUESTED')"
@@ -718,7 +739,7 @@ import { useAuth } from '@/composables/useAuth'
 import { formatQuantity } from '~/utils/formatQuantity'
 import { disabledReasonFor } from '~/server/utils/lockRules'
 import { duplicateCtoonIds } from '~/utils/duplicateCtoonIds'
-import { MAX_CTOONS_PER_SIDE } from '~/server/utils/tradeOfferLimits'
+import { MAX_CTOONS_PER_SIDE, MAX_TRADE_POINTS } from '~/server/utils/tradeOfferLimits'
 import CtoonCard from '@/components/trade/CtoonCard.vue'
 
 const route = useRoute()
@@ -892,12 +913,13 @@ const offeredTotal = computed(() => {
 /** Sum of mint-adjusted values for requested cToons */
 const requestedTotal = computed(() => {
   if (!currentOffer.value || !Object.keys(tradeValuations.value).length) return null
-  return currentOffer.value.ctoons
+  const ctoonSum = currentOffer.value.ctoons
     .filter(tc => tc.role === 'REQUESTED')
     .reduce((sum, tc) => {
       const val = getMintAdjustedValue(tradeValuations.value[tc.userCtoon.id])
       return sum + (val ?? 0)
     }, 0)
+  return ctoonSum + (Number(currentOffer.value.pointsRequested) || 0)
 })
 
 /**
@@ -993,11 +1015,17 @@ async function fetchValuationsForIds(ids) {
   }
 }
 
-/** Total mint-adjusted value of the cToons selected from the other user (Step 1 display) */
+/**
+ * Total mint-adjusted value of the cToons selected from the other user, plus
+ * points requested (Step 1 display). Must not go null just because no cToons
+ * are selected -- "just send me some points, no cToons" is a real, valid
+ * offer, and this total feeds the Next-button gating on this same step.
+ */
 const step1SelectedTotal = computed(() => {
-  if (!selectedTargetCtoons.value.length) return null
+  const points = Number(pointsToRequest.value) || 0
+  if (!selectedTargetCtoons.value.length) return points > 0 ? points : null
   if (!selectedTargetCtoons.value.some(c => createValuations.value[c.id])) return null
-  return selectedTargetCtoons.value.reduce((sum, c) => {
+  return points + selectedTargetCtoons.value.reduce((sum, c) => {
     return sum + (getMintAdjustedValue(createValuations.value[c.id]) ?? 0)
   }, 0)
 })
@@ -1316,7 +1344,7 @@ async function clearTarget(focusInput = false) {
   preselectTargetKeys.value = []; preselectSelfKeys.value = []; counterMissingCount.value = 0; counterTrimmedCount.value = 0
   pinnedTargetIds.value = new Set(); pinnedInitiatorIds.value = new Set()
   limitNotified.target = false; limitNotified.initiator = false
-  selectedTargetCtoons.value = []; selectedInitiatorCtoons.value = []; pointsToOffer.value = 0
+  selectedTargetCtoons.value = []; selectedInitiatorCtoons.value = []; pointsToOffer.value = 0; pointsToRequest.value = 0
   otherCtoons.value = []; selfCtoons.value = []; otherTradeList.value = []; selfTradeList.value = []
   pageOther.value = 1; pageSelf.value = 1
   tradeFiltersOther.value = { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all' }
@@ -1681,7 +1709,21 @@ function buildNameSuggestions(q, list) {
 
 // ── Offer creation ────────────────────────────────────────────────
 const pointsToOffer = ref(0)
+const pointsToRequest = ref(0)
 const makingOffer = ref(false)
+
+/**
+ * Clamps a points input to [0, MAX_TRADE_POINTS], coercing NaN/Infinity (an
+ * empty field, a stray "-" mid-type, a pasted value past what Number can
+ * represent safely) to 0 rather than letting it through as-is. v-model.number
+ * on its own does not guard any of that -- an unclamped NaN silently poisons
+ * every total downstream and renders as the literal string "NaN".
+ */
+function clampPoints(v) {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return 0
+  return Math.min(MAX_TRADE_POINTS, Math.max(0, Math.trunc(n)))
+}
 
 /**
  * Locks shield you from other people asking; they never stop you giving a
@@ -1709,7 +1751,7 @@ watch(selectedInitiatorIds, () => { lockAck.value = false })
 const isCounterMode = computed(() => !!tradeCounterSourceId.value)
 
 async function sendOffer() {
-  if (!tradeTargetUser.value || pointsToOffer.value < 0) return
+  if (!tradeTargetUser.value || pointsToOffer.value < 0 || pointsToRequest.value < 0) return
   // Last line before the network. The toggles and the counter mirror are both
   // capped, but this is the only check every path provably passes through.
   if (selectedTargetCtoons.value.length > MAX_CTOONS_PER_SIDE ||
@@ -1723,6 +1765,7 @@ async function sendOffer() {
     ctoonIdsRequested: selectedTargetCtoons.value.map(c => c.id),
     ctoonIdsOffered: selectedInitiatorCtoons.value.map(c => c.id),
     pointsOffered: pointsToOffer.value,
+    pointsRequested: pointsToRequest.value,
   }
   try {
     makingOffer.value = true
@@ -1764,10 +1807,11 @@ async function startCounter(offer) {
   tradeCounterSourceId.value = offer.id
   tradeCounterSummary.value = {
     username: offer.initiator.username,
-    // Carried purely to be shown: TradeOffer models points in one direction
-    // only (initiator → recipient), so points they offered cannot be mirrored
-    // into a request. Saying so beats silently dropping the value.
+    // Carried purely to be shown, in both directions: a counter is a brand new
+    // offer, so neither field auto-fills from the one being replaced. Saying
+    // so beats silently dropping the value.
     theirPointsOffered: Number(offer.pointsOffered) || 0,
+    theirPointsRequested: Number(offer.pointsRequested) || 0,
   }
   preselectTargetKeys.value = theirs.map(toonKey)
   preselectSelfKeys.value = mine.map(toonKey)
@@ -1840,6 +1884,30 @@ function sortMintResults(list) {
   })
 }
 function countByRole(offer, role) { return offer.ctoons.filter(c => c.role === role).length }
+
+/**
+ * Compact text for the list rows' one "Points" cell, now that an offer can
+ * carry points in both directions. Reuses the ↓/↑ convention the adjacent
+ * "↓ Off." / "↑ Req." columns already established, rather than adding a
+ * whole second column that the list grid (already 7 columns wide) has no
+ * room for on mobile.
+ */
+function pointsCellText(offer) {
+  const off = Number(offer.pointsOffered) || 0
+  const req = Number(offer.pointsRequested) || 0
+  if (!off && !req) return '—'
+  const parts = []
+  if (off) parts.push(`↓${off.toLocaleString()}`)
+  if (req) parts.push(`↑${req.toLocaleString()}`)
+  return parts.join(' ')
+}
+/** Full, unabbreviated values for a hover/long-press title on the cell above. */
+function pointsCellTitle(offer) {
+  const off = Number(offer.pointsOffered) || 0
+  const req = Number(offer.pointsRequested) || 0
+  if (!off && !req) return ''
+  return `Offered: ${off.toLocaleString()} pts · Requested: ${req.toLocaleString()} pts`
+}
 function formatDate(iso) { return new Date(iso).toLocaleDateString() }
 function formatDateTime(iso) { return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) }
 function statusBadgeClass(status) {
@@ -1927,7 +1995,10 @@ onBeforeUnmount(() => {
 /* ── List (incoming / outgoing) ── */
 .tr-list-head, .tr-row {
   display: grid;
-  grid-template-columns: 1fr 60px 45px 45px 80px 72px 58px;
+  /* Points column widened from 60px: it now shows up to two directional
+     values ("↓1.2M ↑300K"), and 60px already clipped a single value near
+     the trade points ceiling. */
+  grid-template-columns: 1fr 100px 45px 45px 80px 72px 58px;
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
@@ -1954,6 +2025,7 @@ onBeforeUnmount(() => {
 .tr-row:hover { background: rgba(0,0,0,0.3); }
 .tr-col-user { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tr-col-pts, .tr-col-ct, .tr-col-stat, .tr-col-date, .tr-col-act { text-align: center; }
+.tr-col-pts { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tr-link { color: var(--OrbitLightBlue); text-decoration: none; }
 .tr-link:hover { text-decoration: underline; }
 .tr-view-btn {

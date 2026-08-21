@@ -145,7 +145,7 @@ export default defineEventHandler(async (event) => {
   const offersInitBySuspect = await prisma.tradeOffer.findMany({
     where: { status: 'ACCEPTED', initiatorId: { in: suspectIds }, recipientId: targetId },
     select: {
-      id: true, initiatorId: true, pointsOffered: true,
+      id: true, initiatorId: true, pointsOffered: true, pointsRequested: true,
       ctoons: {
         where: { role: 'OFFERED' },
         select: {
@@ -183,7 +183,14 @@ export default defineEventHandler(async (event) => {
     }
   })
 
-  const tradeOfferPointsToTarget = offersInitBySuspect.reduce((sum, o) => sum + (o.pointsOffered ?? 0), 0)
+  // Net of both directions: pointsRequested on one of these offers is real
+  // value flowing target -> suspect inside a suspect-initiated trade, and
+  // summing pointsOffered alone would overstate how many points the suspect
+  // actually funneled to the target (or miss that some flowed back).
+  const tradeOfferPointsToTarget = offersInitBySuspect.reduce(
+    (sum, o) => sum + (o.pointsOffered ?? 0) - (o.pointsRequested ?? 0),
+    0
+  )
 
   // pending TradeOffers (informational)
   const pendingOffers = await prisma.tradeOffer.findMany({
@@ -194,7 +201,7 @@ export default defineEventHandler(async (event) => {
         { initiatorId: targetId,           recipientId: { in: suspectIds } },
       ]
     },
-    select: { id: true, initiatorId: true, recipientId: true, pointsOffered: true }
+    select: { id: true, initiatorId: true, recipientId: true, pointsOffered: true, pointsRequested: true }
   })
 
   // ── Section C: Collate all ctoons traded TO target ────────────────────────
@@ -283,6 +290,7 @@ export default defineEventHandler(async (event) => {
   const tradeOfferBreakdown = offersInitBySuspect.map(o => ({
     suspectName: nameById.get(o.initiatorId) ?? String(o.initiatorId),
     pointsOffered: o.pointsOffered ?? 0,
+    pointsRequested: o.pointsRequested ?? 0,
   }))
 
   // Auction breakdown for display
@@ -300,6 +308,7 @@ export default defineEventHandler(async (event) => {
       suspectName: nameById.get(isSuspectInitiator ? o.initiatorId : o.recipientId) ?? '?',
       role: isSuspectInitiator ? 'initiator' : 'recipient',
       pointsOffered: o.pointsOffered ?? 0,
+      pointsRequested: o.pointsRequested ?? 0,
     }
   })
 

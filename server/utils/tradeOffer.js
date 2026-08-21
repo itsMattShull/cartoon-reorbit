@@ -12,6 +12,9 @@ import {
   normalizeCtoonIdList,
   assertNoCrossSideOverlap,
   pendingTradeGuardWhere,
+  assertValidPointsAmount,
+  pendingOfferPairLimitExceeded,
+  MAX_PENDING_OFFERS_PER_PAIR,
   fmtPoints
 } from '@/server/utils/tradeOfferRules'
 import {
@@ -82,16 +85,41 @@ export async function validateTradeOfferInputs ({
   resolvedOffered,
   resolvedRequested,
   pointsOffered,
+  pointsRequested = 0,
   excludeOfferIds = []
 }) {
-  if (typeof pointsOffered !== 'number' || !Number.isInteger(pointsOffered) || pointsOffered < 0) {
-    throw createError({ statusCode: 400, statusMessage: 'pointsOffered must be a non-negative integer' })
-  }
+  assertValidPointsAmount(pointsOffered, 'pointsOffered')
+  // Deliberately the same shape of check as pointsOffered, and deliberately NOT
+  // a balance check — nothing here (or anywhere else in this function) ever
+  // queries the RECIPIENT's UserPoints/LockedPoints for this field. That is
+  // what keeps the initiator from using a request as a way to fish for how
+  // many points someone else has: whether this call succeeds or fails never
+  // depends on the recipient's balance. See accept.post.js for the funds check
+  // this defers to accept time instead.
+  assertValidPointsAmount(pointsRequested, 'pointsRequested')
+
   // Only the client blocked self-trades. Server-side they would make the points
   // release and re-lock in the counter transaction operate on one balance, where
   // the release is visible to the availability check that follows it.
   if (recipient.id === initiatorId) {
     throw createError({ statusCode: 400, statusMessage: 'You cannot trade with yourself.' })
+  }
+
+  // A points-request offer locks nothing and costs the sender no cToon, so it
+  // is free to send — the one thing standing between that and an unbounded,
+  // attacker-writable incoming list is a cap on how many of these one pair can
+  // have open at once. Counters aren't exempted: a counter chain alternates
+  // direction each hop, so at most one PENDING offer ever exists for a given
+  // (initiator, recipient) ordering within a single chain — this only ever
+  // fires against OTHER, unrelated pending offers between the same two users.
+  const existingPendingCount = await prisma.tradeOffer.count({
+    where: { initiatorId, recipientId: recipient.id, status: 'PENDING' }
+  })
+  if (pendingOfferPairLimitExceeded(existingPendingCount)) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `You already have ${MAX_PENDING_OFFERS_PER_PAIR} pending offers to this user. Wait for a response, or withdraw one first.`
+    })
   }
 
   const allIds = [...resolvedOffered, ...resolvedRequested]
@@ -203,6 +231,11 @@ export async function validateTradeOfferInputs ({
       })
     }
   }
+
+  // Handed back so callers can decide whether to send a DM/notification: only
+  // on the first pending offer between this pair, so a sender who already has
+  // one open can't ring a recipient's phone again by sending 20 more.
+  return { existingPendingCount }
 }
 
 /**
@@ -214,6 +247,7 @@ export async function createTradeOfferTx (tx, {
   initiatorId,
   recipientId,
   pointsOffered,
+  pointsRequested = 0,
   resolvedOffered,
   resolvedRequested,
   counteredOfferId = null
@@ -244,6 +278,10 @@ export async function createTradeOfferTx (tx, {
       initiatorId,
       recipientId,
       pointsOffered,
+      // No LockedPoints row for this one, ever — see the schema comment on
+      // TradeOffer.pointsRequested. The recipient's balance is checked for the
+      // first time at accept.post.js, not here.
+      pointsRequested,
       counteredOfferId,
       // createMany, not create: a nested `create` array emits one INSERT per
       // element, so a full-size offer would be 500 statements inside this
@@ -307,6 +345,7 @@ export async function sendTradeOfferDM ({
   recipientDiscordId,
   fromUsername,
   pointsOffered,
+  pointsRequested = 0,
   offeredCount,
   requestedCount,
   isCounter = false
@@ -328,6 +367,9 @@ export async function sendTradeOfferDM ({
       ? `🔄 **${fromUsername}** has countered your trade offer!`
       : `👋 **${fromUsername}** has sent you a trade offer!`,
     `• Points offered: **${pointsOffered}**`,
+    // Only shown when nonzero: a bare "Points requested: 0" line on every DM
+    // would bury the (usually rare) offers that actually ask for points.
+    ...(pointsRequested > 0 ? [`• Points requested: **${pointsRequested}**`] : []),
     `• cToons offered: **${offeredCount}**`,
     `• cToons requested: **${requestedCount}**`,
     ``,

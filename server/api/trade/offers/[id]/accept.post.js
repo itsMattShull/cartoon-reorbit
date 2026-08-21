@@ -5,6 +5,14 @@ import {
 } from 'h3'
 import { prisma } from '@/server/prisma'
 import { notifyTradeOfferAccepted } from '@/server/utils/notifications'
+import { fmtPoints } from '@/server/utils/tradeOfferRules'
+
+// Postgres int4 max. Points columns are Int (32-bit); crediting a side past
+// this would make Postgres raise mid-transaction, and because that happens
+// inside the same transaction as the offer-row claim, the claim rolls back
+// too -- the offer would just go back to PENDING and fail identically on
+// every retry. Checked up front instead so this is a clean, explained 400.
+const INT4_MAX = 2147483647
 
 export default defineEventHandler(async (event) => {
   // 1) Authenticate
@@ -96,6 +104,43 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // 5b) Verify the RECIPIENT (the accepting user) can actually afford what's
+  // being requested, and that crediting either side won't overflow the Int
+  // column. Unlike steps 3-5 above, failure here must NOT reject the offer:
+  // pointsRequested was never locked when the offer arrived (see the schema
+  // comment on TradeOffer.pointsRequested), so the recipient has to be free
+  // to top up and retry later, or decline/counter instead. The message below
+  // only ever describes the caller's OWN balance -- it is never shown to the
+  // initiator, who has no way to trigger this check themselves (recipientId
+  // !== userId was already enforced above).
+  if (offer.pointsOffered > 0 || offer.pointsRequested > 0) {
+    const [recipientPts, recipientLockAgg] = await Promise.all([
+      prisma.userPoints.findUnique({ where: { userId: offer.recipientId }, select: { points: true } }),
+      prisma.lockedPoints.aggregate({
+        _sum: { amount: true },
+        where: { userId: offer.recipientId, status: 'ACTIVE' }
+      })
+    ])
+    const recipientGross = recipientPts?.points || 0
+    const recipientLocked = recipientLockAgg._sum.amount || 0
+    const recipientAvailable = Math.max(0, recipientGross - recipientLocked)
+
+    if (offer.pointsRequested > recipientAvailable) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: `You need ${fmtPoints(offer.pointsRequested - recipientAvailable)} more points to accept this trade — you have ${fmtPoints(recipientAvailable)} available.`
+      })
+    }
+
+    const initiatorGross = pts?.points || 0
+    if (initiatorGross + offer.pointsRequested > INT4_MAX || recipientGross + offer.pointsOffered > INT4_MAX) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'This trade would push a balance past the maximum allowed and cannot be completed.'
+      })
+    }
+  }
+
   // 6) Transfer cToons, move points, log, accept
   await prisma.$transaction(async (tx) => {
     // Claim the offer before touching anything else. The status check above
@@ -119,23 +164,57 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    if (offer.pointsOffered > 0) {
+    if (offer.pointsOffered > 0 || offer.pointsRequested > 0) {
+      // Both fields move in the same two rows: initiator loses pointsOffered
+      // and gains pointsRequested; recipient is the mirror image. Netted into
+      // one delta per user rather than four separate updates.
+      const initiatorNet = offer.pointsRequested - offer.pointsOffered
+      const recipientNet = offer.pointsOffered - offer.pointsRequested
+      const netFor = (userId) => (userId === offer.initiatorId ? initiatorNet : recipientNet)
+
       // Both UserPoints rows are taken in userId order, not initiator-then-
       // recipient. Two accepts between the same pair of users in opposite roles
       // would otherwise grab the same two rows in opposite orders and deadlock —
       // a narrow window at 50 cToons a side, seconds wide at 250.
       const [firstId, secondId] = [offer.initiatorId, offer.recipientId].sort()
-      const deltaFor = (userId) => userId === offer.initiatorId
-        ? { points: { decrement: offer.pointsOffered } }
-        : { points: { increment: offer.pointsOffered } }
 
-      const firstRow = await tx.userPoints.update({ where: { userId: firstId }, data: deltaFor(firstId) })
-      const secondRow = await tx.userPoints.update({ where: { userId: secondId }, data: deltaFor(secondId) })
+      // A user's net can be a decrement even though only pointsRequested (never
+      // locked) is driving it, not pointsOffered (locked at creation). The
+      // pre-transaction check above confirms the recipient can afford it at
+      // that instant, but nothing reserves it — a recipient with two separate
+      // PENDING offers whose pointsRequested both fit their balance alone can
+      // still accept both in quick succession, and the offer-row claim above
+      // only serializes accepts of the SAME offer, not two different offers
+      // touching the same UserPoints row. So the decrementing side of this net
+      // is a CONDITIONAL update gated on the row still covering it, and a miss
+      // aborts the whole transaction (rolling the claim back too) instead of
+      // ever letting a balance go negative.
+      async function applyNet (userId) {
+        const net = netFor(userId)
+        if (net >= 0) {
+          return tx.userPoints.update({ where: { userId }, data: { points: { increment: net } } })
+        }
+        const magnitude = -net
+        const guarded = await tx.userPoints.updateMany({
+          where: { userId, points: { gte: magnitude } },
+          data: { points: { decrement: magnitude } }
+        })
+        if (guarded.count !== 1) {
+          throw createError({
+            statusCode: 409,
+            statusMessage: 'A balance changed and this trade can no longer be completed. Please try again.'
+          })
+        }
+        return tx.userPoints.findUnique({ where: { userId } })
+      }
 
+      const firstRow = await applyNet(firstId)
+      const secondRow = await applyNet(secondId)
       const totalFor = (userId) => (userId === firstId ? firstRow : secondRow).points
 
-      await tx.pointsLog.createMany({
-        data: [
+      const logRows = []
+      if (offer.pointsOffered > 0) {
+        logRows.push(
           {
             userId:    offer.initiatorId,
             points:    offer.pointsOffered,
@@ -150,19 +229,42 @@ export default defineEventHandler(async (event) => {
             method:    'Accepted Trade',
             direction: 'increase'
           }
-        ]
-      })
+        )
+      }
+      if (offer.pointsRequested > 0) {
+        logRows.push(
+          {
+            userId:    offer.recipientId,
+            points:    offer.pointsRequested,
+            total:     totalFor(offer.recipientId),
+            method:    'Accepted Trade (points requested)',
+            direction: 'decrease'
+          },
+          {
+            userId:    offer.initiatorId,
+            points:    offer.pointsRequested,
+            total:     totalFor(offer.initiatorId),
+            method:    'Requested Trade (points requested)',
+            direction: 'increase'
+          }
+        )
+      }
+      await tx.pointsLog.createMany({ data: logRows })
 
-      // Mark the corresponding trade lock as consumed
-      await tx.lockedPoints.updateMany({
-        where: {
-          userId: offer.initiatorId,
-          status: 'ACTIVE',
-          contextType: 'TRADE',
-          contextId: offerId
-        },
-        data: { status: 'CONSUMED' }
-      })
+      // Mark the corresponding trade lock as consumed. pointsRequested never
+      // had one to begin with (see the schema comment on it), so this stays
+      // scoped to pointsOffered exactly as before.
+      if (offer.pointsOffered > 0) {
+        await tx.lockedPoints.updateMany({
+          where: {
+            userId: offer.initiatorId,
+            status: 'ACTIVE',
+            contextType: 'TRADE',
+            contextId: offerId
+          },
+          data: { status: 'CONSUMED' }
+        })
+      }
     }
 
     // Transfer both sides as two set-based updates rather than one update per

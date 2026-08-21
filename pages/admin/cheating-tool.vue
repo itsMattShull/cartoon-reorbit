@@ -167,11 +167,14 @@
               class="flex items-center justify-between text-sm border-b py-1.5"
             >
               <span class="font-medium">{{ row.suspectName }}</span>
-              <span class="text-gray-700">{{ row.pointsOffered.toLocaleString() }} pts offered</span>
+              <span class="text-gray-700">
+                {{ row.pointsOffered.toLocaleString() }} pts offered
+                <template v-if="row.pointsRequested">, {{ row.pointsRequested.toLocaleString() }} pts requested back</template>
+              </span>
             </div>
           </div>
           <div class="mt-2 pt-2 border-t flex justify-between font-semibold text-sm">
-            <span>Subtotal</span>
+            <span>Subtotal (net)</span>
             <span>{{ report.tradeOfferPointsToTarget.toLocaleString() }} pts</span>
           </div>
         </div>
@@ -217,6 +220,7 @@
               <p class="font-medium mb-1">Pending TradeOffers</p>
               <div v-for="(row, i) in report.pendingOffersDisplay" :key="i" class="ml-3 text-gray-700">
                 {{ row.suspectName }} ({{ row.role }}) — {{ row.pointsOffered.toLocaleString() }} pts offered
+                <template v-if="row.pointsRequested">, {{ row.pointsRequested.toLocaleString() }} pts requested</template>
               </div>
             </div>
           </div>

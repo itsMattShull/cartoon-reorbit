@@ -256,6 +256,7 @@ export default defineEventHandler(async (event) => {
       initiatorId: true,
       recipientId: true,
       pointsOffered: true,
+      pointsRequested: true,
       ctoons: {
         select: {
           role: true,
@@ -283,10 +284,14 @@ export default defineEventHandler(async (event) => {
 
     if (requestedSetCtoons.length > 0 && oneSetCompleterIds.includes(offer.initiatorId)) {
       tradeCountByUser.set(offer.initiatorId, (tradeCountByUser.get(offer.initiatorId) || 0) + 1)
-      if (offer.pointsOffered > 0) {
+      // Net of what they also received back via pointsRequested in the same
+      // trade -- pointsOffered alone overstates the cost when both directions
+      // are in play.
+      const netCost = (offer.pointsOffered || 0) - (offer.pointsRequested || 0)
+      if (netCost > 0) {
         tradePointsByUser.set(
           offer.initiatorId,
-          (tradePointsByUser.get(offer.initiatorId) || 0) + offer.pointsOffered
+          (tradePointsByUser.get(offer.initiatorId) || 0) + netCost
         )
       }
     }

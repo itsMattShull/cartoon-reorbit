@@ -20,9 +20,9 @@ import { createError } from 'h3'
 // Imported by RELATIVE path, not the `@/` alias: this module is loaded directly
 // by `node --test`, which has no alias resolution — the same reason the header
 // above gives for keeping prisma out of here.
-import { MAX_CTOONS_PER_SIDE, MAX_COUNTER_CHAIN_DEPTH } from './tradeOfferLimits.js'
+import { MAX_CTOONS_PER_SIDE, MAX_COUNTER_CHAIN_DEPTH, MAX_TRADE_POINTS, MAX_PENDING_OFFERS_PER_PAIR } from './tradeOfferLimits.js'
 
-export { MAX_CTOONS_PER_SIDE, MAX_COUNTER_CHAIN_DEPTH }
+export { MAX_CTOONS_PER_SIDE, MAX_COUNTER_CHAIN_DEPTH, MAX_TRADE_POINTS, MAX_PENDING_OFFERS_PER_PAIR }
 
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
 
@@ -60,14 +60,41 @@ export function normalizeCtoonIdList (list, label) {
   return [...new Set(list)]
 }
 
-/** An offer has to actually offer something, or it is just a notification. */
-export function assertOfferHasContent ({ resolvedOffered, resolvedRequested, pointsOffered }) {
-  if (!resolvedOffered.length && !resolvedRequested.length && !pointsOffered) {
+/** An offer has to actually offer or ask for something, or it is just a notification. */
+export function assertOfferHasContent ({ resolvedOffered, resolvedRequested, pointsOffered, pointsRequested = 0 }) {
+  if (!resolvedOffered.length && !resolvedRequested.length && !pointsOffered && !pointsRequested) {
     throw createError({
       statusCode: 400,
       statusMessage: 'A trade offer must include at least one cToon or some points.'
     })
   }
+}
+
+/**
+ * Validates one points field (pointsOffered or pointsRequested): a
+ * non-negative integer under the shared ceiling.
+ *
+ * Deliberately the same ceiling for both fields, even though only
+ * pointsOffered is ever checked against a real balance — pointsRequested has
+ * no balance check at all at this stage (see the schema comment on
+ * TradeOffer.pointsRequested), so this ceiling is the only thing standing
+ * between it and Number.MAX_SAFE_INTEGER.
+ */
+export function assertValidPointsAmount (value, label) {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw createError({ statusCode: 400, statusMessage: `${label} must be a non-negative integer` })
+  }
+  if (value > MAX_TRADE_POINTS) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `${label} may not exceed ${fmtPoints(MAX_TRADE_POINTS)} points`
+    })
+  }
+}
+
+/** True when a pair already has as many PENDING offers between them as allowed. */
+export function pendingOfferPairLimitExceeded (existingPendingCount) {
+  return existingPendingCount >= MAX_PENDING_OFFERS_PER_PAIR
 }
 
 /** The same physical cToon cannot sit on both sides of one offer. */

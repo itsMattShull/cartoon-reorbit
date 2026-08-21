@@ -18,6 +18,7 @@ import {
   sendTradeOfferDM
 } from '@/server/utils/tradeOffer'
 import { notifyTradeOfferReceived } from '@/server/utils/notifications'
+import { checkTradeOfferRateLimit } from '@/server/utils/tradeOfferRateLimit'
 
 export default defineEventHandler(async (event) => {
   // 1) Authenticate user
@@ -38,18 +39,21 @@ export default defineEventHandler(async (event) => {
     recipientUsername,
     ctoonIdsRequested = [],
     ctoonIdsOffered = [],
-    pointsOffered = 0
+    pointsOffered = 0,
+    pointsRequested = 0
   } = await readBody(event)
 
   if (!recipientUsername || typeof recipientUsername !== 'string') {
     throw createError({ statusCode: 400, statusMessage: 'recipientUsername is required' })
   }
 
+  await checkTradeOfferRateLimit(event, initiatorId)
+
   const { resolvedOffered, resolvedRequested } = await resolveOfferCtoons({
     ctoonIdsOffered,
     ctoonIdsRequested
   })
-  assertOfferHasContent({ resolvedOffered, resolvedRequested, pointsOffered })
+  assertOfferHasContent({ resolvedOffered, resolvedRequested, pointsOffered, pointsRequested })
 
   // 3) Lookup recipient
   const recipient = await prisma.user.findUnique({
@@ -61,12 +65,13 @@ export default defineEventHandler(async (event) => {
   }
 
   // 4) Ownership, availability and funding
-  await validateTradeOfferInputs({
+  const { existingPendingCount } = await validateTradeOfferInputs({
     initiatorId,
     recipient,
     resolvedOffered,
     resolvedRequested,
-    pointsOffered
+    pointsOffered,
+    pointsRequested
   })
 
   // 5) Create the offer and lock the offered points
@@ -74,20 +79,26 @@ export default defineEventHandler(async (event) => {
     initiatorId,
     recipientId: recipient.id,
     pointsOffered,
+    pointsRequested,
     resolvedOffered,
     resolvedRequested
   }))
 
   // 6) Notify the recipient. Not awaited — the offer is already committed and
   // Discord's DM rate limits would otherwise stall the response for seconds.
-  sendTradeOfferDM({
-    recipientDiscordId: recipient.discordId,
-    fromUsername: me.username,
-    pointsOffered,
-    offeredCount: resolvedOffered.length,
-    requestedCount: resolvedRequested.length,
-    isCounter: false
-  }).catch(() => {})
+  // Only on the first pending offer between this pair (existingPendingCount
+  // was taken before this one was created) — see validateTradeOfferInputs.
+  if (existingPendingCount === 0) {
+    sendTradeOfferDM({
+      recipientDiscordId: recipient.discordId,
+      fromUsername: me.username,
+      pointsOffered,
+      pointsRequested,
+      offeredCount: resolvedOffered.length,
+      requestedCount: resolvedRequested.length,
+      isCounter: false
+    }).catch(() => {})
+  }
 
   // In-app notification, same placement and same reasoning as the DM above:
   // after the commit, not awaited.
