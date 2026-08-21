@@ -26,12 +26,22 @@
       <div class="space-y-3 mb-4">
         <div v-for="c in cmoons" :key="c.id" class="bg-white rounded border p-3">
           <div class="flex items-center flex-wrap gap-x-2 gap-y-1 mb-2">
-            <span class="inline-block w-4 h-4 rounded-full border flex-shrink-0" :style="{ background: safeColor(c.color) }"></span>
+            <img
+              v-if="c.imagePath" :src="c.imagePath" alt=""
+              class="w-6 h-9 object-cover rounded border flex-shrink-0"
+            />
+            <span v-else class="inline-block w-4 h-4 rounded-full border flex-shrink-0" :style="{ background: safeColor(c.color) }"></span>
             <span class="font-semibold break-words min-w-0">{{ c.name }}</span>
             <span class="text-xs text-gray-600">{{ c.memberCount }} member{{ c.memberCount === 1 ? '' : 's' }}</span>
             <!-- Kept together so they travel as a unit when the row wraps on narrow screens. -->
             <div class="ml-auto flex items-center gap-3 flex-shrink-0">
               <button class="cm-tap text-xs text-indigo-600 hover:underline" @click="startEdit(c)">Edit</button>
+              <button
+                v-if="c.imagePath"
+                class="cm-tap text-xs text-gray-600 hover:underline disabled:opacity-40"
+                :disabled="imageBusyId === c.id"
+                @click="removeImage(c)"
+              >{{ imageBusyId === c.id ? 'Removing…' : 'Remove graphic' }}</button>
               <button
                 class="cm-tap text-xs text-red-600 hover:underline disabled:opacity-40"
                 :disabled="c.memberCount > 0"
@@ -46,6 +56,10 @@
             Prize cToons: {{ c.prizeCtoons.map(p => `${p.name} ×${p.quantity}`).join(', ') || 'none' }}
           </div>
           <div class="text-xs text-gray-600 break-words">Discord role ID: {{ c.discordRoleId || 'none' }}</div>
+          <div class="text-xs text-gray-600 break-words">
+            cToons displayed: {{ c.displayedCtoonCount }}
+            <NuxtLink :to="`/newsite/cmoon/${c.id}`" class="text-indigo-600 hover:underline ml-1">View cMoon page</NuxtLink>
+          </div>
           <p v-if="c.memberCount > 0" class="text-xs text-gray-600 mt-1">
             Reassign members before this cMoon can be deleted.
           </p>
@@ -75,11 +89,78 @@
                 Badge contrast {{ colorContrast.toFixed(1) }}:1{{ colorContrast >= 4.5 ? '' : ' — below the 4.5:1 minimum, pick a darker or lighter color' }}
               </span>
             </p>
+            <!-- This color now also drives an entire cToon-modal/cMoon-page theme (not just the
+                 small badge above), so preview it in that actual context rather than a swatch alone. -->
+            <div v-if="palettePreview" class="cm-theme-preview" :style="{ background: palettePreview.bg, color: palettePreview.text }">
+              <div class="cm-theme-preview-banner" :style="{ background: palettePreview.banner, color: palettePreview.bannerText }">
+                {{ form.name || 'cMoon name' }}
+              </div>
+              <div class="cm-theme-preview-tile" :style="{ background: palettePreview.tileBg }">
+                <div style="font-size:0.65rem;opacity:0.8;">cWorld</div>
+                <div :style="{ color: palettePreview.linkText }">{{ form.name || 'cMoon name' }} ›</div>
+              </div>
+              <p style="font-size:0.72rem;" :style="{ color: palettePreview.textMuted }">This is how the themed cToon modal &amp; cMoon page will look.</p>
+            </div>
           </div>
           <div>
             <label class="block text-xs font-medium mb-1">Discord Role ID (optional)</label>
             <input v-model="form.discordRoleId" class="w-full border rounded px-2 py-1" style="font-size:16px" inputmode="numeric" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="123456789012345678" />
           </div>
+        </div>
+
+        <div class="mt-3">
+          <label class="block text-xs font-medium mb-1">cMoon page description (optional)</label>
+          <textarea
+            v-model="form.pageDescription"
+            rows="3"
+            maxlength="2000"
+            class="w-full border rounded px-2 py-1"
+            style="font-size:16px"
+            placeholder="Shown on this cMoon's public page"
+          ></textarea>
+        </div>
+
+        <div class="mt-3">
+          <label class="block text-xs font-medium mb-1">cMoon page image (exactly 800×600 after processing)</label>
+          <template v-if="!editId">
+            <p class="text-xs text-gray-600">Save this cMoon first, then Edit it to upload a page image.</p>
+          </template>
+          <template v-else>
+            <img v-if="pageImagePreview" :src="pageImagePreview" class="cm-page-image-preview" alt="Selected image preview" />
+            <img v-else-if="currentPageImagePath" :src="currentPageImagePath" class="cm-page-image-preview" alt="Current cMoon page image" />
+            <p v-else class="text-xs text-gray-600 mb-1">No image uploaded yet.</p>
+            <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" class="cm-field" @change="handlePageImageFile" />
+            <p class="text-xs text-gray-500 mt-1">Any photo works — it's auto-cropped/resized to 800×600 on upload.</p>
+            <button
+              type="button"
+              class="cm-tap mt-2 px-3 border rounded bg-white"
+              :disabled="!pageImageFile || pageImageUploading"
+              @click="uploadPageImage"
+            >{{ pageImageUploading ? 'Uploading…' : 'Upload image' }}</button>
+            <p v-if="pageImageError" class="text-xs text-red-600 mt-1">{{ pageImageError }}</p>
+            <NuxtLink :to="`/newsite/cmoon/${editId}`" class="block text-xs text-indigo-600 hover:underline mt-2">View cMoon page</NuxtLink>
+          </template>
+        </div>
+
+        <div class="mt-3">
+          <label class="block text-xs font-medium mb-1">cToon modal banner (small wide graphic, replaces the "cWorld" text link)</label>
+          <template v-if="!editId">
+            <p class="text-xs text-gray-600">Save this cMoon first, then Edit it to upload a banner.</p>
+          </template>
+          <template v-else>
+            <img v-if="bannerImagePreview" :src="bannerImagePreview" class="cm-banner-image-preview" alt="Selected banner preview" />
+            <img v-else-if="currentBannerImagePath" :src="currentBannerImagePath" class="cm-banner-image-preview" alt="Current cMoon modal banner" />
+            <p v-else class="text-xs text-gray-600 mb-1">No banner uploaded yet — the modal shows a plain text link instead.</p>
+            <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" class="cm-field" @change="handleBannerImageFile" />
+            <p class="text-xs text-gray-500 mt-1">Any image works — it's auto-cropped/resized to a wide 800×200 banner on upload.</p>
+            <button
+              type="button"
+              class="cm-tap mt-2 px-3 border rounded bg-white"
+              :disabled="!bannerImageFile || bannerImageUploading"
+              @click="uploadBannerImage"
+            >{{ bannerImageUploading ? 'Uploading…' : 'Upload banner' }}</button>
+            <p v-if="bannerImageError" class="text-xs text-red-600 mt-1">{{ bannerImageError }}</p>
+          </template>
         </div>
 
         <div class="mt-3">
@@ -138,6 +219,25 @@
           </div>
         </div>
 
+        <div class="mt-3">
+          <label class="block text-xs font-medium mb-1">Starter choice graphic (selection-screen poster)</label>
+          <p class="text-xs text-gray-600 mb-2">
+            Shown as the choice for this cMoon on the "Choose your cMoon" screen new and existing
+            players see. Portrait images work best (about a 2:3 ratio, e.g. 600×900) — it's
+            automatically resized and cropped to fit. PNG, JPEG, or WebP, up to 5MB. Leave empty
+            to keep showing the color swatch instead.
+          </p>
+          <div class="flex items-center gap-3 flex-wrap">
+            <img
+              v-if="imagePreviewUrl || currentImagePath"
+              :src="imagePreviewUrl || currentImagePath" alt=""
+              class="w-16 h-24 object-cover rounded border flex-shrink-0"
+            />
+            <input type="file" accept="image/png,image/jpeg,image/webp" class="cm-field text-xs" @change="onImageFileChange" />
+          </div>
+          <p v-if="imageError" class="text-xs text-red-600 mt-1">{{ imageError }}</p>
+        </div>
+
         <div v-if="formError" class="text-xs text-red-600 mt-2">{{ formError }}</div>
 
         <div class="mt-3 flex gap-2">
@@ -153,6 +253,9 @@
 
 <script setup>
 import { cMoonPillStyle, isSafeCMoonColor, cMoonContrastRatio } from '~/utils/cmoonColor'
+import { cMoonPalette } from '~/utils/cmoonPalette'
+
+const rs = useAdminResources()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -166,10 +269,129 @@ const cMoonEnabledAt = ref(null)
 const cMoonSelectionDeadlineAt = ref(null)
 
 const editId = ref('')
-const emptyForm = () => ({ name: '', color: '', discordRoleId: '', captainIds: [], prizeCtoons: [] })
+const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', captainIds: [], prizeCtoons: [] })
 const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
+
+// Starter-graphic upload state. Kept separate from `form` — the image is a separate multipart
+// request (POST/DELETE .../[id]/image), sent only after the name/color/etc save succeeds.
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024
+const IMAGE_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+const selectedImageFile = ref(null)
+const imagePreviewUrl = ref('')
+const currentImagePath = ref('')
+const imageError = ref('')
+const imageBusyId = ref('')
+
+function onImageFileChange(e) {
+  const file = e.target.files?.[0] || null
+  e.target.value = ''
+  imageError.value = ''
+  if (!file) return
+  if (!IMAGE_MIME_TYPES.includes(file.type)) {
+    imageError.value = 'Only PNG, JPEG, or WebP images are allowed'
+    return
+  }
+  if (file.size > IMAGE_MAX_BYTES) {
+    imageError.value = 'Image must be 5MB or smaller'
+    return
+  }
+  if (imagePreviewUrl.value) rs.revokeObjectUrl(imagePreviewUrl.value)
+  selectedImageFile.value = file
+  imagePreviewUrl.value = rs.objectUrl(file)
+}
+
+async function uploadImageIfNeeded(id) {
+  if (!selectedImageFile.value) return
+  const fd = new FormData()
+  fd.append('image', selectedImageFile.value)
+  await $fetch(`/api/admin/cmoons/${id}/image`, { method: 'POST', body: fd })
+}
+
+async function removeImage(c) {
+  imageBusyId.value = c.id
+  try {
+    await $fetch(`/api/admin/cmoons/${c.id}/image`, { method: 'DELETE' })
+    await load()
+  } catch (e) {
+    alert(e?.data?.statusMessage || 'Failed to remove graphic')
+  } finally {
+    imageBusyId.value = ''
+  }
+}
+
+// ── cMoon page image (separate step — needs an existing cMoon row) ─────
+const pageImageFile = ref(null)
+const pageImagePreview = ref('')
+const pageImageUploading = ref(false)
+const pageImageError = ref('')
+const currentPageImagePath = ref('')
+
+// ── cToon modal banner (separate step — needs an existing cMoon row) ───
+const bannerImageFile = ref(null)
+const bannerImagePreview = ref('')
+const bannerImageUploading = ref(false)
+const bannerImageError = ref('')
+const currentBannerImagePath = ref('')
+
+const palettePreview = computed(() => isValidColor(form.color) ? cMoonPalette(form.color) : null)
+
+function handlePageImageFile(e) {
+  const file = e.target.files?.[0] || null
+  pageImageFile.value = file
+  pageImageError.value = ''
+  if (pageImagePreview.value) URL.revokeObjectURL(pageImagePreview.value)
+  pageImagePreview.value = file ? URL.createObjectURL(file) : ''
+}
+
+async function uploadPageImage() {
+  if (!editId.value || !pageImageFile.value || pageImageUploading.value) return
+  pageImageUploading.value = true
+  pageImageError.value = ''
+  try {
+    const body = new FormData()
+    body.append('image', pageImageFile.value)
+    const res = await $fetch(`/api/admin/cmoons/${editId.value}/page-image`, { method: 'POST', body })
+    currentPageImagePath.value = res.pageImagePath
+    pageImageFile.value = null
+    if (pageImagePreview.value) URL.revokeObjectURL(pageImagePreview.value)
+    pageImagePreview.value = ''
+    await load()
+  } catch (e) {
+    pageImageError.value = e?.data?.statusMessage || 'Upload failed'
+  } finally {
+    pageImageUploading.value = false
+  }
+}
+
+function handleBannerImageFile(e) {
+  const file = e.target.files?.[0] || null
+  bannerImageFile.value = file
+  bannerImageError.value = ''
+  if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
+  bannerImagePreview.value = file ? URL.createObjectURL(file) : ''
+}
+
+async function uploadBannerImage() {
+  if (!editId.value || !bannerImageFile.value || bannerImageUploading.value) return
+  bannerImageUploading.value = true
+  bannerImageError.value = ''
+  try {
+    const body = new FormData()
+    body.append('image', bannerImageFile.value)
+    const res = await $fetch(`/api/admin/cmoons/${editId.value}/banner-image`, { method: 'POST', body })
+    currentBannerImagePath.value = res.bannerImagePath
+    bannerImageFile.value = null
+    if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
+    bannerImagePreview.value = ''
+    await load()
+  } catch (e) {
+    bannerImageError.value = e?.data?.statusMessage || 'Upload failed'
+  } finally {
+    bannerImageUploading.value = false
+  }
+}
 
 // Share the validation/contrast helpers with the player-facing badges so the admin
 // preview here matches exactly what renders on leaderboards and cZones.
@@ -243,16 +465,48 @@ function startEdit(c) {
     name: c.name,
     color: c.color,
     discordRoleId: c.discordRoleId || '',
+    pageDescription: c.pageDescription || '',
     captainIds: c.captains.map(cap => cap.userId),
     prizeCtoons: c.prizeCtoons.map(p => ({ ctoonId: p.ctoonId, quantity: p.quantity })),
   })
+  currentPageImagePath.value = c.pageImagePath || ''
+  pageImageFile.value = null
+  if (pageImagePreview.value) URL.revokeObjectURL(pageImagePreview.value)
+  pageImagePreview.value = ''
+  pageImageError.value = ''
+  currentBannerImagePath.value = c.bannerImagePath || ''
+  bannerImageFile.value = null
+  if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
+  bannerImagePreview.value = ''
+  bannerImageError.value = ''
   formError.value = ''
+  clearImageSelection()
+  currentImagePath.value = c.imagePath || ''
+}
+
+function clearImageSelection() {
+  if (imagePreviewUrl.value) rs.revokeObjectUrl(imagePreviewUrl.value)
+  selectedImageFile.value = null
+  imagePreviewUrl.value = ''
+  imageError.value = ''
 }
 
 function resetForm() {
   Object.assign(form, emptyForm())
   editId.value = ''
   formError.value = ''
+  clearImageSelection()
+  currentImagePath.value = ''
+  currentPageImagePath.value = ''
+  pageImageFile.value = null
+  if (pageImagePreview.value) URL.revokeObjectURL(pageImagePreview.value)
+  pageImagePreview.value = ''
+  pageImageError.value = ''
+  currentBannerImagePath.value = ''
+  bannerImageFile.value = null
+  if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
+  bannerImagePreview.value = ''
+  bannerImageError.value = ''
 }
 
 async function load() {
@@ -300,14 +554,20 @@ async function save() {
       name: form.name.trim(),
       color: form.color,
       discordRoleId: form.discordRoleId.trim(),
+      pageDescription: form.pageDescription,
       captainIds: form.captainIds,
       prizeCtoons: form.prizeCtoons,
     }
-    if (!editId.value) {
-      await $fetch('/api/admin/cmoons', { method: 'POST', body })
+    let id = editId.value
+    if (!id) {
+      const res = await $fetch('/api/admin/cmoons', { method: 'POST', body })
+      id = res.id
     } else {
-      await $fetch(`/api/admin/cmoons/${editId.value}`, { method: 'PUT', body })
+      await $fetch(`/api/admin/cmoons/${id}`, { method: 'PUT', body })
     }
+    // Runs after the main save succeeds so a rejected image never blocks name/color/etc from
+    // saving; a failure here surfaces as formError below without undoing the save that already went through.
+    await uploadImageIfNeeded(id)
     resetForm()
     await load()
   } catch (e) {
@@ -394,5 +654,45 @@ onMounted(load)
   border-radius: 999px;
   font-size: 0.7rem;
   font-weight: 700;
+}
+
+.cm-theme-preview {
+  margin-top: 8px;
+  border-radius: 6px;
+  overflow: hidden;
+  max-width: 320px;
+}
+.cm-theme-preview-banner {
+  padding: 8px 10px;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.cm-theme-preview-tile {
+  margin: 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.cm-theme-preview p { margin: 0 8px 8px; }
+
+.cm-page-image-preview {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+
+.cm-banner-image-preview {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 4 / 1;
+  object-fit: cover;
+  border-radius: 4px;
+  margin-bottom: 6px;
 }
 </style>

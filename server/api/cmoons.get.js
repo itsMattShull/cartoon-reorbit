@@ -19,10 +19,19 @@ export default defineEventHandler(async () => {
   if (!cachedList || (now - cachedAt) >= TTL_MS) {
     cachedList = await db.cMoon.findMany({
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, color: true, memberCount: true },
+      select: { id: true, name: true, color: true, memberCount: true, imagePath: true },
     })
     cachedAt = now
   }
 
   return { cMoonEnabled: true, cmoons: cachedList }
 })
+
+// Imported by the admin cMoon mutation routes (create/update/delete/image) so a name, color, or
+// poster change is visible immediately rather than waiting out the TTL — same
+// export-a-named-function-from-a-route-file pattern as clearSearchesCache in
+// server/api/czone/[username]/searches.get.js.
+export function invalidateCMoonList() {
+  cachedList = null
+  cachedAt = 0
+}

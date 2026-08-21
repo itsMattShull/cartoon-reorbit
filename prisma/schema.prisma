@@ -343,8 +343,13 @@ model Ctoon {
   achievementRequiredCtoons  AchievementRequiredCtoon[]
   achievementClaimOptions    AchievementClaimOption[]
 
-  // cMoon back-relation
+  // cMoon back-relation (prize-on-join — distinct from the display assignment below)
   cMoonPrizeRows CMoonPrizeCtoon[]
+
+  // Optional cMoon this cToon is thematically displayed under (admin-assigned in the cToon
+  // editor). Purely a catalog/display categorization — unrelated to the player-faction system.
+  cMoonId String?
+  cMoon   CMoon?  @relation("CtoonCMoonDisplay", fields: [cMoonId], references: [id], onDelete: SetNull)
 
   cZoneSearchPrizeRows   CZoneSearchPrize[]
   cZoneSearchAppearances CZoneSearchAppearance[]
@@ -366,6 +371,7 @@ model Ctoon {
 
   @@index([isSecondEdition])
   @@index([name])
+  @@index([cMoonId])
 }
 
 model CtoonImageHash {
@@ -2811,8 +2817,12 @@ model AchievementRewardBackground {
 model CMoon {
   id            String   @id @default(uuid())
   name          String   @unique
-  color         String // "#RRGGBB", validated server-side; used as text color
+  color         String // "#RRGGBB", validated server-side; used as text color, and as the base
+  // color a palette is derived from for the cMoon page + themed cToon modals (see utils/cmoonPalette.js).
   discordRoleId String? // Discord role snowflake granted to members (add-only sync)
+  // Public "choose your cMoon" poster art. Server-normalized to a fixed 2:3 webp on upload
+  // (see server/api/admin/cmoons/[id]/image.post.js) — null falls back to the color swatch.
+  imagePath     String?
   // Denormalized to avoid COUNT(*) races/scans on every selection + the daily auto-assign job.
   memberCount   Int      @default(0)
   // Cumulative cMoon team leaderboard score (server/utils/cmoon.js weekly scoring). Never
@@ -2821,10 +2831,23 @@ model CMoon {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  members     User[]
-  captains    CMoonCaptain[]
-  prizeCtoons CMoonPrizeCtoon[]
-  scoreLogs   CMoonScoreLog[]
+  // Public "cMoon page" content (/newsite/cmoon/[id]) — a display/catalog feature, independent
+  // of the cMoonEnabled faction-join flag above. pageImagePath is exactly 800x600, matching CZone.
+  pageImagePath   String?
+  pageImageWidth  Int?
+  pageImageHeight Int?
+  pageDescription String?
+  // Small wide banner graphic (normalized to 800x200) shown on a themed cToon
+  // modal in place of the plain "cWorld" text tile, linking to the page above.
+  bannerImagePath String?
+
+  members         User[]
+  captains        CMoonCaptain[]
+  prizeCtoons     CMoonPrizeCtoon[]
+  scoreLogs       CMoonScoreLog[]
+  // cToons thematically displayed under this cMoon (admin-assigned in the cToon editor). Distinct
+  // from `members`/`prizeCtoons`, which are about the player-faction feature, not catalog display.
+  displayedCtoons Ctoon[]           @relation("CtoonCMoonDisplay")
 
   @@index([memberCount])
   @@index([teamScore])
