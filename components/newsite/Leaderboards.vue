@@ -8,6 +8,27 @@
       <div class="lb-nav-right">
         <GreenButton :active="activeTab === 'users'" @click="activeTab = 'users'">Users</GreenButton>
         <GreenButton :active="activeTab === 'games'" @click="activeTab = 'games'">Games</GreenButton>
+        <GreenButton v-if="cMoonEnabled" :active="activeTab === 'cmoons'" @click="activeTab = 'cmoons'">cMoons</GreenButton>
+      </div>
+    </div>
+
+    <!-- cMoons Tab -->
+    <div v-if="activeTab === 'cmoons'" class="lb-content">
+      <div class="lb-card lb-cmoons-card">
+        <div class="lb-card-header lb-card-header--cmoons">cMoon Team Leaderboard</div>
+        <div v-if="cmoonsPending" class="lb-loading">Loading…</div>
+        <ul v-else class="lb-list">
+          <li v-for="row in cmoonsData" :key="row.id" class="lb-row">
+            <span class="lb-rank">{{ row.rank }}</span>
+            <span class="lb-cmoon-swatch" :style="{ background: safeCMoonColor(row.color) }"></span>
+            <div class="lb-user-col">
+              <NuxtLink :to="`/newsite/cmoon/${row.id}`" class="lb-username">{{ row.name }}</NuxtLink>
+              <span class="lb-cmoon-members">{{ row.memberCount }} member{{ row.memberCount === 1 ? '' : 's' }}</span>
+            </div>
+            <span class="lb-value">{{ Number(row.teamScore).toLocaleString() }}</span>
+          </li>
+          <li v-if="!cmoonsData?.length" class="lb-empty">No cMoons yet</li>
+        </ul>
       </div>
     </div>
 
@@ -81,9 +102,24 @@
 
 <script setup>
 import { useRequestHeaders } from '#app'
+import { isSafeCMoonColor } from '~/utils/cmoonColor'
 
 const activeTab = ref('users')
 const headers = process.server ? useRequestHeaders(['cookie']) : undefined
+
+const cMoonEnabled = ref(false)
+const { data: cmoonsData, pending: cmoonsPending } = useFetch('/api/leaderboard/cmoons', { default: () => [], headers })
+onMounted(async () => {
+  try {
+    const data = await $fetch('/api/cmoons')
+    cMoonEnabled.value = !!data?.cMoonEnabled
+  } catch {
+    cMoonEnabled.value = false
+  }
+})
+function safeCMoonColor(color) {
+  return isSafeCMoonColor(color) ? color : '#3a4a63'
+}
 
 const { data: pointsData, pending: pointsPending } = useFetch('/api/points-leaderboard', { default: () => [], headers })
 const { data: earnersData, pending: earnersPending } = useFetch('/api/leaderboard/trending-earners', { default: () => [], headers })
@@ -317,6 +353,22 @@ function cMoonForRow(row) {
 .lb-card-header--alltime  { background: linear-gradient(90deg, #5a4a00 0%, transparent 100%); border-bottom: 1px solid rgba(226,200,0,0.3); }
 .lb-card-header--monthly  { background: linear-gradient(90deg, #1a4a5a 0%, transparent 100%); border-bottom: 1px solid rgba(74,200,226,0.3); }
 .lb-card-header--weekly   { background: linear-gradient(90deg, #1a3a4a 0%, transparent 100%); border-bottom: 1px solid rgba(74,150,200,0.3); }
+.lb-card-header--cmoons   { background: linear-gradient(90deg, #3a1a5a 0%, transparent 100%); border-bottom: 1px solid rgba(180,74,226,0.3); }
+
+.lb-cmoons-card { max-width: 420px; margin: 0 auto; }
+
+.lb-cmoon-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.lb-cmoon-members {
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.5);
+}
 
 .lb-list {
   list-style: none;

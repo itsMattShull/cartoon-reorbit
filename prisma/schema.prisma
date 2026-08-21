@@ -637,8 +637,9 @@ model User {
   fruitSamuraiPlays  FruitSamuraiPlay[]
 
   // cMoon (faction) relations
-  cMoonCaptainOf    CMoonCaptain[]
-  achievementClaims AchievementClaim[]
+  cMoonCaptainOf         CMoonCaptain[]
+  achievementClaims      AchievementClaim[]
+  dailyTaskCompletions   UserDailyTaskCompletion[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
   @@index([cMoonId])
@@ -995,6 +996,7 @@ model GamePointLog {
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId, gameName, createdAt])
+  @@index([createdAt])
 }
 
 model PointsLog {
@@ -1946,6 +1948,7 @@ model WheelSpinLog {
 
   @@index([userId, createdAt])
   @@index([ctoonId])
+  @@index([createdAt])
 }
 
 model WinWheelOption {
@@ -2812,14 +2815,19 @@ model CMoon {
   discordRoleId String? // Discord role snowflake granted to members (add-only sync)
   // Denormalized to avoid COUNT(*) races/scans on every selection + the daily auto-assign job.
   memberCount   Int      @default(0)
+  // Cumulative cMoon team leaderboard score (server/utils/cmoon.js weekly scoring). Never
+  // resets — a running season total incremented by CMoonScoreLog-backed awards.
+  teamScore     Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
   members     User[]
   captains    CMoonCaptain[]
   prizeCtoons CMoonPrizeCtoon[]
+  scoreLogs   CMoonScoreLog[]
 
   @@index([memberCount])
+  @@index([teamScore])
 }
 
 model CMoonCaptain {
@@ -2845,6 +2853,44 @@ model CMoonPrizeCtoon {
 
   @@unique([cMoonId, ctoonId])
   @@index([ctoonId])
+}
+
+// One row per (user, day) where the user completed at least one of the existing daily tasks
+// (see server/utils/dailyTaskWindows.js for the shared boundary logic with
+// server/api/onboarding/daily.get.js). Populated by a daily cron, restricted to users who
+// currently belong to a cMoon — this table only exists to feed the weekly cMoon scoring job's
+// "10 pts/player/day completed" bonus, so non-cMoon users are never recorded.
+model UserDailyTaskCompletion {
+  id        String   @id @default(uuid())
+  userId    String
+  date      DateTime // the daily boundary/window start this completion belongs to
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([date])
+}
+
+// Append-only audit log of every cMoon team-score award (server/utils/cmoon.js). The unique
+// constraint is the idempotency guard: a retried or overlapping cron run can insert the same
+// (cMoon, player, category, week, detail) award at most once, so CMoon.teamScore can never be
+// double-credited. `detail` disambiguates within a category — a game name for HIGH_SCORE, a
+// board name for TOP10, an ISO date for DAILY_TASK.
+model CMoonScoreLog {
+  id        String   @id @default(uuid())
+  cMoonId   String
+  userId    String?
+  category  String // 'HIGH_SCORE' | 'DAILY_TASK' | 'TOP10'
+  detail    String?
+  points    Int
+  weekStart DateTime // the Monday (America/Chicago) this award belongs to
+  createdAt DateTime @default(now())
+
+  cMoon CMoon @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+
+  @@unique([cMoonId, userId, category, weekStart, detail])
+  @@index([weekStart])
 }
 
 model AchievementRequiredCtoon {
@@ -3119,6 +3165,7 @@ model UserBarcodeScan {
   @@index([userId, mappingId])
   @@index([configId])
   @@index([nextAvailableAt])
+  @@index([lastScannedAt])
 }
 
 model UserScan {
