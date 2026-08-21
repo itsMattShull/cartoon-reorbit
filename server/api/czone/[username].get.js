@@ -38,7 +38,8 @@ export default defineEventHandler(async (event) => {
     where: { username },
     include: {
       cZones: true,
-      cMoon: { select: { id: true, name: true, color: true } }
+      cMoon: { select: { id: true, name: true, color: true } },
+      currentCMoonRank: { select: { name: true } }
     }
   })
 
@@ -250,6 +251,7 @@ export default defineEventHandler(async (event) => {
     isBooster: user.isBooster,
     lastActivity: user.lastActivity ?? null,
     cMoon: (cMoonEnabled && user.cMoon) || null,
+    cMoonRankName: (cMoonEnabled && user.currentCMoonRank?.name) || null,
     cZone: {
       id: chosenZone.id,
       zones: enrichedZones,

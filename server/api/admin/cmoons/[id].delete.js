@@ -24,7 +24,14 @@ export default defineEventHandler(async (event) => {
   // here just reverts those cToons' modals to the default (unthemed) look,
   // which is a low-stakes, reversible outcome unlike losing faction members.
 
-  await db.cMoon.delete({ where: { id } })
+  try {
+    await db.cMoon.delete({ where: { id } })
+  } catch (err) {
+    if (err?.code === 'P2003') {
+      throw createError({ statusCode: 409, statusMessage: 'Cannot delete — one of this cMoon\'s ranks is still referenced by an achievement. Reassign or delete that achievement\'s rank reward first.' })
+    }
+    throw err
+  }
   await logAdminChange(db, { userId: me.id, area: 'cMoon', key: `delete:${id}`, prevValue: { name: cmoon.name }, newValue: null })
   invalidateCMoonList()
 

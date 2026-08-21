@@ -18,6 +18,7 @@ import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
 import { logCronError } from '../utils/cronErrorLog.js'
 import { autoAssignExpiredCMoonUsers } from '../utils/cmoon.js'
+import { runCMoonPointsAggregate } from './cmoon-points-aggregate.js'
 import { runRecordDailyTaskCompletions } from './record-daily-task-completions.js'
 import { runCMoonWeeklyScore } from './cmoon-weekly-score.js'
 
@@ -446,6 +447,37 @@ async function syncCMoonDiscordRoles() {
     if (!ok) continue
     try {
       await prisma.user.update({ where: { id: row.id }, data: { cMoonRoleGrantedAt: new Date() } })
+    } catch {}
+  }
+
+  // cMoon RANK roles use the same add-only, snowflake-based, reconciliation-cron convention
+  // as the base cMoon role above — deliberately not granted synchronously from
+  // awardAchievementToUser, so there's exactly one place (this cron) that talks to Discord
+  // for cMoon-related roles. Gated by cMoonRankRoleGrantedAt so a rank-up re-syncs even if
+  // the user already has cMoonRoleGrantedAt set from joining their cMoon.
+  let rankRows = []
+  try {
+    rankRows = await prisma.$queryRawUnsafe(`
+      SELECT u."id", u."discordId", r."discordRoleId"
+      FROM "User" u
+      JOIN "CMoonRank" r ON r."id" = u."currentCMoonRankId"
+      WHERE u."currentCMoonRankId" IS NOT NULL
+        AND u."cMoonRankRoleGrantedAt" IS NULL
+        AND r."discordRoleId" IS NOT NULL
+        AND u."discordId" IS NOT NULL
+        AND u."inGuild" = true
+        AND u."active" = true
+      LIMIT 300
+    `)
+  } catch {
+    return
+  }
+
+  for (const row of rankRows) {
+    const ok = await addRoleToMember(row.discordId, row.discordRoleId)
+    if (!ok) continue
+    try {
+      await prisma.user.update({ where: { id: row.id }, data: { cMoonRankRoleGrantedAt: new Date() } })
     } catch {}
   }
 }
@@ -1044,3 +1076,6 @@ cron.schedule('10 4 * * *', () => runJob('runEconomyAggregate', runEconomyAggreg
 
 await runJob('runCzoneDisplayCountAggregate', runCzoneDisplayCountAggregate)
 cron.schedule('0 5 * * *', () => runJob('runCzoneDisplayCountAggregate', runCzoneDisplayCountAggregate), { timezone: 'America/Chicago' })  // 05:00 CST daily
+
+await runJob('runCMoonPointsAggregate', runCMoonPointsAggregate)
+cron.schedule('*/15 * * * *', () => runJob('runCMoonPointsAggregate', runCMoonPointsAggregate))  // every 15 minutes

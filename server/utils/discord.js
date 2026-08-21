@@ -369,6 +369,9 @@ export async function announceAchievement(prisma, userId, achievementTitle, rewa
       if (parts.length) {
         msg += ` You received ${formatList(parts)}.`
       }
+      if (rewardSummary.cMoonRank?.name) {
+        msg += ` You've been promoted to **${rewardSummary.cMoonRank.name}** in your cMoon!`
+      }
     }
     const trimmedRole = normalizeRoleName(roleName)
     if (trimmedRole) {

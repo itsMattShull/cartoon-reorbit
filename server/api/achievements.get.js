@@ -21,7 +21,14 @@ export default defineEventHandler(async (event) => {
       },
       claimOptions: {
         orderBy: { sortOrder: 'asc' },
-        include: { ctoon: { select: { id: true, name: true, assetPath: true } } }
+        include: {
+          reward: {
+            include: {
+              ctoons: { include: { ctoon: { select: { id: true, name: true, assetPath: true } } } },
+              backgrounds: { include: { background: { select: { id: true, label: true, imagePath: true } } } }
+            }
+          }
+        }
       }
     }
   })
@@ -56,17 +63,27 @@ export default defineEventHandler(async (event) => {
     achieved: userId ? achievedSet.has(a.id) : false,
     isClaimable: a.isClaimable,
     claimedOptionId: userId ? (claimedMap.get(a.id) || null) : null,
+    // Each claim option is its own reward bundle now (points + multiple cToons +
+    // backgrounds), not a single ctoon-or-points choice.
     claimOptions: a.isClaimable
       ? a.claimOptions.map(o => ({
           id: o.id,
           label: o.label,
-          points: o.points || 0,
-          ctoonName: o.ctoon?.name || null,
-          ctoonImagePath: o.ctoon?.assetPath || null,
-          quantity: o.quantity,
+          points: o.reward?.points || 0,
+          ctoons: (o.reward?.ctoons || []).map(rc => ({
+            name: rc.ctoon?.name || rc.ctoonId,
+            quantity: rc.quantity,
+            imagePath: rc.ctoon?.assetPath || null,
+          })),
+          backgrounds: (o.reward?.backgrounds || []).map(rb => ({
+            label: rb.background?.label || '',
+            imagePath: rb.background?.imagePath || null,
+          })),
         }))
       : [],
-    rewards: a.rewards?.[0]
+    // Claimable achievements auto-grant nothing — their reward rows belong to individual
+    // claim options above, not to a.rewards[0] (which would otherwise arbitrarily pick one).
+    rewards: (!a.isClaimable && a.rewards?.[0])
       ? {
           points: a.rewards[0].points || 0,
           ctoons: (a.rewards[0].ctoons || []).map(rc => ({
