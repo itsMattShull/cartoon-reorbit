@@ -300,6 +300,7 @@ html.newsite-active body {
        A permanently-visible unread badge would make it obvious. -->
   <Onboarding v-if="!ctoonModalIsOpen && !auctionModalIsOpen" />
   <CMoonSelectModal />
+  <CMoonJoinEffect />
 </template>
 
 <script setup>

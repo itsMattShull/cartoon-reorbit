@@ -18,6 +18,75 @@ export function isValidDiscordSnowflake(value) {
   return typeof value === 'string' && DISCORD_SNOWFLAKE_RE.test(value)
 }
 
+// Join-effect admin-editable bounds. Clamp server-side — the client also
+// clamps, but an admin request could reach the API directly.
+export const JOIN_EFFECT_MIN_DURATION_MS = 2000
+export const JOIN_EFFECT_MAX_DURATION_MS = 15000
+export const JOIN_EFFECT_MESSAGE_MAX_LEN = 500
+export const JOIN_EFFECT_MAX_IMAGES = 12
+
+export function clampJoinEffectDurationMs(value) {
+  const n = Math.round(Number(value))
+  if (!Number.isFinite(n)) return 5000
+  return Math.min(JOIN_EFFECT_MAX_DURATION_MS, Math.max(JOIN_EFFECT_MIN_DURATION_MS, n))
+}
+
+export function sanitizeJoinEffectMessage(value) {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim().slice(0, JOIN_EFFECT_MESSAGE_MAX_LEN)
+  return trimmed || null
+}
+
+// Fills {cMoonName}/{username} placeholders in an admin-authored message.
+// Plain string substitution only — the result is rendered client-side with
+// Vue's auto-escaping text interpolation, never v-html.
+function renderJoinEffectMessage(template, cMoonName, username) {
+  if (!template) return ''
+  return template
+    .replaceAll('{cMoonName}', cMoonName || '')
+    .replaceAll('{username}', username || '')
+}
+
+// User-scoped, single-shot claim of a pending join effect: the DB gate that
+// makes "show it exactly once" safe under concurrent tabs/devices, the same
+// updateMany-as-concurrency-gate idiom used by selectCMoonForUser below. Used
+// both right after a live selection and, for cron-auto-assigned users who
+// were offline when it happened, on their next visit.
+export async function claimPendingCMoonJoinEffect(userId) {
+  const claim = await prisma.user.updateMany({
+    where: { id: userId, cMoonId: { not: null }, cMoonJoinEffectShown: false },
+    data: { cMoonJoinEffectShown: true },
+  })
+  if (claim.count === 0) return null
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      username: true,
+      cMoon: {
+        select: {
+          id: true,
+          name: true,
+          color: true,
+          joinEffectMessage: true,
+          joinEffectDurationMs: true,
+          joinEffectImages: { orderBy: { order: 'asc' }, select: { id: true, imagePath: true } },
+        },
+      },
+    },
+  })
+  if (!user?.cMoon) return null
+
+  return {
+    cMoonId: user.cMoon.id,
+    cMoonName: user.cMoon.name,
+    cMoonColor: user.cMoon.color,
+    message: renderJoinEffectMessage(user.cMoon.joinEffectMessage, user.cMoon.name, user.username),
+    durationMs: clampJoinEffectDurationMs(user.cMoon.joinEffectDurationMs),
+    images: user.cMoon.joinEffectImages.map(img => ({ id: img.id, imagePath: img.imagePath })),
+  }
+}
+
 // GlobalGameConfig is read on the selection page/API on every load; cache briefly
 // in-process to avoid hammering the singleton row (mirrors the pattern used by
 // other hot config reads in this codebase, e.g. server/middleware/daily-points.js).

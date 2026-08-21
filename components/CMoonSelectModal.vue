@@ -44,6 +44,10 @@
 </template>
 
 <script setup>
+import { useCMoonJoinEffect } from '~/composables/useCMoonJoinEffect'
+
+const { show: showJoinEffect } = useCMoonJoinEffect()
+
 const visible = ref(false)
 const loading = ref(false)
 const submitting = ref(false)
@@ -63,9 +67,23 @@ const deadlineText = computed(() => {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(d)
 })
 
+async function claimJoinEffect() {
+  try {
+    const res = await $fetch('/api/cmoon/join-effect/claim', { method: 'POST' })
+    if (res?.pending && res.effect) showJoinEffect(res.effect)
+  } catch {
+    // Best-effort — a missed one-time effect isn't worth surfacing an error for.
+  }
+}
+
 async function checkStatus() {
   try {
     const status = await $fetch('/api/cmoon/status')
+    // Independent of the picker logic below: a user who already has a cMoon
+    // (chosen live, or auto-assigned by the cron job while they were offline)
+    // may still have a one-time join effect waiting.
+    if (status?.pendingJoinEffect) await claimJoinEffect()
+
     if (!status?.cMoonEnabled || !status.canChoose) return
     deadline.value = status.deadline || null
     loading.value = true
@@ -86,6 +104,7 @@ async function confirm() {
   try {
     await $fetch('/api/cmoon/select', { method: 'POST', body: { cMoonId: choice.value } })
     visible.value = false
+    await claimJoinEffect()
   } catch (e) {
     error.value = e?.data?.statusMessage || 'Unable to join that cMoon. Please try again.'
   } finally {

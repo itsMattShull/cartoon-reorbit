@@ -488,6 +488,10 @@ model User {
   // Set once the daily Discord sync grants this user's cMoon role, so the job
   // only touches never-synced members instead of re-checking everyone daily.
   cMoonRoleGrantedAt DateTime?
+  // Set once this user has been shown their cMoon's full-screen join effect
+  // (live on selection, or on next visit for cron auto-assignment). Doubles as
+  // the concurrency gate for claiming the effect exactly once.
+  cMoonJoinEffectShown Boolean @default(false)
 
   cZones                    CZone[]
   clashDecks                ClashDeck[]
@@ -2815,11 +2819,30 @@ model CMoon {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  members     User[]
-  captains    CMoonCaptain[]
-  prizeCtoons CMoonPrizeCtoon[]
+  // Full-screen join effect: images stack/rise for joinEffectDurationMs, then
+  // joinEffectMessage (supports {cMoonName}/{username} placeholders) fades in.
+  joinEffectMessage     String?
+  joinEffectDurationMs  Int     @default(5000)
+
+  members         User[]
+  captains        CMoonCaptain[]
+  prizeCtoons     CMoonPrizeCtoon[]
+  joinEffectImages CMoonJoinEffectImage[]
 
   @@index([memberCount])
+}
+
+model CMoonJoinEffectImage {
+  id        String   @id @default(uuid())
+  cMoonId   String
+  filename  String
+  imagePath String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  cMoon CMoon @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+
+  @@index([cMoonId, order])
 }
 
 model CMoonCaptain {

@@ -138,6 +138,77 @@
           </div>
         </div>
 
+        <div class="mt-3 border-t pt-3">
+          <h3 class="font-semibold mb-1">Join effect</h3>
+          <p class="text-xs text-gray-600 mb-2">
+            Shown full-screen the moment a player joins this cMoon: uploaded images rise and
+            fill the screen for the duration below, then this message fades in before everything
+            dissolves away.
+          </p>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium mb-1">Message</label>
+              <textarea
+                v-model="form.joinEffectMessage"
+                class="cm-field w-full border rounded px-2 py-1"
+                style="font-size:16px"
+                rows="2"
+                maxlength="500"
+                placeholder="Welcome to {cMoonName}, {username}!"
+              ></textarea>
+              <p class="text-xs text-gray-500 mt-1">
+                {{ (form.joinEffectMessage || '').length }}/500 · use <code>{cMoonName}</code> and
+                <code>{username}</code> as placeholders. Leave blank to skip the message step.
+              </p>
+            </div>
+            <div>
+              <label class="block text-xs font-medium mb-1">Image display duration (seconds)</label>
+              <input
+                v-model.number="form.joinEffectDurationSeconds"
+                type="number"
+                min="2"
+                max="15"
+                step="1"
+                inputmode="numeric"
+                class="cm-field w-full border rounded px-2 py-1"
+                style="font-size:16px"
+              />
+              <p class="text-xs text-gray-500 mt-1">2–15 seconds. How long the rising images fill the screen before the message appears.</p>
+            </div>
+          </div>
+
+          <div class="mt-3">
+            <label class="block text-xs font-medium mb-1">
+              Effect images ({{ editingImages.length }}/{{ maxJoinEffectImages }})
+            </label>
+            <p v-if="!editId" class="text-xs text-gray-600">Save the cMoon first to upload images.</p>
+            <template v-else>
+              <div v-if="editingImages.length" class="flex flex-wrap gap-2 mb-2">
+                <div v-for="img in editingImages" :key="img.id" class="cje-thumb">
+                  <img :src="img.imagePath" class="cje-thumb-img" />
+                  <button
+                    type="button"
+                    class="cje-thumb-remove"
+                    :disabled="removingImageId === img.id"
+                    aria-label="Remove image"
+                    @click="deleteJoinEffectImage(img)"
+                  >✕</button>
+                </div>
+              </div>
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/gif,image/webp"
+                class="cm-field"
+                :disabled="uploadingImage || editingImages.length >= maxJoinEffectImages"
+                @change="uploadJoinEffectImage"
+              />
+              <p v-if="uploadingImage" class="text-xs text-gray-600 mt-1">Uploading…</p>
+              <p v-else-if="editingImages.length >= maxJoinEffectImages" class="text-xs text-gray-600 mt-1">Maximum images reached.</p>
+            </template>
+            <p v-if="imageError" class="text-xs text-red-600 mt-1">{{ imageError }}</p>
+          </div>
+        </div>
+
         <div v-if="formError" class="text-xs text-red-600 mt-2">{{ formError }}</div>
 
         <div class="mt-3 flex gap-2">
@@ -166,10 +237,51 @@ const cMoonEnabledAt = ref(null)
 const cMoonSelectionDeadlineAt = ref(null)
 
 const editId = ref('')
-const emptyForm = () => ({ name: '', color: '', discordRoleId: '', captainIds: [], prizeCtoons: [] })
+const emptyForm = () => ({ name: '', color: '', discordRoleId: '', captainIds: [], prizeCtoons: [], joinEffectMessage: '', joinEffectDurationSeconds: 5 })
 const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
+
+// Must match server/utils/cmoon.js JOIN_EFFECT_MAX_IMAGES — the server is the
+// real enforcement point, this is just so the UI can disable the picker early.
+const maxJoinEffectImages = 12
+const editingImages = ref([])
+const uploadingImage = ref(false)
+const removingImageId = ref('')
+const imageError = ref('')
+
+async function uploadJoinEffectImage(evt) {
+  const file = evt.target.files?.[0]
+  evt.target.value = ''
+  if (!file || !editId.value) return
+  imageError.value = ''
+  uploadingImage.value = true
+  try {
+    const body = new FormData()
+    body.append('image', file)
+    const row = await $fetch(`/api/admin/cmoons/${editId.value}/join-effect-images`, { method: 'POST', body })
+    editingImages.value.push(row)
+  } catch (e) {
+    imageError.value = e?.data?.statusMessage || 'Upload failed'
+  } finally {
+    uploadingImage.value = false
+  }
+}
+
+async function deleteJoinEffectImage(img) {
+  if (!editId.value) return
+  if (!confirm('Remove this image from the join effect?')) return
+  imageError.value = ''
+  removingImageId.value = img.id
+  try {
+    await $fetch(`/api/admin/cmoons/${editId.value}/join-effect-images/${img.id}`, { method: 'DELETE' })
+    editingImages.value = editingImages.value.filter(i => i.id !== img.id)
+  } catch (e) {
+    imageError.value = e?.data?.statusMessage || 'Failed to remove image'
+  } finally {
+    removingImageId.value = ''
+  }
+}
 
 // Share the validation/contrast helpers with the player-facing badges so the admin
 // preview here matches exactly what renders on leaderboards and cZones.
@@ -245,13 +357,19 @@ function startEdit(c) {
     discordRoleId: c.discordRoleId || '',
     captainIds: c.captains.map(cap => cap.userId),
     prizeCtoons: c.prizeCtoons.map(p => ({ ctoonId: p.ctoonId, quantity: p.quantity })),
+    joinEffectMessage: c.joinEffectMessage || '',
+    joinEffectDurationSeconds: Math.round((c.joinEffectDurationMs || 5000) / 1000),
   })
+  editingImages.value = [...(c.joinEffectImages || [])]
+  imageError.value = ''
   formError.value = ''
 }
 
 function resetForm() {
   Object.assign(form, emptyForm())
   editId.value = ''
+  editingImages.value = []
+  imageError.value = ''
   formError.value = ''
 }
 
@@ -302,6 +420,8 @@ async function save() {
       discordRoleId: form.discordRoleId.trim(),
       captainIds: form.captainIds,
       prizeCtoons: form.prizeCtoons,
+      joinEffectMessage: form.joinEffectMessage.trim(),
+      joinEffectDurationMs: Math.round((Number(form.joinEffectDurationSeconds) || 5) * 1000),
     }
     if (!editId.value) {
       await $fetch('/api/admin/cmoons', { method: 'POST', body })
@@ -394,5 +514,37 @@ onMounted(load)
   border-radius: 999px;
   font-size: 0.7rem;
   font-weight: 700;
+}
+
+.cje-thumb {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f3f4f6;
+  flex-shrink: 0;
+}
+
+.cje-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.cje-thumb-remove {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 22px;
+  height: 22px;
+  min-height: 0;
+  line-height: 1;
+  border-radius: 999px;
+  background: rgba(220, 38, 38, 0.9);
+  color: #fff;
+  font-size: 12px;
+  border: none;
 }
 </style>

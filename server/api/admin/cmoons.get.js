@@ -14,6 +14,7 @@ export default defineEventHandler(async (event) => {
       include: {
         captains: { include: { user: { select: { id: true, username: true } } } },
         prizeCtoons: { include: { ctoon: { select: { id: true, name: true, assetPath: true } } } },
+        joinEffectImages: { orderBy: { order: 'asc' }, select: { id: true, imagePath: true, order: true } },
       },
     }),
     db.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { cMoonEnabled: true, cMoonEnabledAt: true, cMoonSelectionDeadlineAt: true } }),
@@ -31,6 +32,9 @@ export default defineEventHandler(async (event) => {
       memberCount: c.memberCount,
       captains: c.captains.map(cap => ({ userId: cap.userId, username: cap.user?.username || '' })),
       prizeCtoons: c.prizeCtoons.map(pc => ({ ctoonId: pc.ctoonId, quantity: pc.quantity, name: pc.ctoon?.name || '', assetPath: pc.ctoon?.assetPath || null })),
+      joinEffectMessage: c.joinEffectMessage,
+      joinEffectDurationMs: c.joinEffectDurationMs,
+      joinEffectImages: c.joinEffectImages.map(img => ({ id: img.id, imagePath: img.imagePath })),
     })),
   }
 })

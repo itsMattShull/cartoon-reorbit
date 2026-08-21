@@ -2,7 +2,12 @@
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
-import { isValidHexColor, isValidDiscordSnowflake } from '@/server/utils/cmoon'
+import {
+  isValidHexColor,
+  isValidDiscordSnowflake,
+  clampJoinEffectDurationMs,
+  sanitizeJoinEffectMessage,
+} from '@/server/utils/cmoon'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -16,6 +21,8 @@ export default defineEventHandler(async (event) => {
   const discordRoleId = typeof body?.discordRoleId === 'string' ? body.discordRoleId.trim() : ''
   const captainIds = Array.isArray(body?.captainIds) ? [...new Set(body.captainIds.filter(x => typeof x === 'string'))] : []
   const prizeCtoons = Array.isArray(body?.prizeCtoons) ? body.prizeCtoons : []
+  const joinEffectMessage = sanitizeJoinEffectMessage(body?.joinEffectMessage)
+  const joinEffectDurationMs = clampJoinEffectDurationMs(body?.joinEffectDurationMs)
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   if (!isValidHexColor(color)) throw createError({ statusCode: 400, statusMessage: 'Color must be a hex value like #3366ff' })
@@ -46,6 +53,8 @@ export default defineEventHandler(async (event) => {
       name,
       color,
       discordRoleId: discordRoleId || null,
+      joinEffectMessage,
+      joinEffectDurationMs,
       captains: { create: captainIds.map(userId => ({ userId })) },
       prizeCtoons: { create: prizeCtoonRows },
     },
