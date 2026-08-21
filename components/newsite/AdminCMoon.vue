@@ -49,6 +49,38 @@
           <p v-if="c.memberCount > 0" class="text-xs text-gray-600 mt-1">
             Reassign members before this cMoon can be deleted.
           </p>
+
+          <!-- Ranks: an ordered ladder (sortOrder) — a member's displayed rank is always the
+               highest-sortOrder rank they've unlocked via an achievement (see Admin: Achievements). -->
+          <div class="mt-2 pt-2 border-t">
+            <div class="text-xs font-medium mb-1">Ranks</div>
+            <div v-if="c.ranks.length" class="space-y-1 mb-2">
+              <div v-for="r in c.ranks" :key="r.id" class="flex items-center gap-2 text-xs">
+                <span class="text-gray-500 w-6 flex-shrink-0">#{{ r.sortOrder }}</span>
+                <span class="flex-1 min-w-0 break-words">{{ r.name }}</span>
+                <span class="text-gray-500 truncate max-w-[10rem]">{{ r.discordRoleId || 'no role' }}</span>
+                <button type="button" class="cm-tap text-indigo-600" @click="startEditRank(c, r)">Edit</button>
+                <button type="button" class="cm-tap text-red-600" @click="removeRank(c, r)">Delete</button>
+              </div>
+            </div>
+            <div v-else class="text-xs text-gray-500 mb-2">No ranks yet.</div>
+
+            <div v-if="rankForm.cMoonId === c.id" class="bg-gray-50 border rounded p-2 space-y-2">
+              <input v-model="rankForm.name" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" placeholder="Rank name (e.g. Sergeant)" />
+              <div class="flex gap-2">
+                <input v-model.number="rankForm.sortOrder" type="number" inputmode="numeric" class="cm-field w-24 border rounded px-2 py-1" style="font-size:16px" placeholder="Order" aria-label="Ladder order" />
+                <input v-model="rankForm.discordRoleId" class="cm-field flex-1 min-w-0 border rounded px-2 py-1" style="font-size:16px" placeholder="Discord Role ID (optional)" inputmode="numeric" autocapitalize="none" autocorrect="off" spellcheck="false" />
+              </div>
+              <div v-if="rankFormError" class="text-xs text-red-600">{{ rankFormError }}</div>
+              <div class="flex gap-2">
+                <button type="button" class="cm-tap px-3 bg-indigo-600 text-white rounded text-xs" @click="saveRank(c)" :disabled="rankSaving">
+                  {{ rankSaving ? 'Saving…' : (rankForm.id ? 'Save Rank' : 'Add Rank') }}
+                </button>
+                <button type="button" class="cm-tap px-3 border rounded text-xs" @click="resetRankForm">Cancel</button>
+              </div>
+            </div>
+            <button v-else type="button" class="cm-tap text-xs text-indigo-600" @click="startAddRank(c)">+ Add rank</button>
+          </div>
         </div>
         <div v-if="!cmoons.length" class="text-gray-600">No cMoons yet — create one below.</div>
       </div>
@@ -253,6 +285,59 @@ function resetForm() {
   Object.assign(form, emptyForm())
   editId.value = ''
   formError.value = ''
+}
+
+// Ranks: one shared edit-form object, scoped to whichever cMoon card it's open on
+// (rankForm.cMoonId), mirroring the single-form-at-a-time pattern used for cMoons above.
+const emptyRankForm = () => ({ cMoonId: '', id: '', name: '', sortOrder: 0, discordRoleId: '' })
+const rankForm = reactive(emptyRankForm())
+const rankFormError = ref('')
+const rankSaving = ref(false)
+
+function resetRankForm() {
+  Object.assign(rankForm, emptyRankForm())
+  rankFormError.value = ''
+}
+
+function startAddRank(c) {
+  resetRankForm()
+  rankForm.cMoonId = c.id
+  rankForm.sortOrder = (c.ranks.reduce((max, r) => Math.max(max, r.sortOrder), -1)) + 1
+}
+
+function startEditRank(c, r) {
+  Object.assign(rankForm, { cMoonId: c.id, id: r.id, name: r.name, sortOrder: r.sortOrder, discordRoleId: r.discordRoleId || '' })
+  rankFormError.value = ''
+}
+
+async function saveRank(c) {
+  if (!rankForm.name.trim()) { rankFormError.value = 'Name is required'; return }
+  rankFormError.value = ''
+  rankSaving.value = true
+  try {
+    const body = { name: rankForm.name.trim(), sortOrder: rankForm.sortOrder, discordRoleId: rankForm.discordRoleId.trim() }
+    if (!rankForm.id) {
+      await $fetch(`/api/admin/cmoons/${c.id}/ranks`, { method: 'POST', body })
+    } else {
+      await $fetch(`/api/admin/cmoons/${c.id}/ranks/${rankForm.id}`, { method: 'PUT', body })
+    }
+    resetRankForm()
+    await load()
+  } catch (e) {
+    rankFormError.value = e?.data?.statusMessage || 'Save failed'
+  } finally {
+    rankSaving.value = false
+  }
+}
+
+async function removeRank(c, r) {
+  if (!confirm(`Delete rank "${r.name}"?`)) return
+  try {
+    await $fetch(`/api/admin/cmoons/${c.id}/ranks/${r.id}`, { method: 'DELETE' })
+    await load()
+  } catch (e) {
+    alert(e?.data?.statusMessage || 'Delete failed')
+  }
 }
 
 async function load() {

@@ -112,12 +112,22 @@
                   :aria-checked="claimChoice === opt.id"
                   @click="claimChoice = opt.id"
                 >
-                  <img v-if="opt.ctoonImagePath" :src="opt.ctoonImagePath" class="ma-claim-option-img" :alt="opt.label" />
                   <div class="ma-claim-option-body">
                     <div class="ma-claim-option-label">{{ opt.label }}</div>
+                    <div v-if="opt.ctoons?.length || opt.backgrounds?.length" class="ma-claim-option-thumbs">
+                      <img
+                        v-for="(c, i) in opt.ctoons" v-if="c.imagePath" :key="'c' + i"
+                        :src="c.imagePath" class="ma-claim-option-thumb" :alt="c.name" :title="`${c.name} × ${c.quantity}`"
+                      />
+                      <img
+                        v-for="(b, i) in opt.backgrounds" v-if="b.imagePath" :key="'b' + i"
+                        :src="b.imagePath" class="ma-claim-option-thumb" :alt="b.label" :title="b.label"
+                      />
+                    </div>
                     <div class="ma-claim-option-detail">
-                      <span v-if="opt.ctoonName">{{ opt.ctoonName }} × {{ opt.quantity }}</span>
-                      <span v-if="opt.points"> {{ opt.ctoonName ? '+ ' : '' }}{{ opt.points.toLocaleString() }} pts</span>
+                      <span v-if="opt.ctoons?.length">{{ opt.ctoons.map(c => `${c.name} × ${c.quantity}`).join(', ') }}</span>
+                      <span v-if="opt.backgrounds?.length">{{ opt.ctoons?.length ? ' + ' : '' }}{{ opt.backgrounds.length }} background{{ opt.backgrounds.length !== 1 ? 's' : '' }}</span>
+                      <span v-if="opt.points">{{ (opt.ctoons?.length || opt.backgrounds?.length) ? ' + ' : '' }}{{ opt.points.toLocaleString() }} pts</span>
                     </div>
                   </div>
                   <span class="ma-claim-option-check" aria-hidden="true">{{ claimChoice === opt.id ? '●' : '○' }}</span>
@@ -549,12 +559,20 @@ async function confirmClaim(a) {
   background: rgba(255,215,94,0.12);
 }
 
-.ma-claim-option-img {
-  width: 40px;
-  height: 40px;
+.ma-claim-option-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0;
+}
+
+.ma-claim-option-thumb {
+  width: 32px;
+  height: 32px;
   object-fit: cover;
   border-radius: 4px;
   flex: 0 0 auto;
+  background: rgba(0,0,0,0.25);
 }
 
 .ma-claim-option-body {

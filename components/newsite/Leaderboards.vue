@@ -8,6 +8,7 @@
       <div class="lb-nav-right">
         <GreenButton :active="activeTab === 'users'" @click="activeTab = 'users'">Users</GreenButton>
         <GreenButton :active="activeTab === 'games'" @click="activeTab = 'games'">Games</GreenButton>
+        <GreenButton v-if="cMoonEnabled" :active="activeTab === 'cmoons'" @click="activeTab = 'cmoons'">cMoons</GreenButton>
       </div>
     </div>
 
@@ -74,6 +75,34 @@
             <li v-if="!board.rows?.length" class="lb-empty">No scores yet</li>
           </ul>
         </div>
+      </div>
+    </div>
+
+    <!-- cMoons Tab: team standings + each cMoon's top individual contributors -->
+    <div v-else-if="activeTab === 'cmoons'" class="lb-content">
+      <div v-if="cMoonStandingsPending" class="lb-loading">Loading…</div>
+      <div v-else class="cmoon-standings">
+        <div v-for="(team, i) in cMoonStandingsData?.standings" :key="team.id" class="lb-card cmoon-team-card">
+          <div class="lb-card-header cmoon-team-header" :style="cMoonPillStyle(team.color)">
+            <span class="cmoon-team-rank">#{{ i + 1 }}</span>
+            <span class="cmoon-team-name">{{ team.name }}</span>
+            <span class="cmoon-team-total">{{ team.totalPoints.toLocaleString() }} pts</span>
+          </div>
+          <div class="cmoon-team-sub">{{ team.memberCount }} member{{ team.memberCount === 1 ? '' : 's' }}</div>
+          <ul v-if="team.topContributors.length" class="lb-list">
+            <li v-for="(row, ci) in team.topContributors" :key="row.username" class="lb-row">
+              <span class="lb-rank">{{ ci + 1 }}</span>
+              <img class="lb-avatar" :src="`/avatars/${row.avatar || 'default.png'}`" alt="" />
+              <div class="lb-user-col">
+                <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
+                <span v-if="row.rankName" class="cmoon-rank-badge">{{ row.rankName }}</span>
+              </div>
+              <span class="lb-value">{{ row.points.toLocaleString() }}</span>
+            </li>
+          </ul>
+          <div v-else class="lb-empty">No contributions yet</div>
+        </div>
+        <div v-if="!cMoonStandingsData?.standings?.length" class="lb-empty">No cMoons yet</div>
       </div>
     </div>
   </div>
@@ -214,6 +243,13 @@ watch([usersBoards, gamesBoards], ([users, games]) => {
 function cMoonForRow(row) {
   return cMoonBadges.value[row.username] || null
 }
+
+// cMoons tab: fetched eagerly like the Users tab boards above (cheap — reads the
+// denormalized User.cMoonPoints column, not a live PointsLog aggregate), both to render the
+// tab immediately when selected and to know whether to show the tab button at all (hidden
+// entirely when the feature is off, rather than showing an empty "cMoons" tab).
+const { data: cMoonStandingsData, pending: cMoonStandingsPending } = useFetch('/api/leaderboard/cmoon-standings', { default: () => ({ cMoonEnabled: false, standings: [] }), headers })
+const cMoonEnabled = computed(() => cMoonStandingsData.value?.cMoonEnabled ?? false)
 </script>
 
 <style scoped>
@@ -414,5 +450,55 @@ function cMoonForRow(row) {
   .lb-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.cmoon-standings {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cmoon-team-card {
+  /* cMoonPillStyle sets background+color inline on the header for the team's own color;
+     everything else here matches .lb-card-header's existing look. */
+}
+
+.cmoon-team-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: none !important;
+}
+
+.cmoon-team-rank {
+  font-size: 0.68rem;
+  opacity: 0.8;
+  flex-shrink: 0;
+}
+
+.cmoon-team-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cmoon-team-total {
+  flex-shrink: 0;
+}
+
+.cmoon-team-sub {
+  padding: 4px 10px;
+  font-size: 0.68rem;
+  color: rgba(255, 255, 255, 0.4);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.cmoon-rank-badge {
+  align-self: flex-start;
+  font-size: 0.62rem;
+  color: #ffd75e;
+  font-weight: 600;
 }
 </style>

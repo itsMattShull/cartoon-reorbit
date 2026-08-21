@@ -54,6 +54,7 @@
                 <span v-if="lastOnlineText">{{ lastOnlineText }}</span>
                 <span v-if="lastOnlineText && viewedOwner.cMoon"> · </span>
                 <span v-if="viewedOwner.cMoon" class="cz-owner-cmoon" :style="cMoonPillStyle(viewedOwner.cMoon.color)">{{ viewedOwner.cMoon.name }}</span>
+                <span v-if="viewedOwner.cMoonRankName" class="cz-owner-cmoon-rank">{{ viewedOwner.cMoonRankName }}</span>
               </div>
             </div>
           </template>
@@ -815,7 +816,7 @@ async function loadZone(username) {
     cz.value.zones       = data.cZone.zones
     const firstActive    = data.cZone.zones.findIndex(z => z.toons.length > 0)
     cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
-    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null }
+    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null }
     loadCzoneSearchItems()
     eagerLoadMissingDimensions()
 
@@ -1341,6 +1342,13 @@ defineExpose({ save, clearZone })
   font-weight: 600;
   font-size: 0.68rem;
   line-height: 1.4;
+}
+.cz-owner-cmoon-rank {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  color: #ffd75e;
 }
 
 /* ── Skeleton placeholders (shown while a new cZone is loading) ── */

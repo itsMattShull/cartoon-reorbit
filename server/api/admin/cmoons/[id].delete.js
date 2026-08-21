@@ -17,7 +17,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 409, statusMessage: 'Cannot delete a cMoon that still has members — reassign them first' })
   }
 
-  await db.cMoon.delete({ where: { id } })
+  try {
+    await db.cMoon.delete({ where: { id } })
+  } catch (err) {
+    if (err?.code === 'P2003') {
+      throw createError({ statusCode: 409, statusMessage: 'Cannot delete — one of this cMoon\'s ranks is still referenced by an achievement. Reassign or delete that achievement\'s rank reward first.' })
+    }
+    throw err
+  }
   await logAdminChange(db, { userId: me.id, area: 'cMoon', key: `delete:${id}`, prevValue: { name: cmoon.name }, newValue: null })
 
   return { ok: true }
