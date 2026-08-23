@@ -2842,12 +2842,24 @@ model AchievementRewardBackground {
 }
 
 // cMoon — admin-managed factions. Off by default via GlobalGameConfig.cMoonEnabled.
+// Full-screen visual played on this cMoon's behalf at two moments: right after a user confirms
+// this cMoon in the "choose your cMoon" modal, and right after a member claims an achievement
+// prize option (server/utils/achievements.js / components/effects/FullscreenEffectHost.vue).
+// Closed set of pre-built animations, not user/admin-authored content — see effectType below.
+enum CMoonEffectType {
+  GLITCH
+  SLIME
+}
+
 model CMoon {
-  id            String   @id @default(uuid())
-  name          String   @unique
+  id            String           @id @default(uuid())
+  name          String           @unique
   color         String // "#RRGGBB", validated server-side; used as text color, and as the base
   // color a palette is derived from for the cMoon page + themed cToon modals (see utils/cmoonPalette.js).
   discordRoleId String? // Discord role snowflake granted to members (add-only sync)
+  // Optional full-screen animation played on cMoon-select and achievement-claim (see enum above).
+  // Null = no effect, proceed immediately.
+  effectType    CMoonEffectType?
   // Public "choose your cMoon" poster art. Server-normalized to a fixed 2:3 webp on upload
   // (see server/api/admin/cmoons/[id]/image.post.js) — null falls back to the color swatch.
   imagePath     String?

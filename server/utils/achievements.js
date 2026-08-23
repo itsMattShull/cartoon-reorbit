@@ -454,5 +454,11 @@ export async function claimAchievementReward(userId, achievementId, optionId) {
   // the claim row has safely committed — same pattern as awardAchievementToUser.
   const ctoons = await enqueueCtoonJobs(userId, txResult.ctoonJobs, 'ACHIEVEMENT_CLAIM')
 
-  return { label: option.label, points: option.reward.points, ctoons, backgrounds: txResult.backgrounds }
+  // Read-only and unrelated to the reward grant, so it stays outside the transaction above.
+  // Scoped strictly to this same `userId` — never client-suppliable — so a claim can only ever
+  // surface the caller's own cMoon effect, never another user's.
+  const claimant = await prisma.user.findUnique({ where: { id: userId }, select: { cMoon: { select: { effectType: true } } } })
+  const cMoonEffectType = claimant?.cMoon?.effectType || null
+
+  return { label: option.label, points: option.reward.points, ctoons, backgrounds: txResult.backgrounds, cMoonEffectType }
 }

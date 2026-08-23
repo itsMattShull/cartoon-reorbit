@@ -19,7 +19,7 @@ export default defineEventHandler(async () => {
   if (!cachedList || (now - cachedAt) >= TTL_MS) {
     cachedList = await db.cMoon.findMany({
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, color: true, memberCount: true, imagePath: true },
+      select: { id: true, name: true, color: true, memberCount: true, imagePath: true, effectType: true },
     })
     cachedAt = now
   }

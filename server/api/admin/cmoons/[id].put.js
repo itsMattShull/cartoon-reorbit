@@ -2,7 +2,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
-import { isValidHexColor, isValidDiscordSnowflake } from '@/server/utils/cmoon'
+import { isValidHexColor, isValidDiscordSnowflake, isValidCMoonEffectType } from '@/server/utils/cmoon'
 import { invalidateCMoonList } from '@/server/api/cmoons.get'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 
@@ -23,11 +23,17 @@ export default defineEventHandler(async (event) => {
   const pageDescription = body?.pageDescription === undefined
     ? cmoon.pageDescription
     : (typeof body.pageDescription === 'string' ? body.pageDescription.trim().slice(0, 2000) || null : null)
+  const effectType = body?.effectType === undefined
+    ? cmoon.effectType
+    : (body.effectType === '' ? null : body.effectType)
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   if (!isValidHexColor(color)) throw createError({ statusCode: 400, statusMessage: 'Color must be a hex value like #3366ff' })
   if (discordRoleId && !isValidDiscordSnowflake(discordRoleId)) {
     throw createError({ statusCode: 400, statusMessage: 'Discord Role ID must be a numeric snowflake' })
+  }
+  if (!isValidCMoonEffectType(effectType)) {
+    throw createError({ statusCode: 400, statusMessage: 'Invalid effect type' })
   }
 
   if (captainIds && captainIds.length) {
@@ -56,7 +62,7 @@ export default defineEventHandler(async (event) => {
   await db.$transaction(async (tx) => {
     await tx.cMoon.update({
       where: { id },
-      data: { name, color, discordRoleId: discordRoleId || null, pageDescription },
+      data: { name, color, discordRoleId: discordRoleId || null, pageDescription, effectType },
     })
     if (captainIds) {
       await tx.cMoonCaptain.deleteMany({ where: { cMoonId: id } })

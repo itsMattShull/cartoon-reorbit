@@ -2,7 +2,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
-import { isValidHexColor, isValidDiscordSnowflake } from '@/server/utils/cmoon'
+import { isValidHexColor, isValidDiscordSnowflake, isValidCMoonEffectType } from '@/server/utils/cmoon'
 import { invalidateCMoonList } from '@/server/api/cmoons.get'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 
@@ -17,11 +17,15 @@ export default defineEventHandler(async (event) => {
   const pageDescription = typeof body?.pageDescription === 'string' ? body.pageDescription.trim().slice(0, 2000) || null : null
   const captainIds = Array.isArray(body?.captainIds) ? [...new Set(body.captainIds.filter(x => typeof x === 'string'))] : []
   const prizeCtoons = Array.isArray(body?.prizeCtoons) ? body.prizeCtoons : []
+  const effectType = body?.effectType === undefined || body?.effectType === '' ? null : body.effectType
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   if (!isValidHexColor(color)) throw createError({ statusCode: 400, statusMessage: 'Color must be a hex value like #3366ff' })
   if (discordRoleId && !isValidDiscordSnowflake(discordRoleId)) {
     throw createError({ statusCode: 400, statusMessage: 'Discord Role ID must be a numeric snowflake' })
+  }
+  if (!isValidCMoonEffectType(effectType)) {
+    throw createError({ statusCode: 400, statusMessage: 'Invalid effect type' })
   }
 
   if (captainIds.length) {
@@ -48,6 +52,7 @@ export default defineEventHandler(async (event) => {
       color,
       discordRoleId: discordRoleId || null,
       pageDescription,
+      effectType,
       captains: { create: captainIds.map(userId => ({ userId })) },
       prizeCtoons: { create: prizeCtoonRows },
     },
