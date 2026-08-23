@@ -30,6 +30,7 @@ export default defineEventHandler(async (event) => {
       color: c.color,
       imagePath: c.imagePath,
       discordRoleId: c.discordRoleId,
+      effectType: c.effectType,
       memberCount: c.memberCount,
       pageImagePath: c.pageImagePath,
       pageDescription: c.pageDescription,

@@ -361,6 +361,15 @@ export function isValidDiscordSnowflake(value) {
   return typeof value === 'string' && DISCORD_SNOWFLAKE_RE.test(value)
 }
 
+// Explicit allow-list checked before any value reaches Prisma, matching the isValidHexColor /
+// isValidDiscordSnowflake convention above — an invalid enum value should fail with a clean 400
+// here, not surface as an unhandled Prisma validation error from the write itself.
+export const CMOON_EFFECT_TYPES = ['GLITCH', 'SLIME']
+
+export function isValidCMoonEffectType(value) {
+  return value === null || CMOON_EFFECT_TYPES.includes(value)
+}
+
 // GlobalGameConfig is read on the selection page/API on every load; cache briefly
 // in-process to avoid hammering the singleton row (mirrors the pattern used by
 // other hot config reads in this codebase, e.g. server/middleware/daily-points.js).

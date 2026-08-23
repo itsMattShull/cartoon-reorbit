@@ -95,13 +95,21 @@ async function checkStatus() {
   }
 }
 
+const router = useRouter()
+const { play } = useFullscreenEffect()
+
 async function confirm() {
   if (!choice.value || submitting.value) return
   submitting.value = true
   error.value = ''
   try {
-    await $fetch('/api/cmoon/select', { method: 'POST', body: { cMoonId: choice.value } })
+    const chosenId = choice.value
+    await $fetch('/api/cmoon/select', { method: 'POST', body: { cMoonId: chosenId } })
     visible.value = false
+    const picked = cmoons.value.find(c => c.id === chosenId)
+    const goToCMoon = () => router.push(`/newsite/cmoon/${chosenId}`)
+    if (picked?.effectType) play(picked.effectType, { onComplete: goToCMoon })
+    else goToCMoon()
   } catch (e) {
     error.value = e?.data?.statusMessage || 'Unable to join that cMoon. Please try again.'
   } finally {

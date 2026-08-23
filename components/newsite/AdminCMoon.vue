@@ -56,6 +56,7 @@
             Prize cToons: {{ c.prizeCtoons.map(p => `${p.name} ×${p.quantity}`).join(', ') || 'none' }}
           </div>
           <div class="text-xs text-gray-600 break-words">Discord role ID: {{ c.discordRoleId || 'none' }}</div>
+          <div class="text-xs text-gray-600 break-words">Effect: {{ c.effectType ? effectLabel(c.effectType) : 'none' }}</div>
           <div class="text-xs text-gray-600 break-words">
             cToons displayed: {{ c.displayedCtoonCount }}
             <NuxtLink :to="`/newsite/cmoon/${c.id}`" class="text-indigo-600 hover:underline ml-1">View cMoon page</NuxtLink>
@@ -137,6 +138,14 @@
           <div>
             <label class="block text-xs font-medium mb-1">Discord Role ID (optional)</label>
             <input v-model="form.discordRoleId" class="w-full border rounded px-2 py-1" style="font-size:16px" inputmode="numeric" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="123456789012345678" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium mb-1">Effect (plays on cMoon select &amp; achievement claim)</label>
+            <select v-model="form.effectType" class="w-full border rounded px-2 py-1" style="font-size:16px">
+              <option value="">None</option>
+              <option value="GLITCH">Glitch Effect</option>
+              <option value="SLIME">Slime Effect</option>
+            </select>
           </div>
         </div>
 
@@ -300,8 +309,13 @@ const flagSaving = ref(false)
 const cMoonEnabledAt = ref(null)
 const cMoonSelectionDeadlineAt = ref(null)
 
+const EFFECT_LABELS = { GLITCH: 'Glitch Effect', SLIME: 'Slime Effect' }
+function effectLabel(type) {
+  return EFFECT_LABELS[type] || type
+}
+
 const editId = ref('')
-const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', captainIds: [], prizeCtoons: [] })
+const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', effectType: '', captainIds: [], prizeCtoons: [] })
 const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
@@ -498,6 +512,7 @@ function startEdit(c) {
     color: c.color,
     discordRoleId: c.discordRoleId || '',
     pageDescription: c.pageDescription || '',
+    effectType: c.effectType || '',
     captainIds: c.captains.map(cap => cap.userId),
     prizeCtoons: c.prizeCtoons.map(p => ({ ctoonId: p.ctoonId, quantity: p.quantity })),
   })
@@ -640,6 +655,7 @@ async function save() {
       color: form.color,
       discordRoleId: form.discordRoleId.trim(),
       pageDescription: form.pageDescription,
+      effectType: form.effectType || null,
       captainIds: form.captainIds,
       prizeCtoons: form.prizeCtoons,
     }

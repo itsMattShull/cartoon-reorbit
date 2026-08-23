@@ -194,16 +194,23 @@ function claimedOptionLabel(a) {
   return opt?.label || 'a reward'
 }
 
+const { play } = useFullscreenEffect()
+
 async function confirmClaim(a) {
   if (!claimChoice.value || claiming.value) return
   claiming.value = true
   claimError.value = ''
   try {
-    await $fetch(`/api/achievements/${a.id}/claim`, {
+    const optionId = claimChoice.value
+    const result = await $fetch(`/api/achievements/${a.id}/claim`, {
       method: 'POST',
-      body: { optionId: claimChoice.value },
+      body: { optionId },
     })
-    a.claimedOptionId = claimChoice.value
+    // Effect plays first, reveal follows once it completes — matches the cMoon-select flow.
+    // Skipped entirely when the user has no cMoon or their cMoon has no effect assigned.
+    const reveal = () => { a.claimedOptionId = optionId }
+    if (result?.cMoonEffectType) play(result.cMoonEffectType, { onComplete: reveal })
+    else reveal()
   } catch (e) {
     claimError.value = e?.data?.statusMessage || 'Unable to claim reward. Please try again.'
   } finally {

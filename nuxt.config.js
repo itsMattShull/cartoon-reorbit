@@ -16,7 +16,8 @@ export default defineNuxtConfig({
   // ───────────────────────────────────────────────
   components: [
     '~/components',
-    { path: '~/components/newsite', pathPrefix: false }
+    { path: '~/components/newsite', pathPrefix: false },
+    { path: '~/components/effects', pathPrefix: false }
   ],
 
   // ───────────────────────────────────────────────
