@@ -1,6 +1,7 @@
 <template>
   <div class="app-layout reorbit-theme">
     <slot />
+    <Onboarding />
     <CtoonInfoModal />
   </div>
 </template>

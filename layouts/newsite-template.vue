@@ -243,7 +243,14 @@ html.newsite-active body {
 <template>
   <div class="site-container" :class="{ 'site-container-fluid': fluidLayout }" :style="[{ gridTemplateRows: gridRows, gridTemplateColumns: gridColumns }, scaleStyle]">
     <div class="topbar" :style="isMobile ? { height: 'auto', overflow: 'visible', width: '100%' } : {}">
-      <div class="topbar-primary" :style="[{ visibility: showAdbar ? 'visible' : 'hidden' }, isMobile ? { width: '100%' } : {}]">
+      <div
+        class="topbar-primary"
+        :style="[
+          { visibility: showAdbar ? 'visible' : 'hidden' },
+          (!showAdbar && fluidLayout) ? { display: 'none' } : {},
+          isMobile ? { width: '100%' } : {}
+        ]"
+      >
         <div v-if="!isMobile" class="topbar-primary-logo"><ReorbitLogo /></div>
         <div class="topbar-primary-promolabel" :style="{ marginLeft: isMobile ? '0' : 'auto' }"><ClientOnly><PromoLabel /></ClientOnly></div>
         <div class="topbar-primary-promo" :style="isMobile ? { flex: '1', width: 'auto' } : {}"><ClientOnly><PromoSpot /></ClientOnly></div>
@@ -279,7 +286,7 @@ html.newsite-active body {
         <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-bottom-mt)' } : {}"><WinballPromo /></div>
       </template>
     </div>
-    <div class="main-content" :class="{ 'main-content-full': !showSidebar && !isMobile, 'main-content-expand': !showFooter }" :style="[{ border: mainContentBorder }, mainContentMobileStyle]"><slot /></div>
+    <div class="main-content" :class="{ 'main-content-full': !showSidebar && !isMobile, 'main-content-expand': !showFooter }" :style="[{ border: mainContentBorder, overflowY: mainContentScrollY }, mainContentMobileStyle]"><slot /></div>
     <div class="footer" :style="[{ display: showFooter ? '' : 'none' }, isMobile ? { width: '100%', height: 'auto', aspectRatio: '800 / 60' } : {}]"><slot name="footer" /></div>
     <CtoonInfoCard v-if="ctoonModalIsOpen" />
     <AuctionModal
@@ -354,6 +361,12 @@ const showNav = computed(() => route.meta.showNav !== false)
 const showSidebar = computed(() => route.meta.showSidebar !== false)
 const showFooter = computed(() => route.meta.showFooter !== false)
 const mainContentBorder = computed(() => route.meta.mainContentBorder === false ? 'none' : undefined)
+// Opt-in per-route: the fixed-chrome `.main-content` box is `overflow: hidden`
+// by design (the whole 1040x862 chrome is meant to fit one screen at its
+// scaled size), but a handful of pages have content whose length depends on
+// live data (e.g. cmoon's member/cToon counts) and can genuinely exceed it.
+// Those opt into an internal scrollbar instead of being silently clipped.
+const mainContentScrollY = computed(() => route.meta.mainContentScrollY === true ? 'auto' : undefined)
 
 
 // Pages that opt into `fluidLayout` (currently the admin console) escape the
@@ -507,14 +520,22 @@ const scaleStyle = computed(() => {
 }
 
 /* Fluid mode: full-viewport, no fixed track sizes, no clipping. Everything a
-   dense admin table or a `position: fixed` modal needs in order to behave. */
+   dense admin table or a `position: fixed` modal needs in order to behave.
+   The height must be a real bound (not `auto` + `min-height`), because the
+   `main-content` row below is `minmax(0, 1fr)` and every descendant that
+   scrolls internally (`.newsite-admin-body`, `.admin-rail-scroll`) sizes
+   itself off a chain of `height: 100%`. A percentage height only resolves
+   against a definite ancestor height — with `auto` here the whole chain
+   falls back to "grow to fit content", so those `overflow-y: auto` boxes
+   are always exactly as tall as their content (nothing to scroll), and
+   `overscroll-behavior: contain` then swallows the wheel event instead of
+   letting it reach the document. */
 .site-container-fluid {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  height: auto;
-  min-height: 100vh;
-  min-height: 100dvh;
+  height: 100vh;
+  height: 100dvh;
   overflow: visible;
 }
 
