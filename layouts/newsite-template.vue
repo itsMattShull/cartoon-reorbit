@@ -467,7 +467,7 @@ onUnmounted(() => {
 })
 
 const mainContentMobileStyle = computed(() => {
-  if (fluidLayout.value) return { width: '100%', height: '100%', minHeight: '0' }
+  if (fluidLayout.value) return { width: '100%', height: 'auto' }
   if (!isMobile.value) return {}
   return {
     width: '100%',
@@ -519,31 +519,24 @@ const scaleStyle = computed(() => {
   overflow: hidden;
 }
 
-/* Fluid mode: full-viewport, no fixed track sizes, no clipping. Everything a
-   dense admin table or a `position: fixed` modal needs in order to behave.
-   The height must be a real bound (not `auto` + `min-height`), because the
-   `main-content` row below is `minmax(0, 1fr)` and every descendant that
-   scrolls internally (`.newsite-admin-body`, `.admin-rail-scroll`) sizes
-   itself off a chain of `height: 100%`. A percentage height only resolves
-   against a definite ancestor height — with `auto` here the whole chain
-   falls back to "grow to fit content", so those `overflow-y: auto` boxes
-   are always exactly as tall as their content (nothing to scroll), and
-   `overscroll-behavior: contain` then swallows the wheel event instead of
-   letting it reach the document. */
+/* Fluid mode: full-viewport width, no fixed track sizes, no clipping. The
+   height stays `auto` + `min-height` on purpose — the admin console has no
+   internal scroll region of its own; the nav rail and the section body both
+   grow with their content and the document scrolls as one, same as every
+   other page. */
 .site-container-fluid {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  height: 100vh;
-  height: 100dvh;
+  height: auto;
+  min-height: 100vh;
+  min-height: 100dvh;
   overflow: visible;
 }
 
 .site-container-fluid .topbar,
 .site-container-fluid .topbar-primary,
-.site-container-fluid .topbar-nav,
-.site-container-fluid .topbar-nav-left,
-.site-container-fluid .topbar-nav-right {
+.site-container-fluid .topbar-nav {
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -559,8 +552,7 @@ const scaleStyle = computed(() => {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  height: 100%;
-  min-height: 0;
+  height: auto;
   overflow: visible;
 }
 

@@ -174,8 +174,6 @@ html.newsite-admin-page body {
   display: grid;
   grid-template-columns: var(--admin-rail-width, 208px) minmax(0, 1fr);
   width: 100%;
-  min-height: 0;
-  height: 100%;
   box-sizing: border-box;
 }
 
@@ -184,10 +182,10 @@ html.newsite-admin-page body {
   width: 100%;
   box-sizing: border-box;
   /* auto, not hidden: a table wider than the panel must stay reachable rather
-     than being silently amputated. */
+     than being silently amputated. Vertical overflow is left to flow into the
+     page — there is no internal vertical scroll region here, same as the nav
+     rail in AdminNav.vue; the whole document scrolls as one. */
   overflow-x: auto;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   background: #f9fafb;
   /* The panel is light, but the newsite layout sets `color: #ffffff` on body,
      so anything in a section that does not name its own colour inherits white
