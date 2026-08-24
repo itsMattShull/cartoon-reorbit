@@ -67,6 +67,29 @@ export default defineEventHandler(async (event) => {
     : []
   const holidaySet = new Set(holidayRows.map(r => r.ctoonId))
 
+  // acquired date for the CURRENT owner
+  // UserCtoon.createdAt is set once, when that row is first minted, and every
+  // ownership-transfer path (auction win, trade, wishlist accept, dissolve
+  // reassignment, ...) updates userId in place without touching it — so for a
+  // copy that changed hands, createdAt reflects whoever originally minted it,
+  // not when the current owner got it. CtoonOwnerLog gets a fresh row on every
+  // transfer (mint.worker.js and each transfer site all write one), so the
+  // latest log row for this user+copy is the real acquisition date; fall back
+  // to createdAt for rows with no matching log (shouldn't normally happen, but
+  // cheaper than failing the whole page over it).
+  const userCtoonIds = filtered.map(uc => uc.id)
+  const ownerLogRows = userCtoonIds.length
+    ? await prisma.ctoonOwnerLog.findMany({
+        where: { userCtoonId: { in: userCtoonIds }, userId: me.id },
+        select: { userCtoonId: true, createdAt: true }
+      })
+    : []
+  const latestAcquiredAt = new Map()
+  for (const row of ownerLogRows) {
+    const prev = latestAcquiredAt.get(row.userCtoonId)
+    if (!prev || row.createdAt > prev) latestAcquiredAt.set(row.userCtoonId, row.createdAt)
+  }
+
   // shape response
   const TIME_BASED_CAP = 999999999
   const now = new Date()
@@ -99,7 +122,7 @@ export default defineEventHandler(async (event) => {
     mintNumber: uc.mintNumber,
     quantity: effectiveQuantity,
     isFirstEdition: uc.isFirstEdition,
-    acquiredAt: uc.createdAt,
+    acquiredAt: latestAcquiredAt.get(uc.id) || uc.createdAt,
     auctions: uc.auctions || [],
     isHolidayItem: holidaySet.has(uc.ctoonId),
     // Every row here belongs to the caller (the query is scoped userId: me.id),
