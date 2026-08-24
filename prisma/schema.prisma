@@ -2867,6 +2867,10 @@ model CMoon {
   imagePath     String?
   // Denormalized to avoid COUNT(*) races/scans on every selection + the daily auto-assign job.
   memberCount   Int      @default(0)
+  // Closes this cMoon to new joins: excluded from self-selection AND the daily auto-assign
+  // job. Existing members are unaffected. Only an admin can still place a user into a locked
+  // cMoon, via the existing unrestricted per-user "update cMoon" admin endpoint.
+  locked        Boolean  @default(false)
   // Cumulative cMoon team leaderboard score (server/utils/cmoon.js weekly scoring). Never
   // resets — a running season total incremented by CMoonScoreLog-backed awards.
   teamScore     Int      @default(0)

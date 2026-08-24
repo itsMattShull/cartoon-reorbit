@@ -4,7 +4,10 @@
     <div v-else-if="error" class="cmp-status cmp-status--error">{{ error }}</div>
     <template v-else-if="cmoon">
       <div class="cmp-banner">
-        <h1 class="cmp-title">{{ cmoon.name }}</h1>
+        <h1 class="cmp-title">
+          {{ cmoon.name }}
+          <span v-if="cmoon.locked" class="cmp-locked-badge">🔒 Locked</span>
+        </h1>
         <p class="cmp-member-count">{{ cmoon.memberCount.toLocaleString() }} member{{ cmoon.memberCount === 1 ? '' : 's' }}</p>
       </div>
 
@@ -148,6 +151,22 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   font-weight: 700;
   word-break: break-word;
   overflow-wrap: anywhere;
+}
+
+/* Inline with the title rather than a third .cmp-stat tile — two stat tiles already fill the
+   row width on mobile. Fixed neutral background: .cmp-banner sits on an admin-set arbitrary
+   color (--cm-banner), so a badge can't borrow that palette and stay legible. */
+.cmp-locked-badge {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+  margin-left: 8px;
+  background: #4b4b52;
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
 }
 
 .cmp-member-count {
