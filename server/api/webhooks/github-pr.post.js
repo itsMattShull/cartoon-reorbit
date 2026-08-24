@@ -94,7 +94,14 @@ export default defineEventHandler(async (event) => {
 
   // This deployment only ever represents one branch — never trust a branch name out
   // of the request body to pick between the dev/prod channel or DB rows.
-  const isProd = process.env.NODE_ENV === 'production'
+  //
+  // NODE_ENV can't be used here: the dev deployment also runs its built Nuxt server
+  // with NODE_ENV=production (see ecosystem.config.cjs), since that's required for
+  // the built output to run correctly, not to indicate which branch this deployment
+  // tracks. DEPLOY_ENV is a separate, deployment-specific env var set in each
+  // server's .env — 'dev' on the dev box, unset/anything else (defaults to prod) on
+  // the production box.
+  const isProd = process.env.DEPLOY_ENV !== 'dev'
   const branch = isProd ? 'master' : 'dev'
   const channelField = isProd ? 'prodPrDiscordChannelId' : 'devPrDiscordChannelId'
 
