@@ -463,6 +463,10 @@ export async function selectCMoonForUser(userId, cMoonId) {
   // Locked cMoons are only reachable via admin direct-assign (POST
   // /api/admin/users/[id]/update-cmoon), never through this self-serve path — enforced here,
   // not just by hiding the cMoon from GET /api/cmoons, so a known id can't bypass the UI.
+  // This is a fast-path rejection for the common (non-racing) case, not the enforcement
+  // boundary — see the joinLocked:false clause below, which is what actually closes the
+  // TOCTOU window against an admin locking this cMoon between this read and the transaction
+  // committing.
   if (cmoon.joinLocked) throw new CMoonError(CMOON_SELECT_ERRORS.LOCKED)
 
   const assigned = await prisma.$transaction(async (tx) => {
@@ -471,7 +475,14 @@ export async function selectCMoonForUser(userId, cMoonId) {
       data: { cMoonId: cmoon.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: false },
     })
     if (result.count === 0) throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
-    await tx.cMoon.update({ where: { id: cmoon.id }, data: { memberCount: { increment: 1 } } })
+    // Re-checks joinLocked:false as part of the same atomic write, not just the pre-fetch
+    // above — if an admin locked this cMoon in the gap between that read and here, count is 0
+    // and the whole transaction (including the user update above) rolls back.
+    const lockResult = await tx.cMoon.updateMany({
+      where: { id: cmoon.id, joinLocked: false },
+      data: { memberCount: { increment: 1 } },
+    })
+    if (lockResult.count === 0) throw new CMoonError(CMOON_SELECT_ERRORS.LOCKED)
     return cmoon.id
   })
 
@@ -479,9 +490,13 @@ export async function selectCMoonForUser(userId, cMoonId) {
   return assigned
 }
 
-// Assigns one user to whatever cMoon currently has the fewest members.
-// `FOR UPDATE` on the chosen CMoon row serializes concurrent assignments so two
-// callers can't both read the same "smallest" moon before either commits.
+// Assigns one user to whatever unlocked cMoon currently has the fewest members (the
+// balancing step of auto-assignment — each call re-reads memberCount, so a stream of
+// stragglers naturally spreads evenly across every unlocked cMoon rather than piling
+// into one). Locked cMoons are excluded entirely: never a candidate for auto-assignment,
+// only reachable via the admin "update cMoon" endpoint. `FOR UPDATE` on the chosen CMoon
+// row serializes concurrent assignments so two callers can't both read the same
+// "smallest" moon before either commits.
 async function assignSmallestCMoonToUser(userId) {
   return prisma.$transaction(async (tx) => {
     const [smallest] = await tx.$queryRaw`
@@ -508,8 +523,14 @@ export async function autoAssignExpiredCMoonUsers({ batchLimit = 200, maxBatches
   const config = await getGlobalConfig({ fresh: true })
   if (!config?.cMoonEnabled || !config.cMoonEnabledAt) return { processed: 0 }
 
-  const cmoonCount = await prisma.cMoon.count()
-  if (cmoonCount === 0) return { processed: 0 }
+  const unlockedCmoonCount = await prisma.cMoon.count({ where: { joinLocked: false } })
+  if (unlockedCmoonCount === 0) {
+    // Nothing to assign into. Not an error — an admin may have locked every cMoon on
+    // purpose — but worth a log line since it otherwise fails silently and expired users
+    // just stay unassigned indefinitely until an admin unlocks one or assigns them by hand.
+    console.warn('[cmoon] autoAssignExpiredCMoonUsers: no unlocked cMoons available, skipping')
+    return { processed: 0 }
+  }
 
   const now = new Date()
   const newUserCutoff = new Date(now.getTime() - THREE_DAYS_MS)

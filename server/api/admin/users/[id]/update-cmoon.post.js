@@ -1,19 +1,12 @@
 // server/api/admin/users/[id]/update-cmoon.post.js
-import { defineEventHandler, getRequestHeader, readBody, createError } from 'h3'
+import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 
 export default defineEventHandler(async (event) => {
-  const cookie = getRequestHeader(event, 'cookie') || ''
-  let me
-  try {
-    me = await $fetch('/api/auth/me', { headers: { cookie } })
-  } catch {
-    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
-  }
-  if (!me?.isAdmin) {
-    throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
-  }
+  const me = await requireAdmin(event)
+  assertSameOrigin(event)
 
   const { id } = event.context.params || {}
   if (!id) throw createError({ statusCode: 400, statusMessage: 'Missing user id' })
