@@ -196,7 +196,7 @@
             (last {{ netWindowCount }} {{ windowUnitPlural }})
           </span>
         </h2>
-        <div class="chart-container">
+        <div class="chart-container chart-container-tall">
           <canvas ref="issuedCategoryCanvas"></canvas>
         </div>
       </div>
@@ -209,7 +209,7 @@
             (last {{ netWindowCount }} {{ windowUnitPlural }})
           </span>
         </h2>
-        <div class="chart-container">
+        <div class="chart-container chart-container-tall">
           <canvas ref="spentCategoryCanvas"></canvas>
         </div>
       </div>
@@ -531,6 +531,7 @@ const makeUniqueTickFormatter = (formatter, suffix = '') => (value, index, ticks
   return `${current}${suffix}`
 }
 const wholeTick = makeUniqueTickFormatter(v => Math.round(v))
+const wholeTickCommas = makeUniqueTickFormatter(v => Math.round(v).toLocaleString())
 const percentTick = makeUniqueTickFormatter(v => Math.round(v), '%')
 const percentFromDecimalTick = makeUniqueTickFormatter(v => Math.round(v * 100), '%')
 
@@ -646,9 +647,13 @@ function makeCategoryStackOptions (yTitle) {
     maintainAspectRatio: false,
     scales: {
       x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP' }, title: { color: '#000', display: true, text: 'Day' }, stacked: true, ticks: { color: '#000' } },
-      y: { title: { color: '#000', display: true, text: yTitle }, beginAtZero: true, stacked: true, ticks: { color: '#000', callback: wholeTick }, grace: '20%' }
+      y: { title: { color: '#000', display: true, text: yTitle }, beginAtZero: true, stacked: true, ticks: { color: '#000', callback: wholeTickCommas }, grace: '20%' }
     },
-    plugins: { legend: { display: true, position: 'top' } }
+    plugins: {
+      legend: { display: true, position: 'top' },
+      tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${Math.round(ctx.parsed.y ?? 0).toLocaleString()}` } },
+      datalabels: { color: '#ffffff', font: { size: 9 }, formatter: (v) => Math.round(v).toLocaleString() }
+    }
   }
 }
 const issuedCategoryOptions = makeCategoryStackOptions('Points Issued')
@@ -1420,5 +1425,9 @@ watch(pointsBucketSize, async () => {
   height: 220px;
   position: relative;
   padding: 4px;
+}
+
+.chart-container-tall {
+  height: 660px;
 }
 </style>
