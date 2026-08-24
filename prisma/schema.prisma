@@ -1398,6 +1398,8 @@ model GlobalGameConfig {
   rarityDefaults                 Json?
   achievementDiscordChannelId    String?
   czoneContestDiscordChannelId   String?
+  devPrDiscordChannelId          String? // posts PR opened/merged notices for the dev branch
+  prodPrDiscordChannelId         String? // posts PR opened/merged notices for the master branch
   // Scavenger Hunt settings
   scavengerChancePercent         Int     @default(5) // 0–100; 0 disables
   scavengerCooldownHours         Int     @default(24) // cooldown between completed hunts per user
