@@ -471,7 +471,7 @@
             <label class="block text-sm font-medium text-gray-700">cMoon</label>
             <select v-model="updateCMoonValue" class="mt-2 w-full border rounded-md px-3 py-2 text-sm">
               <option :value="null">— No cMoon —</option>
-              <option v-for="c in cmoonOptions" :key="c.id" :value="c.id">{{ c.name }} ({{ c.memberCount }} members)</option>
+              <option v-for="c in cmoonOptions" :key="c.id" :value="c.id">{{ c.name }} ({{ c.memberCount }} members){{ c.joinLocked ? ' — Locked' : '' }}</option>
             </select>
           </div>
         </div>

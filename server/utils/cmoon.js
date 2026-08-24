@@ -411,6 +411,7 @@ export const CMOON_SELECT_ERRORS = {
   NOT_FOUND: 'CMOON_NOT_FOUND',
   ALREADY_ASSIGNED: 'CMOON_ALREADY_ASSIGNED',
   DEADLINE_PASSED: 'CMOON_DEADLINE_PASSED',
+  LOCKED: 'CMOON_LOCKED',
 }
 
 class CMoonError extends Error {
@@ -457,8 +458,12 @@ export async function selectCMoonForUser(userId, cMoonId) {
   const deadline = computeCMoonDeadline(user, config)
   if (deadline && new Date() > deadline) throw new CMoonError(CMOON_SELECT_ERRORS.DEADLINE_PASSED)
 
-  const cmoon = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true } })
+  const cmoon = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true, joinLocked: true } })
   if (!cmoon) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
+  // Locked cMoons are only reachable via admin direct-assign (POST
+  // /api/admin/users/[id]/update-cmoon), never through this self-serve path — enforced here,
+  // not just by hiding the cMoon from GET /api/cmoons, so a known id can't bypass the UI.
+  if (cmoon.joinLocked) throw new CMoonError(CMOON_SELECT_ERRORS.LOCKED)
 
   const assigned = await prisma.$transaction(async (tx) => {
     const result = await tx.user.updateMany({
@@ -480,7 +485,7 @@ export async function selectCMoonForUser(userId, cMoonId) {
 async function assignSmallestCMoonToUser(userId) {
   return prisma.$transaction(async (tx) => {
     const [smallest] = await tx.$queryRaw`
-      SELECT id FROM "CMoon" ORDER BY "memberCount" ASC, id ASC LIMIT 1 FOR UPDATE
+      SELECT id FROM "CMoon" WHERE "joinLocked" = false ORDER BY "memberCount" ASC, id ASC LIMIT 1 FOR UPDATE
     `
     if (!smallest) return null
 

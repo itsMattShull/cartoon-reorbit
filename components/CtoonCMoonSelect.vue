@@ -6,7 +6,7 @@
     @change="$emit('update:modelValue', $event.target.value || null)"
   >
     <option value="">— None —</option>
-    <option v-for="c in cmoons" :key="c.id" :value="c.id">{{ c.name }}</option>
+    <option v-for="c in cmoons" :key="c.id" :value="c.id">{{ c.name }}{{ c.joinLocked ? ' (Locked)' : '' }}</option>
   </select>
 </template>
 

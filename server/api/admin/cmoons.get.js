@@ -31,6 +31,7 @@ export default defineEventHandler(async (event) => {
       imagePath: c.imagePath,
       discordRoleId: c.discordRoleId,
       effectType: c.effectType,
+      joinLocked: c.joinLocked,
       memberCount: c.memberCount,
       pageImagePath: c.pageImagePath,
       pageDescription: c.pageDescription,

@@ -2873,6 +2873,16 @@ model CMoon {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // When true, this cMoon is hidden from the self-serve "choose your cMoon" list/modal and the
+  // cMoons quick-nav, and blocked server-side in selectCMoonForUser/assignSmallestCMoonToUser
+  // (server/utils/cmoon.js) — so it can't be joined by players on their own. Admins can still
+  // place a player into it directly (POST /api/admin/users/[id]/update-cmoon, unaffected by this
+  // flag), cToons can still be display-assigned to it, and its own /newsite/cmoon/[id] page and
+  // member-facing features (points, ranks, role sync) work exactly like any other cMoon. Named
+  // `joinLocked` rather than `locked` to avoid reading like the unrelated per-copy
+  // UserCtoon.lockedByUserId concept in server/utils/lockRules.js.
+  joinLocked    Boolean  @default(false)
+
   // Public "cMoon page" content (/newsite/cmoon/[id]) — a display/catalog feature, independent
   // of the cMoonEnabled faction-join flag above. pageImagePath is exactly 800x600, matching CZone.
   pageImagePath   String?
