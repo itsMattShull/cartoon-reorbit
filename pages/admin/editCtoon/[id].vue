@@ -54,8 +54,8 @@
         <div>
           <label class="block mb-1 font-medium">Series</label>
           <input v-model="series" list="series-list" required class="w-full border rounded p-2" />
-          <datalist id="series-list">
-            <option v-for="opt in seriesOptions" :key="opt" :value="opt" />
+          <datalist v-if="series.length >= 3" id="series-list">
+            <option v-for="opt in filteredSeriesOptions" :key="opt" :value="opt" />
           </datalist>
         </div>
 
@@ -200,7 +200,10 @@
         <!-- Set -->
         <div>
           <label class="block mb-1 font-medium">Set</label>
-          <input v-model="setField" required class="w-full border rounded p-2" />
+          <input v-model="setField" list="sets-list" required class="w-full border rounded p-2" />
+          <datalist v-if="setField.length >= 3" id="sets-list">
+            <option v-for="opt in filteredSetsOptions" :key="opt" :value="opt" />
+          </datalist>
         </div>
 
         <!-- Description -->
@@ -361,9 +364,25 @@ const selectedAbility = computed(() =>
 /* validation errors */
 const err = reactive({ cost:'', power:'', image:'', sound:'' })
 
-/* series + rarity lists */
+/* series + set + rarity lists */
 const seriesOptions = ref([])
+const setsOptions = ref([])
 const rarityOptions = ['Common','Uncommon','Rare','Very Rare','Crazy Rare','Prize Only','Code Only','Auction Only']
+
+// only show suggestions once the user has typed ≥3 chars
+const filteredSeriesOptions = computed(() => {
+  if (series.value.length < 3) return []
+  return seriesOptions.value.filter(opt =>
+    opt.toLowerCase().includes(series.value.toLowerCase())
+  )
+})
+
+const filteredSetsOptions = computed(() => {
+  if (setField.value.length < 3) return []
+  return setsOptions.value.filter(opt =>
+    opt.toLowerCase().includes(setField.value.toLowerCase())
+  )
+})
 const releasePercent = ref(75)
 const delayHours = ref(12)
 
@@ -452,7 +471,7 @@ onMounted(async ()=>{
 
     name.value = ctoon.name
     type.value = ctoon.type
-    series.value = ctoon.series
+    series.value = ctoon.series || ''
     rarity.value = ctoon.rarity
     cMoonId.value = ctoon.cMoonId || null
     price.value = ctoon.price
@@ -462,7 +481,7 @@ onMounted(async ()=>{
     initialQuantity.value = ctoon.initialQuantity
     inCmart.value = ctoon.inCmart
     assetPath.value = ctoon.assetPath
-    setField.value = ctoon.set
+    setField.value = ctoon.set || ''
     characters.value = (ctoon.characters||[]).join(', ')
     description.value = ctoon.description || ''
     mintLimitType.value = ctoon.mintLimitType || 'defined'
@@ -498,8 +517,12 @@ onMounted(async ()=>{
       if(param != null) abilityParam.value = param
     }
 
-    const sRes = await fetch('/api/admin/series',{credentials:'include'})
+    const [sRes, setsRes] = await Promise.all([
+      fetch('/api/admin/series',{credentials:'include'}),
+      fetch('/api/admin/sets',{credentials:'include'})
+    ])
     seriesOptions.value = await sRes.json()
+    setsOptions.value = (await setsRes.json()).filter(Boolean)
 
     try {
       const rdRes = await fetch('/api/rarity-defaults')
