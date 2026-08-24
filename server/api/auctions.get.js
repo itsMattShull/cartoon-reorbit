@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
           userId: true,
           ctoonId: true,
           mintNumber: true,
-          ctoon: { select: { name: true, series: true, set: true, rarity: true, isGtoon: true, cost: true, power: true, assetPath: true, characters: true, isSecondEdition: true, secondEditionOverlayX: true, secondEditionOverlayY: true, secondEditionOverlaySize: true } }
+          ctoon: { select: { name: true, series: true, set: true, rarity: true, isGtoon: true, cost: true, power: true, assetPath: true, characters: true, isSecondEdition: true, secondEditionOverlayX: true, secondEditionOverlayY: true, secondEditionOverlaySize: true, cMoon: { select: { id: true, name: true, color: true } } } }
         }
       },
       bids: { select: { amount: true }, orderBy: { amount: 'desc' }, take: 1 },
@@ -69,6 +69,7 @@ export default defineEventHandler(async (event) => {
     ctoonId:      a.userCtoon.ctoonId,
     name:         a.userCtoon.ctoon.name,
     set:          a.userCtoon.ctoon.set,
+    cMoon:        a.userCtoon.ctoon.cMoon,
     series:       a.userCtoon.ctoon.series,
     rarity:       a.userCtoon.ctoon.rarity,
     isGtoon:      a.userCtoon.ctoon.isGtoon,

@@ -12,6 +12,8 @@ export const NEW_SITE_CTOON_FILTER_DEFAULTS = {
   rarities:        [],
   series:          '',
   set:             '',
+  // '' = no filter, '__none__' = cToons with no cMoon assigned, else a cMoon id.
+  cMoon:           '',
   priceMin:        '',
   priceMax:        '',
   sortField:       'acquiredAt',

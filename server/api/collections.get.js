@@ -23,7 +23,7 @@ export default defineEventHandler(async (event) => {
   const userCtoons = await prisma.userCtoon.findMany({
     where: { userId: me.id },
     include: {
-      ctoon: true,
+      ctoon: { include: { cMoon: { select: { id: true, name: true, color: true } } } },
       auctions: { where: { status: 'ACTIVE' }, select: { id: true } }
     }
   })
@@ -93,6 +93,7 @@ export default defineEventHandler(async (event) => {
     price: uc.ctoon.price,
     rarity: uc.ctoon.rarity,
     set: uc.ctoon.set,
+    cMoon: uc.ctoon.cMoon,
     isGtoon: uc.ctoon.isGtoon,
     cost: uc.ctoon.cost,
     power: uc.ctoon.power,

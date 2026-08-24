@@ -256,6 +256,11 @@ const ctoons = computed(() => {
   if (f.set)
     list = list.filter(c => c.set === f.set)
 
+  if (f.cMoon === '__none__')
+    list = list.filter(c => !c.cMoon)
+  else if (f.cMoon)
+    list = list.filter(c => c.cMoon?.id === f.cMoon)
+
   if (f.priceMin !== '')
     list = list.filter(c => c.price >= Number(f.priceMin))
 

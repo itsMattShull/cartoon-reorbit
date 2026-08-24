@@ -4,16 +4,18 @@ export const useTradePageFilters = () => {
   const tradeCurrentStep = useState('tradeCurrentStep', () => 1)
 
   const tradeFiltersOther = useState('tradeFiltersOther', () => ({
-    nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all'
+    nameQuery: '', set: 'All', series: 'All', cMoon: 'All', rarity: 'All', duplicates: 'all', owned: 'all'
   }))
   const tradeFiltersSelf = useState('tradeFiltersSelf', () => ({
-    nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all', wishlistOnly: false
+    nameQuery: '', set: 'All', series: 'All', cMoon: 'All', rarity: 'All', duplicates: 'all', owned: 'all', wishlistOnly: false
   }))
 
   const tradeSetOptionsOther = useState('tradeSetOptionsOther', () => ['All'])
   const tradeSetOptionsSelf = useState('tradeSetOptionsSelf', () => ['All'])
   const tradeSeriesOptionsOther = useState('tradeSeriesOptionsOther', () => ['All'])
   const tradeSeriesOptionsSelf = useState('tradeSeriesOptionsSelf', () => ['All'])
+  const tradeCMoonOptionsOther = useState('tradeCMoonOptionsOther', () => ['All', 'No cMoon'])
+  const tradeCMoonOptionsSelf = useState('tradeCMoonOptionsSelf', () => ['All', 'No cMoon'])
   const tradeRarityOptionsOther = useState('tradeRarityOptionsOther', () => ['All'])
   const tradeRarityOptionsSelf = useState('tradeRarityOptionsSelf', () => ['All'])
   const tradeNameSuggestionsOther = useState('tradeNameSuggestionsOther', () => [])
@@ -42,6 +44,8 @@ export const useTradePageFilters = () => {
     tradeSetOptionsSelf,
     tradeSeriesOptionsOther,
     tradeSeriesOptionsSelf,
+    tradeCMoonOptionsOther,
+    tradeCMoonOptionsSelf,
     tradeRarityOptionsOther,
     tradeRarityOptionsSelf,
     tradeNameSuggestionsOther,

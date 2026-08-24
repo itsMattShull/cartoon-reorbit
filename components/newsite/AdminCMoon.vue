@@ -37,6 +37,7 @@
               />
               <span v-else class="inline-block w-4 h-4 rounded-full border flex-shrink-0" :style="{ background: safeColor(c.color) }"></span>
               <span class="font-semibold break-words min-w-0">{{ c.name }}</span>
+              <span v-if="c.joinLocked" class="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Locked</span>
               <span class="text-[11px] text-gray-600">{{ c.memberCount }} member{{ c.memberCount === 1 ? '' : 's' }}</span>
               <!-- Kept together so they travel as a unit when the row wraps on narrow screens. -->
               <div class="ml-auto flex items-center gap-3 flex-shrink-0">
@@ -147,6 +148,17 @@
                 <option value="GLITCH">Glitch Effect</option>
                 <option value="SLIME">Slime Effect</option>
               </select>
+            </div>
+            <div>
+              <label class="flex items-center gap-2 cm-tap">
+                <input type="checkbox" v-model="form.joinLocked" />
+                <span class="text-xs font-medium">Locked</span>
+              </label>
+              <p class="text-[11px] text-gray-600 mt-1">
+                Hides this cMoon from the "choose your cMoon" list and quick-nav — players can't join it
+                themselves. Admins can still place a player into it via Admin: Manage Users, cToons can still
+                be assigned to it, and its cMoon page keeps working normally.
+              </p>
             </div>
           </div>
 
@@ -354,7 +366,7 @@ function effectLabel(type) {
 
 const editId = ref('')
 const formOpen = ref(false)
-const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', effectType: '', captainIds: [], prizeCtoons: [] })
+const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', effectType: '', joinLocked: false, captainIds: [], prizeCtoons: [] })
 const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
@@ -557,6 +569,7 @@ function startEdit(c) {
     discordRoleId: c.discordRoleId || '',
     pageDescription: c.pageDescription || '',
     effectType: c.effectType || '',
+    joinLocked: !!c.joinLocked,
     captainIds: c.captains.map(cap => cap.userId),
     prizeCtoons: c.prizeCtoons.map(p => ({ ctoonId: p.ctoonId, quantity: p.quantity })),
   })
@@ -719,6 +732,7 @@ async function save() {
       discordRoleId: form.discordRoleId.trim(),
       pageDescription: form.pageDescription,
       effectType: form.effectType || null,
+      joinLocked: form.joinLocked,
       captainIds: form.captainIds,
       prizeCtoons: form.prizeCtoons,
     }

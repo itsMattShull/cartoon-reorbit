@@ -18,6 +18,9 @@ export default defineEventHandler(async () => {
   const now = Date.now()
   if (!cachedList || (now - cachedAt) >= TTL_MS) {
     cachedList = await db.cMoon.findMany({
+      // Locked cMoons are hidden from this public list (the join modal and the cMoons quick-nav)
+      // but still fully functional — see CMoon.joinLocked in prisma/schema.prisma.
+      where: { joinLocked: false },
       orderBy: { name: 'asc' },
       select: { id: true, name: true, color: true, memberCount: true, imagePath: true, effectType: true },
     })

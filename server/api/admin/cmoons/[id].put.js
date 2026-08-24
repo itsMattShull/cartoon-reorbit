@@ -26,6 +26,7 @@ export default defineEventHandler(async (event) => {
   const effectType = body?.effectType === undefined
     ? cmoon.effectType
     : (body.effectType === '' ? null : body.effectType)
+  const joinLocked = body?.joinLocked === undefined ? cmoon.joinLocked : !!body.joinLocked
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   if (!isValidHexColor(color)) throw createError({ statusCode: 400, statusMessage: 'Color must be a hex value like #3366ff' })
@@ -62,7 +63,7 @@ export default defineEventHandler(async (event) => {
   await db.$transaction(async (tx) => {
     await tx.cMoon.update({
       where: { id },
-      data: { name, color, discordRoleId: discordRoleId || null, pageDescription, effectType },
+      data: { name, color, discordRoleId: discordRoleId || null, pageDescription, effectType, joinLocked },
     })
     if (captainIds) {
       await tx.cMoonCaptain.deleteMany({ where: { cMoonId: id } })
