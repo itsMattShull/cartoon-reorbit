@@ -6,7 +6,7 @@
     <div class="bg-white rounded-lg shadow-md p-6 max-w-4xl mx-auto">
       <!-- Tabs -->
       <div class="border-b mb-6">
-        <nav class="flex gap-4 overflow-x-auto whitespace-nowrap -mb-px hide-scrollbar">
+        <nav class="flex gap-4 overflow-x-auto whitespace-nowrap -mb-px">
           <button
             class="px-3 py-2 border-b-2"
             :class="activeTab==='Global Points' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
@@ -446,23 +446,61 @@
           Configure where Discord announcements for site events are posted. More announcement
           types may be added here over time.
         </p>
-        <div class="max-w-md">
-          <label for="czoneContestDiscordChannelId" class="block text-sm font-medium text-gray-700">
-            cZone Contest Winner Channel ID
-          </label>
-          <input
-            id="czoneContestDiscordChannelId"
-            v-model.trim="czoneContestDiscordChannelId"
-            type="text"
-            inputmode="numeric"
-            pattern="[0-9]*"
-            class="input"
-            placeholder="123456789012345678"
-          />
-          <p class="text-xs text-gray-500 mt-1">
-            When an admin distributes cZone Contest prizes, an announcement is posted here.
-            Leave blank to use the DISCORD_ANNOUNCEMENTS_CHANNEL environment variable.
-          </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div>
+            <label for="czoneContestDiscordChannelId" class="block text-sm font-medium text-gray-700">
+              cZone Contest Winner Channel ID
+            </label>
+            <input
+              id="czoneContestDiscordChannelId"
+              v-model.trim="czoneContestDiscordChannelId"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              class="input"
+              placeholder="123456789012345678"
+            />
+            <p class="text-xs text-gray-500 mt-1">
+              When an admin distributes cZone Contest prizes, an announcement is posted here.
+              Leave blank to use the DISCORD_ANNOUNCEMENTS_CHANNEL environment variable.
+            </p>
+          </div>
+          <div>
+            <label for="devPrDiscordChannelId" class="block text-sm font-medium text-gray-700">
+              Dev PR Messages Channel ID
+            </label>
+            <input
+              id="devPrDiscordChannelId"
+              v-model.trim="devPrDiscordChannelId"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              class="input"
+              placeholder="123456789012345678"
+            />
+            <p class="text-xs text-gray-500 mt-1">
+              Posts a message here when a pull request is opened or merged against this repo's
+              <code>dev</code> branch. Leave blank to disable.
+            </p>
+          </div>
+          <div>
+            <label for="prodPrDiscordChannelId" class="block text-sm font-medium text-gray-700">
+              Prod PR Messages Channel ID
+            </label>
+            <input
+              id="prodPrDiscordChannelId"
+              v-model.trim="prodPrDiscordChannelId"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              class="input"
+              placeholder="123456789012345678"
+            />
+            <p class="text-xs text-gray-500 mt-1">
+              Posts a message here when a pull request is opened or merged against this repo's
+              <code>master</code> branch. Leave blank to disable.
+            </p>
+          </div>
         </div>
         <div>
           <button class="btn-primary" :disabled="savingDiscord" @click="saveDiscord">
@@ -471,7 +509,7 @@
         </div>
       </section>
 
-      <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
+      <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded max-w-[90vw] text-center break-words',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
       </div>
@@ -494,6 +532,8 @@ const savingAuctions = ref(false)
 const savingCmart = ref(false)
 const savingDiscord = ref(false)
 const czoneContestDiscordChannelId = ref('')
+const devPrDiscordChannelId = ref('')
+const prodPrDiscordChannelId = ref('')
 
 // cMart state
 const firstAdditionalCzoneCost      = ref(25000)
@@ -606,6 +646,8 @@ async function loadGlobal() {
     secondEditionOverlayWidth.value  = g?.secondEditionOverlayWidth  ?? null
     secondEditionOverlayHeight.value = g?.secondEditionOverlayHeight ?? null
     czoneContestDiscordChannelId.value = g?.czoneContestDiscordChannelId ?? ''
+    devPrDiscordChannelId.value = g?.devPrDiscordChannelId ?? ''
+    prodPrDiscordChannelId.value = g?.prodPrDiscordChannelId ?? ''
     if (g?.timeBasedPurchaseLimits) {
       for (const r of timeBasedRarities) {
         const def = g.timeBasedPurchaseLimits[r]
@@ -778,7 +820,9 @@ async function saveDiscord() {
       method: 'POST',
       body: {
         dailyPointLimit: Number(dailyPointLimit.value),
-        czoneContestDiscordChannelId: czoneContestDiscordChannelId.value
+        czoneContestDiscordChannelId: czoneContestDiscordChannelId.value,
+        devPrDiscordChannelId: devPrDiscordChannelId.value,
+        prodPrDiscordChannelId: prodPrDiscordChannelId.value
       }
     })
     toast.value = { type: 'ok', msg: 'Discord settings saved.' }
@@ -814,6 +858,4 @@ async function saveDuplicateSettings() {
 .btn-primary:disabled{ opacity:.5 }
 .input { margin-top: .25rem; width: 100%; border: 1px solid #D1D5DB; border-radius: .375rem; padding: .5rem; outline: none }
 .input:focus { border-color: #6366F1; box-shadow: 0 0 0 1px #6366F1 }
-.hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
-.hide-scrollbar::-webkit-scrollbar { display: none; }
 </style>

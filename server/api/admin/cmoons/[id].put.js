@@ -1,14 +1,14 @@
 // server/api/admin/cmoons/[id].put.js
-import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
+import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
-import { isValidHexColor, isValidDiscordSnowflake } from '@/server/utils/cmoon'
+import { isValidHexColor, isValidDiscordSnowflake, isValidCMoonEffectType } from '@/server/utils/cmoon'
+import { invalidateCMoonList } from '@/server/api/cmoons.get'
+import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 
 export default defineEventHandler(async (event) => {
-  const cookie = getRequestHeader(event, 'cookie') || ''
-  let me
-  try { me = await $fetch('/api/auth/me', { headers: { cookie } }) } catch { throw createError({ statusCode: 401, statusMessage: 'Unauthorized' }) }
-  if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
+  const me = await requireAdmin(event)
+  assertSameOrigin(event)
 
   const id = event.context.params?.id
   const cmoon = await db.cMoon.findUnique({ where: { id } })
@@ -20,11 +20,20 @@ export default defineEventHandler(async (event) => {
   const discordRoleId = body?.discordRoleId === undefined ? cmoon.discordRoleId : (typeof body.discordRoleId === 'string' ? body.discordRoleId.trim() : '')
   const captainIds = Array.isArray(body?.captainIds) ? [...new Set(body.captainIds.filter(x => typeof x === 'string'))] : null
   const prizeCtoons = Array.isArray(body?.prizeCtoons) ? body.prizeCtoons : null
+  const pageDescription = body?.pageDescription === undefined
+    ? cmoon.pageDescription
+    : (typeof body.pageDescription === 'string' ? body.pageDescription.trim().slice(0, 2000) || null : null)
+  const effectType = body?.effectType === undefined
+    ? cmoon.effectType
+    : (body.effectType === '' ? null : body.effectType)
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   if (!isValidHexColor(color)) throw createError({ statusCode: 400, statusMessage: 'Color must be a hex value like #3366ff' })
   if (discordRoleId && !isValidDiscordSnowflake(discordRoleId)) {
     throw createError({ statusCode: 400, statusMessage: 'Discord Role ID must be a numeric snowflake' })
+  }
+  if (!isValidCMoonEffectType(effectType)) {
+    throw createError({ statusCode: 400, statusMessage: 'Invalid effect type' })
   }
 
   if (captainIds && captainIds.length) {
@@ -53,7 +62,7 @@ export default defineEventHandler(async (event) => {
   await db.$transaction(async (tx) => {
     await tx.cMoon.update({
       where: { id },
-      data: { name, color, discordRoleId: discordRoleId || null },
+      data: { name, color, discordRoleId: discordRoleId || null, pageDescription, effectType },
     })
     if (captainIds) {
       await tx.cMoonCaptain.deleteMany({ where: { cMoonId: id } })
@@ -66,6 +75,7 @@ export default defineEventHandler(async (event) => {
   })
 
   await logAdminChange(db, { userId: me.id, area: 'cMoon', key: `update:${id}`, prevValue: { name: cmoon.name, color: cmoon.color }, newValue: { name, color } })
+  invalidateCMoonList()
 
   return { ok: true }
 })

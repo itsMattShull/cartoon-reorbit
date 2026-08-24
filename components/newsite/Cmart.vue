@@ -426,7 +426,7 @@ function rarityInfo(rarity) {
 
 const ctoonModal = useCtoonModal()
 function openInfo(c) {
-  ctoonModal.open({ ctoonId: c.id, assetPath: c.assetPath, name: c.name })
+  ctoonModal.open({ ctoonId: c.id, assetPath: c.assetPath, name: c.name, context: { source: 'market' } })
 }
 
 const { user, fetchSelf } = useAuth()

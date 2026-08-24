@@ -78,6 +78,12 @@
             </div>
 
             <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">cMoon (optional)</label>
+              <CtoonCMoonSelect v-model="cMoonId" />
+              <p class="text-[11px] text-gray-500">If set, this cToon's modal (outside cMart/Auction) is redesigned in this cMoon's colors, with a link to its cMoon page.</p>
+            </div>
+
+            <div class="flex flex-col gap-1">
               <label class="text-xs font-medium">Name</label>
               <input v-model="name" type="text" required class="border rounded-md px-2 py-1.5 text-sm" placeholder="Enter cToon name" />
               <p class="text-[11px] text-gray-500">The display name for this cToon.</p>
@@ -339,6 +345,7 @@ const name = ref('')
 const series = ref('')
 const type = ref('')
 const rarity = ref('')
+const cMoonId = ref(null)
 const set = ref('')
 const characters = ref('')
 const releaseDate = ref('')
@@ -588,6 +595,7 @@ async function submitForm() {
   formData.append('series', series.value)
   formData.append('type', type.value)
   formData.append('rarity', rarity.value)
+  if (cMoonId.value) formData.append('cMoonId', cMoonId.value)
   formData.append('set', set.value)
   formData.append('characters', JSON.stringify(characters.value.split(',').map(c => c.trim())))
   // Convert admin-entered CST/CDT time to UTC

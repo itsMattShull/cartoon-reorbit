@@ -243,7 +243,14 @@ html.newsite-active body {
 <template>
   <div class="site-container" :class="{ 'site-container-fluid': fluidLayout }" :style="[{ gridTemplateRows: gridRows, gridTemplateColumns: gridColumns }, scaleStyle]">
     <div class="topbar" :style="isMobile ? { height: 'auto', overflow: 'visible', width: '100%' } : {}">
-      <div class="topbar-primary" :style="[{ visibility: showAdbar ? 'visible' : 'hidden' }, isMobile ? { width: '100%' } : {}]">
+      <div
+        class="topbar-primary"
+        :style="[
+          { visibility: showAdbar ? 'visible' : 'hidden' },
+          (!showAdbar && fluidLayout) ? { display: 'none' } : {},
+          isMobile ? { width: '100%' } : {}
+        ]"
+      >
         <div v-if="!isMobile" class="topbar-primary-logo"><ReorbitLogo /></div>
         <div class="topbar-primary-promolabel" :style="{ marginLeft: isMobile ? '0' : 'auto' }"><ClientOnly><PromoLabel /></ClientOnly></div>
         <div class="topbar-primary-promo" :style="isMobile ? { flex: '1', width: 'auto' } : {}"><ClientOnly><PromoSpot /></ClientOnly></div>
@@ -279,7 +286,7 @@ html.newsite-active body {
         <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-bottom-mt)' } : {}"><WinballPromo /></div>
       </template>
     </div>
-    <div class="main-content" :class="{ 'main-content-full': !showSidebar && !isMobile, 'main-content-expand': !showFooter }" :style="[{ border: mainContentBorder }, mainContentMobileStyle]"><slot /></div>
+    <div class="main-content" :class="{ 'main-content-full': !showSidebar && !isMobile, 'main-content-expand': !showFooter }" :style="[{ border: mainContentBorder, overflowY: mainContentScrollY }, mainContentMobileStyle]"><slot /></div>
     <div class="footer" :style="[{ display: showFooter ? '' : 'none' }, isMobile ? { width: '100%', height: 'auto', aspectRatio: '800 / 60' } : {}]"><slot name="footer" /></div>
     <CtoonInfoCard v-if="ctoonModalIsOpen" />
     <AuctionModal
@@ -300,6 +307,7 @@ html.newsite-active body {
        A permanently-visible unread badge would make it obvious. -->
   <Onboarding v-if="!ctoonModalIsOpen && !auctionModalIsOpen" />
   <CMoonSelectModal />
+  <FullscreenEffectHost />
 </template>
 
 <script setup>
@@ -353,6 +361,12 @@ const showNav = computed(() => route.meta.showNav !== false)
 const showSidebar = computed(() => route.meta.showSidebar !== false)
 const showFooter = computed(() => route.meta.showFooter !== false)
 const mainContentBorder = computed(() => route.meta.mainContentBorder === false ? 'none' : undefined)
+// Opt-in per-route: the fixed-chrome `.main-content` box is `overflow: hidden`
+// by design (the whole 1040x862 chrome is meant to fit one screen at its
+// scaled size), but a handful of pages have content whose length depends on
+// live data (e.g. cmoon's member/cToon counts) and can genuinely exceed it.
+// Those opt into an internal scrollbar instead of being silently clipped.
+const mainContentScrollY = computed(() => route.meta.mainContentScrollY === true ? 'auto' : undefined)
 
 
 // Pages that opt into `fluidLayout` (currently the admin console) escape the
@@ -453,7 +467,7 @@ onUnmounted(() => {
 })
 
 const mainContentMobileStyle = computed(() => {
-  if (fluidLayout.value) return { width: '100%', height: '100%', minHeight: '0' }
+  if (fluidLayout.value) return { width: '100%', height: 'auto' }
   if (!isMobile.value) return {}
   return {
     width: '100%',
@@ -505,8 +519,11 @@ const scaleStyle = computed(() => {
   overflow: hidden;
 }
 
-/* Fluid mode: full-viewport, no fixed track sizes, no clipping. Everything a
-   dense admin table or a `position: fixed` modal needs in order to behave. */
+/* Fluid mode: full-viewport width, no fixed track sizes, no clipping. The
+   height stays `auto` + `min-height` on purpose — the admin console has no
+   internal scroll region of its own; the nav rail and the section body both
+   grow with their content and the document scrolls as one, same as every
+   other page. */
 .site-container-fluid {
   width: 100%;
   min-width: 0;
@@ -519,9 +536,7 @@ const scaleStyle = computed(() => {
 
 .site-container-fluid .topbar,
 .site-container-fluid .topbar-primary,
-.site-container-fluid .topbar-nav,
-.site-container-fluid .topbar-nav-left,
-.site-container-fluid .topbar-nav-right {
+.site-container-fluid .topbar-nav {
   width: 100%;
   min-width: 0;
   max-width: 100%;
@@ -537,8 +552,7 @@ const scaleStyle = computed(() => {
   width: 100%;
   min-width: 0;
   max-width: 100%;
-  height: 100%;
-  min-height: 0;
+  height: auto;
   overflow: visible;
 }
 

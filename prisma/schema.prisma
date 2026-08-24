@@ -341,10 +341,14 @@ model Ctoon {
   // Achievements back‑relations
   achievementRewardCtoons    AchievementRewardCtoon[]
   achievementRequiredCtoons  AchievementRequiredCtoon[]
-  achievementClaimOptions    AchievementClaimOption[]
 
-  // cMoon back-relation
+  // cMoon back-relation (prize-on-join — distinct from the display assignment below)
   cMoonPrizeRows CMoonPrizeCtoon[]
+
+  // Optional cMoon this cToon is thematically displayed under (admin-assigned in the cToon
+  // editor). Purely a catalog/display categorization — unrelated to the player-faction system.
+  cMoonId String?
+  cMoon   CMoon?  @relation("CtoonCMoonDisplay", fields: [cMoonId], references: [id], onDelete: SetNull)
 
   cZoneSearchPrizeRows   CZoneSearchPrize[]
   cZoneSearchAppearances CZoneSearchAppearance[]
@@ -366,6 +370,7 @@ model Ctoon {
 
   @@index([isSecondEdition])
   @@index([name])
+  @@index([cMoonId])
 }
 
 model CtoonImageHash {
@@ -488,6 +493,16 @@ model User {
   // Set once the daily Discord sync grants this user's cMoon role, so the job
   // only touches never-synced members instead of re-checking everyone daily.
   cMoonRoleGrantedAt DateTime?
+  // Lifetime points contributed to the CURRENT cMoon: sum of 'increase' PointsLog rows
+  // since cMoonSelectedAt, kept in sync by a periodic cron (never decreases from spending,
+  // and naturally restarts at 0 when a user is reassigned to a different cMoon since the
+  // window is bounded by their current cMoonSelectedAt). See server/cron/cmoon-points-aggregate.js.
+  cMoonPoints            Int        @default(0)
+  currentCMoonRankId     String?
+  currentCMoonRank       CMoonRank? @relation(fields: [currentCMoonRankId], references: [id], onDelete: SetNull)
+  // Mirrors cMoonRoleGrantedAt but for the rank's own Discord role, granted by the same
+  // nightly reconciliation cron (syncCMoonDiscordRoles) rather than synchronously on unlock.
+  cMoonRankRoleGrantedAt DateTime?
 
   cZones                    CZone[]
   clashDecks                ClashDeck[]
@@ -637,12 +652,15 @@ model User {
   fruitSamuraiPlays  FruitSamuraiPlay[]
 
   // cMoon (faction) relations
-  cMoonCaptainOf    CMoonCaptain[]
-  achievementClaims AchievementClaim[]
+  cMoonCaptainOf         CMoonCaptain[]
+  achievementClaims      AchievementClaim[]
+  dailyTaskCompletions   UserDailyTaskCompletion[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
   @@index([cMoonId])
   @@index([cMoonId, cMoonRoleGrantedAt])
+  @@index([currentCMoonRankId])
+  @@index([cMoonId, cMoonRankRoleGrantedAt])
 }
 
 model CtoonUserSuggestion {
@@ -995,6 +1013,7 @@ model GamePointLog {
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId, gameName, createdAt])
+  @@index([createdAt])
 }
 
 model PointsLog {
@@ -1009,6 +1028,7 @@ model PointsLog {
   user User @relation(fields: [userId], references: [id])
 
   @@index([createdAt])
+  @@index([userId, direction, createdAt])
 }
 
 model GameConfig {
@@ -1378,6 +1398,8 @@ model GlobalGameConfig {
   rarityDefaults                 Json?
   achievementDiscordChannelId    String?
   czoneContestDiscordChannelId   String?
+  devPrDiscordChannelId          String? // posts PR opened/merged notices for the dev branch
+  prodPrDiscordChannelId         String? // posts PR opened/merged notices for the master branch
   // Scavenger Hunt settings
   scavengerChancePercent         Int     @default(5) // 0–100; 0 disables
   scavengerCooldownHours         Int     @default(24) // cooldown between completed hunts per user
@@ -1946,6 +1968,7 @@ model WheelSpinLog {
 
   @@index([userId, createdAt])
   @@index([ctoonId])
+  @@index([createdAt])
 }
 
 model WinWheelOption {
@@ -2683,12 +2706,21 @@ model Achievement {
   setsRequired                String[] // complete ALL sets in this array
   userCreatedBefore           DateTime? // user must have signed up before this date (strictly earlier)
   discordRoleName             String?
+  // Points contributed to the user's CURRENT cMoon (User.cMoonPoints) — only meaningful
+  // paired with cMoonRankId, since it implicitly scopes this achievement to members of that
+  // rank's cMoon. See evaluateUserAgainstAchievement.
+  cMoonPointsGte               Int?
+  // Reward: on unlock, grants this cMoon rank (only if it outranks the user's current rank —
+  // see awardAchievementToUser) instead of/in addition to `rewards`. Mutually exclusive with
+  // isClaimable — a rank-up always auto-grants, it's never a claim-your-prize choice.
+  cMoonRankId                  String?
   // When true, unlocking this achievement does NOT auto-grant `rewards` —
   // instead the user picks exactly one of `claimOptions` (up to 4) via the claim UI.
   isClaimable                 Boolean   @default(false)
   createdAt                   DateTime  @default(now())
   updatedAt                   DateTime  @updatedAt
 
+  cMoonRank      CMoonRank?                 @relation(fields: [cMoonRankId], references: [id], onDelete: Restrict)
   rewards        AchievementReward[]
   users          AchievementUser[]
   requiredCtoons AchievementRequiredCtoon[]
@@ -2700,13 +2732,17 @@ model AchievementClaimOption {
   id            String  @id @default(uuid())
   achievementId String
   label         String
-  points        Int     @default(0)
-  ctoonId       String?
-  quantity      Int     @default(1)
+  // Each option is its own reward bundle (points + ctoons + backgrounds), reusing the same
+  // AchievementReward/AchievementRewardCtoon/AchievementRewardBackground shape and grant
+  // logic as a normal (non-claimable) achievement reward — see grantReward() in
+  // server/utils/achievements.js. Restrict: an option's reward can't be deleted out from
+  // under it; delete the option first (which explicitly deletes its reward in the same
+  // transaction — see the admin claim-option delete endpoint).
+  rewardId      String  @unique
   sortOrder     Int     @default(0)
 
   achievement Achievement        @relation(fields: [achievementId], references: [id], onDelete: Cascade)
-  ctoon       Ctoon?             @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  reward      AchievementReward  @relation(fields: [rewardId], references: [id], onDelete: Restrict)
   claims      AchievementClaim[]
 
   @@index([achievementId, sortOrder])
@@ -2777,6 +2813,9 @@ model AchievementReward {
   achievement Achievement                   @relation(fields: [achievementId], references: [id], onDelete: Cascade)
   ctoons      AchievementRewardCtoon[]
   backgrounds AchievementRewardBackground[]
+  // Set only when this reward is owned by one AchievementClaimOption instead of being the
+  // achievement's own auto-grant reward (never both — see AchievementClaimOption.rewardId).
+  claimOption AchievementClaimOption?
 }
 
 model AchievementRewardCtoon {
@@ -2805,21 +2844,78 @@ model AchievementRewardBackground {
 }
 
 // cMoon — admin-managed factions. Off by default via GlobalGameConfig.cMoonEnabled.
+// Full-screen visual played on this cMoon's behalf at two moments: right after a user confirms
+// this cMoon in the "choose your cMoon" modal, and right after a member claims an achievement
+// prize option (server/utils/achievements.js / components/effects/FullscreenEffectHost.vue).
+// Closed set of pre-built animations, not user/admin-authored content — see effectType below.
+enum CMoonEffectType {
+  GLITCH
+  SLIME
+}
+
 model CMoon {
-  id            String   @id @default(uuid())
-  name          String   @unique
-  color         String // "#RRGGBB", validated server-side; used as text color
+  id            String           @id @default(uuid())
+  name          String           @unique
+  color         String // "#RRGGBB", validated server-side; used as text color, and as the base
+  // color a palette is derived from for the cMoon page + themed cToon modals (see utils/cmoonPalette.js).
   discordRoleId String? // Discord role snowflake granted to members (add-only sync)
+  // Optional full-screen animation played on cMoon-select and achievement-claim (see enum above).
+  // Null = no effect, proceed immediately.
+  effectType    CMoonEffectType?
+  // Public "choose your cMoon" poster art. Server-normalized to a fixed 2:3 webp on upload
+  // (see server/api/admin/cmoons/[id]/image.post.js) — null falls back to the color swatch.
+  imagePath     String?
   // Denormalized to avoid COUNT(*) races/scans on every selection + the daily auto-assign job.
   memberCount   Int      @default(0)
+  // Cumulative cMoon team leaderboard score (server/utils/cmoon.js weekly scoring). Never
+  // resets — a running season total incremented by CMoonScoreLog-backed awards.
+  teamScore     Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  members     User[]
-  captains    CMoonCaptain[]
-  prizeCtoons CMoonPrizeCtoon[]
+  // Public "cMoon page" content (/newsite/cmoon/[id]) — a display/catalog feature, independent
+  // of the cMoonEnabled faction-join flag above. pageImagePath is exactly 800x600, matching CZone.
+  pageImagePath   String?
+  pageImageWidth  Int?
+  pageImageHeight Int?
+  pageDescription String?
+  // Small wide banner graphic (normalized to 800x200) shown on a themed cToon
+  // modal in place of the plain "cWorld" text tile, linking to the page above.
+  bannerImagePath String?
+
+  members         User[]
+  captains        CMoonCaptain[]
+  prizeCtoons     CMoonPrizeCtoon[]
+  scoreLogs       CMoonScoreLog[]
+  ranks           CMoonRank[]
+  // cToons thematically displayed under this cMoon (admin-assigned in the cToon editor). Distinct
+  // from `members`/`prizeCtoons`, which are about the player-faction feature, not catalog display.
+  displayedCtoons Ctoon[]           @relation("CtoonCMoonDisplay")
 
   @@index([memberCount])
+  @@index([teamScore])
+}
+
+// Admin-editable rank ladder for one cMoon (e.g. Private -> Sergeant -> Lieutenant).
+// sortOrder defines the ladder: a user's displayed rank is always the highest-sortOrder
+// CMoonRank they've unlocked for their CURRENT cMoon (see User.currentCMoonRankId). Ranks
+// are granted exclusively via an Achievement's cMoonRankId reward — this model only holds
+// the rank's identity (name/order/Discord role), not the point threshold to reach it.
+model CMoonRank {
+  id            String   @id @default(uuid())
+  cMoonId       String
+  name          String
+  sortOrder     Int      @default(0)
+  discordRoleId String? // snowflake, granted the same add-only way as CMoon.discordRoleId — see syncCMoonDiscordRoles
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  cMoon        CMoon         @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  achievements Achievement[]
+  holders      User[]
+
+  @@unique([cMoonId, name])
+  @@unique([cMoonId, sortOrder])
 }
 
 model CMoonCaptain {
@@ -2845,6 +2941,44 @@ model CMoonPrizeCtoon {
 
   @@unique([cMoonId, ctoonId])
   @@index([ctoonId])
+}
+
+// One row per (user, day) where the user completed at least one of the existing daily tasks
+// (see server/utils/dailyTaskWindows.js for the shared boundary logic with
+// server/api/onboarding/daily.get.js). Populated by a daily cron, restricted to users who
+// currently belong to a cMoon — this table only exists to feed the weekly cMoon scoring job's
+// "10 pts/player/day completed" bonus, so non-cMoon users are never recorded.
+model UserDailyTaskCompletion {
+  id        String   @id @default(uuid())
+  userId    String
+  date      DateTime // the daily boundary/window start this completion belongs to
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([date])
+}
+
+// Append-only audit log of every cMoon team-score award (server/utils/cmoon.js). The unique
+// constraint is the idempotency guard: a retried or overlapping cron run can insert the same
+// (cMoon, player, category, week, detail) award at most once, so CMoon.teamScore can never be
+// double-credited. `detail` disambiguates within a category — a game name for HIGH_SCORE, a
+// board name for TOP10, an ISO date for DAILY_TASK.
+model CMoonScoreLog {
+  id        String   @id @default(uuid())
+  cMoonId   String
+  userId    String?
+  category  String // 'HIGH_SCORE' | 'DAILY_TASK' | 'TOP10'
+  detail    String?
+  points    Int
+  weekStart DateTime // the Monday (America/Chicago) this award belongs to
+  createdAt DateTime @default(now())
+
+  cMoon CMoon @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+
+  @@unique([cMoonId, userId, category, weekStart, detail])
+  @@index([weekStart])
 }
 
 model AchievementRequiredCtoon {
@@ -3119,6 +3253,7 @@ model UserBarcodeScan {
   @@index([userId, mappingId])
   @@index([configId])
   @@index([nextAvailableAt])
+  @@index([lastScannedAt])
 }
 
 model UserScan {

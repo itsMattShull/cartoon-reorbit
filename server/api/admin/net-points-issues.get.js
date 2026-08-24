@@ -2,8 +2,10 @@
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
+import { transferExclusionSql } from '@/server/utils/pointsLogCategories'
 
 const CACHE_TTL_SECONDS = 1800 // 30 minutes
+const EXCLUSION_SQL = transferExclusionSql()
 
 export default defineEventHandler(async (event) => {
   // 1) Admin check
@@ -25,7 +27,7 @@ export default defineEventHandler(async (event) => {
     : 'daily'
 
   // 3) Cache check
-  const cacheKey = `admin:net-points-issues:${timeframe}:${groupBy}`
+  const cacheKey = `admin:net-points-issues:v2:${timeframe}:${groupBy}`
   try {
     const hit = await redis.get(cacheKey)
     if (hit) return JSON.parse(hit)
@@ -65,6 +67,7 @@ export default defineEventHandler(async (event) => {
           FROM "PointsLog"
           WHERE "createdAt" >= (SELECT start_wk FROM bounds)
             AND "createdAt" <  (SELECT end_wk   FROM bounds) + INTERVAL '1 week'
+            AND ${EXCLUSION_SQL}
           GROUP BY 1
         ),
         joined AS (
@@ -118,6 +121,7 @@ export default defineEventHandler(async (event) => {
           FROM "PointsLog"
           WHERE "createdAt" >= (SELECT start_mo FROM bounds)
             AND "createdAt" <  (SELECT end_mo   FROM bounds) + INTERVAL '1 month'
+            AND ${EXCLUSION_SQL}
           GROUP BY 1
         ),
         joined AS (
@@ -170,6 +174,7 @@ export default defineEventHandler(async (event) => {
         FROM "PointsLog"
         WHERE "createdAt" >= (SELECT start_day FROM bounds)
           AND "createdAt" <  (SELECT end_day   FROM bounds) + INTERVAL '1 day'
+          AND ${EXCLUSION_SQL}
         GROUP BY 1
       ),
       joined AS (

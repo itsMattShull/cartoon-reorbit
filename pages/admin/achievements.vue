@@ -116,6 +116,33 @@
                 <input v-model="form.criteria.userCreatedBefore" type="date" class="w-full border rounded px-2 py-1 max-w-xs" />
                 <p class="text-xs text-gray-500 mt-1">Users with an account created strictly earlier than this date qualify.</p>
               </div>
+              <div>
+                <label class="block text-sm">cMoon Points Contributed ≥</label>
+                <input v-model.number="form.criteria.cMoonPointsGte" type="number" min="0" class="w-full border rounded px-2 py-1" :disabled="form.isClaimable" />
+                <p class="text-xs text-gray-500 mt-1">Requires picking the cMoon rank to grant, below — only members of that cMoon are eligible.</p>
+              </div>
+            </div>
+
+            <h3 class="text-lg font-semibold mt-6">cMoon Rank Reward (optional)</h3>
+            <p class="text-xs text-gray-500">
+              Auto-grants a rank in one cMoon's ladder when the points threshold above is met (only for
+              members of that cMoon). Mutually exclusive with the claimable reward below.
+            </p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-1 max-w-xl">
+              <div>
+                <label class="block text-sm">cMoon</label>
+                <select v-model="cMoonPickerId" @change="form.cMoonRankId = ''" class="w-full border rounded px-2 py-1" :disabled="form.isClaimable">
+                  <option value="">— none —</option>
+                  <option v-for="c in cmoons" :key="c.id" :value="c.id">{{ c.name }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-sm">Rank</label>
+                <select v-model="form.cMoonRankId" class="w-full border rounded px-2 py-1" :disabled="form.isClaimable || !cMoonPickerId">
+                  <option value="">— none —</option>
+                  <option v-for="r in ranksForPickedCMoon" :key="r.id" :value="r.id">{{ r.name }}</option>
+                </select>
+              </div>
             </div>
           <div class="mt-3">
             <label class="block text-sm">Set completion (AND):</label>
@@ -174,98 +201,30 @@
             </div>
           </div>
 
-            <h3 class="text-lg font-semibold mt-6">Rewards</h3>
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label class="block text-sm">Points</label>
-                <input v-model.number="form.rewards.points" type="number" min="0" class="w-full border rounded px-2 py-1" />
-              </div>
-            <div class="md:col-span-2">
-              <label class="block text-sm">Add cToon reward</label>
-              <div class="flex gap-2 items-center">
-                <datalist id="ach-ctoon-list">
-                  <option v-for="c in filteredCtoons(ctoonSelection.name)" :key="c.id" :value="c.name" />
-                </datalist>
-                <input
-                  v-model="ctoonSelection.name"
-                  list="ach-ctoon-list"
-                  class="border rounded px-2 py-1 w-full"
-                  placeholder="Type 3+ characters to search"
-                />
-                <input v-model.number="ctoonSelection.qty" type="number" min="1" class="w-24 border rounded px-2 py-1" />
-                <button type="button" class="px-3 py-1 border rounded" @click="addCtoon">Add</button>
-              </div>
-              <div class="text-sm mt-1" v-if="form.rewards.ctoons.length">
-                <div v-for="(r, i) in form.rewards.ctoons" :key="r.ctoonId" class="flex items-center gap-2">
-                  <span>{{ nameForCtoon(r.ctoonId) }} × {{ r.quantity }}</span>
-                  <button type="button" class="text-red-600" @click="form.rewards.ctoons.splice(i,1)">Remove</button>
-                </div>
-              </div>
-            </div>
-            </div>
+            <template v-if="!form.isClaimable">
+              <h3 class="text-lg font-semibold mt-6">Rewards</h3>
+              <AchievementRewardBundleEditor :model-value="form.rewards" :ctoons="ctoons" :backgrounds="backgrounds" />
+            </template>
 
-          <div class="mt-3">
-            <label class="block text-sm">Backgrounds</label>
-            <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 max-h-48 overflow-auto border p-2 rounded">
-              <button
-                v-for="b in backgrounds"
-                :key="b.id"
-                type="button"
-                class="relative focus:outline-none"
-                @click="toggleBg(b.id)"
-                :title="b.label || 'Background'"
-              >
-                <img
-                  :src="b.imagePath"
-                  :alt="b.label || 'Background'"
-                  class="w-20 h-14 object-cover rounded border"
-                  :class="bgSelection.includes(b.id) ? 'ring-2 ring-blue-600' : ''"
-                />
-                <div v-if="bgSelection.includes(b.id)" class="absolute inset-0 bg-blue-500/20 rounded pointer-events-none"></div>
+            <h3 class="text-lg font-semibold mt-6">Claimable Reward (optional)</h3>
+            <div class="flex items-center gap-2">
+              <input type="checkbox" v-model="form.isClaimable" id="isClaimable" :disabled="!!form.cMoonRankId" />
+              <label for="isClaimable">User picks 1 of up to 4 reward bundles instead of auto-granting the Rewards above</label>
+            </div>
+            <div v-if="form.isClaimable" class="mt-2 space-y-3">
+              <div v-for="(opt, i) in form.claimOptions" :key="i" class="border rounded p-2">
+                <div class="flex items-center gap-2 mb-2">
+                  <label class="text-xs flex-1">Label
+                    <input v-model="opt.label" class="w-full border rounded px-2 py-1 mt-1" placeholder="Option name" />
+                  </label>
+                  <button type="button" class="text-red-600 px-2 py-1 text-sm" @click="removeClaimOption(i)">Remove</button>
+                </div>
+                <AchievementRewardBundleEditor :model-value="opt" :ctoons="ctoons" :backgrounds="backgrounds" />
+              </div>
+              <button v-if="form.claimOptions.length < 4" type="button" class="px-3 py-1 border rounded" @click="addClaimOption">
+                Add option ({{ form.claimOptions.length }}/4)
               </button>
             </div>
-          </div>
-
-          <h3 class="text-lg font-semibold mt-6">Claimable Reward (optional)</h3>
-          <div class="flex items-center gap-2">
-            <input type="checkbox" v-model="form.isClaimable" id="isClaimable" />
-            <label for="isClaimable">User picks 1 of up to 4 reward options instead of auto-granting the Rewards above</label>
-          </div>
-          <div v-if="form.isClaimable" class="mt-2 space-y-3">
-            <div v-for="(opt, i) in form.claimOptions" :key="i" class="border rounded p-2 grid grid-cols-1 md:grid-cols-4 gap-2 items-end">
-              <div>
-                <label class="block text-xs">Label</label>
-                <input v-model="opt.label" class="w-full border rounded px-2 py-1" placeholder="Option name" />
-              </div>
-              <div>
-                <label class="block text-xs">Points</label>
-                <input v-model.number="opt.points" type="number" min="0" class="w-full border rounded px-2 py-1" />
-              </div>
-              <div>
-                <label class="block text-xs">cToon</label>
-                <datalist :id="`claim-ctoon-list-${i}`">
-                  <option v-for="c in filteredCtoons(opt.ctoonName)" :key="c.id" :value="c.name" />
-                </datalist>
-                <input
-                  v-model="opt.ctoonName"
-                  :list="`claim-ctoon-list-${i}`"
-                  class="w-full border rounded px-2 py-1"
-                  placeholder="Type 3+ chars"
-                  @change="setClaimOptionCtoon(opt, opt.ctoonName)"
-                />
-              </div>
-              <div class="flex items-end gap-2">
-                <div class="flex-1">
-                  <label class="block text-xs">Qty</label>
-                  <input v-model.number="opt.quantity" type="number" min="1" class="w-full border rounded px-2 py-1" />
-                </div>
-                <button type="button" class="text-red-600 px-2 py-1" @click="removeClaimOption(i)">Remove</button>
-              </div>
-            </div>
-            <button v-if="form.claimOptions.length < 4" type="button" class="px-3 py-1 border rounded" @click="addClaimOption">
-              Add option ({{ form.claimOptions.length }}/4)
-            </button>
-          </div>
           </div>
           <div class="px-4 py-3 border-t flex gap-3 justify-end">
             <button type="button" class="px-4 py-2 border rounded" @click="closeForm">Cancel</button>
@@ -333,18 +292,25 @@ const ctoons = computed(() => ctoonsData.value || [])
 const backgrounds = computed(() => backgroundsData.value || [])
 const setsOptions = computed(() => setsData.value || [])
 
+// cMoon + rank picker for the "cMoon Rank Reward" section.
+const { data: cmoonsData } = await useFetch('/api/admin/cmoons')
+const cmoons = computed(() => cmoonsData.value?.cmoons || [])
+const cMoonPickerId = ref('')
+const ranksForPickedCMoon = computed(() => cmoons.value.find(c => c.id === cMoonPickerId.value)?.ranks || [])
+
 const editId = ref('')
 const showForm = ref(false)
 const showSettings = ref(false)
 const imageInput = ref(null)
 const setInput = ref('')
-const bgSelection = ref([])
-const ctoonSelection = ref({ name: '', qty: 1 })
 const ctoonsRequiredInput = ref('')
 const showCtoonsRequiredDropdown = ref(false)
 
+const emptyRewardBundle = () => ({ points: 0, ctoons: [], backgrounds: [] })
+
 const emptyForm = () => ({
   title: '', slug: '', description: '', isActive: true, notifyDiscord: false, discordRoleName: '',
+  cMoonRankId: '',
   criteria: {
     pointsGte: null,
     totalCtoonsGte: null,
@@ -358,11 +324,12 @@ const emptyForm = () => ({
     wordleWinsGte: null,
     wordleCurrentStreakGte: null,
     flappyBestScoreGte: null,
+    cMoonPointsGte: null,
     setsRequired: [],
     ctoonsRequired: [],
     userCreatedBefore: null
   },
-  rewards: { points: 0, ctoons: [], backgrounds: [] },
+  rewards: emptyRewardBundle(),
   isClaimable: false,
   claimOptions: []
 })
@@ -375,8 +342,7 @@ const settingsSaving = ref(false)
 function resetForm() {
   Object.assign(form, emptyForm())
   editId.value = ''
-  bgSelection.value = []
-  ctoonSelection.value = { name: '', qty: 1 }
+  cMoonPickerId.value = ''
   ctoonsRequiredInput.value = ''
   showCtoonsRequiredDropdown.value = false
   if (imageInput.value) imageInput.value.value = ''
@@ -441,23 +407,6 @@ function filteredSetOptions(input) {
   return (setsOptions.value || []).filter(opt => String(opt || '').toLowerCase().includes(v))
 }
 
-function nameForCtoon(id) {
-  const c = ctoons.value.find(c => c.id === id)
-  return c ? c.name : id
-}
-
-function filteredCtoons(input) {
-  const v = String(input || '').trim().toLowerCase()
-  if (v.length < 3) return []
-  return (ctoons.value || []).filter(ct => ct.name.toLowerCase().includes(v))
-}
-
-function findCtoonByName(name) {
-  const v = String(name || '').trim()
-  if (!v) return null
-  return (ctoons.value || []).find(ct => ct.name === v) || null
-}
-
 const filteredCtoonsRequired = computed(() => {
   const v = String(ctoonsRequiredInput.value || '').trim().toLowerCase()
   if (v.length < 3) return []
@@ -477,36 +426,12 @@ function hideCtoonsRequiredDropdown() {
   setTimeout(() => { showCtoonsRequiredDropdown.value = false }, 150)
 }
 
-function addCtoon() {
-  const match = findCtoonByName(ctoonSelection.value.name)
-  if (!match) {
-    alert('Please select a valid cToon from suggestions (type at least 3 characters).')
-    return
-  }
-  const qty = Math.max(1, Number(ctoonSelection.value.qty || 1))
-  form.rewards.ctoons.push({ ctoonId: match.id, quantity: qty })
-  ctoonSelection.value = { name: '', qty: 1 }
-}
-
-const claimOptionCtoonInput = ref('')
 function addClaimOption() {
   if (form.claimOptions.length >= 4) return
-  form.claimOptions.push({ label: '', points: 0, ctoonId: '', ctoonName: '', quantity: 1 })
+  form.claimOptions.push({ label: '', ...emptyRewardBundle() })
 }
 function removeClaimOption(i) {
   form.claimOptions.splice(i, 1)
-}
-function setClaimOptionCtoon(opt, name) {
-  const match = ctoons.value.find(c => c.name === name)
-  if (!match) return
-  opt.ctoonId = match.id
-  opt.ctoonName = match.name
-}
-
-function toggleBg(id) {
-  const i = bgSelection.value.indexOf(id)
-  if (i >= 0) bgSelection.value.splice(i, 1)
-  else bgSelection.value.push(id)
 }
 
 function startEdit(a) {
@@ -518,6 +443,7 @@ function startEdit(a) {
     isActive: !!a.isActive,
     notifyDiscord: !!a.notifyDiscord,
     discordRoleName: a.discordRoleName || '',
+    cMoonRankId: a.cMoonRankId || '',
     criteria: {
       pointsGte: a.pointsGte ?? null,
       totalCtoonsGte: a.totalCtoonsGte ?? null,
@@ -531,6 +457,7 @@ function startEdit(a) {
       wordleWinsGte: a.wordleWinsGte ?? null,
       wordleCurrentStreakGte: a.wordleCurrentStreakGte ?? null,
       flappyBestScoreGte: a.flappyBestScoreGte ?? null,
+      cMoonPointsGte: a.cMoonPointsGte ?? null,
       setsRequired: [...(a.setsRequired || [])],
       ctoonsRequired: (a.ctoonsRequired || []).map(r => ({ ctoonId: r.ctoonId, name: r.name, assetPath: r.assetPath || null })),
       userCreatedBefore: a.userCreatedBefore ? String(a.userCreatedBefore).slice(0,10) : null
@@ -541,17 +468,20 @@ function startEdit(a) {
       backgrounds: (a.rewards?.backgrounds || []).map(r => ({ backgroundId: r.backgroundId }))
     },
     isClaimable: !!a.isClaimable,
-    claimOptions: (a.claimOptions || []).map(o => ({ label: o.label, points: o.points || 0, ctoonId: o.ctoonId || '', ctoonName: o.ctoonName || '', quantity: o.quantity || 1 }))
+    claimOptions: (a.claimOptions || []).map(o => ({
+      label: o.label,
+      points: o.points || 0,
+      ctoons: (o.ctoons || []).map(r => ({ ctoonId: r.ctoonId, quantity: r.quantity })),
+      backgrounds: (o.backgrounds || []).map(r => ({ backgroundId: r.backgroundId })),
+    }))
   })
-  bgSelection.value = form.rewards.backgrounds.map(b => b.backgroundId)
+  cMoonPickerId.value = a.cMoonId || ''
   if (imageInput.value) imageInput.value.value = ''
   showForm.value = true
 }
 
 async function save() {
   const fd = new FormData()
-  // sync selected backgrounds into form.rewards.backgrounds
-  form.rewards.backgrounds = bgSelection.value.map(id => ({ backgroundId: id }))
   fd.append('payload', JSON.stringify(form))
   if (imageInput.value?.files?.[0]) fd.append('file', imageInput.value.files[0])
   try {

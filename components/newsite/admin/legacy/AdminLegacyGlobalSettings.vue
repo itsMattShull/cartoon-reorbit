@@ -6,7 +6,7 @@
     <div class="bg-white rounded-lg shadow p-3">
       <!-- Tabs -->
       <div class="border-b mb-3">
-        <nav class="flex gap-2 overflow-x-auto whitespace-nowrap -mb-px hide-scrollbar">
+        <nav class="flex gap-2 overflow-x-auto whitespace-nowrap -mb-px">
           <button
             class="px-2 py-1.5 text-xs border-b-2"
             :class="activeTab==='Global Points' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
@@ -446,23 +446,61 @@
           Configure where Discord announcements for site events are posted. More announcement
           types may be added here over time.
         </p>
-        <div class="max-w-md flex flex-col gap-1">
-          <label for="czoneContestDiscordChannelId" class="text-xs font-medium">
-            cZone Contest Winner Channel ID
-          </label>
-          <input
-            id="czoneContestDiscordChannelId"
-            v-model.trim="czoneContestDiscordChannelId"
-            type="text"
-            inputmode="numeric"
-            pattern="[0-9]*"
-            class="border rounded-md px-2 py-1.5 text-sm"
-            placeholder="123456789012345678"
-          />
-          <p class="text-[10px] text-gray-500">
-            When an admin distributes cZone Contest prizes, an announcement is posted here.
-            Leave blank to use the DISCORD_ANNOUNCEMENTS_CHANNEL environment variable.
-          </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div class="flex flex-col gap-1">
+            <label for="czoneContestDiscordChannelId" class="text-xs font-medium">
+              cZone Contest Winner Channel ID
+            </label>
+            <input
+              id="czoneContestDiscordChannelId"
+              v-model.trim="czoneContestDiscordChannelId"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              class="border rounded-md px-2 py-1.5 text-sm"
+              placeholder="123456789012345678"
+            />
+            <p class="text-[10px] text-gray-500">
+              When an admin distributes cZone Contest prizes, an announcement is posted here.
+              Leave blank to use the DISCORD_ANNOUNCEMENTS_CHANNEL environment variable.
+            </p>
+          </div>
+          <div class="flex flex-col gap-1">
+            <label for="devPrDiscordChannelId" class="text-xs font-medium">
+              Dev PR Messages Channel ID
+            </label>
+            <input
+              id="devPrDiscordChannelId"
+              v-model.trim="devPrDiscordChannelId"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              class="border rounded-md px-2 py-1.5 text-sm"
+              placeholder="123456789012345678"
+            />
+            <p class="text-[10px] text-gray-500">
+              Posts a message here when a pull request is opened or merged against this repo's
+              <code>dev</code> branch. Leave blank to disable.
+            </p>
+          </div>
+          <div class="flex flex-col gap-1">
+            <label for="prodPrDiscordChannelId" class="text-xs font-medium">
+              Prod PR Messages Channel ID
+            </label>
+            <input
+              id="prodPrDiscordChannelId"
+              v-model.trim="prodPrDiscordChannelId"
+              type="text"
+              inputmode="numeric"
+              pattern="[0-9]*"
+              class="border rounded-md px-2 py-1.5 text-sm"
+              placeholder="123456789012345678"
+            />
+            <p class="text-[10px] text-gray-500">
+              Posts a message here when a pull request is opened or merged against this repo's
+              <code>master</code> branch. Leave blank to disable.
+            </p>
+          </div>
         </div>
         <div>
           <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="savingDiscord" @click="saveDiscord">
@@ -471,7 +509,7 @@
         </div>
       </section>
 
-      <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-3 py-2 text-xs rounded-md',
+      <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-3 py-2 text-xs rounded-md max-w-[90vw] text-center break-words',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
       </div>
@@ -492,6 +530,8 @@ const savingAuctions = ref(false)
 const savingCmart = ref(false)
 const savingDiscord = ref(false)
 const czoneContestDiscordChannelId = ref('')
+const devPrDiscordChannelId = ref('')
+const prodPrDiscordChannelId = ref('')
 
 // cMart state
 const firstAdditionalCzoneCost      = ref(25000)
@@ -604,6 +644,8 @@ async function loadGlobal() {
     secondEditionOverlayWidth.value  = g?.secondEditionOverlayWidth  ?? null
     secondEditionOverlayHeight.value = g?.secondEditionOverlayHeight ?? null
     czoneContestDiscordChannelId.value = g?.czoneContestDiscordChannelId ?? ''
+    devPrDiscordChannelId.value = g?.devPrDiscordChannelId ?? ''
+    prodPrDiscordChannelId.value = g?.prodPrDiscordChannelId ?? ''
     if (g?.timeBasedPurchaseLimits) {
       for (const r of timeBasedRarities) {
         const def = g.timeBasedPurchaseLimits[r]
@@ -776,7 +818,9 @@ async function saveDiscord() {
       method: 'POST',
       body: {
         dailyPointLimit: Number(dailyPointLimit.value),
-        czoneContestDiscordChannelId: czoneContestDiscordChannelId.value
+        czoneContestDiscordChannelId: czoneContestDiscordChannelId.value,
+        devPrDiscordChannelId: devPrDiscordChannelId.value,
+        prodPrDiscordChannelId: prodPrDiscordChannelId.value
       }
     })
     toast.value = { type: 'ok', msg: 'Discord settings saved.' }
@@ -812,6 +856,4 @@ async function saveDuplicateSettings() {
 .btn-primary:disabled{ opacity:.5 }
 .input { margin-top: .25rem; width: 100%; border: 1px solid #D1D5DB; border-radius: .375rem; padding: .5rem; outline: none }
 .input:focus { border-color: #6366F1; box-shadow: 0 0 0 1px #6366F1 }
-.hide-scrollbar { scrollbar-width: none; -ms-overflow-style: none; }
-.hide-scrollbar::-webkit-scrollbar { display: none; }
 </style>

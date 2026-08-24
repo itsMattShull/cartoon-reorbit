@@ -52,6 +52,13 @@ export default defineEventHandler(async (event) => {
         cMoonId,
         cMoonSelectedAt: cMoonId ? new Date() : null,
         cMoonAutoAssigned: false,
+        // A rank only means something within the cMoon it was earned in — clear it (and the
+        // role-grant cursor) on any reassignment so a moved user doesn't keep showing a rank
+        // badge for a cMoon they're no longer in. Contribution tracking already restarts at
+        // 0 for the new cMoon on its own (server/cron/cmoon-points-aggregate.js sums from
+        // the fresh cMoonSelectedAt set above), so the rank they re-earn will be accurate too.
+        currentCMoonRankId: null,
+        cMoonRankRoleGrantedAt: null,
       }
     })
     return cMoonId ? tx.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true, name: true, color: true } }) : null
