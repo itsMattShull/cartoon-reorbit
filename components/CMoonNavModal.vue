@@ -20,7 +20,6 @@
               <span class="cnm-option-name">{{ c.name }}</span>
               <span class="cnm-option-count">{{ c.memberCount }} member{{ c.memberCount === 1 ? '' : 's' }}</span>
             </span>
-            <span v-if="c.locked" class="cnm-lock" aria-label="Locked" title="Locked">🔒</span>
           </button>
           <div v-if="!loading && !cmoons.length" class="cnm-empty">No cMoons are available yet.</div>
         </div>
@@ -192,14 +191,6 @@ onBeforeUnmount(() => {
 .cnm-option-count {
   font-size: 0.65rem;
   color: rgba(255, 255, 255, 0.55);
-}
-
-/* Icon-only (not a "Locked" text pill): .cnm-option-name is already nowrap+ellipsis, competing
-   with the swatch for space on a 320px screen — a text badge would crowd it further. */
-.cnm-lock {
-  flex-shrink: 0;
-  font-size: 0.85rem;
-  opacity: 0.75;
 }
 
 .cnm-option:focus-visible,

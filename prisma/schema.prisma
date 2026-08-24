@@ -2867,15 +2867,21 @@ model CMoon {
   imagePath     String?
   // Denormalized to avoid COUNT(*) races/scans on every selection + the daily auto-assign job.
   memberCount   Int      @default(0)
-  // Closes this cMoon to new joins: excluded from self-selection AND the daily auto-assign
-  // job. Existing members are unaffected. Only an admin can still place a user into a locked
-  // cMoon, via the existing unrestricted per-user "update cMoon" admin endpoint.
-  locked        Boolean  @default(false)
   // Cumulative cMoon team leaderboard score (server/utils/cmoon.js weekly scoring). Never
   // resets — a running season total incremented by CMoonScoreLog-backed awards.
   teamScore     Int      @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  // When true, this cMoon is hidden from the self-serve "choose your cMoon" list/modal and the
+  // cMoons quick-nav, and blocked server-side in selectCMoonForUser/assignSmallestCMoonToUser
+  // (server/utils/cmoon.js) — so it can't be joined by players on their own. Admins can still
+  // place a player into it directly (POST /api/admin/users/[id]/update-cmoon, unaffected by this
+  // flag), cToons can still be display-assigned to it, and its own /newsite/cmoon/[id] page and
+  // member-facing features (points, ranks, role sync) work exactly like any other cMoon. Named
+  // `joinLocked` rather than `locked` to avoid reading like the unrelated per-copy
+  // UserCtoon.lockedByUserId concept in server/utils/lockRules.js.
+  joinLocked    Boolean  @default(false)
 
   // Public "cMoon page" content (/newsite/cmoon/[id]) — a display/catalog feature, independent
   // of the cMoonEnabled faction-join flag above. pageImagePath is exactly 800x600, matching CZone.

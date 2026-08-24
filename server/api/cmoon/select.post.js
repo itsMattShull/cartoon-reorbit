@@ -7,7 +7,7 @@ const ERROR_STATUS = {
   [CMOON_SELECT_ERRORS.NOT_FOUND]: { statusCode: 404, statusMessage: 'cMoon not found' },
   [CMOON_SELECT_ERRORS.ALREADY_ASSIGNED]: { statusCode: 409, statusMessage: 'You already belong to a cMoon' },
   [CMOON_SELECT_ERRORS.DEADLINE_PASSED]: { statusCode: 409, statusMessage: 'Your selection window has passed' },
-  [CMOON_SELECT_ERRORS.LOCKED]: { statusCode: 409, statusMessage: 'That cMoon is locked and not accepting new members' },
+  [CMOON_SELECT_ERRORS.LOCKED]: { statusCode: 403, statusMessage: 'This cMoon is locked and cannot be joined directly' },
 }
 
 export default defineEventHandler(async (event) => {

@@ -458,12 +458,16 @@ export async function selectCMoonForUser(userId, cMoonId) {
   const deadline = computeCMoonDeadline(user, config)
   if (deadline && new Date() > deadline) throw new CMoonError(CMOON_SELECT_ERRORS.DEADLINE_PASSED)
 
-  const cmoon = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true, locked: true } })
+  const cmoon = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true, joinLocked: true } })
   if (!cmoon) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
-  // Fast-path rejection for the common (non-racing) case; not the enforcement boundary — see
-  // the locked:false clause below, which is what actually closes the TOCTOU window against an
-  // admin locking this cMoon between this read and the transaction committing.
-  if (cmoon.locked) throw new CMoonError(CMOON_SELECT_ERRORS.LOCKED)
+  // Locked cMoons are only reachable via admin direct-assign (POST
+  // /api/admin/users/[id]/update-cmoon), never through this self-serve path — enforced here,
+  // not just by hiding the cMoon from GET /api/cmoons, so a known id can't bypass the UI.
+  // This is a fast-path rejection for the common (non-racing) case, not the enforcement
+  // boundary — see the joinLocked:false clause below, which is what actually closes the
+  // TOCTOU window against an admin locking this cMoon between this read and the transaction
+  // committing.
+  if (cmoon.joinLocked) throw new CMoonError(CMOON_SELECT_ERRORS.LOCKED)
 
   const assigned = await prisma.$transaction(async (tx) => {
     const result = await tx.user.updateMany({
@@ -471,11 +475,11 @@ export async function selectCMoonForUser(userId, cMoonId) {
       data: { cMoonId: cmoon.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: false },
     })
     if (result.count === 0) throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
-    // Re-checks locked:false as part of the same atomic write, not just the pre-fetch above —
-    // if an admin locked this cMoon in the gap between that read and here, count is 0 and the
-    // whole transaction (including the user update above) rolls back.
+    // Re-checks joinLocked:false as part of the same atomic write, not just the pre-fetch
+    // above — if an admin locked this cMoon in the gap between that read and here, count is 0
+    // and the whole transaction (including the user update above) rolls back.
     const lockResult = await tx.cMoon.updateMany({
-      where: { id: cmoon.id, locked: false },
+      where: { id: cmoon.id, joinLocked: false },
       data: { memberCount: { increment: 1 } },
     })
     if (lockResult.count === 0) throw new CMoonError(CMOON_SELECT_ERRORS.LOCKED)
@@ -496,7 +500,7 @@ export async function selectCMoonForUser(userId, cMoonId) {
 async function assignSmallestCMoonToUser(userId) {
   return prisma.$transaction(async (tx) => {
     const [smallest] = await tx.$queryRaw`
-      SELECT id FROM "CMoon" WHERE "locked" = false ORDER BY "memberCount" ASC, id ASC LIMIT 1 FOR UPDATE
+      SELECT id FROM "CMoon" WHERE "joinLocked" = false ORDER BY "memberCount" ASC, id ASC LIMIT 1 FOR UPDATE
     `
     if (!smallest) return null
 
@@ -519,7 +523,7 @@ export async function autoAssignExpiredCMoonUsers({ batchLimit = 200, maxBatches
   const config = await getGlobalConfig({ fresh: true })
   if (!config?.cMoonEnabled || !config.cMoonEnabledAt) return { processed: 0 }
 
-  const unlockedCmoonCount = await prisma.cMoon.count({ where: { locked: false } })
+  const unlockedCmoonCount = await prisma.cMoon.count({ where: { joinLocked: false } })
   if (unlockedCmoonCount === 0) {
     // Nothing to assign into. Not an error — an admin may have locked every cMoon on
     // purpose — but worth a log line since it otherwise fails silently and expired users

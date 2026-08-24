@@ -42,7 +42,7 @@ export default defineEventHandler(async (event) => {
           isTradeable: true,
           ...(filter === 'gtoon' ? { ctoon: { isGtoon: true } } : {})
         },
-        include: { ctoon: true }
+        include: { ctoon: { include: { cMoon: { select: { id: true, name: true, color: true } } } } }
       }
     }
   })
@@ -128,6 +128,7 @@ export default defineEventHandler(async (event) => {
     name: uc.ctoon.name,
     series: uc.ctoon.series?.trim() || null,
     set: uc.ctoon.set?.trim() || null,
+    cMoon: uc.ctoon.cMoon,
     rarity: uc.ctoon.rarity?.trim() || null,
     isGtoon: uc.ctoon.isGtoon,
     cost: uc.ctoon.cost,

@@ -30,6 +30,7 @@ Object.assign(filter.value, {
   sortAsc:   q.sortAsc   !== 'false',
   set:       q.set       || '',
   series:    q.series    || '',
+  cMoon:     q.cMoon     || '',
 })
 activeTab.value = q.tab === 'AllSeries' ? 'AllSeries' : 'AllSets'
 

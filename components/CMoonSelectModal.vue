@@ -19,11 +19,10 @@
               v-for="(c, idx) in cmoons" :key="c.id"
               type="button"
               class="cms-card"
-              :class="{ 'cms-card-selected': choice === c.id, 'cms-card-dim': !!choice && choice !== c.id, 'cms-card-locked': c.locked }"
+              :class="{ 'cms-card-selected': choice === c.id, 'cms-card-dim': !!choice && choice !== c.id }"
               role="radio"
               :aria-checked="choice === c.id"
-              :aria-disabled="c.locked ? 'true' : undefined"
-              @click="selectCard(c)"
+              @click="choice = c.id"
               @keydown="onCardKeydown($event, idx)"
             >
               <span class="cms-poster" :style="{ backgroundColor: safeColor(c.color) }">
@@ -33,7 +32,6 @@
                   @error="onImageError(c.id)"
                 />
                 <span v-if="choice === c.id" class="cms-badge" aria-hidden="true">✓ Selected</span>
-                <span v-if="c.locked" class="cms-badge cms-badge-locked" aria-hidden="true">🔒 Locked</span>
               </span>
               <span class="cms-card-name">{{ c.name }}</span>
               <span class="cms-card-count">{{ c.memberCount }} member{{ c.memberCount === 1 ? '' : 's' }}</span>
@@ -89,22 +87,12 @@ async function checkStatus() {
       $fetch('/api/cmoons').catch(() => ({ cmoons: [] })),
     ])
     if (!status?.cMoonEnabled || !status.canChoose) return
-    const allCmoons = list?.cmoons || []
-    // This modal has no dismiss/close control — it's meant to force a choice. If every cMoon
-    // is locked (an admin could lock all of them while users are still mid-window), there's
-    // nothing selectable, so don't trap the user behind an unpickable, undismissable modal.
-    if (!allCmoons.some(c => !c.locked)) return
     deadline.value = status.deadline || null
-    cmoons.value = allCmoons
+    cmoons.value = list?.cmoons || []
     visible.value = true
   } catch {
     // Not logged in, or feature off — silently skip.
   }
-}
-
-function selectCard(c) {
-  if (c.locked) return
-  choice.value = c.id
 }
 
 const router = useRouter()
@@ -296,18 +284,9 @@ onBeforeUnmount(() => {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .cms-card:not(.cms-card-locked):hover {
+  .cms-card:hover {
     border-color: rgba(255, 215, 94, 0.45);
   }
-}
-
-/* aria-disabled, not the `disabled` attribute: a real disabled button can't receive focus,
-   which would silently break arrow-key navigation (focusCardAt) and drop the card from the
-   Tab order entirely. Staying focusable lets a screen reader announce "Locked" via aria-disabled
-   while the click handler (selectCard) still no-ops the join action. */
-.cms-card-locked {
-  cursor: not-allowed;
-  opacity: 0.7;
 }
 
 .cms-poster {
@@ -349,14 +328,6 @@ onBeforeUnmount(() => {
   border-radius: 999px;
   /* Never rely on the selected border alone against busy, unpredictable admin-uploaded art —
      shape (checkmark) + a solid-background text label both read regardless of the art underneath. */
-}
-
-/* A locked card is never also cms-card-selected (locked cMoons can't become `choice`), so this
-   never has to coexist with .cms-badge's green selected pill in the same top-right corner — safe
-   to share that position. Fixed neutral color, not derived from the cMoon's own (arbitrary,
-   admin-set) color, so it stays readable regardless of what's behind it. */
-.cms-badge-locked {
-  background: #4b4b52;
 }
 
 .cms-card-name {
