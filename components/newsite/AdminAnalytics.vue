@@ -188,6 +188,32 @@
         </div>
       </div>
 
+      <!-- Points Issued by Category -->
+      <div class="lg:col-span-2">
+        <h2 class="text-sm font-semibold mb-1 flex items-center flex-wrap gap-1">
+          Points Issued by Category
+          <span class="text-[10px] text-gray-500">
+            (last {{ netWindowCount }} {{ windowUnitPlural }})
+          </span>
+        </h2>
+        <div class="chart-container">
+          <canvas ref="issuedCategoryCanvas"></canvas>
+        </div>
+      </div>
+
+      <!-- Points Spent by Category -->
+      <div class="lg:col-span-2">
+        <h2 class="text-sm font-semibold mb-1 flex items-center flex-wrap gap-1">
+          Points Spent by Category
+          <span class="text-[10px] text-gray-500">
+            (last {{ netWindowCount }} {{ windowUnitPlural }})
+          </span>
+        </h2>
+        <div class="chart-container">
+          <canvas ref="spentCategoryCanvas"></canvas>
+        </div>
+      </div>
+
       <!-- Spend / Earn Ratio -->
       <div class="lg:col-span-2">
         <h2 class="text-sm font-semibold mb-1 flex items-center flex-wrap gap-1">
@@ -348,6 +374,8 @@ const uniqueCanvas  = ref(null)
 const clashCanvas   = ref(null)
 const tradesCanvas  = ref(null)
 const netCanvas     = ref(null)
+const issuedCategoryCanvas = ref(null)
+const spentCategoryCanvas  = ref(null)
 const codesCanvas   = ref(null)
 const ctoonCanvas   = ref(null)
 const packsCanvas   = ref(null)
@@ -443,7 +471,8 @@ const leakRiskBadgeText = computed(() => ({
 // Chart instances
 let cumChart, pctChart, uniqueChart,
     codesChart, ctoonChart, packChart, ptsHistChart, clashChart, tradesChart,
-    netChart, ratioChart, turnoverChart, monsterScansChart, socketMetricsChart
+    netChart, issuedCategoryChart, spentCategoryChart,
+    ratioChart, turnoverChart, monsterScansChart, socketMetricsChart
 let socketMetricsTimer
 // Set true once the component starts tearing down so async fetches that resolve
 // after unmount don't touch charts we've already destroyed (see onBeforeUnmount).
@@ -479,6 +508,15 @@ colors.turnover = {
   Rare:      '#8B5CF6',
   'Very Rare':'#F59E0B',
   'Crazy Rare':'#EF4444'
+}
+
+// Palette for the dynamic per-category stacked bars (Points Issued / Points
+// Spent by Category). "Other" always gets the neutral gray regardless of its
+// position, since it's a rollup rather than a specific reason.
+const categoryPalette = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#14B8A6']
+const otherCategoryColor = '#9CA3AF'
+function colorForCategory (label, index) {
+  return label === 'Other' ? otherCategoryColor : categoryPalette[index % categoryPalette.length]
 }
 
 const getTickValue = (tick) => (tick && typeof tick === 'object' && 'value' in tick ? tick.value : tick)
@@ -602,6 +640,20 @@ const netOptions = {
   }
 }
 
+function makeCategoryStackOptions (yTitle) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP' }, title: { color: '#000', display: true, text: 'Day' }, stacked: true, ticks: { color: '#000' } },
+      y: { title: { color: '#000', display: true, text: yTitle }, beginAtZero: true, stacked: true, ticks: { color: '#000', callback: wholeTick }, grace: '20%' }
+    },
+    plugins: { legend: { display: true, position: 'top' } }
+  }
+}
+const issuedCategoryOptions = makeCategoryStackOptions('Points Issued')
+const spentCategoryOptions  = makeCategoryStackOptions('Points Spent')
+
 const clashOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -691,6 +743,24 @@ const histOptions = {
 }
 
 const dateOf = (d) => new Date(d.period || d.day || d.week || d.month || d.date)
+
+// Rebuilds a category-breakdown chart's datasets from scratch each fetch,
+// since the set of categories (top N by volume + "Other") can change between
+// timeframes/groupings rather than staying at a fixed count like the other charts.
+function updateCategoryChart (chart, payload) {
+  if (!chart) return
+  const series = payload?.series || []
+  const categories = payload?.categories || []
+  chart.data.labels = series.map(d => dateOf(d))
+  chart.data.datasets = categories.map((label, i) => ({
+    label,
+    data: series.map(d => d[label] ?? 0),
+    backgroundColor: colorForCategory(label, i),
+    borderColor: colorForCategory(label, i),
+    stack: 'points'
+  }))
+  chart.update()
+}
 const formatSocketTime = (value) => {
   const date = value instanceof Date ? value : new Date(value)
   return date.toLocaleString()
@@ -709,7 +779,7 @@ function applyTimeUnit () {
     chart.options.scales.x.time.displayFormats = df
     chart.update('none')
   }
-  ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, tradesChart, packChart, clashChart, monsterScansChart, netChart, ratioChart].forEach(set)
+  ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, tradesChart, packChart, clashChart, monsterScansChart, netChart, issuedCategoryChart, spentCategoryChart, ratioChart].forEach(set)
 }
 
 function applyPointsZoom () {
@@ -887,6 +957,14 @@ async function fetchData() {
   netChart.data.datasets[2].data     = netSeries.map(d => d.net ?? d.netPoints ?? 0)
   netChart.data.datasets[3].data     = netSeries.map(d => d.net_ma7 ?? d.movingAvg7Day ?? 0)
   netChart.update()
+
+  res = await fetch(`/api/admin/points-issued-by-category?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
+  if (isUnmounted) return
+  updateCategoryChart(issuedCategoryChart, await res.json())
+
+  res = await fetch(`/api/admin/points-spent-by-category?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
+  if (isUnmounted) return
+  updateCategoryChart(spentCategoryChart, await res.json())
 
   const last = netSeries[netSeries.length - 1] || null
   const avg7 = last ? (last.net_ma7 ?? last.movingAvg7Day ?? 0) : 0
@@ -1265,6 +1343,18 @@ onMounted(async () => {
     options: netOptions
   })
 
+  issuedCategoryChart = new Chart(issuedCategoryCanvas.value.getContext('2d'), {
+    type: 'bar',
+    data: { labels: [], datasets: [] },
+    options: issuedCategoryOptions
+  })
+
+  spentCategoryChart = new Chart(spentCategoryCanvas.value.getContext('2d'), {
+    type: 'bar',
+    data: { labels: [], datasets: [] },
+    options: spentCategoryOptions
+  })
+
   applyTimeUnit()
 
   await nextTick()
@@ -1286,13 +1376,13 @@ onBeforeUnmount(() => {
   // component re-mounts every time the newsite admin section switches).
   ;[
     cumChart, pctChart, uniqueChart, codesChart, ctoonChart, packChart,
-    ptsHistChart, clashChart, tradesChart, netChart, ratioChart,
-    turnoverChart, monsterScansChart, socketMetricsChart
+    ptsHistChart, clashChart, tradesChart, netChart, issuedCategoryChart, spentCategoryChart,
+    ratioChart, turnoverChart, monsterScansChart, socketMetricsChart
   ].forEach(ch => { try { ch?.destroy() } catch {} })
 
   cumChart = pctChart = uniqueChart = codesChart = ctoonChart = packChart =
-    ptsHistChart = clashChart = tradesChart = netChart = ratioChart =
-    turnoverChart = monsterScansChart = socketMetricsChart = null
+    ptsHistChart = clashChart = tradesChart = netChart = issuedCategoryChart = spentCategoryChart =
+    ratioChart = turnoverChart = monsterScansChart = socketMetricsChart = null
 })
 
 watch([selectedTimeframe, groupBy], async () => {
@@ -1302,6 +1392,12 @@ watch([selectedTimeframe, groupBy], async () => {
     if (!ch) return
     ch.data.labels = []
     ch.data.datasets.forEach(ds => (ds.data = []))
+    ch.update('none')
+  })
+  ;[issuedCategoryChart, spentCategoryChart].forEach(ch => {
+    if (!ch) return
+    ch.data.labels = []
+    ch.data.datasets = []
     ch.update('none')
   })
   await fetchData()
