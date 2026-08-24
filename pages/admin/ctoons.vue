@@ -47,6 +47,20 @@
           >
             Make 2nd Ed
           </button>
+
+          <button
+            :disabled="!canBatchAssignCMoon"
+            @click="openBatchAssignCMoon"
+            :class="[
+              'px-4 py-2 rounded font-medium transition-colors',
+              canBatchAssignCMoon
+                ? 'bg-teal-600 text-white hover:bg-teal-700'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            ]"
+            :title="canBatchAssignCMoon ? 'Assign one cMoon to every cToon in this series/set' : 'Select a Set or Series filter first to enable Batch Assign cMoon'"
+          >
+            Batch Assign cMoon
+          </button>
         </div>
       </div>
 
@@ -322,6 +336,15 @@
       @saved="onMakeSecondEditionSaved"
     />
 
+    <!-- Batch Assign cMoon Modal -->
+    <BatchAssignCMoonModal
+      v-if="showBatchAssignCMoonModal"
+      :ctoons="displayedCtoons"
+      :filter-label="batchAssignCMoonLabel"
+      @close="showBatchAssignCMoonModal = false"
+      @saved="onBatchAssignCMoonSaved"
+    />
+
     <!-- Give to Official Modal -->
     <GiveToOfficialModal
       v-if="giveToOfficialTarget"
@@ -340,6 +363,7 @@ import Nav from '~/components/Nav.vue'
 import BulkEditCtoonModal from '~/components/BulkEditCtoonModal.vue'
 import MakeSecondEditionModal from '~/components/MakeSecondEditionModal.vue'
 import GiveToOfficialModal from '~/components/GiveToOfficialModal.vue'
+import BatchAssignCMoonModal from '~/components/BatchAssignCMoonModal.vue'
 import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
 
 /* Give to Official */
@@ -416,6 +440,29 @@ async function onMakeSecondEditionSaved(result) {
   } else {
     await loadPage(currentPage.value)
   }
+}
+
+/* Batch Assign cMoon modal — only enabled when filtering by an actual
+   Set or Series selection (not a free-text name search), matching the
+   "batch edit by series and by set" scope this tool is meant for. */
+const showBatchAssignCMoonModal = ref(false)
+const canBatchAssignCMoon = computed(() => isSearching.value && !!(selectedSet.value || selectedSeries.value))
+const batchAssignCMoonLabel = computed(() => {
+  if (selectedSeries.value) return `Series: ${selectedSeries.value}`
+  if (selectedSet.value) return `Set: ${selectedSet.value}`
+  return ''
+})
+function openBatchAssignCMoon() {
+  if (!canBatchAssignCMoon.value) return
+  showBatchAssignCMoonModal.value = true
+}
+async function onBatchAssignCMoonSaved(result) {
+  showBatchAssignCMoonModal.value = false
+  const count = result?.count ?? 0
+  alert(`Updated cMoon on ${count} cToon${count !== 1 ? 's' : ''}.`)
+  // Re-run current search to reflect updates
+  const q = String(searchTerm.value || '').trim()
+  await runSearch({ q: q.length >= 3 ? q : '', set: selectedSet.value, series: selectedSeries.value })
 }
 
 /* Route helpers */
