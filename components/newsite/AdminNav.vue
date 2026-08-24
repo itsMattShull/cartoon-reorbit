@@ -172,8 +172,6 @@ watch(() => props.open, (isOpen) => {
 .admin-rail {
   display: flex;
   flex-direction: column;
-  min-height: 0;
-  height: 100%;
   background: var(--OrbitDarkBlue);
   border-right: 1px solid rgba(255, 255, 255, 0.15);
   box-sizing: border-box;
@@ -202,10 +200,6 @@ watch(() => props.open, (isOpen) => {
 .admin-rail-input::placeholder { color: rgba(255, 255, 255, 0.55); }
 
 .admin-rail-scroll {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  overscroll-behavior: contain;
   padding: 0 6px 12px;
 }
 
