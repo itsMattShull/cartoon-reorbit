@@ -43,7 +43,9 @@ export default defineEventHandler(async (event) => {
     packPriceDecayDays,
     packPriceFloor,
     packMaxDefaultBuysPerUser,
-    czoneContestDiscordChannelId
+    czoneContestDiscordChannelId,
+    devPrDiscordChannelId,
+    prodPrDiscordChannelId
   } = body
 
   // minimally require the existing cap; other fields optional with defaults
@@ -54,14 +56,18 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  let czoneContestDiscordChannelIdValue
-  if (czoneContestDiscordChannelId !== undefined) {
-    const trimmed = typeof czoneContestDiscordChannelId === 'string' ? czoneContestDiscordChannelId.trim() : ''
+  function validateSnowflake(value, label) {
+    if (value === undefined) return undefined
+    const trimmed = typeof value === 'string' ? value.trim() : ''
     if (trimmed && !/^\d{17,20}$/.test(trimmed)) {
-      throw createError({ statusCode: 400, statusMessage: 'Discord Channel ID must be a numeric channel/snowflake ID' })
+      throw createError({ statusCode: 400, statusMessage: `${label} must be a numeric channel/snowflake ID` })
     }
-    czoneContestDiscordChannelIdValue = trimmed || null
+    return trimmed || null
   }
+
+  const czoneContestDiscordChannelIdValue = validateSnowflake(czoneContestDiscordChannelId, 'cZone Contest Winner Channel ID')
+  const devPrDiscordChannelIdValue = validateSnowflake(devPrDiscordChannelId, 'Dev PR Messages Channel ID')
+  const prodPrDiscordChannelIdValue = validateSnowflake(prodPrDiscordChannelId, 'Prod PR Messages Channel ID')
 
   const payload = {
     dailyPointLimit: Number(dailyPointLimit),
@@ -87,7 +93,9 @@ export default defineEventHandler(async (event) => {
     packPriceDecayDays:        (typeof packPriceDecayDays        === 'number') ? Math.max(1, packPriceDecayDays)        : undefined,
     packPriceFloor:            (typeof packPriceFloor            === 'number') ? Math.max(0, packPriceFloor)            : undefined,
     packMaxDefaultBuysPerUser: (typeof packMaxDefaultBuysPerUser === 'number') ? Math.max(1, packMaxDefaultBuysPerUser) : undefined,
-    czoneContestDiscordChannelId: czoneContestDiscordChannelIdValue
+    czoneContestDiscordChannelId: czoneContestDiscordChannelIdValue,
+    devPrDiscordChannelId: devPrDiscordChannelIdValue,
+    prodPrDiscordChannelId: prodPrDiscordChannelIdValue
   }
 
   // 3) Upsert the singleton global config row
@@ -121,7 +129,9 @@ export default defineEventHandler(async (event) => {
         packPriceDecayDays:        payload.packPriceDecayDays        ?? 7,
         packPriceFloor:            payload.packPriceFloor            ?? 700,
         packMaxDefaultBuysPerUser: payload.packMaxDefaultBuysPerUser ?? 5,
-        czoneContestDiscordChannelId: payload.czoneContestDiscordChannelId ?? null
+        czoneContestDiscordChannelId: payload.czoneContestDiscordChannelId ?? null,
+        devPrDiscordChannelId: payload.devPrDiscordChannelId ?? null,
+        prodPrDiscordChannelId: payload.prodPrDiscordChannelId ?? null
       },
       update: {
         dailyPointLimit: payload.dailyPointLimit,
@@ -143,7 +153,9 @@ export default defineEventHandler(async (event) => {
         ...(payload.packPriceDecayDays        !== undefined ? { packPriceDecayDays:        payload.packPriceDecayDays }        : {}),
         ...(payload.packPriceFloor            !== undefined ? { packPriceFloor:            payload.packPriceFloor }            : {}),
         ...(payload.packMaxDefaultBuysPerUser !== undefined ? { packMaxDefaultBuysPerUser: payload.packMaxDefaultBuysPerUser } : {}),
-        ...(payload.czoneContestDiscordChannelId !== undefined ? { czoneContestDiscordChannelId: payload.czoneContestDiscordChannelId } : {})
+        ...(payload.czoneContestDiscordChannelId !== undefined ? { czoneContestDiscordChannelId: payload.czoneContestDiscordChannelId } : {}),
+        ...(payload.devPrDiscordChannelId !== undefined ? { devPrDiscordChannelId: payload.devPrDiscordChannelId } : {}),
+        ...(payload.prodPrDiscordChannelId !== undefined ? { prodPrDiscordChannelId: payload.prodPrDiscordChannelId } : {})
       }
     })
     clearUpgradesConfigCache()
@@ -166,7 +178,9 @@ export default defineEventHandler(async (event) => {
       'packPriceDecayDays',
       'packPriceFloor',
       'packMaxDefaultBuysPerUser',
-      'czoneContestDiscordChannelId'
+      'czoneContestDiscordChannelId',
+      'devPrDiscordChannelId',
+      'prodPrDiscordChannelId'
     ]
     for (const k of fields) {
       const prevVal = before ? before[k] : undefined
