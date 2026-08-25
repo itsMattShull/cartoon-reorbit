@@ -179,6 +179,10 @@
                   @click="previewEffect(c)"
                 >Preview effect</button>
                 <button
+                  class="cm-tap text-[11px] text-indigo-600 hover:underline"
+                  @click="openDisperse(c)"
+                >cToon Offers</button>
+                <button
                   v-if="c.imagePath"
                   class="cm-tap text-[11px] text-gray-600 hover:underline disabled:opacity-40"
                   :disabled="imageBusyId === c.id"
@@ -572,6 +576,14 @@
          the real must-choose flow) — preview mode is entirely self-contained per instance, so
          opening this one here can never interfere with a real deadline modal elsewhere. -->
     <CMoonSelectModal preview v-model="previewModalOpen" />
+
+    <!-- ── Disperse cToons modal ─────────────────────────────────────── -->
+    <CMoonDisperseModal
+      v-if="disperseCMoon"
+      :cmoon="disperseCMoon"
+      :allCMoons="cmoons"
+      @close="closeDisperse"
+    />
   </div>
 </template>
 
@@ -1278,6 +1290,18 @@ async function remove(c) {
   } catch (e) {
     alert(e?.data?.statusMessage || 'Delete failed')
   }
+}
+
+// ── Disperse cToons ─────────────────────────────────────────────────────
+const disperseCMoon = ref(null)
+
+function openDisperse(c) {
+  disperseCMoon.value = { id: c.id, name: c.name, memberCount: c.memberCount }
+}
+
+function closeDisperse() {
+  disperseCMoon.value = null
+  load() // member counts / captains etc are unaffected, but keep state fresh either way
 }
 
 onMounted(() => {
