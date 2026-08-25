@@ -93,7 +93,7 @@
             <div class="flex flex-col gap-1">
               <label class="text-xs font-medium">Series</label>
               <input v-model="series" list="series-list" required class="border rounded-md px-2 py-1.5 text-sm" />
-              <datalist v-if="series.length >= 2" id="series-list">
+              <datalist v-if="series.length >= 3" id="series-list">
                 <option v-for="opt in filteredSeriesOptions" :key="opt" :value="opt" />
               </datalist>
               <p class="text-[11px] text-gray-500">Used to group similar cToons. Choose from existing or enter a new one.</p>
@@ -103,7 +103,7 @@
             <div class="flex flex-col gap-1">
               <label class="text-xs font-medium">Set</label>
               <input v-model="set" list="sets-list" required class="border rounded-md px-2 py-1.5 text-sm" />
-              <datalist v-if="set.length >= 2" id="sets-list">
+              <datalist v-if="set.length >= 3" id="sets-list">
                 <option v-for="opt in filteredSetsOptions" :key="opt" :value="opt" />
               </datalist>
               <p class="text-[11px] text-gray-500">Which collectible set this cToon belongs to. Choose from existing or enter a new one.</p>
@@ -401,16 +401,16 @@ const rarityOptions = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare', 
 const soundFile = ref(null)
 const errors = reactive({ image: '', name: '', series: '', rarity: '', cost: '', power: '', sound: '' })
 
-// new: only show suggestions once the user has typed ≥2 chars
+// only show suggestions once the user has typed ≥3 chars
 const filteredSeriesOptions = computed(() => {
-  if (series.value.length < 2) return []
+  if (series.value.length < 3) return []
   return seriesOptions.value.filter(opt =>
     opt.toLowerCase().includes(series.value.toLowerCase())
   )
 })
 
 const filteredSetsOptions = computed(() => {
-  if (set.value.length < 2) return []
+  if (set.value.length < 3) return []
   return setsOptions.value.filter(opt =>
     opt.toLowerCase().includes(set.value.toLowerCase())
   )

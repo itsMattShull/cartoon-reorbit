@@ -10,6 +10,7 @@ export function filterToQuery(filter, tab) {
   if (!filter.sortAsc)                query.sortAsc   = 'false'
   if (filter.set)                     query.set       = filter.set
   if (filter.series)                  query.series    = filter.series
+  if (filter.cMoon)                   query.cMoon     = filter.cMoon
   if (tab !== 'AllSets')              query.tab       = tab
   return query
 }

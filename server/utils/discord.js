@@ -97,6 +97,43 @@ async function addRoleToMember(discordUserId, roleId) {
   return false
 }
 
+// Shared PUT/DELETE-a-guild-member-role primitive backing the two exported functions below.
+// Every other role sync in this codebase (addRoleToMember above, the cMoon/verified-role cron
+// jobs in server/cron/sync-guild-members.js) is grant-only by deliberate design. These two are
+// the first calls in the app that can also REVOKE a Discord role — used only for real-time cMoon
+// membership sync (see reassignUserCMoon in server/utils/cmoon.js), never from a bulk/cron path.
+async function putOrDeleteMemberRole(method, discordUserId, roleId) {
+  const authHeader = getBotAuthHeader()
+  const guildId = process.env.DISCORD_GUILD_ID
+  if (!discordUserId || !roleId || !authHeader || !guildId) return false
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(
+      `${DISCORD_API_BASE}/guilds/${guildId}/members/${discordUserId}/roles/${roleId}`,
+      { method, headers: { Authorization: authHeader } }
+    )
+    // A DELETE for a role the member never had (or no longer has) also comes back 204 — treated
+    // as success either way, since the end state ("member doesn't have this role") is what matters.
+    if (res.status === 204) return true
+    if (res.status === 429) {
+      let body = { retry_after: 5 }
+      try { body = await res.json() } catch {}
+      await sleep(Math.ceil((body.retry_after || 5) * 1000))
+      continue
+    }
+    return false
+  }
+  return false
+}
+
+export async function grantGuildRole(discordUserId, roleId) {
+  return putOrDeleteMemberRole('PUT', discordUserId, roleId)
+}
+
+export async function revokeGuildRole(discordUserId, roleId) {
+  return putOrDeleteMemberRole('DELETE', discordUserId, roleId)
+}
+
 async function openDmChannel(discordId) {
   const BOT_TOKEN = process.env.BOT_TOKEN
   if (!BOT_TOKEN || !discordId) return null

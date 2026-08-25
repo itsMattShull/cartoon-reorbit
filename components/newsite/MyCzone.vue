@@ -58,7 +58,19 @@
               <div v-if="lastOnlineText || viewedOwner.cMoon" class="cz-owner-lastseen">
                 <span v-if="lastOnlineText">{{ lastOnlineText }}</span>
                 <span v-if="lastOnlineText && viewedOwner.cMoon"> · </span>
-                <span v-if="viewedOwner.cMoon" class="cz-owner-cmoon" :style="cMoonPillStyle(viewedOwner.cMoon.color)">{{ viewedOwner.cMoon.name }}</span>
+                <NuxtLink
+                  v-if="viewedOwner.cMoon"
+                  :to="`/newsite/cmoon/${viewedOwner.cMoon.id}`"
+                  class="cz-owner-cmoon-link"
+                >
+                  <img
+                    v-if="viewedOwner.cMoon.avatarPath"
+                    :src="viewedOwner.cMoon.avatarPath"
+                    class="cz-owner-cmoon-avatar"
+                    alt=""
+                  />
+                  <span class="cz-owner-cmoon" :style="cMoonPillStyle(viewedOwner.cMoon.color)">{{ viewedOwner.cMoon.name }}</span>
+                </NuxtLink>
                 <span v-if="viewedOwner.cMoonRankName" class="cz-owner-cmoon-rank">{{ viewedOwner.cMoonRankName }}</span>
               </div>
               <button
@@ -1374,6 +1386,26 @@ defineExpose({ save, clearZone })
 .cz-owner-label  { font-size: 0.68rem; color: #fff; white-space: nowrap; }
 .cz-owner-prefix  { font-size: 0.6rem; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-right: 3px; }
 .cz-owner-lastseen { font-size: 0.58rem; color: rgba(255,255,255,0.5); white-space: nowrap; }
+.cz-owner-cmoon-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  text-decoration: none;
+  vertical-align: middle;
+  /* Expands the tappable area well past this pill's tiny visual footprint without disturbing
+     surrounding layout — matching padding and negative margin cancel out for flow purposes
+     (same "44px hit area, unchanged visual size" idea as AdminCMoon.vue's .cm-tap, applied via
+     the inline-text equivalent since this sits mid-line rather than as a block button). */
+  padding: 12px 6px;
+  margin: -12px -6px;
+}
+.cz-owner-cmoon-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
 .cz-owner-cmoon {
   display: inline-block;
   padding: 0 5px;

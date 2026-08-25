@@ -368,6 +368,15 @@ model Ctoon {
   // double-click/race can only succeed once.
   givenToOfficialAt DateTime?
 
+  // Snapshot of the most recent real auction sale, maintained at write time by
+  // server/socket-server.js's auction-close settlement (not a nightly cron —
+  // there's no polling window to wait out). Powers the "last auction sold"
+  // collection-worth metric with an O(1) lookup instead of a live query
+  // against the full Auction table. Backfilled once via
+  // prisma/backfillLastAuctionSold.js after this migration runs.
+  lastAuctionSoldPrice Int?
+  lastAuctionSoldAt    DateTime?
+
   @@index([isSecondEdition])
   @@index([name])
   @@index([cMoonId])
@@ -1478,6 +1487,22 @@ model GlobalGameConfig {
   cMoonEnabled                       Boolean   @default(false)
   cMoonEnabledAt                     DateTime?
   cMoonSelectionDeadlineAt           DateTime?
+  // Weekly cMoon team-leaderboard scoring rules (see server/utils/cmoon.js
+  // runWeeklyCMoonScoring / recordDailyTaskCompletions). Admin-editable via
+  // Admin > cMoons > Scoring Rules; changes apply forward-only to future cron
+  // runs, never retroactively rewriting CMoonScoreLog/CMoon.teamScore.
+  cMoonHighScorePoints               Int       @default(100) // per-player award for holding rank #1 on an eligible game
+  cMoonTop10Points                   Int       @default(50) // per-player award for a top-N finish on an eligible board
+  cMoonDailyTaskPoints               Int       @default(10) // per-player-per-day award for completing >=1 daily task
+  cMoonScoringMinAccountAgeDays      Int       @default(3) // anti-abuse: account must be this old to qualify for any award
+  cMoonTop10RankCutoff               Int       @default(10) // how many ranks count as "top 10" on eligible boards
+  cMoonTop10PointsBoardEnabled       Boolean   @default(true) // whether the "Total Points" board counts toward TOP10
+  cMoonTop10CtoonsBoardEnabled       Boolean   @default(true) // whether the "Total cToons" board counts toward TOP10
+  // Game keys (SCORE_GAMES[].name / WIN_GAMES[].name in server/utils/cmoon.js)
+  // excluded from HIGH_SCORE eligibility. JSON string[] to match the
+  // featuredAuctionHours/featuredDissolve* array-field convention above.
+  cMoonDisabledScoreGames            Json      @default("[]")
+  cMoonDisabledWinGames              Json      @default("[]")
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }
@@ -2891,6 +2916,16 @@ model CMoon {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // When true, this cMoon is hidden from the self-serve "choose your cMoon" list/modal and the
+  // cMoons quick-nav, and blocked server-side in selectCMoonForUser/assignSmallestCMoonToUser
+  // (server/utils/cmoon.js) — so it can't be joined by players on their own. Admins can still
+  // place a player into it directly (POST /api/admin/users/[id]/update-cmoon, unaffected by this
+  // flag), cToons can still be display-assigned to it, and its own /newsite/cmoon/[id] page and
+  // member-facing features (points, ranks, role sync) work exactly like any other cMoon. Named
+  // `joinLocked` rather than `locked` to avoid reading like the unrelated per-copy
+  // UserCtoon.lockedByUserId concept in server/utils/lockRules.js.
+  joinLocked    Boolean  @default(false)
+
   // Public "cMoon page" content (/newsite/cmoon/[id]) — a display/catalog feature, independent
   // of the cMoonEnabled faction-join flag above. pageImagePath is exactly 800x600, matching CZone.
   pageImagePath   String?
@@ -2900,6 +2935,10 @@ model CMoon {
   // Small wide banner graphic (normalized to 800x200) shown on a themed cToon
   // modal in place of the plain "cWorld" text tile, linking to the page above.
   bannerImagePath String?
+  // Small square "avatar" (normalized ~128x128, like a player avatar) shown next to this
+  // cMoon's colored name badge on member cZones — a quick-glance identity separate from the
+  // large poster (imagePath) and the page/banner art above, which are too large for that spot.
+  avatarPath      String?
 
   members         User[]
   captains        CMoonCaptain[]

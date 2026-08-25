@@ -13,6 +13,10 @@ export default defineEventHandler(async () => {
   if (!config?.cMoonEnabled) return []
 
   const cmoons = await db.cMoon.findMany({
+    // Locked cMoons don't appear on the team-standings leaderboard at all — this is a separate
+    // concern from the general per-user cMoon badge lookup (leaderboard/cmoon-badges.post.js),
+    // which stays unfiltered so locked-cMoon members keep their badge on non-cMoon boards.
+    where: { joinLocked: false },
     orderBy: [{ teamScore: 'desc' }, { name: 'asc' }],
     select: { id: true, name: true, color: true, memberCount: true, teamScore: true },
   })

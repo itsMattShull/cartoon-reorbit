@@ -38,7 +38,7 @@ export default defineEventHandler(async (event) => {
     where: { username },
     include: {
       cZones: true,
-      cMoon: { select: { id: true, name: true, color: true } },
+      cMoon: { select: { id: true, name: true, color: true, avatarPath: true } },
       currentCMoonRank: { select: { name: true } },
       // A single extra FK join, not a live scan of the user's CMoonAffinity rows — glow
       // eligibility is denormalized onto User.equippedGlowCMoonId at grant/equip time

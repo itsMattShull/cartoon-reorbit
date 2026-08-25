@@ -6,11 +6,13 @@
         aria-labelledby="cms-title" @keydown="onModalKeydown"
       >
         <div class="cms-header">
+          <button v-if="preview" type="button" class="cms-preview-close" aria-label="Close preview" @click="closePreview">✕</button>
           <h2 id="cms-title" class="cms-title">Choose your cMoon</h2>
           <p class="cms-sub">
             Pick a faction to represent. This can't be changed later, so choose carefully.
           </p>
           <p v-if="deadlineText" class="cms-deadline">Choose by {{ deadlineText }} or you'll be auto-assigned.</p>
+          <p v-if="preview" class="cms-preview-badge">Admin preview — this is exactly what new players see. Nothing here is saved.</p>
         </div>
 
         <div class="cms-body">
@@ -53,6 +55,18 @@
 </template>
 
 <script setup>
+// `preview` lets admin re-use this exact component (same markup, same joinLocked-filtered
+// /api/cmoons feed, same CSS) to show what new players see, without any of the real
+// self-selection side effects. Visibility is then driven by v-model (modelValue) instead of the
+// player flow's own internal eligibility check (checkStatus), and confirm() never calls the real
+// mutating select endpoint — it only plays the chosen cMoon's effect (if any), so an admin who
+// already belongs to a cMoon can preview repeatedly with zero side effects.
+const props = defineProps({
+  preview: { type: Boolean, default: false },
+  modelValue: { type: Boolean, default: false },
+})
+const emit = defineEmits(['update:modelValue'])
+
 const visible = ref(false)
 const submitting = ref(false)
 const error = ref('')
@@ -95,6 +109,26 @@ async function checkStatus() {
   }
 }
 
+// Admin preview: same /api/cmoons feed as the real flow (so joinLocked cMoons stay excluded
+// exactly like they would for a new player), but skips the eligibility check entirely — an admin
+// previewing this doesn't need canChoose:true, that's the whole point.
+async function loadPreview() {
+  error.value = ''
+  choice.value = null
+  deadline.value = null
+  try {
+    const list = await $fetch('/api/cmoons').catch(() => ({ cmoons: [] }))
+    cmoons.value = list?.cmoons || []
+  } catch {
+    cmoons.value = []
+  }
+}
+
+function closePreview() {
+  visible.value = false
+  emit('update:modelValue', false)
+}
+
 const router = useRouter()
 const { play } = useFullscreenEffect()
 
@@ -102,6 +136,18 @@ async function confirm() {
   if (!choice.value || submitting.value) return
   submitting.value = true
   error.value = ''
+
+  if (props.preview) {
+    // Never calls the real mutating select endpoint — this is a look, not a join. Mirrors the
+    // real flow's ordering (close the picker, then play the effect) rather than navigating
+    // anywhere afterward, since there's no real cMoon page to land an admin preview on.
+    const picked = cmoons.value.find(c => c.id === choice.value)
+    closePreview()
+    if (picked?.effectType) play(picked.effectType)
+    submitting.value = false
+    return
+  }
+
   try {
     const chosenId = choice.value
     await $fetch('/api/cmoon/select', { method: 'POST', body: { cMoonId: chosenId } })
@@ -156,7 +202,17 @@ watch(visible, async (v) => {
   }
 })
 
-onMounted(checkStatus)
+if (props.preview) {
+  // Preview visibility is fully controlled by the parent via v-model — no auto eligibility
+  // check, and no independent internal open/close beyond mirroring the prop.
+  watch(() => props.modelValue, async (v) => {
+    if (v) await loadPreview()
+    visible.value = v
+  }, { immediate: true })
+} else {
+  onMounted(checkStatus)
+}
+
 onBeforeUnmount(() => {
   if (typeof document !== 'undefined') document.documentElement.style.overflow = ''
 })
@@ -201,8 +257,36 @@ onBeforeUnmount(() => {
 }
 
 .cms-header {
+  position: relative;
   padding: 16px 16px 8px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.cms-preview-close {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+.cms-preview-close:hover,
+.cms-preview-close:focus-visible {
+  color: #fff;
+}
+
+.cms-preview-badge {
+  margin: 6px 40px 0 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #ffd75e;
 }
 
 .cms-title {
