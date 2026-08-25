@@ -88,6 +88,30 @@
               </div>
               <div v-else class="text-[11px] text-gray-500">No ranks yet.</div>
             </div>
+
+            <!-- Affinity Levels: "contribute to cMoon" ladder — spend points to reach a level,
+                 which can grant a cZone glow (in this cMoon's color), an exclusive avatar, and/or
+                 an exclusive cZone background. Independent of the Ranks ladder above (Ranks are
+                 achievement-granted; affinity is spend-driven and personal, not team score). -->
+            <div class="mt-2 pt-2 border-t">
+              <div class="flex items-center justify-between mb-1">
+                <div class="text-[11px] font-medium">Affinity Levels</div>
+                <button type="button" class="cm-tap text-[11px] text-indigo-600" @click="startAddLevel(c)">+ Add level</button>
+              </div>
+              <div v-if="c.affinityLevels.length" class="space-y-1">
+                <div v-for="lvl in c.affinityLevels" :key="lvl.id" class="flex items-center gap-2 text-[11px]">
+                  <span class="text-gray-500 w-6 flex-shrink-0">#{{ lvl.sortOrder }}</span>
+                  <span class="flex-1 min-w-0 break-words">{{ lvl.name }}</span>
+                  <span class="text-gray-500 flex-shrink-0">{{ lvl.threshold.toLocaleString() }} pts</span>
+                  <span v-if="lvl.grantsGlow" class="flex-shrink-0" title="Grants cZone glow">✨</span>
+                  <span v-if="lvl.rewardBackground" class="flex-shrink-0" title="Grants background">🖼️</span>
+                  <span v-if="lvl.rewardAvatar" class="flex-shrink-0" title="Grants avatar">🧑</span>
+                  <button type="button" class="cm-tap text-indigo-600" @click="startEditLevel(c, lvl)">Edit</button>
+                  <button type="button" class="cm-tap text-red-600" @click="removeLevel(c, lvl)">Delete</button>
+                </div>
+              </div>
+              <div v-else class="text-[11px] text-gray-500">No affinity levels yet.</div>
+            </div>
           </div>
           <div v-if="!cmoons.length" class="text-gray-600">No cMoons yet — create one above.</div>
         </div>
@@ -323,6 +347,75 @@
           <button type="button" class="cm-tap px-3 border rounded" @click="closeRankModal" :disabled="rankSaving">Cancel</button>
           <button type="button" class="cm-tap px-3 bg-indigo-600 text-white rounded" @click="saveRank(rankCMoon)" :disabled="rankSaving">
             {{ rankSaving ? 'Saving…' : (rankForm.id ? 'Save Rank' : 'Add Rank') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Add / Edit affinity level modal ─────────────────────────────── -->
+    <div v-if="levelModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-2">
+      <div class="absolute inset-0 bg-black/50" @click="!levelSaving && closeLevelModal()"></div>
+      <div class="relative bg-white w-full max-w-sm rounded-lg shadow-lg flex flex-col max-h-[92vh] text-gray-900">
+        <div class="flex items-center justify-between px-4 py-3 border-b flex-shrink-0">
+          <h3 class="text-sm font-semibold">{{ levelForm.id ? 'Edit Affinity Level' : 'Add Affinity Level' }}</h3>
+          <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeLevelModal" :disabled="levelSaving">✕</button>
+        </div>
+
+        <div class="overflow-y-auto flex-1 px-4 py-3 space-y-2">
+          <div>
+            <label class="block text-xs font-medium mb-1">Level name</label>
+            <input v-model="levelForm.name" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" placeholder="e.g. Devoted" />
+          </div>
+          <div class="flex gap-2">
+            <div class="flex-1 min-w-0">
+              <label class="block text-xs font-medium mb-1">Points required</label>
+              <input v-model.number="levelForm.threshold" type="number" inputmode="numeric" min="1" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
+            </div>
+            <div class="w-20 flex-shrink-0">
+              <label class="block text-xs font-medium mb-1">Order</label>
+              <input v-model.number="levelForm.sortOrder" type="number" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" aria-label="Ladder order" />
+            </div>
+          </div>
+
+          <label class="flex items-center gap-2 pt-1">
+            <input type="checkbox" v-model="levelForm.grantsGlow" />
+            <span class="text-xs">Grants cZone glow (in this cMoon's color)</span>
+          </label>
+
+          <div>
+            <label class="block text-xs font-medium mb-1">Reward background (optional)</label>
+            <select v-model="levelForm.rewardBackgroundId" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px">
+              <option value="">None</option>
+              <option v-for="bg in backgrounds" :key="bg.id" :value="bg.id">{{ bg.label || bg.filename }}</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium mb-1">Reward avatar (optional)</label>
+            <select v-model="levelForm.rewardAvatarId" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px">
+              <option value="">None</option>
+              <option v-for="av in avatarsCatalog" :key="av.id" :value="av.id">{{ av.label || av.filename }}</option>
+            </select>
+            <button type="button" class="text-[11px] text-indigo-600 mt-1" @click="avatarUploadOpen = !avatarUploadOpen">
+              {{ avatarUploadOpen ? 'Cancel upload' : '+ Upload new avatar' }}
+            </button>
+            <div v-if="avatarUploadOpen" class="mt-1 space-y-1">
+              <input type="file" accept="image/png,image/jpeg,image/webp" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" @change="onAvatarFileChange" />
+              <input v-model="avatarUploadLabel" placeholder="Label (optional)" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
+              <button type="button" class="cm-tap px-3 border rounded text-xs" :disabled="!avatarUploadFile || avatarUploading" @click="uploadAvatar">
+                {{ avatarUploading ? 'Uploading…' : 'Upload' }}
+              </button>
+              <p v-if="avatarUploadError" class="text-[11px] text-red-600">{{ avatarUploadError }}</p>
+            </div>
+          </div>
+
+          <p v-if="levelFormError" class="text-[11px] text-red-600">{{ levelFormError }}</p>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 px-4 py-3 border-t flex-shrink-0">
+          <button type="button" class="cm-tap px-3 border rounded" @click="closeLevelModal" :disabled="levelSaving">Cancel</button>
+          <button type="button" class="cm-tap px-3 bg-indigo-600 text-white rounded" @click="saveLevel(levelCMoon)" :disabled="levelSaving">
+            {{ levelSaving ? 'Saving…' : (levelForm.id ? 'Save Level' : 'Add Level') }}
           </button>
         </div>
       </div>
@@ -672,13 +765,133 @@ async function removeRank(c, r) {
   }
 }
 
+// Affinity Levels: same single-shared-form-at-a-time pattern as Ranks above. `backgrounds` and
+// `avatarsCatalog` back the two reward pickers — loaded once in load(), refreshed after an
+// inline avatar upload so the new avatar is immediately selectable.
+const backgrounds = ref([])
+const avatarsCatalog = ref([])
+
+const emptyLevelForm = () => ({ id: '', name: '', threshold: 0, sortOrder: 0, grantsGlow: false, rewardBackgroundId: '', rewardAvatarId: '' })
+const levelForm = reactive(emptyLevelForm())
+const levelCMoon = ref(null)
+const levelModalOpen = ref(false)
+const levelFormError = ref('')
+const levelSaving = ref(false)
+
+const avatarUploadOpen = ref(false)
+const avatarUploadFile = ref(null)
+const avatarUploadLabel = ref('')
+const avatarUploading = ref(false)
+const avatarUploadError = ref('')
+
+function resetLevelForm() {
+  Object.assign(levelForm, emptyLevelForm())
+  levelCMoon.value = null
+  levelFormError.value = ''
+  avatarUploadOpen.value = false
+  avatarUploadFile.value = null
+  avatarUploadLabel.value = ''
+  avatarUploadError.value = ''
+}
+
+function closeLevelModal() {
+  resetLevelForm()
+  levelModalOpen.value = false
+}
+
+function startAddLevel(c) {
+  resetLevelForm()
+  levelCMoon.value = c
+  levelForm.sortOrder = (c.affinityLevels.reduce((max, l) => Math.max(max, l.sortOrder), -1)) + 1
+  levelModalOpen.value = true
+}
+
+function startEditLevel(c, lvl) {
+  resetLevelForm()
+  levelCMoon.value = c
+  Object.assign(levelForm, {
+    id: lvl.id, name: lvl.name, threshold: lvl.threshold, sortOrder: lvl.sortOrder,
+    grantsGlow: lvl.grantsGlow, rewardBackgroundId: lvl.rewardBackgroundId || '', rewardAvatarId: lvl.rewardAvatarId || '',
+  })
+  levelModalOpen.value = true
+}
+
+async function saveLevel(c) {
+  if (!c) return
+  if (!levelForm.name.trim()) { levelFormError.value = 'Name is required'; return }
+  if (!Number.isInteger(levelForm.threshold) || levelForm.threshold <= 0) { levelFormError.value = 'Points required must be a positive whole number'; return }
+  levelFormError.value = ''
+  levelSaving.value = true
+  try {
+    const body = {
+      name: levelForm.name.trim(),
+      threshold: levelForm.threshold,
+      sortOrder: levelForm.sortOrder,
+      grantsGlow: levelForm.grantsGlow,
+      rewardBackgroundId: levelForm.rewardBackgroundId || '',
+      rewardAvatarId: levelForm.rewardAvatarId || '',
+    }
+    if (!levelForm.id) {
+      await $fetch(`/api/admin/cmoons/${c.id}/affinity-levels`, { method: 'POST', body })
+    } else {
+      await $fetch(`/api/admin/cmoons/${c.id}/affinity-levels/${levelForm.id}`, { method: 'PUT', body })
+    }
+    closeLevelModal()
+    await load()
+  } catch (e) {
+    levelFormError.value = e?.data?.statusMessage || 'Save failed'
+  } finally {
+    levelSaving.value = false
+  }
+}
+
+async function removeLevel(c, lvl) {
+  if (!confirm(`Delete affinity level "${lvl.name}"?`)) return
+  try {
+    await $fetch(`/api/admin/cmoons/${c.id}/affinity-levels/${lvl.id}`, { method: 'DELETE' })
+    await load()
+  } catch (e) {
+    alert(e?.data?.statusMessage || 'Delete failed')
+  }
+}
+
+function onAvatarFileChange(e) {
+  const file = e.target.files?.[0] || null
+  e.target.value = ''
+  avatarUploadError.value = ''
+  avatarUploadFile.value = file
+}
+
+async function uploadAvatar() {
+  if (!avatarUploadFile.value) return
+  avatarUploading.value = true
+  avatarUploadError.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('image', avatarUploadFile.value)
+    if (avatarUploadLabel.value.trim()) fd.append('label', avatarUploadLabel.value.trim())
+    const created = await $fetch('/api/admin/avatars', { method: 'POST', body: fd })
+    avatarsCatalog.value = await $fetch('/api/admin/avatars')
+    levelForm.rewardAvatarId = created.id
+    avatarUploadOpen.value = false
+    avatarUploadFile.value = null
+    avatarUploadLabel.value = ''
+  } catch (e) {
+    avatarUploadError.value = e?.data?.statusMessage || 'Upload failed'
+  } finally {
+    avatarUploading.value = false
+  }
+}
+
 async function load() {
   loading.value = true
   try {
-    const [data, adminsData, ctoonsData] = await Promise.all([
+    const [data, adminsData, ctoonsData, backgroundsData, avatarsData] = await Promise.all([
       $fetch('/api/admin/cmoons'),
       $fetch('/api/admin/cmoon-admins'),
       $fetch('/api/admin/list-ctoons'),
+      $fetch('/api/admin/backgrounds'),
+      $fetch('/api/admin/avatars'),
     ])
     cmoons.value = data.cmoons || []
     flagEnabled.value = !!data.cMoonEnabled
@@ -686,6 +899,8 @@ async function load() {
     cMoonSelectionDeadlineAt.value = data.cMoonSelectionDeadlineAt
     admins.value = adminsData || []
     ctoons.value = ctoonsData || []
+    backgrounds.value = backgroundsData || []
+    avatarsCatalog.value = avatarsData || []
   } catch (e) {
     formError.value = e?.data?.statusMessage || 'Failed to load cMoons'
   } finally {

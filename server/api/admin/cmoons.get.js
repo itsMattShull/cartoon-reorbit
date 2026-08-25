@@ -13,6 +13,13 @@ export default defineEventHandler(async (event) => {
         captains: { include: { user: { select: { id: true, username: true } } } },
         prizeCtoons: { include: { ctoon: { select: { id: true, name: true, assetPath: true } } } },
         ranks: { orderBy: { sortOrder: 'asc' } },
+      affinityLevels: {
+        orderBy: { sortOrder: 'asc' },
+        include: {
+          rewardBackground: { select: { id: true, label: true, imagePath: true } },
+          rewardAvatar: { select: { id: true, label: true, imagePath: true } },
+        },
+      },
         // Single grouped query, not a per-cMoon count() loop.
         _count: { select: { displayedCtoons: true } },
       },
@@ -39,6 +46,11 @@ export default defineEventHandler(async (event) => {
       captains: c.captains.map(cap => ({ userId: cap.userId, username: cap.user?.username || '' })),
       prizeCtoons: c.prizeCtoons.map(pc => ({ ctoonId: pc.ctoonId, quantity: pc.quantity, name: pc.ctoon?.name || '', assetPath: pc.ctoon?.assetPath || null })),
       ranks: c.ranks.map(r => ({ id: r.id, name: r.name, sortOrder: r.sortOrder, discordRoleId: r.discordRoleId })),
+      affinityLevels: c.affinityLevels.map(l => ({
+        id: l.id, name: l.name, threshold: l.threshold, sortOrder: l.sortOrder, grantsGlow: l.grantsGlow,
+        rewardBackgroundId: l.rewardBackgroundId, rewardAvatarId: l.rewardAvatarId,
+        rewardBackground: l.rewardBackground, rewardAvatar: l.rewardAvatar,
+      })),
     })),
   }
 })

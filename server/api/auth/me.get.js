@@ -46,6 +46,7 @@ export default defineEventHandler(async (event) => {
       isBooster: true,
       additionalCzones: true,
       surveyAnswers: { select: { userId: true } },
+      equippedGlowCMoonId: true,
     }
   })
 
@@ -60,7 +61,7 @@ export default defineEventHandler(async (event) => {
   // Ensure fresh tokens and up-to-date roles
   await refreshDiscordTokenAndRoles(prisma, user, config)
 
-  const [ctoonCount, uniqueCtoonRows, lockAgg, unreadNotifications] = await Promise.all([
+  const [ctoonCount, uniqueCtoonRows, lockAgg, unreadNotifications, ownedGlows] = await Promise.all([
     prisma.userCtoon.count({
       where: {
         userId: user.id,
@@ -89,7 +90,14 @@ export default defineEventHandler(async (event) => {
       _sum: { amount: true },
       where: { userId: user.id, status: 'ACTIVE' }
     }),
-    prisma.notification.count({ where: { userId: user.id, readAt: null } })
+    prisma.notification.count({ where: { userId: user.id, readAt: null } }),
+    // Every cMoon this user has ever earned a glow for (small — one row per cMoon they've
+    // reached a glow-granting affinity level in), so the cZone editor can offer an equip
+    // picker without a dedicated round trip.
+    prisma.userCMoonGlow.findMany({
+      where: { userId: user.id },
+      select: { cMoonId: true, cMoon: { select: { name: true, color: true } } }
+    })
   ])
 
   const lockedPoints = lockAgg._sum.amount || 0
@@ -119,5 +127,7 @@ export default defineEventHandler(async (event) => {
     isBooster: user.isBooster,
     additionalCzones: user.additionalCzones ?? 0,
     surveyComplete: !!user.surveyAnswers,
+    equippedGlowCMoonId: user.equippedGlowCMoonId || null,
+    ownedGlows: ownedGlows.map(g => ({ cMoonId: g.cMoonId, name: g.cMoon?.name || '', color: g.cMoon?.color || '#888888' })),
   }
 })
