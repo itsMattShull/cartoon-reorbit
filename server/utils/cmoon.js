@@ -17,17 +17,26 @@ const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000
 //
 // Three bonuses, awarded once per calendar week (Monday 00:00 America/Chicago —
 // see getWeekWindowStart) to whichever cMoon a qualifying player belongs to:
-//   - HIGH_SCORE (100 pts/player): holding rank #1 (all-time) on any arcade game.
-//   - TOP10 (50 pts/player): a top-10 finish on the Top Points or Total cToons board.
-//   - DAILY_TASK (10 pts/player/day): each day that week the player completed at
+//   - HIGH_SCORE (default 100 pts/player): holding rank #1 (all-time) on an eligible arcade game.
+//   - TOP10 (default 50 pts/player): a top-N finish on an eligible board (Top Points / Total cToons).
+//   - DAILY_TASK (default 10 pts/player/day): each day that week the player completed at
 //     least one of the existing daily tasks (recorded by recordDailyTaskCompletions,
 //     run daily — see server/cron/record-daily-task-completions.js).
 //
-// A minimum account age (matching the 3-day cMoon self-selection window) gates all
-// three: a brand-new throwaway account can join a cMoon and immediately inflate its
-// score by camping a low-traffic game's #1 spot or grinding the (cheap) daily tasks.
-// Requiring the account to first survive 3 days raises the cost of that without
-// adding new anti-abuse infrastructure beyond what already exists for selection.
+// All the numbers above, the minimum-account-age anti-abuse gate, which games are
+// HIGH_SCORE-eligible, and which boards/rank-cutoff count for TOP10 are admin-editable
+// (Admin > cMoons > Scoring Rules — see resolveScoringConfig below and
+// server/api/admin/cmoon-scoring.post.js). Changes apply forward-only: they affect
+// only future weekly cron runs, never rewrite past CMoonScoreLog rows/teamScore.
+//
+// A minimum account age (defaulting to the 3-day cMoon self-selection window) gates
+// all three: a brand-new throwaway account can join a cMoon and immediately inflate
+// its score by camping a low-traffic game's #1 spot or grinding the (cheap) daily
+// tasks. Requiring the account to first survive N days raises the cost of that
+// without adding new anti-abuse infrastructure beyond what already exists for
+// selection. NOTE: this is a distinct concept from THREE_DAYS_MS below, which gates
+// the *selection* deadline (computeCMoonDeadline/autoAssignExpiredCMoonUsers) — the
+// two happen to share the same default but are configured/read independently.
 //
 // Awards are logged to CMoonScoreLog, whose unique constraint
 // (cMoonId, userId, category, weekStart, detail) is the only idempotency guard
@@ -36,27 +45,77 @@ const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000
 // CMoon.teamScore is never incremented directly; it is fully recomputed from
 // CMoonScoreLog on every run (see recomputeCMoonTeamScores), so a crash mid-run
 // can leave it briefly stale but never wrong or double-counted.
-const MIN_ACCOUNT_AGE_MS = THREE_DAYS_MS
 
 // Compile-time-constant game definitions — table/column names below are literal
 // SQL text, never runtime/user input (mirrors the convention documented in
-// server/utils/gameLeaderboard.js and server/utils/duelLeaderboard.js).
+// server/utils/gameLeaderboard.js and server/utils/duelLeaderboard.js). Admin
+// "disabled games" config (see resolveScoringConfig) only ever filters this array by
+// `.name` — it must never be used to construct table/column identifiers itself.
 const SCORE_GAMES = [
-  { name: 'reorbitmatch', table: 'ReOrbitMatchScore', column: 'score', direction: 'desc' },
-  { name: 'tower', table: 'TowerStackScore', column: 'score', direction: 'desc' },
-  { name: 'reorbitmemory', table: 'ReOrbitMemoryScore', column: 'moves', direction: 'asc' },
+  { name: 'reorbitmatch', label: 'ReOrbit Match', table: 'ReOrbitMatchScore', column: 'score', direction: 'desc' },
+  { name: 'tower', label: 'Tower Stack', table: 'TowerStackScore', column: 'score', direction: 'desc' },
+  { name: 'reorbitmemory', label: 'ReOrbit Memory', table: 'ReOrbitMemoryScore', column: 'moves', direction: 'asc' },
   {
-    name: 'guessctoon', table: 'GuessCtoonScore', column: 'streak', direction: 'desc',
+    name: 'guessctoon', label: 'Guess cToon', table: 'GuessCtoonScore', column: 'streak', direction: 'desc',
     extraWhere: 'AND s."suspicious" = false AND s."counted" = true'
   },
-  { name: 'asteroid', table: 'AsteroidScore', column: 'score', direction: 'desc' },
-  { name: 'flappy', table: 'FlappyPowerpuffScore', column: 'score', direction: 'desc' },
-  { name: 'fruitsamurai', table: 'FruitSamuraiScore', column: 'score', direction: 'desc' },
+  { name: 'asteroid', label: 'Op. A.S.T.E.R.O.I.D.', table: 'AsteroidScore', column: 'score', direction: 'desc' },
+  { name: 'flappy', label: 'Flappy Powerpuff', table: 'FlappyPowerpuffScore', column: 'score', direction: 'desc' },
+  { name: 'fruitsamurai', label: 'Fruit Samurai', table: 'FruitSamuraiScore', column: 'score', direction: 'desc' },
 ]
 const WIN_GAMES = [
-  { name: 'edrps', table: 'EdRpsMatch' },
-  { name: 'pokemonbattle', table: 'PokemonBattleMatch' },
+  { name: 'edrps', label: 'Ed, Edd n Eddy RPS', table: 'EdRpsMatch' },
+  { name: 'pokemonbattle', label: 'Pokemon: Fire, Water, Grass!', table: 'PokemonBattleMatch' },
 ]
+
+// Read-only key/label lists for the admin UI's per-game eligibility toggles —
+// never used to build SQL, only rendered and echoed back as `.name` filter values.
+export const SCORE_GAME_OPTIONS = SCORE_GAMES.map(({ name, label }) => ({ key: name, label }))
+export const WIN_GAME_OPTIONS = WIN_GAMES.map(({ name, label }) => ({ key: name, label }))
+
+// Defaults mirror the GlobalGameConfig column defaults (see the migration) — used both
+// as the fallback when a value is missing/out-of-range and to document the shape.
+export const CMOON_SCORING_DEFAULTS = {
+  highScorePoints: 100,
+  top10Points: 50,
+  dailyTaskPoints: 10,
+  minAccountAgeDays: 3,
+  top10RankCutoff: 10,
+  top10PointsBoardEnabled: true,
+  top10CtoonsBoardEnabled: true,
+}
+
+function parseDisabledGameKeys(value) {
+  if (!Array.isArray(value)) return []
+  return value.filter(v => typeof v === 'string')
+}
+
+// Normalizes the cMoon-scoring columns on a GlobalGameConfig row into the values the
+// weekly scorer and daily-task recorder actually use, falling back to
+// CMOON_SCORING_DEFAULTS for anything missing or out of range (defends against a
+// pre-migration row, a manually-edited DB value, etc. — the admin API is the only
+// normal write path and already validates before storing).
+// `activeScoreGames`/`activeWinGames` are the ONLY thing disabledScoreGames/disabledWinGames
+// ever do: filter the compile-time SCORE_GAMES/WIN_GAMES arrays by `.name`. Admin-supplied
+// strings must never be used for anything else (property lookups, SQL text, etc.) — see the
+// module-level SCORE_GAMES/WIN_GAMES comment on why table/column identifiers must stay
+// compile-time constants.
+export function resolveScoringConfig(config) {
+  const int = (v, fallback, min) => (Number.isInteger(v) && v >= min) ? v : fallback
+  const disabledScoreGames = parseDisabledGameKeys(config?.cMoonDisabledScoreGames)
+  const disabledWinGames = parseDisabledGameKeys(config?.cMoonDisabledWinGames)
+  return {
+    highScorePoints: int(config?.cMoonHighScorePoints, CMOON_SCORING_DEFAULTS.highScorePoints, 0),
+    top10Points: int(config?.cMoonTop10Points, CMOON_SCORING_DEFAULTS.top10Points, 0),
+    dailyTaskPoints: int(config?.cMoonDailyTaskPoints, CMOON_SCORING_DEFAULTS.dailyTaskPoints, 0),
+    minAccountAgeDays: int(config?.cMoonScoringMinAccountAgeDays, CMOON_SCORING_DEFAULTS.minAccountAgeDays, 0),
+    top10RankCutoff: int(config?.cMoonTop10RankCutoff, CMOON_SCORING_DEFAULTS.top10RankCutoff, 1),
+    top10PointsBoardEnabled: config?.cMoonTop10PointsBoardEnabled !== false,
+    top10CtoonsBoardEnabled: config?.cMoonTop10CtoonsBoardEnabled !== false,
+    activeScoreGames: SCORE_GAMES.filter(g => !disabledScoreGames.includes(g.name)),
+    activeWinGames: WIN_GAMES.filter(g => !disabledWinGames.includes(g.name)),
+  }
+}
 
 // Current all-time #1 for a score-based game (highest, or lowest for ReOrbit Memory's
 // move count). Shape/exclusions mirror server/utils/gameLeaderboard.js's buildTop11.
@@ -115,10 +174,12 @@ async function findTopWinsHolder({ table }) {
   return rows[0] || null
 }
 
-// True top 10 of the public "Top Points" board (server/api/points-leaderboard.get.js),
+// Top N of the public "Top Points" board (server/api/points-leaderboard.get.js),
 // membership/age-filtered later — ranking itself must reflect the real board, not just
-// cMoon members, or a small/inactive cMoon's top 10 would mean nothing.
-async function getTop10PointsHolders() {
+// cMoon members, or a small/inactive cMoon's top N would mean nothing. `rankCutoff` is
+// bound as an ordinary query parameter (a LIMIT value, not an identifier), so it's safe
+// to come from admin config the same way any other numeric column value would be.
+async function getTop10PointsHolders(rankCutoff) {
   return prisma.$queryRaw`
     SELECT u."id" AS "userId", u."cMoonId" AS "cMoonId", u."createdAt" AS "createdAt"
     FROM "UserPoints" up
@@ -127,12 +188,12 @@ async function getTop10PointsHolders() {
       AND COALESCE(u."banned", false) = false
       AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
     ORDER BY up."points" DESC, u."username" ASC
-    LIMIT 10
+    LIMIT ${rankCutoff}
   `
 }
 
-// True top 10 of the public "Total cToons" board (server/api/leaderboard/total-ctoons.get.js).
-async function getTop10TotalCtoonsHolders() {
+// Top N of the public "Total cToons" board (server/api/leaderboard/total-ctoons.get.js).
+async function getTop10TotalCtoonsHolders(rankCutoff) {
   return prisma.$queryRaw`
     SELECT u."id" AS "userId", u."cMoonId" AS "cMoonId", u."createdAt" AS "createdAt"
     FROM "User" u
@@ -143,12 +204,12 @@ async function getTop10TotalCtoonsHolders() {
       AND uc."burnedAt" IS NULL
     GROUP BY u."id", u."cMoonId", u."createdAt"
     ORDER BY COUNT(uc."id") DESC, u."username" ASC
-    LIMIT 10
+    LIMIT ${rankCutoff}
   `
 }
 
 // A holder row is eligible for a cMoon-score award if it belongs to a cMoon and the
-// account has survived the minimum age gate (see MIN_ACCOUNT_AGE_MS above).
+// account has survived the minimum age gate (see resolveScoringConfig above).
 function isEligibleHolder(row, minAccountAgeCutoff) {
   return !!(row?.cMoonId && new Date(row.createdAt) <= minAccountAgeCutoff)
 }
@@ -189,7 +250,8 @@ export async function recordDailyTaskCompletions() {
 
   const dailyBoundary = getChicagoDailyBoundary()
   const morningBoundary = getChicagoMorningWindowStart()
-  const minAccountAgeCutoff = new Date(Date.now() - MIN_ACCOUNT_AGE_MS)
+  const { minAccountAgeDays } = resolveScoringConfig(config)
+  const minAccountAgeCutoff = new Date(Date.now() - minAccountAgeDays * 24 * 60 * 60 * 1000)
   const combatNames = Prisma.join(COMBAT_POOL_GAME_NAMES)
 
   // daily.get.js only ever treats a threshold-based task as completable when its configured
@@ -299,36 +361,41 @@ export async function runWeeklyCMoonScoring() {
   const config = await getGlobalConfig({ fresh: true })
   if (!config?.cMoonEnabled) return { awarded: 0 }
 
+  const {
+    highScorePoints, top10Points, dailyTaskPoints, minAccountAgeDays, top10RankCutoff,
+    top10PointsBoardEnabled, top10CtoonsBoardEnabled, activeScoreGames, activeWinGames,
+  } = resolveScoringConfig(config)
+
   const weekStart = getWeekWindowStart()
   const weekBegin = new Date(weekStart.getTime() - 7 * 24 * 60 * 60 * 1000)
-  const minAccountAgeCutoff = new Date(Date.now() - MIN_ACCOUNT_AGE_MS)
+  const minAccountAgeCutoff = new Date(Date.now() - minAccountAgeDays * 24 * 60 * 60 * 1000)
 
   const candidates = []
 
-  const [scoreHolders, winHolders, top10Points, top10Ctoons] = await Promise.all([
-    Promise.all(SCORE_GAMES.map(g => findTopScoreHolder(g))),
-    Promise.all(WIN_GAMES.map(g => findTopWinsHolder(g))),
-    getTop10PointsHolders(),
-    getTop10TotalCtoonsHolders(),
+  const [scoreHolders, winHolders, top10PointsHolders, top10CtoonsHolders] = await Promise.all([
+    Promise.all(activeScoreGames.map(g => findTopScoreHolder(g))),
+    Promise.all(activeWinGames.map(g => findTopWinsHolder(g))),
+    top10PointsBoardEnabled ? getTop10PointsHolders(top10RankCutoff) : Promise.resolve([]),
+    top10CtoonsBoardEnabled ? getTop10TotalCtoonsHolders(top10RankCutoff) : Promise.resolve([]),
   ])
 
-  SCORE_GAMES.forEach((g, i) => {
+  activeScoreGames.forEach((g, i) => {
     const holder = scoreHolders[i]
     if (isEligibleHolder(holder, minAccountAgeCutoff)) {
-      candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: 100, weekStart })
+      candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: highScorePoints, weekStart })
     }
   })
-  WIN_GAMES.forEach((g, i) => {
+  activeWinGames.forEach((g, i) => {
     const holder = winHolders[i]
     if (isEligibleHolder(holder, minAccountAgeCutoff)) {
-      candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: 100, weekStart })
+      candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: highScorePoints, weekStart })
     }
   })
-  for (const row of eligibleHolders(top10Points, minAccountAgeCutoff)) {
-    candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'points', points: 50, weekStart })
+  for (const row of eligibleHolders(top10PointsHolders, minAccountAgeCutoff)) {
+    candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'points', points: top10Points, weekStart })
   }
-  for (const row of eligibleHolders(top10Ctoons, minAccountAgeCutoff)) {
-    candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'totalCtoons', points: 50, weekStart })
+  for (const row of eligibleHolders(top10CtoonsHolders, minAccountAgeCutoff)) {
+    candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'totalCtoons', points: top10Points, weekStart })
   }
 
   const dailyTaskRows = await prisma.userDailyTaskCompletion.findMany({
@@ -338,7 +405,7 @@ export async function runWeeklyCMoonScoring() {
   for (const row of dailyTaskRows) {
     candidates.push({
       cMoonId: row.user.cMoonId, userId: row.userId, category: 'DAILY_TASK',
-      detail: row.date.toISOString(), points: 10, weekStart
+      detail: row.date.toISOString(), points: dailyTaskPoints, weekStart
     })
   }
 
