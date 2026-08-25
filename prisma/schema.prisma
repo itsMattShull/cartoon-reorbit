@@ -344,9 +344,10 @@ model Ctoon {
 
   // cMoon back-relation (prize-on-join — distinct from the display assignment below)
   cMoonPrizeRows CMoonPrizeCtoon[]
-  // Admin-triggered manual dispersals of this cToon to a cMoon's members (distinct from
-  // cMoonPrizeRows, which is auto-granted on join).
-  cMoonDispersals CMoonDispersal[]
+  // Admin-created "pick one of these" offer options featuring this cToon, and the resulting
+  // claims (distinct from cMoonPrizeRows, which is auto-granted on join with no choice).
+  dispersalOptions CMoonDispersalOption[]
+  dispersalClaims  CMoonDispersalClaim[]
 
   // Optional cMoon this cToon is thematically displayed under (admin-assigned in the cToon
   // editor). Purely a catalog/display categorization — unrelated to the player-faction system.
@@ -667,8 +668,9 @@ model User {
   cMoonCaptainOf              CMoonCaptain[]
   achievementClaims           AchievementClaim[]
   dailyTaskCompletions        UserDailyTaskCompletion[]
-  initiatedCMoonDispersals    CMoonDispersal[]          @relation("CMoonDispersalInitiatedBy")
-  cMoonDispersalRecipientRows CMoonDispersalRecipient[] @relation("CMoonDispersalRecipientUser")
+  initiatedDispersalOffers CMoonDispersalOffer[] @relation("CMoonDispersalOfferInitiatedBy")
+  closedDispersalOffers   CMoonDispersalOffer[] @relation("CMoonDispersalOfferClosedBy")
+  dispersalClaims         CMoonDispersalClaim[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
   @@index([cMoonId])
@@ -2927,15 +2929,16 @@ model CMoon {
   // large poster (imagePath) and the page/banner art above, which are too large for that spot.
   avatarPath      String?
 
-  members         User[]
-  captains        CMoonCaptain[]
-  prizeCtoons     CMoonPrizeCtoon[]
-  scoreLogs       CMoonScoreLog[]
-  ranks           CMoonRank[]
-  dispersals      CMoonDispersal[]
+  members              User[]
+  captains             CMoonCaptain[]
+  prizeCtoons          CMoonPrizeCtoon[]
+  scoreLogs            CMoonScoreLog[]
+  ranks                CMoonRank[]
+  dispersalOfferLinks  CMoonDispersalOfferCMoon[]
+  dispersalClaims      CMoonDispersalClaim[]
   // cToons thematically displayed under this cMoon (admin-assigned in the cToon editor). Distinct
   // from `members`/`prizeCtoons`, which are about the player-faction feature, not catalog display.
-  displayedCtoons Ctoon[]           @relation("CtoonCMoonDisplay")
+  displayedCtoons      Ctoon[]                    @relation("CtoonCMoonDisplay")
 
   @@index([memberCount])
   @@index([teamScore])
@@ -2988,69 +2991,106 @@ model CMoonPrizeCtoon {
   @@index([ctoonId])
 }
 
-enum CMoonDispersalStatus {
-  PROCESSING
-  COMPLETED
-  COMPLETED_WITH_ERRORS
+enum CMoonDispersalOfferStatus {
+  OPEN
+  CLOSED
 }
 
-enum CMoonDispersalRecipientStatus {
+enum CMoonDispersalClaimStatus {
   QUEUED
   COMPLETED
   PARTIAL
   FAILED
 }
 
-// Admin-triggered one-off "give this cToon to every current member of this cMoon" action —
-// distinct from CMoonPrizeCtoon (auto-granted on join). The member list is snapshotted and
-// shuffled (Fisher-Yates) into CMoonDispersalRecipient at creation time, so mint numbers are
-// handed out in random order rather than by join date, and membership changes mid-run can't
-// affect who's owed a mint. Progress is updated by mint.worker.js's 'completed'/'failed' event
-// listeners, never inside the mint transaction itself — see server/workers/mint.worker.js.
-model CMoonDispersal {
-  id                String               @id @default(uuid())
-  cMoonId           String
-  ctoonId           String
+// Admin-created "pick one of these cToons" offer — distinct from CMoonPrizeCtoon (auto-granted
+// on join, no choice involved). Stays OPEN (visible/claimable on every linked cMoon's page) until
+// an admin explicitly closes it; there's no snapshot of eligible members or a total-job count up
+// front, since membership can change over the offer's open-ended lifetime — eligibility is
+// re-checked live against the claimant's current cMoonId at claim time (see
+// server/api/cmoon/[id]/dispersal-offers/[offerId]/claim.post.js). Linking to multiple cMoons
+// (via CMoonDispersalOfferCMoon) makes it one shared offer/option-pool across all of them, not a
+// separate offer per cMoon. Mint order is naturally randomized relative to join date because
+// claims fire in whatever order members actually pick, not a shuffle computed up front.
+model CMoonDispersalOffer {
+  id                String                     @id @default(uuid())
   quantityPerMember Int
-  status            CMoonDispersalStatus @default(PROCESSING)
-  totalMembers      Int
-  totalJobs         Int
-  completedJobs     Int                  @default(0)
-  failedJobs        Int                  @default(0)
+  status            CMoonDispersalOfferStatus  @default(OPEN)
   initiatedById     String
-  createdAt         DateTime             @default(now())
-  completedAt       DateTime?
+  createdAt         DateTime                   @default(now())
+  closedById        String?
+  closedAt          DateTime?
 
-  cMoon       CMoon                     @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
-  ctoon       Ctoon                     @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
-  initiatedBy User                      @relation("CMoonDispersalInitiatedBy", fields: [initiatedById], references: [id], onDelete: Restrict)
-  recipients  CMoonDispersalRecipient[]
+  initiatedBy User                      @relation("CMoonDispersalOfferInitiatedBy", fields: [initiatedById], references: [id], onDelete: Restrict)
+  closedBy    User?                     @relation("CMoonDispersalOfferClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  cMoons      CMoonDispersalOfferCMoon[]
+  options     CMoonDispersalOption[]
+  claims      CMoonDispersalClaim[]
 
-  @@index([cMoonId, createdAt])
+  @@index([status, createdAt])
 }
 
-// One row per member snapshotted at dispersal creation. mintNumbers accumulates as jobs
-// complete; a row settles to COMPLETED/PARTIAL/FAILED once quantityMinted + failedCount
-// reaches quantityRequested. `username` is a snapshot so history survives the member
-// later leaving the cMoon.
-model CMoonDispersalRecipient {
-  id                String                        @id @default(uuid())
-  dispersalId       String
-  userId            String
-  username          String
-  quantityRequested Int
-  quantityMinted    Int                           @default(0)
-  failedCount       Int                           @default(0)
-  status            CMoonDispersalRecipientStatus @default(QUEUED)
-  mintNumbers       Int[]                         @default([])
-  error             String?
-  updatedAt         DateTime                      @updatedAt
+// Join table: which cMoon(s) an offer is live on. A member's eligibility is "their current
+// cMoonId has a row here for an OPEN offer" — checked live, never snapshotted.
+model CMoonDispersalOfferCMoon {
+  id      String @id @default(uuid())
+  offerId String
+  cMoonId String
 
-  dispersal CMoonDispersal @relation(fields: [dispersalId], references: [id], onDelete: Cascade)
-  user      User           @relation("CMoonDispersalRecipientUser", fields: [userId], references: [id], onDelete: Cascade)
+  offer CMoonDispersalOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  cMoon CMoon                @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
 
-  @@unique([dispersalId, userId])
-  @@index([dispersalId])
+  @@unique([offerId, cMoonId])
+  @@index([cMoonId])
+}
+
+// One of the (2+) cToon choices a member can pick for a given offer.
+model CMoonDispersalOption {
+  id        String @id @default(uuid())
+  offerId   String
+  ctoonId   String
+  sortOrder Int    @default(0)
+
+  offer  CMoonDispersalOffer   @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  ctoon  Ctoon                 @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  claims CMoonDispersalClaim[]
+
+  @@unique([offerId, ctoonId])
+}
+
+// One row per member who claimed an offer — at most one per (offer, user), enforced by the
+// unique constraint below (a claim is final once made, no re-picking). `cMoonId`/`username` are
+// snapshots of which cMoon they were a live member of and their name at claim time, surviving
+// them later leaving that cMoon or renaming. mintNumbers accumulates as jobs complete; status
+// settles to COMPLETED/PARTIAL/FAILED once quantityMinted + failedCount reaches quantity — see
+// mint.worker.js's 'completed'/'failed' event listeners, which are the only place these rows
+// are updated after creation.
+model CMoonDispersalClaim {
+  id             String                     @id @default(uuid())
+  offerId        String
+  optionId       String
+  ctoonId        String
+  userId         String
+  username       String
+  cMoonId        String
+  quantity       Int
+  quantityMinted Int                        @default(0)
+  failedCount    Int                        @default(0)
+  status         CMoonDispersalClaimStatus  @default(QUEUED)
+  mintNumbers    Int[]                      @default([])
+  error          String?
+  claimedAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+
+  offer  CMoonDispersalOffer  @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  option CMoonDispersalOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
+  ctoon  Ctoon                @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  user   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cMoon  CMoon                @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+
+  @@unique([offerId, userId])
+  @@index([offerId])
+  @@index([userId])
 }
 
 // One row per (user, day) where the user completed at least one of the existing daily tasks

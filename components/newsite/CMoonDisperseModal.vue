@@ -1,85 +1,64 @@
 <!-- components/newsite/CMoonDisperseModal.vue
-     Admin tool: mint one cToon to every current member of a cMoon, in randomized mint order.
-     Two steps in one modal: setup (pick cToon + quantity, confirm) -> progress (poll a
-     lightweight summary while jobs drain, with an on-demand full/failed recipient list). -->
+     Admin tool: create a "pick one of these cToons" offer, live on one or more cMoons at once,
+     that members opt into and claim from (see CMoonPage.vue for the member-facing side). Three
+     views in one modal: list (existing offers for this cMoon) -> create (new offer) -> detail
+     (manage one offer: live claim counts, on-demand claim list, close). -->
 <template>
   <div class="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-4">
-    <div class="absolute inset-0 bg-black/60" @click="!submitting && attemptClose()"></div>
+    <div class="absolute inset-0 bg-black/60" @click="!busy && attemptClose()"></div>
     <div class="cmd relative bg-white w-full sm:max-w-lg flex flex-col text-gray-900" style="height:100dvh; max-height:100dvh;">
       <div class="flex items-center justify-between px-4 py-3 border-b flex-shrink-0">
-        <h3 class="text-sm font-semibold">Disperse cToons — {{ cmoon.name }}</h3>
-        <button class="cmd-tap text-gray-400 hover:text-gray-600 text-xl leading-none" @click="attemptClose" :disabled="submitting">✕</button>
+        <h3 class="text-sm font-semibold break-words min-w-0">
+          {{ view === 'create' ? 'New cToon Offer' : (view === 'detail' ? 'Manage Offer' : `cToon Offers — ${cmoon.name}`) }}
+        </h3>
+        <button class="cmd-tap text-gray-400 hover:text-gray-600 text-xl leading-none flex-shrink-0" @click="attemptClose" :disabled="busy">✕</button>
       </div>
 
       <div class="overflow-y-auto flex-1 px-4 py-3 space-y-3">
-        <!-- ── Resume check while we determine whether one is already running ── -->
-        <div v-if="checkingActive" class="text-xs text-gray-600">Checking for an in-progress dispersal…</div>
+        <!-- ── List view: existing offers for this cMoon ── -->
+        <template v-if="view === 'list'">
+          <button type="button" class="cmd-tap w-full px-3 bg-indigo-600 text-white rounded text-xs font-semibold" @click="openCreate">
+            + New Offer
+          </button>
 
-        <!-- ── Progress / result view ── -->
-        <template v-else-if="active">
-          <div class="flex items-center gap-3">
-            <img v-if="active.ctoonAssetPath" :src="active.ctoonAssetPath" :alt="active.ctoonName" class="h-14 w-auto rounded flex-shrink-0" />
-            <div class="min-w-0">
-              <p class="font-medium break-words">{{ active.ctoonName }}</p>
-              <p class="text-[11px] text-gray-500">× {{ active.quantityPerMember }} per member · {{ active.totalMembers }} member{{ active.totalMembers === 1 ? '' : 's' }}</p>
-            </div>
-          </div>
-
-          <div>
-            <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
-              <div
-                class="h-3 rounded-full transition-all"
-                :class="active.failedJobs > 0 ? 'bg-amber-500' : 'bg-indigo-600'"
-                :style="{ width: progressPct + '%' }"
-              ></div>
-            </div>
-            <p class="text-[11px] text-gray-600 mt-1">
-              {{ active.completedJobs }} minted<template v-if="active.failedJobs"> · {{ active.failedJobs }} failed</template>
-              of {{ active.totalJobs }}
-              <span class="ml-1 font-medium" :class="statusColorClass">{{ statusLabel }}</span>
-            </p>
-          </div>
-
-          <p v-if="active.status === 'PROCESSING'" class="text-[11px] text-gray-500">
-            Minting in the background — safe to close this and check back later.
-          </p>
-
-          <div>
+          <div v-if="listLoading" class="text-xs text-gray-600">Loading…</div>
+          <div v-else-if="!offers.length" class="text-xs text-gray-500">No offers yet for this cMoon.</div>
+          <div v-else class="space-y-2">
             <button
               type="button"
-              class="cmd-tap text-[11px] text-indigo-600 hover:underline"
-              @click="toggleRecipients"
-            >{{ recipientsOpen ? 'Hide' : (active.failedJobs > 0 ? 'View failed members' : 'View members') }}</button>
-
-            <div v-if="recipientsOpen" class="mt-2 border rounded divide-y max-h-56 overflow-y-auto">
-              <div v-if="recipientsLoading" class="p-2 text-[11px] text-gray-500">Loading…</div>
-              <template v-else>
-                <div v-for="r in recipients" :key="r.userId" class="flex items-center justify-between gap-2 px-2 py-1.5 text-[11px]">
-                  <span class="break-words min-w-0">{{ r.username }}</span>
-                  <span :class="recipientBadgeClass(r.status)">{{ recipientLabel(r) }}</span>
-                </div>
-                <div v-if="!recipients.length" class="p-2 text-[11px] text-gray-500">No members to show.</div>
-                <p v-if="recipientsTruncated" class="p-2 text-[11px] text-gray-500">Showing the first {{ recipients.length }} — narrow with "failed only" to see everything relevant.</p>
-              </template>
-            </div>
-          </div>
-
-          <div class="pt-2 border-t">
-            <p class="text-[11px] font-medium mb-1">Recent dispersals for this cMoon</p>
-            <div v-if="history.length" class="space-y-1 max-h-32 overflow-y-auto">
-              <div v-for="h in history" :key="h.id" class="text-[11px] text-gray-600 flex items-center justify-between gap-2">
-                <span class="break-words min-w-0">{{ h.ctoonName }} × {{ h.quantityPerMember }}</span>
-                <span :class="statusColorClassFor(h.status)">{{ statusLabelFor(h.status) }}</span>
+              v-for="o in offers" :key="o.id"
+              class="cmd-tap w-full text-left border rounded p-2 hover:bg-gray-50"
+              @click="openDetail(o.id)"
+            >
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-[11px] font-medium break-words min-w-0">
+                  {{ o.options.map(opt => opt.name).join(' / ') }}
+                </span>
+                <span :class="offerStatusClass(o.status)">{{ o.status }}</span>
               </div>
-            </div>
-            <p v-else class="text-[11px] text-gray-500">None yet.</p>
+              <p class="text-[11px] text-gray-500 mt-1">
+                × {{ o.quantityPerMember }} per pick · {{ o.totalClaims }} claim{{ o.totalClaims === 1 ? '' : 's' }} ·
+                {{ o.cMoons.length }} cMoon{{ o.cMoons.length === 1 ? '' : 's' }}
+              </p>
+            </button>
           </div>
         </template>
 
-        <!-- ── Setup step ── -->
-        <template v-else>
+        <!-- ── Create view ── -->
+        <template v-else-if="view === 'create'">
           <div>
-            <label class="block text-xs font-medium mb-1">cToon to disperse</label>
+            <label class="block text-xs font-medium mb-1">cMoons this offer is live on</label>
+            <div class="border rounded divide-y max-h-40 overflow-y-auto">
+              <label v-for="c in allCMoons" :key="c.id" class="cmd-tap flex items-center gap-2 px-2 text-[11px]">
+                <input type="checkbox" :value="c.id" v-model="selectedCMoonIds" />
+                <span class="break-words min-w-0">{{ c.name }} <span class="text-gray-500">({{ c.memberCount }})</span></span>
+              </label>
+            </div>
+            <p v-if="!allCMoons.length" class="text-[11px] text-gray-500 mt-1">No cMoons available.</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium mb-1">cToon options (members pick one)</label>
             <input
               v-model="ctoonSearch"
               class="cmd-field w-full border rounded px-2 py-1"
@@ -88,18 +67,23 @@
               autocapitalize="none" autocorrect="off" spellcheck="false"
               role="combobox"
               :aria-expanded="ctoonSuggestions.length > 0"
-              aria-controls="disperse-ctoon-suggestions"
-              @focus="selectedCtoon = null"
+              aria-controls="disperse-offer-ctoon-suggestions"
             />
-            <div v-if="ctoonSuggestions.length" id="disperse-ctoon-suggestions" class="mt-2 border rounded divide-y bg-white max-h-48 overflow-y-auto">
+            <div v-if="ctoonSuggestions.length" id="disperse-offer-ctoon-suggestions" class="mt-2 border rounded divide-y bg-white max-h-40 overflow-y-auto">
               <button
                 v-for="c in ctoonSuggestions" :key="c.id"
                 type="button"
                 class="cmd-tap w-full text-left px-3 text-[11px] hover:bg-gray-100"
-                @click="pickCtoon(c)"
+                @click="addOption(c)"
               >{{ c.name }}</button>
             </div>
-            <p v-if="selectedCtoon" class="text-[11px] text-gray-600 mt-1">Selected: <strong>{{ selectedCtoon.name }}</strong></p>
+            <div v-if="selectedOptions.length" class="mt-2 space-y-1">
+              <div v-for="(opt, i) in selectedOptions" :key="opt.id" class="flex items-center gap-2 text-[11px]">
+                <span class="break-words min-w-0">{{ opt.name }}</span>
+                <button type="button" class="cmd-tap ml-auto flex-shrink-0 text-red-600" @click="selectedOptions.splice(i, 1)">Remove</button>
+              </div>
+            </div>
+            <p class="text-[11px] text-gray-500 mt-1">At least {{ MIN_OPTIONS }} options, up to {{ MAX_OPTIONS }}.</p>
           </div>
 
           <div>
@@ -109,49 +93,91 @@
               type="number" inputmode="numeric" min="1" :max="MAX_QUANTITY_PER_MEMBER"
               class="cmd-field w-24 border rounded px-2 py-1" style="font-size:16px"
             />
-            <p class="text-[11px] text-gray-500 mt-1">Max {{ MAX_QUANTITY_PER_MEMBER }} per member.</p>
+            <p class="text-[11px] text-gray-500 mt-1">How many copies of their chosen cToon each member gets. Max {{ MAX_QUANTITY_PER_MEMBER }}.</p>
           </div>
-
-          <p class="text-[11px] text-gray-700">
-            This will mint to <strong>{{ cmoon.memberCount }}</strong> current member{{ cmoon.memberCount === 1 ? '' : 's' }}
-            × <strong>{{ safeQuantity }}</strong> = <strong>{{ totalMintsPreview }}</strong> total cToons.
-          </p>
 
           <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-[11px] text-amber-800 space-y-1">
-            <p>Mint order is randomized — the first member to join this cMoon is not guaranteed the first mint.</p>
-            <p class="font-semibold">This action cannot be undone once started.</p>
+            <p>This offer stays open — visible to every current member of the selected cMoons — until you close it.</p>
+            <p>Each member can claim only once, and their pick is final.</p>
           </div>
-
-          <label class="flex items-start gap-2 text-[11px] text-gray-700 cmd-tap">
-            <input type="checkbox" v-model="acknowledged" class="mt-0.5" />
-            <span>I understand this will mint cToons to every current member and cannot be undone.</span>
-          </label>
 
           <p v-if="formError" class="text-[11px] text-red-600">{{ formError }}</p>
+        </template>
 
-          <div v-if="history.length" class="pt-2 border-t">
-            <p class="text-[11px] font-medium mb-1">Recent dispersals for this cMoon</p>
-            <div class="space-y-1 max-h-32 overflow-y-auto">
-              <div v-for="h in history" :key="h.id" class="text-[11px] text-gray-600 flex items-center justify-between gap-2">
-                <span class="break-words min-w-0">{{ h.ctoonName }} × {{ h.quantityPerMember }}</span>
-                <span :class="statusColorClassFor(h.status)">{{ statusLabelFor(h.status) }}</span>
+        <!-- ── Detail view: manage one offer ── -->
+        <template v-else-if="view === 'detail'">
+          <div v-if="detailLoading" class="text-xs text-gray-600">Loading…</div>
+          <template v-else-if="detail">
+            <div>
+              <p class="text-[11px] text-gray-600">
+                Linked to: <strong>{{ detail.cMoons.map(c => c.name).join(', ') }}</strong>
+              </p>
+              <p class="text-[11px] text-gray-600">× {{ detail.quantityPerMember }} per pick · <span :class="offerStatusClass(detail.status)">{{ detail.status }}</span></p>
+            </div>
+
+            <div class="space-y-1">
+              <div v-for="opt in detail.options" :key="opt.id" class="flex items-center gap-2 text-[11px] border rounded px-2 py-1.5">
+                <img v-if="opt.assetPath" :src="opt.assetPath" :alt="opt.name" class="h-8 w-auto flex-shrink-0" />
+                <span class="break-words min-w-0 flex-1">{{ opt.name }}</span>
+                <span class="flex-shrink-0 text-gray-600">{{ opt.claimCount }} pick{{ opt.claimCount === 1 ? '' : 's' }}</span>
               </div>
             </div>
-          </div>
+
+            <p class="text-[11px] text-gray-600">
+              {{ detail.totalClaims }} total claim{{ detail.totalClaims === 1 ? '' : 's' }}
+              · {{ detail.completed }} minted
+              <template v-if="detail.queued"> · {{ detail.queued }} queued</template>
+              <template v-if="detail.failed"> · {{ detail.failed }} failed</template>
+              <template v-if="detail.partial"> · {{ detail.partial }} partial</template>
+            </p>
+
+            <div>
+              <button type="button" class="cmd-tap text-[11px] text-indigo-600 hover:underline" @click="toggleClaims">
+                {{ claimsOpen ? 'Hide' : ((detail.failed || detail.partial) ? 'View failed/partial claims' : 'View claims') }}
+              </button>
+              <div v-if="claimsOpen" class="mt-2 border rounded divide-y max-h-48 overflow-y-auto">
+                <div v-if="claimsLoading" class="p-2 text-[11px] text-gray-500">Loading…</div>
+                <template v-else>
+                  <div v-for="c in claims" :key="c.userId" class="flex items-center justify-between gap-2 px-2 py-1.5 text-[11px]">
+                    <span class="break-words min-w-0">{{ c.username }} → {{ c.ctoonName }}</span>
+                    <span :class="claimBadgeClass(c.status)">{{ c.quantityMinted }}/{{ c.quantity }}</span>
+                  </div>
+                  <div v-if="!claims.length" class="p-2 text-[11px] text-gray-500">No claims to show.</div>
+                </template>
+              </div>
+            </div>
+
+            <p v-if="detailError" class="text-[11px] text-red-600">{{ detailError }}</p>
+
+            <button
+              v-if="detail.status === 'OPEN'"
+              type="button"
+              class="cmd-tap w-full border border-red-300 text-red-600 rounded text-xs font-semibold disabled:opacity-50"
+              :disabled="closing"
+              @click="closeOffer"
+            >{{ closing ? 'Closing…' : 'Close this offer' }}</button>
+          </template>
         </template>
       </div>
 
-      <div class="flex items-center justify-end gap-2 px-4 py-3 border-t flex-shrink-0">
-        <button type="button" class="cmd-tap px-3 border rounded" @click="attemptClose" :disabled="submitting">
-          {{ active ? 'Close' : 'Cancel' }}
-        </button>
+      <div class="flex items-center justify-between gap-2 px-4 py-3 border-t flex-shrink-0">
         <button
-          v-if="!active && !checkingActive"
-          type="button"
-          class="cmd-tap px-3 bg-indigo-600 text-white rounded disabled:opacity-50"
-          :disabled="!canSubmit"
-          @click="submit"
-        >{{ submitting ? 'Starting…' : 'Disperse' }}</button>
+          v-if="view !== 'list'"
+          type="button" class="cmd-tap px-3 border rounded"
+          @click="backToList"
+          :disabled="busy"
+        >← Back</button>
+        <span v-else></span>
+        <div class="flex items-center gap-2">
+          <button type="button" class="cmd-tap px-3 border rounded" @click="attemptClose" :disabled="busy">Close</button>
+          <button
+            v-if="view === 'create'"
+            type="button"
+            class="cmd-tap px-3 bg-indigo-600 text-white rounded disabled:opacity-50"
+            :disabled="!canSubmit"
+            @click="submitCreate"
+          >{{ creating ? 'Creating…' : 'Create Offer' }}</button>
+        </div>
       </div>
     </div>
   </div>
@@ -161,186 +187,205 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
-  cmoon: { type: Object, required: true }, // { id, name, memberCount }
+  cmoon: { type: Object, required: true }, // { id, name, memberCount } — the row this was opened from
+  allCMoons: { type: Array, default: () => [] }, // [{ id, name, memberCount }]
   ctoons: { type: Array, default: () => [] }, // [{ id, name, assetPath }]
 })
 const emit = defineEmits(['close'])
 
 const MAX_QUANTITY_PER_MEMBER = 10
-const POLL_MS = 3000
+const MIN_OPTIONS = 2
+const MAX_OPTIONS = 10
+const POLL_MS = 4000
 
-const checkingActive = ref(true)
-const history = ref([])
-const active = ref(null) // dispersal summary once one exists (in-progress or just-finished)
-const submitting = ref(false)
-const formError = ref('')
+const view = ref('list') // 'list' | 'create' | 'detail'
+const busy = computed(() => creating.value || closing.value)
 
+// ── list ──
+const listLoading = ref(true)
+const offers = ref([])
+
+async function loadList() {
+  listLoading.value = true
+  try {
+    const res = await $fetch('/api/admin/cmoon-dispersal-offers', { params: { cMoonId: props.cmoon.id } })
+    offers.value = res.offers || []
+  } catch {
+    offers.value = []
+  } finally {
+    listLoading.value = false
+  }
+}
+
+function offerStatusClass(status) {
+  return status === 'OPEN' ? 'text-[10px] font-semibold text-green-600 flex-shrink-0' : 'text-[10px] font-semibold text-gray-500 flex-shrink-0'
+}
+
+// ── create ──
+const selectedCMoonIds = ref([props.cmoon.id])
 const ctoonSearch = ref('')
-const selectedCtoon = ref(null)
+const selectedOptions = ref([])
 const quantityPerMember = ref(1)
-const acknowledged = ref(false)
+const formError = ref('')
+const creating = ref(false)
 
-const recipientsOpen = ref(false)
-const recipientsLoading = ref(false)
-const recipients = ref([])
-const recipientsTruncated = ref(false)
+const ctoonSuggestions = computed(() => {
+  const v = String(ctoonSearch.value || '').trim().toLowerCase()
+  if (v.length < 3) return []
+  const chosenIds = new Set(selectedOptions.value.map(o => o.id))
+  return props.ctoons.filter(c => !chosenIds.has(c.id) && c.name?.toLowerCase().includes(v)).slice(0, 20)
+})
 
-let pollTimer = null
+function addOption(c) {
+  if (selectedOptions.value.length >= MAX_OPTIONS) return
+  if (selectedOptions.value.find(o => o.id === c.id)) return
+  selectedOptions.value.push(c)
+  ctoonSearch.value = ''
+}
 
 const safeQuantity = computed(() => {
   const n = Math.floor(Number(quantityPerMember.value))
   return Number.isFinite(n) && n >= 1 ? Math.min(n, MAX_QUANTITY_PER_MEMBER) : 1
 })
-const totalMintsPreview = computed(() => (props.cmoon.memberCount || 0) * safeQuantity.value)
-const canSubmit = computed(() => !!selectedCtoon.value && acknowledged.value && !submitting.value)
 
-const ctoonSuggestions = computed(() => {
-  const v = String(ctoonSearch.value || '').trim().toLowerCase()
-  if (v.length < 3 || selectedCtoon.value) return []
-  return props.ctoons.filter(c => c.name?.toLowerCase().includes(v)).slice(0, 20)
-})
+const canSubmit = computed(() =>
+  selectedCMoonIds.value.length > 0 &&
+  selectedOptions.value.length >= MIN_OPTIONS &&
+  !creating.value
+)
 
-function pickCtoon(c) {
-  selectedCtoon.value = c
-  ctoonSearch.value = c.name
+function openCreate() {
+  selectedCMoonIds.value = [props.cmoon.id]
+  ctoonSearch.value = ''
+  selectedOptions.value = []
+  quantityPerMember.value = 1
+  formError.value = ''
+  view.value = 'create'
 }
 
-const progressPct = computed(() => {
-  if (!active.value || !active.value.totalJobs) return 0
-  return Math.min(100, Math.round(((active.value.completedJobs + active.value.failedJobs) / active.value.totalJobs) * 100))
-})
-
-const STATUS_LABELS = { PROCESSING: 'In progress', COMPLETED: 'Completed', COMPLETED_WITH_ERRORS: 'Completed (with errors)' }
-const statusLabel = computed(() => STATUS_LABELS[active.value?.status] || active.value?.status || '')
-function statusLabelFor(s) { return STATUS_LABELS[s] || s }
-const statusColorClass = computed(() => statusColorClassFor(active.value?.status))
-function statusColorClassFor(s) {
-  if (s === 'PROCESSING') return 'text-indigo-600'
-  if (s === 'COMPLETED_WITH_ERRORS') return 'text-amber-600'
-  if (s === 'COMPLETED') return 'text-green-600'
-  return 'text-gray-500'
+async function submitCreate() {
+  if (!canSubmit.value) return
+  creating.value = true
+  formError.value = ''
+  try {
+    const res = await $fetch('/api/admin/cmoon-dispersal-offers', {
+      method: 'POST',
+      body: {
+        cMoonIds: selectedCMoonIds.value,
+        ctoonIds: selectedOptions.value.map(o => o.id),
+        quantityPerMember: safeQuantity.value,
+      },
+    })
+    await loadList()
+    await openDetail(res.offerId)
+  } catch (e) {
+    formError.value = e?.data?.statusMessage || 'Failed to create offer'
+  } finally {
+    creating.value = false
+  }
 }
 
-const RECIPIENT_LABELS = { QUEUED: 'queued', COMPLETED: 'minted', PARTIAL: 'partial', FAILED: 'failed' }
-function recipientLabel(r) {
-  if (r.status === 'COMPLETED' || r.status === 'PARTIAL') return `${r.quantityMinted}/${r.quantityRequested} minted`
-  return RECIPIENT_LABELS[r.status] || r.status
+// ── detail ──
+const detailLoading = ref(true)
+const detail = ref(null)
+const detailError = ref('')
+const closing = ref(false)
+const claimsOpen = ref(false)
+const claimsLoading = ref(false)
+const claims = ref([])
+let pollTimer = null
+let currentOfferId = null
+
+async function loadDetail(offerId) {
+  try {
+    detail.value = await $fetch(`/api/admin/cmoon-dispersal-offers/${offerId}`)
+  } catch (e) {
+    detailError.value = e?.data?.statusMessage || 'Failed to load offer'
+  }
 }
-function recipientBadgeClass(status) {
+
+async function openDetail(offerId) {
+  view.value = 'detail'
+  currentOfferId = offerId
+  detailLoading.value = true
+  detailError.value = ''
+  claimsOpen.value = false
+  claims.value = []
+  await loadDetail(offerId)
+  detailLoading.value = false
+  startPolling()
+}
+
+function startPolling() {
+  stopPolling()
+  pollTimer = setInterval(() => { if (currentOfferId) loadDetail(currentOfferId) }, POLL_MS)
+}
+function stopPolling() {
+  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
+}
+function handleVisibility() {
+  if (document.hidden) stopPolling()
+  else if (view.value === 'detail' && currentOfferId) { loadDetail(currentOfferId); startPolling() }
+}
+
+async function fetchClaims() {
+  if (!currentOfferId) return
+  claimsLoading.value = true
+  try {
+    const onlyFailed = (detail.value?.failed || detail.value?.partial) ? '?onlyFailed=1' : ''
+    const res = await $fetch(`/api/admin/cmoon-dispersal-offers/${currentOfferId}/claims${onlyFailed}`)
+    claims.value = res.claims || []
+  } catch {
+    claims.value = []
+  } finally {
+    claimsLoading.value = false
+  }
+}
+
+async function toggleClaims() {
+  claimsOpen.value = !claimsOpen.value
+  if (claimsOpen.value && !claims.value.length) await fetchClaims()
+}
+
+function claimBadgeClass(status) {
   if (status === 'COMPLETED') return 'text-green-600 flex-shrink-0'
   if (status === 'FAILED') return 'text-red-600 flex-shrink-0'
   if (status === 'PARTIAL') return 'text-amber-600 flex-shrink-0'
   return 'text-gray-500 flex-shrink-0'
 }
 
-async function loadHistory() {
+async function closeOffer() {
+  if (!currentOfferId || closing.value) return
+  if (!confirm('Close this offer? Members will no longer be able to claim from it.')) return
+  closing.value = true
+  detailError.value = ''
   try {
-    const res = await $fetch(`/api/admin/cmoons/${props.cmoon.id}/dispersals`)
-    history.value = res.dispersals || []
-    return history.value
-  } catch {
-    history.value = []
-    return []
-  }
-}
-
-async function pollActive() {
-  if (!active.value) return
-  try {
-    const res = await $fetch(`/api/admin/cmoons/${props.cmoon.id}/dispersals/${active.value.id}`)
-    active.value = res
-    if (res.status !== 'PROCESSING') {
-      stopPolling()
-      await loadHistory()
-      if (res.failedJobs > 0) await fetchRecipients()
-    }
-  } catch {
-    // transient — next tick retries
-  }
-}
-
-function startPolling() {
-  stopPolling()
-  pollTimer = setInterval(pollActive, POLL_MS)
-}
-function stopPolling() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
-}
-function handleVisibility() {
-  if (document.hidden) {
-    stopPolling()
-  } else if (active.value?.status === 'PROCESSING') {
-    pollActive()
-    startPolling()
-  }
-}
-
-async function fetchRecipients() {
-  if (!active.value) return
-  recipientsLoading.value = true
-  try {
-    const onlyFailed = active.value.failedJobs > 0 ? '?onlyFailed=1' : ''
-    const res = await $fetch(`/api/admin/cmoons/${props.cmoon.id}/dispersals/${active.value.id}/recipients${onlyFailed}`)
-    recipients.value = res.recipients || []
-    recipientsTruncated.value = !!res.truncated
-  } catch {
-    recipients.value = []
-  } finally {
-    recipientsLoading.value = false
-  }
-}
-
-async function toggleRecipients() {
-  recipientsOpen.value = !recipientsOpen.value
-  if (recipientsOpen.value && !recipients.value.length) await fetchRecipients()
-}
-
-async function submit() {
-  if (!canSubmit.value) return
-  submitting.value = true
-  formError.value = ''
-  try {
-    const res = await $fetch(`/api/admin/cmoons/${props.cmoon.id}/dispersals`, {
-      method: 'POST',
-      body: { ctoonId: selectedCtoon.value.id, quantityPerMember: safeQuantity.value },
-    })
-    active.value = {
-      id: res.dispersalId,
-      ctoonId: selectedCtoon.value.id,
-      ctoonName: selectedCtoon.value.name,
-      ctoonAssetPath: selectedCtoon.value.assetPath || null,
-      quantityPerMember: safeQuantity.value,
-      status: 'PROCESSING',
-      totalMembers: res.totalMembers,
-      totalJobs: res.totalJobs,
-      completedJobs: 0,
-      failedJobs: 0,
-    }
-    startPolling()
+    await $fetch(`/api/admin/cmoon-dispersal-offers/${currentOfferId}/close`, { method: 'POST' })
+    await loadDetail(currentOfferId)
   } catch (e) {
-    formError.value = e?.data?.statusMessage || 'Failed to start dispersal'
+    detailError.value = e?.data?.statusMessage || 'Failed to close offer'
   } finally {
-    submitting.value = false
+    closing.value = false
   }
+}
+
+function backToList() {
+  stopPolling()
+  currentOfferId = null
+  detail.value = null
+  view.value = 'list'
+  loadList()
 }
 
 function attemptClose() {
-  if (submitting.value) return
+  if (busy.value) return
   emit('close')
 }
 
-onMounted(async () => {
-  checkingActive.value = true
-  const list = await loadHistory()
-  const inProgress = list.find(d => d.status === 'PROCESSING')
-  if (inProgress) {
-    active.value = inProgress
-    startPolling()
-  }
-  checkingActive.value = false
+onMounted(() => {
+  loadList()
   document.addEventListener('visibilitychange', handleVisibility)
 })
-
 onUnmounted(() => {
   stopPolling()
   document.removeEventListener('visibilitychange', handleVisibility)

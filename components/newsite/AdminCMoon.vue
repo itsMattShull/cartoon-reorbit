@@ -179,10 +179,9 @@
                   @click="previewEffect(c)"
                 >Preview effect</button>
                 <button
-                  class="cm-tap text-[11px] text-indigo-600 hover:underline disabled:opacity-40"
-                  :disabled="c.memberCount === 0"
+                  class="cm-tap text-[11px] text-indigo-600 hover:underline"
                   @click="openDisperse(c)"
-                >Disperse cToons</button>
+                >cToon Offers</button>
                 <button
                   v-if="c.imagePath"
                   class="cm-tap text-[11px] text-gray-600 hover:underline disabled:opacity-40"
@@ -582,6 +581,7 @@
     <CMoonDisperseModal
       v-if="disperseCMoon"
       :cmoon="disperseCMoon"
+      :allCMoons="cmoons"
       :ctoons="ctoons"
       @close="closeDisperse"
     />

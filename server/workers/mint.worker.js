@@ -333,20 +333,22 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
     })
 }, { connection })
 
-// ── cMoon dispersal progress tracking ───────────────────────────────────────
-// A dispersal job (server/api/admin/cmoons/[id]/dispersals.post.js) carries
-// dispersalId/dispersalRecipientId in its data. These listeners are the ONLY place
-// dispersal rows are touched — kept entirely outside the mint transaction above so this
-// admin-only bookkeeping can never affect (or be affected by) the shared mint hot path.
-// Failures here are swallowed (logged) rather than thrown: a lost progress update must
-// never look like a failed mint to the rest of the app.
-async function recordDispersalOutcome(jobData, { success, mintNumber = null, errorMessage = null }) {
-  const { dispersalId, dispersalRecipientId } = jobData || {}
-  if (!dispersalId || !dispersalRecipientId) return
+// ── cMoon dispersal-offer claim tracking ──────────────────────────────────────
+// A claim job (server/api/cmoon/[id]/dispersal-offers/[offerId]/claim.post.js) carries
+// dispersalClaimId in its data. This listener is the ONLY place CMoonDispersalClaim rows are
+// touched — kept entirely outside the mint transaction above so this bookkeeping can never
+// affect (or be affected by) the shared mint hot path. Failures here are swallowed (logged)
+// rather than thrown: a lost progress update must never look like a failed mint to the rest of
+// the app. There's no parent "offer" counter to roll up into — an offer stays OPEN across an
+// open-ended number of claims until an admin closes it, so per-claim status is the whole
+// picture; the admin summary endpoint aggregates claims live with a groupBy instead.
+async function recordClaimOutcome(jobData, { success, mintNumber = null, errorMessage = null }) {
+  const { dispersalClaimId } = jobData || {}
+  if (!dispersalClaimId) return
   try {
     await prisma.$transaction(async (tx) => {
-      const recipient = await tx.cMoonDispersalRecipient.update({
-        where: { id: dispersalRecipientId },
+      const claim = await tx.cMoonDispersalClaim.update({
+        where: { id: dispersalClaimId },
         data: success
           ? {
               quantityMinted: { increment: 1 },
@@ -356,48 +358,32 @@ async function recordDispersalOutcome(jobData, { success, mintNumber = null, err
               failedCount: { increment: 1 },
               error: errorMessage ? String(errorMessage).slice(0, 500) : undefined
             },
-        select: { quantityMinted: true, failedCount: true, quantityRequested: true }
+        select: { quantityMinted: true, failedCount: true, quantity: true }
       })
 
-      if (recipient.quantityMinted + recipient.failedCount >= recipient.quantityRequested) {
+      if (claim.quantityMinted + claim.failedCount >= claim.quantity) {
         const status =
-          recipient.failedCount === 0 ? 'COMPLETED' :
-          recipient.quantityMinted > 0 ? 'PARTIAL' : 'FAILED'
-        await tx.cMoonDispersalRecipient.update({
-          where: { id: dispersalRecipientId },
+          claim.failedCount === 0 ? 'COMPLETED' :
+          claim.quantityMinted > 0 ? 'PARTIAL' : 'FAILED'
+        await tx.cMoonDispersalClaim.update({
+          where: { id: dispersalClaimId },
           data: { status }
-        })
-      }
-
-      const dispersal = await tx.cMoonDispersal.update({
-        where: { id: dispersalId },
-        data: success ? { completedJobs: { increment: 1 } } : { failedJobs: { increment: 1 } },
-        select: { completedJobs: true, failedJobs: true, totalJobs: true }
-      })
-
-      if (dispersal.completedJobs + dispersal.failedJobs >= dispersal.totalJobs) {
-        await tx.cMoonDispersal.update({
-          where: { id: dispersalId },
-          data: {
-            status: dispersal.failedJobs > 0 ? 'COMPLETED_WITH_ERRORS' : 'COMPLETED',
-            completedAt: new Date()
-          }
         })
       }
     })
   } catch (err) {
-    console.warn('cMoon dispersal outcome update failed:', err?.message || err)
+    console.warn('cMoon dispersal claim outcome update failed:', err?.message || err)
   }
 }
 
 worker.on('completed', (job, returnvalue) => {
-  if (job?.data?.dispersalId) {
-    recordDispersalOutcome(job.data, { success: true, mintNumber: returnvalue?.mintNumber ?? null })
+  if (job?.data?.dispersalClaimId) {
+    recordClaimOutcome(job.data, { success: true, mintNumber: returnvalue?.mintNumber ?? null })
   }
 })
 worker.on('failed', (job, err) => {
-  if (job?.data?.dispersalId) {
-    recordDispersalOutcome(job.data, { success: false, errorMessage: err?.message })
+  if (job?.data?.dispersalClaimId) {
+    recordClaimOutcome(job.data, { success: false, errorMessage: err?.message })
   }
 })
 
