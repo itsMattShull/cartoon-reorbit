@@ -344,6 +344,9 @@ model Ctoon {
 
   // cMoon back-relation (prize-on-join — distinct from the display assignment below)
   cMoonPrizeRows CMoonPrizeCtoon[]
+  // Admin-triggered manual dispersals of this cToon to a cMoon's members (distinct from
+  // cMoonPrizeRows, which is auto-granted on join).
+  cMoonDispersals CMoonDispersal[]
 
   // Optional cMoon this cToon is thematically displayed under (admin-assigned in the cToon
   // editor). Purely a catalog/display categorization — unrelated to the player-faction system.
@@ -652,9 +655,11 @@ model User {
   fruitSamuraiPlays  FruitSamuraiPlay[]
 
   // cMoon (faction) relations
-  cMoonCaptainOf         CMoonCaptain[]
-  achievementClaims      AchievementClaim[]
-  dailyTaskCompletions   UserDailyTaskCompletion[]
+  cMoonCaptainOf              CMoonCaptain[]
+  achievementClaims           AchievementClaim[]
+  dailyTaskCompletions        UserDailyTaskCompletion[]
+  initiatedCMoonDispersals    CMoonDispersal[]          @relation("CMoonDispersalInitiatedBy")
+  cMoonDispersalRecipientRows CMoonDispersalRecipient[] @relation("CMoonDispersalRecipientUser")
 
   @@unique([discordId, active]) // at most one active user per Discord ID
   @@index([cMoonId])
@@ -2888,6 +2893,7 @@ model CMoon {
   prizeCtoons     CMoonPrizeCtoon[]
   scoreLogs       CMoonScoreLog[]
   ranks           CMoonRank[]
+  dispersals      CMoonDispersal[]
   // cToons thematically displayed under this cMoon (admin-assigned in the cToon editor). Distinct
   // from `members`/`prizeCtoons`, which are about the player-faction feature, not catalog display.
   displayedCtoons Ctoon[]           @relation("CtoonCMoonDisplay")
@@ -2941,6 +2947,71 @@ model CMoonPrizeCtoon {
 
   @@unique([cMoonId, ctoonId])
   @@index([ctoonId])
+}
+
+enum CMoonDispersalStatus {
+  PROCESSING
+  COMPLETED
+  COMPLETED_WITH_ERRORS
+}
+
+enum CMoonDispersalRecipientStatus {
+  QUEUED
+  COMPLETED
+  PARTIAL
+  FAILED
+}
+
+// Admin-triggered one-off "give this cToon to every current member of this cMoon" action —
+// distinct from CMoonPrizeCtoon (auto-granted on join). The member list is snapshotted and
+// shuffled (Fisher-Yates) into CMoonDispersalRecipient at creation time, so mint numbers are
+// handed out in random order rather than by join date, and membership changes mid-run can't
+// affect who's owed a mint. Progress is updated by mint.worker.js's 'completed'/'failed' event
+// listeners, never inside the mint transaction itself — see server/workers/mint.worker.js.
+model CMoonDispersal {
+  id                String               @id @default(uuid())
+  cMoonId           String
+  ctoonId           String
+  quantityPerMember Int
+  status            CMoonDispersalStatus @default(PROCESSING)
+  totalMembers      Int
+  totalJobs         Int
+  completedJobs     Int                  @default(0)
+  failedJobs        Int                  @default(0)
+  initiatedById     String
+  createdAt         DateTime             @default(now())
+  completedAt       DateTime?
+
+  cMoon       CMoon                     @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  ctoon       Ctoon                     @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  initiatedBy User                      @relation("CMoonDispersalInitiatedBy", fields: [initiatedById], references: [id], onDelete: Restrict)
+  recipients  CMoonDispersalRecipient[]
+
+  @@index([cMoonId, createdAt])
+}
+
+// One row per member snapshotted at dispersal creation. mintNumbers accumulates as jobs
+// complete; a row settles to COMPLETED/PARTIAL/FAILED once quantityMinted + failedCount
+// reaches quantityRequested. `username` is a snapshot so history survives the member
+// later leaving the cMoon.
+model CMoonDispersalRecipient {
+  id                String                        @id @default(uuid())
+  dispersalId       String
+  userId            String
+  username          String
+  quantityRequested Int
+  quantityMinted    Int                           @default(0)
+  failedCount       Int                           @default(0)
+  status            CMoonDispersalRecipientStatus @default(QUEUED)
+  mintNumbers       Int[]                         @default([])
+  error             String?
+  updatedAt         DateTime                      @updatedAt
+
+  dispersal CMoonDispersal @relation(fields: [dispersalId], references: [id], onDelete: Cascade)
+  user      User           @relation("CMoonDispersalRecipientUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([dispersalId, userId])
+  @@index([dispersalId])
 }
 
 // One row per (user, day) where the user completed at least one of the existing daily tasks

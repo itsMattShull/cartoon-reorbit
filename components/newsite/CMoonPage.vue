@@ -52,7 +52,13 @@
 
         <template v-if="cmoon.captains.length">
           <h2 class="cmp-section-title">Captains</h2>
-          <p class="cmp-captains">{{ cmoon.captains.join(', ') }}</p>
+          <div class="cmp-captains">
+            <NuxtLink
+              v-for="name in cmoon.captains" :key="name"
+              :to="`/newsite/czone/${name}`"
+              class="cmp-captain-link"
+            >{{ name }}</NuxtLink>
+          </div>
         </template>
 
         <template v-if="cmoon.prizeCtoons.length">
@@ -289,9 +295,26 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
 .cmp-card--static:hover { opacity: 1; }
 
 .cmp-captains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
   margin: 0 0 20px;
-  font-size: 0.95rem;
 }
+
+.cmp-captain-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: var(--cm-tile-bg, rgba(255,255,255,0.08));
+  color: var(--cm-link-text, #ffffff);
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.cmp-captain-link:hover { opacity: 0.85; }
+.cmp-captain-link:focus-visible { outline: 2px solid var(--cm-focus-ring, var(--OrbitLightBlue)); outline-offset: 1px; }
 
 .cmp-members {
   display: flex;

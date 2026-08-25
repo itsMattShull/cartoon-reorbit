@@ -42,6 +42,11 @@
               <div class="ml-auto flex items-center gap-3 flex-shrink-0">
                 <button class="cm-tap text-[11px] text-indigo-600 hover:underline" @click="startEdit(c)">Edit</button>
                 <button
+                  class="cm-tap text-[11px] text-indigo-600 hover:underline disabled:opacity-40"
+                  :disabled="c.memberCount === 0"
+                  @click="openDisperse(c)"
+                >Disperse cToons</button>
+                <button
                   v-if="c.imagePath"
                   class="cm-tap text-[11px] text-gray-600 hover:underline disabled:opacity-40"
                   :disabled="imageBusyId === c.id"
@@ -327,6 +332,14 @@
         </div>
       </div>
     </div>
+
+    <!-- ── Disperse cToons modal ─────────────────────────────────────── -->
+    <CMoonDisperseModal
+      v-if="disperseCMoon"
+      :cmoon="disperseCMoon"
+      :ctoons="ctoons"
+      @close="closeDisperse"
+    />
   </div>
 </template>
 
@@ -750,6 +763,18 @@ async function remove(c) {
   } catch (e) {
     alert(e?.data?.statusMessage || 'Delete failed')
   }
+}
+
+// ── Disperse cToons ─────────────────────────────────────────────────────
+const disperseCMoon = ref(null)
+
+function openDisperse(c) {
+  disperseCMoon.value = { id: c.id, name: c.name, memberCount: c.memberCount }
+}
+
+function closeDisperse() {
+  disperseCMoon.value = null
+  load() // member counts / captains etc are unaffected, but keep state fresh either way
 }
 
 onMounted(load)
