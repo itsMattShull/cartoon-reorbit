@@ -368,15 +368,6 @@ model Ctoon {
   // double-click/race can only succeed once.
   givenToOfficialAt DateTime?
 
-  // Snapshot of the most recent real auction sale, maintained at write time by
-  // server/socket-server.js's auction-close settlement (not a nightly cron —
-  // there's no polling window to wait out). Powers the "last auction sold"
-  // collection-worth metric with an O(1) lookup instead of a live query
-  // against the full Auction table. Backfilled once via
-  // prisma/backfillLastAuctionSold.js after this migration runs.
-  lastAuctionSoldPrice Int?
-  lastAuctionSoldAt    DateTime?
-
   @@index([isSecondEdition])
   @@index([name])
   @@index([cMoonId])

@@ -14,27 +14,29 @@
         title="Estimated collection worth"
         @click="worthOpen = !worthOpen"
       >
-        <span class="mc-worth-amount">{{ formatCompact(worth.totals.avgAuctionSold) }} pts</span>
+        <span class="mc-worth-amount">{{ formatCompact(worth.total) }} pts</span>
         <span class="mc-worth-caret" :class="{ 'mc-worth-caret--open': worthOpen }" aria-hidden="true">▾</span>
       </button>
     </div>
 
-    <!-- ── Collection worth breakdown (overlay, doesn't push the grid) ──── -->
+    <!-- ── Collection worth details (overlay, doesn't push the grid) ──── -->
     <div
       v-if="worthOpen && worth"
       id="mc-worth-panel"
       ref="worthPanelEl"
       class="mc-worth-panel"
       role="region"
-      aria-label="Collection worth breakdown"
+      aria-label="Collection worth details"
     >
-      <div v-for="m in worthMetrics" :key="m.key" class="mc-worth-row">
-        <div class="mc-worth-row-main">
-          <span class="mc-worth-row-label">{{ m.label }}</span>
-          <span class="mc-worth-row-value">{{ formatFull(worth.totals[m.key]) }} pts</span>
-        </div>
-        <span class="mc-worth-row-note">{{ m.note(worth) }}</span>
+      <div class="mc-worth-row-main">
+        <span class="mc-worth-row-label">Estimated worth</span>
+        <span class="mc-worth-row-value">{{ formatFull(worth.total) }} pts</span>
       </div>
+      <p class="mc-worth-explainer">
+        Each item's average auction sale price, adjusted for mint number, or its
+        cMart price if it's never sold — the same estimate shown per mint in the
+        Owners tab of a cToon's info window.
+      </p>
       <div class="mc-worth-footnote">
         {{ worth.distinctCount }} cToon type{{ worth.distinctCount === 1 ? '' : 's' }},
         {{ worth.itemCount }} item{{ worth.itemCount === 1 ? '' : 's' }} total.
@@ -162,28 +164,6 @@ const worth        = ref(null)
 const worthOpen     = ref(false)
 const worthToggleEl = ref(null)
 const worthPanelEl  = ref(null)
-
-// "Avg. trade value" is explicitly labeled "(est.)": unlike an auction sale or
-// the cMart price, it's an imputed number (server/cron/economy-aggregate.js
-// derives it from each trade's other side, not a price the item itself sold
-// for), so it reads as an estimate rather than a peer to the other three.
-const worthMetrics = [
-  { key: 'avgAuctionSold',  label: 'Avg. auction sale',        verb: 'sold in an auction' },
-  { key: 'lastAuctionSold', label: 'Last auction sold',        verb: 'have a recorded auction sale' },
-  { key: 'avgTraded',       label: 'Avg. trade value (est.)',  verb: 'have enough trade history' },
-  { key: 'faceValue',       label: 'cMart / face price',       verb: null },
-].map(m => ({
-  ...m,
-  note(w) {
-    if (!m.verb) return 'Original listed price for every item.'
-    const pricedCount = w.priced[m.key]
-    const total = w.itemCount
-    if (!total) return ''
-    if (pricedCount === total) return `All ${total} items ${m.verb}.`
-    if (pricedCount === 0) return `No items ${m.verb} yet — showing cMart price instead.`
-    return `${pricedCount} of ${total} items ${m.verb}; rest show cMart price.`
-  }
-}))
 
 function formatFull(n) {
   return Math.round(n ?? 0).toLocaleString()
@@ -579,18 +559,12 @@ onMounted(() => {
   /* A fixed cap, not a percentage: .my-collection's height resolves to `auto`
      on mobile (layouts/newsite-template.vue gives .main-content `height:
      auto` there), so a percentage here would have no definite containing
-     block to resolve against. 320px comfortably fits all 4 rows without a
-     scrollbar in the normal case; it only engages as a real cap if a very
-     tall dynamic type setting stretches the rows. */
+     block to resolve against. 320px comfortably fits the total, explainer and
+     footnote without a scrollbar in the normal case; it only engages as a
+     real cap if a very tall dynamic type setting stretches them. */
   max-height: 320px;
   overflow-y: auto;
 }
-
-.mc-worth-row {
-  padding: 5px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.08);
-}
-.mc-worth-row:last-of-type { border-bottom: none; }
 
 .mc-worth-row-main {
   display: flex;
@@ -613,11 +587,11 @@ onMounted(() => {
   white-space: nowrap;
 }
 
-.mc-worth-row-note {
-  display: block;
-  font-size: 0.62rem;
-  color: rgba(255,255,255,0.6);
-  margin-top: 1px;
+.mc-worth-explainer {
+  margin: 4px 0 0;
+  font-size: 0.64rem;
+  line-height: 1.4;
+  color: rgba(255,255,255,0.7);
 }
 
 .mc-worth-footnote {
