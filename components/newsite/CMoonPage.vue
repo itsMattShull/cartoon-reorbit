@@ -20,43 +20,6 @@
           </div>
         </div>
 
-        <template v-if="offers.length">
-          <h2 class="cmp-section-title">cToon Offers</h2>
-          <div v-for="o in offers" :key="o.id" class="cmp-offer">
-            <p class="cmp-offer-meta">
-              <span v-if="o.myClaim">You claimed this offer.</span>
-              <span v-else-if="o.status !== 'OPEN'">This offer has closed.</span>
-              <span v-else-if="!eligible">Join this cMoon to claim a reward here.</span>
-              <span v-else>Pick one — you'll get {{ o.quantityPerMember }} cop{{ o.quantityPerMember === 1 ? 'y' : 'ies' }}.</span>
-            </p>
-            <div class="cmp-grid">
-              <button
-                v-for="opt in o.options" :key="opt.id"
-                type="button"
-                class="cmp-card cmp-offer-option"
-                :class="{
-                  'cmp-offer-option--picked': o.myClaim && o.myClaim.optionId === opt.id,
-                  'cmp-offer-option--selected': !o.myClaim && offerSelections[o.id] === opt.id,
-                }"
-                :disabled="!!o.myClaim || o.status !== 'OPEN' || !eligible || offerClaiming[o.id]"
-                @click="offerSelections[o.id] = opt.id"
-              >
-                <img :src="opt.assetPath" :alt="opt.name" class="cmp-card-img" loading="lazy" />
-                <span class="cmp-card-name">{{ opt.name }}</span>
-                <span v-if="o.myClaim && o.myClaim.optionId === opt.id" class="cmp-offer-picked-badge">Your pick</span>
-              </button>
-            </div>
-            <button
-              v-if="!o.myClaim && o.status === 'OPEN' && eligible"
-              type="button"
-              class="cmp-offer-claim-btn"
-              :disabled="!offerSelections[o.id] || offerClaiming[o.id]"
-              @click="claimOffer(o)"
-            >{{ offerClaiming[o.id] ? 'Claiming…' : 'Claim' }}</button>
-            <p v-if="offerErrors[o.id]" class="cmp-offer-error">{{ offerErrors[o.id] }}</p>
-          </div>
-        </template>
-
         <div class="cmp-image-wrap">
           <img
             v-if="cmoon.pageImagePath"
@@ -105,6 +68,43 @@
               <img v-if="p.assetPath" :src="p.assetPath" :alt="p.name" class="cmp-card-img" loading="lazy" />
               <span class="cmp-card-name">{{ p.name }} × {{ p.quantity }}</span>
             </div>
+          </div>
+        </template>
+
+        <template v-if="offers.length">
+          <h2 class="cmp-section-title">cToon Offers</h2>
+          <div v-for="o in offers" :key="o.id" class="cmp-offer">
+            <p class="cmp-offer-meta">
+              <span v-if="o.myClaim">You claimed this offer.</span>
+              <span v-else-if="o.status !== 'OPEN'">This offer has closed.</span>
+              <span v-else-if="!eligible">Join this cMoon to claim a reward here.</span>
+              <span v-else>Pick one — you'll get {{ o.quantityPerMember }} cop{{ o.quantityPerMember === 1 ? 'y' : 'ies' }}.</span>
+            </p>
+            <div class="cmp-grid">
+              <button
+                v-for="opt in o.options" :key="opt.id"
+                type="button"
+                class="cmp-card cmp-offer-option"
+                :class="{
+                  'cmp-offer-option--picked': o.myClaim && o.myClaim.optionId === opt.id,
+                  'cmp-offer-option--selected': !o.myClaim && offerSelections[o.id] === opt.id,
+                }"
+                :disabled="!!o.myClaim || o.status !== 'OPEN' || !eligible || offerClaiming[o.id]"
+                @click="offerSelections[o.id] = opt.id"
+              >
+                <img :src="opt.assetPath" :alt="opt.name" class="cmp-card-img" loading="lazy" />
+                <span class="cmp-card-name">{{ opt.name }}</span>
+                <span v-if="o.myClaim && o.myClaim.optionId === opt.id" class="cmp-offer-picked-badge">Your pick</span>
+              </button>
+            </div>
+            <button
+              v-if="!o.myClaim && o.status === 'OPEN' && eligible"
+              type="button"
+              class="cmp-offer-claim-btn"
+              :disabled="!offerSelections[o.id] || offerClaiming[o.id]"
+              @click="claimOffer(o)"
+            >{{ offerClaiming[o.id] ? 'Claiming…' : 'Claim' }}</button>
+            <p v-if="offerErrors[o.id]" class="cmp-offer-error">{{ offerErrors[o.id] }}</p>
           </div>
         </template>
 
