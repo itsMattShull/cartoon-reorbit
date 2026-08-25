@@ -32,6 +32,129 @@
         </p>
       </div>
 
+      <!-- Scoring rules: the weekly team-leaderboard bonus job's admin-editable knobs
+           (see server/utils/cmoon.js runWeeklyCMoonScoring). Kept as one panel with
+           sub-sections rather than a separate admin page/tab — it's config for the
+           cMoons feature, same as the flag above, not a distinct resource. -->
+      <div class="bg-white rounded border p-3 mb-4">
+        <h2 class="text-sm font-semibold mb-1">Team Leaderboard Scoring Rules</h2>
+        <p class="text-[11px] text-gray-600 mb-3">
+          Controls the weekly cMoon team-leaderboard bonus job (runs Monday 00:00 CST). Changes take
+          effect starting the next weekly run — past scores are never recalculated.
+        </p>
+
+        <div v-if="scoringLoading" class="text-gray-600">Loading…</div>
+        <template v-else>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs font-medium mb-1">High Score points</label>
+              <input v-model.number="scoring.highScorePoints" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
+              <p class="text-[11px] text-gray-500 mt-1">Per player, for holding rank #1 on an eligible game.</p>
+            </div>
+            <div>
+              <label class="block text-xs font-medium mb-1">Top 10 points</label>
+              <input v-model.number="scoring.top10Points" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
+              <p class="text-[11px] text-gray-500 mt-1">Per player, for a top-{{ scoring.top10RankCutoff || 10 }} finish on an eligible board.</p>
+            </div>
+            <div>
+              <label class="block text-xs font-medium mb-1">Daily task points</label>
+              <input v-model.number="scoring.dailyTaskPoints" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
+              <p class="text-[11px] text-gray-500 mt-1">Per player, per day a daily task was completed that week.</p>
+            </div>
+          </div>
+
+          <div class="border-t pt-3 mt-3">
+            <label class="block text-xs font-medium mb-1">Minimum account age (days)</label>
+            <input v-model.number="scoring.minAccountAgeDays" type="number" min="0" max="365" inputmode="numeric" class="cm-field w-full sm:w-40 border rounded px-2 py-1" style="font-size:16px" />
+            <p class="text-[11px] text-gray-500 mt-1">
+              Accounts younger than this don't qualify for any award — the only defense against a
+              throwaway account inflating a team's score.
+            </p>
+            <p v-if="scoring.minAccountAgeDays === 0" class="text-[11px] text-amber-600 font-medium mt-1">
+              0 disables the anti-abuse gate entirely — any account, including one created today, can score.
+            </p>
+          </div>
+
+          <div class="border-t pt-3 mt-3">
+            <div class="text-xs font-medium mb-1.5">Top 10 boards</div>
+            <div class="flex flex-col gap-1.5">
+              <label class="cm-tap flex items-center gap-2">
+                <input type="checkbox" v-model="scoring.top10PointsBoardEnabled" />
+                <span class="text-xs">Total Points board</span>
+              </label>
+              <label class="cm-tap flex items-center gap-2">
+                <input type="checkbox" v-model="scoring.top10CtoonsBoardEnabled" />
+                <span class="text-xs">Total cToons board</span>
+              </label>
+            </div>
+            <div class="mt-2">
+              <label class="block text-xs font-medium mb-1">Rank cutoff</label>
+              <input v-model.number="scoring.top10RankCutoff" type="number" min="1" max="250" inputmode="numeric" class="cm-field w-full sm:w-40 border rounded px-2 py-1" style="font-size:16px" />
+              <p class="text-[11px] text-gray-500 mt-1">How many ranks count as "top 10" on each enabled board.</p>
+            </div>
+            <p v-if="!scoring.top10PointsBoardEnabled && !scoring.top10CtoonsBoardEnabled" class="text-[11px] text-amber-600 font-medium mt-1">
+              Both boards are off — the Top 10 bonus is effectively disabled.
+            </p>
+          </div>
+
+          <div class="border-t pt-3 mt-3">
+            <div class="text-xs font-medium mb-1">High Score eligible games</div>
+            <p class="text-[11px] text-gray-500 mb-2">Only checked games can earn the High Score bonus.</p>
+
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[11px] text-gray-600">Score-based games</span>
+              <span class="flex gap-3">
+                <button type="button" class="cm-tap text-[11px] text-indigo-600" @click="setAllGames('score', true)">All</button>
+                <button type="button" class="cm-tap text-[11px] text-indigo-600" @click="setAllGames('score', false)">None</button>
+              </span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-1 mb-3">
+              <label
+                v-for="g in scoreGameOptions" :key="g.key"
+                class="cm-tap flex items-center gap-1.5 px-2 rounded-md border cursor-pointer select-none"
+                :class="isGameEnabled('score', g.key) ? 'bg-indigo-50 border-indigo-400 text-indigo-700' : 'bg-gray-50 border-gray-200 text-gray-600'"
+              >
+                <input type="checkbox" class="sr-only" :checked="isGameEnabled('score', g.key)" @change="toggleGame('score', g.key)" />
+                <span class="text-[11px] font-medium break-words">{{ g.label }}</span>
+              </label>
+            </div>
+
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[11px] text-gray-600">Win-based games</span>
+              <span class="flex gap-3">
+                <button type="button" class="cm-tap text-[11px] text-indigo-600" @click="setAllGames('win', true)">All</button>
+                <button type="button" class="cm-tap text-[11px] text-indigo-600" @click="setAllGames('win', false)">None</button>
+              </span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-1">
+              <label
+                v-for="g in winGameOptions" :key="g.key"
+                class="cm-tap flex items-center gap-1.5 px-2 rounded-md border cursor-pointer select-none"
+                :class="isGameEnabled('win', g.key) ? 'bg-indigo-50 border-indigo-400 text-indigo-700' : 'bg-gray-50 border-gray-200 text-gray-600'"
+              >
+                <input type="checkbox" class="sr-only" :checked="isGameEnabled('win', g.key)" @change="toggleGame('win', g.key)" />
+                <span class="text-[11px] font-medium break-words">{{ g.label }}</span>
+              </label>
+            </div>
+
+            <p class="text-[11px] text-gray-500 mt-2">{{ enabledGameSummary }}</p>
+            <p v-if="enabledGameCount === 0" class="text-[11px] text-amber-600 font-medium mt-1">
+              No games selected — the High Score bonus is effectively disabled.
+            </p>
+          </div>
+
+          <p v-if="scoringError" class="text-[11px] text-red-600 mt-3">{{ scoringError }}</p>
+
+          <div class="mt-3">
+            <button
+              class="cm-tap px-3 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+              :disabled="scoringSaving"
+              @click="saveScoring"
+            >{{ scoringSaving ? 'Saving…' : 'Save Scoring Rules' }}</button>
+          </div>
+        </template>
+      </div>
+
       <div v-if="loading" class="text-gray-600">Loading…</div>
       <template v-else>
         <!-- Existing cMoons -->
@@ -970,6 +1093,133 @@ async function load() {
   }
 }
 
+// ── Scoring rules ──────────────────────────────────────────────────────────
+const scoring = reactive({
+  highScorePoints: 100,
+  top10Points: 50,
+  dailyTaskPoints: 10,
+  minAccountAgeDays: 3,
+  top10RankCutoff: 10,
+  top10PointsBoardEnabled: true,
+  top10CtoonsBoardEnabled: true,
+  disabledScoreGames: [],
+  disabledWinGames: [],
+})
+const scoreGameOptions = ref([])
+const winGameOptions = ref([])
+const scoringLoading = ref(false)
+const scoringSaving = ref(false)
+const scoringError = ref('')
+
+function disabledListKey(kind) {
+  return kind === 'score' ? 'disabledScoreGames' : 'disabledWinGames'
+}
+
+function isGameEnabled(kind, key) {
+  return !scoring[disabledListKey(kind)].includes(key)
+}
+
+function toggleGame(kind, key) {
+  const list = scoring[disabledListKey(kind)]
+  const i = list.indexOf(key)
+  if (i >= 0) list.splice(i, 1)
+  else list.push(key)
+}
+
+function setAllGames(kind, enabled) {
+  const options = kind === 'score' ? scoreGameOptions.value : winGameOptions.value
+  scoring[disabledListKey(kind)] = enabled ? [] : options.map(g => g.key)
+}
+
+const enabledGameCount = computed(() => {
+  const scoreEnabled = scoreGameOptions.value.filter(g => isGameEnabled('score', g.key)).length
+  const winEnabled = winGameOptions.value.filter(g => isGameEnabled('win', g.key)).length
+  return scoreEnabled + winEnabled
+})
+
+const enabledGameSummary = computed(() => {
+  const total = scoreGameOptions.value.length + winGameOptions.value.length
+  return `${enabledGameCount.value} of ${total} games eligible for the High Score bonus.`
+})
+
+async function loadScoring() {
+  scoringLoading.value = true
+  try {
+    const data = await $fetch('/api/admin/cmoon-scoring')
+    Object.assign(scoring, {
+      highScorePoints: data.highScorePoints,
+      top10Points: data.top10Points,
+      dailyTaskPoints: data.dailyTaskPoints,
+      minAccountAgeDays: data.minAccountAgeDays,
+      top10RankCutoff: data.top10RankCutoff,
+      top10PointsBoardEnabled: data.top10PointsBoardEnabled,
+      top10CtoonsBoardEnabled: data.top10CtoonsBoardEnabled,
+      disabledScoreGames: data.disabledScoreGames || [],
+      disabledWinGames: data.disabledWinGames || [],
+    })
+    scoreGameOptions.value = data.scoreGameOptions || []
+    winGameOptions.value = data.winGameOptions || []
+  } catch (e) {
+    scoringError.value = e?.data?.statusMessage || 'Failed to load scoring rules'
+  } finally {
+    scoringLoading.value = false
+  }
+}
+
+// Lightweight guardrail: a fat-fingered mobile save that zeroes out a bonus or the
+// anti-abuse gate takes effect silently at the next weekly run, so surface exactly
+// what would change and make the admin confirm rather than just accept it.
+function scoringRiskWarnings() {
+  const warnings = []
+  if (scoring.minAccountAgeDays === 0) warnings.push('the anti-abuse minimum-account-age gate will be off')
+  if (scoring.highScorePoints === 0) warnings.push('the High Score bonus will award 0 points')
+  if (scoring.top10Points === 0) warnings.push('the Top 10 bonus will award 0 points')
+  if (scoring.dailyTaskPoints === 0) warnings.push('the Daily Task bonus will award 0 points')
+  if (!scoring.top10PointsBoardEnabled && !scoring.top10CtoonsBoardEnabled) {
+    warnings.push('the Top 10 bonus will be effectively disabled (no boards enabled)')
+  }
+  if (enabledGameCount.value === 0) warnings.push('the High Score bonus will be effectively disabled (no games selected)')
+  return warnings
+}
+
+async function saveScoring() {
+  scoringError.value = ''
+  const warnings = scoringRiskWarnings()
+  if (warnings.length && !confirm(`Starting next week:\n- ${warnings.join('\n- ')}\n\nSave anyway?`)) {
+    return
+  }
+  scoringSaving.value = true
+  try {
+    const body = {
+      highScorePoints: scoring.highScorePoints,
+      top10Points: scoring.top10Points,
+      dailyTaskPoints: scoring.dailyTaskPoints,
+      minAccountAgeDays: scoring.minAccountAgeDays,
+      top10RankCutoff: scoring.top10RankCutoff,
+      top10PointsBoardEnabled: scoring.top10PointsBoardEnabled,
+      top10CtoonsBoardEnabled: scoring.top10CtoonsBoardEnabled,
+      disabledScoreGames: scoring.disabledScoreGames,
+      disabledWinGames: scoring.disabledWinGames,
+    }
+    const res = await $fetch('/api/admin/cmoon-scoring', { method: 'POST', body })
+    Object.assign(scoring, {
+      highScorePoints: res.highScorePoints,
+      top10Points: res.top10Points,
+      dailyTaskPoints: res.dailyTaskPoints,
+      minAccountAgeDays: res.minAccountAgeDays,
+      top10RankCutoff: res.top10RankCutoff,
+      top10PointsBoardEnabled: res.top10PointsBoardEnabled,
+      top10CtoonsBoardEnabled: res.top10CtoonsBoardEnabled,
+      disabledScoreGames: res.disabledScoreGames || [],
+      disabledWinGames: res.disabledWinGames || [],
+    })
+  } catch (e) {
+    scoringError.value = e?.data?.statusMessage || 'Save failed'
+  } finally {
+    scoringSaving.value = false
+  }
+}
+
 async function toggleFlag() {
   flagSaving.value = true
   try {
@@ -1030,7 +1280,10 @@ async function remove(c) {
   }
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadScoring()
+})
 </script>
 
 <style scoped>
