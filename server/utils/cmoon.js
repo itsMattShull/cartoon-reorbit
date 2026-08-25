@@ -10,6 +10,7 @@ import { getWeekWindowStart } from './centralTime.js'
 import { getChicagoDailyBoundary, getChicagoMorningWindowStart } from './dailyTaskWindows.js'
 import { COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
 import { EXCLUDED_SYSTEM_USER_ID } from './economyValuation.js'
+import { grantGuildRole, revokeGuildRole } from './discord.js'
 
 const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000
 
@@ -412,6 +413,7 @@ export const CMOON_SELECT_ERRORS = {
   ALREADY_ASSIGNED: 'CMOON_ALREADY_ASSIGNED',
   DEADLINE_PASSED: 'CMOON_DEADLINE_PASSED',
   LOCKED: 'CMOON_LOCKED',
+  BANNED: 'CMOON_USER_BANNED',
 }
 
 class CMoonError extends Error {
@@ -551,6 +553,12 @@ export async function autoAssignExpiredCMoonUsers({ batchLimit = 200, maxBatches
         cMoonId: null,
         active: true,
         banned: false,
+        // Admins (which includes every cMoon captain — captaincy is only ever granted to
+        // isAdmin:true users, see CMoonCaptain) are never swept into balancing. An admin who
+        // hasn't personally picked a cMoon should stay unassigned indefinitely rather than being
+        // dropped into a faction they may end up captaining (or moved into) later — see
+        // reassignUserCMoon below, which is the only path that should ever set an admin's cMoonId.
+        isAdmin: false,
         OR: orClauses,
       },
       select: { id: true },
@@ -574,6 +582,121 @@ export async function autoAssignExpiredCMoonUsers({ batchLimit = 200, maxBatches
   }
 
   return { processed }
+}
+
+// Bounds a real-time Discord role sync so an admin action never hangs on Discord rate-limiting —
+// grantGuildRole/revokeGuildRole can each sleep several seconds per 429 retry (see
+// server/utils/discord.js), and this is called from an admin request handler, not a cron. The
+// underlying call is left running past the timeout (its result is just no longer waited on) — a
+// slow grant/revoke still lands, it's only the caller's confirmation that gives up early.
+const DISCORD_SYNC_TIMEOUT_MS = 4000
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (value) => { if (!settled) { settled = true; resolve(value) } }
+    setTimeout(() => finish(null), ms)
+    promise.then((ok) => finish(ok)).catch(() => finish(false))
+  })
+}
+
+// Real-time (not nightly-cron) Discord role sync for a single reassignment. Revoking a role is
+// new capability, not an existing pattern being reused: every other Discord sync in this codebase
+// (server/cron/sync-guild-members.js's addRoleToMember-backed jobs) is grant-only by deliberate
+// design, so this is scoped tightly — called only from reassignUserCMoon below (one user, one
+// admin-initiated change at a time), never from a bulk or cron path. Returns true/false once both
+// calls resolve within the timeout, or null if either is still in flight (not a failure — the
+// nightly syncCMoonDiscordRoles job will still pick up a late grant via cMoonRoleGrantedAt).
+async function syncDiscordRolesForReassignment(user, oldRoleId, newRoleId) {
+  if (!user.discordId || !user.inGuild || (!oldRoleId && !newRoleId)) return null
+  const [revoked, granted] = await Promise.all([
+    oldRoleId ? withTimeout(revokeGuildRole(user.discordId, oldRoleId), DISCORD_SYNC_TIMEOUT_MS) : Promise.resolve(null),
+    newRoleId ? withTimeout(grantGuildRole(user.discordId, newRoleId), DISCORD_SYNC_TIMEOUT_MS) : Promise.resolve(null),
+  ])
+  if (revoked === false || granted === false) return false
+  if (revoked === null || granted === null) return null
+  return true
+}
+
+// Single shared path for moving a user into, out of, or between cMoons — used by the admin
+// "update user's cMoon" action, the new per-cMoon Members panel, and captain auto-align (making
+// someone a captain of a cMoon moves them into it). Deliberately ignores CMoon.joinLocked: admin
+// placement into a locked cMoon is an existing, intentional override (see the joinLocked comment
+// on the CMoon model), not something this function should re-litigate.
+//
+// Callers that mutate memberCount indirectly through this function are responsible for calling
+// invalidateCMoonList() (server/api/cmoons.get.js) afterward — not done here, since importing an
+// API route file from this shared util would create a circular import (cmoons.get.js already
+// imports getGlobalConfig from this file).
+export async function reassignUserCMoon(userId, newCMoonId) {
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, cMoonId: true, banned: true, discordId: true, inGuild: true },
+  })
+  if (!target) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
+
+  let newCMoon = null
+  if (newCMoonId) {
+    newCMoon = await prisma.cMoon.findUnique({
+      where: { id: newCMoonId },
+      select: { id: true, name: true, color: true, discordRoleId: true },
+    })
+    if (!newCMoon) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
+  }
+
+  // Checked before the ban guard below: a true no-op (already exactly where this call wants them)
+  // must never fail just because the user happens to be banned — it isn't placing them anywhere.
+  if (target.cMoonId === newCMoonId) {
+    return { cMoonId: target.cMoonId, cMoonName: newCMoon?.name || null, cMoonColor: newCMoon?.color || null, discordRoleSynced: null }
+  }
+
+  // Removing someone from a cMoon (newCMoonId: null) is always allowed regardless of ban status
+  // — that's cleanup. Placing a banned account INTO a (different) cMoon is never allowed.
+  if (newCMoon && target.banned) throw new CMoonError(CMOON_SELECT_ERRORS.BANNED)
+
+  const oldCMoon = target.cMoonId
+    ? await prisma.cMoon.findUnique({ where: { id: target.cMoonId }, select: { id: true, discordRoleId: true } })
+    : null
+
+  await prisma.$transaction(async (tx) => {
+    if (oldCMoon) {
+      await tx.cMoon.update({ where: { id: oldCMoon.id }, data: { memberCount: { decrement: 1 } } })
+      // A captain who no longer belongs to a cMoon shouldn't still show as its captain — this is
+      // exactly the captain/member mismatch this feature exists to prevent, so clean it up here
+      // rather than leaving an orphaned CMoonCaptain row behind on every reassignment.
+      await tx.cMoonCaptain.deleteMany({ where: { cMoonId: oldCMoon.id, userId } })
+    }
+    if (newCMoon) {
+      await tx.cMoon.update({ where: { id: newCMoon.id }, data: { memberCount: { increment: 1 } } })
+    }
+    await tx.user.update({
+      where: { id: userId },
+      data: {
+        cMoonId: newCMoonId,
+        cMoonSelectedAt: newCMoonId ? new Date() : null,
+        cMoonAutoAssigned: false,
+        // A rank/role-grant cursor only means something within the cMoon it was earned in — clear
+        // both on any reassignment so a moved user doesn't keep a stale rank badge, and so the
+        // nightly rank-role sync re-grants cleanly for whatever cMoon they're in now.
+        currentCMoonRankId: null,
+        cMoonRankRoleGrantedAt: null,
+        cMoonRoleGrantedAt: null,
+      },
+    })
+  })
+
+  const discordRoleSynced = await syncDiscordRolesForReassignment(
+    target,
+    oldCMoon?.discordRoleId || null,
+    newCMoon?.discordRoleId || null,
+  )
+
+  return {
+    cMoonId: newCMoonId,
+    cMoonName: newCMoon?.name || null,
+    cMoonColor: newCMoon?.color || null,
+    discordRoleSynced,
+  }
 }
 
 export { CMoonError }

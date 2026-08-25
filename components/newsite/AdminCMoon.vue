@@ -3,10 +3,17 @@
     <div class="px-2 py-2">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
         <h1 class="text-base font-semibold">cMoons</h1>
-        <button
-          class="cm-tap px-3 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
-          @click="openCreateModal"
-        >+ Create cMoon</button>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button
+            class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50"
+            :disabled="!cmoons.length"
+            @click="previewModalOpen = true"
+          >Preview join modal</button>
+          <button
+            class="cm-tap px-3 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
+            @click="openCreateModal"
+          >+ Create cMoon</button>
+        </div>
       </div>
 
       <!-- Feature flag -->
@@ -36,12 +43,18 @@
                 class="w-6 h-9 object-cover rounded border flex-shrink-0"
               />
               <span v-else class="inline-block w-4 h-4 rounded-full border flex-shrink-0" :style="{ background: safeColor(c.color) }"></span>
+              <img v-if="c.avatarPath" :src="c.avatarPath" alt="" class="w-5 h-5 rounded-full object-cover border flex-shrink-0" title="cZone avatar" />
               <span class="font-semibold break-words min-w-0">{{ c.name }}</span>
               <span v-if="c.joinLocked" class="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Locked</span>
               <span class="text-[11px] text-gray-600">{{ c.memberCount }} member{{ c.memberCount === 1 ? '' : 's' }}</span>
               <!-- Kept together so they travel as a unit when the row wraps on narrow screens. -->
               <div class="ml-auto flex items-center gap-3 flex-shrink-0">
                 <button class="cm-tap text-[11px] text-indigo-600 hover:underline" @click="startEdit(c)">Edit</button>
+                <button
+                  v-if="c.effectType"
+                  class="cm-tap text-[11px] text-indigo-600 hover:underline"
+                  @click="previewEffect(c)"
+                >Preview effect</button>
                 <button
                   v-if="c.imagePath"
                   class="cm-tap text-[11px] text-gray-600 hover:underline disabled:opacity-40"
@@ -70,6 +83,59 @@
             <p v-if="c.memberCount > 0" class="text-[11px] text-gray-600 mt-1">
               Reassign members before this cMoon can be deleted.
             </p>
+
+            <!-- Members: add/remove any player's cMoon membership directly from here, so a
+                 captain/member mismatch (or a player stuck in the wrong cMoon) never needs the
+                 separate Manage Users screen. Discord roles sync in real time on every change. -->
+            <div class="mt-2 pt-2 border-t">
+              <button type="button" class="cm-tap text-[11px] font-medium text-indigo-600" @click="toggleMembers(c)">
+                {{ membersOpenId === c.id ? '▾' : '▸' }} Members ({{ c.memberCount }})
+              </button>
+              <div v-if="membersOpenId === c.id" class="mt-2 space-y-2">
+                <div v-if="membersLoading" class="text-[11px] text-gray-500">Loading…</div>
+                <template v-else>
+                  <div class="max-h-56 overflow-y-auto border rounded divide-y">
+                    <div v-for="m in members" :key="m.id" class="flex items-center gap-2 px-2 py-1.5 text-[11px]">
+                      <span class="flex-1 min-w-0 break-words">
+                        {{ m.username }}<span v-if="m.banned" class="text-red-600 ml-1">(banned)</span>
+                      </span>
+                      <button
+                        type="button" class="cm-tap text-red-600 disabled:opacity-40 flex-shrink-0"
+                        :disabled="memberActionBusy" @click="removeMember(c, m)"
+                      >Remove</button>
+                    </div>
+                    <div v-if="!members.length" class="px-2 py-2 text-[11px] text-gray-500">No members yet.</div>
+                  </div>
+
+                  <div>
+                    <label class="block text-[11px] font-medium mb-1">Add member</label>
+                    <input
+                      v-model="memberSearch"
+                      class="cm-field w-full border rounded px-2 py-1"
+                      style="font-size:16px"
+                      placeholder="Type 3+ characters of a username"
+                      autocapitalize="none" autocorrect="off" spellcheck="false"
+                      role="combobox" :aria-expanded="memberSearchResults.length > 0"
+                    />
+                    <div v-if="memberSearchResults.length" class="mt-1 border rounded divide-y bg-white max-h-40 overflow-y-auto">
+                      <button
+                        v-for="u in memberSearchResults" :key="u.id"
+                        type="button"
+                        class="cm-tap w-full text-left px-2 text-[11px] hover:bg-gray-100 disabled:opacity-40"
+                        :disabled="memberActionBusy || u.banned || u.cMoonId === c.id"
+                        @click="addMember(c, u)"
+                      >
+                        {{ u.username }}
+                        <span v-if="u.banned" class="text-red-600 ml-1">(banned — can't be assigned)</span>
+                        <span v-else-if="u.cMoonId === c.id" class="text-gray-400 ml-1">(already a member)</span>
+                        <span v-else-if="u.cMoonName" class="text-amber-700 ml-1">(moves from {{ u.cMoonName }})</span>
+                      </button>
+                    </div>
+                  </div>
+                  <p v-if="memberActionError" class="text-[11px] text-red-600">{{ memberActionError }}</p>
+                </template>
+              </div>
+            </div>
 
             <!-- Ranks: an ordered ladder (sortOrder) — a member's displayed rank is always the
                  highest-sortOrder rank they've unlocked via an achievement (see Admin: Achievements). -->
@@ -218,6 +284,45 @@
           </div>
 
           <div>
+            <label class="block text-xs font-medium mb-1">cZone avatar (small, like a player avatar)</label>
+            <p class="text-[11px] text-gray-600 mb-2">
+              Shown next to this cMoon's colored name badge on members' cZones. Square works
+              best — it's auto-cropped/resized to 128×128. Leave empty to show just the badge.
+            </p>
+            <template v-if="!editId">
+              <p class="text-[11px] text-gray-600">Save this cMoon first, then Edit it to upload an avatar.</p>
+            </template>
+            <template v-else>
+              <div class="flex items-center gap-3 flex-wrap">
+                <img
+                  v-if="avatarImagePreview || currentAvatarPath"
+                  :src="avatarImagePreview || currentAvatarPath"
+                  class="w-14 h-14 rounded-full object-cover border flex-shrink-0"
+                  alt="cZone avatar preview"
+                />
+                <p v-else class="text-[11px] text-gray-600">No avatar uploaded yet.</p>
+                <input type="file" accept="image/png,image/jpeg,image/webp" class="cm-field text-[11px]" @change="handleAvatarImageFile" />
+              </div>
+              <div class="flex items-center gap-3 mt-2 flex-wrap">
+                <button
+                  type="button"
+                  class="cm-tap px-3 border rounded bg-white"
+                  :disabled="!avatarImageFile || avatarImageUploading"
+                  @click="uploadAvatarImage"
+                >{{ avatarImageUploading ? 'Uploading…' : 'Upload avatar' }}</button>
+                <button
+                  v-if="currentAvatarPath"
+                  type="button"
+                  class="cm-tap text-[11px] text-gray-600 hover:underline disabled:opacity-40"
+                  :disabled="avatarImageUploading"
+                  @click="removeAvatarImage"
+                >Remove avatar</button>
+              </div>
+              <p v-if="avatarImageError" class="text-[11px] text-red-600 mt-1">{{ avatarImageError }}</p>
+            </template>
+          </div>
+
+          <div>
             <label class="block text-xs font-medium mb-1">Captains (from admins)</label>
             <div class="flex flex-wrap gap-2">
               <button
@@ -339,6 +444,11 @@
         </div>
       </div>
     </div>
+
+    <!-- A separate instance from the one mounted globally in the newsite layout (which drives
+         the real must-choose flow) — preview mode is entirely self-contained per instance, so
+         opening this one here can never interfere with a real deadline modal elsewhere. -->
+    <CMoonSelectModal preview v-model="previewModalOpen" />
   </div>
 </template>
 
@@ -347,6 +457,7 @@ import { cMoonPillStyle, isSafeCMoonColor, cMoonContrastRatio } from '~/utils/cm
 import { cMoonPalette } from '~/utils/cmoonPalette'
 
 const rs = useAdminResources()
+const { play: playPreviewEffect } = useFullscreenEffect()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -358,6 +469,99 @@ const flagEnabled = ref(false)
 const flagSaving = ref(false)
 const cMoonEnabledAt = ref(null)
 const cMoonSelectionDeadlineAt = ref(null)
+const previewModalOpen = ref(false)
+
+function previewEffect(c) {
+  if (c.effectType) playPreviewEffect(c.effectType)
+}
+
+// ── Members panel (per-cMoon, one open at a time) ───────────────────────
+const membersOpenId = ref('')
+const membersLoading = ref(false)
+const members = ref([])
+const memberSearch = ref('')
+const memberSearchResults = ref([])
+const memberActionBusy = ref(false)
+const memberActionError = ref('')
+let memberSearchTimer = null
+
+async function loadMembers(cMoonId) {
+  membersLoading.value = true
+  try {
+    const res = await $fetch(`/api/admin/cmoons/${cMoonId}/members`)
+    members.value = res.members || []
+  } catch (e) {
+    memberActionError.value = e?.data?.statusMessage || 'Failed to load members'
+    members.value = []
+  } finally {
+    membersLoading.value = false
+  }
+}
+
+function toggleMembers(c) {
+  if (membersOpenId.value === c.id) {
+    membersOpenId.value = ''
+    return
+  }
+  membersOpenId.value = c.id
+  memberSearch.value = ''
+  memberSearchResults.value = []
+  memberActionError.value = ''
+  loadMembers(c.id)
+}
+
+watch(memberSearch, (v) => {
+  clearTimeout(memberSearchTimer)
+  const q = String(v || '').trim()
+  if (q.length < 3) { memberSearchResults.value = []; return }
+  // Debounced search-as-you-type against a lightweight dedicated endpoint (not the full
+  // Manage-Users user list) — see server/api/admin/users/search.get.js.
+  memberSearchTimer = setTimeout(async () => {
+    try {
+      const res = await $fetch('/api/admin/users/search', { params: { q } })
+      memberSearchResults.value = res.users || []
+    } catch {
+      memberSearchResults.value = []
+    }
+  }, 250)
+})
+
+async function addMember(c, u) {
+  if (u.banned || u.cMoonId === c.id || memberActionBusy.value) return
+  const confirmMsg = u.cMoonName
+    ? `Move ${u.username} from ${u.cMoonName} into ${c.name}? This updates their Discord roles too.`
+    : `Add ${u.username} to ${c.name}?`
+  if (!confirm(confirmMsg)) return
+  memberActionBusy.value = true
+  memberActionError.value = ''
+  try {
+    const res = await $fetch(`/api/admin/users/${u.id}/update-cmoon`, { method: 'POST', body: { cMoonId: c.id } })
+    if (res.discordRoleSynced === false) memberActionError.value = "Added, but Discord role sync didn't confirm — it may still land shortly, or check the bot's permissions."
+    memberSearch.value = ''
+    memberSearchResults.value = []
+    await Promise.all([loadMembers(c.id), load()])
+  } catch (e) {
+    memberActionError.value = e?.data?.statusMessage || 'Failed to add member'
+  } finally {
+    memberActionBusy.value = false
+  }
+}
+
+async function removeMember(c, m) {
+  if (memberActionBusy.value) return
+  if (!confirm(`Remove ${m.username} from ${c.name}?`)) return
+  memberActionBusy.value = true
+  memberActionError.value = ''
+  try {
+    const res = await $fetch(`/api/admin/users/${m.id}/update-cmoon`, { method: 'POST', body: { cMoonId: null } })
+    if (res.discordRoleSynced === false) memberActionError.value = "Removed, but Discord role sync didn't confirm — it may still land shortly, or check the bot's permissions."
+    await Promise.all([loadMembers(c.id), load()])
+  } catch (e) {
+    memberActionError.value = e?.data?.statusMessage || 'Failed to remove member'
+  } finally {
+    memberActionBusy.value = false
+  }
+}
 
 const EFFECT_LABELS = { GLITCH: 'Glitch Effect', SLIME: 'Slime Effect' }
 function effectLabel(type) {
@@ -432,6 +636,13 @@ const bannerImageUploading = ref(false)
 const bannerImageError = ref('')
 const currentBannerImagePath = ref('')
 
+// ── cZone avatar (separate step — needs an existing cMoon row) ─────────
+const avatarImageFile = ref(null)
+const avatarImagePreview = ref('')
+const avatarImageUploading = ref(false)
+const avatarImageError = ref('')
+const currentAvatarPath = ref('')
+
 const palettePreview = computed(() => isValidColor(form.color) ? cMoonPalette(form.color) : null)
 
 function handlePageImageFile(e) {
@@ -487,6 +698,49 @@ async function uploadBannerImage() {
     bannerImageError.value = e?.data?.statusMessage || 'Upload failed'
   } finally {
     bannerImageUploading.value = false
+  }
+}
+
+function handleAvatarImageFile(e) {
+  const file = e.target.files?.[0] || null
+  avatarImageFile.value = file
+  avatarImageError.value = ''
+  if (avatarImagePreview.value) URL.revokeObjectURL(avatarImagePreview.value)
+  avatarImagePreview.value = file ? URL.createObjectURL(file) : ''
+}
+
+async function uploadAvatarImage() {
+  if (!editId.value || !avatarImageFile.value || avatarImageUploading.value) return
+  avatarImageUploading.value = true
+  avatarImageError.value = ''
+  try {
+    const body = new FormData()
+    body.append('image', avatarImageFile.value)
+    const res = await $fetch(`/api/admin/cmoons/${editId.value}/avatar-image`, { method: 'POST', body })
+    currentAvatarPath.value = res.avatarPath
+    avatarImageFile.value = null
+    if (avatarImagePreview.value) URL.revokeObjectURL(avatarImagePreview.value)
+    avatarImagePreview.value = ''
+    await load()
+  } catch (e) {
+    avatarImageError.value = e?.data?.statusMessage || 'Upload failed'
+  } finally {
+    avatarImageUploading.value = false
+  }
+}
+
+async function removeAvatarImage() {
+  if (!editId.value || avatarImageUploading.value) return
+  avatarImageUploading.value = true
+  avatarImageError.value = ''
+  try {
+    await $fetch(`/api/admin/cmoons/${editId.value}/avatar-image`, { method: 'DELETE' })
+    currentAvatarPath.value = ''
+    await load()
+  } catch (e) {
+    avatarImageError.value = e?.data?.statusMessage || 'Failed to remove avatar'
+  } finally {
+    avatarImageUploading.value = false
   }
 }
 
@@ -583,6 +837,11 @@ function startEdit(c) {
   if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
   bannerImagePreview.value = ''
   bannerImageError.value = ''
+  currentAvatarPath.value = c.avatarPath || ''
+  avatarImageFile.value = null
+  if (avatarImagePreview.value) URL.revokeObjectURL(avatarImagePreview.value)
+  avatarImagePreview.value = ''
+  avatarImageError.value = ''
   formError.value = ''
   clearImageSelection()
   currentImagePath.value = c.imagePath || ''
@@ -612,6 +871,11 @@ function resetForm() {
   if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
   bannerImagePreview.value = ''
   bannerImageError.value = ''
+  currentAvatarPath.value = ''
+  avatarImageFile.value = null
+  if (avatarImagePreview.value) URL.revokeObjectURL(avatarImagePreview.value)
+  avatarImagePreview.value = ''
+  avatarImageError.value = ''
 }
 
 function closeModal() {

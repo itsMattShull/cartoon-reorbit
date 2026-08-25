@@ -2,7 +2,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
-import { isValidHexColor, isValidDiscordSnowflake, isValidCMoonEffectType } from '@/server/utils/cmoon'
+import { isValidHexColor, isValidDiscordSnowflake, isValidCMoonEffectType, reassignUserCMoon } from '@/server/utils/cmoon'
 import { invalidateCMoonList } from '@/server/api/cmoons.get'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 
@@ -60,6 +60,12 @@ export default defineEventHandler(async (event) => {
     if (dup && dup.id !== id) throw createError({ statusCode: 409, statusMessage: 'A cMoon with that name already exists' })
   }
 
+  // Captured before the transaction below replaces the captain list, so it reflects who
+  // captained this cMoon BEFORE this save — the set this save adds to it, if any.
+  const priorCaptainIds = captainIds
+    ? new Set((await db.cMoonCaptain.findMany({ where: { cMoonId: id }, select: { userId: true } })).map(c => c.userId))
+    : null
+
   await db.$transaction(async (tx) => {
     await tx.cMoon.update({
       where: { id },
@@ -74,6 +80,17 @@ export default defineEventHandler(async (event) => {
       if (prizeCtoonRows.length) await tx.cMoonPrizeCtoon.createMany({ data: prizeCtoonRows.map(p => ({ cMoonId: id, ...p })), skipDuplicates: true })
     }
   })
+
+  // Captaincy implies membership: a newly-added captain (one who wasn't already captaining this
+  // cMoon before this save) who doesn't already belong to it gets moved in. Removing someone from
+  // captainIds does NOT remove their membership — that's a separate, more destructive action the
+  // admin can take explicitly via the Members panel if they want it.
+  if (priorCaptainIds) {
+    const newlyAdded = captainIds.filter(uid => !priorCaptainIds.has(uid))
+    if (newlyAdded.length) {
+      await Promise.all(newlyAdded.map(userId => reassignUserCMoon(userId, id).catch(() => null)))
+    }
+  }
 
   await logAdminChange(db, { userId: me.id, area: 'cMoon', key: `update:${id}`, prevValue: { name: cmoon.name, color: cmoon.color }, newValue: { name, color } })
   invalidateCMoonList()
