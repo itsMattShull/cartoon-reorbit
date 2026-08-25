@@ -177,7 +177,7 @@ async function claimOffer(offer) {
       method: 'POST',
       body: { optionId },
     })
-    offer.myClaim = { optionId: res.optionId, status: 'QUEUED', quantityMinted: 0, quantity: res.quantity }
+    offer.myClaim = { optionId: res.optionId, quantity: res.quantity }
   } catch (err) {
     offerErrors[offer.id] = err?.data?.statusMessage || 'Failed to claim'
   } finally {

@@ -1,7 +1,9 @@
 // GET /api/admin/cmoon-dispersal-offers/[offerId] — summary for one offer, including a live
-// claim-status breakdown. This is the polling target for the admin management view; it stays
-// cheap regardless of how many members have claimed because it's a single indexed groupBy
-// rather than fetching every claim row (see claims.get.js for the on-demand full list).
+// per-option claim count. This is a single indexed groupBy, cheap regardless of how many members
+// have claimed — see claims.get.js for the on-demand full list. There's no mint-job status
+// breakdown here (queued/completed/failed): claims are minted fire-and-forget straight to
+// mintQueue, same as every other bulk-mint call site in the app, with nothing tracking the
+// individual job outcomes afterward.
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { requireAdmin } from '@/server/utils/requireAdmin'
@@ -20,15 +22,12 @@ export default defineEventHandler(async (event) => {
       closedBy: { select: { username: true } },
       cMoons: { select: { cMoon: { select: { id: true, name: true, memberCount: true } } } },
       options: { orderBy: { sortOrder: 'asc' }, select: { id: true, ctoon: { select: { id: true, name: true, assetPath: true } } } },
+      _count: { select: { claims: true } },
     },
   })
   if (!offer) throw createError({ statusCode: 404, statusMessage: 'Offer not found' })
 
-  const [statusCounts, optionCounts] = await Promise.all([
-    db.cMoonDispersalClaim.groupBy({ by: ['status'], where: { offerId }, _count: true }),
-    db.cMoonDispersalClaim.groupBy({ by: ['optionId'], where: { offerId }, _count: true }),
-  ])
-  const byStatus = Object.fromEntries(statusCounts.map(s => [s.status, s._count]))
+  const optionCounts = await db.cMoonDispersalClaim.groupBy({ by: ['optionId'], where: { offerId }, _count: true })
   const claimsByOption = Object.fromEntries(optionCounts.map(o => [o.optionId, o._count]))
 
   return {
@@ -47,10 +46,6 @@ export default defineEventHandler(async (event) => {
       assetPath: opt.ctoon.assetPath,
       claimCount: claimsByOption[opt.id] || 0,
     })),
-    totalClaims: statusCounts.reduce((sum, s) => sum + s._count, 0),
-    queued: byStatus.QUEUED || 0,
-    completed: byStatus.COMPLETED || 0,
-    partial: byStatus.PARTIAL || 0,
-    failed: byStatus.FAILED || 0,
+    totalClaims: offer._count?.claims ?? 0,
   }
 })

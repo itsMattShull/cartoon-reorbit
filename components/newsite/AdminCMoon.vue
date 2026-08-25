@@ -582,7 +582,6 @@
       v-if="disperseCMoon"
       :cmoon="disperseCMoon"
       :allCMoons="cmoons"
-      :ctoons="ctoons"
       @close="closeDisperse"
     />
   </div>

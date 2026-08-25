@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
           orderBy: { sortOrder: 'asc' },
           select: { id: true, ctoon: { select: { id: true, name: true, assetPath: true } } },
         },
-        claims: { where: { userId }, select: { optionId: true, status: true, quantityMinted: true, quantity: true } },
+        claims: { where: { userId }, select: { optionId: true, quantity: true } },
       },
     }),
   ])
@@ -40,14 +40,7 @@ export default defineEventHandler(async (event) => {
       quantityPerMember: o.quantityPerMember,
       status: o.status,
       options: o.options.map(opt => ({ id: opt.id, ctoonId: opt.ctoon.id, name: opt.ctoon.name, assetPath: opt.ctoon.assetPath })),
-      myClaim: o.claims[0]
-        ? {
-            optionId: o.claims[0].optionId,
-            status: o.claims[0].status,
-            quantityMinted: o.claims[0].quantityMinted,
-            quantity: o.claims[0].quantity,
-          }
-        : null,
+      myClaim: o.claims[0] ? { optionId: o.claims[0].optionId, quantity: o.claims[0].quantity } : null,
     })),
   }
 })

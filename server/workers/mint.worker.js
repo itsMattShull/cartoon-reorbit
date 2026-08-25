@@ -80,40 +80,31 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
       }
     }
 
-    // Count existing user purchases for limit checks (first-owner only). Only meaningful for
-    // non-special mints (the sole place `existing` is read below is gated on !isSpecial), so
-    // special mints (admin/prize/dispersal/code-redeem) skip this round trip entirely.
-    let existing = 0
-    if (!isSpecial) {
-      const existingRows = await prisma.$queryRaw`
-        SELECT COUNT(*)::int AS count
-        FROM (
-          SELECT DISTINCT ON ("userCtoonId") "userCtoonId", "userId"
-          FROM "CtoonOwnerLog"
-          WHERE "ctoonId" = ${ctoonId}
-            AND "userCtoonId" IS NOT NULL
-          ORDER BY "userCtoonId", "createdAt" ASC
-        ) first_logs
-        WHERE "userId" = ${userId}
-      `
-      existing = existingRows[0]?.count ?? 0
-    }
+    // Count existing user purchases for limit checks (first-owner only)
+    const existingRows = await prisma.$queryRaw`
+      SELECT COUNT(*)::int AS count
+      FROM (
+        SELECT DISTINCT ON ("userCtoonId") "userCtoonId", "userId"
+        FROM "CtoonOwnerLog"
+        WHERE "ctoonId" = ${ctoonId}
+          AND "userCtoonId" IS NOT NULL
+        ORDER BY "userCtoonId", "createdAt" ASC
+      ) first_logs
+      WHERE "userId" = ${userId}
+    `
+    const existing = existingRows[0]?.count ?? 0
 
-    // Wallet balance check (available = total - active locks). Only used by the
-    // !isSpecial insufficient-points guard below, so skipped for special mints.
-    let availablePoints = 0
-    if (!isSpecial) {
-      const [wallet, activeLocks] = await Promise.all([
-        prisma.userPoints.findUnique({ where: { userId }, select: { points: true } }),
-        prisma.lockedPoints.findMany({
-          where: { userId, status: 'ACTIVE' },
-          select: { amount: true }
-        })
-      ])
-      const totalPoints = wallet?.points ?? 0
-      const lockedSum = activeLocks.reduce((acc, lock) => acc + (lock.amount || 0), 0)
-      availablePoints = totalPoints - lockedSum
-    }
+    // Wallet balance check (available = total - active locks)
+    const [wallet, activeLocks] = await Promise.all([
+      prisma.userPoints.findUnique({ where: { userId }, select: { points: true } }),
+      prisma.lockedPoints.findMany({
+        where: { userId, status: 'ACTIVE' },
+        select: { amount: true }
+      })
+    ])
+    const totalPoints = wallet?.points ?? 0
+    const lockedSum = activeLocks.reduce((acc, lock) => acc + (lock.amount || 0), 0)
+    const availablePoints = totalPoints - lockedSum
     // A freshly-verified active Sale price always wins over the (possibly stale)
     // effectivePrice passed from the HTTP layer.
     const chargePrice = activeSale
@@ -217,7 +208,7 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
     } catch {}
 
     // Mint inside a single transaction with atomic counter for mintNumber
-    return prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       // 1) Atomically increment totalMinted and use the new value as mintNumber
       const updatedCtoon = await tx.ctoon.update({
         where: { id: ctoonId },
@@ -328,63 +319,15 @@ const worker = new Worker(process.env.MINT_QUEUE_KEY, async job => {
           data: { userId, ctoonId, saleId: activeSale?.saleId ?? null }
         })
       }
-
-      return { mintNumber: uc.mintNumber }
     })
 }, { connection })
 
-// ── cMoon dispersal-offer claim tracking ──────────────────────────────────────
-// A claim job (server/api/cmoon/[id]/dispersal-offers/[offerId]/claim.post.js) carries
-// dispersalClaimId in its data. This listener is the ONLY place CMoonDispersalClaim rows are
-// touched — kept entirely outside the mint transaction above so this bookkeeping can never
-// affect (or be affected by) the shared mint hot path. Failures here are swallowed (logged)
-// rather than thrown: a lost progress update must never look like a failed mint to the rest of
-// the app. There's no parent "offer" counter to roll up into — an offer stays OPEN across an
-// open-ended number of claims until an admin closes it, so per-claim status is the whole
-// picture; the admin summary endpoint aggregates claims live with a groupBy instead.
-async function recordClaimOutcome(jobData, { success, mintNumber = null, errorMessage = null }) {
-  const { dispersalClaimId } = jobData || {}
-  if (!dispersalClaimId) return
-  try {
-    await prisma.$transaction(async (tx) => {
-      const claim = await tx.cMoonDispersalClaim.update({
-        where: { id: dispersalClaimId },
-        data: success
-          ? {
-              quantityMinted: { increment: 1 },
-              ...(typeof mintNumber === 'number' ? { mintNumbers: { push: mintNumber } } : {})
-            }
-          : {
-              failedCount: { increment: 1 },
-              error: errorMessage ? String(errorMessage).slice(0, 500) : undefined
-            },
-        select: { quantityMinted: true, failedCount: true, quantity: true }
-      })
-
-      if (claim.quantityMinted + claim.failedCount >= claim.quantity) {
-        const status =
-          claim.failedCount === 0 ? 'COMPLETED' :
-          claim.quantityMinted > 0 ? 'PARTIAL' : 'FAILED'
-        await tx.cMoonDispersalClaim.update({
-          where: { id: dispersalClaimId },
-          data: { status }
-        })
-      }
-    })
-  } catch (err) {
-    console.warn('cMoon dispersal claim outcome update failed:', err?.message || err)
-  }
-}
-
-worker.on('completed', (job, returnvalue) => {
-  if (job?.data?.dispersalClaimId) {
-    recordClaimOutcome(job.data, { success: true, mintNumber: returnvalue?.mintNumber ?? null })
-  }
+// Optional: logging
+worker.on('completed', job => {
+  // console.log(`Mint job ${job.id} completed`)
 })
 worker.on('failed', (job, err) => {
-  if (job?.data?.dispersalClaimId) {
-    recordClaimOutcome(job.data, { success: false, errorMessage: err?.message })
-  }
+  // console.error(`Mint job ${job?.id} failed: ${err.message}`)
 })
 
 export default worker

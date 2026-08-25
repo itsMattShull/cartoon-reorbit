@@ -72,6 +72,11 @@ export default defineEventHandler(async (event) => {
     throw err
   }
 
+  // Fire-and-forget, exactly like every other bulk-mint call site in the app (grantCMoonPrizes,
+  // the cZone-contest distribute route) — mint.worker.js is never special-cased per caller, so
+  // nothing here tracks these jobs' outcomes afterward. The CMoonDispersalClaim row above is the
+  // durable record of "who picked what"; whether each mint actually lands is left entirely to
+  // the worker's own atomic transaction and its normal sold-out/failure handling.
   const jobs = []
   for (let copy = 0; copy < offer.quantityPerMember; copy++) {
     jobs.push({
@@ -81,7 +86,6 @@ export default defineEventHandler(async (event) => {
         ctoonId: option.ctoonId,
         isSpecial: true,
         method: 'CMOON_DISPERSAL',
-        dispersalClaimId: claim.id,
       },
       opts: { jobId: `dispersal-claim:${claim.id}:${copy}`, priority: CLAIM_JOB_PRIORITY },
     })

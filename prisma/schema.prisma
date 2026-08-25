@@ -2996,13 +2996,6 @@ enum CMoonDispersalOfferStatus {
   CLOSED
 }
 
-enum CMoonDispersalClaimStatus {
-  QUEUED
-  COMPLETED
-  PARTIAL
-  FAILED
-}
-
 // Admin-created "pick one of these cToons" offer — distinct from CMoonPrizeCtoon (auto-granted
 // on join, no choice involved). Stays OPEN (visible/claimable on every linked cMoon's page) until
 // an admin explicitly closes it; there's no snapshot of eligible members or a total-job count up
@@ -3061,26 +3054,22 @@ model CMoonDispersalOption {
 // One row per member who claimed an offer — at most one per (offer, user), enforced by the
 // unique constraint below (a claim is final once made, no re-picking). `cMoonId`/`username` are
 // snapshots of which cMoon they were a live member of and their name at claim time, surviving
-// them later leaving that cMoon or renaming. mintNumbers accumulates as jobs complete; status
-// settles to COMPLETED/PARTIAL/FAILED once quantityMinted + failedCount reaches quantity — see
-// mint.worker.js's 'completed'/'failed' event listeners, which are the only place these rows
-// are updated after creation.
+// them later leaving that cMoon or renaming. This is a plain immutable log of who picked what —
+// it deliberately does NOT track the resulting mint job's outcome (no status/mintNumber fields):
+// the mint itself is queued fire-and-forget straight to mintQueue, same as every other bulk-mint
+// call site in the app (grantCMoonPrizes, the cZone-contest distribute route), and nothing writes
+// back into this row afterward — mint.worker.js is the shared hot path for every mint in the app
+// and is intentionally never special-cased for any one caller.
 model CMoonDispersalClaim {
-  id             String                     @id @default(uuid())
-  offerId        String
-  optionId       String
-  ctoonId        String
-  userId         String
-  username       String
-  cMoonId        String
-  quantity       Int
-  quantityMinted Int                        @default(0)
-  failedCount    Int                        @default(0)
-  status         CMoonDispersalClaimStatus  @default(QUEUED)
-  mintNumbers    Int[]                      @default([])
-  error          String?
-  claimedAt      DateTime                   @default(now())
-  updatedAt      DateTime                   @updatedAt
+  id        String   @id @default(uuid())
+  offerId   String
+  optionId  String
+  ctoonId   String
+  userId    String
+  username  String
+  cMoonId   String
+  quantity  Int
+  claimedAt DateTime @default(now())
 
   offer  CMoonDispersalOffer  @relation(fields: [offerId], references: [id], onDelete: Cascade)
   option CMoonDispersalOption @relation(fields: [optionId], references: [id], onDelete: Restrict)

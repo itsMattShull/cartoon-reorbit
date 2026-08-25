@@ -2,7 +2,13 @@
      Admin tool: create a "pick one of these cToons" offer, live on one or more cMoons at once,
      that members opt into and claim from (see CMoonPage.vue for the member-facing side). Three
      views in one modal: list (existing offers for this cMoon) -> create (new offer) -> detail
-     (manage one offer: live claim counts, on-demand claim list, close). -->
+     (manage one offer: live claim counts, on-demand claim list, close).
+
+     Deliberately does NOT track individual mint-job outcomes (queued/minted/failed per claim) —
+     claims are minted fire-and-forget straight to mintQueue, same as every other bulk-mint call
+     site in the app, and mint.worker.js (the shared hot path for every mint in the app) is never
+     touched or special-cased for this feature. What's shown here is only what this feature's own
+     routes actually write: who claimed what, and when. -->
 <template>
   <div class="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-4">
     <div class="absolute inset-0 bg-black/60" @click="!busy && attemptClose()"></div>
@@ -59,6 +65,7 @@
 
           <div>
             <label class="block text-xs font-medium mb-1">cToon options (members pick one)</label>
+            <p class="text-[11px] text-gray-500 mb-1">Only unlimited-quantity cToons can be offered here.</p>
             <input
               v-model="ctoonSearch"
               class="cmd-field w-full border rounded px-2 py-1"
@@ -68,7 +75,9 @@
               role="combobox"
               :aria-expanded="ctoonSuggestions.length > 0"
               aria-controls="disperse-offer-ctoon-suggestions"
+              :disabled="eligibleCtoonsLoading"
             />
+            <p v-if="eligibleCtoonsLoading" class="text-[11px] text-gray-500 mt-1">Loading eligible cToons…</p>
             <div v-if="ctoonSuggestions.length" id="disperse-offer-ctoon-suggestions" class="mt-2 border rounded divide-y bg-white max-h-40 overflow-y-auto">
               <button
                 v-for="c in ctoonSuggestions" :key="c.id"
@@ -123,26 +132,20 @@
               </div>
             </div>
 
-            <p class="text-[11px] text-gray-600">
-              {{ detail.totalClaims }} total claim{{ detail.totalClaims === 1 ? '' : 's' }}
-              · {{ detail.completed }} minted
-              <template v-if="detail.queued"> · {{ detail.queued }} queued</template>
-              <template v-if="detail.failed"> · {{ detail.failed }} failed</template>
-              <template v-if="detail.partial"> · {{ detail.partial }} partial</template>
-            </p>
+            <p class="text-[11px] text-gray-600">{{ detail.totalClaims }} total claim{{ detail.totalClaims === 1 ? '' : 's' }}</p>
 
             <div>
               <button type="button" class="cmd-tap text-[11px] text-indigo-600 hover:underline" @click="toggleClaims">
-                {{ claimsOpen ? 'Hide' : ((detail.failed || detail.partial) ? 'View failed/partial claims' : 'View claims') }}
+                {{ claimsOpen ? 'Hide' : 'View claims' }}
               </button>
               <div v-if="claimsOpen" class="mt-2 border rounded divide-y max-h-48 overflow-y-auto">
                 <div v-if="claimsLoading" class="p-2 text-[11px] text-gray-500">Loading…</div>
                 <template v-else>
                   <div v-for="c in claims" :key="c.userId" class="flex items-center justify-between gap-2 px-2 py-1.5 text-[11px]">
-                    <span class="break-words min-w-0">{{ c.username }} → {{ c.ctoonName }}</span>
-                    <span :class="claimBadgeClass(c.status)">{{ c.quantityMinted }}/{{ c.quantity }}</span>
+                    <span class="break-words min-w-0">{{ c.username }} → {{ c.ctoonName }} × {{ c.quantity }}</span>
+                    <span class="text-gray-500 flex-shrink-0">{{ formatDate(c.claimedAt) }}</span>
                   </div>
-                  <div v-if="!claims.length" class="p-2 text-[11px] text-gray-500">No claims to show.</div>
+                  <div v-if="!claims.length" class="p-2 text-[11px] text-gray-500">No claims yet.</div>
                 </template>
               </div>
             </div>
@@ -169,6 +172,11 @@
         >← Back</button>
         <span v-else></span>
         <div class="flex items-center gap-2">
+          <button
+            v-if="view === 'detail'"
+            type="button" class="cmd-tap px-3 border rounded"
+            @click="loadDetail(currentOfferId)"
+          >Refresh</button>
           <button type="button" class="cmd-tap px-3 border rounded" @click="attemptClose" :disabled="busy">Close</button>
           <button
             v-if="view === 'create'"
@@ -184,22 +192,27 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 const props = defineProps({
   cmoon: { type: Object, required: true }, // { id, name, memberCount } — the row this was opened from
   allCMoons: { type: Array, default: () => [] }, // [{ id, name, memberCount }]
-  ctoons: { type: Array, default: () => [] }, // [{ id, name, assetPath }]
 })
 const emit = defineEmits(['close'])
 
 const MAX_QUANTITY_PER_MEMBER = 10
 const MIN_OPTIONS = 2
 const MAX_OPTIONS = 10
-const POLL_MS = 4000
 
 const view = ref('list') // 'list' | 'create' | 'detail'
 const busy = computed(() => creating.value || closing.value)
+
+function formatDate(d) {
+  if (!d) return ''
+  const dt = new Date(d)
+  if (Number.isNaN(dt.getTime())) return ''
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(dt)
+}
 
 // ── list ──
 const listLoading = ref(true)
@@ -223,17 +236,31 @@ function offerStatusClass(status) {
 
 // ── create ──
 const selectedCMoonIds = ref([props.cmoon.id])
+const eligibleCtoons = ref([])
+const eligibleCtoonsLoading = ref(false)
 const ctoonSearch = ref('')
 const selectedOptions = ref([])
 const quantityPerMember = ref(1)
 const formError = ref('')
 const creating = ref(false)
 
+async function loadEligibleCtoons() {
+  eligibleCtoonsLoading.value = true
+  try {
+    const res = await $fetch('/api/admin/cmoon-dispersal-offers/eligible-ctoons')
+    eligibleCtoons.value = res.ctoons || []
+  } catch {
+    eligibleCtoons.value = []
+  } finally {
+    eligibleCtoonsLoading.value = false
+  }
+}
+
 const ctoonSuggestions = computed(() => {
   const v = String(ctoonSearch.value || '').trim().toLowerCase()
   if (v.length < 3) return []
   const chosenIds = new Set(selectedOptions.value.map(o => o.id))
-  return props.ctoons.filter(c => !chosenIds.has(c.id) && c.name?.toLowerCase().includes(v)).slice(0, 20)
+  return eligibleCtoons.value.filter(c => !chosenIds.has(c.id) && c.name?.toLowerCase().includes(v)).slice(0, 20)
 })
 
 function addOption(c) {
@@ -261,6 +288,7 @@ function openCreate() {
   quantityPerMember.value = 1
   formError.value = ''
   view.value = 'create'
+  if (!eligibleCtoons.value.length) loadEligibleCtoons()
 }
 
 async function submitCreate() {
@@ -293,12 +321,13 @@ const closing = ref(false)
 const claimsOpen = ref(false)
 const claimsLoading = ref(false)
 const claims = ref([])
-let pollTimer = null
-let currentOfferId = null
+const currentOfferId = ref(null)
 
 async function loadDetail(offerId) {
+  if (!offerId) return
   try {
     detail.value = await $fetch(`/api/admin/cmoon-dispersal-offers/${offerId}`)
+    if (claimsOpen.value) await fetchClaims()
   } catch (e) {
     detailError.value = e?.data?.statusMessage || 'Failed to load offer'
   }
@@ -306,34 +335,20 @@ async function loadDetail(offerId) {
 
 async function openDetail(offerId) {
   view.value = 'detail'
-  currentOfferId = offerId
+  currentOfferId.value = offerId
   detailLoading.value = true
   detailError.value = ''
   claimsOpen.value = false
   claims.value = []
   await loadDetail(offerId)
   detailLoading.value = false
-  startPolling()
-}
-
-function startPolling() {
-  stopPolling()
-  pollTimer = setInterval(() => { if (currentOfferId) loadDetail(currentOfferId) }, POLL_MS)
-}
-function stopPolling() {
-  if (pollTimer) { clearInterval(pollTimer); pollTimer = null }
-}
-function handleVisibility() {
-  if (document.hidden) stopPolling()
-  else if (view.value === 'detail' && currentOfferId) { loadDetail(currentOfferId); startPolling() }
 }
 
 async function fetchClaims() {
-  if (!currentOfferId) return
+  if (!currentOfferId.value) return
   claimsLoading.value = true
   try {
-    const onlyFailed = (detail.value?.failed || detail.value?.partial) ? '?onlyFailed=1' : ''
-    const res = await $fetch(`/api/admin/cmoon-dispersal-offers/${currentOfferId}/claims${onlyFailed}`)
+    const res = await $fetch(`/api/admin/cmoon-dispersal-offers/${currentOfferId.value}/claims`)
     claims.value = res.claims || []
   } catch {
     claims.value = []
@@ -344,24 +359,17 @@ async function fetchClaims() {
 
 async function toggleClaims() {
   claimsOpen.value = !claimsOpen.value
-  if (claimsOpen.value && !claims.value.length) await fetchClaims()
-}
-
-function claimBadgeClass(status) {
-  if (status === 'COMPLETED') return 'text-green-600 flex-shrink-0'
-  if (status === 'FAILED') return 'text-red-600 flex-shrink-0'
-  if (status === 'PARTIAL') return 'text-amber-600 flex-shrink-0'
-  return 'text-gray-500 flex-shrink-0'
+  if (claimsOpen.value) await fetchClaims()
 }
 
 async function closeOffer() {
-  if (!currentOfferId || closing.value) return
+  if (!currentOfferId.value || closing.value) return
   if (!confirm('Close this offer? Members will no longer be able to claim from it.')) return
   closing.value = true
   detailError.value = ''
   try {
-    await $fetch(`/api/admin/cmoon-dispersal-offers/${currentOfferId}/close`, { method: 'POST' })
-    await loadDetail(currentOfferId)
+    await $fetch(`/api/admin/cmoon-dispersal-offers/${currentOfferId.value}/close`, { method: 'POST' })
+    await loadDetail(currentOfferId.value)
   } catch (e) {
     detailError.value = e?.data?.statusMessage || 'Failed to close offer'
   } finally {
@@ -370,8 +378,7 @@ async function closeOffer() {
 }
 
 function backToList() {
-  stopPolling()
-  currentOfferId = null
+  currentOfferId.value = null
   detail.value = null
   view.value = 'list'
   loadList()
@@ -382,14 +389,7 @@ function attemptClose() {
   emit('close')
 }
 
-onMounted(() => {
-  loadList()
-  document.addEventListener('visibilitychange', handleVisibility)
-})
-onUnmounted(() => {
-  stopPolling()
-  document.removeEventListener('visibilitychange', handleVisibility)
-})
+onMounted(loadList)
 </script>
 
 <style scoped>

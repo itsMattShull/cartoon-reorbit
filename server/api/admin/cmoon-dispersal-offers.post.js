@@ -36,10 +36,21 @@ export default defineEventHandler(async (event) => {
 
   const [cMoonCount, ctoons] = await Promise.all([
     db.cMoon.count({ where: { id: { in: cMoonIds } } }),
-    db.ctoon.findMany({ where: { id: { in: ctoonIds } }, select: { id: true, name: true } }),
+    db.ctoon.findMany({ where: { id: { in: ctoonIds } }, select: { id: true, name: true, quantity: true } }),
   ])
   if (cMoonCount !== cMoonIds.length) throw createError({ statusCode: 400, statusMessage: 'One or more cMoons do not exist' })
   if (ctoons.length !== ctoonIds.length) throw createError({ statusCode: 400, statusMessage: 'One or more cToons do not exist' })
+  // Only unlimited-quantity cToons (quantity === null) are eligible — an offer stays open to an
+  // unknown, open-ended number of future claimants, so a finite-quantity cToon could silently
+  // sell out mid-offer. Re-checked here regardless of what the admin UI already filtered to,
+  // since the client-side list can never be trusted as the actual gate.
+  const limited = ctoons.filter(c => c.quantity !== null)
+  if (limited.length) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: `These cToons have a limited quantity and can't be offered: ${limited.map(c => c.name).join(', ')}`,
+    })
+  }
 
   const offer = await db.$transaction(async (tx) => {
     const created = await tx.cMoonDispersalOffer.create({
