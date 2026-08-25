@@ -2,7 +2,45 @@
   <div class="my-collection">
 
     <!-- ── Header bar ────────────────────────────────────────────── -->
-    <div class="mc-header">My Collection</div>
+    <div class="mc-header">
+      <span class="mc-header-title">My Collection</span>
+      <button
+        v-if="worth && worth.itemCount > 0"
+        ref="worthToggleEl"
+        type="button"
+        class="mc-worth-toggle"
+        :aria-expanded="worthOpen ? 'true' : 'false'"
+        aria-controls="mc-worth-panel"
+        title="Estimated collection worth"
+        @click="worthOpen = !worthOpen"
+      >
+        <span class="mc-worth-amount">{{ formatCompact(worth.totals.avgAuctionSold) }} pts</span>
+        <span class="mc-worth-caret" :class="{ 'mc-worth-caret--open': worthOpen }" aria-hidden="true">▾</span>
+      </button>
+    </div>
+
+    <!-- ── Collection worth breakdown (overlay, doesn't push the grid) ──── -->
+    <div
+      v-if="worthOpen && worth"
+      id="mc-worth-panel"
+      ref="worthPanelEl"
+      class="mc-worth-panel"
+      role="region"
+      aria-label="Collection worth breakdown"
+    >
+      <div v-for="m in worthMetrics" :key="m.key" class="mc-worth-row">
+        <div class="mc-worth-row-main">
+          <span class="mc-worth-row-label">{{ m.label }}</span>
+          <span class="mc-worth-row-value">{{ formatFull(worth.totals[m.key]) }} pts</span>
+        </div>
+        <span class="mc-worth-row-note">{{ m.note(worth) }}</span>
+      </div>
+      <div class="mc-worth-footnote">
+        {{ worth.distinctCount }} cToon type{{ worth.distinctCount === 1 ? '' : 's' }},
+        {{ worth.itemCount }} item{{ worth.itemCount === 1 ? '' : 's' }} total.
+        <template v-if="worth.truncated"> Estimated from a subset — this collection is too large to price in full.</template>
+      </div>
+    </div>
 
     <!-- ── Active "duplicates only" indicator ─────────────────────── -->
     <div v-if="filter.duplicatesOnly" class="mc-active-filter">
@@ -116,6 +154,79 @@ function rarityColor(rarity) {
 const allCtoons   = useState('myCollectionCtoons', () => [])
 const loading     = ref(true)
 const filter      = useNewSiteCtoonFilter()
+
+// ── Collection worth ─────────────────────────────────────────────
+// Fetched separately from allCtoons (its own endpoint, its own loading state)
+// so a slow valuation query never delays the grid the user actually came for.
+const worth        = ref(null)
+const worthOpen     = ref(false)
+const worthToggleEl = ref(null)
+const worthPanelEl  = ref(null)
+
+// "Avg. trade value" is explicitly labeled "(est.)": unlike an auction sale or
+// the cMart price, it's an imputed number (server/cron/economy-aggregate.js
+// derives it from each trade's other side, not a price the item itself sold
+// for), so it reads as an estimate rather than a peer to the other three.
+const worthMetrics = [
+  { key: 'avgAuctionSold',  label: 'Avg. auction sale',        verb: 'sold in an auction' },
+  { key: 'lastAuctionSold', label: 'Last auction sold',        verb: 'have a recorded auction sale' },
+  { key: 'avgTraded',       label: 'Avg. trade value (est.)',  verb: 'have enough trade history' },
+  { key: 'faceValue',       label: 'cMart / face price',       verb: null },
+].map(m => ({
+  ...m,
+  note(w) {
+    if (!m.verb) return 'Original listed price for every item.'
+    const pricedCount = w.priced[m.key]
+    const total = w.itemCount
+    if (!total) return ''
+    if (pricedCount === total) return `All ${total} items ${m.verb}.`
+    if (pricedCount === 0) return `No items ${m.verb} yet — showing cMart price instead.`
+    return `${pricedCount} of ${total} items ${m.verb}; rest show cMart price.`
+  }
+}))
+
+function formatFull(n) {
+  return Math.round(n ?? 0).toLocaleString()
+}
+
+function formatCompact(n) {
+  const num = Math.round(n ?? 0)
+  const abs = Math.abs(num)
+  if (abs < 1000) return String(num)
+  const units = [[1e9, 'B'], [1e6, 'M'], [1e3, 'K']]
+  for (const [v, suffix] of units) {
+    if (abs >= v) return (num / v).toFixed(1).replace(/\.0$/, '') + suffix
+  }
+  return String(num)
+}
+
+function onWorthOutsideActivate(e) {
+  if (worthPanelEl.value?.contains(e.target)) return
+  if (worthToggleEl.value?.contains(e.target)) return
+  worthOpen.value = false
+}
+function onWorthKeydown(e) {
+  if (e.key === 'Escape') worthOpen.value = false
+}
+watch(worthOpen, (open) => {
+  if (!process.client) return
+  if (open) {
+    // Registered on the next tick so the click that opened the panel doesn't
+    // also immediately close it via this same listener.
+    nextTick(() => {
+      document.addEventListener('mousedown', onWorthOutsideActivate)
+      document.addEventListener('keydown', onWorthKeydown)
+    })
+  } else {
+    document.removeEventListener('mousedown', onWorthOutsideActivate)
+    document.removeEventListener('keydown', onWorthKeydown)
+  }
+})
+onBeforeUnmount(() => {
+  if (!process.client) return
+  document.removeEventListener('mousedown', onWorthOutsideActivate)
+  document.removeEventListener('keydown', onWorthKeydown)
+})
 // The modal itself is mounted once in layouts/newsite-template.vue.
 const { open: openAuctionModal, createdSignal, lastCreated } = useAuctionModal()
 
@@ -333,14 +444,25 @@ const paginatedCtoons = computed(() => {
 function prevPage() { if (currentPage.value > 1) currentPage.value-- }
 function nextPage() { if (currentPage.value < totalPages.value) currentPage.value++ }
 
-onMounted(async () => {
-  try {
-    allCtoons.value = await $fetch('/api/collections')
-  } catch (err) {
-    console.error('MyCollection: failed to load', err)
-  } finally {
-    loading.value = false
-  }
+onMounted(() => {
+  // Independent fetches, not awaited together: a slow /worth query must never
+  // hold up the grid, and a slow grid load shouldn't delay the worth badge.
+  ;(async () => {
+    try {
+      allCtoons.value = await $fetch('/api/collections')
+    } catch (err) {
+      console.error('MyCollection: failed to load', err)
+    } finally {
+      loading.value = false
+    }
+  })()
+  ;(async () => {
+    try {
+      worth.value = await $fetch('/api/collection/self/worth')
+    } catch (err) {
+      console.error('MyCollection: failed to load collection worth', err)
+    }
+  })()
 })
 </script>
 
@@ -353,8 +475,10 @@ onMounted(async () => {
   background: white;
   box-sizing: border-box;
   overflow: hidden;
+  position: relative;
 
   --img-scale: 0.7;
+  --mc-header-height: 23px;
 }
 
 .mc-pagination {
@@ -391,17 +515,129 @@ onMounted(async () => {
 
 .mc-header {
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
   width: 100%;
-  height: 23px;
-  line-height: 21px;
+  height: var(--mc-header-height);
   padding-bottom: 2px;
   overflow: hidden;
-  text-align: center;
   font-size: 1.6rem;
   font-weight: bold;
   color: #ffffff;
   background: var(--OrbitLightBlue);
   box-sizing: border-box;
+}
+
+/* ── Collection worth ────────────────────────────────────────── */
+.mc-worth-toggle {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: calc(var(--mc-header-height) - 6px);
+  border: 1px solid rgba(255,255,255,0.35);
+  border-radius: 10px;
+  background: rgba(0,0,0,0.22);
+  color: #fff;
+  font-family: inherit;
+  font-weight: normal;
+  font-size: 0.62rem;
+  line-height: 1;
+  padding: 0 7px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mc-worth-toggle:hover { background: rgba(0,0,0,0.35); }
+
+.mc-worth-amount { font-weight: bold; font-variant-numeric: tabular-nums; }
+
+.mc-worth-caret {
+  font-size: 0.55rem;
+  opacity: 0.75;
+  transition: transform 0.15s;
+}
+.mc-worth-caret--open { transform: rotate(180deg); }
+
+.mc-worth-panel {
+  position: absolute;
+  top: var(--mc-header-height);
+  left: 6px;
+  right: 6px;
+  z-index: 40;
+  background: #0b2540;
+  border: 1px solid var(--OrbitLightBlue);
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  box-shadow: 0 6px 18px rgba(0,0,0,0.4);
+  padding: 6px 10px 8px;
+  box-sizing: border-box;
+  /* A fixed cap, not a percentage: .my-collection's height resolves to `auto`
+     on mobile (layouts/newsite-template.vue gives .main-content `height:
+     auto` there), so a percentage here would have no definite containing
+     block to resolve against. 320px comfortably fits all 4 rows without a
+     scrollbar in the normal case; it only engages as a real cap if a very
+     tall dynamic type setting stretches the rows. */
+  max-height: 320px;
+  overflow-y: auto;
+}
+
+.mc-worth-row {
+  padding: 5px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.mc-worth-row:last-of-type { border-bottom: none; }
+
+.mc-worth-row-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.mc-worth-row-label {
+  font-size: 0.72rem;
+  color: #fff;
+  font-weight: bold;
+}
+
+.mc-worth-row-value {
+  font-size: 0.78rem;
+  color: #9fd1ff;
+  font-weight: bold;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.mc-worth-row-note {
+  display: block;
+  font-size: 0.62rem;
+  color: rgba(255,255,255,0.6);
+  margin-top: 1px;
+}
+
+.mc-worth-footnote {
+  margin-top: 4px;
+  padding-top: 5px;
+  border-top: 1px solid rgba(255,255,255,0.15);
+  font-size: 0.6rem;
+  color: rgba(255,255,255,0.5);
+  text-align: center;
+}
+
+/* A real tap target without growing the header on desktop, where a mouse
+   click has no minimum-size requirement. */
+@media (max-width: 768px) {
+  /* On .my-collection, not .mc-header: .mc-worth-panel is a sibling of
+     .mc-header and reads this same variable for its `top` offset, so the
+     override has to live where both can inherit it. */
+  .my-collection { --mc-header-height: 40px; }
+  .mc-worth-toggle { font-size: 0.72rem; padding: 0 9px; }
+  .mc-worth-amount { font-size: 0.74rem; }
 }
 
 /* ── Active filter chip ──────────────────────────────────────── */
