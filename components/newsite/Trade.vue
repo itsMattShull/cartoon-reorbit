@@ -745,6 +745,8 @@ const {
   tradeSetOptionsSelf,
   tradeSeriesOptionsOther,
   tradeSeriesOptionsSelf,
+  tradeCMoonOptionsOther,
+  tradeCMoonOptionsSelf,
   tradeRarityOptionsOther,
   tradeRarityOptionsSelf,
   tradeNameSuggestionsOther,
@@ -1319,11 +1321,12 @@ async function clearTarget(focusInput = false) {
   selectedTargetCtoons.value = []; selectedInitiatorCtoons.value = []; pointsToOffer.value = 0
   otherCtoons.value = []; selfCtoons.value = []; otherTradeList.value = []; selfTradeList.value = []
   pageOther.value = 1; pageSelf.value = 1
-  tradeFiltersOther.value = { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all' }
-  tradeFiltersSelf.value = { nameQuery: '', set: 'All', series: 'All', rarity: 'All', duplicates: 'all', owned: 'all', wishlistOnly: false }
+  tradeFiltersOther.value = { nameQuery: '', set: 'All', series: 'All', cMoon: 'All', rarity: 'All', duplicates: 'all', owned: 'all' }
+  tradeFiltersSelf.value = { nameQuery: '', set: 'All', series: 'All', cMoon: 'All', rarity: 'All', duplicates: 'all', owned: 'all', wishlistOnly: false }
   targetWishlist.value = []; tradeLoadingWishlist.value = false; tradeTargetWishlistCount.value = 0
   tradeSetOptionsOther.value = ['All']; tradeSetOptionsSelf.value = ['All']
   tradeSeriesOptionsOther.value = ['All']; tradeSeriesOptionsSelf.value = ['All']
+  tradeCMoonOptionsOther.value = ['All', 'No cMoon']; tradeCMoonOptionsSelf.value = ['All', 'No cMoon']
   tradeRarityOptionsOther.value = ['All']; tradeRarityOptionsSelf.value = ['All']
   tradeNameSuggestionsOther.value = []; tradeNameSuggestionsSelf.value = []
   createValuations.value = {}
@@ -1391,6 +1394,8 @@ function updateFilterOptions() {
   tradeSetOptionsSelf.value = ['All', ...sortAlpha(uniqueTruthies(selfCtoons.value.map(c => c.set ?? c.setName ?? c.collectionSet)))]
   tradeSeriesOptionsOther.value = ['All', ...sortAlpha(uniqueTruthies(otherCtoons.value.map(c => c.series ?? c.seriesName)))]
   tradeSeriesOptionsSelf.value = ['All', ...sortAlpha(uniqueTruthies(selfCtoons.value.map(c => c.series ?? c.seriesName)))]
+  tradeCMoonOptionsOther.value = ['All', 'No cMoon', ...sortAlpha(uniqueTruthies(otherCtoons.value.map(c => c.cMoon?.name)))]
+  tradeCMoonOptionsSelf.value = ['All', 'No cMoon', ...sortAlpha(uniqueTruthies(selfCtoons.value.map(c => c.cMoon?.name)))]
   tradeRarityOptionsOther.value = buildRarityOptions(otherCtoons.value)
   tradeRarityOptionsSelf.value = buildRarityOptions(selfCtoons.value)
 }
@@ -1601,6 +1606,8 @@ function applyFilters(items, f, ctx) {
     if (nameQ && !c.name?.toLowerCase().includes(nameQ)) return false
     if (f.set && f.set !== 'All' && c.set !== f.set) return false
     if (f.series && f.series !== 'All' && c.series !== f.series) return false
+    if (f.cMoon === 'No cMoon' && c.cMoon) return false
+    if (f.cMoon && f.cMoon !== 'All' && f.cMoon !== 'No cMoon' && c.cMoon?.name !== f.cMoon) return false
     if (f.rarity && f.rarity !== 'All' && c.rarity !== f.rarity) return false
     if (f.duplicates === 'dups' && !ctx.dupIds.has(c.ctoonId)) return false
     if (f.duplicates === 'trade-list' && !ctx.tradeListIds.has(c.id)) return false

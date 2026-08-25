@@ -45,6 +45,14 @@
       </select>
     </div>
 
+    <!-- cMoon -->
+    <div class="tsb-field">
+      <label class="tsb-label">cMoon</label>
+      <select class="tsb-select" :value="activeFilters.cMoon" @change="setFilter('cMoon', $event.target.value)">
+        <option v-for="opt in activeCMoonOptions" :key="opt">{{ opt }}</option>
+      </select>
+    </div>
+
     <!-- Rarity -->
     <div class="tsb-field">
       <label class="tsb-label">Rarity</label>
@@ -100,6 +108,8 @@ const {
   tradeSetOptionsSelf,
   tradeSeriesOptionsOther,
   tradeSeriesOptionsSelf,
+  tradeCMoonOptionsOther,
+  tradeCMoonOptionsSelf,
   tradeRarityOptionsOther,
   tradeRarityOptionsSelf,
   tradeNameSuggestionsOther,
@@ -122,6 +132,9 @@ const activeSetOptions = computed(() =>
 )
 const activeSeriesOptions = computed(() =>
   isStep2.value ? tradeSeriesOptionsSelf.value : tradeSeriesOptionsOther.value
+)
+const activeCMoonOptions = computed(() =>
+  isStep2.value ? tradeCMoonOptionsSelf.value : tradeCMoonOptionsOther.value
 )
 const activeRarityOptions = computed(() =>
   isStep2.value ? tradeRarityOptionsSelf.value : tradeRarityOptionsOther.value

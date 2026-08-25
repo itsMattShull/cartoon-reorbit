@@ -3,10 +3,17 @@
     <div class="px-2 py-2">
       <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
         <h1 class="text-base font-semibold">cMoons</h1>
-        <button
-          class="cm-tap px-3 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
-          @click="openCreateModal"
-        >+ Create cMoon</button>
+        <div class="flex items-center gap-2 flex-wrap">
+          <button
+            class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50"
+            :disabled="!cmoons.length"
+            @click="previewModalOpen = true"
+          >Preview join modal</button>
+          <button
+            class="cm-tap px-3 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
+            @click="openCreateModal"
+          >+ Create cMoon</button>
+        </div>
       </div>
 
       <!-- Feature flag -->
@@ -25,6 +32,129 @@
         </p>
       </div>
 
+      <!-- Scoring rules: the weekly team-leaderboard bonus job's admin-editable knobs
+           (see server/utils/cmoon.js runWeeklyCMoonScoring). Kept as one panel with
+           sub-sections rather than a separate admin page/tab — it's config for the
+           cMoons feature, same as the flag above, not a distinct resource. -->
+      <div class="bg-white rounded border p-3 mb-4">
+        <h2 class="text-sm font-semibold mb-1">Team Leaderboard Scoring Rules</h2>
+        <p class="text-[11px] text-gray-600 mb-3">
+          Controls the weekly cMoon team-leaderboard bonus job (runs Monday 00:00 CST). Changes take
+          effect starting the next weekly run — past scores are never recalculated.
+        </p>
+
+        <div v-if="scoringLoading" class="text-gray-600">Loading…</div>
+        <template v-else>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs font-medium mb-1">High Score points</label>
+              <input v-model.number="scoring.highScorePoints" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
+              <p class="text-[11px] text-gray-500 mt-1">Per player, for holding rank #1 on an eligible game.</p>
+            </div>
+            <div>
+              <label class="block text-xs font-medium mb-1">Top 10 points</label>
+              <input v-model.number="scoring.top10Points" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
+              <p class="text-[11px] text-gray-500 mt-1">Per player, for a top-{{ scoring.top10RankCutoff || 10 }} finish on an eligible board.</p>
+            </div>
+            <div>
+              <label class="block text-xs font-medium mb-1">Daily task points</label>
+              <input v-model.number="scoring.dailyTaskPoints" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
+              <p class="text-[11px] text-gray-500 mt-1">Per player, per day a daily task was completed that week.</p>
+            </div>
+          </div>
+
+          <div class="border-t pt-3 mt-3">
+            <label class="block text-xs font-medium mb-1">Minimum account age (days)</label>
+            <input v-model.number="scoring.minAccountAgeDays" type="number" min="0" max="365" inputmode="numeric" class="cm-field w-full sm:w-40 border rounded px-2 py-1" style="font-size:16px" />
+            <p class="text-[11px] text-gray-500 mt-1">
+              Accounts younger than this don't qualify for any award — the only defense against a
+              throwaway account inflating a team's score.
+            </p>
+            <p v-if="scoring.minAccountAgeDays === 0" class="text-[11px] text-amber-600 font-medium mt-1">
+              0 disables the anti-abuse gate entirely — any account, including one created today, can score.
+            </p>
+          </div>
+
+          <div class="border-t pt-3 mt-3">
+            <div class="text-xs font-medium mb-1.5">Top 10 boards</div>
+            <div class="flex flex-col gap-1.5">
+              <label class="cm-tap flex items-center gap-2">
+                <input type="checkbox" v-model="scoring.top10PointsBoardEnabled" />
+                <span class="text-xs">Total Points board</span>
+              </label>
+              <label class="cm-tap flex items-center gap-2">
+                <input type="checkbox" v-model="scoring.top10CtoonsBoardEnabled" />
+                <span class="text-xs">Total cToons board</span>
+              </label>
+            </div>
+            <div class="mt-2">
+              <label class="block text-xs font-medium mb-1">Rank cutoff</label>
+              <input v-model.number="scoring.top10RankCutoff" type="number" min="1" max="250" inputmode="numeric" class="cm-field w-full sm:w-40 border rounded px-2 py-1" style="font-size:16px" />
+              <p class="text-[11px] text-gray-500 mt-1">How many ranks count as "top 10" on each enabled board.</p>
+            </div>
+            <p v-if="!scoring.top10PointsBoardEnabled && !scoring.top10CtoonsBoardEnabled" class="text-[11px] text-amber-600 font-medium mt-1">
+              Both boards are off — the Top 10 bonus is effectively disabled.
+            </p>
+          </div>
+
+          <div class="border-t pt-3 mt-3">
+            <div class="text-xs font-medium mb-1">High Score eligible games</div>
+            <p class="text-[11px] text-gray-500 mb-2">Only checked games can earn the High Score bonus.</p>
+
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[11px] text-gray-600">Score-based games</span>
+              <span class="flex gap-3">
+                <button type="button" class="cm-tap text-[11px] text-indigo-600" @click="setAllGames('score', true)">All</button>
+                <button type="button" class="cm-tap text-[11px] text-indigo-600" @click="setAllGames('score', false)">None</button>
+              </span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-1 mb-3">
+              <label
+                v-for="g in scoreGameOptions" :key="g.key"
+                class="cm-tap flex items-center gap-1.5 px-2 rounded-md border cursor-pointer select-none"
+                :class="isGameEnabled('score', g.key) ? 'bg-indigo-50 border-indigo-400 text-indigo-700' : 'bg-gray-50 border-gray-200 text-gray-600'"
+              >
+                <input type="checkbox" class="sr-only" :checked="isGameEnabled('score', g.key)" @change="toggleGame('score', g.key)" />
+                <span class="text-[11px] font-medium break-words">{{ g.label }}</span>
+              </label>
+            </div>
+
+            <div class="flex items-center justify-between mb-1">
+              <span class="text-[11px] text-gray-600">Win-based games</span>
+              <span class="flex gap-3">
+                <button type="button" class="cm-tap text-[11px] text-indigo-600" @click="setAllGames('win', true)">All</button>
+                <button type="button" class="cm-tap text-[11px] text-indigo-600" @click="setAllGames('win', false)">None</button>
+              </span>
+            </div>
+            <div class="grid grid-cols-2 sm:grid-cols-3 gap-1">
+              <label
+                v-for="g in winGameOptions" :key="g.key"
+                class="cm-tap flex items-center gap-1.5 px-2 rounded-md border cursor-pointer select-none"
+                :class="isGameEnabled('win', g.key) ? 'bg-indigo-50 border-indigo-400 text-indigo-700' : 'bg-gray-50 border-gray-200 text-gray-600'"
+              >
+                <input type="checkbox" class="sr-only" :checked="isGameEnabled('win', g.key)" @change="toggleGame('win', g.key)" />
+                <span class="text-[11px] font-medium break-words">{{ g.label }}</span>
+              </label>
+            </div>
+
+            <p class="text-[11px] text-gray-500 mt-2">{{ enabledGameSummary }}</p>
+            <p v-if="enabledGameCount === 0" class="text-[11px] text-amber-600 font-medium mt-1">
+              No games selected — the High Score bonus is effectively disabled.
+            </p>
+          </div>
+
+          <p v-if="scoringError" class="text-[11px] text-red-600 mt-3">{{ scoringError }}</p>
+
+          <div class="mt-3">
+            <button
+              class="cm-tap px-3 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+              :disabled="scoringSaving"
+              @click="saveScoring"
+            >{{ scoringSaving ? 'Saving…' : 'Save Scoring Rules' }}</button>
+          </div>
+        </template>
+      </div>
+
       <div v-if="loading" class="text-gray-600">Loading…</div>
       <template v-else>
         <!-- Existing cMoons -->
@@ -36,11 +166,18 @@
                 class="w-6 h-9 object-cover rounded border flex-shrink-0"
               />
               <span v-else class="inline-block w-4 h-4 rounded-full border flex-shrink-0" :style="{ background: safeColor(c.color) }"></span>
+              <img v-if="c.avatarPath" :src="c.avatarPath" alt="" class="w-5 h-5 rounded-full object-cover border flex-shrink-0" title="cZone avatar" />
               <span class="font-semibold break-words min-w-0">{{ c.name }}</span>
+              <span v-if="c.joinLocked" class="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Locked</span>
               <span class="text-[11px] text-gray-600">{{ c.memberCount }} member{{ c.memberCount === 1 ? '' : 's' }}</span>
               <!-- Kept together so they travel as a unit when the row wraps on narrow screens. -->
               <div class="ml-auto flex items-center gap-3 flex-shrink-0">
                 <button class="cm-tap text-[11px] text-indigo-600 hover:underline" @click="startEdit(c)">Edit</button>
+                <button
+                  v-if="c.effectType"
+                  class="cm-tap text-[11px] text-indigo-600 hover:underline"
+                  @click="previewEffect(c)"
+                >Preview effect</button>
                 <button
                   class="cm-tap text-[11px] text-indigo-600 hover:underline disabled:opacity-40"
                   :disabled="c.memberCount === 0"
@@ -74,6 +211,59 @@
             <p v-if="c.memberCount > 0" class="text-[11px] text-gray-600 mt-1">
               Reassign members before this cMoon can be deleted.
             </p>
+
+            <!-- Members: add/remove any player's cMoon membership directly from here, so a
+                 captain/member mismatch (or a player stuck in the wrong cMoon) never needs the
+                 separate Manage Users screen. Discord roles sync in real time on every change. -->
+            <div class="mt-2 pt-2 border-t">
+              <button type="button" class="cm-tap text-[11px] font-medium text-indigo-600" @click="toggleMembers(c)">
+                {{ membersOpenId === c.id ? '▾' : '▸' }} Members ({{ c.memberCount }})
+              </button>
+              <div v-if="membersOpenId === c.id" class="mt-2 space-y-2">
+                <div v-if="membersLoading" class="text-[11px] text-gray-500">Loading…</div>
+                <template v-else>
+                  <div class="max-h-56 overflow-y-auto border rounded divide-y">
+                    <div v-for="m in members" :key="m.id" class="flex items-center gap-2 px-2 py-1.5 text-[11px]">
+                      <span class="flex-1 min-w-0 break-words">
+                        {{ m.username }}<span v-if="m.banned" class="text-red-600 ml-1">(banned)</span>
+                      </span>
+                      <button
+                        type="button" class="cm-tap text-red-600 disabled:opacity-40 flex-shrink-0"
+                        :disabled="memberActionBusy" @click="removeMember(c, m)"
+                      >Remove</button>
+                    </div>
+                    <div v-if="!members.length" class="px-2 py-2 text-[11px] text-gray-500">No members yet.</div>
+                  </div>
+
+                  <div>
+                    <label class="block text-[11px] font-medium mb-1">Add member</label>
+                    <input
+                      v-model="memberSearch"
+                      class="cm-field w-full border rounded px-2 py-1"
+                      style="font-size:16px"
+                      placeholder="Type 3+ characters of a username"
+                      autocapitalize="none" autocorrect="off" spellcheck="false"
+                      role="combobox" :aria-expanded="memberSearchResults.length > 0"
+                    />
+                    <div v-if="memberSearchResults.length" class="mt-1 border rounded divide-y bg-white max-h-40 overflow-y-auto">
+                      <button
+                        v-for="u in memberSearchResults" :key="u.id"
+                        type="button"
+                        class="cm-tap w-full text-left px-2 text-[11px] hover:bg-gray-100 disabled:opacity-40"
+                        :disabled="memberActionBusy || u.banned || u.cMoonId === c.id"
+                        @click="addMember(c, u)"
+                      >
+                        {{ u.username }}
+                        <span v-if="u.banned" class="text-red-600 ml-1">(banned — can't be assigned)</span>
+                        <span v-else-if="u.cMoonId === c.id" class="text-gray-400 ml-1">(already a member)</span>
+                        <span v-else-if="u.cMoonName" class="text-amber-700 ml-1">(moves from {{ u.cMoonName }})</span>
+                      </button>
+                    </div>
+                  </div>
+                  <p v-if="memberActionError" class="text-[11px] text-red-600">{{ memberActionError }}</p>
+                </template>
+              </div>
+            </div>
 
             <!-- Ranks: an ordered ladder (sortOrder) — a member's displayed rank is always the
                  highest-sortOrder rank they've unlocked via an achievement (see Admin: Achievements). -->
@@ -153,6 +343,17 @@
                 <option value="SLIME">Slime Effect</option>
               </select>
             </div>
+            <div>
+              <label class="flex items-center gap-2 cm-tap">
+                <input type="checkbox" v-model="form.joinLocked" />
+                <span class="text-xs font-medium">Locked</span>
+              </label>
+              <p class="text-[11px] text-gray-600 mt-1">
+                Hides this cMoon from the "choose your cMoon" list and quick-nav — players can't join it
+                themselves. Admins can still place a player into it via Admin: Manage Users, cToons can still
+                be assigned to it, and its cMoon page keeps working normally.
+              </p>
+            </div>
           </div>
 
           <div>
@@ -207,6 +408,45 @@
                 @click="uploadBannerImage"
               >{{ bannerImageUploading ? 'Uploading…' : 'Upload banner' }}</button>
               <p v-if="bannerImageError" class="text-[11px] text-red-600 mt-1">{{ bannerImageError }}</p>
+            </template>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium mb-1">cZone avatar (small, like a player avatar)</label>
+            <p class="text-[11px] text-gray-600 mb-2">
+              Shown next to this cMoon's colored name badge on members' cZones. Square works
+              best — it's auto-cropped/resized to 128×128. Leave empty to show just the badge.
+            </p>
+            <template v-if="!editId">
+              <p class="text-[11px] text-gray-600">Save this cMoon first, then Edit it to upload an avatar.</p>
+            </template>
+            <template v-else>
+              <div class="flex items-center gap-3 flex-wrap">
+                <img
+                  v-if="avatarImagePreview || currentAvatarPath"
+                  :src="avatarImagePreview || currentAvatarPath"
+                  class="w-14 h-14 rounded-full object-cover border flex-shrink-0"
+                  alt="cZone avatar preview"
+                />
+                <p v-else class="text-[11px] text-gray-600">No avatar uploaded yet.</p>
+                <input type="file" accept="image/png,image/jpeg,image/webp" class="cm-field text-[11px]" @change="handleAvatarImageFile" />
+              </div>
+              <div class="flex items-center gap-3 mt-2 flex-wrap">
+                <button
+                  type="button"
+                  class="cm-tap px-3 border rounded bg-white"
+                  :disabled="!avatarImageFile || avatarImageUploading"
+                  @click="uploadAvatarImage"
+                >{{ avatarImageUploading ? 'Uploading…' : 'Upload avatar' }}</button>
+                <button
+                  v-if="currentAvatarPath"
+                  type="button"
+                  class="cm-tap text-[11px] text-gray-600 hover:underline disabled:opacity-40"
+                  :disabled="avatarImageUploading"
+                  @click="removeAvatarImage"
+                >Remove avatar</button>
+              </div>
+              <p v-if="avatarImageError" class="text-[11px] text-red-600 mt-1">{{ avatarImageError }}</p>
             </template>
           </div>
 
@@ -333,6 +573,11 @@
       </div>
     </div>
 
+    <!-- A separate instance from the one mounted globally in the newsite layout (which drives
+         the real must-choose flow) — preview mode is entirely self-contained per instance, so
+         opening this one here can never interfere with a real deadline modal elsewhere. -->
+    <CMoonSelectModal preview v-model="previewModalOpen" />
+
     <!-- ── Disperse cToons modal ─────────────────────────────────────── -->
     <CMoonDisperseModal
       v-if="disperseCMoon"
@@ -348,6 +593,7 @@ import { cMoonPillStyle, isSafeCMoonColor, cMoonContrastRatio } from '~/utils/cm
 import { cMoonPalette } from '~/utils/cmoonPalette'
 
 const rs = useAdminResources()
+const { play: playPreviewEffect } = useFullscreenEffect()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -359,6 +605,99 @@ const flagEnabled = ref(false)
 const flagSaving = ref(false)
 const cMoonEnabledAt = ref(null)
 const cMoonSelectionDeadlineAt = ref(null)
+const previewModalOpen = ref(false)
+
+function previewEffect(c) {
+  if (c.effectType) playPreviewEffect(c.effectType)
+}
+
+// ── Members panel (per-cMoon, one open at a time) ───────────────────────
+const membersOpenId = ref('')
+const membersLoading = ref(false)
+const members = ref([])
+const memberSearch = ref('')
+const memberSearchResults = ref([])
+const memberActionBusy = ref(false)
+const memberActionError = ref('')
+let memberSearchTimer = null
+
+async function loadMembers(cMoonId) {
+  membersLoading.value = true
+  try {
+    const res = await $fetch(`/api/admin/cmoons/${cMoonId}/members`)
+    members.value = res.members || []
+  } catch (e) {
+    memberActionError.value = e?.data?.statusMessage || 'Failed to load members'
+    members.value = []
+  } finally {
+    membersLoading.value = false
+  }
+}
+
+function toggleMembers(c) {
+  if (membersOpenId.value === c.id) {
+    membersOpenId.value = ''
+    return
+  }
+  membersOpenId.value = c.id
+  memberSearch.value = ''
+  memberSearchResults.value = []
+  memberActionError.value = ''
+  loadMembers(c.id)
+}
+
+watch(memberSearch, (v) => {
+  clearTimeout(memberSearchTimer)
+  const q = String(v || '').trim()
+  if (q.length < 3) { memberSearchResults.value = []; return }
+  // Debounced search-as-you-type against a lightweight dedicated endpoint (not the full
+  // Manage-Users user list) — see server/api/admin/users/search.get.js.
+  memberSearchTimer = setTimeout(async () => {
+    try {
+      const res = await $fetch('/api/admin/users/search', { params: { q } })
+      memberSearchResults.value = res.users || []
+    } catch {
+      memberSearchResults.value = []
+    }
+  }, 250)
+})
+
+async function addMember(c, u) {
+  if (u.banned || u.cMoonId === c.id || memberActionBusy.value) return
+  const confirmMsg = u.cMoonName
+    ? `Move ${u.username} from ${u.cMoonName} into ${c.name}? This updates their Discord roles too.`
+    : `Add ${u.username} to ${c.name}?`
+  if (!confirm(confirmMsg)) return
+  memberActionBusy.value = true
+  memberActionError.value = ''
+  try {
+    const res = await $fetch(`/api/admin/users/${u.id}/update-cmoon`, { method: 'POST', body: { cMoonId: c.id } })
+    if (res.discordRoleSynced === false) memberActionError.value = "Added, but Discord role sync didn't confirm — it may still land shortly, or check the bot's permissions."
+    memberSearch.value = ''
+    memberSearchResults.value = []
+    await Promise.all([loadMembers(c.id), load()])
+  } catch (e) {
+    memberActionError.value = e?.data?.statusMessage || 'Failed to add member'
+  } finally {
+    memberActionBusy.value = false
+  }
+}
+
+async function removeMember(c, m) {
+  if (memberActionBusy.value) return
+  if (!confirm(`Remove ${m.username} from ${c.name}?`)) return
+  memberActionBusy.value = true
+  memberActionError.value = ''
+  try {
+    const res = await $fetch(`/api/admin/users/${m.id}/update-cmoon`, { method: 'POST', body: { cMoonId: null } })
+    if (res.discordRoleSynced === false) memberActionError.value = "Removed, but Discord role sync didn't confirm — it may still land shortly, or check the bot's permissions."
+    await Promise.all([loadMembers(c.id), load()])
+  } catch (e) {
+    memberActionError.value = e?.data?.statusMessage || 'Failed to remove member'
+  } finally {
+    memberActionBusy.value = false
+  }
+}
 
 const EFFECT_LABELS = { GLITCH: 'Glitch Effect', SLIME: 'Slime Effect' }
 function effectLabel(type) {
@@ -367,7 +706,7 @@ function effectLabel(type) {
 
 const editId = ref('')
 const formOpen = ref(false)
-const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', effectType: '', captainIds: [], prizeCtoons: [] })
+const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', effectType: '', joinLocked: false, captainIds: [], prizeCtoons: [] })
 const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
@@ -433,6 +772,13 @@ const bannerImageUploading = ref(false)
 const bannerImageError = ref('')
 const currentBannerImagePath = ref('')
 
+// ── cZone avatar (separate step — needs an existing cMoon row) ─────────
+const avatarImageFile = ref(null)
+const avatarImagePreview = ref('')
+const avatarImageUploading = ref(false)
+const avatarImageError = ref('')
+const currentAvatarPath = ref('')
+
 const palettePreview = computed(() => isValidColor(form.color) ? cMoonPalette(form.color) : null)
 
 function handlePageImageFile(e) {
@@ -488,6 +834,49 @@ async function uploadBannerImage() {
     bannerImageError.value = e?.data?.statusMessage || 'Upload failed'
   } finally {
     bannerImageUploading.value = false
+  }
+}
+
+function handleAvatarImageFile(e) {
+  const file = e.target.files?.[0] || null
+  avatarImageFile.value = file
+  avatarImageError.value = ''
+  if (avatarImagePreview.value) URL.revokeObjectURL(avatarImagePreview.value)
+  avatarImagePreview.value = file ? URL.createObjectURL(file) : ''
+}
+
+async function uploadAvatarImage() {
+  if (!editId.value || !avatarImageFile.value || avatarImageUploading.value) return
+  avatarImageUploading.value = true
+  avatarImageError.value = ''
+  try {
+    const body = new FormData()
+    body.append('image', avatarImageFile.value)
+    const res = await $fetch(`/api/admin/cmoons/${editId.value}/avatar-image`, { method: 'POST', body })
+    currentAvatarPath.value = res.avatarPath
+    avatarImageFile.value = null
+    if (avatarImagePreview.value) URL.revokeObjectURL(avatarImagePreview.value)
+    avatarImagePreview.value = ''
+    await load()
+  } catch (e) {
+    avatarImageError.value = e?.data?.statusMessage || 'Upload failed'
+  } finally {
+    avatarImageUploading.value = false
+  }
+}
+
+async function removeAvatarImage() {
+  if (!editId.value || avatarImageUploading.value) return
+  avatarImageUploading.value = true
+  avatarImageError.value = ''
+  try {
+    await $fetch(`/api/admin/cmoons/${editId.value}/avatar-image`, { method: 'DELETE' })
+    currentAvatarPath.value = ''
+    await load()
+  } catch (e) {
+    avatarImageError.value = e?.data?.statusMessage || 'Failed to remove avatar'
+  } finally {
+    avatarImageUploading.value = false
   }
 }
 
@@ -570,6 +959,7 @@ function startEdit(c) {
     discordRoleId: c.discordRoleId || '',
     pageDescription: c.pageDescription || '',
     effectType: c.effectType || '',
+    joinLocked: !!c.joinLocked,
     captainIds: c.captains.map(cap => cap.userId),
     prizeCtoons: c.prizeCtoons.map(p => ({ ctoonId: p.ctoonId, quantity: p.quantity })),
   })
@@ -583,6 +973,11 @@ function startEdit(c) {
   if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
   bannerImagePreview.value = ''
   bannerImageError.value = ''
+  currentAvatarPath.value = c.avatarPath || ''
+  avatarImageFile.value = null
+  if (avatarImagePreview.value) URL.revokeObjectURL(avatarImagePreview.value)
+  avatarImagePreview.value = ''
+  avatarImageError.value = ''
   formError.value = ''
   clearImageSelection()
   currentImagePath.value = c.imagePath || ''
@@ -612,6 +1007,11 @@ function resetForm() {
   if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
   bannerImagePreview.value = ''
   bannerImageError.value = ''
+  currentAvatarPath.value = ''
+  avatarImageFile.value = null
+  if (avatarImagePreview.value) URL.revokeObjectURL(avatarImagePreview.value)
+  avatarImagePreview.value = ''
+  avatarImageError.value = ''
 }
 
 function closeModal() {
@@ -706,6 +1106,133 @@ async function load() {
   }
 }
 
+// ── Scoring rules ──────────────────────────────────────────────────────────
+const scoring = reactive({
+  highScorePoints: 100,
+  top10Points: 50,
+  dailyTaskPoints: 10,
+  minAccountAgeDays: 3,
+  top10RankCutoff: 10,
+  top10PointsBoardEnabled: true,
+  top10CtoonsBoardEnabled: true,
+  disabledScoreGames: [],
+  disabledWinGames: [],
+})
+const scoreGameOptions = ref([])
+const winGameOptions = ref([])
+const scoringLoading = ref(false)
+const scoringSaving = ref(false)
+const scoringError = ref('')
+
+function disabledListKey(kind) {
+  return kind === 'score' ? 'disabledScoreGames' : 'disabledWinGames'
+}
+
+function isGameEnabled(kind, key) {
+  return !scoring[disabledListKey(kind)].includes(key)
+}
+
+function toggleGame(kind, key) {
+  const list = scoring[disabledListKey(kind)]
+  const i = list.indexOf(key)
+  if (i >= 0) list.splice(i, 1)
+  else list.push(key)
+}
+
+function setAllGames(kind, enabled) {
+  const options = kind === 'score' ? scoreGameOptions.value : winGameOptions.value
+  scoring[disabledListKey(kind)] = enabled ? [] : options.map(g => g.key)
+}
+
+const enabledGameCount = computed(() => {
+  const scoreEnabled = scoreGameOptions.value.filter(g => isGameEnabled('score', g.key)).length
+  const winEnabled = winGameOptions.value.filter(g => isGameEnabled('win', g.key)).length
+  return scoreEnabled + winEnabled
+})
+
+const enabledGameSummary = computed(() => {
+  const total = scoreGameOptions.value.length + winGameOptions.value.length
+  return `${enabledGameCount.value} of ${total} games eligible for the High Score bonus.`
+})
+
+async function loadScoring() {
+  scoringLoading.value = true
+  try {
+    const data = await $fetch('/api/admin/cmoon-scoring')
+    Object.assign(scoring, {
+      highScorePoints: data.highScorePoints,
+      top10Points: data.top10Points,
+      dailyTaskPoints: data.dailyTaskPoints,
+      minAccountAgeDays: data.minAccountAgeDays,
+      top10RankCutoff: data.top10RankCutoff,
+      top10PointsBoardEnabled: data.top10PointsBoardEnabled,
+      top10CtoonsBoardEnabled: data.top10CtoonsBoardEnabled,
+      disabledScoreGames: data.disabledScoreGames || [],
+      disabledWinGames: data.disabledWinGames || [],
+    })
+    scoreGameOptions.value = data.scoreGameOptions || []
+    winGameOptions.value = data.winGameOptions || []
+  } catch (e) {
+    scoringError.value = e?.data?.statusMessage || 'Failed to load scoring rules'
+  } finally {
+    scoringLoading.value = false
+  }
+}
+
+// Lightweight guardrail: a fat-fingered mobile save that zeroes out a bonus or the
+// anti-abuse gate takes effect silently at the next weekly run, so surface exactly
+// what would change and make the admin confirm rather than just accept it.
+function scoringRiskWarnings() {
+  const warnings = []
+  if (scoring.minAccountAgeDays === 0) warnings.push('the anti-abuse minimum-account-age gate will be off')
+  if (scoring.highScorePoints === 0) warnings.push('the High Score bonus will award 0 points')
+  if (scoring.top10Points === 0) warnings.push('the Top 10 bonus will award 0 points')
+  if (scoring.dailyTaskPoints === 0) warnings.push('the Daily Task bonus will award 0 points')
+  if (!scoring.top10PointsBoardEnabled && !scoring.top10CtoonsBoardEnabled) {
+    warnings.push('the Top 10 bonus will be effectively disabled (no boards enabled)')
+  }
+  if (enabledGameCount.value === 0) warnings.push('the High Score bonus will be effectively disabled (no games selected)')
+  return warnings
+}
+
+async function saveScoring() {
+  scoringError.value = ''
+  const warnings = scoringRiskWarnings()
+  if (warnings.length && !confirm(`Starting next week:\n- ${warnings.join('\n- ')}\n\nSave anyway?`)) {
+    return
+  }
+  scoringSaving.value = true
+  try {
+    const body = {
+      highScorePoints: scoring.highScorePoints,
+      top10Points: scoring.top10Points,
+      dailyTaskPoints: scoring.dailyTaskPoints,
+      minAccountAgeDays: scoring.minAccountAgeDays,
+      top10RankCutoff: scoring.top10RankCutoff,
+      top10PointsBoardEnabled: scoring.top10PointsBoardEnabled,
+      top10CtoonsBoardEnabled: scoring.top10CtoonsBoardEnabled,
+      disabledScoreGames: scoring.disabledScoreGames,
+      disabledWinGames: scoring.disabledWinGames,
+    }
+    const res = await $fetch('/api/admin/cmoon-scoring', { method: 'POST', body })
+    Object.assign(scoring, {
+      highScorePoints: res.highScorePoints,
+      top10Points: res.top10Points,
+      dailyTaskPoints: res.dailyTaskPoints,
+      minAccountAgeDays: res.minAccountAgeDays,
+      top10RankCutoff: res.top10RankCutoff,
+      top10PointsBoardEnabled: res.top10PointsBoardEnabled,
+      top10CtoonsBoardEnabled: res.top10CtoonsBoardEnabled,
+      disabledScoreGames: res.disabledScoreGames || [],
+      disabledWinGames: res.disabledWinGames || [],
+    })
+  } catch (e) {
+    scoringError.value = e?.data?.statusMessage || 'Save failed'
+  } finally {
+    scoringSaving.value = false
+  }
+}
+
 async function toggleFlag() {
   flagSaving.value = true
   try {
@@ -732,6 +1259,7 @@ async function save() {
       discordRoleId: form.discordRoleId.trim(),
       pageDescription: form.pageDescription,
       effectType: form.effectType || null,
+      joinLocked: form.joinLocked,
       captainIds: form.captainIds,
       prizeCtoons: form.prizeCtoons,
     }
@@ -777,7 +1305,10 @@ function closeDisperse() {
   load() // member counts / captains etc are unaffected, but keep state fresh either way
 }
 
-onMounted(load)
+onMounted(() => {
+  load()
+  loadScoring()
+})
 </script>
 
 <style scoped>

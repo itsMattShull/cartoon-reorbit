@@ -3,7 +3,7 @@
 
     <div class="ac-header">All cToons</div>
 
-    <div v-if="filter.set || filter.series" class="ac-active-filters">
+    <div v-if="filter.set || filter.series || filter.cMoon" class="ac-active-filters">
       <span v-if="filter.set" class="ac-filter-chip">
         Set: <strong>{{ filter.set }}</strong>
         <button class="ac-filter-chip-x" aria-label="Clear set filter" @click="filter.set = ''">✕</button>
@@ -11,6 +11,10 @@
       <span v-if="filter.series" class="ac-filter-chip">
         Series: <strong>{{ filter.series }}</strong>
         <button class="ac-filter-chip-x" aria-label="Clear series filter" @click="filter.series = ''">✕</button>
+      </span>
+      <span v-if="filter.cMoon" class="ac-filter-chip">
+        cMoon: <strong>{{ filter.cMoon === '__none__' ? 'No cMoon' : cMoonName(filter.cMoon) }}</strong>
+        <button class="ac-filter-chip-x" aria-label="Clear cMoon filter" @click="filter.cMoon = ''">✕</button>
       </span>
     </div>
 
@@ -169,9 +173,16 @@ const filteredCtoons = computed(() => {
     const w  = !f.wishlist || wishlist.value.includes(c.id)
     const st = !f.set    || c.set    === f.set
     const sr = !f.series || c.series === f.series
-    return nm && r && o && w && st && sr
+    const cm = !f.cMoon
+      ? true
+      : f.cMoon === '__none__' ? !c.cMoon : c.cMoon?.id === f.cMoon
+    return nm && r && o && w && st && sr && cm
   })
 })
+
+function cMoonName(id) {
+  return meta.value.cmoons.find(c => c.id === id)?.name || 'cMoon'
+}
 
 function sortedItems(list) {
   const f = filter.value
@@ -237,7 +248,12 @@ onMounted(async () => {
     })
     const sets   = [...new Set(allCtoons.value.map(c => c.set).filter(Boolean))].sort()
     const series = [...new Set(allCtoons.value.map(c => c.series).filter(Boolean))].sort()
-    meta.value = { sets, series }
+    const cmoonMap = new Map()
+    for (const c of allCtoons.value) {
+      if (c.cMoon?.id && !cmoonMap.has(c.cMoon.id)) cmoonMap.set(c.cMoon.id, c.cMoon)
+    }
+    const cmoons = [...cmoonMap.values()].sort((a, b) => a.name.localeCompare(b.name))
+    meta.value = { sets, series, cmoons }
   } catch (err) {
     console.error('AllCtoons: failed to load', err)
   } finally {

@@ -88,6 +88,8 @@ export default defineEventHandler(async (event) => {
   const gtoonsOnly = isTruthy(query.gtoon)
   const wishlistOnly = isTruthy(query.wishlist)
   const hasBidsOnly = isTruthy(query.hasBids)
+  // '__none__' means "cToons with no cMoon assigned"; any other non-empty value is a cMoon id.
+  const cMoonFilter = typeof query.cMoon === 'string' ? query.cMoon.trim() : ''
   const sort = typeof query.sort === 'string' ? query.sort : 'endAsc'
   const orderBy = buildSortOrder(sort)
   const seller = typeof query.seller === 'string' ? query.seller.trim() : ''
@@ -151,6 +153,8 @@ export default defineEventHandler(async (event) => {
   }
   if (ctoonIdFilter) ctoonWhere.id = { in: ctoonIdFilter }
   else if (ctoonIdExclude && ctoonIdExclude.length) ctoonWhere.id = { notIn: ctoonIdExclude }
+  if (cMoonFilter === '__none__') ctoonWhere.cMoonId = null
+  else if (cMoonFilter) ctoonWhere.cMoonId = cMoonFilter
 
   const where = { status: 'CLOSED' }
   if (featuredOnly) where.isFeatured = true
@@ -232,6 +236,7 @@ export default defineEventHandler(async (event) => {
                 secondEditionOverlayX: true,
                 secondEditionOverlayY: true,
                 secondEditionOverlaySize: true,
+                cMoon: { select: { id: true, name: true, color: true } },
               },
             },
           },
@@ -278,6 +283,7 @@ export default defineEventHandler(async (event) => {
       assetPath: a.userCtoon?.ctoon?.assetPath ?? null,
       name: a.userCtoon?.ctoon?.name ?? null,
       set: a.userCtoon?.ctoon?.set ?? null,
+      cMoon: a.userCtoon?.ctoon?.cMoon ?? null,
       series: a.userCtoon?.ctoon?.series ?? null,
       rarity: a.userCtoon?.ctoon?.rarity ?? null,
       isGtoon: a.userCtoon?.ctoon?.isGtoon ?? false,
