@@ -3125,6 +3125,15 @@ async function performAuctionClose(auctionId) {
         select: { id: true, ctoonId: true, mintNumber: true }
       })
 
+      // Snapshot for the "last auction sold" collection-worth metric — kept
+      // fresh at write time so reading it never needs a live scan over the
+      // full Auction table. See prisma/schema.prisma's comment on these
+      // columns.
+      await tx.ctoon.update({
+        where: { id: uc.ctoonId },
+        data:  { lastAuctionSoldPrice: winningBid.amount, lastAuctionSoldAt: now }
+      })
+
       await tx.userTradeListItem.deleteMany({
         where: { userCtoonId, userId: { not: winningBid.userId } }
       })
