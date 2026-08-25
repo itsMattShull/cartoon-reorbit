@@ -2892,6 +2892,10 @@ model CMoon {
   // Small wide banner graphic (normalized to 800x200) shown on a themed cToon
   // modal in place of the plain "cWorld" text tile, linking to the page above.
   bannerImagePath String?
+  // Small square "avatar" (normalized ~128x128, like a player avatar) shown next to this
+  // cMoon's colored name badge on member cZones — a quick-glance identity separate from the
+  // large poster (imagePath) and the page/banner art above, which are too large for that spot.
+  avatarPath      String?
 
   members         User[]
   captains        CMoonCaptain[]

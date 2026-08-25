@@ -2,7 +2,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
-import { isValidHexColor, isValidDiscordSnowflake, isValidCMoonEffectType } from '@/server/utils/cmoon'
+import { isValidHexColor, isValidDiscordSnowflake, isValidCMoonEffectType, reassignUserCMoon } from '@/server/utils/cmoon'
 import { invalidateCMoonList } from '@/server/api/cmoons.get'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 
@@ -59,6 +59,16 @@ export default defineEventHandler(async (event) => {
       prizeCtoons: { create: prizeCtoonRows },
     },
   })
+
+  // Captaincy implies membership: a captain can't already belong to a cMoon that didn't exist
+  // until this call, so every captain here is "newly added" and gets moved in. Run in parallel —
+  // reassignUserCMoon bounds its own Discord round trip, but N sequential calls would still
+  // serialize N of those bounds into one request. A single captain's reassignment failing (e.g.
+  // banned) shouldn't fail cMoon creation itself; the admin can fix that captain from the new
+  // Members panel.
+  if (captainIds.length) {
+    await Promise.all(captainIds.map(userId => reassignUserCMoon(userId, created.id).catch(() => null)))
+  }
 
   await logAdminChange(db, { userId: me.id, area: 'cMoon', key: `create:${created.id}`, prevValue: null, newValue: { id: created.id, name } })
   invalidateCMoonList()
