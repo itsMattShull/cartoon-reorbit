@@ -10,7 +10,10 @@
      touched or special-cased for this feature. What's shown here is only what this feature's own
      routes actually write: who claimed what, and when. -->
 <template>
-  <div class="fixed inset-0 z-50 flex items-stretch sm:items-center justify-center sm:p-4">
+  <!-- z-[60]: the globally-mounted "Daily" onboarding widget (components/Onboarding.vue) is
+       fixed/z-50 in the bottom-right corner on every page, including this one on mobile — an
+       open modal must always render above it, not tie with it. -->
+  <div class="fixed inset-0 z-[60] flex items-stretch sm:items-center justify-center sm:p-4">
     <div class="absolute inset-0 bg-black/60" @click="!busy && attemptClose()"></div>
     <div class="cmd relative bg-white w-full sm:max-w-lg flex flex-col text-gray-900" style="height:100dvh; max-height:100dvh;">
       <div class="flex items-center justify-between px-4 py-3 border-b flex-shrink-0">
