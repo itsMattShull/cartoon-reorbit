@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
   const prizeCtoons = Array.isArray(body?.prizeCtoons) ? body.prizeCtoons : []
   const effectType = body?.effectType === undefined || body?.effectType === '' ? null : body.effectType
   const joinLocked = !!body?.joinLocked
+  const showOnNav = body?.showOnNav === undefined ? true : !!body.showOnNav
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   if (!isValidHexColor(color)) throw createError({ statusCode: 400, statusMessage: 'Color must be a hex value like #3366ff' })
@@ -55,6 +56,7 @@ export default defineEventHandler(async (event) => {
       pageDescription,
       effectType,
       joinLocked,
+      showOnNav,
       captains: { create: captainIds.map(userId => ({ userId })) },
       prizeCtoons: { create: prizeCtoonRows },
     },
