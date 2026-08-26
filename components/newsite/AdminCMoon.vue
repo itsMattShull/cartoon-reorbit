@@ -169,6 +169,7 @@
               <img v-if="c.avatarPath" :src="c.avatarPath" alt="" class="w-5 h-5 rounded-full object-cover border flex-shrink-0" title="cZone avatar" />
               <span class="font-semibold break-words min-w-0">{{ c.name }}</span>
               <span v-if="c.joinLocked" class="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Locked</span>
+              <span v-if="!c.showOnNav" class="text-[10px] font-semibold text-gray-600 bg-gray-200 px-1.5 py-0.5 rounded">Off nav</span>
               <span class="text-[11px] text-gray-600">{{ c.memberCount }} member{{ c.memberCount === 1 ? '' : 's' }}</span>
               <!-- Kept together so they travel as a unit when the row wraps on narrow screens. -->
               <div class="ml-auto flex items-center gap-3 flex-shrink-0">
@@ -348,9 +349,20 @@
                 <span class="text-xs font-medium">Locked</span>
               </label>
               <p class="text-[11px] text-gray-600 mt-1">
-                Hides this cMoon from the "choose your cMoon" list and quick-nav — players can't join it
-                themselves. Admins can still place a player into it via Admin: Manage Users, cToons can still
-                be assigned to it, and its cMoon page keeps working normally.
+                Hides this cMoon from the "choose your cMoon" list — players can't join it themselves.
+                Admins can still place a player into it via Admin: Manage Users, cToons can still be
+                assigned to it, and its cMoon page keeps working normally.
+              </p>
+            </div>
+            <div>
+              <label class="flex items-center gap-2 cm-tap">
+                <input type="checkbox" v-model="form.showOnNav" />
+                <span class="text-xs font-medium">Display on cMoons navigation page</span>
+              </label>
+              <p class="text-[11px] text-gray-600 mt-1">
+                Shows this cMoon as a clickable circle on the public cMoons navigation page
+                (uses the cZone avatar below as its logo). Independent of Locked above — a
+                locked cMoon can still be shown here, it just still can't be joined.
               </p>
             </div>
           </div>
@@ -413,8 +425,10 @@
           <div>
             <label class="block text-xs font-medium mb-1">cZone avatar (small, like a player avatar)</label>
             <p class="text-[11px] text-gray-600 mb-2">
-              Shown next to this cMoon's colored name badge on members' cZones. Square works
-              best — it's auto-cropped/resized to 128×128. Leave empty to show just the badge.
+              Shown next to this cMoon's colored name badge on members' cZones, and as this
+              cMoon's logo on the cMoons navigation page (if "Display on cMoons navigation page"
+              is checked above). Square works best — it's auto-cropped/resized to 128×128. Leave
+              empty to fall back to a plain color circle in both places.
             </p>
             <template v-if="!editId">
               <p class="text-[11px] text-gray-600">Save this cMoon first, then Edit it to upload an avatar.</p>
@@ -705,7 +719,7 @@ function effectLabel(type) {
 
 const editId = ref('')
 const formOpen = ref(false)
-const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', effectType: '', joinLocked: false, captainIds: [], prizeCtoons: [] })
+const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', effectType: '', joinLocked: false, showOnNav: true, captainIds: [], prizeCtoons: [] })
 const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
@@ -959,6 +973,7 @@ function startEdit(c) {
     pageDescription: c.pageDescription || '',
     effectType: c.effectType || '',
     joinLocked: !!c.joinLocked,
+    showOnNav: c.showOnNav !== false,
     captainIds: c.captains.map(cap => cap.userId),
     prizeCtoons: c.prizeCtoons.map(p => ({ ctoonId: p.ctoonId, quantity: p.quantity })),
   })
@@ -1259,6 +1274,7 @@ async function save() {
       pageDescription: form.pageDescription,
       effectType: form.effectType || null,
       joinLocked: form.joinLocked,
+      showOnNav: form.showOnNav,
       captainIds: form.captainIds,
       prizeCtoons: form.prizeCtoons,
     }
