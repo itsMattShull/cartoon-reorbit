@@ -99,7 +99,13 @@
 
         <template v-if="cmoon.captains.length">
           <h2 class="cmp-section-title">Captains</h2>
-          <p class="cmp-captains">{{ cmoon.captains.join(', ') }}</p>
+          <div class="cmp-captains">
+            <NuxtLink
+              v-for="name in cmoon.captains" :key="name"
+              :to="`/newsite/czone/${name}`"
+              class="cmp-captain-link"
+            >{{ name }}</NuxtLink>
+          </div>
         </template>
 
         <template v-if="cmoon.prizeCtoons.length">
@@ -109,6 +115,43 @@
               <img v-if="p.assetPath" :src="p.assetPath" :alt="p.name" class="cmp-card-img" loading="lazy" />
               <span class="cmp-card-name">{{ p.name }} × {{ p.quantity }}</span>
             </div>
+          </div>
+        </template>
+
+        <template v-if="offers.length">
+          <h2 class="cmp-section-title">cToon Offers</h2>
+          <div v-for="o in offers" :key="o.id" class="cmp-offer">
+            <p class="cmp-offer-meta">
+              <span v-if="o.myClaim">You claimed this offer.</span>
+              <span v-else-if="o.status !== 'OPEN'">This offer has closed.</span>
+              <span v-else-if="!eligible">Join this cMoon to claim a reward here.</span>
+              <span v-else>Pick one — you'll get {{ o.quantityPerMember }} cop{{ o.quantityPerMember === 1 ? 'y' : 'ies' }}.</span>
+            </p>
+            <div class="cmp-grid">
+              <button
+                v-for="opt in o.options" :key="opt.id"
+                type="button"
+                class="cmp-card cmp-offer-option"
+                :class="{
+                  'cmp-offer-option--picked': o.myClaim && o.myClaim.optionId === opt.id,
+                  'cmp-offer-option--selected': !o.myClaim && offerSelections[o.id] === opt.id,
+                }"
+                :disabled="!!o.myClaim || o.status !== 'OPEN' || !eligible || offerClaiming[o.id]"
+                @click="offerSelections[o.id] = opt.id"
+              >
+                <img :src="opt.assetPath" :alt="opt.name" class="cmp-card-img" loading="lazy" />
+                <span class="cmp-card-name">{{ opt.name }}</span>
+                <span v-if="o.myClaim && o.myClaim.optionId === opt.id" class="cmp-offer-picked-badge">Your pick</span>
+              </button>
+            </div>
+            <button
+              v-if="!o.myClaim && o.status === 'OPEN' && eligible"
+              type="button"
+              class="cmp-offer-claim-btn"
+              :disabled="!offerSelections[o.id] || offerClaiming[o.id]"
+              @click="claimOffer(o)"
+            >{{ offerClaiming[o.id] ? 'Claiming…' : 'Claim' }}</button>
+            <p v-if="offerErrors[o.id]" class="cmp-offer-error">{{ offerErrors[o.id] }}</p>
           </div>
         </template>
 
@@ -131,7 +174,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { cMoonPaletteStyle } from '@/utils/cmoonPalette'
 import { useCtoonModal } from '@/composables/useCtoonModal'
 
@@ -152,6 +195,12 @@ const justLeveledUp = ref(false)
 const levelUpToast = ref('')
 let toastTimer = null
 let pulseTimer = null
+
+const offers = ref([])
+const eligible = ref(false)
+const offerSelections = reactive({})
+const offerClaiming = reactive({})
+const offerErrors = reactive({})
 
 const paletteStyle = computed(() => cmoon.value ? cMoonPaletteStyle(cmoon.value.color) : {})
 
@@ -189,6 +238,37 @@ async function loadAffinity(id) {
   }
 }
 
+async function loadOffers(id) {
+  try {
+    const res = await $fetch(`/api/cmoon/${encodeURIComponent(id)}/dispersal-offers`)
+    offers.value = res.offers || []
+    eligible.value = !!res.eligible
+  } catch {
+    offers.value = []
+    eligible.value = false
+  }
+}
+
+async function claimOffer(offer) {
+  const optionId = offerSelections[offer.id]
+  if (!optionId || offerClaiming[offer.id]) return
+  const opt = offer.options.find(o => o.id === optionId)
+  if (!confirm(`Claim ${opt?.name || 'this cToon'}? This can't be changed once claimed.`)) return
+  offerClaiming[offer.id] = true
+  offerErrors[offer.id] = ''
+  try {
+    const res = await $fetch(`/api/cmoon/${encodeURIComponent(cmoon.value.id)}/dispersal-offers/${offer.id}/claim`, {
+      method: 'POST',
+      body: { optionId },
+    })
+    offer.myClaim = { optionId: res.optionId, quantity: res.quantity }
+  } catch (err) {
+    offerErrors[offer.id] = err?.data?.statusMessage || 'Failed to claim'
+  } finally {
+    offerClaiming[offer.id] = false
+  }
+}
+
 async function load(id) {
   if (!id) return
   loading.value = true
@@ -196,7 +276,7 @@ async function load(id) {
   contributeOpen.value = false
   try {
     cmoon.value = await $fetch(`/api/cmoon/${encodeURIComponent(id)}`)
-    await loadAffinity(id)
+    await Promise.all([loadAffinity(id), loadOffers(id)])
   } catch (err) {
     cmoon.value = null
     error.value = err?.data?.statusMessage || 'Failed to load this cMoon.'
@@ -554,10 +634,88 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
 }
 .cmp-card--static:hover { opacity: 1; }
 
-.cmp-captains {
-  margin: 0 0 20px;
-  font-size: 0.95rem;
+.cmp-offer {
+  margin-bottom: 24px;
 }
+
+.cmp-offer-meta {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  color: var(--cm-text-muted, rgba(255,255,255,0.6));
+}
+
+.cmp-offer-option {
+  border: 2px solid transparent;
+  position: relative;
+}
+.cmp-offer-option:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+.cmp-offer-option:disabled:hover { opacity: 0.55; }
+
+.cmp-offer-option--selected {
+  border-color: var(--cm-focus-ring, var(--OrbitLightBlue));
+  opacity: 1;
+}
+
+.cmp-offer-option--picked {
+  border-color: #22c55e;
+  opacity: 1 !important;
+}
+
+.cmp-offer-picked-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #22c55e;
+}
+
+.cmp-offer-claim-btn {
+  margin-top: 10px;
+  min-height: 44px;
+  padding: 0 20px;
+  width: 100%;
+  border: none;
+  border-radius: 6px;
+  background: var(--cm-banner, var(--OrbitLightBlue));
+  color: var(--cm-banner-text, #ffffff);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.cmp-offer-claim-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.cmp-offer-claim-btn:not(:disabled):hover { opacity: 0.9; }
+
+.cmp-offer-error {
+  margin: 8px 0 0;
+  font-size: 0.8rem;
+  color: #fca5a5;
+}
+
+.cmp-captains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 20px;
+}
+
+.cmp-captain-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 4px 14px;
+  border-radius: 999px;
+  background: var(--cm-tile-bg, rgba(255,255,255,0.08));
+  color: var(--cm-link-text, #ffffff);
+  text-decoration: none;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+.cmp-captain-link:hover { opacity: 0.85; }
+.cmp-captain-link:focus-visible { outline: 2px solid var(--cm-focus-ring, var(--OrbitLightBlue)); outline-offset: 1px; }
 
 .cmp-members {
   display: flex;

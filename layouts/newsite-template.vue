@@ -305,7 +305,7 @@ html.newsite-active body {
        the modals cover the pill correctly — so without this the behaviour flips
        at 768px, which is exactly the class of bug the note above warns about.
        A permanently-visible unread badge would make it obvious. -->
-  <Onboarding v-if="!ctoonModalIsOpen && !auctionModalIsOpen" />
+  <Onboarding v-if="!ctoonModalIsOpen && !auctionModalIsOpen && !isAdminRoute" />
   <CMoonSelectModal />
   <FullscreenEffectHost />
 </template>
@@ -314,6 +314,10 @@ html.newsite-active body {
 import { computeSiteScale, scaleMarginBottom, MOBILE_QUERY } from '~/utils/siteScale'
 
 const route = useRoute()
+// Mirrors layouts/default.vue's own admin exclusion (`!route.path.startsWith('/admin')`) — the
+// newsite admin console lives under /newsite/admin/* and shares this layout with the rest of
+// /newsite, so it needs its own check rather than inheriting default.vue's.
+const isAdminRoute = computed(() => route.path.startsWith('/newsite/admin'))
 const { isOpen: ctoonModalIsOpen } = useCtoonModal()
 const {
   isOpen:  auctionModalIsOpen,
