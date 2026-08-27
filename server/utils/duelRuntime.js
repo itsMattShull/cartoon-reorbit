@@ -1008,7 +1008,13 @@ export function createDuelRuntime(spec) {
     // Exposed for tests.
     const __testing = { rooms, matches, publicMatchView, resolveRound }
 
-    return { register, startSweep, __testing }
+    // The one query a sibling, non-PvP mode for this same game needs: whether a user is already
+    // mid-match here, so it can refuse to start a second, unrelated match underneath them (see
+    // server/utils/edRpsAiMatch.js). Deliberately just a boolean — nothing about the match's
+    // contents leaves this closure through here.
+    const hasLiveMatch = (userId) => matchByUser.has(userId)
+
+    return { register, startSweep, hasLiveMatch, __testing }
   }
 
 function assertSpec(spec) {

@@ -1769,25 +1769,37 @@ model ClashGame {
 // One completed Ed, Edd n Eddy RPS match.
 //
 // Written ONCE, at match end, inside the same transaction that awards the points — there is no
-// stake to escrow, so unlike ClashGame there is nothing worth persisting mid-match. CPU
-// practice matches are played entirely in the browser and never reach this table, which is why
-// both player columns are NOT NULL.
+// stake to escrow, so unlike ClashGame there is nothing worth persisting mid-match.
+//
+// player2UserId is null for an AI opponent ("Play the Eds"), the same pattern
+// ClashGame.player2UserId / MonsterBattle.player2UserId already use — that match is
+// server-authoritative too (server/utils/edRpsAiMatch.js), unlike the CPU mode this game shipped
+// with originally, which never reached this table at all. player1UserId <> player2UserId reads
+// NULL (falsy) whenever player2UserId is null, which is what already keeps AI rows out of the
+// win leaderboard (server/utils/duelLeaderboard.js), the cMoon high-score scan
+// (server/utils/cmoon.js) and the pair-limit count (LEAST/GREATEST ignore a null argument, so an
+// AI row's pair key is always (p1, p1) and can never match a real two-user pair) with no
+// explicit filter needed in any of them.
 //
 // The IP/fingerprint/timing columns exist for one reason: win-trading between alts is the
 // obvious way to farm a game this fast, and the admin cheat tooling is otherwise blind to game
-// outcomes entirely. `pointsAwardedAt` doubles as the award idempotency key.
+// outcomes entirely. `pointsAwardedAt` doubles as the award idempotency key. For an AI match,
+// player1Ip/player1VisitorId are still captured (there's a real device on that side) — the AI
+// path's device-cluster daily cap sums over those instead of a same-device check.
 model EdRpsMatch {
   id     String @id @default(uuid())
   roomId String
 
   player1UserId    String
-  player2UserId    String
+  player2UserId    String?
+  player2IsAi      Boolean @default(false)
   player1Character String
   player2Character String
   player1Score     Int    @default(0)
   player2Score     Int    @default(0)
 
   winnerUserId  String?
+  winnerIsAi    Boolean @default(false)
   whoLeftUserId String?
   // 'natural' | 'forfeit' | 'sweep' — only 'natural' ever pays points.
   endReason     String  @default("natural")
@@ -1821,13 +1833,14 @@ model EdRpsMatch {
   endedAt   DateTime?
 
   player1 User  @relation("EdRpsMatchPlayer1", fields: [player1UserId], references: [id])
-  player2 User  @relation("EdRpsMatchPlayer2", fields: [player2UserId], references: [id])
+  player2 User? @relation("EdRpsMatchPlayer2", fields: [player2UserId], references: [id])
   winner  User? @relation("EdRpsMatchWinner", fields: [winnerUserId], references: [id])
   whoLeft User? @relation("EdRpsMatchWhoLeft", fields: [whoLeftUserId], references: [id])
 
   // ClashGame has no indexes at all and its leaderboard sequentially scans five times over.
   // This table grows far faster, so it gets real ones. The migration adds partial variants
-  // (WHERE "endedAt" IS NOT NULL) that Prisma cannot express.
+  // (WHERE "endedAt" IS NOT NULL) that Prisma cannot express, including the two AI-match
+  // device-cluster indexes on (player1Ip | player1VisitorId, pointsAwardedAt).
   @@index([startedAt])
   @@index([endedAt])
   @@index([player1UserId, endedAt])
