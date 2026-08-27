@@ -29,6 +29,7 @@ export default defineEventHandler(async (event) => {
         cost: true,
         power: true,
         totalMinted: true, // ← use aggregate stored on Ctoon
+        cMoon: { select: { id: true, name: true, color: true } },
       }
     })
     if (ctoons.length === 0) return []

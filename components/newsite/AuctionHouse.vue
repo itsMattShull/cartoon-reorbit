@@ -279,6 +279,7 @@ function buildFilterParams() {
   if (filter.value.rarities.length)               params.set('rarity',   filter.value.rarities.join(','))
   if (filter.value.series)                        params.set('series',   filter.value.series)
   if (filter.value.set)                           params.set('set',      filter.value.set)
+  if (filter.value.cMoon)                         params.set('cMoon',    filter.value.cMoon)
   if (aFilters.value.selectedOwned !== 'all')     params.set('owned',    aFilters.value.selectedOwned)
   if (aFilters.value.featuredOnly)                params.set('featured', '1')
   if (aFilters.value.wishlistOnly)                params.set('wishlist', '1')
@@ -407,6 +408,7 @@ watch(() => aFilters.value.wishlistOnly, val => {
 watch(
   [
     () => filter.value.name, () => filter.value.rarities, () => filter.value.series, () => filter.value.set,
+    () => filter.value.cMoon,
     () => filter.value.priceMin, () => filter.value.priceMax,
     () => aFilters.value.featuredOnly, () => aFilters.value.wishlistOnly,
     () => aFilters.value.gtoonsOnly,   () => aFilters.value.selectedOwned,
@@ -426,6 +428,7 @@ function applyFilters(items) {
   const rarities = filter.value.rarities
   const series   = filter.value.series
   const set      = filter.value.set
+  const cMoon    = filter.value.cMoon
 
   return (Array.isArray(items) ? items : []).filter(item => {
     if (!item) return false
@@ -437,6 +440,8 @@ function applyFilters(items) {
     if (rarities.length && !rarities.includes((item.rarity || '').toLowerCase()))    return false
     if (series && item.series !== series)                                             return false
     if (set    && item.set    !== set)                                                return false
+    if (cMoon === '__none__' && item.cMoon)                                           return false
+    if (cMoon && cMoon !== '__none__' && item.cMoon?.id !== cMoon)                     return false
     if (filter.value.excludeSecondEditions && item.isSecondEdition)                  return false
     if (aFilters.value.featuredOnly  && !item.isFeatured)                            return false
     if (aFilters.value.selectedOwned === 'owned'   && !item.isOwned)                 return false
@@ -517,7 +522,7 @@ const emptyMessage = computed(() => ({
 }[activeTab.value] ?? 'No auctions found.'))
 
 const hasActiveFilters = computed(() => !!(
-  filter.value.name || filter.value.rarities.length || filter.value.series || filter.value.set ||
+  filter.value.name || filter.value.rarities.length || filter.value.series || filter.value.set || filter.value.cMoon ||
   aFilters.value.featuredOnly || aFilters.value.wishlistOnly || aFilters.value.hasBidsOnly ||
   aFilters.value.gtoonsOnly   || aFilters.value.selectedOwned !== 'all'
 ))

@@ -39,6 +39,18 @@
 
     <hr class="acs-divider" />
 
+    <!-- cMoon filter -->
+    <div v-if="meta.cmoons.length">
+      <div class="acs-label">cMoon</div>
+      <select class="acs-select acs-select-full" v-model="filter.cMoon">
+        <option value="">All cMoons</option>
+        <option value="__none__">No cMoon</option>
+        <option v-for="c in meta.cmoons" :key="c.id" :value="c.id">{{ c.name }}</option>
+      </select>
+    </div>
+
+    <hr class="acs-divider" v-if="meta.cmoons.length" />
+
     <!-- Search -->
     <div class="acs-search">
       <span class="acs-search-icon">&#9906;</span>
@@ -136,6 +148,7 @@ function clearFilters() {
     sortAsc:   true,
     set:       '',
     series:    '',
+    cMoon:     '',
   })
 }
 </script>

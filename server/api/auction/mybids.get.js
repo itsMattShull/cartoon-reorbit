@@ -27,6 +27,8 @@ function applyAuctionFilters(items, filters) {
   const requireFeatured = filters.featuredOnly
   const requireBids = filters.hasBidsOnly
   const wishlistSet = filters.wishlistSet || null
+  // '__none__' means "cToons with no cMoon assigned"; any other non-empty value is a cMoon id.
+  const cMoonFilter = filters.cMoon || ''
 
   return items.filter(item => {
     if (!item) return false
@@ -45,6 +47,8 @@ function applyAuctionFilters(items, filters) {
     if (ownedFilter === 'unowned' && item.isOwned) return false
     if (wishlistSet && !wishlistSet.has(item.ctoonId)) return false
     if (requireBids && Number(item.bidCount ?? 0) < 1) return false
+    if (cMoonFilter === '__none__' && item.cMoon) return false
+    if (cMoonFilter && cMoonFilter !== '__none__' && item.cMoon?.id !== cMoonFilter) return false
     return true
   })
 }
@@ -119,6 +123,7 @@ export default defineEventHandler(async (event) => {
   const wishlistOnly = isTruthy(query.wishlist)
   const hasBidsOnly = isTruthy(query.hasBids)
   const gtoonsOnly = isTruthy(query.gtoon)
+  const cMoonFilter = typeof query.cMoon === 'string' ? query.cMoon.trim() : ''
   const sortKey = typeof query.sort === 'string' ? query.sort : 'recentDesc'
   const validSorts = ['recentDesc', 'recentAsc', 'endOldest', 'endNewest', 'biggestBid', 'recentlyWon', 'recentlyLost']
   const effectiveSort = validSorts.includes(sortKey) ? sortKey : 'recentDesc'
@@ -177,7 +182,7 @@ export default defineEventHandler(async (event) => {
     where: { id: { in: auctionIds } },
     include: {
       userCtoon: {
-        include: { ctoon: true }
+        include: { ctoon: { include: { cMoon: { select: { id: true, name: true, color: true } } } } }
       },
       winner: { select: { id: true, username: true } }
     }
@@ -212,6 +217,7 @@ export default defineEventHandler(async (event) => {
       ctoonId: a.userCtoon?.ctoonId ?? null,
       name: a.userCtoon?.ctoon?.name ?? 'Unknown',
       set: a.userCtoon?.ctoon?.set ?? null,
+      cMoon: a.userCtoon?.ctoon?.cMoon ?? null,
       series: a.userCtoon?.ctoon?.series ?? null,
       rarity: a.userCtoon?.ctoon?.rarity ?? null,
       isGtoon: a.userCtoon?.ctoon?.isGtoon ?? false,
@@ -247,7 +253,8 @@ export default defineEventHandler(async (event) => {
     featuredOnly,
     wishlistSet,
     hasBidsOnly,
-    gtoonsOnly
+    gtoonsOnly,
+    cMoon: cMoonFilter
   })
 
   const sorted = sortMyBids(filtered, effectiveSort, now)

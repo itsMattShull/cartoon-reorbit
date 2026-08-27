@@ -41,8 +41,8 @@
                 <input v-model="bulk.set" @input="applyBulk('set', bulk.set)" list="bulk-sets-list"
                   placeholder="— no change —"
                   class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
-                <datalist id="bulk-sets-list">
-                  <option v-for="opt in setsOptions" :key="opt" :value="opt" />
+                <datalist v-if="bulk.set.length >= 3" id="bulk-sets-list">
+                  <option v-for="opt in filterOptions(setsOptions, bulk.set)" :key="opt" :value="opt" />
                 </datalist>
               </div>
 
@@ -52,8 +52,8 @@
                 <input v-model="bulk.series" @input="applyBulk('series', bulk.series)" list="bulk-series-list"
                   placeholder="— no change —"
                   class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
-                <datalist id="bulk-series-list">
-                  <option v-for="opt in seriesOptions" :key="opt" :value="opt" />
+                <datalist v-if="bulk.series.length >= 3" id="bulk-series-list">
+                  <option v-for="opt in filterOptions(seriesOptions, bulk.series)" :key="opt" :value="opt" />
                 </datalist>
               </div>
 
@@ -191,8 +191,8 @@
                     <label class="block text-xs font-medium text-gray-500 mb-1">Set</label>
                     <input v-model="row.current.set" :list="`sets-list-${i}`"
                       :class="['w-full border rounded px-2 py-1.5 text-sm', fieldChanged(row, 'set') ? 'border-yellow-400 bg-yellow-50' : 'border-gray-300']" />
-                    <datalist :id="`sets-list-${i}`">
-                      <option v-for="opt in setsOptions" :key="opt" :value="opt" />
+                    <datalist v-if="row.current.set.length >= 3" :id="`sets-list-${i}`">
+                      <option v-for="opt in filterOptions(setsOptions, row.current.set)" :key="opt" :value="opt" />
                     </datalist>
                   </div>
 
@@ -201,8 +201,8 @@
                     <label class="block text-xs font-medium text-gray-500 mb-1">Series</label>
                     <input v-model="row.current.series" :list="`series-list-${i}`"
                       :class="['w-full border rounded px-2 py-1.5 text-sm', fieldChanged(row, 'series') ? 'border-yellow-400 bg-yellow-50' : 'border-gray-300']" />
-                    <datalist :id="`series-list-${i}`">
-                      <option v-for="opt in seriesOptions" :key="opt" :value="opt" />
+                    <datalist v-if="row.current.series.length >= 3" :id="`series-list-${i}`">
+                      <option v-for="opt in filterOptions(seriesOptions, row.current.series)" :key="opt" :value="opt" />
                     </datalist>
                   </div>
 
@@ -384,6 +384,15 @@ function localToUtcIso(localStr) {
   const [hh, mm] = timePart.split(':').map(n => parseInt(n, 10))
   const offset = isChicagoDst(y, m, d) ? '-05:00' : '-06:00'
   return new Date(`${datePart}T${timePart}:00${offset}`).toISOString()
+}
+
+// ── Set/Series autocomplete ────────────────────────────────────────────
+// Only surface suggestions once the user has typed ≥3 chars, matching
+// the other cToon create/edit forms' set/series autocomplete behavior.
+function filterOptions(list, query) {
+  const q = String(query || '').trim().toLowerCase()
+  if (q.length < 3) return []
+  return list.filter(opt => opt.toLowerCase().includes(q))
 }
 
 // ── Price helpers ─────────────────────────────────────────────────────

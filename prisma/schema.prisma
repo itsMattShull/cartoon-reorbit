@@ -344,6 +344,10 @@ model Ctoon {
 
   // cMoon back-relation (prize-on-join — distinct from the display assignment below)
   cMoonPrizeRows CMoonPrizeCtoon[]
+  // Admin-created "pick one of these" offer options featuring this cToon, and the resulting
+  // claims (distinct from cMoonPrizeRows, which is auto-granted on join with no choice).
+  dispersalOptions CMoonDispersalOption[]
+  dispersalClaims  CMoonDispersalClaim[]
 
   // Optional cMoon this cToon is thematically displayed under (admin-assigned in the cToon
   // editor). Purely a catalog/display categorization — unrelated to the player-faction system.
@@ -367,6 +371,15 @@ model Ctoon {
   // system account). One-time-ever per cToon — also used as the DB-level guard so a
   // double-click/race can only succeed once.
   givenToOfficialAt DateTime?
+
+  // Snapshot of the most recent real auction sale, maintained at write time by
+  // server/socket-server.js's auction-close settlement (not a nightly cron —
+  // there's no polling window to wait out). Powers the "last auction sold"
+  // collection-worth metric with an O(1) lookup instead of a live query
+  // against the full Auction table. Backfilled once via
+  // prisma/backfillLastAuctionSold.js after this migration runs.
+  lastAuctionSoldPrice Int?
+  lastAuctionSoldAt    DateTime?
 
   @@index([isSecondEdition])
   @@index([name])
@@ -652,9 +665,12 @@ model User {
   fruitSamuraiPlays  FruitSamuraiPlay[]
 
   // cMoon (faction) relations
-  cMoonCaptainOf         CMoonCaptain[]
-  achievementClaims      AchievementClaim[]
-  dailyTaskCompletions   UserDailyTaskCompletion[]
+  cMoonCaptainOf              CMoonCaptain[]
+  achievementClaims           AchievementClaim[]
+  dailyTaskCompletions        UserDailyTaskCompletion[]
+  initiatedDispersalOffers CMoonDispersalOffer[] @relation("CMoonDispersalOfferInitiatedBy")
+  closedDispersalOffers   CMoonDispersalOffer[] @relation("CMoonDispersalOfferClosedBy")
+  dispersalClaims         CMoonDispersalClaim[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
   @@index([cMoonId])
@@ -1465,6 +1481,22 @@ model GlobalGameConfig {
   cMoonEnabled                       Boolean   @default(false)
   cMoonEnabledAt                     DateTime?
   cMoonSelectionDeadlineAt           DateTime?
+  // Weekly cMoon team-leaderboard scoring rules (see server/utils/cmoon.js
+  // runWeeklyCMoonScoring / recordDailyTaskCompletions). Admin-editable via
+  // Admin > cMoons > Scoring Rules; changes apply forward-only to future cron
+  // runs, never retroactively rewriting CMoonScoreLog/CMoon.teamScore.
+  cMoonHighScorePoints               Int       @default(100) // per-player award for holding rank #1 on an eligible game
+  cMoonTop10Points                   Int       @default(50) // per-player award for a top-N finish on an eligible board
+  cMoonDailyTaskPoints               Int       @default(10) // per-player-per-day award for completing >=1 daily task
+  cMoonScoringMinAccountAgeDays      Int       @default(3) // anti-abuse: account must be this old to qualify for any award
+  cMoonTop10RankCutoff               Int       @default(10) // how many ranks count as "top 10" on eligible boards
+  cMoonTop10PointsBoardEnabled       Boolean   @default(true) // whether the "Total Points" board counts toward TOP10
+  cMoonTop10CtoonsBoardEnabled       Boolean   @default(true) // whether the "Total cToons" board counts toward TOP10
+  // Game keys (SCORE_GAMES[].name / WIN_GAMES[].name in server/utils/cmoon.js)
+  // excluded from HIGH_SCORE eligibility. JSON string[] to match the
+  // featuredAuctionHours/featuredDissolve* array-field convention above.
+  cMoonDisabledScoreGames            Json      @default("[]")
+  cMoonDisabledWinGames              Json      @default("[]")
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }
@@ -1737,25 +1769,37 @@ model ClashGame {
 // One completed Ed, Edd n Eddy RPS match.
 //
 // Written ONCE, at match end, inside the same transaction that awards the points — there is no
-// stake to escrow, so unlike ClashGame there is nothing worth persisting mid-match. CPU
-// practice matches are played entirely in the browser and never reach this table, which is why
-// both player columns are NOT NULL.
+// stake to escrow, so unlike ClashGame there is nothing worth persisting mid-match.
+//
+// player2UserId is null for an AI opponent ("Play the Eds"), the same pattern
+// ClashGame.player2UserId / MonsterBattle.player2UserId already use — that match is
+// server-authoritative too (server/utils/edRpsAiMatch.js), unlike the CPU mode this game shipped
+// with originally, which never reached this table at all. player1UserId <> player2UserId reads
+// NULL (falsy) whenever player2UserId is null, which is what already keeps AI rows out of the
+// win leaderboard (server/utils/duelLeaderboard.js), the cMoon high-score scan
+// (server/utils/cmoon.js) and the pair-limit count (LEAST/GREATEST ignore a null argument, so an
+// AI row's pair key is always (p1, p1) and can never match a real two-user pair) with no
+// explicit filter needed in any of them.
 //
 // The IP/fingerprint/timing columns exist for one reason: win-trading between alts is the
 // obvious way to farm a game this fast, and the admin cheat tooling is otherwise blind to game
-// outcomes entirely. `pointsAwardedAt` doubles as the award idempotency key.
+// outcomes entirely. `pointsAwardedAt` doubles as the award idempotency key. For an AI match,
+// player1Ip/player1VisitorId are still captured (there's a real device on that side) — the AI
+// path's device-cluster daily cap sums over those instead of a same-device check.
 model EdRpsMatch {
   id     String @id @default(uuid())
   roomId String
 
   player1UserId    String
-  player2UserId    String
+  player2UserId    String?
+  player2IsAi      Boolean @default(false)
   player1Character String
   player2Character String
   player1Score     Int    @default(0)
   player2Score     Int    @default(0)
 
   winnerUserId  String?
+  winnerIsAi    Boolean @default(false)
   whoLeftUserId String?
   // 'natural' | 'forfeit' | 'sweep' — only 'natural' ever pays points.
   endReason     String  @default("natural")
@@ -1789,13 +1833,14 @@ model EdRpsMatch {
   endedAt   DateTime?
 
   player1 User  @relation("EdRpsMatchPlayer1", fields: [player1UserId], references: [id])
-  player2 User  @relation("EdRpsMatchPlayer2", fields: [player2UserId], references: [id])
+  player2 User? @relation("EdRpsMatchPlayer2", fields: [player2UserId], references: [id])
   winner  User? @relation("EdRpsMatchWinner", fields: [winnerUserId], references: [id])
   whoLeft User? @relation("EdRpsMatchWhoLeft", fields: [whoLeftUserId], references: [id])
 
   // ClashGame has no indexes at all and its leaderboard sequentially scans five times over.
   // This table grows far faster, so it gets real ones. The migration adds partial variants
-  // (WHERE "endedAt" IS NOT NULL) that Prisma cannot express.
+  // (WHERE "endedAt" IS NOT NULL) that Prisma cannot express, including the two AI-match
+  // device-cluster indexes on (player1Ip | player1VisitorId, pointsAwardedAt).
   @@index([startedAt])
   @@index([endedAt])
   @@index([player1UserId, endedAt])
@@ -2873,6 +2918,25 @@ model CMoon {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  // When true, this cMoon is hidden from the self-serve "choose your cMoon" list/modal, and
+  // blocked server-side in selectCMoonForUser/assignSmallestCMoonToUser (server/utils/cmoon.js)
+  // — so it can't be joined by players on their own. Admins can still place a player into it
+  // directly (POST /api/admin/users/[id]/update-cmoon, unaffected by this flag), cToons can still
+  // be display-assigned to it, and its own /newsite/cmoon/[id] page and member-facing features
+  // (points, ranks, role sync) work exactly like any other cMoon. Named `joinLocked` rather than
+  // `locked` to avoid reading like the unrelated per-copy UserCtoon.lockedByUserId concept in
+  // server/utils/lockRules.js. Independent of `showOnNav` below — a locked cMoon can still be
+  // opted into the cMoons quick-nav (browsable, still not joinable).
+  joinLocked    Boolean  @default(false)
+
+  // Whether this cMoon shows as a clickable circle on the /newsite/cmoon-nav "cMoons" quick-nav
+  // page — a display toggle independent of `joinLocked` above (a locked cMoon can still be shown
+  // here; visiting still isn't joining). Defaults to true for newly-created cMoons. The migration
+  // that added this column backfilled it to `NOT joinLocked` for pre-existing rows, so an
+  // already-locked cMoon doesn't silently reappear on a new public surface the moment this
+  // shipped — see prisma/migrations/20260826000000_add_cmoon_show_on_nav.
+  showOnNav     Boolean  @default(true)
+
   // Public "cMoon page" content (/newsite/cmoon/[id]) — a display/catalog feature, independent
   // of the cMoonEnabled faction-join flag above. pageImagePath is exactly 800x600, matching CZone.
   pageImagePath   String?
@@ -2882,15 +2946,21 @@ model CMoon {
   // Small wide banner graphic (normalized to 800x200) shown on a themed cToon
   // modal in place of the plain "cWorld" text tile, linking to the page above.
   bannerImagePath String?
+  // Small square "avatar" (normalized ~128x128, like a player avatar) shown next to this
+  // cMoon's colored name badge on member cZones — a quick-glance identity separate from the
+  // large poster (imagePath) and the page/banner art above, which are too large for that spot.
+  avatarPath      String?
 
-  members         User[]
-  captains        CMoonCaptain[]
-  prizeCtoons     CMoonPrizeCtoon[]
-  scoreLogs       CMoonScoreLog[]
-  ranks           CMoonRank[]
+  members              User[]
+  captains             CMoonCaptain[]
+  prizeCtoons          CMoonPrizeCtoon[]
+  scoreLogs            CMoonScoreLog[]
+  ranks                CMoonRank[]
+  dispersalOfferLinks  CMoonDispersalOfferCMoon[]
+  dispersalClaims      CMoonDispersalClaim[]
   // cToons thematically displayed under this cMoon (admin-assigned in the cToon editor). Distinct
   // from `members`/`prizeCtoons`, which are about the player-faction feature, not catalog display.
-  displayedCtoons Ctoon[]           @relation("CtoonCMoonDisplay")
+  displayedCtoons      Ctoon[]                    @relation("CtoonCMoonDisplay")
 
   @@index([memberCount])
   @@index([teamScore])
@@ -2941,6 +3011,97 @@ model CMoonPrizeCtoon {
 
   @@unique([cMoonId, ctoonId])
   @@index([ctoonId])
+}
+
+enum CMoonDispersalOfferStatus {
+  OPEN
+  CLOSED
+}
+
+// Admin-created "pick one of these cToons" offer — distinct from CMoonPrizeCtoon (auto-granted
+// on join, no choice involved). Stays OPEN (visible/claimable on every linked cMoon's page) until
+// an admin explicitly closes it; there's no snapshot of eligible members or a total-job count up
+// front, since membership can change over the offer's open-ended lifetime — eligibility is
+// re-checked live against the claimant's current cMoonId at claim time (see
+// server/api/cmoon/[id]/dispersal-offers/[offerId]/claim.post.js). Linking to multiple cMoons
+// (via CMoonDispersalOfferCMoon) makes it one shared offer/option-pool across all of them, not a
+// separate offer per cMoon. Mint order is naturally randomized relative to join date because
+// claims fire in whatever order members actually pick, not a shuffle computed up front.
+model CMoonDispersalOffer {
+  id                String                     @id @default(uuid())
+  quantityPerMember Int
+  status            CMoonDispersalOfferStatus  @default(OPEN)
+  initiatedById     String
+  createdAt         DateTime                   @default(now())
+  closedById        String?
+  closedAt          DateTime?
+
+  initiatedBy User                      @relation("CMoonDispersalOfferInitiatedBy", fields: [initiatedById], references: [id], onDelete: Restrict)
+  closedBy    User?                     @relation("CMoonDispersalOfferClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  cMoons      CMoonDispersalOfferCMoon[]
+  options     CMoonDispersalOption[]
+  claims      CMoonDispersalClaim[]
+
+  @@index([status, createdAt])
+}
+
+// Join table: which cMoon(s) an offer is live on. A member's eligibility is "their current
+// cMoonId has a row here for an OPEN offer" — checked live, never snapshotted.
+model CMoonDispersalOfferCMoon {
+  id      String @id @default(uuid())
+  offerId String
+  cMoonId String
+
+  offer CMoonDispersalOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  cMoon CMoon                @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+
+  @@unique([offerId, cMoonId])
+  @@index([cMoonId])
+}
+
+// One of the (2+) cToon choices a member can pick for a given offer.
+model CMoonDispersalOption {
+  id        String @id @default(uuid())
+  offerId   String
+  ctoonId   String
+  sortOrder Int    @default(0)
+
+  offer  CMoonDispersalOffer   @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  ctoon  Ctoon                 @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  claims CMoonDispersalClaim[]
+
+  @@unique([offerId, ctoonId])
+}
+
+// One row per member who claimed an offer — at most one per (offer, user), enforced by the
+// unique constraint below (a claim is final once made, no re-picking). `cMoonId`/`username` are
+// snapshots of which cMoon they were a live member of and their name at claim time, surviving
+// them later leaving that cMoon or renaming. This is a plain immutable log of who picked what —
+// it deliberately does NOT track the resulting mint job's outcome (no status/mintNumber fields):
+// the mint itself is queued fire-and-forget straight to mintQueue, same as every other bulk-mint
+// call site in the app (grantCMoonPrizes, the cZone-contest distribute route), and nothing writes
+// back into this row afterward — mint.worker.js is the shared hot path for every mint in the app
+// and is intentionally never special-cased for any one caller.
+model CMoonDispersalClaim {
+  id        String   @id @default(uuid())
+  offerId   String
+  optionId  String
+  ctoonId   String
+  userId    String
+  username  String
+  cMoonId   String
+  quantity  Int
+  claimedAt DateTime @default(now())
+
+  offer  CMoonDispersalOffer  @relation(fields: [offerId], references: [id], onDelete: Cascade)
+  option CMoonDispersalOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
+  ctoon  Ctoon                @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  user   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cMoon  CMoon                @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+
+  @@unique([offerId, userId])
+  @@index([offerId])
+  @@index([userId])
 }
 
 // One row per (user, day) where the user completed at least one of the existing daily tasks

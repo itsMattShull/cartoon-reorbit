@@ -43,6 +43,16 @@
       </select>
     </div>
 
+    <!-- cMoon -->
+    <div v-if="cmoonList.length">
+      <div class="cf-section-label">cMoon</div>
+      <select class="cf-select" v-model="filter.cMoon">
+        <option value="">All cMoons</option>
+        <option value="__none__">No cMoon</option>
+        <option v-for="c in cmoonList" :key="c.id" :value="c.id">{{ c.name }}</option>
+      </select>
+    </div>
+
     <hr class="cf-divider" />
 
     <!-- Price -->
@@ -167,6 +177,14 @@ const filteredSetList = computed(() => {
     ? ctoons.value.filter(c => c.series === filter.value.series)
     : ctoons.value
   return [...new Set(src.map(c => c.set).filter(Boolean))].sort()
+})
+
+const cmoonList = computed(() => {
+  const map = new Map()
+  for (const c of ctoons.value) {
+    if (c.cMoon?.id && !map.has(c.cMoon.id)) map.set(c.cMoon.id, c.cMoon)
+  }
+  return [...map.values()].sort((a, b) => a.name.localeCompare(b.name))
 })
 
 watch(() => filter.value.series, () => {

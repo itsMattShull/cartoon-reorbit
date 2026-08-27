@@ -38,7 +38,7 @@ export default defineEventHandler(async (event) => {
     where: { username },
     include: {
       cZones: true,
-      cMoon: { select: { id: true, name: true, color: true } },
+      cMoon: { select: { id: true, name: true, color: true, avatarPath: true } },
       currentCMoonRank: { select: { name: true } }
     }
   })
