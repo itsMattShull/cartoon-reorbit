@@ -23,12 +23,12 @@
           <span class="font-medium">cMoons enabled</span>
         </label>
         <p class="text-[11px] text-gray-600 mt-1">
-          Off by default. Turning this on starts a 3-day window for existing players to pick a
-          cMoon before they're auto-assigned to whichever has the fewest members; new players
-          always get 3 days from when they join.
+          Off by default. New players get a "Choose your cMoon" prompt when they join, with the
+          option to skip it — a player who skips (or hasn't decided) can always join later from
+          the cMoons navigation page. There's no deadline and no auto-assignment.
         </p>
         <p v-if="cMoonEnabledAt" class="text-[11px] text-gray-600 mt-1">
-          Launched {{ formatDate(cMoonEnabledAt) }} · existing-player deadline {{ formatDate(cMoonSelectionDeadlineAt) }}
+          Launched {{ formatDate(cMoonEnabledAt) }}
         </p>
       </div>
 
@@ -380,45 +380,143 @@
           </div>
 
           <div>
-            <label class="block text-xs font-medium mb-1">cMoon page image (exactly 800×600 after processing)</label>
+            <label class="block text-xs font-medium mb-1">cMoon page banner (top of page, ~1200×100 after processing)</label>
+            <p class="text-[11px] text-gray-600 mb-2">
+              A wide masthead shown across the top of this cMoon's page. Keep any name/logo art
+              centered — the edges get cropped first on a narrow phone screen. Falls back to a
+              plain colored title bar when not uploaded.
+            </p>
             <template v-if="!editId">
-              <p class="text-[11px] text-gray-600">Save this cMoon first, then Edit it to upload a page image.</p>
+              <p class="text-[11px] text-gray-600">Save this cMoon first, then Edit it to upload a banner.</p>
             </template>
             <template v-else>
-              <img v-if="pageImagePreview" :src="pageImagePreview" class="cm-page-image-preview" alt="Selected image preview" />
-              <img v-else-if="currentPageImagePath" :src="currentPageImagePath" class="cm-page-image-preview" alt="Current cMoon page image" />
-              <p v-else class="text-[11px] text-gray-600 mb-1">No image uploaded yet.</p>
-              <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" class="cm-field" @change="handlePageImageFile" />
-              <p class="text-[11px] text-gray-500 mt-1">Any photo works — it's auto-cropped/resized to 800×600 on upload.</p>
+              <img v-if="pageBannerImagePreview" :src="pageBannerImagePreview" class="cm-page-banner-image-preview" alt="Selected banner preview" />
+              <img v-else-if="currentPageBannerImagePath" :src="currentPageBannerImagePath" class="cm-page-banner-image-preview" alt="Current cMoon page banner" />
+              <p v-else class="text-[11px] text-gray-600 mb-1">No banner uploaded yet.</p>
+              <input type="file" accept="image/png,image/jpeg,image/webp" class="cm-field" @change="handlePageBannerImageFile" />
               <button
                 type="button"
                 class="cm-tap mt-2 px-3 border rounded bg-white"
-                :disabled="!pageImageFile || pageImageUploading"
-                @click="uploadPageImage"
-              >{{ pageImageUploading ? 'Uploading…' : 'Upload image' }}</button>
-              <p v-if="pageImageError" class="text-[11px] text-red-600 mt-1">{{ pageImageError }}</p>
+                :disabled="!pageBannerImageFile || pageBannerImageUploading"
+                @click="uploadPageBannerImage"
+              >{{ pageBannerImageUploading ? 'Uploading…' : 'Upload banner' }}</button>
+              <p v-if="pageBannerImageError" class="text-[11px] text-red-600 mt-1">{{ pageBannerImageError }}</p>
               <NuxtLink :to="`/newsite/cmoon/${editId}`" class="block text-[11px] text-indigo-600 hover:underline mt-2">View cMoon page</NuxtLink>
             </template>
           </div>
 
           <div>
-            <label class="block text-xs font-medium mb-1">cToon modal banner (small wide graphic, replaces the "cWorld" text link)</label>
+            <label class="block text-xs font-medium mb-1">Featured cToons ({{ featuredCtoons.length }}/12)</label>
+            <p class="text-[11px] text-gray-600 mb-2">
+              Shown in the page's centerpiece grid, in this order. Only cToons already assigned to
+              display under this cMoon (in the cToon editor) can be featured. Leave empty to
+              auto-show the first 12 assigned cToons instead.
+            </p>
             <template v-if="!editId">
-              <p class="text-[11px] text-gray-600">Save this cMoon first, then Edit it to upload a banner.</p>
+              <p class="text-[11px] text-gray-600">Save this cMoon first, then Edit it to pick featured cToons.</p>
             </template>
             <template v-else>
-              <img v-if="bannerImagePreview" :src="bannerImagePreview" class="cm-banner-image-preview" alt="Selected banner preview" />
-              <img v-else-if="currentBannerImagePath" :src="currentBannerImagePath" class="cm-banner-image-preview" alt="Current cMoon modal banner" />
-              <p v-else class="text-[11px] text-gray-600 mb-1">No banner uploaded yet — the modal shows a plain text link instead.</p>
-              <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" class="cm-field" @change="handleBannerImageFile" />
-              <p class="text-[11px] text-gray-500 mt-1">Any image works — it's auto-cropped/resized to a wide 800×200 banner on upload.</p>
+              <div v-if="featuredCtoonsLoading" class="text-[11px] text-gray-500">Loading…</div>
+              <template v-else>
+                <div v-if="featuredCtoons.length" class="space-y-1 mb-2">
+                  <div v-for="(f, i) in featuredCtoons" :key="f.ctoonId" class="flex items-center gap-2 text-[11px]">
+                    <span class="text-gray-500 w-5 flex-shrink-0">{{ i + 1 }}.</span>
+                    <span class="flex-1 min-w-0 break-words">{{ f.name }}</span>
+                    <button type="button" class="cm-tap text-gray-600 disabled:opacity-40" :disabled="i === 0" @click="moveFeaturedCtoon(i, -1)">↑</button>
+                    <button type="button" class="cm-tap text-gray-600 disabled:opacity-40" :disabled="i === featuredCtoons.length - 1" @click="moveFeaturedCtoon(i, 1)">↓</button>
+                    <button type="button" class="cm-tap text-red-600" @click="removeFeaturedCtoon(i)">Remove</button>
+                  </div>
+                </div>
+                <input
+                  v-model="featuredCtoonSearch"
+                  class="cm-field w-full border rounded px-2 py-1"
+                  style="font-size:16px"
+                  :placeholder="featuredCtoons.length >= 12 ? '12 featured — remove one to add another' : 'Type 3+ characters of an assigned cToon'"
+                  :disabled="featuredCtoons.length >= 12"
+                  autocapitalize="none" autocorrect="off" spellcheck="false"
+                  role="combobox" :aria-expanded="featuredCtoonSuggestions.length > 0"
+                />
+                <div v-if="featuredCtoonSuggestions.length" class="mt-1 border rounded divide-y bg-white max-h-40 overflow-y-auto">
+                  <button
+                    v-for="c in featuredCtoonSuggestions" :key="c.id"
+                    type="button"
+                    class="cm-tap w-full text-left px-2 text-[11px] hover:bg-gray-100"
+                    @click="addFeaturedCtoon(c)"
+                  >{{ c.name }}</button>
+                </div>
+                <button
+                  type="button"
+                  class="cm-tap mt-2 px-3 border rounded bg-white disabled:opacity-50"
+                  :disabled="featuredCtoonsSaving"
+                  @click="saveFeaturedCtoons"
+                >{{ featuredCtoonsSaving ? 'Saving…' : 'Save Featured cToons' }}</button>
+                <p v-if="featuredCtoonsError" class="text-[11px] text-red-600 mt-1">{{ featuredCtoonsError }}</p>
+              </template>
+            </template>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium mb-1">cToon ID card button (small pill graphic, replaces the "cWorld" text link)</label>
+            <p class="text-[11px] text-gray-600 mb-2">
+              Shown on every cToon assigned to this cMoon's ID card, linking to this cMoon's page.
+            </p>
+            <template v-if="!editId">
+              <p class="text-[11px] text-gray-600">Save this cMoon first, then Edit it to upload a button.</p>
+            </template>
+            <template v-else>
+              <img v-if="buttonImagePreview" :src="buttonImagePreview" class="cm-button-image-preview" alt="Selected button preview" />
+              <img v-else-if="currentButtonImagePath" :src="currentButtonImagePath" class="cm-button-image-preview" alt="Current cMoon button" />
+              <p v-else class="text-[11px] text-gray-600 mb-1">No button uploaded yet — the modal shows a plain text link instead.</p>
+              <input type="file" accept="image/png,image/jpeg,image/gif,image/webp" class="cm-field" @change="handleButtonImageFile" />
+              <p class="text-[11px] text-gray-500 mt-1">Any image works — it's auto-cropped/resized to a small ~232×62 pill button on upload.</p>
               <button
                 type="button"
                 class="cm-tap mt-2 px-3 border rounded bg-white"
-                :disabled="!bannerImageFile || bannerImageUploading"
-                @click="uploadBannerImage"
-              >{{ bannerImageUploading ? 'Uploading…' : 'Upload banner' }}</button>
-              <p v-if="bannerImageError" class="text-[11px] text-red-600 mt-1">{{ bannerImageError }}</p>
+                :disabled="!buttonImageFile || buttonImageUploading"
+                @click="uploadButtonImage"
+              >{{ buttonImageUploading ? 'Uploading…' : 'Upload button' }}</button>
+              <p v-if="buttonImageError" class="text-[11px] text-red-600 mt-1">{{ buttonImageError }}</p>
+              <label class="flex items-center gap-2 cm-tap mt-2">
+                <input type="checkbox" v-model="form.showButtonOnPages" />
+                <span class="text-xs font-medium">Show this button on OTHER cMoons' pages</span>
+              </label>
+              <p class="text-[11px] text-gray-600 mt-1">
+                Cross-promotes this cMoon in the button-pill list on every other cMoon's page.
+                Works even while Locked above — an admin can still cross-promote a locked cMoon.
+              </p>
+            </template>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium mb-1">Poll (shown at the bottom of this cMoon's page)</label>
+            <p class="text-[11px] text-gray-600 mb-2">
+              At most one active poll per cMoon. Replacing it deletes any existing votes — there's
+              no in-place edit, only replace or remove.
+            </p>
+            <template v-if="!editId">
+              <p class="text-[11px] text-gray-600">Save this cMoon first, then Edit it to set up a poll.</p>
+            </template>
+            <template v-else>
+              <p v-if="currentPollQuestion" class="text-[11px] text-gray-600 mb-2">
+                Currently live: "{{ currentPollQuestion }}"
+              </p>
+              <label class="block text-xs font-medium mb-1">Question</label>
+              <input v-model="pollForm.question" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" maxlength="300" />
+              <label class="block text-xs font-medium mb-1 mt-2">Options (2–8)</label>
+              <div v-for="(opt, i) in pollForm.options" :key="i" class="flex items-center gap-2 mb-1">
+                <input v-model="pollForm.options[i]" class="cm-field flex-1 min-w-0 border rounded px-2 py-1" style="font-size:16px" maxlength="120" :placeholder="`Option ${i + 1}`" />
+                <button type="button" class="cm-tap text-red-600 disabled:opacity-40" :disabled="pollForm.options.length <= 2" @click="removePollOption(i)">✕</button>
+              </div>
+              <button type="button" class="cm-tap text-[11px] text-indigo-600" :disabled="pollForm.options.length >= 8" @click="addPollOption">+ Add option</button>
+              <div class="flex items-center gap-3 mt-2">
+                <button type="button" class="cm-tap px-3 border rounded bg-white disabled:opacity-50" :disabled="pollSaving" @click="savePoll">
+                  {{ pollSaving ? 'Saving…' : 'Replace Poll' }}
+                </button>
+                <button v-if="currentPollQuestion" type="button" class="cm-tap text-[11px] text-red-600 disabled:opacity-40" :disabled="pollSaving" @click="deletePoll">
+                  Remove poll
+                </button>
+              </div>
+              <p v-if="pollError" class="text-[11px] text-red-600 mt-1">{{ pollError }}</p>
             </template>
           </div>
 
@@ -617,7 +715,6 @@ const ctoons = ref([])
 const flagEnabled = ref(false)
 const flagSaving = ref(false)
 const cMoonEnabledAt = ref(null)
-const cMoonSelectionDeadlineAt = ref(null)
 const previewModalOpen = ref(false)
 
 function previewEffect(c) {
@@ -719,10 +816,122 @@ function effectLabel(type) {
 
 const editId = ref('')
 const formOpen = ref(false)
-const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', effectType: '', joinLocked: false, showOnNav: true, captainIds: [], prizeCtoons: [] })
+const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', effectType: '', joinLocked: false, showOnNav: true, showButtonOnPages: false, captainIds: [], prizeCtoons: [] })
 const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
+
+// ── Featured cToons (separate step — needs an existing cMoon row) ──────
+const featuredCtoons = ref([]) // [{ ctoonId, name, assetPath }], in display order
+const assignableCtoons = ref([]) // pool: cToons already display-assigned to this cMoon
+const featuredCtoonsLoading = ref(false)
+const featuredCtoonsSaving = ref(false)
+const featuredCtoonsError = ref('')
+const featuredCtoonSearch = ref('')
+
+const featuredCtoonSuggestions = computed(() => {
+  const v = String(featuredCtoonSearch.value || '').trim().toLowerCase()
+  if (v.length < 3) return []
+  const already = new Set(featuredCtoons.value.map(f => f.ctoonId))
+  return assignableCtoons.value
+    .filter(c => !already.has(c.id) && c.name?.toLowerCase().includes(v))
+    .slice(0, 20)
+})
+
+async function loadFeaturedCtoons(cMoonId) {
+  featuredCtoonsLoading.value = true
+  featuredCtoonsError.value = ''
+  try {
+    const res = await $fetch(`/api/admin/cmoons/${cMoonId}/featured-ctoons`)
+    featuredCtoons.value = res.featuredCtoons || []
+    assignableCtoons.value = res.assignableCtoons || []
+  } catch (e) {
+    featuredCtoonsError.value = e?.data?.statusMessage || 'Failed to load featured cToons'
+    featuredCtoons.value = []
+    assignableCtoons.value = []
+  } finally {
+    featuredCtoonsLoading.value = false
+  }
+}
+
+function addFeaturedCtoon(c) {
+  if (featuredCtoons.value.length >= 12 || featuredCtoons.value.some(f => f.ctoonId === c.id)) return
+  featuredCtoons.value.push({ ctoonId: c.id, name: c.name, assetPath: c.assetPath })
+  featuredCtoonSearch.value = ''
+}
+
+function removeFeaturedCtoon(i) {
+  featuredCtoons.value.splice(i, 1)
+}
+
+function moveFeaturedCtoon(i, delta) {
+  const j = i + delta
+  if (j < 0 || j >= featuredCtoons.value.length) return
+  const list = featuredCtoons.value
+  ;[list[i], list[j]] = [list[j], list[i]]
+}
+
+// ── Poll (separate step — needs an existing cMoon row) ──────────────────
+const currentPollQuestion = ref('')
+const pollForm = reactive({ question: '', options: ['', ''] })
+const pollSaving = ref(false)
+const pollError = ref('')
+
+function addPollOption() {
+  if (pollForm.options.length < 8) pollForm.options.push('')
+}
+function removePollOption(i) {
+  if (pollForm.options.length > 2) pollForm.options.splice(i, 1)
+}
+
+async function savePoll() {
+  if (!editId.value || pollSaving.value) return
+  pollSaving.value = true
+  pollError.value = ''
+  try {
+    const res = await $fetch(`/api/admin/cmoons/${editId.value}/poll`, {
+      method: 'PUT',
+      body: { question: pollForm.question, options: pollForm.options },
+    })
+    currentPollQuestion.value = res.poll?.question || ''
+  } catch (e) {
+    pollError.value = e?.data?.statusMessage || 'Failed to save poll'
+  } finally {
+    pollSaving.value = false
+  }
+}
+
+async function deletePoll() {
+  if (!editId.value || pollSaving.value) return
+  if (!confirm('Remove the active poll and all its votes?')) return
+  pollSaving.value = true
+  pollError.value = ''
+  try {
+    await $fetch(`/api/admin/cmoons/${editId.value}/poll`, { method: 'DELETE' })
+    currentPollQuestion.value = ''
+    Object.assign(pollForm, { question: '', options: ['', ''] })
+  } catch (e) {
+    pollError.value = e?.data?.statusMessage || 'Failed to remove poll'
+  } finally {
+    pollSaving.value = false
+  }
+}
+
+async function saveFeaturedCtoons() {
+  if (!editId.value || featuredCtoonsSaving.value) return
+  featuredCtoonsSaving.value = true
+  featuredCtoonsError.value = ''
+  try {
+    await $fetch(`/api/admin/cmoons/${editId.value}/featured-ctoons`, {
+      method: 'PUT',
+      body: { ctoonIds: featuredCtoons.value.map(f => f.ctoonId) },
+    })
+  } catch (e) {
+    featuredCtoonsError.value = e?.data?.statusMessage || 'Failed to save featured cToons'
+  } finally {
+    featuredCtoonsSaving.value = false
+  }
+}
 
 // Starter-graphic upload state. Kept separate from `form` — the image is a separate multipart
 // request (POST/DELETE .../[id]/image), sent only after the name/color/etc save succeeds.
@@ -772,18 +981,18 @@ async function removeImage(c) {
 }
 
 // ── cMoon page image (separate step — needs an existing cMoon row) ─────
-const pageImageFile = ref(null)
-const pageImagePreview = ref('')
-const pageImageUploading = ref(false)
-const pageImageError = ref('')
-const currentPageImagePath = ref('')
+const pageBannerImageFile = ref(null)
+const pageBannerImagePreview = ref('')
+const pageBannerImageUploading = ref(false)
+const pageBannerImageError = ref('')
+const currentPageBannerImagePath = ref('')
 
 // ── cToon modal banner (separate step — needs an existing cMoon row) ───
-const bannerImageFile = ref(null)
-const bannerImagePreview = ref('')
-const bannerImageUploading = ref(false)
-const bannerImageError = ref('')
-const currentBannerImagePath = ref('')
+const buttonImageFile = ref(null)
+const buttonImagePreview = ref('')
+const buttonImageUploading = ref(false)
+const buttonImageError = ref('')
+const currentButtonImagePath = ref('')
 
 // ── cZone avatar (separate step — needs an existing cMoon row) ─────────
 const avatarImageFile = ref(null)
@@ -794,59 +1003,59 @@ const currentAvatarPath = ref('')
 
 const palettePreview = computed(() => isValidColor(form.color) ? cMoonPalette(form.color) : null)
 
-function handlePageImageFile(e) {
+function handlePageBannerImageFile(e) {
   const file = e.target.files?.[0] || null
-  pageImageFile.value = file
-  pageImageError.value = ''
-  if (pageImagePreview.value) URL.revokeObjectURL(pageImagePreview.value)
-  pageImagePreview.value = file ? URL.createObjectURL(file) : ''
+  pageBannerImageFile.value = file
+  pageBannerImageError.value = ''
+  if (pageBannerImagePreview.value) URL.revokeObjectURL(pageBannerImagePreview.value)
+  pageBannerImagePreview.value = file ? URL.createObjectURL(file) : ''
 }
 
-async function uploadPageImage() {
-  if (!editId.value || !pageImageFile.value || pageImageUploading.value) return
-  pageImageUploading.value = true
-  pageImageError.value = ''
+async function uploadPageBannerImage() {
+  if (!editId.value || !pageBannerImageFile.value || pageBannerImageUploading.value) return
+  pageBannerImageUploading.value = true
+  pageBannerImageError.value = ''
   try {
     const body = new FormData()
-    body.append('image', pageImageFile.value)
-    const res = await $fetch(`/api/admin/cmoons/${editId.value}/page-image`, { method: 'POST', body })
-    currentPageImagePath.value = res.pageImagePath
-    pageImageFile.value = null
-    if (pageImagePreview.value) URL.revokeObjectURL(pageImagePreview.value)
-    pageImagePreview.value = ''
+    body.append('image', pageBannerImageFile.value)
+    const res = await $fetch(`/api/admin/cmoons/${editId.value}/page-banner-image`, { method: 'POST', body })
+    currentPageBannerImagePath.value = res.pageBannerImagePath
+    pageBannerImageFile.value = null
+    if (pageBannerImagePreview.value) URL.revokeObjectURL(pageBannerImagePreview.value)
+    pageBannerImagePreview.value = ''
     await load()
   } catch (e) {
-    pageImageError.value = e?.data?.statusMessage || 'Upload failed'
+    pageBannerImageError.value = e?.data?.statusMessage || 'Upload failed'
   } finally {
-    pageImageUploading.value = false
+    pageBannerImageUploading.value = false
   }
 }
 
-function handleBannerImageFile(e) {
+function handleButtonImageFile(e) {
   const file = e.target.files?.[0] || null
-  bannerImageFile.value = file
-  bannerImageError.value = ''
-  if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
-  bannerImagePreview.value = file ? URL.createObjectURL(file) : ''
+  buttonImageFile.value = file
+  buttonImageError.value = ''
+  if (buttonImagePreview.value) URL.revokeObjectURL(buttonImagePreview.value)
+  buttonImagePreview.value = file ? URL.createObjectURL(file) : ''
 }
 
-async function uploadBannerImage() {
-  if (!editId.value || !bannerImageFile.value || bannerImageUploading.value) return
-  bannerImageUploading.value = true
-  bannerImageError.value = ''
+async function uploadButtonImage() {
+  if (!editId.value || !buttonImageFile.value || buttonImageUploading.value) return
+  buttonImageUploading.value = true
+  buttonImageError.value = ''
   try {
     const body = new FormData()
-    body.append('image', bannerImageFile.value)
-    const res = await $fetch(`/api/admin/cmoons/${editId.value}/banner-image`, { method: 'POST', body })
-    currentBannerImagePath.value = res.bannerImagePath
-    bannerImageFile.value = null
-    if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
-    bannerImagePreview.value = ''
+    body.append('image', buttonImageFile.value)
+    const res = await $fetch(`/api/admin/cmoons/${editId.value}/button-image`, { method: 'POST', body })
+    currentButtonImagePath.value = res.buttonImagePath
+    buttonImageFile.value = null
+    if (buttonImagePreview.value) URL.revokeObjectURL(buttonImagePreview.value)
+    buttonImagePreview.value = ''
     await load()
   } catch (e) {
-    bannerImageError.value = e?.data?.statusMessage || 'Upload failed'
+    buttonImageError.value = e?.data?.statusMessage || 'Upload failed'
   } finally {
-    bannerImageUploading.value = false
+    buttonImageUploading.value = false
   }
 }
 
@@ -974,19 +1183,20 @@ function startEdit(c) {
     effectType: c.effectType || '',
     joinLocked: !!c.joinLocked,
     showOnNav: c.showOnNav !== false,
+    showButtonOnPages: !!c.showButtonOnPages,
     captainIds: c.captains.map(cap => cap.userId),
     prizeCtoons: c.prizeCtoons.map(p => ({ ctoonId: p.ctoonId, quantity: p.quantity })),
   })
-  currentPageImagePath.value = c.pageImagePath || ''
-  pageImageFile.value = null
-  if (pageImagePreview.value) URL.revokeObjectURL(pageImagePreview.value)
-  pageImagePreview.value = ''
-  pageImageError.value = ''
-  currentBannerImagePath.value = c.bannerImagePath || ''
-  bannerImageFile.value = null
-  if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
-  bannerImagePreview.value = ''
-  bannerImageError.value = ''
+  currentPageBannerImagePath.value = c.pageBannerImagePath || ''
+  pageBannerImageFile.value = null
+  if (pageBannerImagePreview.value) URL.revokeObjectURL(pageBannerImagePreview.value)
+  pageBannerImagePreview.value = ''
+  pageBannerImageError.value = ''
+  currentButtonImagePath.value = c.buttonImagePath || ''
+  buttonImageFile.value = null
+  if (buttonImagePreview.value) URL.revokeObjectURL(buttonImagePreview.value)
+  buttonImagePreview.value = ''
+  buttonImageError.value = ''
   currentAvatarPath.value = c.avatarPath || ''
   avatarImageFile.value = null
   if (avatarImagePreview.value) URL.revokeObjectURL(avatarImagePreview.value)
@@ -995,6 +1205,11 @@ function startEdit(c) {
   formError.value = ''
   clearImageSelection()
   currentImagePath.value = c.imagePath || ''
+  featuredCtoonSearch.value = ''
+  loadFeaturedCtoons(c.id)
+  currentPollQuestion.value = c.poll?.question || ''
+  Object.assign(pollForm, c.poll ? { question: c.poll.question, options: [...c.poll.options] } : { question: '', options: ['', ''] })
+  pollError.value = ''
   formOpen.value = true
 }
 
@@ -1011,21 +1226,28 @@ function resetForm() {
   formError.value = ''
   clearImageSelection()
   currentImagePath.value = ''
-  currentPageImagePath.value = ''
-  pageImageFile.value = null
-  if (pageImagePreview.value) URL.revokeObjectURL(pageImagePreview.value)
-  pageImagePreview.value = ''
-  pageImageError.value = ''
-  currentBannerImagePath.value = ''
-  bannerImageFile.value = null
-  if (bannerImagePreview.value) URL.revokeObjectURL(bannerImagePreview.value)
-  bannerImagePreview.value = ''
-  bannerImageError.value = ''
+  currentPageBannerImagePath.value = ''
+  pageBannerImageFile.value = null
+  if (pageBannerImagePreview.value) URL.revokeObjectURL(pageBannerImagePreview.value)
+  pageBannerImagePreview.value = ''
+  pageBannerImageError.value = ''
+  currentButtonImagePath.value = ''
+  buttonImageFile.value = null
+  if (buttonImagePreview.value) URL.revokeObjectURL(buttonImagePreview.value)
+  buttonImagePreview.value = ''
+  buttonImageError.value = ''
   currentAvatarPath.value = ''
   avatarImageFile.value = null
   if (avatarImagePreview.value) URL.revokeObjectURL(avatarImagePreview.value)
   avatarImagePreview.value = ''
   avatarImageError.value = ''
+  featuredCtoons.value = []
+  assignableCtoons.value = []
+  featuredCtoonSearch.value = ''
+  featuredCtoonsError.value = ''
+  currentPollQuestion.value = ''
+  Object.assign(pollForm, { question: '', options: ['', ''] })
+  pollError.value = ''
 }
 
 function closeModal() {
@@ -1110,7 +1332,6 @@ async function load() {
     cmoons.value = data.cmoons || []
     flagEnabled.value = !!data.cMoonEnabled
     cMoonEnabledAt.value = data.cMoonEnabledAt
-    cMoonSelectionDeadlineAt.value = data.cMoonSelectionDeadlineAt
     admins.value = adminsData || []
     ctoons.value = ctoonsData || []
   } catch (e) {
@@ -1252,7 +1473,6 @@ async function toggleFlag() {
   try {
     const res = await $fetch('/api/admin/cmoon-settings', { method: 'POST', body: { cMoonEnabled: flagEnabled.value } })
     cMoonEnabledAt.value = res.cMoonEnabledAt
-    cMoonSelectionDeadlineAt.value = res.cMoonSelectionDeadlineAt
   } catch (e) {
     flagEnabled.value = !flagEnabled.value
     alert(e?.data?.statusMessage || 'Failed to update flag')
@@ -1275,6 +1495,7 @@ async function save() {
       effectType: form.effectType || null,
       joinLocked: form.joinLocked,
       showOnNav: form.showOnNav,
+      showButtonOnPages: form.showButtonOnPages,
       captainIds: form.captainIds,
       prizeCtoons: form.prizeCtoons,
     }
@@ -1421,11 +1642,22 @@ onMounted(() => {
   margin-bottom: 6px;
 }
 
-.cm-banner-image-preview {
+.cm-button-image-preview {
+  display: block;
+  width: auto;
+  max-width: 232px;
+  height: 62px;
+  aspect-ratio: 232 / 62;
+  object-fit: contain;
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+
+.cm-page-banner-image-preview {
   display: block;
   width: 100%;
-  max-width: 320px;
-  aspect-ratio: 4 / 1;
+  max-width: 480px;
+  aspect-ratio: 12 / 1;
   object-fit: cover;
   border-radius: 4px;
   margin-bottom: 6px;

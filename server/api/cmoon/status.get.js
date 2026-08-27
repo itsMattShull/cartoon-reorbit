@@ -1,9 +1,12 @@
 // server/api/cmoon/status.get.js
-// The logged-in user's cMoon selection state: what they're in (if anything),
-// whether they're still eligible to choose, and their personal deadline.
+// The logged-in user's cMoon selection state: what they're in (if anything), and whether the
+// join modal should pop up automatically (canChoose). There is no deadline/auto-assignment —
+// a user who explicitly opted out just stops seeing the automatic prompt (see cMoonOptedOut);
+// they can still join later via the "Join a cMoon" button on /newsite/cmoon-nav, which reopens
+// the same modal regardless of canChoose.
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
-import { getGlobalConfig, computeCMoonDeadline } from '@/server/utils/cmoon'
+import { getGlobalConfig } from '@/server/utils/cmoon'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -15,23 +18,21 @@ export default defineEventHandler(async (event) => {
   const user = await db.user.findUnique({
     where: { id: userId },
     select: {
-      createdAt: true,
       cMoonId: true,
       cMoonSelectedAt: true,
       cMoonAutoAssigned: true,
+      cMoonOptedOut: true,
       cMoon: { select: { id: true, name: true, color: true } },
     },
   })
   if (!user) throw createError({ statusCode: 404, statusMessage: 'User not found' })
-
-  const deadline = computeCMoonDeadline(user, config)
 
   return {
     cMoonEnabled: true,
     cMoon: user.cMoon,
     cMoonSelectedAt: user.cMoonSelectedAt,
     cMoonAutoAssigned: user.cMoonAutoAssigned,
-    canChoose: !user.cMoonId && (!deadline || new Date() <= deadline),
-    deadline,
+    cMoonOptedOut: user.cMoonOptedOut,
+    canChoose: !user.cMoonId && !user.cMoonOptedOut,
   }
 })

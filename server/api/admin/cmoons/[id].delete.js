@@ -5,7 +5,7 @@ import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { invalidateCMoonList } from '@/server/api/cmoons.get'
 import { uploadFsPath } from '@/server/utils/uploadStorage'
-import { cmoonPageFsPath, cmoonBannerFsPath } from '@/server/utils/cmoonImageStorage'
+import { cmoonPageFsPath, cmoonButtonFsPath, cmoonPageBannerFsPath } from '@/server/utils/cmoonImageStorage'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 
 export default defineEventHandler(async (event) => {
@@ -45,9 +45,13 @@ export default defineEventHandler(async (event) => {
     const filename = cmoon.pageImagePath.split('/').pop()
     if (filename) { try { await unlink(cmoonPageFsPath(filename)) } catch {} }
   }
-  if (cmoon.bannerImagePath) {
-    const filename = cmoon.bannerImagePath.split('/').pop()
-    if (filename) { try { await unlink(cmoonBannerFsPath(filename)) } catch {} }
+  if (cmoon.buttonImagePath) {
+    const filename = cmoon.buttonImagePath.split('/').pop()
+    if (filename) { try { await unlink(cmoonButtonFsPath(filename)) } catch {} }
+  }
+  if (cmoon.pageBannerImagePath) {
+    const filename = cmoon.pageBannerImagePath.split('/').pop()
+    if (filename) { try { await unlink(cmoonPageBannerFsPath(filename)) } catch {} }
   }
 
   return { ok: true }

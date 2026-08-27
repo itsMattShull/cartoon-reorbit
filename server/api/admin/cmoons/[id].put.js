@@ -28,6 +28,7 @@ export default defineEventHandler(async (event) => {
     : (body.effectType === '' ? null : body.effectType)
   const joinLocked = body?.joinLocked === undefined ? cmoon.joinLocked : !!body.joinLocked
   const showOnNav = body?.showOnNav === undefined ? cmoon.showOnNav : !!body.showOnNav
+  const showButtonOnPages = body?.showButtonOnPages === undefined ? cmoon.showButtonOnPages : !!body.showButtonOnPages
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   if (!isValidHexColor(color)) throw createError({ statusCode: 400, statusMessage: 'Color must be a hex value like #3366ff' })
@@ -70,7 +71,7 @@ export default defineEventHandler(async (event) => {
   await db.$transaction(async (tx) => {
     await tx.cMoon.update({
       where: { id },
-      data: { name, color, discordRoleId: discordRoleId || null, pageDescription, effectType, joinLocked, showOnNav },
+      data: { name, color, discordRoleId: discordRoleId || null, pageDescription, effectType, joinLocked, showOnNav, showButtonOnPages },
     })
     if (captainIds) {
       await tx.cMoonCaptain.deleteMany({ where: { cMoonId: id } })

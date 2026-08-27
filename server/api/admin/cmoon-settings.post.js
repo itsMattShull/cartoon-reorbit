@@ -20,14 +20,12 @@ export default defineEventHandler(async (event) => {
   const wasEnabled = !!existing?.cMoonEnabled
 
   const data = { cMoonEnabled: enabled }
-  // Rising edge only: starting the feature (re)sets the launch timestamp and the
-  // 3-day window existing users get to pick before auto-assignment kicks in.
-  // Flipping it off never touches these — data/timers are preserved so turning
-  // it back on later doesn't reset anyone's clock unexpectedly.
+  // Rising edge only: starting the feature (re)sets the launch timestamp, purely informational
+  // (shown in the admin panel as "Launched X"). Flipping it off never touches this — turning it
+  // back on later doesn't reset it unexpectedly. There is no selection deadline to set: players
+  // pick a cMoon or explicitly opt out, with no auto-assignment either way.
   if (enabled && !wasEnabled) {
-    const now = new Date()
-    data.cMoonEnabledAt = now
-    data.cMoonSelectionDeadlineAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
+    data.cMoonEnabledAt = new Date()
   }
 
   const updated = await db.globalGameConfig.upsert({
@@ -42,12 +40,11 @@ export default defineEventHandler(async (event) => {
     area: 'cMoon',
     key: 'cMoonEnabled',
     prevValue: { cMoonEnabled: wasEnabled },
-    newValue: { cMoonEnabled: enabled, cMoonEnabledAt: updated.cMoonEnabledAt, cMoonSelectionDeadlineAt: updated.cMoonSelectionDeadlineAt },
+    newValue: { cMoonEnabled: enabled, cMoonEnabledAt: updated.cMoonEnabledAt },
   })
 
   return {
     cMoonEnabled: updated.cMoonEnabled,
     cMoonEnabledAt: updated.cMoonEnabledAt,
-    cMoonSelectionDeadlineAt: updated.cMoonSelectionDeadlineAt,
   }
 })
