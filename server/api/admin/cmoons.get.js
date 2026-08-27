@@ -18,12 +18,13 @@ export default defineEventHandler(async (event) => {
         _count: { select: { displayedCtoons: true } },
       },
     }),
-    db.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { cMoonEnabled: true, cMoonEnabledAt: true } }),
+    db.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { cMoonEnabled: true, cMoonEnabledAt: true, cMoonOptOutCooldownDays: true } }),
   ])
 
   return {
     cMoonEnabled: !!config?.cMoonEnabled,
     cMoonEnabledAt: config?.cMoonEnabledAt || null,
+    cMoonOptOutCooldownDays: config?.cMoonOptOutCooldownDays ?? 14,
     cmoons: cmoons.map(c => ({
       id: c.id,
       name: c.name,
@@ -34,6 +35,7 @@ export default defineEventHandler(async (event) => {
       effectType: c.effectType,
       joinLocked: c.joinLocked,
       showOnNav: c.showOnNav,
+      allowOptOutJoin: c.allowOptOutJoin,
       memberCount: c.memberCount,
       pageImagePath: c.pageImagePath,
       pageDescription: c.pageDescription,

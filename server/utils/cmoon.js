@@ -458,6 +458,20 @@ export const CMOON_SELECT_ERRORS = {
   ALREADY_ASSIGNED: 'CMOON_ALREADY_ASSIGNED',
   LOCKED: 'CMOON_LOCKED',
   BANNED: 'CMOON_USER_BANNED',
+  REJOIN_COOLDOWN: 'CMOON_REJOIN_COOLDOWN',
+  REJOIN_NOT_ALLOWED: 'CMOON_REJOIN_NOT_ALLOWED',
+}
+
+// The moment a player who opted out becomes eligible to rejoin, per the admin-configurable
+// cooldown (GlobalGameConfig.cMoonOptOutCooldownDays — 0 disables it). Returns null when there's
+// no cooldown to wait out: the player never opted out, or the configured cooldown is 0/invalid.
+// Called from both server/api/cmoon/status.get.js (to show/hide the "Join a cMoon" CTA and its
+// countdown) and selectCMoonForUser below (the actual enforcement).
+export function computeCMoonRejoinAvailableAt(user, config) {
+  if (!user?.cMoonOptedOut || !user?.cMoonOptedOutAt) return null
+  const days = Number(config?.cMoonOptOutCooldownDays)
+  if (!Number.isFinite(days) || days <= 0) return null
+  return new Date(new Date(user.cMoonOptedOutAt).getTime() + days * 24 * 60 * 60 * 1000)
 }
 
 class CMoonError extends Error {
@@ -496,12 +510,19 @@ export async function selectCMoonForUser(userId, cMoonId) {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, cMoonId: true },
+    select: { id: true, cMoonId: true, cMoonOptedOut: true, cMoonOptedOutAt: true },
   })
   if (!user) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
   if (user.cMoonId) throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
 
-  const cmoon = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true, joinLocked: true } })
+  // The two rejoin safeguards below only ever apply to a player who previously opted out — a
+  // first-time chooser (cMoonOptedOut:false) is never subject to either one.
+  if (user.cMoonOptedOut) {
+    const rejoinAt = computeCMoonRejoinAvailableAt(user, config)
+    if (rejoinAt && new Date() < rejoinAt) throw new CMoonError(CMOON_SELECT_ERRORS.REJOIN_COOLDOWN)
+  }
+
+  const cmoon = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true, joinLocked: true, allowOptOutJoin: true } })
   if (!cmoon) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
   // Locked cMoons are only reachable via admin direct-assign (POST
   // /api/admin/users/[id]/update-cmoon), never through this self-serve path — enforced here,
@@ -511,11 +532,15 @@ export async function selectCMoonForUser(userId, cMoonId) {
   // TOCTOU window against an admin locking this cMoon between this read and the transaction
   // committing.
   if (cmoon.joinLocked) throw new CMoonError(CMOON_SELECT_ERRORS.LOCKED)
+  // Team-balance safeguard: this cMoon has opted out of accepting returning/late joiners (see
+  // CMoon.allowOptOutJoin) — only bites a player who previously opted out, same as the cooldown
+  // check above.
+  if (user.cMoonOptedOut && !cmoon.allowOptOutJoin) throw new CMoonError(CMOON_SELECT_ERRORS.REJOIN_NOT_ALLOWED)
 
   const assigned = await prisma.$transaction(async (tx) => {
     const result = await tx.user.updateMany({
       where: { id: userId, cMoonId: null },
-      data: { cMoonId: cmoon.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: false, cMoonOptedOut: false },
+      data: { cMoonId: cmoon.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: false, cMoonOptedOut: false, cMoonOptedOutAt: null },
     })
     if (result.count === 0) throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
     // Re-checks joinLocked:false as part of the same atomic write, not just the pre-fetch
@@ -545,7 +570,7 @@ export async function optOutOfCMoonSelection(userId) {
 
   const result = await prisma.user.updateMany({
     where: { id: userId, cMoonId: null },
-    data: { cMoonOptedOut: true },
+    data: { cMoonOptedOut: true, cMoonOptedOutAt: new Date() },
   })
   if (result.count === 0) {
     const exists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, cMoonId: true } })

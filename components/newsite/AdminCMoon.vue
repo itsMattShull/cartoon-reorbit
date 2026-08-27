@@ -30,6 +30,26 @@
         <p v-if="cMoonEnabledAt" class="text-[11px] text-gray-600 mt-1">
           Launched {{ formatDate(cMoonEnabledAt) }}
         </p>
+
+        <div class="border-t pt-3 mt-3">
+          <label class="block text-xs font-medium mb-1">Opt-out rejoin cooldown (days)</label>
+          <div class="flex items-center gap-2">
+            <input
+              v-model.number="optOutCooldownDays" type="number" min="0" max="365" inputmode="numeric"
+              class="cm-field w-24 border rounded px-2 py-1" style="font-size:16px"
+            />
+            <button
+              class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              :disabled="cooldownSaving" @click="saveCooldown"
+            >{{ cooldownSaving ? 'Saving…' : 'Save' }}</button>
+          </div>
+          <p class="text-[11px] text-gray-600 mt-1">
+            How long a player who skipped/opted out must wait before "Join a cMoon" on the cMoons
+            navigation page works again. 0 = no wait. Applied together with each cMoon's own
+            "Allow opt-out join" toggle below — both must allow it.
+          </p>
+          <p v-if="cooldownError" class="text-[11px] text-red-600 mt-1">{{ cooldownError }}</p>
+        </div>
       </div>
 
       <!-- Scoring rules: the weekly team-leaderboard bonus job's admin-editable knobs
@@ -170,6 +190,7 @@
               <span class="font-semibold break-words min-w-0">{{ c.name }}</span>
               <span v-if="c.joinLocked" class="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Locked</span>
               <span v-if="!c.showOnNav" class="text-[10px] font-semibold text-gray-600 bg-gray-200 px-1.5 py-0.5 rounded">Off nav</span>
+              <span v-if="c.allowOptOutJoin === false" class="text-[10px] font-semibold text-gray-600 bg-gray-200 px-1.5 py-0.5 rounded">No rejoin</span>
               <span class="text-[11px] text-gray-600">{{ c.memberCount }} member{{ c.memberCount === 1 ? '' : 's' }}</span>
               <!-- Kept together so they travel as a unit when the row wraps on narrow screens. -->
               <div class="ml-auto flex items-center gap-3 flex-shrink-0">
@@ -364,6 +385,28 @@
                 (uses the cZone avatar below as its logo). Independent of Locked above — a
                 locked cMoon can still be shown here, it just still can't be joined.
               </p>
+            </div>
+          </div>
+
+          <div>
+            <label class="flex items-center gap-2 cm-tap">
+              <input type="checkbox" v-model="form.allowOptOutJoin" />
+              <span class="text-xs font-medium">Allow opt-out join (rejoin after skipping)</span>
+            </label>
+            <p class="text-[11px] text-gray-600 mt-1">
+              Whether a player who previously skipped/opted out of choosing a cMoon can pick THIS
+              one when they come back to join later (after the site-wide cooldown above).
+              Independent of Locked — a locked cMoon can't be joined by anyone regardless. On by
+              default. Use this to keep a cMoon open to first-time choosers but closed to
+              late/returning joiners for team-balance reasons, or vice versa.
+            </p>
+            <div v-if="cmoons.length" class="mt-2 text-[11px] text-gray-600">
+              <p class="font-medium mb-1">Current team balance (for an informed decision):</p>
+              <ul class="space-y-0.5">
+                <li v-for="tc in cmoons" :key="tc.id" :class="{ 'font-semibold text-gray-900': tc.id === editId }">
+                  {{ tc.name }}: {{ tc.memberCount }} member{{ tc.memberCount === 1 ? '' : 's' }}
+                </li>
+              </ul>
             </div>
           </div>
 
@@ -715,6 +758,9 @@ const ctoons = ref([])
 const flagEnabled = ref(false)
 const flagSaving = ref(false)
 const cMoonEnabledAt = ref(null)
+const optOutCooldownDays = ref(14)
+const cooldownSaving = ref(false)
+const cooldownError = ref('')
 const previewModalOpen = ref(false)
 
 function previewEffect(c) {
@@ -816,7 +862,7 @@ function effectLabel(type) {
 
 const editId = ref('')
 const formOpen = ref(false)
-const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', effectType: '', joinLocked: false, showOnNav: true, showButtonOnPages: false, captainIds: [], prizeCtoons: [] })
+const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', effectType: '', joinLocked: false, showOnNav: true, showButtonOnPages: false, allowOptOutJoin: true, captainIds: [], prizeCtoons: [] })
 const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
@@ -1184,6 +1230,7 @@ function startEdit(c) {
     joinLocked: !!c.joinLocked,
     showOnNav: c.showOnNav !== false,
     showButtonOnPages: !!c.showButtonOnPages,
+    allowOptOutJoin: c.allowOptOutJoin !== false,
     captainIds: c.captains.map(cap => cap.userId),
     prizeCtoons: c.prizeCtoons.map(p => ({ ctoonId: p.ctoonId, quantity: p.quantity })),
   })
@@ -1332,6 +1379,7 @@ async function load() {
     cmoons.value = data.cmoons || []
     flagEnabled.value = !!data.cMoonEnabled
     cMoonEnabledAt.value = data.cMoonEnabledAt
+    optOutCooldownDays.value = Number.isInteger(data.cMoonOptOutCooldownDays) ? data.cMoonOptOutCooldownDays : 14
     admins.value = adminsData || []
     ctoons.value = ctoonsData || []
   } catch (e) {
@@ -1481,6 +1529,22 @@ async function toggleFlag() {
   }
 }
 
+async function saveCooldown() {
+  cooldownSaving.value = true
+  cooldownError.value = ''
+  try {
+    const res = await $fetch('/api/admin/cmoon-settings', {
+      method: 'POST',
+      body: { cMoonEnabled: flagEnabled.value, cMoonOptOutCooldownDays: optOutCooldownDays.value },
+    })
+    optOutCooldownDays.value = res.cMoonOptOutCooldownDays
+  } catch (e) {
+    cooldownError.value = e?.data?.statusMessage || 'Failed to save cooldown'
+  } finally {
+    cooldownSaving.value = false
+  }
+}
+
 async function save() {
   if (!form.name.trim()) { formError.value = 'Name is required'; return }
   if (!isValidColor(form.color)) { formError.value = 'Color must be a hex value like #3366ff'; return }
@@ -1496,6 +1560,7 @@ async function save() {
       joinLocked: form.joinLocked,
       showOnNav: form.showOnNav,
       showButtonOnPages: form.showButtonOnPages,
+      allowOptOutJoin: form.allowOptOutJoin,
       captainIds: form.captainIds,
       prizeCtoons: form.prizeCtoons,
     }

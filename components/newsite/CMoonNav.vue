@@ -7,6 +7,7 @@
       <button v-if="showJoinCta" type="button" class="cmn-join-btn" @click="requestOpen">
         Join a cMoon
       </button>
+      <p v-else-if="cooldownText" class="cmn-cooldown">{{ cooldownText }}</p>
     </div>
 
     <div v-if="loading" class="cmn-status">Loading…</div>
@@ -48,14 +49,20 @@ const loading = ref(true)
 const error = ref('')
 const cmoons = ref([])
 // Whether to show "Join a cMoon" — true for anyone without a cMoon yet, whether they explicitly
-// opted out of the join modal or just never saw it (feature disabled, logged out, etc.). Clicking
-// it force-reopens the same globally-mounted CMoonSelectModal.vue via the shared composable.
+// opted out of the join modal or just never saw it (feature disabled, logged out, etc.), AND not
+// currently sitting out an admin-configured rejoin cooldown (see cooldownText below). Clicking it
+// force-reopens the same globally-mounted CMoonSelectModal.vue via the shared composable.
 const showJoinCta = ref(false)
+// Set only while a rejoin cooldown is actively blocking this user — shown in the button's place
+// so the page never looks broken (silently missing the CTA) once eligible.
+const cooldownText = ref('')
 const { requestOpen } = useCMoonJoinModal()
 
 function goBack() {
   router.push('/newsite/MycWorld')
 }
+
+const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
 
 onMounted(async () => {
   const [listResult, statusResult] = await Promise.allSettled([
@@ -69,7 +76,11 @@ onMounted(async () => {
   }
   if (statusResult.status === 'fulfilled') {
     const status = statusResult.value
-    showJoinCta.value = !!status?.cMoonEnabled && !status.cMoon
+    const hasNoCMoon = !!status?.cMoonEnabled && !status.cMoon
+    const rejoinAt = status?.cMoonRejoinAvailableAt ? new Date(status.cMoonRejoinAvailableAt) : null
+    const inCooldown = !!(rejoinAt && rejoinAt > new Date())
+    showJoinCta.value = hasNoCMoon && !inCooldown
+    cooldownText.value = (hasNoCMoon && inCooldown) ? `You can rejoin a cMoon on ${dateFormatter.format(rejoinAt)}.` : ''
   }
   loading.value = false
 })
@@ -152,6 +163,12 @@ onMounted(async () => {
 .cmn-join-btn:focus-visible {
   outline: 3px solid #ffd75e;
   outline-offset: 2px;
+}
+
+.cmn-cooldown {
+  margin: 12px 0 0;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .cmn-status {

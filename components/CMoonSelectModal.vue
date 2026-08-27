@@ -107,16 +107,32 @@ async function checkStatus() {
 // (or otherwise has no cMoon) and wants back in. Bypasses canChoose entirely, since being here
 // means they're asking on purpose; loads the real (non-preview) cmoons list and reuses the exact
 // same confirm()/select flow as the automatic prompt.
+//
+// Two admin-configurable safeguards apply ONLY to a player who previously opted out (never to a
+// first-time chooser, an edge case covered by the final else below): a rejoin cooldown
+// (GlobalGameConfig.cMoonOptOutCooldownDays, off cMoonOptedOutAt) and a per-cMoon
+// allowOptOutJoin toggle. CMoonNav.vue already re-fetches status and hides this button entirely
+// while the cooldown is active, so reaching here mid-cooldown is a rare race (e.g. a stale tab) —
+// handled the same "silently skip" way as every other failure mode in this function, since the
+// real enforcement is server-side in selectCMoonForUser regardless of what this shows.
 const { requested } = useCMoonJoinModal()
 async function openManually() {
   error.value = ''
   choice.value = null
   try {
-    const list = await $fetch('/api/cmoons').catch(() => ({ cmoons: [] }))
-    cmoons.value = list?.cmoons || []
+    const [status, list] = await Promise.all([
+      $fetch('/api/cmoon/status'),
+      $fetch('/api/cmoons').catch(() => ({ cmoons: [] })),
+    ])
+    if (!status?.cMoonEnabled) return
+    const rejoinAt = status.cMoonRejoinAvailableAt ? new Date(status.cMoonRejoinAvailableAt) : null
+    if (rejoinAt && new Date() < rejoinAt) return
+
+    const all = list?.cmoons || []
+    cmoons.value = status.cMoonOptedOut ? all.filter(c => c.allowOptOutJoin !== false) : all
     visible.value = true
   } catch {
-    // Silently skip — same failure mode as checkStatus above.
+    // Not logged in, or feature off — silently skip, same as checkStatus above.
   }
 }
 if (!props.preview) {
@@ -129,7 +145,6 @@ if (!props.preview) {
 async function loadPreview() {
   error.value = ''
   choice.value = null
-  deadline.value = null
   try {
     const list = await $fetch('/api/cmoons').catch(() => ({ cmoons: [] }))
     cmoons.value = list?.cmoons || []

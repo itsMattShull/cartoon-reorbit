@@ -28,6 +28,17 @@ export default defineEventHandler(async (event) => {
     data.cMoonEnabledAt = new Date()
   }
 
+  // Optional: how long an opted-out player must wait before rejoining (see
+  // computeCMoonRejoinAvailableAt in server/utils/cmoon.js). Omitted from the body when this
+  // request is only toggling the feature flag itself — preserves the existing value in that case.
+  if (body?.cMoonOptOutCooldownDays !== undefined) {
+    const days = Number(body.cMoonOptOutCooldownDays)
+    if (!Number.isInteger(days) || days < 0 || days > 365) {
+      throw createError({ statusCode: 400, statusMessage: 'Cooldown must be a whole number of days between 0 and 365' })
+    }
+    data.cMoonOptOutCooldownDays = days
+  }
+
   const updated = await db.globalGameConfig.upsert({
     where: { id: 'singleton' },
     create: { id: 'singleton', dailyPointLimit: 100, ...data },
@@ -39,12 +50,13 @@ export default defineEventHandler(async (event) => {
     userId: me.id,
     area: 'cMoon',
     key: 'cMoonEnabled',
-    prevValue: { cMoonEnabled: wasEnabled },
-    newValue: { cMoonEnabled: enabled, cMoonEnabledAt: updated.cMoonEnabledAt },
+    prevValue: { cMoonEnabled: wasEnabled, cMoonOptOutCooldownDays: existing?.cMoonOptOutCooldownDays },
+    newValue: { cMoonEnabled: enabled, cMoonEnabledAt: updated.cMoonEnabledAt, cMoonOptOutCooldownDays: updated.cMoonOptOutCooldownDays },
   })
 
   return {
     cMoonEnabled: updated.cMoonEnabled,
     cMoonEnabledAt: updated.cMoonEnabledAt,
+    cMoonOptOutCooldownDays: updated.cMoonOptOutCooldownDays,
   }
 })

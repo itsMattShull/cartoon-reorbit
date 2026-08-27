@@ -22,6 +22,7 @@ async function getAllCMoons() {
       select: {
         id: true, name: true, color: true, memberCount: true, imagePath: true, avatarPath: true,
         effectType: true, joinLocked: true, showOnNav: true, buttonImagePath: true, showButtonOnPages: true,
+        allowOptOutJoin: true,
       },
     })
     cachedAt = now
