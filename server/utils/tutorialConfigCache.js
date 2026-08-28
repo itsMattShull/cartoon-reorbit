@@ -3,7 +3,10 @@
 // handful of times a year, read on every page view.
 // Import this from both tutorial/index.get.js and any route that needs to bust it.
 
-export const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
+// Not exported — Nuxt auto-imports every named export in server/utils/*.js by
+// convention, and activeSaleCache.js/upgradesConfigCache.js each already
+// export their own same-named constant, so exporting this one collides.
+const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
 
 let _cache = null
 let _cacheAt = 0

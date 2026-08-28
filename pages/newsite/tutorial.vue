@@ -53,7 +53,12 @@ definePageMeta({
   showAdbar: true,
   showNav: true,
   title: 'How to Play',
-  description: 'New to Cartoon ReOrbit? Learn how auctions, trading, cMoons, cMart, games, and cWorld work, plus how to earn points every day.'
+  description: 'New to Cartoon ReOrbit? Learn how auctions, trading, cMoons, cMart, games, and cWorld work, plus how to earn points every day.',
+  // The fixed-chrome `.main-content` box is `overflow: hidden` by default
+  // (layouts/newsite-template.vue) — nine expandable sections plus a hero
+  // image can push this well past that fixed height (same reasoning as
+  // pages/newsite/cmoon-nav.vue).
+  mainContentScrollY: true
 })
 
 const { clearSidebarMiddle } = useNewsiteLayout()
@@ -89,9 +94,10 @@ html.newsite-tutorial body {
 
 <style scoped>
 .tutorial-wrap {
+  /* mainContentScrollY (page meta) makes the ancestor .main-content the
+     scroll container — no independent height/overflow here, or content gets
+     clipped inside a second, shorter scroll box nested in the real one. */
   width: 100%;
-  height: 100%;
-  overflow-y: auto;
   box-sizing: border-box;
   padding: 12px;
 }
