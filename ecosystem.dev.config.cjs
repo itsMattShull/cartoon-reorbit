@@ -26,6 +26,10 @@ module.exports = {
       args:      'dev',
       exec_mode: 'fork',
       instances: 1,
+      // Disabled: PM2's pmx/require-in-the-middle require() hook mis-resolves
+      // dual ESM/CJS packages (e.g. sanitize-html -> htmlparser2), causing
+      // ERR_REQUIRE_ESM crashes that don't happen under plain `npm start`.
+      pmx:       false,
       env: {
         NODE_ENV:          'development',
         NITRO_PORT:        NUXT_PORT,

@@ -52,6 +52,10 @@ module.exports = {
       script:             '.output/server/index.mjs',
       exec_mode:          'cluster',
       instances:          2,
+      // Disabled: PM2's pmx/require-in-the-middle require() hook mis-resolves
+      // dual ESM/CJS packages (e.g. sanitize-html -> htmlparser2), causing
+      // ERR_REQUIRE_ESM crashes that don't happen under plain `npm start`.
+      pmx:                false,
       // Graceful reload: PM2 waits for process.send('ready') before swapping
       wait_ready:         true,
       listen_timeout:     15000,   // ms to wait for 'ready' signal
