@@ -10,7 +10,7 @@
 // members) — this page and the team leaderboard page turned out to be the
 // same page, so their data lives in one endpoint rather than two competing
 // per-cMoon routes.
-import { defineEventHandler, createError } from 'h3'
+import { defineEventHandler, createError, setHeader } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { EXCLUDED_SYSTEM_USER_ID } from '@/server/utils/economyValuation'
 import { getPollResults } from '@/server/utils/cmoon'
@@ -24,6 +24,10 @@ export default defineEventHandler(async (event) => {
 
   const id = event.context.params?.id
   if (!id) throw createError({ statusCode: 400, statusMessage: 'Missing cMoon id' })
+
+  // Reflects live per-user state (poll myVote/results, offer eligibility elsewhere) — never safe
+  // for an intermediary (CDN, reverse proxy) to cache and reuse across users or requests.
+  setHeader(event, 'Cache-Control', 'no-store')
 
   const cmoon = await db.cMoon.findUnique({
     where: { id },
