@@ -3,9 +3,19 @@
     <div v-if="loading" class="cmp-status">Loading…</div>
     <div v-else-if="error" class="cmp-status cmp-status--error">{{ error }}</div>
     <template v-else-if="cmoon">
-      <div class="cmp-banner">
-        <h1 class="cmp-title">{{ cmoon.name }}</h1>
-        <p class="cmp-member-count">{{ cmoon.memberCount.toLocaleString() }} member{{ cmoon.memberCount === 1 ? '' : 's' }}</p>
+      <div class="cmp-masthead-wrap">
+        <img
+          v-if="cmoon.pageBannerImagePath"
+          :src="cmoon.pageBannerImagePath"
+          :alt="`${cmoon.name} cMoon`"
+          class="cmp-masthead-img"
+          loading="eager"
+          fetchpriority="high"
+        />
+        <div v-else class="cmp-banner">
+          <h1 class="cmp-title">{{ cmoon.name }}</h1>
+          <p class="cmp-member-count">{{ cmoon.memberCount.toLocaleString() }} member{{ cmoon.memberCount === 1 ? '' : 's' }}</p>
+        </div>
       </div>
 
       <div class="cmp-body">
@@ -20,35 +30,47 @@
           </div>
         </div>
 
-        <div class="cmp-image-wrap">
-          <img
-            v-if="cmoon.pageImagePath"
-            :src="cmoon.pageImagePath"
-            :alt="`${cmoon.name} cMoon`"
-            class="cmp-image"
-          />
-          <div v-else class="cmp-image-placeholder">No image uploaded yet</div>
-        </div>
+        <!-- Featured cToons comes first in the markup (the page's visual centerpiece) so a
+             narrow/stacked layout shows it before the leaderboard panel; a wide container
+             reorders them side by side via the container query below. -->
+        <div class="cmp-middle-row">
+          <section class="cmp-panel cmp-featured-panel">
+            <h2 class="cmp-section-title">Featured cToons</h2>
+            <div v-if="!cmoon.featuredCtoons.length" class="cmp-empty">No cToons are featured under this cMoon yet.</div>
+            <div v-else class="cmp-grid">
+              <button
+                v-for="c in cmoon.featuredCtoons"
+                :key="c.id"
+                type="button"
+                class="cmp-card"
+                @click="openInfo(c)"
+              >
+                <img :src="c.assetPath" :alt="c.name" class="cmp-card-img" loading="lazy" />
+                <span class="cmp-card-name">{{ c.name }}</span>
+              </button>
+            </div>
+          </section>
 
-        <p v-if="cmoon.pageDescription" class="cmp-description">{{ cmoon.pageDescription }}</p>
-
-        <h2 class="cmp-section-title">cToons ({{ cmoon.ctoonCount.toLocaleString() }})</h2>
-        <div v-if="!cmoon.ctoons.length" class="cmp-empty">No cToons are displayed under this cMoon yet.</div>
-        <div v-else class="cmp-grid">
-          <button
-            v-for="c in cmoon.ctoons"
-            :key="c.id"
-            type="button"
-            class="cmp-card"
-            @click="openInfo(c)"
-          >
-            <img :src="c.assetPath" :alt="c.name" class="cmp-card-img" loading="lazy" />
-            <span class="cmp-card-name">{{ c.name }}</span>
-          </button>
+          <section class="cmp-panel cmp-leaderboard-panel">
+            <h2 class="cmp-section-title">cMoon Leaderboard</h2>
+            <select v-model="leaderboardView" class="cmp-leaderboard-select">
+              <option value="points">Top Point Contributors</option>
+              <option value="rank">Top Ranking Members</option>
+            </select>
+            <div v-if="!leaderboardRows.length" class="cmp-empty">No members yet.</div>
+            <div v-else class="cmp-members">
+              <NuxtLink
+                v-for="m in leaderboardRows" :key="m.username"
+                :to="`/newsite/czone/${m.username}`"
+                class="cmp-member"
+              >
+                <img :src="`/avatars/${m.avatar || 'default.png'}`" class="cmp-member-avatar" alt="" />
+                <span class="cmp-member-name">{{ m.username }}</span>
+                <span class="cmp-member-points">{{ leaderboardView === 'points' ? `${m.points.toLocaleString()} pts` : m.rankName }}</span>
+              </NuxtLink>
+            </div>
+          </section>
         </div>
-        <p v-if="cmoon.ctoonsTruncated" class="cmp-truncated-note">
-          Showing the first {{ cmoon.ctoons.length.toLocaleString() }} of {{ cmoon.ctoonCount.toLocaleString() }} cToons.
-        </p>
 
         <template v-if="cmoon.captains.length">
           <h2 class="cmp-section-title">Captains</h2>
@@ -60,6 +82,64 @@
             >{{ name }}</NuxtLink>
           </div>
         </template>
+
+        <!-- Bottom row: description on the left, poll + button-pills stacked on the right. -->
+        <div class="cmp-bottom-row">
+          <section class="cmp-panel cmp-description-panel">
+            <h2 v-if="cmoon.pageDescription" class="cmp-section-title">About</h2>
+            <p v-if="cmoon.pageDescription" class="cmp-description">{{ cmoon.pageDescription }}</p>
+            <p v-else class="cmp-empty">No description yet.</p>
+          </section>
+
+          <section class="cmp-panel cmp-poll-buttons-panel">
+            <template v-if="cmoon.poll">
+              <h2 class="cmp-section-title">{{ cmoon.poll.question }}</h2>
+              <div v-if="cmoon.poll.myVote" class="cmp-poll-results">
+                <div v-for="opt in cmoon.poll.options" :key="opt.id" class="cmp-poll-result-row">
+                  <span class="cmp-poll-result-label">
+                    {{ opt.label }}
+                    <span v-if="opt.id === cmoon.poll.myVote" aria-hidden="true">✓</span>
+                  </span>
+                  <div class="cmp-poll-result-bar-track">
+                    <div class="cmp-poll-result-bar-fill" :style="{ width: pollResultPercent(opt.id) + '%' }"></div>
+                  </div>
+                  <span class="cmp-poll-result-pct">{{ pollResultPercent(opt.id) }}%</span>
+                </div>
+              </div>
+              <template v-else>
+                <div class="cmp-poll-options" role="radiogroup">
+                  <button
+                    v-for="opt in cmoon.poll.options" :key="opt.id"
+                    type="button"
+                    class="cmp-poll-option"
+                    :class="{ 'cmp-poll-option--selected': pollChoice === opt.id }"
+                    role="radio"
+                    :aria-checked="pollChoice === opt.id"
+                    @click="pollChoice = opt.id"
+                  >{{ opt.label }}</button>
+                </div>
+                <button
+                  type="button"
+                  class="cmp-poll-vote-btn"
+                  :disabled="!pollChoice || pollSubmitting"
+                  @click="voteOnPoll"
+                >{{ pollSubmitting ? 'Voting…' : 'Vote' }}</button>
+                <p v-if="pollError" class="cmp-offer-error">{{ pollError }}</p>
+              </template>
+            </template>
+            <p v-else class="cmp-empty">No poll right now.</p>
+
+            <div v-if="buttonPills.length" class="cmp-button-pills">
+              <NuxtLink
+                v-for="b in buttonPills" :key="b.id"
+                :to="`/newsite/cmoon/${b.id}`"
+                class="cmp-button-pill-link"
+              >
+                <img :src="b.buttonImagePath" :alt="`${b.name} cMoon`" class="cmp-button-pill-img" loading="lazy" />
+              </NuxtLink>
+            </div>
+          </section>
+        </div>
 
         <template v-if="cmoon.prizeCtoons.length">
           <h2 class="cmp-section-title">Prize cToons</h2>
@@ -107,20 +187,6 @@
             <p v-if="offerErrors[o.id]" class="cmp-offer-error">{{ offerErrors[o.id] }}</p>
           </div>
         </template>
-
-        <h2 class="cmp-section-title">Top Members</h2>
-        <div v-if="!cmoon.topMembers.length" class="cmp-empty">No members yet.</div>
-        <div v-else class="cmp-members">
-          <NuxtLink
-            v-for="m in cmoon.topMembers" :key="m.username"
-            :to="`/newsite/czone/${m.username}`"
-            class="cmp-member"
-          >
-            <img :src="`/avatars/${m.avatar || 'default.png'}`" class="cmp-member-avatar" alt="" />
-            <span class="cmp-member-name">{{ m.username }}</span>
-            <span class="cmp-member-points">{{ m.points.toLocaleString() }} pts</span>
-          </NuxtLink>
-        </div>
       </div>
     </template>
   </div>
@@ -137,12 +203,51 @@ const { open: openCtoonModal } = useCtoonModal()
 const loading = ref(true)
 const error = ref('')
 const cmoon = ref(null)
+const buttonPills = ref([])
 
 const offers = ref([])
 const eligible = ref(false)
 const offerSelections = reactive({})
 const offerClaiming = reactive({})
 const offerErrors = reactive({})
+
+const leaderboardView = ref('points')
+const leaderboardRows = computed(() => {
+  if (!cmoon.value) return []
+  return leaderboardView.value === 'points' ? cmoon.value.topPointContributors : cmoon.value.topRankMembers
+})
+
+const pollChoice = ref(null)
+const pollSubmitting = ref(false)
+const pollError = ref('')
+
+function pollResultPercent(optionId) {
+  const results = cmoon.value?.poll?.results
+  if (!results) return 0
+  const total = results.reduce((sum, r) => sum + r.count, 0)
+  if (!total) return 0
+  const row = results.find(r => r.optionId === optionId)
+  return Math.round(((row?.count || 0) / total) * 100)
+}
+
+async function voteOnPoll() {
+  if (!pollChoice.value || pollSubmitting.value || !cmoon.value) return
+  pollSubmitting.value = true
+  pollError.value = ''
+  try {
+    await $fetch(`/api/cmoon/${encodeURIComponent(cmoon.value.id)}/poll-vote`, {
+      method: 'POST',
+      body: { optionId: pollChoice.value },
+    })
+    // Refreshes the whole page payload rather than hand-patching poll state locally — the vote
+    // tally (getPollResults) is cached server-side, so this stays cheap.
+    await load(cmoon.value.id)
+  } catch (err) {
+    pollError.value = err?.data?.statusMessage || 'Failed to submit your vote'
+  } finally {
+    pollSubmitting.value = false
+  }
+}
 
 const paletteStyle = computed(() => cmoon.value ? cMoonPaletteStyle(cmoon.value.color) : {})
 
@@ -162,6 +267,15 @@ async function loadOffers(id) {
   } catch {
     offers.value = []
     eligible.value = false
+  }
+}
+
+async function loadButtonPills(id) {
+  try {
+    const res = await $fetch('/api/cmoons', { params: { view: 'buttons', excludeId: id } })
+    buttonPills.value = res?.cmoons || []
+  } catch {
+    buttonPills.value = []
   }
 }
 
@@ -189,9 +303,11 @@ async function load(id) {
   if (!id) return
   loading.value = true
   error.value = ''
+  pollChoice.value = null
+  pollError.value = ''
   try {
     cmoon.value = await $fetch(`/api/cmoon/${encodeURIComponent(id)}`)
-    await loadOffers(id)
+    await Promise.all([loadOffers(id), loadButtonPills(id)])
   } catch (err) {
     cmoon.value = null
     error.value = err?.data?.statusMessage || 'Failed to load this cMoon.'
@@ -217,6 +333,21 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
 }
 .cmp-status--error { color: #fca5a5; }
 
+.cmp-masthead-wrap {
+  width: 100%;
+}
+
+/* Height clamp rather than a locked aspect-ratio box: the source art is a very wide, short strip
+   (~12:1) — locking that ratio at a narrow phone width would shrink it to a barely-visible sliver.
+   Clamping height instead means the image crops at the sides on a narrow screen rather than
+   collapsing — admins should keep name/logo art centered, since the edges crop first. */
+.cmp-masthead-img {
+  display: block;
+  width: 100%;
+  height: clamp(48px, 14vw, 100px);
+  object-fit: cover;
+}
+
 .cmp-banner {
   background: var(--cm-banner, var(--OrbitDarkBlue));
   color: var(--cm-banner-text, #ffffff);
@@ -237,7 +368,13 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   opacity: 0.85;
 }
 
+/* Container query, not a viewport media query: `.site-container` in layouts/newsite-template.vue
+   applies transform:scale() on desktop, which desyncs real viewport width from this element's
+   actual rendered width — the same reason CMoonSelectModal.vue/CMoonNav.vue use auto-fit grids
+   instead of breakpoints, and AuctionHouse.vue already uses container queries for exactly this. */
 .cmp-body {
+  container-type: inline-size;
+  container-name: cmp-pane;
   padding: 16px;
   background: var(--cm-bg, transparent);
   color: var(--cm-text, #ffffff);
@@ -265,37 +402,28 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   font-weight: 800;
 }
 
-/* 800x600 (4:3), same resolution as a cZone background. */
-.cmp-image-wrap {
-  width: 100%;
-  max-width: 800px;
-  aspect-ratio: 4 / 3;
-  margin: 0 auto 16px;
-  border-radius: 6px;
-  overflow: hidden;
-  background: var(--cm-tile-bg, rgba(255,255,255,0.08));
-}
-@supports not (aspect-ratio: 4 / 3) {
-  .cmp-image-wrap { height: 0; padding-bottom: 75%; position: relative; }
-  .cmp-image-wrap .cmp-image,
-  .cmp-image-wrap .cmp-image-placeholder { position: absolute; inset: 0; }
+.cmp-panel {
+  min-width: 0;
 }
 
-.cmp-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
-.cmp-image-placeholder {
-  width: 100%;
-  height: 100%;
+.cmp-middle-row,
+.cmp-bottom-row {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--cm-text-muted, rgba(255,255,255,0.6));
-  font-size: 0.9rem;
+  flex-direction: column;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+/* Side-by-side once the pane is wide enough to fit both comfortably — leaderboard first (left),
+   featured cToons second (right), even though featured cToons comes first in the DOM (so a
+   stacked/narrow layout shows the centerpiece grid before the leaderboard). */
+@container cmp-pane (min-width: 640px) {
+  .cmp-middle-row { flex-direction: row; align-items: flex-start; }
+  .cmp-featured-panel { order: 2; flex: 1 1 auto; }
+  .cmp-leaderboard-panel { order: 1; flex: 0 0 240px; }
+  .cmp-bottom-row { flex-direction: row; align-items: flex-start; }
+  .cmp-description-panel { flex: 1 1 auto; }
+  .cmp-poll-buttons-panel { flex: 0 0 260px; }
 }
 
 .cmp-description {
@@ -303,7 +431,7 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   overflow-wrap: anywhere;
   font-size: 0.95rem;
   line-height: 1.5;
-  margin: 0 0 20px;
+  margin: 0;
 }
 
 .cmp-section-title {
@@ -319,12 +447,11 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
 
 .cmp-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  /* auto-fit off the container's own rendered width (see the .cmp-body comment above) — settles
+     into ~6 columns for a 12-item grid on a wide pane, fewer on a narrow one, with no viewport
+     breakpoint to keep in sync. */
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
   gap: 8px;
-}
-
-@media (max-width: 768px) {
-  .cmp-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 .cmp-card {
@@ -343,7 +470,9 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   min-height: 44px;
   box-sizing: border-box;
 }
-.cmp-card:hover { opacity: 0.85; }
+@media (hover: hover) and (pointer: fine) {
+  .cmp-card:hover { opacity: 0.85; }
+}
 .cmp-card:focus-visible { outline: 2px solid var(--cm-focus-ring, var(--OrbitLightBlue)); outline-offset: 1px; }
 
 .cmp-card-img {
@@ -358,16 +487,24 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   overflow-wrap: anywhere;
 }
 
-.cmp-truncated-note {
-  margin-top: 12px;
-  font-size: 0.8rem;
-  color: var(--cm-text-muted, rgba(255,255,255,0.6));
-}
-
 .cmp-card--static {
   cursor: default;
 }
-.cmp-card--static:hover { opacity: 1; }
+@media (hover: hover) and (pointer: fine) {
+  .cmp-card--static:hover { opacity: 1; }
+}
+
+.cmp-leaderboard-select {
+  width: 100%;
+  min-height: 44px;
+  margin-bottom: 10px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--cm-tile-bg, rgba(255,255,255,0.2));
+  background: var(--cm-tile-bg, rgba(255,255,255,0.08));
+  color: var(--cm-text, #ffffff);
+  font-size: 0.9rem;
+}
 
 .cmp-offer {
   margin-bottom: 24px;
@@ -387,7 +524,9 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   cursor: default;
   opacity: 0.55;
 }
-.cmp-offer-option:disabled:hover { opacity: 0.55; }
+@media (hover: hover) and (pointer: fine) {
+  .cmp-offer-option:disabled:hover { opacity: 0.55; }
+}
 
 .cmp-offer-option--selected {
   border-color: var(--cm-focus-ring, var(--OrbitLightBlue));
@@ -422,7 +561,9 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   opacity: 0.5;
   cursor: default;
 }
-.cmp-offer-claim-btn:not(:disabled):hover { opacity: 0.9; }
+@media (hover: hover) and (pointer: fine) {
+  .cmp-offer-claim-btn:not(:disabled):hover { opacity: 0.9; }
+}
 
 .cmp-offer-error {
   margin: 8px 0 0;
@@ -449,15 +590,18 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   font-size: 0.95rem;
   font-weight: 600;
 }
-.cmp-captain-link:hover { opacity: 0.85; }
+@media (hover: hover) and (pointer: fine) {
+  .cmp-captain-link:hover { opacity: 0.85; }
+}
 .cmp-captain-link:focus-visible { outline: 2px solid var(--cm-focus-ring, var(--OrbitLightBlue)); outline-offset: 1px; }
 
 .cmp-members {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  max-height: 360px;
+  max-height: 320px;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .cmp-member {
@@ -469,8 +613,12 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   text-decoration: none;
   color: var(--cm-link-text, #ffffff);
   min-width: 0;
+  min-height: 44px;
+  box-sizing: border-box;
 }
-.cmp-member:hover { background: var(--cm-tile-bg, rgba(255,255,255,0.08)); }
+@media (hover: hover) and (pointer: fine) {
+  .cmp-member:hover { background: var(--cm-tile-bg, rgba(255,255,255,0.08)); }
+}
 .cmp-member:focus-visible { outline: 2px solid var(--cm-focus-ring, var(--OrbitLightBlue)); outline-offset: 1px; }
 
 .cmp-member-avatar {
@@ -496,6 +644,109 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   flex-shrink: 0;
   font-size: 0.8rem;
   font-weight: 700;
+}
+
+.cmp-poll-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.cmp-poll-option {
+  min-height: 44px;
+  padding: 0 14px;
+  border: 2px solid var(--cm-tile-bg, rgba(255,255,255,0.15));
+  border-radius: 6px;
+  background: var(--cm-tile-bg, rgba(255,255,255,0.08));
+  color: var(--cm-text, #ffffff);
+  text-align: left;
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.cmp-poll-option--selected {
+  border-color: var(--cm-focus-ring, var(--OrbitLightBlue));
+}
+.cmp-poll-option:focus-visible { outline: 2px solid var(--cm-focus-ring, var(--OrbitLightBlue)); outline-offset: 1px; }
+
+.cmp-poll-vote-btn {
+  width: 100%;
+  min-height: 44px;
+  border: none;
+  border-radius: 6px;
+  background: var(--cm-banner, var(--OrbitLightBlue));
+  color: var(--cm-banner-text, #ffffff);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.cmp-poll-vote-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.cmp-poll-results {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.cmp-poll-result-row {
+  display: grid;
+  grid-template-columns: 1fr 34px;
+  gap: 2px 8px;
+  align-items: center;
+}
+
+.cmp-poll-result-label {
+  font-size: 0.85rem;
+  grid-column: 1 / -1;
+}
+
+.cmp-poll-result-bar-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--cm-tile-bg, rgba(255,255,255,0.12));
+  overflow: hidden;
+}
+
+.cmp-poll-result-bar-fill {
+  height: 100%;
+  background: var(--cm-focus-ring, var(--OrbitLightBlue));
+}
+
+.cmp-poll-result-pct {
+  font-size: 0.75rem;
+  text-align: right;
+  opacity: 0.85;
+}
+
+.cmp-button-pills {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.cmp-button-pill-link {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.cmp-button-pill-link:focus-visible {
+  outline: 2px solid var(--cm-focus-ring, var(--OrbitLightBlue));
+  outline-offset: 2px;
+}
+
+.cmp-button-pill-img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: 44px;
+  aspect-ratio: 232 / 62;
+  object-fit: contain;
 }
 
 @media (max-width: 480px) {

@@ -4,6 +4,10 @@
       <button type="button" class="cmn-back" @click="goBack">← Back</button>
       <h1 class="cmn-title">cMoons</h1>
       <p class="cmn-sub">Click on the cMoon you want to visit.</p>
+      <button v-if="showJoinCta" type="button" class="cmn-join-btn" @click="requestOpen">
+        Join a cMoon
+      </button>
+      <p v-else-if="cooldownText" class="cmn-cooldown">{{ cooldownText }}</p>
     </div>
 
     <div v-if="loading" class="cmn-status">Loading…</div>
@@ -44,20 +48,41 @@ const router = useRouter()
 const loading = ref(true)
 const error = ref('')
 const cmoons = ref([])
+// Whether to show "Join a cMoon" — true for anyone without a cMoon yet, whether they explicitly
+// opted out of the join modal or just never saw it (feature disabled, logged out, etc.), AND not
+// currently sitting out an admin-configured rejoin cooldown (see cooldownText below). Clicking it
+// force-reopens the same globally-mounted CMoonSelectModal.vue via the shared composable.
+const showJoinCta = ref(false)
+// Set only while a rejoin cooldown is actively blocking this user — shown in the button's place
+// so the page never looks broken (silently missing the CTA) once eligible.
+const cooldownText = ref('')
+const { requestOpen } = useCMoonJoinModal()
 
 function goBack() {
   router.push('/newsite/MycWorld')
 }
 
+const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+
 onMounted(async () => {
-  try {
-    const data = await $fetch('/api/cmoons', { params: { view: 'nav' } })
-    cmoons.value = data?.cmoons || []
-  } catch {
+  const [listResult, statusResult] = await Promise.allSettled([
+    $fetch('/api/cmoons', { params: { view: 'nav' } }),
+    $fetch('/api/cmoon/status'),
+  ])
+  if (listResult.status === 'fulfilled') {
+    cmoons.value = listResult.value?.cmoons || []
+  } else {
     error.value = 'Unable to load cMoons right now.'
-  } finally {
-    loading.value = false
   }
+  if (statusResult.status === 'fulfilled') {
+    const status = statusResult.value
+    const hasNoCMoon = !!status?.cMoonEnabled && !status.cMoon
+    const rejoinAt = status?.cMoonRejoinAvailableAt ? new Date(status.cMoonRejoinAvailableAt) : null
+    const inCooldown = !!(rejoinAt && rejoinAt > new Date())
+    showJoinCta.value = hasNoCMoon && !inCooldown
+    cooldownText.value = (hasNoCMoon && inCooldown) ? `You can rejoin a cMoon on ${dateFormatter.format(rejoinAt)}.` : ''
+  }
+  loading.value = false
 })
 </script>
 
@@ -116,6 +141,33 @@ onMounted(async () => {
 .cmn-sub {
   margin: 6px 0 0;
   font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.cmn-join-btn {
+  margin: 12px auto 0;
+  display: block;
+  min-height: 44px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 8px;
+  background: #256e45;
+  color: #fff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .cmn-join-btn:hover { background: #2e8b57; }
+}
+.cmn-join-btn:focus-visible {
+  outline: 3px solid #ffd75e;
+  outline-offset: 2px;
+}
+
+.cmn-cooldown {
+  margin: 12px 0 0;
+  font-size: 0.78rem;
   color: rgba(255, 255, 255, 0.65);
 }
 

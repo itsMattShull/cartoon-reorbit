@@ -267,8 +267,7 @@ async function enqueueCtoonJobs(userId, ctoonJobs, method) {
 
 // Grants a cMoon rank if it outranks the user's current rank for that same cMoon. Locks the
 // user row (FOR UPDATE) so two concurrent rank-ups for the same user can't both read a stale
-// "current rank" and race — mirrors the FOR UPDATE pattern in server/utils/cmoon.js's
-// assignSmallestCMoonToUser. Returns { id, name } if a new rank was granted, else null (no
+// "current rank" and race. Returns { id, name } if a new rank was granted, else null (no
 // rank achieved yet — the user's already at/above it, or they've since left that cMoon).
 async function grantCMoonRank(tx, userId, cMoonRankId) {
   const newRank = await tx.cMoonRank.findUnique({
