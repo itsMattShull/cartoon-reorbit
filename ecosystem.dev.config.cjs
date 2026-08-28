@@ -31,10 +31,10 @@ module.exports = {
       // ERR_REQUIRE_ESM crashes that don't happen under plain `npm start`.
       pmx:       false,
       env: {
+        ...process.env,
         NODE_ENV:          'development',
         NITRO_PORT:        NUXT_PORT,
         NUXT_PORT:         NUXT_PORT,
-        IP_ENCRYPTION_KEY: process.env.IP_ENCRYPTION_KEY,
         OFFICIAL_USERNAME,
       },
     },
@@ -46,6 +46,7 @@ module.exports = {
       exec_mode: 'fork',
       instances: 1,
       env: {
+        ...process.env,
         NODE_ENV:        'development',
         SOCKET_PORT:     SOCKET_PORT,
         OFFICIAL_USERNAME,
@@ -58,7 +59,7 @@ module.exports = {
       script:    'server/workers/mint.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'development', OFFICIAL_USERNAME },
+      env: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME },
     },
 
     // ── BullMQ worker: account dissolution ────────────────────────────────
@@ -67,7 +68,7 @@ module.exports = {
       script:    'server/workers/dissolve.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'development', OFFICIAL_USERNAME },
+      env: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME },
     },
 
     // ── BullMQ worker: dissolve auction launch ────────────────────────────
@@ -76,7 +77,7 @@ module.exports = {
       script:    'server/workers/dissolve-auction-launch.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'development', OFFICIAL_USERNAME },
+      env: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME },
     },
 
     // ── BullMQ worker: admin user-to-user asset transfer ──────────────────
@@ -85,7 +86,7 @@ module.exports = {
       script:    'server/workers/transfer.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'development', OFFICIAL_USERNAME },
+      env: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME },
     },
 
     // ── BullMQ worker: daily achievements ─────────────────────────────────
@@ -94,7 +95,7 @@ module.exports = {
       script:    'server/workers/achievements.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'development', OFFICIAL_USERNAME },
+      env: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME },
     },
 
     // ── Cron: Discord guild member sync ───────────────────────────────────
@@ -103,7 +104,7 @@ module.exports = {
       script:    'server/cron/sync-guild-members.js',
       exec_mode: 'fork',
       instances: 1,
-      env: { NODE_ENV: 'development', OFFICIAL_USERNAME },
+      env: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME },
     },
   ],
 }
