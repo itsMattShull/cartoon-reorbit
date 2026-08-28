@@ -2507,13 +2507,6 @@ model HomepageConfig {
   updatedAt               DateTime @updatedAt
 }
 
-model TutorialConfig {
-  id            String   @id
-  heroImagePath String?
-  sections      Json     @default("{}")
-  updatedAt     DateTime @updatedAt
-}
-
 model AdImage {
   id        String   @id @default(uuid())
   imagePath String   @unique
