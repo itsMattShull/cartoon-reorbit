@@ -67,6 +67,7 @@ export const ADMIN_SECTIONS = [
   S('homepage', 'Manage Homepage', 'content', legacy('AdminLegacyHomepage')),
   S('announcements', 'Announcements', 'content', legacy('AdminLegacyAnnouncements')),
   S('ads', 'Manage Ads', 'content', legacy('AdminLegacyAds')),
+  S('tutorial', 'Manage Tutorial', 'content', nu('AdminManageTutorial')),
 
   // ── Economy ─────────────────────────────────────────────────
   S('manageSales', 'Manage Sales', 'economy', nu('AdminManageSales')),
