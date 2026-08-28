@@ -42,7 +42,7 @@ export default defineEventHandler(async (event) => {
     // `captains` relations that pull full User rows (Discord tokens, email);
     // this endpoint must only ever expose the same public-safe fields as the
     // cMoon-themed modal card needs.
-    cMoon: { select: { id: true, name: true, color: true, bannerImagePath: true } }
+    cMoon: { select: { id: true, name: true, color: true, buttonImagePath: true } }
   }
 
   if (userCtoonId?.startsWith('uc|')) {

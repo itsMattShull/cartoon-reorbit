@@ -41,8 +41,8 @@
                 <input v-model="bulk.set" @input="applyBulk('set', bulk.set)" list="bulk-sets-list"
                   placeholder="— no change —"
                   class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
-                <datalist id="bulk-sets-list">
-                  <option v-for="opt in setsOptions" :key="opt" :value="opt" />
+                <datalist v-if="bulk.set.length >= 3" id="bulk-sets-list">
+                  <option v-for="opt in filterOptions(setsOptions, bulk.set)" :key="opt" :value="opt" />
                 </datalist>
               </div>
 
@@ -52,9 +52,19 @@
                 <input v-model="bulk.series" @input="applyBulk('series', bulk.series)" list="bulk-series-list"
                   placeholder="— no change —"
                   class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm" />
-                <datalist id="bulk-series-list">
-                  <option v-for="opt in seriesOptions" :key="opt" :value="opt" />
+                <datalist v-if="bulk.series.length >= 3" id="bulk-series-list">
+                  <option v-for="opt in filterOptions(seriesOptions, bulk.series)" :key="opt" :value="opt" />
                 </datalist>
+              </div>
+
+              <!-- cMoon -->
+              <div>
+                <label class="block text-sm font-medium mb-1">cMoon</label>
+                <select v-model="bulk.cMoonId" @change="applyBulk('cMoonId', bulk.cMoonId)" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
+                  <option value="">— no change —</option>
+                  <option value="__none__">— None (remove) —</option>
+                  <option v-for="cm in cmoons" :key="cm.id" :value="cm.id">{{ cm.name }}</option>
+                </select>
               </div>
 
               <!-- Price -->
@@ -191,8 +201,8 @@
                     <label class="block text-xs font-medium text-gray-500 mb-1">Set</label>
                     <input v-model="row.current.set" :list="`sets-list-${i}`"
                       :class="['w-full border rounded px-2 py-1.5 text-sm', fieldChanged(row, 'set') ? 'border-yellow-400 bg-yellow-50' : 'border-gray-300']" />
-                    <datalist :id="`sets-list-${i}`">
-                      <option v-for="opt in setsOptions" :key="opt" :value="opt" />
+                    <datalist v-if="row.current.set.length >= 3" :id="`sets-list-${i}`">
+                      <option v-for="opt in filterOptions(setsOptions, row.current.set)" :key="opt" :value="opt" />
                     </datalist>
                   </div>
 
@@ -201,9 +211,19 @@
                     <label class="block text-xs font-medium text-gray-500 mb-1">Series</label>
                     <input v-model="row.current.series" :list="`series-list-${i}`"
                       :class="['w-full border rounded px-2 py-1.5 text-sm', fieldChanged(row, 'series') ? 'border-yellow-400 bg-yellow-50' : 'border-gray-300']" />
-                    <datalist :id="`series-list-${i}`">
-                      <option v-for="opt in seriesOptions" :key="opt" :value="opt" />
+                    <datalist v-if="row.current.series.length >= 3" :id="`series-list-${i}`">
+                      <option v-for="opt in filterOptions(seriesOptions, row.current.series)" :key="opt" :value="opt" />
                     </datalist>
+                  </div>
+
+                  <!-- cMoon -->
+                  <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">cMoon</label>
+                    <select v-model="row.current.cMoonId"
+                      :class="['w-full border rounded px-2 py-1.5 text-sm bg-white', fieldChanged(row, 'cMoonId') ? 'border-yellow-400 bg-yellow-50' : 'border-gray-300']">
+                      <option :value="null">— None —</option>
+                      <option v-for="cm in cmoons" :key="cm.id" :value="cm.id">{{ cm.name }}</option>
+                    </select>
                   </div>
 
                   <!-- Price -->
@@ -328,12 +348,14 @@ const loading = ref(true)
 const saving = ref(false)
 const rows = ref([])
 const rarityDefaults = ref(null)
+const cmoons = ref([])
 
 // Bulk apply section — null means "no change applied yet"
 const bulk = reactive({
   rarity: '',
   set: '',
   series: '',
+  cMoonId: '',
   inCmart: null,
   codeOnly: null,
   price: null,
@@ -386,6 +408,15 @@ function localToUtcIso(localStr) {
   return new Date(`${datePart}T${timePart}:00${offset}`).toISOString()
 }
 
+// ── Set/Series autocomplete ────────────────────────────────────────────
+// Only surface suggestions once the user has typed ≥3 chars, matching
+// the other cToon create/edit forms' set/series autocomplete behavior.
+function filterOptions(list, query) {
+  const q = String(query || '').trim().toLowerCase()
+  if (q.length < 3) return []
+  return list.filter(opt => opt.toLowerCase().includes(q))
+}
+
 // ── Price helpers ─────────────────────────────────────────────────────
 function rarityPrice(rarity) {
   const d = rarityDefaults.value?.[rarity]
@@ -396,7 +427,7 @@ function rarityPrice(rarity) {
 // ── Load data ────────────────────────────────────────────────────────
 onMounted(async () => {
   try {
-    const [detailsRes, rdRes] = await Promise.all([
+    const [detailsRes, rdRes, cmoonsRes] = await Promise.all([
       fetch('/api/admin/ctoons/bulk-details', {
         method: 'POST',
         credentials: 'include',
@@ -404,11 +435,17 @@ onMounted(async () => {
         body: JSON.stringify({ ids: props.ctoonIds }),
       }),
       fetch('/api/rarity-defaults').catch(() => null),
+      fetch('/api/admin/cmoons', { credentials: 'include' }).catch(() => null),
     ])
 
     if (rdRes?.ok) {
       const rdJson = await rdRes.json()
       rarityDefaults.value = rdJson?.defaults || null
+    }
+
+    if (cmoonsRes?.ok) {
+      const cmoonsJson = await cmoonsRes.json()
+      cmoons.value = cmoonsJson?.cmoons || []
     }
 
     if (!detailsRes.ok) throw new Error('Failed to load cToon details')
@@ -424,6 +461,7 @@ onMounted(async () => {
           rarity: c.rarity || '',
           set: c.set || '',
           series: c.series || '',
+          cMoonId: c.cMoonId || null,
           inCmart: Boolean(c.inCmart),
           codeOnly: Boolean(c.codeOnly),
           price: c.price ?? 0,
@@ -482,9 +520,13 @@ function applyDefinedMintDefaults(row) {
 // ── Bulk apply ────────────────────────────────────────────────────────
 function applyBulk(field, value) {
   if (value === '' || value === null || value === undefined) return
+  // '__none__' is the bulk cMoon select's explicit "remove" option — distinct from '' ("no
+  // change") so it can pass the empty-string guard above, then gets translated to a real null
+  // here before landing in row.current.cMoonId.
+  const resolved = (field === 'cMoonId' && value === '__none__') ? null : value
   for (const row of rows.value) {
     const prevMintLimitType = row.current.mintLimitType
-    row.current[field] = value
+    row.current[field] = resolved
     // Auto-price on rarity change
     if (field === 'rarity') {
       row.current.price = rarityPrice(value)
@@ -517,7 +559,7 @@ watch(() => bulk.codeOnly, val => { if (val !== null) applyBulk('codeOnly', val)
 
 // ── Change detection ──────────────────────────────────────────────────
 const COMPARABLE_FIELDS = [
-  'rarity', 'set', 'series', 'inCmart', 'codeOnly', 'price',
+  'rarity', 'set', 'series', 'cMoonId', 'inCmart', 'codeOnly', 'price',
   'perUserLimit', 'quantity', 'initialQuantity',
   'releaseDate', 'mintLimitType', 'mintEndDate',
 ]

@@ -1,8 +1,7 @@
 // server/utils/cmoon.js
-// Shared logic for the cMoon (faction) feature: eligibility/deadline math, atomic
-// self-selection, cron auto-assignment, prize granting, and the weekly team
-// leaderboard scoring. Kept in one place so the feature is easy to rip out later —
-// see GlobalGameConfig.cMoonEnabled.
+// Shared logic for the cMoon (faction) feature: atomic self-selection/opt-out, prize
+// granting, and the weekly team leaderboard scoring. Kept in one place so the feature
+// is easy to rip out later — see GlobalGameConfig.cMoonEnabled.
 import { Prisma } from '@prisma/client'
 import { prisma } from '../prisma.js'
 import { mintQueue } from './queues.js'
@@ -10,24 +9,28 @@ import { getWeekWindowStart } from './centralTime.js'
 import { getChicagoDailyBoundary, getChicagoMorningWindowStart } from './dailyTaskWindows.js'
 import { COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
 import { EXCLUDED_SYSTEM_USER_ID } from './economyValuation.js'
-
-const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000
+import { grantGuildRole, revokeGuildRole } from './discord.js'
 
 // ── Weekly cMoon team leaderboard scoring ──────────────────────────────────────
 //
 // Three bonuses, awarded once per calendar week (Monday 00:00 America/Chicago —
 // see getWeekWindowStart) to whichever cMoon a qualifying player belongs to:
-//   - HIGH_SCORE (100 pts/player): holding rank #1 (all-time) on any arcade game.
-//   - TOP10 (50 pts/player): a top-10 finish on the Top Points or Total cToons board.
-//   - DAILY_TASK (10 pts/player/day): each day that week the player completed at
+//   - HIGH_SCORE (default 100 pts/player): holding rank #1 (all-time) on an eligible arcade game.
+//   - TOP10 (default 50 pts/player): a top-N finish on an eligible board (Top Points / Total cToons).
+//   - DAILY_TASK (default 10 pts/player/day): each day that week the player completed at
 //     least one of the existing daily tasks (recorded by recordDailyTaskCompletions,
 //     run daily — see server/cron/record-daily-task-completions.js).
 //
-// A minimum account age (matching the 3-day cMoon self-selection window) gates all
-// three: a brand-new throwaway account can join a cMoon and immediately inflate its
-// score by camping a low-traffic game's #1 spot or grinding the (cheap) daily tasks.
-// Requiring the account to first survive 3 days raises the cost of that without
-// adding new anti-abuse infrastructure beyond what already exists for selection.
+// All the numbers above, the minimum-account-age anti-abuse gate, which games are
+// HIGH_SCORE-eligible, and which boards/rank-cutoff count for TOP10 are admin-editable
+// (Admin > cMoons > Scoring Rules — see resolveScoringConfig below and
+// server/api/admin/cmoon-scoring.post.js). Changes apply forward-only: they affect
+// only future weekly cron runs, never rewrite past CMoonScoreLog rows/teamScore.
+//
+// A minimum account age (default 3 days) gates all three: a brand-new throwaway account
+// can join a cMoon and immediately inflate its score by camping a low-traffic game's #1
+// spot or grinding the (cheap) daily tasks. Requiring the account to first survive N days
+// raises the cost of that without adding new anti-abuse infrastructure.
 //
 // Awards are logged to CMoonScoreLog, whose unique constraint
 // (cMoonId, userId, category, weekStart, detail) is the only idempotency guard
@@ -36,27 +39,77 @@ const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000
 // CMoon.teamScore is never incremented directly; it is fully recomputed from
 // CMoonScoreLog on every run (see recomputeCMoonTeamScores), so a crash mid-run
 // can leave it briefly stale but never wrong or double-counted.
-const MIN_ACCOUNT_AGE_MS = THREE_DAYS_MS
 
 // Compile-time-constant game definitions — table/column names below are literal
 // SQL text, never runtime/user input (mirrors the convention documented in
-// server/utils/gameLeaderboard.js and server/utils/duelLeaderboard.js).
+// server/utils/gameLeaderboard.js and server/utils/duelLeaderboard.js). Admin
+// "disabled games" config (see resolveScoringConfig) only ever filters this array by
+// `.name` — it must never be used to construct table/column identifiers itself.
 const SCORE_GAMES = [
-  { name: 'reorbitmatch', table: 'ReOrbitMatchScore', column: 'score', direction: 'desc' },
-  { name: 'tower', table: 'TowerStackScore', column: 'score', direction: 'desc' },
-  { name: 'reorbitmemory', table: 'ReOrbitMemoryScore', column: 'moves', direction: 'asc' },
+  { name: 'reorbitmatch', label: 'ReOrbit Match', table: 'ReOrbitMatchScore', column: 'score', direction: 'desc' },
+  { name: 'tower', label: 'Tower Stack', table: 'TowerStackScore', column: 'score', direction: 'desc' },
+  { name: 'reorbitmemory', label: 'ReOrbit Memory', table: 'ReOrbitMemoryScore', column: 'moves', direction: 'asc' },
   {
-    name: 'guessctoon', table: 'GuessCtoonScore', column: 'streak', direction: 'desc',
+    name: 'guessctoon', label: 'Guess cToon', table: 'GuessCtoonScore', column: 'streak', direction: 'desc',
     extraWhere: 'AND s."suspicious" = false AND s."counted" = true'
   },
-  { name: 'asteroid', table: 'AsteroidScore', column: 'score', direction: 'desc' },
-  { name: 'flappy', table: 'FlappyPowerpuffScore', column: 'score', direction: 'desc' },
-  { name: 'fruitsamurai', table: 'FruitSamuraiScore', column: 'score', direction: 'desc' },
+  { name: 'asteroid', label: 'Op. A.S.T.E.R.O.I.D.', table: 'AsteroidScore', column: 'score', direction: 'desc' },
+  { name: 'flappy', label: 'Flappy Powerpuff', table: 'FlappyPowerpuffScore', column: 'score', direction: 'desc' },
+  { name: 'fruitsamurai', label: 'Fruit Samurai', table: 'FruitSamuraiScore', column: 'score', direction: 'desc' },
 ]
 const WIN_GAMES = [
-  { name: 'edrps', table: 'EdRpsMatch' },
-  { name: 'pokemonbattle', table: 'PokemonBattleMatch' },
+  { name: 'edrps', label: 'Ed, Edd n Eddy RPS', table: 'EdRpsMatch' },
+  { name: 'pokemonbattle', label: 'Pokemon: Fire, Water, Grass!', table: 'PokemonBattleMatch' },
 ]
+
+// Read-only key/label lists for the admin UI's per-game eligibility toggles —
+// never used to build SQL, only rendered and echoed back as `.name` filter values.
+export const SCORE_GAME_OPTIONS = SCORE_GAMES.map(({ name, label }) => ({ key: name, label }))
+export const WIN_GAME_OPTIONS = WIN_GAMES.map(({ name, label }) => ({ key: name, label }))
+
+// Defaults mirror the GlobalGameConfig column defaults (see the migration) — used both
+// as the fallback when a value is missing/out-of-range and to document the shape.
+export const CMOON_SCORING_DEFAULTS = {
+  highScorePoints: 100,
+  top10Points: 50,
+  dailyTaskPoints: 10,
+  minAccountAgeDays: 3,
+  top10RankCutoff: 10,
+  top10PointsBoardEnabled: true,
+  top10CtoonsBoardEnabled: true,
+}
+
+function parseDisabledGameKeys(value) {
+  if (!Array.isArray(value)) return []
+  return value.filter(v => typeof v === 'string')
+}
+
+// Normalizes the cMoon-scoring columns on a GlobalGameConfig row into the values the
+// weekly scorer and daily-task recorder actually use, falling back to
+// CMOON_SCORING_DEFAULTS for anything missing or out of range (defends against a
+// pre-migration row, a manually-edited DB value, etc. — the admin API is the only
+// normal write path and already validates before storing).
+// `activeScoreGames`/`activeWinGames` are the ONLY thing disabledScoreGames/disabledWinGames
+// ever do: filter the compile-time SCORE_GAMES/WIN_GAMES arrays by `.name`. Admin-supplied
+// strings must never be used for anything else (property lookups, SQL text, etc.) — see the
+// module-level SCORE_GAMES/WIN_GAMES comment on why table/column identifiers must stay
+// compile-time constants.
+export function resolveScoringConfig(config) {
+  const int = (v, fallback, min) => (Number.isInteger(v) && v >= min) ? v : fallback
+  const disabledScoreGames = parseDisabledGameKeys(config?.cMoonDisabledScoreGames)
+  const disabledWinGames = parseDisabledGameKeys(config?.cMoonDisabledWinGames)
+  return {
+    highScorePoints: int(config?.cMoonHighScorePoints, CMOON_SCORING_DEFAULTS.highScorePoints, 0),
+    top10Points: int(config?.cMoonTop10Points, CMOON_SCORING_DEFAULTS.top10Points, 0),
+    dailyTaskPoints: int(config?.cMoonDailyTaskPoints, CMOON_SCORING_DEFAULTS.dailyTaskPoints, 0),
+    minAccountAgeDays: int(config?.cMoonScoringMinAccountAgeDays, CMOON_SCORING_DEFAULTS.minAccountAgeDays, 0),
+    top10RankCutoff: int(config?.cMoonTop10RankCutoff, CMOON_SCORING_DEFAULTS.top10RankCutoff, 1),
+    top10PointsBoardEnabled: config?.cMoonTop10PointsBoardEnabled !== false,
+    top10CtoonsBoardEnabled: config?.cMoonTop10CtoonsBoardEnabled !== false,
+    activeScoreGames: SCORE_GAMES.filter(g => !disabledScoreGames.includes(g.name)),
+    activeWinGames: WIN_GAMES.filter(g => !disabledWinGames.includes(g.name)),
+  }
+}
 
 // Current all-time #1 for a score-based game (highest, or lowest for ReOrbit Memory's
 // move count). Shape/exclusions mirror server/utils/gameLeaderboard.js's buildTop11.
@@ -115,10 +168,12 @@ async function findTopWinsHolder({ table }) {
   return rows[0] || null
 }
 
-// True top 10 of the public "Top Points" board (server/api/points-leaderboard.get.js),
+// Top N of the public "Top Points" board (server/api/points-leaderboard.get.js),
 // membership/age-filtered later — ranking itself must reflect the real board, not just
-// cMoon members, or a small/inactive cMoon's top 10 would mean nothing.
-async function getTop10PointsHolders() {
+// cMoon members, or a small/inactive cMoon's top N would mean nothing. `rankCutoff` is
+// bound as an ordinary query parameter (a LIMIT value, not an identifier), so it's safe
+// to come from admin config the same way any other numeric column value would be.
+async function getTop10PointsHolders(rankCutoff) {
   return prisma.$queryRaw`
     SELECT u."id" AS "userId", u."cMoonId" AS "cMoonId", u."createdAt" AS "createdAt"
     FROM "UserPoints" up
@@ -127,12 +182,12 @@ async function getTop10PointsHolders() {
       AND COALESCE(u."banned", false) = false
       AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
     ORDER BY up."points" DESC, u."username" ASC
-    LIMIT 10
+    LIMIT ${rankCutoff}
   `
 }
 
-// True top 10 of the public "Total cToons" board (server/api/leaderboard/total-ctoons.get.js).
-async function getTop10TotalCtoonsHolders() {
+// Top N of the public "Total cToons" board (server/api/leaderboard/total-ctoons.get.js).
+async function getTop10TotalCtoonsHolders(rankCutoff) {
   return prisma.$queryRaw`
     SELECT u."id" AS "userId", u."cMoonId" AS "cMoonId", u."createdAt" AS "createdAt"
     FROM "User" u
@@ -143,12 +198,12 @@ async function getTop10TotalCtoonsHolders() {
       AND uc."burnedAt" IS NULL
     GROUP BY u."id", u."cMoonId", u."createdAt"
     ORDER BY COUNT(uc."id") DESC, u."username" ASC
-    LIMIT 10
+    LIMIT ${rankCutoff}
   `
 }
 
 // A holder row is eligible for a cMoon-score award if it belongs to a cMoon and the
-// account has survived the minimum age gate (see MIN_ACCOUNT_AGE_MS above).
+// account has survived the minimum age gate (see resolveScoringConfig above).
 function isEligibleHolder(row, minAccountAgeCutoff) {
   return !!(row?.cMoonId && new Date(row.createdAt) <= minAccountAgeCutoff)
 }
@@ -189,7 +244,8 @@ export async function recordDailyTaskCompletions() {
 
   const dailyBoundary = getChicagoDailyBoundary()
   const morningBoundary = getChicagoMorningWindowStart()
-  const minAccountAgeCutoff = new Date(Date.now() - MIN_ACCOUNT_AGE_MS)
+  const { minAccountAgeDays } = resolveScoringConfig(config)
+  const minAccountAgeCutoff = new Date(Date.now() - minAccountAgeDays * 24 * 60 * 60 * 1000)
   const combatNames = Prisma.join(COMBAT_POOL_GAME_NAMES)
 
   // daily.get.js only ever treats a threshold-based task as completable when its configured
@@ -299,36 +355,41 @@ export async function runWeeklyCMoonScoring() {
   const config = await getGlobalConfig({ fresh: true })
   if (!config?.cMoonEnabled) return { awarded: 0 }
 
+  const {
+    highScorePoints, top10Points, dailyTaskPoints, minAccountAgeDays, top10RankCutoff,
+    top10PointsBoardEnabled, top10CtoonsBoardEnabled, activeScoreGames, activeWinGames,
+  } = resolveScoringConfig(config)
+
   const weekStart = getWeekWindowStart()
   const weekBegin = new Date(weekStart.getTime() - 7 * 24 * 60 * 60 * 1000)
-  const minAccountAgeCutoff = new Date(Date.now() - MIN_ACCOUNT_AGE_MS)
+  const minAccountAgeCutoff = new Date(Date.now() - minAccountAgeDays * 24 * 60 * 60 * 1000)
 
   const candidates = []
 
-  const [scoreHolders, winHolders, top10Points, top10Ctoons] = await Promise.all([
-    Promise.all(SCORE_GAMES.map(g => findTopScoreHolder(g))),
-    Promise.all(WIN_GAMES.map(g => findTopWinsHolder(g))),
-    getTop10PointsHolders(),
-    getTop10TotalCtoonsHolders(),
+  const [scoreHolders, winHolders, top10PointsHolders, top10CtoonsHolders] = await Promise.all([
+    Promise.all(activeScoreGames.map(g => findTopScoreHolder(g))),
+    Promise.all(activeWinGames.map(g => findTopWinsHolder(g))),
+    top10PointsBoardEnabled ? getTop10PointsHolders(top10RankCutoff) : Promise.resolve([]),
+    top10CtoonsBoardEnabled ? getTop10TotalCtoonsHolders(top10RankCutoff) : Promise.resolve([]),
   ])
 
-  SCORE_GAMES.forEach((g, i) => {
+  activeScoreGames.forEach((g, i) => {
     const holder = scoreHolders[i]
     if (isEligibleHolder(holder, minAccountAgeCutoff)) {
-      candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: 100, weekStart })
+      candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: highScorePoints, weekStart })
     }
   })
-  WIN_GAMES.forEach((g, i) => {
+  activeWinGames.forEach((g, i) => {
     const holder = winHolders[i]
     if (isEligibleHolder(holder, minAccountAgeCutoff)) {
-      candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: 100, weekStart })
+      candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: highScorePoints, weekStart })
     }
   })
-  for (const row of eligibleHolders(top10Points, minAccountAgeCutoff)) {
-    candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'points', points: 50, weekStart })
+  for (const row of eligibleHolders(top10PointsHolders, minAccountAgeCutoff)) {
+    candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'points', points: top10Points, weekStart })
   }
-  for (const row of eligibleHolders(top10Ctoons, minAccountAgeCutoff)) {
-    candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'totalCtoons', points: 50, weekStart })
+  for (const row of eligibleHolders(top10CtoonsHolders, minAccountAgeCutoff)) {
+    candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'totalCtoons', points: top10Points, weekStart })
   }
 
   const dailyTaskRows = await prisma.userDailyTaskCompletion.findMany({
@@ -338,7 +399,7 @@ export async function runWeeklyCMoonScoring() {
   for (const row of dailyTaskRows) {
     candidates.push({
       cMoonId: row.user.cMoonId, userId: row.userId, category: 'DAILY_TASK',
-      detail: row.date.toISOString(), points: 10, weekStart
+      detail: row.date.toISOString(), points: dailyTaskPoints, weekStart
     })
   }
 
@@ -391,26 +452,26 @@ export function invalidateGlobalConfigCache() {
   cachedConfigAt = 0
 }
 
-// A user's personal deadline to pick a cMoon before they're auto-assigned:
-//  - joined on/after the feature's launch (cMoonEnabledAt): 3 days from their own join date
-//  - joined before launch (an "existing" user): the shared cMoonSelectionDeadlineAt
-// Returns null if the feature isn't enabled or the user already has a cMoon.
-export function computeCMoonDeadline(user, config) {
-  if (!config?.cMoonEnabled || !config.cMoonEnabledAt) return null
-  if (user.cMoonId) return null
-  const createdAt = new Date(user.createdAt)
-  const enabledAt = new Date(config.cMoonEnabledAt)
-  if (createdAt >= enabledAt) {
-    return new Date(createdAt.getTime() + THREE_DAYS_MS)
-  }
-  return config.cMoonSelectionDeadlineAt ? new Date(config.cMoonSelectionDeadlineAt) : null
-}
-
 export const CMOON_SELECT_ERRORS = {
   DISABLED: 'CMOON_DISABLED',
   NOT_FOUND: 'CMOON_NOT_FOUND',
   ALREADY_ASSIGNED: 'CMOON_ALREADY_ASSIGNED',
-  DEADLINE_PASSED: 'CMOON_DEADLINE_PASSED',
+  LOCKED: 'CMOON_LOCKED',
+  BANNED: 'CMOON_USER_BANNED',
+  REJOIN_COOLDOWN: 'CMOON_REJOIN_COOLDOWN',
+  REJOIN_NOT_ALLOWED: 'CMOON_REJOIN_NOT_ALLOWED',
+}
+
+// The moment a player who opted out becomes eligible to rejoin, per the admin-configurable
+// cooldown (GlobalGameConfig.cMoonOptOutCooldownDays — 0 disables it). Returns null when there's
+// no cooldown to wait out: the player never opted out, or the configured cooldown is 0/invalid.
+// Called from both server/api/cmoon/status.get.js (to show/hide the "Join a cMoon" CTA and its
+// countdown) and selectCMoonForUser below (the actual enforcement).
+export function computeCMoonRejoinAvailableAt(user, config) {
+  if (!user?.cMoonOptedOut || !user?.cMoonOptedOutAt) return null
+  const days = Number(config?.cMoonOptOutCooldownDays)
+  if (!Number.isFinite(days) || days <= 0) return null
+  return new Date(new Date(user.cMoonOptedOutAt).getTime() + days * 24 * 60 * 60 * 1000)
 }
 
 class CMoonError extends Error {
@@ -449,24 +510,47 @@ export async function selectCMoonForUser(userId, cMoonId) {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, createdAt: true, cMoonId: true },
+    select: { id: true, cMoonId: true, cMoonOptedOut: true, cMoonOptedOutAt: true },
   })
   if (!user) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
   if (user.cMoonId) throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
 
-  const deadline = computeCMoonDeadline(user, config)
-  if (deadline && new Date() > deadline) throw new CMoonError(CMOON_SELECT_ERRORS.DEADLINE_PASSED)
+  // The two rejoin safeguards below only ever apply to a player who previously opted out — a
+  // first-time chooser (cMoonOptedOut:false) is never subject to either one.
+  if (user.cMoonOptedOut) {
+    const rejoinAt = computeCMoonRejoinAvailableAt(user, config)
+    if (rejoinAt && new Date() < rejoinAt) throw new CMoonError(CMOON_SELECT_ERRORS.REJOIN_COOLDOWN)
+  }
 
-  const cmoon = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true } })
+  const cmoon = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true, joinLocked: true, allowOptOutJoin: true } })
   if (!cmoon) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
+  // Locked cMoons are only reachable via admin direct-assign (POST
+  // /api/admin/users/[id]/update-cmoon), never through this self-serve path — enforced here,
+  // not just by hiding the cMoon from GET /api/cmoons, so a known id can't bypass the UI.
+  // This is a fast-path rejection for the common (non-racing) case, not the enforcement
+  // boundary — see the joinLocked:false clause below, which is what actually closes the
+  // TOCTOU window against an admin locking this cMoon between this read and the transaction
+  // committing.
+  if (cmoon.joinLocked) throw new CMoonError(CMOON_SELECT_ERRORS.LOCKED)
+  // Team-balance safeguard: this cMoon has opted out of accepting returning/late joiners (see
+  // CMoon.allowOptOutJoin) — only bites a player who previously opted out, same as the cooldown
+  // check above.
+  if (user.cMoonOptedOut && !cmoon.allowOptOutJoin) throw new CMoonError(CMOON_SELECT_ERRORS.REJOIN_NOT_ALLOWED)
 
   const assigned = await prisma.$transaction(async (tx) => {
     const result = await tx.user.updateMany({
       where: { id: userId, cMoonId: null },
-      data: { cMoonId: cmoon.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: false },
+      data: { cMoonId: cmoon.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: false, cMoonOptedOut: false, cMoonOptedOutAt: null },
     })
     if (result.count === 0) throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
-    await tx.cMoon.update({ where: { id: cmoon.id }, data: { memberCount: { increment: 1 } } })
+    // Re-checks joinLocked:false as part of the same atomic write, not just the pre-fetch
+    // above — if an admin locked this cMoon in the gap between that read and here, count is 0
+    // and the whole transaction (including the user update above) rolls back.
+    const lockResult = await tx.cMoon.updateMany({
+      where: { id: cmoon.id, joinLocked: false },
+      data: { memberCount: { increment: 1 } },
+    })
+    if (lockResult.count === 0) throw new CMoonError(CMOON_SELECT_ERRORS.LOCKED)
     return cmoon.id
   })
 
@@ -474,80 +558,164 @@ export async function selectCMoonForUser(userId, cMoonId) {
   return assigned
 }
 
-// Assigns one user to whatever cMoon currently has the fewest members.
-// `FOR UPDATE` on the chosen CMoon row serializes concurrent assignments so two
-// callers can't both read the same "smallest" moon before either commits.
-async function assignSmallestCMoonToUser(userId) {
-  return prisma.$transaction(async (tx) => {
-    const [smallest] = await tx.$queryRaw`
-      SELECT id FROM "CMoon" ORDER BY "memberCount" ASC, id ASC LIMIT 1 FOR UPDATE
-    `
-    if (!smallest) return null
+// User-initiated decline from the join modal — there is no more time-based auto-assignment, so
+// declining just stops the modal from popping up automatically again (see canChoose in
+// server/api/cmoon/status.get.js); the player can still join later via the "Join a cMoon" button
+// on /newsite/cmoon-nav, which reopens the same modal. Atomic for the same reason
+// selectCMoonForUser is: `updateMany({ where: { cMoonId: null } })` is the guard, not a pre-read
+// check, so a concurrent opt-out can't race a concurrent join into a confusing half-state.
+export async function optOutOfCMoonSelection(userId) {
+  const config = await getGlobalConfig({ fresh: true })
+  if (!config?.cMoonEnabled) throw new CMoonError(CMOON_SELECT_ERRORS.DISABLED)
 
-    const result = await tx.user.updateMany({
-      where: { id: userId, cMoonId: null },
-      data: { cMoonId: smallest.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: true },
-    })
-    if (result.count === 0) return null
+  const result = await prisma.user.updateMany({
+    where: { id: userId, cMoonId: null },
+    data: { cMoonOptedOut: true, cMoonOptedOutAt: new Date() },
+  })
+  if (result.count === 0) {
+    const exists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, cMoonId: true } })
+    if (!exists) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
+    throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
+  }
+}
 
-    await tx.cMoon.update({ where: { id: smallest.id }, data: { memberCount: { increment: 1 } } })
-    return smallest.id
+// Bounds a real-time Discord role sync so an admin action never hangs on Discord rate-limiting —
+// grantGuildRole/revokeGuildRole can each sleep several seconds per 429 retry (see
+// server/utils/discord.js), and this is called from an admin request handler, not a cron. The
+// underlying call is left running past the timeout (its result is just no longer waited on) — a
+// slow grant/revoke still lands, it's only the caller's confirmation that gives up early.
+const DISCORD_SYNC_TIMEOUT_MS = 4000
+
+function withTimeout(promise, ms) {
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (value) => { if (!settled) { settled = true; resolve(value) } }
+    setTimeout(() => finish(null), ms)
+    promise.then((ok) => finish(ok)).catch(() => finish(false))
   })
 }
 
-// Daily cron entry point. Finds users whose personal deadline has passed and
-// haven't picked a cMoon, auto-assigns them to the smallest cMoon, and grants
-// that cMoon's prizes. Capped per run so a large backlog can't stall the shared
-// cron process or flood the mint queue in one shot; it drains across days.
-export async function autoAssignExpiredCMoonUsers({ batchLimit = 200, maxBatches = 5 } = {}) {
-  const config = await getGlobalConfig({ fresh: true })
-  if (!config?.cMoonEnabled || !config.cMoonEnabledAt) return { processed: 0 }
+// Real-time (not nightly-cron) Discord role sync for a single reassignment. Revoking a role is
+// new capability, not an existing pattern being reused: every other Discord sync in this codebase
+// (server/cron/sync-guild-members.js's addRoleToMember-backed jobs) is grant-only by deliberate
+// design, so this is scoped tightly — called only from reassignUserCMoon below (one user, one
+// admin-initiated change at a time), never from a bulk or cron path. Returns true/false once both
+// calls resolve within the timeout, or null if either is still in flight (not a failure — the
+// nightly syncCMoonDiscordRoles job will still pick up a late grant via cMoonRoleGrantedAt).
+async function syncDiscordRolesForReassignment(user, oldRoleId, newRoleId) {
+  if (!user.discordId || !user.inGuild || (!oldRoleId && !newRoleId)) return null
+  const [revoked, granted] = await Promise.all([
+    oldRoleId ? withTimeout(revokeGuildRole(user.discordId, oldRoleId), DISCORD_SYNC_TIMEOUT_MS) : Promise.resolve(null),
+    newRoleId ? withTimeout(grantGuildRole(user.discordId, newRoleId), DISCORD_SYNC_TIMEOUT_MS) : Promise.resolve(null),
+  ])
+  if (revoked === false || granted === false) return false
+  if (revoked === null || granted === null) return null
+  return true
+}
 
-  const cmoonCount = await prisma.cMoon.count()
-  if (cmoonCount === 0) return { processed: 0 }
+// Single shared path for moving a user into, out of, or between cMoons — used by the admin
+// "update user's cMoon" action, the new per-cMoon Members panel, and captain auto-align (making
+// someone a captain of a cMoon moves them into it). Deliberately ignores CMoon.joinLocked: admin
+// placement into a locked cMoon is an existing, intentional override (see the joinLocked comment
+// on the CMoon model), not something this function should re-litigate.
+//
+// Callers that mutate memberCount indirectly through this function are responsible for calling
+// invalidateCMoonList() (server/api/cmoons.get.js) afterward — not done here, since importing an
+// API route file from this shared util would create a circular import (cmoons.get.js already
+// imports getGlobalConfig from this file).
+export async function reassignUserCMoon(userId, newCMoonId) {
+  const target = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, cMoonId: true, banned: true, discordId: true, inGuild: true },
+  })
+  if (!target) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
 
-  const now = new Date()
-  const newUserCutoff = new Date(now.getTime() - THREE_DAYS_MS)
-  const enabledAt = new Date(config.cMoonEnabledAt)
-  const globalDeadlinePassed = !!(config.cMoonSelectionDeadlineAt && now > new Date(config.cMoonSelectionDeadlineAt))
-
-  const orClauses = [
-    { createdAt: { gte: enabledAt, lt: newUserCutoff } },
-  ]
-  if (globalDeadlinePassed) {
-    orClauses.push({ createdAt: { lt: enabledAt } })
-  }
-
-  let processed = 0
-  for (let batch = 0; batch < maxBatches; batch++) {
-    const candidates = await prisma.user.findMany({
-      where: {
-        cMoonId: null,
-        active: true,
-        banned: false,
-        OR: orClauses,
-      },
-      select: { id: true },
-      take: batchLimit,
+  let newCMoon = null
+  if (newCMoonId) {
+    newCMoon = await prisma.cMoon.findUnique({
+      where: { id: newCMoonId },
+      select: { id: true, name: true, color: true, discordRoleId: true },
     })
-    if (candidates.length === 0) break
-
-    for (const { id: userId } of candidates) {
-      try {
-        const cMoonId = await assignSmallestCMoonToUser(userId)
-        if (cMoonId) {
-          await grantCMoonPrizes(userId, cMoonId)
-          processed++
-        }
-      } catch {
-        // one user's failure shouldn't stop the rest of the batch
-      }
-    }
-
-    if (candidates.length < batchLimit) break
+    if (!newCMoon) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
   }
 
-  return { processed }
+  // Checked before the ban guard below: a true no-op (already exactly where this call wants them)
+  // must never fail just because the user happens to be banned — it isn't placing them anywhere.
+  if (target.cMoonId === newCMoonId) {
+    return { cMoonId: target.cMoonId, cMoonName: newCMoon?.name || null, cMoonColor: newCMoon?.color || null, discordRoleSynced: null }
+  }
+
+  // Removing someone from a cMoon (newCMoonId: null) is always allowed regardless of ban status
+  // — that's cleanup. Placing a banned account INTO a (different) cMoon is never allowed.
+  if (newCMoon && target.banned) throw new CMoonError(CMOON_SELECT_ERRORS.BANNED)
+
+  const oldCMoon = target.cMoonId
+    ? await prisma.cMoon.findUnique({ where: { id: target.cMoonId }, select: { id: true, discordRoleId: true } })
+    : null
+
+  await prisma.$transaction(async (tx) => {
+    if (oldCMoon) {
+      await tx.cMoon.update({ where: { id: oldCMoon.id }, data: { memberCount: { decrement: 1 } } })
+      // A captain who no longer belongs to a cMoon shouldn't still show as its captain — this is
+      // exactly the captain/member mismatch this feature exists to prevent, so clean it up here
+      // rather than leaving an orphaned CMoonCaptain row behind on every reassignment.
+      await tx.cMoonCaptain.deleteMany({ where: { cMoonId: oldCMoon.id, userId } })
+    }
+    if (newCMoon) {
+      await tx.cMoon.update({ where: { id: newCMoon.id }, data: { memberCount: { increment: 1 } } })
+    }
+    await tx.user.update({
+      where: { id: userId },
+      data: {
+        cMoonId: newCMoonId,
+        cMoonSelectedAt: newCMoonId ? new Date() : null,
+        cMoonAutoAssigned: false,
+        // A rank/role-grant cursor only means something within the cMoon it was earned in — clear
+        // both on any reassignment so a moved user doesn't keep a stale rank badge, and so the
+        // nightly rank-role sync re-grants cleanly for whatever cMoon they're in now.
+        currentCMoonRankId: null,
+        cMoonRankRoleGrantedAt: null,
+        cMoonRoleGrantedAt: null,
+      },
+    })
+  })
+
+  const discordRoleSynced = await syncDiscordRolesForReassignment(
+    target,
+    oldCMoon?.discordRoleId || null,
+    newCMoon?.discordRoleId || null,
+  )
+
+  return {
+    cMoonId: newCMoonId,
+    cMoonName: newCMoon?.name || null,
+    cMoonColor: newCMoon?.color || null,
+    discordRoleSynced,
+  }
+}
+
+// ── Poll vote tallies ───────────────────────────────────────────────────────────
+//
+// Results are only ever shown to a user once they've voted (product decision), which in
+// practice means most returning visitors to a cMoon page with an active poll — so this is a
+// real hot path, not a rare one. Cached per pollId with a short in-process TTL (same pattern as
+// server/api/cmoons.get.js's 30s list cache), invalidated on every vote and on any admin
+// replace/delete of the poll — never left to just expire, since a poll's own voters are exactly
+// the audience who'd notice stale counts.
+const pollResultsCache = new Map() // pollId -> { at, results: [{ optionId, count }] }
+const POLL_RESULTS_TTL_MS = 30_000
+
+export async function getPollResults(pollId) {
+  const cached = pollResultsCache.get(pollId)
+  if (cached && (Date.now() - cached.at) < POLL_RESULTS_TTL_MS) return cached.results
+  const rows = await prisma.cMoonPollVote.groupBy({ by: ['optionId'], where: { pollId }, _count: { optionId: true } })
+  const results = rows.map(r => ({ optionId: r.optionId, count: r._count.optionId }))
+  pollResultsCache.set(pollId, { at: Date.now(), results })
+  return results
+}
+
+export function invalidatePollResults(pollId) {
+  pollResultsCache.delete(pollId)
 }
 
 export { CMoonError }

@@ -12,7 +12,14 @@
 // browser: these tables grow far faster than ClashGame, so that stops working early.
 const PAGE_SIZE = 25
 
-export async function listDuelMatches(delegate, q = {}) {
+/**
+ * @param {object} opts
+ *   supportsAi  true for EdRpsMatch, which has player2IsAi/winnerIsAi columns for its bot-match
+ *               mode (server/utils/edRpsAiMatch.js). PokemonBattleMatch has no AI mode server-
+ *               side and no such columns, so this must stay opt-in rather than selected
+ *               unconditionally — Prisma throws if a select names a column the model doesn't have.
+ */
+export async function listDuelMatches(delegate, q = {}, { supportsAi = false } = {}) {
   const page = Math.max(1, Number.parseInt(q.page, 10) || 1)
   const flaggedOnly = String(q.flagged ?? '') === 'true'
   const username = typeof q.username === 'string' ? q.username.trim() : ''
@@ -57,7 +64,8 @@ export async function listDuelMatches(delegate, q = {}) {
         suppressReason: true,
         player1: { select: { id: true, username: true, discordTag: true } },
         player2: { select: { id: true, username: true, discordTag: true } },
-        winner: { select: { username: true } }
+        winner: { select: { username: true } },
+        ...(supportsAi ? { player2IsAi: true, winnerIsAi: true } : {})
       }
     })
   ])
@@ -81,12 +89,15 @@ export async function listDuelMatches(delegate, q = {}) {
         id: m.id,
         startedAt: m.startedAt,
         endedAt: m.endedAt,
+        // A bot opponent has no account, so player2 reads null for an AI match — the
+        // player2IsAi/winnerIsAi flags below are what tell that apart from a row with a real,
+        // just-unresolved second player.
         player1: m.player1,
         player2: m.player2,
         player1Character: m.player1Character,
         player2Character: m.player2Character,
         score: `${m.player1Score}-${m.player2Score}`,
-        winner: m.winner?.username ?? null,
+        winner: m.winner?.username ?? (m.winnerIsAi ? 'the AI' : null),
         winnerUserId: m.winnerUserId,
         whoLeftUserId: m.whoLeftUserId,
         endReason: m.endReason,
@@ -96,7 +107,8 @@ export async function listDuelMatches(delegate, q = {}) {
         sameIp: m.sameIp,
         sameVisitorId: m.sameVisitorId,
         pointsAwarded: m.pointsAwarded,
-        suppressReason: m.suppressReason
+        suppressReason: m.suppressReason,
+        ...(supportsAi ? { opponentIsAi: !!m.player2IsAi, winnerIsAi: !!m.winnerIsAi } : {})
       }
     })
   }

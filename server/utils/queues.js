@@ -40,6 +40,18 @@ export const dissolveQueue = new Queue(
   }
 )
 
+// Queue for transferring points/cToons from one user to another (admin action)
+export const transferQueue = new Queue(
+  process.env.TRANSFER_QUEUE_KEY || 'transferQueue',
+  {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 100 },
+      removeOnFail:     { count: 100 },
+    },
+  }
+)
+
 // Queue for closing auctions at their exact endAt time
 export const auctionCloseQueue = new Queue(
   process.env.AUCTION_CLOSE_QUEUE_KEY || 'auctionClose',

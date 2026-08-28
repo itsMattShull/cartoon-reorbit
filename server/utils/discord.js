@@ -97,6 +97,43 @@ async function addRoleToMember(discordUserId, roleId) {
   return false
 }
 
+// Shared PUT/DELETE-a-guild-member-role primitive backing the two exported functions below.
+// Every other role sync in this codebase (addRoleToMember above, the cMoon/verified-role cron
+// jobs in server/cron/sync-guild-members.js) is grant-only by deliberate design. These two are
+// the first calls in the app that can also REVOKE a Discord role — used only for real-time cMoon
+// membership sync (see reassignUserCMoon in server/utils/cmoon.js), never from a bulk/cron path.
+async function putOrDeleteMemberRole(method, discordUserId, roleId) {
+  const authHeader = getBotAuthHeader()
+  const guildId = process.env.DISCORD_GUILD_ID
+  if (!discordUserId || !roleId || !authHeader || !guildId) return false
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(
+      `${DISCORD_API_BASE}/guilds/${guildId}/members/${discordUserId}/roles/${roleId}`,
+      { method, headers: { Authorization: authHeader } }
+    )
+    // A DELETE for a role the member never had (or no longer has) also comes back 204 — treated
+    // as success either way, since the end state ("member doesn't have this role") is what matters.
+    if (res.status === 204) return true
+    if (res.status === 429) {
+      let body = { retry_after: 5 }
+      try { body = await res.json() } catch {}
+      await sleep(Math.ceil((body.retry_after || 5) * 1000))
+      continue
+    }
+    return false
+  }
+  return false
+}
+
+export async function grantGuildRole(discordUserId, roleId) {
+  return putOrDeleteMemberRole('PUT', discordUserId, roleId)
+}
+
+export async function revokeGuildRole(discordUserId, roleId) {
+  return putOrDeleteMemberRole('DELETE', discordUserId, roleId)
+}
+
 async function openDmChannel(discordId) {
   const BOT_TOKEN = process.env.BOT_TOKEN
   if (!BOT_TOKEN || !discordId) return null
@@ -305,26 +342,39 @@ export async function sendGuildChannelMessageById(channelId, content, tokenOverr
   const rawToken = tokenOverride || process.env.BOT_TOKEN
   if (!rawToken || !channelId) return false
   const authHeader = rawToken.startsWith('Bot ') ? rawToken : `Bot ${rawToken}`
-  try {
-    await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
-      method: 'POST',
-      headers: {
-        'Authorization': authHeader,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        content,
-        allowed_mentions: { parse: [], users: mentionUserIds },
-        ...(embeds.length ? { embeds } : {})
-      }),
-      signal: AbortSignal.timeout(5000)
-    })
-    // console.log('sendGuildChannelMessageById succeeded')
-    return true
-  } catch(e) {
-    // console.error('sendGuildChannelMessageById failed:', e)
-    return false
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages`, {
+        method: 'POST',
+        headers: {
+          'Authorization': authHeader,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          content,
+          allowed_mentions: { parse: [], users: mentionUserIds },
+          ...(embeds.length ? { embeds } : {})
+        }),
+        signal: AbortSignal.timeout(8000)
+      })
+      if (res.status === 429 && attempt === 0) {
+        let body = { retry_after: 2 }
+        try { body = await res.json() } catch {}
+        await sleep(Math.min(Math.ceil((body.retry_after || 2) * 1000), 5000))
+        continue
+      }
+      if (!res.ok) {
+        console.error('sendGuildChannelMessageById failed:', res.status, await res.text().catch(() => ''))
+        return false
+      }
+      return true
+    } catch (e) {
+      console.error('sendGuildChannelMessageById failed:', e?.message || e)
+      return false
+    }
   }
+  return false
 }
 
 function formatList(items) {
@@ -453,4 +503,44 @@ export async function announceCZoneContestWinner(prisma, {
   } catch (e) {
     console.error('announceCZoneContestWinner failed:', e?.message || e)
   }
+}
+
+// Truncates a string to `max` characters without splitting a UTF-16 surrogate
+// pair (which would otherwise corrupt the last character and can make Discord
+// reject the payload with a 400).
+function truncateSafely(str, max) {
+  const chars = [...String(str || '')]
+  if (chars.length <= max) return chars.join('')
+  return chars.slice(0, max).join('')
+}
+
+// Announce a PR opened/merged event to the configured Discord channel.
+// `title`/`body` come from the pull request as reported by our own GitHub Actions
+// workflow; `url` is always built by the caller from a hardcoded owner/repo + PR
+// number rather than trusting a URL out of the webhook payload. Never throws —
+// the webhook endpoint decides how to report failure back to the caller.
+export async function sendPrNotification(channelId, { number, title, body, url, author, action, branch }) {
+  const botToken = getAnnouncementsBotToken()
+  if (!channelId || !botToken) return false
+
+  const safeTitle = truncateSafely(title || '(no title)', 256)
+  const embed = { title: `PR #${number}: ${safeTitle}`, url, color: action === 'merged' ? 0x57F287 : 0x5865F2 }
+  if (author) embed.author = { name: truncateSafely(author, 256) }
+
+  if (action === 'merged') {
+    embed.description = `✅ Merged into \`${branch}\`.`
+  } else {
+    const DESC_LIMIT = 4096
+    const rawBody = String(body || '').trim()
+    if (rawBody) {
+      const suffix = `\n\n[…continued on GitHub](${url})`
+      const bodyLimit = DESC_LIMIT - suffix.length
+      const truncatedBody = truncateSafely(rawBody, bodyLimit)
+      embed.description = truncatedBody.length < rawBody.length ? `${truncatedBody}${suffix}` : truncatedBody
+    } else {
+      embed.description = '_No description provided._'
+    }
+  }
+
+  return sendGuildChannelMessageById(channelId, '', botToken, [], [embed])
 }

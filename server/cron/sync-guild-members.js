@@ -17,7 +17,6 @@ import { applyDissolveSchedule, getDissolveScheduleConfig } from '../utils/disso
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
 import { logCronError } from '../utils/cronErrorLog.js'
-import { autoAssignExpiredCMoonUsers } from '../utils/cmoon.js'
 import { runCMoonPointsAggregate } from './cmoon-points-aggregate.js'
 import { runRecordDailyTaskCompletions } from './record-daily-task-completions.js'
 import { runCMoonWeeklyScore } from './cmoon-weekly-score.js'
@@ -994,12 +993,12 @@ await runJob('syncVerifiedRoles', syncVerifiedRoles)
 cron.schedule('30 2 * * *', () => runJob('recordDailyActivity', recordDailyActivity), { timezone: 'America/Chicago' }) // 02:30 CST daily
 cron.schedule('35 2 * * *', () => runJob('syncVerifiedRoles', syncVerifiedRoles), { timezone: 'America/Chicago' }) // 02:35 CST daily
 
-// cMoon: auto-assign anyone past their pick-a-cMoon deadline, then grant Discord
-// role flair to newly-assigned/newly-selected members. Off by default via
-// GlobalGameConfig.cMoonEnabled — both jobs no-op immediately when disabled.
-await runJob('autoAssignExpiredCMoonUsers', autoAssignExpiredCMoonUsers)
+// cMoon: grant Discord role flair to newly-selected members. There is no more time-based
+// auto-assignment — players either pick a cMoon or explicitly opt out (see
+// server/utils/cmoon.js selectCMoonForUser/optOutOfCMoonSelection) — so this job only ever
+// needs to sync roles for whoever has actually joined. Off by default via
+// GlobalGameConfig.cMoonEnabled — no-ops immediately when disabled.
 await runJob('syncCMoonDiscordRoles', syncCMoonDiscordRoles)
-cron.schedule('40 2 * * *', () => runJob('autoAssignExpiredCMoonUsers', autoAssignExpiredCMoonUsers), { timezone: 'America/Chicago' }) // 02:40 CST daily
 cron.schedule('45 2 * * *', () => runJob('syncCMoonDiscordRoles', syncCMoonDiscordRoles), { timezone: 'America/Chicago' }) // 02:45 CST daily
 
 // cMoon team leaderboard: record which cMoon members completed at least one daily task,

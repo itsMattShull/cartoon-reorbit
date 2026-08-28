@@ -1664,7 +1664,10 @@
                     <td class="px-3 py-2 whitespace-nowrap text-gray-700">{{ fmtDate(e.endedAt) }}</td>
                     <td class="px-3 py-2">
                       <div class="font-mono text-xs text-gray-500 truncate max-w-[140px]" :title="e.match.externalMatchId">{{ e.match.externalMatchId }}</div>
-                      <div class="text-xs text-gray-400">Round {{ e.roundNumber }} of {{ e.bestOf }} · {{ e.match.mode }}</div>
+                      <div class="text-xs text-gray-400">
+                        Round {{ e.roundNumber }} of {{ e.bestOf }} · {{ e.match.mode }}
+                        <span v-if="e.match.isTraining" class="ml-1 text-amber-600 font-medium">· training/AI</span>
+                      </div>
                     </td>
                     <td class="px-3 py-2">
                       <div class="font-medium">{{ e.winnerUsername }}</div>
@@ -1694,7 +1697,10 @@
                 <div class="flex items-start justify-between gap-2">
                   <div>
                     <div class="text-xs text-gray-400 font-mono truncate max-w-[200px]" :title="e.match.externalMatchId">{{ e.match.externalMatchId }}</div>
-                    <div class="text-xs text-gray-400">Round {{ e.roundNumber }}/{{ e.bestOf }} · {{ e.match.mode }}</div>
+                    <div class="text-xs text-gray-400">
+                      Round {{ e.roundNumber }}/{{ e.bestOf }} · {{ e.match.mode }}
+                      <span v-if="e.match.isTraining" class="text-amber-600 font-medium">· training/AI</span>
+                    </div>
                   </div>
                   <span
                     class="shrink-0 inline-block px-2 py-0.5 rounded-full text-xs font-medium"

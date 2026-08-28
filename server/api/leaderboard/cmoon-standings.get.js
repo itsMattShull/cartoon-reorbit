@@ -16,7 +16,9 @@ export default defineEventHandler(async () => {
   const config = await getGlobalConfig()
   if (!config?.cMoonEnabled) return { cMoonEnabled: false, contributorsByCMoonId: {} }
 
-  const cmoons = await db.cMoon.findMany({ select: { id: true } })
+  // Locked cMoons are excluded from this "top contributors" tab, same as the team-standings
+  // board in leaderboard/cmoons.get.js — see CMoon.joinLocked in prisma/schema.prisma.
+  const cmoons = await db.cMoon.findMany({ where: { joinLocked: false }, select: { id: true } })
   if (!cmoons.length) return { cMoonEnabled: true, contributorsByCMoonId: {} }
 
   const contributorsByCMoonId = {}

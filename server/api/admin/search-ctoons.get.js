@@ -60,7 +60,9 @@ export default defineEventHandler(async (event) => {
       isSecondEdition: true,
       secondEditionOverlayX: true,
       secondEditionOverlayY: true,
-      secondEditionOverlaySize: true
+      secondEditionOverlaySize: true,
+      cMoonId: true,
+      cMoon: { select: { id: true, name: true, color: true } }
     }
   })
   if (!ctoons.length) return []
