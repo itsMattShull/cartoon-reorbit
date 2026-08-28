@@ -57,6 +57,16 @@
                 </datalist>
               </div>
 
+              <!-- cMoon -->
+              <div>
+                <label class="block text-sm font-medium mb-1">cMoon</label>
+                <select v-model="bulk.cMoonId" @change="applyBulk('cMoonId', bulk.cMoonId)" class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm bg-white">
+                  <option value="">— no change —</option>
+                  <option value="__none__">— None (remove) —</option>
+                  <option v-for="cm in cmoons" :key="cm.id" :value="cm.id">{{ cm.name }}</option>
+                </select>
+              </div>
+
               <!-- Price -->
               <div>
                 <label class="block text-sm font-medium mb-1">Price</label>
@@ -206,6 +216,16 @@
                     </datalist>
                   </div>
 
+                  <!-- cMoon -->
+                  <div>
+                    <label class="block text-xs font-medium text-gray-500 mb-1">cMoon</label>
+                    <select v-model="row.current.cMoonId"
+                      :class="['w-full border rounded px-2 py-1.5 text-sm bg-white', fieldChanged(row, 'cMoonId') ? 'border-yellow-400 bg-yellow-50' : 'border-gray-300']">
+                      <option :value="null">— None —</option>
+                      <option v-for="cm in cmoons" :key="cm.id" :value="cm.id">{{ cm.name }}</option>
+                    </select>
+                  </div>
+
                   <!-- Price -->
                   <div>
                     <label class="block text-xs font-medium text-gray-500 mb-1">Price</label>
@@ -328,12 +348,14 @@ const loading = ref(true)
 const saving = ref(false)
 const rows = ref([])
 const rarityDefaults = ref(null)
+const cmoons = ref([])
 
 // Bulk apply section — null means "no change applied yet"
 const bulk = reactive({
   rarity: '',
   set: '',
   series: '',
+  cMoonId: '',
   inCmart: null,
   codeOnly: null,
   price: null,
@@ -405,7 +427,7 @@ function rarityPrice(rarity) {
 // ── Load data ────────────────────────────────────────────────────────
 onMounted(async () => {
   try {
-    const [detailsRes, rdRes] = await Promise.all([
+    const [detailsRes, rdRes, cmoonsRes] = await Promise.all([
       fetch('/api/admin/ctoons/bulk-details', {
         method: 'POST',
         credentials: 'include',
@@ -413,11 +435,17 @@ onMounted(async () => {
         body: JSON.stringify({ ids: props.ctoonIds }),
       }),
       fetch('/api/rarity-defaults').catch(() => null),
+      fetch('/api/admin/cmoons', { credentials: 'include' }).catch(() => null),
     ])
 
     if (rdRes?.ok) {
       const rdJson = await rdRes.json()
       rarityDefaults.value = rdJson?.defaults || null
+    }
+
+    if (cmoonsRes?.ok) {
+      const cmoonsJson = await cmoonsRes.json()
+      cmoons.value = cmoonsJson?.cmoons || []
     }
 
     if (!detailsRes.ok) throw new Error('Failed to load cToon details')
@@ -433,6 +461,7 @@ onMounted(async () => {
           rarity: c.rarity || '',
           set: c.set || '',
           series: c.series || '',
+          cMoonId: c.cMoonId || null,
           inCmart: Boolean(c.inCmart),
           codeOnly: Boolean(c.codeOnly),
           price: c.price ?? 0,
@@ -491,9 +520,13 @@ function applyDefinedMintDefaults(row) {
 // ── Bulk apply ────────────────────────────────────────────────────────
 function applyBulk(field, value) {
   if (value === '' || value === null || value === undefined) return
+  // '__none__' is the bulk cMoon select's explicit "remove" option — distinct from '' ("no
+  // change") so it can pass the empty-string guard above, then gets translated to a real null
+  // here before landing in row.current.cMoonId.
+  const resolved = (field === 'cMoonId' && value === '__none__') ? null : value
   for (const row of rows.value) {
     const prevMintLimitType = row.current.mintLimitType
-    row.current[field] = value
+    row.current[field] = resolved
     // Auto-price on rarity change
     if (field === 'rarity') {
       row.current.price = rarityPrice(value)
@@ -526,7 +559,7 @@ watch(() => bulk.codeOnly, val => { if (val !== null) applyBulk('codeOnly', val)
 
 // ── Change detection ──────────────────────────────────────────────────
 const COMPARABLE_FIELDS = [
-  'rarity', 'set', 'series', 'inCmart', 'codeOnly', 'price',
+  'rarity', 'set', 'series', 'cMoonId', 'inCmart', 'codeOnly', 'price',
   'perUserLimit', 'quantity', 'initialQuantity',
   'releaseDate', 'mintLimitType', 'mintEndDate',
 ]
