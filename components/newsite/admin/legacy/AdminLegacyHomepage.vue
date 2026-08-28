@@ -173,6 +173,7 @@
                       <option value="gtoons-clash">gToons Clash</option>
                       <option value="news">News</option>
                       <option value="earn-points">Earn Points</option>
+                      <option value="tutorial">Tutorial</option>
                       <option value="custom">Custom URL…</option>
                     </select>
                     <input v-if="homeImages[n].linkPreset === 'custom'"
@@ -281,6 +282,7 @@
                       <option value="gtoons-clash">gToons Clash</option>
                       <option value="news">News</option>
                       <option value="earn-points">Earn Points</option>
+                      <option value="tutorial">Tutorial</option>
                       <option value="custom">Custom URL…</option>
                     </select>
                     <input v-if="middleSidebarImages[n].linkPreset === 'custom'"
@@ -463,7 +465,8 @@ const PAGE_LINKS = {
   'auctions':    '/newsite/AuctionHouse',
   'gtoons-clash':'/newsite/gtoons-clash',
   'news':        '/newsite/news',
-  'earn-points': '/newsite/earnpoints'
+  'earn-points': '/newsite/earnpoints',
+  'tutorial':    '/newsite/tutorial'
 }
 
 const activeTab = ref('Homepage')
