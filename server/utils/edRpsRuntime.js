@@ -7,7 +7,10 @@
 //
 // The exports and their signatures are unchanged, so server/socket-server.js needs no edit.
 import { createDuelRuntime } from './duelRuntime.js'
-import { compareHands, isHand, isCharacterId, clampConfig, HANDS, ROUND_BREAK_MS } from '../../lib/edRps.js'
+// `#lib/...` (package.json "imports", not a relative path) — same Nitro
+// dev-bundler relative-depth bug as server/utils/asteroidEngine.js's import
+// of lib/asteroidSim.js; see the comment there for the full explanation.
+import { compareHands, isHand, isCharacterId, clampConfig, HANDS, ROUND_BREAK_MS } from '#lib/edRps.js'
 import { DUEL_PAIR_SCOPE } from './duelPairScope.js'
 
 const runtime = createDuelRuntime({

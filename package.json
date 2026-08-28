@@ -3,6 +3,9 @@
   "type": "module",
   "version": "1.0.0",
   "main": "index.js",
+  "imports": {
+    "#lib/*": "./lib/*"
+  },
   "scripts": {
     "test": "node --test",
     "dev": "concurrently \"nuxt dev\" \"npm:worker\" \"npm:mint-end\" \"npm:guildchecker\" \"npm:achievements\" \"npm:dissolve\" \"npm:dissolve-launch\" \"npm:content-analyzer\"",
