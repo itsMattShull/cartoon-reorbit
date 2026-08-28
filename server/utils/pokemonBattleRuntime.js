@@ -10,7 +10,10 @@
 // guarantee rather than a checked one, and tests/pokemonBattleWiring.test.js asserts the words
 // stay absent so it cannot quietly stop being true.
 import { createDuelRuntime } from './duelRuntime.js'
-import { compareTypes, isType, clampConfig, TYPES, intermissionMs } from '../../lib/pokemonBattle.js'
+// `#lib/...` (package.json "imports", not a relative path) — same Nitro
+// dev-bundler relative-depth bug as server/utils/asteroidEngine.js's import
+// of lib/asteroidSim.js; see the comment there for the full explanation.
+import { compareTypes, isType, clampConfig, TYPES, intermissionMs } from '#lib/pokemonBattle.js'
 import { isTrainerId } from './pokemonBattleConfig.js'
 import { getPokemonBattleAssets } from './pokemonBattleAssets.js'
 import { DUEL_PAIR_SCOPE } from './duelPairScope.js'
