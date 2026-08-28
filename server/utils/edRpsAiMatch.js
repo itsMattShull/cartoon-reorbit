@@ -40,7 +40,10 @@ import { encryptIp } from './ip-encrypt.js'
 import { getDailyWindowStart } from './centralTime.js'
 import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
 import { hasLiveEdRpsMatch } from './edRpsRuntime.js'
-import { compareHands, isHand, isCharacterId, clampConfig, characterById, CHARACTER_IDS, ROUND_BREAK_MS } from '../../lib/edRps.js'
+// `#lib/...` (package.json "imports", not a relative path) — same Nitro
+// dev-bundler relative-depth bug as server/utils/asteroidEngine.js's import
+// of lib/asteroidSim.js; see the comment there for the full explanation.
+import { compareHands, isHand, isCharacterId, clampConfig, characterById, CHARACTER_IDS, ROUND_BREAK_MS } from '#lib/edRps.js'
 
 const EV = (name) => `edrps:ai:${name}`
 const NS = { userId: 'edRpsAiUserId' }

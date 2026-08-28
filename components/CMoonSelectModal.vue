@@ -9,9 +9,9 @@
           <button v-if="preview" type="button" class="cms-preview-close" aria-label="Close preview" @click="closePreview">✕</button>
           <h2 id="cms-title" class="cms-title">Choose your cMoon</h2>
           <p class="cms-sub">
-            Pick a faction to represent. This can't be changed later, so choose carefully.
+            Pick a faction to represent — this can't be changed once you join. Not ready? Skip for
+            now and join anytime later from the cMoons page.
           </p>
-          <p v-if="deadlineText" class="cms-deadline">Choose by {{ deadlineText }} or you'll be auto-assigned.</p>
           <p v-if="preview" class="cms-preview-badge">Admin preview — this is exactly what new players see. Nothing here is saved.</p>
         </div>
 
@@ -48,6 +48,9 @@
           <button class="cms-confirm-btn" :disabled="!choice || submitting" @click="confirm">
             {{ submitting ? 'Joining…' : 'Confirm cMoon' }}
           </button>
+          <button v-if="!preview" type="button" class="cms-skip-btn" :disabled="submitting" @click="skip">
+            Maybe later
+          </button>
         </div>
       </div>
     </div>
@@ -72,7 +75,6 @@ const submitting = ref(false)
 const error = ref('')
 const cmoons = ref([])
 const choice = ref(null)
-const deadline = ref(null)
 const imageErrors = ref({})
 const modalRef = ref(null)
 
@@ -84,13 +86,6 @@ function onImageError(id) {
   imageErrors.value = { ...imageErrors.value, [id]: true }
 }
 
-const deadlineText = computed(() => {
-  if (!deadline.value) return ''
-  const d = new Date(deadline.value)
-  if (Number.isNaN(d.getTime())) return ''
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(d)
-})
-
 async function checkStatus() {
   try {
     // /api/cmoons is public and briefly cached, so fetching it alongside the eligibility check
@@ -101,12 +96,47 @@ async function checkStatus() {
       $fetch('/api/cmoons').catch(() => ({ cmoons: [] })),
     ])
     if (!status?.cMoonEnabled || !status.canChoose) return
-    deadline.value = status.deadline || null
     cmoons.value = list?.cmoons || []
     visible.value = true
   } catch {
     // Not logged in, or feature off — silently skip.
   }
+}
+
+// Force-open from the "Join a cMoon" button on /newsite/cmoon-nav — for a player who opted out
+// (or otherwise has no cMoon) and wants back in. Bypasses canChoose entirely, since being here
+// means they're asking on purpose; loads the real (non-preview) cmoons list and reuses the exact
+// same confirm()/select flow as the automatic prompt.
+//
+// Two admin-configurable safeguards apply ONLY to a player who previously opted out (never to a
+// first-time chooser, an edge case covered by the final else below): a rejoin cooldown
+// (GlobalGameConfig.cMoonOptOutCooldownDays, off cMoonOptedOutAt) and a per-cMoon
+// allowOptOutJoin toggle. CMoonNav.vue already re-fetches status and hides this button entirely
+// while the cooldown is active, so reaching here mid-cooldown is a rare race (e.g. a stale tab) —
+// handled the same "silently skip" way as every other failure mode in this function, since the
+// real enforcement is server-side in selectCMoonForUser regardless of what this shows.
+const { requested } = useCMoonJoinModal()
+async function openManually() {
+  error.value = ''
+  choice.value = null
+  try {
+    const [status, list] = await Promise.all([
+      $fetch('/api/cmoon/status'),
+      $fetch('/api/cmoons').catch(() => ({ cmoons: [] })),
+    ])
+    if (!status?.cMoonEnabled) return
+    const rejoinAt = status.cMoonRejoinAvailableAt ? new Date(status.cMoonRejoinAvailableAt) : null
+    if (rejoinAt && new Date() < rejoinAt) return
+
+    const all = list?.cmoons || []
+    cmoons.value = status.cMoonOptedOut ? all.filter(c => c.allowOptOutJoin !== false) : all
+    visible.value = true
+  } catch {
+    // Not logged in, or feature off — silently skip, same as checkStatus above.
+  }
+}
+if (!props.preview) {
+  watch(requested, (v) => { if (v > 0) openManually() })
 }
 
 // Admin preview: same /api/cmoons feed as the real flow (so joinLocked cMoons stay excluded
@@ -115,7 +145,6 @@ async function checkStatus() {
 async function loadPreview() {
   error.value = ''
   choice.value = null
-  deadline.value = null
   try {
     const list = await $fetch('/api/cmoons').catch(() => ({ cmoons: [] }))
     cmoons.value = list?.cmoons || []
@@ -158,6 +187,20 @@ async function confirm() {
     else goToCMoon()
   } catch (e) {
     error.value = e?.data?.statusMessage || 'Unable to join that cMoon. Please try again.'
+  } finally {
+    submitting.value = false
+  }
+}
+
+async function skip() {
+  if (submitting.value) return
+  submitting.value = true
+  error.value = ''
+  try {
+    await $fetch('/api/cmoon/opt-out', { method: 'POST' })
+    visible.value = false
+  } catch (e) {
+    error.value = e?.data?.statusMessage || 'Unable to skip right now. Please try again.'
   } finally {
     submitting.value = false
   }
@@ -249,11 +292,12 @@ onBeforeUnmount(() => {
   font-family: 'Nunito', sans-serif;
 }
 
-/* Only 4 cMoons ever exist, so widening the modal (rather than switching Tailwind-style
-   viewport breakpoints) is what lets the auto-fit grid below settle into 4 columns instead of 2
-   — the grid reflows off the modal's own width, so this is the only breakpoint that matters. */
+/* Cartoon selection is data-driven (any number of cMoons, currently 5), so widening the modal
+   (rather than switching Tailwind-style viewport breakpoints) is what lets the auto-fit grid
+   below settle into more columns on a wider screen — the grid reflows off the modal's own width,
+   so this is the only breakpoint that matters. */
 @media (min-width: 700px) {
-  .cms-modal { max-width: 640px; }
+  .cms-modal { max-width: 720px; }
 }
 
 .cms-header {
@@ -301,13 +345,6 @@ onBeforeUnmount(() => {
   color: rgba(255, 255, 255, 0.65);
 }
 
-.cms-deadline {
-  margin: 6px 0 0;
-  font-size: 0.7rem;
-  color: #ffd75e;
-  font-weight: 600;
-}
-
 .cms-empty {
   padding: 20px 16px;
   font-size: 0.8rem;
@@ -335,10 +372,12 @@ onBeforeUnmount(() => {
 
 .cms-options {
   display: grid;
-  /* auto-fit (not a fixed 2/4-column split) sizes columns off the modal's real width and
-     naturally caps at however many of the (at most 4) cards fit — no viewport breakpoint to
-     keep in sync with the max-width rule above. */
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  /* auto-fit (not a fixed column-count split) sizes columns off the modal's real width and
+     naturally caps at however many cards fit — no viewport breakpoint to keep in sync with the
+     max-width rule above. minmax's floor is tuned so 5 cards fit one row at the ≥700px
+     breakpoint's 720px width (5*112 + 4*10 gap = 600px) without going so narrow that 2-3 cards
+     get uncomfortably thin on a phone. */
+  grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
   gap: 10px;
 }
 
@@ -432,6 +471,9 @@ onBeforeUnmount(() => {
 }
 
 .cms-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding: 12px 16px 16px;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
@@ -454,8 +496,31 @@ onBeforeUnmount(() => {
   cursor: not-allowed;
 }
 
+.cms-skip-btn {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.cms-skip-btn:disabled {
+  color: rgba(255, 255, 255, 0.35);
+  cursor: not-allowed;
+}
+@media (hover: hover) and (pointer: fine) {
+  .cms-skip-btn:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.45);
+    color: #fff;
+  }
+}
+
 .cms-card:focus-visible,
-.cms-confirm-btn:focus-visible {
+.cms-confirm-btn:focus-visible,
+.cms-skip-btn:focus-visible {
   outline: 3px solid #ffd75e;
   outline-offset: 2px;
 }
@@ -470,7 +535,6 @@ onBeforeUnmount(() => {
     -webkit-line-clamp: 1;
     -webkit-box-orient: vertical;
   }
-  .cms-deadline { margin-top: 2px; }
   .cms-body { padding: 8px 16px; }
   .cms-footer { padding: 8px 16px 12px; }
 }
