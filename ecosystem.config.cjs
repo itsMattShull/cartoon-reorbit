@@ -147,6 +147,16 @@ module.exports = {
       env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
+    // ── BullMQ worker: admin user-to-user asset transfer ──────────────────
+    {
+      name:      'worker-transfer',
+      script:    'server/workers/transfer.worker.js',
+      exec_mode: 'fork',
+      instances: 1,
+      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+    },
+
     // ── BullMQ worker: daily achievements ─────────────────────────────────
     {
       name:      'worker-achieve',
