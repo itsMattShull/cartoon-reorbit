@@ -37,7 +37,7 @@
           <section class="cmp-panel cmp-featured-panel">
             <h2 class="cmp-section-title">Featured cToons</h2>
             <div v-if="!cmoon.featuredCtoons.length" class="cmp-empty">No cToons are featured under this cMoon yet.</div>
-            <div v-else class="cmp-grid">
+            <div v-else class="cmp-featured-grid">
               <button
                 v-for="c in cmoon.featuredCtoons"
                 :key="c.id"
@@ -337,14 +337,16 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   width: 100%;
 }
 
-/* Height clamp rather than a locked aspect-ratio box: the source art is a very wide, short strip
-   (~12:1) — locking that ratio at a narrow phone width would shrink it to a barely-visible sliver.
-   Clamping height instead means the image crops at the sides on a narrow screen rather than
-   collapsing — admins should keep name/logo art centered, since the edges crop first. */
+/* Locked to the upload's real stored aspect ratio (the backend always normalizes to exactly
+   1200x100 — see page-banner-image.post.js) rather than a fixed height: with the box's aspect
+   ratio matching the image's exactly, object-fit has nothing to crop, so the full banner is
+   always visible edge to edge. On a narrow phone this does mean a shorter strip in absolute
+   pixels, but a cropped side is worse than a shorter (fully visible) banner. */
 .cmp-masthead-img {
   display: block;
   width: 100%;
-  height: clamp(48px, 14vw, 100px);
+  height: auto;
+  aspect-ratio: 1200 / 100;
   object-fit: cover;
 }
 
@@ -406,6 +408,26 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   min-width: 0;
 }
 
+/* The Featured cToons panel is deliberately NOT themed off the cMoon's color like the rest of the
+   page (.cmp-body's --cm-bg) — it's the site's fixed classic blue, matching the reference layout
+   where the center "Featured cToons" panel stays blue regardless of which world's colors surround
+   it. Cards get their own fixed light tile + dark text here too, rather than the cMoon-derived
+   --cm-tile-bg/--cm-text, since those are only contrast-tuned against --cm-bg and could clash
+   against a fixed blue an admin's chosen color was never checked against. */
+.cmp-featured-panel {
+  background: var(--OrbitDarkBlue, #336699);
+  color: #ffffff;
+  border-radius: 10px;
+  padding: 14px;
+}
+.cmp-featured-panel .cmp-empty {
+  color: rgba(255, 255, 255, 0.75);
+}
+.cmp-featured-panel .cmp-card {
+  background: rgba(255, 255, 255, 0.94);
+  color: #1a2b3d;
+}
+
 .cmp-middle-row,
 .cmp-bottom-row {
   display: flex;
@@ -452,6 +474,18 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
      breakpoint to keep in sync. */
   grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
   gap: 8px;
+}
+
+/* Featured cToons only: fixed-size (not 1fr-stretched) tracks with justify-content:center, so the
+   grid reads as a flush, centered block — like the reference layout's 2-row-of-6 — instead of
+   stretching cards edge-to-edge and instead of an off-center last row. auto-fill (not auto-fit)
+   keeps the track count stable as items are added/removed; centering handles any leftover slots
+   in the final row itself, so 12 cards on a wide pane settle into two centered rows of 6. */
+.cmp-featured-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 100px));
+  justify-content: center;
+  gap: 10px;
 }
 
 .cmp-card {
