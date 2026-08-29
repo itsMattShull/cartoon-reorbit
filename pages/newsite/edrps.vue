@@ -31,10 +31,19 @@
 
       <!-- Above the room list on purpose: the room list is usually empty, and a dead lobby
            must never be the first thing a player meets. -->
-      <button class="rps-btn rps-btn--go" @click="startCpu" :disabled="!character">
-        Play the Eds
+      <button
+        class="rps-btn rps-btn--go"
+        @click="startCpu"
+        :disabled="!character || !connected || startingAi"
+      >
+        <span v-if="startingAi" class="rps-spinner rps-spinner--inline" aria-hidden="true"></span>
+        {{ startingAi ? 'Squaring off…' : 'Play the Eds' }}
       </button>
-      <p class="rps-note">Practice against the computer. No points, play as much as you like.</p>
+      <p v-if="pointsPerWin > 0" class="rps-note rps-note--tight">
+        Beat the Eds for <strong>{{ pointsPerWin }}</strong> points too, from the same daily
+        pool as PvP.
+      </p>
+      <p v-else class="rps-note">Practice against the computer, any time.</p>
 
       <div class="rps-versus">
         <div class="rps-versus-head">
@@ -75,8 +84,6 @@
           Nobody's waiting right now. Create a room and the Discord will hear about it.
         </p>
       </div>
-
-      <p v-if="error" class="rps-error" role="alert">{{ error }}</p>
     </div>
 
     <!-- ── Match ─────────────────────────────────────────────────────────────────── -->
@@ -204,13 +211,20 @@
         <p class="rps-rotate-text">Turn your phone upright to play</p>
       </div>
     </Teleport>
+
+    <!-- A toast, not the old lobby-only paragraph: errors from a live AI or PvP match (a socket
+         drop mid-round, a rejected start) fire while screen === 'match', where the match template
+         has no room to spare for an inline error box — see the ~396px mobile budget note above. -->
+    <Teleport to="body">
+      <p v-if="error" class="rps-error-toast" role="alert">{{ error }}</p>
+    </Teleport>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { io as ioClient } from 'socket.io-client'
-import { CHARACTERS, HANDS, HAND_ART, ROUND_BREAK_MS, characterById, compareHands } from '~/lib/edRps'
+import { CHARACTERS, HANDS, HAND_ART, ROUND_BREAK_MS, characterById } from '~/lib/edRps'
 
 definePageMeta({
   layout: 'newsite-template',
@@ -265,6 +279,10 @@ const wrapper = ref(null)
 const blockedLandscape = ref(false)
 
 const isCpu = ref(false)
+// True only for the round-trip between tapping "Play the Eds" and the server's ack — guards the
+// button against a double-tap firing two edrps:ai:start emits while a slow/buffered connection
+// is still catching up.
+const startingAi = ref(false)
 const me = ref({ username: 'You', character: 'ed', score: 0 })
 const opp = ref({ username: 'Opponent', character: 'eddy', score: 0 })
 const winsNeeded = ref(4)
@@ -286,7 +304,6 @@ const endReason = ref('natural')
 const pointsAwarded = ref(0)
 const suppressReason = ref(null)
 const pointsPerWin = ref(0)
-const cpuRoundSeconds = ref(15)
 
 const myChar = computed(() => characterById(me.value.character))
 const oppChar = computed(() => characterById(opp.value.character))
@@ -335,6 +352,11 @@ function connectSocket() {
   socket.on('connect', () => {
     connected.value = true
     socket.emit('edrps:subscribe')
+    // Resumes a live AI match after a reconnect (page reload, a network blip) — the server
+    // resends edrps:ai:matchStart if this user has one in flight. There is no separate "waiting
+    // room" state to restore for it the way edrps:subscribe restores the PvP lobby: an AI match
+    // has no second player, so it either exists or it doesn't.
+    socket.emit('edrps:ai:subscribe')
   })
   socket.on('disconnect', () => { connected.value = false })
 
@@ -342,10 +364,10 @@ function connectSocket() {
   socket.on('edrps:config', (cfg) => {
     pointsPerWin.value = cfg?.pointsPerWin ?? 0
     // Only used to size the pip rows before a match starts; matchStart carries the
-    // authoritative values.
+    // authoritative values. The AI match uses this exact same pointsPerWin/pool — see
+    // server/utils/edRpsAiMatch.js — so there is no separate ai-config broadcast to listen for.
     if (cfg?.winsNeeded) winsNeeded.value = cfg.winsNeeded
     if (cfg?.maxRounds) maxRounds.value = cfg.maxRounds
-    if (cfg?.roundSeconds) cpuRoundSeconds.value = cfg.roundSeconds
   })
   socket.on('edrps:roomAdded', (r) => {
     if (!rooms.value.some(x => x.id === r.id)) rooms.value = [r, ...rooms.value]
@@ -415,6 +437,68 @@ function connectSocket() {
   socket.on('edrps:error', ({ message }) => {
     error.value = message || 'Something went wrong.'
     setTimeout(() => { error.value = '' }, 4000)
+  })
+
+  /* ── AI match (server/utils/edRpsAiMatch.js) ──────────────────────────────────────────
+   * Deliberately reuses applyView/showReveal rather than a parallel set of handlers: the
+   * server's edrps:ai:* payloads are shaped identically to the PvP ones on purpose, so the same
+   * match-screen state (and the same 396px-budget template) renders both. isCpu is what the rest
+   * of this file already branches on to tell them apart. */
+  socket.on('edrps:ai:matchStart', (v) => {
+    if (startAiTimeout) { clearTimeout(startAiTimeout); startAiTimeout = null }
+    startingAi.value = false
+    isCpu.value = true
+    resetMatchUi()
+    applyView(v)
+    screen.value = 'match'
+    startTick()
+  })
+
+  socket.on('edrps:ai:round', (v) => {
+    applyView(v)
+    revealed.value = null
+    myPick.value = null
+    banner.value = ''
+    myLine.value = ''
+    oppLine.value = ''
+  })
+
+  socket.on('edrps:ai:throwAccepted', () => { iThrew.value = true })
+  socket.on('edrps:ai:opponentThrew', () => { oppThrew.value = true })
+
+  socket.on('edrps:ai:reveal', (v) => {
+    applyView(v)
+    showReveal(v.reveal)
+  })
+
+  socket.on('edrps:ai:matchEnd', (v) => {
+    applyView(v)
+    won.value = v.won
+    endReason.value = v.endReason
+    pointsAwarded.value = v.pointsAwarded || 0
+    suppressReason.value = v.suppressReason || null
+    deadlineAt.value = 0
+    stopTick()
+
+    const holdForResult = v.endReason === 'natural' && !!revealed.value
+    if (matchEndTimer) clearTimeout(matchEndTimer)
+    if (holdForResult) {
+      matchEndTimer = setTimeout(() => { over.value = true }, ROUND_BREAK_MS)
+    } else {
+      over.value = true
+    }
+  })
+
+  socket.on('edrps:ai:error', ({ code, message }) => {
+    if (startAiTimeout) { clearTimeout(startAiTimeout); startAiTimeout = null }
+    startingAi.value = false
+    error.value = message || 'Something went wrong.'
+    setTimeout(() => { error.value = '' }, 4000)
+    // The server refused to start a match (already in one, on cooldown, bad character) — if we
+    // optimistically left the lobby for anything, this is the one error that should send the
+    // player back rather than strand them on a screen with no match behind it. In practice
+    // startCpu never flips screen before the ack, so this is defensive.
+    if (code === 'inMatch' && screen.value !== 'match') screen.value = 'lobby'
   })
 }
 
@@ -490,9 +574,8 @@ function backToLobby() {
 }
 
 function quitMatch() {
-  if (isCpu.value) { backToLobby(); return }
-  socket?.emit('edrps:leave')
-  // The server confirms with edrps:matchEnd; this just stops the clock ticking meanwhile.
+  socket?.emit(isCpu.value ? 'edrps:ai:leave' : 'edrps:leave')
+  // The server confirms with a matchEnd event; this just stops the clock ticking meanwhile.
   deadlineAt.value = 0
   stopTick()
 }
@@ -501,86 +584,35 @@ function quitMatch() {
 function throwHand(hand) {
   if (!canThrow.value) return
   myPick.value = hand
-  if (isCpu.value) { cpuResolve(hand); return }
   iThrew.value = true
+  if (isCpu.value) {
+    socket?.emit('edrps:ai:throw', { round: roundNumber.value, hand })
+    return
+  }
   socket?.emit('edrps:throw', { round: roundNumber.value, hand })
 }
 
-/* ── CPU practice ─────────────────────────────────────────────────────────────────────
- * Entirely local: no socket, no match row, no points. Nothing here may ever report a result
- * to the server — the award path is PvP-only by construction. */
-let cpuTimer = null
-
-function randomHand() {
-  if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
-    const a = new Uint32Array(1)
-    // Rejection-sample so the three hands stay equally likely rather than 2^32 % 3 biased.
-    do { crypto.getRandomValues(a) } while (a[0] >= 4294967295 - (4294967295 % 3))
-    return a[0] % 3
-  }
-  return Math.floor(Math.random() * 3)
-}
+/* ── AI match ("Play the Eds") ────────────────────────────────────────────────────────
+ * Server-authoritative — see server/utils/edRpsAiMatch.js. Round timing, hand resolution and
+ * points all happen there; this just starts the match and throws hands the same way PvP does. */
+let startAiTimeout = null
 
 function startCpu() {
-  if (!character.value) return
-  isCpu.value = true
-  resetMatchUi()
-  const others = CHARACTERS.filter(c => c.id !== character.value)
-  // One draw, not two: picking the name and the sprite independently produces an opponent
-  // called "Ed" who is drawn as Eddy.
-  const foe = others[Math.floor(Math.random() * others.length)]
-  me.value = { username: 'You', character: character.value, score: 0 }
-  opp.value = { username: foe.name, character: foe.id, score: 0 }
-  roundNumber.value = 1
-  screen.value = 'match'
-  cpuArmRound()
-}
-
-function cpuArmRound() {
-  revealed.value = null
-  myPick.value = null
-  iThrew.value = false
-  oppThrew.value = false
-  banner.value = ''
-  myLine.value = ''
-  oppLine.value = ''
-  const ms = cpuRoundSeconds.value * 1000
-  deadlineAt.value = Date.now() + ms
-  startTick()
-  if (cpuTimer) clearTimeout(cpuTimer)
-  cpuTimer = setTimeout(() => {
-    if (!revealed.value && screen.value === 'match' && isCpu.value) cpuResolve(randomHand())
-  }, ms + 250)
-}
-
-function cpuResolve(myHand) {
-  if (cpuTimer) { clearTimeout(cpuTimer); cpuTimer = null }
-  const theirs = randomHand()
-  const cmp = compareHands(myHand, theirs)
-  if (cmp > 0) me.value = { ...me.value, score: me.value.score + 1 }
-  else if (cmp < 0) opp.value = { ...opp.value, score: opp.value.score + 1 }
-  deadlineAt.value = 0
-  stopTick()
-  showReveal({
-    you: myHand,
-    opponent: theirs,
-    result: cmp === 0 ? 'tie' : (cmp > 0 ? 'win' : 'loss')
-  })
-
-  const decided = me.value.score >= winsNeeded.value || opp.value.score >= winsNeeded.value
-  setTimeout(() => {
-    if (screen.value !== 'match' || !isCpu.value) return
-    if (decided) {
-      over.value = true
-      won.value = me.value.score > opp.value.score
-      endReason.value = 'natural'
-      pointsAwarded.value = 0
-      suppressReason.value = null
-    } else {
-      roundNumber.value += 1
-      cpuArmRound()
-    }
-  }, ROUND_BREAK_MS)
+  if (!character.value || startingAi.value || !connected.value) return
+  startingAi.value = true
+  error.value = ''
+  socket?.emit('edrps:ai:start', { character: character.value })
+  // A disconnected socket.io client queues emits and can take a while to flush on reconnect —
+  // without this, a slow network leaves the button stuck disabled with no feedback rather than
+  // failing visibly. edrps:ai:matchStart/edrps:ai:error both clear startingAi well before this
+  // in the normal case.
+  if (startAiTimeout) clearTimeout(startAiTimeout)
+  startAiTimeout = setTimeout(() => {
+    if (!startingAi.value) return
+    startingAi.value = false
+    error.value = "Couldn't reach the server. Try again."
+    setTimeout(() => { error.value = '' }, 4000)
+  }, 8000)
 }
 
 /* ── Orientation ──────────────────────────────────────────────────────────────────── */
@@ -624,8 +656,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   stopTick()
-  if (cpuTimer) clearTimeout(cpuTimer)
   if (matchEndTimer) clearTimeout(matchEndTimer)
+  if (startAiTimeout) clearTimeout(startAiTimeout)
   if (orientationHandler) {
     window.removeEventListener('orientationchange', orientationHandler)
     window.removeEventListener('resize', orientationHandler)
@@ -852,6 +884,15 @@ html.edrps-page body ::-moz-selection { background: transparent; }
   animation: rps-spin 0.8s linear infinite;
 }
 @keyframes rps-spin { to { transform: rotate(360deg); } }
+/* Sits inside the green "Play the Eds" button rather than the pale .rps-waiting row, so it
+   needs light-on-dark contrast instead of the default dark-on-pale one. */
+.rps-spinner--inline {
+  display: inline-block;
+  vertical-align: -3px;
+  margin-right: 6px;
+  border-color: rgba(255, 255, 255, 0.4);
+  border-top-color: #fff;
+}
 
 .rps-link {
   background: none;
@@ -872,6 +913,28 @@ html.edrps-page body ::-moz-selection { background: transparent; }
   border: 2px solid #e2231a;
   font-size: 13px;
   text-align: center;
+}
+
+/* Fixed and teleported to body (see the template) so it renders over the match screen too,
+   which has no vertical budget for an in-flow error box. Below .rps-rotate's 9999 — a blocked-
+   landscape lock should never be obscured by a transient toast underneath it. */
+.rps-error-toast {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 500;
+  max-width: min(92vw, 420px);
+  margin: 0;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: #ffe0de;
+  border: 2px solid #e2231a;
+  color: #10243a;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 
 /* ── Match ─────────────────────────────────────────────────────────────────────────── */

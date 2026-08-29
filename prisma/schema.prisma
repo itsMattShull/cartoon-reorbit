@@ -353,6 +353,7 @@ model Ctoon {
   // editor). Purely a catalog/display categorization — unrelated to the player-faction system.
   cMoonId String?
   cMoon   CMoon?  @relation("CtoonCMoonDisplay", fields: [cMoonId], references: [id], onDelete: SetNull)
+  cMoonFeaturedRows CMoonFeaturedCtoon[]
 
   cZoneSearchPrizeRows   CZoneSearchPrize[]
   cZoneSearchAppearances CZoneSearchAppearance[]
@@ -503,6 +504,16 @@ model User {
   cMoon              CMoon?    @relation(fields: [cMoonId], references: [id], onDelete: SetNull)
   cMoonSelectedAt    DateTime?
   cMoonAutoAssigned  Boolean   @default(false)
+  // Set when a player explicitly declines to pick a cMoon from the initial join modal (there is no
+  // more time-based auto-assignment — see server/utils/cmoon.js). Only meaningful while cMoonId is
+  // null; cleared back to false on a successful selectCMoonForUser. Lets the modal stop popping up
+  // automatically (see canChoose in server/api/cmoon/status.get.js) while /newsite/cmoon-nav still
+  // offers a "Join a cMoon" button that reopens the same modal on demand.
+  cMoonOptedOut      Boolean   @default(false)
+  // When cMoonOptedOut was last set true — the anchor for the admin-configurable rejoin cooldown
+  // (GlobalGameConfig.cMoonOptOutCooldownDays, see computeCMoonRejoinAvailableAt in
+  // server/utils/cmoon.js). Cleared back to null alongside cMoonOptedOut on a successful rejoin.
+  cMoonOptedOutAt    DateTime?
   // Set once the daily Discord sync grants this user's cMoon role, so the job
   // only touches never-synced members instead of re-checking everyone daily.
   cMoonRoleGrantedAt DateTime?
@@ -516,6 +527,7 @@ model User {
   // Mirrors cMoonRoleGrantedAt but for the rank's own Discord role, granted by the same
   // nightly reconciliation cron (syncCMoonDiscordRoles) rather than synchronously on unlock.
   cMoonRankRoleGrantedAt DateTime?
+  cMoonPollVotes         CMoonPollVote[]
 
   cZones                    CZone[]
   clashDecks                ClashDeck[]
@@ -677,6 +689,10 @@ model User {
   @@index([cMoonId, cMoonRoleGrantedAt])
   @@index([currentCMoonRankId])
   @@index([cMoonId, cMoonRankRoleGrantedAt])
+  // Powers the cMoon page's "Top Ranking Members" leaderboard view: filters to this cMoon's
+  // members that actually hold a rank before the join/sort, pruning the (usually majority)
+  // no-rank rows first rather than sorting the whole membership.
+  @@index([cMoonId, currentCMoonRankId])
 }
 
 model CtoonUserSuggestion {
@@ -1476,11 +1492,17 @@ model GlobalGameConfig {
   faviconVersion                     BigInt?
   faviconSourcePath                  String? // original master upload, retained for re-generation/audit
   // cMoon (faction) feature — off by default, easy to disable without losing data.
-  // When flipped false -> true, cMoonEnabledAt is set to now and cMoonSelectionDeadlineAt
-  // to now + 3 days (the window existing users get to pick a cMoon before auto-assignment).
+  // When flipped false -> true, cMoonEnabledAt is set to now (purely informational, shown in the
+  // admin panel as "Launched X"). cMoonSelectionDeadlineAt predates the opt-out flow and is no
+  // longer read by anything — left in place rather than migrated away since it's harmless.
   cMoonEnabled                       Boolean   @default(false)
   cMoonEnabledAt                     DateTime?
   cMoonSelectionDeadlineAt           DateTime?
+  // How many days a player who opted out of (or hasn't yet picked) a cMoon must wait before they
+  // can join one again from the cMoons navigation page's "Join a cMoon" button — see
+  // computeCMoonRejoinAvailableAt in server/utils/cmoon.js. 0 = no cooldown. Independent of, and
+  // applied together with, each CMoon's own allowOptOutJoin toggle below.
+  cMoonOptOutCooldownDays            Int       @default(14)
   // Weekly cMoon team-leaderboard scoring rules (see server/utils/cmoon.js
   // runWeeklyCMoonScoring / recordDailyTaskCompletions). Admin-editable via
   // Admin > cMoons > Scoring Rules; changes apply forward-only to future cron
@@ -1769,25 +1791,37 @@ model ClashGame {
 // One completed Ed, Edd n Eddy RPS match.
 //
 // Written ONCE, at match end, inside the same transaction that awards the points — there is no
-// stake to escrow, so unlike ClashGame there is nothing worth persisting mid-match. CPU
-// practice matches are played entirely in the browser and never reach this table, which is why
-// both player columns are NOT NULL.
+// stake to escrow, so unlike ClashGame there is nothing worth persisting mid-match.
+//
+// player2UserId is null for an AI opponent ("Play the Eds"), the same pattern
+// ClashGame.player2UserId / MonsterBattle.player2UserId already use — that match is
+// server-authoritative too (server/utils/edRpsAiMatch.js), unlike the CPU mode this game shipped
+// with originally, which never reached this table at all. player1UserId <> player2UserId reads
+// NULL (falsy) whenever player2UserId is null, which is what already keeps AI rows out of the
+// win leaderboard (server/utils/duelLeaderboard.js), the cMoon high-score scan
+// (server/utils/cmoon.js) and the pair-limit count (LEAST/GREATEST ignore a null argument, so an
+// AI row's pair key is always (p1, p1) and can never match a real two-user pair) with no
+// explicit filter needed in any of them.
 //
 // The IP/fingerprint/timing columns exist for one reason: win-trading between alts is the
 // obvious way to farm a game this fast, and the admin cheat tooling is otherwise blind to game
-// outcomes entirely. `pointsAwardedAt` doubles as the award idempotency key.
+// outcomes entirely. `pointsAwardedAt` doubles as the award idempotency key. For an AI match,
+// player1Ip/player1VisitorId are still captured (there's a real device on that side) — the AI
+// path's device-cluster daily cap sums over those instead of a same-device check.
 model EdRpsMatch {
   id     String @id @default(uuid())
   roomId String
 
   player1UserId    String
-  player2UserId    String
+  player2UserId    String?
+  player2IsAi      Boolean @default(false)
   player1Character String
   player2Character String
   player1Score     Int    @default(0)
   player2Score     Int    @default(0)
 
   winnerUserId  String?
+  winnerIsAi    Boolean @default(false)
   whoLeftUserId String?
   // 'natural' | 'forfeit' | 'sweep' — only 'natural' ever pays points.
   endReason     String  @default("natural")
@@ -1821,13 +1855,14 @@ model EdRpsMatch {
   endedAt   DateTime?
 
   player1 User  @relation("EdRpsMatchPlayer1", fields: [player1UserId], references: [id])
-  player2 User  @relation("EdRpsMatchPlayer2", fields: [player2UserId], references: [id])
+  player2 User? @relation("EdRpsMatchPlayer2", fields: [player2UserId], references: [id])
   winner  User? @relation("EdRpsMatchWinner", fields: [winnerUserId], references: [id])
   whoLeft User? @relation("EdRpsMatchWhoLeft", fields: [whoLeftUserId], references: [id])
 
   // ClashGame has no indexes at all and its leaderboard sequentially scans five times over.
   // This table grows far faster, so it gets real ones. The migration adds partial variants
-  // (WHERE "endedAt" IS NOT NULL) that Prisma cannot express.
+  // (WHERE "endedAt" IS NOT NULL) that Prisma cannot express, including the two AI-match
+  // device-cluster indexes on (player1Ip | player1VisitorId, pointsAwardedAt).
   @@index([startedAt])
   @@index([endedAt])
   @@index([player1UserId, endedAt])
@@ -2480,6 +2515,13 @@ model HomepageConfig {
   updatedAt               DateTime @updatedAt
 }
 
+model TutorialConfig {
+  id            String   @id
+  heroImagePath String?
+  sections      Json     @default("{}")
+  updatedAt     DateTime @updatedAt
+}
+
 model AdImage {
   id        String   @id @default(uuid())
   imagePath String   @unique
@@ -2914,7 +2956,7 @@ model CMoon {
   updatedAt     DateTime @updatedAt
 
   // When true, this cMoon is hidden from the self-serve "choose your cMoon" list/modal, and
-  // blocked server-side in selectCMoonForUser/assignSmallestCMoonToUser (server/utils/cmoon.js)
+  // blocked server-side in selectCMoonForUser (server/utils/cmoon.js)
   // — so it can't be joined by players on their own. Admins can still place a player into it
   // directly (POST /api/admin/users/[id]/update-cmoon, unaffected by this flag), cToons can still
   // be display-assigned to it, and its own /newsite/cmoon/[id] page and member-facing features
@@ -2934,16 +2976,35 @@ model CMoon {
 
   // Public "cMoon page" content (/newsite/cmoon/[id]) — a display/catalog feature, independent
   // of the cMoonEnabled faction-join flag above. pageImagePath is exactly 800x600, matching CZone.
+  // No longer rendered on the redesigned cMoon page (superseded by pageBannerImagePath +
+  // featuredCtoons below) — left in place rather than migrated away since it's a harmless,
+  // easily-resurrected no-op otherwise.
   pageImagePath   String?
   pageImageWidth  Int?
   pageImageHeight Int?
   pageDescription String?
-  // Small wide banner graphic (normalized to 800x200) shown on a themed cToon
-  // modal in place of the plain "cWorld" text tile, linking to the page above.
-  bannerImagePath String?
+  // Small pill-shaped button (normalized to 232x62) linking to this cMoon's page — shown on every
+  // cToon's ID card in place of the old full-width banner it replaced (see the migration that
+  // renamed this from bannerImagePath), and optionally on other cMoons' pages too (see
+  // showButtonOnPages below).
+  buttonImagePath String?
+  // Whether this cMoon's buttonImagePath appears in the button-pill list on OTHER cMoons' pages
+  // (never on its own page). Independent of joinLocked/showOnNav — a locked cMoon can still opt
+  // into this cross-promotion. Defaults off: an admin must upload art and explicitly turn it on.
+  showButtonOnPages Boolean @default(false)
+  // Whether a player who previously opted out of picking a cMoon can choose THIS cMoon when they
+  // come back to join later (after any cooldown — see GlobalGameConfig.cMoonOptOutCooldownDays).
+  // A team-balance safeguard, independent of joinLocked: a cMoon can stay open to first-time
+  // choosers but closed to late/returning joiners, or vice versa. Defaults on (matches the
+  // pre-existing behavior of every cMoon being open to a rejoin).
+  allowOptOutJoin Boolean @default(true)
+  // Wide masthead banner (normalized to 1200x100) shown at the top of this cMoon's own page —
+  // distinct from buttonImagePath above (that's the small pill shown elsewhere) and from
+  // pageImagePath above (no longer displayed). Falls back to a plain colored title bar when unset.
+  pageBannerImagePath String?
   // Small square "avatar" (normalized ~128x128, like a player avatar) shown next to this
   // cMoon's colored name badge on member cZones — a quick-glance identity separate from the
-  // large poster (imagePath) and the page/banner art above, which are too large for that spot.
+  // large poster (imagePath) and the page/button art above, which are too large for that spot.
   avatarPath      String?
 
   members              User[]
@@ -2955,10 +3016,79 @@ model CMoon {
   dispersalClaims      CMoonDispersalClaim[]
   // cToons thematically displayed under this cMoon (admin-assigned in the cToon editor). Distinct
   // from `members`/`prizeCtoons`, which are about the player-faction feature, not catalog display.
+  // No longer rendered directly on the cMoon page (see featuredCtoons below), but still the pool
+  // admins pick featured cToons from, and still used wherever else the cToon editor relies on it.
   displayedCtoons      Ctoon[]                    @relation("CtoonCMoonDisplay")
+  // Up to 12 admin-curated cToons shown in the page's centerpiece grid — a curated subset of
+  // displayedCtoons above, not a replacement for it. See server/api/cmoon/[id].get.js for the
+  // fallback behavior when an admin hasn't curated one yet.
+  featuredCtoons       CMoonFeaturedCtoon[]
+  poll                 CMoonPoll?
 
   @@index([memberCount])
   @@index([teamScore])
+}
+
+// Admin-curated "Featured cToons" for one cMoon's page (capped at 12, enforced server-side in
+// server/api/admin/cmoons/[id]/featured-ctoons.put.js — not a DB constraint). A ctoonId here must
+// have Ctoon.cMoonId equal to this row's cMoonId (checked at write time), keeping "featured" a
+// strict subset of the existing display-assignment rather than an independent pool.
+model CMoonFeaturedCtoon {
+  id        String   @id @default(uuid())
+  cMoonId   String
+  cMoon     CMoon    @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  ctoonId   String
+  ctoon     Ctoon    @relation(fields: [ctoonId], references: [id], onDelete: Cascade)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([cMoonId, ctoonId])
+  @@index([cMoonId, sortOrder])
+}
+
+// At most one poll per cMoon at a time (cMoonId is @unique) — "replacing" a poll from the admin
+// editor deletes this row (cascading options/votes) and creates a new one, rather than editing
+// options in place, so results never silently mix across unrelated questions.
+model CMoonPoll {
+  id        String   @id @default(uuid())
+  cMoonId   String   @unique
+  cMoon     CMoon    @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  question  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  options CMoonPollOption[]
+  votes   CMoonPollVote[]
+}
+
+model CMoonPollOption {
+  id        String   @id @default(uuid())
+  pollId    String
+  poll      CMoonPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  label     String
+  sortOrder Int       @default(0)
+
+  votes CMoonPollVote[]
+
+  @@index([pollId, sortOrder])
+}
+
+// One vote per user per poll — the @@unique constraint below (not a pre-read check) is the
+// concurrency guard against double-voting, mirroring the updateMany-where-cMoonId-null pattern
+// selectCMoonForUser uses in server/utils/cmoon.js: the write itself either succeeds once or fails
+// with a Prisma P2002, which server/api/cmoon/[id]/poll-vote.post.js turns into a clean 409.
+model CMoonPollVote {
+  id        String    @id @default(uuid())
+  pollId    String
+  poll      CMoonPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  optionId  String
+  option    CMoonPollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
+  @@unique([pollId, userId])
+  @@index([pollId, optionId])
 }
 
 // Admin-editable rank ladder for one cMoon (e.g. Private -> Sergeant -> Lieutenant).
