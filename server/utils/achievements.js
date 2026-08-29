@@ -384,7 +384,7 @@ export async function awardAchievementToUser(client, userId, achievement) {
 
 export async function processAchievementsForUser(userId) {
   // Only process active + non-banned users
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, active: true, banned: true } })
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, active: true, banned: true, cMoonId: true } })
   if (!user) {
     // console.log('[achievements] process: skip no user', { userId })
     return { awarded: 0 }
@@ -409,6 +409,17 @@ export async function processAchievementsForUser(userId) {
 
   let awarded = 0
   for (const ach of achievements) {
+    // Cheap, in-memory pre-filter before either DB round trip below: a cMoon-rank achievement
+    // only ever applies to members of the specific cMoon that rank belongs to (the same rule
+    // evaluateUserAgainstAchievement enforces), so skip it immediately for every other member
+    // instead of paying an achievementUser lookup + a full evaluate call for it. Without this,
+    // a universal rank tier's N-cMoons-worth of auto-provisioned achievements (see
+    // server/utils/cmoonRankTiers.js) would mean nearly all of them are wasted work for any
+    // given user — only one cMoon's copy is ever relevant to them at a time.
+    if (ach.cMoonRankId && ach.cMoonRank && ach.cMoonRank.cMoonId !== user.cMoonId) {
+      continue
+    }
+
     // Skip if already achieved
     const has = await prisma.achievementUser.findUnique({ where: { achievementId_userId: { achievementId: ach.id, userId } } })
     if (has) {
@@ -452,7 +463,7 @@ export async function claimAchievementReward(userId, achievementId, optionId) {
   })
   if (!achieved) throw new AchievementClaimError('NOT_UNLOCKED')
 
-  const ach = await prisma.achievement.findUnique({ where: { id: achievementId }, select: { isClaimable: true } })
+  const ach = await prisma.achievement.findUnique({ where: { id: achievementId }, select: { isClaimable: true, cMoonRankTierId: true } })
   if (!ach?.isClaimable) throw new AchievementClaimError('NOT_CLAIMABLE')
 
   const option = await prisma.achievementClaimOption.findUnique({
@@ -473,10 +484,27 @@ export async function claimAchievementReward(userId, achievementId, optionId) {
   let txResult
   try {
     txResult = await prisma.$transaction(async (tx) => {
+      // A universal rank tier's reward is meant to be claimed ONCE, ever — but each cMoon gets
+      // its own copy of the tier's achievement (see server/utils/cmoonRankTiers.js), and
+      // User.cMoonPoints restarts on every cMoon reassignment, so without this guard a player
+      // could hop cMoon A -> B -> C, re-earn each cMoon's copy of the same tier from zero, and
+      // re-claim the "universal" reward again in every cMoon visited. The advisory lock (keyed
+      // to this user+tier, released automatically at transaction end) closes the race where two
+      // concurrent claims — one against cMoon A's achievement, one against cMoon B's — could
+      // otherwise both read zero prior claims before either commits.
+      if (ach.cMoonRankTierId) {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${ach.cMoonRankTierId}`}))`
+        const alreadyClaimedTier = await tx.achievementClaim.count({
+          where: { userId, achievement: { cMoonRankTierId: ach.cMoonRankTierId } },
+        })
+        if (alreadyClaimedTier > 0) throw new AchievementClaimError('TIER_ALREADY_CLAIMED')
+      }
+
       await tx.achievementClaim.create({ data: { achievementId, userId, optionId } })
       return grantRewardInTx(tx, userId, option.reward, `achievementClaim:${achievementId}`)
     })
   } catch (err) {
+    if (err instanceof AchievementClaimError) throw err
     if (err?.code === 'P2002') throw new AchievementClaimError('ALREADY_CLAIMED')
     throw err
   }
