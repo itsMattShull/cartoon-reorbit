@@ -39,11 +39,11 @@
         <div class="grid lg:grid-cols-2 gap-6 lg:gap-10">
           <!-- LEFT: login panel -->
           <div class="flex flex-col gap-4">
-            <HeroMedia :src="loginTopSrc" :link="loginTopLink" alt="Wanna trade?" aspect-class="aspect-[4/3]" />
+            <HeroMedia :src="loginTopSrc" :link="loginTopLink" alt="Wanna trade?" placeholder="Top image not set" aspect-class="aspect-[4/3]" />
 
             <div class="retro-login-box">
               <div class="retro-login-ribbon">Welcome! Wanna Trade?</div>
-              <p class="mt-3 text-white/90 text-sm sm:text-base">
+              <p class="mt-3 text-[var(--reorbit-deep)] text-sm sm:text-base">
                 Not an Orbiter yet? Join free and start collecting cToons today.
               </p>
               <button
@@ -57,7 +57,7 @@
               </button>
             </div>
 
-            <HeroMedia :src="loginBottomSrc" :link="loginBottomLink" alt="Bonus cToon" aspect-class="aspect-[4/3]" />
+            <HeroMedia :src="loginBottomSrc" :link="loginBottomLink" alt="Bonus cToon" placeholder="Bottom image not set" aspect-class="aspect-[4/3]" />
           </div>
 
           <!-- RIGHT: hero image + Tutorial / Watch Video -->
@@ -66,6 +66,7 @@
               :src="heroImageSrc"
               :link="heroImageLink"
               alt="Cartoon ReOrbit"
+              placeholder="Hero image not set"
               aspect-class="aspect-[16/11]"
               :priority="true"
             />
@@ -73,20 +74,16 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <NuxtLink
                 to="/newsite/tutorial"
-                class="inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3.5 min-h-[48px]
-                       text-base font-semibold text-white border-2 shadow hover:brightness-110 text-center"
-                style="border-color: var(--reorbit-cyan); background: rgba(15,221,214,0.12);"
+                class="retro-cta-btn text-center"
               >
                 New to Orbit? Tutorial
               </NuxtLink>
               <button
                 v-if="heroVideoSrc"
                 @click="showVideoModal = true"
-                class="inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3.5 min-h-[48px]
-                       text-base font-semibold text-[var(--reorbit-deep)]
-                       bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] shadow hover:brightness-95"
+                class="retro-cta-btn retro-cta-btn--accent"
               >
-                <svg viewBox="0 0 20 20" class="h-5 w-5 fill-current" aria-hidden="true"><path d="M6 4.5v11l9-5.5-9-5.5Z" /></svg>
+                <svg viewBox="0 0 20 20" class="h-5 w-5 fill-current shrink-0" aria-hidden="true"><path d="M6 4.5v11l9-5.5-9-5.5Z" /></svg>
                 Watch Video
               </button>
             </div>
@@ -254,17 +251,27 @@ const DiscordIcon = (props) => h('svg', { viewBox: '0 0 245 240', 'aria-hidden':
 // A fixed-aspect-ratio media box for admin-uploaded images of arbitrary dimensions. Caps height on
 // mobile (max-h-[45vh]) so a tall/odd-aspect upload can't push the login CTA below the fold, and
 // crops via object-cover rather than distorting. Optionally wraps in a link when one is configured.
+// When no image has been uploaded yet, shows an honest "empty admin slot" placeholder rather than
+// silently reusing an unrelated leftover image from the old hero — that read as "nothing changed."
 const HeroMedia = (props) => {
-  const img = h('img', {
-    src: props.src,
-    alt: props.alt || '',
-    class: 'absolute inset-0 h-full w-full object-cover',
-    loading: props.priority ? 'eager' : 'lazy',
-    fetchpriority: props.priority ? 'high' : undefined
-  })
+  const content = props.src
+    ? h('img', {
+        src: props.src,
+        alt: props.alt || '',
+        class: 'absolute inset-0 h-full w-full object-cover',
+        loading: props.priority ? 'eager' : 'lazy',
+        fetchpriority: props.priority ? 'high' : undefined
+      })
+    : h('div', { class: 'absolute inset-0 flex flex-col items-center justify-center gap-2 text-center px-4 border-2 border-dashed border-white/25 m-2 rounded-xl' }, [
+        h('svg', { viewBox: '0 0 24 24', class: 'h-8 w-8 fill-white/40', 'aria-hidden': 'true' }, [
+          h('path', { d: 'M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Zm1 2v10h14V7H5Zm2 8 3.5-4.5 2.5 3 2-2.5L18 15H7Z' })
+        ]),
+        h('p', { class: 'text-xs font-semibold uppercase tracking-wide text-white/50' }, props.placeholder || 'Image not set')
+      ])
   const box = h('div', {
-    class: `relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur max-h-[45vh] sm:max-h-none ${props.aspectClass || 'aspect-[4/3]'}`
-  }, [img])
+    class: `relative overflow-hidden rounded-2xl border-4 shadow-2xl max-h-[45vh] sm:max-h-none ${props.aspectClass || 'aspect-[4/3]'}`,
+    style: `border-color: var(--reorbit-border); background: rgba(1,10,54,0.35);`
+  }, [content])
   if (props.link) {
     return h('a', { href: props.link, class: 'block', 'aria-label': props.alt || 'Learn more' }, [box])
   }
@@ -279,13 +286,13 @@ const [{ data: hp }, { data: stats }, { data: globalConfig }] = await Promise.al
   useAsyncData('global-config-public', () => $fetch('/api/global-config'))
 ])
 
-const heroImageSrc    = computed(() => hp.value?.heroImagePath        || '/images/posterOct25.png')
+const heroImageSrc    = computed(() => hp.value?.heroImagePath        || '')
 const heroImageLink   = computed(() => hp.value?.heroImageLink        || '')
 const heroVideoSrc    = computed(() => hp.value?.heroVideoPath        || '')
 const heroVideoPosterSrc = computed(() => hp.value?.heroVideoPosterPath || '')
-const loginTopSrc     = computed(() => hp.value?.loginTopImagePath    || '/images/welcome2.png')
+const loginTopSrc     = computed(() => hp.value?.loginTopImagePath    || '')
 const loginTopLink    = computed(() => hp.value?.loginTopImageLink    || '')
-const loginBottomSrc  = computed(() => hp.value?.loginBottomImagePath || '/images/gtoonsbanner.png')
+const loginBottomSrc  = computed(() => hp.value?.loginBottomImagePath || '')
 const loginBottomLink = computed(() => hp.value?.loginBottomImageLink || '')
 
 const showVideoModal = ref(false)
@@ -527,12 +534,14 @@ useHead({
 </style>
 
 <style scoped>
+/* Solid, opaque, chunky-bordered panel — evokes the original site's boxed login panel rather
+   than a modern translucent glass card. */
 .retro-login-box {
   border-radius: 1rem;
-  border: 4px solid var(--reorbit-purple);
+  border: 6px solid var(--reorbit-purple);
   padding: 1.25rem;
-  background: linear-gradient(180deg, rgba(150,71,207,0.14), rgba(255,255,255,0.02));
-  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+  background: #fff;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35);
 }
 @media (min-width: 640px) {
   .retro-login-box { padding: 1.5rem; }
@@ -540,13 +549,14 @@ useHead({
 .retro-login-ribbon {
   display: inline-block;
   border-radius: 9999px;
-  padding: 0.25rem 1rem;
-  font-size: 0.75rem;
+  padding: 0.35rem 1.1rem;
+  font-size: 0.8rem;
   font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.03em;
   color: #fff;
-  background: var(--reorbit-purple);
+  background: #E8399B;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.15);
 }
 .retro-badge {
   display: inline-block;
@@ -575,5 +585,30 @@ useHead({
   border: 3px solid var(--reorbit-border);
   background: #fff;
   padding: 1.5rem;
+}
+/* Solid, flat, chunky pill buttons — matches the reference's opaque dark buttons rather than a
+   thin translucent outline. */
+.retro-cta-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 1rem;
+  padding: 0.85rem 1.5rem;
+  min-height: 48px;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--reorbit-deep);
+  border: 3px solid var(--reorbit-cyan);
+  box-shadow: 0 4px 0 rgba(0,0,0,0.25);
+}
+.retro-cta-btn:hover {
+  filter: brightness(1.15);
+}
+.retro-cta-btn--accent {
+  color: var(--reorbit-deep);
+  background: linear-gradient(180deg, var(--reorbit-lime), var(--reorbit-green-2));
+  border-color: var(--reorbit-deep);
 }
 </style>
