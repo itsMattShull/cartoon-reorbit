@@ -348,6 +348,8 @@ model Ctoon {
   // claims (distinct from cMoonPrizeRows, which is auto-granted on join with no choice).
   dispersalOptions CMoonDispersalOption[]
   dispersalClaims  CMoonDispersalClaim[]
+  // Universal rank-tier reward choices featuring this cToon (see CMoonRankTierRewardCtoon).
+  cMoonRankTierRewardRows CMoonRankTierRewardCtoon[]
 
   // Optional cMoon this cToon is thematically displayed under (admin-assigned in the cToon
   // editor). Purely a catalog/display categorization — unrelated to the player-faction system.
@@ -2803,9 +2805,20 @@ model Achievement {
   // rank's cMoon. See evaluateUserAgainstAchievement.
   cMoonPointsGte               Int?
   // Reward: on unlock, grants this cMoon rank (only if it outranks the user's current rank —
-  // see awardAchievementToUser) instead of/in addition to `rewards`. Mutually exclusive with
-  // isClaimable — a rank-up always auto-grants, it's never a claim-your-prize choice.
+  // see awardAchievementToUser) instead of/in addition to `rewards`. The admin-facing achievement
+  // editor (server/api/admin/achievements.post.js / [id].put.js) still refuses to combine this
+  // with isClaimable for any HAND-AUTHORED achievement — a rank-up an admin builds by hand always
+  // just auto-grants. The one exception is an achievement auto-provisioned by a universal
+  // CMoonRankTier (see cMoonRankTierId below and server/utils/cmoonRankTiers.js): those rows ARE
+  // both cMoonRankId and isClaimable, written directly via Prisma from that internal sync path,
+  // never through the public admin HTTP validation above.
   cMoonRankId                  String?
+  // Set only on an achievement auto-provisioned by a universal rank tier (never set by the admin
+  // achievement editor) — identifies which CMoonRankTier this per-cMoon achievement mirrors, so
+  // server/utils/cmoonRankTiers.js can find and resync it later, and claimAchievementReward can
+  // block a player from claiming the same tier's reward twice by cMoon-hopping. Purely bookkeeping;
+  // does not itself affect evaluation.
+  cMoonRankTierId              String?
   // When true, unlocking this achievement does NOT auto-grant `rewards` —
   // instead the user picks exactly one of `claimOptions` (up to 4) via the claim UI.
   isClaimable                 Boolean   @default(false)
@@ -2813,11 +2826,14 @@ model Achievement {
   updatedAt                   DateTime  @updatedAt
 
   cMoonRank      CMoonRank?                 @relation(fields: [cMoonRankId], references: [id], onDelete: Restrict)
+  cMoonRankTier  CMoonRankTier?             @relation(fields: [cMoonRankTierId], references: [id], onDelete: SetNull)
   rewards        AchievementReward[]
   users          AchievementUser[]
   requiredCtoons AchievementRequiredCtoon[]
   claimOptions   AchievementClaimOption[]
   claims         AchievementClaim[]
+
+  @@index([cMoonRankTierId])
 }
 
 model AchievementClaimOption {
@@ -3215,26 +3231,76 @@ model UserAvatar {
   @@unique([userId, avatarId])
 }
 
-// Admin-editable rank ladder for one cMoon (e.g. Private -> Sergeant -> Lieutenant).
-// sortOrder defines the ladder: a user's displayed rank is always the highest-sortOrder
-// CMoonRank they've unlocked for their CURRENT cMoon (see User.currentCMoonRankId). Ranks
-// are granted exclusively via an Achievement's cMoonRankId reward — this model only holds
-// the rank's identity (name/order/Discord role), not the point threshold to reach it.
+// Per-cMoon rank ladder (e.g. Private -> Sergeant -> Lieutenant). sortOrder defines the ladder:
+// a user's displayed rank is always the highest-sortOrder CMoonRank they've unlocked for their
+// CURRENT cMoon (see User.currentCMoonRankId). Ranks are granted exclusively via an Achievement's
+// cMoonRankId reward — this model only holds the rank's identity (name/order/Discord role), not
+// the point threshold to reach it.
+//
+// A row with `tierId` set is one cMoon's mirror of a universal CMoonRankTier — its name/sortOrder
+// are kept in sync with the tier by server/utils/cmoonRankTiers.js (an admin edits the tier once,
+// on one global screen, and every cMoon's copy updates), and discordRoleId stays independently
+// editable per cMoon since Discord roles are legitimately per-guild/per-faction. `tierId` is null
+// for a legacy/custom rank an admin created by hand directly on one cMoon — that path still works
+// unchanged alongside the tier system (a deliberate "keep the current system" decision, not a
+// migration of existing ranks).
 model CMoonRank {
   id            String   @id @default(uuid())
   cMoonId       String
   name          String
   sortOrder     Int      @default(0)
   discordRoleId String? // snowflake, granted the same add-only way as CMoon.discordRoleId — see syncCMoonDiscordRoles
+  tierId        String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  cMoon        CMoon         @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  cMoon        CMoon          @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  tier         CMoonRankTier? @relation(fields: [tierId], references: [id], onDelete: Restrict)
   achievements Achievement[]
   holders      User[]
 
   @@unique([cMoonId, name])
+  @@unique([cMoonId, tierId])
   @@unique([cMoonId, sortOrder])
+}
+
+// A universal rank ladder rung, authored ONCE on a single global admin screen and mirrored into
+// every cMoon's own CMoonRank ladder (see server/utils/cmoonRankTiers.js) — this is what makes
+// "Sergeant" the same name/point threshold in every cMoon rather than an independent per-cMoon
+// ladder. Granting still goes through the existing achievement engine unchanged: creating or
+// editing a tier upserts a matching claimable Achievement (cMoonPointsGte = pointThreshold) for
+// every existing cMoon, wired to that cMoon's mirrored CMoonRank. Deleting a tier is blocked
+// (see the admin endpoint) once any player has actually earned one of its per-cMoon achievements,
+// the same "never silently orphan a grant" caution CMoonPrizeCtoon's Restrict FK documents.
+model CMoonRankTier {
+  id             String   @id @default(uuid())
+  name           String   @unique
+  sortOrder      Int      @unique
+  pointThreshold Int // cumulative User.cMoonPoints required to reach this rank
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  ranks        CMoonRank[]
+  achievements Achievement[]
+  rewardCtoons CMoonRankTierRewardCtoon[]
+}
+
+// Up to 4 universal reward-cToon choices for one rank tier (the cap of 4 is enforced in the admin
+// API, mirroring AchievementClaimOption's MAX_CLAIM_OPTIONS — not a DB constraint). These are the
+// same 4 choices for every cMoon's copy of this rank: server/utils/cmoonRankTiers.js mirrors them
+// 1:1 onto each per-cMoon achievement's own AchievementClaimOption rows, which is what actually
+// grants the player's picked cToon (see claimAchievementReward in server/utils/achievements.js).
+model CMoonRankTierRewardCtoon {
+  id        String @id @default(uuid())
+  tierId    String
+  ctoonId   String
+  sortOrder Int    @default(0)
+
+  tier  CMoonRankTier @relation(fields: [tierId], references: [id], onDelete: Cascade)
+  ctoon Ctoon         @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+
+  @@unique([tierId, ctoonId])
+  @@index([ctoonId])
 }
 
 model CMoonCaptain {
