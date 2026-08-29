@@ -54,7 +54,14 @@ export default defineEventHandler(async (event) => {
     throw err
   }
 
-  await syncTierAcrossCMoons(id)
+  try {
+    await syncTierAcrossCMoons(id)
+  } catch (err) {
+    // The tier's own row above already saved — only the per-cMoon resync (a separate, all-or-
+    // nothing transaction) failed, so every cMoon's rank/achievement still reflects the OLD
+    // name/threshold until this is retried after the underlying collision is fixed.
+    throw createError({ statusCode: 409, statusMessage: err?.message || 'Rank saved, but failed to resync it across cMoons' })
+  }
   await logAdminChange(db, { userId: me.id, area: 'CMoonRankTier', key: `update:${id}`, prevValue: { name: tier.name, sortOrder: tier.sortOrder, pointThreshold: tier.pointThreshold }, newValue: { name, sortOrder, pointThreshold } })
 
   return { ok: true }

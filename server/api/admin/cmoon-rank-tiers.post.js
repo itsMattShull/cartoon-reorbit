@@ -49,7 +49,15 @@ export default defineEventHandler(async (event) => {
     throw err
   }
 
-  await syncTierAcrossCMoons(created.id)
+  try {
+    await syncTierAcrossCMoons(created.id)
+  } catch (err) {
+    // Provisioning failed (e.g. a name/order collision with an existing custom rank in some
+    // cMoon) — the tier row itself was created in a separate transaction from the sync, so
+    // clean it up rather than leaving a rank tier that isn't actually wired up anywhere.
+    await db.cMoonRankTier.delete({ where: { id: created.id } }).catch(() => {})
+    throw createError({ statusCode: 409, statusMessage: err?.message || 'Failed to provision this rank across cMoons' })
+  }
   await logAdminChange(db, { userId: me.id, area: 'CMoonRankTier', key: `create:${created.id}`, prevValue: null, newValue: { name, sortOrder, pointThreshold } })
 
   return { id: created.id }

@@ -73,11 +73,24 @@ async function resyncClaimOptions(tx, achievementId, rewardCtoons) {
 // claim options. `cMoonName` is passed in (rather than queried here) so callers looping over
 // every cMoon can fetch names once up front instead of N+1.
 async function syncTierForOneCMoon(tx, tier, rewardCtoons, cMoonId, cMoonName) {
-  const rank = await tx.cMoonRank.upsert({
-    where: { cMoonId_tierId: { cMoonId, tierId: tier.id } },
-    create: { cMoonId, tierId: tier.id, name: tier.name, sortOrder: tier.sortOrder },
-    update: { name: tier.name, sortOrder: tier.sortOrder },
-  })
+  let rank
+  try {
+    rank = await tx.cMoonRank.upsert({
+      where: { cMoonId_tierId: { cMoonId, tierId: tier.id } },
+      create: { cMoonId, tierId: tier.id, name: tier.name, sortOrder: tier.sortOrder },
+      update: { name: tier.name, sortOrder: tier.sortOrder },
+    })
+  } catch (err) {
+    // A legacy hand-authored custom rank (tierId null) in this specific cMoon already uses this
+    // name or sortOrder — CMoonRank's own @@unique([cMoonId, name])/@@unique([cMoonId, sortOrder])
+    // constraints (shared with the tier system, not just among tiers) reject the upsert. Surface
+    // a clear, actionable error rather than a raw P2002 — the whole sync is one transaction, so
+    // this cleanly aborts every cMoon's update, not just this one's.
+    if (err?.code === 'P2002') {
+      throw new Error(`"${tier.name}" (order ${tier.sortOrder}) collides with an existing custom rank in "${cMoonName}" — rename or remove that rank first.`)
+    }
+    throw err
+  }
 
   const title = `${cMoonName || 'cMoon'} — ${tier.name}`
   const description = `Reach ${tier.pointThreshold.toLocaleString()} cMoon points to earn ${tier.name}.`
