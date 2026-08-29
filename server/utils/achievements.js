@@ -201,13 +201,15 @@ async function getOrCreateUserPoints(tx, userId) {
   return await tx.userPoints.create({ data: { userId, points: 0 } })
 }
 
-// Grants a reward bundle (points + backgrounds, transactionally) to a user. Shared by the
-// auto-grant path (awardAchievementToUser) and the claim-your-prize path
-// (claimAchievementReward) so both mint/grant exactly the same way. cToon mint jobs are
-// NOT enqueued here — mintQueue.add isn't rollback-safe, so the caller must only enqueue
-// the returned `ctoonJobs` after its transaction has committed (see enqueueCtoonJobs).
-async function grantRewardInTx(tx, userId, reward, method) {
-  const summary = { points: 0, backgrounds: 0, ctoonJobs: [] }
+// Grants a reward bundle (points + backgrounds + avatars + a cMoon glow, transactionally) to a
+// user. Shared by the auto-grant path (awardAchievementToUser), the claim-your-prize path
+// (claimAchievementReward), and cMoon affinity level-ups (server/api/cmoon/[id]/contribute.post.js)
+// so all three grant exactly the same way — one reward-granting path rather than a parallel one
+// per feature. cToon mint jobs are NOT enqueued here — mintQueue.add isn't rollback-safe, so the
+// caller must only enqueue the returned `ctoonJobs` after its transaction has committed (see
+// enqueueCtoonJobs).
+export async function grantRewardInTx(tx, userId, reward, method) {
+  const summary = { points: 0, backgrounds: 0, avatars: 0, glow: false, ctoonJobs: [] }
   if (!reward) return summary
 
   // Points
@@ -231,10 +233,39 @@ async function grantRewardInTx(tx, userId, reward, method) {
     summary.backgrounds = newBgIds.length
     if (newBgIds.length) {
       await tx.userBackground.createMany({
-        data: newBgIds.map(backgroundId => ({ userId, backgroundId })),
+        data: newBgIds.map(backgroundId => ({ userId, backgroundId, source: method })),
         skipDuplicates: true
       })
     }
+  }
+
+  // Avatars — same shape as backgrounds above, against the restricted Avatar catalog.
+  const avatarIds = [...new Set((reward.avatars || []).map(a => a.avatarId))]
+  if (avatarIds.length) {
+    const existing = await tx.userAvatar.findMany({
+      where: { userId, avatarId: { in: avatarIds } },
+      select: { avatarId: true }
+    })
+    const existingSet = new Set(existing.map(a => a.avatarId))
+    const newAvatarIds = avatarIds.filter(id => !existingSet.has(id))
+    summary.avatars = newAvatarIds.length
+    if (newAvatarIds.length) {
+      await tx.userAvatar.createMany({
+        data: newAvatarIds.map(avatarId => ({ userId, avatarId, source: method })),
+        skipDuplicates: true
+      })
+    }
+  }
+
+  // cMoon glow — idempotent grant of a persistent cZone glow for one cMoon (upsert rather than
+  // create+catch, since re-granting an already-owned glow must be a silent no-op, not an error).
+  if (reward.glowCMoonId) {
+    await tx.userCMoonGlow.upsert({
+      where: { userId_cMoonId: { userId, cMoonId: reward.glowCMoonId } },
+      create: { userId, cMoonId: reward.glowCMoonId },
+      update: {}
+    })
+    summary.glow = true
   }
 
   // cToons — resolve how many of each can actually be granted (supply-capped), but leave

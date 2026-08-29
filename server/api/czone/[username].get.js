@@ -39,7 +39,11 @@ export default defineEventHandler(async (event) => {
     include: {
       cZones: true,
       cMoon: { select: { id: true, name: true, color: true, avatarPath: true } },
-      currentCMoonRank: { select: { name: true } }
+      currentCMoonRank: { select: { name: true } },
+      // A single extra FK join, not a live scan of the user's CMoonAffinity rows — glow
+      // eligibility is denormalized onto User.equippedGlowCMoonId at grant/equip time
+      // specifically so this hot, public-facing route never has to compute it per view.
+      equippedGlow: { select: { id: true, name: true, color: true } }
     }
   })
 
@@ -252,6 +256,9 @@ export default defineEventHandler(async (event) => {
     lastActivity: user.lastActivity ?? null,
     cMoon: (cMoonEnabled && user.cMoon) || null,
     cMoonRankName: (cMoonEnabled && user.currentCMoonRank?.name) || null,
+    // Independent of cMoonEnabled/membership above — an earned glow is a permanent personal
+    // cosmetic, visible even if the member later leaves the cMoon that granted it.
+    glow: user.equippedGlow ? { cMoonId: user.equippedGlow.id, name: user.equippedGlow.name, color: user.equippedGlow.color } : null,
     cZone: {
       id: chosenZone.id,
       zones: enrichedZones,

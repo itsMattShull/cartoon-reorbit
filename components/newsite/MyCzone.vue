@@ -47,7 +47,12 @@
             </div>
           </template>
           <template v-else>
-            <img :src="`/avatars/${viewedOwner.avatar || 'default.png'}`" class="cz-owner-avatar" />
+            <img
+              :src="`/avatars/${viewedOwner.avatar || 'default.png'}`"
+              class="cz-owner-avatar"
+              :class="{ 'cz-owner-avatar--glow': viewedOwner.glow }"
+              :style="viewedOwner.glow ? { '--cz-glow-color': viewedOwner.glow.color } : {}"
+            />
             <div class="cz-owner-label">
               <div><span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}</div>
               <div v-if="lastOnlineText || viewedOwner.cMoon" class="cz-owner-lastseen">
@@ -67,6 +72,28 @@
                   <span class="cz-owner-cmoon" :style="cMoonPillStyle(viewedOwner.cMoon.color)">{{ viewedOwner.cMoon.name }}</span>
                 </NuxtLink>
                 <span v-if="viewedOwner.cMoonRankName" class="cz-owner-cmoon-rank">{{ viewedOwner.cMoonRankName }}</span>
+              </div>
+              <button
+                v-if="isOwnZone && ownedGlows.length"
+                type="button"
+                class="cz-glow-equip-btn"
+                @click="glowPickerOpen = !glowPickerOpen"
+              >{{ viewedOwner.glow ? `Glow: ${viewedOwner.glow.name}` : 'Show cMoon glow' }}</button>
+              <div v-if="glowPickerOpen" class="cz-glow-picker">
+                <button
+                  type="button"
+                  class="cz-glow-option"
+                  :class="{ active: !equippedGlowCMoonId }"
+                  @click="setGlow(null)"
+                >None</button>
+                <button
+                  v-for="g in ownedGlows" :key="g.cMoonId"
+                  type="button"
+                  class="cz-glow-option"
+                  :class="{ active: equippedGlowCMoonId === g.cMoonId }"
+                  :style="{ '--cz-glow-color': g.color }"
+                  @click="setGlow(g.cMoonId)"
+                >{{ g.name }}</button>
               </div>
             </div>
           </template>
@@ -348,6 +375,22 @@ function canvasH() { return CANVAS_H }
 
 const { user, fetchSelf } = useAuth()
 const cz = useNewSiteCzoneState()
+
+// cMoon affinity glow — which cMoon's glow (if any) the caller has equipped, and the set they
+// can choose from (see /api/auth/me's ownedGlows). Read from `user`, not a dedicated fetch: the
+// session payload already carries both, and every glow change already forces a fetchSelf refresh.
+const ownedGlows = computed(() => user.value?.ownedGlows || [])
+const equippedGlowCMoonId = computed(() => user.value?.equippedGlowCMoonId || null)
+const glowPickerOpen = ref(false)
+
+async function setGlow(cMoonId) {
+  glowPickerOpen.value = false
+  try {
+    await $fetch('/api/czone/glow', { method: 'POST', body: { cMoonId } })
+    await fetchSelf({ force: true })
+    if (viewedUsername.value === user.value?.username) await loadZone(viewedUsername.value)
+  } catch {}
+}
 const { open: openCtoonModal, holidaySignal, holidayRedeem } = useCtoonModal()
 const { mobileSidebarCollapsed } = useNewsiteLayout()
 const route  = useRoute()
@@ -823,7 +866,7 @@ async function loadZone(username) {
     cz.value.zones       = data.cZone.zones
     const firstActive    = data.cZone.zones.findIndex(z => z.toons.length > 0)
     cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
-    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null }
+    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null, glow: data.glow ?? null }
     loadCzoneSearchItems()
     eagerLoadMissingDimensions()
 
@@ -1378,6 +1421,55 @@ defineExpose({ save, clearZone })
   font-weight: 600;
   color: #ffd75e;
 }
+
+/* cMoon affinity glow — a single small avatar-sized instance (never repeated across a list, see
+   AdminCMoon/CMoonPage), so a subtle animated ring is affordable here. box-shadow rather than
+   filter: drop-shadow (much cheaper to animate), and reduced to a static ring under
+   prefers-reduced-motion. */
+.cz-owner-avatar--glow {
+  box-shadow: 0 0 0 2px var(--cz-glow-color, #fff), 0 0 8px 2px var(--cz-glow-color, #fff);
+  animation: cz-glow-pulse 2.4s ease-in-out infinite;
+}
+@keyframes cz-glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 2px var(--cz-glow-color, #fff), 0 0 6px 1px var(--cz-glow-color, #fff); }
+  50%      { box-shadow: 0 0 0 2px var(--cz-glow-color, #fff), 0 0 12px 4px var(--cz-glow-color, #fff); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cz-owner-avatar--glow { animation: none; }
+}
+
+.cz-glow-equip-btn {
+  display: block;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgba(255,255,255,0.7);
+  font-size: 0.58rem;
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 24px;
+}
+
+.cz-glow-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  max-width: 180px;
+}
+
+.cz-glow-option {
+  min-height: 28px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--cz-glow-color, rgba(255,255,255,0.4));
+  background: transparent;
+  color: #fff;
+  font-size: 0.6rem;
+  cursor: pointer;
+}
+.cz-glow-option.active { background: var(--cz-glow-color, rgba(255,255,255,0.25)); font-weight: 700; }
 
 /* ── Skeleton placeholders (shown while a new cZone is loading) ── */
 .cz-skeleton {

@@ -529,6 +529,15 @@ model User {
   cMoonRankRoleGrantedAt DateTime?
   cMoonPollVotes         CMoonPollVote[]
 
+  // Which of this user's earned cMoon-affinity glows (see UserCMoonGlow) is currently displayed
+  // on their cZone — a player can outrank the glow threshold for more than one cMoon over time
+  // (affinity is permanent per-cMoon and survives leaving), so this is an explicit equip choice
+  // rather than "whichever cMoon they're in now". Denormalized onto User (not computed from
+  // CMoonAffinity at read time) specifically so the public cZone view never has to join/scan
+  // affinity rows on a hot, high-traffic route — see server/api/czone/[username].get.js.
+  equippedGlowCMoonId String?
+  equippedGlow        CMoon?          @relation("CMoon_GlowEquippedBy", fields: [equippedGlowCMoonId], references: [id], onDelete: SetNull)
+
   cZones                    CZone[]
   clashDecks                ClashDeck[]
   logins                    LoginLog[]
@@ -583,6 +592,10 @@ model User {
   wheelSpinLogs             WheelSpinLog[]                @relation("WheelSpinLogToUser")
   backgroundsCreated        Background[]                  @relation("BackgroundCreatedBy")
   ownedBackgrounds          UserBackground[]              @relation("User_UserBackgrounds")
+  avatarsCreated            Avatar[]                      @relation("AvatarCreatedBy")
+  ownedAvatars              UserAvatar[]                  @relation("User_UserAvatars")
+  cMoonAffinities           CMoonAffinity[]
+  cMoonGlows                UserCMoonGlow[]               @relation("User_UserCMoonGlows")
   ownerLogs                 CtoonOwnerLog[]
   ownerLogsAsCounterparty   CtoonOwnerLog[]               @relation("CtoonOwnerLogCounterparty")
   holidayRedemptions        HolidayRedemption[]
@@ -2228,6 +2241,7 @@ model Background {
   rewardBackgrounds            RewardBackground[]            @relation("BackgroundReward")
   owners                       UserBackground[]              @relation("Background_UserBackgrounds")
   achievementRewardBackgrounds AchievementRewardBackground[]
+  affinityLevelRewards         CMoonAffinityLevel[]
 
   @@index([createdAt])
 }
@@ -2249,6 +2263,10 @@ model UserBackground {
   backgroundId String
   unlockedAt   DateTime @default(now())
   sourceCodeId String?
+  // Free-text provenance for grants that don't go through a ClaimCode (achievement rewards,
+  // cMoon affinity rewards, ...) — mirrors PointsLog.method. Existing rows predate this field
+  // and stay null; nothing depends on it being backfilled.
+  source       String?
 
   user       User       @relation("User_UserBackgrounds", fields: [userId], references: [id])
   background Background @relation("Background_UserBackgrounds", fields: [backgroundId], references: [id])
@@ -3017,6 +3035,14 @@ model CMoon {
   featuredCtoons       CMoonFeaturedCtoon[]
   poll                 CMoonPoll?
 
+  // Admin-configured "contribute to cMoon" affinity ladder (see CMoonAffinityLevel) and every
+  // member's progress on it (see CMoonAffinity) — a personal spend-driven track, independent of
+  // teamScore above.
+  affinityLevels CMoonAffinityLevel[]
+  affinities     CMoonAffinity[]
+  glowOwners     UserCMoonGlow[]      @relation("CMoon_GlowOwners")
+  glowEquippedBy User[]               @relation("CMoon_GlowEquippedBy")
+
   @@index([memberCount])
   @@index([teamScore])
 }
@@ -3081,6 +3107,111 @@ model CMoonPollVote {
 
   @@unique([pollId, userId])
   @@index([pollId, optionId])
+}
+
+// One rung of a per-cMoon "affinity" ladder: an admin-defined point threshold a member reaches
+// by spending points via POST /api/cmoon/:id/contribute (see CMoonAffinity.affinitySpent). Each
+// cMoon has its OWN ladder (unlike the shared point-threshold-free CMoonRank ladder above, which
+// is granted through achievements) — mirrors that model's shape (name/sortOrder/unique-per-cMoon)
+// but adds the threshold and the cosmetic reward(s) unlocked at it. Rewards are granted once,
+// permanently, the moment a member's cumulative affinitySpent first reaches `threshold` — see
+// grantRewardInTx in server/utils/achievements.js, reused here as the single reward-granting path.
+model CMoonAffinityLevel {
+  id        String   @id @default(uuid())
+  cMoonId   String
+  name      String
+  threshold Int // cumulative points spent on this cMoon required to reach this level
+  sortOrder Int      @default(0)
+  // Grants a permanent UserCMoonGlow(userId, this cMoonId) row — a persistent cZone glow effect
+  // in this cMoon's live `color` (not snapshotted, so an admin re-coloring the cMoon updates
+  // every glow it already granted). Purely cosmetic; never re-evaluated downward.
+  grantsGlow Boolean @default(false)
+  // Optional cosmetic rewards granted alongside the glow above. Both are optional and
+  // independent of grantsGlow — a level can grant any combination of the three.
+  rewardBackgroundId String?
+  rewardAvatarId     String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  cMoon            CMoon           @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  rewardBackground Background?     @relation(fields: [rewardBackgroundId], references: [id], onDelete: SetNull)
+  rewardAvatar     Avatar?         @relation(fields: [rewardAvatarId], references: [id], onDelete: SetNull)
+  reachedBy        CMoonAffinity[]
+
+  @@unique([cMoonId, threshold])
+  @@unique([cMoonId, sortOrder])
+}
+
+// One member's lifetime "contribute to cMoon" progress for one cMoon. Permanent — affinitySpent
+// never resets or decreases, even after the member leaves this cMoon (unlike User.cMoonPoints,
+// the pre-existing passive earn-tracking counter this is deliberately NOT reusing: that one is
+// read-only, nightly-recomputed, and rebased every time a player re-selects a cMoon). A member
+// can accumulate affinity rows for more than one cMoon over their lifetime.
+model CMoonAffinity {
+  userId         String
+  cMoonId        String
+  affinitySpent  Int      @default(0)
+  currentLevelId String?
+  updatedAt      DateTime @updatedAt
+
+  user         User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cMoon        CMoon               @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  currentLevel CMoonAffinityLevel? @relation(fields: [currentLevelId], references: [id], onDelete: SetNull)
+
+  @@id([userId, cMoonId])
+  @@index([cMoonId, affinitySpent])
+}
+
+// Ownership record for a persistent per-cMoon cZone glow, granted by CMoonAffinityLevel.grantsGlow.
+// A member can own more than one (affinity from multiple cMoons over time); which one is actually
+// displayed is the separate, explicit User.equippedGlowCMoonId choice.
+model UserCMoonGlow {
+  id         String   @id @default(uuid())
+  userId     String
+  cMoonId    String
+  unlockedAt DateTime @default(now())
+
+  user  User  @relation("User_UserCMoonGlows", fields: [userId], references: [id], onDelete: Cascade)
+  cMoon CMoon @relation("CMoon_GlowOwners", fields: [cMoonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cMoonId])
+}
+
+// Restricted/exclusive avatar catalog — distinct from the free-for-all files in public/avatars,
+// which stay ungoverned (any authenticated user may still pick any of those). A row here is only
+// selectable via /api/auth/set-avatar by a user holding the matching UserAvatar ownership row,
+// letting cMoon-affinity (and, later, other systems) grant a genuinely exclusive avatar. Mirrors
+// the existing Background/UserBackground ownership pattern.
+model Avatar {
+  id          String   @id @default(uuid())
+  label       String?
+  filename    String   @unique
+  imagePath   String
+  width       Int
+  height      Int
+  mimeType    String
+  createdAt   DateTime @default(now())
+  createdById String?
+
+  createdBy User?                @relation("AvatarCreatedBy", fields: [createdById], references: [id])
+  owners    UserAvatar[]
+  levels    CMoonAffinityLevel[]
+
+  @@index([createdAt])
+}
+
+model UserAvatar {
+  id         String   @id @default(uuid())
+  userId     String
+  avatarId   String
+  unlockedAt DateTime @default(now())
+  // Free-text provenance, same convention as UserBackground.source above.
+  source     String?
+
+  user   User   @relation("User_UserAvatars", fields: [userId], references: [id], onDelete: Cascade)
+  avatar Avatar @relation(fields: [avatarId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, avatarId])
 }
 
 // Admin-editable rank ladder for one cMoon (e.g. Private -> Sergeant -> Lieutenant).
