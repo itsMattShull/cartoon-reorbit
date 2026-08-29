@@ -175,6 +175,35 @@
         </template>
       </div>
 
+      <!-- Rank Ladder: ONE shared list of ranks — same name, order, and point threshold in
+           every cMoon (see prisma/schema.prisma's CMoonRankTier). Saving a tier here provisions/
+           resyncs a matching rank + claimable achievement for every existing cMoon (see
+           server/utils/cmoonRankTiers.js); a cMoon's own Ranks sub-section below still shows
+           each tier's mirror (marked "Universal") alongside any legacy per-cMoon custom ranks. -->
+      <div class="bg-white rounded border p-3 mb-4">
+        <div class="flex items-center justify-between mb-1">
+          <h2 class="text-sm font-semibold">Rank Ladder</h2>
+          <button type="button" class="cm-tap px-3 text-[11px] font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700" @click="startAddTier">+ Add rank</button>
+        </div>
+        <p class="text-[11px] text-gray-600 mb-2">
+          One shared ladder for every cMoon. Reaching a rank's point threshold (measured against a
+          member's own cMoon points) lets them pick one of up to 4 reward cToons.
+        </p>
+        <div v-if="rankTiersLoading" class="text-[11px] text-gray-500">Loading…</div>
+        <div v-else-if="rankTiers.length" class="space-y-1">
+          <div v-for="t in rankTiers" :key="t.id" class="flex items-center gap-2 text-[11px]">
+            <span class="text-gray-500 w-6 flex-shrink-0">#{{ t.sortOrder }}</span>
+            <span class="flex-1 min-w-0 break-words">{{ t.name }}</span>
+            <span class="text-gray-500 flex-shrink-0">{{ t.pointThreshold.toLocaleString() }} pts</span>
+            <span class="text-gray-500 flex-shrink-0">{{ t.rewardCtoons.length }}/4 rewards</span>
+            <button type="button" class="cm-tap text-indigo-600" @click="startEditTier(t)">Edit</button>
+            <button type="button" class="cm-tap text-red-600" @click="removeTier(t)">Delete</button>
+          </div>
+        </div>
+        <div v-else class="text-[11px] text-gray-500">No ranks yet.</div>
+        <p v-if="rankTiersError" class="text-[11px] text-red-600 mt-1">{{ rankTiersError }}</p>
+      </div>
+
       <div v-if="loading" class="text-gray-600">Loading…</div>
       <template v-else>
         <!-- Existing cMoons -->
@@ -297,9 +326,13 @@
                 <div v-for="r in c.ranks" :key="r.id" class="flex items-center gap-2 text-[11px]">
                   <span class="text-gray-500 w-6 flex-shrink-0">#{{ r.sortOrder }}</span>
                   <span class="flex-1 min-w-0 break-words">{{ r.name }}</span>
+                  <span
+                    v-if="r.tierId" class="text-indigo-600 text-[10px] font-medium flex-shrink-0"
+                    title="Name, order, and threshold are managed by the universal Rank Ladder above"
+                  >Universal</span>
                   <span class="text-gray-500 truncate max-w-[10rem]">{{ r.discordRoleId || 'no role' }}</span>
                   <button type="button" class="cm-tap text-indigo-600" @click="startEditRank(c, r)">Edit</button>
-                  <button type="button" class="cm-tap text-red-600" @click="removeRank(c, r)">Delete</button>
+                  <button v-if="!r.tierId" type="button" class="cm-tap text-red-600" @click="removeRank(c, r)">Delete</button>
                 </div>
               </div>
               <div v-else class="text-[11px] text-gray-500">No ranks yet.</div>
@@ -725,14 +758,18 @@
         </div>
 
         <div class="overflow-y-auto flex-1 px-4 py-3 space-y-2">
+          <p v-if="rankForm.tierId" class="text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-200 rounded px-2 py-1.5">
+            This rank is managed by the universal Rank Ladder — edit its name, order, or point
+            threshold there. Only the Discord Role ID below is specific to this cMoon.
+          </p>
           <div>
             <label class="block text-xs font-medium mb-1">Rank name</label>
-            <input v-model="rankForm.name" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" placeholder="e.g. Sergeant" />
+            <input v-model="rankForm.name" :disabled="!!rankForm.tierId" class="cm-field w-full border rounded px-2 py-1 disabled:bg-gray-100 disabled:text-gray-500" style="font-size:16px" placeholder="e.g. Sergeant" />
           </div>
           <div class="flex gap-2">
             <div class="w-24 flex-shrink-0">
               <label class="block text-xs font-medium mb-1">Order</label>
-              <input v-model.number="rankForm.sortOrder" type="number" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" aria-label="Ladder order" />
+              <input v-model.number="rankForm.sortOrder" type="number" inputmode="numeric" :disabled="!!rankForm.tierId" class="cm-field w-full border rounded px-2 py-1 disabled:bg-gray-100 disabled:text-gray-500" style="font-size:16px" aria-label="Ladder order" />
             </div>
             <div class="flex-1 min-w-0">
               <label class="block text-xs font-medium mb-1">Discord Role ID (optional)</label>
@@ -746,6 +783,70 @@
           <button type="button" class="cm-tap px-3 border rounded" @click="closeRankModal" :disabled="rankSaving">Cancel</button>
           <button type="button" class="cm-tap px-3 bg-indigo-600 text-white rounded" @click="saveRank(rankCMoon)" :disabled="rankSaving">
             {{ rankSaving ? 'Saving…' : (rankForm.id ? 'Save Rank' : 'Add Rank') }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Add / Edit rank tier modal (the universal Rank Ladder) ────────── -->
+    <div v-if="tierModalOpen" class="fixed inset-0 z-50 flex items-center justify-center p-2">
+      <div class="absolute inset-0 bg-black/50" @click="!tierSaving && closeTierModal()"></div>
+      <div class="relative bg-white w-full max-w-sm rounded-lg shadow-lg flex flex-col max-h-[92vh] text-gray-900">
+        <div class="flex items-center justify-between px-4 py-3 border-b flex-shrink-0">
+          <h3 class="text-sm font-semibold">{{ tierForm.id ? 'Edit Rank' : 'Add Rank' }}</h3>
+          <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeTierModal" :disabled="tierSaving">✕</button>
+        </div>
+
+        <div class="overflow-y-auto flex-1 px-4 py-3 space-y-2">
+          <div>
+            <label class="block text-xs font-medium mb-1">Rank name</label>
+            <input v-model="tierForm.name" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" placeholder="e.g. Sergeant" />
+          </div>
+          <div class="flex gap-2">
+            <div class="w-20 flex-shrink-0">
+              <label class="block text-xs font-medium mb-1">Order</label>
+              <input v-model.number="tierForm.sortOrder" type="number" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" aria-label="Ladder order" />
+            </div>
+            <div class="flex-1 min-w-0">
+              <label class="block text-xs font-medium mb-1">Point threshold</label>
+              <input v-model.number="tierForm.pointThreshold" type="number" min="0" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" placeholder="e.g. 5000" />
+            </div>
+          </div>
+
+          <div class="pt-2 border-t">
+            <label class="block text-xs font-medium mb-1">Reward cToons (up to 4 — member picks 1)</label>
+            <div v-if="tierForm.rewardCtoons.length" class="space-y-1 mb-2">
+              <div v-for="(r, i) in tierForm.rewardCtoons" :key="r.ctoonId" class="flex items-center gap-2 text-[11px]">
+                <span class="flex-1 min-w-0 break-words">{{ r.name }}</span>
+                <button type="button" class="cm-tap text-red-600" @click="removeTierRewardCtoon(i)">Remove</button>
+              </div>
+            </div>
+            <input
+              v-model="tierRewardSearch"
+              class="cm-field w-full border rounded px-2 py-1"
+              style="font-size:16px"
+              :placeholder="tierForm.rewardCtoons.length >= 4 ? '4 rewards — remove one to add another' : 'Type 3+ characters of a cToon'"
+              :disabled="tierForm.rewardCtoons.length >= 4"
+              autocapitalize="none" autocorrect="off" spellcheck="false"
+              role="combobox" :aria-expanded="tierRewardSuggestions.length > 0"
+            />
+            <div v-if="tierRewardSuggestions.length" class="mt-1 border rounded divide-y bg-white max-h-40 overflow-y-auto">
+              <button
+                v-for="c in tierRewardSuggestions" :key="c.id"
+                type="button"
+                class="cm-tap w-full text-left px-2 text-[11px] hover:bg-gray-100"
+                @click="addTierRewardCtoon(c)"
+              >{{ c.name }}</button>
+            </div>
+          </div>
+
+          <p v-if="tierFormError" class="text-[11px] text-red-600">{{ tierFormError }}</p>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 px-4 py-3 border-t flex-shrink-0">
+          <button type="button" class="cm-tap px-3 border rounded" @click="closeTierModal" :disabled="tierSaving">Cancel</button>
+          <button type="button" class="cm-tap px-3 bg-indigo-600 text-white rounded" @click="saveTier" :disabled="tierSaving">
+            {{ tierSaving ? 'Saving…' : (tierForm.id ? 'Save Rank' : 'Add Rank') }}
           </button>
         </div>
       </div>
@@ -1397,7 +1498,7 @@ function closeModal() {
 
 // Ranks: one shared edit-form object, scoped to whichever cMoon it's open for
 // (rankCMoon), mirroring the single-form-at-a-time pattern used for cMoons above.
-const emptyRankForm = () => ({ id: '', name: '', sortOrder: 0, discordRoleId: '' })
+const emptyRankForm = () => ({ id: '', name: '', sortOrder: 0, discordRoleId: '', tierId: null })
 const rankForm = reactive(emptyRankForm())
 const rankCMoon = ref(null)
 const rankModalOpen = ref(false)
@@ -1425,7 +1526,7 @@ function startAddRank(c) {
 function startEditRank(c, r) {
   resetRankForm()
   rankCMoon.value = c
-  Object.assign(rankForm, { id: r.id, name: r.name, sortOrder: r.sortOrder, discordRoleId: r.discordRoleId || '' })
+  Object.assign(rankForm, { id: r.id, name: r.name, sortOrder: r.sortOrder, discordRoleId: r.discordRoleId || '', tierId: r.tierId || null })
   rankFormError.value = ''
   rankModalOpen.value = true
 }
@@ -1456,6 +1557,117 @@ async function removeRank(c, r) {
   try {
     await $fetch(`/api/admin/cmoons/${c.id}/ranks/${r.id}`, { method: 'DELETE' })
     await load()
+  } catch (e) {
+    alert(e?.data?.statusMessage || 'Delete failed')
+  }
+}
+
+// Rank Ladder: the universal, shared-across-every-cMoon rank tiers (see
+// prisma/schema.prisma's CMoonRankTier and server/utils/cmoonRankTiers.js). Reuses the same
+// pre-loaded `ctoons` catalog + filteredCtoons() pattern the prize-cToon picker above uses,
+// rather than a per-keystroke server search.
+const rankTiers = ref([])
+const rankTiersLoading = ref(false)
+const rankTiersError = ref('')
+
+async function loadRankTiers() {
+  rankTiersLoading.value = true
+  rankTiersError.value = ''
+  try {
+    const res = await $fetch('/api/admin/cmoon-rank-tiers')
+    rankTiers.value = res.tiers || []
+  } catch (e) {
+    rankTiersError.value = e?.data?.statusMessage || 'Failed to load rank ladder'
+  } finally {
+    rankTiersLoading.value = false
+  }
+}
+
+const emptyTierForm = () => ({ id: '', name: '', sortOrder: 0, pointThreshold: 0, rewardCtoons: [] })
+const tierForm = reactive(emptyTierForm())
+const tierModalOpen = ref(false)
+const tierFormError = ref('')
+const tierSaving = ref(false)
+const tierRewardSearch = ref('')
+
+const tierRewardSuggestions = computed(() => {
+  if (tierForm.rewardCtoons.length >= 4) return []
+  const already = new Set(tierForm.rewardCtoons.map(r => r.ctoonId))
+  return filteredCtoons(tierRewardSearch.value).filter(c => !already.has(c.id))
+})
+
+function resetTierForm() {
+  Object.assign(tierForm, emptyTierForm())
+  tierFormError.value = ''
+  tierRewardSearch.value = ''
+}
+
+function closeTierModal() {
+  resetTierForm()
+  tierModalOpen.value = false
+}
+
+function startAddTier() {
+  resetTierForm()
+  tierForm.sortOrder = (rankTiers.value.reduce((max, t) => Math.max(max, t.sortOrder), -1)) + 1
+  tierModalOpen.value = true
+}
+
+function startEditTier(t) {
+  resetTierForm()
+  Object.assign(tierForm, {
+    id: t.id, name: t.name, sortOrder: t.sortOrder, pointThreshold: t.pointThreshold,
+    rewardCtoons: t.rewardCtoons.map(r => ({ ctoonId: r.ctoonId, name: r.name })),
+  })
+  tierModalOpen.value = true
+}
+
+function addTierRewardCtoon(c) {
+  if (tierForm.rewardCtoons.length >= 4 || tierForm.rewardCtoons.some(r => r.ctoonId === c.id)) return
+  tierForm.rewardCtoons.push({ ctoonId: c.id, name: c.name })
+  tierRewardSearch.value = ''
+}
+
+function removeTierRewardCtoon(i) {
+  tierForm.rewardCtoons.splice(i, 1)
+}
+
+async function saveTier() {
+  if (!tierForm.name.trim()) { tierFormError.value = 'Name is required'; return }
+  const threshold = Math.trunc(Number(tierForm.pointThreshold))
+  if (!Number.isInteger(threshold) || threshold < 0) {
+    tierFormError.value = 'Point threshold must be a non-negative whole number'
+    return
+  }
+  tierFormError.value = ''
+  tierSaving.value = true
+  try {
+    const body = {
+      name: tierForm.name.trim(),
+      sortOrder: tierForm.sortOrder,
+      pointThreshold: threshold,
+      rewardCtoonIds: tierForm.rewardCtoons.map(r => r.ctoonId),
+    }
+    if (!tierForm.id) {
+      await $fetch('/api/admin/cmoon-rank-tiers', { method: 'POST', body })
+    } else {
+      await $fetch(`/api/admin/cmoon-rank-tiers/${tierForm.id}`, { method: 'PUT', body })
+    }
+    closeTierModal()
+    // Resyncing a tier changes every cMoon's own mirrored rank, so refresh both lists.
+    await Promise.all([loadRankTiers(), load()])
+  } catch (e) {
+    tierFormError.value = e?.data?.statusMessage || 'Save failed'
+  } finally {
+    tierSaving.value = false
+  }
+}
+
+async function removeTier(t) {
+  if (!confirm(`Delete rank "${t.name}"? This removes it from every cMoon.`)) return
+  try {
+    await $fetch(`/api/admin/cmoon-rank-tiers/${t.id}`, { method: 'DELETE' })
+    await Promise.all([loadRankTiers(), load()])
   } catch (e) {
     alert(e?.data?.statusMessage || 'Delete failed')
   }
@@ -1824,6 +2036,7 @@ function closeDisperse() {
 onMounted(() => {
   load()
   loadScoring()
+  loadRankTiers()
 })
 </script>
 

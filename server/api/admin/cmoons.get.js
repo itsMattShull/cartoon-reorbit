@@ -53,7 +53,7 @@ export default defineEventHandler(async (event) => {
       poll: c.poll ? { question: c.poll.question, options: c.poll.options.map(o => o.label) } : null,
       captains: c.captains.map(cap => ({ userId: cap.userId, username: cap.user?.username || '' })),
       prizeCtoons: c.prizeCtoons.map(pc => ({ ctoonId: pc.ctoonId, quantity: pc.quantity, name: pc.ctoon?.name || '', assetPath: pc.ctoon?.assetPath || null })),
-      ranks: c.ranks.map(r => ({ id: r.id, name: r.name, sortOrder: r.sortOrder, discordRoleId: r.discordRoleId })),
+      ranks: c.ranks.map(r => ({ id: r.id, name: r.name, sortOrder: r.sortOrder, discordRoleId: r.discordRoleId, tierId: r.tierId })),
       affinityLevels: c.affinityLevels.map(l => ({
         id: l.id, name: l.name, threshold: l.threshold, sortOrder: l.sortOrder, grantsBorder: l.grantsBorder,
         rewardBackgroundId: l.rewardBackgroundId, rewardAvatarId: l.rewardAvatarId,

@@ -15,8 +15,11 @@ export default defineEventHandler(async (event) => {
   if (!rank || rank.cMoonId !== cMoonId) throw createError({ statusCode: 404, statusMessage: 'Rank not found' })
 
   const body = await readBody(event)
-  const name = typeof body?.name === 'string' ? body.name.trim() : rank.name
-  const sortOrder = body?.sortOrder === undefined ? rank.sortOrder : (Number.isFinite(Number(body.sortOrder)) ? Math.trunc(Number(body.sortOrder)) : rank.sortOrder)
+  // A tier-linked rank's name/sortOrder is owned by its CMoonRankTier (see
+  // server/utils/cmoonRankTiers.js) and kept in sync across every cMoon from there — only
+  // discordRoleId (legitimately per-cMoon/per-guild) stays editable here for it.
+  const name = rank.tierId || typeof body?.name !== 'string' ? rank.name : body.name.trim()
+  const sortOrder = rank.tierId || body?.sortOrder === undefined ? rank.sortOrder : (Number.isFinite(Number(body.sortOrder)) ? Math.trunc(Number(body.sortOrder)) : rank.sortOrder)
   const discordRoleId = body?.discordRoleId === undefined ? rank.discordRoleId : (typeof body.discordRoleId === 'string' ? body.discordRoleId.trim() : '')
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
