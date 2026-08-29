@@ -77,6 +77,27 @@
           <p v-if="contributeError" class="cmp-affinity-error">{{ contributeError }}</p>
         </div>
 
+        <!-- Rank Ladder progress: only shown to a member of THIS cMoon, since rank is per-cMoon
+             even though the ladder itself (name/threshold/rewards) is universal — see
+             prisma/schema.prisma's CMoonRankTier. Independent of the affinity widget above:
+             ranks are earned automatically from cMoonPoints, not spent like affinity. -->
+        <div v-if="rankProgress && rankProgress.isMember" class="cmp-rank">
+          <div class="cmp-rank-head">
+            <span class="cmp-affinity-label">Your Rank</span>
+            <span class="cmp-affinity-level">{{ rankProgress.currentRank ? rankProgress.currentRank.name : 'Unranked' }}</span>
+          </div>
+          <div class="cmp-affinity-bar-track">
+            <div class="cmp-affinity-bar-fill" :style="{ width: rankProgressPct + '%' }"></div>
+          </div>
+          <p class="cmp-affinity-next">
+            <span v-if="rankProgress.nextTier">
+              {{ rankProgress.cMoonPoints.toLocaleString() }} / {{ rankProgress.nextTier.pointThreshold.toLocaleString() }} pts to {{ rankProgress.nextTier.name }}
+            </span>
+            <span v-else-if="rankProgress.tiers.length">Max rank reached — {{ rankProgress.cMoonPoints.toLocaleString() }} pts</span>
+            <span v-else>{{ rankProgress.cMoonPoints.toLocaleString() }} pts contributed</span>
+          </p>
+        </div>
+
         <!-- Featured cToons comes first in the markup (the page's visual centerpiece) so a
              narrow/stacked layout shows it before the leaderboard panel; a wide container
              reorders them side by side via the container query below. -->
@@ -253,6 +274,7 @@ const error = ref('')
 const cmoon = ref(null)
 const buttonPills = ref([])
 const affinity = ref(null)
+const rankProgress = ref(null)
 
 const contributeOpen = ref(false)
 const contributeAmount = ref(null)
@@ -343,6 +365,29 @@ async function loadAffinity(id) {
   }
 }
 
+async function loadRankProgress(id) {
+  try {
+    rankProgress.value = await $fetch(`/api/cmoon/${encodeURIComponent(id)}/rank-progress`)
+  } catch {
+    rankProgress.value = null
+  }
+}
+
+const rankProgressPct = computed(() => {
+  const rp = rankProgress.value
+  if (!rp || !rp.nextTier) return 100
+  // Match the current rank to its tier by sortOrder, not id — CMoonRank.id (per-cMoon) and
+  // CMoonRankTier.id (global) are different rows entirely; a tier-linked rank's sortOrder is
+  // always kept in sync with its tier's (see server/utils/cmoonRankTiers.js), and is unique per
+  // cMoon, so this reliably finds "the floor" for a tier-managed rank. A legacy custom rank
+  // (not tier-linked) simply won't match anything here — falls back to a floor of 0, which is
+  // an acceptable approximation for that now-secondary path.
+  const floor = rp.currentRank ? (rp.tiers.find(t => t.sortOrder === rp.currentRank.sortOrder)?.pointThreshold ?? 0) : 0
+  const span = rp.nextTier.pointThreshold - floor
+  if (span <= 0) return 100
+  return Math.max(0, Math.min(100, Math.round(((rp.cMoonPoints - floor) / span) * 100)))
+})
+
 async function loadOffers(id) {
   try {
     const res = await $fetch(`/api/cmoon/${encodeURIComponent(id)}/dispersal-offers`)
@@ -392,7 +437,7 @@ async function load(id) {
   contributeOpen.value = false
   try {
     cmoon.value = await $fetch(`/api/cmoon/${encodeURIComponent(id)}`)
-    await Promise.all([loadOffers(id), loadButtonPills(id), loadAffinity(id)])
+    await Promise.all([loadOffers(id), loadButtonPills(id), loadAffinity(id), loadRankProgress(id)])
   } catch (err) {
     cmoon.value = null
     error.value = err?.data?.statusMessage || 'Failed to load this cMoon.'
@@ -524,11 +569,20 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   min-width: 0;
 }
 
-.cmp-affinity {
+.cmp-affinity,
+.cmp-rank {
   background: var(--cm-tile-bg, rgba(255,255,255,0.08));
   border-radius: 8px;
   padding: 12px;
   margin-bottom: 16px;
+}
+
+.cmp-rank-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .cmp-affinity-head {
