@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "imports": {
-    "#lib/*": "./lib/*"
+    "#lib/*": "./lib/*",
+    "#utils/*": "./utils/*"
   },
   "scripts": {
     "test": "node --test",
@@ -35,6 +36,9 @@
     "@prisma/client": "^6.19.0",
     "@prisma/nuxt": "^0.3.0",
     "@socket.io/redis-adapter": "^8.3.0",
+    "@tiptap/extension-link": "^2.27.2",
+    "@tiptap/starter-kit": "^2.27.2",
+    "@tiptap/vue-3": "^2.27.2",
     "bcryptjs": "^3.0.2",
     "bullmq": "^5.53.2",
     "cannon-es": "^0.20.0",
