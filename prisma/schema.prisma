@@ -2451,6 +2451,14 @@ model HomepageConfig {
   bottomRightImagePath    String?
   bottomRightLink         String?
   showcaseImagePath       String?
+  // Logged-out homepage hero redesign (2-col layout: login panel left, hero image + tutorial/video CTAs right)
+  heroImagePath           String?
+  heroImageLink           String?
+  heroVideoPath           String?
+  loginTopImagePath       String?
+  loginTopImageLink       String?
+  loginBottomImagePath    String?
+  loginBottomImageLink    String?
   homeImage1Path          String?
   homeImage1Link          String?
   homeImage2Path          String?

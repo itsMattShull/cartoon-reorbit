@@ -36,6 +36,15 @@
 
       <!-- Homepage tab -->
       <section v-if="activeTab==='Homepage'" class="space-y-3">
+        <div class="rounded-md border border-amber-300 bg-amber-50 p-3">
+          <p class="text-xs font-semibold text-amber-800">⚠ Deprecated — not displayed anywhere on the site</p>
+          <p class="text-[11px] text-amber-700 mt-1">
+            The redesigned logged-out homepage no longer renders Top Left / Top Right / Bottom Left.
+            These controls are kept here only for legacy record-keeping. Manage the current homepage
+            hero (login panel images, hero image, hero video) in the new Admin &rarr; Manage Homepage &rarr;
+            Hero tab instead.
+          </p>
+        </div>
         <p class="text-xs text-gray-600">
           Upload SVG/PNG/JPEG/GIF/MP4. Files are stored on the server and paths saved in the database.
         </p>

@@ -4,7 +4,7 @@
     class="fixed inset-0 flex items-center justify-center z-[1001] bg-black bg-opacity-50"
     @click.self="handleBackdrop"
   >
-    <div :class="['bg-gray-800 rounded-lg p-6 w-11/12 max-w-md max-h-[90vh]', overflowVisible ? 'overflow-visible' : 'overflow-y-auto']">
+    <div :class="['bg-gray-800 rounded-lg p-6 w-11/12 max-h-[90vh]', maxWidthClass, overflowVisible ? 'overflow-visible' : 'overflow-y-auto']">
       <slot></slot>
       <button
         v-if="!hideCloseButton"
@@ -32,6 +32,10 @@ export default {
     closeOnBackdrop: {
       type: Boolean,
       default: false
+    },
+    maxWidthClass: {
+      type: String,
+      default: 'max-w-md'
     }
   },
   emits: ['close'],

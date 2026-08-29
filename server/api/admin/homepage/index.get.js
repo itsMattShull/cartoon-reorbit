@@ -23,6 +23,13 @@ export default defineEventHandler(async (event) => {
     bottomRightImagePath: null,
     bottomRightLink: null,
     showcaseImagePath: null,
+    heroImagePath: null,
+    heroImageLink: null,
+    heroVideoPath: null,
+    loginTopImagePath: null,
+    loginTopImageLink: null,
+    loginBottomImagePath: null,
+    loginBottomImageLink: null,
     homeImage1Path: null,
     homeImage1Link: null,
     homeImage2Path: null,
@@ -43,11 +50,11 @@ export default defineEventHandler(async (event) => {
     updatedAt: null
   }
 
-  // If showcase is an mp4, check for a generated poster image (same base name, .jpg)
-  let showcasePosterPath = null
-  try {
-    const sp = cfgSafe.showcaseImagePath || ''
-    if (sp && /\.mp4($|\?)/i.test(sp)) {
+  // If a slot is an mp4, check for a generated poster image (same base name, .jpg)
+  async function posterPathFor(videoPath) {
+    try {
+      const sp = videoPath || ''
+      if (!sp || !/\.mp4($|\?)/i.test(sp)) return null
       const base = (sp.split('?')[0] || '').split('/').pop() || ''
       const posterFilename = base.replace(/\.mp4$/i, '.jpg')
       const uploadDir = process.env.NODE_ENV === 'production'
@@ -55,11 +62,14 @@ export default defineEventHandler(async (event) => {
         : join(baseDir, 'public', 'homepage')
       const cand = join(uploadDir, posterFilename)
       await access(cand)
-      showcasePosterPath = process.env.NODE_ENV === 'production' ? `/images/homepage/${posterFilename}` : `/homepage/${posterFilename}`
+      return process.env.NODE_ENV === 'production' ? `/images/homepage/${posterFilename}` : `/homepage/${posterFilename}`
+    } catch (e) {
+      return null // poster not found -- that's fine
     }
-  } catch (e) {
-    // poster not found -- that's fine
   }
 
-  return { ...cfgSafe, showcasePosterPath }
+  const showcasePosterPath = await posterPathFor(cfgSafe.showcaseImagePath)
+  const heroVideoPosterPath = await posterPathFor(cfgSafe.heroVideoPath)
+
+  return { ...cfgSafe, showcasePosterPath, heroVideoPosterPath }
 })

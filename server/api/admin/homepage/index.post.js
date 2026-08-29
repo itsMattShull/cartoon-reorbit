@@ -9,18 +9,41 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
 import { join, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import sharp from 'sharp'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { sanitizeLink } from '@/server/utils/sanitizeLink'
+import { uploadDir as sharedUploadDir, uploadPublicPath as sharedUploadPublicPath } from '@/server/utils/uploadStorage'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
   ? join(__dirname, '..', '..', '..')
   : process.cwd()
 
+// Legacy slots (topLeft/bottomLeft/topRight/showcase/homeImage*/middleSidebar*/news/earnPoints/label,
+// and the still-live bottomRight "Bottom Spotlight" shared with WinballPromo.vue) keep the original,
+// broader allow-list for backward compatibility with content admins already uploaded.
 const ALLOWED = new Set(['image/png','image/jpeg','image/jpg','image/svg+xml','image/gif','video/mp4'])
+
+// New hero-redesign image slots deliberately exclude SVG — an uploaded SVG can carry <script>,
+// and if a "link to" field ever points straight at the file's own same-origin path, navigating to
+// it would execute that script. Same reasoning already applied to the favicon uploader.
+const ALLOWED_NEW_IMAGE = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/gif'])
+const ALLOWED_VIDEO = new Set(['video/mp4'])
+
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024 // 8MB
+const MAX_VIDEO_BYTES = 150 * 1024 * 1024 // 150MB
+const MAX_INPUT_PIXELS = 30_000_000 // guards against decompression-bomb-style crafted images
+const HERO_IMAGE_MAX_WIDTH = 1600 // bounds worst-case payload for the highest-traffic page
 
 const publicAssetPath = (filename) =>
   process.env.NODE_ENV === 'production' ? `/images/homepage/${filename}` : `/homepage/${filename}`
+
+// New fields route their dev/prod path split through the shared helper instead of copy-pasting
+// the inline logic above a fourth time; they still land in the same "homepage" bucket as the
+// legacy fields since they're the same conceptual asset set.
+const newUploadDir = () => sharedUploadDir('homepage')
+const newPublicAssetPath = (filename) => sharedUploadPublicPath('homepage', filename)
 
 export default defineEventHandler(async (event) => {
   // auth
@@ -48,6 +71,13 @@ export default defineEventHandler(async (event) => {
     bottomRightImagePath:    null,
     bottomRightLink:         null,
     showcaseImagePath:       null,
+    heroImagePath:           null,
+    heroImageLink:           null,
+    heroVideoPath:           null,
+    loginTopImagePath:       null,
+    loginTopImageLink:       null,
+    loginBottomImagePath:    null,
+    loginBottomImageLink:    null,
     middleSidebar1ImagePath: null,
     middleSidebar1Link:      null,
     middleSidebar2ImagePath: null,
@@ -59,7 +89,7 @@ export default defineEventHandler(async (event) => {
     labelImagePath:          null
   }
 
-  // fs prep
+  // fs prep (legacy slots)
   const uploadDir = process.env.NODE_ENV === 'production'
     ? join(baseDir, 'cartoon-reorbit-images', 'homepage')
     : join(baseDir, 'public', 'homepage')
@@ -70,6 +100,11 @@ export default defineEventHandler(async (event) => {
     if (!part) return null
     if (!ALLOWED.has(part.type)) {
       throw createError({ statusCode: 400, statusMessage: `Invalid file type for ${key}` })
+    }
+    const isVideo = part.type === 'video/mp4'
+    const maxBytes = isVideo ? MAX_VIDEO_BYTES : MAX_IMAGE_BYTES
+    if (!part.data || part.data.length > maxBytes) {
+      throw createError({ statusCode: 400, statusMessage: `${key} exceeds the ${Math.round(maxBytes / (1024 * 1024))}MB limit` })
     }
     const ext = extname(part.filename || '').toLowerCase() ||
       (part.type === 'image/svg+xml' ? '.svg' : part.type === 'image/png' ? '.png' : part.type === 'image/gif' ? '.gif' : part.type === 'video/mp4' ? '.mp4' : '.jpg')
@@ -95,6 +130,82 @@ export default defineEventHandler(async (event) => {
     return publicAssetPath(filename)
   }
 
+  // New hero-redesign image slots: raster-only, size-capped, and re-encoded through sharp both to
+  // bound the worst-case payload on the site's highest-traffic page and as a basic content check —
+  // sharp fails closed on anything it can't actually decode as an image, which catches a spoofed
+  // Content-Type header (a non-image file declared as image/png, etc).
+  async function saveNewImageIfPresent(key) {
+    const part = files[key]
+    if (!part) return null
+    if (!ALLOWED_NEW_IMAGE.has(part.type)) {
+      throw createError({ statusCode: 400, statusMessage: `Invalid file type for ${key} — PNG, JPG, or GIF only` })
+    }
+    if (!part.data || part.data.length > MAX_IMAGE_BYTES) {
+      throw createError({ statusCode: 400, statusMessage: `${key} exceeds the ${Math.round(MAX_IMAGE_BYTES / (1024 * 1024))}MB limit` })
+    }
+
+    const dir = newUploadDir()
+    await mkdir(dir, { recursive: true })
+    const ts = Date.now()
+
+    // Animated GIFs can't be resized through sharp without collapsing to a single frame, so pass
+    // them through as-is (still MIME/size/decode-validated above via the allow-list + cap).
+    if (part.type === 'image/gif') {
+      const filename = `${key}-${ts}.gif`
+      await writeFile(join(dir, filename), part.data)
+      return newPublicAssetPath(filename)
+    }
+
+    let outBuffer, outExt
+    try {
+      const oriented = await sharp(part.data, { limitInputPixels: MAX_INPUT_PIXELS }).rotate().toBuffer()
+      const meta = await sharp(oriented).metadata()
+      if (!meta.width || !meta.height) throw new Error('no dimensions')
+      const pipeline = sharp(oriented).resize({ width: HERO_IMAGE_MAX_WIDTH, withoutEnlargement: true })
+      if (part.type === 'image/png') {
+        outBuffer = await pipeline.png({ compressionLevel: 9 }).toBuffer()
+        outExt = '.png'
+      } else {
+        outBuffer = await pipeline.jpeg({ quality: 85 }).toBuffer()
+        outExt = '.jpg'
+      }
+    } catch {
+      throw createError({ statusCode: 400, statusMessage: `Could not read ${key} — file may be corrupt, too large, or an unsupported format.` })
+    }
+
+    const filename = `${key}-${ts}${outExt}`
+    await writeFile(join(dir, filename), outBuffer)
+    return newPublicAssetPath(filename)
+  }
+
+  async function saveVideoIfPresent(key) {
+    const part = files[key]
+    if (!part) return null
+    if (!ALLOWED_VIDEO.has(part.type)) {
+      throw createError({ statusCode: 400, statusMessage: `Invalid file type for ${key} — MP4 only` })
+    }
+    if (!part.data || part.data.length > MAX_VIDEO_BYTES) {
+      throw createError({ statusCode: 400, statusMessage: `${key} exceeds the ${Math.round(MAX_VIDEO_BYTES / (1024 * 1024))}MB limit` })
+    }
+
+    const dir = newUploadDir()
+    await mkdir(dir, { recursive: true })
+    const ts = Date.now()
+    const filename = `${key}-${ts}.mp4`
+    const dest = join(dir, filename)
+    await writeFile(dest, part.data)
+
+    try {
+      const posterName = `${key}-${ts}.jpg`
+      const posterDest = join(dir, posterName)
+      spawnSync('ffmpeg', ['-ss', '00:00:01', '-i', dest, '-frames:v', '1', '-q:v', '2', posterDest], { stdio: 'ignore' })
+    } catch (e) {
+      // ignore poster generation failures
+    }
+
+    return newPublicAssetPath(filename)
+  }
+
   const saved = {
     topLeft:          await saveIfPresent('topLeft'),
     bottomLeft:       await saveIfPresent('bottomLeft'),
@@ -110,7 +221,11 @@ export default defineEventHandler(async (event) => {
     middleSidebar3:   await saveIfPresent('middleSidebar3'),
     news:             await saveIfPresent('news'),
     earnPoints:       await saveIfPresent('earnPoints'),
-    label:            await saveIfPresent('label')
+    label:            await saveIfPresent('label'),
+    heroImage:        await saveNewImageIfPresent('heroImage'),
+    loginTop:         await saveNewImageIfPresent('loginTop'),
+    loginBottom:      await saveNewImageIfPresent('loginBottom'),
+    heroVideo:        await saveVideoIfPresent('heroVideo')
   }
 
   // helper: update one slot without touching others unless provided
@@ -132,8 +247,20 @@ export default defineEventHandler(async (event) => {
     return currentValue
   }
 
+  // Link fields are echoed back as real `<a href>` targets on the public, unauthenticated
+  // homepage — sanitizeLink rejects anything but http(s)/relative paths (blocks javascript:/data:
+  // etc. stored XSS). Applied to every link field, not just the new ones: this endpoint has never
+  // validated these server-side, so it's a pre-existing gap on fields already exposed publicly.
   const resolveLink = (textKey, currentValue) => {
-    if (has(textKey)) return norm(text[textKey]) || null
+    if (has(textKey)) {
+      const val = norm(text[textKey])
+      if (val === '') return null
+      const clean = sanitizeLink(val)
+      if (clean === null) {
+        throw createError({ statusCode: 400, statusMessage: `${textKey} must be a relative path or an http(s) URL` })
+      }
+      return clean
+    }
     return currentValue
   }
 
@@ -144,6 +271,13 @@ export default defineEventHandler(async (event) => {
     bottomRightImagePath: resolveSlot('bottomRightImagePath', 'bottomRight', 'bottomRightPath', current.bottomRightImagePath),
     bottomRightLink:      resolveLink('bottomRightLink', current.bottomRightLink),
     showcaseImagePath:    resolveSlot('showcaseImagePath',    'showcase',    'showcasePath',    current.showcaseImagePath),
+    heroImagePath:        resolveSlot('heroImagePath',        'heroImage',   'heroImagePath',   current.heroImagePath),
+    heroImageLink:        resolveLink('heroImageLink', current.heroImageLink),
+    heroVideoPath:        resolveSlot('heroVideoPath',        'heroVideo',   'heroVideoPath',   current.heroVideoPath),
+    loginTopImagePath:    resolveSlot('loginTopImagePath',    'loginTop',    'loginTopImagePath',    current.loginTopImagePath),
+    loginTopImageLink:    resolveLink('loginTopImageLink', current.loginTopImageLink),
+    loginBottomImagePath: resolveSlot('loginBottomImagePath', 'loginBottom', 'loginBottomImagePath', current.loginBottomImagePath),
+    loginBottomImageLink: resolveLink('loginBottomImageLink', current.loginBottomImageLink),
     homeImage1Path:       resolveSlot('homeImage1Path',       'homeImage1',  'homeImage1Path',  current.homeImage1Path),
     homeImage1Link:       resolveLink('homeImage1Link', current.homeImage1Link),
     homeImage2Path:       resolveSlot('homeImage2Path',       'homeImage2',  'homeImage2Path',  current.homeImage2Path),
@@ -175,6 +309,8 @@ export default defineEventHandler(async (event) => {
     const fields = [
       'topLeftImagePath', 'bottomLeftImagePath', 'topRightImagePath', 'bottomRightImagePath',
       'bottomRightLink', 'showcaseImagePath',
+      'heroImagePath', 'heroImageLink', 'heroVideoPath',
+      'loginTopImagePath', 'loginTopImageLink', 'loginBottomImagePath', 'loginBottomImageLink',
       'homeImage1Path', 'homeImage1Link', 'homeImage2Path', 'homeImage2Link',
       'homeImage3Path', 'homeImage3Link', 'homeImage4Path', 'homeImage4Link',
       'middleSidebar1ImagePath', 'middleSidebar1Link',
@@ -200,6 +336,13 @@ export default defineEventHandler(async (event) => {
     bottomRightImagePath:    cfg.bottomRightImagePath,
     bottomRightLink:         cfg.bottomRightLink,
     showcaseImagePath:       cfg.showcaseImagePath,
+    heroImagePath:           cfg.heroImagePath,
+    heroImageLink:           cfg.heroImageLink,
+    heroVideoPath:           cfg.heroVideoPath,
+    loginTopImagePath:       cfg.loginTopImagePath,
+    loginTopImageLink:       cfg.loginTopImageLink,
+    loginBottomImagePath:    cfg.loginBottomImagePath,
+    loginBottomImageLink:    cfg.loginBottomImageLink,
     homeImage1Path:          cfg.homeImage1Path,
     homeImage1Link:          cfg.homeImage1Link,
     homeImage2Path:          cfg.homeImage2Path,

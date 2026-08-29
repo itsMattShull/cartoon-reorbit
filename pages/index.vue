@@ -1,6 +1,6 @@
 <template>
-  <main class="bg-white text-slate-900">
-    <!-- Top nav -->
+  <main class="bg-white text-slate-900 overflow-x-hidden">
+    <!-- Top nav (ad rotator) -->
     <header class="sticky top-0 z-40 backdrop-blur border-b border-[var(--reorbit-border)]" style="background: var(--reorbit-navy)">
       <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 md:py-8 flex items-center justify-between">
         <!-- logo: left on small, centered on md+ -->
@@ -21,147 +21,123 @@
                   bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] shadow hover:brightness-95"
             aria-label="Sign in with Discord"
           >
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 245 240" class="h-4 w-4 fill-[var(--reorbit-deep)]" aria-hidden="true">
-              <path d="M104.4 104.5c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1.1-6.1-4.5-11.1-10.2-11.1zm36.2 0c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1s-4.5-11.1-10.2-11.1z"/>
-              <path d="M189.5 20h-134C42 20 30 32 30 46v148c0 14 12 26 25.5 26h114.3l-5.4-18.7 13 12 12.3 11.3 21.8 19V46c0-14-12-26-25.5-26zm-37 141s-3.5-4.2-6.4-7.9c12.7-3.6 17.5-11.6 17.5-11.6-4 2.6-7.8 4.4-11.2 5.6-4.9 2.1-9.6 3.4-14.2 4.2-9.4 1.8-18 1.3-25.3-.1-5.6-1.1-10.4-2.6-14.4-4.2-2.2-.9-4.6-2-7.1-3.4-.3-.2-.6-.3-.9-.5-.2-.1-.3-.2-.4-.3-1.8-1-2.8-1.7-2.8-1.7s4.6 7.6 16.7 11.4c-2.9 3.7-6.5 8-6.5 8-21.6-.7-29.8-14.9-29.8-14.9 0-31.5 14-57 14-57 14-10.4 27.2-10.1 27.2-10.1l1 1.2c-17.5 5.1-25.6 13-25.6 13s2.1-1.1 5.6-2.7c10.2-4.5 18.3-5.8 21.6-6.1.5-.1.9-.1 1.4-.1 5-1 10.6-1.2 16.5-0.1 7.7 1.1 15.9 3.9 24.3 9.6 0 0-7.7-7.3-24.3-12.3l1.4-1.6s13.2-.3 27.2 10.1c0 0 14 25.5 14 57 0 0-8.2 14.2-29.8 14.9z"/>
-            </svg>
+            <DiscordIcon class="h-4 w-4 fill-[var(--reorbit-deep)]" />
             Play now
           </button>
         </div>
       </div>
     </header>
 
-    <!-- Hero -->
+    <!-- Hero: login panel (left) + hero image / Tutorial / Watch Video (right) -->
     <section
       class="relative overflow-hidden"
       style="background:
   linear-gradient(180deg, var(--reorbit-cyan) -50%, transparent 100%) top/100% 20px no-repeat,
   linear-gradient(180deg, var(--reorbit-blue), var(--reorbit-navy))"
     >
-      <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-8">
-        <div class="grid lg:grid-cols-2 gap-8">
-          <div class="relative">
-            <video v-if="isVideo(topLeftSrc)"
-              :src="topLeftSrc"
-              controls playsinline preload="metadata"
-              class="rounded-2xl" style="width:100%; cursor: pointer; margin-top: -17px"
-              @click="login"
-            ></video>
-            <img v-else
-              :src="topLeftSrc"
-              alt="Cartoon ReOrbit Welcome Image"
-              class="rounded-2xl" style="width:100%; cursor: pointer; margin-top: -17px"
-              @click="login"
-            />
-            <div class="my-8">
-              <h1 class="mt-4 text-3xl sm:text-4xl font-extrabold leading-tight text-white" style="font-family: 'Comic Sans MS', cursive, sans-serif;">
-                Collect cToons. Build cZones. Trade and play in real time.
-              </h1>
-              <p class="mt-4 text-lg text-white/80 max-w-xl">
-                Cartoon ReOrbit is a modern remake of the early-2000s Cartoon Orbit experience. Own digital cards (cToons), design themed boards (cZones), and compete through trades, auctions, and mini-games like gToons Clash.
+      <div class="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 sm:py-10">
+        <div class="grid lg:grid-cols-2 gap-6 lg:gap-10">
+          <!-- LEFT: login panel -->
+          <div class="flex flex-col gap-4">
+            <HeroMedia :src="loginTopSrc" :link="loginTopLink" alt="Wanna trade?" aspect-class="aspect-[4/3]" />
+
+            <div class="retro-login-box">
+              <div class="retro-login-ribbon">Welcome! Wanna Trade?</div>
+              <p class="mt-3 text-white/90 text-sm sm:text-base">
+                Not an Orbiter yet? Join free and start collecting cToons today.
               </p>
+              <button
+                @click="login"
+                class="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3.5 min-h-[48px]
+                       text-base font-semibold text-[var(--reorbit-deep)]
+                       bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] shadow hover:brightness-95"
+              >
+                <DiscordIcon class="h-5 w-5 fill-[var(--reorbit-deep)]" />
+                Log in with Discord
+              </button>
             </div>
 
-            <div class="relative">
-              <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur">
-                <video v-if="isVideo(bottomLeftSrc)"
-                  :src="bottomLeftSrc"
-                  controls playsinline preload="metadata"
-                  class="rounded-2xl" style="width:100%; cursor: pointer;"
-                  @click="login"
-                ></video>
-                <img v-else
-                  :src="bottomLeftSrc"
-                  alt="Cartoon ReOrbit gToons preview"
-                  class="rounded-2xl" style="width:100%; cursor: pointer;"
-                  @click="login"
-                />
-              </div>
-            </div>
+            <HeroMedia :src="loginBottomSrc" :link="loginBottomLink" alt="Bonus cToon" aspect-class="aspect-[4/3]" />
           </div>
 
-          <div class="relative">
-            <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur">
-              <video v-if="isVideo(topRightSrc)"
-                :src="topRightSrc"
-                controls playsinline preload="metadata"
-                class="rounded-2xl" style="width:100%; cursor: pointer;"
-                @click="login"
-              ></video>
-              <img v-else
-                :src="topRightSrc"
-                alt="Cartoon ReOrbit WinWheel Preview"
-                class="rounded-2xl" style="width:100%; cursor: pointer;"
-                @click="login"
-              />
-            </div>
-            <!-- bottom-right card -->
-            <div class="rounded-2xl border border-white/10 bg-white/5 p-2 shadow-2xl backdrop-blur mt-2 relative">
-              <video v-if="isVideo(bottomRightSrc)"
-                :src="bottomRightSrc"
-                controls playsinline preload="metadata"
-                class="rounded-2xl w-full cursor-pointer"
-                @click="login"
-              ></video>
-              <img v-else
-                :src="bottomRightSrc"
-                alt="Cartoon ReOrbit cToons preview"
-                class="rounded-2xl w-full cursor-pointer"
-                @click="login"
-              />
-
-              <!-- centered prize overlay -->
-              <img
-                v-if="winballPrizeUrl"
-                :src="winballPrizeUrl"
-                alt="Current Winball prize"
-                class="pointer-events-none absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
-                      max-w-[60%] max-h-[60%] object-contain rounded-xl"
-              />
-            </div>
-            <div
-              class="pointer-events-none absolute -right-10 -bottom-10 h-56 w-56 rounded-full blur-2xl"
-              style="background: radial-gradient(circle, var(--reorbit-cyan), transparent 30%);"
+          <!-- RIGHT: hero image + Tutorial / Watch Video -->
+          <div class="flex flex-col gap-4">
+            <HeroMedia
+              :src="heroImageSrc"
+              :link="heroImageLink"
+              alt="Cartoon ReOrbit"
+              aspect-class="aspect-[16/11]"
+              :priority="true"
             />
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <NuxtLink
+                to="/newsite/tutorial"
+                class="inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3.5 min-h-[48px]
+                       text-base font-semibold text-white border-2 shadow hover:brightness-110 text-center"
+                style="border-color: var(--reorbit-cyan); background: rgba(15,221,214,0.12);"
+              >
+                New to Orbit? Tutorial
+              </NuxtLink>
+              <button
+                v-if="heroVideoSrc"
+                @click="showVideoModal = true"
+                class="inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3.5 min-h-[48px]
+                       text-base font-semibold text-[var(--reorbit-deep)]
+                       bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] shadow hover:brightness-95"
+              >
+                <svg viewBox="0 0 20 20" class="h-5 w-5 fill-current" aria-hidden="true"><path d="M6 4.5v11l9-5.5-9-5.5Z" /></svg>
+                Watch Video
+              </button>
+            </div>
+
+            <h1 class="mt-2 text-3xl sm:text-4xl font-extrabold leading-tight text-white" style="font-family: 'Comic Sans MS', cursive, sans-serif;">
+              Collect cToons. Build cZones. Trade and play in real time.
+            </h1>
+            <p class="text-lg text-white/80 max-w-xl">
+              Cartoon ReOrbit is a modern remake of the early-2000s Cartoon Orbit experience. Own digital cards (cToons), design themed boards (cZones), and compete through trades, auctions, and mini-games like gToons Clash.
+            </p>
           </div>
         </div>
       </div>
     </section>
 
+    <HomepageVideoModal v-if="showVideoModal" :src="heroVideoSrc" :poster="heroVideoPosterSrc" @close="showVideoModal = false" />
+
     <!-- Community stats -->
     <section class="py-12 bg-white">
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div class="mb-4">
-          <p class="text-xs font-semibold uppercase tracking-[0.2em] text-slate-700">Community stats</p>
+          <span class="retro-badge">Community stats</span>
         </div>
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <div class="rounded-3xl border border-[var(--reorbit-border)] bg-white p-6 shadow-sm text-center">
+          <div class="retro-stat-card">
             <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">Users</div>
-            <div class="mt-2 text-4xl sm:text-5xl font-extrabold bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)] bg-clip-text text-transparent">
+            <div class="mt-2 text-3xl sm:text-4xl lg:text-5xl font-extrabold bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)] bg-clip-text text-transparent">
               {{ formatNumber(stats?.users) }}
             </div>
           </div>
-          <div class="rounded-3xl border border-[var(--reorbit-border)] bg-white p-6 shadow-sm text-center">
+          <div class="retro-stat-card">
             <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">Active last month</div>
-            <div class="mt-2 text-4xl sm:text-5xl font-extrabold bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)] bg-clip-text text-transparent">
+            <div class="mt-2 text-3xl sm:text-4xl lg:text-5xl font-extrabold bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)] bg-clip-text text-transparent">
               {{ formatNumber(stats?.activeUsers) }}
             </div>
           </div>
-          <div class="rounded-3xl border border-[var(--reorbit-border)] bg-white p-6 shadow-sm text-center">
+          <div class="retro-stat-card">
             <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">cToons sold</div>
-            <div class="mt-2 text-4xl sm:text-5xl font-extrabold bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)] bg-clip-text text-transparent">
+            <div class="mt-2 text-3xl sm:text-4xl lg:text-5xl font-extrabold bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)] bg-clip-text text-transparent">
               {{ formatNumber(stats?.ctoonsSold) }}
             </div>
           </div>
-          <div class="rounded-3xl border border-[var(--reorbit-border)] bg-white p-6 shadow-sm text-center">
+          <div class="retro-stat-card">
             <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">Active auctions</div>
-            <div class="mt-2 text-4xl sm:text-5xl font-extrabold bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)] bg-clip-text text-transparent">
+            <div class="mt-2 text-3xl sm:text-4xl lg:text-5xl font-extrabold bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)] bg-clip-text text-transparent">
               {{ formatNumber(stats?.activeAuctions) }}
             </div>
           </div>
-          <div class="rounded-3xl border border-[var(--reorbit-border)] bg-white p-6 shadow-sm text-center">
+          <div class="retro-stat-card">
             <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-700">Trades all time</div>
-            <div class="mt-2 text-4xl sm:text-5xl font-extrabold bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)] bg-clip-text text-transparent">
+            <div class="mt-2 text-3xl sm:text-4xl lg:text-5xl font-extrabold bg-gradient-to-r from-[var(--reorbit-purple)] via-[var(--reorbit-cyan)] to-[var(--reorbit-lime)] bg-clip-text text-transparent">
               {{ formatNumber(stats?.tradesAllTime) }}
             </div>
           </div>
@@ -172,46 +148,44 @@
     <!-- How it works -->
     <section id="how" class="py-20 bg-[var(--reorbit-tint)]">
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <h2 class="text-3xl font-bold text-slate-900">Start in minutes</h2>
+        <span class="retro-badge">Start in minutes</span>
+        <h2 class="mt-3 text-3xl font-bold text-slate-900">Start in minutes</h2>
         <ol class="mt-6 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          <li class="rounded-2xl bg-white p-6 border border-[var(--reorbit-border)]">
+          <li class="retro-step-card">
             <p class="text-sm font-semibold text-slate-700">1. Sign in</p>
             <p class="mt-1 text-slate-600">Use Discord to create your free account.</p>
           </li>
-          <li class="rounded-2xl bg-white p-6 border border-[var(--reorbit-border)]">
+          <li class="retro-step-card">
             <p class="text-sm font-semibold text-slate-700">2. Gather cToons</p>
             <p class="mt-1 text-slate-600">Claim your starter cToons, buy from the cMart, and open packs.</p>
           </li>
-          <li class="rounded-2xl bg-white p-6 border border-[var(--reorbit-border)]">
+          <li class="retro-step-card">
             <p class="text-sm font-semibold text-slate-700">3. Build a cZone</p>
             <p class="mt-1 text-slate-600">Place cards, unlock bonuses, and share.</p>
           </li>
-          <li class="rounded-2xl bg-white p-6 border border-[var(--reorbit-border)]">
+          <li class="retro-step-card">
             <p class="text-sm font-semibold text-slate-700">4. Trade and play</p>
             <p class="mt-1 text-slate-600">Complete sets through trades, auctions, and games.</p>
           </li>
         </ol>
-        <div class="mt-8">
-          <img @click="login" src="/images/notmember_top.gif" alt="Not a member yet? Join free today!" style="cursor: pointer; margin-bottom: -80px" />
-        </div>
       </div>
     </section>
 
     <!-- Community / callout -->
     <section class="py-20">
       <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 grid lg:grid-cols-3 gap-8">
-        <div class="lg:col-span-2 rounded-3xl p-8 border border-[var(--reorbit-border)] bg-gradient-to-br from-[var(--reorbit-cyan-transparent)] to-white">
+        <div class="lg:col-span-2 rounded-3xl p-8 border-4 border-[var(--reorbit-border)] bg-gradient-to-br from-[var(--reorbit-cyan-transparent)] to-white">
           <h3 class="text-2xl font-bold text-slate-900">Built by fans for fans</h3>
           <p class="mt-2 text-slate-600">
             Free to play. Community-driven. This project is not affiliated with, endorsed by, or sponsored by Cartoon Network or Warner Bros. Discovery.
           </p>
         </div>
-        <div class="rounded-3xl p-8 border border-[var(--reorbit-border)] bg-white">
+        <div class="rounded-3xl p-8 border-4 bg-white" style="border-color: var(--reorbit-lime);">
           <h3 class="text-2xl font-bold text-slate-900">Ready to orbit?</h3>
           <p class="mt-2 text-slate-600">Join and start collecting today.</p>
           <button
             @click="login"
-            class="mt-4 w-full inline-flex items-center justify-center rounded-2xl px-6 py-3 font-semibold text-[var(--reorbit-deep)]
+            class="mt-4 w-full inline-flex items-center justify-center rounded-2xl px-6 py-3.5 min-h-[48px] font-semibold text-[var(--reorbit-deep)]
                    bg-gradient-to-br from-[var(--reorbit-lime)] to-[var(--reorbit-green-2)] shadow hover:brightness-95"
           >
             Play free
@@ -260,12 +234,9 @@
 </template>
 
 <script setup>
-// Utility to check if a path is an mp4 video
-function isVideo(path) {
-  return /\.mp4($|\?)/i.test(path || '')
-}
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, h } from 'vue'
 import { useAuth } from '@/composables/useAuth'
+import HomepageVideoModal from '@/components/HomepageVideoModal.vue'
 
 const { login } = useAuth()
 
@@ -274,15 +245,50 @@ definePageMeta({
   layout: 'home'
 })
 
-/* ── Homepage images (existing) ─────────────────────────────── */
-const { data: hp } = await useAsyncData('homepage-public', () => $fetch('/api/homepage'))
+// Small inline Discord glyph, reused by both the header and hero login buttons.
+const DiscordIcon = (props) => h('svg', { viewBox: '0 0 245 240', 'aria-hidden': 'true', ...props }, [
+  h('path', { d: 'M104.4 104.5c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1.1-6.1-4.5-11.1-10.2-11.1zm36.2 0c-5.7 0-10.2 5-10.2 11.1s4.6 11.1 10.2 11.1c5.7 0 10.2-5 10.2-11.1s-4.5-11.1-10.2-11.1z' }),
+  h('path', { d: 'M189.5 20h-134C42 20 30 32 30 46v148c0 14 12 26 25.5 26h114.3l-5.4-18.7 13 12 12.3 11.3 21.8 19V46c0-14-12-26-25.5-26zm-37 141s-3.5-4.2-6.4-7.9c12.7-3.6 17.5-11.6 17.5-11.6-4 2.6-7.8 4.4-11.2 5.6-4.9 2.1-9.6 3.4-14.2 4.2-9.4 1.8-18 1.3-25.3-.1-5.6-1.1-10.4-2.6-14.4-4.2-2.2-.9-4.6-2-7.1-3.4-.3-.2-.6-.3-.9-.5-.2-.1-.3-.2-.4-.3-1.8-1-2.8-1.7-2.8-1.7s4.6 7.6 16.7 11.4c-2.9 3.7-6.5 8-6.5 8-21.6-.7-29.8-14.9-29.8-14.9 0-31.5 14-57 14-57 14-10.4 27.2-10.1 27.2-10.1l1 1.2c-17.5 5.1-25.6 13-25.6 13s2.1-1.1 5.6-2.7c10.2-4.5 18.3-5.8 21.6-6.1.5-.1.9-.1 1.4-.1 5-1 10.6-1.2 16.5-0.1 7.7 1.1 15.9 3.9 24.3 9.6 0 0-7.7-7.3-24.3-12.3l1.4-1.6s13.2-.3 27.2 10.1c0 0 14 25.5 14 57 0 0-8.2 14.2-29.8 14.9z' })
+])
 
-const topLeftSrc     = computed(() => hp.value?.topLeftImagePath     || '/images/welcome2.png')
-const bottomLeftSrc  = computed(() => hp.value?.bottomLeftImagePath  || '/images/gtoonsbanner.png')
-const topRightSrc    = computed(() => hp.value?.topRightImagePath    || '/images/posterOct25.png')
-const bottomRightSrc = computed(() => hp.value?.bottomRightImagePath || '/images/ZoidsWinball.png')
+// A fixed-aspect-ratio media box for admin-uploaded images of arbitrary dimensions. Caps height on
+// mobile (max-h-[45vh]) so a tall/odd-aspect upload can't push the login CTA below the fold, and
+// crops via object-cover rather than distorting. Optionally wraps in a link when one is configured.
+const HeroMedia = (props) => {
+  const img = h('img', {
+    src: props.src,
+    alt: props.alt || '',
+    class: 'absolute inset-0 h-full w-full object-cover',
+    loading: props.priority ? 'eager' : 'lazy',
+    fetchpriority: props.priority ? 'high' : undefined
+  })
+  const box = h('div', {
+    class: `relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-2xl backdrop-blur max-h-[45vh] sm:max-h-none ${props.aspectClass || 'aspect-[4/3]'}`
+  }, [img])
+  if (props.link) {
+    return h('a', { href: props.link, class: 'block', 'aria-label': props.alt || 'Learn more' }, [box])
+  }
+  return box
+}
 
-const { data: stats } = await useAsyncData('homepage-stats', () => $fetch('/api/homepage/stats'))
+/* ── Homepage hero config + community stats + global config ───────────────
+   Fired together (no sequential awaits) so one slow endpoint doesn't block the others. */
+const [{ data: hp }, { data: stats }, { data: globalConfig }] = await Promise.all([
+  useAsyncData('homepage-public', () => $fetch('/api/homepage')),
+  useAsyncData('homepage-stats', () => $fetch('/api/homepage/stats')),
+  useAsyncData('global-config-public', () => $fetch('/api/global-config'))
+])
+
+const heroImageSrc    = computed(() => hp.value?.heroImagePath        || '/images/posterOct25.png')
+const heroImageLink   = computed(() => hp.value?.heroImageLink        || '')
+const heroVideoSrc    = computed(() => hp.value?.heroVideoPath        || '')
+const heroVideoPosterSrc = computed(() => hp.value?.heroVideoPosterPath || '')
+const loginTopSrc     = computed(() => hp.value?.loginTopImagePath    || '/images/welcome2.png')
+const loginTopLink    = computed(() => hp.value?.loginTopImageLink    || '')
+const loginBottomSrc  = computed(() => hp.value?.loginBottomImagePath || '/images/gtoonsbanner.png')
+const loginBottomLink = computed(() => hp.value?.loginBottomImageLink || '')
+
+const showVideoModal = ref(false)
 
 function formatNumber(value) {
   const num = Number(value)
@@ -290,7 +296,7 @@ function formatNumber(value) {
   return num.toLocaleString()
 }
 
-/* ── Ad logo rotation (new) ───────────────────────────────────
+/* ── Ad logo rotation (existing) ───────────────────────────────
    - Uses /api/promotions to get image list
    - GIF: advance after one loop
    - PNG/JPG/JPEG/WEBP/SVG: advance every 8s
@@ -403,7 +409,6 @@ const siteName = 'Cartoon ReOrbit'
 // Cache-busting for the favicon/meta-icon set: admin-uploaded icons overwrite
 // the same filenames in place, so a version query string is the only way
 // browsers pick up an update without a hard refresh.
-const { data: globalConfig } = await useAsyncData('global-config-public', () => $fetch('/api/global-config'))
 const faviconV = computed(() => globalConfig.value?.faviconVersion ? `?v=${globalConfig.value.faviconVersion}` : '')
 function iconHref(path) {
   return `${path}${faviconV.value}`
@@ -500,13 +505,6 @@ useHead({
   ]
 })
 
-const { data: prizeData } = await useAsyncData('winball-prize', () =>
-  $fetch('/api/winball-prize')
-)
-
-const winballPrizeUrl = computed(() =>
-  prizeData.value?.prize?.ctoon?.imageUrl || ''
-)
 </script>
 
 <style>
@@ -525,5 +523,57 @@ const winballPrizeUrl = computed(() =>
   --reorbit-border: rgba(150,71,207,0.55);
   --reorbit-tint: rgba(0,44,98,0.035);
   --reorbit-cyan-transparent: rgba(15,221,214,0.12);
+}
+</style>
+
+<style scoped>
+.retro-login-box {
+  border-radius: 1rem;
+  border: 4px solid var(--reorbit-purple);
+  padding: 1.25rem;
+  background: linear-gradient(180deg, rgba(150,71,207,0.14), rgba(255,255,255,0.02));
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+}
+@media (min-width: 640px) {
+  .retro-login-box { padding: 1.5rem; }
+}
+.retro-login-ribbon {
+  display: inline-block;
+  border-radius: 9999px;
+  padding: 0.25rem 1rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #fff;
+  background: var(--reorbit-purple);
+}
+.retro-badge {
+  display: inline-block;
+  border-radius: 9999px;
+  padding: 0.2rem 0.85rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--reorbit-deep);
+  background: linear-gradient(90deg, var(--reorbit-lime), var(--reorbit-cyan));
+}
+.retro-stat-card {
+  border-radius: 1.5rem;
+  border: 3px solid var(--reorbit-border);
+  background: #fff;
+  padding: 1rem;
+  text-align: center;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+}
+@media (min-width: 640px) {
+  .retro-stat-card { padding: 1.5rem; }
+}
+.retro-step-card {
+  border-radius: 1rem;
+  border: 3px solid var(--reorbit-border);
+  background: #fff;
+  padding: 1.5rem;
 }
 </style>

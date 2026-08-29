@@ -9,8 +9,8 @@
         <nav class="flex gap-1 sm:gap-4 overflow-x-auto flex-nowrap -mb-px">
           <button
             class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
-            :class="activeTab==='Homepage' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
-            @click="activeTab='Homepage'">Homepage</button>
+            :class="activeTab==='Hero' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='Hero'">Hero</button>
           <button
             class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
             :class="activeTab==='Home' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
@@ -34,77 +34,128 @@
         </nav>
       </div>
 
-      <!-- Homepage tab -->
-      <section v-if="activeTab==='Homepage'" class="space-y-6">
+      <!-- Hero tab (logged-out homepage redesign) -->
+      <section v-if="activeTab==='Hero'" class="space-y-6">
         <p class="text-sm text-gray-600">
-          Upload SVG/PNG/JPEG/GIF/MP4. Files are stored on the server and paths saved in the database.
+          Controls the logged-out homepage (<code>/</code>) hero: a login panel on the left (top image,
+          "Log in with Discord" box, bottom image) and a hero image with Tutorial / Watch Video buttons
+          on the right. Images: PNG/JPEG/GIF, 8MB max. Video: MP4, 150MB max.
         </p>
+
+        <!-- Hero image (right column) -->
+        <div class="border rounded p-4 space-y-3">
+          <h2 class="font-semibold">Hero Image (right side)</h2>
+          <p class="text-xs text-gray-500">Suggested width around 700–900px. Displayed above the Tutorial / Watch Video buttons.</p>
+          <div class="flex items-center gap-4">
+            <div class="w-40 h-28 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
+              <img v-if="previewUrls.heroImage || heroImagePath" :src="previewUrls.heroImage || heroImagePath" alt="Hero" class="max-h-full max-w-full object-contain" />
+              <span v-else class="text-gray-400 text-xs">No image</span>
+            </div>
+            <div class="space-y-2 flex-1 min-w-0">
+              <input type="file" accept="image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
+                @change="onHeroFile('heroImage', $event)" class="block w-full text-sm" />
+              <div v-if="heroImageFile" class="text-xs text-gray-600 truncate">Selected: {{ heroImageFile.name }}</div>
+              <button type="button" class="px-3 py-1 text-sm rounded border"
+                      v-if="heroImagePath" @click="clearHero('heroImage')">Clear</button>
+            </div>
+          </div>
+          <div class="space-y-1">
+            <label class="text-xs text-gray-600 font-medium">Link to (optional)</label>
+            <select v-model="heroImageLinkPreset" @change="onHeroLinkPresetChange('heroImage')" class="block w-full text-sm border rounded p-1.5">
+              <option value="">— None —</option>
+              <option v-for="(path, preset) in PAGE_LINKS" :key="preset" :value="preset">{{ preset }}</option>
+              <option value="custom">Custom URL…</option>
+            </select>
+            <input v-if="heroImageLinkPreset === 'custom'" type="url" v-model="heroImageLink"
+              placeholder="https://example.com" class="block w-full text-sm border rounded p-1.5 mt-1" />
+          </div>
+        </div>
+
+        <!-- Hero video (watch-video modal) -->
+        <div class="border rounded p-4 space-y-3">
+          <h2 class="font-semibold">Hero Video (Watch Video button)</h2>
+          <p class="text-xs text-gray-500">Opens in a popup when a visitor clicks "Watch Video". Leave empty to hide that button.</p>
+          <div class="flex items-center gap-4">
+            <div class="w-40 h-28 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
+              <video v-if="(heroVideoFile && heroVideoFile.type && heroVideoFile.type.startsWith('video/')) || heroVideoPath"
+                :src="previewUrls.heroVideo || heroVideoPath"
+                :poster="heroVideoPosterPath || ''"
+                preload="metadata" playsinline class="max-h-full max-w-full object-contain"></video>
+              <span v-else class="text-gray-400 text-xs">No video</span>
+            </div>
+            <div class="space-y-2 flex-1 min-w-0">
+              <input type="file" accept="video/mp4,.mp4"
+                @change="onHeroFile('heroVideo', $event)" class="block w-full text-sm" />
+              <div v-if="heroVideoFile" class="text-xs text-gray-600 truncate">Selected: {{ heroVideoFile.name }}</div>
+              <button type="button" class="px-3 py-1 text-sm rounded border"
+                      v-if="heroVideoPath" @click="clearHero('heroVideo')">Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Login panel images (left column) -->
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
-          <!-- Top Left -->
-          <div class="space-y-3">
-            <h2 class="font-semibold">Top Left</h2>
-            <p class="text-xs text-gray-500">Max size is 374px by 292px</p>
+          <div class="border rounded p-4 space-y-3">
+            <h2 class="font-semibold">Login Panel — Top Image</h2>
+            <p class="text-xs text-gray-500">Displayed above the "Log in with Discord" box.</p>
             <div class="aspect-video bg-gray-50 border rounded flex items-center justify-center overflow-hidden">
-              <video v-if="(files.topLeft && files.topLeft.type && files.topLeft.type.startsWith('video/')) || /\.mp4($|\?)/i.test(paths.topLeft || '')"
-                :src="previewUrls.topLeft || paths.topLeft" :poster="(previewUrls.topLeft && /\.(png|jpe?g|gif|svg)$/i.test(previewUrls.topLeft)) ? previewUrls.topLeft : (/\.(png|jpe?g|gif|svg)$/i.test(paths.topLeft||'') ? paths.topLeft : '')"
-                controls preload="metadata" playsinline class="max-h-full max-w-full"></video>
-              <img v-else-if="previewUrls.topLeft || paths.topLeft" :src="previewUrls.topLeft || paths.topLeft" alt="Top Left" class="max-h-full max-w-full" />
+              <img v-if="previewUrls.loginTop || loginTopImagePath" :src="previewUrls.loginTop || loginTopImagePath" alt="Login top" class="max-h-full max-w-full object-contain" />
               <span v-else class="text-gray-400 text-sm">No image</span>
             </div>
-                 <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif,video/mp4,.mp4"
-                   @change="onFile('topLeft', $event)" class="block w-full text-sm" />
-            <div v-if="files.topLeft" class="text-xs text-gray-600 truncate">Selected: {{ files.topLeft.name }}</div>
+            <input type="file" accept="image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
+              @change="onHeroFile('loginTop', $event)" class="block w-full text-sm" />
+            <div v-if="loginTopImageFile" class="text-xs text-gray-600 truncate">Selected: {{ loginTopImageFile.name }}</div>
             <button type="button" class="px-3 py-1 text-sm rounded border"
-                    v-if="paths.topLeft" @click="clearPath('topLeft')">Clear</button>
+                    v-if="loginTopImagePath" @click="clearHero('loginTop')">Clear</button>
+            <div class="space-y-1">
+              <label class="text-xs text-gray-600 font-medium">Link to (optional)</label>
+              <select v-model="loginTopImageLinkPreset" @change="onHeroLinkPresetChange('loginTop')" class="block w-full text-sm border rounded p-1.5">
+                <option value="">— None —</option>
+                <option v-for="(path, preset) in PAGE_LINKS" :key="preset" :value="preset">{{ preset }}</option>
+                <option value="custom">Custom URL…</option>
+              </select>
+              <input v-if="loginTopImageLinkPreset === 'custom'" type="url" v-model="loginTopImageLink"
+                placeholder="https://example.com" class="block w-full text-sm border rounded p-1.5 mt-1" />
+            </div>
           </div>
 
-          <!-- Top Right -->
-          <div class="space-y-3">
-            <h2 class="font-semibold">Top Right</h2>
-            <p class="text-xs text-gray-500">Max size is 374px by 292px</p>
+          <div class="border rounded p-4 space-y-3">
+            <h2 class="font-semibold">Login Panel — Bottom Image</h2>
+            <p class="text-xs text-gray-500">Displayed below the "Log in with Discord" box.</p>
             <div class="aspect-video bg-gray-50 border rounded flex items-center justify-center overflow-hidden">
-              <video v-if="(files.topRight && files.topRight.type && files.topRight.type.startsWith('video/')) || /\.mp4($|\?)/i.test(paths.topRight || '')"
-                :src="previewUrls.topRight || paths.topRight" :poster="(previewUrls.topRight && /\.(png|jpe?g|gif|svg)$/i.test(previewUrls.topRight)) ? previewUrls.topRight : (/\.(png|jpe?g|gif|svg)$/i.test(paths.topRight||'') ? paths.topRight : '')"
-                controls preload="metadata" playsinline class="max-h-full max-w-full"></video>
-              <img v-else-if="previewUrls.topRight || paths.topRight" :src="previewUrls.topRight || paths.topRight" alt="Top Right" class="max-h-full max-w-full" />
+              <img v-if="previewUrls.loginBottom || loginBottomImagePath" :src="previewUrls.loginBottom || loginBottomImagePath" alt="Login bottom" class="max-h-full max-w-full object-contain" />
               <span v-else class="text-gray-400 text-sm">No image</span>
             </div>
-                 <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif,video/mp4,.mp4"
-                   @change="onFile('topRight', $event)" class="block w-full text-sm" />
-            <div v-if="files.topRight" class="text-xs text-gray-600 truncate">Selected: {{ files.topRight.name }}</div>
+            <input type="file" accept="image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif"
+              @change="onHeroFile('loginBottom', $event)" class="block w-full text-sm" />
+            <div v-if="loginBottomImageFile" class="text-xs text-gray-600 truncate">Selected: {{ loginBottomImageFile.name }}</div>
             <button type="button" class="px-3 py-1 text-sm rounded border"
-                    v-if="paths.topRight" @click="clearPath('topRight')">Clear</button>
-          </div>
-
-          <!-- Bottom Left -->
-          <div class="space-y-3">
-            <h2 class="font-semibold">Bottom Left</h2>
-            <p class="text-xs text-gray-500">Max size is 374px by 292px</p>
-            <div class="aspect-video bg-gray-50 border rounded flex items-center justify-center overflow-hidden">
-              <video v-if="(files.bottomLeft && files.bottomLeft.type && files.bottomLeft.type.startsWith('video/')) || /\.mp4($|\?)/i.test(paths.bottomLeft || '')"
-                :src="previewUrls.bottomLeft || paths.bottomLeft" :poster="(previewUrls.bottomLeft && /\.(png|jpe?g|gif|svg)$/i.test(previewUrls.bottomLeft)) ? previewUrls.bottomLeft : (/\.(png|jpe?g|gif|svg)$/i.test(paths.bottomLeft||'') ? paths.bottomLeft : '')"
-                controls preload="metadata" playsinline class="max-h-full max-w-full"></video>
-              <img v-else-if="previewUrls.bottomLeft || paths.bottomLeft" :src="previewUrls.bottomLeft || paths.bottomLeft" alt="Bottom Left" class="max-h-full max-w-full" />
-              <span v-else class="text-gray-400 text-sm">No image</span>
+                    v-if="loginBottomImagePath" @click="clearHero('loginBottom')">Clear</button>
+            <div class="space-y-1">
+              <label class="text-xs text-gray-600 font-medium">Link to (optional)</label>
+              <select v-model="loginBottomImageLinkPreset" @change="onHeroLinkPresetChange('loginBottom')" class="block w-full text-sm border rounded p-1.5">
+                <option value="">— None —</option>
+                <option v-for="(path, preset) in PAGE_LINKS" :key="preset" :value="preset">{{ preset }}</option>
+                <option value="custom">Custom URL…</option>
+              </select>
+              <input v-if="loginBottomImageLinkPreset === 'custom'" type="url" v-model="loginBottomImageLink"
+                placeholder="https://example.com" class="block w-full text-sm border rounded p-1.5 mt-1" />
             </div>
-                 <input type="file" accept=".svg,image/svg+xml,image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif,video/mp4,.mp4"
-                   @change="onFile('bottomLeft', $event)" class="block w-full text-sm" />
-            <div v-if="files.bottomLeft" class="text-xs text-gray-600 truncate">Selected: {{ files.bottomLeft.name }}</div>
-            <button type="button" class="px-3 py-1 text-sm rounded border"
-                    v-if="paths.bottomLeft" @click="clearPath('bottomLeft')">Clear</button>
-          </div>
-
-          <!-- Bottom Right removed — now managed in the Sidebar tab -->
-          <div class="space-y-3 border rounded p-4 bg-gray-50">
-            <h2 class="font-semibold text-gray-400">Bottom Right</h2>
-            <p class="text-xs text-gray-400">The Bottom Right image has been moved to the <button type="button" class="underline text-indigo-500" @click="activeTab='Sidebar'">Sidebar tab</button> as "Bottom Spotlight".</p>
           </div>
         </div>
 
         <div class="mt-2">
-          <button class="btn-primary" :disabled="saving" @click="saveAll">
-            <span v-if="!saving">Save</span><span v-else>Saving…</span>
+          <button class="btn-primary" :disabled="saving" @click="saveHero">
+            <span v-if="!saving">Save Hero</span><span v-else>Saving…</span>
           </button>
+        </div>
+
+        <div class="border-t pt-4 mt-4">
+          <p class="text-xs text-gray-400">
+            The old Top Left / Top Right / Bottom Left hero images are no longer displayed anywhere on the
+            site and have been replaced by the fields above. They're still viewable/editable for legacy
+            record-keeping in <NuxtLink to="/newsite/admin/homepage" class="underline">Legacy Admin</NuxtLink>.
+          </p>
         </div>
       </section>
 
@@ -470,11 +521,113 @@ const PAGE_LINKS = {
   'earn-points': '/newsite/earnpoints'
 }
 
-const activeTab = ref('Homepage')
+const activeTab = ref('Hero')
 
-const paths = ref({ topLeft:'', bottomLeft:'', topRight:'', bottomRight:'' })
-const files = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null })
-const previewUrls = ref({ topLeft:null, bottomLeft:null, topRight:null, bottomRight:null, showcase:null, homeImage1:null, homeImage2:null, homeImage3:null, homeImage4:null, middleSidebar1:null, middleSidebar2:null, middleSidebar3:null, news:null, earnPoints:null, label:null })
+const paths = ref({ bottomRight:'' })
+const files = ref({ bottomRight:null })
+const previewUrls = ref({ bottomRight:null, showcase:null, homeImage1:null, homeImage2:null, homeImage3:null, homeImage4:null, middleSidebar1:null, middleSidebar2:null, middleSidebar3:null, news:null, earnPoints:null, label:null, heroImage:null, heroVideo:null, loginTop:null, loginBottom:null })
+
+// Hero tab state (logged-out homepage redesign)
+const heroImagePath = ref('')
+const heroImageFile = ref(null)
+const heroImageLink = ref('')
+const heroImageLinkPreset = ref('')
+
+const heroVideoPath = ref('')
+const heroVideoFile = ref(null)
+const heroVideoPosterPath = ref('')
+
+const loginTopImagePath = ref('')
+const loginTopImageFile = ref(null)
+const loginTopImageLink = ref('')
+const loginTopImageLinkPreset = ref('')
+
+const loginBottomImagePath = ref('')
+const loginBottomImageFile = ref(null)
+const loginBottomImageLink = ref('')
+const loginBottomImageLinkPreset = ref('')
+
+const HERO_FILE_REFS = {
+  heroImage:    { path: heroImagePath,    file: heroImageFile },
+  heroVideo:    { path: heroVideoPath,    file: heroVideoFile },
+  loginTop:     { path: loginTopImagePath,    file: loginTopImageFile },
+  loginBottom:  { path: loginBottomImagePath, file: loginBottomImageFile }
+}
+const HERO_LINK_REFS = {
+  heroImage:   { link: heroImageLink,   preset: heroImageLinkPreset },
+  loginTop:    { link: loginTopImageLink,    preset: loginTopImageLinkPreset },
+  loginBottom: { link: loginBottomImageLink, preset: loginBottomImageLinkPreset }
+}
+
+function onHeroFile(key, e) {
+  const f = e.target.files?.[0] || null
+  try { if (previewUrls.value[key]) { URL.revokeObjectURL(previewUrls.value[key]); previewUrls.value[key] = null } } catch (e) {}
+  HERO_FILE_REFS[key].file.value = f
+  if (f) previewUrls.value[key] = URL.createObjectURL(f)
+}
+
+function clearHero(key) {
+  HERO_FILE_REFS[key].path.value = ''
+  if (previewUrls.value[key]) { try { URL.revokeObjectURL(previewUrls.value[key]) } catch (e) {} ; previewUrls.value[key] = null }
+  HERO_FILE_REFS[key].file.value = null
+}
+
+function onHeroLinkPresetChange(key) {
+  const refs = HERO_LINK_REFS[key]
+  const preset = refs.preset.value
+  if (preset === '') {
+    refs.link.value = ''
+  } else if (preset !== 'custom') {
+    refs.link.value = PAGE_LINKS[preset] ?? ''
+  }
+}
+
+async function saveHero() {
+  saving.value = true; toast.value = null
+  try {
+    const fd = new FormData()
+    fd.append('heroImagePath', heroImagePath.value || '')
+    fd.append('heroImageLink', heroImageLink.value || '')
+    if (heroImageFile.value) fd.append('heroImage', heroImageFile.value)
+
+    fd.append('heroVideoPath', heroVideoPath.value || '')
+    if (heroVideoFile.value) fd.append('heroVideo', heroVideoFile.value)
+
+    fd.append('loginTopImagePath', loginTopImagePath.value || '')
+    fd.append('loginTopImageLink', loginTopImageLink.value || '')
+    if (loginTopImageFile.value) fd.append('loginTop', loginTopImageFile.value)
+
+    fd.append('loginBottomImagePath', loginBottomImagePath.value || '')
+    fd.append('loginBottomImageLink', loginBottomImageLink.value || '')
+    if (loginBottomImageFile.value) fd.append('loginBottom', loginBottomImageFile.value)
+
+    const res = await $fetch('/api/admin/homepage', { method: 'POST', body: fd })
+    heroImagePath.value = res.heroImagePath || ''
+    heroImageLink.value = res.heroImageLink || ''
+    heroImageLinkPreset.value = detectPreset(heroImageLink.value)
+    heroImageFile.value = null
+
+    heroVideoPath.value = res.heroVideoPath || ''
+    heroVideoFile.value = null
+
+    loginTopImagePath.value = res.loginTopImagePath || ''
+    loginTopImageLink.value = res.loginTopImageLink || ''
+    loginTopImageLinkPreset.value = detectPreset(loginTopImageLink.value)
+    loginTopImageFile.value = null
+
+    loginBottomImagePath.value = res.loginBottomImagePath || ''
+    loginBottomImageLink.value = res.loginBottomImageLink || ''
+    loginBottomImageLinkPreset.value = detectPreset(loginBottomImageLink.value)
+    loginBottomImageFile.value = null
+
+    toast.value = { type: 'ok', msg: 'Hero saved.' }
+    await loadConfig()
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.data?.statusMessage || e?.statusMessage || 'Save failed' }
+  } finally {
+    saving.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
 
 const newsPath = ref('')
 const newsFile = ref(null)
@@ -716,9 +869,6 @@ onBeforeUnmount(() => {
 
 async function loadConfig() {
   const cfg = await $fetch('/api/admin/homepage')
-  paths.value.topLeft     = cfg.topLeftImagePath     || ''
-  paths.value.bottomLeft  = cfg.bottomLeftImagePath  || ''
-  paths.value.topRight    = cfg.topRightImagePath    || ''
   paths.value.bottomRight = cfg.bottomRightImagePath || ''
   showcasePath.value      = cfg.showcaseImagePath    || ''
   showcasePosterPath.value = cfg.showcasePosterPath  || ''
@@ -744,35 +894,23 @@ async function loadConfig() {
   newsPath.value = cfg.newsImagePath || ''
   earnPointsPath.value = cfg.earnPointsImagePath || ''
   labelPath.value = cfg.labelImagePath || ''
+
+  heroImagePath.value = cfg.heroImagePath || ''
+  heroImageLink.value = cfg.heroImageLink || ''
+  heroImageLinkPreset.value = detectPreset(heroImageLink.value)
+
+  heroVideoPath.value = cfg.heroVideoPath || ''
+  heroVideoPosterPath.value = cfg.heroVideoPosterPath || ''
+
+  loginTopImagePath.value = cfg.loginTopImagePath || ''
+  loginTopImageLink.value = cfg.loginTopImageLink || ''
+  loginTopImageLinkPreset.value = detectPreset(loginTopImageLink.value)
+
+  loginBottomImagePath.value = cfg.loginBottomImagePath || ''
+  loginBottomImageLink.value = cfg.loginBottomImageLink || ''
+  loginBottomImageLinkPreset.value = detectPreset(loginBottomImageLink.value)
 }
 
-
-async function saveAll() {
-  saving.value = true; toast.value = null
-  try {
-    const fd = new FormData()
-    fd.append('topLeftPath',     paths.value.topLeft     || '')
-    fd.append('bottomLeftPath',  paths.value.bottomLeft  || '')
-    fd.append('topRightPath',    paths.value.topRight    || '')
-    fd.append('bottomRightPath', paths.value.bottomRight || '')
-    if (files.value.topLeft)     fd.append('topLeft',     files.value.topLeft)
-    if (files.value.bottomLeft)  fd.append('bottomLeft',  files.value.bottomLeft)
-    if (files.value.topRight)    fd.append('topRight',    files.value.topRight)
-    if (files.value.bottomRight) fd.append('bottomRight', files.value.bottomRight)
-
-    const res = await $fetch('/api/admin/homepage', { method: 'POST', body: fd })
-    paths.value.topLeft     = res.topLeftImagePath     || ''
-    paths.value.bottomLeft  = res.bottomLeftImagePath  || ''
-    paths.value.topRight    = res.topRightImagePath    || ''
-    paths.value.bottomRight = res.bottomRightImagePath || ''
-    files.value = { topLeft:null, bottomLeft:null, topRight:null, bottomRight:null }
-    toast.value = { type: 'ok', msg: 'Homepage images saved.' }
-  } catch (e) {
-    console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || 'Save failed' }
-  } finally {
-    saving.value = false; setTimeout(() => { toast.value = null }, 2500)
-  }
-}
 
 async function saveShowcase() {
   saving.value = true; toast.value = null
