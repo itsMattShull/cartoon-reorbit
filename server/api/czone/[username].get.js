@@ -39,7 +39,11 @@ export default defineEventHandler(async (event) => {
     include: {
       cZones: true,
       cMoon: { select: { id: true, name: true, color: true, avatarPath: true } },
-      currentCMoonRank: { select: { name: true } }
+      currentCMoonRank: { select: { name: true } },
+      // A single extra FK join, not a live scan of the user's CMoonAffinity rows — border
+      // eligibility is denormalized onto User.equippedBorderCMoonId at grant/equip time
+      // specifically so this hot, public-facing route never has to compute it per view.
+      equippedBorder: { select: { id: true, name: true, color: true } }
     }
   })
 
@@ -252,6 +256,9 @@ export default defineEventHandler(async (event) => {
     lastActivity: user.lastActivity ?? null,
     cMoon: (cMoonEnabled && user.cMoon) || null,
     cMoonRankName: (cMoonEnabled && user.currentCMoonRank?.name) || null,
+    // Independent of cMoonEnabled/membership above — an earned border is a permanent personal
+    // cosmetic, visible even if the member later leaves the cMoon that granted it.
+    border: user.equippedBorder ? { cMoonId: user.equippedBorder.id, name: user.equippedBorder.name, color: user.equippedBorder.color } : null,
     cZone: {
       id: chosenZone.id,
       zones: enrichedZones,

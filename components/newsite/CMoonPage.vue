@@ -3,6 +3,10 @@
     <div v-if="loading" class="cmp-status">Loading…</div>
     <div v-else-if="error" class="cmp-status cmp-status--error">{{ error }}</div>
     <template v-else-if="cmoon">
+      <Transition name="cmp-toast-fade">
+        <div v-if="levelUpToast" class="cmp-toast" role="status">🌙 Level up — {{ levelUpToast }}!</div>
+      </Transition>
+
       <div class="cmp-masthead-wrap">
         <img
           v-if="cmoon.pageBannerImagePath"
@@ -28,6 +32,70 @@
             <span class="cmp-stat-label">Team Score</span>
             <span class="cmp-stat-value">{{ cmoon.teamScore.toLocaleString() }}</span>
           </div>
+        </div>
+
+        <div v-if="affinity && affinity.isMember" class="cmp-affinity" :class="{ 'cmp-affinity--pulse': justLeveledUp }">
+          <div class="cmp-affinity-head">
+            <span class="cmp-affinity-label">Your Affinity</span>
+            <span class="cmp-affinity-level">{{ currentLevelName }}</span>
+          </div>
+          <div class="cmp-affinity-bar-track">
+            <div class="cmp-affinity-bar-fill" :style="{ width: affinityProgressPct + '%' }"></div>
+          </div>
+          <p class="cmp-affinity-next">
+            <span v-if="affinity.nextLevel">
+              {{ affinity.affinitySpent.toLocaleString() }} / {{ affinity.nextLevel.threshold.toLocaleString() }} pts to {{ affinity.nextLevel.name }}
+            </span>
+            <span v-else-if="affinity.levels.length">Max level reached — {{ affinity.affinitySpent.toLocaleString() }} pts contributed</span>
+            <span v-else>{{ affinity.affinitySpent.toLocaleString() }} pts contributed</span>
+          </p>
+
+          <button
+            v-if="!contributeOpen"
+            type="button"
+            class="cmp-affinity-toggle"
+            @click="contributeOpen = true"
+          >Contribute to {{ cmoon.name }}</button>
+
+          <div v-else class="cmp-affinity-form">
+            <input
+              v-model.number="contributeAmount"
+              type="number"
+              inputmode="numeric"
+              min="1"
+              step="1"
+              class="cmp-affinity-input"
+              style="font-size:16px"
+              placeholder="Points"
+              :disabled="contributing"
+            />
+            <button type="button" class="cmp-affinity-submit" :disabled="contributing || !contributeAmount" @click="submitContribute">
+              {{ contributing ? 'Contributing…' : 'Contribute' }}
+            </button>
+            <button type="button" class="cmp-affinity-cancel" :disabled="contributing" @click="contributeOpen = false">Cancel</button>
+          </div>
+          <p v-if="contributeError" class="cmp-affinity-error">{{ contributeError }}</p>
+        </div>
+
+        <!-- Rank Ladder progress: only shown to a member of THIS cMoon, since rank is per-cMoon
+             even though the ladder itself (name/threshold/rewards) is universal — see
+             prisma/schema.prisma's CMoonRankTier. Independent of the affinity widget above:
+             ranks are earned automatically from cMoonPoints, not spent like affinity. -->
+        <div v-if="rankProgress && rankProgress.isMember" class="cmp-rank">
+          <div class="cmp-rank-head">
+            <span class="cmp-affinity-label">Your Rank</span>
+            <span class="cmp-affinity-level">{{ rankProgress.currentRank ? rankProgress.currentRank.name : 'Unranked' }}</span>
+          </div>
+          <div class="cmp-affinity-bar-track">
+            <div class="cmp-affinity-bar-fill" :style="{ width: rankProgressPct + '%' }"></div>
+          </div>
+          <p class="cmp-affinity-next">
+            <span v-if="rankProgress.nextTier">
+              {{ rankProgress.cMoonPoints.toLocaleString() }} / {{ rankProgress.nextTier.pointThreshold.toLocaleString() }} pts to {{ rankProgress.nextTier.name }}
+            </span>
+            <span v-else-if="rankProgress.tiers.length">Max rank reached — {{ rankProgress.cMoonPoints.toLocaleString() }} pts</span>
+            <span v-else>{{ rankProgress.cMoonPoints.toLocaleString() }} pts contributed</span>
+          </p>
         </div>
 
         <!-- Featured cToons comes first in the markup (the page's visual centerpiece) so a
@@ -199,11 +267,23 @@ import { useCtoonModal } from '@/composables/useCtoonModal'
 
 const route = useRoute()
 const { open: openCtoonModal } = useCtoonModal()
+const { fetchSelf } = useAuth()
 
 const loading = ref(true)
 const error = ref('')
 const cmoon = ref(null)
 const buttonPills = ref([])
+const affinity = ref(null)
+const rankProgress = ref(null)
+
+const contributeOpen = ref(false)
+const contributeAmount = ref(null)
+const contributing = ref(false)
+const contributeError = ref('')
+const justLeveledUp = ref(false)
+const levelUpToast = ref('')
+let toastTimer = null
+let pulseTimer = null
 
 const offers = ref([])
 const eligible = ref(false)
@@ -251,6 +331,24 @@ async function voteOnPoll() {
 
 const paletteStyle = computed(() => cmoon.value ? cMoonPaletteStyle(cmoon.value.color) : {})
 
+const currentLevelName = computed(() => {
+  if (!affinity.value) return ''
+  const lvl = affinity.value.levels.find(l => l.id === affinity.value.currentLevelId)
+  return lvl ? lvl.name : 'Unranked'
+})
+
+const affinityProgressPct = computed(() => {
+  if (!affinity.value) return 0
+  const spent = affinity.value.affinitySpent
+  const next = affinity.value.nextLevel
+  if (!next) return 100
+  const currentLevel = affinity.value.levels.find(l => l.id === affinity.value.currentLevelId)
+  const floor = currentLevel ? currentLevel.threshold : 0
+  const span = next.threshold - floor
+  if (span <= 0) return 100
+  return Math.max(0, Math.min(100, Math.round(((spent - floor) / span) * 100)))
+})
+
 useHead({
   title: computed(() => cmoon.value ? `${cmoon.value.name} · cMoon` : 'cMoon')
 })
@@ -258,6 +356,37 @@ useHead({
 function openInfo(c) {
   openCtoonModal({ ctoonId: c.id, assetPath: c.assetPath, name: c.name })
 }
+
+async function loadAffinity(id) {
+  try {
+    affinity.value = await $fetch(`/api/cmoon/${encodeURIComponent(id)}/affinity`)
+  } catch {
+    affinity.value = null
+  }
+}
+
+async function loadRankProgress(id) {
+  try {
+    rankProgress.value = await $fetch(`/api/cmoon/${encodeURIComponent(id)}/rank-progress`)
+  } catch {
+    rankProgress.value = null
+  }
+}
+
+const rankProgressPct = computed(() => {
+  const rp = rankProgress.value
+  if (!rp || !rp.nextTier) return 100
+  // Match the current rank to its tier by sortOrder, not id — CMoonRank.id (per-cMoon) and
+  // CMoonRankTier.id (global) are different rows entirely; a tier-linked rank's sortOrder is
+  // always kept in sync with its tier's (see server/utils/cmoonRankTiers.js), and is unique per
+  // cMoon, so this reliably finds "the floor" for a tier-managed rank. A legacy custom rank
+  // (not tier-linked) simply won't match anything here — falls back to a floor of 0, which is
+  // an acceptable approximation for that now-secondary path.
+  const floor = rp.currentRank ? (rp.tiers.find(t => t.sortOrder === rp.currentRank.sortOrder)?.pointThreshold ?? 0) : 0
+  const span = rp.nextTier.pointThreshold - floor
+  if (span <= 0) return 100
+  return Math.max(0, Math.min(100, Math.round(((rp.cMoonPoints - floor) / span) * 100)))
+})
 
 async function loadOffers(id) {
   try {
@@ -305,14 +434,46 @@ async function load(id) {
   error.value = ''
   pollChoice.value = null
   pollError.value = ''
+  contributeOpen.value = false
   try {
     cmoon.value = await $fetch(`/api/cmoon/${encodeURIComponent(id)}`)
-    await Promise.all([loadOffers(id), loadButtonPills(id)])
+    await Promise.all([loadOffers(id), loadButtonPills(id), loadAffinity(id), loadRankProgress(id)])
   } catch (err) {
     cmoon.value = null
     error.value = err?.data?.statusMessage || 'Failed to load this cMoon.'
   } finally {
     loading.value = false
+  }
+}
+
+async function submitContribute() {
+  const amount = Math.trunc(Number(contributeAmount.value))
+  if (!Number.isInteger(amount) || amount <= 0) {
+    contributeError.value = 'Enter a whole number of points.'
+    return
+  }
+  contributeError.value = ''
+  contributing.value = true
+  try {
+    const res = await $fetch(`/api/cmoon/${encodeURIComponent(cmoon.value.id)}/contribute`, {
+      method: 'POST',
+      body: { amount },
+    })
+    contributeAmount.value = null
+    contributeOpen.value = false
+    await Promise.all([loadAffinity(cmoon.value.id), fetchSelf({ force: true })])
+    if (res?.leveledUpTo) {
+      levelUpToast.value = res.leveledUpTo.name
+      justLeveledUp.value = true
+      clearTimeout(toastTimer)
+      clearTimeout(pulseTimer)
+      toastTimer = setTimeout(() => { levelUpToast.value = '' }, 3200)
+      pulseTimer = setTimeout(() => { justLeveledUp.value = false }, 1600)
+    }
+  } catch (err) {
+    contributeError.value = err?.data?.statusMessage || 'Could not contribute right now.'
+  } finally {
+    contributing.value = false
   }
 }
 
@@ -406,6 +567,164 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
 
 .cmp-panel {
   min-width: 0;
+}
+
+.cmp-affinity,
+.cmp-rank {
+  background: var(--cm-tile-bg, rgba(255,255,255,0.08));
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.cmp-rank-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.cmp-affinity-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.cmp-affinity-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cm-text-muted, rgba(255,255,255,0.6));
+}
+
+.cmp-affinity-level {
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.cmp-affinity-bar-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--cm-hairline, rgba(255,255,255,0.14));
+  overflow: hidden;
+}
+
+.cmp-affinity-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: var(--cm-banner, var(--OrbitLightBlue));
+  transition: width 0.4s ease;
+}
+
+.cmp-affinity-next {
+  margin: 6px 0 0;
+  font-size: 0.78rem;
+  color: var(--cm-text-muted, rgba(255,255,255,0.6));
+}
+
+.cmp-affinity-toggle {
+  margin-top: 10px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 6px;
+  background: var(--cm-banner, var(--OrbitLightBlue));
+  color: var(--cm-banner-text, #ffffff);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  width: 100%;
+}
+.cmp-affinity-toggle:hover { opacity: 0.9; }
+
+.cmp-affinity-form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.cmp-affinity-input {
+  flex: 1 1 100px;
+  min-width: 0;
+  min-height: 44px;
+  border-radius: 6px;
+  border: 1px solid var(--cm-border, rgba(255,255,255,0.3));
+  background: var(--cm-bg, transparent);
+  color: var(--cm-text, #ffffff);
+  padding: 0 10px;
+  box-sizing: border-box;
+}
+
+.cmp-affinity-submit,
+.cmp-affinity-cancel {
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 6px;
+  border: none;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.cmp-affinity-submit {
+  background: var(--cm-success, #16a34a);
+  color: #ffffff;
+}
+.cmp-affinity-submit:disabled { opacity: 0.5; cursor: default; }
+
+.cmp-affinity-cancel {
+  background: transparent;
+  color: var(--cm-text, #ffffff);
+  border: 1px solid var(--cm-border, rgba(255,255,255,0.3));
+}
+
+.cmp-affinity-error {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: var(--cm-danger, #fca5a5);
+}
+
+/* A brief, non-animated highlight rather than a filter/box-shadow loop — cheap and respects
+   prefers-reduced-motion for free since it's just a background-color transition. */
+.cmp-affinity--pulse .cmp-affinity-bar-fill {
+  background: #ffd700;
+}
+
+.cmp-toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 40;
+  background: #16a34a;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 10px 18px;
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.3);
+  white-space: nowrap;
+  max-width: calc(100vw - 32px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cmp-toast-fade-enter-active,
+.cmp-toast-fade-leave-active {
+  transition: opacity 0.25s ease;
+}
+.cmp-toast-fade-enter-from,
+.cmp-toast-fade-leave-to { opacity: 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .cmp-affinity-bar-fill,
+  .cmp-toast-fade-enter-active,
+  .cmp-toast-fade-leave-active { transition: none; }
 }
 
 /* The Featured cToons panel is deliberately NOT themed off the cMoon's color like the rest of the

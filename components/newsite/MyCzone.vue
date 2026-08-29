@@ -47,7 +47,10 @@
             </div>
           </template>
           <template v-else>
-            <img :src="`/avatars/${viewedOwner.avatar || 'default.png'}`" class="cz-owner-avatar" />
+            <img
+              :src="`/avatars/${viewedOwner.avatar || 'default.png'}`"
+              class="cz-owner-avatar"
+            />
             <div class="cz-owner-label">
               <div><span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}</div>
               <div v-if="lastOnlineText || viewedOwner.cMoon" class="cz-owner-lastseen">
@@ -68,13 +71,45 @@
                 </NuxtLink>
                 <span v-if="viewedOwner.cMoonRankName" class="cz-owner-cmoon-rank">{{ viewedOwner.cMoonRankName }}</span>
               </div>
+              <button
+                v-if="isOwnZone && ownedBorders.length"
+                type="button"
+                class="cz-border-equip-btn"
+                @click="borderPickerOpen = !borderPickerOpen"
+              >{{ displayedBorder ? `Border: ${displayedBorder.name}` : 'Show cMoon border' }}</button>
+              <div v-if="borderPickerOpen" class="cz-border-picker">
+                <button
+                  type="button"
+                  class="cz-border-option"
+                  :class="{ active: !equippedBorderCMoonId }"
+                  @click="setBorder(null)"
+                >None</button>
+                <button
+                  v-for="b in ownedBorders" :key="b.cMoonId"
+                  type="button"
+                  class="cz-border-option"
+                  :class="{ active: equippedBorderCMoonId === b.cMoonId }"
+                  :style="{ '--cz-border-color': b.color }"
+                  @click="setBorder(b.cMoonId)"
+                >{{ b.name }}</button>
+              </div>
             </div>
           </template>
         </div>
       </div>
     </div>
 
-    <!-- ── Canvas: outer reserves scaled layout, inner holds the 800×600 transform ── -->
+    <!-- ── Canvas: outer reserves scaled layout, inner holds the 800×600 transform ──
+         The cMoon-affinity border (if any) is drawn on cz-frame, a plain ancestor OUTSIDE the
+         800×600 design-space/scale-transform math below — a fixed real-px frame around the
+         canvas's visual footprint rather than a mark inside it, so it can never overlap
+         edge-placed toons (canvas item positions are clamped flush to 0/CANVAS_W/H, see
+         clampPos) and never has to fight cz-canvas's own opaque background for paint order. -->
+    <div
+      class="cz-frame"
+      :class="{ 'cz-frame--bordered': displayedBorder }"
+      :style="displayedBorder ? { '--cz-border-color': displayedBorder.color } : {}"
+    >
     <div class="cz-canvas-outer" :style="outerScaleStyle">
       <div class="cz-canvas-inner" :style="innerScaleStyle">
         <div
@@ -142,6 +177,7 @@
           </template>
         </div>
       </div>
+    </div>
     </div>
 
     <!-- ── Bottom bar ──────────────────────────────────────── -->
@@ -348,18 +384,57 @@ function canvasH() { return CANVAS_H }
 
 const { user, fetchSelf } = useAuth()
 const cz = useNewSiteCzoneState()
+
+// cMoon affinity border — which cMoon's colorized cZone border (if any) the caller has
+// equipped, and the set they can choose from (see /api/auth/me's ownedBorders). Read from
+// `user`, not a dedicated fetch: the session payload already carries both, and every border
+// change already forces a fetchSelf refresh.
+const ownedBorders = computed(() => user.value?.ownedBorders || [])
+const equippedBorderCMoonId = computed(() => user.value?.equippedBorderCMoonId || null)
+const borderPickerOpen = ref(false)
+
+async function setBorder(cMoonId) {
+  borderPickerOpen.value = false
+  try {
+    await $fetch('/api/czone/border', { method: 'POST', body: { cMoonId } })
+    await fetchSelf({ force: true })
+    if (viewedUsername.value === user.value?.username) await loadZone(viewedUsername.value)
+  } catch {}
+}
 const { open: openCtoonModal, holidaySignal, holidayRedeem } = useCtoonModal()
 const { mobileSidebarCollapsed } = useNewsiteLayout()
 const route  = useRoute()
 const router = useRouter()
 
+const viewedOwner = ref(null)   // { username, avatar, border, ... } of the displayed zone owner
+const viewedUsername = ref(null)   // username whose zone is currently displayed
+
+// While viewing your OWN zone, prefer the live session state (kept fresh by both this
+// component's own equip picker below and CzoneEdit.vue's build-mode toggle checkbox) so
+// toggling the border reflects immediately without a full zone reload; viewing someone else's
+// zone still uses whatever their own zone payload said their equipped border is (see loadZone).
+const displayedBorder = computed(() => {
+  if (viewedUsername.value && viewedUsername.value === user.value?.username) {
+    const cMoonId = equippedBorderCMoonId.value
+    if (!cMoonId) return null
+    return ownedBorders.value.find(b => b.cMoonId === cMoonId) || null
+  }
+  return viewedOwner.value?.border || null
+})
+
 // ── Scale logic (mirrors pages/czone/[username].vue) ──────────
 const scale = ref(1)
+// Real (unscaled) px thickness of the cMoon-affinity border frame — reserved out of the
+// available width below so a bordered cZone never grows past what an unbordered one would
+// occupy (the border sits OUTSIDE the 800×600 scaled canvas box, not drawn inside it).
+const FRAME_BORDER_PX = 6
+const hasBorder = computed(() => !!displayedBorder.value)
 function recalcScale() {
   if (typeof window === 'undefined') return
   const gutter = 32 // account for page padding / scrollbar
+  const reserve = hasBorder.value ? FRAME_BORDER_PX * 2 : 0
   const w = window.innerWidth || document.documentElement?.clientWidth || CANVAS_W
-  scale.value = Math.min(1, Math.max(0.1, (w - gutter) / CANVAS_W))
+  scale.value = Math.min(1, Math.max(0.1, (w - gutter - reserve) / CANVAS_W))
 }
 
 // Set the correct scale immediately on the client to avoid a post-hydration
@@ -384,8 +459,6 @@ const innerScaleStyle = computed(() => ({
 }))
 
 const canvasEl       = ref(null)
-const viewedOwner    = ref(null)   // { username, avatar } of the displayed zone owner
-const viewedUsername = ref(null)   // username whose zone is currently displayed
 
 // Art Mode: hides the Second Edition overlay icon for this viewer only. Off by
 // default; resets to off whenever the viewed cZone/user changes.
@@ -823,7 +896,11 @@ async function loadZone(username) {
     cz.value.zones       = data.cZone.zones
     const firstActive    = data.cZone.zones.findIndex(z => z.toons.length > 0)
     cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
-    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null }
+    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null, border: data.border ?? null }
+    // The border reserve baked into recalcScale() depends on whether this zone owner has one
+    // equipped, which is only known once the zone payload above has loaded — recompute now
+    // rather than waiting for the next resize event.
+    recalcScale()
     loadCzoneSearchItems()
     eagerLoadMissingDimensions()
 
@@ -1378,6 +1455,57 @@ defineExpose({ save, clearZone })
   font-weight: 600;
   color: #ffd75e;
 }
+
+/* cMoon affinity border — a plain, static colorized frame wrapping the canvas's OUTSIDE
+   (cz-frame is the ancestor of cz-canvas-outer, added purely for this), never inside the
+   800×600 design-space box the canvas/scale-transform math uses. Static rather than animated
+   (cheaper to render, and this can appear behind long content sessions unlike the old
+   single-avatar glow) — no @keyframes, so there's nothing to gate on prefers-reduced-motion.
+   Padding here is real CSS px matching FRAME_BORDER_PX, which recalcScale() already reserves
+   out of the canvas's own scaled width so a bordered cZone never grows past an unbordered
+   one's footprint or overflows a narrow mobile viewport. */
+.cz-frame {
+  flex-shrink: 0;
+}
+.cz-frame--bordered {
+  padding: 6px;
+  background: var(--cz-border-color, transparent);
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.cz-border-equip-btn {
+  display: block;
+  margin-top: 2px;
+  padding: 0;
+  border: none;
+  background: none;
+  color: rgba(255,255,255,0.7);
+  font-size: 0.58rem;
+  text-decoration: underline;
+  cursor: pointer;
+  min-height: 24px;
+}
+
+.cz-border-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+  max-width: 180px;
+}
+
+.cz-border-option {
+  min-height: 28px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--cz-border-color, rgba(255,255,255,0.4));
+  background: transparent;
+  color: #fff;
+  font-size: 0.6rem;
+  cursor: pointer;
+}
+.cz-border-option.active { background: var(--cz-border-color, rgba(255,255,255,0.25)); font-weight: 700; }
 
 /* ── Skeleton placeholders (shown while a new cZone is loading) ── */
 .cz-skeleton {

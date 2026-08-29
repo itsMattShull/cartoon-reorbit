@@ -7,6 +7,7 @@ const ERROR_STATUS = {
   NOT_CLAIMABLE: { statusCode: 400, statusMessage: 'This achievement has no claimable reward' },
   INVALID_OPTION: { statusCode: 400, statusMessage: 'Invalid reward option' },
   ALREADY_CLAIMED: { statusCode: 409, statusMessage: 'You already claimed a reward for this achievement' },
+  TIER_ALREADY_CLAIMED: { statusCode: 409, statusMessage: 'You already claimed this rank\'s reward in another cMoon' },
 }
 
 export default defineEventHandler(async (event) => {
