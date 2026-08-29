@@ -76,7 +76,7 @@
                 type="button"
                 class="cz-border-equip-btn"
                 @click="borderPickerOpen = !borderPickerOpen"
-              >{{ viewedOwner.border ? `Border: ${viewedOwner.border.name}` : 'Show cMoon border' }}</button>
+              >{{ displayedBorder ? `Border: ${displayedBorder.name}` : 'Show cMoon border' }}</button>
               <div v-if="borderPickerOpen" class="cz-border-picker">
                 <button
                   type="button"
@@ -107,8 +107,8 @@
          clampPos) and never has to fight cz-canvas's own opaque background for paint order. -->
     <div
       class="cz-frame"
-      :class="{ 'cz-frame--bordered': viewedOwner && viewedOwner.border }"
-      :style="viewedOwner && viewedOwner.border ? { '--cz-border-color': viewedOwner.border.color } : {}"
+      :class="{ 'cz-frame--bordered': displayedBorder }"
+      :style="displayedBorder ? { '--cz-border-color': displayedBorder.color } : {}"
     >
     <div class="cz-canvas-outer" :style="outerScaleStyle">
       <div class="cz-canvas-inner" :style="innerScaleStyle">
@@ -407,6 +407,20 @@ const route  = useRoute()
 const router = useRouter()
 
 const viewedOwner = ref(null)   // { username, avatar, border, ... } of the displayed zone owner
+const viewedUsername = ref(null)   // username whose zone is currently displayed
+
+// While viewing your OWN zone, prefer the live session state (kept fresh by both this
+// component's own equip picker below and CzoneEdit.vue's build-mode toggle checkbox) so
+// toggling the border reflects immediately without a full zone reload; viewing someone else's
+// zone still uses whatever their own zone payload said their equipped border is (see loadZone).
+const displayedBorder = computed(() => {
+  if (viewedUsername.value && viewedUsername.value === user.value?.username) {
+    const cMoonId = equippedBorderCMoonId.value
+    if (!cMoonId) return null
+    return ownedBorders.value.find(b => b.cMoonId === cMoonId) || null
+  }
+  return viewedOwner.value?.border || null
+})
 
 // ── Scale logic (mirrors pages/czone/[username].vue) ──────────
 const scale = ref(1)
@@ -414,7 +428,7 @@ const scale = ref(1)
 // available width below so a bordered cZone never grows past what an unbordered one would
 // occupy (the border sits OUTSIDE the 800×600 scaled canvas box, not drawn inside it).
 const FRAME_BORDER_PX = 6
-const hasBorder = computed(() => !!(viewedOwner.value && viewedOwner.value.border))
+const hasBorder = computed(() => !!displayedBorder.value)
 function recalcScale() {
   if (typeof window === 'undefined') return
   const gutter = 32 // account for page padding / scrollbar
@@ -445,7 +459,6 @@ const innerScaleStyle = computed(() => ({
 }))
 
 const canvasEl       = ref(null)
-const viewedUsername = ref(null)   // username whose zone is currently displayed
 
 // Art Mode: hides the Second Edition overlay icon for this viewer only. Off by
 // default; resets to off whenever the viewed cZone/user changes.
