@@ -1,5 +1,5 @@
 -- AlterTable
-ALTER TABLE "User" ADD COLUMN     "equippedGlowCMoonId" TEXT;
+ALTER TABLE "User" ADD COLUMN     "equippedBorderCMoonId" TEXT;
 
 -- AlterTable
 ALTER TABLE "UserBackground" ADD COLUMN     "source" TEXT;
@@ -11,7 +11,7 @@ CREATE TABLE "CMoonAffinityLevel" (
     "name" TEXT NOT NULL,
     "threshold" INTEGER NOT NULL,
     "sortOrder" INTEGER NOT NULL DEFAULT 0,
-    "grantsGlow" BOOLEAN NOT NULL DEFAULT false,
+    "grantsBorder" BOOLEAN NOT NULL DEFAULT false,
     "rewardBackgroundId" TEXT,
     "rewardAvatarId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -32,13 +32,13 @@ CREATE TABLE "CMoonAffinity" (
 );
 
 -- CreateTable
-CREATE TABLE "UserCMoonGlow" (
+CREATE TABLE "UserCMoonBorder" (
     "id" TEXT NOT NULL,
     "userId" TEXT NOT NULL,
     "cMoonId" TEXT NOT NULL,
     "unlockedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
-    CONSTRAINT "UserCMoonGlow_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "UserCMoonBorder_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -77,7 +77,7 @@ CREATE UNIQUE INDEX "CMoonAffinityLevel_cMoonId_sortOrder_key" ON "CMoonAffinity
 CREATE INDEX "CMoonAffinity_cMoonId_affinitySpent_idx" ON "CMoonAffinity"("cMoonId", "affinitySpent");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "UserCMoonGlow_userId_cMoonId_key" ON "UserCMoonGlow"("userId", "cMoonId");
+CREATE UNIQUE INDEX "UserCMoonBorder_userId_cMoonId_key" ON "UserCMoonBorder"("userId", "cMoonId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Avatar_filename_key" ON "Avatar"("filename");
@@ -89,7 +89,7 @@ CREATE INDEX "Avatar_createdAt_idx" ON "Avatar"("createdAt");
 CREATE UNIQUE INDEX "UserAvatar_userId_avatarId_key" ON "UserAvatar"("userId", "avatarId");
 
 -- AddForeignKey
-ALTER TABLE "User" ADD CONSTRAINT "User_equippedGlowCMoonId_fkey" FOREIGN KEY ("equippedGlowCMoonId") REFERENCES "CMoon"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "User" ADD CONSTRAINT "User_equippedBorderCMoonId_fkey" FOREIGN KEY ("equippedBorderCMoonId") REFERENCES "CMoon"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "CMoonAffinityLevel" ADD CONSTRAINT "CMoonAffinityLevel_cMoonId_fkey" FOREIGN KEY ("cMoonId") REFERENCES "CMoon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -110,10 +110,10 @@ ALTER TABLE "CMoonAffinity" ADD CONSTRAINT "CMoonAffinity_cMoonId_fkey" FOREIGN 
 ALTER TABLE "CMoonAffinity" ADD CONSTRAINT "CMoonAffinity_currentLevelId_fkey" FOREIGN KEY ("currentLevelId") REFERENCES "CMoonAffinityLevel"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "UserCMoonGlow" ADD CONSTRAINT "UserCMoonGlow_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "UserCMoonBorder" ADD CONSTRAINT "UserCMoonBorder_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "UserCMoonGlow" ADD CONSTRAINT "UserCMoonGlow_cMoonId_fkey" FOREIGN KEY ("cMoonId") REFERENCES "CMoon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "UserCMoonBorder" ADD CONSTRAINT "UserCMoonBorder_cMoonId_fkey" FOREIGN KEY ("cMoonId") REFERENCES "CMoon"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Avatar" ADD CONSTRAINT "Avatar_createdById_fkey" FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;

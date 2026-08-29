@@ -50,8 +50,6 @@
             <img
               :src="`/avatars/${viewedOwner.avatar || 'default.png'}`"
               class="cz-owner-avatar"
-              :class="{ 'cz-owner-avatar--glow': viewedOwner.glow }"
-              :style="viewedOwner.glow ? { '--cz-glow-color': viewedOwner.glow.color } : {}"
             />
             <div class="cz-owner-label">
               <div><span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}</div>
@@ -74,26 +72,26 @@
                 <span v-if="viewedOwner.cMoonRankName" class="cz-owner-cmoon-rank">{{ viewedOwner.cMoonRankName }}</span>
               </div>
               <button
-                v-if="isOwnZone && ownedGlows.length"
+                v-if="isOwnZone && ownedBorders.length"
                 type="button"
-                class="cz-glow-equip-btn"
-                @click="glowPickerOpen = !glowPickerOpen"
-              >{{ viewedOwner.glow ? `Glow: ${viewedOwner.glow.name}` : 'Show cMoon glow' }}</button>
-              <div v-if="glowPickerOpen" class="cz-glow-picker">
+                class="cz-border-equip-btn"
+                @click="borderPickerOpen = !borderPickerOpen"
+              >{{ viewedOwner.border ? `Border: ${viewedOwner.border.name}` : 'Show cMoon border' }}</button>
+              <div v-if="borderPickerOpen" class="cz-border-picker">
                 <button
                   type="button"
-                  class="cz-glow-option"
-                  :class="{ active: !equippedGlowCMoonId }"
-                  @click="setGlow(null)"
+                  class="cz-border-option"
+                  :class="{ active: !equippedBorderCMoonId }"
+                  @click="setBorder(null)"
                 >None</button>
                 <button
-                  v-for="g in ownedGlows" :key="g.cMoonId"
+                  v-for="b in ownedBorders" :key="b.cMoonId"
                   type="button"
-                  class="cz-glow-option"
-                  :class="{ active: equippedGlowCMoonId === g.cMoonId }"
-                  :style="{ '--cz-glow-color': g.color }"
-                  @click="setGlow(g.cMoonId)"
-                >{{ g.name }}</button>
+                  class="cz-border-option"
+                  :class="{ active: equippedBorderCMoonId === b.cMoonId }"
+                  :style="{ '--cz-border-color': b.color }"
+                  @click="setBorder(b.cMoonId)"
+                >{{ b.name }}</button>
               </div>
             </div>
           </template>
@@ -101,7 +99,17 @@
       </div>
     </div>
 
-    <!-- ── Canvas: outer reserves scaled layout, inner holds the 800×600 transform ── -->
+    <!-- ── Canvas: outer reserves scaled layout, inner holds the 800×600 transform ──
+         The cMoon-affinity border (if any) is drawn on cz-frame, a plain ancestor OUTSIDE the
+         800×600 design-space/scale-transform math below — a fixed real-px frame around the
+         canvas's visual footprint rather than a mark inside it, so it can never overlap
+         edge-placed toons (canvas item positions are clamped flush to 0/CANVAS_W/H, see
+         clampPos) and never has to fight cz-canvas's own opaque background for paint order. -->
+    <div
+      class="cz-frame"
+      :class="{ 'cz-frame--bordered': viewedOwner && viewedOwner.border }"
+      :style="viewedOwner && viewedOwner.border ? { '--cz-border-color': viewedOwner.border.color } : {}"
+    >
     <div class="cz-canvas-outer" :style="outerScaleStyle">
       <div class="cz-canvas-inner" :style="innerScaleStyle">
         <div
@@ -169,6 +177,7 @@
           </template>
         </div>
       </div>
+    </div>
     </div>
 
     <!-- ── Bottom bar ──────────────────────────────────────── -->
@@ -376,17 +385,18 @@ function canvasH() { return CANVAS_H }
 const { user, fetchSelf } = useAuth()
 const cz = useNewSiteCzoneState()
 
-// cMoon affinity glow — which cMoon's glow (if any) the caller has equipped, and the set they
-// can choose from (see /api/auth/me's ownedGlows). Read from `user`, not a dedicated fetch: the
-// session payload already carries both, and every glow change already forces a fetchSelf refresh.
-const ownedGlows = computed(() => user.value?.ownedGlows || [])
-const equippedGlowCMoonId = computed(() => user.value?.equippedGlowCMoonId || null)
-const glowPickerOpen = ref(false)
+// cMoon affinity border — which cMoon's colorized cZone border (if any) the caller has
+// equipped, and the set they can choose from (see /api/auth/me's ownedBorders). Read from
+// `user`, not a dedicated fetch: the session payload already carries both, and every border
+// change already forces a fetchSelf refresh.
+const ownedBorders = computed(() => user.value?.ownedBorders || [])
+const equippedBorderCMoonId = computed(() => user.value?.equippedBorderCMoonId || null)
+const borderPickerOpen = ref(false)
 
-async function setGlow(cMoonId) {
-  glowPickerOpen.value = false
+async function setBorder(cMoonId) {
+  borderPickerOpen.value = false
   try {
-    await $fetch('/api/czone/glow', { method: 'POST', body: { cMoonId } })
+    await $fetch('/api/czone/border', { method: 'POST', body: { cMoonId } })
     await fetchSelf({ force: true })
     if (viewedUsername.value === user.value?.username) await loadZone(viewedUsername.value)
   } catch {}
@@ -396,13 +406,21 @@ const { mobileSidebarCollapsed } = useNewsiteLayout()
 const route  = useRoute()
 const router = useRouter()
 
+const viewedOwner = ref(null)   // { username, avatar, border, ... } of the displayed zone owner
+
 // ── Scale logic (mirrors pages/czone/[username].vue) ──────────
 const scale = ref(1)
+// Real (unscaled) px thickness of the cMoon-affinity border frame — reserved out of the
+// available width below so a bordered cZone never grows past what an unbordered one would
+// occupy (the border sits OUTSIDE the 800×600 scaled canvas box, not drawn inside it).
+const FRAME_BORDER_PX = 6
+const hasBorder = computed(() => !!(viewedOwner.value && viewedOwner.value.border))
 function recalcScale() {
   if (typeof window === 'undefined') return
   const gutter = 32 // account for page padding / scrollbar
+  const reserve = hasBorder.value ? FRAME_BORDER_PX * 2 : 0
   const w = window.innerWidth || document.documentElement?.clientWidth || CANVAS_W
-  scale.value = Math.min(1, Math.max(0.1, (w - gutter) / CANVAS_W))
+  scale.value = Math.min(1, Math.max(0.1, (w - gutter - reserve) / CANVAS_W))
 }
 
 // Set the correct scale immediately on the client to avoid a post-hydration
@@ -427,7 +445,6 @@ const innerScaleStyle = computed(() => ({
 }))
 
 const canvasEl       = ref(null)
-const viewedOwner    = ref(null)   // { username, avatar } of the displayed zone owner
 const viewedUsername = ref(null)   // username whose zone is currently displayed
 
 // Art Mode: hides the Second Edition overlay icon for this viewer only. Off by
@@ -866,7 +883,11 @@ async function loadZone(username) {
     cz.value.zones       = data.cZone.zones
     const firstActive    = data.cZone.zones.findIndex(z => z.toons.length > 0)
     cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
-    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null, glow: data.glow ?? null }
+    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null, border: data.border ?? null }
+    // The border reserve baked into recalcScale() depends on whether this zone owner has one
+    // equipped, which is only known once the zone payload above has loaded — recompute now
+    // rather than waiting for the next resize event.
+    recalcScale()
     loadCzoneSearchItems()
     eagerLoadMissingDimensions()
 
@@ -1422,23 +1443,25 @@ defineExpose({ save, clearZone })
   color: #ffd75e;
 }
 
-/* cMoon affinity glow — a single small avatar-sized instance (never repeated across a list, see
-   AdminCMoon/CMoonPage), so a subtle animated ring is affordable here. box-shadow rather than
-   filter: drop-shadow (much cheaper to animate), and reduced to a static ring under
-   prefers-reduced-motion. */
-.cz-owner-avatar--glow {
-  box-shadow: 0 0 0 2px var(--cz-glow-color, #fff), 0 0 8px 2px var(--cz-glow-color, #fff);
-  animation: cz-glow-pulse 2.4s ease-in-out infinite;
+/* cMoon affinity border — a plain, static colorized frame wrapping the canvas's OUTSIDE
+   (cz-frame is the ancestor of cz-canvas-outer, added purely for this), never inside the
+   800×600 design-space box the canvas/scale-transform math uses. Static rather than animated
+   (cheaper to render, and this can appear behind long content sessions unlike the old
+   single-avatar glow) — no @keyframes, so there's nothing to gate on prefers-reduced-motion.
+   Padding here is real CSS px matching FRAME_BORDER_PX, which recalcScale() already reserves
+   out of the canvas's own scaled width so a bordered cZone never grows past an unbordered
+   one's footprint or overflows a narrow mobile viewport. */
+.cz-frame {
+  flex-shrink: 0;
 }
-@keyframes cz-glow-pulse {
-  0%, 100% { box-shadow: 0 0 0 2px var(--cz-glow-color, #fff), 0 0 6px 1px var(--cz-glow-color, #fff); }
-  50%      { box-shadow: 0 0 0 2px var(--cz-glow-color, #fff), 0 0 12px 4px var(--cz-glow-color, #fff); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .cz-owner-avatar--glow { animation: none; }
+.cz-frame--bordered {
+  padding: 6px;
+  background: var(--cz-border-color, transparent);
+  border-radius: 4px;
+  box-sizing: border-box;
 }
 
-.cz-glow-equip-btn {
+.cz-border-equip-btn {
   display: block;
   margin-top: 2px;
   padding: 0;
@@ -1451,7 +1474,7 @@ defineExpose({ save, clearZone })
   min-height: 24px;
 }
 
-.cz-glow-picker {
+.cz-border-picker {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
@@ -1459,17 +1482,17 @@ defineExpose({ save, clearZone })
   max-width: 180px;
 }
 
-.cz-glow-option {
+.cz-border-option {
   min-height: 28px;
   padding: 2px 8px;
   border-radius: 999px;
-  border: 1px solid var(--cz-glow-color, rgba(255,255,255,0.4));
+  border: 1px solid var(--cz-border-color, rgba(255,255,255,0.4));
   background: transparent;
   color: #fff;
   font-size: 0.6rem;
   cursor: pointer;
 }
-.cz-glow-option.active { background: var(--cz-glow-color, rgba(255,255,255,0.25)); font-weight: 700; }
+.cz-border-option.active { background: var(--cz-border-color, rgba(255,255,255,0.25)); font-weight: 700; }
 
 /* ── Skeleton placeholders (shown while a new cZone is loading) ── */
 .cz-skeleton {

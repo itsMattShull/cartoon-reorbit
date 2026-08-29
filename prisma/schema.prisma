@@ -529,14 +529,14 @@ model User {
   cMoonRankRoleGrantedAt DateTime?
   cMoonPollVotes         CMoonPollVote[]
 
-  // Which of this user's earned cMoon-affinity glows (see UserCMoonGlow) is currently displayed
-  // on their cZone — a player can outrank the glow threshold for more than one cMoon over time
-  // (affinity is permanent per-cMoon and survives leaving), so this is an explicit equip choice
-  // rather than "whichever cMoon they're in now". Denormalized onto User (not computed from
+  // Which of this user's earned cMoon-affinity cZone borders (see UserCMoonBorder) is currently
+  // displayed on their cZone — a player can outrank the border threshold for more than one cMoon
+  // over time (affinity is permanent per-cMoon and survives leaving), so this is an explicit equip
+  // choice rather than "whichever cMoon they're in now". Denormalized onto User (not computed from
   // CMoonAffinity at read time) specifically so the public cZone view never has to join/scan
   // affinity rows on a hot, high-traffic route — see server/api/czone/[username].get.js.
-  equippedGlowCMoonId String?
-  equippedGlow        CMoon?          @relation("CMoon_GlowEquippedBy", fields: [equippedGlowCMoonId], references: [id], onDelete: SetNull)
+  equippedBorderCMoonId String?
+  equippedBorder        CMoon?          @relation("CMoon_BorderEquippedBy", fields: [equippedBorderCMoonId], references: [id], onDelete: SetNull)
 
   cZones                    CZone[]
   clashDecks                ClashDeck[]
@@ -595,7 +595,7 @@ model User {
   avatarsCreated            Avatar[]                      @relation("AvatarCreatedBy")
   ownedAvatars              UserAvatar[]                  @relation("User_UserAvatars")
   cMoonAffinities           CMoonAffinity[]
-  cMoonGlows                UserCMoonGlow[]               @relation("User_UserCMoonGlows")
+  cMoonBorders              UserCMoonBorder[]             @relation("User_UserCMoonBorders")
   ownerLogs                 CtoonOwnerLog[]
   ownerLogsAsCounterparty   CtoonOwnerLog[]               @relation("CtoonOwnerLogCounterparty")
   holidayRedemptions        HolidayRedemption[]
@@ -3040,8 +3040,8 @@ model CMoon {
   // teamScore above.
   affinityLevels CMoonAffinityLevel[]
   affinities     CMoonAffinity[]
-  glowOwners     UserCMoonGlow[]      @relation("CMoon_GlowOwners")
-  glowEquippedBy User[]               @relation("CMoon_GlowEquippedBy")
+  borderOwners     UserCMoonBorder[] @relation("CMoon_BorderOwners")
+  borderEquippedBy User[]            @relation("CMoon_BorderEquippedBy")
 
   @@index([memberCount])
   @@index([teamScore])
@@ -3122,12 +3122,13 @@ model CMoonAffinityLevel {
   name      String
   threshold Int // cumulative points spent on this cMoon required to reach this level
   sortOrder Int      @default(0)
-  // Grants a permanent UserCMoonGlow(userId, this cMoonId) row — a persistent cZone glow effect
-  // in this cMoon's live `color` (not snapshotted, so an admin re-coloring the cMoon updates
-  // every glow it already granted). Purely cosmetic; never re-evaluated downward.
-  grantsGlow Boolean @default(false)
-  // Optional cosmetic rewards granted alongside the glow above. Both are optional and
-  // independent of grantsGlow — a level can grant any combination of the three.
+  // Grants a permanent UserCMoonBorder(userId, this cMoonId) row — a persistent, static colorized
+  // border around the member's cZone in this cMoon's live `color` (not snapshotted, so an admin
+  // re-coloring the cMoon updates every border it already granted). Purely cosmetic; never
+  // re-evaluated downward.
+  grantsBorder Boolean @default(false)
+  // Optional cosmetic rewards granted alongside the border above. Both are optional and
+  // independent of grantsBorder — a level can grant any combination of the three.
   rewardBackgroundId String?
   rewardAvatarId     String?
   createdAt          DateTime @default(now())
@@ -3162,17 +3163,17 @@ model CMoonAffinity {
   @@index([cMoonId, affinitySpent])
 }
 
-// Ownership record for a persistent per-cMoon cZone glow, granted by CMoonAffinityLevel.grantsGlow.
+// Ownership record for a persistent per-cMoon cZone border, granted by CMoonAffinityLevel.grantsBorder.
 // A member can own more than one (affinity from multiple cMoons over time); which one is actually
-// displayed is the separate, explicit User.equippedGlowCMoonId choice.
-model UserCMoonGlow {
+// displayed is the separate, explicit User.equippedBorderCMoonId choice.
+model UserCMoonBorder {
   id         String   @id @default(uuid())
   userId     String
   cMoonId    String
   unlockedAt DateTime @default(now())
 
-  user  User  @relation("User_UserCMoonGlows", fields: [userId], references: [id], onDelete: Cascade)
-  cMoon CMoon @relation("CMoon_GlowOwners", fields: [cMoonId], references: [id], onDelete: Cascade)
+  user  User  @relation("User_UserCMoonBorders", fields: [userId], references: [id], onDelete: Cascade)
+  cMoon CMoon @relation("CMoon_BorderOwners", fields: [cMoonId], references: [id], onDelete: Cascade)
 
   @@unique([userId, cMoonId])
 }

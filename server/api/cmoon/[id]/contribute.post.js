@@ -101,18 +101,18 @@ export default defineEventHandler(async (event) => {
             data: { currentLevelId: newLevel.id }
           })
 
-          const reward = { backgrounds: [], avatars: [], glowCMoonId: newLevel.grantsGlow ? cMoonId : null }
+          const reward = { backgrounds: [], avatars: [], borderCMoonId: newLevel.grantsBorder ? cMoonId : null }
           if (newLevel.rewardBackgroundId) reward.backgrounds.push({ backgroundId: newLevel.rewardBackgroundId })
           if (newLevel.rewardAvatarId) reward.avatars.push({ avatarId: newLevel.rewardAvatarId })
           await grantRewardInTx(tx, userId, reward, `cmoonAffinity:level:${newLevel.id}`)
 
-          // Auto-equip the member's first-ever glow so it's visible without an extra step;
-          // later glows from other cMoons stay unequipped until explicitly chosen.
-          if (newLevel.grantsGlow) {
-            await tx.user.updateMany({ where: { id: userId, equippedGlowCMoonId: null }, data: { equippedGlowCMoonId: cMoonId } })
+          // Auto-equip the member's first-ever border so it's visible without an extra step;
+          // later borders from other cMoons stay unequipped until explicitly chosen.
+          if (newLevel.grantsBorder) {
+            await tx.user.updateMany({ where: { id: userId, equippedBorderCMoonId: null }, data: { equippedBorderCMoonId: cMoonId } })
           }
 
-          leveledUpTo = { id: newLevel.id, name: newLevel.name, grantsGlow: newLevel.grantsGlow }
+          leveledUpTo = { id: newLevel.id, name: newLevel.name, grantsBorder: newLevel.grantsBorder }
         }
       }
 

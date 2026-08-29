@@ -306,7 +306,7 @@
             </div>
 
             <!-- Affinity Levels: "contribute to cMoon" ladder — spend points to reach a level,
-                 which can grant a cZone glow (in this cMoon's color), an exclusive avatar, and/or
+                 which can grant a cZone border (in this cMoon's color), an exclusive avatar, and/or
                  an exclusive cZone background. Independent of the Ranks ladder above (Ranks are
                  achievement-granted; affinity is spend-driven and personal, not team score). -->
             <div class="mt-2 pt-2 border-t">
@@ -319,7 +319,7 @@
                   <span class="text-gray-500 w-6 flex-shrink-0">#{{ lvl.sortOrder }}</span>
                   <span class="flex-1 min-w-0 break-words">{{ lvl.name }}</span>
                   <span class="text-gray-500 flex-shrink-0">{{ lvl.threshold.toLocaleString() }} pts</span>
-                  <span v-if="lvl.grantsGlow" class="flex-shrink-0" title="Grants cZone glow">✨</span>
+                  <span v-if="lvl.grantsBorder" class="flex-shrink-0" title="Grants cZone border">🔲</span>
                   <span v-if="lvl.rewardBackground" class="flex-shrink-0" title="Grants background">🖼️</span>
                   <span v-if="lvl.rewardAvatar" class="flex-shrink-0" title="Grants avatar">🧑</span>
                   <button type="button" class="cm-tap text-indigo-600" @click="startEditLevel(c, lvl)">Edit</button>
@@ -777,8 +777,8 @@
           </div>
 
           <label class="flex items-center gap-2 pt-1">
-            <input type="checkbox" v-model="levelForm.grantsGlow" />
-            <span class="text-xs">Grants cZone glow (in this cMoon's color)</span>
+            <input type="checkbox" v-model="levelForm.grantsBorder" />
+            <span class="text-xs">Grants cZone border (in this cMoon's color)</span>
           </label>
 
           <div>
@@ -1467,7 +1467,7 @@ async function removeRank(c, r) {
 const backgrounds = ref([])
 const avatarsCatalog = ref([])
 
-const emptyLevelForm = () => ({ id: '', name: '', threshold: 0, sortOrder: 0, grantsGlow: false, rewardBackgroundId: '', rewardAvatarId: '' })
+const emptyLevelForm = () => ({ id: '', name: '', threshold: 0, sortOrder: 0, grantsBorder: false, rewardBackgroundId: '', rewardAvatarId: '' })
 const levelForm = reactive(emptyLevelForm())
 const levelCMoon = ref(null)
 const levelModalOpen = ref(false)
@@ -1507,7 +1507,7 @@ function startEditLevel(c, lvl) {
   levelCMoon.value = c
   Object.assign(levelForm, {
     id: lvl.id, name: lvl.name, threshold: lvl.threshold, sortOrder: lvl.sortOrder,
-    grantsGlow: lvl.grantsGlow, rewardBackgroundId: lvl.rewardBackgroundId || '', rewardAvatarId: lvl.rewardAvatarId || '',
+    grantsBorder: lvl.grantsBorder, rewardBackgroundId: lvl.rewardBackgroundId || '', rewardAvatarId: lvl.rewardAvatarId || '',
   })
   levelModalOpen.value = true
 }
@@ -1523,7 +1523,7 @@ async function saveLevel(c) {
       name: levelForm.name.trim(),
       threshold: levelForm.threshold,
       sortOrder: levelForm.sortOrder,
-      grantsGlow: levelForm.grantsGlow,
+      grantsBorder: levelForm.grantsBorder,
       rewardBackgroundId: levelForm.rewardBackgroundId || '',
       rewardAvatarId: levelForm.rewardAvatarId || '',
     }

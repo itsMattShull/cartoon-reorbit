@@ -201,15 +201,15 @@ async function getOrCreateUserPoints(tx, userId) {
   return await tx.userPoints.create({ data: { userId, points: 0 } })
 }
 
-// Grants a reward bundle (points + backgrounds + avatars + a cMoon glow, transactionally) to a
-// user. Shared by the auto-grant path (awardAchievementToUser), the claim-your-prize path
+// Grants a reward bundle (points + backgrounds + avatars + a cMoon cZone border, transactionally)
+// to a user. Shared by the auto-grant path (awardAchievementToUser), the claim-your-prize path
 // (claimAchievementReward), and cMoon affinity level-ups (server/api/cmoon/[id]/contribute.post.js)
 // so all three grant exactly the same way — one reward-granting path rather than a parallel one
 // per feature. cToon mint jobs are NOT enqueued here — mintQueue.add isn't rollback-safe, so the
 // caller must only enqueue the returned `ctoonJobs` after its transaction has committed (see
 // enqueueCtoonJobs).
 export async function grantRewardInTx(tx, userId, reward, method) {
-  const summary = { points: 0, backgrounds: 0, avatars: 0, glow: false, ctoonJobs: [] }
+  const summary = { points: 0, backgrounds: 0, avatars: 0, border: false, ctoonJobs: [] }
   if (!reward) return summary
 
   // Points
@@ -257,15 +257,16 @@ export async function grantRewardInTx(tx, userId, reward, method) {
     }
   }
 
-  // cMoon glow — idempotent grant of a persistent cZone glow for one cMoon (upsert rather than
-  // create+catch, since re-granting an already-owned glow must be a silent no-op, not an error).
-  if (reward.glowCMoonId) {
-    await tx.userCMoonGlow.upsert({
-      where: { userId_cMoonId: { userId, cMoonId: reward.glowCMoonId } },
-      create: { userId, cMoonId: reward.glowCMoonId },
+  // cMoon border — idempotent grant of a persistent cZone border for one cMoon (upsert rather
+  // than create+catch, since re-granting an already-owned border must be a silent no-op, not an
+  // error).
+  if (reward.borderCMoonId) {
+    await tx.userCMoonBorder.upsert({
+      where: { userId_cMoonId: { userId, cMoonId: reward.borderCMoonId } },
+      create: { userId, cMoonId: reward.borderCMoonId },
       update: {}
     })
-    summary.glow = true
+    summary.border = true
   }
 
   // cToons — resolve how many of each can actually be granted (supply-capped), but leave
