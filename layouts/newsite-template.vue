@@ -241,7 +241,7 @@ html.newsite-active body {
 </style>
 
 <template>
-  <div class="site-container" :class="{ 'site-container-fluid': fluidLayout }" :style="[{ gridTemplateRows: gridRows, gridTemplateColumns: gridColumns }, scaleStyle]">
+  <div class="site-container" :class="{ 'site-container-fluid': fluidLayout }" :style="[{ gridTemplateRows: gridRows, gridTemplateColumns: gridColumns }, scaleStyle, themeColorStyle]">
     <div class="topbar" :style="isMobile ? { height: 'auto', overflow: 'visible', width: '100%' } : {}">
       <div
         class="topbar-primary"
@@ -330,7 +330,7 @@ const {
 function onAuctionCreated(userCtoonId) {
   notifyAuctionCreated(userCtoonId)
 }
-const { sidebarMiddleComponent, mobileSidebarCollapsed } = useNewsiteLayout()
+const { sidebarMiddleComponent, mobileSidebarCollapsed, pageThemeColor } = useNewsiteLayout()
 const czoneState = useNewSiteCzoneState()
 
 const siteName = 'Cartoon ReOrbit'
@@ -371,6 +371,22 @@ const mainContentBorder = computed(() => route.meta.mainContentBorder === false 
 // live data (e.g. cmoon's member/cToon counts) and can genuinely exceed it.
 // Those opt into an internal scrollbar instead of being silently clipped.
 const mainContentScrollY = computed(() => route.meta.mainContentScrollY === true ? 'auto' : undefined)
+
+// Recolors the top nav bar and sidebar (but not the whole app's blue theme) to a page-set
+// color — currently used by cZone pages to match the viewed owner's cMoon, via
+// useNewsiteLayout().pageThemeColor. Overrides only the specific derived tokens those two
+// chrome pieces use, rather than the base --OrbitLightBlue/--OrbitDarkBlue tokens themselves,
+// since those base tokens are also used throughout unrelated page content rendered inside
+// .main-content — overriding them here would recolor far more than "the top nav and sidebar".
+const themeColorStyle = computed(() => {
+  if (!pageThemeColor.value) return {}
+  return {
+    '--topbar-nav-left-bg':  pageThemeColor.value,
+    '--topbar-nav-right-bg': pageThemeColor.value,
+    '--sidebar-bg':          pageThemeColor.value,
+    '--sidebar-top-bg':      pageThemeColor.value,
+  }
+})
 
 
 // Pages that opt into `fluidLayout` (currently the admin console) escape the

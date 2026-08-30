@@ -1,6 +1,21 @@
 <template>
   <div class="myczone">
 
+    <!-- ── Frame: wraps topbar+canvas+bottombar as one unit so the cMoon-affinity border
+         colors the whole cZone container (topbar, canvas, and bottombar together), matching
+         the reference cWorld skin, not just the canvas's own edge. A real `border` here (not
+         outline/box-shadow) is safe because recalcScale()'s width formula always reserves
+         FRAME_BORDER_PX on each side from the fixed 800px .main-content budget (see that
+         function below) — the border is never "extra" pixels this fixed-width chrome has to
+         find room for. Always rendered (transparent when no border is equipped) so the
+         reserved space — and thus the canvas's rendered size — never jumps when a border is
+         equipped/unequipped. ── -->
+    <div
+      class="cz-frame"
+      :class="{ 'cz-frame--bordered': displayedBorder }"
+      :style="displayedBorder ? { '--cz-border-color': displayedBorder.color } : {}"
+    >
+
     <!-- ── Top bar ─────────────────────────────────────────── -->
     <div class="cz-topbar">
       <div class="cz-topbar-left">
@@ -100,18 +115,12 @@
     </div>
 
     <!-- ── Canvas: outer reserves scaled layout, inner holds the 800×600 transform ──
-         The cMoon-affinity border (if any) is a CSS outline on cz-canvas-outer itself, not a
-         border/padding on a wrapper: outline is painted outside the box's own edge without
-         ever being part of its layout box, so it can never change this element's rendered
-         width/height (unlike border or padding) and can't overlap edge-placed toons or get
-         painted over by cz-canvas's own opaque background (outline paints on cz-canvas-outer,
-         a strict ancestor of cz-canvas). This also means scale/recalcScale need no border-aware
-         reserve at all — the outline never competes with the canvas for box space, on any
-         viewport width. -->
+         The cMoon-affinity border color itself now lives on cz-frame (the wrapper around
+         topbar+canvas+bottombar, above), not here — see that div's comment for why. This outer
+         box just reserves the scaled canvas footprint in layout flow. -->
     <div
       class="cz-canvas-outer"
-      :class="{ 'cz-canvas-outer--bordered': displayedBorder }"
-      :style="displayedBorder ? { ...outerScaleStyle, '--cz-border-color': displayedBorder.color } : outerScaleStyle"
+      :style="outerScaleStyle"
     >
       <div class="cz-canvas-inner" :style="innerScaleStyle">
         <div
@@ -189,6 +198,12 @@
           <span class="cz-build-hint-desktop">Drag cToons from sidebar · Right-click canvas to remove</span>
           <span class="cz-build-hint-mobile">Tap sidebar to add · Hold 2s to remove</span>
         </template>
+        <img
+          v-else-if="viewedOwner?.cMoon?.pageBannerImagePath"
+          :src="viewedOwner.cMoon.pageBannerImagePath"
+          :alt="`${viewedOwner.cMoon.name} cMoon`"
+          class="cz-cmoon-banner"
+        />
       </div>
       <div v-show="!cz.buildMode" class="cz-nav-buttons">
         <img src="/images/newsite/ten_left.gif"  class="cz-nav-btn" title="Previous 10" draggable="false" @click="navigate('previous10')" />
@@ -198,6 +213,8 @@
         <img src="/images/newsite/ten_right.gif" class="cz-nav-btn" title="Next 10"     draggable="false" @click="navigate('next10')"     />
       </div>
     </div>
+
+    </div> <!-- /.cz-frame -->
 
     <!-- ── Ghost (global, for cross-component drag) ─────────── -->
     <Teleport to="body">
@@ -373,6 +390,21 @@ const TOPBAR_H         = 34    // top bar height in px
 const BOTTOMBAR_H      = 35    // bottom bar height in px
 const CANVAS_W         = 800   // design-space canvas width
 const CANVAS_H         = 600   // design-space canvas height
+// .cz-frame's border-width (see its CSS below) — always reserved from the available width in
+// recalcScale(), whether or not a border is actually equipped/colored, so the canvas's rendered
+// size never jumps when a border is equipped/unequipped and so the border (real CSS `border`,
+// not outline) never has to compete with the canvas for space in the fixed-width chrome.
+const FRAME_BORDER_PX  = 8
+// Desktop only (see recalcScale below): this component renders inside newsite-template.vue's
+// fixed retro chrome there — .main-content is a hardcoded 800×682 box (--main-content-width /
+// --sidebar-height) with `overflow: hidden` and no spare pixels budgeted around it. A generous
+// estimate of the topbar's real rendered height with the owner-info block's username/rank/
+// lastseen+cMoon lines — deliberately well above the CSS min-height's bare-minimum 34px, so a
+// normal 3-line topbar never eats into the bottombar's own reserved space and gets it clipped
+// by that fixed, non-scrolling chrome.
+const DESKTOP_CHROME_H       = 682
+const DESKTOP_TOPBAR_RESERVE = 70
+const MOBILE_BREAKPOINT      = 768 // matches newsite-template.vue's own isMobile media query
 const SIZE_CYCLE       = [1, 0.5, 2]  // sizeScale cycle: default → half → double
 const SEARCH_TOON_SIZE = 140   // cZone search toon size in px
 
@@ -429,7 +461,30 @@ function recalcScale() {
   if (typeof window === 'undefined') return
   const gutter = 32 // account for page padding / scrollbar
   const w = window.innerWidth || document.documentElement?.clientWidth || CANVAS_W
-  scale.value = Math.min(1, Math.max(0.1, (w - gutter) / CANVAS_W))
+  const reserve = FRAME_BORDER_PX * 2 // cz-frame's border, both sides
+  // The ceiling itself must reserve the frame's border too, not just the raw available-width
+  // numerator below — on a wide desktop window, (w - gutter - reserve) / CANVAS_W comfortably
+  // exceeds 1, so a flat `Math.min(1, ...)` ceiling would let scale hit 1 regardless of the
+  // reserve, rendering the canvas at its full unshrunk 800px width — 2*FRAME_BORDER_PX wider
+  // than cz-frame's own (border-box) content box actually has room for. Capping at this ratio
+  // instead guarantees the canvas is never wider than "CANVAS_W minus the frame's own border",
+  // on any viewport width.
+  const ceiling = (CANVAS_W - reserve) / CANVAS_W
+  const available = w - gutter - reserve
+  let s = Math.min(ceiling, Math.max(0.1, available / CANVAS_W))
+
+  // On desktop, also cap scale so topbar + canvas + bottombar + frame border together never
+  // exceed the fixed, non-scrolling chrome's own height budget (see DESKTOP_CHROME_H's comment
+  // above) — otherwise the bottombar's buttons get silently clipped off by that chrome's
+  // overflow: hidden, regardless of how the width-based scale above came out. Skipped on
+  // mobile, where .main-content switches to a fluid height: auto with no such fixed budget.
+  if (w > MOBILE_BREAKPOINT) {
+    const availableCanvasH = DESKTOP_CHROME_H - DESKTOP_TOPBAR_RESERVE - BOTTOMBAR_H - reserve
+    const heightCeiling = Math.max(0.1, availableCanvasH / CANVAS_H)
+    s = Math.min(s, heightCeiling)
+  }
+
+  scale.value = s
 }
 
 // Set the correct scale immediately on the client to avoid a post-hydration
@@ -837,6 +892,13 @@ const canvasStyle = computed(() => ({
 // ── Lifecycle ─────────────────────────────────────────────────
 const czoneActions = useCzoneActions()
 
+// Recolor the top nav bar + sidebar to match the viewed owner's cMoon, mirroring the reference
+// cWorld skin (the whole surrounding chrome, not just the cZone itself, took on the member's
+// affiliation color). Must be cleared on unmount — this is shared, app-wide layout state, so
+// leaving it set would leak this page's color onto every other page the user navigates to next.
+const { setPageThemeColor, clearPageThemeColor } = useNewsiteLayout()
+watch(() => viewedOwner.value?.cMoon?.color, (color) => { setPageThemeColor(color || null) }, { immediate: true })
+
 onMounted(() => {
   czoneActions.register(save, clearZone)
   recalcScale()
@@ -876,6 +938,7 @@ onUnmounted(() => {
   clearTimeout(_dimSaveTimer)
   // stop any active glitch effect
   stopGlitchEffect()
+  clearPageThemeColor()
 })
 
 // ── Data loading ──────────────────────────────────────────────
@@ -1341,13 +1404,40 @@ defineExpose({ save, clearZone })
   box-sizing: border-box;
 }
 
+/* Wraps the topbar, canvas, and bottombar as one bordered unit — the cMoon-affinity border
+   colors this whole container (matching the reference cWorld skin), not just the canvas.
+   Always renders a border (transparent by default) so recalcScale()'s reserved space — and
+   thus the canvas's own rendered size — stays constant whether or not a border is equipped;
+   only the color changes. box-sizing: border-box keeps the border inside the width recalcScale
+   already accounted for, rather than adding to it. overflow: hidden clips the square corners of
+   the topbar/canvas/bottombar children to this frame's own rounded corners. */
+.cz-frame {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  box-sizing: border-box;
+  border: v-bind(FRAME_BORDER_PX + 'px') solid transparent;
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+.cz-frame--bordered {
+  border-color: var(--cz-border-color, transparent);
+}
+
 /* ── Top bar ── */
 .cz-topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
-  height: v-bind(TOPBAR_H + 'px');
+  /* min-height, not height: the owner-info block's content is variable (rank line only shows
+     for some viewers, the border-equip picker adds rows when open, ...) — a fixed height with
+     align-items:center let taller content silently overflow both above AND below this bar
+     without the bar itself growing, which could visually overlap the canvas immediately below
+     it (a later sibling paints over an earlier one wherever they occupy the same space). TOPBAR_H
+     still sets the normal-case height so the bar doesn't look sparse when content IS short. */
+  min-height: v-bind(TOPBAR_H + 'px');
   box-sizing: border-box;
   padding: 4px 6px;
   gap: 6px;
@@ -1408,10 +1498,11 @@ defineExpose({ save, clearZone })
   padding: 2px 8px 2px 4px;
 }
 .cz-owner-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-/* text-align: right so the username/rank/last-seen lines (each a different natural width) line
-   up flush along their right edge, matching this block's position at the right end of the
-   topbar, instead of all left-hugging the label's own (widest-line-sized) box. */
-.cz-owner-label  { font-size: 0.68rem; color: #fff; white-space: nowrap; text-align: right; }
+/* Centered rather than left- or right-aligned: the username/rank/last-seen lines are each a
+   different natural width, so any one-sided alignment leaves a visibly empty gap on the other
+   side of the shorter lines within this shrink-to-fit label. Centering splits that gap evenly
+   instead of concentrating it in one corner. */
+.cz-owner-label  { font-size: 0.68rem; color: #fff; white-space: nowrap; text-align: center; }
 .cz-owner-prefix  { font-size: 0.6rem; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-right: 3px; }
 .cz-owner-lastseen { font-size: 0.58rem; color: rgba(255,255,255,0.5); white-space: nowrap; }
 .cz-owner-cmoon-link {
@@ -1446,18 +1537,6 @@ defineExpose({ save, clearZone })
   font-size: 0.6rem;
   font-weight: 600;
   color: #ffd75e;
-}
-
-/* cMoon affinity border — a static colorized `outline` on cz-canvas-outer itself, not a
-   border/padding on a wrapper element. outline is painted outside the box's own edge without
-   ever becoming part of its layout box (unlike border/padding, which add to rendered
-   width/height) — so it can't overlap edge-placed toons, can't get painted over by cz-canvas's
-   own opaque background (it paints on an ancestor of that), and needs no scale/recalcScale
-   compensation on any viewport width, since it never competes with the canvas for box space.
-   Static rather than animated (cheaper to render) — no @keyframes, so there's nothing to gate
-   on prefers-reduced-motion. */
-.cz-canvas-outer--bordered {
-  outline: 6px solid var(--cz-border-color, transparent);
 }
 
 .cz-border-equip-btn {
@@ -1642,6 +1721,10 @@ defineExpose({ save, clearZone })
 .cz-myczone-btn { flex-shrink: 0; }
 
 .cz-build-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
   font-size: 0.62rem;
   font-style: italic;
   color: rgba(255,255,255,0.7);
@@ -1653,6 +1736,18 @@ defineExpose({ save, clearZone })
 @media (max-width: 768px) {
   .cz-build-hint-mobile  { display: inline; }
   .cz-build-hint-desktop { display: none; }
+}
+
+/* This cMoon's page banner (admin-uploaded, normalized to 1200x100 — see CMoonPage.vue), shown
+   in the bottombar's middle slot in place of the build hint whenever not in build mode. Capped
+   to the bottombar's own available height (BOTTOMBAR_H minus the bar's vertical padding) with
+   width free to shrink via object-fit, since the banner's native 12:1 aspect ratio is far wider
+   than this slot on any but the widest viewports. */
+.cz-cmoon-banner {
+  max-width: 100%;
+  max-height: calc(v-bind(BOTTOMBAR_H + 'px') - 6px);
+  object-fit: contain;
+  border-radius: 3px;
 }
 
 .cz-nav-buttons {
