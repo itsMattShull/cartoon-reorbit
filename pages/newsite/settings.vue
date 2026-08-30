@@ -13,6 +13,9 @@
             <div class="settings-button-row">
               <button class="btn-avatar" @click="openAvatarModal">Change Avatar</button>
               <button class="btn-username" @click="openUsernameModal">Change Username</button>
+              <button v-if="showTeamChangeButton" class="btn-team" @click="openTeamChangeModal">
+                {{ pendingRequest ? 'Team Change: Pending' : 'Request Team Change' }}
+              </button>
             </div>
           </div>
 
@@ -117,6 +120,58 @@
           </div>
         </div>
       </Teleport>
+
+      <!-- Request Team Change modal -->
+      <!-- Teleported to body: same containing-block/overflow issue as the avatar/username
+           modals above. `team-modal` adds max-height + internal scroll to `.modal-box`, which
+           the shared modal-box class otherwise lacks — without it a tall cMoon list plus the
+           explanatory copy can overflow a short viewport with no way to reach the Submit button. -->
+      <Teleport to="body">
+        <div v-if="showTeamModal" class="modal-overlay" @click.self="closeTeamChangeModal">
+          <div class="modal-box team-modal">
+            <template v-if="pendingRequest">
+              <h2 class="modal-title">Team Change Pending</h2>
+              <p class="modal-desc">
+                Your request to join <strong>{{ pendingRequest.requestedCMoon?.name }}</strong>
+                is waiting for admin approval.
+              </p>
+              <p v-if="teamChangeError" class="modal-error">{{ teamChangeError }}</p>
+              <div class="modal-actions">
+                <button class="btn-cancel" @click="closeTeamChangeModal">Close</button>
+                <button class="btn-save-blue" :disabled="cancelingRequest" @click="cancelTeamChangeRequest">
+                  {{ cancelingRequest ? 'Cancelling...' : 'Cancel Request' }}
+                </button>
+              </div>
+            </template>
+            <template v-else>
+              <h2 class="modal-title">Request Team Change</h2>
+              <p class="modal-desc">
+                Pick a cMoon to request joining. An admin has to approve this before you move.
+                Any affinity progress and rewards you've already earned stay yours either way.
+              </p>
+
+              <div v-if="loadingCMoons" class="team-status-text">Loading teams…</div>
+              <div v-else-if="!eligibleCMoons.length" class="team-status-text">No other teams are available right now.</div>
+              <div v-else class="team-list">
+                <label v-for="c in eligibleCMoons" :key="c.id" class="team-option">
+                  <input type="radio" class="sr-only" v-model="selectedTargetCMoonId" :value="c.id" />
+                  <span class="team-swatch" :style="{ background: c.color }"></span>
+                  <span class="team-name">{{ c.name }}</span>
+                </label>
+              </div>
+
+              <p v-if="teamChangeError" class="modal-error">{{ teamChangeError }}</p>
+
+              <div class="modal-actions">
+                <button class="btn-cancel" @click="closeTeamChangeModal">Cancel</button>
+                <button class="btn-save-blue" :disabled="teamChangeSaving || !selectedTargetCMoonId" @click="submitTeamChangeRequest">
+                  {{ teamChangeSaving ? 'Submitting...' : 'Submit Request' }}
+                </button>
+              </div>
+            </template>
+          </div>
+        </div>
+      </Teleport>
 </template>
 
 <script setup>
@@ -133,7 +188,7 @@ definePageMeta({
 const { clearSidebarMiddle } = useNewsiteLayout()
 clearSidebarMiddle()
 
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 
 const { user, fetchSelf } = useAuth()
 
@@ -291,6 +346,95 @@ async function saveUsername() {
     savingUsername.value = false
   }
 }
+
+// ── Request Team Change ──────────────────────────────────────────────────
+// Hidden for admins (they manage cMoon placement from the admin console directly) and for
+// anyone not currently on a cMoon (they use the normal join flow, not a change request).
+const cMoonEnabled = ref(false)
+const currentCMoonId = ref(null)
+const pendingRequest = ref(null)
+const eligibleCMoons = ref([])
+const loadingCMoons = ref(false)
+const showTeamModal = ref(false)
+const selectedTargetCMoonId = ref('')
+const teamChangeError = ref('')
+const teamChangeSaving = ref(false)
+const cancelingRequest = ref(false)
+
+const showTeamChangeButton = computed(() =>
+  cMoonEnabled.value && !user.value?.isAdmin && !!currentCMoonId.value
+)
+
+async function loadCMoonState() {
+  try {
+    const [status, changeRequest] = await Promise.all([
+      $fetch('/api/cmoon/status', { credentials: 'include' }),
+      $fetch('/api/cmoon/change-request', { credentials: 'include' }),
+    ])
+    cMoonEnabled.value = !!status?.cMoonEnabled
+    currentCMoonId.value = status?.cMoon?.id || null
+    pendingRequest.value = changeRequest?.request || null
+  } catch {
+    // Non-critical: the button just stays hidden if this fails to load.
+  }
+}
+
+async function openTeamChangeModal() {
+  teamChangeError.value = ''
+  showTeamModal.value = true
+  if (!pendingRequest.value && !eligibleCMoons.value.length) {
+    loadingCMoons.value = true
+    try {
+      const data = await $fetch('/api/cmoons', { credentials: 'include' })
+      eligibleCMoons.value = (data?.cmoons || []).filter((c) => c.id !== currentCMoonId.value)
+    } catch {
+      teamChangeError.value = 'Failed to load teams.'
+    } finally {
+      loadingCMoons.value = false
+    }
+  }
+}
+
+function closeTeamChangeModal() {
+  showTeamModal.value = false
+  selectedTargetCMoonId.value = ''
+  teamChangeError.value = ''
+}
+
+async function submitTeamChangeRequest() {
+  if (!selectedTargetCMoonId.value) return
+  teamChangeError.value = ''
+  teamChangeSaving.value = true
+  try {
+    await $fetch('/api/cmoon/change-request', {
+      method: 'POST',
+      body: { requestedCMoonId: selectedTargetCMoonId.value },
+      credentials: 'include',
+    })
+    await loadCMoonState()
+    closeTeamChangeModal()
+  } catch (e) {
+    teamChangeError.value = e?.data?.statusMessage || 'Failed to submit request.'
+  } finally {
+    teamChangeSaving.value = false
+  }
+}
+
+async function cancelTeamChangeRequest() {
+  cancelingRequest.value = true
+  teamChangeError.value = ''
+  try {
+    await $fetch('/api/cmoon/change-request', { method: 'DELETE', credentials: 'include' })
+    await loadCMoonState()
+    closeTeamChangeModal()
+  } catch (e) {
+    teamChangeError.value = e?.data?.statusMessage || 'Failed to cancel request.'
+  } finally {
+    cancelingRequest.value = false
+  }
+}
+
+onMounted(loadCMoonState)
 </script>
 
 <style>
@@ -390,6 +534,22 @@ body.page-newsite-settings .main-content { overflow-y: auto !important; scrollba
 }
 
 .btn-username:hover { opacity: 0.85; }
+
+.btn-team {
+  padding: 6px 14px;
+  min-height: 44px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-family: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.btn-team:hover { opacity: 0.85; }
 
 .settings-body {
   padding: 14px;
@@ -613,4 +773,54 @@ body.page-newsite-settings .main-content { overflow-y: auto !important; scrollba
 }
 
 .btn-save-purple:disabled { opacity: 0.5; cursor: default; }
+
+/* .modal-box has no max-height/overflow-y-auto of its own (only the avatar grid inside it
+   scrolls internally) — fine for that short form, but a cMoon list plus explanatory copy can
+   run taller than a short phone viewport with no way to reach Submit. This modifier fixes that
+   for the team-change modal specifically, without touching the avatar/username modals' layout. */
+.modal-box.team-modal {
+  max-height: 90dvh;
+  overflow-y: auto;
+}
+
+.team-status-text {
+  font-size: 0.78rem;
+  color: #555;
+  margin-bottom: 14px;
+}
+
+.team-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 14px;
+}
+
+.team-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+
+.team-option:has(input:checked) { border-color: var(--OrbitDarkBlue, #336699); border-width: 2px; }
+
+.team-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.team-name {
+  font-size: 0.82rem;
+  color: #1a1a2e;
+}
 </style>

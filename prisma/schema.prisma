@@ -343,7 +343,7 @@ model Ctoon {
   achievementRequiredCtoons  AchievementRequiredCtoon[]
 
   // cMoon back-relation (prize-on-join — distinct from the display assignment below)
-  cMoonPrizeRows CMoonPrizeCtoon[]
+  cMoonPrizeRows   CMoonPrizeCtoon[]
   // Admin-created "pick one of these" offer options featuring this cToon, and the resulting
   // claims (distinct from cMoonPrizeRows, which is auto-granted on join with no choice).
   dispersalOptions CMoonDispersalOption[]
@@ -518,11 +518,19 @@ model User {
   cMoonOptedOutAt    DateTime?
   // Set once the daily Discord sync grants this user's cMoon role, so the job
   // only touches never-synced members instead of re-checking everyone daily.
-  cMoonRoleGrantedAt DateTime?
+  cMoonRoleGrantedAt     DateTime?
   // Lifetime points contributed to the CURRENT cMoon: sum of 'increase' PointsLog rows
   // since cMoonSelectedAt, kept in sync by a periodic cron (never decreases from spending,
   // and naturally restarts at 0 when a user is reassigned to a different cMoon since the
-  // window is bounded by their current cMoonSelectedAt). See server/cron/cmoon-points-aggregate.js.
+  // window is bounded by their current cMoonSelectedAt — including an admin "Balance Teams"
+  // move or an accepted CMoonChangeRequest, which use the same reassignUserCMoon path as any
+  // other admin-driven reassignment). This reset is load-bearing, not incidental: the
+  // universal cMoon rank ladder (CMoonRankTier) evaluates against this field, and
+  // claimAchievementReward's cMoon-hop guard (server/utils/achievements.js) is written
+  // assuming a mover re-earns each cMoon's copy from zero. The actual "affinity carries with
+  // the player" progress (CMoonAffinity.affinitySpent, UserCMoonBorder ownership) is a
+  // separate, permanent, per-(user, cMoon) track untouched by any cMoonId change — see
+  // CMoonAffinity's own doc comment. See server/cron/cmoon-points-aggregate.js.
   cMoonPoints            Int        @default(0)
   currentCMoonRankId     String?
   currentCMoonRank       CMoonRank? @relation(fields: [currentCMoonRankId], references: [id], onDelete: SetNull)
@@ -692,12 +700,13 @@ model User {
   fruitSamuraiPlays  FruitSamuraiPlay[]
 
   // cMoon (faction) relations
-  cMoonCaptainOf              CMoonCaptain[]
-  achievementClaims           AchievementClaim[]
-  dailyTaskCompletions        UserDailyTaskCompletion[]
-  initiatedDispersalOffers CMoonDispersalOffer[] @relation("CMoonDispersalOfferInitiatedBy")
-  closedDispersalOffers   CMoonDispersalOffer[] @relation("CMoonDispersalOfferClosedBy")
-  dispersalClaims         CMoonDispersalClaim[]
+  cMoonCaptainOf           CMoonCaptain[]
+  achievementClaims        AchievementClaim[]
+  dailyTaskCompletions     UserDailyTaskCompletion[]
+  initiatedDispersalOffers CMoonDispersalOffer[]     @relation("CMoonDispersalOfferInitiatedBy")
+  closedDispersalOffers    CMoonDispersalOffer[]     @relation("CMoonDispersalOfferClosedBy")
+  dispersalClaims          CMoonDispersalClaim[]
+  cMoonChangeRequests      CMoonChangeRequest[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
   @@index([cMoonId])
@@ -2803,7 +2812,7 @@ model Achievement {
   // Points contributed to the user's CURRENT cMoon (User.cMoonPoints) — only meaningful
   // paired with cMoonRankId, since it implicitly scopes this achievement to members of that
   // rank's cMoon. See evaluateUserAgainstAchievement.
-  cMoonPointsGte               Int?
+  cMoonPointsGte              Int?
   // Reward: on unlock, grants this cMoon rank (only if it outranks the user's current rank —
   // see awardAchievementToUser) instead of/in addition to `rewards`. The admin-facing achievement
   // editor (server/api/admin/achievements.post.js / [id].put.js) still refuses to combine this
@@ -2837,7 +2846,7 @@ model Achievement {
 }
 
 model AchievementClaimOption {
-  id            String  @id @default(uuid())
+  id            String @id @default(uuid())
   achievementId String
   label         String
   // Each option is its own reward bundle (points + ctoons + backgrounds), reusing the same
@@ -2846,8 +2855,8 @@ model AchievementClaimOption {
   // server/utils/achievements.js. Restrict: an option's reward can't be deleted out from
   // under it; delete the option first (which explicitly deletes its reward in the same
   // transaction — see the admin claim-option delete endpoint).
-  rewardId      String  @unique
-  sortOrder     Int     @default(0)
+  rewardId      String @unique
+  sortOrder     Int    @default(0)
 
   achievement Achievement        @relation(fields: [achievementId], references: [id], onDelete: Cascade)
   reward      AchievementReward  @relation(fields: [rewardId], references: [id], onDelete: Restrict)
@@ -2974,12 +2983,12 @@ model CMoon {
   // (see server/api/admin/cmoons/[id]/image.post.js) — null falls back to the color swatch.
   imagePath     String?
   // Denormalized to avoid COUNT(*) races/scans on every selection + the daily auto-assign job.
-  memberCount   Int      @default(0)
+  memberCount   Int              @default(0)
   // Cumulative cMoon team leaderboard score (server/utils/cmoon.js weekly scoring). Never
   // resets — a running season total incremented by CMoonScoreLog-backed awards.
-  teamScore     Int      @default(0)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  teamScore     Int              @default(0)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
 
   // When true, this cMoon is hidden from the self-serve "choose your cMoon" list/modal, and
   // blocked server-side in selectCMoonForUser (server/utils/cmoon.js)
@@ -2990,7 +2999,7 @@ model CMoon {
   // `locked` to avoid reading like the unrelated per-copy UserCtoon.lockedByUserId concept in
   // server/utils/lockRules.js. Independent of `showOnNav` below — a locked cMoon can still be
   // opted into the cMoons quick-nav (browsable, still not joinable).
-  joinLocked    Boolean  @default(false)
+  joinLocked Boolean @default(false)
 
   // Whether this cMoon shows as a clickable circle on the /newsite/cmoon-nav "cMoons" quick-nav
   // page — a display toggle independent of `joinLocked` above (a locked cMoon can still be shown
@@ -2998,7 +3007,7 @@ model CMoon {
   // that added this column backfilled it to `NOT joinLocked` for pre-existing rows, so an
   // already-locked cMoon doesn't silently reappear on a new public surface the moment this
   // shipped — see prisma/migrations/20260826000000_add_cmoon_show_on_nav.
-  showOnNav     Boolean  @default(true)
+  showOnNav Boolean @default(true)
 
   // Public "cMoon page" content (/newsite/cmoon/[id]) — a display/catalog feature, independent
   // of the cMoonEnabled faction-join flag above. pageImagePath is exactly 800x600, matching CZone.
@@ -3033,15 +3042,15 @@ model CMoon {
   // large poster (imagePath) and the page/button art above, which are too large for that spot.
   avatarPath      String?
 
-  members              User[]
-  captains             CMoonCaptain[]
-  prizeCtoons          CMoonPrizeCtoon[]
-  scoreLogs            CMoonScoreLog[]
-  ranks                CMoonRank[]
-  dispersalOfferLinks  CMoonDispersalOfferCMoon[]
-  dispersalClaims      CMoonDispersalClaim[]
-  // cToons thematically displayed under this cMoon (admin-assigned in the cToon editor). Distinct
-  // from `members`/`prizeCtoons`, which are about the player-faction feature, not catalog display.
+  members             User[]
+  captains            CMoonCaptain[]
+  prizeCtoons         CMoonPrizeCtoon[]
+  scoreLogs           CMoonScoreLog[]
+  ranks               CMoonRank[]
+  dispersalOfferLinks CMoonDispersalOfferCMoon[]
+  dispersalClaims     CMoonDispersalClaim[]
+  changeRequestsFrom  CMoonChangeRequest[]       @relation("CMoonChangeRequestCurrent")
+  changeRequestsTo    CMoonChangeRequest[]       @relation("CMoonChangeRequestRequested")
   // No longer rendered directly on the cMoon page (see featuredCtoons below), but still the pool
   // admins pick featured cToons from, and still used wherever else the cToon editor relies on it.
   displayedCtoons      Ctoon[]                    @relation("CtoonCMoonDisplay")
@@ -3322,6 +3331,38 @@ model CMoonCaptain {
   @@index([userId])
 }
 
+enum CMoonChangeRequestStatus {
+  IN_REVIEW
+  ACCEPTED
+  REJECTED
+}
+
+// Player-initiated request to move to a different cMoon, approved/rejected by an admin
+// (mirrors CtoonUserSuggestion's review flow). At most one IN_REVIEW row per user is
+// maintained by the API layer (a new submission replaces the existing pending one rather
+// than stacking rows). On accept, reassignUserCMoon(userId, requestedCMoonId) performs the
+// actual move — the same shared path as any other admin-driven reassignment, including its
+// usual User.cMoonPoints reset — see server/utils/cmoon.js.
+model CMoonChangeRequest {
+  id               String                   @id @default(uuid())
+  userId           String
+  // Snapshot of the user's cMoon at submission time, for display/history purposes only —
+  // the actual move on accept always targets the user's cMoon as of that moment.
+  currentCMoonId   String?
+  requestedCMoonId String
+  status           CMoonChangeRequestStatus @default(IN_REVIEW)
+  rejectionReason  String?
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  user           User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentCMoon   CMoon? @relation("CMoonChangeRequestCurrent", fields: [currentCMoonId], references: [id], onDelete: SetNull)
+  requestedCMoon CMoon  @relation("CMoonChangeRequestRequested", fields: [requestedCMoonId], references: [id], onDelete: Cascade)
+
+  @@index([status, createdAt])
+  @@index([userId, status])
+}
+
 model CMoonPrizeCtoon {
   id       String @id @default(uuid())
   cMoonId  String
@@ -3350,16 +3391,16 @@ enum CMoonDispersalOfferStatus {
 // separate offer per cMoon. Mint order is naturally randomized relative to join date because
 // claims fire in whatever order members actually pick, not a shuffle computed up front.
 model CMoonDispersalOffer {
-  id                String                     @id @default(uuid())
+  id                String                    @id @default(uuid())
   quantityPerMember Int
-  status            CMoonDispersalOfferStatus  @default(OPEN)
+  status            CMoonDispersalOfferStatus @default(OPEN)
   initiatedById     String
-  createdAt         DateTime                   @default(now())
+  createdAt         DateTime                  @default(now())
   closedById        String?
   closedAt          DateTime?
 
-  initiatedBy User                      @relation("CMoonDispersalOfferInitiatedBy", fields: [initiatedById], references: [id], onDelete: Restrict)
-  closedBy    User?                     @relation("CMoonDispersalOfferClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  initiatedBy User                       @relation("CMoonDispersalOfferInitiatedBy", fields: [initiatedById], references: [id], onDelete: Restrict)
+  closedBy    User?                      @relation("CMoonDispersalOfferClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
   cMoons      CMoonDispersalOfferCMoon[]
   options     CMoonDispersalOption[]
   claims      CMoonDispersalClaim[]
@@ -3375,7 +3416,7 @@ model CMoonDispersalOfferCMoon {
   cMoonId String
 
   offer CMoonDispersalOffer @relation(fields: [offerId], references: [id], onDelete: Cascade)
-  cMoon CMoon                @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  cMoon CMoon               @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
 
   @@unique([offerId, cMoonId])
   @@index([cMoonId])
