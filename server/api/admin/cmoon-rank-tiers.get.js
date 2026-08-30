@@ -23,6 +23,7 @@ export default defineEventHandler(async (event) => {
       name: t.name,
       sortOrder: t.sortOrder,
       pointThreshold: t.pointThreshold,
+      maxRewardChoices: t.maxRewardChoices,
       rewardCtoons: t.rewardCtoons.map(r => ({
         ctoonId: r.ctoonId,
         name: r.ctoon?.name || '',

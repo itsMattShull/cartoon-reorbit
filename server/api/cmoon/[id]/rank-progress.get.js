@@ -7,6 +7,7 @@
 // the authenticated caller's own progress.
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
+import { isCMoonCaptain, displayRankName } from '@/server/utils/cmoon'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -28,8 +29,19 @@ export default defineEventHandler(async (event) => {
 
   const isMember = me?.cMoonId === cMoonId
   const cMoonPoints = isMember ? (me?.cMoonPoints || 0) : 0
-  const currentRank = isMember ? (me?.currentCMoonRank || null) : null
   const nextTier = isMember ? (tiers.find(t => t.pointThreshold > cMoonPoints) || null) : null
+
+  // A captain always displays as "Captain" regardless of their actually-earned rank tier — see
+  // displayRankName in server/utils/cmoon.js. sortOrder is left untouched (only the label
+  // changes) since CMoonPage.vue's progress bar still needs the REAL rank's sortOrder to find
+  // its floor threshold.
+  let currentRank = isMember ? (me?.currentCMoonRank || null) : null
+  if (isMember) {
+    const isCaptain = await isCMoonCaptain(cMoonId, userId)
+    if (isCaptain) {
+      currentRank = { ...(currentRank || { id: null, sortOrder: -1 }), name: displayRankName(currentRank?.name, true) }
+    }
+  }
 
   return {
     isMember,

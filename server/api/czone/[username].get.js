@@ -3,7 +3,7 @@
 import { defineEventHandler, createError } from 'h3'
 
 import { prisma } from '@/server/prisma'
-import { getGlobalConfig } from '@/server/utils/cmoon'
+import { getGlobalConfig, isCMoonCaptain, displayRankName } from '@/server/utils/cmoon'
 
 function normalizeZones(layoutData, background, targetCount) {
   let zones = []
@@ -247,6 +247,13 @@ export default defineEventHandler(async (event) => {
     }
   })
 
+  // A captain always displays as "Captain" regardless of their actually-earned rank tier — see
+  // displayRankName in server/utils/cmoon.js. Only worth the extra lookup when there's a cMoon
+  // rank name to potentially override in the first place.
+  const isCaptain = (cMoonEnabled && user.cMoon)
+    ? await isCMoonCaptain(user.cMoonId, user.id)
+    : false
+
   // 7) Return the payload containing owner info and the 3-zone array
   return {
     ownerId: user.id,
@@ -255,7 +262,7 @@ export default defineEventHandler(async (event) => {
     isBooster: user.isBooster,
     lastActivity: user.lastActivity ?? null,
     cMoon: (cMoonEnabled && user.cMoon) || null,
-    cMoonRankName: (cMoonEnabled && user.currentCMoonRank?.name) || null,
+    cMoonRankName: (cMoonEnabled && user.cMoon) ? displayRankName(user.currentCMoonRank?.name, isCaptain) : null,
     // Independent of cMoonEnabled/membership above — an earned border is a permanent personal
     // cosmetic, visible even if the member later leaves the cMoon that granted it.
     border: user.equippedBorder ? { cMoonId: user.equippedBorder.id, name: user.equippedBorder.name, color: user.equippedBorder.color } : null,

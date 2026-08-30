@@ -5,7 +5,10 @@ import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
-import { syncTierAcrossCMoons, MAX_TIER_REWARD_CTOONS } from '@/server/utils/cmoonRankTiers'
+import {
+  syncTierAcrossCMoons, MIN_TIER_REWARD_CHOICES, MAX_TIER_REWARD_CTOONS,
+  DEFAULT_TIER_REWARD_CHOICES, isValidMaxRewardChoices,
+} from '@/server/utils/cmoonRankTiers'
 
 const MAX_THRESHOLD = 5_000_000
 
@@ -17,13 +20,19 @@ export default defineEventHandler(async (event) => {
   const name = typeof body?.name === 'string' ? body.name.trim() : ''
   const sortOrder = Number.isFinite(Number(body?.sortOrder)) ? Math.trunc(Number(body.sortOrder)) : 0
   const pointThreshold = Number.isFinite(Number(body?.pointThreshold)) ? Math.trunc(Number(body.pointThreshold)) : NaN
+  const maxRewardChoices = body?.maxRewardChoices === undefined
+    ? DEFAULT_TIER_REWARD_CHOICES
+    : Math.trunc(Number(body.maxRewardChoices))
   const rewardCtoonIds = [...new Set(
     Array.isArray(body?.rewardCtoonIds) ? body.rewardCtoonIds.filter(x => typeof x === 'string') : []
-  )].slice(0, MAX_TIER_REWARD_CTOONS)
+  )].slice(0, maxRewardChoices)
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   if (!Number.isInteger(pointThreshold) || pointThreshold < 0 || pointThreshold > MAX_THRESHOLD) {
     throw createError({ statusCode: 400, statusMessage: 'Point threshold must be a non-negative whole number' })
+  }
+  if (!isValidMaxRewardChoices(maxRewardChoices)) {
+    throw createError({ statusCode: 400, statusMessage: `Reward choices must be between ${MIN_TIER_REWARD_CHOICES} and ${MAX_TIER_REWARD_CTOONS}` })
   }
   if (rewardCtoonIds.length) {
     const validCount = await db.ctoon.count({ where: { id: { in: rewardCtoonIds } } })
@@ -39,6 +48,7 @@ export default defineEventHandler(async (event) => {
         name,
         sortOrder,
         pointThreshold,
+        maxRewardChoices,
         rewardCtoons: { create: rewardCtoonIds.map((ctoonId, i) => ({ ctoonId, sortOrder: i })) },
       },
     })

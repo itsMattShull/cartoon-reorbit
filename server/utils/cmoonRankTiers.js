@@ -1,7 +1,8 @@
 // server/utils/cmoonRankTiers.js
 // Provisions/resyncs the per-cMoon CMoonRank + auto-managed Achievement rows a universal
 // CMoonRankTier drives, so an admin configures one shared rank ladder (name, point threshold,
-// up to 4 universal reward-cToon choices) instead of building it out once per cMoon by hand.
+// up to 6 universal reward-cToon choices, defaulting to 5) instead of building it out once
+// per cMoon by hand.
 // See the CMoonRankTier model comment in prisma/schema.prisma for the overall design.
 //
 // This module is the ONLY thing that ever writes a tier-managed Achievement/AchievementClaimOption
@@ -15,7 +16,16 @@
 // completely unmodified.
 import { prisma } from '../prisma.js'
 
-export const MAX_TIER_REWARD_CTOONS = 4
+// A tier's reward-choice count is admin-configurable per tier (CMoonRankTier.maxRewardChoices),
+// not a single fixed number — these two bound the allowed range, and DEFAULT is what a newly
+// created tier starts at (matches the Prisma column default).
+export const MIN_TIER_REWARD_CHOICES = 1
+export const MAX_TIER_REWARD_CTOONS = 6
+export const DEFAULT_TIER_REWARD_CHOICES = 5
+
+export function isValidMaxRewardChoices(value) {
+  return Number.isInteger(value) && value >= MIN_TIER_REWARD_CHOICES && value <= MAX_TIER_REWARD_CTOONS
+}
 
 function tierAchievementSlug(tier, cMoonId) {
   return `cmoon-rank-tier-${tier.sortOrder}-${cMoonId}`

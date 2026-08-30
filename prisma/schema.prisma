@@ -3277,6 +3277,11 @@ model CMoonRankTier {
   name           String   @unique
   sortOrder      Int      @unique
   pointThreshold Int // cumulative User.cMoonPoints required to reach this rank
+  // How many reward-cToon choices this tier offers (the player picks exactly one) — admin-
+  // configurable per tier rather than a single fixed cap, clamped to [1, 6] at the API layer
+  // (see MIN_TIER_REWARD_CHOICES/MAX_TIER_REWARD_CTOONS in server/utils/cmoonRankTiers.js).
+  // Defaults to 5 for newly created tiers.
+  maxRewardChoices Int    @default(5)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -3285,11 +3290,13 @@ model CMoonRankTier {
   rewardCtoons CMoonRankTierRewardCtoon[]
 }
 
-// Up to 4 universal reward-cToon choices for one rank tier (the cap of 4 is enforced in the admin
-// API, mirroring AchievementClaimOption's MAX_CLAIM_OPTIONS — not a DB constraint). These are the
-// same 4 choices for every cMoon's copy of this rank: server/utils/cmoonRankTiers.js mirrors them
-// 1:1 onto each per-cMoon achievement's own AchievementClaimOption rows, which is what actually
-// grants the player's picked cToon (see claimAchievementReward in server/utils/achievements.js).
+// Universal reward-cToon choices for one rank tier — up to CMoonRankTier.maxRewardChoices (an
+// admin-configurable 1-6, enforced in the admin API, not a DB constraint; see
+// MIN_TIER_REWARD_CHOICES/MAX_TIER_REWARD_CTOONS in server/utils/cmoonRankTiers.js). These are
+// the same choices for every cMoon's copy of this rank: server/utils/cmoonRankTiers.js mirrors
+// them 1:1 onto each per-cMoon achievement's own AchievementClaimOption rows, which is what
+// actually grants the player's picked cToon (see claimAchievementReward in
+// server/utils/achievements.js).
 model CMoonRankTierRewardCtoon {
   id        String @id @default(uuid())
   tierId    String
