@@ -13,7 +13,7 @@
 import { defineEventHandler, createError, setHeader } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { EXCLUDED_SYSTEM_USER_ID } from '@/server/utils/economyValuation'
-import { getPollResults } from '@/server/utils/cmoon'
+import { getPollResults, displayRankName } from '@/server/utils/cmoon'
 
 const FEATURED_CTOON_LIMIT = 12
 const LEADERBOARD_LIMIT = 15
@@ -110,6 +110,11 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // A captain always displays as "Captain" regardless of their actually-earned rank tier — see
+  // displayRankName in server/utils/cmoon.js. Reuses the captains list already fetched above
+  // rather than an extra query.
+  const captainUsernames = new Set(cmoon.captains.map(cap => cap.user?.username).filter(Boolean))
+
   return {
     id: cmoon.id,
     name: cmoon.name,
@@ -120,10 +125,14 @@ export default defineEventHandler(async (event) => {
     memberCount: cmoon.memberCount,
     teamScore: cmoon.teamScore,
     rank: rankRows + 1,
-    captains: cmoon.captains.map(cap => cap.user?.username).filter(Boolean),
+    captains: [...captainUsernames],
     prizeCtoons: cmoon.prizeCtoons.map(pc => ({ name: pc.ctoon?.name || '', assetPath: pc.ctoon?.assetPath || null, quantity: pc.quantity })),
     topPointContributors: topPointContributors.map(u => ({ username: u.username, avatar: u.avatar, points: u.cMoonPoints })),
-    topRankMembers: topRankMembers.map(u => ({ username: u.username, avatar: u.avatar, rankName: u.currentCMoonRank?.name || '' })),
+    topRankMembers: topRankMembers.map(u => ({
+      username: u.username,
+      avatar: u.avatar,
+      rankName: displayRankName(u.currentCMoonRank?.name, captainUsernames.has(u.username)) || '',
+    })),
     poll: pollPayload,
   }
 })

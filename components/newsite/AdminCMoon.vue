@@ -187,7 +187,8 @@
         </div>
         <p class="text-[11px] text-gray-600 mb-2">
           One shared ladder for every cMoon. Reaching a rank's point threshold (measured against a
-          member's own cMoon points) lets them pick one of up to 4 reward cToons.
+          member's own cMoon points) lets them pick one of that rank's reward cToons (1-6 choices,
+          default 5).
         </p>
         <div v-if="rankTiersLoading" class="text-[11px] text-gray-500">Loading…</div>
         <div v-else-if="rankTiers.length" class="space-y-1">
@@ -195,7 +196,7 @@
             <span class="text-gray-500 w-6 flex-shrink-0">#{{ t.sortOrder }}</span>
             <span class="flex-1 min-w-0 break-words">{{ t.name }}</span>
             <span class="text-gray-500 flex-shrink-0">{{ t.pointThreshold.toLocaleString() }} pts</span>
-            <span class="text-gray-500 flex-shrink-0">{{ t.rewardCtoons.length }}/4 rewards</span>
+            <span class="text-gray-500 flex-shrink-0">{{ t.rewardCtoons.length }}/{{ t.maxRewardChoices }} rewards</span>
             <button type="button" class="cm-tap text-indigo-600" @click="startEditTier(t)">Edit</button>
             <button type="button" class="cm-tap text-red-600" @click="removeTier(t)">Delete</button>
           </div>
@@ -813,8 +814,16 @@
             </div>
           </div>
 
+          <div>
+            <label class="block text-xs font-medium mb-1">Reward choices (1-6)</label>
+            <input
+              v-model.number="tierForm.maxRewardChoices" type="number" min="1" max="6" inputmode="numeric"
+              class="cm-field w-24 border rounded px-2 py-1" style="font-size:16px"
+            />
+          </div>
+
           <div class="pt-2 border-t">
-            <label class="block text-xs font-medium mb-1">Reward cToons (up to 4 — member picks 1)</label>
+            <label class="block text-xs font-medium mb-1">Reward cToons ({{ tierForm.rewardCtoons.length }}/{{ tierForm.maxRewardChoices }} — member picks 1)</label>
             <div v-if="tierForm.rewardCtoons.length" class="space-y-1 mb-2">
               <div v-for="(r, i) in tierForm.rewardCtoons" :key="r.ctoonId" class="flex items-center gap-2 text-[11px]">
                 <span class="flex-1 min-w-0 break-words">{{ r.name }}</span>
@@ -825,8 +834,8 @@
               v-model="tierRewardSearch"
               class="cm-field w-full border rounded px-2 py-1"
               style="font-size:16px"
-              :placeholder="tierForm.rewardCtoons.length >= 4 ? '4 rewards — remove one to add another' : 'Type 3+ characters of a cToon'"
-              :disabled="tierForm.rewardCtoons.length >= 4"
+              :placeholder="tierForm.rewardCtoons.length >= tierForm.maxRewardChoices ? `${tierForm.maxRewardChoices} rewards — remove one to add another` : 'Type 3+ characters of a cToon'"
+              :disabled="tierForm.rewardCtoons.length >= tierForm.maxRewardChoices"
               autocapitalize="none" autocorrect="off" spellcheck="false"
               role="combobox" :aria-expanded="tierRewardSuggestions.length > 0"
             />
@@ -1583,7 +1592,10 @@ async function loadRankTiers() {
   }
 }
 
-const emptyTierForm = () => ({ id: '', name: '', sortOrder: 0, pointThreshold: 0, rewardCtoons: [] })
+// Reward-choice count defaults to 5, admin-adjustable 1-6 per rank tier (see
+// MIN_TIER_REWARD_CHOICES/MAX_TIER_REWARD_CTOONS/DEFAULT_TIER_REWARD_CHOICES in
+// server/utils/cmoonRankTiers.js — kept in sync with those literal bounds here).
+const emptyTierForm = () => ({ id: '', name: '', sortOrder: 0, pointThreshold: 0, maxRewardChoices: 5, rewardCtoons: [] })
 const tierForm = reactive(emptyTierForm())
 const tierModalOpen = ref(false)
 const tierFormError = ref('')
@@ -1591,9 +1603,16 @@ const tierSaving = ref(false)
 const tierRewardSearch = ref('')
 
 const tierRewardSuggestions = computed(() => {
-  if (tierForm.rewardCtoons.length >= 4) return []
+  if (tierForm.rewardCtoons.length >= tierForm.maxRewardChoices) return []
   const already = new Set(tierForm.rewardCtoons.map(r => r.ctoonId))
   return filteredCtoons(tierRewardSearch.value).filter(c => !already.has(c.id))
+})
+
+// Lowering the cap below the number of already-picked rewards trims the extras — keeps the
+// form's own state consistent with the new limit before it's ever saved.
+watch(() => tierForm.maxRewardChoices, (n) => {
+  const max = Number.isInteger(n) ? n : 0
+  if (tierForm.rewardCtoons.length > max) tierForm.rewardCtoons.length = Math.max(0, max)
 })
 
 function resetTierForm() {
@@ -1617,13 +1636,14 @@ function startEditTier(t) {
   resetTierForm()
   Object.assign(tierForm, {
     id: t.id, name: t.name, sortOrder: t.sortOrder, pointThreshold: t.pointThreshold,
+    maxRewardChoices: t.maxRewardChoices,
     rewardCtoons: t.rewardCtoons.map(r => ({ ctoonId: r.ctoonId, name: r.name })),
   })
   tierModalOpen.value = true
 }
 
 function addTierRewardCtoon(c) {
-  if (tierForm.rewardCtoons.length >= 4 || tierForm.rewardCtoons.some(r => r.ctoonId === c.id)) return
+  if (tierForm.rewardCtoons.length >= tierForm.maxRewardChoices || tierForm.rewardCtoons.some(r => r.ctoonId === c.id)) return
   tierForm.rewardCtoons.push({ ctoonId: c.id, name: c.name })
   tierRewardSearch.value = ''
 }
@@ -1639,6 +1659,11 @@ async function saveTier() {
     tierFormError.value = 'Point threshold must be a non-negative whole number'
     return
   }
+  const maxRewardChoices = Math.trunc(Number(tierForm.maxRewardChoices))
+  if (!Number.isInteger(maxRewardChoices) || maxRewardChoices < 1 || maxRewardChoices > 6) {
+    tierFormError.value = 'Reward choices must be between 1 and 6'
+    return
+  }
   tierFormError.value = ''
   tierSaving.value = true
   try {
@@ -1646,6 +1671,7 @@ async function saveTier() {
       name: tierForm.name.trim(),
       sortOrder: tierForm.sortOrder,
       pointThreshold: threshold,
+      maxRewardChoices,
       rewardCtoonIds: tierForm.rewardCtoons.map(r => r.ctoonId),
     }
     if (!tierForm.id) {

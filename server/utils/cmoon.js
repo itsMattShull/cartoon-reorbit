@@ -431,6 +431,33 @@ export function isValidCMoonEffectType(value) {
   return value === null || CMOON_EFFECT_TYPES.includes(value)
 }
 
+// A cMoon captain always DISPLAYS as "Captain", regardless of whatever CMoonRank tier they've
+// actually earned — a leadership title overriding the shown label only. Nothing about their
+// underlying progression changes: cMoonPoints keeps accruing, currentCMoonRankId keeps getting
+// granted/upgraded normally by the achievement engine, and the nightly Discord role sync
+// (server/cron/sync-guild-members.js) still grants the earned rank's own role — this is a
+// read-side label swap in the handful of places a member's rank name is surfaced to other
+// players (cZone page, cMoon leaderboard, standings), not a change to the rank system itself.
+export const CAPTAIN_DISPLAY_RANK_NAME = 'Captain'
+
+export function displayRankName(rankName, isCaptain) {
+  return isCaptain ? CAPTAIN_DISPLAY_RANK_NAME : (rankName || null)
+}
+
+// Batch-friendly: one query per cMoon rather than one per member row. Callers already iterating
+// members of a single cMoon should call this once and check Set membership per row.
+export async function getCMoonCaptainUserIdSet(cMoonId) {
+  if (!cMoonId) return new Set()
+  const rows = await prisma.cMoonCaptain.findMany({ where: { cMoonId }, select: { userId: true } })
+  return new Set(rows.map(r => r.userId))
+}
+
+export async function isCMoonCaptain(cMoonId, userId) {
+  if (!cMoonId || !userId) return false
+  const row = await prisma.cMoonCaptain.findUnique({ where: { cMoonId_userId: { cMoonId, userId } } })
+  return !!row
+}
+
 // GlobalGameConfig is read on the selection page/API on every load; cache briefly
 // in-process to avoid hammering the singleton row (mirrors the pattern used by
 // other hot config reads in this codebase, e.g. server/middleware/daily-points.js).

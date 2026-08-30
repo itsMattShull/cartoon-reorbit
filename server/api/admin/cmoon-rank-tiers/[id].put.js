@@ -4,7 +4,9 @@ import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
-import { syncTierAcrossCMoons, MAX_TIER_REWARD_CTOONS } from '@/server/utils/cmoonRankTiers'
+import {
+  syncTierAcrossCMoons, MIN_TIER_REWARD_CHOICES, MAX_TIER_REWARD_CTOONS, isValidMaxRewardChoices,
+} from '@/server/utils/cmoonRankTiers'
 
 const MAX_THRESHOLD = 5_000_000
 
@@ -20,13 +22,17 @@ export default defineEventHandler(async (event) => {
   const name = typeof body?.name === 'string' ? body.name.trim() : tier.name
   const sortOrder = body?.sortOrder === undefined ? tier.sortOrder : Math.trunc(Number(body.sortOrder))
   const pointThreshold = body?.pointThreshold === undefined ? tier.pointThreshold : Math.trunc(Number(body.pointThreshold))
+  const maxRewardChoices = body?.maxRewardChoices === undefined ? tier.maxRewardChoices : Math.trunc(Number(body.maxRewardChoices))
   const rewardCtoonIds = body?.rewardCtoonIds === undefined
     ? null
-    : [...new Set(Array.isArray(body.rewardCtoonIds) ? body.rewardCtoonIds.filter(x => typeof x === 'string') : [])].slice(0, MAX_TIER_REWARD_CTOONS)
+    : [...new Set(Array.isArray(body.rewardCtoonIds) ? body.rewardCtoonIds.filter(x => typeof x === 'string') : [])].slice(0, maxRewardChoices)
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   if (!Number.isInteger(pointThreshold) || pointThreshold < 0 || pointThreshold > MAX_THRESHOLD) {
     throw createError({ statusCode: 400, statusMessage: 'Point threshold must be a non-negative whole number' })
+  }
+  if (!isValidMaxRewardChoices(maxRewardChoices)) {
+    throw createError({ statusCode: 400, statusMessage: `Reward choices must be between ${MIN_TIER_REWARD_CHOICES} and ${MAX_TIER_REWARD_CTOONS}` })
   }
   if (rewardCtoonIds && rewardCtoonIds.length) {
     const validCount = await db.ctoon.count({ where: { id: { in: rewardCtoonIds } } })
@@ -37,7 +43,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     await db.$transaction(async (tx) => {
-      await tx.cMoonRankTier.update({ where: { id }, data: { name, sortOrder, pointThreshold } })
+      await tx.cMoonRankTier.update({ where: { id }, data: { name, sortOrder, pointThreshold, maxRewardChoices } })
       if (rewardCtoonIds !== null) {
         await tx.cMoonRankTierRewardCtoon.deleteMany({ where: { tierId: id } })
         if (rewardCtoonIds.length) {
@@ -62,7 +68,11 @@ export default defineEventHandler(async (event) => {
     // name/threshold until this is retried after the underlying collision is fixed.
     throw createError({ statusCode: 409, statusMessage: err?.message || 'Rank saved, but failed to resync it across cMoons' })
   }
-  await logAdminChange(db, { userId: me.id, area: 'CMoonRankTier', key: `update:${id}`, prevValue: { name: tier.name, sortOrder: tier.sortOrder, pointThreshold: tier.pointThreshold }, newValue: { name, sortOrder, pointThreshold } })
+  await logAdminChange(db, {
+    userId: me.id, area: 'CMoonRankTier', key: `update:${id}`,
+    prevValue: { name: tier.name, sortOrder: tier.sortOrder, pointThreshold: tier.pointThreshold, maxRewardChoices: tier.maxRewardChoices },
+    newValue: { name, sortOrder, pointThreshold, maxRewardChoices },
+  })
 
   return { ok: true }
 })
