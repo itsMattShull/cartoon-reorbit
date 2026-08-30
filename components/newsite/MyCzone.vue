@@ -225,12 +225,17 @@
           <span class="cz-build-hint-desktop">Drag cToons from sidebar · Right-click canvas to remove</span>
           <span class="cz-build-hint-mobile">Tap sidebar to add · Hold 2s to remove</span>
         </template>
-        <img
+        <NuxtLink
           v-else-if="viewedOwner?.cMoon?.pageBannerImagePath"
-          :src="viewedOwner.cMoon.pageBannerImagePath"
-          :alt="`${viewedOwner.cMoon.name} cMoon`"
-          class="cz-cmoon-banner"
-        />
+          :to="`/newsite/cmoon/${viewedOwner.cMoon.id}`"
+          class="cz-cmoon-banner-link"
+        >
+          <img
+            :src="viewedOwner.cMoon.pageBannerImagePath"
+            :alt="`${viewedOwner.cMoon.name} cMoon`"
+            class="cz-cmoon-banner"
+          />
+        </NuxtLink>
       </div>
       <div v-show="!cz.buildMode" class="cz-nav-buttons">
         <img src="/images/newsite/ten_left.gif"  class="cz-nav-btn" title="Previous 10" draggable="false" @click="navigate('previous10')" />
@@ -420,8 +425,12 @@ const CANVAS_H         = 600   // design-space canvas height
 // .cz-frame's border-width (see its CSS below) — always reserved from the available width in
 // recalcScale(), whether or not a border is actually equipped/colored, so the canvas's rendered
 // size never jumps when a border is equipped/unequipped and so the border (real CSS `border`,
-// not outline) never has to compete with the canvas for space in the fixed-width chrome.
-const FRAME_BORDER_PX  = 8
+// not outline) never has to compete with the canvas for space in the fixed-width chrome. Bumped
+// from an initial 8px (then 16px), both of which read as too thin/subtle to notice at a glance
+// against a busy cZone background — this is a deliberately bold, unmissable frame now, with
+// headroom for the glow cosmetic (see .cz-frame--glowing below) to read as clearly saturated
+// rather than a faint blurred hint.
+const FRAME_BORDER_PX  = 20
 // Desktop only (see recalcScale below): this component renders inside newsite-template.vue's
 // fixed retro chrome there — .main-content is a hardcoded 800×682 box (--main-content-width /
 // --sidebar-height) with `overflow: hidden` and no spare pixels budgeted around it. A first,
@@ -1505,21 +1514,26 @@ defineExpose({ save, clearZone })
    fit within FRAME_BORDER_PX of the frame's own edge, same as the solid border, since anything
    extending further would spill onto pixels the FIXED-WIDTH page chrome (.main-content, see
    recalcScale()'s own comment) never budgeted room for and would get clipped there instead. Kept
-   to spread+blur ≤ FRAME_BORDER_PX (8px) at every point in the pulse for exactly that reason —
-   the faint blurred tail that's technically clipped right at that edge is already faded to near
-   nothing, so it isn't visible even when cut off. transparent border-color (inherited from
-   .cz-frame) stays in effect here — the two cosmetics are mutually exclusive, never combined. */
+   to spread+blur comfortably under FRAME_BORDER_PX (20px) at every point in the pulse for exactly
+   that reason — the faint blurred tail that's technically clipped right at that edge is already
+   faded to near nothing, so it isn't visible even when cut off. A first, thinner version of this
+   (spread+blur maxing out around 8px) read as barely-there — practically invisible at a glance
+   against a busy cZone canvas — so the spread component (the solid, unblurred part of the
+   shadow) is now large enough on its own to read as a clearly saturated ring, with the blur only
+   adding a soft trailing edge beyond it, rather than being the only thing carrying the effect.
+   transparent border-color (inherited from .cz-frame) stays in effect here — the two cosmetics
+   are mutually exclusive, never combined. */
 .cz-frame--glowing {
   animation: cz-frame-glow-pulse 2.4s ease-in-out infinite;
 }
 @keyframes cz-frame-glow-pulse {
-  0%, 100% { box-shadow: 0 0 0 1px var(--cz-border-color, #fff), 0 0 4px 1px var(--cz-border-color, #fff); }
-  50%      { box-shadow: 0 0 0 2px var(--cz-border-color, #fff), 0 0 6px 2px var(--cz-border-color, #fff); }
+  0%, 100% { box-shadow: 0 0 0 4px var(--cz-border-color, #fff), 0 0 8px 3px var(--cz-border-color, #fff); }
+  50%      { box-shadow: 0 0 0 8px var(--cz-border-color, #fff), 0 0 14px 5px var(--cz-border-color, #fff); }
 }
 @media (prefers-reduced-motion: reduce) {
   .cz-frame--glowing {
     animation: none;
-    box-shadow: 0 0 0 1px var(--cz-border-color, #fff), 0 0 4px 1px var(--cz-border-color, #fff);
+    box-shadow: 0 0 0 6px var(--cz-border-color, #fff), 0 0 10px 4px var(--cz-border-color, #fff);
   }
 }
 
@@ -1841,11 +1855,44 @@ defineExpose({ save, clearZone })
    to the bottombar's own available height (BOTTOMBAR_H minus the bar's vertical padding) with
    width free to shrink via object-fit, since the banner's native 12:1 aspect ratio is far wider
    than this slot on any but the widest viewports. */
+.cz-cmoon-banner-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  max-width: 100%;
+}
 .cz-cmoon-banner {
   max-width: 100%;
   max-height: calc(v-bind(BOTTOMBAR_H + 'px') - 6px);
   object-fit: contain;
   border-radius: 3px;
+}
+/* On mobile the bottombar isn't fighting a fixed-height page chrome for space (see
+   recalcScale()'s MOBILE_BREAKPOINT branch — .main-content goes fluid/height:auto there), so
+   there's no need to squeeze the banner down to the desktop bar's tight 29px cap. Raising the
+   height cap alone isn't enough, though: the banner's 12:1 aspect ratio means WIDTH, not height,
+   is what actually constrains its rendered size, and on a narrow phone the width left over after
+   the "My cZone" button and 5 nav icons share the row is often smaller than the banner got on
+   desktop. Giving the banner its own full-width row (wrap + order + flex-basis:100%) instead of
+   splitting the row three ways is what actually makes it render "full size" on mobile — the
+   button and nav icons move to their own row below it. */
+@media (max-width: 768px) {
+  .cz-bottombar {
+    flex-wrap: wrap;
+    height: auto;
+    min-height: v-bind(BOTTOMBAR_H + 'px');
+    padding: 6px 8px;
+    row-gap: 4px;
+  }
+  .cz-cmoon-banner-link {
+    order: -1;
+    flex: 1 1 100%;
+  }
+  .cz-cmoon-banner {
+    width: 100%;
+    max-height: 72px;
+  }
 }
 
 .cz-nav-buttons {
