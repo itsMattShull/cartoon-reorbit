@@ -249,9 +249,10 @@ onMounted(loadSetting)
 
 async function openAvatarModal() {
   avatarError.value = ''
-  if (!avatars.value.length) {
-    avatars.value = await $fetch('/api/avatars', { credentials: 'include' })
-  }
+  // Always fetch fresh rather than only when empty — a newly-earned restricted avatar (e.g. a
+  // cMoon affinity reward) should show up the next time this modal opens within the same page
+  // visit, not just after a full page reload.
+  avatars.value = await $fetch('/api/avatars', { credentials: 'include' })
   avatarDraft.value = user.value?.avatar || ''
   showAvatarModal.value = true
 }

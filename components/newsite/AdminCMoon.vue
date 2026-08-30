@@ -5,6 +5,12 @@
         <h1 class="text-base font-semibold">cMoons</h1>
         <div class="flex items-center gap-2 flex-wrap">
           <button
+            class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            :disabled="backfillRunning"
+            title="Repairs a fixed bug where a large contribution could jump past an affinity level and forfeit that level's background/avatar reward"
+            @click="runAffinityBackfill"
+          >{{ backfillRunning ? 'Repairing…' : 'Repair missed affinity rewards' }}</button>
+          <button
             class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50"
             :disabled="!cmoons.length"
             @click="previewModalOpen = true"
@@ -15,6 +21,8 @@
           >+ Create cMoon</button>
         </div>
       </div>
+      <p v-if="backfillResult" class="text-[11px] text-gray-600 mb-3 -mt-2">{{ backfillResult }}</p>
+      <p v-if="backfillError" class="text-[11px] text-red-600 mb-3 -mt-2">{{ backfillError }}</p>
 
       <!-- Feature flag -->
       <div class="bg-white rounded border p-3 mb-4">
@@ -2057,6 +2065,29 @@ function openDisperse(c) {
 function closeDisperse() {
   disperseCMoon.value = null
   load() // member counts / captains etc are unaffected, but keep state fresh either way
+}
+
+// One-off repair button for a fixed bug: a big enough single contribution used to jump past an
+// affinity level and forfeit that level's background/avatar reward forever (see
+// server/api/admin/cmoon-affinity/backfill.post.js). Safe to click more than once — grants are
+// idempotent, so a repeat run just reports 0 fixed.
+const backfillRunning = ref(false)
+const backfillResult  = ref('')
+const backfillError   = ref('')
+
+async function runAffinityBackfill() {
+  if (!confirm('Re-grant any affinity level reward members already qualify for but never received?')) return
+  backfillRunning.value = true
+  backfillResult.value = ''
+  backfillError.value = ''
+  try {
+    const res = await $fetch('/api/admin/cmoon-affinity/backfill', { method: 'POST' })
+    backfillResult.value = `Checked ${res.usersChecked} member(s) — fixed ${res.usersFixed}, granting ${res.backgroundsGranted} background(s) and ${res.avatarsGranted} avatar(s).`
+  } catch (e) {
+    backfillError.value = e?.data?.statusMessage || 'Repair failed'
+  } finally {
+    backfillRunning.value = false
+  }
 }
 
 onMounted(() => {
