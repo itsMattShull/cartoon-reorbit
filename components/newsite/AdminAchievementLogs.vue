@@ -6,6 +6,19 @@
         <div class="text-[11px] text-gray-500">Showing {{ showingRange }}</div>
       </div>
 
+      <div class="flex flex-wrap items-center gap-2 mb-2 text-[11px]">
+        <label class="flex items-center gap-1">
+          <span class="text-gray-600">Achievement:</span>
+          <select v-model="achievementId" class="border rounded px-1 py-0.5" @change="onFilterChange">
+            <option value="">All achievements</option>
+            <option v-for="a in achievements" :key="a.id" :value="a.id">{{ a.title }}</option>
+          </select>
+        </label>
+        <button class="px-2 py-0.5 border rounded" @click="toggleOrder">
+          {{ order === 'asc' ? 'Oldest first' : 'Newest first' }}
+        </button>
+      </div>
+
       <div class="bg-white rounded shadow p-2">
         <div v-if="loading" class="text-gray-500">Loading…</div>
         <div v-else-if="logs.length === 0" class="text-gray-500">No logs found.</div>
@@ -73,10 +86,13 @@
 import { ref, computed, onMounted } from 'vue'
 
 const logs = ref([])
+const achievements = ref([])
 const total = ref(0)
 const loading = ref(false)
 const page = ref(1)
 const pageSize = 100
+const achievementId = ref('')
+const order = ref('desc')
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 const showingRange = computed(() => {
@@ -107,10 +123,15 @@ async function fetchLogs() {
   loading.value = true
   try {
     const res = await $fetch('/api/admin/achievement-logs', {
-      query: { page: String(page.value) }
+      query: {
+        page: String(page.value),
+        order: order.value,
+        ...(achievementId.value ? { achievementId: achievementId.value } : {})
+      }
     })
     logs.value = res.items || []
     total.value = res.total || 0
+    achievements.value = res.achievements || achievements.value
   } catch (e) {
     console.error('Failed to load achievement logs', e)
     logs.value = []
@@ -129,6 +150,17 @@ async function nextPage() {
 async function prevPage() {
   if (page.value <= 1) return
   page.value -= 1
+  await fetchLogs()
+}
+
+async function onFilterChange() {
+  page.value = 1
+  await fetchLogs()
+}
+
+async function toggleOrder() {
+  order.value = order.value === 'asc' ? 'desc' : 'asc'
+  page.value = 1
   await fetchLogs()
 }
 
