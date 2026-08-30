@@ -67,8 +67,10 @@
               class="cz-owner-avatar"
             />
             <div class="cz-owner-label">
-              <div><span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}</div>
-              <div v-if="viewedOwner.cMoonRankName" class="cz-owner-cmoon-rank">{{ viewedOwner.cMoonRankName }}</div>
+              <div>
+                <span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}
+                <span v-if="viewedOwner.cMoonRankName" class="cz-owner-cmoon-rank"> · {{ viewedOwner.cMoonRankName }}</span>
+              </div>
               <div v-if="lastOnlineText || viewedOwner.cMoon" class="cz-owner-lastseen">
                 <span v-if="lastOnlineText">{{ lastOnlineText }}</span>
                 <span v-if="lastOnlineText && viewedOwner.cMoon"> · </span>
@@ -910,13 +912,6 @@ const canvasStyle = computed(() => ({
 // ── Lifecycle ─────────────────────────────────────────────────
 const czoneActions = useCzoneActions()
 
-// Recolor the top nav bar + sidebar to match the viewed owner's cMoon, mirroring the reference
-// cWorld skin (the whole surrounding chrome, not just the cZone itself, took on the member's
-// affiliation color). Must be cleared on unmount — this is shared, app-wide layout state, so
-// leaving it set would leak this page's color onto every other page the user navigates to next.
-const { setPageThemeColor, clearPageThemeColor } = useNewsiteLayout()
-watch(() => viewedOwner.value?.cMoon?.color, (color) => { setPageThemeColor(color || null) }, { immediate: true })
-
 onMounted(() => {
   czoneActions.register(save, clearZone)
   recalcScale()
@@ -963,7 +958,6 @@ onUnmounted(() => {
   clearTimeout(_dimSaveTimer)
   // stop any active glitch effect
   stopGlitchEffect()
-  clearPageThemeColor()
 })
 
 // ── Data loading ──────────────────────────────────────────────
