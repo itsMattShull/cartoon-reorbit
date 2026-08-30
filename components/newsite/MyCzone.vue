@@ -1,19 +1,22 @@
 <template>
   <div class="myczone">
 
-    <!-- ── Frame: wraps topbar+canvas+bottombar as one unit so the cMoon-affinity border
+    <!-- ── Frame: wraps topbar+canvas+bottombar as one unit so the cMoon-affinity border/glow
          colors the whole cZone container (topbar, canvas, and bottombar together), matching
-         the reference cWorld skin, not just the canvas's own edge. A real `border` here (not
-         outline/box-shadow) is safe because recalcScale()'s width formula always reserves
-         FRAME_BORDER_PX on each side from the fixed 800px .main-content budget (see that
-         function below) — the border is never "extra" pixels this fixed-width chrome has to
-         find room for. Always rendered (transparent when no border is equipped) so the
-         reserved space — and thus the canvas's rendered size — never jumps when a border is
-         equipped/unequipped. ── -->
+         the reference cWorld skin, not just the canvas's own edge. A real `border` (for the
+         solid cosmetic) or `box-shadow` (for the glow) here is safe because recalcScale()'s
+         width formula always reserves FRAME_BORDER_PX on each side from the fixed 800px
+         .main-content budget (see that function below) — neither cosmetic is ever "extra"
+         pixels this fixed-width chrome has to find room for. Border and glow are mutually
+         exclusive (displayedBorder/displayedGlow are never both non-null — see their computeds
+         above), so at most one of these two modifier classes is ever applied. Always renders
+         cz-frame's own (transparent-by-default) border regardless of which, if either, is
+         equipped, so the reserved space — and thus the canvas's rendered size — never jumps
+         when a cosmetic is equipped/unequipped or switched. ── -->
     <div
       class="cz-frame"
-      :class="{ 'cz-frame--bordered': displayedBorder }"
-      :style="displayedBorder ? { '--cz-border-color': displayedBorder.color } : {}"
+      :class="{ 'cz-frame--bordered': displayedBorder, 'cz-frame--glowing': displayedGlow }"
+      :style="(displayedBorder || displayedGlow) ? { '--cz-border-color': (displayedBorder || displayedGlow).color } : {}"
     >
 
     <!-- ── Top bar ─────────────────────────────────────────── -->
@@ -109,6 +112,28 @@
                   :style="{ '--cz-border-color': b.color }"
                   @click="setBorder(b.cMoonId)"
                 >{{ b.name }}</button>
+              </div>
+              <button
+                v-if="isOwnZone && ownedGlows.length"
+                type="button"
+                class="cz-border-equip-btn"
+                @click="glowPickerOpen = !glowPickerOpen"
+              >{{ displayedGlow ? `Glow: ${displayedGlow.name}` : 'Show cMoon glow' }}</button>
+              <div v-if="glowPickerOpen" class="cz-border-picker">
+                <button
+                  type="button"
+                  class="cz-border-option"
+                  :class="{ active: !equippedGlowCMoonId }"
+                  @click="setGlow(null)"
+                >None</button>
+                <button
+                  v-for="g in ownedGlows" :key="g.cMoonId"
+                  type="button"
+                  class="cz-border-option"
+                  :class="{ active: equippedGlowCMoonId === g.cMoonId }"
+                  :style="{ '--cz-border-color': g.color }"
+                  @click="setGlow(g.cMoonId)"
+                >{{ g.name }}</button>
               </div>
             </div>
           </template>
@@ -439,6 +464,23 @@ async function setBorder(cMoonId) {
     if (viewedUsername.value === user.value?.username) await loadZone(viewedUsername.value)
   } catch {}
 }
+
+// cMoon affinity glow — same shape as the border above, against the separate /api/czone/glow
+// endpoint. Mutually exclusive with the border at equip time (enforced server-side by both
+// endpoints, each clearing the other's field), so displayedBorder and displayedGlow below are
+// never both non-null for the same viewed cZone.
+const ownedGlows = computed(() => user.value?.ownedGlows || [])
+const equippedGlowCMoonId = computed(() => user.value?.equippedGlowCMoonId || null)
+const glowPickerOpen = ref(false)
+
+async function setGlow(cMoonId) {
+  glowPickerOpen.value = false
+  try {
+    await $fetch('/api/czone/glow', { method: 'POST', body: { cMoonId } })
+    await fetchSelf({ force: true })
+    if (viewedUsername.value === user.value?.username) await loadZone(viewedUsername.value)
+  } catch {}
+}
 const { open: openCtoonModal, holidaySignal, holidayRedeem } = useCtoonModal()
 const { mobileSidebarCollapsed } = useNewsiteLayout()
 const route  = useRoute()
@@ -458,6 +500,18 @@ const displayedBorder = computed(() => {
     return ownedBorders.value.find(b => b.cMoonId === cMoonId) || null
   }
   return viewedOwner.value?.border || null
+})
+
+// Same idea as displayedBorder above, for the alternative glow cosmetic. Mutually exclusive
+// with it — never rely on the template to enforce that, since it's already guaranteed by the
+// data (equip endpoints keep the two equipped-cMoonId fields from ever both being set).
+const displayedGlow = computed(() => {
+  if (viewedUsername.value && viewedUsername.value === user.value?.username) {
+    const cMoonId = equippedGlowCMoonId.value
+    if (!cMoonId) return null
+    return ownedGlows.value.find(g => g.cMoonId === cMoonId) || null
+  }
+  return viewedOwner.value?.glow || null
 })
 
 // ── Scale logic (mirrors pages/czone/[username].vue) ──────────
@@ -973,7 +1027,7 @@ async function loadZone(username) {
     cz.value.zones       = data.cZone.zones
     const firstActive    = data.cZone.zones.findIndex(z => z.toons.length > 0)
     cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
-    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null, border: data.border ?? null }
+    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null, border: data.border ?? null, glow: data.glow ?? null }
     loadCzoneSearchItems()
     eagerLoadMissingDimensions()
 
@@ -1442,6 +1496,31 @@ defineExpose({ save, clearZone })
 }
 .cz-frame--bordered {
   border-color: var(--cz-border-color, transparent);
+}
+
+/* The alternative cosmetic to the solid border above — a pulsing colored glow around the same
+   frame, instead of a hard-edged color fill. Uses box-shadow (not outline): cz-frame's own
+   overflow: hidden doesn't clip its own box-shadow or outline either one (an element's overflow
+   only clips its children's content, never its own box decorations) — but the glow still has to
+   fit within FRAME_BORDER_PX of the frame's own edge, same as the solid border, since anything
+   extending further would spill onto pixels the FIXED-WIDTH page chrome (.main-content, see
+   recalcScale()'s own comment) never budgeted room for and would get clipped there instead. Kept
+   to spread+blur ≤ FRAME_BORDER_PX (8px) at every point in the pulse for exactly that reason —
+   the faint blurred tail that's technically clipped right at that edge is already faded to near
+   nothing, so it isn't visible even when cut off. transparent border-color (inherited from
+   .cz-frame) stays in effect here — the two cosmetics are mutually exclusive, never combined. */
+.cz-frame--glowing {
+  animation: cz-frame-glow-pulse 2.4s ease-in-out infinite;
+}
+@keyframes cz-frame-glow-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px var(--cz-border-color, #fff), 0 0 4px 1px var(--cz-border-color, #fff); }
+  50%      { box-shadow: 0 0 0 2px var(--cz-border-color, #fff), 0 0 6px 2px var(--cz-border-color, #fff); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cz-frame--glowing {
+    animation: none;
+    box-shadow: 0 0 0 1px var(--cz-border-color, #fff), 0 0 4px 1px var(--cz-border-color, #fff);
+  }
 }
 
 /* ── Top bar ── */

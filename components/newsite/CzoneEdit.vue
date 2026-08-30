@@ -70,6 +70,27 @@
         <p v-if="borderError" class="czew-border-error">{{ borderError }}</p>
       </div>
 
+      <!-- cMoon-affinity cZone glow: same shape as the border block above, but its own
+           independent equip choice — checking a glow box here always clears any equipped
+           border (and vice versa), enforced server-side by /api/czone/glow and border.post.js,
+           so at most one of the two is ever equipped. A member can own both at once; this list
+           and the border list above just each reflect whichever one (if either) is currently
+           equipped after the shared `user` state refreshes. -->
+      <div v-if="ownedGlows.length" class="czew-border-block">
+        <div class="czew-border-label">cZone Glow</div>
+        <label v-for="g in ownedGlows" :key="g.cMoonId" class="czew-border-row">
+          <input
+            type="checkbox"
+            :checked="equippedGlowCMoonId === g.cMoonId"
+            :disabled="glowSaving"
+            @change="toggleGlow(g.cMoonId, $event.target.checked)"
+          />
+          <span class="czew-border-swatch" :style="{ background: g.color }"></span>
+          <span class="czew-border-name">{{ g.name }}</span>
+        </label>
+        <p v-if="glowError" class="czew-border-error">{{ glowError }}</p>
+      </div>
+
       <div class="czew-bg-grid">
         <div v-if="cz.loadingBackgrounds" class="czew-empty" style="grid-column:1/-1">Loading…</div>
         <template v-else>
@@ -124,6 +145,27 @@ async function toggleBorder(cMoonId, checked) {
     borderError.value = e?.data?.statusMessage || 'Could not update your border right now.'
   } finally {
     borderSaving.value = false
+  }
+}
+
+// cZone Glow toggle — mirrors the border toggle above exactly, against the separate /glow
+// endpoint. Equipping a glow clears any equipped border server-side (and vice versa), so after
+// fetchSelf() refreshes `user`, whichever list was just cleared will show its own box unchecked.
+const ownedGlows = computed(() => user.value?.ownedGlows || [])
+const equippedGlowCMoonId = computed(() => user.value?.equippedGlowCMoonId || null)
+const glowSaving = ref(false)
+const glowError = ref('')
+
+async function toggleGlow(cMoonId, checked) {
+  glowSaving.value = true
+  glowError.value = ''
+  try {
+    await $fetch('/api/czone/glow', { method: 'POST', body: { cMoonId: checked ? cMoonId : null } })
+    await fetchSelf({ force: true })
+  } catch (e) {
+    glowError.value = e?.data?.statusMessage || 'Could not update your glow right now.'
+  } finally {
+    glowSaving.value = false
   }
 }
 

@@ -209,7 +209,7 @@ async function getOrCreateUserPoints(tx, userId) {
 // caller must only enqueue the returned `ctoonJobs` after its transaction has committed (see
 // enqueueCtoonJobs).
 export async function grantRewardInTx(tx, userId, reward, method) {
-  const summary = { points: 0, backgrounds: 0, avatars: 0, border: false, ctoonJobs: [] }
+  const summary = { points: 0, backgrounds: 0, avatars: 0, border: false, glow: false, ctoonJobs: [] }
   if (!reward) return summary
 
   // Points
@@ -267,6 +267,20 @@ export async function grantRewardInTx(tx, userId, reward, method) {
       update: {}
     })
     summary.border = true
+  }
+
+  // cMoon glow — same idempotent-ownership shape as the border above, but a separate cosmetic:
+  // border colors the whole cZone container, glow is a pulsing colored glow around it. A member
+  // can own both from different levels/cMoons, but only one can be equipped/displayed at a time
+  // (see server/api/czone/border.post.js and glow.post.js, which each clear the other's equip
+  // field) — ownership here is independent of that display choice.
+  if (reward.glowCMoonId) {
+    await tx.userCMoonGlow.upsert({
+      where: { userId_cMoonId: { userId, cMoonId: reward.glowCMoonId } },
+      create: { userId, cMoonId: reward.glowCMoonId },
+      update: {}
+    })
+    summary.glow = true
   }
 
   // cToons — resolve how many of each can actually be granted (supply-capped), but leave
