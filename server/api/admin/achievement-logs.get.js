@@ -18,19 +18,27 @@ export default defineEventHandler(async (event) => {
   const take = 100
   const page = Math.max(parseInt(q.page || '1', 10), 1)
   const skip = (page - 1) * take
+  const order = q.order === 'asc' ? 'asc' : 'desc'
+  const achievementId = typeof q.achievementId === 'string' && q.achievementId ? q.achievementId : undefined
+  const where = achievementId ? { achievementId } : undefined
 
-  const [total, logs] = await Promise.all([
-    prisma.achievementUser.count(),
+  const [total, logs, achievements] = await Promise.all([
+    prisma.achievementUser.count({ where }),
     prisma.achievementUser.findMany({
+      where,
       include: {
         user: { select: { id: true, username: true, discordTag: true } },
         achievement: { select: { id: true, title: true, slug: true } }
       },
-      orderBy: { achievedAt: 'desc' },
+      orderBy: { achievedAt: order },
       skip,
       take
+    }),
+    prisma.achievement.findMany({
+      select: { id: true, title: true, slug: true },
+      orderBy: { title: 'asc' }
     })
   ])
 
-  return { items: logs, total, page, limit: take }
+  return { items: logs, total, page, limit: take, achievements }
 })
