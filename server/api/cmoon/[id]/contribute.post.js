@@ -83,37 +83,47 @@ export default defineEventHandler(async (event) => {
         update: { affinitySpent: { increment: amount } }
       })
 
-      const newLevel = await tx.cMoonAffinityLevel.findFirst({
-        where: { cMoonId, threshold: { lte: affinity.affinitySpent } },
-        orderBy: { threshold: 'desc' }
+      // The full ladder (small — a handful of rows per cMoon), not just the single highest
+      // qualifying level: a big-enough contribution can cross several thresholds in one call,
+      // and each level's own reward (background/avatar/border) is only ever granted here, the
+      // moment its threshold is first reached. Granting only the final/highest level (as this
+      // used to do) silently forfeited every skipped level's reward forever — currentLevelId
+      // only ever moves forward, so a skipped level's threshold is never re-evaluated on a
+      // later contribution. This was the actual bug behind "I earned an avatar but it never
+      // showed up" reports: contributing a large lump sum jumped straight past the level that
+      // granted it.
+      const allLevels = await tx.cMoonAffinityLevel.findMany({
+        where: { cMoonId },
+        orderBy: { threshold: 'asc' },
       })
+      // Only ever move forward, even if the ladder shrank (an admin deleted a higher level the
+      // member had already reached) — never let a level-up silently move a member down.
+      const prevLevel = affinity.currentLevelId ? allLevels.find(l => l.id === affinity.currentLevelId) : null
+      const prevThreshold = prevLevel ? prevLevel.threshold : -1
+      const crossedLevels = allLevels.filter(l => l.threshold > prevThreshold && l.threshold <= affinity.affinitySpent)
 
       let leveledUpTo = null
-      if (newLevel && newLevel.id !== affinity.currentLevelId) {
-        // Only ever move forward, even if the ladder shrank (an admin deleted a higher level
-        // the member had already reached) — never let a level-up silently move a member down.
-        const prevLevel = affinity.currentLevelId
-          ? await tx.cMoonAffinityLevel.findUnique({ where: { id: affinity.currentLevelId }, select: { threshold: true } })
-          : null
-        if (!prevLevel || newLevel.threshold > prevLevel.threshold) {
-          await tx.cMoonAffinity.update({
-            where: { userId_cMoonId: { userId, cMoonId } },
-            data: { currentLevelId: newLevel.id }
-          })
+      if (crossedLevels.length) {
+        const highest = crossedLevels[crossedLevels.length - 1]
+        await tx.cMoonAffinity.update({
+          where: { userId_cMoonId: { userId, cMoonId } },
+          data: { currentLevelId: highest.id }
+        })
 
-          const reward = { backgrounds: [], avatars: [], borderCMoonId: newLevel.grantsBorder ? cMoonId : null }
-          if (newLevel.rewardBackgroundId) reward.backgrounds.push({ backgroundId: newLevel.rewardBackgroundId })
-          if (newLevel.rewardAvatarId) reward.avatars.push({ avatarId: newLevel.rewardAvatarId })
-          await grantRewardInTx(tx, userId, reward, `cmoonAffinity:level:${newLevel.id}`)
+        for (const lvl of crossedLevels) {
+          const reward = { backgrounds: [], avatars: [], borderCMoonId: lvl.grantsBorder ? cMoonId : null }
+          if (lvl.rewardBackgroundId) reward.backgrounds.push({ backgroundId: lvl.rewardBackgroundId })
+          if (lvl.rewardAvatarId) reward.avatars.push({ avatarId: lvl.rewardAvatarId })
+          await grantRewardInTx(tx, userId, reward, `cmoonAffinity:level:${lvl.id}`)
 
           // Auto-equip the member's first-ever border so it's visible without an extra step;
           // later borders from other cMoons stay unequipped until explicitly chosen.
-          if (newLevel.grantsBorder) {
+          if (lvl.grantsBorder) {
             await tx.user.updateMany({ where: { id: userId, equippedBorderCMoonId: null }, data: { equippedBorderCMoonId: cMoonId } })
           }
-
-          leveledUpTo = { id: newLevel.id, name: newLevel.name, grantsBorder: newLevel.grantsBorder }
         }
+
+        leveledUpTo = { id: highest.id, name: highest.name, grantsBorder: highest.grantsBorder }
       }
 
       return { affinitySpent: affinity.affinitySpent, leveledUpTo }
