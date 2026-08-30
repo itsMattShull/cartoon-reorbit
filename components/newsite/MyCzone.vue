@@ -17,7 +17,7 @@
     >
 
     <!-- ── Top bar ─────────────────────────────────────────── -->
-    <div class="cz-topbar">
+    <div class="cz-topbar" ref="topbarEl">
       <div class="cz-topbar-left">
         <OrangeButton v-if="isOwnZone" @click="toggleBuild" :disabled="buildLoading">
           {{ cz.buildMode ? 'Exit Build' : buildLoading ? 'Loading…' : 'Build' }}
@@ -397,14 +397,17 @@ const CANVAS_H         = 600   // design-space canvas height
 const FRAME_BORDER_PX  = 8
 // Desktop only (see recalcScale below): this component renders inside newsite-template.vue's
 // fixed retro chrome there — .main-content is a hardcoded 800×682 box (--main-content-width /
-// --sidebar-height) with `overflow: hidden` and no spare pixels budgeted around it. A generous
-// estimate of the topbar's real rendered height with the owner-info block's username/rank/
-// lastseen+cMoon lines — deliberately well above the CSS min-height's bare-minimum 34px, so a
-// normal 3-line topbar never eats into the bottombar's own reserved space and gets it clipped
-// by that fixed, non-scrolling chrome.
-const DESKTOP_CHROME_H       = 682
-const DESKTOP_TOPBAR_RESERVE = 70
-const MOBILE_BREAKPOINT      = 768 // matches newsite-template.vue's own isMobile media query
+// --sidebar-height) with `overflow: hidden` and no spare pixels budgeted around it. A first,
+// simpler version of this reserved a hardcoded guess at the topbar's rendered height instead of
+// measuring it — that guess was tuned to a 3-line owner-info block and undershot as soon as a
+// real cZone showed a 4th line (the border/glow equip link, shown whenever the owner owns
+// either cosmetic), which under-reserved the height budget and clipped the bottombar right off
+// the bottom of the chrome. TOPBAR_H below is now just the CSS's own min-height baseline for the
+// short-content case; recalcScale() measures the topbar's ACTUAL rendered height at runtime
+// (see topbarEl/topbarHeight) instead of guessing, so it can never be wrong about how many lines
+// the owner-info block ends up showing.
+const DESKTOP_CHROME_H  = 682
+const MOBILE_BREAKPOINT = 768 // matches newsite-template.vue's own isMobile media query
 const SIZE_CYCLE       = [1, 0.5, 2]  // sizeScale cycle: default → half → double
 const SEARCH_TOON_SIZE = 140   // cZone search toon size in px
 
@@ -457,6 +460,14 @@ const displayedBorder = computed(() => {
 
 // ── Scale logic (mirrors pages/czone/[username].vue) ──────────
 const scale = ref(1)
+// Real DOM ref on .cz-topbar (see template), measured by recalcScale() below instead of assumed
+// — the topbar's rendered height is content-dependent (owner-info shows 2-4 lines depending on
+// rank/border/glow ownership) and a hardcoded guess here previously undershot on real cZones,
+// under-reserving the height budget below and clipping the bottombar off the bottom of the fixed
+// chrome. offsetHeight falls back to TOPBAR_H before the DOM ref exists (first script-setup-time
+// call, pre-mount) — recalcScale() re-runs from onMounted and on every subsequent resize once the
+// ResizeObserver below is attached, so this self-corrects to the true height immediately after.
+const topbarEl = ref(null)
 function recalcScale() {
   if (typeof window === 'undefined') return
   const gutter = 32 // account for page padding / scrollbar
@@ -479,7 +490,8 @@ function recalcScale() {
   // overflow: hidden, regardless of how the width-based scale above came out. Skipped on
   // mobile, where .main-content switches to a fluid height: auto with no such fixed budget.
   if (w > MOBILE_BREAKPOINT) {
-    const availableCanvasH = DESKTOP_CHROME_H - DESKTOP_TOPBAR_RESERVE - BOTTOMBAR_H - reserve
+    const topbarH = topbarEl.value?.offsetHeight || TOPBAR_H
+    const availableCanvasH = DESKTOP_CHROME_H - topbarH - BOTTOMBAR_H - reserve
     const heightCeiling = Math.max(0.1, availableCanvasH / CANVAS_H)
     s = Math.min(s, heightCeiling)
   }
@@ -490,6 +502,12 @@ function recalcScale() {
 // Set the correct scale immediately on the client to avoid a post-hydration
 // layout flash where the canvas briefly renders at full 800px width.
 if (process.client) recalcScale()
+
+// Keeps recalcScale()'s height budget correct as the topbar's own rendered height changes for
+// ANY reason — owner-info gaining/losing its rank line, the border/glow equip link appearing
+// once ownership loads, the picker opening, a font finishing its load — without hardcoding or
+// enumerating those cases. (dis)connected alongside the resize listener in onMounted/onUnmounted.
+let topbarResizeObserver = null
 
 // Outer box reserves the scaled visual footprint in layout flow
 const outerScaleStyle = computed(() => ({
@@ -907,6 +925,11 @@ onMounted(() => {
   window.addEventListener('mouseup',   onGlobalUp)
   window.addEventListener('touchmove', onGlobalMove, { passive: false })
   window.addEventListener('touchend',  onGlobalUp)
+
+  if (topbarEl.value && typeof ResizeObserver !== 'undefined') {
+    topbarResizeObserver = new ResizeObserver(() => recalcScale())
+    topbarResizeObserver.observe(topbarEl.value)
+  }
 })
 
 // Load once the user is available (may not be ready at mount time)
@@ -930,6 +953,8 @@ onUnmounted(() => {
   window.removeEventListener('mouseup',   onGlobalUp)
   window.removeEventListener('touchmove', onGlobalMove)
   window.removeEventListener('touchend',  onGlobalUp)
+  topbarResizeObserver?.disconnect()
+  topbarResizeObserver = null
   // clear any leftover drag state
   cancelLongPress()
   cz.value.activeDrag = null
