@@ -5,6 +5,12 @@
 // you're in". Ownership is re-checked from the database — never trust a client-supplied cMoonId
 // blindly, same reasoning that flags server/api/auth/set-avatar.post.js's disk-existence-only
 // check as the pattern NOT to copy.
+//
+// Border and glow (see glow.post.js) are mutually exclusive cZone cosmetics — a member can own
+// both (from the same or different cMoons) but only one is ever displayed. Turning a border ON
+// here always clears any equipped glow in the same write, so the two fields can never both be
+// non-null at once; turning it off (cMoonId null) only clears this field, since the other
+// cosmetic wasn't touched.
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { assertSameOrigin } from '@/server/utils/requireAdmin'
@@ -23,7 +29,12 @@ export default defineEventHandler(async (event) => {
     if (!owned) throw createError({ statusCode: 403, statusMessage: 'You have not earned a border for that cMoon' })
   }
 
-  await db.user.update({ where: { id: userId }, data: { equippedBorderCMoonId: cMoonId } })
+  await db.user.update({
+    where: { id: userId },
+    data: cMoonId
+      ? { equippedBorderCMoonId: cMoonId, equippedGlowCMoonId: null }
+      : { equippedBorderCMoonId: null },
+  })
 
   return { success: true, equippedBorderCMoonId: cMoonId }
 })

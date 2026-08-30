@@ -20,6 +20,7 @@ export default defineEventHandler(async (event) => {
   const threshold = Number(body?.threshold)
   const sortOrder = Number.isFinite(Number(body?.sortOrder)) ? Math.trunc(Number(body.sortOrder)) : 0
   const grantsBorder = !!body?.grantsBorder
+  const grantsGlow = !!body?.grantsGlow
   const rewardBackgroundId = typeof body?.rewardBackgroundId === 'string' && body.rewardBackgroundId ? body.rewardBackgroundId : null
   const rewardAvatarId = typeof body?.rewardAvatarId === 'string' && body.rewardAvatarId ? body.rewardAvatarId : null
 
@@ -40,7 +41,7 @@ export default defineEventHandler(async (event) => {
   let created
   try {
     created = await db.cMoonAffinityLevel.create({
-      data: { cMoonId, name, threshold, sortOrder, grantsBorder, rewardBackgroundId, rewardAvatarId },
+      data: { cMoonId, name, threshold, sortOrder, grantsBorder, grantsGlow, rewardBackgroundId, rewardAvatarId },
     })
   } catch (err) {
     if (err?.code === 'P2002') {
@@ -49,7 +50,7 @@ export default defineEventHandler(async (event) => {
     throw err
   }
 
-  await logAdminChange(db, { userId: me.id, area: 'CMoonAffinityLevel', key: `create:${created.id}`, prevValue: null, newValue: { cMoonId, name, threshold, sortOrder, grantsBorder } })
+  await logAdminChange(db, { userId: me.id, area: 'CMoonAffinityLevel', key: `create:${created.id}`, prevValue: null, newValue: { cMoonId, name, threshold, sortOrder, grantsBorder, grantsGlow } })
 
   return { id: created.id }
 })

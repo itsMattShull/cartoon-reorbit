@@ -43,7 +43,10 @@ export default defineEventHandler(async (event) => {
       // A single extra FK join, not a live scan of the user's CMoonAffinity rows — border
       // eligibility is denormalized onto User.equippedBorderCMoonId at grant/equip time
       // specifically so this hot, public-facing route never has to compute it per view.
-      equippedBorder: { select: { id: true, name: true, color: true } }
+      equippedBorder: { select: { id: true, name: true, color: true } },
+      // Same idea as equippedBorder above, for the alternative glow cosmetic — mutually
+      // exclusive with it at equip time, so at most one of the two is ever non-null.
+      equippedGlow: { select: { id: true, name: true, color: true } }
     }
   })
 
@@ -263,9 +266,11 @@ export default defineEventHandler(async (event) => {
     lastActivity: user.lastActivity ?? null,
     cMoon: (cMoonEnabled && user.cMoon) || null,
     cMoonRankName: (cMoonEnabled && user.cMoon) ? displayRankName(user.currentCMoonRank?.name, isCaptain) : null,
-    // Independent of cMoonEnabled/membership above — an earned border is a permanent personal
-    // cosmetic, visible even if the member later leaves the cMoon that granted it.
+    // Independent of cMoonEnabled/membership above — an earned border/glow is a permanent
+    // personal cosmetic, visible even if the member later leaves the cMoon that granted it.
+    // Mutually exclusive at equip time, so at most one of these two is ever non-null.
     border: user.equippedBorder ? { cMoonId: user.equippedBorder.id, name: user.equippedBorder.name, color: user.equippedBorder.color } : null,
+    glow: user.equippedGlow ? { cMoonId: user.equippedGlow.id, name: user.equippedGlow.name, color: user.equippedGlow.color } : null,
     cZone: {
       id: chosenZone.id,
       zones: enrichedZones,

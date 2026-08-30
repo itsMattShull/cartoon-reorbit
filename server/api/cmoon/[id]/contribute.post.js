@@ -111,19 +111,40 @@ export default defineEventHandler(async (event) => {
         })
 
         for (const lvl of crossedLevels) {
-          const reward = { backgrounds: [], avatars: [], borderCMoonId: lvl.grantsBorder ? cMoonId : null }
+          const reward = {
+            backgrounds: [],
+            avatars: [],
+            borderCMoonId: lvl.grantsBorder ? cMoonId : null,
+            glowCMoonId: lvl.grantsGlow ? cMoonId : null,
+          }
           if (lvl.rewardBackgroundId) reward.backgrounds.push({ backgroundId: lvl.rewardBackgroundId })
           if (lvl.rewardAvatarId) reward.avatars.push({ avatarId: lvl.rewardAvatarId })
           await grantRewardInTx(tx, userId, reward, `cmoonAffinity:level:${lvl.id}`)
 
-          // Auto-equip the member's first-ever border so it's visible without an extra step;
-          // later borders from other cMoons stay unequipped until explicitly chosen.
+          // Auto-equip the member's first-ever border/glow so it's visible without an extra
+          // step; later borders/glows from other cMoons stay unequipped until explicitly chosen.
+          // Border and glow are mutually exclusive display choices (see /api/czone/border and
+          // /glow), so auto-equip only fires when NEITHER is set yet — never overwrite an
+          // already-active choice of the other cosmetic. If a single level grants both (an
+          // unusual admin configuration), the border update below runs first and its own field
+          // is no longer null by the time the glow update's WHERE clause is evaluated, so glow
+          // is deliberately skipped that one time — border wins the auto-equip, glow is still
+          // granted/owned and can be switched to manually.
           if (lvl.grantsBorder) {
-            await tx.user.updateMany({ where: { id: userId, equippedBorderCMoonId: null }, data: { equippedBorderCMoonId: cMoonId } })
+            await tx.user.updateMany({
+              where: { id: userId, equippedBorderCMoonId: null, equippedGlowCMoonId: null },
+              data: { equippedBorderCMoonId: cMoonId },
+            })
+          }
+          if (lvl.grantsGlow) {
+            await tx.user.updateMany({
+              where: { id: userId, equippedBorderCMoonId: null, equippedGlowCMoonId: null },
+              data: { equippedGlowCMoonId: cMoonId },
+            })
           }
         }
 
-        leveledUpTo = { id: highest.id, name: highest.name, grantsBorder: highest.grantsBorder }
+        leveledUpTo = { id: highest.id, name: highest.name, grantsBorder: highest.grantsBorder, grantsGlow: highest.grantsGlow }
       }
 
       return { affinitySpent: affinity.affinitySpent, leveledUpTo }

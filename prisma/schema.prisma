@@ -548,6 +548,15 @@ model User {
   equippedBorderCMoonId String?
   equippedBorder        CMoon?          @relation("CMoon_BorderEquippedBy", fields: [equippedBorderCMoonId], references: [id], onDelete: SetNull)
 
+  // Same idea as equippedBorderCMoonId above, for the alternative glow cosmetic (see
+  // UserCMoonGlow). Mutually exclusive with equippedBorderCMoonId at the application layer —
+  // server/api/czone/border.post.js and glow.post.js each clear the other field when setting
+  // theirs — not a DB constraint, since Prisma doesn't express a cross-column "at most one of
+  // these two" check without raw SQL, and the existing single-writer equip endpoints already
+  // guarantee it in practice.
+  equippedGlowCMoonId String?
+  equippedGlow        CMoon?          @relation("CMoon_GlowEquippedBy", fields: [equippedGlowCMoonId], references: [id], onDelete: SetNull)
+
   cZones                    CZone[]
   clashDecks                ClashDeck[]
   logins                    LoginLog[]
@@ -606,6 +615,7 @@ model User {
   ownedAvatars              UserAvatar[]                  @relation("User_UserAvatars")
   cMoonAffinities           CMoonAffinity[]
   cMoonBorders              UserCMoonBorder[]             @relation("User_UserCMoonBorders")
+  cMoonGlows                UserCMoonGlow[]               @relation("User_UserCMoonGlows")
   ownerLogs                 CtoonOwnerLog[]
   ownerLogsAsCounterparty   CtoonOwnerLog[]               @relation("CtoonOwnerLogCounterparty")
   holidayRedemptions        HolidayRedemption[]
@@ -3067,6 +3077,8 @@ model CMoon {
   affinities     CMoonAffinity[]
   borderOwners     UserCMoonBorder[] @relation("CMoon_BorderOwners")
   borderEquippedBy User[]            @relation("CMoon_BorderEquippedBy")
+  glowOwners       UserCMoonGlow[]   @relation("CMoon_GlowOwners")
+  glowEquippedBy   User[]            @relation("CMoon_GlowEquippedBy")
 
   @@index([memberCount])
   @@index([teamScore])
@@ -3152,8 +3164,15 @@ model CMoonAffinityLevel {
   // re-coloring the cMoon updates every border it already granted). Purely cosmetic; never
   // re-evaluated downward.
   grantsBorder Boolean @default(false)
-  // Optional cosmetic rewards granted alongside the border above. Both are optional and
-  // independent of grantsBorder — a level can grant any combination of the three.
+  // Grants a permanent UserCMoonGlow(userId, this cMoonId) row — a pulsing colored glow around
+  // the cZone, as an alternative to the solid border above. A member can hold both a border and
+  // a glow (from this or other cMoons) at once, but only one can be equipped/displayed on their
+  // cZone at a time — see server/api/czone/border.post.js and glow.post.js, which each clear the
+  // other's equip field when set. Independent of grantsBorder: a level can grant neither, either,
+  // or both (a member who owns both then simply picks which one to display).
+  grantsGlow Boolean @default(false)
+  // Optional cosmetic rewards granted alongside the border/glow above. All independent of each
+  // other — a level can grant any combination.
   rewardBackgroundId String?
   rewardAvatarId     String?
   createdAt          DateTime @default(now())
@@ -3199,6 +3218,22 @@ model UserCMoonBorder {
 
   user  User  @relation("User_UserCMoonBorders", fields: [userId], references: [id], onDelete: Cascade)
   cMoon CMoon @relation("CMoon_BorderOwners", fields: [cMoonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cMoonId])
+}
+
+// Ownership record for a persistent per-cMoon cZone glow, granted by CMoonAffinityLevel.grantsGlow.
+// Mirrors UserCMoonBorder exactly — a separate cosmetic type, not a variant of it, since a member
+// can hold both a border and a glow at once (they just can't display both simultaneously; see
+// User.equippedGlowCMoonId below and server/api/czone/glow.post.js).
+model UserCMoonGlow {
+  id         String   @id @default(uuid())
+  userId     String
+  cMoonId    String
+  unlockedAt DateTime @default(now())
+
+  user  User  @relation("User_UserCMoonGlows", fields: [userId], references: [id], onDelete: Cascade)
+  cMoon CMoon @relation("CMoon_GlowOwners", fields: [cMoonId], references: [id], onDelete: Cascade)
 
   @@unique([userId, cMoonId])
 }

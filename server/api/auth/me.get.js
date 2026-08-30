@@ -47,6 +47,7 @@ export default defineEventHandler(async (event) => {
       additionalCzones: true,
       surveyAnswers: { select: { userId: true } },
       equippedBorderCMoonId: true,
+      equippedGlowCMoonId: true,
     }
   })
 
@@ -61,7 +62,7 @@ export default defineEventHandler(async (event) => {
   // Ensure fresh tokens and up-to-date roles
   await refreshDiscordTokenAndRoles(prisma, user, config)
 
-  const [ctoonCount, uniqueCtoonRows, lockAgg, unreadNotifications, ownedBorders] = await Promise.all([
+  const [ctoonCount, uniqueCtoonRows, lockAgg, unreadNotifications, ownedBorders, ownedGlows] = await Promise.all([
     prisma.userCtoon.count({
       where: {
         userId: user.id,
@@ -97,6 +98,11 @@ export default defineEventHandler(async (event) => {
     prisma.userCMoonBorder.findMany({
       where: { userId: user.id },
       select: { cMoonId: true, cMoon: { select: { name: true, color: true } } }
+    }),
+    // Same idea as ownedBorders above, for the alternative glow cosmetic.
+    prisma.userCMoonGlow.findMany({
+      where: { userId: user.id },
+      select: { cMoonId: true, cMoon: { select: { name: true, color: true } } }
     })
   ])
 
@@ -129,5 +135,7 @@ export default defineEventHandler(async (event) => {
     surveyComplete: !!user.surveyAnswers,
     equippedBorderCMoonId: user.equippedBorderCMoonId || null,
     ownedBorders: ownedBorders.map(b => ({ cMoonId: b.cMoonId, name: b.cMoon?.name || '', color: b.cMoon?.color || '#888888' })),
+    equippedGlowCMoonId: user.equippedGlowCMoonId || null,
+    ownedGlows: ownedGlows.map(g => ({ cMoonId: g.cMoonId, name: g.cMoon?.name || '', color: g.cMoon?.color || '#888888' })),
   }
 })

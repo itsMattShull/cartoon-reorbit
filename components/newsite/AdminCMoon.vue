@@ -368,6 +368,7 @@
                   <span class="flex-1 min-w-0 break-words">{{ lvl.name }}</span>
                   <span class="text-gray-500 flex-shrink-0">{{ lvl.threshold.toLocaleString() }} pts</span>
                   <span v-if="lvl.grantsBorder" class="flex-shrink-0" title="Grants cZone border">🔲</span>
+                  <span v-if="lvl.grantsGlow" class="flex-shrink-0" title="Grants cZone glow">✨</span>
                   <span v-if="lvl.rewardBackground" class="flex-shrink-0" title="Grants background">🖼️</span>
                   <span v-if="lvl.rewardAvatar" class="flex-shrink-0" title="Grants avatar">🧑</span>
                   <button type="button" class="cm-tap text-indigo-600" @click="startEditLevel(c, lvl)">Edit</button>
@@ -904,6 +905,12 @@
             <input type="checkbox" v-model="levelForm.grantsBorder" />
             <span class="text-xs">Grants cZone border (in this cMoon's color)</span>
           </label>
+
+          <label class="flex items-center gap-2">
+            <input type="checkbox" v-model="levelForm.grantsGlow" />
+            <span class="text-xs">Grants cZone glow (in this cMoon's color)</span>
+          </label>
+          <p class="text-[11px] text-gray-500 -mt-1">Border and glow are separate, permanent unlocks — a member can earn both, but can only display one on their cZone at a time.</p>
 
           <div>
             <label class="block text-xs font-medium mb-1">Reward background (optional)</label>
@@ -1727,7 +1734,7 @@ async function removeTier(t) {
 const backgrounds = ref([])
 const avatarsCatalog = ref([])
 
-const emptyLevelForm = () => ({ id: '', name: '', threshold: 0, sortOrder: 0, grantsBorder: false, rewardBackgroundId: '', rewardAvatarId: '' })
+const emptyLevelForm = () => ({ id: '', name: '', threshold: 0, sortOrder: 0, grantsBorder: false, grantsGlow: false, rewardBackgroundId: '', rewardAvatarId: '' })
 const levelForm = reactive(emptyLevelForm())
 const levelCMoon = ref(null)
 const levelModalOpen = ref(false)
@@ -1767,7 +1774,8 @@ function startEditLevel(c, lvl) {
   levelCMoon.value = c
   Object.assign(levelForm, {
     id: lvl.id, name: lvl.name, threshold: lvl.threshold, sortOrder: lvl.sortOrder,
-    grantsBorder: lvl.grantsBorder, rewardBackgroundId: lvl.rewardBackgroundId || '', rewardAvatarId: lvl.rewardAvatarId || '',
+    grantsBorder: lvl.grantsBorder, grantsGlow: lvl.grantsGlow,
+    rewardBackgroundId: lvl.rewardBackgroundId || '', rewardAvatarId: lvl.rewardAvatarId || '',
   })
   levelModalOpen.value = true
 }
@@ -1784,6 +1792,7 @@ async function saveLevel(c) {
       threshold: levelForm.threshold,
       sortOrder: levelForm.sortOrder,
       grantsBorder: levelForm.grantsBorder,
+      grantsGlow: levelForm.grantsGlow,
       rewardBackgroundId: levelForm.rewardBackgroundId || '',
       rewardAvatarId: levelForm.rewardAvatarId || '',
     }

@@ -21,6 +21,7 @@ export default defineEventHandler(async (event) => {
   const threshold = body?.threshold === undefined ? level.threshold : Number(body.threshold)
   const sortOrder = body?.sortOrder === undefined ? level.sortOrder : (Number.isFinite(Number(body.sortOrder)) ? Math.trunc(Number(body.sortOrder)) : level.sortOrder)
   const grantsBorder = body?.grantsBorder === undefined ? level.grantsBorder : !!body.grantsBorder
+  const grantsGlow = body?.grantsGlow === undefined ? level.grantsGlow : !!body.grantsGlow
   const rewardBackgroundId = body?.rewardBackgroundId === undefined
     ? level.rewardBackgroundId
     : (typeof body.rewardBackgroundId === 'string' && body.rewardBackgroundId ? body.rewardBackgroundId : null)
@@ -45,7 +46,7 @@ export default defineEventHandler(async (event) => {
   try {
     await db.cMoonAffinityLevel.update({
       where: { id: levelId },
-      data: { name, threshold, sortOrder, grantsBorder, rewardBackgroundId, rewardAvatarId },
+      data: { name, threshold, sortOrder, grantsBorder, grantsGlow, rewardBackgroundId, rewardAvatarId },
     })
   } catch (err) {
     if (err?.code === 'P2002') {

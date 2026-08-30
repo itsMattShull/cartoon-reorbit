@@ -8,10 +8,10 @@
 //
 // Re-grants any level reward a member's current affinitySpent already qualifies for but never
 // received. Safe to run any number of times: grantRewardInTx's background/avatar grants check
-// existing ownership first, and its border grant is an idempotent upsert, so nothing already
-// owned is re-granted or duplicated. Never moves currentLevelId (already correctly at the
-// highest reached level — only the in-between rewards were missed) and never grants a level the
-// member hasn't actually reached.
+// existing ownership first, and its border/glow grants are idempotent upserts, so nothing
+// already owned is re-granted or duplicated. Never moves currentLevelId (already correctly at
+// the highest reached level — only the in-between rewards were missed) and never grants a level
+// the member hasn't actually reached.
 import { defineEventHandler } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { grantRewardInTx } from '@/server/utils/achievements'
@@ -40,17 +40,31 @@ export default defineEventHandler(async (event) => {
     let grantedAnyForUser = false
     await db.$transaction(async (tx) => {
       for (const lvl of qualifyingLevels) {
-        const reward = { backgrounds: [], avatars: [], borderCMoonId: lvl.grantsBorder ? a.cMoonId : null }
+        const reward = {
+          backgrounds: [],
+          avatars: [],
+          borderCMoonId: lvl.grantsBorder ? a.cMoonId : null,
+          glowCMoonId: lvl.grantsGlow ? a.cMoonId : null,
+        }
         if (lvl.rewardBackgroundId) reward.backgrounds.push({ backgroundId: lvl.rewardBackgroundId })
         if (lvl.rewardAvatarId) reward.avatars.push({ avatarId: lvl.rewardAvatarId })
         const granted = await grantRewardInTx(tx, a.userId, reward, `cmoonAffinity:backfill:${lvl.id}`)
         if (granted.backgrounds) { backgroundsGranted += granted.backgrounds; grantedAnyForUser = true }
         if (granted.avatars) { avatarsGranted += granted.avatars; grantedAnyForUser = true }
 
+        // See contribute.post.js's identical auto-equip comment: mutually exclusive with each
+        // other, so both checks require neither field set yet, and border (checked first) wins
+        // if a single level somehow grants both.
         if (lvl.grantsBorder) {
           await tx.user.updateMany({
-            where: { id: a.userId, equippedBorderCMoonId: null },
+            where: { id: a.userId, equippedBorderCMoonId: null, equippedGlowCMoonId: null },
             data: { equippedBorderCMoonId: a.cMoonId },
+          })
+        }
+        if (lvl.grantsGlow) {
+          await tx.user.updateMany({
+            where: { id: a.userId, equippedBorderCMoonId: null, equippedGlowCMoonId: null },
+            data: { equippedGlowCMoonId: a.cMoonId },
           })
         }
       }

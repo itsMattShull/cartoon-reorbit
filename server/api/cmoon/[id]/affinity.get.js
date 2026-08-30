@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
       where: { cMoonId },
       orderBy: { sortOrder: 'asc' },
       select: {
-        id: true, name: true, threshold: true, sortOrder: true, grantsBorder: true,
+        id: true, name: true, threshold: true, sortOrder: true, grantsBorder: true, grantsGlow: true,
         rewardBackground: { select: { id: true, label: true, imagePath: true } },
         rewardAvatar: { select: { id: true, label: true, imagePath: true } },
       }
