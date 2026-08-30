@@ -10,6 +10,12 @@
             @click="previewModalOpen = true"
           >Preview join modal</button>
           <button
+            class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            :disabled="!flagEnabled || cmoons.length < 2"
+            :title="!flagEnabled ? 'Enable cMoons first' : ''"
+            @click="balanceModalOpen = true"
+          >Balance teams</button>
+          <button
             class="cm-tap px-3 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
             @click="openCreateModal"
           >+ Create cMoon</button>
@@ -598,6 +604,13 @@
       :allCMoons="cmoons"
       @close="closeDisperse"
     />
+
+    <!-- ── Balance Teams modal ───────────────────────────────────────── -->
+    <CMoonBalanceModal
+      v-if="balanceModalOpen"
+      @close="balanceModalOpen = false"
+      @done="load"
+    />
   </div>
 </template>
 
@@ -619,6 +632,7 @@ const flagSaving = ref(false)
 const cMoonEnabledAt = ref(null)
 const cMoonSelectionDeadlineAt = ref(null)
 const previewModalOpen = ref(false)
+const balanceModalOpen = ref(false)
 
 function previewEffect(c) {
   if (c.effectType) playPreviewEffect(c.effectType)

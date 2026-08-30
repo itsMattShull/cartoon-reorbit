@@ -77,6 +77,7 @@ export const ADMIN_SECTIONS = [
   S('auctions/new', 'Add Auction', 'economy', legacy('AdminLegacyAuctionsNew'), { hidden: true }),
   S('dissolveQueue', 'Dissolve Queue', 'economy', legacy('AdminLegacyDissolveQueue')),
   S('cMoon', 'cMoons', 'economy', nu('AdminCMoon')),
+  S('cmoonChangeRequests', 'cMoon Change Requests', 'economy', nu('AdminCMoonChangeRequests')),
 
   // ── Games & Events ──────────────────────────────────────────
   S('games', 'Manage Games', 'games', legacy('AdminLegacyGames'), { dense: true }),
