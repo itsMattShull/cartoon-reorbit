@@ -29,8 +29,9 @@
         <template v-else>
           <p class="text-[11px] text-gray-600">
             Moves non-captain players between unlocked cMoons to even out membership. Captains,
-            admins, and locked cMoons are never touched. No new prize cToons are awarded, and each
-            player's existing cMoon points/history moves with them.
+            admins, and locked cMoons are never touched. No new prize cToons are awarded; each
+            player's cMoon points restart under their new team, same as any other reassignment,
+            but any affinity progress and rewards they've already earned are untouched.
           </p>
 
           <div v-if="!moves.length" class="text-xs text-gray-700 bg-gray-50 border rounded p-3">

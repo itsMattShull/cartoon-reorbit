@@ -36,10 +36,11 @@ export default defineEventHandler(async (event) => {
 
   let result
   try {
-    // Approved team-change requests carry the player's cMoon points/affinity forward rather
-    // than resetting them, same as an admin's Balance Teams move — see reassignUserCMoon's
-    // skipPointsReset option.
-    result = await reassignUserCMoon(request.userId, request.requestedCMoonId, { skipPointsReset: true })
+    // Same shared path as any other admin-driven reassignment (including an admin's Balance
+    // Teams move) — cMoonPoints resets under the new team, same as always; the player's actual
+    // affinity progress and any cToons/cosmetics already earned are untouched by this, since
+    // those are permanent per-(user, cMoon) records rather than derived from current membership.
+    result = await reassignUserCMoon(request.userId, request.requestedCMoonId)
   } catch (err) {
     // The move failed after we already claimed the request (e.g. the player's cMoon changed
     // since they submitted — a Balance Teams run or another accepted request moved them in the

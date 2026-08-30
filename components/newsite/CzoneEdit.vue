@@ -50,6 +50,26 @@
 
     <!-- ── Background panel ── -->
     <div v-show="activeTab === 'bg'" class="czew-panel">
+      <!-- cMoon-affinity cZone border: only shown to a member who's actually earned one (see
+           User.ownedBorders/equippedBorderCMoonId, populated by /api/auth/me). Purely a display
+           toggle — checking a box here just re-POSTs whichever cMoonId (or null) to
+           /api/czone/border, the same endpoint the viewer-mode equip picker in MyCzone.vue's
+           topbar already uses; only one can be equipped at a time. -->
+      <div v-if="ownedBorders.length" class="czew-border-block">
+        <div class="czew-border-label">cZone Border</div>
+        <label v-for="b in ownedBorders" :key="b.cMoonId" class="czew-border-row">
+          <input
+            type="checkbox"
+            :checked="equippedBorderCMoonId === b.cMoonId"
+            :disabled="borderSaving"
+            @change="toggleBorder(b.cMoonId, $event.target.checked)"
+          />
+          <span class="czew-border-swatch" :style="{ background: b.color }"></span>
+          <span class="czew-border-name">{{ b.name }}</span>
+        </label>
+        <p v-if="borderError" class="czew-border-error">{{ borderError }}</p>
+      </div>
+
       <div class="czew-bg-grid">
         <div v-if="cz.loadingBackgrounds" class="czew-empty" style="grid-column:1/-1">Loading…</div>
         <template v-else>
@@ -81,6 +101,31 @@
 defineEmits(['save', 'clear'])
 
 const cz = useNewSiteCzoneState()
+
+// cZone Border toggle — `user` is the same shared session singleton MyCzone.vue reads
+// (see useAuth.js), so posting a change here and refreshing it is immediately reflected in
+// the canvas frame there too, with no direct coupling between the two components needed.
+const { user, fetchSelf } = useAuth()
+const ownedBorders = computed(() => user.value?.ownedBorders || [])
+const equippedBorderCMoonId = computed(() => user.value?.equippedBorderCMoonId || null)
+const borderSaving = ref(false)
+const borderError = ref('')
+
+async function toggleBorder(cMoonId, checked) {
+  // Checking one box equips it; unchecking the currently-equipped one turns it off. Checking a
+  // different box while one is already equipped just switches which is shown (only one border
+  // can ever be equipped at a time) — the newly-checked box's own @change handles that case.
+  borderSaving.value = true
+  borderError.value = ''
+  try {
+    await $fetch('/api/czone/border', { method: 'POST', body: { cMoonId: checked ? cMoonId : null } })
+    await fetchSelf({ force: true })
+  } catch (e) {
+    borderError.value = e?.data?.statusMessage || 'Could not update your border right now.'
+  } finally {
+    borderSaving.value = false
+  }
+}
 
 const TABS = [
   { id: 'ctoons', label: 'cToons' },
@@ -346,6 +391,49 @@ function selectBg(bg) {
   padding: 3px;
   image-rendering: pixelated;
   box-sizing: border-box;
+}
+
+/* ── cZone Border toggle ── */
+.czew-border-block {
+  flex-shrink: 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+  margin-bottom: 2px;
+}
+.czew-border-label {
+  font-size: 0.62rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.45);
+  margin-bottom: 3px;
+}
+.czew-border-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 2px;
+  cursor: pointer;
+}
+.czew-border-row input[type="checkbox"] {
+  width: 15px; height: 15px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.czew-border-swatch {
+  width: 12px; height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.25);
+}
+.czew-border-name {
+  font-size: 0.72rem;
+  color: #fff;
+}
+.czew-border-error {
+  font-size: 0.65rem;
+  color: #ffb4a8;
+  margin: 2px 0 0;
 }
 
 /* ── Background grid ── */

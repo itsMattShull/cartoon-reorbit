@@ -37,7 +37,7 @@ export default defineEventHandler(async (event) => {
     if (claimed.count === 0) continue
 
     try {
-      const result = await reassignUserCMoon(request.userId, request.requestedCMoonId, { skipPointsReset: true })
+      const result = await reassignUserCMoon(request.userId, request.requestedCMoonId)
       invalidateCMoonList()
       await logAdminChange(prisma, {
         userId: me.id,

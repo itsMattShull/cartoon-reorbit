@@ -146,8 +146,8 @@
             <template v-else>
               <h2 class="modal-title">Request Team Change</h2>
               <p class="modal-desc">
-                Pick a cMoon to request joining. An admin has to approve this before you move —
-                your existing cMoon points and history come with you.
+                Pick a cMoon to request joining. An admin has to approve this before you move.
+                Any affinity progress and rewards you've already earned stay yours either way.
               </p>
 
               <div v-if="loadingCMoons" class="team-status-text">Loading teams…</div>
@@ -304,9 +304,10 @@ onMounted(loadSetting)
 
 async function openAvatarModal() {
   avatarError.value = ''
-  if (!avatars.value.length) {
-    avatars.value = await $fetch('/api/avatars', { credentials: 'include' })
-  }
+  // Always fetch fresh rather than only when empty — a newly-earned restricted avatar (e.g. a
+  // cMoon affinity reward) should show up the next time this modal opens within the same page
+  // visit, not just after a full page reload.
+  avatars.value = await $fetch('/api/avatars', { credentials: 'include' })
   avatarDraft.value = user.value?.avatar || ''
   showAvatarModal.value = true
 }

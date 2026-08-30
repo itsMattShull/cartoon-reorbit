@@ -26,6 +26,7 @@ import jwt                from 'jsonwebtoken'
 import { clampVariancePct, rollInstanceStats } from './utils/monsterStats.js'
 import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './utils/gamePoints.js'
 import { registerEdRps, startEdRpsSweep } from './utils/edRpsRuntime.js'
+import { registerEdRpsAi, startEdRpsAiSweep } from './utils/edRpsAiMatch.js'
 import { registerPokemonBattle, startPokemonBattleSweep } from './utils/pokemonBattleRuntime.js'
 
 startDiagnostics().catch((err) => {
@@ -1861,6 +1862,11 @@ io.on('connection', socket => {
   // reads the shared socket.data.roomId.
   registerEdRps(io, socket, resolveSocketUser)
 
+  // "Play the Eds" — a bot opponent, paid from the same combat pool as the PvP match above but
+  // deliberately its own module and its own socket.data key (edRpsAiUserId): see
+  // server/utils/edRpsAiMatch.js for why this never shares duelRuntime's room/join machinery.
+  registerEdRpsAi(io, socket, resolveSocketUser)
+
   // Same runtime, different spec (server/utils/duelRuntime.js). Its socket.data keys are
   // namespaced pkmnBattle* rather than edRps*, so a player with both games open on one socket
   // cannot have one game's disconnect cleanup consume the other's room id -- which would leave
@@ -2994,6 +3000,7 @@ setInterval(() => {
 // RPS rooms churn far faster than Clash's, and its matches need an absolute-age backstop that
 // does not depend on socket presence, so it runs its own sweep on its own interval.
 startEdRpsSweep(io)
+startEdRpsAiSweep()
 startPokemonBattleSweep(io)
 
 // Extracted close logic — called by the BullMQ worker for each auction job.

@@ -8,7 +8,7 @@
 // server/cron/cmoon-points-aggregate.js), not a live PointsLog aggregate, so this stays cheap.
 import { defineEventHandler } from 'h3'
 import { prisma as db } from '@/server/prisma'
-import { getGlobalConfig } from '@/server/utils/cmoon'
+import { getGlobalConfig, getCMoonCaptainUserIdSet, displayRankName } from '@/server/utils/cmoon'
 
 const TOP_CONTRIBUTORS = 10
 
@@ -23,22 +23,28 @@ export default defineEventHandler(async () => {
 
   const contributorsByCMoonId = {}
   await Promise.all(cmoons.map(async (c) => {
-    const topContributors = await db.user.findMany({
-      where: { cMoonId: c.id, active: true, banned: false, cMoonPoints: { gt: 0 } },
-      orderBy: { cMoonPoints: 'desc' },
-      take: TOP_CONTRIBUTORS,
-      select: {
-        username: true,
-        avatar: true,
-        cMoonPoints: true,
-        currentCMoonRank: { select: { name: true } },
-      },
-    })
+    const [topContributors, captainUserIds] = await Promise.all([
+      db.user.findMany({
+        where: { cMoonId: c.id, active: true, banned: false, cMoonPoints: { gt: 0 } },
+        orderBy: { cMoonPoints: 'desc' },
+        take: TOP_CONTRIBUTORS,
+        select: {
+          id: true,
+          username: true,
+          avatar: true,
+          cMoonPoints: true,
+          currentCMoonRank: { select: { name: true } },
+        },
+      }),
+      getCMoonCaptainUserIdSet(c.id),
+    ])
+    // A captain always displays as "Captain" regardless of their actually-earned rank tier —
+    // see displayRankName in server/utils/cmoon.js.
     contributorsByCMoonId[c.id] = topContributors.map(u => ({
       username: u.username,
       avatar: u.avatar,
       points: u.cMoonPoints,
-      rankName: u.currentCMoonRank?.name || null,
+      rankName: displayRankName(u.currentCMoonRank?.name, captainUserIds.has(u.id)),
     }))
   }))
 

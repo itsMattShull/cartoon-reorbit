@@ -52,29 +52,36 @@ module.exports = {
       script:             '.output/server/index.mjs',
       exec_mode:          'cluster',
       instances:          2,
+      // Disabled: PM2's pmx/require-in-the-middle require() hook mis-resolves
+      // dual ESM/CJS packages (e.g. sanitize-html -> htmlparser2), causing
+      // ERR_REQUIRE_ESM crashes that don't happen under plain `npm start`.
+      pmx:                false,
       // Graceful reload: PM2 waits for process.send('ready') before swapping
       wait_ready:         true,
       listen_timeout:     15000,   // ms to wait for 'ready' signal
       kill_timeout:       5000,    // ms to allow in-flight requests to finish
       node_args:          '--max-old-space-size=2048',
       max_memory_restart: '2G',
+      // PM2 does NOT inherit the shell's full environment for ecosystem-file
+      // apps — only what's listed below. Spread ...process.env first (loaded
+      // from .env above) so DATABASE_URL, REDIS_*, queue keys, JWT_SECRET,
+      // Discord creds, etc. actually reach the process; explicit keys after
+      // the spread still override/select the right variant.
       env: {
+        ...process.env,
         NODE_ENV:            'production',
         DEPLOY_ENV:          process.env.DEPLOY_ENV || 'production',
         NITRO_PORT:          NUXT_PORT,
         NUXT_PORT:           NUXT_PORT,
-        TKO_PASSCODE:        process.env.TKO_PASSCODE,
-        IP_ENCRYPTION_KEY:   process.env.IP_ENCRYPTION_KEY,
         OFFICIAL_USERNAME:   OFFICIAL_USERNAME_PROD,
         ...DIAG_ENV,
       },
       env_development: {
+        ...process.env,
         NODE_ENV:            'production',
         DEPLOY_ENV:          process.env.DEPLOY_ENV || 'dev',
         NITRO_PORT:          NUXT_PORT,
         NUXT_PORT:           NUXT_PORT,
-        TKO_PASSCODE:        process.env.TKO_PASSCODE,
-        IP_ENCRYPTION_KEY:   process.env.IP_ENCRYPTION_KEY,
         OFFICIAL_USERNAME:   OFFICIAL_USERNAME_DEV,
         ...DIAG_ENV,
       },
@@ -94,12 +101,14 @@ module.exports = {
       node_args:          '--max-old-space-size=2048',
       max_memory_restart: '2G',
       env: {
+        ...process.env,
         NODE_ENV:         'production',
         SOCKET_PORT:      SOCKET_PORT,
         OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD,
         ...DIAG_ENV,
       },
       env_development: {
+        ...process.env,
         NODE_ENV:         'production',
         SOCKET_PORT:      SOCKET_PORT,
         OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV,
@@ -113,8 +122,8 @@ module.exports = {
       script:    'server/workers/mint.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
-      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
     // ── BullMQ worker: time-based mint window closure ───────────────────────
@@ -123,8 +132,8 @@ module.exports = {
       script:    'server/workers/mint-end.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
-      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
     // ── BullMQ worker: account dissolution ────────────────────────────────
@@ -133,8 +142,8 @@ module.exports = {
       script:    'server/workers/dissolve.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
-      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
     // ── BullMQ worker: dissolve auction launch ────────────────────────────
@@ -143,8 +152,18 @@ module.exports = {
       script:    'server/workers/dissolve-auction-launch.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
-      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+    },
+
+    // ── BullMQ worker: admin user-to-user asset transfer ──────────────────
+    {
+      name:      'worker-transfer',
+      script:    'server/workers/transfer.worker.js',
+      exec_mode: 'fork',
+      instances: 1,
+      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
     // ── BullMQ worker: daily achievements ─────────────────────────────────
@@ -153,8 +172,8 @@ module.exports = {
       script:    'server/workers/achievements.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
-      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
     // ── BullMQ worker: survey content analysis ─────────────────────────────
@@ -163,8 +182,8 @@ module.exports = {
       script:    'server/workers/content-analyzer.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
-      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
     // ── Cron: Discord guild member sync ───────────────────────────────────
@@ -173,8 +192,8 @@ module.exports = {
       script:    'server/cron/sync-guild-members.js',
       exec_mode: 'fork',
       instances: 1,
-      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
-      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
   ],
 }

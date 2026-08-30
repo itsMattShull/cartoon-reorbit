@@ -25,7 +25,16 @@
 // player who backgrounds the tab, takes a phone call, or plays on a device that throttles
 // rAF must never lose a legitimate run.
 
-import { WORLD_W, WORLD_H, TICK_HZ, IN_LEFT, IN_RIGHT, IN_THRUST, simulate } from '../../lib/asteroidSim.js'
+// `#lib/...` (package.json "imports", not a relative path) — Nitro's dev
+// bundler miscalculates the relative depth for this specific import
+// (verified: it emitted a 6-level '../../../../../../lib/asteroidSim.js'
+// from a 2-level-deep output file, resolving to '/lib/asteroidSim.js' and
+// crashing every request in `nuxt dev` with "Cannot find module"; the
+// production build was unaffected). A `~~/...`/`@/...` bundler alias would
+// dodge that too, but only plain node's native subpath-imports resolution
+// (package.json "imports") also works when tests import this file directly
+// via `node --test`, outside any bundler.
+import { WORLD_W, WORLD_H, TICK_HZ, IN_LEFT, IN_RIGHT, IN_THRUST, simulate } from '#lib/asteroidSim.js'
 
 // A run is capped at 5 minutes of simulated time. This bounds the replay cost of a single
 // /end request (~130ms worst case, measured with every difficulty knob maxed) and gives the
