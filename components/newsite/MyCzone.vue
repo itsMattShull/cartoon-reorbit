@@ -7,16 +7,23 @@
          solid cosmetic) or `box-shadow` (for the glow) here is safe because recalcScale()'s
          width formula always reserves FRAME_BORDER_PX on each side from the fixed 800px
          .main-content budget (see that function below) — neither cosmetic is ever "extra"
-         pixels this fixed-width chrome has to find room for. Border and glow are mutually
-         exclusive (displayedBorder/displayedGlow are never both non-null — see their computeds
-         above), so at most one of these two modifier classes is ever applied. Always renders
-         cz-frame's own (transparent-by-default) border regardless of which, if either, is
-         equipped, so the reserved space — and thus the canvas's rendered size — never jumps
-         when a cosmetic is equipped/unequipped or switched. ── -->
+         pixels this fixed-width chrome has to find room for. Border and glow are meant to be
+         mutually exclusive (the equip endpoints each clear the other's field), so normally at
+         most one of these two modifier classes is applied — but each reads its OWN color custom
+         property (--cz-border-color / --cz-glow-color) rather than sharing one, so if the two
+         ever DID end up active together (equipped from different cMoons, or a future state that
+         allows stacking them), the glow still renders in its own correct color instead of
+         silently inheriting the border's — never invisible, never mis-colored, regardless of
+         which one, if either, is equipped. Always renders cz-frame's own (transparent-by-default)
+         border regardless of which is equipped, so the reserved space — and thus the canvas's
+         rendered size — never jumps when a cosmetic is equipped/unequipped or switched. ── -->
     <div
       class="cz-frame"
       :class="{ 'cz-frame--bordered': displayedBorder, 'cz-frame--glowing': displayedGlow }"
-      :style="(displayedBorder || displayedGlow) ? { '--cz-border-color': (displayedBorder || displayedGlow).color } : {}"
+      :style="{
+        ...(displayedBorder ? { '--cz-border-color': displayedBorder.color } : {}),
+        ...(displayedGlow ? { '--cz-glow-color': displayedGlow.color } : {}),
+      }"
     >
 
     <!-- ── Top bar ─────────────────────────────────────────── -->
@@ -1521,19 +1528,20 @@ defineExpose({ save, clearZone })
    against a busy cZone canvas — so the spread component (the solid, unblurred part of the
    shadow) is now large enough on its own to read as a clearly saturated ring, with the blur only
    adding a soft trailing edge beyond it, rather than being the only thing carrying the effect.
-   transparent border-color (inherited from .cz-frame) stays in effect here — the two cosmetics
-   are mutually exclusive, never combined. */
+   Reads its own --cz-glow-color (not the border's --cz-border-color) so it renders in its own
+   correct color and stays visible even in the (normally-prevented, but not CSS-enforced) case
+   where a border happens to be active at the same time from a different cMoon. */
 .cz-frame--glowing {
   animation: cz-frame-glow-pulse 2.4s ease-in-out infinite;
 }
 @keyframes cz-frame-glow-pulse {
-  0%, 100% { box-shadow: 0 0 0 4px var(--cz-border-color, #fff), 0 0 8px 3px var(--cz-border-color, #fff); }
-  50%      { box-shadow: 0 0 0 8px var(--cz-border-color, #fff), 0 0 14px 5px var(--cz-border-color, #fff); }
+  0%, 100% { box-shadow: 0 0 0 4px var(--cz-glow-color, #fff), 0 0 8px 3px var(--cz-glow-color, #fff); }
+  50%      { box-shadow: 0 0 0 8px var(--cz-glow-color, #fff), 0 0 14px 5px var(--cz-glow-color, #fff); }
 }
 @media (prefers-reduced-motion: reduce) {
   .cz-frame--glowing {
     animation: none;
-    box-shadow: 0 0 0 6px var(--cz-border-color, #fff), 0 0 10px 4px var(--cz-border-color, #fff);
+    box-shadow: 0 0 0 6px var(--cz-glow-color, #fff), 0 0 10px 4px var(--cz-glow-color, #fff);
   }
 }
 
