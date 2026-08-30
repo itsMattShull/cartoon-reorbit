@@ -53,6 +53,7 @@
             />
             <div class="cz-owner-label">
               <div><span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}</div>
+              <div v-if="viewedOwner.cMoonRankName" class="cz-owner-cmoon-rank">{{ viewedOwner.cMoonRankName }}</div>
               <div v-if="lastOnlineText || viewedOwner.cMoon" class="cz-owner-lastseen">
                 <span v-if="lastOnlineText">{{ lastOnlineText }}</span>
                 <span v-if="lastOnlineText && viewedOwner.cMoon"> · </span>
@@ -69,7 +70,6 @@
                   />
                   <span class="cz-owner-cmoon" :style="cMoonPillStyle(viewedOwner.cMoon.color)">{{ viewedOwner.cMoon.name }}</span>
                 </NuxtLink>
-                <span v-if="viewedOwner.cMoonRankName" class="cz-owner-cmoon-rank">{{ viewedOwner.cMoonRankName }}</span>
               </div>
               <button
                 v-if="isOwnZone && ownedBorders.length"
@@ -100,17 +100,19 @@
     </div>
 
     <!-- ── Canvas: outer reserves scaled layout, inner holds the 800×600 transform ──
-         The cMoon-affinity border (if any) is drawn on cz-frame, a plain ancestor OUTSIDE the
-         800×600 design-space/scale-transform math below — a fixed real-px frame around the
-         canvas's visual footprint rather than a mark inside it, so it can never overlap
-         edge-placed toons (canvas item positions are clamped flush to 0/CANVAS_W/H, see
-         clampPos) and never has to fight cz-canvas's own opaque background for paint order. -->
+         The cMoon-affinity border (if any) is a CSS outline on cz-canvas-outer itself, not a
+         border/padding on a wrapper: outline is painted outside the box's own edge without
+         ever being part of its layout box, so it can never change this element's rendered
+         width/height (unlike border or padding) and can't overlap edge-placed toons or get
+         painted over by cz-canvas's own opaque background (outline paints on cz-canvas-outer,
+         a strict ancestor of cz-canvas). This also means scale/recalcScale need no border-aware
+         reserve at all — the outline never competes with the canvas for box space, on any
+         viewport width. -->
     <div
-      class="cz-frame"
-      :class="{ 'cz-frame--bordered': displayedBorder }"
-      :style="displayedBorder ? { '--cz-border-color': displayedBorder.color } : {}"
+      class="cz-canvas-outer"
+      :class="{ 'cz-canvas-outer--bordered': displayedBorder }"
+      :style="displayedBorder ? { ...outerScaleStyle, '--cz-border-color': displayedBorder.color } : outerScaleStyle"
     >
-    <div class="cz-canvas-outer" :style="outerScaleStyle">
       <div class="cz-canvas-inner" :style="innerScaleStyle">
         <div
           class="cz-canvas"
@@ -177,7 +179,6 @@
           </template>
         </div>
       </div>
-    </div>
     </div>
 
     <!-- ── Bottom bar ──────────────────────────────────────── -->
@@ -424,24 +425,11 @@ const displayedBorder = computed(() => {
 
 // ── Scale logic (mirrors pages/czone/[username].vue) ──────────
 const scale = ref(1)
-// Real (unscaled) px thickness of the cMoon-affinity border frame — reserved out of the
-// available width below so a bordered cZone never grows past what an unbordered one would
-// occupy (the border sits OUTSIDE the 800×600 scaled canvas box, not drawn inside it).
-const FRAME_BORDER_PX = 6
-const hasBorder = computed(() => !!displayedBorder.value)
 function recalcScale() {
   if (typeof window === 'undefined') return
   const gutter = 32 // account for page padding / scrollbar
-  const reserve = hasBorder.value ? FRAME_BORDER_PX * 2 : 0
   const w = window.innerWidth || document.documentElement?.clientWidth || CANVAS_W
-  // The `1` ceiling below is "never render bigger than the natural 800px box" — but with a
-  // border, cz-frame's border-box padding eats `reserve` px out of that same 800px box (see
-  // .cz-frame--bordered), so the canvas itself has to cap at less than its full natural size
-  // even on a wide desktop viewport where window width was never the limiting factor. Without
-  // this, scale hit exactly 1 regardless of `reserve` on any viewport wide enough to not need
-  // shrinking otherwise, and the now-unshrunk 800px canvas overflowed the frame's padded box.
-  const maxScale = (CANVAS_W - reserve) / CANVAS_W
-  scale.value = Math.min(maxScale, Math.max(0.1, (w - gutter - reserve) / CANVAS_W))
+  scale.value = Math.min(1, Math.max(0.1, (w - gutter) / CANVAS_W))
 }
 
 // Set the correct scale immediately on the client to avoid a post-hydration
@@ -904,10 +892,6 @@ async function loadZone(username) {
     const firstActive    = data.cZone.zones.findIndex(z => z.toons.length > 0)
     cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
     viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null, border: data.border ?? null }
-    // The border reserve baked into recalcScale() depends on whether this zone owner has one
-    // equipped, which is only known once the zone payload above has loaded — recompute now
-    // rather than waiting for the next resize event.
-    recalcScale()
     loadCzoneSearchItems()
     eagerLoadMissingDimensions()
 
@@ -1424,7 +1408,10 @@ defineExpose({ save, clearZone })
   padding: 2px 8px 2px 4px;
 }
 .cz-owner-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-.cz-owner-label  { font-size: 0.68rem; color: #fff; white-space: nowrap; }
+/* text-align: right so the username/rank/last-seen lines (each a different natural width) line
+   up flush along their right edge, matching this block's position at the right end of the
+   topbar, instead of all left-hugging the label's own (widest-line-sized) box. */
+.cz-owner-label  { font-size: 0.68rem; color: #fff; white-space: nowrap; text-align: right; }
 .cz-owner-prefix  { font-size: 0.6rem; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-right: 3px; }
 .cz-owner-lastseen { font-size: 0.58rem; color: rgba(255,255,255,0.5); white-space: nowrap; }
 .cz-owner-cmoon-link {
@@ -1456,29 +1443,21 @@ defineExpose({ save, clearZone })
   line-height: 1.4;
 }
 .cz-owner-cmoon-rank {
-  display: inline-block;
-  margin-left: 4px;
   font-size: 0.6rem;
   font-weight: 600;
   color: #ffd75e;
 }
 
-/* cMoon affinity border — a plain, static colorized frame wrapping the canvas's OUTSIDE
-   (cz-frame is the ancestor of cz-canvas-outer, added purely for this), never inside the
-   800×600 design-space box the canvas/scale-transform math uses. Static rather than animated
-   (cheaper to render, and this can appear behind long content sessions unlike the old
-   single-avatar glow) — no @keyframes, so there's nothing to gate on prefers-reduced-motion.
-   Padding here is real CSS px matching FRAME_BORDER_PX, which recalcScale() already reserves
-   out of the canvas's own scaled width so a bordered cZone never grows past an unbordered
-   one's footprint or overflows a narrow mobile viewport. */
-.cz-frame {
-  flex-shrink: 0;
-}
-.cz-frame--bordered {
-  padding: 6px;
-  background: var(--cz-border-color, transparent);
-  border-radius: 4px;
-  box-sizing: border-box;
+/* cMoon affinity border — a static colorized `outline` on cz-canvas-outer itself, not a
+   border/padding on a wrapper element. outline is painted outside the box's own edge without
+   ever becoming part of its layout box (unlike border/padding, which add to rendered
+   width/height) — so it can't overlap edge-placed toons, can't get painted over by cz-canvas's
+   own opaque background (it paints on an ancestor of that), and needs no scale/recalcScale
+   compensation on any viewport width, since it never competes with the canvas for box space.
+   Static rather than animated (cheaper to render) — no @keyframes, so there's nothing to gate
+   on prefers-reduced-motion. */
+.cz-canvas-outer--bordered {
+  outline: 6px solid var(--cz-border-color, transparent);
 }
 
 .cz-border-equip-btn {
