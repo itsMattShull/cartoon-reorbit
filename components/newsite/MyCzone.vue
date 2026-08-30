@@ -434,7 +434,14 @@ function recalcScale() {
   const gutter = 32 // account for page padding / scrollbar
   const reserve = hasBorder.value ? FRAME_BORDER_PX * 2 : 0
   const w = window.innerWidth || document.documentElement?.clientWidth || CANVAS_W
-  scale.value = Math.min(1, Math.max(0.1, (w - gutter - reserve) / CANVAS_W))
+  // The `1` ceiling below is "never render bigger than the natural 800px box" — but with a
+  // border, cz-frame's border-box padding eats `reserve` px out of that same 800px box (see
+  // .cz-frame--bordered), so the canvas itself has to cap at less than its full natural size
+  // even on a wide desktop viewport where window width was never the limiting factor. Without
+  // this, scale hit exactly 1 regardless of `reserve` on any viewport wide enough to not need
+  // shrinking otherwise, and the now-unshrunk 800px canvas overflowed the frame's padded box.
+  const maxScale = (CANVAS_W - reserve) / CANVAS_W
+  scale.value = Math.min(maxScale, Math.max(0.1, (w - gutter - reserve) / CANVAS_W))
 }
 
 // Set the correct scale immediately on the client to avoid a post-hydration
