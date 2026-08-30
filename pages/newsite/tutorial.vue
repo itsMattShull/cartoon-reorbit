@@ -5,8 +5,8 @@
         v-if="heroImagePath"
         :src="heroImagePath"
         alt=""
-        width="800"
-        height="800"
+        width="200"
+        height="200"
         loading="eager"
         fetchpriority="high"
         class="tutorial-hero"
@@ -111,12 +111,12 @@ html.newsite-tutorial body {
   box-sizing: border-box;
 }
 
-/* Reserve space up front (no CLS) and never let an 800x800 asset overflow a
+/* Reserve space up front (no CLS) and never let a 200x200 asset overflow a
    narrow phone viewport. */
 .tutorial-hero {
   display: block;
   width: 100%;
-  max-width: 800px;
+  max-width: 200px;
   height: auto;
   aspect-ratio: 1 / 1;
   object-fit: cover;
