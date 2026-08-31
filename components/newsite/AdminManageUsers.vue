@@ -101,6 +101,11 @@
                     @click="openDissolveModal(u); closeMenu()"
                   >Dissolve User</button>
                   <button
+                    v-if="!u.banned && u.active"
+                    class="w-full text-left px-2 py-1 text-[11px] text-purple-700 hover:bg-purple-50"
+                    @click="openTransferModal(u); closeMenu()"
+                  >Transfer</button>
+                  <button
                     v-if="isSuperAdmin && !u.isAdmin"
                     class="w-full text-left px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-50"
                     @click="makeAdmin(u); closeMenu()"
@@ -603,11 +608,20 @@
         </div>
       </div>
     </div>
+
+    <!-- Transfer User modal -->
+    <AdminTransferModal
+      :show="showTransferModal"
+      :source-user="transferTarget"
+      @close="closeTransferModal"
+      @completed="onTransferCompleted"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import AdminTransferModal from '@/components/newsite/AdminTransferModal.vue'
 
 const users    = ref([])
 const official = ref(null)
@@ -1174,6 +1188,33 @@ async function activateUser(u) {
     if (idx !== -1) users.value[idx] = { ...users.value[idx], active: true }
   } catch (e) {
     alert(e?.data?.statusMessage || e?.message || 'Failed to activate user')
+  }
+}
+
+// Transfer modal state
+const showTransferModal = ref(false)
+const transferTarget = ref(null)
+
+function openTransferModal(u) {
+  transferTarget.value = u
+  showTransferModal.value = true
+}
+function closeTransferModal() {
+  showTransferModal.value = false
+  transferTarget.value = null
+}
+function onTransferCompleted(summary) {
+  if (!summary) return
+  const sourceIdx = users.value.findIndex(x => x.username === summary.sourceUsername)
+  if (sourceIdx !== -1) {
+    users.value[sourceIdx] = { ...users.value[sourceIdx], active: false, points: 0, uniqueCtoons: 0, totalCtoons: 0 }
+  }
+  const targetIdx = users.value.findIndex(x => x.username === summary.targetUsername)
+  if (targetIdx !== -1) {
+    users.value[targetIdx] = {
+      ...users.value[targetIdx],
+      points: (users.value[targetIdx].points || 0) + (summary.pointsTransferred || 0),
+    }
   }
 }
 

@@ -1,8 +1,7 @@
 // server/utils/cmoon.js
-// Shared logic for the cMoon (faction) feature: eligibility/deadline math, atomic
-// self-selection, cron auto-assignment, prize granting, and the weekly team
-// leaderboard scoring. Kept in one place so the feature is easy to rip out later —
-// see GlobalGameConfig.cMoonEnabled.
+// Shared logic for the cMoon (faction) feature: atomic self-selection/opt-out, prize
+// granting, and the weekly team leaderboard scoring. Kept in one place so the feature
+// is easy to rip out later — see GlobalGameConfig.cMoonEnabled.
 import { Prisma } from '@prisma/client'
 import { prisma } from '../prisma.js'
 import { mintQueue } from './queues.js'
@@ -12,8 +11,6 @@ import { COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
 import { EXCLUDED_SYSTEM_USER_ID } from './economyValuation.js'
 import { grantGuildRole, revokeGuildRole } from './discord.js'
 import { CMOON_EFFECT_TYPES } from '../../utils/cmoonEffectTypes.js'
-
-const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000
 
 // ── Weekly cMoon team leaderboard scoring ──────────────────────────────────────
 //
@@ -31,14 +28,10 @@ const THREE_DAYS_MS = 3 * 24 * 60 * 60 * 1000
 // server/api/admin/cmoon-scoring.post.js). Changes apply forward-only: they affect
 // only future weekly cron runs, never rewrite past CMoonScoreLog rows/teamScore.
 //
-// A minimum account age (defaulting to the 3-day cMoon self-selection window) gates
-// all three: a brand-new throwaway account can join a cMoon and immediately inflate
-// its score by camping a low-traffic game's #1 spot or grinding the (cheap) daily
-// tasks. Requiring the account to first survive N days raises the cost of that
-// without adding new anti-abuse infrastructure beyond what already exists for
-// selection. NOTE: this is a distinct concept from THREE_DAYS_MS below, which gates
-// the *selection* deadline (computeCMoonDeadline/autoAssignExpiredCMoonUsers) — the
-// two happen to share the same default but are configured/read independently.
+// A minimum account age (default 3 days) gates all three: a brand-new throwaway account
+// can join a cMoon and immediately inflate its score by camping a low-traffic game's #1
+// spot or grinding the (cheap) daily tasks. Requiring the account to first survive N days
+// raises the cost of that without adding new anti-abuse infrastructure.
 //
 // Awards are logged to CMoonScoreLog, whose unique constraint
 // (cMoonId, userId, category, weekStart, detail) is the only idempotency guard
@@ -440,6 +433,33 @@ export function isValidCMoonEffectType(value) {
   return value === null || CMOON_EFFECT_TYPES.includes(value)
 }
 
+// A cMoon captain always DISPLAYS as "Captain", regardless of whatever CMoonRank tier they've
+// actually earned — a leadership title overriding the shown label only. Nothing about their
+// underlying progression changes: cMoonPoints keeps accruing, currentCMoonRankId keeps getting
+// granted/upgraded normally by the achievement engine, and the nightly Discord role sync
+// (server/cron/sync-guild-members.js) still grants the earned rank's own role — this is a
+// read-side label swap in the handful of places a member's rank name is surfaced to other
+// players (cZone page, cMoon leaderboard, standings), not a change to the rank system itself.
+export const CAPTAIN_DISPLAY_RANK_NAME = 'Captain'
+
+export function displayRankName(rankName, isCaptain) {
+  return isCaptain ? CAPTAIN_DISPLAY_RANK_NAME : (rankName || null)
+}
+
+// Batch-friendly: one query per cMoon rather than one per member row. Callers already iterating
+// members of a single cMoon should call this once and check Set membership per row.
+export async function getCMoonCaptainUserIdSet(cMoonId) {
+  if (!cMoonId) return new Set()
+  const rows = await prisma.cMoonCaptain.findMany({ where: { cMoonId }, select: { userId: true } })
+  return new Set(rows.map(r => r.userId))
+}
+
+export async function isCMoonCaptain(cMoonId, userId) {
+  if (!cMoonId || !userId) return false
+  const row = await prisma.cMoonCaptain.findUnique({ where: { cMoonId_userId: { cMoonId, userId } } })
+  return !!row
+}
+
 // GlobalGameConfig is read on the selection page/API on every load; cache briefly
 // in-process to avoid hammering the singleton row (mirrors the pattern used by
 // other hot config reads in this codebase, e.g. server/middleware/daily-points.js).
@@ -461,28 +481,31 @@ export function invalidateGlobalConfigCache() {
   cachedConfigAt = 0
 }
 
-// A user's personal deadline to pick a cMoon before they're auto-assigned:
-//  - joined on/after the feature's launch (cMoonEnabledAt): 3 days from their own join date
-//  - joined before launch (an "existing" user): the shared cMoonSelectionDeadlineAt
-// Returns null if the feature isn't enabled or the user already has a cMoon.
-export function computeCMoonDeadline(user, config) {
-  if (!config?.cMoonEnabled || !config.cMoonEnabledAt) return null
-  if (user.cMoonId) return null
-  const createdAt = new Date(user.createdAt)
-  const enabledAt = new Date(config.cMoonEnabledAt)
-  if (createdAt >= enabledAt) {
-    return new Date(createdAt.getTime() + THREE_DAYS_MS)
-  }
-  return config.cMoonSelectionDeadlineAt ? new Date(config.cMoonSelectionDeadlineAt) : null
-}
-
 export const CMOON_SELECT_ERRORS = {
   DISABLED: 'CMOON_DISABLED',
   NOT_FOUND: 'CMOON_NOT_FOUND',
   ALREADY_ASSIGNED: 'CMOON_ALREADY_ASSIGNED',
-  DEADLINE_PASSED: 'CMOON_DEADLINE_PASSED',
   LOCKED: 'CMOON_LOCKED',
   BANNED: 'CMOON_USER_BANNED',
+  REJOIN_COOLDOWN: 'CMOON_REJOIN_COOLDOWN',
+  REJOIN_NOT_ALLOWED: 'CMOON_REJOIN_NOT_ALLOWED',
+  // The user's cMoonId changed between when the caller decided to move them and when
+  // reassignUserCMoon's guarded write ran (e.g. a concurrent Balance Teams run, or a second
+  // admin action on the same user) — the caller should re-check current state and retry or
+  // surface this rather than silently overwriting whatever the other writer just did.
+  STALE_STATE: 'CMOON_STALE_STATE',
+}
+
+// The moment a player who opted out becomes eligible to rejoin, per the admin-configurable
+// cooldown (GlobalGameConfig.cMoonOptOutCooldownDays — 0 disables it). Returns null when there's
+// no cooldown to wait out: the player never opted out, or the configured cooldown is 0/invalid.
+// Called from both server/api/cmoon/status.get.js (to show/hide the "Join a cMoon" CTA and its
+// countdown) and selectCMoonForUser below (the actual enforcement).
+export function computeCMoonRejoinAvailableAt(user, config) {
+  if (!user?.cMoonOptedOut || !user?.cMoonOptedOutAt) return null
+  const days = Number(config?.cMoonOptOutCooldownDays)
+  if (!Number.isFinite(days) || days <= 0) return null
+  return new Date(new Date(user.cMoonOptedOutAt).getTime() + days * 24 * 60 * 60 * 1000)
 }
 
 class CMoonError extends Error {
@@ -521,15 +544,19 @@ export async function selectCMoonForUser(userId, cMoonId) {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, createdAt: true, cMoonId: true },
+    select: { id: true, cMoonId: true, cMoonOptedOut: true, cMoonOptedOutAt: true },
   })
   if (!user) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
   if (user.cMoonId) throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
 
-  const deadline = computeCMoonDeadline(user, config)
-  if (deadline && new Date() > deadline) throw new CMoonError(CMOON_SELECT_ERRORS.DEADLINE_PASSED)
+  // The two rejoin safeguards below only ever apply to a player who previously opted out — a
+  // first-time chooser (cMoonOptedOut:false) is never subject to either one.
+  if (user.cMoonOptedOut) {
+    const rejoinAt = computeCMoonRejoinAvailableAt(user, config)
+    if (rejoinAt && new Date() < rejoinAt) throw new CMoonError(CMOON_SELECT_ERRORS.REJOIN_COOLDOWN)
+  }
 
-  const cmoon = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true, joinLocked: true } })
+  const cmoon = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true, joinLocked: true, allowOptOutJoin: true } })
   if (!cmoon) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
   // Locked cMoons are only reachable via admin direct-assign (POST
   // /api/admin/users/[id]/update-cmoon), never through this self-serve path — enforced here,
@@ -539,11 +566,15 @@ export async function selectCMoonForUser(userId, cMoonId) {
   // TOCTOU window against an admin locking this cMoon between this read and the transaction
   // committing.
   if (cmoon.joinLocked) throw new CMoonError(CMOON_SELECT_ERRORS.LOCKED)
+  // Team-balance safeguard: this cMoon has opted out of accepting returning/late joiners (see
+  // CMoon.allowOptOutJoin) — only bites a player who previously opted out, same as the cooldown
+  // check above.
+  if (user.cMoonOptedOut && !cmoon.allowOptOutJoin) throw new CMoonError(CMOON_SELECT_ERRORS.REJOIN_NOT_ALLOWED)
 
   const assigned = await prisma.$transaction(async (tx) => {
     const result = await tx.user.updateMany({
       where: { id: userId, cMoonId: null },
-      data: { cMoonId: cmoon.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: false },
+      data: { cMoonId: cmoon.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: false, cMoonOptedOut: false, cMoonOptedOutAt: null },
     })
     if (result.count === 0) throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
     // Re-checks joinLocked:false as part of the same atomic write, not just the pre-fetch
@@ -561,96 +592,25 @@ export async function selectCMoonForUser(userId, cMoonId) {
   return assigned
 }
 
-// Assigns one user to whatever unlocked cMoon currently has the fewest members (the
-// balancing step of auto-assignment — each call re-reads memberCount, so a stream of
-// stragglers naturally spreads evenly across every unlocked cMoon rather than piling
-// into one). Locked cMoons are excluded entirely: never a candidate for auto-assignment,
-// only reachable via the admin "update cMoon" endpoint. `FOR UPDATE` on the chosen CMoon
-// row serializes concurrent assignments so two callers can't both read the same
-// "smallest" moon before either commits.
-async function assignSmallestCMoonToUser(userId) {
-  return prisma.$transaction(async (tx) => {
-    const [smallest] = await tx.$queryRaw`
-      SELECT id FROM "CMoon" WHERE "joinLocked" = false ORDER BY "memberCount" ASC, id ASC LIMIT 1 FOR UPDATE
-    `
-    if (!smallest) return null
-
-    const result = await tx.user.updateMany({
-      where: { id: userId, cMoonId: null },
-      data: { cMoonId: smallest.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: true },
-    })
-    if (result.count === 0) return null
-
-    await tx.cMoon.update({ where: { id: smallest.id }, data: { memberCount: { increment: 1 } } })
-    return smallest.id
-  })
-}
-
-// Daily cron entry point. Finds users whose personal deadline has passed and
-// haven't picked a cMoon, auto-assigns them to the smallest cMoon, and grants
-// that cMoon's prizes. Capped per run so a large backlog can't stall the shared
-// cron process or flood the mint queue in one shot; it drains across days.
-export async function autoAssignExpiredCMoonUsers({ batchLimit = 200, maxBatches = 5 } = {}) {
+// User-initiated decline from the join modal — there is no more time-based auto-assignment, so
+// declining just stops the modal from popping up automatically again (see canChoose in
+// server/api/cmoon/status.get.js); the player can still join later via the "Join a cMoon" button
+// on /newsite/cmoon-nav, which reopens the same modal. Atomic for the same reason
+// selectCMoonForUser is: `updateMany({ where: { cMoonId: null } })` is the guard, not a pre-read
+// check, so a concurrent opt-out can't race a concurrent join into a confusing half-state.
+export async function optOutOfCMoonSelection(userId) {
   const config = await getGlobalConfig({ fresh: true })
-  if (!config?.cMoonEnabled || !config.cMoonEnabledAt) return { processed: 0 }
+  if (!config?.cMoonEnabled) throw new CMoonError(CMOON_SELECT_ERRORS.DISABLED)
 
-  const unlockedCmoonCount = await prisma.cMoon.count({ where: { joinLocked: false } })
-  if (unlockedCmoonCount === 0) {
-    // Nothing to assign into. Not an error — an admin may have locked every cMoon on
-    // purpose — but worth a log line since it otherwise fails silently and expired users
-    // just stay unassigned indefinitely until an admin unlocks one or assigns them by hand.
-    console.warn('[cmoon] autoAssignExpiredCMoonUsers: no unlocked cMoons available, skipping')
-    return { processed: 0 }
+  const result = await prisma.user.updateMany({
+    where: { id: userId, cMoonId: null },
+    data: { cMoonOptedOut: true, cMoonOptedOutAt: new Date() },
+  })
+  if (result.count === 0) {
+    const exists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, cMoonId: true } })
+    if (!exists) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
+    throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
   }
-
-  const now = new Date()
-  const newUserCutoff = new Date(now.getTime() - THREE_DAYS_MS)
-  const enabledAt = new Date(config.cMoonEnabledAt)
-  const globalDeadlinePassed = !!(config.cMoonSelectionDeadlineAt && now > new Date(config.cMoonSelectionDeadlineAt))
-
-  const orClauses = [
-    { createdAt: { gte: enabledAt, lt: newUserCutoff } },
-  ]
-  if (globalDeadlinePassed) {
-    orClauses.push({ createdAt: { lt: enabledAt } })
-  }
-
-  let processed = 0
-  for (let batch = 0; batch < maxBatches; batch++) {
-    const candidates = await prisma.user.findMany({
-      where: {
-        cMoonId: null,
-        active: true,
-        banned: false,
-        // Admins (which includes every cMoon captain — captaincy is only ever granted to
-        // isAdmin:true users, see CMoonCaptain) are never swept into balancing. An admin who
-        // hasn't personally picked a cMoon should stay unassigned indefinitely rather than being
-        // dropped into a faction they may end up captaining (or moved into) later — see
-        // reassignUserCMoon below, which is the only path that should ever set an admin's cMoonId.
-        isAdmin: false,
-        OR: orClauses,
-      },
-      select: { id: true },
-      take: batchLimit,
-    })
-    if (candidates.length === 0) break
-
-    for (const { id: userId } of candidates) {
-      try {
-        const cMoonId = await assignSmallestCMoonToUser(userId)
-        if (cMoonId) {
-          await grantCMoonPrizes(userId, cMoonId)
-          processed++
-        }
-      } catch {
-        // one user's failure shouldn't stop the rest of the batch
-      }
-    }
-
-    if (candidates.length < batchLimit) break
-  }
-
-  return { processed }
 }
 
 // Bounds a real-time Discord role sync so an admin action never hangs on Discord rate-limiting —
@@ -688,10 +648,29 @@ async function syncDiscordRolesForReassignment(user, oldRoleId, newRoleId) {
 }
 
 // Single shared path for moving a user into, out of, or between cMoons — used by the admin
-// "update user's cMoon" action, the new per-cMoon Members panel, and captain auto-align (making
-// someone a captain of a cMoon moves them into it). Deliberately ignores CMoon.joinLocked: admin
-// placement into a locked cMoon is an existing, intentional override (see the joinLocked comment
-// on the CMoon model), not something this function should re-litigate.
+// "update user's cMoon" action, the new per-cMoon Members panel, captain auto-align (making
+// someone a captain of a cMoon moves them into it), the "Balance Teams" bulk rebalance, and
+// accepted player team-change requests. Deliberately ignores CMoon.joinLocked: admin placement
+// into a locked cMoon is an existing, intentional override (see the joinLocked comment on the
+// CMoon model), not something this function should re-litigate — callers that must respect
+// joinLocked (e.g. the Balance Teams candidate/destination selection) enforce it themselves
+// before calling in.
+//
+// Every reassignment — including Balance Teams and an accepted CMoonChangeRequest, which both
+// route through this same function — resets User.cMoonPoints' aggregation window (via
+// cMoonSelectedAt below) exactly like any other admin-driven move. This is deliberate, not an
+// oversight: the universal rank ladder (CMoonRankTier) evaluates against cMoonPoints, and
+// claimAchievementReward's cMoon-hop guard (server/utils/achievements.js) is written assuming a
+// mover re-earns each cMoon's copy from zero — special-casing that reset away for some callers
+// would undermine both. The part of "affinity" that's genuinely meant to survive a team move
+// (CMoonAffinity.affinitySpent, UserCMoonBorder ownership) is a separate, permanent,
+// per-(user, cMoon) track that a cMoonId change never touches — see CMoonAffinity's doc comment.
+//
+// Guards against a concurrent second mover (e.g. Balance Teams running while an admin accepts a
+// change request for the same user) with a conditional `updateMany({ where: { cMoonId:
+// target.cMoonId } } })` — if another writer already moved this user between the read above and
+// this write, count is 0 and the whole reassignment aborts with CMOON_STALE_STATE instead of
+// silently clobbering whatever the other writer just did.
 //
 // Callers that mutate memberCount indirectly through this function are responsible for calling
 // invalidateCMoonList() (server/api/cmoons.get.js) afterward — not done here, since importing an
@@ -728,18 +707,8 @@ export async function reassignUserCMoon(userId, newCMoonId) {
     : null
 
   await prisma.$transaction(async (tx) => {
-    if (oldCMoon) {
-      await tx.cMoon.update({ where: { id: oldCMoon.id }, data: { memberCount: { decrement: 1 } } })
-      // A captain who no longer belongs to a cMoon shouldn't still show as its captain — this is
-      // exactly the captain/member mismatch this feature exists to prevent, so clean it up here
-      // rather than leaving an orphaned CMoonCaptain row behind on every reassignment.
-      await tx.cMoonCaptain.deleteMany({ where: { cMoonId: oldCMoon.id, userId } })
-    }
-    if (newCMoon) {
-      await tx.cMoon.update({ where: { id: newCMoon.id }, data: { memberCount: { increment: 1 } } })
-    }
-    await tx.user.update({
-      where: { id: userId },
+    const result = await tx.user.updateMany({
+      where: { id: userId, cMoonId: target.cMoonId },
       data: {
         cMoonId: newCMoonId,
         cMoonSelectedAt: newCMoonId ? new Date() : null,
@@ -752,6 +721,18 @@ export async function reassignUserCMoon(userId, newCMoonId) {
         cMoonRoleGrantedAt: null,
       },
     })
+    if (result.count === 0) throw new CMoonError(CMOON_SELECT_ERRORS.STALE_STATE)
+
+    if (oldCMoon) {
+      await tx.cMoon.update({ where: { id: oldCMoon.id }, data: { memberCount: { decrement: 1 } } })
+      // A captain who no longer belongs to a cMoon shouldn't still show as its captain — this is
+      // exactly the captain/member mismatch this feature exists to prevent, so clean it up here
+      // rather than leaving an orphaned CMoonCaptain row behind on every reassignment.
+      await tx.cMoonCaptain.deleteMany({ where: { cMoonId: oldCMoon.id, userId } })
+    }
+    if (newCMoon) {
+      await tx.cMoon.update({ where: { id: newCMoon.id }, data: { memberCount: { increment: 1 } } })
+    }
   })
 
   const discordRoleSynced = await syncDiscordRolesForReassignment(
@@ -766,6 +747,245 @@ export async function reassignUserCMoon(userId, newCMoonId) {
     cMoonColor: newCMoon?.color || null,
     discordRoleSynced,
   }
+}
+
+// ── Admin "Balance Teams" bulk rebalance ────────────────────────────────────────
+//
+// Moves the minimum number of non-admin, non-banned players between unlocked cMoons so
+// every team's eligible member count is as even as possible (every team lands on either
+// floor(total/n) or that +1). Captains are never candidates: captaincy is only ever
+// granted to isAdmin:true users (see CMoonCaptain), so excluding admins excludes every
+// captain for free. joinLocked cMoons are excluded entirely, both as a source and a
+// destination — reassignUserCMoon itself doesn't enforce joinLocked (see its own comment),
+// so that exclusion has to live here in the candidate/destination selection.
+//
+// computeBalancePlan is a pure read — safe to call as often as needed for a preview. It is
+// also re-run from scratch (never trusting a client-submitted plan) at the top of
+// executeBalancePlan, so a stale preview or a double-submitted execute can never replay
+// moves against outdated team membership — the second call just sees a more balanced (or
+// already-balanced) state and computes a smaller-or-empty plan.
+export async function computeBalancePlan() {
+  const cmoons = await prisma.cMoon.findMany({
+    where: { joinLocked: false },
+    select: { id: true, name: true, color: true, discordRoleId: true },
+    orderBy: { id: 'asc' },
+  })
+
+  const teamSummary = (current, target) => ({ current, target })
+  if (cmoons.length < 2) {
+    return { moves: [], teams: [], totalEligible: 0 }
+  }
+
+  const cmoonIds = cmoons.map((c) => c.id)
+  const eligibleByTeam = await prisma.user.groupBy({
+    by: ['cMoonId'],
+    where: { cMoonId: { in: cmoonIds }, isAdmin: false, banned: false },
+    _count: { _all: true },
+  })
+  const currentCountById = new Map(eligibleByTeam.map((r) => [r.cMoonId, r._count._all]))
+  const totalEligible = [...currentCountById.values()].reduce((sum, n) => sum + n, 0)
+
+  const n = cmoons.length
+  const base = Math.floor(totalEligible / n)
+  const remainder = totalEligible % n
+  // Deterministic assignment of the "+1" remainder seats (order doesn't matter for fairness,
+  // only for reproducibility of the same plan given the same input).
+  const targetById = new Map()
+  cmoons.forEach((c, i) => targetById.set(c.id, base + (i < remainder ? 1 : 0)))
+
+  const teams = cmoons.map((c) => ({
+    id: c.id,
+    name: c.name,
+    color: c.color,
+    ...teamSummary(currentCountById.get(c.id) || 0, targetById.get(c.id)),
+  }))
+
+  const overTeams = teams.filter((t) => t.current > t.target)
+  const underTeams = teams.filter((t) => t.current < t.target)
+  if (!overTeams.length || !underTeams.length) {
+    return { moves: [], teams, totalEligible }
+  }
+
+  const overIds = overTeams.map((t) => t.id)
+  const candidates = await prisma.user.findMany({
+    where: { cMoonId: { in: overIds }, isAdmin: false, banned: false },
+    select: { id: true, username: true, cMoonId: true },
+    orderBy: { id: 'asc' },
+  })
+  const candidatesByTeam = new Map()
+  for (const u of candidates) {
+    if (!candidatesByTeam.has(u.cMoonId)) candidatesByTeam.set(u.cMoonId, [])
+    candidatesByTeam.get(u.cMoonId).push(u)
+  }
+  const cmoonById = new Map(cmoons.map((c) => [c.id, c]))
+
+  // Flatten "who's movable" into one queue: exactly `current - target` users from each
+  // over-populated team, in the order sums(over deltas) === sum(under deltas) guarantees
+  // the queue below fully satisfies every under-team's need with nothing left over.
+  const moveQueue = []
+  for (const t of overTeams) {
+    const pool = candidatesByTeam.get(t.id) || []
+    const take = pool.slice(0, t.current - t.target)
+    for (const u of take) moveQueue.push({ user: u, from: cmoonById.get(t.id) })
+  }
+
+  const moves = []
+  let qi = 0
+  for (const t of underTeams) {
+    let need = t.target - t.current
+    const to = cmoonById.get(t.id)
+    while (need > 0 && qi < moveQueue.length) {
+      const { user, from } = moveQueue[qi++]
+      moves.push({
+        userId: user.id,
+        username: user.username,
+        fromCMoonId: from.id,
+        fromName: from.name,
+        fromColor: from.color,
+        fromDiscordRoleId: from.discordRoleId,
+        toCMoonId: to.id,
+        toName: to.name,
+        toColor: to.color,
+        toDiscordRoleId: to.discordRoleId,
+      })
+      need--
+    }
+  }
+
+  return { moves, teams, totalEligible }
+}
+
+// Applies the plan computeBalancePlan() would compute right now (always recomputed fresh
+// here, never trusting a caller-supplied plan). DB writes are batched per (fromCMoon,
+// toCMoon) pair — a handful of guarded updateMany calls plus one memberCount update per
+// touched team — rather than looping a per-user reassignUserCMoon call, which would mean
+// one transaction and multiple row locks on the same two CMoon rows per moved player.
+// Every moved player's cMoonSelectedAt is reset to now exactly like reassignUserCMoon does for
+// any other move (restarting their cMoonPoints window under the new team — see that function's
+// own comment for why this reset is load-bearing, not incidental). No join-prize cToons are
+// granted (mirrors reassignUserCMoon, which never grants prizes itself either), and rank/
+// role-grant cursors are cleared exactly like a normal reassignment so the nightly cron
+// re-evaluates them cleanly for the new team.
+//
+// Discord role sync is NOT awaited inline — syncDiscordRolesForReassignment is explicitly
+// scoped to one-user admin requests (see its own comment) and looping it here for
+// potentially hundreds of users would make this request take minutes and risk hammering
+// Discord's rate limits. Instead the DB commit finishes fast, the response returns
+// immediately, and role sync for the moved batch runs afterward with bounded concurrency
+// in the background (see syncBalanceMoveDiscordRolesInBackground) — exactly the same
+// eventual-consistency guarantee (backstopped by the nightly syncCMoonDiscordRoles cron)
+// that self-select and auto-assign already rely on today.
+export async function executeBalancePlan() {
+  const plan = await computeBalancePlan()
+  if (!plan.moves.length) return { moved: 0, teams: plan.teams, moves: [] }
+
+  const groups = new Map()
+  for (const mv of plan.moves) {
+    const key = `${mv.fromCMoonId}|${mv.toCMoonId}`
+    if (!groups.has(key)) groups.set(key, { fromCMoonId: mv.fromCMoonId, toCMoonId: mv.toCMoonId, userIds: [] })
+    groups.get(key).userIds.push(mv.userId)
+  }
+
+  const teamDelta = new Map()
+  await prisma.$transaction(async (tx) => {
+    for (const group of groups.values()) {
+      // Conditional on cMoonId still matching the plan's assumption — if a concurrent
+      // change (e.g. an admin accepting a CMoonChangeRequest for one of these users in the
+      // gap between the read above and this write) already moved someone, they're simply
+      // excluded from this run rather than clobbered; the next Balance Teams click will
+      // account for wherever they actually ended up.
+      const result = await tx.user.updateMany({
+        where: { id: { in: group.userIds }, cMoonId: group.fromCMoonId, isAdmin: false, banned: false },
+        data: {
+          cMoonId: group.toCMoonId,
+          cMoonSelectedAt: new Date(),
+          cMoonAutoAssigned: false,
+          currentCMoonRankId: null,
+          cMoonRankRoleGrantedAt: null,
+          cMoonRoleGrantedAt: null,
+        },
+      })
+      if (result.count > 0) {
+        teamDelta.set(group.fromCMoonId, (teamDelta.get(group.fromCMoonId) || 0) - result.count)
+        teamDelta.set(group.toCMoonId, (teamDelta.get(group.toCMoonId) || 0) + result.count)
+      }
+    }
+
+    for (const [cMoonId, delta] of teamDelta) {
+      if (delta !== 0) {
+        await tx.cMoon.update({ where: { id: cMoonId }, data: { memberCount: { increment: delta } } })
+      }
+    }
+  })
+
+  const totalMoved = [...teamDelta.values()].filter((d) => d > 0).reduce((sum, d) => sum + d, 0)
+  if (totalMoved === 0) return { moved: 0, teams: plan.teams, moves: [] }
+
+  // Re-read exactly who actually landed on their planned destination (excludes anyone
+  // skipped above due to the race guard) to drive both the Discord sync batch and the
+  // response's move list.
+  const destinationIds = [...new Set(plan.moves.map((m) => m.toCMoonId))]
+  const settled = await prisma.user.findMany({
+    where: { id: { in: plan.moves.map((m) => m.userId) }, cMoonId: { in: destinationIds } },
+    select: { id: true, discordId: true, inGuild: true, cMoonId: true },
+  })
+  const settledByUserId = new Map(settled.map((u) => [u.id, u]))
+  const appliedMoves = plan.moves.filter((m) => settledByUserId.get(m.userId)?.cMoonId === m.toCMoonId)
+
+  syncBalanceMoveDiscordRolesInBackground(appliedMoves, settledByUserId)
+
+  return { moved: appliedMoves.length, teams: plan.teams, moves: appliedMoves }
+}
+
+// Runs Discord role sync for a batch of already-committed cMoon moves with bounded
+// concurrency, without the caller (executeBalancePlan / the admin HTTP request) waiting on
+// it — the DB write is the source of truth and has already committed by the time this
+// runs. Never throws: any failure here just means the nightly syncCMoonDiscordRoles cron
+// (which grants any role where cMoonRoleGrantedAt IS NULL — already true for every user
+// touched by executeBalancePlan) picks up the grant later, same as it does today for
+// self-select and auto-assign.
+const BALANCE_DISCORD_SYNC_CONCURRENCY = 4
+
+async function syncBalanceMoveDiscordRolesInBackground(moves, settledByUserId) {
+  let cursor = 0
+  async function worker() {
+    while (cursor < moves.length) {
+      const mv = moves[cursor++]
+      const user = settledByUserId.get(mv.userId)
+      if (!user) continue
+      try {
+        await syncDiscordRolesForReassignment(user, mv.fromDiscordRoleId || null, mv.toDiscordRoleId || null)
+      } catch (err) {
+        console.warn('[cmoon] balance-teams Discord sync failed for user', mv.userId, err?.message || err)
+      }
+    }
+  }
+  const workers = Array.from({ length: Math.min(BALANCE_DISCORD_SYNC_CONCURRENCY, moves.length) }, worker)
+  Promise.all(workers).catch(() => {})
+}
+
+// ── Poll vote tallies ───────────────────────────────────────────────────────────
+//
+// Results are only ever shown to a user once they've voted (product decision), which in
+// practice means most returning visitors to a cMoon page with an active poll — so this is a
+// real hot path, not a rare one. Cached per pollId with a short in-process TTL (same pattern as
+// server/api/cmoons.get.js's 30s list cache), invalidated on every vote and on any admin
+// replace/delete of the poll — never left to just expire, since a poll's own voters are exactly
+// the audience who'd notice stale counts.
+const pollResultsCache = new Map() // pollId -> { at, results: [{ optionId, count }] }
+const POLL_RESULTS_TTL_MS = 30_000
+
+export async function getPollResults(pollId) {
+  const cached = pollResultsCache.get(pollId)
+  if (cached && (Date.now() - cached.at) < POLL_RESULTS_TTL_MS) return cached.results
+  const rows = await prisma.cMoonPollVote.groupBy({ by: ['optionId'], where: { pollId }, _count: { optionId: true } })
+  const results = rows.map(r => ({ optionId: r.optionId, count: r._count.optionId }))
+  pollResultsCache.set(pollId, { at: Date.now(), results })
+  return results
+}
+
+export function invalidatePollResults(pollId) {
+  pollResultsCache.delete(pollId)
 }
 
 export { CMoonError }

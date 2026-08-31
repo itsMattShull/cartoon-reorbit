@@ -20,14 +20,23 @@ export default defineEventHandler(async (event) => {
   const wasEnabled = !!existing?.cMoonEnabled
 
   const data = { cMoonEnabled: enabled }
-  // Rising edge only: starting the feature (re)sets the launch timestamp and the
-  // 3-day window existing users get to pick before auto-assignment kicks in.
-  // Flipping it off never touches these — data/timers are preserved so turning
-  // it back on later doesn't reset anyone's clock unexpectedly.
+  // Rising edge only: starting the feature (re)sets the launch timestamp, purely informational
+  // (shown in the admin panel as "Launched X"). Flipping it off never touches this — turning it
+  // back on later doesn't reset it unexpectedly. There is no selection deadline to set: players
+  // pick a cMoon or explicitly opt out, with no auto-assignment either way.
   if (enabled && !wasEnabled) {
-    const now = new Date()
-    data.cMoonEnabledAt = now
-    data.cMoonSelectionDeadlineAt = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000)
+    data.cMoonEnabledAt = new Date()
+  }
+
+  // Optional: how long an opted-out player must wait before rejoining (see
+  // computeCMoonRejoinAvailableAt in server/utils/cmoon.js). Omitted from the body when this
+  // request is only toggling the feature flag itself — preserves the existing value in that case.
+  if (body?.cMoonOptOutCooldownDays !== undefined) {
+    const days = Number(body.cMoonOptOutCooldownDays)
+    if (!Number.isInteger(days) || days < 0 || days > 365) {
+      throw createError({ statusCode: 400, statusMessage: 'Cooldown must be a whole number of days between 0 and 365' })
+    }
+    data.cMoonOptOutCooldownDays = days
   }
 
   const updated = await db.globalGameConfig.upsert({
@@ -41,13 +50,13 @@ export default defineEventHandler(async (event) => {
     userId: me.id,
     area: 'cMoon',
     key: 'cMoonEnabled',
-    prevValue: { cMoonEnabled: wasEnabled },
-    newValue: { cMoonEnabled: enabled, cMoonEnabledAt: updated.cMoonEnabledAt, cMoonSelectionDeadlineAt: updated.cMoonSelectionDeadlineAt },
+    prevValue: { cMoonEnabled: wasEnabled, cMoonOptOutCooldownDays: existing?.cMoonOptOutCooldownDays },
+    newValue: { cMoonEnabled: enabled, cMoonEnabledAt: updated.cMoonEnabledAt, cMoonOptOutCooldownDays: updated.cMoonOptOutCooldownDays },
   })
 
   return {
     cMoonEnabled: updated.cMoonEnabled,
     cMoonEnabledAt: updated.cMoonEnabledAt,
-    cMoonSelectionDeadlineAt: updated.cMoonSelectionDeadlineAt,
+    cMoonOptOutCooldownDays: updated.cMoonOptOutCooldownDays,
   }
 })

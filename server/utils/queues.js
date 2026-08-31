@@ -40,6 +40,18 @@ export const dissolveQueue = new Queue(
   }
 )
 
+// Queue for transferring points/cToons from one user to another (admin action)
+export const transferQueue = new Queue(
+  process.env.TRANSFER_QUEUE_KEY || 'transferQueue',
+  {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 100 },
+      removeOnFail:     { count: 100 },
+    },
+  }
+)
+
 // Queue for closing auctions at their exact endAt time
 export const auctionCloseQueue = new Queue(
   process.env.AUCTION_CLOSE_QUEUE_KEY || 'auctionClose',
@@ -168,6 +180,23 @@ export async function cancelDissolveAuctionLaunch(queueEntryId) {
   const existing = await dissolveAuctionLaunchQueue.getJob(queueEntryId)
   if (existing) { try { await existing.remove() } catch {} }
 }
+
+// Queue for redeeming Holiday Items (burn source cToon → mint reward cToon).
+// The whole burn+mint+record critical section runs inside the worker
+// (see server/workers/holiday-redeem.worker.js) rather than in the HTTP
+// request handler, so it survives the nuxt-server process being reloaded
+// or killed mid-request — the job keeps running in the separate, longer-lived
+// worker process and Redis keeps the job around if that process restarts too.
+export const holidayRedeemQueue = new Queue(
+  process.env.HOLIDAY_REDEEM_QUEUE_KEY || 'holidayRedeemQueue',
+  {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 500 },
+      removeOnFail:     { count: 500 },
+    },
+  }
+)
 
 // Queue for analysing survey text (embeddings, MinHash, stylometrics)
 export const contentAnalysisQueue = new Queue(

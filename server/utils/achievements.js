@@ -201,13 +201,15 @@ async function getOrCreateUserPoints(tx, userId) {
   return await tx.userPoints.create({ data: { userId, points: 0 } })
 }
 
-// Grants a reward bundle (points + backgrounds, transactionally) to a user. Shared by the
-// auto-grant path (awardAchievementToUser) and the claim-your-prize path
-// (claimAchievementReward) so both mint/grant exactly the same way. cToon mint jobs are
-// NOT enqueued here — mintQueue.add isn't rollback-safe, so the caller must only enqueue
-// the returned `ctoonJobs` after its transaction has committed (see enqueueCtoonJobs).
-async function grantRewardInTx(tx, userId, reward, method) {
-  const summary = { points: 0, backgrounds: 0, ctoonJobs: [] }
+// Grants a reward bundle (points + backgrounds + avatars + a cMoon cZone border, transactionally)
+// to a user. Shared by the auto-grant path (awardAchievementToUser), the claim-your-prize path
+// (claimAchievementReward), and cMoon affinity level-ups (server/api/cmoon/[id]/contribute.post.js)
+// so all three grant exactly the same way — one reward-granting path rather than a parallel one
+// per feature. cToon mint jobs are NOT enqueued here — mintQueue.add isn't rollback-safe, so the
+// caller must only enqueue the returned `ctoonJobs` after its transaction has committed (see
+// enqueueCtoonJobs).
+export async function grantRewardInTx(tx, userId, reward, method) {
+  const summary = { points: 0, backgrounds: 0, avatars: 0, border: false, glow: false, ctoonJobs: [] }
   if (!reward) return summary
 
   // Points
@@ -231,10 +233,54 @@ async function grantRewardInTx(tx, userId, reward, method) {
     summary.backgrounds = newBgIds.length
     if (newBgIds.length) {
       await tx.userBackground.createMany({
-        data: newBgIds.map(backgroundId => ({ userId, backgroundId })),
+        data: newBgIds.map(backgroundId => ({ userId, backgroundId, source: method })),
         skipDuplicates: true
       })
     }
+  }
+
+  // Avatars — same shape as backgrounds above, against the restricted Avatar catalog.
+  const avatarIds = [...new Set((reward.avatars || []).map(a => a.avatarId))]
+  if (avatarIds.length) {
+    const existing = await tx.userAvatar.findMany({
+      where: { userId, avatarId: { in: avatarIds } },
+      select: { avatarId: true }
+    })
+    const existingSet = new Set(existing.map(a => a.avatarId))
+    const newAvatarIds = avatarIds.filter(id => !existingSet.has(id))
+    summary.avatars = newAvatarIds.length
+    if (newAvatarIds.length) {
+      await tx.userAvatar.createMany({
+        data: newAvatarIds.map(avatarId => ({ userId, avatarId, source: method })),
+        skipDuplicates: true
+      })
+    }
+  }
+
+  // cMoon border — idempotent grant of a persistent cZone border for one cMoon (upsert rather
+  // than create+catch, since re-granting an already-owned border must be a silent no-op, not an
+  // error).
+  if (reward.borderCMoonId) {
+    await tx.userCMoonBorder.upsert({
+      where: { userId_cMoonId: { userId, cMoonId: reward.borderCMoonId } },
+      create: { userId, cMoonId: reward.borderCMoonId },
+      update: {}
+    })
+    summary.border = true
+  }
+
+  // cMoon glow — same idempotent-ownership shape as the border above, but a separate cosmetic:
+  // border colors the whole cZone container, glow is a pulsing colored glow around it. A member
+  // can own both from different levels/cMoons, but only one can be equipped/displayed at a time
+  // (see server/api/czone/border.post.js and glow.post.js, which each clear the other's equip
+  // field) — ownership here is independent of that display choice.
+  if (reward.glowCMoonId) {
+    await tx.userCMoonGlow.upsert({
+      where: { userId_cMoonId: { userId, cMoonId: reward.glowCMoonId } },
+      create: { userId, cMoonId: reward.glowCMoonId },
+      update: {}
+    })
+    summary.glow = true
   }
 
   // cToons — resolve how many of each can actually be granted (supply-capped), but leave
@@ -267,8 +313,7 @@ async function enqueueCtoonJobs(userId, ctoonJobs, method) {
 
 // Grants a cMoon rank if it outranks the user's current rank for that same cMoon. Locks the
 // user row (FOR UPDATE) so two concurrent rank-ups for the same user can't both read a stale
-// "current rank" and race — mirrors the FOR UPDATE pattern in server/utils/cmoon.js's
-// assignSmallestCMoonToUser. Returns { id, name } if a new rank was granted, else null (no
+// "current rank" and race. Returns { id, name } if a new rank was granted, else null (no
 // rank achieved yet — the user's already at/above it, or they've since left that cMoon).
 async function grantCMoonRank(tx, userId, cMoonRankId) {
   const newRank = await tx.cMoonRank.findUnique({
@@ -353,7 +398,7 @@ export async function awardAchievementToUser(client, userId, achievement) {
 
 export async function processAchievementsForUser(userId) {
   // Only process active + non-banned users
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, active: true, banned: true } })
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, active: true, banned: true, cMoonId: true } })
   if (!user) {
     // console.log('[achievements] process: skip no user', { userId })
     return { awarded: 0 }
@@ -378,6 +423,17 @@ export async function processAchievementsForUser(userId) {
 
   let awarded = 0
   for (const ach of achievements) {
+    // Cheap, in-memory pre-filter before either DB round trip below: a cMoon-rank achievement
+    // only ever applies to members of the specific cMoon that rank belongs to (the same rule
+    // evaluateUserAgainstAchievement enforces), so skip it immediately for every other member
+    // instead of paying an achievementUser lookup + a full evaluate call for it. Without this,
+    // a universal rank tier's N-cMoons-worth of auto-provisioned achievements (see
+    // server/utils/cmoonRankTiers.js) would mean nearly all of them are wasted work for any
+    // given user — only one cMoon's copy is ever relevant to them at a time.
+    if (ach.cMoonRankId && ach.cMoonRank && ach.cMoonRank.cMoonId !== user.cMoonId) {
+      continue
+    }
+
     // Skip if already achieved
     const has = await prisma.achievementUser.findUnique({ where: { achievementId_userId: { achievementId: ach.id, userId } } })
     if (has) {
@@ -421,7 +477,7 @@ export async function claimAchievementReward(userId, achievementId, optionId) {
   })
   if (!achieved) throw new AchievementClaimError('NOT_UNLOCKED')
 
-  const ach = await prisma.achievement.findUnique({ where: { id: achievementId }, select: { isClaimable: true } })
+  const ach = await prisma.achievement.findUnique({ where: { id: achievementId }, select: { isClaimable: true, cMoonRankTierId: true } })
   if (!ach?.isClaimable) throw new AchievementClaimError('NOT_CLAIMABLE')
 
   const option = await prisma.achievementClaimOption.findUnique({
@@ -442,10 +498,27 @@ export async function claimAchievementReward(userId, achievementId, optionId) {
   let txResult
   try {
     txResult = await prisma.$transaction(async (tx) => {
+      // A universal rank tier's reward is meant to be claimed ONCE, ever — but each cMoon gets
+      // its own copy of the tier's achievement (see server/utils/cmoonRankTiers.js), and
+      // User.cMoonPoints restarts on every cMoon reassignment, so without this guard a player
+      // could hop cMoon A -> B -> C, re-earn each cMoon's copy of the same tier from zero, and
+      // re-claim the "universal" reward again in every cMoon visited. The advisory lock (keyed
+      // to this user+tier, released automatically at transaction end) closes the race where two
+      // concurrent claims — one against cMoon A's achievement, one against cMoon B's — could
+      // otherwise both read zero prior claims before either commits.
+      if (ach.cMoonRankTierId) {
+        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${ach.cMoonRankTierId}`}))`
+        const alreadyClaimedTier = await tx.achievementClaim.count({
+          where: { userId, achievement: { cMoonRankTierId: ach.cMoonRankTierId } },
+        })
+        if (alreadyClaimedTier > 0) throw new AchievementClaimError('TIER_ALREADY_CLAIMED')
+      }
+
       await tx.achievementClaim.create({ data: { achievementId, userId, optionId } })
       return grantRewardInTx(tx, userId, option.reward, `achievementClaim:${achievementId}`)
     })
   } catch (err) {
+    if (err instanceof AchievementClaimError) throw err
     if (err?.code === 'P2002') throw new AchievementClaimError('ALREADY_CLAIMED')
     throw err
   }

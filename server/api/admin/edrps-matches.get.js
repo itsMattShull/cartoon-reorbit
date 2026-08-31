@@ -14,5 +14,5 @@ import { listDuelMatches } from '@/server/utils/duelMatchLog'
 
 export default defineEventHandler(async (event) => {
   await requireAdmin(event)
-  return listDuelMatches(db.edRpsMatch, getQuery(event))
+  return listDuelMatches(db.edRpsMatch, getQuery(event), { supportsAi: true })
 })

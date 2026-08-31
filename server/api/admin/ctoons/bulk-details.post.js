@@ -30,6 +30,7 @@ export default defineEventHandler(async (event) => {
       rarity: true,
       set: true,
       series: true,
+      cMoonId: true,
       inCmart: true,
       codeOnly: true,
       price: true,

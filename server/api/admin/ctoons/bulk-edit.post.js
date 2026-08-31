@@ -7,7 +7,7 @@ import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { scheduleMintEnd, cancelMintEnd } from '@/server/utils/queues'
 
 const ALLOWED_FIELDS = new Set([
-  'rarity', 'set', 'series', 'inCmart', 'codeOnly', 'price',
+  'rarity', 'set', 'series', 'cMoonId', 'inCmart', 'codeOnly', 'price',
   'perUserLimit', 'quantity', 'initialQuantity',
   'releaseDate', 'mintLimitType', 'mintEndDate',
 ])
@@ -54,6 +54,11 @@ export default defineEventHandler(async (event) => {
           break
         case 'series':
           if (item.series != null) updateData.series = String(item.series)
+          break
+        case 'cMoonId':
+          // A bad/deleted id surfaces as a foreign-key-constraint failure below (caught per-item,
+          // pushed to `errors`), same as every other write in this loop — no separate pre-check.
+          updateData.cMoonId = item.cMoonId ? String(item.cMoonId) : null
           break
         case 'inCmart':
           updateData.inCmart = Boolean(item.inCmart)

@@ -99,6 +99,10 @@
                 <div class="font-semibold">{{ formatValue(ctoon.highestMint) }}</div>
                 <div class="text-xs text-gray-300 mt-1">Total: {{ totalQuantityLabel }}</div>
               </div>
+              <div v-if="ctoon.isHolidayItem" class="rounded bg-gray-700/60 p-3">
+                <div class="text-xs uppercase text-gray-300">Opened</div>
+                <div class="font-semibold">{{ formatValue(ctoon.openedCount) }}</div>
+              </div>
               <div class="rounded bg-gray-700/60 p-3">
                 <div class="text-xs uppercase text-gray-300">You Own</div>
                 <div class="font-semibold">{{ formatValue(ownedCount) }}</div>
