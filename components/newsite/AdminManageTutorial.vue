@@ -18,7 +18,7 @@
       <!-- Hero image -->
       <div class="bg-white border rounded p-3 space-y-2">
         <h2 class="font-semibold text-sm">Hero Image</h2>
-        <p class="text-gray-500">Shown at the top of the page. Uploaded images are automatically cropped/resized to 800x800.</p>
+        <p class="text-gray-500">Shown at the top of the page. Uploaded images are automatically cropped/resized to 200x200.</p>
         <div class="flex items-center gap-4">
           <div class="w-32 h-32 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
             <img v-if="heroPreviewUrl || heroImagePath" :src="heroPreviewUrl || heroImagePath" alt="Hero preview" class="max-h-full max-w-full object-cover" />
