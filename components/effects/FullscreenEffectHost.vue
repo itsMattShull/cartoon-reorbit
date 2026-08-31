@@ -150,7 +150,7 @@ onBeforeUnmount(() => {
 .fxh-reduced-GLITCH { background: #1a1a1a; }
 .fxh-reduced-SLIME { background: #4caf00; }
 .fxh-reduced-SLIME_FLOOD { background: #3fa000; }
-.fxh-reduced-SNAKE { background: #0a0a0a; }
+.fxh-reduced-SNAKE { background: #b31217; }
 .fxh-reduced-TEXT_CALLOUT { background: #ffd400; }
 .fxh-reduced-FROG { background: #6a1fb0; }
 .fxh-reduced-FIREWORKS { background: #0d47a1; }
