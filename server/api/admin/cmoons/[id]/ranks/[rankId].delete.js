@@ -16,6 +16,9 @@ export default defineEventHandler(async (event) => {
   const rankId = event.context.params?.rankId
   const rank = await db.cMoonRank.findUnique({ where: { id: rankId } })
   if (!rank || rank.cMoonId !== cMoonId) throw createError({ statusCode: 404, statusMessage: 'Rank not found' })
+  if (rank.tierId) {
+    throw createError({ statusCode: 409, statusMessage: 'This rank is managed by the universal Rank Ladder — delete the tier there instead.' })
+  }
 
   const [achievementCount, holderCount] = await Promise.all([
     db.achievement.count({ where: { cMoonRankId: rankId } }),

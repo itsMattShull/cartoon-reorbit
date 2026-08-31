@@ -1,6 +1,29 @@
 <template>
   <div class="myczone">
 
+    <!-- ── Frame: wraps topbar+canvas+bottombar as one unit so the cMoon-affinity border/glow
+         colors the whole cZone container (topbar, canvas, and bottombar together), matching
+         the reference cWorld skin, not just the canvas's own edge. Both cosmetics are purely
+         additive INSET box-shadows (see cz-frame's CSS) — painted entirely inside this element's
+         existing box, so a cZone with a cosmetic equipped is pixel-for-pixel the same size as
+         one without: recalcScale() needs no reserve for either, and neither can ever be clipped
+         by an ancestor's overflow:hidden. Border and glow are meant to be mutually exclusive (the
+         equip endpoints each clear the other's field), so normally at most one of these two
+         modifier classes is applied — but each reads its OWN color custom property
+         (--cz-border-color / --cz-glow-color) rather than sharing one, so if the two ever DID
+         end up active together (equipped from different cMoons, or a future state that allows
+         stacking them), the glow still renders in its own correct color instead of silently
+         inheriting the border's — never invisible, never mis-colored, regardless of which one,
+         if either, is equipped. ── -->
+    <div
+      class="cz-frame"
+      :class="{ 'cz-frame--bordered': displayedBorder, 'cz-frame--glowing': displayedGlow }"
+      :style="{
+        ...(displayedBorder ? { '--cz-border-color': displayedBorder.color } : {}),
+        ...(displayedGlow ? { '--cz-glow-color': displayedGlow.color } : {}),
+      }"
+    >
+
     <!-- ── Top bar ─────────────────────────────────────────── -->
     <div class="cz-topbar">
       <div class="cz-topbar-left">
@@ -25,6 +48,57 @@
             @click="cz.activeZone = i"
           >{{ i + 1 }}</button>
         </template>
+
+        <!-- cMoon border/glow equip triggers — compact, single-line buttons that live in this
+             row's own leftover space (alongside Build/zone-tabs) rather than stacking as extra
+             lines inside cz-owner-info on the right, which used to inflate the whole topbar's
+             height whenever a member owned either cosmetic. Each picker is an absolutely
+             positioned dropdown (see .cz-cosmetic-picker), so opening one never reflows this row
+             either — the topbar's height is now identical whether or not any cosmetic is owned,
+             equipped, or being picked, matching a cZone with no cMoon affiliation at all. -->
+        <div v-if="isOwnZone && ownedBorders.length" class="cz-cosmetic">
+          <button type="button" class="cz-cosmetic-btn" @click="borderPickerOpen = !borderPickerOpen">
+            🔲 {{ displayedBorder ? displayedBorder.name : 'Border' }}
+          </button>
+          <div v-if="borderPickerOpen" class="cz-cosmetic-picker">
+            <button
+              type="button"
+              class="cz-cosmetic-option"
+              :class="{ active: !equippedBorderCMoonId }"
+              @click="setBorder(null)"
+            >None</button>
+            <button
+              v-for="b in ownedBorders" :key="b.cMoonId"
+              type="button"
+              class="cz-cosmetic-option"
+              :class="{ active: equippedBorderCMoonId === b.cMoonId }"
+              :style="{ '--cz-border-color': b.color }"
+              @click="setBorder(b.cMoonId)"
+            >{{ b.name }}</button>
+          </div>
+        </div>
+        <div v-if="isOwnZone && ownedGlows.length" class="cz-cosmetic">
+          <button type="button" class="cz-cosmetic-btn" @click="glowPickerOpen = !glowPickerOpen">
+            ✨ {{ displayedGlow ? displayedGlow.name : 'Glow' }}
+          </button>
+          <div v-if="glowPickerOpen" class="cz-cosmetic-picker">
+            <button
+              type="button"
+              class="cz-cosmetic-option"
+              :class="{ active: !equippedGlowCMoonId }"
+              @click="setGlow(null)"
+            >None</button>
+            <button
+              v-for="g in ownedGlows" :key="g.cMoonId"
+              type="button"
+              class="cz-cosmetic-option"
+              :class="{ active: equippedGlowCMoonId === g.cMoonId }"
+              :style="{ '--cz-border-color': g.color }"
+              @click="setGlow(g.cMoonId)"
+            >{{ g.name }}</button>
+          </div>
+        </div>
+        <GreenButton v-show="!cz.buildMode" class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
       </div>
       <div class="cz-topbar-right">
         <button
@@ -47,9 +121,15 @@
             </div>
           </template>
           <template v-else>
-            <img :src="`/avatars/${viewedOwner.avatar || 'default.png'}`" class="cz-owner-avatar" />
+            <img
+              :src="`/avatars/${viewedOwner.avatar || 'default.png'}`"
+              class="cz-owner-avatar"
+            />
             <div class="cz-owner-label">
-              <div><span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}</div>
+              <div>
+                <span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}
+                <span v-if="viewedOwner.cMoonRankName" class="cz-owner-cmoon-rank"> · {{ viewedOwner.cMoonRankName }}</span>
+              </div>
               <div v-if="lastOnlineText || viewedOwner.cMoon" class="cz-owner-lastseen">
                 <span v-if="lastOnlineText">{{ lastOnlineText }}</span>
                 <span v-if="lastOnlineText && viewedOwner.cMoon"> · </span>
@@ -66,7 +146,6 @@
                   />
                   <span class="cz-owner-cmoon" :style="cMoonPillStyle(viewedOwner.cMoon.color)">{{ viewedOwner.cMoon.name }}</span>
                 </NuxtLink>
-                <span v-if="viewedOwner.cMoonRankName" class="cz-owner-cmoon-rank">{{ viewedOwner.cMoonRankName }}</span>
               </div>
             </div>
           </template>
@@ -74,8 +153,14 @@
       </div>
     </div>
 
-    <!-- ── Canvas: outer reserves scaled layout, inner holds the 800×600 transform ── -->
-    <div class="cz-canvas-outer" :style="outerScaleStyle">
+    <!-- ── Canvas: outer reserves scaled layout, inner holds the 800×600 transform ──
+         The cMoon-affinity border color itself now lives on cz-frame (the wrapper around
+         topbar+canvas+bottombar, above), not here — see that div's comment for why. This outer
+         box just reserves the scaled canvas footprint in layout flow. -->
+    <div
+      class="cz-canvas-outer"
+      :style="outerScaleStyle"
+    >
       <div class="cz-canvas-inner" :style="innerScaleStyle">
         <div
           class="cz-canvas"
@@ -146,7 +231,6 @@
 
     <!-- ── Bottom bar ──────────────────────────────────────── -->
     <div class="cz-bottombar">
-      <GreenButton v-show="!cz.buildMode" class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
       <div class="cz-build-hint">
         <template v-if="cz.buildMode">
           <span class="cz-build-hint-desktop">Drag cToons from sidebar · Right-click canvas to remove</span>
@@ -161,6 +245,8 @@
         <img src="/images/newsite/ten_right.gif" class="cz-nav-btn" title="Next 10"     draggable="false" @click="navigate('next10')"     />
       </div>
     </div>
+
+    </div> <!-- /.cz-frame -->
 
     <!-- ── Ghost (global, for cross-component drag) ─────────── -->
     <Teleport to="body">
@@ -336,6 +422,17 @@ const TOPBAR_H         = 34    // top bar height in px
 const BOTTOMBAR_H      = 35    // bottom bar height in px
 const CANVAS_W         = 800   // design-space canvas width
 const CANVAS_H         = 600   // design-space canvas height
+// cMoon border/glow cosmetics (see .cz-frame below) are rendered as INSET box-shadows — painted
+// entirely inside cz-frame's own existing box, never adding to its width or height. Earlier
+// versions used a real `border`/outset box-shadow instead, which needed recalcScale() to reserve
+// extra space for it: first that reserve was wrong (didn't account for newsite-template.vue's
+// .main-content having its own 4px border under box-sizing: border-box, an 8px shortfall in both
+// dimensions that clipped the cosmetic's bottom/right edge), and more fundamentally, reserving
+// *any* space at all meant a cZone with a cosmetic equipped rendered its canvas measurably
+// smaller than a cZone without one — never what "additive" should mean. Inset shadows sidestep
+// both problems: no reserve needed, so every cZone (cMoon-affiliated or not) uses the exact same
+// plain scale formula below and renders at the exact same size, and nothing can ever be clipped
+// by an ancestor's overflow:hidden since the shadow never leaves cz-frame's own bounds.
 const SIZE_CYCLE       = [1, 0.5, 2]  // sizeScale cycle: default → half → double
 const SEARCH_TOON_SIZE = 140   // cZone search toon size in px
 
@@ -348,12 +445,79 @@ function canvasH() { return CANVAS_H }
 
 const { user, fetchSelf } = useAuth()
 const cz = useNewSiteCzoneState()
+
+// cMoon affinity border — which cMoon's colorized cZone border (if any) the caller has
+// equipped, and the set they can choose from (see /api/auth/me's ownedBorders). Read from
+// `user`, not a dedicated fetch: the session payload already carries both, and every border
+// change already forces a fetchSelf refresh.
+const ownedBorders = computed(() => user.value?.ownedBorders || [])
+const equippedBorderCMoonId = computed(() => user.value?.equippedBorderCMoonId || null)
+const borderPickerOpen = ref(false)
+
+async function setBorder(cMoonId) {
+  borderPickerOpen.value = false
+  try {
+    await $fetch('/api/czone/border', { method: 'POST', body: { cMoonId } })
+    await fetchSelf({ force: true })
+    if (viewedUsername.value === user.value?.username) await loadZone(viewedUsername.value)
+  } catch {}
+}
+
+// cMoon affinity glow — same shape as the border above, against the separate /api/czone/glow
+// endpoint. Mutually exclusive with the border at equip time (enforced server-side by both
+// endpoints, each clearing the other's field), so displayedBorder and displayedGlow below are
+// never both non-null for the same viewed cZone.
+const ownedGlows = computed(() => user.value?.ownedGlows || [])
+const equippedGlowCMoonId = computed(() => user.value?.equippedGlowCMoonId || null)
+const glowPickerOpen = ref(false)
+
+async function setGlow(cMoonId) {
+  glowPickerOpen.value = false
+  try {
+    await $fetch('/api/czone/glow', { method: 'POST', body: { cMoonId } })
+    await fetchSelf({ force: true })
+    if (viewedUsername.value === user.value?.username) await loadZone(viewedUsername.value)
+  } catch {}
+}
 const { open: openCtoonModal, holidaySignal, holidayRedeem } = useCtoonModal()
 const { mobileSidebarCollapsed } = useNewsiteLayout()
 const route  = useRoute()
 const router = useRouter()
 
+const viewedOwner = ref(null)   // { username, avatar, border, ... } of the displayed zone owner
+const viewedUsername = ref(null)   // username whose zone is currently displayed
+
+// While viewing your OWN zone, prefer the live session state (kept fresh by both this
+// component's own equip picker below and CzoneEdit.vue's build-mode toggle checkbox) so
+// toggling the border reflects immediately without a full zone reload; viewing someone else's
+// zone still uses whatever their own zone payload said their equipped border is (see loadZone).
+const displayedBorder = computed(() => {
+  if (viewedUsername.value && viewedUsername.value === user.value?.username) {
+    const cMoonId = equippedBorderCMoonId.value
+    if (!cMoonId) return null
+    return ownedBorders.value.find(b => b.cMoonId === cMoonId) || null
+  }
+  return viewedOwner.value?.border || null
+})
+
+// Same idea as displayedBorder above, for the alternative glow cosmetic. Mutually exclusive
+// with it — never rely on the template to enforce that, since it's already guaranteed by the
+// data (equip endpoints keep the two equipped-cMoonId fields from ever both being set).
+const displayedGlow = computed(() => {
+  if (viewedUsername.value && viewedUsername.value === user.value?.username) {
+    const cMoonId = equippedGlowCMoonId.value
+    if (!cMoonId) return null
+    return ownedGlows.value.find(g => g.cMoonId === cMoonId) || null
+  }
+  return viewedOwner.value?.glow || null
+})
+
 // ── Scale logic (mirrors pages/czone/[username].vue) ──────────
+// Identical for every cZone regardless of cMoon affiliation — see the FRAME_BORDER_PX-removal
+// comment above CANVAS_W/CANVAS_H for why this no longer reserves any space for the border/glow
+// cosmetic. The topbar's own height is likewise always the same 2-line owner-info block whether
+// or not a cosmetic is owned/equipped (see cz-cosmetic in the template), so there's nothing here
+// that needs to react to it growing.
 const scale = ref(1)
 function recalcScale() {
   if (typeof window === 'undefined') return
@@ -384,8 +548,6 @@ const innerScaleStyle = computed(() => ({
 }))
 
 const canvasEl       = ref(null)
-const viewedOwner    = ref(null)   // { username, avatar } of the displayed zone owner
-const viewedUsername = ref(null)   // username whose zone is currently displayed
 
 // Art Mode: hides the Second Edition overlay icon for this viewer only. Off by
 // default; resets to off whenever the viewed cZone/user changes.
@@ -823,7 +985,7 @@ async function loadZone(username) {
     cz.value.zones       = data.cZone.zones
     const firstActive    = data.cZone.zones.findIndex(z => z.toons.length > 0)
     cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
-    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null }
+    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null, border: data.border ?? null, glow: data.glow ?? null }
     loadCzoneSearchItems()
     eagerLoadMissingDimensions()
 
@@ -1273,13 +1435,70 @@ defineExpose({ save, clearZone })
   box-sizing: border-box;
 }
 
+/* Purely a positioning/clipping context — no border or padding of its own, so it takes up
+   exactly the same space a cZone with no cMoon affiliation at all would; recalcScale() needs no
+   reserve for either cosmetic, and every cZone uses the same plain scale formula. overflow:
+   hidden clips the topbar/canvas/bottombar children's own square corners to this frame's rounded
+   ones. The cosmetics themselves are NOT painted directly on cz-frame — an inset box-shadow
+   there would be entirely invisible, painted behind the topbar/canvas/bottombar's own opaque
+   backgrounds, which fill this box edge-to-edge with no gap for it to show through (unlike a
+   real `border`, which lives in space children can never occupy). Instead they're painted on
+   the ::after pseudo-element below: absolutely positioned over the whole frame, so it paints on
+   top of those children regardless, while contributing zero size to the frame itself (position:
+   absolute removes it from flow entirely) — additive in the fullest sense, both zero layout
+   impact AND actually visible. */
+.cz-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  border-radius: 10px;
+  overflow: hidden;
+}
+.cz-frame--bordered::after,
+.cz-frame--glowing::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.cz-frame--bordered::after {
+  box-shadow: inset 0 0 0 10px var(--cz-border-color, transparent);
+}
+
+/* The alternative cosmetic to the solid border above — a pulsing colored glow around the same
+   frame, instead of a hard-edged color fill. Reads its own --cz-glow-color (not the border's
+   --cz-border-color) so it renders in its own correct color and stays visible even in the
+   (normally-prevented, but not CSS-enforced) case where a border happens to be active at the
+   same time from a different cMoon. */
+.cz-frame--glowing::after {
+  animation: cz-frame-glow-pulse 2.4s ease-in-out infinite;
+}
+@keyframes cz-frame-glow-pulse {
+  0%, 100% { box-shadow: inset 0 0 0 6px var(--cz-glow-color, #fff), inset 0 0 16px 4px var(--cz-glow-color, #fff); }
+  50%      { box-shadow: inset 0 0 0 10px var(--cz-glow-color, #fff), inset 0 0 24px 8px var(--cz-glow-color, #fff); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cz-frame--glowing::after {
+    animation: none;
+    box-shadow: inset 0 0 0 8px var(--cz-glow-color, #fff), inset 0 0 20px 6px var(--cz-glow-color, #fff);
+  }
+}
+
 /* ── Top bar ── */
 .cz-topbar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   flex-shrink: 0;
-  height: v-bind(TOPBAR_H + 'px');
+  /* min-height, not height: the owner-info block's content is variable (rank line only shows
+     for some viewers, the border-equip picker adds rows when open, ...) — a fixed height with
+     align-items:center let taller content silently overflow both above AND below this bar
+     without the bar itself growing, which could visually overlap the canvas immediately below
+     it (a later sibling paints over an earlier one wherever they occupy the same space). TOPBAR_H
+     still sets the normal-case height so the bar doesn't look sparse when content IS short. */
+  min-height: v-bind(TOPBAR_H + 'px');
   box-sizing: border-box;
   padding: 4px 6px;
   gap: 6px;
@@ -1340,7 +1559,11 @@ defineExpose({ save, clearZone })
   padding: 2px 8px 2px 4px;
 }
 .cz-owner-avatar { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
-.cz-owner-label  { font-size: 0.68rem; color: #fff; white-space: nowrap; }
+/* Centered rather than left- or right-aligned: the username/rank/last-seen lines are each a
+   different natural width, so any one-sided alignment leaves a visibly empty gap on the other
+   side of the shorter lines within this shrink-to-fit label. Centering splits that gap evenly
+   instead of concentrating it in one corner. */
+.cz-owner-label  { font-size: 0.68rem; color: #fff; white-space: nowrap; text-align: center; }
 .cz-owner-prefix  { font-size: 0.6rem; text-transform: uppercase; color: rgba(255,255,255,0.55); margin-right: 3px; }
 .cz-owner-lastseen { font-size: 0.58rem; color: rgba(255,255,255,0.5); white-space: nowrap; }
 .cz-owner-cmoon-link {
@@ -1372,12 +1595,59 @@ defineExpose({ save, clearZone })
   line-height: 1.4;
 }
 .cz-owner-cmoon-rank {
-  display: inline-block;
-  margin-left: 4px;
   font-size: 0.6rem;
   font-weight: 600;
   color: #ffd75e;
 }
+
+/* cMoon border/glow equip triggers, in cz-topbar-left alongside Build/zone-tabs (see template
+   comment there for why they moved out of cz-owner-info). position: relative here + position:
+   absolute on the picker below means opening a picker overlays on top of the canvas instead of
+   pushing anything else in this row down — the topbar's own height never changes, whether a
+   picker is open, closed, or doesn't exist for this viewer at all. */
+.cz-cosmetic { position: relative; }
+.cz-cosmetic-btn {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(0,0,0,0.2);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.cz-cosmetic-picker {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 180px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--OrbitDarkBlue);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+
+.cz-cosmetic-option {
+  min-height: 28px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--cz-border-color, rgba(255,255,255,0.4));
+  background: transparent;
+  color: #fff;
+  font-size: 0.6rem;
+  cursor: pointer;
+}
+.cz-cosmetic-option.active { background: var(--cz-border-color, rgba(255,255,255,0.25)); font-weight: 700; }
 
 /* ── Skeleton placeholders (shown while a new cZone is loading) ── */
 .cz-skeleton {
@@ -1525,9 +1795,17 @@ defineExpose({ save, clearZone })
   box-sizing: border-box;
 }
 
+/* The "My cZone" button now lives in cz-topbar-left (next to Build/zone-tabs/cosmetics) instead
+   of here — see that button's usage above — so it fills the topbar's leftover space instead of
+   the cMoon page banner that used to occupy this bar's middle slot (removed: it caused layout
+   issues at small widths). */
 .cz-myczone-btn { flex-shrink: 0; }
 
 .cz-build-hint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
   font-size: 0.62rem;
   font-style: italic;
   color: rgba(255,255,255,0.7);

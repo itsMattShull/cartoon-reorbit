@@ -5,6 +5,7 @@ import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { isValidHexColor, isValidDiscordSnowflake, isValidCMoonEffectType, reassignUserCMoon } from '@/server/utils/cmoon'
 import { invalidateCMoonList } from '@/server/api/cmoons.get'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
+import { provisionAllTiersForCMoon } from '@/server/utils/cmoonRankTiers'
 
 export default defineEventHandler(async (event) => {
   const me = await requireAdmin(event)
@@ -75,6 +76,10 @@ export default defineEventHandler(async (event) => {
   if (captainIds.length) {
     await Promise.all(captainIds.map(userId => reassignUserCMoon(userId, created.id).catch(() => null)))
   }
+
+  // Every existing universal rank tier applies to this cMoon too — provision its ladder now
+  // rather than waiting for the next time an existing tier happens to be edited.
+  await provisionAllTiersForCMoon(created.id)
 
   await logAdminChange(db, { userId: me.id, area: 'cMoon', key: `create:${created.id}`, prevValue: null, newValue: { id: created.id, name } })
   invalidateCMoonList()

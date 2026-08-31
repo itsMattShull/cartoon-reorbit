@@ -3,7 +3,7 @@
 import { defineEventHandler, createError } from 'h3'
 
 import { prisma } from '@/server/prisma'
-import { getGlobalConfig } from '@/server/utils/cmoon'
+import { getGlobalConfig, isCMoonCaptain, displayRankName } from '@/server/utils/cmoon'
 
 function normalizeZones(layoutData, background, targetCount) {
   let zones = []
@@ -38,8 +38,15 @@ export default defineEventHandler(async (event) => {
     where: { username },
     include: {
       cZones: true,
-      cMoon: { select: { id: true, name: true, color: true, avatarPath: true } },
-      currentCMoonRank: { select: { name: true } }
+      cMoon: { select: { id: true, name: true, color: true, avatarPath: true, pageBannerImagePath: true } },
+      currentCMoonRank: { select: { name: true } },
+      // A single extra FK join, not a live scan of the user's CMoonAffinity rows — border
+      // eligibility is denormalized onto User.equippedBorderCMoonId at grant/equip time
+      // specifically so this hot, public-facing route never has to compute it per view.
+      equippedBorder: { select: { id: true, name: true, color: true } },
+      // Same idea as equippedBorder above, for the alternative glow cosmetic — mutually
+      // exclusive with it at equip time, so at most one of the two is ever non-null.
+      equippedGlow: { select: { id: true, name: true, color: true } }
     }
   })
 
@@ -243,6 +250,13 @@ export default defineEventHandler(async (event) => {
     }
   })
 
+  // A captain always displays as "Captain" regardless of their actually-earned rank tier — see
+  // displayRankName in server/utils/cmoon.js. Only worth the extra lookup when there's a cMoon
+  // rank name to potentially override in the first place.
+  const isCaptain = (cMoonEnabled && user.cMoon)
+    ? await isCMoonCaptain(user.cMoonId, user.id)
+    : false
+
   // 7) Return the payload containing owner info and the 3-zone array
   return {
     ownerId: user.id,
@@ -251,7 +265,12 @@ export default defineEventHandler(async (event) => {
     isBooster: user.isBooster,
     lastActivity: user.lastActivity ?? null,
     cMoon: (cMoonEnabled && user.cMoon) || null,
-    cMoonRankName: (cMoonEnabled && user.currentCMoonRank?.name) || null,
+    cMoonRankName: (cMoonEnabled && user.cMoon) ? displayRankName(user.currentCMoonRank?.name, isCaptain) : null,
+    // Independent of cMoonEnabled/membership above — an earned border/glow is a permanent
+    // personal cosmetic, visible even if the member later leaves the cMoon that granted it.
+    // Mutually exclusive at equip time, so at most one of these two is ever non-null.
+    border: user.equippedBorder ? { cMoonId: user.equippedBorder.id, name: user.equippedBorder.name, color: user.equippedBorder.color } : null,
+    glow: user.equippedGlow ? { cMoonId: user.equippedGlow.id, name: user.equippedGlow.name, color: user.equippedGlow.color } : null,
     cZone: {
       id: chosenZone.id,
       zones: enrichedZones,
