@@ -9,9 +9,10 @@
   },
   "scripts": {
     "test": "node --test",
-    "dev": "concurrently \"nuxt dev\" \"npm:worker\" \"npm:mint-end\" \"npm:guildchecker\" \"npm:achievements\" \"npm:dissolve\" \"npm:dissolve-launch\" \"npm:transfer\" \"npm:content-analyzer\"",
+    "dev": "concurrently \"nuxt dev\" \"npm:worker\" \"npm:mint-end\" \"npm:holiday-redeem\" \"npm:guildchecker\" \"npm:achievements\" \"npm:dissolve\" \"npm:dissolve-launch\" \"npm:transfer\" \"npm:content-analyzer\"",
     "worker": "node server/workers/mint.worker.js",
     "mint-end": "node server/workers/mint-end.worker.js",
+    "holiday-redeem": "node server/workers/holiday-redeem.worker.js",
     "dissolve": "node server/workers/dissolve.worker.js",
     "transfer": "node server/workers/transfer.worker.js",
     "dissolve-launch": "node server/workers/dissolve-auction-launch.worker.js",

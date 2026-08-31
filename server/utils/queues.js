@@ -181,6 +181,23 @@ export async function cancelDissolveAuctionLaunch(queueEntryId) {
   if (existing) { try { await existing.remove() } catch {} }
 }
 
+// Queue for redeeming Holiday Items (burn source cToon → mint reward cToon).
+// The whole burn+mint+record critical section runs inside the worker
+// (see server/workers/holiday-redeem.worker.js) rather than in the HTTP
+// request handler, so it survives the nuxt-server process being reloaded
+// or killed mid-request — the job keeps running in the separate, longer-lived
+// worker process and Redis keeps the job around if that process restarts too.
+export const holidayRedeemQueue = new Queue(
+  process.env.HOLIDAY_REDEEM_QUEUE_KEY || 'holidayRedeemQueue',
+  {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 500 },
+      removeOnFail:     { count: 500 },
+    },
+  }
+)
+
 // Queue for analysing survey text (embeddings, MinHash, stylometrics)
 export const contentAnalysisQueue = new Queue(
   process.env.CONTENT_ANALYSIS_QUEUE_KEY || 'contentAnalysis',

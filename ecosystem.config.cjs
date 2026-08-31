@@ -13,6 +13,7 @@
  *                       coordinates all real-time game state)
  *   worker-mint                   – BullMQ worker: NFT minting
  *   worker-mint-end               – BullMQ worker: time-based mint window closure
+ *   worker-holiday-redeem          – BullMQ worker: Holiday Item open/redeem
  *   worker-dissolve               – BullMQ worker: account dissolution
  *   worker-dissolve-auction-launch – BullMQ worker: dissolve auction launch
  *   worker-achieve                – BullMQ worker: daily achievements
@@ -134,6 +135,16 @@ module.exports = {
       instances: 1,
       env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
       env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+    },
+
+    // ── BullMQ worker: Holiday Item open/redeem ───────────────────────────
+    {
+      name:      'worker-holiday-redeem',
+      script:    'server/workers/holiday-redeem.worker.js',
+      exec_mode: 'fork',
+      instances: 1,
+      env:             { NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
     // ── BullMQ worker: account dissolution ────────────────────────────────

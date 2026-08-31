@@ -62,6 +62,15 @@ module.exports = {
       env: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME },
     },
 
+    // ── BullMQ worker: Holiday Item open/redeem ───────────────────────────
+    {
+      name:      'worker-holiday-redeem',
+      script:    'server/workers/holiday-redeem.worker.js',
+      exec_mode: 'fork',
+      instances: 1,
+      env: { NODE_ENV: 'development', OFFICIAL_USERNAME },
+    },
+
     // ── BullMQ worker: account dissolution ────────────────────────────────
     {
       name:      'worker-dissolve',

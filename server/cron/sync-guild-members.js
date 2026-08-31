@@ -20,6 +20,7 @@ import { logCronError } from '../utils/cronErrorLog.js'
 import { runCMoonPointsAggregate } from './cmoon-points-aggregate.js'
 import { runRecordDailyTaskCompletions } from './record-daily-task-completions.js'
 import { runCMoonWeeklyScore } from './cmoon-weekly-score.js'
+import { reconcileHolidayRedemptions } from './reconcile-holiday-redemptions.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
 const ANNOUNCEMENTS_BOT_TOKEN = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || BOT_TOKEN
@@ -1078,3 +1079,5 @@ cron.schedule('0 5 * * *', () => runJob('runCzoneDisplayCountAggregate', runCzon
 
 await runJob('runCMoonPointsAggregate', runCMoonPointsAggregate)
 cron.schedule('*/15 * * * *', () => runJob('runCMoonPointsAggregate', runCMoonPointsAggregate))  // every 15 minutes
+
+cron.schedule('*/5 * * * *', () => runJob('reconcileHolidayRedemptions', reconcileHolidayRedemptions))  // every 5 minutes
