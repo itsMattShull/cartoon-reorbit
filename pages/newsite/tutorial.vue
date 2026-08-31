@@ -1,44 +1,42 @@
 <template>
-  <div class="tutorial-wrap">
-    <div class="tutorial-card">
-      <img
-        v-if="heroImagePath"
-        :src="heroImagePath"
-        alt=""
-        width="200"
-        height="200"
-        loading="eager"
-        fetchpriority="high"
-        class="tutorial-hero"
-      />
+  <div class="tutorial">
+    <img
+      v-if="heroImagePath"
+      :src="heroImagePath"
+      alt=""
+      width="200"
+      height="200"
+      loading="eager"
+      fetchpriority="high"
+      class="tutorial-hero"
+    />
 
-      <h1 class="tutorial-title">How to Play</h1>
-      <p class="tutorial-subtitle">A quick guide to everything Cartoon ReOrbit has to offer.</p>
+    <h1 class="tutorial-title">How to Play</h1>
+    <p class="tutorial-subtitle">A quick guide to everything Cartoon ReOrbit has to offer.</p>
 
-      <div class="tutorial-sections">
-        <details
-          v-for="(meta, i) in SECTION_META"
-          :key="meta.key"
-          class="tutorial-section"
-          :open="i === 0"
-        >
-          <summary class="tutorial-section-summary">{{ meta.label }}</summary>
-          <div class="tutorial-section-body">
-            <div class="tutorial-prose" v-html="sections[meta.key]"></div>
+    <div class="tutorial-sections">
+      <details
+        v-for="(meta, i) in SECTION_META"
+        :key="meta.key"
+        class="tutorial-section"
+        :open="i === 0"
+      >
+        <summary class="tutorial-section-summary">{{ meta.label }}</summary>
+        <div class="tutorial-section-body">
+          <div class="tutorial-prose" v-html="sections[meta.key]"></div>
 
-            <div v-if="meta.key === 'points'" class="tutorial-points-stats">
-              <div class="tutorial-points-stat">
-                <span class="tutorial-points-num">{{ dailyLoginPoints }}</span>
-                <span class="tutorial-points-label">points / day for returning players</span>
-              </div>
-              <div class="tutorial-points-stat">
-                <span class="tutorial-points-num">{{ dailyNewUserPoints }}</span>
-                <span class="tutorial-points-label">points / day for new players (first 7 days)</span>
-              </div>
+          <div v-if="meta.key === 'points'" class="tutorial-points-stats">
+            <div class="tutorial-points-stat">
+              <span class="tutorial-points-num">{{ dailyLoginPoints }}</span>
+              <span class="tutorial-points-label">points / day for returning players</span>
+            </div>
+            <div class="tutorial-points-stat">
+              <span class="tutorial-points-num">{{ dailyNewUserPoints }}</span>
+              <span class="tutorial-points-label">points / day for new players (first 7 days)</span>
             </div>
           </div>
-        </details>
-      </div>
+        </div>
+      </details>
     </div>
   </div>
 </template>
@@ -93,22 +91,24 @@ html.newsite-tutorial body {
 </style>
 
 <style scoped>
-.tutorial-wrap {
-  /* mainContentScrollY (page meta) makes the ancestor .main-content the
-     scroll container — no independent height/overflow here, or content gets
-     clipped inside a second, shorter scroll box nested in the real one. */
+/* Single container directly on the page's own dark gradient (set below) —
+   matches every other newsite page component (.economy, .ah, .cmart,
+   .all-ctoons): no separate opaque "card" layered on top of it. Fluid like
+   .economy too: on desktop .main-content is a fixed var(--main-content-width)
+   box so this still resolves to 800px, while at <=768px .main-content
+   switches to width:100% + overflow-x:auto, and a fixed width here would
+   leave the page half off-screen behind a horizontal pan.
+   mainContentScrollY (page meta) makes the ancestor .main-content the real
+   scroll container — no independent height/overflow here, or content gets
+   clipped inside a second, shorter scroll box nested in the real one. */
+.tutorial {
   width: 100%;
-  box-sizing: border-box;
-  padding: 12px;
-}
-
-.tutorial-card {
-  max-width: 46rem;
+  max-width: var(--main-content-width, 800px);
+  min-width: 0;
   margin: 0 auto;
-  background: rgba(255, 255, 255, 0.97);
-  border-radius: 10px;
   padding: 16px;
   box-sizing: border-box;
+  color: #fff;
 }
 
 /* Reserve space up front (no CLS) and never let a 200x200 asset overflow a
@@ -125,15 +125,14 @@ html.newsite-tutorial body {
 }
 
 .tutorial-title {
-  font-size: 1.5rem;
-  font-weight: 700;
-  color: #111827;
+  font-size: 1.6rem;
+  font-weight: 800;
   margin: 0 0 4px;
 }
 
 .tutorial-subtitle {
   font-size: 0.9rem;
-  color: #6b7280;
+  color: rgba(255, 255, 255, 0.65);
   margin: 0 0 16px;
 }
 
@@ -144,8 +143,9 @@ html.newsite-tutorial body {
 }
 
 .tutorial-section {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
   overflow: hidden;
 }
 
@@ -155,8 +155,7 @@ html.newsite-tutorial body {
   padding: 12px 14px;
   font-weight: 600;
   font-size: 1rem;
-  color: #1f2937;
-  background: #f9fafb;
+  color: #fff;
   user-select: none;
 }
 .tutorial-section-summary::-webkit-details-marker { display: none; }
@@ -171,7 +170,7 @@ html.newsite-tutorial body {
 }
 
 .tutorial-section-body {
-  padding: 12px 14px 16px;
+  padding: 0 14px 16px;
 }
 
 /* No @tailwindcss/typography plugin in this app — hand-written prose rhythm
@@ -179,7 +178,7 @@ html.newsite-tutorial body {
 .tutorial-prose {
   font-size: 0.95rem;
   line-height: 1.6;
-  color: #374151;
+  color: rgba(255, 255, 255, 0.85);
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -189,7 +188,7 @@ html.newsite-tutorial body {
 .tutorial-prose :deep(h3),
 .tutorial-prose :deep(h4) {
   font-weight: 700;
-  color: #111827;
+  color: #fff;
   margin: 1em 0 0.4em;
 }
 .tutorial-prose :deep(h2:first-child),
@@ -202,17 +201,17 @@ html.newsite-tutorial body {
 }
 .tutorial-prose :deep(li) { margin: 0.25em 0; }
 .tutorial-prose :deep(a) {
-  color: #4f46e5;
+  color: var(--OrbitLightBlue, #3399CC);
   text-decoration: underline;
   padding: 0.1em 0;
   display: inline-block;
   min-height: 1.4em;
 }
 .tutorial-prose :deep(blockquote) {
-  border-left: 3px solid #d1d5db;
+  border-left: 3px solid rgba(255, 255, 255, 0.25);
   margin: 0 0 0.75em;
   padding-left: 0.75em;
-  color: #6b7280;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .tutorial-points-stats {
@@ -226,18 +225,19 @@ html.newsite-tutorial body {
   flex-direction: column;
   align-items: center;
   text-align: center;
-  background: #eef2ff;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
   padding: 12px 10px;
 }
 .tutorial-points-num {
   font-size: 1.5rem;
   font-weight: 800;
-  color: #4338ca;
+  color: var(--OrbitLightBlue, #3399CC);
 }
 .tutorial-points-label {
   font-size: 0.75rem;
-  color: #4338ca;
+  color: rgba(255, 255, 255, 0.75);
   margin-top: 2px;
 }
 </style>
