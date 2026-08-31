@@ -90,7 +90,7 @@ export default defineEventHandler(async (event) => {
   const activeSaleItem = activeSale?.items?.find(item => item.ctoon.id === ctoon.id) || null
   const saleImagePath = activeSaleItem ? (activeSale.imagePath || null) : null
 
-  const [highestSale, lowestSale, overallTradeCount, overallStats, ownedCount, totalCzoneCount] = await Promise.all([
+  const [highestSale, lowestSale, overallTradeCount, overallStats, ownedCount, totalCzoneCount, holidayItem, openedCount] = await Promise.all([
     prisma.auction.findFirst({
       where: {
         userCtoon: { ctoonId: ctoon.id },
@@ -132,7 +132,11 @@ export default defineEventHandler(async (event) => {
     // Cheap live count (no precompute needed) — the expensive part this
     // stat depends on is czoneDisplayCount below, which is precomputed
     // daily by server/cron/czone-display-count.js.
-    prisma.cZone.count()
+    prisma.cZone.count(),
+    // Any cToon can be a "gift box" — it's whatever an admin has listed as a
+    // Holiday Item for some event, not a flag on Ctoon itself.
+    prisma.holidayEventItem.findFirst({ where: { ctoonId: ctoon.id }, select: { id: true } }),
+    prisma.holidayRedemption.count({ where: { itemCtoonId: ctoon.id } })
   ])
 
   const overallRow = overallStats[0] ?? {}
@@ -226,7 +230,9 @@ export default defineEventHandler(async (event) => {
       relatedSecondEdition: ctoon.relatedSecondEdition ?? null,
       saleImagePath,
       czoneDisplayCount: ctoon.czoneDisplayCount ?? 0,
-      cMoon: ctoon.cMoon ?? null
+      cMoon: ctoon.cMoon ?? null,
+      isHolidayItem: !!holidayItem,
+      openedCount
     },
     userCtoon: userStats,
     ownedCount,
