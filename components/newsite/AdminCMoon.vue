@@ -341,6 +341,11 @@
                 <option value="">None</option>
                 <option value="GLITCH">Glitch Effect</option>
                 <option value="SLIME">Slime Effect</option>
+                <option value="SLIME_FLOOD">Slime Flood Effect</option>
+                <option value="SNAKE">Snake Effect</option>
+                <option value="TEXT_CALLOUT">"You With Us?" Text Effect</option>
+                <option value="POKEBALL">Pokeball Effect</option>
+                <option value="FIREWORKS">Fireworks Effect</option>
               </select>
             </div>
             <div>
@@ -712,7 +717,15 @@ async function removeMember(c, m) {
   }
 }
 
-const EFFECT_LABELS = { GLITCH: 'Glitch Effect', SLIME: 'Slime Effect' }
+const EFFECT_LABELS = {
+  GLITCH: 'Glitch Effect',
+  SLIME: 'Slime Effect',
+  SLIME_FLOOD: 'Slime Flood Effect',
+  SNAKE: 'Snake Effect',
+  TEXT_CALLOUT: '"You With Us?" Text Effect',
+  POKEBALL: 'Pokeball Effect',
+  FIREWORKS: 'Fireworks Effect',
+}
 function effectLabel(type) {
   return EFFECT_LABELS[type] || type
 }
