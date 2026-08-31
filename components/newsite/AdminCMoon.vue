@@ -438,7 +438,7 @@
                 <option value="SLIME_FLOOD">Slime Flood Effect</option>
                 <option value="SNAKE">Snake Effect</option>
                 <option value="TEXT_CALLOUT">"You With Us?" Text Effect</option>
-                <option value="POKEBALL">Pokeball Effect</option>
+                <option value="FROG">Frog Effect</option>
                 <option value="FIREWORKS">Fireworks Effect</option>
               </select>
             </div>
@@ -1098,7 +1098,7 @@ const EFFECT_LABELS = {
   SLIME_FLOOD: 'Slime Flood Effect',
   SNAKE: 'Snake Effect',
   TEXT_CALLOUT: '"You With Us?" Text Effect',
-  POKEBALL: 'Pokeball Effect',
+  FROG: 'Frog Effect',
   FIREWORKS: 'Fireworks Effect',
 }
 function effectLabel(type) {

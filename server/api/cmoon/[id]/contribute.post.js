@@ -96,6 +96,22 @@ export default defineEventHandler(async (event) => {
         where: { cMoonId },
         orderBy: { threshold: 'asc' },
       })
+
+      // Hard cap: a contribution can never push affinitySpent past the highest configured
+      // level's threshold — points beyond that buy no further reward, so reject the request
+      // rather than silently absorb them. Mirrors the client-side check in CMoonPage.vue, which
+      // exists for UX only; this is the actual guard. Checked against affinity.affinitySpent
+      // AFTER the upsert above (whose increment is atomic), not a separate pre-read — two
+      // concurrent contributions can't each pass a stale pre-check and jointly overshoot the cap
+      // this way, since throwing here rolls back the upsert (and the points decrement/log) along
+      // with everything else in this transaction, same as every other error path here.
+      if (allLevels.length) {
+        const maxThreshold = allLevels[allLevels.length - 1].threshold
+        if (affinity.affinitySpent > maxThreshold) {
+          throw new ContributeError('EXCEEDS_MAX_RANK', 'You are attempting to contribute a higher amount than any affinity Ranks available')
+        }
+      }
+
       // Only ever move forward, even if the ladder shrank (an admin deleted a higher level the
       // member had already reached) — never let a level-up silently move a member down.
       const prevLevel = affinity.currentLevelId ? allLevels.find(l => l.id === affinity.currentLevelId) : null
