@@ -25,7 +25,7 @@
     >
 
     <!-- ── Top bar ─────────────────────────────────────────── -->
-    <div class="cz-topbar">
+    <div class="cz-topbar" ref="topbarEl">
       <div class="cz-topbar-left">
         <OrangeButton v-if="isOwnZone" @click="toggleBuild" :disabled="buildLoading">
           {{ cz.buildMode ? 'Exit Build' : buildLoading ? 'Loading…' : 'Build' }}
@@ -418,21 +418,31 @@
 <script setup>
 // ── Canvas size variables ─────────────────────────────────────
 const TOON_SIZE        = 80    // default toon size in px when dropped
-const TOPBAR_H         = 34    // top bar height in px
+const TOPBAR_H         = 34    // top bar's CSS min-height (bare-minimum, short-content baseline)
 const BOTTOMBAR_H      = 35    // bottom bar height in px
 const CANVAS_W         = 800   // design-space canvas width
 const CANVAS_H         = 600   // design-space canvas height
 // cMoon border/glow cosmetics (see .cz-frame below) are rendered as INSET box-shadows — painted
 // entirely inside cz-frame's own existing box, never adding to its width or height. Earlier
 // versions used a real `border`/outset box-shadow instead, which needed recalcScale() to reserve
-// extra space for it: first that reserve was wrong (didn't account for newsite-template.vue's
-// .main-content having its own 4px border under box-sizing: border-box, an 8px shortfall in both
-// dimensions that clipped the cosmetic's bottom/right edge), and more fundamentally, reserving
-// *any* space at all meant a cZone with a cosmetic equipped rendered its canvas measurably
-// smaller than a cZone without one — never what "additive" should mean. Inset shadows sidestep
-// both problems: no reserve needed, so every cZone (cMoon-affiliated or not) uses the exact same
-// plain scale formula below and renders at the exact same size, and nothing can ever be clipped
-// by an ancestor's overflow:hidden since the shadow never leaves cz-frame's own bounds.
+// extra space for it; inset shadows need no such reserve, so every cZone (cMoon-affiliated or
+// not) uses the exact same scale formula below and renders at the exact same size.
+//
+// Desktop only (see recalcScale below): this component renders inside newsite-template.vue's
+// fixed retro chrome there — .main-content is a hardcoded 800×682 box (--main-content-width /
+// --main-content-height) with `overflow: hidden` and no spare pixels budgeted around it, and
+// under box-sizing: border-box its own 4px border shrinks the actual content area by 2× that on
+// top. The topbar's real rendered height also varies with content (owner-info's rank/cMoon-pill
+// line, the border/glow equip buttons, ...) and can exceed TOPBAR_H's bare CSS min-height —
+// recalcScale() measures it via topbarEl instead of assuming the minimum, so the canvas is
+// always scaled down just enough that topbar + canvas + bottombar together still fit inside this
+// fixed box. Skipping this on width alone (as a plain width-based scale formula does) let a
+// taller-than-assumed topbar push the bottombar — and this frame's own border/glow overlay,
+// sized to match — past the chrome's fixed bottom edge, silently clipped off by its
+// overflow:hidden with no visible bottom edge at all.
+const DESKTOP_CHROME_H       = 682
+const MAIN_CONTENT_BORDER_PX = 4   // matches --main-content-border-thickness
+const MOBILE_BREAKPOINT      = 768 // matches newsite-template.vue's own isMobile media query
 const SIZE_CYCLE       = [1, 0.5, 2]  // sizeScale cycle: default → half → double
 const SEARCH_TOON_SIZE = 140   // cZone search toon size in px
 
@@ -514,21 +524,46 @@ const displayedGlow = computed(() => {
 
 // ── Scale logic (mirrors pages/czone/[username].vue) ──────────
 // Identical for every cZone regardless of cMoon affiliation — see the FRAME_BORDER_PX-removal
-// comment above CANVAS_W/CANVAS_H for why this no longer reserves any space for the border/glow
-// cosmetic. The topbar's own height is likewise always the same 2-line owner-info block whether
-// or not a cosmetic is owned/equipped (see cz-cosmetic in the template), so there's nothing here
-// that needs to react to it growing.
+// comment above CANVAS_W/CANVAS_H for why this no longer reserves any WIDTH for the border/glow
+// cosmetic. Height is a separate story: see DESKTOP_CHROME_H's comment above and topbarEl below.
 const scale = ref(1)
+// Real DOM ref on .cz-topbar (see template), measured by recalcScale() below instead of assumed
+// — the topbar's rendered height is content-dependent (owner-info's rank/cMoon-pill line, the
+// border/glow equip buttons, ...) and a fixed assumption here previously undershot on real
+// cZones, under-reserving the height budget and clipping the bottombar (and this frame's own
+// border/glow overlay) off the bottom of the fixed chrome. offsetHeight falls back to TOPBAR_H
+// before the DOM ref exists (first script-setup-time call, pre-mount) — recalcScale() re-runs
+// from onMounted and on every subsequent resize once the ResizeObserver below is attached, so
+// this self-corrects to the true height immediately after.
+const topbarEl = ref(null)
 function recalcScale() {
   if (typeof window === 'undefined') return
   const gutter = 32 // account for page padding / scrollbar
   const w = window.innerWidth || document.documentElement?.clientWidth || CANVAS_W
-  scale.value = Math.min(1, Math.max(0.1, (w - gutter) / CANVAS_W))
+  let s = Math.min(1, Math.max(0.1, (w - gutter) / CANVAS_W))
+
+  // Also cap by HEIGHT so topbar + canvas + bottombar never exceed newsite-template.vue's fixed
+  // overflow: hidden chrome, regardless of how the width-based scale above came out. Skipped on
+  // mobile, where .main-content switches to a fluid height: auto with no such fixed budget.
+  if (w > MOBILE_BREAKPOINT) {
+    const topbarH = topbarEl.value?.offsetHeight || TOPBAR_H
+    const availableContentH = DESKTOP_CHROME_H - MAIN_CONTENT_BORDER_PX * 2
+    const availableCanvasH = availableContentH - topbarH - BOTTOMBAR_H
+    const heightCeiling = Math.max(0.1, availableCanvasH / CANVAS_H)
+    s = Math.min(s, heightCeiling)
+  }
+  scale.value = s
 }
 
 // Set the correct scale immediately on the client to avoid a post-hydration
 // layout flash where the canvas briefly renders at full 800px width.
 if (process.client) recalcScale()
+
+// Keeps recalcScale()'s height budget correct as the topbar's own rendered height changes for
+// ANY reason — owner-info gaining/losing its rank line, the border/glow picker opening, a font
+// finishing its load — without hardcoding or enumerating those cases. (dis)connected alongside
+// the resize listener in onMounted/onUnmounted.
+let topbarResizeObserver = null
 
 // Outer box reserves the scaled visual footprint in layout flow
 const outerScaleStyle = computed(() => ({
@@ -939,6 +974,11 @@ onMounted(() => {
   window.addEventListener('mouseup',   onGlobalUp)
   window.addEventListener('touchmove', onGlobalMove, { passive: false })
   window.addEventListener('touchend',  onGlobalUp)
+
+  if (topbarEl.value && typeof ResizeObserver !== 'undefined') {
+    topbarResizeObserver = new ResizeObserver(() => recalcScale())
+    topbarResizeObserver.observe(topbarEl.value)
+  }
 })
 
 // Load once the user is available (may not be ready at mount time)
@@ -962,6 +1002,8 @@ onUnmounted(() => {
   window.removeEventListener('mouseup',   onGlobalUp)
   window.removeEventListener('touchmove', onGlobalMove)
   window.removeEventListener('touchend',  onGlobalUp)
+  topbarResizeObserver?.disconnect()
+  topbarResizeObserver = null
   // clear any leftover drag state
   cancelLongPress()
   cz.value.activeDrag = null
@@ -1506,7 +1548,24 @@ defineExpose({ save, clearZone })
   border-bottom: 2px solid var(--OrbitDarkBlue);
 }
 
-.cz-topbar-left { display: flex; align-items: center; gap: 4px; }
+/* flex-grow so this box actually claims the row's leftover space (cz-topbar-right keeps its own
+   natural width via flex-shrink: 0), and min-width: 0 so it CAN be constrained below its
+   children's combined natural width when that space runs out — a real cMoon name plus both
+   cosmetic pickers plus the My cZone button can be wider than what's left next to Art Mode/owner
+   info. Without min-width: 0, a flex item's default auto min-width refuses to shrink below its
+   content's width at all, so the overflow would silently spill past cz-frame's own
+   overflow: hidden and disappear off the right edge instead of wrapping. flex-wrap here turns
+   that same overflow into a second line instead — nothing is ever cut off, just shorter/taller
+   depending on how much content the owner actually has equipped. */
+.cz-topbar-left {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 4px;
+  row-gap: 4px;
+}
 
 .cz-zone-tab {
   font-size: 0.65rem;
