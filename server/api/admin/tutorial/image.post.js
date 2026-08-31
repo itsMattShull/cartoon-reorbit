@@ -24,7 +24,10 @@ const baseDir = process.env.NODE_ENV === 'production'
 const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/jpg', 'image/webp'])
 const MAX_BYTES = 5 * 1024 * 1024 // 5MB
 const MAX_INPUT_PIXELS = 30_000_000 // guards against decompression-bomb-style crafted images
-const SIDE = 200
+// 4:1 banner, 2x the 800x200 CSS display size (var(--main-content-width) x 200)
+// for a sharp render on retina screens.
+const BANNER_WIDTH = 1600
+const BANNER_HEIGHT = 400
 
 const publicAssetPath = (filename) =>
   process.env.NODE_ENV === 'production' ? `/images/tutorial/${filename}` : `/tutorial/${filename}`
@@ -44,14 +47,14 @@ export default defineEventHandler(async (event) => {
   }
 
   // Decode + auto-orient, then always re-encode through sharp to a fresh PNG
-  // buffer — this both center-crops/resizes to exactly 200x200 and strips
+  // buffer — this both center-crops/resizes to exactly 1600x400 and strips
   // anything beyond valid pixel data (the real defense against a spoofed or
   // polyglot file, not the MIME check alone).
   let outBuffer
   try {
     outBuffer = await sharp(imagePart.data, { limitInputPixels: MAX_INPUT_PIXELS })
       .rotate()
-      .resize(SIDE, SIDE, { fit: 'cover', position: 'centre' })
+      .resize(BANNER_WIDTH, BANNER_HEIGHT, { fit: 'cover', position: 'centre' })
       .png()
       .toBuffer()
   } catch {

@@ -4,8 +4,8 @@
       v-if="heroImagePath"
       :src="heroImagePath"
       alt=""
-      width="200"
-      height="200"
+      width="1600"
+      height="400"
       loading="eager"
       fetchpriority="high"
       class="tutorial-hero"
@@ -111,17 +111,17 @@ html.newsite-tutorial body {
   color: #fff;
 }
 
-/* Reserve space up front (no CLS) and never let a 200x200 asset overflow a
-   narrow phone viewport. */
+/* Full-width 4:1 banner (source is 1600x400, 2x this for retina). aspect-ratio
+   reserves the space up front from the width/height attrs above (no CLS)
+   before the image itself loads. */
 .tutorial-hero {
   display: block;
   width: 100%;
-  max-width: 200px;
   height: auto;
-  aspect-ratio: 1 / 1;
+  aspect-ratio: 4 / 1;
   object-fit: cover;
   border-radius: 8px;
-  margin: 0 auto 16px;
+  margin: 0 0 16px;
 }
 
 .tutorial-title {

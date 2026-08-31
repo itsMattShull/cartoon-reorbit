@@ -17,10 +17,10 @@
 
       <!-- Hero image -->
       <div class="bg-white border rounded p-3 space-y-2">
-        <h2 class="font-semibold text-sm">Hero Image</h2>
-        <p class="text-gray-500">Shown at the top of the page. Uploaded images are automatically cropped/resized to 200x200.</p>
+        <h2 class="font-semibold text-sm">Hero Banner</h2>
+        <p class="text-gray-500">Shown as a wide banner at the top of the page. Uploaded images are automatically cropped/resized to 1600x400 (4:1).</p>
         <div class="flex items-center gap-4">
-          <div class="w-32 h-32 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
+          <div class="w-64 h-16 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
             <img v-if="heroPreviewUrl || heroImagePath" :src="heroPreviewUrl || heroImagePath" alt="Hero preview" class="max-h-full max-w-full object-cover" />
             <span v-else class="text-gray-400">No image</span>
           </div>
