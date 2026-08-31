@@ -98,6 +98,7 @@
             >{{ g.name }}</button>
           </div>
         </div>
+        <GreenButton v-show="!cz.buildMode" class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
       </div>
       <div class="cz-topbar-right">
         <button
@@ -230,23 +231,11 @@
 
     <!-- ── Bottom bar ──────────────────────────────────────── -->
     <div class="cz-bottombar">
-      <GreenButton v-show="!cz.buildMode" class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
       <div class="cz-build-hint">
         <template v-if="cz.buildMode">
           <span class="cz-build-hint-desktop">Drag cToons from sidebar · Right-click canvas to remove</span>
           <span class="cz-build-hint-mobile">Tap sidebar to add · Hold 2s to remove</span>
         </template>
-        <NuxtLink
-          v-else-if="viewedOwner?.cMoon?.pageBannerImagePath"
-          :to="`/newsite/cmoon/${viewedOwner.cMoon.id}`"
-          class="cz-cmoon-banner-link"
-        >
-          <img
-            :src="viewedOwner.cMoon.pageBannerImagePath"
-            :alt="`${viewedOwner.cMoon.name} cMoon`"
-            class="cz-cmoon-banner"
-          />
-        </NuxtLink>
       </div>
       <div v-show="!cz.buildMode" class="cz-nav-buttons">
         <img src="/images/newsite/ten_left.gif"  class="cz-nav-btn" title="Previous 10" draggable="false" @click="navigate('previous10')" />
@@ -1806,6 +1795,10 @@ defineExpose({ save, clearZone })
   box-sizing: border-box;
 }
 
+/* The "My cZone" button now lives in cz-topbar-left (next to Build/zone-tabs/cosmetics) instead
+   of here — see that button's usage above — so it fills the topbar's leftover space instead of
+   the cMoon page banner that used to occupy this bar's middle slot (removed: it caused layout
+   issues at small widths). */
 .cz-myczone-btn { flex-shrink: 0; }
 
 .cz-build-hint {
@@ -1824,51 +1817,6 @@ defineExpose({ save, clearZone })
 @media (max-width: 768px) {
   .cz-build-hint-mobile  { display: inline; }
   .cz-build-hint-desktop { display: none; }
-}
-
-/* This cMoon's page banner (admin-uploaded, normalized to 1200x100 — see CMoonPage.vue), shown
-   in the bottombar's middle slot in place of the build hint whenever not in build mode. Capped
-   to the bottombar's own available height (BOTTOMBAR_H minus the bar's vertical padding) with
-   width free to shrink via object-fit, since the banner's native 12:1 aspect ratio is far wider
-   than this slot on any but the widest viewports. */
-.cz-cmoon-banner-link {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 0;
-  max-width: 100%;
-}
-.cz-cmoon-banner {
-  max-width: 100%;
-  max-height: calc(v-bind(BOTTOMBAR_H + 'px') - 6px);
-  object-fit: contain;
-  border-radius: 3px;
-}
-/* On mobile the bottombar isn't fighting a fixed-height page chrome for space (.main-content
-   goes fluid/height:auto there — see newsite-template.vue's own isMobile logic), so there's no
-   need to squeeze the banner down to the desktop bar's tight 29px cap. Raising the
-   height cap alone isn't enough, though: the banner's 12:1 aspect ratio means WIDTH, not height,
-   is what actually constrains its rendered size, and on a narrow phone the width left over after
-   the "My cZone" button and 5 nav icons share the row is often smaller than the banner got on
-   desktop. Giving the banner its own full-width row (wrap + order + flex-basis:100%) instead of
-   splitting the row three ways is what actually makes it render "full size" on mobile — the
-   button and nav icons move to their own row below it. */
-@media (max-width: 768px) {
-  .cz-bottombar {
-    flex-wrap: wrap;
-    height: auto;
-    min-height: v-bind(BOTTOMBAR_H + 'px');
-    padding: 6px 8px;
-    row-gap: 4px;
-  }
-  .cz-cmoon-banner-link {
-    order: -1;
-    flex: 1 1 100%;
-  }
-  .cz-cmoon-banner {
-    width: 100%;
-    max-height: 72px;
-  }
 }
 
 .cz-nav-buttons {
