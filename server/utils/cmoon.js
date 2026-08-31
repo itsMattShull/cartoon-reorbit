@@ -10,6 +10,7 @@ import { getChicagoDailyBoundary, getChicagoMorningWindowStart } from './dailyTa
 import { COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
 import { EXCLUDED_SYSTEM_USER_ID } from './economyValuation.js'
 import { grantGuildRole, revokeGuildRole } from './discord.js'
+import { CMOON_EFFECT_TYPES } from '../../utils/cmoonEffectTypes.js'
 
 // ── Weekly cMoon team leaderboard scoring ──────────────────────────────────────
 //
@@ -422,10 +423,11 @@ export function isValidDiscordSnowflake(value) {
   return typeof value === 'string' && DISCORD_SNOWFLAKE_RE.test(value)
 }
 
-// Explicit allow-list checked before any value reaches Prisma, matching the isValidHexColor /
+// Allow-list checked before any value reaches Prisma, matching the isValidHexColor /
 // isValidDiscordSnowflake convention above — an invalid enum value should fail with a clean 400
-// here, not surface as an unhandled Prisma validation error from the write itself.
-export const CMOON_EFFECT_TYPES = ['GLITCH', 'SLIME']
+// here, not surface as an unhandled Prisma validation error from the write itself. Imported from
+// utils/cmoonEffectTypes.js (the single source of truth also used by the client-side player) so
+// this list can't drift out of sync with composables/useFullscreenEffect.js's VALID_TYPES.
 
 export function isValidCMoonEffectType(value) {
   return value === null || CMOON_EFFECT_TYPES.includes(value)

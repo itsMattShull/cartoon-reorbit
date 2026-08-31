@@ -2,6 +2,21 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Shared with pages/newsite/newwinball.vue's own scoped copy (same font file, same family name —
+ * duplicate @font-face declarations pointing at the same URL are deduped by the browser, so this
+ * doesn't double-download there). Declared globally here so components/effects/TextCalloutEffect.vue
+ * can use it too without a third copy. `font-display: swap` matters more here than it does for
+ * winball: the join effect's whole runtime is ~2.6s, so on a slow connection this must never sit
+ * on invisible text (the default `font-display: block` FOIT) waiting for the file — render
+ * immediately in the fallback stack and swap in place if/when the real font arrives.
+ */
+@font-face {
+  font-family: "FuturaBdCnBT";
+  src: url("/newwinball/fonts/84_Futura BdCn BT.ttf") format("truetype");
+  font-display: swap;
+}
+
 @layer base {
   /*
    * Readable text in form controls, everywhere.

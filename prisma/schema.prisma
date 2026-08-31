@@ -2978,6 +2978,11 @@ model AchievementRewardBackground {
 enum CMoonEffectType {
   GLITCH
   SLIME
+  SLIME_FLOOD
+  SNAKE
+  TEXT_CALLOUT
+  POKEBALL
+  FIREWORKS
 }
 
 model CMoon {
