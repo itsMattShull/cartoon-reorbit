@@ -63,18 +63,32 @@
               type="number"
               inputmode="numeric"
               min="1"
+              :max="affinityRemainingToMax ?? undefined"
               step="1"
               class="cmp-affinity-input"
               style="font-size:16px"
               placeholder="Points"
-              :disabled="contributing"
+              :disabled="contributing || affinityRemainingToMax === 0"
             />
-            <button type="button" class="cmp-affinity-submit" :disabled="contributing || !contributeAmount" @click="submitContribute">
+            <button type="button" class="cmp-affinity-submit" :disabled="contributing || !contributeAmount || affinityRemainingToMax === 0" @click="submitContribute">
               {{ contributing ? 'Contributing…' : 'Contribute' }}
             </button>
             <button type="button" class="cmp-affinity-cancel" :disabled="contributing" @click="contributeOpen = false">Cancel</button>
           </div>
-          <p v-if="contributeError" class="cmp-affinity-error">{{ contributeError }}</p>
+          <p v-if="affinityRemainingToMax === 0" class="cmp-affinity-error">You've already reached the highest affinity rank for this cMoon.</p>
+          <p v-else-if="contributeError" class="cmp-affinity-error">{{ contributeError }}</p>
+        </div>
+
+        <!-- Hard-stop warning, not a confirm-and-proceed prompt: the amount is rejected outright
+             (see submitContribute/server contribute.post.js), this dialog only explains why. -->
+        <div v-if="showMaxRankWarning" class="cmp-modal-overlay" @click="showMaxRankWarning = false">
+          <div class="cmp-modal-card" role="alertdialog" aria-modal="true" aria-labelledby="cmp-max-rank-title" @click.stop>
+            <p id="cmp-max-rank-title" class="cmp-modal-title">You are attempting to contribute a higher amount than any affinity Ranks available</p>
+            <p v-if="affinityRemainingToMax" class="cmp-modal-body">
+              You can contribute up to {{ affinityRemainingToMax.toLocaleString() }} more point{{ affinityRemainingToMax === 1 ? '' : 's' }} toward this cMoon's highest rank.
+            </p>
+            <button type="button" class="cmp-modal-ok" @click="showMaxRankWarning = false">OK</button>
+          </div>
         </div>
 
         <!-- Rank Ladder progress: only shown to a member of THIS cMoon, since rank is per-cMoon
@@ -349,6 +363,25 @@ const affinityProgressPct = computed(() => {
   return Math.max(0, Math.min(100, Math.round(((spent - floor) / span) * 100)))
 })
 
+// The highest configured level's threshold is the ceiling on contributions: points spent past it
+// earn no further reward, so a contribution that would cross it is rejected rather than silently
+// accepted. `Math.max` over threshold rather than trusting array order — `levels` here is sorted
+// by `sortOrder` (its display order), not `threshold`, and the two aren't guaranteed to match.
+// Null (not 0) when this cMoon has no levels configured yet, so "no ceiling" and "ceiling of 0"
+// stay distinguishable.
+const maxAffinityThreshold = computed(() => {
+  const levels = affinity.value?.levels
+  if (!levels?.length) return null
+  return Math.max(...levels.map(l => l.threshold))
+})
+
+const affinityRemainingToMax = computed(() => {
+  if (maxAffinityThreshold.value == null) return null
+  return Math.max(0, maxAffinityThreshold.value - (affinity.value?.affinitySpent || 0))
+})
+
+const showMaxRankWarning = ref(false)
+
 useHead({
   title: computed(() => cmoon.value ? `${cmoon.value.name} · cMoon` : 'cMoon')
 })
@@ -450,6 +483,13 @@ async function submitContribute() {
   const amount = Math.trunc(Number(contributeAmount.value))
   if (!Number.isInteger(amount) || amount <= 0) {
     contributeError.value = 'Enter a whole number of points.'
+    return
+  }
+  // Hard cap, checked client-side for immediate feedback — the server enforces the same ceiling
+  // independently (see server/api/cmoon/[id]/contribute.post.js), so this is a UX shortcut, not
+  // the actual guard.
+  if (maxAffinityThreshold.value != null && (affinity.value?.affinitySpent || 0) + amount > maxAffinityThreshold.value) {
+    showMaxRankWarning.value = true
     return
   }
   contributeError.value = ''
@@ -687,6 +727,53 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   margin: 8px 0 0;
   font-size: 0.78rem;
   color: var(--cm-danger, #fca5a5);
+}
+
+.cmp-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.cmp-modal-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--cm-bg, #1a1a2e);
+  color: var(--cm-text, #ffffff);
+  border: 1px solid var(--cm-border, rgba(255,255,255,0.3));
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.cmp-modal-title {
+  margin: 0 0 8px;
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--cm-danger, #fca5a5);
+}
+
+.cmp-modal-body {
+  margin: 0 0 14px;
+  font-size: 0.82rem;
+  color: var(--cm-text-muted, rgba(255,255,255,0.7));
+}
+
+.cmp-modal-ok {
+  min-height: 44px;
+  width: 100%;
+  border: none;
+  border-radius: 6px;
+  background: var(--cm-banner, var(--OrbitLightBlue));
+  color: var(--cm-banner-text, #ffffff);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
 }
 
 /* A brief, non-animated highlight rather than a filter/box-shadow loop — cheap and respects
