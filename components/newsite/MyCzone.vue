@@ -3,20 +3,18 @@
 
     <!-- ── Frame: wraps topbar+canvas+bottombar as one unit so the cMoon-affinity border/glow
          colors the whole cZone container (topbar, canvas, and bottombar together), matching
-         the reference cWorld skin, not just the canvas's own edge. A real `border` (for the
-         solid cosmetic) or `box-shadow` (for the glow) here is safe because recalcScale()'s
-         width formula always reserves FRAME_BORDER_PX on each side from the fixed 800px
-         .main-content budget (see that function below) — neither cosmetic is ever "extra"
-         pixels this fixed-width chrome has to find room for. Border and glow are meant to be
-         mutually exclusive (the equip endpoints each clear the other's field), so normally at
-         most one of these two modifier classes is applied — but each reads its OWN color custom
-         property (--cz-border-color / --cz-glow-color) rather than sharing one, so if the two
-         ever DID end up active together (equipped from different cMoons, or a future state that
-         allows stacking them), the glow still renders in its own correct color instead of
-         silently inheriting the border's — never invisible, never mis-colored, regardless of
-         which one, if either, is equipped. Always renders cz-frame's own (transparent-by-default)
-         border regardless of which is equipped, so the reserved space — and thus the canvas's
-         rendered size — never jumps when a cosmetic is equipped/unequipped or switched. ── -->
+         the reference cWorld skin, not just the canvas's own edge. Both cosmetics are purely
+         additive INSET box-shadows (see cz-frame's CSS) — painted entirely inside this element's
+         existing box, so a cZone with a cosmetic equipped is pixel-for-pixel the same size as
+         one without: recalcScale() needs no reserve for either, and neither can ever be clipped
+         by an ancestor's overflow:hidden. Border and glow are meant to be mutually exclusive (the
+         equip endpoints each clear the other's field), so normally at most one of these two
+         modifier classes is applied — but each reads its OWN color custom property
+         (--cz-border-color / --cz-glow-color) rather than sharing one, so if the two ever DID
+         end up active together (equipped from different cMoons, or a future state that allows
+         stacking them), the glow still renders in its own correct color instead of silently
+         inheriting the border's — never invisible, never mis-colored, regardless of which one,
+         if either, is equipped. ── -->
     <div
       class="cz-frame"
       :class="{ 'cz-frame--bordered': displayedBorder, 'cz-frame--glowing': displayedGlow }"
@@ -27,7 +25,7 @@
     >
 
     <!-- ── Top bar ─────────────────────────────────────────── -->
-    <div class="cz-topbar" ref="topbarEl">
+    <div class="cz-topbar">
       <div class="cz-topbar-left">
         <OrangeButton v-if="isOwnZone" @click="toggleBuild" :disabled="buildLoading">
           {{ cz.buildMode ? 'Exit Build' : buildLoading ? 'Loading…' : 'Build' }}
@@ -50,6 +48,56 @@
             @click="cz.activeZone = i"
           >{{ i + 1 }}</button>
         </template>
+
+        <!-- cMoon border/glow equip triggers — compact, single-line buttons that live in this
+             row's own leftover space (alongside Build/zone-tabs) rather than stacking as extra
+             lines inside cz-owner-info on the right, which used to inflate the whole topbar's
+             height whenever a member owned either cosmetic. Each picker is an absolutely
+             positioned dropdown (see .cz-cosmetic-picker), so opening one never reflows this row
+             either — the topbar's height is now identical whether or not any cosmetic is owned,
+             equipped, or being picked, matching a cZone with no cMoon affiliation at all. -->
+        <div v-if="isOwnZone && ownedBorders.length" class="cz-cosmetic">
+          <button type="button" class="cz-cosmetic-btn" @click="borderPickerOpen = !borderPickerOpen">
+            🔲 {{ displayedBorder ? displayedBorder.name : 'Border' }}
+          </button>
+          <div v-if="borderPickerOpen" class="cz-cosmetic-picker">
+            <button
+              type="button"
+              class="cz-cosmetic-option"
+              :class="{ active: !equippedBorderCMoonId }"
+              @click="setBorder(null)"
+            >None</button>
+            <button
+              v-for="b in ownedBorders" :key="b.cMoonId"
+              type="button"
+              class="cz-cosmetic-option"
+              :class="{ active: equippedBorderCMoonId === b.cMoonId }"
+              :style="{ '--cz-border-color': b.color }"
+              @click="setBorder(b.cMoonId)"
+            >{{ b.name }}</button>
+          </div>
+        </div>
+        <div v-if="isOwnZone && ownedGlows.length" class="cz-cosmetic">
+          <button type="button" class="cz-cosmetic-btn" @click="glowPickerOpen = !glowPickerOpen">
+            ✨ {{ displayedGlow ? displayedGlow.name : 'Glow' }}
+          </button>
+          <div v-if="glowPickerOpen" class="cz-cosmetic-picker">
+            <button
+              type="button"
+              class="cz-cosmetic-option"
+              :class="{ active: !equippedGlowCMoonId }"
+              @click="setGlow(null)"
+            >None</button>
+            <button
+              v-for="g in ownedGlows" :key="g.cMoonId"
+              type="button"
+              class="cz-cosmetic-option"
+              :class="{ active: equippedGlowCMoonId === g.cMoonId }"
+              :style="{ '--cz-border-color': g.color }"
+              @click="setGlow(g.cMoonId)"
+            >{{ g.name }}</button>
+          </div>
+        </div>
       </div>
       <div class="cz-topbar-right">
         <button
@@ -97,50 +145,6 @@
                   />
                   <span class="cz-owner-cmoon" :style="cMoonPillStyle(viewedOwner.cMoon.color)">{{ viewedOwner.cMoon.name }}</span>
                 </NuxtLink>
-              </div>
-              <button
-                v-if="isOwnZone && ownedBorders.length"
-                type="button"
-                class="cz-border-equip-btn"
-                @click="borderPickerOpen = !borderPickerOpen"
-              >{{ displayedBorder ? `Border: ${displayedBorder.name}` : 'Show cMoon border' }}</button>
-              <div v-if="borderPickerOpen" class="cz-border-picker">
-                <button
-                  type="button"
-                  class="cz-border-option"
-                  :class="{ active: !equippedBorderCMoonId }"
-                  @click="setBorder(null)"
-                >None</button>
-                <button
-                  v-for="b in ownedBorders" :key="b.cMoonId"
-                  type="button"
-                  class="cz-border-option"
-                  :class="{ active: equippedBorderCMoonId === b.cMoonId }"
-                  :style="{ '--cz-border-color': b.color }"
-                  @click="setBorder(b.cMoonId)"
-                >{{ b.name }}</button>
-              </div>
-              <button
-                v-if="isOwnZone && ownedGlows.length"
-                type="button"
-                class="cz-border-equip-btn"
-                @click="glowPickerOpen = !glowPickerOpen"
-              >{{ displayedGlow ? `Glow: ${displayedGlow.name}` : 'Show cMoon glow' }}</button>
-              <div v-if="glowPickerOpen" class="cz-border-picker">
-                <button
-                  type="button"
-                  class="cz-border-option"
-                  :class="{ active: !equippedGlowCMoonId }"
-                  @click="setGlow(null)"
-                >None</button>
-                <button
-                  v-for="g in ownedGlows" :key="g.cMoonId"
-                  type="button"
-                  class="cz-border-option"
-                  :class="{ active: equippedGlowCMoonId === g.cMoonId }"
-                  :style="{ '--cz-border-color': g.color }"
-                  @click="setGlow(g.cMoonId)"
-                >{{ g.name }}</button>
               </div>
             </div>
           </template>
@@ -429,28 +433,17 @@ const TOPBAR_H         = 34    // top bar height in px
 const BOTTOMBAR_H      = 35    // bottom bar height in px
 const CANVAS_W         = 800   // design-space canvas width
 const CANVAS_H         = 600   // design-space canvas height
-// .cz-frame's border-width (see its CSS below) — always reserved from the available width in
-// recalcScale(), whether or not a border is actually equipped/colored, so the canvas's rendered
-// size never jumps when a border is equipped/unequipped and so the border (real CSS `border`,
-// not outline) never has to compete with the canvas for space in the fixed-width chrome. Bumped
-// from an initial 8px (then 16px), both of which read as too thin/subtle to notice at a glance
-// against a busy cZone background — this is a deliberately bold, unmissable frame now, with
-// headroom for the glow cosmetic (see .cz-frame--glowing below) to read as clearly saturated
-// rather than a faint blurred hint.
-const FRAME_BORDER_PX  = 20
-// Desktop only (see recalcScale below): this component renders inside newsite-template.vue's
-// fixed retro chrome there — .main-content is a hardcoded 800×682 box (--main-content-width /
-// --sidebar-height) with `overflow: hidden` and no spare pixels budgeted around it. A first,
-// simpler version of this reserved a hardcoded guess at the topbar's rendered height instead of
-// measuring it — that guess was tuned to a 3-line owner-info block and undershot as soon as a
-// real cZone showed a 4th line (the border/glow equip link, shown whenever the owner owns
-// either cosmetic), which under-reserved the height budget and clipped the bottombar right off
-// the bottom of the chrome. TOPBAR_H below is now just the CSS's own min-height baseline for the
-// short-content case; recalcScale() measures the topbar's ACTUAL rendered height at runtime
-// (see topbarEl/topbarHeight) instead of guessing, so it can never be wrong about how many lines
-// the owner-info block ends up showing.
-const DESKTOP_CHROME_H  = 682
-const MOBILE_BREAKPOINT = 768 // matches newsite-template.vue's own isMobile media query
+// cMoon border/glow cosmetics (see .cz-frame below) are rendered as INSET box-shadows — painted
+// entirely inside cz-frame's own existing box, never adding to its width or height. Earlier
+// versions used a real `border`/outset box-shadow instead, which needed recalcScale() to reserve
+// extra space for it: first that reserve was wrong (didn't account for newsite-template.vue's
+// .main-content having its own 4px border under box-sizing: border-box, an 8px shortfall in both
+// dimensions that clipped the cosmetic's bottom/right edge), and more fundamentally, reserving
+// *any* space at all meant a cZone with a cosmetic equipped rendered its canvas measurably
+// smaller than a cZone without one — never what "additive" should mean. Inset shadows sidestep
+// both problems: no reserve needed, so every cZone (cMoon-affiliated or not) uses the exact same
+// plain scale formula below and renders at the exact same size, and nothing can ever be clipped
+// by an ancestor's overflow:hidden since the shadow never leaves cz-frame's own bounds.
 const SIZE_CYCLE       = [1, 0.5, 2]  // sizeScale cycle: default → half → double
 const SEARCH_TOON_SIZE = 140   // cZone search toon size in px
 
@@ -531,55 +524,22 @@ const displayedGlow = computed(() => {
 })
 
 // ── Scale logic (mirrors pages/czone/[username].vue) ──────────
+// Identical for every cZone regardless of cMoon affiliation — see the FRAME_BORDER_PX-removal
+// comment above CANVAS_W/CANVAS_H for why this no longer reserves any space for the border/glow
+// cosmetic. The topbar's own height is likewise always the same 2-line owner-info block whether
+// or not a cosmetic is owned/equipped (see cz-cosmetic in the template), so there's nothing here
+// that needs to react to it growing.
 const scale = ref(1)
-// Real DOM ref on .cz-topbar (see template), measured by recalcScale() below instead of assumed
-// — the topbar's rendered height is content-dependent (owner-info shows 2-4 lines depending on
-// rank/border/glow ownership) and a hardcoded guess here previously undershot on real cZones,
-// under-reserving the height budget below and clipping the bottombar off the bottom of the fixed
-// chrome. offsetHeight falls back to TOPBAR_H before the DOM ref exists (first script-setup-time
-// call, pre-mount) — recalcScale() re-runs from onMounted and on every subsequent resize once the
-// ResizeObserver below is attached, so this self-corrects to the true height immediately after.
-const topbarEl = ref(null)
 function recalcScale() {
   if (typeof window === 'undefined') return
   const gutter = 32 // account for page padding / scrollbar
   const w = window.innerWidth || document.documentElement?.clientWidth || CANVAS_W
-  const reserve = FRAME_BORDER_PX * 2 // cz-frame's border, both sides
-  // The ceiling itself must reserve the frame's border too, not just the raw available-width
-  // numerator below — on a wide desktop window, (w - gutter - reserve) / CANVAS_W comfortably
-  // exceeds 1, so a flat `Math.min(1, ...)` ceiling would let scale hit 1 regardless of the
-  // reserve, rendering the canvas at its full unshrunk 800px width — 2*FRAME_BORDER_PX wider
-  // than cz-frame's own (border-box) content box actually has room for. Capping at this ratio
-  // instead guarantees the canvas is never wider than "CANVAS_W minus the frame's own border",
-  // on any viewport width.
-  const ceiling = (CANVAS_W - reserve) / CANVAS_W
-  const available = w - gutter - reserve
-  let s = Math.min(ceiling, Math.max(0.1, available / CANVAS_W))
-
-  // On desktop, also cap scale so topbar + canvas + bottombar + frame border together never
-  // exceed the fixed, non-scrolling chrome's own height budget (see DESKTOP_CHROME_H's comment
-  // above) — otherwise the bottombar's buttons get silently clipped off by that chrome's
-  // overflow: hidden, regardless of how the width-based scale above came out. Skipped on
-  // mobile, where .main-content switches to a fluid height: auto with no such fixed budget.
-  if (w > MOBILE_BREAKPOINT) {
-    const topbarH = topbarEl.value?.offsetHeight || TOPBAR_H
-    const availableCanvasH = DESKTOP_CHROME_H - topbarH - BOTTOMBAR_H - reserve
-    const heightCeiling = Math.max(0.1, availableCanvasH / CANVAS_H)
-    s = Math.min(s, heightCeiling)
-  }
-
-  scale.value = s
+  scale.value = Math.min(1, Math.max(0.1, (w - gutter) / CANVAS_W))
 }
 
 // Set the correct scale immediately on the client to avoid a post-hydration
 // layout flash where the canvas briefly renders at full 800px width.
 if (process.client) recalcScale()
-
-// Keeps recalcScale()'s height budget correct as the topbar's own rendered height changes for
-// ANY reason — owner-info gaining/losing its rank line, the border/glow equip link appearing
-// once ownership loads, the picker opening, a font finishing its load — without hardcoding or
-// enumerating those cases. (dis)connected alongside the resize listener in onMounted/onUnmounted.
-let topbarResizeObserver = null
 
 // Outer box reserves the scaled visual footprint in layout flow
 const outerScaleStyle = computed(() => ({
@@ -990,11 +950,6 @@ onMounted(() => {
   window.addEventListener('mouseup',   onGlobalUp)
   window.addEventListener('touchmove', onGlobalMove, { passive: false })
   window.addEventListener('touchend',  onGlobalUp)
-
-  if (topbarEl.value && typeof ResizeObserver !== 'undefined') {
-    topbarResizeObserver = new ResizeObserver(() => recalcScale())
-    topbarResizeObserver.observe(topbarEl.value)
-  }
 })
 
 // Load once the user is available (may not be ready at mount time)
@@ -1018,8 +973,6 @@ onUnmounted(() => {
   window.removeEventListener('mouseup',   onGlobalUp)
   window.removeEventListener('touchmove', onGlobalMove)
   window.removeEventListener('touchend',  onGlobalUp)
-  topbarResizeObserver?.disconnect()
-  topbarResizeObserver = null
   // clear any leftover drag state
   cancelLongPress()
   cz.value.activeDrag = null
@@ -1493,55 +1446,54 @@ defineExpose({ save, clearZone })
   box-sizing: border-box;
 }
 
-/* Wraps the topbar, canvas, and bottombar as one bordered unit — the cMoon-affinity border
-   colors this whole container (matching the reference cWorld skin), not just the canvas.
-   Always renders a border (transparent by default) so recalcScale()'s reserved space — and
-   thus the canvas's own rendered size — stays constant whether or not a border is equipped;
-   only the color changes. box-sizing: border-box keeps the border inside the width recalcScale
-   already accounted for, rather than adding to it. overflow: hidden clips the square corners of
-   the topbar/canvas/bottombar children to this frame's own rounded corners. */
+/* Purely a positioning/clipping context — no border or padding of its own, so it takes up
+   exactly the same space a cZone with no cMoon affiliation at all would; recalcScale() needs no
+   reserve for either cosmetic, and every cZone uses the same plain scale formula. overflow:
+   hidden clips the topbar/canvas/bottombar children's own square corners to this frame's rounded
+   ones. The cosmetics themselves are NOT painted directly on cz-frame — an inset box-shadow
+   there would be entirely invisible, painted behind the topbar/canvas/bottombar's own opaque
+   backgrounds, which fill this box edge-to-edge with no gap for it to show through (unlike a
+   real `border`, which lives in space children can never occupy). Instead they're painted on
+   the ::after pseudo-element below: absolutely positioned over the whole frame, so it paints on
+   top of those children regardless, while contributing zero size to the frame itself (position:
+   absolute removes it from flow entirely) — additive in the fullest sense, both zero layout
+   impact AND actually visible. */
 .cz-frame {
+  position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
-  box-sizing: border-box;
-  border: v-bind(FRAME_BORDER_PX + 'px') solid transparent;
   border-radius: 10px;
   overflow: hidden;
-  transition: border-color 0.15s;
 }
-.cz-frame--bordered {
-  border-color: var(--cz-border-color, transparent);
+.cz-frame--bordered::after,
+.cz-frame--glowing::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+.cz-frame--bordered::after {
+  box-shadow: inset 0 0 0 10px var(--cz-border-color, transparent);
 }
 
 /* The alternative cosmetic to the solid border above — a pulsing colored glow around the same
-   frame, instead of a hard-edged color fill. Uses box-shadow (not outline): cz-frame's own
-   overflow: hidden doesn't clip its own box-shadow or outline either one (an element's overflow
-   only clips its children's content, never its own box decorations) — but the glow still has to
-   fit within FRAME_BORDER_PX of the frame's own edge, same as the solid border, since anything
-   extending further would spill onto pixels the FIXED-WIDTH page chrome (.main-content, see
-   recalcScale()'s own comment) never budgeted room for and would get clipped there instead. Kept
-   to spread+blur comfortably under FRAME_BORDER_PX (20px) at every point in the pulse for exactly
-   that reason — the faint blurred tail that's technically clipped right at that edge is already
-   faded to near nothing, so it isn't visible even when cut off. A first, thinner version of this
-   (spread+blur maxing out around 8px) read as barely-there — practically invisible at a glance
-   against a busy cZone canvas — so the spread component (the solid, unblurred part of the
-   shadow) is now large enough on its own to read as a clearly saturated ring, with the blur only
-   adding a soft trailing edge beyond it, rather than being the only thing carrying the effect.
-   Reads its own --cz-glow-color (not the border's --cz-border-color) so it renders in its own
-   correct color and stays visible even in the (normally-prevented, but not CSS-enforced) case
-   where a border happens to be active at the same time from a different cMoon. */
-.cz-frame--glowing {
+   frame, instead of a hard-edged color fill. Reads its own --cz-glow-color (not the border's
+   --cz-border-color) so it renders in its own correct color and stays visible even in the
+   (normally-prevented, but not CSS-enforced) case where a border happens to be active at the
+   same time from a different cMoon. */
+.cz-frame--glowing::after {
   animation: cz-frame-glow-pulse 2.4s ease-in-out infinite;
 }
 @keyframes cz-frame-glow-pulse {
-  0%, 100% { box-shadow: 0 0 0 4px var(--cz-glow-color, #fff), 0 0 8px 3px var(--cz-glow-color, #fff); }
-  50%      { box-shadow: 0 0 0 8px var(--cz-glow-color, #fff), 0 0 14px 5px var(--cz-glow-color, #fff); }
+  0%, 100% { box-shadow: inset 0 0 0 6px var(--cz-glow-color, #fff), inset 0 0 16px 4px var(--cz-glow-color, #fff); }
+  50%      { box-shadow: inset 0 0 0 10px var(--cz-glow-color, #fff), inset 0 0 24px 8px var(--cz-glow-color, #fff); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cz-frame--glowing {
+  .cz-frame--glowing::after {
     animation: none;
-    box-shadow: 0 0 0 6px var(--cz-glow-color, #fff), 0 0 10px 4px var(--cz-glow-color, #fff);
+    box-shadow: inset 0 0 0 8px var(--cz-glow-color, #fff), inset 0 0 20px 6px var(--cz-glow-color, #fff);
   }
 }
 
@@ -1659,28 +1611,44 @@ defineExpose({ save, clearZone })
   color: #ffd75e;
 }
 
-.cz-border-equip-btn {
-  display: block;
-  margin-top: 2px;
-  padding: 0;
-  border: none;
-  background: none;
-  color: rgba(255,255,255,0.7);
-  font-size: 0.58rem;
-  text-decoration: underline;
+/* cMoon border/glow equip triggers, in cz-topbar-left alongside Build/zone-tabs (see template
+   comment there for why they moved out of cz-owner-info). position: relative here + position:
+   absolute on the picker below means opening a picker overlays on top of the canvas instead of
+   pushing anything else in this row down — the topbar's own height never changes, whether a
+   picker is open, closed, or doesn't exist for this viewer at all. */
+.cz-cosmetic { position: relative; }
+.cz-cosmetic-btn {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(0,0,0,0.2);
+  color: #fff;
+  font-size: 0.62rem;
+  font-weight: 600;
+  white-space: nowrap;
   cursor: pointer;
-  min-height: 24px;
 }
-
-.cz-border-picker {
+.cz-cosmetic-picker {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  z-index: 50;
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 4px;
   max-width: 180px;
+  padding: 6px;
+  border-radius: 8px;
+  background: var(--OrbitDarkBlue);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
 }
 
-.cz-border-option {
+.cz-cosmetic-option {
   min-height: 28px;
   padding: 2px 8px;
   border-radius: 999px;
@@ -1690,7 +1658,7 @@ defineExpose({ save, clearZone })
   font-size: 0.6rem;
   cursor: pointer;
 }
-.cz-border-option.active { background: var(--cz-border-color, rgba(255,255,255,0.25)); font-weight: 700; }
+.cz-cosmetic-option.active { background: var(--cz-border-color, rgba(255,255,255,0.25)); font-weight: 700; }
 
 /* ── Skeleton placeholders (shown while a new cZone is loading) ── */
 .cz-skeleton {
@@ -1876,9 +1844,9 @@ defineExpose({ save, clearZone })
   object-fit: contain;
   border-radius: 3px;
 }
-/* On mobile the bottombar isn't fighting a fixed-height page chrome for space (see
-   recalcScale()'s MOBILE_BREAKPOINT branch — .main-content goes fluid/height:auto there), so
-   there's no need to squeeze the banner down to the desktop bar's tight 29px cap. Raising the
+/* On mobile the bottombar isn't fighting a fixed-height page chrome for space (.main-content
+   goes fluid/height:auto there — see newsite-template.vue's own isMobile logic), so there's no
+   need to squeeze the banner down to the desktop bar's tight 29px cap. Raising the
    height cap alone isn't enough, though: the banner's 12:1 aspect ratio means WIDTH, not height,
    is what actually constrains its rendered size, and on a narrow phone the width left over after
    the "My cZone" button and 5 nav icons share the row is often smaller than the banner got on
