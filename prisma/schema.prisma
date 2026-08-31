@@ -2981,7 +2981,7 @@ enum CMoonEffectType {
   SLIME_FLOOD
   SNAKE
   TEXT_CALLOUT
-  POKEBALL
+  FROG
   FIREWORKS
 }
 

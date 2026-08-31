@@ -10,6 +10,6 @@ export const CMOON_EFFECT_TYPES = [
   'SLIME_FLOOD',
   'SNAKE',
   'TEXT_CALLOUT',
-  'POKEBALL',
+  'FROG',
   'FIREWORKS',
 ]
