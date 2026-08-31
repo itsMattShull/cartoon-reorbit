@@ -135,6 +135,10 @@
                 <div class="ctic-value">{{ formatValue(ctoon.highestMint) }}</div>
                 <div class="ctic-sub">Total: {{ totalQuantityLabel }}</div>
               </div>
+              <div v-if="ctoon.isHolidayItem" class="ctic-tile">
+                <div class="ctic-label">Opened</div>
+                <div class="ctic-value">{{ formatValue(ctoon.openedCount) }}</div>
+              </div>
               <div class="ctic-tile">
                 <div class="ctic-label">You Own</div>
                 <div class="ctic-value">{{ formatValue(ownedCount) }}</div>
