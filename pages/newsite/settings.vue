@@ -677,7 +677,10 @@ body.page-newsite-settings .main-content { overflow-y: auto !important; scrollba
 
 .avatar-grid {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  /* Fills as many 52px-min columns as fit rather than forcing a fixed 6 — a fixed count
+     with a fixed image width overflows the grid tracks on narrow phones (~375px and under),
+     producing a hidden horizontal scrollbar nested inside the vertical one. */
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
   gap: 8px;
   max-height: 240px;
   overflow-y: auto;
@@ -687,8 +690,9 @@ body.page-newsite-settings .main-content { overflow-y: auto !important; scrollba
 .avatar-option { cursor: pointer; }
 
 .avatar-img {
-  width: 52px;
-  height: 52px;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
   object-fit: cover;
   border-radius: 6px;
   border: 3px solid transparent;
