@@ -34,6 +34,7 @@ export default defineEventHandler(async (event) => {
     const qualifyingLevels = await db.cMoonAffinityLevel.findMany({
       where: { cMoonId: a.cMoonId, threshold: { lte: a.affinitySpent } },
       orderBy: { threshold: 'asc' },
+      include: { rewardAvatars: { select: { avatarId: true } } },
     })
     if (!qualifyingLevels.length) continue
 
@@ -47,7 +48,7 @@ export default defineEventHandler(async (event) => {
           glowCMoonId: lvl.grantsGlow ? a.cMoonId : null,
         }
         if (lvl.rewardBackgroundId) reward.backgrounds.push({ backgroundId: lvl.rewardBackgroundId })
-        if (lvl.rewardAvatarId) reward.avatars.push({ avatarId: lvl.rewardAvatarId })
+        reward.avatars.push(...lvl.rewardAvatars.map(ra => ({ avatarId: ra.avatarId })))
         const granted = await grantRewardInTx(tx, a.userId, reward, `cmoonAffinity:backfill:${lvl.id}`)
         if (granted.backgrounds) { backgroundsGranted += granted.backgrounds; grantedAnyForUser = true }
         if (granted.avatars) { avatarsGranted += granted.avatars; grantedAnyForUser = true }

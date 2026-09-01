@@ -22,7 +22,9 @@ export default defineEventHandler(async (event) => {
   const grantsBorder = !!body?.grantsBorder
   const grantsGlow = !!body?.grantsGlow
   const rewardBackgroundId = typeof body?.rewardBackgroundId === 'string' && body.rewardBackgroundId ? body.rewardBackgroundId : null
-  const rewardAvatarId = typeof body?.rewardAvatarId === 'string' && body.rewardAvatarId ? body.rewardAvatarId : null
+  const rewardAvatarIds = Array.isArray(body?.rewardAvatarIds)
+    ? [...new Set(body.rewardAvatarIds.filter(v => typeof v === 'string' && v))]
+    : []
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   if (!Number.isInteger(threshold) || threshold <= 0 || threshold > MAX_THRESHOLD) {
@@ -33,15 +35,23 @@ export default defineEventHandler(async (event) => {
     const bg = await db.background.count({ where: { id: rewardBackgroundId } })
     if (!bg) throw createError({ statusCode: 400, statusMessage: 'Reward background not found' })
   }
-  if (rewardAvatarId) {
-    const av = await db.avatar.count({ where: { id: rewardAvatarId } })
-    if (!av) throw createError({ statusCode: 400, statusMessage: 'Reward avatar not found' })
+  if (rewardAvatarIds.length) {
+    const avCount = await db.avatar.count({ where: { id: { in: rewardAvatarIds } } })
+    if (avCount !== rewardAvatarIds.length) throw createError({ statusCode: 400, statusMessage: 'One or more reward avatars not found' })
   }
 
   let created
   try {
-    created = await db.cMoonAffinityLevel.create({
-      data: { cMoonId, name, threshold, sortOrder, grantsBorder, grantsGlow, rewardBackgroundId, rewardAvatarId },
+    created = await db.$transaction(async (tx) => {
+      const lvl = await tx.cMoonAffinityLevel.create({
+        data: { cMoonId, name, threshold, sortOrder, grantsBorder, grantsGlow, rewardBackgroundId },
+      })
+      if (rewardAvatarIds.length) {
+        await tx.cMoonAffinityLevelRewardAvatar.createMany({
+          data: rewardAvatarIds.map(avatarId => ({ levelId: lvl.id, avatarId })),
+        })
+      }
+      return lvl
     })
   } catch (err) {
     if (err?.code === 'P2002') {

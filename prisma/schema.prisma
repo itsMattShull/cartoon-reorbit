@@ -3177,19 +3177,34 @@ model CMoonAffinityLevel {
   // or both (a member who owns both then simply picks which one to display).
   grantsGlow Boolean @default(false)
   // Optional cosmetic rewards granted alongside the border/glow above. All independent of each
-  // other — a level can grant any combination.
+  // other — a level can grant any combination. Background stays a single optional slot; avatars
+  // are many-to-many (CMoonAffinityLevelRewardAvatar) since a level can hand out more than one.
   rewardBackgroundId String?
-  rewardAvatarId     String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  cMoon            CMoon           @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
-  rewardBackground Background?     @relation(fields: [rewardBackgroundId], references: [id], onDelete: SetNull)
-  rewardAvatar     Avatar?         @relation(fields: [rewardAvatarId], references: [id], onDelete: SetNull)
+  cMoon            CMoon                            @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  rewardBackground Background?                      @relation(fields: [rewardBackgroundId], references: [id], onDelete: SetNull)
+  rewardAvatars    CMoonAffinityLevelRewardAvatar[]
   reachedBy        CMoonAffinity[]
 
   @@unique([cMoonId, threshold])
   @@unique([cMoonId, sortOrder])
+}
+
+// One avatar granted by one CMoonAffinityLevel — many-to-many, since a level can hand out more
+// than one avatar at once (unlike rewardBackgroundId, still a single optional slot). Mirrors
+// AchievementRewardBackground's join-table shape.
+model CMoonAffinityLevelRewardAvatar {
+  id       String @id @default(uuid())
+  levelId  String
+  avatarId String
+
+  level  CMoonAffinityLevel @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  avatar Avatar             @relation(fields: [avatarId], references: [id], onDelete: Restrict)
+
+  @@unique([levelId, avatarId])
+  @@index([avatarId])
 }
 
 // One member's lifetime "contribute to cMoon" progress for one cMoon. Permanent — affinitySpent
@@ -3259,9 +3274,9 @@ model Avatar {
   createdAt   DateTime @default(now())
   createdById String?
 
-  createdBy User?                @relation("AvatarCreatedBy", fields: [createdById], references: [id])
-  owners    UserAvatar[]
-  levels    CMoonAffinityLevel[]
+  createdBy    User?                            @relation("AvatarCreatedBy", fields: [createdById], references: [id])
+  owners       UserAvatar[]
+  levelRewards CMoonAffinityLevelRewardAvatar[]
 
   @@index([createdAt])
 }

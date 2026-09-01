@@ -3,9 +3,13 @@
     <div v-if="loading" class="cmp-status">Loading…</div>
     <div v-else-if="error" class="cmp-status cmp-status--error">{{ error }}</div>
     <template v-else-if="cmoon">
-      <Transition name="cmp-toast-fade">
-        <div v-if="levelUpToast" class="cmp-toast" role="status">🌙 Level up — {{ levelUpToast }}!</div>
-      </Transition>
+      <CMoonAffinityLevelUpModal
+        v-if="levelUpDetails"
+        :level="levelUpDetails"
+        :cmoon-name="cmoon.name"
+        :cmoon-color="cmoon.color"
+        @close="levelUpDetails = null"
+      />
 
       <div class="cmp-masthead-wrap">
         <img
@@ -295,8 +299,7 @@ const contributeAmount = ref(null)
 const contributing = ref(false)
 const contributeError = ref('')
 const justLeveledUp = ref(false)
-const levelUpToast = ref('')
-let toastTimer = null
+const levelUpDetails = ref(null)
 let pulseTimer = null
 
 const offers = ref([])
@@ -503,11 +506,9 @@ async function submitContribute() {
     contributeOpen.value = false
     await Promise.all([loadAffinity(cmoon.value.id), fetchSelf({ force: true })])
     if (res?.leveledUpTo) {
-      levelUpToast.value = res.leveledUpTo.name
+      levelUpDetails.value = res.leveledUpTo
       justLeveledUp.value = true
-      clearTimeout(toastTimer)
       clearTimeout(pulseTimer)
-      toastTimer = setTimeout(() => { levelUpToast.value = '' }, 3200)
       pulseTimer = setTimeout(() => { justLeveledUp.value = false }, 1600)
     }
   } catch (err) {
@@ -782,36 +783,8 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   background: #ffd700;
 }
 
-.cmp-toast {
-  position: fixed;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 40;
-  background: #16a34a;
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 0.85rem;
-  padding: 10px 18px;
-  border-radius: 999px;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.3);
-  white-space: nowrap;
-  max-width: calc(100vw - 32px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cmp-toast-fade-enter-active,
-.cmp-toast-fade-leave-active {
-  transition: opacity 0.25s ease;
-}
-.cmp-toast-fade-enter-from,
-.cmp-toast-fade-leave-to { opacity: 0; }
-
 @media (prefers-reduced-motion: reduce) {
-  .cmp-affinity-bar-fill,
-  .cmp-toast-fade-enter-active,
-  .cmp-toast-fade-leave-active { transition: none; }
+  .cmp-affinity-bar-fill { transition: none; }
 }
 
 /* The Featured cToons panel is deliberately NOT themed off the cMoon's color like the rest of the
