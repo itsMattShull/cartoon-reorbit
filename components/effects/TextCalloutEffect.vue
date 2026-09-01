@@ -1,23 +1,54 @@
 <template>
   <div class="tcx-root" :style="{ animationDuration: durationMs + 'ms' }">
-    <div class="tcx-content" :style="{ animationDuration: durationMs + 'ms' }">
+    <div class="tcx-tiles" :style="{ animationDelay: tilesFadeDelayMs + 'ms', animationDuration: tilesFadeMs + 'ms' }">
+      <img
+        v-for="t in tiles" :key="t.id"
+        :src="t.src"
+        alt=""
+        class="tcx-tile"
+        :style="{ animationDelay: t.delay + 'ms' }"
+      />
+    </div>
+
+    <div class="tcx-content" :style="{ animationDelay: contentDelayMs + 'ms', animationDuration: contentMs + 'ms' }">
       <div class="tcx-text">You with us?</div>
-      <img src="/effects/cartoon-cartoon-fridays.webp" alt="Cartoon Cartoon Fridays" class="tcx-logo" />
     </div>
   </div>
 </template>
 
 <script setup>
-// Solid yellow flash with centered pop-in text + logo. Cheapest of the five new effects — no
-// canvas, no per-frame JS, just CSS keyframe animations (background opacity, content scale/
-// opacity), all compositor-only (see performance review: SlimeEffect's own comment sets the
-// precedent of avoiding layout/paint-triggering properties in these overlays). Text and logo pop
-// in together as one group rather than staggered — simpler timing, and neither reads as more
-// "primary" than the other.
+// Solid yellow background throughout. Phase 1: a grid of tiles, each showing one of the two
+// provided Cartoon Network gifs, pops in one by one (randomized order/timing) until they fill the
+// screen, holds briefly, then fades out. Phase 2 (overlapping the tail of that fade): the green
+// "You with us?" text pops in over the now-bare yellow background, holds, then fades — the text's
+// own keyframe already ends in a fade-out, so no separate root-level fade is needed on top of it;
+// the tiles and content phases are timed back-to-back to add up to the full duration.
 const props = defineProps({
   durationMs: { type: Number, default: 2600 },
 })
 const emit = defineEmits(['done'])
+
+const TILE_COLS = 4
+const TILE_ROWS = 6
+const TILE_GIFS = ['/effects/cn-board.gif', '/effects/cn-columns.gif']
+
+// Tiles pop in across the first ~45% of the budget, hold briefly, then fade over the next ~12% —
+// the text's own delay/duration picks up exactly where that leaves off.
+const fillMs = Math.round(props.durationMs * 0.45)
+const tilesHoldMs = Math.round(props.durationMs * 0.08)
+const tilesFadeMs = Math.round(props.durationMs * 0.12)
+const tilesFadeDelayMs = fillMs + tilesHoldMs
+const contentDelayMs = tilesFadeDelayMs
+const contentMs = props.durationMs - contentDelayMs
+
+// Randomized once per play, not per frame — staggered (not strictly left-to-right) delays within
+// the fill window read as tiles "filling in" organically; each tile randomly picks one of the two
+// provided gifs.
+const tiles = Array.from({ length: TILE_COLS * TILE_ROWS }, (_, i) => ({
+  id: i,
+  src: TILE_GIFS[Math.random() < 0.5 ? 0 : 1],
+  delay: Math.round(Math.random() * fillMs * 0.7),
+}))
 
 let timer = null
 
@@ -51,11 +82,45 @@ onBeforeUnmount(() => {
   100% { opacity: 0; }
 }
 
+.tcx-tiles {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+  animation-name: tcx-tiles-fade;
+  animation-timing-function: ease-in-out;
+  animation-fill-mode: forwards;
+}
+
+@keyframes tcx-tiles-fade {
+  0%   { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.tcx-tile {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: 0;
+  transform: scale(0.4);
+  animation-name: tcx-tile-pop;
+  animation-duration: 380ms;
+  animation-timing-function: cubic-bezier(0.2, 1.3, 0.4, 1);
+  animation-fill-mode: both;
+}
+
+@keyframes tcx-tile-pop {
+  0%   { opacity: 0; transform: scale(0.4); }
+  70%  { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
 .tcx-content {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: min(4vh, 1.5rem);
   max-width: 100%;
   max-height: 92vh;
   padding: 0 5vw;
@@ -83,20 +148,8 @@ onBeforeUnmount(() => {
   text-transform: uppercase;
   letter-spacing: 0.02em;
   text-align: center;
-  /* Scales with viewport but stays readable on a 320px phone and doesn't blow out on a tablet.
-     Sized a bit smaller than a text-only callout would need, to leave room for the logo below on
-     a short landscape-phone viewport. */
-  font-size: clamp(1.9rem, 9vw, 4.75rem);
+  /* Scales with viewport but stays readable on a 320px phone and doesn't blow out on a tablet. */
+  font-size: clamp(2.25rem, 11vw, 5.5rem);
   line-height: 1.05;
-}
-
-.tcx-logo {
-  /* Both a width and a max-height cap (with object-fit) rather than width alone — this is a wide,
-     short banner image, so on a short landscape-phone viewport a width-only cap could still push
-     the combined text+logo content taller than the screen. */
-  width: min(60vw, 300px);
-  max-height: 22vh;
-  height: auto;
-  object-fit: contain;
 }
 </style>

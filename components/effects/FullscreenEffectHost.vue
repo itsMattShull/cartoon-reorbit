@@ -24,7 +24,7 @@ const EFFECT_DURATIONS = {
   GLITCH: 2600,
   SLIME: 2600,
   SLIME_FLOOD: 2800,
-  TEXT_CALLOUT: 2600,
+  TEXT_CALLOUT: 3000,
   FIREWORKS: 2800,
   FROG: 2800,
   SNAKE: 3200,
@@ -149,7 +149,7 @@ onBeforeUnmount(() => {
 }
 .fxh-reduced-GLITCH { background: #1a1a1a; }
 .fxh-reduced-SLIME { background: #4caf00; }
-.fxh-reduced-SLIME_FLOOD { background: #3fa000; }
+.fxh-reduced-SLIME_FLOOD { background: #ff8c00; }
 .fxh-reduced-SNAKE { background: #b31217; }
 .fxh-reduced-TEXT_CALLOUT { background: #ffd400; }
 .fxh-reduced-FROG { background: #6a1fb0; }
