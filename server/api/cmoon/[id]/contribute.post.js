@@ -95,6 +95,10 @@ export default defineEventHandler(async (event) => {
       const allLevels = await tx.cMoonAffinityLevel.findMany({
         where: { cMoonId },
         orderBy: { threshold: 'asc' },
+        include: {
+          rewardBackground: { select: { id: true, label: true, imagePath: true } },
+          rewardAvatars: { select: { avatar: { select: { id: true, label: true, imagePath: true } } } },
+        },
       })
 
       // Hard cap: a contribution can never push affinitySpent past the highest configured
@@ -126,6 +130,15 @@ export default defineEventHandler(async (event) => {
           data: { currentLevelId: highest.id }
         })
 
+        // Aggregated across every crossed level (not just `highest`) for the client's level-up
+        // reveal — a big lump-sum contribution can cross several thresholds in one call, and
+        // each one's reward is granted below, so the reveal has to show all of them or a player
+        // would never be told about the ones that weren't the final level reached.
+        const revealedAvatars = []
+        const revealedBackgrounds = []
+        let revealedBorder = false
+        let revealedGlow = false
+
         for (const lvl of crossedLevels) {
           const reward = {
             backgrounds: [],
@@ -133,8 +146,16 @@ export default defineEventHandler(async (event) => {
             borderCMoonId: lvl.grantsBorder ? cMoonId : null,
             glowCMoonId: lvl.grantsGlow ? cMoonId : null,
           }
-          if (lvl.rewardBackgroundId) reward.backgrounds.push({ backgroundId: lvl.rewardBackgroundId })
-          if (lvl.rewardAvatarId) reward.avatars.push({ avatarId: lvl.rewardAvatarId })
+          if (lvl.rewardBackground) {
+            reward.backgrounds.push({ backgroundId: lvl.rewardBackground.id })
+            revealedBackgrounds.push(lvl.rewardBackground)
+          }
+          for (const ra of lvl.rewardAvatars) {
+            reward.avatars.push({ avatarId: ra.avatar.id })
+            revealedAvatars.push(ra.avatar)
+          }
+          if (lvl.grantsBorder) revealedBorder = true
+          if (lvl.grantsGlow) revealedGlow = true
           await grantRewardInTx(tx, userId, reward, `cmoonAffinity:level:${lvl.id}`)
 
           // Auto-equip the member's first-ever border/glow so it's visible without an extra
@@ -160,7 +181,21 @@ export default defineEventHandler(async (event) => {
           }
         }
 
-        leveledUpTo = { id: highest.id, name: highest.name, grantsBorder: highest.grantsBorder, grantsGlow: highest.grantsGlow }
+        leveledUpTo = {
+          id: highest.id,
+          name: highest.name,
+          grantsBorder: highest.grantsBorder,
+          grantsGlow: highest.grantsGlow,
+          // Every level name crossed in this one contribution, oldest first — usually just
+          // [highest.name], but a big lump sum can skip several at once.
+          levelNames: crossedLevels.map(l => l.name),
+          rewards: {
+            avatars: revealedAvatars,
+            backgrounds: revealedBackgrounds,
+            border: revealedBorder,
+            glow: revealedGlow,
+          },
+        }
       }
 
       return { affinitySpent: affinity.affinitySpent, leveledUpTo }

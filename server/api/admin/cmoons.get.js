@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
           orderBy: { sortOrder: 'asc' },
           include: {
             rewardBackground: { select: { id: true, label: true, imagePath: true } },
-            rewardAvatar: { select: { id: true, label: true, imagePath: true } },
+            rewardAvatars: { include: { avatar: { select: { id: true, label: true, imagePath: true } } } },
           },
         },
         // Single grouped query, not a per-cMoon count() loop.
@@ -56,8 +56,10 @@ export default defineEventHandler(async (event) => {
       ranks: c.ranks.map(r => ({ id: r.id, name: r.name, sortOrder: r.sortOrder, discordRoleId: r.discordRoleId, tierId: r.tierId })),
       affinityLevels: c.affinityLevels.map(l => ({
         id: l.id, name: l.name, threshold: l.threshold, sortOrder: l.sortOrder, grantsBorder: l.grantsBorder, grantsGlow: l.grantsGlow,
-        rewardBackgroundId: l.rewardBackgroundId, rewardAvatarId: l.rewardAvatarId,
-        rewardBackground: l.rewardBackground, rewardAvatar: l.rewardAvatar,
+        rewardBackgroundId: l.rewardBackgroundId,
+        rewardBackground: l.rewardBackground,
+        rewardAvatarIds: l.rewardAvatars.map(ra => ra.avatar.id),
+        rewardAvatars: l.rewardAvatars.map(ra => ra.avatar),
       })),
     })),
   }
