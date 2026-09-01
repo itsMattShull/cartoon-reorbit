@@ -1,53 +1,28 @@
 <template>
   <div class="sfd-root" :style="{ animationDuration: durationMs + 'ms' }">
-    <div
-      v-for="d in drips" :key="d.id"
-      class="sfd-drip"
-      :style="{
-        left: d.left + '%',
-        width: d.width + '%',
-        animationDelay: d.delay + 'ms',
-        animationDuration: fillMs + 'ms',
-        background: d.gradient,
-      }"
-    ></div>
+    <img src="/effects/slime.gif" alt="" class="sfd-gif" />
+    <div class="sfd-orange" :style="{ animationDelay: orangeDelayMs + 'ms', animationDuration: orangeMs + 'ms' }"></div>
   </div>
 </template>
 
 <script setup>
-// Distinct from SlimeEffect.vue's drip-and-slide-off: here the slime pours down from the top,
-// FLOODS to fully cover the screen, holds solid for a beat, then the whole thing fades to
-// transparent as one unit. Root uses `position:absolute;inset:0` (inherited from the host's
-// fixed, 100dvh overlay) rather than any `vh` unit of its own — the mobile-browser-chrome/dvh
-// pitfall the host's own comment already documents (see mobile review).
+// The provided transparent slime .gif plays full-screen (its own animation is the "pours down and
+// floods" motion — no CSS drip shapes needed anymore), then a solid orange wash fades in over it,
+// holds, then the whole thing (gif + orange) fades to transparent together via the root's own
+// opacity animation. Root uses `position:absolute;inset:0` (inherited from the host's fixed,
+// 100dvh overlay) rather than any `vh` unit of its own — the mobile-browser-chrome/dvh pitfall the
+// host's own comment already documents (see mobile review on the original version of this effect).
 const props = defineProps({
   durationMs: { type: Number, default: 2800 },
 })
 const emit = defineEmits(['done'])
 
-const DRIP_COUNT = 14
-const GREENS = [
-  'linear-gradient(180deg, #8cff1a 0%, #4caf00 55%, #2e7d00 100%)',
-  'linear-gradient(180deg, #9dff33 0%, #5cc400 55%, #337a00 100%)',
-  'linear-gradient(180deg, #7be600 0%, #439900 55%, #285c00 100%)',
-]
-
-// Randomized once per play, not per frame — a static layout choice, not part of any animation
-// loop (matches SlimeEffect.vue's own reasoning). Widths are in percent (not px) and deliberately
-// overlap their neighbors' lanes — this effect needs to fully FLOOD the screen regardless of
-// viewport width, unlike SlimeEffect's narrower drip-and-slide-off look, so px-fixed widths would
-// leave visible gaps on a wide desktop monitor.
-const spread = 100 / DRIP_COUNT
-const drips = Array.from({ length: DRIP_COUNT }, (_, i) => ({
-  id: i,
-  left: Math.max(0, spread * i - spread * 0.3 + (Math.random() * spread * 0.3)),
-  width: spread * (1.6 + Math.random() * 0.6),
-  delay: Math.round(Math.random() * 180),
-  gradient: GREENS[i % GREENS.length],
-}))
-
-// The pour/flood phase gets ~55% of the budget, the rest is the solid hold + the root's own fade.
-const fillMs = Math.round(props.durationMs * 0.55)
+// The gif plays alone for the first ~40% of the budget, then the orange wash fades in over the
+// next ~22% — the existing root-level fade (see the CSS keyframe below, fixed at 72%/100% of the
+// FULL duration) starts only once that's finished, leaving a short hold beat before everything
+// fades out together.
+const orangeDelayMs = Math.round(props.durationMs * 0.4)
+const orangeMs = Math.round(props.durationMs * 0.22)
 
 let timer = null
 
@@ -77,22 +52,30 @@ onBeforeUnmount(() => {
   100% { opacity: 0; }
 }
 
-.sfd-drip {
+.sfd-gif {
   position: absolute;
-  top: 0;
+  inset: 0;
+  width: 100%;
   height: 100%;
-  border-radius: 0 0 45% 45% / 0 0 60px 60px;
-  transform-origin: top center;
-  transform: scaleY(0);
-  animation-name: sfd-pour;
-  animation-timing-function: cubic-bezier(0.65, 0, 0.35, 1);
-  animation-fill-mode: forwards;
-  will-change: transform;
-  box-shadow: inset 0 -12px 24px rgba(0, 0, 0, 0.25);
+  /* object-position top: the gif pours from its own top edge, so top-aligning the crop keeps
+     that motion visible even where `cover` has to crop the sides on a narrow phone. */
+  object-fit: cover;
+  object-position: center top;
+  display: block;
 }
 
-@keyframes sfd-pour {
-  0%   { transform: scaleY(0); }
-  100% { transform: scaleY(1.08); }
+.sfd-orange {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 50% 40%, #ffb347 0%, #ff8c00 55%, #b35900 100%);
+  opacity: 0;
+  animation-name: sfd-orange-in;
+  animation-timing-function: ease-out;
+  animation-fill-mode: both;
+}
+
+@keyframes sfd-orange-in {
+  0%   { opacity: 0; }
+  100% { opacity: 1; }
 }
 </style>
