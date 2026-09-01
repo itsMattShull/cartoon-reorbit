@@ -59,6 +59,16 @@ export default defineEventHandler(async (event) => {
 
   // 4) Transaction
   await db.$transaction(async (tx) => {
+    // First statement, before any read. Without this, two concurrent bid
+    // requests for the same auction can both read the same stale highestBid,
+    // both compute the same requiredBid, and both pass the check below --
+    // writing two Bid rows at the identical amount with the winner decided
+    // only by whichever UPDATE happened to commit last. Locking the row here
+    // serializes every writer (manual bids and autobid.post.js's own
+    // transaction alike) so each one re-reads the real, post-previous-write
+    // state before deciding whether this bid is still valid.
+    await tx.$executeRaw`SELECT id FROM "Auction" WHERE id = ${auctionId} FOR UPDATE`
+
     const fresh = await tx.auction.findUnique({
       where: { id: auctionId },
       select: {
