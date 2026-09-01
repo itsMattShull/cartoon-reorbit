@@ -138,6 +138,12 @@ export default defineEventHandler(async (event) => {
   let outbidUserIds = []
 
   await db.$transaction(async (tx) => {
+    // First statement, before any read -- see bid.post.js for why this must
+    // come before the auction read. Locking here means this transaction's
+    // proxy auto-bidding can never interleave with a concurrent manual bid
+    // (or another autobid.post.js call) on the same auction.
+    await tx.$executeRaw`SELECT id FROM "Auction" WHERE id = ${auctionId} FOR UPDATE`
+
     const fresh = await tx.auction.findUnique({
       where: { id: auctionId },
       select: {
