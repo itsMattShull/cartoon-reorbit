@@ -59,13 +59,13 @@
         <div class="cz-options" v-show="!cz.buildMode">
           <button
             type="button"
-            class="cz-art-mode-btn"
+            class="cz-options-btn"
             :class="{ active: optionsOpen }"
             :aria-expanded="optionsOpen ? 'true' : 'false'"
             @click="optionsOpen = !optionsOpen"
           >
-            <span class="cz-art-mode-icon">⚙️</span>
-            <span class="cz-art-mode-label">cZone Options</span>
+            <span class="cz-options-icon">⚙️</span>
+            <span class="cz-options-label-text">cZone Options</span>
           </button>
           <div v-if="optionsOpen" class="cz-options-panel">
             <button
@@ -1611,7 +1611,7 @@ defineExpose({ save, clearZone })
 /* Trigger button for the "cZone Options" dropdown — same box as the old standalone Art Mode
    button it replaces, so this corner of the topbar keeps the same footprint at every width. */
 .cz-options { position: relative; }
-.cz-art-mode-btn {
+.cz-options-btn {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -1628,12 +1628,12 @@ defineExpose({ save, clearZone })
   white-space: nowrap;
   transition: background 0.15s, border-color 0.15s;
 }
-.cz-art-mode-btn:hover { background: rgba(0,0,0,0.32); }
-.cz-art-mode-btn.active {
+.cz-options-btn:hover { background: rgba(0,0,0,0.32); }
+.cz-options-btn.active {
   background: var(--OrbitDarkBlue);
   border-color: #fff;
 }
-.cz-art-mode-icon { font-size: 0.82rem; line-height: 1; }
+.cz-options-icon { font-size: 0.82rem; line-height: 1; }
 
 /* The dropdown itself — anchored to the trigger button's own wrapper (.cz-options), not the
    whole topbar-right row, so it opens in the same spot regardless of how wide cz-owner-info
@@ -1769,10 +1769,19 @@ defineExpose({ save, clearZone })
     width: 100%;
     justify-content: space-between;
   }
+  /* cz-topbar-right's space-between pushes .cz-options (the trigger's wrapper) to the far LEFT
+     of this now full-width row, with cz-owner-info at the far right — the opposite of the
+     desktop layout the panel's default right:0 anchoring assumes. Left-anchoring here instead
+     keeps the panel growing rightward from that left edge, inside cz-frame's overflow: hidden
+     bounds, instead of mostly off-screen to the left. */
+  .cz-options-panel {
+    left: 0;
+    right: auto;
+  }
 }
 
 @media (max-width: 480px) {
-  .cz-art-mode-btn { font-size: 0.6rem; padding: 0 8px; }
+  .cz-options-btn { font-size: 0.6rem; padding: 0 8px; }
 }
 
 /* ── Canvas ── */
