@@ -518,8 +518,15 @@ class CMoonError extends Error {
 // Grants a cMoon's configured prize cToons to a user. Called only after the
 // selection/assignment transaction has committed (mint jobs are not
 // transactional, so they must never run inside a $transaction that might roll back).
+// Returns the granted prize list (name/image/quantity) purely for the caller to show a
+// "here's what's coming" reveal — this is the same config already shown publicly on the
+// cMoon's own page, not new information, and the mint jobs above are fire-and-forget, so
+// this list describes what was queued, not a confirmed-delivered receipt.
 async function grantCMoonPrizes(userId, cMoonId) {
-  const prizes = await prisma.cMoonPrizeCtoon.findMany({ where: { cMoonId } })
+  const prizes = await prisma.cMoonPrizeCtoon.findMany({
+    where: { cMoonId },
+    include: { ctoon: { select: { name: true, assetPath: true } } },
+  })
   for (const prize of prizes) {
     const qty = Math.max(1, Number(prize.quantity || 1))
     for (let i = 0; i < qty; i++) {
@@ -531,6 +538,12 @@ async function grantCMoonPrizes(userId, cMoonId) {
       })
     }
   }
+  return prizes.map(p => ({
+    ctoonId: p.ctoonId,
+    name: p.ctoon?.name || 'cToon',
+    assetPath: p.ctoon?.assetPath || null,
+    quantity: Math.max(1, Number(p.quantity || 1)),
+  }))
 }
 
 // User-initiated selection. Atomic: the `updateMany({ where: { cMoonId: null } })`
@@ -588,8 +601,8 @@ export async function selectCMoonForUser(userId, cMoonId) {
     return cmoon.id
   })
 
-  await grantCMoonPrizes(userId, assigned)
-  return assigned
+  const prizes = await grantCMoonPrizes(userId, assigned)
+  return { cMoonId: assigned, prizes }
 }
 
 // User-initiated decline from the join modal — there is no more time-based auto-assignment, so

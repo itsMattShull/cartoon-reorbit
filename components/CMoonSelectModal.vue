@@ -160,6 +160,7 @@ function closePreview() {
 
 const router = useRouter()
 const { play } = useFullscreenEffect()
+const { open: openRewardModal } = useCMoonRewardModal()
 
 async function confirm() {
   if (!choice.value || submitting.value) return
@@ -179,10 +180,26 @@ async function confirm() {
 
   try {
     const chosenId = choice.value
-    await $fetch('/api/cmoon/select', { method: 'POST', body: { cMoonId: chosenId } })
+    const res = await $fetch('/api/cmoon/select', { method: 'POST', body: { cMoonId: chosenId } })
     visible.value = false
     const picked = cmoons.value.find(c => c.id === chosenId)
-    const goToCMoon = () => router.push(`/newsite/cmoon/${chosenId}`)
+    // Navigate right away rather than waiting on the reward modal being dismissed — the modal is
+    // mounted globally (layouts/newsite-template.vue) so it keeps rendering across the route
+    // change anyway, and gating a route change behind a "you got a prize" dismiss click only
+    // slows down a flow that already feels instant today.
+    const goToCMoon = () => {
+      router.push(`/newsite/cmoon/${chosenId}`)
+      const prizes = res?.prizes || []
+      if (prizes.length) {
+        openRewardModal({
+          kind: 'prize',
+          eyebrow: `${picked?.name || 'cMoon'} Join Prize`,
+          title: 'Welcome!',
+          items: prizes.map(p => ({ id: p.ctoonId, imagePath: p.assetPath, label: p.name, qty: p.quantity, variant: 'ctoon' })),
+          note: 'On their way to your cToon collection.',
+        })
+      }
+    }
     if (picked?.effectType) play(picked.effectType, { onComplete: goToCMoon })
     else goToCMoon()
   } catch (e) {

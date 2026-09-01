@@ -62,6 +62,12 @@ export default defineEventHandler(async (event) => {
     achievers: countMap.get(a.id) || 0,
     achieved: userId ? achievedSet.has(a.id) : false,
     isClaimable: a.isClaimable,
+    // Flags a claim as "you were promoted to a cMoon rank" so the client can show the
+    // rank-reveal modal (which names the rank) instead of the generic inline claim text.
+    // The boolean alone is safe to expose to every caller of this list, including logged-out
+    // (see the `me = null` fallback above) — it's derived from a field already implied by every
+    // claim option's cToon/background rewards this same response already returns unfiltered.
+    isCMoonRank: !!a.cMoonRankTierId,
     claimedOptionId: userId ? (claimedMap.get(a.id) || null) : null,
     // Each claim option is its own reward bundle now (points + multiple cToons +
     // backgrounds), not a single ctoon-or-points choice.

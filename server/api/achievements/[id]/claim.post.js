@@ -1,6 +1,7 @@
 // server/api/achievements/[id]/claim.post.js
 import { defineEventHandler, readBody, createError } from 'h3'
 import { claimAchievementReward, AchievementClaimError } from '@/server/utils/achievements'
+import { assertSameOrigin } from '@/server/utils/requireAdmin'
 
 const ERROR_STATUS = {
   NOT_UNLOCKED: { statusCode: 403, statusMessage: 'You have not unlocked this achievement' },
@@ -13,6 +14,7 @@ const ERROR_STATUS = {
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
   if (!userId) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+  assertSameOrigin(event)
 
   const achievementId = event.context.params?.id
   const body = await readBody(event)
