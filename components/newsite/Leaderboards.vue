@@ -272,10 +272,9 @@ function cMoonForRow(row) {
   return cMoonBadges.value[row.username] || null
 }
 
-// Top individual point contributors per cMoon — a different, complementary metric from the
-// team-score standings above (row.teamScore, from weekly bonus categories): this is each
-// member's own lifetime point contribution (User.cMoonPoints, feeds the cMoon rank/achievement
-// system). Fetched eagerly like the boards above — cheap, reads a denormalized column.
+// Top individual point contributors per cMoon — a per-player breakdown of the same weekly
+// team-score log (CMoonScoreLog) the team totals above (row.teamScore) are summed from, see
+// server/api/leaderboard/cmoon-standings.get.js. Fetched eagerly like the boards above.
 const { data: cMoonContributorsData } = useFetch('/api/leaderboard/cmoon-standings', { default: () => ({ cMoonEnabled: false, contributorsByCMoonId: {} }), headers })
 const contributorsByCMoonId = computed(() => cMoonContributorsData.value?.contributorsByCMoonId || {})
 </script>

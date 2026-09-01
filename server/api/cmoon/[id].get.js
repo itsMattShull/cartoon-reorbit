@@ -68,15 +68,29 @@ export default defineEventHandler(async (event) => {
   // payload rather than a separate on-demand endpoint — each is a cheap LIMIT-15 query, and a
   // dropdown that defaults to showing one of them on load would pay the extra round trip on
   // effectively every page view anyway, with none of the savings a truly on-demand fetch buys.
+  //
+  // "Top Point Contributors" sums CMoonScoreLog (the same weekly team-score log teamScore is
+  // computed from — see recomputeCMoonTeamScores in server/utils/cmoon.js), not User.cMoonPoints
+  // — see server/api/leaderboard/cmoon-standings.get.js's header comment for why: cMoonPoints is
+  // a lifetime points-earned-from-anything counter that converges toward a player's whole account
+  // balance, not what they've actually contributed to this team. Raw SQL (JOIN + GROUP BY +
+  // ORDER BY + LIMIT), mirroring that same endpoint, rather than a denormalized-column read.
   const [featuredCtoons, rankRows, topPointContributors, topRankMembers, poll] = await Promise.all([
     featuredCtoonsQuery,
     db.cMoon.count({ where: { teamScore: { gt: cmoon.teamScore } } }),
-    db.user.findMany({
-      where: { cMoonId: id, active: true, banned: false, id: { not: EXCLUDED_SYSTEM_USER_ID } },
-      orderBy: { cMoonPoints: 'desc' },
-      take: LEADERBOARD_LIMIT,
-      select: { username: true, avatar: true, cMoonPoints: true },
-    }),
+    db.$queryRaw`
+      SELECT u."username", u."avatar", SUM(csl."points")::int AS "points"
+      FROM "CMoonScoreLog" csl
+      JOIN "User" u ON u."id" = csl."userId" AND u."cMoonId" = ${id}
+      WHERE csl."cMoonId" = ${id}
+        AND u."active" = true
+        AND COALESCE(u."banned", false) = false
+        AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
+      GROUP BY u."id", u."username", u."avatar"
+      HAVING SUM(csl."points") > 0
+      ORDER BY SUM(csl."points") DESC, u."username" ASC
+      LIMIT ${LEADERBOARD_LIMIT}
+    `,
     db.user.findMany({
       where: { cMoonId: id, active: true, banned: false, id: { not: EXCLUDED_SYSTEM_USER_ID }, currentCMoonRankId: { not: null } },
       orderBy: { currentCMoonRank: { sortOrder: 'desc' } },
@@ -127,7 +141,7 @@ export default defineEventHandler(async (event) => {
     rank: rankRows + 1,
     captains: [...captainUsernames],
     prizeCtoons: cmoon.prizeCtoons.map(pc => ({ name: pc.ctoon?.name || '', assetPath: pc.ctoon?.assetPath || null, quantity: pc.quantity })),
-    topPointContributors: topPointContributors.map(u => ({ username: u.username, avatar: u.avatar, points: u.cMoonPoints })),
+    topPointContributors: topPointContributors.map(u => ({ username: u.username, avatar: u.avatar, points: u.points })),
     topRankMembers: topRankMembers.map(u => ({
       username: u.username,
       avatar: u.avatar,
