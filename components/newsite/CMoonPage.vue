@@ -140,10 +140,12 @@
           <section class="cmp-panel cmp-leaderboard-panel">
             <h2 class="cmp-section-title">cMoon Leaderboard</h2>
             <select v-model="leaderboardView" class="cmp-leaderboard-select">
-              <option value="points">Top Point Contributors</option>
+              <option value="points">Top Weekly Contributors</option>
               <option value="rank">Top Ranking Members</option>
             </select>
-            <div v-if="!leaderboardRows.length" class="cmp-empty">No members yet.</div>
+            <div v-if="!leaderboardRows.length" class="cmp-empty">
+              {{ leaderboardView === 'points' ? 'No contributions yet.' : 'No ranked members yet.' }}
+            </div>
             <div v-else class="cmp-members">
               <NuxtLink
                 v-for="m in leaderboardRows" :key="m.username"
