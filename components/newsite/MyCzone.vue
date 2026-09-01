@@ -98,7 +98,7 @@
             >{{ g.name }}</button>
           </div>
         </div>
-        <GreenButton v-show="!cz.buildMode" class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
+        <GreenButton v-if="!isOwnZone" v-show="!cz.buildMode" class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
       </div>
       <div class="cz-topbar-right">
         <button
@@ -1494,6 +1494,10 @@ defineExpose({ save, clearZone })
   display: flex;
   flex-direction: column;
   width: 100%;
+  /* Matches the topbar/bottombar's own background so the sliver of corner that overflow:
+     hidden clips off their square corners (to round them to this frame's radius) reveals
+     the same light blue instead of whatever sits behind the frame. */
+  background: var(--OrbitLightBlue);
   border-radius: 10px;
   overflow: hidden;
 }
