@@ -3,14 +3,6 @@
     <div v-if="loading" class="cmp-status">Loading…</div>
     <div v-else-if="error" class="cmp-status cmp-status--error">{{ error }}</div>
     <template v-else-if="cmoon">
-      <CMoonAffinityLevelUpModal
-        v-if="levelUpDetails"
-        :level="levelUpDetails"
-        :cmoon-name="cmoon.name"
-        :cmoon-color="cmoon.color"
-        @close="levelUpDetails = null"
-      />
-
       <div class="cmp-masthead-wrap">
         <img
           v-if="cmoon.pageBannerImagePath"
@@ -284,9 +276,11 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { cMoonPaletteStyle } from '@/utils/cmoonPalette'
 import { useCtoonModal } from '@/composables/useCtoonModal'
+import { useCMoonRewardModal } from '@/composables/useCMoonRewardModal'
 
 const route = useRoute()
 const { open: openCtoonModal } = useCtoonModal()
+const { open: openRewardModal } = useCMoonRewardModal()
 const { fetchSelf } = useAuth()
 
 const loading = ref(true)
@@ -301,7 +295,6 @@ const contributeAmount = ref(null)
 const contributing = ref(false)
 const contributeError = ref('')
 const justLeveledUp = ref(false)
-const levelUpDetails = ref(null)
 let pulseTimer = null
 
 const offers = ref([])
@@ -459,6 +452,12 @@ async function claimOffer(offer) {
       body: { optionId },
     })
     offer.myClaim = { optionId: res.optionId, quantity: res.quantity }
+    openRewardModal({
+      kind: 'offer',
+      eyebrow: 'cToon Offer Claimed!',
+      title: 'Nice pick!',
+      items: [{ id: res.optionId, imagePath: opt?.assetPath || null, label: opt?.name || 'cToon', qty: res.quantity, variant: 'ctoon' }],
+    })
   } catch (err) {
     offerErrors[offer.id] = err?.data?.statusMessage || 'Failed to claim'
   } finally {
@@ -508,7 +507,24 @@ async function submitContribute() {
     contributeOpen.value = false
     await Promise.all([loadAffinity(cmoon.value.id), fetchSelf({ force: true })])
     if (res?.leveledUpTo) {
-      levelUpDetails.value = res.leveledUpTo
+      const level = res.leveledUpTo
+      const rewards = level.rewards || {}
+      const items = [
+        ...(rewards.avatars || []).map(av => ({ id: `av-${av.id}`, imagePath: av.imagePath, label: av.label || 'Avatar', variant: 'avatar' })),
+        ...(rewards.backgrounds || []).map(bg => ({ id: `bg-${bg.id}`, imagePath: bg.imagePath, label: bg.label || 'Background', variant: 'background' })),
+      ]
+      if (rewards.border) items.push({ id: 'border', imagePath: null, label: 'cZone Border', variant: 'swatch', icon: '🔲' })
+      if (rewards.glow) items.push({ id: 'glow', imagePath: null, label: 'cZone Glow', variant: 'swatch', icon: '✨' })
+      openRewardModal({
+        kind: 'affinity',
+        eyebrow: `${cmoon.value.name} Affinity — Rank Up!`,
+        title: level.name,
+        subtitle: level.levelNames?.length > 1
+          ? `You jumped ${level.levelNames.length} ranks in one contribution: ${level.levelNames.join(' → ')}`
+          : '',
+        items,
+        emptyText: 'This rank is a milestone — no cosmetic reward attached.',
+      })
       justLeveledUp.value = true
       clearTimeout(pulseTimer)
       pulseTimer = setTimeout(() => { justLeveledUp.value = false }, 1600)

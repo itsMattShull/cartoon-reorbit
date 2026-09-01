@@ -1,6 +1,7 @@
 // server/api/cmoon/select.post.js
 import { defineEventHandler, readBody, createError } from 'h3'
 import { selectCMoonForUser, CMoonError, CMOON_SELECT_ERRORS } from '@/server/utils/cmoon'
+import { assertSameOrigin } from '@/server/utils/requireAdmin'
 
 const ERROR_STATUS = {
   [CMOON_SELECT_ERRORS.DISABLED]: { statusCode: 403, statusMessage: 'cMoons are not currently enabled' },
@@ -14,14 +15,15 @@ const ERROR_STATUS = {
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
   if (!userId) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+  assertSameOrigin(event)
 
   const body = await readBody(event)
   const cMoonId = typeof body?.cMoonId === 'string' ? body.cMoonId : ''
   if (!cMoonId) throw createError({ statusCode: 400, statusMessage: 'cMoonId is required' })
 
   try {
-    const assigned = await selectCMoonForUser(userId, cMoonId)
-    return { ok: true, cMoonId: assigned }
+    const { cMoonId: assigned, prizes } = await selectCMoonForUser(userId, cMoonId)
+    return { ok: true, cMoonId: assigned, prizes }
   } catch (err) {
     if (err instanceof CMoonError) {
       const mapped = ERROR_STATUS[err.code] || { statusCode: 400, statusMessage: 'Unable to select cMoon' }

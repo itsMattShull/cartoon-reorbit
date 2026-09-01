@@ -308,6 +308,7 @@ html.newsite-active body {
   <Onboarding v-if="!ctoonModalIsOpen && !auctionModalIsOpen && !isAdminRoute" />
   <CMoonSelectModal />
   <FullscreenEffectHost />
+  <CMoonRewardModal />
 </template>
 
 <script setup>
