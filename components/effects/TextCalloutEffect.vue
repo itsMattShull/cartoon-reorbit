@@ -6,6 +6,7 @@
         :src="t.src"
         alt=""
         class="tcx-tile"
+        decoding="async"
         :style="{ animationDelay: t.delay + 'ms' }"
       />
     </div>
@@ -28,8 +29,14 @@ const props = defineProps({
 })
 const emit = defineEmits(['done'])
 
-const TILE_COLS = 4
-const TILE_ROWS = 6
+// 15 tiles (not the original 24) — each animated <img> runs its own independent GIF decode/paint
+// loop (browsers don't share one decoded timeline across multiple <img> tags pointing at the same
+// URL), so total tile count directly multiplies decode cost. 24 simultaneous instances of these
+// gifs was the actual cause of choppy/glitchy playback on mobile; 15 plus the much smaller source
+// files below (see public/effects/cn-board.gif, cn-columns.gif — re-encoded at 300px wide instead
+// of the original 800px, ~7x fewer pixels per frame) brings this comfortably within budget.
+const TILE_COLS = 3
+const TILE_ROWS = 5
 const TILE_GIFS = ['/effects/cn-board.gif', '/effects/cn-columns.gif']
 
 // Tiles pop in across the first ~45% of the budget, hold briefly, then fade over the next ~12% —
@@ -86,8 +93,8 @@ onBeforeUnmount(() => {
   position: absolute;
   inset: 0;
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  grid-template-rows: repeat(6, 1fr);
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(5, 1fr);
   animation-name: tcx-tiles-fade;
   animation-timing-function: ease-in-out;
   animation-fill-mode: forwards;
