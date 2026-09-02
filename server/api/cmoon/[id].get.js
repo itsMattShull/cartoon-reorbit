@@ -40,7 +40,6 @@ export default defineEventHandler(async (event) => {
       memberCount: true,
       teamScore: true,
       captains: { select: { user: { select: { username: true } } } },
-      prizeCtoons: { select: { quantity: true, ctoon: { select: { name: true, assetPath: true } } } },
       _count: { select: { featuredCtoons: true } }
     }
   })
@@ -140,7 +139,6 @@ export default defineEventHandler(async (event) => {
     teamScore: cmoon.teamScore,
     rank: rankRows + 1,
     captains: [...captainUsernames],
-    prizeCtoons: cmoon.prizeCtoons.map(pc => ({ name: pc.ctoon?.name || '', assetPath: pc.ctoon?.assetPath || null, quantity: pc.quantity })),
     topPointContributors: topPointContributors.map(u => ({ username: u.username, avatar: u.avatar, points: u.points })),
     topRankMembers: topRankMembers.map(u => ({
       username: u.username,
