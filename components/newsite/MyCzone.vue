@@ -1494,6 +1494,14 @@ defineExpose({ save, clearZone })
   user-select: none;
   position: relative;
   box-sizing: border-box;
+  /* border-radius clips an element's OWN background to its rounded shape too, not just its
+     children — so cz-frame's rounded corners always leave a tiny wedge (outside the curve, inside
+     its own sharp bounding box) that cz-frame itself can never paint, no matter what background
+     it's given. That wedge shows through to whatever sits directly behind cz-frame, which is
+     this element — so it needs the same fill, otherwise that sliver reveals the page's dark
+     background instead of matching. Squares, so it isn't clipped by its own radius the way
+     cz-frame is, and paints flush all the way into the corner. */
+  background: var(--OrbitLightBlue);
 }
 
 /* Purely a positioning/clipping context — no border or padding of its own, so it takes up
@@ -1513,9 +1521,11 @@ defineExpose({ save, clearZone })
   display: flex;
   flex-direction: column;
   width: 100%;
-  /* Matches the topbar/bottombar's own background so the sliver of corner that overflow:
-     hidden clips off their square corners (to round them to this frame's radius) reveals
-     the same light blue instead of whatever sits behind the frame. */
+  /* Matches the topbar/bottombar's own background — mostly redundant with them since they
+     already fill this box edge-to-edge, but keeps the fallback sane if a future child ever
+     doesn't. The actual corner fix lives on .myczone below: border-radius clips even an
+     element's OWN background to its rounded shape, so this can never paint the tiny wedge
+     outside its own curve — only whatever's directly behind it can. */
   background: var(--OrbitLightBlue);
   border-radius: 10px;
   overflow: hidden;
