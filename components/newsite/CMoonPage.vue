@@ -1,4 +1,13 @@
 <template>
+  <!-- Teleported to body for the same reason as CMoonSelectModal/CtoonInfoCard/CMoonRewardModal:
+       .site-container carries a `transform: scale()` on desktop, which traps position:fixed
+       descendants inside its own clipped box unless they're teleported out. -->
+  <Teleport to="body">
+    <div v-if="isAdminPreview" class="cmp-admin-preview-banner" role="status">
+      <span>Admin preview — this is exactly what a new player sees. Nothing here was saved.</span>
+      <NuxtLink to="/newsite/admin/cMoon" class="cmp-admin-preview-exit">Exit preview</NuxtLink>
+    </div>
+  </Teleport>
   <div class="cmp-wrap" :style="paletteStyle">
     <div v-if="loading" class="cmp-status">Loading…</div>
     <div v-else-if="error" class="cmp-status cmp-status--error">{{ error }}</div>
@@ -271,7 +280,12 @@ import { useCMoonRewardModal } from '@/composables/useCMoonRewardModal'
 const route = useRoute()
 const { open: openCtoonModal } = useCtoonModal()
 const { open: openRewardModal } = useCMoonRewardModal()
-const { fetchSelf } = useAuth()
+const { fetchSelf, isAdmin } = useAuth()
+
+// Set only by the admin console's "Preview join modal" flow (CMoonSelectModal.vue, preview
+// branch of confirm()) after a real navigation here — purely cosmetic, gated on the
+// server-verified isAdmin so a non-admin adding this to the URL by hand sees nothing extra.
+const isAdminPreview = computed(() => route.query.adminPreview === '1' && isAdmin.value)
 
 const loading = ref(true)
 const error = ref('')
@@ -530,6 +544,36 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
 </script>
 
 <style scoped>
+.cmp-admin-preview-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 8px 16px;
+  padding-top: max(8px, env(safe-area-inset-top));
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  background: #0a1830;
+  border-bottom: 2px solid #ffd75e;
+  color: #ffd75e;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.cmp-admin-preview-exit {
+  color: #fff;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
 .cmp-wrap {
   width: 100%;
   min-height: 100%;
