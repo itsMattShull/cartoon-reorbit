@@ -106,29 +106,14 @@
               <p>{{ ctoonDescription }}</p>
             </div>
             <div class="ctic-grid">
-              <div
-                v-if="showCMoonTheme"
-                class="ctic-tile ctic-tile-wide"
-                :class="{ 'ctic-tile--button': !!ctoon.cMoon.buttonImagePath }"
-              >
+              <div v-if="showCMoonTheme" class="ctic-tile ctic-tile-wide">
+                <div class="ctic-label">cWorld</div>
                 <NuxtLink
-                  v-if="ctoon.cMoon.buttonImagePath"
                   :to="`/newsite/cmoon/${ctoon.cMoon.id}`"
-                  class="ctic-cmoon-button-link"
+                  class="ctic-value ctic-value--link ctic-value--wrap"
                   :aria-label="`View the ${ctoon.cMoon.name} cMoon page`"
                   @click="close"
-                >
-                  <img :src="ctoon.cMoon.buttonImagePath" :alt="`${ctoon.cMoon.name} cMoon`" class="ctic-cmoon-button-img" />
-                </NuxtLink>
-                <template v-else>
-                  <div class="ctic-label">cWorld</div>
-                  <NuxtLink
-                    :to="`/newsite/cmoon/${ctoon.cMoon.id}`"
-                    class="ctic-value ctic-value--link ctic-value--wrap"
-                    :aria-label="`View the ${ctoon.cMoon.name} cMoon page`"
-                    @click="close"
-                  >{{ ctoon.cMoon.name }} <span aria-hidden="true">&rsaquo;</span></NuxtLink>
-                </template>
+                >{{ ctoon.cMoon.name }} <span aria-hidden="true">&rsaquo;</span></NuxtLink>
               </div>
               <div class="ctic-tile">
                 <div class="ctic-label">Highest Mint</div>
@@ -1191,38 +1176,6 @@ function formatDate(value) {
   grid-column: 1 / -1;
 }
 
-/* ── cMoon button tile ──────────────────────────────────────── */
-.ctic-tile--button {
-  /* The button art is a small pill, not a full-bleed banner — center it in the tile rather than
-     stretching it edge to edge, and pad the link itself out to a real touch target below. */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px 0;
-}
-
-.ctic-cmoon-button-link {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 44px;
-  padding: 4px 8px;
-  -webkit-tap-highlight-color: transparent;
-}
-.ctic-cmoon-button-link:focus-visible {
-  outline: 2px solid var(--OrbitLightBlue);
-  outline-offset: 2px;
-}
-
-.ctic-cmoon-button-img {
-  display: block;
-  width: auto;
-  max-width: 100%;
-  height: 44px;
-  aspect-ratio: 232 / 62;
-  object-fit: contain;
-}
-
 .ctic-desc {
   margin-bottom: 0;
 }
@@ -1614,7 +1567,6 @@ function formatDate(value) {
 .ctic-panel--cmoon .ctic-value--link:hover,
 .ctic-panel--cmoon .ctic-value--link:active { opacity: 0.82; }
 .ctic-panel--cmoon .ctic-value--link:focus-visible { outline-color: var(--cm-focus-ring); }
-.ctic-panel--cmoon .ctic-cmoon-button-link:focus-visible { outline-color: var(--cm-focus-ring); }
 .ctic-panel--cmoon .ctic-sub { color: var(--cm-text-muted); }
 
 .ctic-panel--cmoon .ctic-mint-title { color: var(--cm-text-muted); }

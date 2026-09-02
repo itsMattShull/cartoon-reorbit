@@ -13,8 +13,9 @@
           <button
             class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50"
             :disabled="!cmoons.length"
+            title="Simulates the full new-player onboarding flow: team pick, join effect, and the join-prize reveal — navigates to the real cMoon page, but makes no real join or prize grant"
             @click="previewModalOpen = true"
-          >Preview join modal</button>
+          >Preview join flow</button>
           <button
             class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             :disabled="!flagEnabled || cmoons.length < 2"
@@ -962,8 +963,10 @@
 
     <!-- A separate instance from the one mounted globally in the newsite layout (which drives
          the real must-choose flow) — preview mode is entirely self-contained per instance, so
-         opening this one here can never interfere with a real deadline modal elsewhere. -->
-    <CMoonSelectModal preview v-model="previewModalOpen" />
+         opening this one here can never interfere with a real deadline modal elsewhere.
+         :admin-cmoons reuses the list this page already loaded (full prizeCtoons included) so the
+         preview's simulated join-prize reveal needs no extra network round trip. -->
+    <CMoonSelectModal preview v-model="previewModalOpen" :admin-cmoons="cmoons" />
 
     <!-- ── Disperse cToons modal ─────────────────────────────────────── -->
     <CMoonDisperseModal

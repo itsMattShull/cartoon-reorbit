@@ -59,14 +59,19 @@
 
 <script setup>
 // `preview` lets admin re-use this exact component (same markup, same joinLocked-filtered
-// /api/cmoons feed, same CSS) to show what new players see, without any of the real
-// self-selection side effects. Visibility is then driven by v-model (modelValue) instead of the
-// player flow's own internal eligibility check (checkStatus), and confirm() never calls the real
-// mutating select endpoint — it only plays the chosen cMoon's effect (if any), so an admin who
-// already belongs to a cMoon can preview repeatedly with zero side effects.
+// cMoon list, same CSS) to fully simulate what a new player experiences: team pick, the full-
+// screen join effect, a real navigation to the real cMoon page, and the same join-prize reveal
+// modal — without any of the real self-selection side effects. Visibility is driven by v-model
+// (modelValue) instead of the player flow's own internal eligibility check (checkStatus), and
+// confirm() never calls the real mutating select endpoint, so an admin who already belongs to a
+// cMoon can preview repeatedly with zero DB writes or mint jobs.
 const props = defineProps({
   preview: { type: Boolean, default: false },
   modelValue: { type: Boolean, default: false },
+  // Preview-only: the admin console's already-loaded /api/admin/cmoons list (full prizeCtoons
+  // included), passed down so the simulated join-prize reveal needs no extra fetch and no new
+  // read-only endpoint. Falls back to the public feed (without prize data) if omitted.
+  adminCmoons: { type: Array, default: () => [] },
 })
 const emit = defineEmits(['update:modelValue'])
 
@@ -142,9 +147,19 @@ if (!props.preview) {
 // Admin preview: same /api/cmoons feed as the real flow (so joinLocked cMoons stay excluded
 // exactly like they would for a new player), but skips the eligibility check entirely — an admin
 // previewing this doesn't need canChoose:true, that's the whole point.
+//
+// When the caller passes adminCmoons (the admin console's already-loaded /api/admin/cmoons list),
+// reuse it instead of a second fetch — it carries the same fields plus each team's real
+// prizeCtoons, which the public feed never exposes. joinLocked is filtered out client-side to
+// mirror the public feed's default (unlocked-only) view exactly, so the preview still shows only
+// what a new player could actually pick.
 async function loadPreview() {
   error.value = ''
   choice.value = null
+  if (props.adminCmoons.length) {
+    cmoons.value = props.adminCmoons.filter(c => !c.joinLocked)
+    return
+  }
   try {
     const list = await $fetch('/api/cmoons').catch(() => ({ cmoons: [] }))
     cmoons.value = list?.cmoons || []
@@ -168,12 +183,30 @@ async function confirm() {
   error.value = ''
 
   if (props.preview) {
-    // Never calls the real mutating select endpoint — this is a look, not a join. Mirrors the
-    // real flow's ordering (close the picker, then play the effect) rather than navigating
-    // anywhere afterward, since there's no real cMoon page to land an admin preview on.
+    // Full onboarding simulation: never calls the real mutating select endpoint (so no DB write,
+    // no mint job, no change to the admin's own cMoonId) but otherwise mirrors the real flow
+    // exactly — team pick, full-screen effect, a real navigation to the real cMoon page, then the
+    // same join-prize reveal modal a new player would see. `?adminPreview=1` only ever drives a
+    // cosmetic "you're previewing" banner on that page (see CMoonPage.vue) — it carries no
+    // server-verified capability of its own.
     const picked = cmoons.value.find(c => c.id === choice.value)
+    const chosenId = choice.value
     closePreview()
-    if (picked?.effectType) play(picked.effectType)
+    const goToCMoon = () => {
+      router.push(`/newsite/cmoon/${chosenId}?adminPreview=1`)
+      const prizes = picked?.prizeCtoons || []
+      if (prizes.length) {
+        openRewardModal({
+          kind: 'prize',
+          eyebrow: `${picked?.name || 'cMoon'} Join Prize (Preview)`,
+          title: 'Welcome!',
+          items: prizes.map(p => ({ id: p.ctoonId, imagePath: p.assetPath, label: p.name, qty: p.quantity, variant: 'ctoon' })),
+          note: 'Preview only — nothing was added to any account.',
+        })
+      }
+    }
+    if (picked?.effectType) play(picked.effectType, { onComplete: goToCMoon })
+    else goToCMoon()
     submitting.value = false
     return
   }
