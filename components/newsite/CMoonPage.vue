@@ -61,16 +61,6 @@
           </div>
         </template>
 
-        <template v-if="cmoon.prizeCtoons.length">
-          <h2 class="cmp-section-title">Prize cToons</h2>
-          <div class="cmp-grid">
-            <div v-for="(p, i) in cmoon.prizeCtoons" :key="i" class="cmp-card cmp-card--static">
-              <img v-if="p.assetPath" :src="p.assetPath" :alt="p.name" class="cmp-card-img" loading="lazy" />
-              <span class="cmp-card-name">{{ p.name }} × {{ p.quantity }}</span>
-            </div>
-          </div>
-        </template>
-
         <template v-if="offers.length">
           <h2 class="cmp-section-title">cToon Offers</h2>
           <div v-for="o in offers" :key="o.id" class="cmp-offer">
@@ -363,11 +353,6 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   font-size: 0.8rem;
   color: var(--cm-text-muted, rgba(255,255,255,0.6));
 }
-
-.cmp-card--static {
-  cursor: default;
-}
-.cmp-card--static:hover { opacity: 1; }
 
 .cmp-offer {
   margin-bottom: 24px;

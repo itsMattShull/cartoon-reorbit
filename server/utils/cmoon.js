@@ -541,7 +541,16 @@ export async function selectCMoonForUser(userId, cMoonId) {
   const assigned = await prisma.$transaction(async (tx) => {
     const result = await tx.user.updateMany({
       where: { id: userId, cMoonId: null },
-      data: { cMoonId: cmoon.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: false },
+      // Self-selection always starts a member at 0 cMoonPoints / no rank, regardless of
+      // whatever they'd accumulated in a cMoon they previously left — cMoonPoints is only
+      // ever written going forward by the aggregate cron (see cmoon-points-aggregate.js),
+      // so a former member's stale total would otherwise linger until its next 15-minute
+      // run. currentCMoonRankId/cMoonRankRoleGrantedAt are already guaranteed null here
+      // (reassignUserCMoon nulls them whenever cMoonId is cleared), included for clarity.
+      data: {
+        cMoonId: cmoon.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: false,
+        cMoonPoints: 0, currentCMoonRankId: null, cMoonRankRoleGrantedAt: null,
+      },
     })
     if (result.count === 0) throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
     // Re-checks joinLocked:false as part of the same atomic write, not just the pre-fetch
@@ -575,7 +584,12 @@ async function assignSmallestCMoonToUser(userId) {
 
     const result = await tx.user.updateMany({
       where: { id: userId, cMoonId: null },
-      data: { cMoonId: smallest.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: true },
+      // Same fresh-start reset as selectCMoonForUser above — auto-assignment is just the
+      // deadline-expiry path into the same "brand new member" state.
+      data: {
+        cMoonId: smallest.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: true,
+        cMoonPoints: 0, currentCMoonRankId: null, cMoonRankRoleGrantedAt: null,
+      },
     })
     if (result.count === 0) return null
 
@@ -736,6 +750,15 @@ export async function reassignUserCMoon(userId, newCMoonId) {
     if (newCMoon) {
       await tx.cMoon.update({ where: { id: newCMoon.id }, data: { memberCount: { increment: 1 } } })
     }
+    // Captains are placed into their cMoon by this same function (see cmoons.post.js /
+    // cmoons/[id].put.js — the CMoonCaptain row is always created first), so this check
+    // reflects captaincy of the DESTINATION cMoon at the moment of the move. Everyone else
+    // moving in — an ordinary admin reassignment, or the Members panel — starts that cMoon
+    // fresh at 0 cMoonPoints, same as a self-selected join (see selectCMoonForUser), rather
+    // than carrying over whatever they'd earned in a cMoon they previously belonged to.
+    const isNewCaptain = newCMoon
+      ? !!(await tx.cMoonCaptain.findUnique({ where: { cMoonId_userId: { cMoonId: newCMoon.id, userId } } }))
+      : false
     await tx.user.update({
       where: { id: userId },
       data: {
@@ -748,6 +771,7 @@ export async function reassignUserCMoon(userId, newCMoonId) {
         currentCMoonRankId: null,
         cMoonRankRoleGrantedAt: null,
         cMoonRoleGrantedAt: null,
+        ...(newCMoon && !isNewCaptain ? { cMoonPoints: 0 } : {}),
       },
     })
   })
