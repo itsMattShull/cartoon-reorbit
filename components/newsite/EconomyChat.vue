@@ -333,15 +333,22 @@ onUnmounted(() => {
 <style scoped>
 /* z-index 800: below the Economy page's own modals (EconomyCtoonHistoryModal
    at 1100, EconomyFeaturedAuctionsCarousel at 1150) so either can still cover
-   this panel, above ordinary page content. */
+   this panel, above ordinary page content.
+
+   Anchored bottom-LEFT, not bottom-right: components/Onboarding.vue (the
+   site-wide Daily/Events/Alerts hub) is `fixed right-3` at every breakpoint,
+   not just mobile, so a right-anchored toggle here would sit on top of it —
+   on mobile, permanently hiding a real notification surface behind a chat
+   button. Left is unclaimed by any other fixed UI (checked layouts/ and the
+   newsite template: no bottom nav bar either). */
 .echat {
   position: fixed;
-  right: 16px;
+  left: 16px;
   bottom: 16px;
   z-index: 800;
   display: flex;
   flex-direction: column;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 8px;
 }
 
@@ -584,7 +591,11 @@ onUnmounted(() => {
 
 /* 768px matches the layout's own MOBILE_BREAKPOINT (layouts/newsite-template.vue)
    — below it the panel becomes a bottom sheet instead of a floating card, since
-   a 320px fixed card either overflows a narrow phone or covers most of it anyway. */
+   a 320px fixed card either overflows a narrow phone or covers most of it anyway.
+   The sheet itself still spans the full width (opening it is a deliberate,
+   temporary action, same as Onboarding's own panel covering other content when
+   opened) — only the collapsed TOGGLE stays left-aligned, so Onboarding's
+   bottom-right toggle remains reachable whenever chat isn't actually open. */
 @media (max-width: 768px) {
   .echat {
     right: 0;
@@ -596,8 +607,8 @@ onUnmounted(() => {
   }
 
   .echat-toggle {
-    align-self: flex-end;
-    margin-right: 6px;
+    align-self: flex-start;
+    margin-left: 6px;
   }
 
   .echat-panel {
