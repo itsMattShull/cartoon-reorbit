@@ -587,6 +587,7 @@ model User {
   bids                      Bid[]
   autoBids                  AuctionAutoBid[]
   auctionsCreated           Auction[]                     @relation("AuctionsCreated")
+  chatMessages              ChatMessage[]
   clashGamesAsPlayer1       ClashGame[]                   @relation("ClashGamePlayer1")
   clashGamesAsPlayer2       ClashGame[]                   @relation("ClashGamePlayer2")
   clashGamesWhoLeft         ClashGame[]                   @relation("ClashGameWhoLeft")
@@ -1741,6 +1742,11 @@ model Auction {
   // doesn't index foreign keys automatically, so without this the "My Auctions"
   // tab sequentially scans every auction ever created.
   @@index([creatorId, endAt])
+  // server/api/economy/ctoons/[id]/auctions.get.js joins in from UserCtoon on
+  // ctoonId, then filters CLOSED+winnerId-not-null and orders by winnerAt desc.
+  // Without winnerAt in the index, Postgres has to sort every matching row
+  // before applying the LIMIT.
+  @@index([userCtoonId, status, winnerAt])
 }
 
 model Bid {
@@ -1798,6 +1804,28 @@ model EconomyAggregateCursor {
   lastAuctionProcessedAt DateTime @default("1970-01-01T00:00:00Z")
   lastTradeProcessedAt   DateTime @default("1970-01-01T00:00:00Z")
   updatedAt              DateTime @updatedAt
+}
+
+// ── Live chat ────────────────────────────────────────────────────
+// Generic room-scoped chat, persisted so history survives page refresh /
+// late joiners. "room" is a free-form string ("economy" today) rather than a
+// dedicated Economy table so a future page can reuse this model unchanged.
+// Written only by server/socket-server.js's chat handlers, which resolve
+// userId/username from the authenticated socket session — never from the
+// client payload — to prevent username spoofing.
+model ChatMessage {
+  id        String    @id @default(uuid())
+  room      String
+  userId    String
+  username  String // display-name snapshot at send time; survives a later username change
+  body      String
+  createdAt DateTime  @default(now())
+  deletedAt DateTime? // soft-delete, e.g. admin moderation
+
+  user User @relation(fields: [userId], references: [id])
+
+  // Chat history is paginated per room ordered by recency.
+  @@index([room, createdAt])
 }
 
 model ClashGame {

@@ -39,7 +39,8 @@ const props = defineProps({
   source: { type: String, required: true }, // 'AUCTION' | 'TRADE'
   window: { type: String, default: 'all' },
   hideGtoons: { type: Boolean, default: false },
-  hidePokemon: { type: Boolean, default: false }
+  hidePokemon: { type: Boolean, default: false },
+  hideHighMints: { type: Boolean, default: false }
 })
 const emit = defineEmits(['close', 'select'])
 
@@ -50,6 +51,7 @@ const exclusionSuffix = computed(() => {
   const parts = []
   if (props.hideGtoons) parts.push('gToons')
   if (props.hidePokemon) parts.push('Pokémon')
+  if (props.hideHighMints) parts.push('high mints')
   return parts.length ? ` · excluding ${parts.join(' and ')}` : ''
 })
 
@@ -71,7 +73,8 @@ async function load() {
         source: props.source,
         window: props.window,
         hideGtoons: props.hideGtoons ? '1' : undefined,
-        hidePokemon: props.hidePokemon ? '1' : undefined
+        hidePokemon: props.hidePokemon ? '1' : undefined,
+        hideHighMints: props.hideHighMints ? '1' : undefined
       }
     })
     if (myId !== reqId) return
@@ -85,7 +88,7 @@ async function load() {
 }
 
 watch(
-  () => [props.source, props.window, props.hideGtoons, props.hidePokemon],
+  () => [props.source, props.window, props.hideGtoons, props.hidePokemon, props.hideHighMints],
   load,
   { immediate: true }
 )

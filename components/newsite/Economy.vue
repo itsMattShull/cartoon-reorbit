@@ -48,12 +48,30 @@
           <input type="checkbox" v-model="filter.hidePokemon" />
           <span>Hide Pokémon cToons</span>
         </label>
+        <label class="filter-check">
+          <input type="checkbox" v-model="filter.hideHighMints" />
+          <span>Hide high mints (&gt;500)</span>
+        </label>
       </fieldset>
 
       <button type="button" class="filter-clear" :disabled="!activeFilterCount" @click="clearFilters">
         Clear Filters
       </button>
     </div>
+
+    <!-- Live ticker: recent big sales + inflation index, stock-ticker style. -->
+    <EconomyTicker />
+
+    <!-- Featured auctions -->
+    <section class="economy-section">
+      <div class="featured-cta">
+        <div>
+          <h2 class="section-title">Featured Auctions</h2>
+          <p class="section-sub">Look at them live and place bids without leaving this page.</p>
+        </div>
+        <GreenButton @click="showFeaturedAuctions = true">View Featured</GreenButton>
+      </div>
+    </section>
 
     <!-- Stat tiles -->
     <p class="stat-note">Site-wide totals — the filters above don't apply here.</p>
@@ -195,6 +213,7 @@
       :window="windowValue"
       :hide-gtoons="filter.hideGtoons"
       :hide-pokemon="filter.hidePokemon"
+      :hide-high-mints="filter.hideHighMints"
       @close="showTopValuable = false"
       @select="openHistory"
     />
@@ -204,6 +223,13 @@
       :ctoon-id="historyCtoonId"
       @close="historyCtoonId = null"
     />
+
+    <EconomyFeaturedAuctionsCarousel
+      v-if="showFeaturedAuctions"
+      @close="showFeaturedAuctions = false"
+    />
+
+    <EconomyChat />
   </div>
 </template>
 
@@ -226,7 +252,10 @@ const windowLabel = computed(() => windowOptions.find(o => o.value === windowVal
 const showTopValuable = ref(false)
 const topValuableSource = ref('AUCTION')
 const historyCtoonId = ref(null)
-const anyModalOpen = computed(() => showTopValuable.value || !!historyCtoonId.value)
+const showFeaturedAuctions = ref(false)
+const anyModalOpen = computed(
+  () => showTopValuable.value || !!historyCtoonId.value || showFeaturedAuctions.value
+)
 
 function openTopValuable(source) {
   topValuableSource.value = source
@@ -245,9 +274,10 @@ const filtersOpen = ref(false)
 // Sent as the app's usual `1` flag, or omitted entirely when off.
 const hideGtoonsParam = computed(() => (filter.value.hideGtoons ? '1' : undefined))
 const hidePokemonParam = computed(() => (filter.value.hidePokemon ? '1' : undefined))
+const hideHighMintsParam = computed(() => (filter.value.hideHighMints ? '1' : undefined))
 
 const activeExclusionCount = computed(
-  () => (filter.value.hideGtoons ? 1 : 0) + (filter.value.hidePokemon ? 1 : 0)
+  () => (filter.value.hideGtoons ? 1 : 0) + (filter.value.hidePokemon ? 1 : 0) + (filter.value.hideHighMints ? 1 : 0)
 )
 const activeFilterCount = computed(
   () => activeExclusionCount.value + (filter.value.sort !== ECONOMY_FILTER_DEFAULTS.sort ? 1 : 0)
@@ -257,6 +287,7 @@ const exclusionChips = computed(() => {
   const chips = []
   if (filter.value.hideGtoons) chips.push({ key: 'hideGtoons', label: 'gToons hidden' })
   if (filter.value.hidePokemon) chips.push({ key: 'hidePokemon', label: 'Pokémon hidden' })
+  if (filter.value.hideHighMints) chips.push({ key: 'hideHighMints', label: 'High mints hidden' })
   return chips
 })
 
@@ -264,6 +295,7 @@ const exclusionSuffix = computed(() => {
   const parts = []
   if (filter.value.hideGtoons) parts.push('gToons')
   if (filter.value.hidePokemon) parts.push('Pokémon')
+  if (filter.value.hideHighMints) parts.push('high mints')
   if (!parts.length) return ''
   return ` · excluding ${parts.join(' and ')}`
 })
@@ -284,7 +316,12 @@ function clearFilters() {
 // changes — an extra manual watch here would double every request.
 const { data: summary, refresh: refreshSummary } = useFetch('/api/economy/summary', { headers })
 const { data: trending, refresh: refreshTrending } = useFetch('/api/economy/trending', {
-  query: { window: windowValue, hideGtoons: hideGtoonsParam, hidePokemon: hidePokemonParam },
+  query: {
+    window: windowValue,
+    hideGtoons: hideGtoonsParam,
+    hidePokemon: hidePokemonParam,
+    hideHighMints: hideHighMintsParam
+  },
   headers
 })
 
@@ -343,7 +380,8 @@ async function loadBrowse() {
         page: browsePage.value,
         sort: filter.value.sort,
         hideGtoons: hideGtoonsParam.value,
-        hidePokemon: hidePokemonParam.value
+        hidePokemon: hidePokemonParam.value,
+        hideHighMints: hideHighMintsParam.value
       },
       headers,
       signal: browseAbort.signal
@@ -375,7 +413,7 @@ function scheduleBrowse() {
 
 watch([debouncedQuery, browsePage], scheduleBrowse)
 watch(
-  () => [filter.value.sort, filter.value.hideGtoons, filter.value.hidePokemon],
+  () => [filter.value.sort, filter.value.hideGtoons, filter.value.hidePokemon, filter.value.hideHighMints],
   () => {
     // Reset synchronously here rather than in a watcher on browsePage: a
     // separate watcher would queue a second load for the page change.
@@ -719,6 +757,26 @@ function formatVolume(n) {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.featured-cta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.featured-cta .section-title,
+.featured-cta .section-sub {
+  margin: 0;
+}
+
+@media (max-width: 768px) {
+  .featured-cta {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 .ctoon-list {

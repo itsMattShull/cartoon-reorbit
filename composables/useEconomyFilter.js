@@ -21,7 +21,8 @@ export const ECONOMY_SORTS = [
 export const ECONOMY_FILTER_DEFAULTS = {
   sort: 'nameAsc',
   hideGtoons: false,
-  hidePokemon: false
+  hidePokemon: false,
+  hideHighMints: false
 }
 
 export const useEconomyFilter = () => useState('economyFilter', () => ({ ...ECONOMY_FILTER_DEFAULTS }))
@@ -33,5 +34,6 @@ export function economyFilterToQuery(filter) {
   if (filter.sort && filter.sort !== ECONOMY_FILTER_DEFAULTS.sort) query.sort = filter.sort
   if (filter.hideGtoons) query.hideGtoons = '1'
   if (filter.hidePokemon) query.hidePokemon = '1'
+  if (filter.hideHighMints) query.hideHighMints = '1'
   return query
 }
