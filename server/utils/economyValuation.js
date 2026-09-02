@@ -2,6 +2,19 @@
 // Shared valuation helpers for the Economy page (pages/newsite/economy.vue).
 import { prisma } from '../prisma.js'
 import { Prisma } from '@prisma/client'
+// Deferred/dynamic to avoid a hard circular import at module-eval time:
+// systemAccounts.js imports EXCLUDED_SYSTEM_USER_ID from this file. Both
+// bindings are only ever touched inside async function bodies, well after
+// both modules finish loading, so the cycle resolves safely either way this
+// module is entered — but keeping the import lazy makes that not depend on
+// remembering that detail if either file changes.
+let _getSystemUserIds = null
+async function systemUserIds() {
+  if (!_getSystemUserIds) {
+    ({ getSystemUserIds: _getSystemUserIds } = await import('./systemAccounts.js'))
+  }
+  return _getSystemUserIds()
+}
 
 // Minimum number of distinct transactions required before an aggregate is
 // shown as a real number. Below this, a cToon's "average price" is really
@@ -17,9 +30,18 @@ export const MIN_SAMPLE_SIZE = 3
 export const EXCLUDED_SYSTEM_USER_ID = '4f0e8b3b-7d0b-466b-99e7-8996c91d7eb3'
 
 // All-time average closed-auction sale price per cToon, batched across a
-// list of ctoonIds. Same underlying query as server/api/ctoon/valuations.post.js.
+// list of ctoonIds. Used by server/api/ctoon/valuations.post.js and by the
+// trade-value imputation in server/cron/economy-aggregate.js and
+// server/api/economy/ctoons/[id]/trades.get.js.
+//
+// Excludes system/official-account wins (see server/utils/systemAccounts.js):
+// the insta-bid path parks a bid from that account at the rarity floor, so an
+// auction nobody outbids "sells" there for free. Left in, those buyout floors
+// drag every average toward the rarity minimum instead of reflecting what
+// players actually paid.
 export async function getAuctionReferenceValues(ctoonIds) {
   if (!ctoonIds.length) return new Map()
+  const excludeIds = await systemUserIds()
   const rows = await prisma.$queryRaw`
     SELECT
       uc."ctoonId" AS "ctoonId",
@@ -30,6 +52,7 @@ export async function getAuctionReferenceValues(ctoonIds) {
     WHERE uc."ctoonId" IN (${Prisma.join(ctoonIds)})
       AND a.status = 'CLOSED'
       AND a."winnerId" IS NOT NULL
+      AND a."winnerId" NOT IN (${Prisma.join(excludeIds.length ? excludeIds : [''])})
     GROUP BY uc."ctoonId"
   `
   return new Map(rows.map(r => [r.ctoonId, { avgPrice: r.avgPrice, count: r.count }]))

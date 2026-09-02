@@ -1,4 +1,4 @@
-// GET /api/economy/top-valuable?source=AUCTION|TRADE&window=7d|30d|all&hideGtoons=&hidePokemon=
+// GET /api/economy/top-valuable?source=AUCTION|TRADE&window=7d|30d|all&hideGtoons=&hidePokemon=&hideHighMints=
 // Top 10 most valuable cToons for one source, shown in the two "Top 10"
 // modals on the Economy page.
 import { defineEventHandler, getQuery, createError } from 'h3'

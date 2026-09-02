@@ -13,8 +13,9 @@
           <button
             class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50"
             :disabled="!cmoons.length"
+            title="Simulates the full new-player onboarding flow: team pick, join effect, and the join-prize reveal — navigates to the real cMoon page, but makes no real join or prize grant"
             @click="previewModalOpen = true"
-          >Preview join modal</button>
+          >Preview join flow</button>
           <button
             class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
             :disabled="!flagEnabled || cmoons.length < 2"
@@ -370,7 +371,7 @@
                   <span v-if="lvl.grantsBorder" class="flex-shrink-0" title="Grants cZone border">🔲</span>
                   <span v-if="lvl.grantsGlow" class="flex-shrink-0" title="Grants cZone glow">✨</span>
                   <span v-if="lvl.rewardBackground" class="flex-shrink-0" title="Grants background">🖼️</span>
-                  <span v-if="lvl.rewardAvatar" class="flex-shrink-0" title="Grants avatar">🧑</span>
+                  <span v-if="lvl.rewardAvatars?.length" class="flex-shrink-0" :title="`Grants ${lvl.rewardAvatars.length} avatar${lvl.rewardAvatars.length === 1 ? '' : 's'}`">🧑{{ lvl.rewardAvatars.length > 1 ? `×${lvl.rewardAvatars.length}` : '' }}</span>
                   <button type="button" class="cm-tap text-indigo-600" @click="startEditLevel(c, lvl)">Edit</button>
                   <button type="button" class="cm-tap text-red-600" @click="removeLevel(c, lvl)">Delete</button>
                 </div>
@@ -438,7 +439,7 @@
                 <option value="SLIME_FLOOD">Slime Flood Effect</option>
                 <option value="SNAKE">Snake Effect</option>
                 <option value="TEXT_CALLOUT">"You With Us?" Text Effect</option>
-                <option value="POKEBALL">Pokeball Effect</option>
+                <option value="FROG">Frog Effect</option>
                 <option value="FIREWORKS">Fireworks Effect</option>
               </select>
             </div>
@@ -926,11 +927,15 @@
           </div>
 
           <div>
-            <label class="block text-xs font-medium mb-1">Reward avatar (optional)</label>
-            <select v-model="levelForm.rewardAvatarId" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px">
-              <option value="">None</option>
-              <option v-for="av in avatarsCatalog" :key="av.id" :value="av.id">{{ av.label || av.filename }}</option>
-            </select>
+            <label class="block text-xs font-medium mb-1">Reward avatars (optional, any number)</label>
+            <div class="border rounded max-h-36 overflow-y-auto divide-y">
+              <label v-for="av in avatarsCatalog" :key="av.id" class="flex items-center gap-2 px-2 py-1 text-xs cursor-pointer">
+                <input type="checkbox" :value="av.id" v-model="levelForm.rewardAvatarIds" />
+                <img :src="av.imagePath" alt="" class="w-6 h-6 rounded object-cover flex-shrink-0" />
+                <span class="flex-1 min-w-0 truncate">{{ av.label || av.filename }}</span>
+              </label>
+              <p v-if="!avatarsCatalog.length" class="px-2 py-1.5 text-[11px] text-gray-500">No avatars in the catalog yet — upload one below.</p>
+            </div>
             <button type="button" class="text-[11px] text-indigo-600 mt-1" @click="avatarUploadOpen = !avatarUploadOpen">
               {{ avatarUploadOpen ? 'Cancel upload' : '+ Upload new avatar' }}
             </button>
@@ -958,8 +963,10 @@
 
     <!-- A separate instance from the one mounted globally in the newsite layout (which drives
          the real must-choose flow) — preview mode is entirely self-contained per instance, so
-         opening this one here can never interfere with a real deadline modal elsewhere. -->
-    <CMoonSelectModal preview v-model="previewModalOpen" />
+         opening this one here can never interfere with a real deadline modal elsewhere.
+         :admin-cmoons reuses the list this page already loaded (full prizeCtoons included) so the
+         preview's simulated join-prize reveal needs no extra network round trip. -->
+    <CMoonSelectModal preview v-model="previewModalOpen" :admin-cmoons="cmoons" />
 
     <!-- ── Disperse cToons modal ─────────────────────────────────────── -->
     <CMoonDisperseModal
@@ -1098,7 +1105,7 @@ const EFFECT_LABELS = {
   SLIME_FLOOD: 'Slime Flood Effect',
   SNAKE: 'Snake Effect',
   TEXT_CALLOUT: '"You With Us?" Text Effect',
-  POKEBALL: 'Pokeball Effect',
+  FROG: 'Frog Effect',
   FIREWORKS: 'Fireworks Effect',
 }
 function effectLabel(type) {
@@ -1747,7 +1754,7 @@ async function removeTier(t) {
 const backgrounds = ref([])
 const avatarsCatalog = ref([])
 
-const emptyLevelForm = () => ({ id: '', name: '', threshold: 0, sortOrder: 0, grantsBorder: false, grantsGlow: false, rewardBackgroundId: '', rewardAvatarId: '' })
+const emptyLevelForm = () => ({ id: '', name: '', threshold: 0, sortOrder: 0, grantsBorder: false, grantsGlow: false, rewardBackgroundId: '', rewardAvatarIds: [] })
 const levelForm = reactive(emptyLevelForm())
 const levelCMoon = ref(null)
 const levelModalOpen = ref(false)
@@ -1788,7 +1795,7 @@ function startEditLevel(c, lvl) {
   Object.assign(levelForm, {
     id: lvl.id, name: lvl.name, threshold: lvl.threshold, sortOrder: lvl.sortOrder,
     grantsBorder: lvl.grantsBorder, grantsGlow: lvl.grantsGlow,
-    rewardBackgroundId: lvl.rewardBackgroundId || '', rewardAvatarId: lvl.rewardAvatarId || '',
+    rewardBackgroundId: lvl.rewardBackgroundId || '', rewardAvatarIds: (lvl.rewardAvatarIds || []).slice(),
   })
   levelModalOpen.value = true
 }
@@ -1807,7 +1814,7 @@ async function saveLevel(c) {
       grantsBorder: levelForm.grantsBorder,
       grantsGlow: levelForm.grantsGlow,
       rewardBackgroundId: levelForm.rewardBackgroundId || '',
-      rewardAvatarId: levelForm.rewardAvatarId || '',
+      rewardAvatarIds: levelForm.rewardAvatarIds,
     }
     if (!levelForm.id) {
       await $fetch(`/api/admin/cmoons/${c.id}/affinity-levels`, { method: 'POST', body })
@@ -1850,7 +1857,7 @@ async function uploadAvatar() {
     if (avatarUploadLabel.value.trim()) fd.append('label', avatarUploadLabel.value.trim())
     const created = await $fetch('/api/admin/avatars', { method: 'POST', body: fd })
     avatarsCatalog.value = await $fetch('/api/admin/avatars')
-    levelForm.rewardAvatarId = created.id
+    if (!levelForm.rewardAvatarIds.includes(created.id)) levelForm.rewardAvatarIds.push(created.id)
     avatarUploadOpen.value = false
     avatarUploadFile.value = null
     avatarUploadLabel.value = ''

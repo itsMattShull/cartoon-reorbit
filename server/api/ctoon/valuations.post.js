@@ -1,7 +1,7 @@
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
-import { Prisma } from '@prisma/client'
 import { resolveUserCtoonIds } from '@/server/utils/userCtoonId'
+import { getAuctionReferenceValues, MIN_SAMPLE_SIZE } from '@/server/utils/economyValuation'
 
 /// Ceiling on one request. Sized to cover a full trade offer (MAX_CTOONS_PER_SIDE
 /// on each side) in a single call, so the trade UI never has to guess where the
@@ -100,24 +100,18 @@ export default defineEventHandler(async (event) => {
     mintAggs.map(row => [row.ctoonId, row._max.mintNumber])
   )
 
-  // Get average sale price per ctoon type across all mints
-  const avgSaleRows = await prisma.$queryRaw`
-    SELECT
-      uc."ctoonId",
-      ROUND(AVG(a."highestBid")::numeric, 2)::float AS avg_bid
-    FROM "Auction" a
-    JOIN "UserCtoon" uc ON a."userCtoonId" = uc.id
-    WHERE uc."ctoonId" IN (${Prisma.join(ctoonIds)})
-      AND a.status = 'CLOSED'
-      AND a."winnerId" IS NOT NULL
-    GROUP BY uc."ctoonId"
-  `
-
+  // Average sale price per ctoon type across all mints — same query
+  // economy-aggregate.js and the Economy page's search use, so this and they
+  // never disagree on what a cToon's auction average is. Gated by
+  // MIN_SAMPLE_SIZE: below that, avgSale comes back null rather than a number
+  // built from one or two identifiable sales (Trade.vue already falls back to
+  // cMartPrice when avgSale is null, so no fallback is invented here).
+  const auctionRefs = await getAuctionReferenceValues(ctoonIds)
   const avgSaleByCtoonId = new Map(
-    avgSaleRows.map(row => [
-      row.ctoonId,
-      row.avg_bid != null ? Number(row.avg_bid) : null
-    ])
+    ctoonIds.map(id => {
+      const ref = auctionRefs.get(id)
+      return [id, ref && ref.count >= MIN_SAMPLE_SIZE ? Math.round(ref.avgPrice * 100) / 100 : null]
+    })
   )
 
   // Build result keyed by the ORIGINAL input ID (encoded or raw) so the

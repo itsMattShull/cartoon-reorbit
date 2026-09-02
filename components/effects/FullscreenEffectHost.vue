@@ -24,9 +24,9 @@ const EFFECT_DURATIONS = {
   GLITCH: 2600,
   SLIME: 2600,
   SLIME_FLOOD: 2800,
-  TEXT_CALLOUT: 2600,
+  TEXT_CALLOUT: 3000,
   FIREWORKS: 2800,
-  POKEBALL: 3000,
+  FROG: 2800,
   SNAKE: 3200,
 }
 const DEFAULT_DURATION_MS = 2600
@@ -40,7 +40,7 @@ const EFFECT_COMPONENTS = {
   SLIME_FLOOD: defineAsyncComponent(() => import('./SlimeFloodEffect.vue')),
   SNAKE: defineAsyncComponent(() => import('./SnakeEffect.vue')),
   TEXT_CALLOUT: defineAsyncComponent(() => import('./TextCalloutEffect.vue')),
-  POKEBALL: defineAsyncComponent(() => import('./PokeballEffect.vue')),
+  FROG: defineAsyncComponent(() => import('./FrogEffect.vue')),
   FIREWORKS: defineAsyncComponent(() => import('./FireworksEffect.vue')),
 }
 const effectComponent = computed(() => (type.value ? EFFECT_COMPONENTS[type.value] : null))
@@ -53,7 +53,7 @@ const EFFECT_STATUS_TEXT = {
   SLIME_FLOOD: 'Slime flood effect playing',
   SNAKE: 'Snake effect playing',
   TEXT_CALLOUT: 'Callout effect playing',
-  POKEBALL: 'Pokeball effect playing',
+  FROG: 'Frog effect playing',
   FIREWORKS: 'Fireworks effect playing',
 }
 const statusText = computed(() => {
@@ -149,10 +149,10 @@ onBeforeUnmount(() => {
 }
 .fxh-reduced-GLITCH { background: #1a1a1a; }
 .fxh-reduced-SLIME { background: #4caf00; }
-.fxh-reduced-SLIME_FLOOD { background: #3fa000; }
-.fxh-reduced-SNAKE { background: #0a0a0a; }
+.fxh-reduced-SLIME_FLOOD { background: #ff8c00; }
+.fxh-reduced-SNAKE { background: #b31217; }
 .fxh-reduced-TEXT_CALLOUT { background: #ffd400; }
-.fxh-reduced-POKEBALL { background: #0a0a0a; }
+.fxh-reduced-FROG { background: #6a1fb0; }
 .fxh-reduced-FIREWORKS { background: #0d47a1; }
 
 @keyframes fxh-reduced-fade {

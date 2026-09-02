@@ -25,9 +25,12 @@ export default defineEventHandler(async (event) => {
   const rewardBackgroundId = body?.rewardBackgroundId === undefined
     ? level.rewardBackgroundId
     : (typeof body.rewardBackgroundId === 'string' && body.rewardBackgroundId ? body.rewardBackgroundId : null)
-  const rewardAvatarId = body?.rewardAvatarId === undefined
-    ? level.rewardAvatarId
-    : (typeof body.rewardAvatarId === 'string' && body.rewardAvatarId ? body.rewardAvatarId : null)
+  // undefined => leave the existing reward-avatar set untouched; an array (even empty) replaces
+  // it entirely, same "provided vs omitted" convention as every other field on this route.
+  const rewardAvatarIdsProvided = body?.rewardAvatarIds !== undefined
+  const rewardAvatarIds = rewardAvatarIdsProvided
+    ? (Array.isArray(body.rewardAvatarIds) ? [...new Set(body.rewardAvatarIds.filter(v => typeof v === 'string' && v))] : [])
+    : []
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   if (!Number.isInteger(threshold) || threshold <= 0 || threshold > MAX_THRESHOLD) {
@@ -38,15 +41,25 @@ export default defineEventHandler(async (event) => {
     const bg = await db.background.count({ where: { id: rewardBackgroundId } })
     if (!bg) throw createError({ statusCode: 400, statusMessage: 'Reward background not found' })
   }
-  if (rewardAvatarId) {
-    const av = await db.avatar.count({ where: { id: rewardAvatarId } })
-    if (!av) throw createError({ statusCode: 400, statusMessage: 'Reward avatar not found' })
+  if (rewardAvatarIdsProvided && rewardAvatarIds.length) {
+    const avCount = await db.avatar.count({ where: { id: { in: rewardAvatarIds } } })
+    if (avCount !== rewardAvatarIds.length) throw createError({ statusCode: 400, statusMessage: 'One or more reward avatars not found' })
   }
 
   try {
-    await db.cMoonAffinityLevel.update({
-      where: { id: levelId },
-      data: { name, threshold, sortOrder, grantsBorder, grantsGlow, rewardBackgroundId, rewardAvatarId },
+    await db.$transaction(async (tx) => {
+      await tx.cMoonAffinityLevel.update({
+        where: { id: levelId },
+        data: { name, threshold, sortOrder, grantsBorder, grantsGlow, rewardBackgroundId },
+      })
+      if (rewardAvatarIdsProvided) {
+        await tx.cMoonAffinityLevelRewardAvatar.deleteMany({ where: { levelId } })
+        if (rewardAvatarIds.length) {
+          await tx.cMoonAffinityLevelRewardAvatar.createMany({
+            data: rewardAvatarIds.map(avatarId => ({ levelId, avatarId })),
+          })
+        }
+      }
     })
   } catch (err) {
     if (err?.code === 'P2002') {

@@ -507,7 +507,11 @@ export async function claimAchievementReward(userId, achievementId, optionId) {
       // concurrent claims — one against cMoon A's achievement, one against cMoon B's — could
       // otherwise both read zero prior claims before either commits.
       if (ach.cMoonRankTierId) {
-        await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${ach.cMoonRankTierId}`}))`
+        // $executeRaw, not $queryRaw: pg_advisory_xact_lock returns void, and Prisma's $queryRaw
+        // can't deserialize a void column ("Failed to deserialize column of type 'void'"), which
+        // made every cMoon-rank-tier claim fail with a 500 before this fix — pre-existing, found
+        // while wiring up the rank-reveal modal to this same claim path.
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${ach.cMoonRankTierId}`}))`
         const alreadyClaimedTier = await tx.achievementClaim.count({
           where: { userId, achievement: { cMoonRankTierId: ach.cMoonRankTierId } },
         })

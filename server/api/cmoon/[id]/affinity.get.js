@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
       select: {
         id: true, name: true, threshold: true, sortOrder: true, grantsBorder: true, grantsGlow: true,
         rewardBackground: { select: { id: true, label: true, imagePath: true } },
-        rewardAvatar: { select: { id: true, label: true, imagePath: true } },
+        rewardAvatars: { select: { avatar: { select: { id: true, label: true, imagePath: true } } } },
       }
     }),
     db.cMoonAffinity.findUnique({
@@ -40,6 +40,6 @@ export default defineEventHandler(async (event) => {
     affinitySpent,
     currentLevelId: affinity?.currentLevelId || null,
     nextLevel: nextLevel ? { id: nextLevel.id, name: nextLevel.name, threshold: nextLevel.threshold } : null,
-    levels,
+    levels: levels.map(l => ({ ...l, rewardAvatars: l.rewardAvatars.map(ra => ra.avatar) })),
   }
 })

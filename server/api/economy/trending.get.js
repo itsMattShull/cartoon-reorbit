@@ -1,4 +1,4 @@
-// GET /api/economy/trending?window=7d|30d|all&hideGtoons=&hidePokemon=
+// GET /api/economy/trending?window=7d|30d|all&hideGtoons=&hidePokemon=&hideHighMints=
 // "Trending cToons" — combined trade+auction transaction volume in the window.
 import { defineEventHandler, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'

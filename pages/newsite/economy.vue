@@ -31,7 +31,8 @@ Object.assign(filter.value, {
   // default rather than breaking the page.
   sort: isValidEconomySort(q.sort) ? q.sort : ECONOMY_FILTER_DEFAULTS.sort,
   hideGtoons: q.hideGtoons === '1',
-  hidePokemon: q.hidePokemon === '1'
+  hidePokemon: q.hidePokemon === '1',
+  hideHighMints: q.hideHighMints === '1'
 })
 
 // The exclusions change what every number on this page means, so they belong in

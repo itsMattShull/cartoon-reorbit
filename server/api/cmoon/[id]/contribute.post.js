@@ -95,7 +95,27 @@ export default defineEventHandler(async (event) => {
       const allLevels = await tx.cMoonAffinityLevel.findMany({
         where: { cMoonId },
         orderBy: { threshold: 'asc' },
+        include: {
+          rewardBackground: { select: { id: true, label: true, imagePath: true } },
+          rewardAvatars: { select: { avatar: { select: { id: true, label: true, imagePath: true } } } },
+        },
       })
+
+      // Hard cap: a contribution can never push affinitySpent past the highest configured
+      // level's threshold — points beyond that buy no further reward, so reject the request
+      // rather than silently absorb them. Mirrors the client-side check in CMoonPage.vue, which
+      // exists for UX only; this is the actual guard. Checked against affinity.affinitySpent
+      // AFTER the upsert above (whose increment is atomic), not a separate pre-read — two
+      // concurrent contributions can't each pass a stale pre-check and jointly overshoot the cap
+      // this way, since throwing here rolls back the upsert (and the points decrement/log) along
+      // with everything else in this transaction, same as every other error path here.
+      if (allLevels.length) {
+        const maxThreshold = allLevels[allLevels.length - 1].threshold
+        if (affinity.affinitySpent > maxThreshold) {
+          throw new ContributeError('EXCEEDS_MAX_RANK', 'You are attempting to contribute a higher amount than any affinity Ranks available')
+        }
+      }
+
       // Only ever move forward, even if the ladder shrank (an admin deleted a higher level the
       // member had already reached) — never let a level-up silently move a member down.
       const prevLevel = affinity.currentLevelId ? allLevels.find(l => l.id === affinity.currentLevelId) : null
@@ -110,6 +130,15 @@ export default defineEventHandler(async (event) => {
           data: { currentLevelId: highest.id }
         })
 
+        // Aggregated across every crossed level (not just `highest`) for the client's level-up
+        // reveal — a big lump-sum contribution can cross several thresholds in one call, and
+        // each one's reward is granted below, so the reveal has to show all of them or a player
+        // would never be told about the ones that weren't the final level reached.
+        const revealedAvatars = []
+        const revealedBackgrounds = []
+        let revealedBorder = false
+        let revealedGlow = false
+
         for (const lvl of crossedLevels) {
           const reward = {
             backgrounds: [],
@@ -117,8 +146,16 @@ export default defineEventHandler(async (event) => {
             borderCMoonId: lvl.grantsBorder ? cMoonId : null,
             glowCMoonId: lvl.grantsGlow ? cMoonId : null,
           }
-          if (lvl.rewardBackgroundId) reward.backgrounds.push({ backgroundId: lvl.rewardBackgroundId })
-          if (lvl.rewardAvatarId) reward.avatars.push({ avatarId: lvl.rewardAvatarId })
+          if (lvl.rewardBackground) {
+            reward.backgrounds.push({ backgroundId: lvl.rewardBackground.id })
+            revealedBackgrounds.push(lvl.rewardBackground)
+          }
+          for (const ra of lvl.rewardAvatars) {
+            reward.avatars.push({ avatarId: ra.avatar.id })
+            revealedAvatars.push(ra.avatar)
+          }
+          if (lvl.grantsBorder) revealedBorder = true
+          if (lvl.grantsGlow) revealedGlow = true
           await grantRewardInTx(tx, userId, reward, `cmoonAffinity:level:${lvl.id}`)
 
           // Auto-equip the member's first-ever border/glow so it's visible without an extra
@@ -144,7 +181,21 @@ export default defineEventHandler(async (event) => {
           }
         }
 
-        leveledUpTo = { id: highest.id, name: highest.name, grantsBorder: highest.grantsBorder, grantsGlow: highest.grantsGlow }
+        leveledUpTo = {
+          id: highest.id,
+          name: highest.name,
+          grantsBorder: highest.grantsBorder,
+          grantsGlow: highest.grantsGlow,
+          // Every level name crossed in this one contribution, oldest first — usually just
+          // [highest.name], but a big lump sum can skip several at once.
+          levelNames: crossedLevels.map(l => l.name),
+          rewards: {
+            avatars: revealedAvatars,
+            backgrounds: revealedBackgrounds,
+            border: revealedBorder,
+            glow: revealedGlow,
+          },
+        }
       }
 
       return { affinitySpent: affinity.affinitySpent, leveledUpTo }

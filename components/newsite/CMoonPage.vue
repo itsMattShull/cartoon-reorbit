@@ -1,12 +1,17 @@
 <template>
+  <!-- Teleported to body for the same reason as CMoonSelectModal/CtoonInfoCard/CMoonRewardModal:
+       .site-container carries a `transform: scale()` on desktop, which traps position:fixed
+       descendants inside its own clipped box unless they're teleported out. -->
+  <Teleport to="body">
+    <div v-if="isAdminPreview" class="cmp-admin-preview-banner" role="status">
+      <span>Admin preview — this is exactly what a new player sees. Nothing here was saved.</span>
+      <NuxtLink to="/newsite/admin/cMoon" class="cmp-admin-preview-exit">Exit preview</NuxtLink>
+    </div>
+  </Teleport>
   <div class="cmp-wrap" :style="paletteStyle">
     <div v-if="loading" class="cmp-status">Loading…</div>
     <div v-else-if="error" class="cmp-status cmp-status--error">{{ error }}</div>
     <template v-else-if="cmoon">
-      <Transition name="cmp-toast-fade">
-        <div v-if="levelUpToast" class="cmp-toast" role="status">🌙 Level up — {{ levelUpToast }}!</div>
-      </Transition>
-
       <div class="cmp-masthead-wrap">
         <img
           v-if="cmoon.pageBannerImagePath"
@@ -63,18 +68,32 @@
               type="number"
               inputmode="numeric"
               min="1"
+              :max="affinityRemainingToMax ?? undefined"
               step="1"
               class="cmp-affinity-input"
               style="font-size:16px"
               placeholder="Points"
-              :disabled="contributing"
+              :disabled="contributing || affinityRemainingToMax === 0"
             />
-            <button type="button" class="cmp-affinity-submit" :disabled="contributing || !contributeAmount" @click="submitContribute">
+            <button type="button" class="cmp-affinity-submit" :disabled="contributing || !contributeAmount || affinityRemainingToMax === 0" @click="submitContribute">
               {{ contributing ? 'Contributing…' : 'Contribute' }}
             </button>
             <button type="button" class="cmp-affinity-cancel" :disabled="contributing" @click="contributeOpen = false">Cancel</button>
           </div>
-          <p v-if="contributeError" class="cmp-affinity-error">{{ contributeError }}</p>
+          <p v-if="affinityRemainingToMax === 0" class="cmp-affinity-error">You've already reached the highest affinity rank for this cMoon.</p>
+          <p v-else-if="contributeError" class="cmp-affinity-error">{{ contributeError }}</p>
+        </div>
+
+        <!-- Hard-stop warning, not a confirm-and-proceed prompt: the amount is rejected outright
+             (see submitContribute/server contribute.post.js), this dialog only explains why. -->
+        <div v-if="showMaxRankWarning" class="cmp-modal-overlay" @click="showMaxRankWarning = false">
+          <div class="cmp-modal-card" role="alertdialog" aria-modal="true" aria-labelledby="cmp-max-rank-title" @click.stop>
+            <p id="cmp-max-rank-title" class="cmp-modal-title">You are attempting to contribute a higher amount than any affinity Ranks available</p>
+            <p v-if="affinityRemainingToMax" class="cmp-modal-body">
+              You can contribute up to {{ affinityRemainingToMax.toLocaleString() }} more point{{ affinityRemainingToMax === 1 ? '' : 's' }} toward this cMoon's highest rank.
+            </p>
+            <button type="button" class="cmp-modal-ok" @click="showMaxRankWarning = false">OK</button>
+          </div>
         </div>
 
         <!-- Rank Ladder progress: only shown to a member of THIS cMoon, since rank is per-cMoon
@@ -122,10 +141,12 @@
           <section class="cmp-panel cmp-leaderboard-panel">
             <h2 class="cmp-section-title">cMoon Leaderboard</h2>
             <select v-model="leaderboardView" class="cmp-leaderboard-select">
-              <option value="points">Top Point Contributors</option>
+              <option value="points">Top Weekly Contributors</option>
               <option value="rank">Top Ranking Members</option>
             </select>
-            <div v-if="!leaderboardRows.length" class="cmp-empty">No members yet.</div>
+            <div v-if="!leaderboardRows.length" class="cmp-empty">
+              {{ leaderboardView === 'points' ? 'No contributions yet.' : 'No ranked members yet.' }}
+            </div>
             <div v-else class="cmp-members">
               <NuxtLink
                 v-for="m in leaderboardRows" :key="m.username"
@@ -209,16 +230,6 @@
           </section>
         </div>
 
-        <template v-if="cmoon.prizeCtoons.length">
-          <h2 class="cmp-section-title">Prize cToons</h2>
-          <div class="cmp-grid">
-            <div v-for="(p, i) in cmoon.prizeCtoons" :key="i" class="cmp-card cmp-card--static">
-              <img v-if="p.assetPath" :src="p.assetPath" :alt="p.name" class="cmp-card-img" loading="lazy" />
-              <span class="cmp-card-name">{{ p.name }} × {{ p.quantity }}</span>
-            </div>
-          </div>
-        </template>
-
         <template v-if="offers.length">
           <h2 class="cmp-section-title">cToon Offers</h2>
           <div v-for="o in offers" :key="o.id" class="cmp-offer">
@@ -264,10 +275,17 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { cMoonPaletteStyle } from '@/utils/cmoonPalette'
 import { useCtoonModal } from '@/composables/useCtoonModal'
+import { useCMoonRewardModal } from '@/composables/useCMoonRewardModal'
 
 const route = useRoute()
 const { open: openCtoonModal } = useCtoonModal()
-const { fetchSelf } = useAuth()
+const { open: openRewardModal } = useCMoonRewardModal()
+const { fetchSelf, isAdmin } = useAuth()
+
+// Set only by the admin console's "Preview join modal" flow (CMoonSelectModal.vue, preview
+// branch of confirm()) after a real navigation here — purely cosmetic, gated on the
+// server-verified isAdmin so a non-admin adding this to the URL by hand sees nothing extra.
+const isAdminPreview = computed(() => route.query.adminPreview === '1' && isAdmin.value)
 
 const loading = ref(true)
 const error = ref('')
@@ -281,8 +299,6 @@ const contributeAmount = ref(null)
 const contributing = ref(false)
 const contributeError = ref('')
 const justLeveledUp = ref(false)
-const levelUpToast = ref('')
-let toastTimer = null
 let pulseTimer = null
 
 const offers = ref([])
@@ -348,6 +364,25 @@ const affinityProgressPct = computed(() => {
   if (span <= 0) return 100
   return Math.max(0, Math.min(100, Math.round(((spent - floor) / span) * 100)))
 })
+
+// The highest configured level's threshold is the ceiling on contributions: points spent past it
+// earn no further reward, so a contribution that would cross it is rejected rather than silently
+// accepted. `Math.max` over threshold rather than trusting array order — `levels` here is sorted
+// by `sortOrder` (its display order), not `threshold`, and the two aren't guaranteed to match.
+// Null (not 0) when this cMoon has no levels configured yet, so "no ceiling" and "ceiling of 0"
+// stay distinguishable.
+const maxAffinityThreshold = computed(() => {
+  const levels = affinity.value?.levels
+  if (!levels?.length) return null
+  return Math.max(...levels.map(l => l.threshold))
+})
+
+const affinityRemainingToMax = computed(() => {
+  if (maxAffinityThreshold.value == null) return null
+  return Math.max(0, maxAffinityThreshold.value - (affinity.value?.affinitySpent || 0))
+})
+
+const showMaxRankWarning = ref(false)
 
 useHead({
   title: computed(() => cmoon.value ? `${cmoon.value.name} · cMoon` : 'cMoon')
@@ -421,6 +456,12 @@ async function claimOffer(offer) {
       body: { optionId },
     })
     offer.myClaim = { optionId: res.optionId, quantity: res.quantity }
+    openRewardModal({
+      kind: 'offer',
+      eyebrow: 'cToon Offer Claimed!',
+      title: 'Nice pick!',
+      items: [{ id: res.optionId, imagePath: opt?.assetPath || null, label: opt?.name || 'cToon', qty: res.quantity, variant: 'ctoon' }],
+    })
   } catch (err) {
     offerErrors[offer.id] = err?.data?.statusMessage || 'Failed to claim'
   } finally {
@@ -452,6 +493,13 @@ async function submitContribute() {
     contributeError.value = 'Enter a whole number of points.'
     return
   }
+  // Hard cap, checked client-side for immediate feedback — the server enforces the same ceiling
+  // independently (see server/api/cmoon/[id]/contribute.post.js), so this is a UX shortcut, not
+  // the actual guard.
+  if (maxAffinityThreshold.value != null && (affinity.value?.affinitySpent || 0) + amount > maxAffinityThreshold.value) {
+    showMaxRankWarning.value = true
+    return
+  }
   contributeError.value = ''
   contributing.value = true
   try {
@@ -463,11 +511,26 @@ async function submitContribute() {
     contributeOpen.value = false
     await Promise.all([loadAffinity(cmoon.value.id), fetchSelf({ force: true })])
     if (res?.leveledUpTo) {
-      levelUpToast.value = res.leveledUpTo.name
+      const level = res.leveledUpTo
+      const rewards = level.rewards || {}
+      const items = [
+        ...(rewards.avatars || []).map(av => ({ id: `av-${av.id}`, imagePath: av.imagePath, label: av.label || 'Avatar', variant: 'avatar' })),
+        ...(rewards.backgrounds || []).map(bg => ({ id: `bg-${bg.id}`, imagePath: bg.imagePath, label: bg.label || 'Background', variant: 'background' })),
+      ]
+      if (rewards.border) items.push({ id: 'border', imagePath: null, label: 'cZone Border', variant: 'swatch', icon: '🔲' })
+      if (rewards.glow) items.push({ id: 'glow', imagePath: null, label: 'cZone Glow', variant: 'swatch', icon: '✨' })
+      openRewardModal({
+        kind: 'affinity',
+        eyebrow: `${cmoon.value.name} Affinity — Rank Up!`,
+        title: level.name,
+        subtitle: level.levelNames?.length > 1
+          ? `You jumped ${level.levelNames.length} ranks in one contribution: ${level.levelNames.join(' → ')}`
+          : '',
+        items,
+        emptyText: 'This rank is a milestone — no cosmetic reward attached.',
+      })
       justLeveledUp.value = true
-      clearTimeout(toastTimer)
       clearTimeout(pulseTimer)
-      toastTimer = setTimeout(() => { levelUpToast.value = '' }, 3200)
       pulseTimer = setTimeout(() => { justLeveledUp.value = false }, 1600)
     }
   } catch (err) {
@@ -481,6 +544,36 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
 </script>
 
 <style scoped>
+.cmp-admin-preview-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  padding: 8px 16px;
+  padding-top: max(8px, env(safe-area-inset-top));
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
+  background: #0a1830;
+  border-bottom: 2px solid #ffd75e;
+  color: #ffd75e;
+  font-family: 'Nunito', sans-serif;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.cmp-admin-preview-exit {
+  color: #fff;
+  text-decoration: underline;
+  white-space: nowrap;
+}
+
 .cmp-wrap {
   width: 100%;
   min-height: 100%;
@@ -689,42 +782,61 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   color: var(--cm-danger, #fca5a5);
 }
 
+.cmp-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.cmp-modal-card {
+  width: 100%;
+  max-width: 360px;
+  background: var(--cm-bg, #1a1a2e);
+  color: var(--cm-text, #ffffff);
+  border: 1px solid var(--cm-border, rgba(255,255,255,0.3));
+  border-radius: 10px;
+  padding: 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.cmp-modal-title {
+  margin: 0 0 8px;
+  font-weight: 800;
+  font-size: 0.95rem;
+  color: var(--cm-danger, #fca5a5);
+}
+
+.cmp-modal-body {
+  margin: 0 0 14px;
+  font-size: 0.82rem;
+  color: var(--cm-text-muted, rgba(255,255,255,0.7));
+}
+
+.cmp-modal-ok {
+  min-height: 44px;
+  width: 100%;
+  border: none;
+  border-radius: 6px;
+  background: var(--cm-banner, var(--OrbitLightBlue));
+  color: var(--cm-banner-text, #ffffff);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
 /* A brief, non-animated highlight rather than a filter/box-shadow loop — cheap and respects
    prefers-reduced-motion for free since it's just a background-color transition. */
 .cmp-affinity--pulse .cmp-affinity-bar-fill {
   background: #ffd700;
 }
 
-.cmp-toast {
-  position: fixed;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 40;
-  background: #16a34a;
-  color: #ffffff;
-  font-weight: 700;
-  font-size: 0.85rem;
-  padding: 10px 18px;
-  border-radius: 999px;
-  box-shadow: 0 4px 14px rgba(0,0,0,0.3);
-  white-space: nowrap;
-  max-width: calc(100vw - 32px);
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.cmp-toast-fade-enter-active,
-.cmp-toast-fade-leave-active {
-  transition: opacity 0.25s ease;
-}
-.cmp-toast-fade-enter-from,
-.cmp-toast-fade-leave-to { opacity: 0; }
-
 @media (prefers-reduced-motion: reduce) {
-  .cmp-affinity-bar-fill,
-  .cmp-toast-fade-enter-active,
-  .cmp-toast-fade-leave-active { transition: none; }
+  .cmp-affinity-bar-fill { transition: none; }
 }
 
 /* The Featured cToons panel is deliberately NOT themed off the cMoon's color like the rest of the
@@ -838,13 +950,6 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   font-size: 0.75rem;
   text-align: center;
   overflow-wrap: anywhere;
-}
-
-.cmp-card--static {
-  cursor: default;
-}
-@media (hover: hover) and (pointer: fine) {
-  .cmp-card--static:hover { opacity: 1; }
 }
 
 .cmp-leaderboard-select {

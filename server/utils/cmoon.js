@@ -518,8 +518,15 @@ class CMoonError extends Error {
 // Grants a cMoon's configured prize cToons to a user. Called only after the
 // selection/assignment transaction has committed (mint jobs are not
 // transactional, so they must never run inside a $transaction that might roll back).
+// Returns the granted prize list (name/image/quantity) purely for the caller to show a
+// "here's what's coming" reveal — this is the same config already shown publicly on the
+// cMoon's own page, not new information, and the mint jobs above are fire-and-forget, so
+// this list describes what was queued, not a confirmed-delivered receipt.
 async function grantCMoonPrizes(userId, cMoonId) {
-  const prizes = await prisma.cMoonPrizeCtoon.findMany({ where: { cMoonId } })
+  const prizes = await prisma.cMoonPrizeCtoon.findMany({
+    where: { cMoonId },
+    include: { ctoon: { select: { name: true, assetPath: true } } },
+  })
   for (const prize of prizes) {
     const qty = Math.max(1, Number(prize.quantity || 1))
     for (let i = 0; i < qty; i++) {
@@ -531,6 +538,12 @@ async function grantCMoonPrizes(userId, cMoonId) {
       })
     }
   }
+  return prizes.map(p => ({
+    ctoonId: p.ctoonId,
+    name: p.ctoon?.name || 'cToon',
+    assetPath: p.ctoon?.assetPath || null,
+    quantity: Math.max(1, Number(p.quantity || 1)),
+  }))
 }
 
 // User-initiated selection. Atomic: the `updateMany({ where: { cMoonId: null } })`
@@ -574,7 +587,17 @@ export async function selectCMoonForUser(userId, cMoonId) {
   const assigned = await prisma.$transaction(async (tx) => {
     const result = await tx.user.updateMany({
       where: { id: userId, cMoonId: null },
-      data: { cMoonId: cmoon.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: false, cMoonOptedOut: false, cMoonOptedOutAt: null },
+      // Self-selection always starts a member at 0 cMoonPoints / no rank, regardless of
+      // whatever they'd accumulated in a cMoon they previously left — cMoonPoints is only
+      // ever written going forward by the aggregate cron (see cmoon-points-aggregate.js),
+      // so a former member's stale total would otherwise linger until its next 15-minute
+      // run. currentCMoonRankId/cMoonRankRoleGrantedAt are already guaranteed null here
+      // (reassignUserCMoon nulls them whenever cMoonId is cleared), included for clarity.
+      data: {
+        cMoonId: cmoon.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: false,
+        cMoonOptedOut: false, cMoonOptedOutAt: null,
+        cMoonPoints: 0, currentCMoonRankId: null, cMoonRankRoleGrantedAt: null,
+      },
     })
     if (result.count === 0) throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
     // Re-checks joinLocked:false as part of the same atomic write, not just the pre-fetch
@@ -588,8 +611,8 @@ export async function selectCMoonForUser(userId, cMoonId) {
     return cmoon.id
   })
 
-  await grantCMoonPrizes(userId, assigned)
-  return assigned
+  const prizes = await grantCMoonPrizes(userId, assigned)
+  return { cMoonId: assigned, prizes }
 }
 
 // User-initiated decline from the join modal — there is no more time-based auto-assignment, so
@@ -707,6 +730,16 @@ export async function reassignUserCMoon(userId, newCMoonId) {
     : null
 
   await prisma.$transaction(async (tx) => {
+    // Captains are placed into their cMoon by this same function (see cmoons.post.js /
+    // cmoons/[id].put.js — the CMoonCaptain row is always created first), so this check
+    // reflects captaincy of the DESTINATION cMoon at the moment of the move. Everyone else
+    // moving in — an ordinary admin reassignment, Balance Teams, or an accepted change
+    // request — starts that cMoon fresh at 0 cMoonPoints, same as a self-selected join (see
+    // selectCMoonForUser), rather than carrying over whatever they'd earned in a cMoon they
+    // previously belonged to.
+    const isNewCaptain = newCMoon
+      ? !!(await tx.cMoonCaptain.findUnique({ where: { cMoonId_userId: { cMoonId: newCMoon.id, userId } } }))
+      : false
     const result = await tx.user.updateMany({
       where: { id: userId, cMoonId: target.cMoonId },
       data: {
@@ -719,6 +752,7 @@ export async function reassignUserCMoon(userId, newCMoonId) {
         currentCMoonRankId: null,
         cMoonRankRoleGrantedAt: null,
         cMoonRoleGrantedAt: null,
+        ...(newCMoon && !isNewCaptain ? { cMoonPoints: 0 } : {}),
       },
     })
     if (result.count === 0) throw new CMoonError(CMOON_SELECT_ERRORS.STALE_STATE)
@@ -860,9 +894,9 @@ export async function computeBalancePlan() {
 // toCMoon) pair — a handful of guarded updateMany calls plus one memberCount update per
 // touched team — rather than looping a per-user reassignUserCMoon call, which would mean
 // one transaction and multiple row locks on the same two CMoon rows per moved player.
-// Every moved player's cMoonSelectedAt is reset to now exactly like reassignUserCMoon does for
-// any other move (restarting their cMoonPoints window under the new team — see that function's
-// own comment for why this reset is load-bearing, not incidental). No join-prize cToons are
+// Every moved player's cMoonSelectedAt is reset to now and cMoonPoints explicitly zeroed,
+// exactly like reassignUserCMoon does for any other move (see that function's own comment for
+// why this reset is load-bearing, not incidental). No join-prize cToons are
 // granted (mirrors reassignUserCMoon, which never grants prizes itself either), and rank/
 // role-grant cursors are cleared exactly like a normal reassignment so the nightly cron
 // re-evaluates them cleanly for the new team.
@@ -903,6 +937,11 @@ export async function executeBalancePlan() {
           currentCMoonRankId: null,
           cMoonRankRoleGrantedAt: null,
           cMoonRoleGrantedAt: null,
+          // isAdmin:false in the where clause above already excludes every captain (see this
+          // function's header comment), so unlike reassignUserCMoon this never needs a
+          // per-user captaincy check — every mover here starts the destination team fresh at
+          // 0 cMoonPoints, same as any other reassignment (see reassignUserCMoon's comment).
+          cMoonPoints: 0,
         },
       })
       if (result.count > 0) {
