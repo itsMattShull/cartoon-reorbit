@@ -39,10 +39,16 @@ export function firstQueryValue(query, key) {
 // than `series = 'Pokemon'`.
 export const POKEMON_SERIES_ALIASES = Object.freeze(['pokemon', 'pokémon'])
 
+// cToons with a very high totalMinted show up disproportionately in cZone
+// searches (mass-produced, low-value) — players asked to filter them out of
+// the Economy page the same way as gToons/Pokémon.
+export const HIGH_MINT_THRESHOLD = 500
+
 export function parseExclusions(query) {
   return {
     hideGtoons: isTruthy(firstQueryValue(query, 'hideGtoons')),
-    hidePokemon: isTruthy(firstQueryValue(query, 'hidePokemon'))
+    hidePokemon: isTruthy(firstQueryValue(query, 'hidePokemon')),
+    hideHighMints: isTruthy(firstQueryValue(query, 'hideHighMints'))
   }
 }
 
@@ -64,23 +70,34 @@ export function buildExclusionSql(ex) {
       COALESCE(LOWER(BTRIM(c."series")), '') <> ALL (ARRAY[${Prisma.join(POKEMON_SERIES_ALIASES)}])
     `)
   }
+  if (ex.hideHighMints === true) {
+    // totalMinted is nullable on legacy rows; NULL is left visible (unknown, not
+    // "high") rather than excluded — mirrors the hidePokemon NULL-safety above.
+    parts.push(Prisma.sql`(c."totalMinted" IS NULL OR c."totalMinted" <= ${HIGH_MINT_THRESHOLD})`)
+  }
   if (!parts.length) return Prisma.empty
   return Prisma.sql` AND ${Prisma.join(parts, ' AND ')}`
 }
 
-// Frozen 2x2 table rather than a template string: the output is provably one of
-// four constants, so no request value can shape a Redis key.
+// Frozen 2x2x2 table rather than a template string: the output is provably one
+// of eight constants, so no request value can shape a Redis key.
 const EXCLUSION_KEYS = Object.freeze([
-  Object.freeze(['g0p0', 'g0p1']),
-  Object.freeze(['g1p0', 'g1p1'])
+  Object.freeze([
+    Object.freeze(['g0p0m0', 'g0p1m0']),
+    Object.freeze(['g1p0m0', 'g1p1m0'])
+  ]),
+  Object.freeze([
+    Object.freeze(['g0p0m1', 'g0p1m1']),
+    Object.freeze(['g1p0m1', 'g1p1m1'])
+  ])
 ])
 
 export function exclusionCacheKey(ex) {
-  return EXCLUSION_KEYS[ex.hideGtoons === true ? 1 : 0][ex.hidePokemon === true ? 1 : 0]
+  return EXCLUSION_KEYS[ex.hideHighMints === true ? 1 : 0][ex.hideGtoons === true ? 1 : 0][ex.hidePokemon === true ? 1 : 0]
 }
 
 export function hasExclusions(ex) {
-  return ex.hideGtoons === true || ex.hidePokemon === true
+  return ex.hideGtoons === true || ex.hidePokemon === true || ex.hideHighMints === true
 }
 
 // LIKE metacharacters in user input would otherwise stay live — Prisma's

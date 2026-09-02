@@ -1,4 +1,4 @@
-// GET /api/economy/ctoons/search?q=&page=&sort=&hideGtoons=&hidePokemon=
+// GET /api/economy/ctoons/search?q=&page=&sort=&hideGtoons=&hidePokemon=&hideHighMints=
 // "Browse all cToons" — paginated, name-searchable, sortable list with each
 // cToon's all-time average auction/trade price and activity volume.
 //

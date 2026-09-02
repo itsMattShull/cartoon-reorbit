@@ -35,59 +35,69 @@ test('firstQueryValue survives repeated params without throwing', () => {
 })
 
 test('parseExclusions handles arrays and non-strings without bypassing the filter', () => {
-  assert.deepEqual(parseExclusions({ hideGtoons: '1', hidePokemon: 'true' }), {
+  assert.deepEqual(parseExclusions({ hideGtoons: '1', hidePokemon: 'true', hideHighMints: 'yes' }), {
     hideGtoons: true,
-    hidePokemon: true
+    hidePokemon: true,
+    hideHighMints: true
   })
   // A repeated param must not silently disable the filter the user asked for.
   assert.deepEqual(parseExclusions({ hideGtoons: ['1', '1'] }), {
     hideGtoons: true,
-    hidePokemon: false
+    hidePokemon: false,
+    hideHighMints: false
   })
-  assert.deepEqual(parseExclusions({ hideGtoons: {}, hidePokemon: [] }), {
+  assert.deepEqual(parseExclusions({ hideGtoons: {}, hidePokemon: [], hideHighMints: {} }), {
     hideGtoons: false,
-    hidePokemon: false
+    hidePokemon: false,
+    hideHighMints: false
   })
-  assert.deepEqual(parseExclusions({}), { hideGtoons: false, hidePokemon: false })
+  assert.deepEqual(parseExclusions({}), { hideGtoons: false, hidePokemon: false, hideHighMints: false })
 })
 
-test('exclusionCacheKey is one of four constants and never collides', () => {
-  const keys = [
-    exclusionCacheKey({ hideGtoons: false, hidePokemon: false }),
-    exclusionCacheKey({ hideGtoons: false, hidePokemon: true }),
-    exclusionCacheKey({ hideGtoons: true, hidePokemon: false }),
-    exclusionCacheKey({ hideGtoons: true, hidePokemon: true })
-  ]
-  assert.equal(new Set(keys).size, 4)
-  for (const k of keys) assert.match(k, /^g[01]p[01]$/)
-  // A collision here would serve Pokemon-filtered data to a gToon-filtered request.
-  assert.notEqual(keys[1], keys[2])
+test('exclusionCacheKey is one of eight constants and never collides', () => {
+  const combos = []
+  for (const hideGtoons of [false, true]) {
+    for (const hidePokemon of [false, true]) {
+      for (const hideHighMints of [false, true]) {
+        combos.push({ hideGtoons, hidePokemon, hideHighMints })
+      }
+    }
+  }
+  const keys = combos.map(exclusionCacheKey)
+  assert.equal(new Set(keys).size, 8)
+  for (const k of keys) assert.match(k, /^g[01]p[01]m[01]$/)
+  // A collision here would serve one filter combo's data under another's key.
+  assert.notEqual(
+    exclusionCacheKey({ hideGtoons: false, hidePokemon: true, hideHighMints: false }),
+    exclusionCacheKey({ hideGtoons: true, hidePokemon: false, hideHighMints: false })
+  )
 })
 
 test('exclusionCacheKey cannot be shaped by a request value', () => {
   // Anything non-boolean-true must fall into the "off" slot rather than reach
   // the key string — Economy shares a Redis namespace with the aggregation
   // freshness flag and the per-user rate-limit counters.
-  const key = exclusionCacheKey({ hideGtoons: 'economy:aggregate:fresh', hidePokemon: '1' })
-  assert.equal(key, 'g0p0')
+  const key = exclusionCacheKey({ hideGtoons: 'economy:aggregate:fresh', hidePokemon: '1', hideHighMints: 'DROP TABLE' })
+  assert.equal(key, 'g0p0m0')
 })
 
 test('hasExclusions only reports real booleans', () => {
-  assert.equal(hasExclusions({ hideGtoons: false, hidePokemon: false }), false)
-  assert.equal(hasExclusions({ hideGtoons: true, hidePokemon: false }), true)
-  assert.equal(hasExclusions({ hideGtoons: 'true', hidePokemon: 'true' }), false)
+  assert.equal(hasExclusions({ hideGtoons: false, hidePokemon: false, hideHighMints: false }), false)
+  assert.equal(hasExclusions({ hideGtoons: true, hidePokemon: false, hideHighMints: false }), true)
+  assert.equal(hasExclusions({ hideGtoons: false, hidePokemon: false, hideHighMints: true }), true)
+  assert.equal(hasExclusions({ hideGtoons: 'true', hidePokemon: 'true', hideHighMints: 'true' }), false)
 })
 
-test('buildExclusionSql parameterises the series list and keeps NULL series visible', () => {
-  const none = buildExclusionSql({ hideGtoons: false, hidePokemon: false })
+test('buildExclusionSql parameterises the series list and keeps NULL series/mints visible', () => {
+  const none = buildExclusionSql({ hideGtoons: false, hidePokemon: false, hideHighMints: false })
   assert.equal(none.strings.join(''), '')
   assert.deepEqual(none.values, [])
 
-  const gtoons = buildExclusionSql({ hideGtoons: true, hidePokemon: false })
+  const gtoons = buildExclusionSql({ hideGtoons: true, hidePokemon: false, hideHighMints: false })
   assert.match(gtoons.strings.join('?'), /"isGtoon" = false/)
   assert.deepEqual(gtoons.values, [])
 
-  const pokemon = buildExclusionSql({ hideGtoons: false, hidePokemon: true })
+  const pokemon = buildExclusionSql({ hideGtoons: false, hidePokemon: true, hideHighMints: false })
   const sql = pokemon.strings.join('?')
   // COALESCE keeps NULL-series cToons in the result; a bare `<>` would drop them.
   assert.match(sql, /COALESCE\(LOWER\(BTRIM\(c\."series"\)\), ''\)/)
@@ -95,9 +105,16 @@ test('buildExclusionSql parameterises the series list and keeps NULL series visi
   // The alias list is bound, never inlined.
   assert.ok(pokemon.values.includes('pokemon'))
 
-  const both = buildExclusionSql({ hideGtoons: true, hidePokemon: true })
-  assert.match(both.strings.join('?'), /"isGtoon" = false/)
-  assert.match(both.strings.join('?'), /BTRIM/)
+  const highMints = buildExclusionSql({ hideGtoons: false, hidePokemon: false, hideHighMints: true })
+  const mintSql = highMints.strings.join('?')
+  // NULL totalMinted (legacy/unknown) stays visible rather than excluded.
+  assert.match(mintSql, /"totalMinted" IS NULL OR c\."totalMinted" <= /)
+  assert.ok(highMints.values.includes(500))
+
+  const all = buildExclusionSql({ hideGtoons: true, hidePokemon: true, hideHighMints: true })
+  assert.match(all.strings.join('?'), /"isGtoon" = false/)
+  assert.match(all.strings.join('?'), /BTRIM/)
+  assert.match(all.strings.join('?'), /"totalMinted"/)
 })
 
 test('buildNamePattern escapes LIKE metacharacters', () => {
