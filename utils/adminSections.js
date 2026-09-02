@@ -67,6 +67,7 @@ export const ADMIN_SECTIONS = [
   S('homepage', 'Manage Homepage', 'content', legacy('AdminLegacyHomepage')),
   S('announcements', 'Announcements', 'content', legacy('AdminLegacyAnnouncements')),
   S('ads', 'Manage Ads', 'content', legacy('AdminLegacyAds')),
+  S('tutorial', 'Manage Tutorial', 'content', nu('AdminManageTutorial')),
 
   // ── Economy ─────────────────────────────────────────────────
   S('manageSales', 'Manage Sales', 'economy', nu('AdminManageSales')),
@@ -77,6 +78,7 @@ export const ADMIN_SECTIONS = [
   S('auctions/new', 'Add Auction', 'economy', legacy('AdminLegacyAuctionsNew'), { hidden: true }),
   S('dissolveQueue', 'Dissolve Queue', 'economy', legacy('AdminLegacyDissolveQueue')),
   S('cMoon', 'cMoons', 'economy', nu('AdminCMoon')),
+  S('cmoonChangeRequests', 'cMoon Change Requests', 'economy', nu('AdminCMoonChangeRequests')),
 
   // ── Games & Events ──────────────────────────────────────────
   S('games', 'Manage Games', 'games', legacy('AdminLegacyGames'), { dense: true }),

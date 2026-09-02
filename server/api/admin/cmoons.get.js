@@ -13,17 +13,25 @@ export default defineEventHandler(async (event) => {
         captains: { include: { user: { select: { id: true, username: true } } } },
         prizeCtoons: { include: { ctoon: { select: { id: true, name: true, assetPath: true } } } },
         ranks: { orderBy: { sortOrder: 'asc' } },
+        poll: { select: { question: true, options: { select: { label: true }, orderBy: { sortOrder: 'asc' } } } },
+        affinityLevels: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            rewardBackground: { select: { id: true, label: true, imagePath: true } },
+            rewardAvatars: { include: { avatar: { select: { id: true, label: true, imagePath: true } } } },
+          },
+        },
         // Single grouped query, not a per-cMoon count() loop.
         _count: { select: { displayedCtoons: true } },
       },
     }),
-    db.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { cMoonEnabled: true, cMoonEnabledAt: true, cMoonSelectionDeadlineAt: true } }),
+    db.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { cMoonEnabled: true, cMoonEnabledAt: true, cMoonOptOutCooldownDays: true } }),
   ])
 
   return {
     cMoonEnabled: !!config?.cMoonEnabled,
     cMoonEnabledAt: config?.cMoonEnabledAt || null,
-    cMoonSelectionDeadlineAt: config?.cMoonSelectionDeadlineAt || null,
+    cMoonOptOutCooldownDays: config?.cMoonOptOutCooldownDays ?? 14,
     cmoons: cmoons.map(c => ({
       id: c.id,
       name: c.name,
@@ -34,14 +42,25 @@ export default defineEventHandler(async (event) => {
       effectType: c.effectType,
       joinLocked: c.joinLocked,
       showOnNav: c.showOnNav,
+      allowOptOutJoin: c.allowOptOutJoin,
       memberCount: c.memberCount,
       pageImagePath: c.pageImagePath,
       pageDescription: c.pageDescription,
-      bannerImagePath: c.bannerImagePath,
+      buttonImagePath: c.buttonImagePath,
+      showButtonOnPages: c.showButtonOnPages,
+      pageBannerImagePath: c.pageBannerImagePath,
       displayedCtoonCount: c._count?.displayedCtoons ?? 0,
+      poll: c.poll ? { question: c.poll.question, options: c.poll.options.map(o => o.label) } : null,
       captains: c.captains.map(cap => ({ userId: cap.userId, username: cap.user?.username || '' })),
       prizeCtoons: c.prizeCtoons.map(pc => ({ ctoonId: pc.ctoonId, quantity: pc.quantity, name: pc.ctoon?.name || '', assetPath: pc.ctoon?.assetPath || null })),
-      ranks: c.ranks.map(r => ({ id: r.id, name: r.name, sortOrder: r.sortOrder, discordRoleId: r.discordRoleId })),
+      ranks: c.ranks.map(r => ({ id: r.id, name: r.name, sortOrder: r.sortOrder, discordRoleId: r.discordRoleId, tierId: r.tierId })),
+      affinityLevels: c.affinityLevels.map(l => ({
+        id: l.id, name: l.name, threshold: l.threshold, sortOrder: l.sortOrder, grantsBorder: l.grantsBorder, grantsGlow: l.grantsGlow,
+        rewardBackgroundId: l.rewardBackgroundId,
+        rewardBackground: l.rewardBackground,
+        rewardAvatarIds: l.rewardAvatars.map(ra => ra.avatar.id),
+        rewardAvatars: l.rewardAvatars.map(ra => ra.avatar),
+      })),
     })),
   }
 })

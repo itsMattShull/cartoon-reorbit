@@ -55,16 +55,25 @@ export default defineEventHandler(async (event) => {
   // ticket cost in a single transaction. Prizes are only awarded after this
   // succeeds, so a limit violation or insufficient-points error always rolls back
   // before any reward is committed.
+  //
+  // The limit check and the increment must happen as one conditional UPDATE
+  // (not a SELECT followed by an UPDATE) — under READ COMMITTED, concurrent
+  // requests can otherwise all read the same pre-increment count and each
+  // pass the check before any of them commits, letting a player exceed
+  // countPerDay by firing purchases in parallel.
   let purchasesTodayAfter
   const pointsAfterPurchase = await db.$transaction(async (tx) => {
-    const current = await tx.lottoUser.findUnique({ where: { userId: me.id } })
-    if (settings.countPerDay !== -1 && (current?.purchasesToday ?? 0) >= settings.countPerDay) {
-      throw createError({ statusCode: 400, statusMessage: 'Daily ticket limit reached' })
-    }
-    const next = await tx.lottoUser.update({
-      where: { userId: me.id },
+    const incremented = await tx.lottoUser.updateMany({
+      where: {
+        userId: me.id,
+        ...(settings.countPerDay !== -1 ? { purchasesToday: { lt: settings.countPerDay } } : {})
+      },
       data: { purchasesToday: { increment: 1 }, lastPurchaseAt: now }
     })
+    if (incremented.count === 0) {
+      throw createError({ statusCode: 400, statusMessage: 'Daily ticket limit reached' })
+    }
+    const next = await tx.lottoUser.findUnique({ where: { userId: me.id } })
     purchasesTodayAfter = next.purchasesToday
 
     const deducted = await tx.userPoints.updateMany({

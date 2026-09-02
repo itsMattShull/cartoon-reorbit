@@ -195,6 +195,7 @@ function claimedOptionLabel(a) {
 }
 
 const { play } = useFullscreenEffect()
+const { open: openRewardModal } = useCMoonRewardModal()
 
 async function confirmClaim(a) {
   if (!claimChoice.value || claiming.value) return
@@ -208,7 +209,26 @@ async function confirmClaim(a) {
     })
     // Effect plays first, reveal follows once it completes — matches the cMoon-select flow.
     // Skipped entirely when the user has no cMoon or their cMoon has no effect assigned.
-    const reveal = () => { a.claimedOptionId = optionId }
+    const reveal = () => {
+      // Always flips this card's own inline "You claimed: X" state first, cMoon rank or not —
+      // the reward modal below is an ADDITIONAL celebration for rank claims, not a replacement,
+      // so this panel never looks stuck showing the reward-choice radiogroup underneath it.
+      a.claimedOptionId = optionId
+      if (a.isCMoonRank) {
+        const items = [
+          ...(result.ctoons || []).map(c => ({ id: c.name, imagePath: c.imagePath, label: c.name, qty: c.quantity, variant: 'ctoon' })),
+          ...(result.backgrounds || []).map(b => ({ id: b.label, imagePath: b.imagePath, label: b.label || 'Background', variant: 'background' })),
+        ]
+        openRewardModal({
+          kind: 'rank',
+          eyebrow: 'cMoon Rank — Promoted!',
+          title: a.title,
+          items,
+          pointsAwarded: result.points || null,
+          emptyText: 'This rank is a milestone — no cosmetic reward attached.',
+        })
+      }
+    }
     if (result?.cMoonEffectType) play(result.cMoonEffectType, { onComplete: reveal })
     else reveal()
   } catch (e) {

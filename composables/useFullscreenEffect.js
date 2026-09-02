@@ -1,8 +1,11 @@
-// Singleton driver for full-screen cMoon effects (Glitch/Slime) — mirrors the useState-backed
-// singleton pattern in useCtoonModal.js, but keeps `onComplete` in a plain module-level variable
-// rather than useState: useState's value is part of the SSR payload and must stay serializable,
-// and a function reference is neither serializable nor meaningful across the server/client split.
-const VALID_TYPES = ['GLITCH', 'SLIME']
+// Singleton driver for full-screen cMoon effects — mirrors the useState-backed singleton pattern
+// in useCtoonModal.js, but keeps `onComplete` in a plain module-level variable rather than
+// useState: useState's value is part of the SSR payload and must stay serializable, and a
+// function reference is neither serializable nor meaningful across the server/client split.
+// Imported from utils/cmoonEffectTypes.js (the single source of truth also used by the
+// server-side allow-list in server/utils/cmoon.js) so this list can't drift out of sync.
+import { CMOON_EFFECT_TYPES } from '~/utils/cmoonEffectTypes'
+const VALID_TYPES = CMOON_EFFECT_TYPES
 
 let onCompleteCallback = null
 

@@ -35,6 +35,9 @@
 // waving it through. MAX_SESSION_SECONDS caps that: it bounds the achievable slowdown to
 // roughly 3x rather than leaving it unbounded. It is a rail, not a scoring rule — an honest
 // run cannot reach it, because MAX_TICKS ends the run first at normal pacing.
+// `#lib/...` (package.json "imports", not a relative path) — same Nitro
+// dev-bundler relative-depth bug as server/utils/asteroidEngine.js's import
+// of lib/asteroidSim.js; see the comment there for the full explanation.
 import {
   TICK_HZ,
   COORD_MARGIN,
@@ -43,7 +46,7 @@ import {
   normalizeConfig,
   hashSeed,
   simulate
-} from '../../lib/fruitSamuraiSim.js'
+} from '#lib/fruitSamuraiSim.js'
 
 // A run is capped at 5 minutes of simulated time. This bounds the replay cost of one /end
 // request and is an anti-abuse rail rather than the intended ending: the uncapped wave

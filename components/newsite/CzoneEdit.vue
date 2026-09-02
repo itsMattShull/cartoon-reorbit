@@ -50,6 +50,47 @@
 
     <!-- ── Background panel ── -->
     <div v-show="activeTab === 'bg'" class="czew-panel">
+      <!-- cMoon-affinity cZone border: only shown to a member who's actually earned one (see
+           User.ownedBorders/equippedBorderCMoonId, populated by /api/auth/me). Purely a display
+           toggle — checking a box here just re-POSTs whichever cMoonId (or null) to
+           /api/czone/border, the same endpoint the viewer-mode equip picker in MyCzone.vue's
+           topbar already uses; only one can be equipped at a time. -->
+      <div v-if="ownedBorders.length" class="czew-border-block">
+        <div class="czew-border-label">cZone Border</div>
+        <label v-for="b in ownedBorders" :key="b.cMoonId" class="czew-border-row">
+          <input
+            type="checkbox"
+            :checked="equippedBorderCMoonId === b.cMoonId"
+            :disabled="borderSaving"
+            @change="toggleBorder(b.cMoonId, $event.target.checked)"
+          />
+          <span class="czew-border-swatch" :style="{ background: b.color }"></span>
+          <span class="czew-border-name">{{ b.name }}</span>
+        </label>
+        <p v-if="borderError" class="czew-border-error">{{ borderError }}</p>
+      </div>
+
+      <!-- cMoon-affinity cZone glow: same shape as the border block above, but its own
+           independent equip choice — checking a glow box here always clears any equipped
+           border (and vice versa), enforced server-side by /api/czone/glow and border.post.js,
+           so at most one of the two is ever equipped. A member can own both at once; this list
+           and the border list above just each reflect whichever one (if either) is currently
+           equipped after the shared `user` state refreshes. -->
+      <div v-if="ownedGlows.length" class="czew-border-block">
+        <div class="czew-border-label">cZone Glow</div>
+        <label v-for="g in ownedGlows" :key="g.cMoonId" class="czew-border-row">
+          <input
+            type="checkbox"
+            :checked="equippedGlowCMoonId === g.cMoonId"
+            :disabled="glowSaving"
+            @change="toggleGlow(g.cMoonId, $event.target.checked)"
+          />
+          <span class="czew-border-swatch" :style="{ background: g.color }"></span>
+          <span class="czew-border-name">{{ g.name }}</span>
+        </label>
+        <p v-if="glowError" class="czew-border-error">{{ glowError }}</p>
+      </div>
+
       <div class="czew-bg-grid">
         <div v-if="cz.loadingBackgrounds" class="czew-empty" style="grid-column:1/-1">Loading…</div>
         <template v-else>
@@ -81,6 +122,52 @@
 defineEmits(['save', 'clear'])
 
 const cz = useNewSiteCzoneState()
+
+// cZone Border toggle — `user` is the same shared session singleton MyCzone.vue reads
+// (see useAuth.js), so posting a change here and refreshing it is immediately reflected in
+// the canvas frame there too, with no direct coupling between the two components needed.
+const { user, fetchSelf } = useAuth()
+const ownedBorders = computed(() => user.value?.ownedBorders || [])
+const equippedBorderCMoonId = computed(() => user.value?.equippedBorderCMoonId || null)
+const borderSaving = ref(false)
+const borderError = ref('')
+
+async function toggleBorder(cMoonId, checked) {
+  // Checking one box equips it; unchecking the currently-equipped one turns it off. Checking a
+  // different box while one is already equipped just switches which is shown (only one border
+  // can ever be equipped at a time) — the newly-checked box's own @change handles that case.
+  borderSaving.value = true
+  borderError.value = ''
+  try {
+    await $fetch('/api/czone/border', { method: 'POST', body: { cMoonId: checked ? cMoonId : null } })
+    await fetchSelf({ force: true })
+  } catch (e) {
+    borderError.value = e?.data?.statusMessage || 'Could not update your border right now.'
+  } finally {
+    borderSaving.value = false
+  }
+}
+
+// cZone Glow toggle — mirrors the border toggle above exactly, against the separate /glow
+// endpoint. Equipping a glow clears any equipped border server-side (and vice versa), so after
+// fetchSelf() refreshes `user`, whichever list was just cleared will show its own box unchecked.
+const ownedGlows = computed(() => user.value?.ownedGlows || [])
+const equippedGlowCMoonId = computed(() => user.value?.equippedGlowCMoonId || null)
+const glowSaving = ref(false)
+const glowError = ref('')
+
+async function toggleGlow(cMoonId, checked) {
+  glowSaving.value = true
+  glowError.value = ''
+  try {
+    await $fetch('/api/czone/glow', { method: 'POST', body: { cMoonId: checked ? cMoonId : null } })
+    await fetchSelf({ force: true })
+  } catch (e) {
+    glowError.value = e?.data?.statusMessage || 'Could not update your glow right now.'
+  } finally {
+    glowSaving.value = false
+  }
+}
 
 const TABS = [
   { id: 'ctoons', label: 'cToons' },
@@ -346,6 +433,49 @@ function selectBg(bg) {
   padding: 3px;
   image-rendering: pixelated;
   box-sizing: border-box;
+}
+
+/* ── cZone Border toggle ── */
+.czew-border-block {
+  flex-shrink: 0;
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255,255,255,0.12);
+  margin-bottom: 2px;
+}
+.czew-border-label {
+  font-size: 0.62rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.45);
+  margin-bottom: 3px;
+}
+.czew-border-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 2px;
+  cursor: pointer;
+}
+.czew-border-row input[type="checkbox"] {
+  width: 15px; height: 15px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.czew-border-swatch {
+  width: 12px; height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.25);
+}
+.czew-border-name {
+  font-size: 0.72rem;
+  color: #fff;
+}
+.czew-border-error {
+  font-size: 0.65rem;
+  color: #ffb4a8;
+  margin: 2px 0 0;
 }
 
 /* ── Background grid ── */

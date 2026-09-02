@@ -26,8 +26,12 @@ export default defineEventHandler(async (event) => {
       orderBy: { createdAt: 'desc' },
       take: 20,
       include: {
+        // isTraining is stored on every match but was never surfaced here — the points-award
+        // gate in server/api/tko/event.post.js only reads `outcome.counted` (fully controlled by
+        // the external TKO client), so this is the one place an admin can actually see whether a
+        // paid round was a practice/AI match rather than a real head-to-head one.
         match: {
-          select: { externalMatchId: true, mode: true, battleCode: true },
+          select: { externalMatchId: true, mode: true, battleCode: true, isTraining: true },
         },
       },
     }),

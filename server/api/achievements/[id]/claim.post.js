@@ -1,17 +1,20 @@
 // server/api/achievements/[id]/claim.post.js
 import { defineEventHandler, readBody, createError } from 'h3'
 import { claimAchievementReward, AchievementClaimError } from '@/server/utils/achievements'
+import { assertSameOrigin } from '@/server/utils/requireAdmin'
 
 const ERROR_STATUS = {
   NOT_UNLOCKED: { statusCode: 403, statusMessage: 'You have not unlocked this achievement' },
   NOT_CLAIMABLE: { statusCode: 400, statusMessage: 'This achievement has no claimable reward' },
   INVALID_OPTION: { statusCode: 400, statusMessage: 'Invalid reward option' },
   ALREADY_CLAIMED: { statusCode: 409, statusMessage: 'You already claimed a reward for this achievement' },
+  TIER_ALREADY_CLAIMED: { statusCode: 409, statusMessage: 'You already claimed this rank\'s reward in another cMoon' },
 }
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
   if (!userId) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+  assertSameOrigin(event)
 
   const achievementId = event.context.params?.id
   const body = await readBody(event)
