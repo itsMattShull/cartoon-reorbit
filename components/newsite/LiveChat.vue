@@ -10,7 +10,7 @@
         class="echat-toggle"
         :class="{ 'echat-toggle--open': open }"
         :aria-expanded="open ? 'true' : 'false'"
-        aria-controls="economy-chat-panel"
+        aria-controls="live-chat-panel"
         @click="togglePanel"
       >
         <span aria-hidden="true">💬</span>
@@ -18,9 +18,9 @@
         <span v-if="!open && unreadCount > 0" class="echat-unread" aria-hidden="true">{{ unreadCount > 9 ? '9+' : unreadCount }}</span>
       </button>
 
-      <div v-if="open" id="economy-chat-panel" class="echat-panel" role="dialog" aria-label="Economy hangout chat">
+      <div v-if="open" id="live-chat-panel" class="echat-panel" role="dialog" aria-label="Live chat">
         <div class="echat-header">
-          <span class="echat-title">Economy Chat</span>
+          <span class="echat-title">Live Chat</span>
           <span class="echat-header-actions">
             <button
               v-if="isAdmin"
@@ -111,7 +111,7 @@
             v-model="draft"
             class="echat-input"
             rows="1"
-            :placeholder="timedOut ? 'You cannot send messages right now…' : 'Message the economy…'"
+            :placeholder="timedOut ? 'You cannot send messages right now…' : 'Say something…'"
             maxlength="320"
             :disabled="timedOut"
             @keydown.enter.exact.prevent="send"
@@ -132,6 +132,12 @@
 </template>
 
 <script setup>
+// One shared room across every page this component is dropped onto (Economy,
+// Auction House, individual auction pages) — deliberately not per-page/per-
+// auction, so it reads as one community hangout rather than fragmenting into
+// silos. Keep this literal string in sync with the ChatMessage/ChatTimeout
+// rows already persisted under "economy" from before this component covered
+// more than the Economy page — renaming it would orphan existing history.
 const ROOM = 'economy'
 const NEAR_BOTTOM_PX = 80
 const NEAR_TOP_PX = 40
@@ -489,9 +495,11 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* z-index 800: below the Economy page's own modals (EconomyCtoonHistoryModal
-   at 1100, EconomyFeaturedAuctionsCarousel at 1150) so either can still cover
-   this panel, above ordinary page content.
+/* z-index 800: below the highest modals this component shares a page with —
+   on Economy, EconomyCtoonHistoryModal (1100) and EconomyFeaturedAuctionsCarousel
+   (1150) — so either can still cover this panel, while staying above ordinary
+   page content everywhere else this component is used (Auction House, an
+   individual auction page).
 
    Anchored bottom-LEFT, not bottom-right: components/Onboarding.vue (the
    site-wide Daily/Events/Alerts hub) is `fixed right-3` at every breakpoint,

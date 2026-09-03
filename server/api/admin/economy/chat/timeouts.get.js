@@ -1,5 +1,5 @@
 // GET /api/admin/economy/chat/timeouts?room= — active (non-lifted, unexpired)
-// chat timeouts, for the admin-only panel in EconomyChat.vue. Actually
+// chat timeouts, for the admin-only panel in LiveChat.vue. Actually
 // creating/lifting a timeout goes through the `admin:chat:timeout(-lifted)`
 // socket events (server/socket-server.js) so every open chat tab updates
 // live; this GET exists purely so an admin who opens chat after a timeout

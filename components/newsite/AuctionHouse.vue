@@ -186,6 +186,11 @@
       <button class="ah-pg-btn" :disabled="activePage >= totalPages"  @click="nextPage">›</button>
     </div>
 
+    <!-- Same shared "economy" room as the Economy page and individual auction
+         pages — one community chat, not a per-page silo. Self-contained/
+         Teleport'd, so dropping it in here needs nothing else. -->
+    <LiveChat />
+
   </div>
 </template>
 

@@ -229,7 +229,7 @@
       @close="showFeaturedAuctions = false"
     />
 
-    <EconomyChat />
+    <LiveChat />
   </div>
 </template>
 

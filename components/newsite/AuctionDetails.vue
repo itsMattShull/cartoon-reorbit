@@ -137,6 +137,10 @@
     <div v-if="toast.message" class="adet-toast" :class="toast.type">{{ toast.message }}</div>
 
     <ScavengerHuntModal v-if="scavenger.isOpen && scavenger.sessionId" />
+
+    <!-- Same shared "economy" room as the Economy page and the Auction House
+         list — one community chat, not a per-auction silo. -->
+    <LiveChat />
   </div>
 </template>
 
