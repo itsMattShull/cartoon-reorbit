@@ -28,6 +28,7 @@ import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './utils/gamePoint
 import { registerEdRps, startEdRpsSweep } from './utils/edRpsRuntime.js'
 import { registerEdRpsAi, startEdRpsAiSweep } from './utils/edRpsAiMatch.js'
 import { registerPokemonBattle, startPokemonBattleSweep } from './utils/pokemonBattleRuntime.js'
+import { filterProfanity } from './utils/profanityFilter.js'
 
 startDiagnostics().catch((err) => {
   console.error('[Diagnostics] failed to start (socket server):', err)
@@ -1865,12 +1866,40 @@ async function requireSocketUser(socket, errorEvent = 'authError') {
 const CHAT_MAX_LEN = 300
 const CHAT_RATE_LIMIT_MAX = 5
 const CHAT_RATE_LIMIT_WINDOW_SEC = 10
+// Bounds on an admin timeout so a typo ("100000" minutes) can't silence
+// someone for years by accident. ~1 week is a generous ceiling for a chat mute.
+const CHAT_TIMEOUT_MIN_MINUTES = 1
+const CHAT_TIMEOUT_MAX_MINUTES = 10080
 
 async function checkChatRateLimit(userId) {
   const key = `economy:chat-rl:${userId}`
   const count = await _redisPub.incr(key)
   if (count === 1) await _redisPub.expire(key, CHAT_RATE_LIMIT_WINDOW_SEC)
   return count <= CHAT_RATE_LIMIT_MAX
+}
+
+// Admin actions (delete/timeout) are privileged, so isAdmin is always read
+// fresh here rather than trusted from any cached/client value — an admin
+// demoted mid-session should lose the ability on their very next action, not
+// whenever they happen to reconnect.
+async function requireSocketAdmin(socket, errorEvent = 'chat:error') {
+  const me = await requireSocketUser(socket, errorEvent)
+  if (!me) return null
+  const fresh = await db.user.findUnique({ where: { id: me.id }, select: { isAdmin: true } })
+  if (!fresh?.isAdmin) {
+    socket.emit(errorEvent, { message: 'Admins only.' })
+    return null
+  }
+  return me
+}
+
+// Null when there's no active timeout, else the still-active ChatTimeout row.
+async function activeChatTimeout(room, userId) {
+  return db.chatTimeout.findFirst({
+    where: { room, userId, liftedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { expiresAt: 'desc' },
+    select: { id: true, expiresAt: true, reason: true }
+  })
 }
 
 io.on('connection', socket => {
@@ -2696,12 +2725,12 @@ io.on('connection', socket => {
     // requireSocketUser/resolveSocketUser cache identity for the life of the
     // connection, so a ban applied mid-session needs a fresh read here, not
     // the cached one, or a banned user keeps posting until they reconnect.
-    let fresh
+    let fresh, timeout
     try {
-      fresh = await db.user.findUnique({
-        where: { id: me.id },
-        select: { banned: true, username: true }
-      })
+      [fresh, timeout] = await Promise.all([
+        db.user.findUnique({ where: { id: me.id }, select: { banned: true, username: true } }),
+        activeChatTimeout(room, me.id)
+      ])
     } catch {
       socket.emit('chat:error', { message: 'Could not send your message. Try again.' })
       return
@@ -2710,11 +2739,20 @@ io.on('connection', socket => {
       socket.emit('chat:error', { message: 'You are not able to chat right now.' })
       return
     }
+    if (timeout) {
+      const mins = Math.max(1, Math.ceil((timeout.expiresAt.getTime() - Date.now()) / 60000))
+      socket.emit('chat:error', { message: `You're timed out from chat for ${mins} more minute${mins === 1 ? '' : 's'}.` })
+      return
+    }
+
+    // Runs after every other rejection reason (rate limit / ban / timeout) so
+    // a request that's about to be refused anyway never touches the filter.
+    const filteredText = filterProfanity(text)
 
     let message
     try {
       message = await db.chatMessage.create({
-        data: { room, userId: me.id, username: fresh.username, body: text },
+        data: { room, userId: me.id, username: fresh.username, body: filteredText },
         select: { id: true, room: true, userId: true, username: true, body: true, createdAt: true }
       })
     } catch (err) {
@@ -2724,6 +2762,82 @@ io.on('connection', socket => {
     }
 
     io.to(`chat:${room}`).emit('chat:message', message)
+  })
+
+  // ── Chat moderation (admin only) ─────────────────────────────────────────
+  socket.on('admin:chat:delete', async ({ room, id } = {}) => {
+    const me = await requireSocketAdmin(socket)
+    if (!me) return
+    if (typeof room !== 'string' || !room || typeof id !== 'string' || !id) return
+
+    let deleted
+    try {
+      deleted = await db.chatMessage.updateMany({
+        where: { id, room, deletedAt: null },
+        data: { deletedAt: new Date(), deletedByUserId: me.id }
+      })
+    } catch (err) {
+      console.error('[EconomyChat] admin delete failed:', err?.message || err)
+      socket.emit('chat:error', { message: 'Could not delete that message.' })
+      return
+    }
+    if (!deleted.count) return // already deleted / wrong room — nothing to broadcast
+
+    io.to(`chat:${room}`).emit('chat:deleted', { id, room })
+  })
+
+  socket.on('admin:chat:timeout', async ({ room, userId, minutes, reason } = {}) => {
+    const me = await requireSocketAdmin(socket)
+    if (!me) return
+    if (typeof room !== 'string' || !room || typeof userId !== 'string' || !userId) return
+
+    const mins = Math.round(Number(minutes))
+    if (!Number.isFinite(mins) || mins < CHAT_TIMEOUT_MIN_MINUTES || mins > CHAT_TIMEOUT_MAX_MINUTES) {
+      socket.emit('chat:error', { message: `Timeout length must be between ${CHAT_TIMEOUT_MIN_MINUTES} and ${CHAT_TIMEOUT_MAX_MINUTES} minutes.` })
+      return
+    }
+
+    const target = await db.user.findUnique({ where: { id: userId }, select: { id: true, username: true } })
+    if (!target) {
+      socket.emit('chat:error', { message: 'That player could not be found.' })
+      return
+    }
+
+    const expiresAt = new Date(Date.now() + mins * 60000)
+    const trimmedReason = typeof reason === 'string' ? reason.trim().slice(0, 200) || null : null
+
+    try {
+      await db.chatTimeout.create({
+        data: { room, userId: target.id, createdByUserId: me.id, reason: trimmedReason, expiresAt }
+      })
+    } catch (err) {
+      console.error('[EconomyChat] admin timeout failed:', err?.message || err)
+      socket.emit('chat:error', { message: 'Could not time out that player.' })
+      return
+    }
+
+    io.to(`chat:${room}`).emit('chat:timeout', {
+      room, userId: target.id, username: target.username, expiresAt, reason: trimmedReason
+    })
+  })
+
+  socket.on('admin:chat:lift-timeout', async ({ room, userId } = {}) => {
+    const me = await requireSocketAdmin(socket)
+    if (!me) return
+    if (typeof room !== 'string' || !room || typeof userId !== 'string' || !userId) return
+
+    try {
+      await db.chatTimeout.updateMany({
+        where: { room, userId, liftedAt: null, expiresAt: { gt: new Date() } },
+        data: { liftedAt: new Date() }
+      })
+    } catch (err) {
+      console.error('[EconomyChat] lift timeout failed:', err?.message || err)
+      socket.emit('chat:error', { message: 'Could not lift that timeout.' })
+      return
+    }
+
+    io.to(`chat:${room}`).emit('chat:timeout-lifted', { room, userId })
   })
 
   // ── Reconnect rejoin handlers ──────────────────────────────────────────────

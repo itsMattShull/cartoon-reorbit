@@ -1,7 +1,9 @@
-// DELETE /api/economy/chat/:id — admin moderation kill-switch. Soft-deletes a
-// chat message (sets deletedAt) so it drops out of future history.get.js
-// pages; already-open clients only lose it on their next fetch/rejoin, not
-// instantly, which is an accepted v1 tradeoff for a live-delete broadcast.
+// DELETE /api/economy/chat/:id — non-live moderation fallback. Soft-deletes a
+// chat message (sets deletedAt/deletedByUserId) so it drops out of future
+// history.get.js pages. The chat UI itself uses the `admin:chat:delete`
+// socket event instead (server/socket-server.js), since only that path can
+// broadcast the removal live to everyone currently viewing the room — this
+// endpoint exists for moderation done outside the live chat panel.
 import { defineEventHandler, getRequestHeader, getRouterParam, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
@@ -25,7 +27,7 @@ export default defineEventHandler(async (event) => {
   try {
     await prisma.chatMessage.update({
       where: { id },
-      data: { deletedAt: new Date() }
+      data: { deletedAt: new Date(), deletedByUserId: me.id }
     })
   } catch {
     throw createError({ statusCode: 404, statusMessage: 'Message not found' })

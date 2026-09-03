@@ -21,7 +21,25 @@
       <div v-if="open" id="economy-chat-panel" class="echat-panel" role="dialog" aria-label="Economy hangout chat">
         <div class="echat-header">
           <span class="echat-title">Economy Chat</span>
-          <button type="button" class="echat-close" aria-label="Close chat" @click="togglePanel">✕</button>
+          <span class="echat-header-actions">
+            <button
+              v-if="isAdmin"
+              type="button"
+              class="echat-mod-toggle"
+              :aria-expanded="showActiveTimeouts ? 'true' : 'false'"
+              @click="showActiveTimeouts = !showActiveTimeouts"
+            >🛡 {{ activeTimeouts.length || '' }}</button>
+            <button type="button" class="echat-close" aria-label="Close chat" @click="togglePanel">✕</button>
+          </span>
+        </div>
+
+        <div v-if="isAdmin && showActiveTimeouts" class="echat-timeouts">
+          <p v-if="!activeTimeouts.length" class="echat-timeouts-empty">No active timeouts.</p>
+          <div v-for="t in activeTimeouts" :key="t.id" class="echat-timeout-row">
+            <span class="echat-timeout-user">{{ t.username }}</span>
+            <span class="echat-timeout-until">until {{ new Date(t.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) }}</span>
+            <button type="button" class="echat-timeout-lift" @click="liftTimeout(t.userId)">Lift</button>
+          </div>
         </div>
 
         <div ref="listEl" class="echat-list" @scroll="onScroll">
@@ -45,17 +63,40 @@
 
               <p v-if="!messages.length" class="echat-state echat-state--empty">No messages yet — say hi!</p>
 
-              <div v-for="m in messages" :key="m.id" class="echat-msg">
-                <div class="echat-msg-head">
-                  <span class="echat-msg-user">{{ m.username }}</span>
-                  <span class="echat-msg-time">{{ relativeTime(m.createdAt) }}</span>
+              <template v-for="m in messages" :key="m.id">
+                <p v-if="m.system" class="echat-system-note">{{ m.body }}</p>
+
+                <div v-else class="echat-msg">
+                  <div class="echat-msg-head">
+                    <span class="echat-msg-user">{{ m.username }}</span>
+                    <span class="echat-msg-time">{{ relativeTime(m.createdAt) }}</span>
+                    <span v-if="isAdmin" class="echat-msg-mod">
+                      <button type="button" class="echat-mod-btn" title="Delete message" @click="deleteMessage(m.id)">🗑</button>
+                      <button
+                        v-if="m.userId !== user?.id"
+                        type="button"
+                        class="echat-mod-btn"
+                        title="Time out this player"
+                        @click="openTimeoutPrompt(m.userId, m.id)"
+                      >⏱</button>
+                    </span>
+                  </div>
+                  <!-- Plain text interpolation only — body is untrusted input from every
+                       other player and is replayed to every future viewer via history,
+                       so v-html here would be a stored-XSS hole. No linkification either:
+                       inert text is a deliberate anti-scam measure for a real-economy game. -->
+                  <div class="echat-msg-body">{{ m.body }}</div>
+
+                  <div v-if="isAdmin && timeoutPromptMessageId === m.id" class="echat-timeout-prompt">
+                    <select v-model.number="timeoutMinutes" class="echat-timeout-select">
+                      <option v-for="d in TIMEOUT_DURATIONS" :key="d.minutes" :value="d.minutes">{{ d.label }}</option>
+                    </select>
+                    <input v-model="timeoutReason" class="echat-timeout-reason" type="text" maxlength="200" placeholder="Reason (optional)" />
+                    <button type="button" class="echat-timeout-confirm" @click="submitTimeout">Time Out</button>
+                    <button type="button" class="echat-timeout-cancel" @click="cancelTimeoutPrompt">Cancel</button>
+                  </div>
                 </div>
-                <!-- Plain text interpolation only — body is untrusted input from every
-                     other player and is replayed to every future viewer via history,
-                     so v-html here would be a stored-XSS hole. No linkification either:
-                     inert text is a deliberate anti-scam measure for a real-economy game. -->
-                <div class="echat-msg-body">{{ m.body }}</div>
-              </div>
+              </template>
             </template>
           </template>
         </div>
@@ -63,12 +104,16 @@
         <p v-if="chatError" class="echat-error" role="alert">{{ chatError }}</p>
 
         <div v-if="authState === 'ok'" class="echat-compose">
+          <p v-if="timedOut" class="echat-timedout-banner">
+            You're timed out from chat until {{ timeoutUntilLabel }}<span v-if="myTimeout?.reason">: {{ myTimeout.reason }}</span>.
+          </p>
           <textarea
             v-model="draft"
             class="echat-input"
             rows="1"
-            placeholder="Message the economy…"
+            :placeholder="timedOut ? 'You cannot send messages right now…' : 'Message the economy…'"
             maxlength="320"
+            :disabled="timedOut"
             @keydown.enter.exact.prevent="send"
           />
           <div class="echat-compose-foot">
@@ -92,10 +137,32 @@ const NEAR_BOTTOM_PX = 80
 const NEAR_TOP_PX = 40
 
 const config = useRuntimeConfig()
-const { user, login, fetchSelf } = useAuth()
+const { user, login, fetchSelf, isAdmin } = useAuth()
 
 const open = ref(false)
 const unreadCount = ref(0)
+
+// Moderation (admin-only UI; every action is also re-checked server-side).
+const myTimeout = ref(null) // { expiresAt, reason } | null — am I currently timed out
+const timedOut = computed(() => !!myTimeout.value && new Date(myTimeout.value.expiresAt) > new Date())
+const timeoutUntilLabel = computed(() => (
+  myTimeout.value ? new Date(myTimeout.value.expiresAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : ''
+))
+const activeTimeouts = ref([]) // admin panel: [{id, userId, username, reason, expiresAt}]
+const showActiveTimeouts = ref(false)
+// Split in two: a user can have several messages in view, so the prompt must
+// render under the ONE message that was clicked (timeoutPromptMessageId),
+// while the action itself always targets the user (timeoutPromptForUserId).
+const timeoutPromptMessageId = ref(null)
+const timeoutPromptForUserId = ref(null)
+const timeoutMinutes = ref(15)
+const timeoutReason = ref('')
+const TIMEOUT_DURATIONS = [
+  { minutes: 5, label: '5 minutes' },
+  { minutes: 15, label: '15 minutes' },
+  { minutes: 60, label: '1 hour' },
+  { minutes: 1440, label: '24 hours' }
+]
 
 // 'ok' | 'anon' | 'error' — set once the first history load resolves.
 const authState = ref(null)
@@ -122,7 +189,7 @@ let chatErrorTimeout = null
 
 const canSend = computed(() => {
   const len = draft.value.trim().length
-  return len > 0 && len <= 300 && !sending.value && socketConnected.value
+  return len > 0 && len <= 300 && !sending.value && socketConnected.value && !timedOut.value
 })
 
 function showChatError(message) {
@@ -162,6 +229,34 @@ function addMessage(m) {
   if (seenIds.has(m.id)) return
   seenIds.add(m.id)
   messages.value.push(m)
+}
+
+// A local-only, unpersisted line ("Someone was timed out for 15m") so the
+// room understands why a player went quiet — never stored, never sent to the
+// server, just synthesized from the chat:timeout(-lifted) broadcast every
+// open tab already receives.
+function addSystemNote(text) {
+  messages.value.push({ id: `sys-${Date.now()}-${Math.random()}`, system: true, body: text, createdAt: new Date().toISOString() })
+}
+
+async function fetchTimeoutStatus() {
+  try {
+    const res = await $fetch('/api/economy/chat/timeout-status', { query: { room: ROOM } })
+    myTimeout.value = res?.timedOut ? { expiresAt: res.expiresAt, reason: res.reason } : null
+  } catch {
+    // Non-fatal: worst case the compose box stays enabled until the server
+    // rejects a send and the resulting chat:error explains why.
+  }
+}
+
+async function fetchActiveTimeouts() {
+  if (!isAdmin.value) return
+  try {
+    const res = await $fetch('/api/admin/economy/chat/timeouts', { query: { room: ROOM } })
+    activeTimeouts.value = res?.timeouts || []
+  } catch {
+    activeTimeouts.value = []
+  }
 }
 
 async function fetchHistory(before) {
@@ -207,7 +302,9 @@ async function loadInitial() {
     scrollToBottom()
     // Best-effort — used only to label the sender's own outgoing sends; the
     // history/socket auth check above is what actually gates the panel.
-    if (!user.value) fetchSelf({ ttlMs: 30000 })
+    if (!user.value) await fetchSelf({ ttlMs: 30000 })
+    fetchTimeoutStatus()
+    fetchActiveTimeouts()
   } catch (err) {
     authState.value = err?.statusCode === 401 ? 'anon' : 'error'
   } finally {
@@ -293,6 +390,31 @@ function connectSocket() {
       clearTimeout(sendingTimeout)
     })
 
+    socket.on('chat:deleted', ({ room: r, id } = {}) => {
+      if (r !== ROOM) return
+      const idx = messages.value.findIndex(m => m.id === id)
+      if (idx !== -1) messages.value.splice(idx, 1)
+    })
+
+    socket.on('chat:timeout', (payload) => {
+      if (!payload || payload.room !== ROOM) return
+      if (payload.userId === user.value?.id) myTimeout.value = { expiresAt: payload.expiresAt, reason: payload.reason }
+      if (isAdmin.value) {
+        activeTimeouts.value = [
+          ...activeTimeouts.value.filter(t => t.userId !== payload.userId),
+          { id: `${payload.userId}-${payload.expiresAt}`, userId: payload.userId, username: payload.username, reason: payload.reason, expiresAt: payload.expiresAt }
+        ]
+      }
+      const mins = Math.max(1, Math.round((new Date(payload.expiresAt).getTime() - Date.now()) / 60000))
+      addSystemNote(`${payload.username || 'A player'} was timed out from chat for ${mins}m${payload.reason ? ` (${payload.reason})` : ''}.`)
+    })
+
+    socket.on('chat:timeout-lifted', (payload) => {
+      if (!payload || payload.room !== ROOM) return
+      if (payload.userId === user.value?.id) myTimeout.value = null
+      if (isAdmin.value) activeTimeouts.value = activeTimeouts.value.filter(t => t.userId !== payload.userId)
+    })
+
     socket.connect()
   })
 }
@@ -321,6 +443,42 @@ function send() {
     sending.value = false
     pendingBody = null
   }, 6000)
+}
+
+// ── Admin moderation actions. The socket handlers re-check isAdmin fresh
+// server-side on every call, so these client gates are UX only, not security. ──
+function deleteMessage(id) {
+  if (!socket || !socketConnected.value) return
+  socket.emit('admin:chat:delete', { room: ROOM, id })
+}
+
+function openTimeoutPrompt(userId, messageId) {
+  timeoutPromptForUserId.value = userId
+  timeoutPromptMessageId.value = messageId
+  timeoutMinutes.value = 15
+  timeoutReason.value = ''
+}
+
+function cancelTimeoutPrompt() {
+  timeoutPromptForUserId.value = null
+  timeoutPromptMessageId.value = null
+}
+
+function submitTimeout() {
+  if (!socket || !socketConnected.value || !timeoutPromptForUserId.value) return
+  socket.emit('admin:chat:timeout', {
+    room: ROOM,
+    userId: timeoutPromptForUserId.value,
+    minutes: timeoutMinutes.value,
+    reason: timeoutReason.value.trim() || undefined
+  })
+  timeoutPromptForUserId.value = null
+  timeoutPromptMessageId.value = null
+}
+
+function liftTimeout(userId) {
+  if (!socket || !socketConnected.value) return
+  socket.emit('admin:chat:lift-timeout', { room: ROOM, userId })
 }
 
 onUnmounted(() => {
@@ -428,6 +586,65 @@ onUnmounted(() => {
 }
 .echat-close:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
 
+.echat-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.echat-mod-toggle {
+  min-width: 36px;
+  min-height: 36px;
+  padding: 0 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.echat-mod-toggle:hover { background: rgba(255, 255, 255, 0.1); color: #fff; }
+
+.echat-timeouts {
+  flex-shrink: 0;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.echat-timeouts-empty {
+  margin: 0;
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.echat-timeout-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.78rem;
+  color: #fff;
+}
+
+.echat-timeout-user { font-weight: 700; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.echat-timeout-until { color: rgba(255, 255, 255, 0.55); flex-shrink: 0; }
+
+.echat-timeout-lift {
+  flex-shrink: 0;
+  min-height: 28px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  background: var(--OrbitLightBlue, #3399CC);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
 .echat-list {
   flex: 1;
   min-height: 0;
@@ -512,6 +729,75 @@ onUnmounted(() => {
   white-space: pre-wrap;
 }
 
+/* Admin-only per-message controls — kept small (this is a dense, secondary
+   surface in a 320px panel, not the primary tap target the 44px floor is
+   for), but still a real tappable box rather than bare text. */
+.echat-msg-mod {
+  margin-left: auto;
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.echat-mod-btn {
+  min-width: 26px;
+  min-height: 26px;
+  border: none;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.7rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.echat-mod-btn:hover { background: rgba(255, 255, 255, 0.18); color: #fff; }
+
+.echat-timeout-prompt {
+  margin-top: 4px;
+  padding: 6px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.echat-timeout-select,
+.echat-timeout-reason {
+  min-height: 32px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 0.78rem;
+  padding: 0 6px;
+}
+.echat-timeout-reason { flex: 1; min-width: 90px; }
+
+.echat-timeout-confirm,
+.echat-timeout-cancel {
+  min-height: 32px;
+  padding: 0 10px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.echat-timeout-confirm { background: #dc2626; color: #fff; }
+.echat-timeout-cancel { background: rgba(255, 255, 255, 0.12); color: #fff; }
+
+/* Ephemeral, unpersisted "X was timed out" line — visually distinct from a
+   real message so it can't be mistaken for something a player said. */
+.echat-system-note {
+  margin: 0;
+  text-align: center;
+  font-size: 0.72rem;
+  font-style: italic;
+  color: rgba(255, 255, 255, 0.5);
+}
+
 .echat-error {
   flex-shrink: 0;
   margin: 0;
@@ -547,6 +833,13 @@ onUnmounted(() => {
 }
 .echat-input::placeholder { color: rgba(255, 255, 255, 0.45); }
 .echat-input:focus { outline: none; border-color: var(--OrbitLightBlue, #3399CC); }
+.echat-input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.echat-timedout-banner {
+  margin: 0 0 2px;
+  font-size: 0.75rem;
+  color: #fca5a5;
+}
 
 .echat-compose-foot {
   display: flex;

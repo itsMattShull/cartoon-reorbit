@@ -588,6 +588,9 @@ model User {
   autoBids                  AuctionAutoBid[]
   auctionsCreated           Auction[]                     @relation("AuctionsCreated")
   chatMessages              ChatMessage[]
+  chatMessagesDeleted       ChatMessage[]                 @relation("ChatMessageDeletedBy")
+  chatTimeoutsReceived      ChatTimeout[]                 @relation("ChatTimeoutUser")
+  chatTimeoutsIssued        ChatTimeout[]                 @relation("ChatTimeoutCreatedBy")
   clashGamesAsPlayer1       ClashGame[]                   @relation("ClashGamePlayer1")
   clashGamesAsPlayer2       ClashGame[]                   @relation("ClashGamePlayer2")
   clashGamesWhoLeft         ClashGame[]                   @relation("ClashGameWhoLeft")
@@ -1821,11 +1824,35 @@ model ChatMessage {
   body      String
   createdAt DateTime  @default(now())
   deletedAt DateTime? // soft-delete, e.g. admin moderation
+  deletedByUserId String? // admin who deleted it, null for a self/system delete
 
-  user User @relation(fields: [userId], references: [id])
+  user        User  @relation(fields: [userId], references: [id])
+  deletedBy   User? @relation("ChatMessageDeletedBy", fields: [deletedByUserId], references: [id])
 
   // Chat history is paginated per room ordered by recency.
   @@index([room, createdAt])
+}
+
+// A timed mute from chat, room-scoped like ChatMessage. Enforced in
+// server/socket-server.js's chat:send handler (an active, non-lifted row with
+// expiresAt in the future blocks sending); naturally self-resolves once
+// expiresAt passes, no cleanup job needed. liftedAt lets an admin end one
+// early without deleting the audit row.
+model ChatTimeout {
+  id              String    @id @default(uuid())
+  room            String
+  userId          String
+  createdByUserId String
+  reason          String?
+  expiresAt       DateTime
+  liftedAt        DateTime?
+  createdAt       DateTime  @default(now())
+
+  user      User @relation("ChatTimeoutUser", fields: [userId], references: [id])
+  createdBy User @relation("ChatTimeoutCreatedBy", fields: [createdByUserId], references: [id])
+
+  // chat:send's hot-path check: "does this user have an active timeout in this room right now".
+  @@index([room, userId, expiresAt])
 }
 
 model ClashGame {
