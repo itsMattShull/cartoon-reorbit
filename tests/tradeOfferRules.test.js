@@ -172,8 +172,9 @@ test('the per-side cap is the number the UI and the accept path were sized for',
   // Pinned deliberately. The test below builds its fixture FROM the constant, so
   // it passes at any value — which is how this silently became 50 and started
   // rejecting the large trades the feature is for. Changing this number means
-  // re-checking accept.post.js, whose transaction moves every cToon in the offer.
-  assert.equal(MAX_CTOONS_PER_SIDE, 250)
+  // re-checking accept.post.js, whose transaction moves every cToon in the offer
+  // (and whose $transaction timeout is sized off this same constant).
+  assert.equal(MAX_CTOONS_PER_SIDE, 10000)
 })
 
 test('normalizeCtoonIdList caps list length', () => {

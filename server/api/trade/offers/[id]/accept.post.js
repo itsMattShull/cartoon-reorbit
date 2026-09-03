@@ -221,10 +221,13 @@ export default defineEventHandler(async (event) => {
     // Status was already claimed at the top of this transaction.
   }, {
     // Explicit rather than Prisma's 5s/2s defaults. The work is bounded now, but
-    // a max-size offer still moves 500 rows, and the precedent for bulk work in
-    // this repo is an explicit budget (see admin/auction-only/index.post.js).
-    timeout: 20000,
-    maxWait: 10000
+    // a max-size offer can move up to 20,000 rows (MAX_CTOONS_PER_SIDE on each
+    // side) via set-based updateMany calls, not a per-cToon loop, so this scales
+    // with row count rather than round trips — widened proportionally to that
+    // ceiling. The precedent for bulk work in this repo is an explicit budget
+    // (see admin/auction-only/index.post.js).
+    timeout: 45000,
+    maxWait: 15000
   })
 
   // 7a) In-app notification to the initiator — their sent offer was accepted.
