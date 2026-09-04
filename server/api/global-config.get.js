@@ -1,7 +1,8 @@
 // server/api/global-config.get.js (public-safe fields)
 import { defineEventHandler, setResponseHeader } from 'h3'
 import { prisma as db } from '@/server/prisma'
-import { isValidUiClickSoundPath } from '@/server/utils/uiClickSoundPath'
+import { isValidUiClickSoundPath, sanitizeUiNavButtonSounds } from '@/server/utils/uiClickSoundPath'
+import { NAV_SOUND_SLOT_KEYS } from '@/utils/navSoundSlots'
 
 export default defineEventHandler(async (event) => {
   // Called on every page load by every visitor (unlike the admin-only config endpoints), so
@@ -22,6 +23,10 @@ export default defineEventHandler(async (event) => {
     secondEditionOverlayWidth:  cfg?.secondEditionOverlayWidth  ?? null,
     secondEditionOverlayHeight: cfg?.secondEditionOverlayHeight ?? null,
     faviconVersion: cfg?.faviconVersion ? cfg.faviconVersion.toString() : null,
-    uiClickSoundPath: isValidUiClickSoundPath(cfg?.uiClickSoundPath) ? cfg.uiClickSoundPath : null
+    uiClickSoundPath: isValidUiClickSoundPath(cfg?.uiClickSoundPath) ? cfg.uiClickSoundPath : null,
+    uiNavButtonSounds: Object.fromEntries(
+      Object.entries(sanitizeUiNavButtonSounds(cfg?.uiNavButtonSounds))
+        .filter(([key]) => NAV_SOUND_SLOT_KEYS.has(key))
+    )
   }
 })

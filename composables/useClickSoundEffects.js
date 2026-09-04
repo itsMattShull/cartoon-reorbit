@@ -1,25 +1,33 @@
 // composables/useClickSoundEffects.js
 //
-// Site-wide "haptic sound" click effect, recreating the classic Cartoon Orbit button blip.
-// Installed once from layouts/newsite-template.vue's onMounted — NOT a Nuxt plugin, since
-// nothing here needs plugin-level init; a composable called from the root layout is the
-// existing idiom for "one global thing, set up once" in this codebase (see
+// Site-wide "haptic sound" click effect, recreating the classic Cartoon Orbit button blip —
+// including per-nav-button sound overrides (utils/navSoundSlots.js), admin-assigned from
+// Manage Homepage > Sounds. Installed once from layouts/newsite-template.vue's onMounted — NOT
+// a Nuxt plugin, since nothing here needs plugin-level init; a composable called from the root
+// layout is the existing idiom for "one global thing, set up once" in this codebase (see
 // composables/useSecondEditionOverlay.js).
 //
 // Deliberately a single delegated `click` listener on `document` rather than touching any of
 // the ~1600 individual <button> elements across the app: cheap (one listener, not thousands),
-// and works retroactively on every button anywhere without per-component changes.
+// and works retroactively on every button anywhere without per-component changes. A clicked
+// element is mapped to a nav slot by walking up to the nearest `data-nav-sound="<slotKey>"`
+// ancestor (set on the NuxtLink wrapping each main-nav button in NavLeft.vue/NavRight.vue);
+// anything without one just plays the site-wide default.
 //
 // Playback uses the Web Audio API (AudioContext + decodeAudioData + BufferSource), mirroring
 // the existing pattern in pages/newsite/newwinball.vue, rather than a pool of HTMLAudioElements
-// — a single decoded AudioBuffer can be started many times concurrently with no pooling, no
-// "reset currentTime" dance, and no HTMLAudioElement-count ceiling on rapid repeat clicks.
+// — a decoded AudioBuffer can be started many times concurrently with no pooling, no "reset
+// currentTime" dance, and no HTMLAudioElement-count ceiling on rapid repeat clicks. Buffers are
+// cached per resolved sound path (a handful of short clips at most — one per nav slot plus the
+// default — trivial memory once decoded), not just one global buffer, since different slots can
+// point at different sounds.
 //
-// The AudioContext and the decode are both deferred until the FIRST qualifying click, not
-// created eagerly on mount: creating one earlier risks it landing before any user gesture
-// (autoplay-policy-suspended with nothing to resume it later) for zero benefit, since nothing
-// plays before a click anyway. The trade-off is that the very first click of a session plays no
-// sound (it only kicks off the decode); every click after that is instant.
+// The AudioContext and every decode are deferred until the FIRST qualifying click of each
+// distinct sound, not created/fetched eagerly on mount: creating the context earlier risks it
+// landing before any user gesture (autoplay-policy-suspended with nothing to resume it later)
+// for zero benefit, since nothing plays before a click anyway. The trade-off is that the first
+// click that resolves to a given sound plays nothing (it only kicks off the decode); every click
+// after that on the same sound is instant.
 import { isGameRoute } from '@/utils/gameRoutePrefixes'
 import { useUiClickSound } from '@/composables/useUiClickSound'
 import { useHapticSoundsPref } from '@/composables/useHapticSoundsPref'
@@ -40,8 +48,8 @@ const CLICKABLE_SELECTOR = 'button:not(:disabled), [role="button"]:not([aria-dis
 let installed = false
 let audioCtx = null
 let gainNode = null
-let audioBuffer = null
-let decodePromise = null
+const audioBuffers = new Map()   // resolved sound path -> decoded AudioBuffer
+const decodePromises = new Map() // resolved sound path -> in-flight decode promise
 let lastPlayedAt = 0
 
 function isTouchCapable() {
@@ -63,22 +71,25 @@ async function ensureAudioReady(soundPath) {
   if (audioCtx.state === 'suspended') {
     try { await audioCtx.resume() } catch {}
   }
-  if (!audioBuffer && !decodePromise) {
-    decodePromise = fetch(soundPath)
+  if (!audioBuffers.has(soundPath) && !decodePromises.has(soundPath)) {
+    const decode = fetch(soundPath)
       .then(res => res.arrayBuffer())
       .then(buf => audioCtx.decodeAudioData(buf))
-      .then(decoded => { audioBuffer = decoded })
+      .then(decoded => { audioBuffers.set(soundPath, decoded) })
       .catch(() => {})
+      .finally(() => { decodePromises.delete(soundPath) })
+    decodePromises.set(soundPath, decode)
   }
-  await decodePromise
-  return audioBuffer
+  await decodePromises.get(soundPath)
+  return audioBuffers.get(soundPath)
 }
 
-function playBuffer() {
-  if (!audioCtx || !audioBuffer) return
+function playBuffer(soundPath) {
+  const buffer = audioBuffers.get(soundPath)
+  if (!audioCtx || !buffer) return
   try {
     const source = audioCtx.createBufferSource()
-    source.buffer = audioBuffer
+    source.buffer = buffer
     source.connect(gainNode)
     source.start(0)
   } catch {}
@@ -91,7 +102,7 @@ export function useClickSoundEffects() {
 
     const route = useRoute()
     const { enabled, hydrate } = useHapticSoundsPref()
-    const { soundPath, ensureLoaded } = useUiClickSound()
+    const { soundConfig, ensureLoaded } = useUiClickSound()
     hydrate()
     ensureLoaded()
 
@@ -116,8 +127,11 @@ export function useClickSoundEffects() {
       }
 
       await ensureLoaded()
-      await ensureAudioReady(soundPath.value.path)
-      playBuffer()
+      const navSlot = target.closest('[data-nav-sound]')?.dataset.navSound
+      const resolvedPath = (navSlot && soundConfig.value.navSounds[navSlot]) || soundConfig.value.defaultPath
+
+      await ensureAudioReady(resolvedPath)
+      playBuffer(resolvedPath)
     }, { passive: true })
   }
 
