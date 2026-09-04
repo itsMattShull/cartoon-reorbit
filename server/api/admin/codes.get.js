@@ -23,7 +23,13 @@ export default defineEventHandler(async (event) => {
   const sort = typeof query.sort === 'string' ? query.sort : 'created'
   const page = hasCodeFilter ? 1 : Math.max(parseInt(query.page || '1', 10), 1)
   const limit = hasCodeFilter ? 1 : Math.min(Math.max(parseInt(query.limit || '50', 10), 1), 200)
-  const skip = hasCodeFilter ? 0 : (page - 1) * limit
+  // "active" sort ranks currently-redeemable codes first, computed in JS
+  // below (Prisma's query builder has no computed/CASE orderBy) -- so it
+  // fetches every matching row and paginates in memory instead of at the
+  // DB level. Fine at this table's admin-only scale; the other two sorts
+  // keep the cheap DB-level skip/take path.
+  const sortActive = sort === 'active'
+  const skip = hasCodeFilter || sortActive ? 0 : (page - 1) * limit
   const orderBy = sort === 'expires'
     ? [{ expiresAt: 'asc' }, { createdAt: 'desc' }]
     : [{ createdAt: 'desc' }]
@@ -63,16 +69,17 @@ export default defineEventHandler(async (event) => {
   }
 
   // 2) Fetch codes with fixed, pooled, and background rewards
-  const [total, codes] = await Promise.all([
+  const [total, fetched] = await Promise.all([
     prisma.claimCode.count({ where }),
     prisma.claimCode.findMany({
       where,
       orderBy,
       skip,
-      take: limit,
+      take: sortActive ? undefined : limit,
       select: {
         code: true,
         maxClaims: true,
+        createdAt: true,
         startsAt: true,
         expiresAt: true,
         prereqMinOwned: true,
@@ -115,6 +122,24 @@ export default defineEventHandler(async (event) => {
       }
     })
   ])
+
+  let codes = fetched
+  if (sortActive) {
+    const now = Date.now()
+    const isActive = (c) =>
+      (!c.startsAt || new Date(c.startsAt).getTime() <= now) &&
+      (!c.expiresAt || new Date(c.expiresAt).getTime() > now)
+    codes = [...fetched].sort((a, b) => {
+      const activeDiff = Number(isActive(b)) - Number(isActive(a))
+      if (activeDiff !== 0) return activeDiff
+      // Within each group, soonest-expiring first (matches the "expires" sort
+      // convention), never-expiring last, then newest-created first.
+      const aExp = a.expiresAt ? new Date(a.expiresAt).getTime() : Infinity
+      const bExp = b.expiresAt ? new Date(b.expiresAt).getTime() : Infinity
+      if (aExp !== bExp) return aExp - bExp
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    }).slice((page - 1) * limit, (page - 1) * limit + limit)
+  }
 
   return { items: codes, total, page, limit }
 })
