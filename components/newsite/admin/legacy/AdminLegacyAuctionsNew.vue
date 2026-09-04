@@ -126,9 +126,15 @@
             Is Featured
           </label>
         </div>
-        <p class="text-[10px] text-gray-500">
-          Marks the auction as featured on the auctions page. Users cannot bid if they
-          currently own 2+ of this cToon or have received 2+ in the last 30 days.
+        <div v-if="isFeatured">
+          <label class="text-xs font-medium block mb-1">Eligibility limit</label>
+          <select v-model.number="featuredOwnLimit" class="w-full border rounded p-2 text-xs">
+            <option :value="2">Standard — can't bid if you already own 2+ or received 2+ in the last 30 days</option>
+            <option :value="1">Strict — can't bid if you already own 1+ or received 1+ in the last 30 days</option>
+          </select>
+        </div>
+        <p v-else class="text-[10px] text-gray-500">
+          Marks the auction as featured on the auctions page, with a bidding eligibility limit you choose above.
         </p>
 
         <div class="pt-3 border-t flex items-center flex-wrap gap-2">
@@ -225,6 +231,7 @@ const durationDays = ref(1)
 const createCount = ref(1)
 const releaseEveryHours = ref(1)
 const isFeatured = ref(false)
+const featuredOwnLimit = ref(2)
 const error = ref('')
 const saving = ref(false)
 const decision = ref(null)   // shortfall modal payload from the server
@@ -357,6 +364,7 @@ async function submitForm() {
     pricePoints: Number(price.value || 0),
     durationDays: Number(durationDays.value || 1),
     isFeatured: Boolean(isFeatured.value),
+    featuredOwnLimit: Number(featuredOwnLimit.value || 2),
     startsAtUtc,
     createCount: count,
     releaseEveryHours: releaseHours

@@ -127,9 +127,15 @@
             <input id="editIsFeatured" v-model="editIsFeatured" type="checkbox" class="h-4 w-4 border-gray-300 rounded" />
             <label for="editIsFeatured" class="text-sm font-medium text-gray-700">Is Featured</label>
           </div>
-          <p class="text-xs text-gray-500">
-            Marks the auction as featured on the auctions page. Users cannot bid if they
-            currently own 2+ of this cToon or have received 2+ in the last 30 days.
+          <div v-if="editIsFeatured">
+            <label class="block font-medium mb-1">Eligibility limit</label>
+            <select v-model.number="editFeaturedOwnLimit" class="w-full border rounded p-2">
+              <option :value="2">Standard — can't bid if you already own 2+ or received 2+ in the last 30 days</option>
+              <option :value="1">Strict — can't bid if you already own 1+ or received 1+ in the last 30 days</option>
+            </select>
+          </div>
+          <p v-else class="text-xs text-gray-500">
+            Marks the auction as featured on the auctions page, with a bidding eligibility limit you choose above.
           </p>
 
           <div class="pt-3 border-t flex flex-wrap items-center gap-2">
@@ -373,6 +379,7 @@ const editStartDate = ref('')
 const editStartHour = ref('')
 const editDurationDays = ref(1)
 const editIsFeatured = ref(false)
+const editFeaturedOwnLimit = ref(2)
 const editError = ref('')
 const editSaving = ref(false)
 
@@ -527,6 +534,7 @@ function openEdit(a) {
   editing.value = a
   editPrice.value = Number(a.pricePoints || 0)
   editIsFeatured.value = !!a.isFeatured
+  editFeaturedOwnLimit.value = a.featuredOwnLimit === 1 ? 1 : 2
   const { date, hour } = utcToChicagoDateHour(a.startsAt)
   editStartDate.value = date
   editStartHour.value = hour
@@ -554,6 +562,7 @@ async function saveEdit() {
     pricePoints: Number(editPrice.value || 0),
     durationDays: Number(editDurationDays.value || 1),
     isFeatured: Boolean(editIsFeatured.value),
+    featuredOwnLimit: Number(editFeaturedOwnLimit.value || 2),
     startsAtUtc
   }
 

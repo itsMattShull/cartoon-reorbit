@@ -40,6 +40,7 @@ export default defineEventHandler(async (event) => {
       highestBid: true, highestBidderId: true, initialBet: true,
       creatorId: true,
       isFeatured: true,
+      featuredOwnLimit: true,
       userCtoon: {
         select: {
           ctoonId: true,
@@ -63,6 +64,7 @@ export default defineEventHandler(async (event) => {
   // This check must happen before the upsert so an ineligible user's auto-bid is never saved.
   await assertFeaturedEligibility(db, userId, {
     isFeatured: auc.isFeatured,
+    featuredOwnLimit: auc.featuredOwnLimit,
     ctoon: {
       ctoonId: auc.userCtoon?.ctoonId,
       isSecondEdition: auc.userCtoon?.ctoon?.isSecondEdition,
@@ -155,6 +157,7 @@ export default defineEventHandler(async (event) => {
         initialBet: true,
         creatorId: true,
         isFeatured: true,
+        featuredOwnLimit: true,
         userCtoon: {
           select: {
             ctoonId: true,
@@ -176,6 +179,7 @@ export default defineEventHandler(async (event) => {
     // cToons this counts copies across both editions.
     await assertFeaturedEligibility(tx, userId, {
       isFeatured: fresh.isFeatured,
+      featuredOwnLimit: fresh.featuredOwnLimit,
       ctoon: {
         ctoonId: fresh.userCtoon?.ctoonId,
         isSecondEdition: fresh.userCtoon?.ctoon?.isSecondEdition,

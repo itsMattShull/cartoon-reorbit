@@ -5,6 +5,7 @@ import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { logAuctionOnlyError } from '@/server/utils/auctionOnlyErrorLog'
 import { selectAuctionOnlyBatch } from '@/server/utils/auctionOnlySchedule'
+import { FEATURED_OWN_LIMIT_OPTIONS, DEFAULT_FEATURED_OWN_LIMIT } from '@/server/utils/featuredEligibility'
 const OWNER_USERNAME = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
 
 export default defineEventHandler(async (event) => {
@@ -40,12 +41,24 @@ async function handleAuctionOnlyCreate(event) {
     startsAtUtc,
     durationDays,
     isFeatured,
+    featuredOwnLimit,
     createCount = 1,
     releaseEveryHours = 0,
     mintMode // undefined | 'mint' | 'availableOnly' — set by the shortfall modal
   } = body || {}
 
   const isFeaturedFlag = !!isFeatured
+  // Only meaningful when featured; still validated (rather than silently
+  // coerced) whenever provided so a malformed value never gets swallowed as
+  // the default. See server/utils/featuredEligibility.js.
+  let featuredOwnLimitValue = DEFAULT_FEATURED_OWN_LIMIT
+  if (isFeaturedFlag && featuredOwnLimit !== undefined) {
+    const n = Number(featuredOwnLimit)
+    if (!FEATURED_OWN_LIMIT_OPTIONS.includes(n)) {
+      throw createError({ statusCode: 400, statusMessage: `featuredOwnLimit must be one of ${FEATURED_OWN_LIMIT_OPTIONS.join(', ')}` })
+    }
+    featuredOwnLimitValue = n
+  }
   if (!Number.isInteger(pricePoints) || pricePoints < 0) throw createError({ statusCode: 400, statusMessage: 'Invalid pricePoints' })
   if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 7) throw createError({ statusCode: 400, statusMessage: 'durationDays must be 1–7' })
   const count = Number(createCount ?? 1)
@@ -195,6 +208,7 @@ async function handleAuctionOnlyCreate(event) {
         startsAt,
         endsAt,
         isFeatured: isFeaturedFlag,
+        featuredOwnLimit: featuredOwnLimitValue,
         createdById: me.id ?? null
       }
     })
