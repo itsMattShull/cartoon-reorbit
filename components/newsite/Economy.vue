@@ -228,8 +228,6 @@
       v-if="showFeaturedAuctions"
       @close="showFeaturedAuctions = false"
     />
-
-    <EconomyChat />
   </div>
 </template>
 
