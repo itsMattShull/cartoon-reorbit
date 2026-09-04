@@ -2,6 +2,7 @@
 import { defineEventHandler, getRequestHeader, readBody, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { logAuctionOnlyError } from '@/server/utils/auctionOnlyErrorLog'
+import { FEATURED_OWN_LIMIT_OPTIONS, DEFAULT_FEATURED_OWN_LIMIT } from '@/server/utils/featuredEligibility'
 
 export default defineEventHandler(async (event) => {
   try {
@@ -29,7 +30,17 @@ async function handleAuctionOnlyUpdate(event) {
   if (!id) throw createError({ statusCode: 400, statusMessage: 'Missing id' })
 
   const body = await readBody(event)
-  const { pricePoints, startsAtUtc, durationDays, isFeatured } = body || {}
+  const { pricePoints, startsAtUtc, durationDays, isFeatured, featuredOwnLimit } = body || {}
+  const isFeaturedFlag = !!isFeatured
+
+  let featuredOwnLimitValue = DEFAULT_FEATURED_OWN_LIMIT
+  if (isFeaturedFlag && featuredOwnLimit !== undefined) {
+    const n = Number(featuredOwnLimit)
+    if (!FEATURED_OWN_LIMIT_OPTIONS.includes(n)) {
+      throw createError({ statusCode: 400, statusMessage: `featuredOwnLimit must be one of ${FEATURED_OWN_LIMIT_OPTIONS.join(', ')}` })
+    }
+    featuredOwnLimitValue = n
+  }
 
   if (!Number.isInteger(pricePoints) || pricePoints < 0) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid pricePoints' })
@@ -62,7 +73,8 @@ async function handleAuctionOnlyUpdate(event) {
       pricePoints,
       startsAt: normStarts,
       endsAt,
-      isFeatured: !!isFeatured
+      isFeatured: isFeaturedFlag,
+      featuredOwnLimit: featuredOwnLimitValue
     },
     select: { id: true }
   })

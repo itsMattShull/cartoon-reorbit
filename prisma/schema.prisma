@@ -587,7 +587,6 @@ model User {
   bids                      Bid[]
   autoBids                  AuctionAutoBid[]
   auctionsCreated           Auction[]                     @relation("AuctionsCreated")
-  chatMessages              ChatMessage[]
   clashGamesAsPlayer1       ClashGame[]                   @relation("ClashGamePlayer1")
   clashGamesAsPlayer2       ClashGame[]                   @relation("ClashGamePlayer2")
   clashGamesWhoLeft         ClashGame[]                   @relation("ClashGameWhoLeft")
@@ -1711,6 +1710,9 @@ model Auction {
   winnerAt           DateTime?
   endingSoonNotified Boolean       @default(false)
   isFeatured         Boolean       @default(false)
+  // Only meaningful when isFeatured. Copied from AuctionOnly.featuredOwnLimit
+  // at activation — see server/utils/featuredEligibility.js.
+  featuredOwnLimit   Int           @default(2)
   // Back-reference to the AuctionOnly listing that activated into this Auction
   // (set at activation time in server/cron/sync-guild-members.js). Nullable/not a
   // FK since the AuctionOnly row can later be deleted while this Auction lives on.
@@ -1804,28 +1806,6 @@ model EconomyAggregateCursor {
   lastAuctionProcessedAt DateTime @default("1970-01-01T00:00:00Z")
   lastTradeProcessedAt   DateTime @default("1970-01-01T00:00:00Z")
   updatedAt              DateTime @updatedAt
-}
-
-// ── Live chat ────────────────────────────────────────────────────
-// Generic room-scoped chat, persisted so history survives page refresh /
-// late joiners. "room" is a free-form string ("economy" today) rather than a
-// dedicated Economy table so a future page can reuse this model unchanged.
-// Written only by server/socket-server.js's chat handlers, which resolve
-// userId/username from the authenticated socket session — never from the
-// client payload — to prevent username spoofing.
-model ChatMessage {
-  id        String    @id @default(uuid())
-  room      String
-  userId    String
-  username  String // display-name snapshot at send time; survives a later username change
-  body      String
-  createdAt DateTime  @default(now())
-  deletedAt DateTime? // soft-delete, e.g. admin moderation
-
-  user User @relation(fields: [userId], references: [id])
-
-  // Chat history is paginated per room ordered by recency.
-  @@index([room, createdAt])
 }
 
 model ClashGame {
@@ -2466,6 +2446,11 @@ model AuctionOnly {
   createdAt   DateTime @default(now())
   createdById String?
   isFeatured  Boolean  @default(false)
+  // Only meaningful when isFeatured. A user can't bid once they own, or have
+  // received in the last 30 days, this many copies — 2 (Standard, the
+  // long-standing default) or 1 (Strict), chosen at creation time. See
+  // server/utils/featuredEligibility.js.
+  featuredOwnLimit Int @default(2)
 
   // relations
   userCtoon UserCtoon @relation(fields: [userCtoonId], references: [id])

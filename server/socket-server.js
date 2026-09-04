@@ -1855,24 +1855,6 @@ async function requireSocketUser(socket, errorEvent = 'authError') {
   return user
 }
 
-/**
- * Economy live chat. Deliberately NOT built on the join-zone/chat-message
- * handlers below: those trust a client-supplied `user` field with no auth
- * check at all, which lets anyone spoof any username — that's almost
- * certainly why nothing in the app actually calls them. Identity here always
- * comes from requireSocketUser (session-cookie-derived), never the payload.
- */
-const CHAT_MAX_LEN = 300
-const CHAT_RATE_LIMIT_MAX = 5
-const CHAT_RATE_LIMIT_WINDOW_SEC = 10
-
-async function checkChatRateLimit(userId) {
-  const key = `economy:chat-rl:${userId}`
-  const count = await _redisPub.incr(key)
-  if (count === 1) await _redisPub.expire(key, CHAT_RATE_LIMIT_WINDOW_SEC)
-  return count <= CHAT_RATE_LIMIT_MAX
-}
-
 io.on('connection', socket => {
   // Ed, Edd n Eddy RPS lives in its own module and resolves identity from the session cookie
   // on every event rather than trusting a payload userId. It keeps its own socket.data keys
@@ -2658,72 +2640,6 @@ io.on('connection', socket => {
 
   socket.on('chat-message', ({ zone, user, message }) => {
     io.to(zone).emit('chat-message', { user, message })
-  })
-
-  socket.on('join-chat-room', ({ room } = {}) => {
-    if (typeof room !== 'string' || !room) return
-    socket.join(`chat:${room}`)
-  })
-
-  socket.on('leave-chat-room', ({ room } = {}) => {
-    if (typeof room !== 'string' || !room) return
-    socket.leave(`chat:${room}`)
-  })
-
-  socket.on('chat:send', async ({ room, body } = {}) => {
-    const me = await requireSocketUser(socket, 'chat:error')
-    if (!me) return
-    if (typeof room !== 'string' || !room) return
-
-    const text = typeof body === 'string' ? body.trim() : ''
-    if (!text) return
-    if (text.length > CHAT_MAX_LEN) {
-      socket.emit('chat:error', { message: `Messages are limited to ${CHAT_MAX_LEN} characters.` })
-      return
-    }
-
-    let allowed = true
-    try {
-      allowed = await checkChatRateLimit(me.id)
-    } catch {
-      // Redis down: fail open rather than silencing chat entirely.
-    }
-    if (!allowed) {
-      socket.emit('chat:error', { message: 'Slow down a bit before sending another message.' })
-      return
-    }
-
-    // requireSocketUser/resolveSocketUser cache identity for the life of the
-    // connection, so a ban applied mid-session needs a fresh read here, not
-    // the cached one, or a banned user keeps posting until they reconnect.
-    let fresh
-    try {
-      fresh = await db.user.findUnique({
-        where: { id: me.id },
-        select: { banned: true, username: true }
-      })
-    } catch {
-      socket.emit('chat:error', { message: 'Could not send your message. Try again.' })
-      return
-    }
-    if (!fresh || fresh.banned || !fresh.username) {
-      socket.emit('chat:error', { message: 'You are not able to chat right now.' })
-      return
-    }
-
-    let message
-    try {
-      message = await db.chatMessage.create({
-        data: { room, userId: me.id, username: fresh.username, body: text },
-        select: { id: true, room: true, userId: true, username: true, body: true, createdAt: true }
-      })
-    } catch (err) {
-      console.error('[EconomyChat] failed to persist message:', err?.message || err)
-      socket.emit('chat:error', { message: 'Could not send your message. Try again.' })
-      return
-    }
-
-    io.to(`chat:${room}`).emit('chat:message', message)
   })
 
   // ── Reconnect rejoin handlers ──────────────────────────────────────────────
