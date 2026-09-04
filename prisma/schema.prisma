@@ -1711,6 +1711,9 @@ model Auction {
   winnerAt           DateTime?
   endingSoonNotified Boolean       @default(false)
   isFeatured         Boolean       @default(false)
+  // Only meaningful when isFeatured. Copied from AuctionOnly.featuredOwnLimit
+  // at activation — see server/utils/featuredEligibility.js.
+  featuredOwnLimit   Int           @default(2)
   // Back-reference to the AuctionOnly listing that activated into this Auction
   // (set at activation time in server/cron/sync-guild-members.js). Nullable/not a
   // FK since the AuctionOnly row can later be deleted while this Auction lives on.
@@ -2466,6 +2469,11 @@ model AuctionOnly {
   createdAt   DateTime @default(now())
   createdById String?
   isFeatured  Boolean  @default(false)
+  // Only meaningful when isFeatured. A user can't bid once they own, or have
+  // received in the last 30 days, this many copies — 2 (Standard, the
+  // long-standing default) or 1 (Strict), chosen at creation time. See
+  // server/utils/featuredEligibility.js.
+  featuredOwnLimit Int @default(2)
 
   // relations
   userCtoon UserCtoon @relation(fields: [userCtoonId], references: [id])

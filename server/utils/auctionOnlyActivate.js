@@ -143,7 +143,8 @@ export async function activateAuctionOnlyRow(row) {
         pricePoints: true,
         startsAt: true,
         endsAt: true,
-        isFeatured: true
+        isFeatured: true,
+        featuredOwnLimit: true
       }
     })
     if (!fresh || fresh.isStarted) return null
@@ -217,6 +218,7 @@ export async function activateAuctionOnlyRow(row) {
         endAt: new Date(fresh.endsAt),
         creatorId: userCtoon.userId,
         isFeatured: fresh.isFeatured,
+        featuredOwnLimit: fresh.featuredOwnLimit,
         auctionOnlyId: fresh.id
       },
       select: { id: true }

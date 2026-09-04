@@ -62,6 +62,7 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
       initialBet: true, // If your column is named initialBid/initialPrice, rename accordingly
       // 👇 needed to enforce the featured-auction bidding cap on proxy raises
       isFeatured: true,
+      featuredOwnLimit: true,
       userCtoon: {
         select: {
           ctoonId: true,
@@ -117,7 +118,7 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
     }
     if (featuredCtoon.ctoonId) {
       const flags = await Promise.all(
-        auto.map(a => checkFeaturedEligibility(tx, a.userId, featuredCtoon))
+        auto.map(a => checkFeaturedEligibility(tx, a.userId, featuredCtoon, auc.featuredOwnLimit))
       )
       auto = auto.filter((_, i) => flags[i].eligible)
       if (!auto.length) return { finalAuction: auc, steps }

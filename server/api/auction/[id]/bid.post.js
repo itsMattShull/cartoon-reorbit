@@ -80,6 +80,7 @@ export default defineEventHandler(async (event) => {
         initialBet: true,
         creatorId: true,
         isFeatured: true,
+        featuredOwnLimit: true,
         userCtoon: {
           select: {
             ctoonId: true,
@@ -102,6 +103,7 @@ export default defineEventHandler(async (event) => {
     // across both editions (see server/utils/featuredEligibility.js).
     await assertFeaturedEligibility(tx, userId, {
       isFeatured: fresh.isFeatured,
+      featuredOwnLimit: fresh.featuredOwnLimit,
       ctoon: {
         ctoonId: fresh.userCtoon?.ctoonId,
         isSecondEdition: fresh.userCtoon?.ctoon?.isSecondEdition,

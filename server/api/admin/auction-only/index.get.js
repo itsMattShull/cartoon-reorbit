@@ -39,6 +39,7 @@ export default defineEventHandler(async (event) => {
     startsAt: r.startsAt,
     endsAt: r.endsAt,
     isFeatured: r.isFeatured,
+    featuredOwnLimit: r.featuredOwnLimit,
     mintNumber: r.userCtoon.mintNumber,
     ctoon: r.userCtoon.ctoon
   }))
