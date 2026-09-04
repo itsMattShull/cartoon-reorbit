@@ -31,6 +31,10 @@
             class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
             :class="activeTab==='Favicon' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Favicon'">Favicon</button>
+          <button
+            class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
+            :class="activeTab==='Sounds' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='Sounds'">Sounds</button>
         </nav>
       </div>
 
@@ -445,6 +449,36 @@
         </div>
       </section>
 
+      <!-- Sounds tab -->
+      <section v-if="activeTab==='Sounds'" class="space-y-6 max-w-lg">
+        <p class="text-sm text-gray-600">
+          The short "haptic sound" click blip played site-wide when visitors click a button,
+          recreating the original Cartoon Orbit's button feedback. MP3, OGG, or WAV, 3MB max,
+          3 seconds max duration — this plays on every button click across the site, so it must stay short.
+        </p>
+
+        <div class="border rounded p-4 space-y-3">
+          <h2 class="font-semibold">Click Sound</h2>
+          <div class="flex items-center gap-4">
+            <audio :src="soundPreviewUrl || uiClickSoundPath || DEFAULT_CLICK_SOUND_PATH" controls preload="none" class="h-10"></audio>
+            <span class="text-xs text-gray-500">
+              {{ soundFile ? soundFile.name : (uiClickSoundPath ? 'Custom sound' : 'Default (bundled) sound') }}
+            </span>
+          </div>
+          <input type="file" accept=".mp3,.ogg,.wav,audio/mpeg,audio/ogg,audio/wav"
+            @change="onSoundFile($event)" class="block w-full text-sm" />
+          <div class="flex gap-2">
+            <button class="btn-primary" :disabled="!soundFile || soundSaving" @click="saveSound">
+              <span v-if="!soundSaving">Save</span><span v-else>Saving…</span>
+            </button>
+            <button type="button" class="px-3 py-1 text-sm rounded border"
+                    v-if="uiClickSoundPath" :disabled="soundSaving" @click="clearSound">
+              Reset to default
+            </button>
+          </div>
+        </div>
+      </section>
+
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
@@ -456,6 +490,7 @@
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import Nav from '@/components/Nav.vue'
+import { DEFAULT_CLICK_SOUND_PATH } from '@/composables/useUiClickSound'
 
 definePageMeta({ title: 'Admin - Manage Homepage', middleware: ['auth','admin'], layout: 'admin' })
 
@@ -515,6 +550,62 @@ const middleSidebarFiles = reactive({ 1: null, 2: null, 3: null })
 
 const saving = ref(false)
 const toast  = ref(null)
+
+// Sounds tab state
+const uiClickSoundPath = ref('')
+const soundFile = ref(null)
+const soundPreviewUrl = ref(null)
+const soundSaving = ref(false)
+
+function onSoundFile(e) {
+  const f = e.target.files?.[0] || null
+  try { if (soundPreviewUrl.value) { URL.revokeObjectURL(soundPreviewUrl.value); soundPreviewUrl.value = null } } catch (e) {}
+  soundFile.value = f
+  if (f) soundPreviewUrl.value = URL.createObjectURL(f)
+}
+
+async function loadSoundConfig() {
+  try {
+    const cfg = await $fetch('/api/global-config')
+    uiClickSoundPath.value = cfg?.uiClickSoundPath || ''
+  } catch {}
+}
+
+async function saveSound() {
+  if (!soundFile.value) return
+  soundSaving.value = true; toast.value = null
+  try {
+    const fd = new FormData()
+    fd.append('sound', soundFile.value)
+    const res = await $fetch('/api/admin/global-config/ui-click-sound', { method: 'POST', body: fd })
+    uiClickSoundPath.value = res.uiClickSoundPath || ''
+    try { if (soundPreviewUrl.value) URL.revokeObjectURL(soundPreviewUrl.value) } catch (e) {}
+    soundPreviewUrl.value = null
+    soundFile.value = null
+    toast.value = { type: 'ok', msg: 'Click sound updated.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.data?.statusMessage || e?.statusMessage || 'Save failed' }
+  } finally {
+    soundSaving.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+async function clearSound() {
+  soundSaving.value = true; toast.value = null
+  try {
+    const fd = new FormData()
+    fd.append('clear', '1')
+    const res = await $fetch('/api/admin/global-config/ui-click-sound', { method: 'POST', body: fd })
+    uiClickSoundPath.value = res.uiClickSoundPath || ''
+    toast.value = { type: 'ok', msg: 'Reset to the default click sound.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.data?.statusMessage || e?.statusMessage || 'Reset failed' }
+  } finally {
+    soundSaving.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+onMounted(loadSoundConfig)
 
 // Favicon tab state
 const faviconFile = ref(null)
@@ -715,6 +806,7 @@ onBeforeUnmount(() => {
     if (u) { try { URL.revokeObjectURL(u) } catch (e) {} }
   }
   if (faviconPreviewUrl.value) { try { URL.revokeObjectURL(faviconPreviewUrl.value) } catch (e) {} }
+  if (soundPreviewUrl.value) { try { URL.revokeObjectURL(soundPreviewUrl.value) } catch (e) {} }
 })
 
 async function loadConfig() {

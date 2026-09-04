@@ -1525,6 +1525,12 @@ model GlobalGameConfig {
   // query string to every icon URL rendered in pages/index.vue's useHead.
   faviconVersion                     BigInt?
   faviconSourcePath                  String? // original master upload, retained for re-generation/audit
+  // Site-wide UI "haptic sound" (click blip), uploaded from Admin > Manage Homepage > Sounds.
+  // Null means "use the bundled default at public/ui-sounds/click-default.mp3". Always a
+  // server-generated relative path (see server/api/admin/global-config/ui-click-sound.post.js) —
+  // never client input — but server/api/global-config.get.js still re-validates its shape before
+  // handing it to every visitor, since this is the one config value read on literally every page.
+  uiClickSoundPath                   String?
   // cMoon (faction) feature — off by default, easy to disable without losing data.
   // When flipped false -> true, cMoonEnabledAt is set to now (purely informational, shown in the
   // admin panel as "Launched X"). cMoonSelectionDeadlineAt predates the opt-out flow and is no

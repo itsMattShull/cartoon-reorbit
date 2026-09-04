@@ -27,6 +27,37 @@ html.newsite-active body {
   font-family: var(--font-family);
 }
 
+/*
+ * Site-wide button hover/press feedback, recreating classic Cartoon Orbit's button
+ * highlighting. Plain (non-scoped, so it reaches into every child component's own
+ * template — a `scoped` block here could only ever style this layout's own root markup)
+ * and gated on `html.newsite-active` so it never leaks into layouts/admin.vue's pages.
+ *
+ * `(hover: hover) and (pointer: fine)` keeps the hover rule off touch devices — without it,
+ * a tap on iOS/Android leaves the element visually "stuck" highlighted until the next tap
+ * elsewhere (there is no mouse-out event to clear it). `:active` has no such gotcha and
+ * applies unconditionally, so touch devices still get real press feedback, just via the
+ * press state rather than hover.
+ */
+@media (hover: hover) and (pointer: fine) {
+  html.newsite-active button:not(:disabled):hover,
+  html.newsite-active [role="button"]:not([aria-disabled="true"]):hover {
+    filter: brightness(1.12);
+  }
+}
+
+html.newsite-active button:not(:disabled),
+html.newsite-active [role="button"]:not([aria-disabled="true"]) {
+  transition: filter 80ms ease, transform 80ms ease;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html.newsite-active button:not(:disabled):active,
+  html.newsite-active [role="button"]:not([aria-disabled="true"]):active {
+    transform: scale(0.97);
+  }
+}
+
 :root {
   --OrbitDarkBlue:                   #336699;
   --OrbitLightBlue:                  #3399CC;
@@ -313,6 +344,7 @@ html.newsite-active body {
 
 <script setup>
 import { computeSiteScale, scaleMarginBottom, MOBILE_QUERY } from '~/utils/siteScale'
+import { useClickSoundEffects } from '@/composables/useClickSoundEffects'
 
 const route = useRoute()
 // Mirrors layouts/default.vue's own admin exclusion (`!route.path.startsWith('/admin')`) — the
@@ -463,6 +495,8 @@ onMounted(() => {
   applyMobile(mql)
   mql.addEventListener('change', applyMobile)
   window.addEventListener('resize', computeLayout)
+
+  useClickSoundEffects().install()
 })
 
 onUnmounted(() => {
