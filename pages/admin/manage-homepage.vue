@@ -31,6 +31,10 @@
             class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
             :class="activeTab==='Favicon' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
             @click="activeTab='Favicon'">Favicon</button>
+          <button
+            class="px-3 py-2 border-b-2 whitespace-nowrap shrink-0"
+            :class="activeTab==='Sounds' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-gray-500'"
+            @click="activeTab='Sounds'">Sounds</button>
         </nav>
       </div>
 
@@ -445,6 +449,61 @@
         </div>
       </section>
 
+      <!-- Sounds tab -->
+      <section v-if="activeTab==='Sounds'" class="space-y-6 max-w-2xl">
+        <p class="text-sm text-gray-600">
+          The "haptic sound" click blip played when visitors click a button, recreating the
+          original Cartoon Orbit's button feedback. Upload clips to the library below, then
+          assign one to the site-wide default and/or any individual main-nav button.
+        </p>
+
+        <!-- Sound Library -->
+        <div class="border rounded p-4 space-y-3">
+          <h2 class="font-semibold">Sound Library</h2>
+          <p class="text-xs text-gray-500">MP3, OGG, or WAV. 3MB max, 3 seconds max duration — these can end up playing on every click site-wide.</p>
+
+          <div v-if="soundLibrary.length" class="space-y-2">
+            <div v-for="s in soundLibrary" :key="s.id" class="flex items-center gap-3 border rounded p-2">
+              <audio :src="s.path" controls preload="none" class="h-9"></audio>
+              <span class="text-sm flex-1 min-w-0 truncate">{{ s.label }}</span>
+              <button type="button" class="px-2 py-1 text-xs rounded border hover:bg-gray-50"
+                      :disabled="librarySaving" @click="deleteLibrarySound(s)">
+                Delete
+              </button>
+            </div>
+          </div>
+          <p v-else class="text-xs text-gray-400">No sounds uploaded yet.</p>
+
+          <div class="flex flex-col sm:flex-row gap-2 pt-2 border-t">
+            <input v-model="newSoundLabel" type="text" placeholder="Label (e.g. Classic Blip)" maxlength="60"
+              class="border rounded p-1.5 text-sm flex-1 min-w-0" />
+            <input type="file" accept=".mp3,.ogg,.wav,audio/mpeg,audio/ogg,audio/wav"
+              @change="onNewSoundFile($event)" class="block text-sm" />
+            <button class="btn-primary shrink-0" :disabled="!newSoundFile || !newSoundLabel.trim() || librarySaving" @click="uploadLibrarySound">
+              <span v-if="!librarySaving">Add to Library</span><span v-else>Uploading…</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Assignments -->
+        <div class="border rounded p-4 space-y-3">
+          <h2 class="font-semibold">Button Sounds</h2>
+          <p class="text-xs text-gray-500">Assign a library sound to the default (every button) or to one specific main-nav button. Unassigned nav buttons use the default.</p>
+
+          <div class="divide-y">
+            <div v-for="slot in NAV_SOUND_SLOTS" :key="slot.key" class="flex items-center gap-3 py-2">
+              <span class="text-sm flex-1" :class="{ 'font-semibold': slot.key === 'default' }">{{ slot.label }}</span>
+              <select :value="assignments[slot.key] || ''" :disabled="assignSaving[slot.key]"
+                @change="assignSlot(slot.key, $event.target.value || null)"
+                class="border rounded p-1.5 text-sm w-56">
+                <option value="">{{ slot.key === 'default' ? 'Bundled default' : 'Use default' }}</option>
+                <option v-for="s in soundLibrary" :key="s.id" :value="s.id">{{ s.label }}</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-4 py-2 rounded',
                                  toast.type==='error'?'bg-red-100 text-red-700':'bg-green-100 text-green-700']">
         {{ toast.msg }}
@@ -456,6 +515,7 @@
 <script setup>
 import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import Nav from '@/components/Nav.vue'
+import { NAV_SOUND_SLOTS } from '@/utils/navSoundSlots'
 
 definePageMeta({ title: 'Admin - Manage Homepage', middleware: ['auth','admin'], layout: 'admin' })
 
@@ -515,6 +575,92 @@ const middleSidebarFiles = reactive({ 1: null, 2: null, 3: null })
 
 const saving = ref(false)
 const toast  = ref(null)
+
+// Sounds tab state
+const soundLibrary = ref([])       // [{ id, label, path, createdAt }]
+const newSoundLabel = ref('')
+const newSoundFile = ref(null)
+const librarySaving = ref(false)
+const assignments = ref({})        // { [slotKey]: soundId }
+const assignSaving = reactive({})  // { [slotKey]: boolean }
+
+function onNewSoundFile(e) {
+  newSoundFile.value = e.target.files?.[0] || null
+}
+
+async function loadLibrary() {
+  try {
+    soundLibrary.value = await $fetch('/api/admin/global-config/ui-sounds')
+  } catch {}
+}
+
+async function loadAssignments() {
+  try {
+    const cfg = await $fetch('/api/global-config')
+    const idByPath = Object.fromEntries(soundLibrary.value.map(s => [s.path, s.id]))
+    const next = {}
+    if (cfg?.uiClickSoundPath && idByPath[cfg.uiClickSoundPath]) next.default = idByPath[cfg.uiClickSoundPath]
+    for (const [key, path] of Object.entries(cfg?.uiNavButtonSounds || {})) {
+      if (idByPath[path]) next[key] = idByPath[path]
+    }
+    assignments.value = next
+  } catch {}
+}
+
+async function uploadLibrarySound() {
+  if (!newSoundFile.value || !newSoundLabel.value.trim()) return
+  librarySaving.value = true; toast.value = null
+  try {
+    const fd = new FormData()
+    fd.append('label', newSoundLabel.value.trim())
+    fd.append('sound', newSoundFile.value)
+    const sound = await $fetch('/api/admin/global-config/ui-sounds', { method: 'POST', body: fd })
+    soundLibrary.value = [sound, ...soundLibrary.value]
+    newSoundFile.value = null
+    newSoundLabel.value = ''
+    toast.value = { type: 'ok', msg: 'Sound added to library.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.data?.statusMessage || e?.statusMessage || 'Upload failed' }
+  } finally {
+    librarySaving.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+async function deleteLibrarySound(sound) {
+  if (!confirm(`Delete "${sound.label}"?`)) return
+  librarySaving.value = true; toast.value = null
+  try {
+    await $fetch(`/api/admin/global-config/ui-sounds/${sound.id}`, { method: 'DELETE' })
+    soundLibrary.value = soundLibrary.value.filter(s => s.id !== sound.id)
+    toast.value = { type: 'ok', msg: 'Sound deleted.' }
+  } catch (e) {
+    console.error(e)
+    toast.value = { type: 'error', msg: e?.data?.statusMessage || e?.statusMessage || 'Delete failed' }
+  } finally {
+    librarySaving.value = false; setTimeout(() => { toast.value = null }, 3500)
+  }
+}
+
+async function assignSlot(slot, soundId) {
+  assignSaving[slot] = true; toast.value = null
+  try {
+    await $fetch('/api/admin/global-config/nav-sounds', { method: 'POST', body: { slot, soundId } })
+    const next = { ...assignments.value }
+    if (soundId) next[slot] = soundId
+    else delete next[slot]
+    assignments.value = next
+    toast.value = { type: 'ok', msg: 'Saved.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.data?.statusMessage || e?.statusMessage || 'Save failed' }
+  } finally {
+    assignSaving[slot] = false; setTimeout(() => { toast.value = null }, 2000)
+  }
+}
+
+onMounted(async () => {
+  await loadLibrary()
+  await loadAssignments()
+})
 
 // Favicon tab state
 const faviconFile = ref(null)

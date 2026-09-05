@@ -1525,6 +1525,18 @@ model GlobalGameConfig {
   // query string to every icon URL rendered in pages/index.vue's useHead.
   faviconVersion                     BigInt?
   faviconSourcePath                  String? // original master upload, retained for re-generation/audit
+  // Site-wide UI "haptic sound" (click blip) played on every button click, and the per-nav-item
+  // overrides below it — assigned from Admin > Manage Homepage > Sounds, always resolved from
+  // the UiSound library, below (never a raw upload — see server/api/admin/global-config/nav-sounds.post.js).
+  // uiClickSoundPath null means "use the bundled default at public/ui-sounds/click-default.mp3".
+  // Both fields hold server-generated relative paths, never client input, but
+  // server/api/global-config.get.js still re-validates their shape before handing them to every
+  // visitor, since these are read on literally every page.
+  uiClickSoundPath                   String?
+  // { [navSoundSlotKey]: assetPath } — see utils/navSoundSlots.js for the fixed set of valid
+  // keys (one per main-nav button) and server/api/admin/global-config/nav-sounds.post.js for how
+  // entries are written. A key with no entry (or an invalid one) falls back to uiClickSoundPath.
+  uiNavButtonSounds                  Json?
   // cMoon (faction) feature — off by default, easy to disable without losing data.
   // When flipped false -> true, cMoonEnabledAt is set to now (purely informational, shown in the
   // admin panel as "Launched X"). cMoonSelectionDeadlineAt predates the opt-out flow and is no
@@ -1555,6 +1567,19 @@ model GlobalGameConfig {
   cMoonDisabledWinGames              Json      @default("[]")
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
+}
+
+// A small reusable library of uploaded "haptic sound" clips (see composables/useClickSoundEffects.js).
+// Admins upload here once, then assign any entry as the site-wide default or a specific nav
+// button's sound (GlobalGameConfig.uiClickSoundPath / uiNavButtonSounds) via
+// server/api/admin/global-config/nav-sounds.post.js — those fields store a resolved `path`
+// string, not a foreign key, so this row can be deleted once nothing references its path
+// (server/api/admin/global-config/ui-sounds/[id].delete.js blocks the delete otherwise).
+model UiSound {
+  id        String   @id @default(uuid())
+  label     String
+  path      String
+  createdAt DateTime @default(now())
 }
 
 model WishlistItem {
