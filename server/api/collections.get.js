@@ -2,6 +2,8 @@
 import { defineEventHandler, getRequestHeader, createError, getQuery } from 'h3'
 import { prisma } from '@/server/prisma'
 import { isLockedCopy } from '@/server/utils/lockRules'
+import { ensureEconomyDataFresh } from '@/server/utils/economyFreshness'
+import { getDailyReferenceValues, MIN_SAMPLE_SIZE, MAX_WORTH_CTOON_TYPES } from '@/server/utils/collectionWorth'
 
 export default defineEventHandler(async (event) => {
   // auth
@@ -67,6 +69,21 @@ export default defineEventHandler(async (event) => {
     : []
   const holidaySet = new Set(holidayRows.map(r => r.ctoonId))
 
+  // Sort-by-Price on My Collection uses the same "avg auction sale, falling
+  // back to cMart/face price on a thin sample" metric as the page's Worth
+  // badge (server/utils/collectionWorth.js) instead of the flat cMart price
+  // alone -- one collector could otherwise sit far outside auction reality
+  // (a rare cToon worth 50,000 pts at auction but listed at cMart for 500).
+  // Skipped past MAX_WORTH_CTOON_TYPES distinct ctoonIds for the same reason
+  // worth.get.js caps there: bounds the IN-list against a pathological
+  // collection rather than a realistic one.
+  const auctionRefs = (ids.length && ids.length <= MAX_WORTH_CTOON_TYPES)
+    ? await (async () => {
+        await ensureEconomyDataFresh()
+        return (await getDailyReferenceValues(ids)).auction
+      })()
+    : new Map()
+
   // acquired date for the CURRENT owner
   // UserCtoon.createdAt is set once, when that row is first minted, and every
   // ownership-transfer path (auction win, trade, wishlist accept, dissolve
@@ -105,6 +122,14 @@ export default defineEventHandler(async (event) => {
       uc.ctoon.quantity === TIME_BASED_CAP
     ) ? uc.ctoon.totalMinted : uc.ctoon.quantity
 
+    // Same fallback rule as computeCollectionWorth: only trust the auction
+    // average once it has enough sales behind it, otherwise fall back to the
+    // cToon's face/cMart price (never a live query -- CtoonPriceDaily is a
+    // precomputed aggregate, kept fresh by ensureEconomyDataFresh() above).
+    const auctionRef = auctionRefs.get(uc.ctoonId)
+    const auctionPriced = !!auctionRef && auctionRef.pricedVolume >= MIN_SAMPLE_SIZE && auctionRef.avgPrice != null
+    const avgAuctionSalePrice = auctionPriced ? auctionRef.avgPrice : uc.ctoon.price
+
     return {
     id: uc.id,
     userId: uc.userId,
@@ -114,6 +139,7 @@ export default defineEventHandler(async (event) => {
     series: uc.ctoon.series,
     releaseDate: uc.ctoon.releaseDate,
     price: uc.ctoon.price,
+    avgAuctionSalePrice,
     rarity: uc.ctoon.rarity,
     set: uc.ctoon.set,
     cMoon: uc.ctoon.cMoon,
