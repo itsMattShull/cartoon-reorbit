@@ -572,6 +572,8 @@ model User {
   ctoons                    UserCtoon[]
   friends                   Friend[]                      @relation("UserFriends")
   friendedBy                Friend[]                      @relation("UserFriendOf")
+  favoriteCzones            FavoriteCzone[]               @relation("CzoneFavoritedBy")
+  favoritedByCzones         FavoriteCzone[]               @relation("CzoneFavoritedOf")
   traderARooms              TradeRoom[]                   @relation("TraderA")
   traderBRooms              TradeRoom[]                   @relation("TraderB")
   trades                    Trade[]
@@ -1607,6 +1609,23 @@ model UserTradeListItem {
   @@unique([userId, userCtoonId])
   @@index([userId])
   @@index([userCtoonId])
+}
+
+/// A user bookmarking another user's cZone for quick access later (see the
+/// "⭐ Favorites" list in the cZone options panel). Self-relation shaped like
+/// Friend above — favoritedUserId is the cZone OWNER being bookmarked, not a
+/// mutual relationship.
+model FavoriteCzone {
+  id              String   @id @default(uuid())
+  userId          String
+  favoritedUserId String
+  createdAt       DateTime @default(now())
+
+  user          User @relation("CzoneFavoritedBy", fields: [userId], references: [id])
+  favoritedUser User @relation("CzoneFavoritedOf", fields: [favoritedUserId], references: [id])
+
+  @@unique([userId, favoritedUserId])
+  @@index([favoritedUserId])
 }
 
 /// A pending trade between two users
