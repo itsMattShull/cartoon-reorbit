@@ -42,6 +42,7 @@
         <div
           v-for="item in paginatedItems" :key="item.id"
           class="ah-row" :class="{ trending: trendingIds.has(item.id) }"
+          :data-auction-item-id="item.id"
         >
           <!-- Thumbnail -->
           <div class="ah-img-wrap" @click="openInfoModal(item)">
@@ -126,6 +127,7 @@
         <ShortCard
           v-for="item in paginatedItems" :key="item.id"
           :class="{ 'ah-card--has-relist': item.canRelist }"
+          :data-auction-item-id="item.id"
         >
           <template #header>
             <div class="ah-card-header" @click="openInfoModal(item)">
@@ -193,6 +195,8 @@
 import { formatRemainingShort } from '~/server/utils/auctionDuration'
 const filter   = useNewSiteCtoonFilter()
 const aFilters = useAuctionHouseFilters()
+const navState = useAuctionHouseListState()
+const scrollAnchors = useAuctionHouseScrollAnchor()
 const cmartCtoons = useState('cmartCtoons', () => [])
 const { open: openCtoonModal } = useCtoonModal()
 const { open: openAuctionModal, createdSignal: auctionCreatedSignal } = useAuctionModal()
@@ -261,15 +265,43 @@ const wishlistCtoonIdSet = computed(() => new Set(wishlistCtoonIds.value))
 const now = ref(new Date())
 let timer = null
 
-onMounted(() => {
+onMounted(async () => {
   if (import.meta.client) {
     viewMode.value = localStorage.getItem('auctionHouseView') || 'list'
   }
   timer = setInterval(() => { now.value = new Date() }, 1000)
-  loadAuctions()
-  loadTrendingAuctions()
+
+  // Resume wherever this tab/session last left off instead of always
+  // reopening on "Current" page 1.
+  const saved = navState.value
+  activeTab.value   = saved.activeTab
+  currentPage.value = saved.currentPage
+  myPage.value      = saved.myPage
+  myBidsPage.value  = saved.myBidsPage
+  allPage.value     = saved.allPage
+
+  await loadForTab(activeTab.value)
+  // A shrunk result set (an auction sold/ended) can leave a remembered page
+  // number out of range; clamping re-fetches the corrected page, so restoring
+  // a scroll anchor against the page we actually asked for is skipped here.
+  if (!clampActivePage()) restoreScrollAnchor(activeTab.value)
 })
+
 onUnmounted(() => clearInterval(timer))
+
+// The only way out of this component is a route change (View a listing,
+// navigate elsewhere, browser back/forward), so a single capture here covers
+// every case without a per-frame scroll listener.
+onBeforeUnmount(() => {
+  captureScrollAnchor()
+  navState.value = {
+    activeTab:   activeTab.value,
+    currentPage: currentPage.value,
+    myPage:      myPage.value,
+    myBidsPage:  myBidsPage.value,
+    allPage:     allPage.value,
+  }
+})
 
 // ── API helpers ───────────────────────────────────────────────────
 function buildFilterParams() {
@@ -293,7 +325,7 @@ function loadAuctions() {
   const params = new URLSearchParams()
   if (aFilters.value.hasBidsOnly) params.set('hasBids', '1')
   const qs = params.toString()
-  $fetch(qs ? `/api/auctions?${qs}` : '/api/auctions')
+  return $fetch(qs ? `/api/auctions?${qs}` : '/api/auctions')
     .then(data => { auctions.value = Array.isArray(data) ? data : []; syncCmartCtoons() })
     .finally(() => { isLoading.value = false })
 }
@@ -311,7 +343,7 @@ function loadMyAuctions() {
   params.set('page',  String(myPage.value))
   params.set('limit', String(PAGE_SIZE))
   params.set('sort',  filter.value.sortField)
-  $fetch(`/api/my-auctions?${params.toString()}`)
+  return $fetch(`/api/my-auctions?${params.toString()}`)
     .then(data => {
       myAuctions.value  = Array.isArray(data?.items) ? data.items : []
       myTotalPages.value = data?.totalPages ?? 1
@@ -326,7 +358,7 @@ function loadMyBids() {
   params.set('page',  String(myBidsPage.value))
   params.set('limit', String(PAGE_SIZE))
   params.set('sort',  filter.value.sortField)
-  $fetch(`/api/auction/mybids?${params.toString()}`)
+  return $fetch(`/api/auction/mybids?${params.toString()}`)
     .then(data => {
       myBids.value           = Array.isArray(data?.items) ? data.items : []
       myBidsTotalPages.value = data?.totalPages ?? 1
@@ -341,7 +373,7 @@ function loadAllAuctions() {
   params.set('page',  String(allPage.value))
   params.set('limit', String(PAGE_SIZE))
   params.set('sort',  filter.value.sortField)
-  $fetch(`/api/auctions/all?${params.toString()}`)
+  return $fetch(`/api/auctions/all?${params.toString()}`)
     .then(data => {
       allAuctions.value  = Array.isArray(data?.items) ? data.items : []
       allTotalPages.value = data?.totalPages ?? 1
@@ -528,12 +560,67 @@ const hasActiveFilters = computed(() => !!(
 ))
 
 // ── Actions ───────────────────────────────────────────────────────
+
+// Shared by switchTab (fire-and-forget) and the mount-time restore path
+// (awaited, so scroll-anchor restoration happens only once data has arrived).
+function loadForTab(tab) {
+  if (tab === 'current') { loadTrendingAuctions(); return loadAuctions() }
+  if (tab === 'mybids')  return loadMyBids()
+  if (tab === 'mine')    return loadMyAuctions()
+  if (tab === 'all')     return loadAllAuctions()
+  return Promise.resolve()
+}
+
 function switchTab(id) {
   activeTab.value = id
-  if (id === 'current') { loadAuctions(); loadTrendingAuctions() }
-  else if (id === 'mybids') { myBidsPage.value = 1; loadMyBids() }
-  else if (id === 'mine')   { myPage.value = 1;     loadMyAuctions() }
-  else if (id === 'all')    { allPage.value = 1;     loadAllAuctions() }
+  if      (id === 'mybids') myBidsPage.value = 1
+  else if (id === 'mine')   myPage.value = 1
+  else if (id === 'all')    allPage.value = 1
+  loadForTab(id)
+}
+
+// A remembered page can outrun the current result set (an auction sold or
+// ended since the last visit); snap back to the last valid page and let the
+// existing page watchers re-fetch it. Returns whether it had to correct anything.
+function clampActivePage() {
+  const tab = activeTab.value
+  if (tab === 'mine'    && myPage.value     > myTotalPages.value)     { myPage.value     = myTotalPages.value;     return true }
+  if (tab === 'mybids'  && myBidsPage.value > myBidsTotalPages.value) { myBidsPage.value = myBidsTotalPages.value; return true }
+  if (tab === 'all'     && allPage.value    > allTotalPages.value)    { allPage.value    = allTotalPages.value;    return true }
+  if (tab === 'current' && currentPage.value > totalPages.value)      { currentPage.value = totalPages.value;      return true }
+  return false
+}
+
+// Finds whichever rendered item currently sits at the top of the visible
+// scroll area and remembers its id (not a pixel offset, which would break
+// across the list/card view's own responsive column and row-height changes)
+// so it can be scrolled back into view on return.
+function captureScrollAnchor() {
+  const container = viewMode.value === 'list' ? listEl.value : cardEl.value
+  if (!container) return
+  const containerTop = container.getBoundingClientRect().top
+  const items = container.querySelectorAll('[data-auction-item-id]')
+  let topId = null
+  for (const el of items) {
+    if (el.getBoundingClientRect().bottom - containerTop > 0) {
+      topId = el.getAttribute('data-auction-item-id')
+      break
+    }
+  }
+  if (topId != null) {
+    scrollAnchors.value = { ...scrollAnchors.value, [activeTab.value]: topId }
+  }
+}
+
+function restoreScrollAnchor(tab) {
+  const itemId = scrollAnchors.value[tab]
+  if (itemId == null) return
+  nextTick(() => {
+    const container = viewMode.value === 'list' ? listEl.value : cardEl.value
+    if (!container) return
+    const target = container.querySelector(`[data-auction-item-id="${CSS.escape(String(itemId))}"]`)
+    if (target) target.scrollIntoView({ block: 'start', behavior: 'auto' })
+  })
 }
 
 function scrollContentToTop() {

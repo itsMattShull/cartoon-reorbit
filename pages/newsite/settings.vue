@@ -45,6 +45,23 @@
               {{ loading ? 'Loading current setting…' : saving ? 'Saving…' : 'Changes are saved instantly.' }}
             </p>
             <p v-if="error" class="settings-error">{{ error }}</p>
+
+            <div class="settings-row settings-row-haptic">
+              <div>
+                <h2 class="settings-row-title">Haptic Sounds</h2>
+                <p class="settings-row-desc">Play a click sound and highlight buttons when you tap or click them, like the original Cartoon Orbit.</p>
+              </div>
+
+              <div class="toggle-wrap">
+                <label class="toggle-label">
+                  <input type="checkbox" class="sr-only" :checked="hapticSoundsEnabled" @change="onToggleHapticSounds" />
+                  <div :class="['toggle-track', hapticSoundsEnabled ? 'toggle-on' : 'toggle-off']">
+                    <div :class="['toggle-knob', hapticSoundsEnabled ? 'toggle-knob-on' : '']"></div>
+                  </div>
+                </label>
+              </div>
+            </div>
+            <p class="settings-status">Saved on this device only.</p>
           </div>
         </div>
       </div>
@@ -189,8 +206,15 @@ const { clearSidebarMiddle } = useNewsiteLayout()
 clearSidebarMiddle()
 
 import { ref, computed, onMounted } from 'vue'
+import { useHapticSoundsPref } from '@/composables/useHapticSoundsPref'
 
 const { user, fetchSelf } = useAuth()
+
+const { enabled: hapticSoundsEnabled, hydrate: hydrateHapticSoundsPref, setEnabled: setHapticSoundsEnabled } = useHapticSoundsPref()
+onMounted(hydrateHapticSoundsPref)
+function onToggleHapticSounds(event) {
+  setHapticSoundsEnabled(event.target.checked)
+}
 
 const allow   = ref(true)
 const saving  = ref(false)
@@ -628,6 +652,12 @@ body.page-newsite-settings .main-content { overflow-y: auto !important; scrollba
   font-size: 0.72rem;
   color: #ff6b6b;
   margin-top: 6px;
+}
+
+.settings-row-haptic {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(51, 153, 204, 0.25);
 }
 
 /* Modals */

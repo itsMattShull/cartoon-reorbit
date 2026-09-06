@@ -1855,7 +1855,22 @@ async function requireSocketUser(socket, errorEvent = 'authError') {
   return user
 }
 
+// Shared secret proving a connection is server/api/auction/[id]/bid.post.js's
+// own bridge, not a browser — see the 'new-bid' handler below. Falls back to
+// JWT_SECRET (already required for every session to verify) so this check is
+// on by default with no extra deployment config; SOCKET_BRIDGE_SECRET lets an
+// operator use a separate value instead.
+const SOCKET_BRIDGE_SECRET = process.env.SOCKET_BRIDGE_SECRET || process.env.JWT_SECRET
+if (!SOCKET_BRIDGE_SECRET) {
+  console.warn('[socket] Neither SOCKET_BRIDGE_SECRET nor JWT_SECRET is set — new-bid broadcasts will be disabled until one is configured.')
+}
+
 io.on('connection', socket => {
+  socket.data = socket.data || {}
+  socket.data.isBridge = !!(
+    SOCKET_BRIDGE_SECRET && socket.handshake?.auth?.bridgeSecret === SOCKET_BRIDGE_SECRET
+  )
+
   // Ed, Edd n Eddy RPS lives in its own module and resolves identity from the session cookie
   // on every event rather than trusting a payload userId. It keeps its own socket.data keys
   // (edRpsUserId / edRpsRoomId) so it never collides with the Clash cleanup below, which
@@ -2774,7 +2789,16 @@ io.on('connection', socket => {
 
   })
 
+  // 'new-bid' is rebroadcast verbatim to every viewer currently in that
+  // auction's room, so it must only ever originate from
+  // server/api/auction/[id]/bid.post.js's own bridge connection — never from
+  // an ordinary browser socket, which could otherwise spoof a fake bid
+  // amount/winner name into a room full of live viewers. That bridge
+  // connection identifies itself at handshake time with a shared secret (see
+  // nuxt.config.js's socketBridgeSecret); everything else is silently
+  // ignored, since no legitimate browser-side caller ever emits this event.
   socket.on('new-bid', payload => {
+    if (!socket.data?.isBridge) return
     // forward every property, including newEndAt when present
     io.to(`auction_${payload.auctionId}`).emit('new-bid', payload)
   })

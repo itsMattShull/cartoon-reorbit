@@ -386,7 +386,9 @@ const ctoons = computed(() => {
     if (f.sortField === 'acquiredDate') {
       cmp = new Date(a.acquiredAt) - new Date(b.acquiredAt)
     } else if (f.sortField === 'price') {
-      cmp = a.price - b.price
+      // Avg. auction sale (falling back to cMart/face price on a thin
+      // sample), matching the page's Worth badge -- not the flat cMart price.
+      cmp = a.avgAuctionSalePrice - b.avgAuctionSalePrice
     } else if (f.sortField === 'rarity') {
       const ar = RARITY_ORDER[(a.rarity || '').toLowerCase()] ?? 99
       const br = RARITY_ORDER[(b.rarity || '').toLowerCase()] ?? 99

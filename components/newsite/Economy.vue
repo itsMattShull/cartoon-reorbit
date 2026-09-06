@@ -59,7 +59,8 @@
       </button>
     </div>
 
-    <!-- Live ticker: recent big sales + inflation index, stock-ticker style. -->
+    <!-- Live ticker: inflation index + a live-scrolling strip of the top 10
+         currently-active, highest-bid auctions, stock-ticker style. -->
     <EconomyTicker />
 
     <!-- Featured auctions -->
