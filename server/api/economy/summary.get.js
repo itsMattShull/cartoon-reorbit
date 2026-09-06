@@ -5,11 +5,14 @@ import { defineEventHandler, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
 import { EXCLUDED_SYSTEM_USER_ID } from '@/server/utils/economyValuation'
+import { activeDailyTaskUsersFragment } from '@/server/utils/activeDailyTaskUsers'
 
-const CACHE_KEY = 'economy:summary:v2'
+const CACHE_KEY = 'economy:summary:v3'
 const CACHE_TTL = 60 // seconds — matches the page's polling interval, no point hitting Postgres more often
 
 async function computeSummary() {
+  const activeUsersSql = await activeDailyTaskUsersFragment()
+
   const [pointsAgg, totalTradeVolume, totalAuctionVolume, netPointsAgg] = await Promise.all([
     // Median alongside the mean: point balances are heavily right-skewed, so the
     // mean alone overstates what a typical player actually holds.
@@ -25,12 +28,17 @@ async function computeSummary() {
     `,
     prisma.tradeOffer.count({ where: { status: 'ACCEPTED' } }),
     prisma.auction.count({ where: { status: 'CLOSED', winnerId: { not: null } } }),
+    // Restricted to accounts that were actually active (completed at least one
+    // daily task, per activeDailyTaskUsersFragment) sometime in the window —
+    // otherwise this counts points issued to accounts that did nothing that
+    // week and inflates the figure.
     prisma.$queryRaw`
       SELECT
         SUM(CASE WHEN "direction" = 'increase' THEN "points" ELSE 0 END)::bigint AS "earned",
         SUM(CASE WHEN "direction" = 'decrease' THEN "points" ELSE 0 END)::bigint AS "spent"
       FROM "PointsLog"
       WHERE "createdAt" >= NOW() - INTERVAL '7 days'
+        AND "userId" IN (${activeUsersSql})
     `
   ])
 
