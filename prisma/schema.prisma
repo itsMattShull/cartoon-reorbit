@@ -1793,6 +1793,14 @@ model Auction {
   // Without winnerAt in the index, Postgres has to sort every matching row
   // before applying the LIMIT.
   @@index([userCtoonId, status, winnerAt])
+  // NOTE: a partial index, "Auction_active_highestBid_idx" ON ("highestBid" DESC)
+  // WHERE status = 'ACTIVE' AND "highestBid" > 0, also exists on this table.
+  // Supports server/api/economy/active-top-auctions.get.js's ORDER BY
+  // "highestBid" DESC LIMIT 10 — without it Postgres would sort every ACTIVE
+  // row before applying the LIMIT. Partial indexes are not expressible in the
+  // Prisma schema language, so it lives only in migration
+  // 20260906130000_add_auction_active_highestbid_idx and shows up as drift in
+  // `prisma migrate dev`. Do not drop it.
 }
 
 model Bid {
