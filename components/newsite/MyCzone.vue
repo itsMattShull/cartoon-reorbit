@@ -117,8 +117,30 @@
                 >{{ g.name }}</button>
               </div>
             </template>
+
+            <!-- Cross-cZone navigation, not a viewing/customizing toggle for THIS zone like the
+                 options above — still lives here since it's the one menu every viewer already
+                 has open, rather than adding a second trigger elsewhere in the topbar. -->
+            <button
+              type="button"
+              class="cz-options-toggle"
+              @click="openFavoritesModal"
+            >
+              ⭐ Favorites
+            </button>
           </div>
         </div>
+        <button
+          v-if="!isOwnZone && viewedUsername"
+          v-show="!cz.buildMode"
+          type="button"
+          class="cz-fav-star"
+          :class="{ active: isFavorited }"
+          :aria-pressed="isFavorited ? 'true' : 'false'"
+          :disabled="isTogglingFavorite"
+          :title="isFavorited ? 'Remove from Favorites' : 'Add to Favorites'"
+          @click="toggleFavorite"
+        >{{ isFavorited ? '★' : '☆' }}</button>
         <div class="cz-owner-info" v-if="zoneLoading || viewedOwner">
           <template v-if="zoneLoading">
             <div class="cz-owner-avatar cz-skeleton cz-skeleton-avatar"></div>
@@ -243,6 +265,20 @@
           <span class="cz-build-hint-desktop">Drag cToons from sidebar · Right-click canvas to remove</span>
           <span class="cz-build-hint-mobile">Tap sidebar to add · Hold 2s to remove</span>
         </template>
+        <!-- Opens as a modal (Teleport, below) rather than an inline dropdown: this row sits at
+             the very bottom of cz-frame's own overflow:hidden box, so a suggestion list anchored
+             to it has nowhere to open into without being clipped. A modal sidesteps that
+             entirely and reuses the same overlay pattern as the Wishlist/Trade List modals. -->
+        <button
+          v-else
+          type="button"
+          class="cz-search-btn"
+          title="Search cZones by username"
+          @click="openCzoneSearchModal"
+        >
+          <span class="cz-search-btn-icon">🔍</span>
+          <span class="cz-search-btn-label">Search cZones</span>
+        </button>
       </div>
       <div v-show="!cz.buildMode" class="cz-nav-buttons">
         <img src="/images/newsite/ten_left.gif"  class="cz-nav-btn" title="Previous 10" draggable="false" @click="navigate('previous10')" />
@@ -376,6 +412,78 @@
                     <p class="cz-wl-owned">Mint #{{ item.mintNumber ?? 'N/A' }}</p>
                   </div>
                 </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+
+      <!-- ── Favorite cZones modal ── -->
+      <transition name="cz-fade">
+        <div v-if="favoritesModalVisible" class="cz-modal-overlay" @click.self="closeFavoritesModal">
+          <div class="cz-modal">
+            <div class="cz-modal-header">
+              <span>⭐ Favorite cZones</span>
+              <button class="cz-modal-close" @click="closeFavoritesModal">✕</button>
+            </div>
+            <div class="cz-modal-body">
+              <div v-if="isLoadingFavorites" class="cz-modal-loading">Loading…</div>
+              <div v-else-if="!favoriteCzones.length" class="cz-modal-empty">No favorited cZones yet.</div>
+              <div v-else class="cz-fav-list">
+                <div v-for="fav in favoriteCzones" :key="fav.username" class="cz-fav-row">
+                  <button type="button" class="cz-fav-row-link" @click="goToFavoritedCzone(fav.username)">
+                    <img :src="`/avatars/${fav.avatar || 'default.png'}`" class="cz-fav-avatar" />
+                    <span class="cz-fav-username">{{ fav.username }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    class="cz-fav-remove"
+                    title="Remove from Favorites"
+                    @click="removeFavorite(fav.username)"
+                  >★</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </transition>
+
+      <!-- ── cZone search modal ── -->
+      <transition name="cz-fade">
+        <div v-if="czoneSearchModalVisible" class="cz-modal-overlay" @click.self="closeCzoneSearchModal">
+          <div class="cz-modal cz-search-modal">
+            <div class="cz-modal-header">
+              <span>🔍 Search cZones</span>
+              <button class="cz-modal-close" @click="closeCzoneSearchModal">✕</button>
+            </div>
+            <div class="cz-modal-body">
+              <input
+                ref="czoneSearchInputRef"
+                v-model.trim="czoneSearchQuery"
+                @input="onCzoneSearchInput"
+                @keydown="onCzoneSearchKeydown"
+                type="text"
+                placeholder="Type a username…"
+                autocomplete="off"
+                class="cz-search-input"
+              />
+              <div class="cz-search-results">
+                <div v-if="isCzoneSearching" class="cz-modal-loading">Searching…</div>
+                <template v-else-if="czoneSearchResults.length">
+                  <button
+                    v-for="(u, idx) in czoneSearchResults"
+                    :key="u.username"
+                    type="button"
+                    :class="['cz-search-result', { highlighted: czoneSearchHighlighted === idx }]"
+                    @mouseenter="czoneSearchHighlighted = idx"
+                    @click="goToSearchedCzone(u.username)"
+                  >
+                    <img :src="`/avatars/${u.avatar || 'default.png'}`" class="cz-fav-avatar" />
+                    <span class="cz-fav-username">{{ u.username }}</span>
+                    <span v-if="u.isBooster" class="cz-search-booster-tag">Booster</span>
+                  </button>
+                </template>
+                <div v-else-if="czoneSearchQuery.length >= CZONE_SEARCH_MIN_CHARS" class="cz-modal-empty">No matches.</div>
               </div>
             </div>
           </div>
@@ -946,6 +1054,142 @@ function goToTradeWithCtoon(item) {
   router.push(`/newsite/trade?username=${encodeURIComponent(viewedUsername.value)}&userCtoonId=${encodeURIComponent(item.userCtoonId)}`)
 }
 
+// ── Favorite cZone (star toggle + list modal) ──────────────────
+// Whether the CURRENTLY VIEWED cZone is favorited — seeded by loadZone()'s
+// own response (server already computes it relative to the viewer) so the
+// star's state is correct with no extra round-trip on first load.
+const isFavorited        = ref(false)
+const isTogglingFavorite = ref(false)
+
+async function toggleFavorite() {
+  if (isOwnZone.value || !viewedUsername.value || isTogglingFavorite.value) return
+  const username = viewedUsername.value
+  const next = !isFavorited.value
+  isFavorited.value = next // optimistic; reverted on failure below
+  isTogglingFavorite.value = true
+  try {
+    await $fetch(`/api/czone/favorites/${encodeURIComponent(username)}`, { method: next ? 'POST' : 'DELETE' })
+  } catch {
+    isFavorited.value = !next
+  } finally {
+    isTogglingFavorite.value = false
+  }
+}
+
+const favoritesModalVisible = ref(false)
+const favoriteCzones        = ref([])
+const isLoadingFavorites    = ref(false)
+
+async function loadFavorites() {
+  isLoadingFavorites.value = true
+  try {
+    const items = await $fetch('/api/czone/favorites')
+    favoriteCzones.value = Array.isArray(items) ? items : []
+  } catch {
+    favoriteCzones.value = []
+  } finally {
+    isLoadingFavorites.value = false
+  }
+}
+
+function openFavoritesModal() {
+  optionsOpen.value = false
+  favoritesModalVisible.value = true
+  loadFavorites()
+}
+function closeFavoritesModal() {
+  favoritesModalVisible.value = false
+}
+
+function goToFavoritedCzone(username) {
+  closeFavoritesModal()
+  router.push(`/newsite/czone/${encodeURIComponent(username)}`)
+}
+
+async function removeFavorite(username) {
+  // Remove from the local list immediately — this is the modal the user is
+  // looking at, not the star on a zone they're currently viewing, so there's
+  // no separate source of truth to reconcile against on failure beyond a
+  // silent reload.
+  favoriteCzones.value = favoriteCzones.value.filter(f => f.username !== username)
+  if (viewedUsername.value === username) isFavorited.value = false
+  try {
+    await $fetch(`/api/czone/favorites/${encodeURIComponent(username)}`, { method: 'DELETE' })
+  } catch {
+    await loadFavorites()
+  }
+}
+
+// ── cZone search (username autocomplete) ───────────────────────
+// Mirrors Trade.vue's own "Find User" autocomplete (debounce + per-query
+// cache + keyboard nav against the same /api/users/search endpoint) rather
+// than inventing a new pattern — see that component's onUserQueryInput /
+// onUserKeydown for the original. Rendered inside a modal here instead of an
+// inline dropdown: this control lives at the very bottom of cz-frame's own
+// overflow:hidden box, with no room below (or, on the bottom bar, above) it
+// for an anchored suggestion list to open into without being clipped.
+const CZONE_SEARCH_MIN_CHARS  = 3
+const CZONE_SEARCH_DEBOUNCE_MS = 250
+
+const czoneSearchModalVisible = ref(false)
+const czoneSearchQuery        = ref('')
+const czoneSearchResults      = ref([])
+const isCzoneSearching        = ref(false)
+const czoneSearchHighlighted  = ref(-1)
+const czoneSearchInputRef     = ref(null)
+const czoneSearchCache        = new Map()
+let   czoneSearchTimer        = null
+
+function openCzoneSearchModal() {
+  czoneSearchModalVisible.value = true
+  czoneSearchQuery.value = ''
+  czoneSearchResults.value = []
+  czoneSearchHighlighted.value = -1
+  nextTick(() => czoneSearchInputRef.value?.focus())
+}
+function closeCzoneSearchModal() {
+  czoneSearchModalVisible.value = false
+  clearTimeout(czoneSearchTimer)
+}
+
+function onCzoneSearchInput() {
+  czoneSearchHighlighted.value = -1
+  clearTimeout(czoneSearchTimer)
+  const q = czoneSearchQuery.value || ''
+  if (q.length < CZONE_SEARCH_MIN_CHARS) { czoneSearchResults.value = []; isCzoneSearching.value = false; return }
+  czoneSearchTimer = setTimeout(async () => {
+    const key = q.toLowerCase()
+    try {
+      isCzoneSearching.value = true
+      if (czoneSearchCache.has(key)) { czoneSearchResults.value = czoneSearchCache.get(key); return }
+      const res = await $fetch('/api/users/search', { params: { q, limit: 8 } })
+      const items = Array.isArray(res) ? res : (res?.items || [])
+      czoneSearchCache.set(key, items)
+      czoneSearchResults.value = items
+    } catch {
+      czoneSearchResults.value = []
+    } finally {
+      isCzoneSearching.value = false
+    }
+  }, CZONE_SEARCH_DEBOUNCE_MS)
+}
+
+function onCzoneSearchKeydown(e) {
+  const max = czoneSearchResults.value.length - 1
+  if (e.key === 'ArrowDown') { e.preventDefault(); czoneSearchHighlighted.value = czoneSearchHighlighted.value < max ? czoneSearchHighlighted.value + 1 : 0 }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); czoneSearchHighlighted.value = czoneSearchHighlighted.value > 0 ? czoneSearchHighlighted.value - 1 : max }
+  else if (e.key === 'Enter') {
+    e.preventDefault()
+    const item = czoneSearchResults.value[czoneSearchHighlighted.value >= 0 ? czoneSearchHighlighted.value : 0]
+    if (item) goToSearchedCzone(item.username)
+  } else if (e.key === 'Escape') closeCzoneSearchModal()
+}
+
+function goToSearchedCzone(username) {
+  closeCzoneSearchModal()
+  router.push(`/newsite/czone/${encodeURIComponent(username)}`)
+}
+
 const currentZone = computed(() => cz.value.zones?.[cz.value.activeZone] ?? { background: '', toons: [] })
 const isOwnZone   = computed(() => !!user.value && viewedUsername.value === user.value.username)
 
@@ -1041,12 +1285,14 @@ async function loadZone(username) {
   // (and stable in place) while the zone data loads.
   viewedUsername.value = target
   zoneLoading.value    = true
+  isFavorited.value    = false
   try {
     const data = await $fetch(`/api/czone/${target}`)
     cz.value.zones       = data.cZone.zones
     const firstActive    = data.cZone.zones.findIndex(z => z.toons.length > 0)
     cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
     viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null, border: data.border ?? null, glow: data.glow ?? null }
+    isFavorited.value    = !!data.isFavorited
     loadCzoneSearchItems()
     eagerLoadMissingDimensions()
 
@@ -2066,6 +2312,124 @@ defineExpose({ save, clearZone })
   color: #666;
   margin-bottom: 10px;
   font-style: italic;
+}
+
+/* ── Favorite cZones modal ── */
+.cz-fav-list { display: flex; flex-direction: column; gap: 6px; }
+.cz-fav-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  padding: 4px 6px;
+}
+.cz-fav-row-link {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 4px 2px;
+  cursor: pointer;
+  text-align: left;
+}
+.cz-fav-row-link:hover .cz-fav-username { text-decoration: underline; }
+.cz-fav-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+.cz-fav-username { font-size: 0.78rem; font-weight: 600; color: #111; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cz-fav-remove {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #e5c200;
+  background: #fffbe6;
+  color: #d4a900;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.cz-fav-remove:hover { background: #fff2b8; }
+
+/* ── Favorite star toggle (topbar) ── */
+/* A normal flex sibling in cz-topbar-right, not an absolutely/negative-margin
+   expanded hit target like cz-owner-cmoon-link: this sits at the frame's
+   bottom-most/right-most corner with no slack around it, so an expanded tap
+   area would overlap cz-options-btn's own clickable region. Sized to match
+   the topbar's own established button height (cz-options-btn) instead. */
+.cz-fav-star {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.35);
+  background: rgba(0,0,0,0.2);
+  color: #ffd75e;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.cz-fav-star:hover { background: rgba(0,0,0,0.32); }
+.cz-fav-star.active { background: rgba(255,215,94,0.22); border-color: #ffd75e; }
+.cz-fav-star:disabled { opacity: 0.6; cursor: default; }
+
+/* ── cZone search (bottombar trigger + modal) ── */
+.cz-search-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  height: 100%;
+  padding: 0 8px;
+  border: none;
+  background: none;
+  color: rgba(255,255,255,0.75);
+  font-size: 0.62rem;
+  font-style: italic;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.15s;
+}
+.cz-search-btn:hover { color: #fff; }
+.cz-search-btn-icon { font-size: 0.85rem; font-style: normal; }
+
+.cz-search-modal .cz-modal-body { display: flex; flex-direction: column; gap: 10px; }
+.cz-search-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 0.85rem;
+  box-sizing: border-box;
+}
+.cz-search-results { display: flex; flex-direction: column; gap: 4px; max-height: 45vh; overflow-y: auto; }
+.cz-search-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 5px 6px;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+}
+.cz-search-result:hover,
+.cz-search-result.highlighted { background: #f0f4fa; border-color: #dde; }
+.cz-search-booster-tag {
+  margin-left: auto;
+  font-size: 0.6rem;
+  font-weight: bold;
+  color: #7c3aed;
+  background: #ede9fe;
+  padding: 1px 6px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 480px) {
+  .cz-search-btn-label { display: none; }
 }
 
 /* ── Wishlist trade buttons ── */

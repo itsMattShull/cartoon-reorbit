@@ -67,13 +67,23 @@ export default defineEventHandler(async (event) => {
   const viewerId = event.context.userId || event.context.user?.id || null
   const viewerIsOwner = !!viewerId && viewerId === user.id
 
-  const cMoonConfig = await getGlobalConfig()
+  // Independent lookups run concurrently — this route already treats latency as
+  // worth engineering around (see the ownedUserCtoons comment above). isFavorited
+  // is never allowed to fail the whole zone view: default to false on error.
+  const [cMoonConfig, config, isFavorited] = await Promise.all([
+    getGlobalConfig(),
+    prisma.globalGameConfig.findUnique({
+      where: { id: 'singleton' },
+      select: { czoneCount: true }
+    }),
+    (viewerId && !viewerIsOwner)
+      ? prisma.favoriteCzone
+          .findUnique({ where: { userId_favoritedUserId: { userId: viewerId, favoritedUserId: user.id } } })
+          .then(row => !!row)
+          .catch(() => false)
+      : Promise.resolve(false)
+  ])
   const cMoonEnabled = !!cMoonConfig?.cMoonEnabled
-
-  const config = await prisma.globalGameConfig.findUnique({
-    where: { id: 'singleton' },
-    select: { czoneCount: true }
-  })
   const baseCount = Number(config?.czoneCount ?? 3)
   const extraCount = Math.max(0, Number(user.additionalCzones ?? 0))
   let targetCount = Math.max(1, baseCount + extraCount)
@@ -263,6 +273,7 @@ export default defineEventHandler(async (event) => {
     avatar: user.avatar,
     ownerName: user.username,
     isBooster: user.isBooster,
+    isFavorited,
     lastActivity: user.lastActivity ?? null,
     cMoon: (cMoonEnabled && user.cMoon) || null,
     cMoonRankName: (cMoonEnabled && user.cMoon) ? displayRankName(user.currentCMoonRank?.name, isCaptain) : null,
