@@ -87,7 +87,7 @@
         <div class="stat-value" :class="netPointsClass">
           {{ summary ? formatSigned(summary.netPoints7d) : '—' }}
         </div>
-        <div v-if="summary" class="stat-foot">Issued minus spent</div>
+        <div v-if="summary" class="stat-foot">Issued minus spent, active accounts only</div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Total Trades</div>
