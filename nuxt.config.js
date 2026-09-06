@@ -59,6 +59,14 @@ export default defineNuxtConfig({
     socketOrigin: process.env.SOCKET_ORIGIN || 'http://localhost:3001',
     socketPath: process.env.SOCKET_PATH || '/socket.io',
     socketMetricsToken: process.env.SOCKET_METRICS_TOKEN,
+    // Proves to server/socket-server.js that a 'new-bid' emit came from this
+    // process's own bid.post.js bridge connection, not from an arbitrary
+    // browser socket (see the matching check in socket-server.js — without it,
+    // anyone can spoof a fake bid amount/winner name into a live auction room).
+    // Falls back to JWT_SECRET, which every working deployment already has set,
+    // so this closes the hole with no new required config; set a dedicated
+    // SOCKET_BRIDGE_SECRET to use a separate value instead.
+    socketBridgeSecret: process.env.SOCKET_BRIDGE_SECRET || process.env.JWT_SECRET,
 
     public: {
       discordInvite: process.env.DISCORD_INVITE,

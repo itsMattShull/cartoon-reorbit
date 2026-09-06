@@ -294,7 +294,11 @@ export default defineEventHandler(async (event) => {
   await new Promise((resolve) => {
     const socket = createSocket(url, {
       path: useRuntimeConfig().socketPath,
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      // Identifies this connection to socket-server.js as the trusted bridge
+      // so its 'new-bid' emits actually get rebroadcast — see the matching
+      // check there and the note on socketBridgeSecret in nuxt.config.js.
+      auth: { bridgeSecret: useRuntimeConfig().socketBridgeSecret }
     })
     let finished = false
     const finish = () => {
