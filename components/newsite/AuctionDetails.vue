@@ -309,12 +309,19 @@ watch(auctionCreatedSignal, () => {
 
 async function placeBid() {
   if (!canBid.value) return
+  const amount = nextBidAmount.value
   try {
     await $fetch(`/api/auction/${props.auctionId}/bid`, {
       method: 'POST',
-      body: { amount: nextBidAmount.value },
+      body: { amount },
     })
-    showToast(hasBids.value ? `Bid raised to ${nextBidAmount.value} pts!` : `Bid of ${nextBidAmount.value} pts placed!`, 'success')
+    showToast(hasBids.value ? `Bid raised to ${amount} pts!` : `Bid of ${amount} pts placed!`, 'success')
+    // Don't wait on the socket round-trip to reflect the bid we just placed —
+    // that bridge connection can silently fail to deliver (see bid.post.js),
+    // and even when it works, a proxy auto-bid war can immediately outbid us
+    // before the browser socket sees anything. Re-fetch so this client always
+    // reflects the true post-bid state regardless of socket delivery.
+    await loadAuction()
     await scavenger.maybeTrigger('auction_bid', { open: true })
   } catch (err) {
     showToast(err.data?.message || 'Bid failed.', 'error')
@@ -327,8 +334,11 @@ async function saveAutoBid() {
       method: 'POST',
       body: { maxAmount: Number(autoBidInput.value) },
     })
-    myAutoBid.value = { maxAmount: Number(autoBidInput.value), isActive: true }
     showToast('Max Auto-Bid saved.', 'success')
+    // Same reasoning as placeBid(): setting a max auto-bid can immediately
+    // trigger a proxy bidding war against other auto-bidders, so pull the
+    // real state from the server instead of trusting the socket broadcast.
+    await loadAuction()
     await scavenger.maybeTrigger('auction_bid', { open: true })
   } catch (err) {
     showToast(err.data?.message || 'Failed to save Auto-Bid.', 'error')

@@ -283,7 +283,11 @@ export default defineEventHandler(async (event) => {
   await new Promise((resolve) => {
     const socket = createSocket(url, {
       path: useRuntimeConfig().socketPath,
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      // Without this the socket server's isBridge check (see the 'new-bid'
+      // handler in socket-server.js) silently drops every event this proxy
+      // auto-bid war emits — see the matching auth block in bid.post.js.
+      auth: { bridgeSecret: useRuntimeConfig().socketBridgeSecret }
     })
     let finished = false
     const finish = () => {
@@ -305,7 +309,10 @@ export default defineEventHandler(async (event) => {
       setTimeout(finish, 25)
     })
 
-    socket.on('connect_error', finish)
+    socket.on('connect_error', (err) => {
+      console.error('[AutoBid] socket bridge connect_error:', err?.message || err)
+      finish()
+    })
     setTimeout(finish, 1500)
   })
 
