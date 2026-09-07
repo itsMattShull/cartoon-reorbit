@@ -202,7 +202,7 @@
           <div
             v-for="(toon, toonIdx) in currentZone.toons" :key="toon.id"
             class="cz-item"
-            :class="{ 'is-dragging': localDrag?.toon?.id === toon.id, 'is-viewable': !cz.buildMode, 'is-build': cz.buildMode, 'is-long-pressing': longPressToon?.toon?.id === toon.id }"
+            :class="{ 'is-dragging': isToonDragging(toon), 'is-viewable': !cz.buildMode, 'is-build': cz.buildMode, 'is-long-pressing': longPressToon?.toon?.id === toon.id, 'is-selected': selectedToonIds.has(toon.id) }"
             :style="{ left: toon.x + 'px', top: toon.y + 'px', width: toonW(toon) + 'px', height: toonH(toon) + 'px' }"
             @click.stop="onToonClick(toon)"
             @mousedown="cz.buildMode && onItemMouseDown(toon, $event)"
@@ -239,6 +239,13 @@
               </button>
             </div>
           </div>
+
+          <!-- ── Build-mode multi-select rubber-band box (desktop only) ── -->
+          <div
+            v-if="selectionBox"
+            class="cz-selection-box"
+            :style="selectionBoxStyle"
+          ></div>
 
           <!-- ── cZone Search items (zone 0 only, visitor only) ── -->
           <template v-if="!cz.buildMode && cz.activeZone === 0">
@@ -721,7 +728,46 @@ const buildLoading = ref(false)
 const zoneLoading = ref(false)
 
 // Local drag: repositioning toons already on the canvas
-const localDrag = ref(null)  // { toon, offsetX, offsetY }
+// Single-toon drag: { toon, offsetX, offsetY }
+// Multi-toon drag (desktop, build mode, multiple selected): { group: [{ toon, offsetX, offsetY }] }
+const localDrag = ref(null)
+
+// ── Multi-select (build mode, desktop only) ────────────────────
+// Rubber-band drag-select on the canvas background: mousedown-drag on empty canvas draws a
+// selection box, and every toon it overlaps on mouseup becomes selected. Clicking the
+// background without dragging (a zero-size box) clears the selection instead — the same
+// mousedown-clear-then-repopulate-on-up flow naturally covers both cases. Desktop only per
+// isDesktop(): mobile's build mode already uses press-and-drag for single-toon repositioning
+// and long-press-to-remove, so a background drag there is reserved for that instead.
+const selectedToonIds = ref(new Set())
+const selectionBox = ref(null)  // { startX, startY, curX, curY } in canvas (design-space) coords
+
+function isDesktop() {
+  return typeof window !== 'undefined' && window.innerWidth > MOBILE_BREAKPOINT
+}
+
+function isToonDragging(toon) {
+  if (localDrag.value?.toon?.id === toon.id) return true
+  return !!localDrag.value?.group?.some(g => g.toon.id === toon.id)
+}
+
+const selectionBoxStyle = computed(() => {
+  const b = selectionBox.value
+  if (!b) return {}
+  const left = Math.min(b.startX, b.curX)
+  const top  = Math.min(b.startY, b.curY)
+  return {
+    left:   `${left}px`,
+    top:    `${top}px`,
+    width:  `${Math.abs(b.curX - b.startX)}px`,
+    height: `${Math.abs(b.curY - b.startY)}px`,
+  }
+})
+
+// Clear selection whenever build mode exits or the active zone changes — selected toons belong
+// to a specific zone's array, and stale ids from a previous zone/mode would just never match.
+watch(() => cz.value.buildMode, (building) => { if (!building) { selectedToonIds.value = new Set(); selectionBox.value = null } })
+watch(() => cz.value.activeZone, () => { selectedToonIds.value = new Set(); selectionBox.value = null })
 
 // Long-press (mobile): hold 2s on a canvas toon to remove it
 const LONG_PRESS_DURATION  = 2000
@@ -1423,9 +1469,20 @@ function onToonClick(toon) {
 }
 
 // ── Item mousedown: reposition placed toon (desktop drag) ─────
+// Dragging a toon that's part of the current multi-selection moves the whole selection
+// together; dragging any other toon collapses the selection down to just that one (standard
+// click-to-select-single behavior) so a plain drag never silently drags a stale group.
 function onItemMouseDown(toon, e) {
   const { x, y } = toCanvasCoords(e.clientX, e.clientY)
-  localDrag.value = { toon, offsetX: x - toon.x, offsetY: y - toon.y }
+  if (isDesktop() && selectedToonIds.value.size > 1 && selectedToonIds.value.has(toon.id)) {
+    const group = currentZone.value.toons
+      .filter(t => selectedToonIds.value.has(t.id))
+      .map(t => ({ toon: t, offsetX: x - t.x, offsetY: y - t.y }))
+    localDrag.value = { group }
+  } else {
+    if (isDesktop() && cz.value.buildMode) selectedToonIds.value = new Set([toon.id])
+    localDrag.value = { toon, offsetX: x - toon.x, offsetY: y - toon.y }
+  }
   e.preventDefault()
   e.stopPropagation()
 }
@@ -1460,8 +1517,16 @@ function removeToon(toon) {
   if (idx !== -1) toons.splice(idx, 1)
 }
 
-// ── Canvas mousedown: no-op (toon drag handled at item level) ─
-function onCanvasMouseDown(e) {}
+// ── Canvas mousedown: start rubber-band multi-select (build mode, desktop only) ──
+// Items' own @mousedown handlers stopPropagation, so this only ever fires for a genuine
+// background click/drag. Clear the existing selection immediately — a plain click (zero-size
+// box on mouseup) then just leaves it cleared, i.e. deselects.
+function onCanvasMouseDown(e) {
+  if (!cz.value.buildMode || !isDesktop() || e.button !== 0) return
+  const { x, y } = toCanvasCoords(e.clientX, e.clientY)
+  selectionBox.value = { startX: x, startY: y, curX: x, curY: y }
+  selectedToonIds.value = new Set()
+}
 
 // ── Canvas touchstart: no-op (toon touch handled at item level) ─
 function onCanvasTouchStart(e) {}
@@ -1479,7 +1544,7 @@ function onGlobalMove(e) {
       localDrag.value = { toon, offsetX: canvasX - toon.x, offsetY: canvasY - toon.y }
     }
   }
-  if (cz.value.activeDrag || localDrag.value) {
+  if (cz.value.activeDrag || localDrag.value || selectionBox.value) {
     e.preventDefault()  // prevent page scroll during drag
   }
   if (cz.value.activeDrag) {
@@ -1488,9 +1553,21 @@ function onGlobalMove(e) {
   }
   if (localDrag.value) {
     const { x, y } = toCanvasCoords(clientX, clientY)
-    const t = localDrag.value.toon
-    t.x = clamp(x - localDrag.value.offsetX, 0, canvasW() - toonW(t))
-    t.y = clamp(y - localDrag.value.offsetY, 0, canvasH() - toonH(t))
+    if (localDrag.value.group) {
+      for (const g of localDrag.value.group) {
+        g.toon.x = clamp(x - g.offsetX, 0, canvasW() - toonW(g.toon))
+        g.toon.y = clamp(y - g.offsetY, 0, canvasH() - toonH(g.toon))
+      }
+    } else {
+      const t = localDrag.value.toon
+      t.x = clamp(x - localDrag.value.offsetX, 0, canvasW() - toonW(t))
+      t.y = clamp(y - localDrag.value.offsetY, 0, canvasH() - toonH(t))
+    }
+  }
+  if (selectionBox.value) {
+    const { x, y } = toCanvasCoords(clientX, clientY)
+    selectionBox.value.curX = x
+    selectionBox.value.curY = y
   }
 }
 
@@ -1523,6 +1600,19 @@ function onGlobalUp(e) {
   }
   cz.value.activeDrag = null
   localDrag.value     = null
+
+  if (selectionBox.value) {
+    const b = selectionBox.value
+    const minX = Math.min(b.startX, b.curX), maxX = Math.max(b.startX, b.curX)
+    const minY = Math.min(b.startY, b.curY), maxY = Math.max(b.startY, b.curY)
+    const newSel = new Set()
+    for (const t of currentZone.value.toons) {
+      const overlaps = t.x < maxX && t.x + toonW(t) > minX && t.y < maxY && t.y + toonH(t) > minY
+      if (overlaps) newSel.add(t.id)
+    }
+    selectedToonIds.value = newSel
+    selectionBox.value = null
+  }
 }
 
 // ── Right-click: remove toon ──────────────────────────────────
@@ -2074,6 +2164,19 @@ defineExpose({ save, clearZone })
 .cz-item.is-viewable:hover { filter: brightness(1.1); }
 .cz-item.is-build { pointer-events: auto; cursor: grab; }
 .cz-item.is-build.is-dragging { cursor: grabbing; }
+.cz-item.is-selected {
+  outline: 2px solid #4da3ff;
+  outline-offset: 2px;
+  box-shadow: 0 0 6px rgba(77, 163, 255, 0.8);
+}
+
+.cz-selection-box {
+  position: absolute;
+  border: 1px dashed #4da3ff;
+  background: rgba(77, 163, 255, 0.15);
+  pointer-events: none;
+  z-index: 50;
+}
 .cz-item.is-long-pressing {
   animation: cz-long-press-shrink 2s linear forwards;
   transform-origin: center;

@@ -4,35 +4,61 @@
     <!-- ── Header ────────────────────────────────────────────────── -->
     <div class="ma-header">Achievements</div>
 
+    <!-- ── Toolbar (only relevant once at least one achievement is cMoon-scoped) ── -->
+    <div v-if="showCMoonToggle" class="ma-toolbar">
+      <span class="ma-toolbar-label">Only show my cMoon's achievements</span>
+      <button
+        type="button"
+        role="switch"
+        :aria-checked="onlyMyCMoon"
+        class="ma-switch"
+        :class="{ 'ma-switch-on': onlyMyCMoon }"
+        @click="toggleOnlyMyCMoon"
+      >
+        <span class="ma-switch-thumb" />
+      </button>
+    </div>
+
     <!-- ── Grid ──────────────────────────────────────────────────── -->
     <div class="ma-grid-wrap">
       <div v-if="loading" class="ma-empty">Loading…</div>
-      <div v-else-if="!achievements.length" class="ma-empty">No achievements found.</div>
-      <div v-else class="ma-grid">
-        <div
-          v-for="a in achievements" :key="a.id"
-          class="ma-card"
-          :class="{ 'ma-card-achieved': a.achieved }"
-          @click="selected = a"
-        >
-          <div class="ma-card-img-wrap">
-            <img v-if="a.imagePath" :src="a.imagePath" class="ma-card-img" :alt="a.title" />
-            <div v-else class="ma-card-img-ph">?</div>
-            <span class="ma-card-status" :class="a.achieved ? 'ma-status-done' : 'ma-status-locked'">
-              {{ a.achieved ? '✓' : '🔒' }}
-            </span>
-          </div>
-          <div class="ma-card-body">
-            <div class="ma-card-title">{{ a.title }}</div>
-            <div v-if="a.description" class="ma-card-desc">{{ a.description }}</div>
-            <div class="ma-card-footer">
-              <span class="ma-achievers">{{ a.achievers }} achiever{{ a.achievers !== 1 ? 's' : '' }}</span>
-              <span v-if="hasRewards(a)" class="ma-has-reward">★ Reward</span>
-              <span v-else-if="a.isClaimable" class="ma-has-reward">★ Choose reward</span>
+      <template v-else>
+        <div v-if="showNoCMoonNotice" class="ma-notice">
+          Join a cMoon to see your team's achievements here.
+        </div>
+        <div v-if="!visibleAchievements.length" class="ma-empty">No achievements found.</div>
+        <div v-else class="ma-grid">
+          <div
+            v-for="a in visibleAchievements" :key="a.id"
+            class="ma-card"
+            :class="{ 'ma-card-achieved': a.achieved }"
+            @click="selected = a"
+          >
+            <div class="ma-card-img-wrap">
+              <img v-if="a.imagePath" :src="a.imagePath" class="ma-card-img" :alt="a.title" />
+              <div v-else class="ma-card-img-ph">?</div>
+              <span
+                v-if="a.cMoon"
+                class="ma-card-team"
+                :style="cMoonPillStyle(a.cMoon.color)"
+                :title="a.cMoon.name"
+              >{{ a.cMoon.name }}</span>
+              <span class="ma-card-status" :class="a.achieved ? 'ma-status-done' : 'ma-status-locked'">
+                {{ a.achieved ? '✓' : '🔒' }}
+              </span>
+            </div>
+            <div class="ma-card-body">
+              <div class="ma-card-title">{{ a.title }}</div>
+              <div v-if="a.description" class="ma-card-desc">{{ a.description }}</div>
+              <div class="ma-card-footer">
+                <span class="ma-achievers">{{ a.achievers }} achiever{{ a.achievers !== 1 ? 's' : '' }}</span>
+                <span v-if="hasRewards(a)" class="ma-has-reward">★ Reward</span>
+                <span v-else-if="a.isClaimable" class="ma-has-reward">★ Choose reward</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      </template>
     </div>
 
     <!-- ── Detail modal ───────────────────────────────────────────── -->
@@ -159,6 +185,10 @@
 </template>
 
 <script setup>
+import { cMoonPillStyle } from '~/utils/cmoonColor'
+
+const ONLY_MY_CMOON_STORAGE_KEY = 'achievementsOnlyMyCMoon'
+
 const achievements = ref([])
 const loading      = ref(false)
 const selected     = ref(null)
@@ -166,20 +196,60 @@ const claimChoice  = ref(null)
 const claiming     = ref(false)
 const claimError   = ref('')
 
+// Viewer's own cMoon (team) membership, loaded alongside the achievement list so the
+// "only show my cMoon" toggle below can filter without a second round trip per toggle.
+const cMoonEnabled = ref(false)
+const myCMoonId    = ref(null)
+const onlyMyCMoon  = ref(false)
+
 watch(selected, () => {
   claimChoice.value = null
   claiming.value = false
   claimError.value = ''
 })
 
-onMounted(loadAchievements)
+// Only worth showing the toggle once there's actually a cMoon-scoped achievement in the
+// list — otherwise it's a control with nothing to do.
+const showCMoonToggle = computed(() => cMoonEnabled.value && achievements.value.some(a => a.cMoonId))
+
+// A player with no cMoon has no "my team" achievements to filter down to — rather than
+// silently falling back to showing everything (defeating the point of the toggle) or a
+// fully blank page (any general, non-cMoon achievements still show below this notice).
+const showNoCMoonNotice = computed(() => showCMoonToggle.value && onlyMyCMoon.value && !myCMoonId.value)
+
+const visibleAchievements = computed(() => {
+  if (!onlyMyCMoon.value) return achievements.value
+  return achievements.value.filter(a => !a.cMoonId || a.cMoonId === myCMoonId.value)
+})
+
+function toggleOnlyMyCMoon() {
+  onlyMyCMoon.value = !onlyMyCMoon.value
+  if (import.meta.client) localStorage.setItem(ONLY_MY_CMOON_STORAGE_KEY, onlyMyCMoon.value ? '1' : '0')
+}
+
+onMounted(() => {
+  if (import.meta.client) {
+    onlyMyCMoon.value = localStorage.getItem(ONLY_MY_CMOON_STORAGE_KEY) === '1'
+  }
+  loadAchievements()
+})
 
 async function loadAchievements() {
   loading.value = true
   try {
-    achievements.value = await $fetch('/api/achievements')
-  } catch (e) {
-    console.error('MyAchievements: load failed', e)
+    const [achievementsResult, statusResult] = await Promise.allSettled([
+      $fetch('/api/achievements'),
+      $fetch('/api/cmoon/status'),
+    ])
+    if (achievementsResult.status === 'fulfilled') {
+      achievements.value = achievementsResult.value
+    } else {
+      console.error('MyAchievements: load failed', achievementsResult.reason)
+    }
+    if (statusResult.status === 'fulfilled') {
+      cMoonEnabled.value = !!statusResult.value?.cMoonEnabled
+      myCMoonId.value = statusResult.value?.cMoon?.id || null
+    }
   } finally {
     loading.value = false
   }
@@ -263,6 +333,63 @@ async function confirmClaim(a) {
   letter-spacing: 0.03em;
 }
 
+/* ── Toolbar ── */
+.ma-toolbar {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 10px;
+  background: rgba(0,0,0,0.15);
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+}
+.ma-toolbar-label {
+  font-size: 0.68rem;
+  color: rgba(255,255,255,0.75);
+}
+
+/* Small switch matching the track/thumb proportions used elsewhere in the app (e.g. the
+   cZone search "Only Show Available cToons" toggle), but with the clickable button padded
+   out to a ~44px hit area without growing the visible control — same technique as
+   .cz-owner-cmoon-link in MyCzone.vue. */
+.ma-switch {
+  position: relative;
+  display: inline-flex;
+  width: 36px;
+  height: 20px;
+  padding: 12px;
+  margin: -12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+.ma-switch::before {
+  content: '';
+  position: absolute;
+  inset: 12px;
+  border-radius: 999px;
+  background: rgba(255,255,255,0.25);
+  transition: background 0.15s;
+}
+.ma-switch-on::before {
+  background: var(--OrbitLightBlue);
+}
+.ma-switch-thumb {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.4);
+  transition: transform 0.15s;
+}
+.ma-switch-on .ma-switch-thumb {
+  transform: translateX(16px);
+}
+
 /* ── Grid wrap ── */
 .ma-grid-wrap {
   flex: 1;
@@ -277,6 +404,16 @@ async function confirmClaim(a) {
   font-style: italic;
   text-align: center;
   padding: 20px 0;
+}
+
+.ma-notice {
+  font-size: 0.7rem;
+  color: rgba(255,255,255,0.75);
+  background: rgba(244,168,0,0.12);
+  border: 1px solid rgba(244,168,0,0.3);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
 }
 
 .ma-grid {
@@ -332,6 +469,23 @@ async function confirmClaim(a) {
 }
 .ma-status-done   { background: #2ea843; color: #fff; }
 .ma-status-locked { background: rgba(0,0,0,0.5); color: rgba(255,255,255,0.5); }
+
+/* Which cMoon (team) this achievement belongs to — left corner, so it never collides with
+   the achieved/locked badge opposite it at .ma-card-status (top-right). */
+.ma-card-team {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  max-width: calc(100% - 8px);
+  font-size: 0.55rem;
+  font-weight: bold;
+  padding: 1px 5px;
+  border-radius: 3px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 .ma-card-body {
   padding: 6px 7px 7px;
