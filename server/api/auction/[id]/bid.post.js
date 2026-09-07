@@ -328,7 +328,10 @@ export default defineEventHandler(async (event) => {
       setTimeout(finish, 25)
     })
 
-    socket.on('connect_error', finish)
+    socket.on('connect_error', (err) => {
+      console.error('[Bid] socket bridge connect_error:', err?.message || err)
+      finish()
+    })
     setTimeout(finish, 1500)
   })
 

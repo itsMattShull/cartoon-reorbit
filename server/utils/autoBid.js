@@ -377,7 +377,9 @@ export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
   await new Promise((resolve) => {
     const socket = createSocket(url, {
       path: useRuntimeConfig().socketPath,
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      // Required for the socket server's isBridge check — see bid.post.js.
+      auth: { bridgeSecret: useRuntimeConfig().socketBridgeSecret }
     })
     let done = false
     const finish = () => {
