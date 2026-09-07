@@ -1204,13 +1204,6 @@ function formatDate(value) {
   gap: 3px;
   color: #93c5fd;
   text-decoration: none;
-  background: rgba(147, 197, 253, 0.14);
-  border-radius: 4px;
-  padding: 5px 8px;
-  margin: -5px -8px;
-  /* Real touch target, matching the 44px convention used elsewhere (e.g. AdminCMoon.vue's .cm-tap). */
-  min-height: 44px;
-  box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
 }
 .ctic-value--link::after {
@@ -1221,7 +1214,6 @@ function formatDate(value) {
 .ctic-value--link:hover,
 .ctic-value--link:active {
   color: #bfdbfe;
-  background: rgba(147, 197, 253, 0.24);
   text-decoration: underline;
 }
 .ctic-value--link:focus-visible {
@@ -1563,7 +1555,7 @@ function formatDate(value) {
 .ctic-panel--cmoon .ctic-desc p { color: var(--cm-text); }
 .ctic-panel--cmoon .ctic-label { color: var(--cm-text-muted); }
 .ctic-panel--cmoon .ctic-value { color: var(--cm-text); }
-.ctic-panel--cmoon .ctic-value--link { color: var(--cm-link-text); background: var(--cm-link-bg); }
+.ctic-panel--cmoon .ctic-value--link { color: var(--cm-link-text); }
 .ctic-panel--cmoon .ctic-value--link:hover,
 .ctic-panel--cmoon .ctic-value--link:active { opacity: 0.82; }
 .ctic-panel--cmoon .ctic-value--link:focus-visible { outline-color: var(--cm-focus-ring); }
