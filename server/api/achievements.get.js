@@ -1,12 +1,9 @@
 // server/api/achievements.get.js
-import { defineEventHandler, getRequestHeader } from 'h3'
+import { defineEventHandler } from 'h3'
 import { prisma as db } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
-  const cookie = getRequestHeader(event, 'cookie') || ''
-  let me = null
-  try { me = await $fetch('/api/auth/me', { headers: { cookie } }) } catch {}
-  const userId = me?.id || null
+  const userId = event.context.userId || null
 
   // Load all active achievements
   const list = await db.achievement.findMany({
@@ -29,7 +26,10 @@ export default defineEventHandler(async (event) => {
             }
           }
         }
-      }
+      },
+      // Only path from an achievement to the cMoon (team) it's scoped to — see
+      // Achievement.cMoonRankId in prisma/schema.prisma. Null for general achievements.
+      cMoonRank: { select: { cMoonId: true, cMoon: { select: { id: true, name: true, color: true } } } }
     }
   })
 
@@ -65,9 +65,15 @@ export default defineEventHandler(async (event) => {
     // Flags a claim as "you were promoted to a cMoon rank" so the client can show the
     // rank-reveal modal (which names the rank) instead of the generic inline claim text.
     // The boolean alone is safe to expose to every caller of this list, including logged-out
-    // (see the `me = null` fallback above) — it's derived from a field already implied by every
-    // claim option's cToon/background rewards this same response already returns unfiltered.
+    // (see the `userId = null` fallback above) — it's derived from a field already implied by
+    // every claim option's cToon/background rewards this same response already returns unfiltered.
     isCMoonRank: !!a.cMoonRankTierId,
+    // Which cMoon (team) this achievement is scoped to, if any — null for general
+    // achievements. Used client-side by the "only show my cMoon" visibility toggle
+    // (see components/newsite/MyAchievements.vue); matches the cMoonId derivation
+    // already used in server/api/admin/achievements.get.js.
+    cMoonId: a.cMoonRank?.cMoonId || null,
+    cMoon: a.cMoonRank?.cMoon ? { id: a.cMoonRank.cMoon.id, name: a.cMoonRank.cMoon.name, color: a.cMoonRank.cMoon.color } : null,
     claimedOptionId: userId ? (claimedMap.get(a.id) || null) : null,
     // Each claim option is its own reward bundle now (points + multiple cToons +
     // backgrounds), not a single ctoon-or-points choice.
