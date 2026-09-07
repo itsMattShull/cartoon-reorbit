@@ -2390,6 +2390,7 @@ defineExpose({ save, clearZone })
   cursor: pointer;
   white-space: nowrap;
   transition: color 0.15s;
+  margin-right: auto;
 }
 .cz-search-btn:hover { color: #fff; }
 .cz-search-btn-icon { font-size: 0.85rem; font-style: normal; }
