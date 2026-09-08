@@ -16,7 +16,7 @@
         Cartoon ReOrbit Member Since<br />
         <span class="cert-date">{{ memberSinceLabel }}</span>
       </p>
-      <img class="cert-logo" src="/images/logo-reorbit.png" alt="Cartoon ReOrbit" />
+      <img class="cert-logo" src="/images/logo-reorbit-blocks.png" alt="Cartoon ReOrbit" />
 
       <p class="cert-disclaimer">
         Cartoon ReOrbit is an independent, fan-made project — not affiliated with, endorsed by, or sponsored by any intellectual property holder.
@@ -158,9 +158,11 @@ const circlePositions = computed(() => {
 }
 
 .cert-logo {
-  width: 120px;
+  width: 220px;
   height: auto;
-  margin-top: 10px;
+  margin-top: 14px;
+  border-radius: 6px;
+  box-shadow: 0 0 0 3px #ffffff, 0 0 0 4px #ddd;
 }
 
 .cert-disclaimer {
