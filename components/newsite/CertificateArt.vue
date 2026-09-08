@@ -41,9 +41,18 @@ const props = defineProps({
 const CERT_WIDTH = 1100
 const CERT_HEIGHT = 850
 
-const CIRCLE_COUNT = 12
+// .cert-art below is border-box with this border width. Absolutely positioned
+// children (the circles) are placed relative to its padding box — i.e. already
+// inset by the border — so the perimeter walk below must lay them out against
+// CONTENT_WIDTH/CONTENT_HEIGHT, not the outer CERT_WIDTH/CERT_HEIGHT, or the
+// bottom/right circles drift past the padding box and get clipped by `overflow: hidden`.
+const BORDER_WIDTH = 10
+const CONTENT_WIDTH = CERT_WIDTH - BORDER_WIDTH * 2
+const CONTENT_HEIGHT = CERT_HEIGHT - BORDER_WIDTH * 2
+
+const CIRCLE_COUNT = 18
 const CIRCLE_SIZE = 64
-const INSET = 40 // distance of circle centers from the certificate's outer edge
+const INSET = 40 // distance of circle centers from the certificate's inner (content-box) edge
 const FALLBACK_IMAGE = { assetPath: '/images/logo-reorbit.png', name: 'Cartoon ReOrbit' }
 
 const images = computed(() => {
@@ -68,8 +77,8 @@ function perimeterPoint(t, w, h) {
 }
 
 const circlePositions = computed(() => {
-  const w = CERT_WIDTH - INSET * 2
-  const h = CERT_HEIGHT - INSET * 2
+  const w = CONTENT_WIDTH - INSET * 2
+  const h = CONTENT_HEIGHT - INSET * 2
   return Array.from({ length: CIRCLE_COUNT }, (_, i) => {
     const p = perimeterPoint(i / CIRCLE_COUNT, w, h)
     return { x: p.x + INSET - CIRCLE_SIZE / 2, y: p.y + INSET - CIRCLE_SIZE / 2 }

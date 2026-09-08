@@ -3,10 +3,10 @@ import { defineEventHandler, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 
 // Decorative border on the certificate holds this many cToon thumbnails —
-// capped low deliberately so a heavy collector's request stays a single cheap
+// capped deliberately so a heavy collector's request stays a single cheap
 // DB-level random sample instead of pulling their whole collection to shore
 // down client-side.
-const BORDER_IMAGE_COUNT = 12
+const BORDER_IMAGE_COUNT = 18
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
