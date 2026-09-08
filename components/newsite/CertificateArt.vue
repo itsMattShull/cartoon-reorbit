@@ -50,7 +50,7 @@ const BORDER_WIDTH = 10
 const CONTENT_WIDTH = CERT_WIDTH - BORDER_WIDTH * 2
 const CONTENT_HEIGHT = CERT_HEIGHT - BORDER_WIDTH * 2
 
-const CIRCLE_COUNT = 18
+const CIRCLE_COUNT = 36
 const CIRCLE_SIZE = 64
 const INSET = 40 // distance of circle centers from the certificate's inner (content-box) edge
 const FALLBACK_IMAGE = { assetPath: '/images/logo-reorbit.png', name: 'Cartoon ReOrbit' }

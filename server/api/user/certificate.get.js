@@ -6,7 +6,7 @@ import { prisma } from '@/server/prisma'
 // capped deliberately so a heavy collector's request stays a single cheap
 // DB-level random sample instead of pulling their whole collection to shore
 // down client-side.
-const BORDER_IMAGE_COUNT = 18
+const BORDER_IMAGE_COUNT = 36
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
