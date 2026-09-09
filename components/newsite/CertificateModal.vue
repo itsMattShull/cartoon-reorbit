@@ -14,6 +14,7 @@
                 :username="data.username"
                 :member-since-label="memberSinceLabel"
                 :border-images="data.borderImages"
+                :logo-path="data.logoPath"
               />
             </div>
           </div>
@@ -27,6 +28,7 @@
                 :username="data.username"
                 :member-since-label="memberSinceLabel"
                 :border-images="data.borderImages"
+                :logo-path="data.logoPath"
               />
             </div>
           </div>

@@ -1527,6 +1527,13 @@ model GlobalGameConfig {
   // query string to every icon URL rendered in pages/index.vue's useHead.
   faviconVersion                     BigInt?
   faviconSourcePath                  String? // original master upload, retained for re-generation/audit
+  // Logo shown at the bottom of the player membership certificate (Settings > Generate
+  // Certificate), uploaded from Admin > Manage Certificate. Deployed static files under public/
+  // are never actually served in production/dev — /images/* is served from the sibling
+  // cartoon-reorbit-images/ directory instead (see server/utils/uploadStorage.js) — so this
+  // logo has to go through an admin upload like every other site-wide image, not a git commit.
+  // Null falls back to /images/logo-reorbit.png (the original static asset).
+  certificateLogoPath                String?
   // Site-wide UI "haptic sound" (click blip) played on every button click, and the per-nav-item
   // overrides below it — assigned from Admin > Manage Homepage > Sounds, always resolved from
   // the UiSound library, below (never a raw upload — see server/api/admin/global-config/nav-sounds.post.js).
