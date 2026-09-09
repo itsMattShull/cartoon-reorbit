@@ -77,11 +77,11 @@ export const ADMIN_SECTIONS = [
   S('auctions', 'Auction Only', 'economy', legacy('AdminLegacyAuctions')),
   S('auctions/new', 'Add Auction', 'economy', legacy('AdminLegacyAuctionsNew'), { hidden: true }),
   S('dissolveQueue', 'Dissolve Queue', 'economy', legacy('AdminLegacyDissolveQueue')),
-  S('cMoon', 'cMoons', 'economy', nu('AdminCMoon')),
-  S('cmoonChangeRequests', 'cMoon Change Requests', 'economy', nu('AdminCMoonChangeRequests')),
 
   // ── Games & Events ──────────────────────────────────────────
   S('games', 'Manage Games', 'games', legacy('AdminLegacyGames'), { dense: true }),
+  S('cMoon', 'cMoons', 'games', nu('AdminCMoon')),
+  S('cmoonChangeRequests', 'cMoon Change Requests', 'games', nu('AdminCMoonChangeRequests')),
   S('lotto', 'Manage Lotto', 'games', legacy('AdminLegacyLotto')),
   S('clashTournaments', 'Clash Tournaments', 'games', legacy('AdminLegacyClashTournaments')),
   S('monsters', 'Manage Monsters', 'games', legacy('AdminLegacyMonsters'), { dense: true }),
