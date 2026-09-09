@@ -16,7 +16,7 @@
         Cartoon ReOrbit Member Since<br />
         <span class="cert-date">{{ memberSinceLabel }}</span>
       </p>
-      <img class="cert-logo" src="/images/logo-reorbit-blocks.png" alt="Cartoon ReOrbit" />
+      <img class="cert-logo" src="/images/logo-reorbit-blocks-v2.png" alt="Cartoon ReOrbit" />
 
       <p class="cert-disclaimer">
         Cartoon ReOrbit is an independent, fan-made project — not affiliated with, endorsed by, or sponsored by any intellectual property holder.
