@@ -16,7 +16,7 @@
         Cartoon ReOrbit Member Since<br />
         <span class="cert-date">{{ memberSinceLabel }}</span>
       </p>
-      <img class="cert-logo" src="/images/logo-reorbit-blocks-v2.png" alt="Cartoon ReOrbit" />
+      <img class="cert-logo" :src="logoPath" alt="Cartoon ReOrbit" />
 
       <p class="cert-disclaimer">
         Cartoon ReOrbit is an independent, fan-made project — not affiliated with, endorsed by, or sponsored by any intellectual property holder.
@@ -31,7 +31,10 @@ import { computed } from 'vue'
 const props = defineProps({
   username: { type: String, required: true },
   memberSinceLabel: { type: String, required: true },
-  borderImages: { type: Array, default: () => [] }
+  borderImages: { type: Array, default: () => [] },
+  // Admin-uploaded via Admin > Manage Certificate (server/api/user/certificate.get.js already
+  // resolves the fallback), but default here too in case a caller ever renders this standalone.
+  logoPath: { type: String, default: '/images/logo-reorbit.png' }
 })
 
 // Design canvas is a fixed logical size (also hardcoded as CERT_WIDTH/CERT_HEIGHT
