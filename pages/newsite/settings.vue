@@ -16,6 +16,7 @@
               <button v-if="showTeamChangeButton" class="btn-team" @click="openTeamChangeModal">
                 {{ pendingRequest ? 'Team Change: Pending' : 'Request Team Change' }}
               </button>
+              <button class="btn-certificate" @click="showCertificateModal = true">Generate Certificate</button>
             </div>
           </div>
 
@@ -189,6 +190,8 @@
           </div>
         </div>
       </Teleport>
+
+      <CertificateModal v-if="showCertificateModal" @close="showCertificateModal = false" />
 </template>
 
 <script setup>
@@ -222,8 +225,9 @@ const loading = ref(true)
 const error   = ref('')
 const avatars = ref([])
 
-const showAvatarModal   = ref(false)
-const showUsernameModal = ref(false)
+const showAvatarModal      = ref(false)
+const showUsernameModal    = ref(false)
+const showCertificateModal = ref(false)
 const avatarDraft       = ref('')
 const savingAvatar      = ref(false)
 const avatarError       = ref('')
@@ -574,6 +578,21 @@ body.page-newsite-settings .main-content { overflow-y: auto !important; scrollba
 }
 
 .btn-team:hover { opacity: 0.85; }
+
+.btn-certificate {
+  padding: 6px 14px;
+  border-radius: 6px;
+  background: var(--OrbitLightBlue, #3399CC);
+  color: #ffffff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-family: inherit;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.btn-certificate:hover { opacity: 0.85; }
 
 .settings-body {
   padding: 14px;
