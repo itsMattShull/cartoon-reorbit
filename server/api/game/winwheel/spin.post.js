@@ -4,6 +4,7 @@ import { createError } from 'h3'
 import { mintQueue } from '../../../utils/queues'
 import { QueueEvents } from 'bullmq'
 import { redis } from '@/server/utils/redis'
+import { getChicagoMorningWindowStart } from '@/server/utils/dailyTaskWindows'
 
 const redisConnection = {
   host: process.env.REDIS_HOST,
@@ -61,23 +62,18 @@ export default defineEventHandler(async (event) => {
     if (!config) {
       throw createError({ statusCode: 500, statusMessage: 'Winwheel config not found' })
     }
-    const { spinCost, pointsWon, maxDailySpins, exclusiveCtoons } = config
+    const { spinCost, pointsWon, maxDailySpins, exclusiveCtoons, tripleNothingCtoonId } = config
     const pool = exclusiveCtoons.map(o => o.ctoon)
 
     // — Enforce daily limit (8 AM CST → 8 AM CST) —
-    const now = new Date()
-    const chicagoNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' }))
-    const offsetMs   = now.getTime() - chicagoNow.getTime()
-    const y = chicagoNow.getFullYear(), m = chicagoNow.getMonth(), d = chicagoNow.getDate()
-    let resetUtcMs = new Date(y, m, d, 8, 0, 0).getTime() + offsetMs
-    if (now.getTime() < resetUtcMs) {
-      resetUtcMs -= 24 * 60 * 60 * 1000
-    }
-    const windowStart = new Date(resetUtcMs)
+    const windowStart = getChicagoMorningWindowStart()
+    const resetUtcMs = windowStart.getTime()
 
-    // Count pending and completed spins — failed spins don't consume the daily slot
+    // Count pending and completed spins — failed spins don't consume the daily slot.
+    // 'tripleNothing' bonus-grant rows are excluded too: they're a reward layered on
+    // top of an already-counted spin, not a spin of their own.
     const spinsToday = await prisma.wheelSpinLog.count({
-      where: { userId, createdAt: { gte: windowStart }, status: { not: 'failed' } }
+      where: { userId, createdAt: { gte: windowStart }, status: { not: 'failed' }, result: { not: 'tripleNothing' } }
     })
     if (spinsToday >= maxDailySpins) {
       const nextReset = new Date(resetUtcMs + 24 * 60 * 60 * 1000)
@@ -239,6 +235,73 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 500, statusMessage: spinErr.message || 'Spin failed — points refunded.' })
     }
 
+    // — Triple Nothing bonus: 3 consecutive 'nothing' results in one day —
+    // Runs only after the primary spin above is durably 'completed', and entirely
+    // inside its own try/catch: a failure here (bad config, sold-out cToon, mint
+    // timeout) must never refund or fail the primary spin the player already had.
+    let tripleNothingBonus = null
+    if (result === 'nothing' && tripleNothingCtoonId) {
+      try {
+        const alreadyClaimedToday = await prisma.wheelSpinLog.findFirst({
+          where: { userId, result: 'tripleNothing', createdAt: { gte: windowStart } },
+          select: { id: true }
+        })
+        if (!alreadyClaimedToday) {
+          const recent = await prisma.wheelSpinLog.findMany({
+            where: {
+              userId,
+              createdAt: { gte: windowStart },
+              status: 'completed',
+              result: { not: 'tripleNothing' }
+            },
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+            take: 3,
+            select: { result: true }
+          })
+          const isTripleNothing = recent.length === 3 && recent.every(r => r.result === 'nothing')
+          if (isTripleNothing) {
+            // Pre-claim the bonus slot before minting (pending → completed/failed),
+            // same pattern as the primary spin's pre-claim above, so a crash or
+            // timeout between a successful mint and this row landing can't leave
+            // the day's claim un-recorded and re-triggerable on a later streak.
+            const bonusLog = await prisma.wheelSpinLog.create({
+              data: { userId, result: 'tripleNothing', status: 'pending' }
+            })
+            try {
+              const qe = getQueueEvents()
+              await qe.waitUntilReady()
+              const bonusJob = await mintQueue.add('mintCtoon', {
+                userId,
+                ctoonId: tripleNothingCtoonId,
+                isSpecial: true,
+                method: 'WINWHEEL_TRIPLE_NOTHING'
+              })
+              await bonusJob.waitUntilFinished(qe, MINT_JOB_TIMEOUT_MS)
+              await prisma.wheelSpinLog.update({
+                where: { id: bonusLog.id },
+                data: { status: 'completed', ctoonId: tripleNothingCtoonId }
+              })
+              const bonusCtoon = await prisma.ctoon.findUnique({
+                where: { id: tripleNothingCtoonId },
+                select: { id: true, name: true, assetPath: true }
+              })
+              tripleNothingBonus = { ctoon: bonusCtoon }
+            } catch (bonusMintErr) {
+              await prisma.wheelSpinLog.update({
+                where: { id: bonusLog.id },
+                data: { status: 'failed' }
+              }).catch(() => {})
+              // Sold out / config error / mint timeout — skip gracefully, no retry
+              // today (the same cToon would still be unavailable on a later streak).
+              console.error('[WinWheel] Triple Nothing bonus mint failed for user', userId, bonusMintErr)
+            }
+          }
+        }
+      } catch (streakErr) {
+        console.error('[WinWheel] Triple Nothing streak check failed for user', userId, streakErr)
+      }
+    }
+
     // — Fetch won cToon details if any —
     let wonCtoon = null
     if (ctoonIdToMint) {
@@ -252,6 +315,7 @@ export default defineEventHandler(async (event) => {
       result,
       ...(result === 'points' ? { points: prizePoints } : {}),
       ...(wonCtoon ? { ctoon: wonCtoon } : {}),
+      ...(tripleNothingBonus ? { tripleNothingBonus } : {}),
       sliceIndex
     }
   } finally {
