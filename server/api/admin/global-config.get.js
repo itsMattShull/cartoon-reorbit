@@ -61,6 +61,10 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  // 4) Return it
-  return config
+  // 4) Return it (faviconVersion is a BigInt, which JSON.stringify can't
+  // serialize on its own and would otherwise 500 this endpoint)
+  return {
+    ...config,
+    faviconVersion: config.faviconVersion != null ? config.faviconVersion.toString() : null
+  }
 })
