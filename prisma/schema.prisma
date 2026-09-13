@@ -319,6 +319,7 @@ model Ctoon {
   rewardCtoons               RewardCtoon[]
   packOptions                PackCtoonOption[]
   gameConfigsAsGrandPrize    GameConfig[]                @relation("GrandPrize", fields: [], references: [])
+  gameConfigsAsTripleNothing GameConfig[]                @relation("TripleNothingPrize", fields: [], references: [])
   wishlistItems              WishlistItem[]
   prerequisites              ClaimCodePrerequisite[]
   wheelSpinLogs              WheelSpinLog[]              @relation("WheelSpinLogToCtoon")
@@ -1216,13 +1217,15 @@ model GameConfig {
   winballPeg12Z      Float? @default(4)
 
   // — Win Wheel settings —
-  spinCost          Int              @default(100)
-  pointsWon         Int              @default(250)
-  maxDailySpins     Int              @default(2)
-  exclusiveCtoons   WinWheelOption[] @relation("WinWheelOptions")
-  winWheelImagePath String?
-  winWheelSoundPath String?
-  winWheelSoundMode String?
+  spinCost             Int              @default(100)
+  pointsWon            Int              @default(250)
+  maxDailySpins        Int              @default(2)
+  exclusiveCtoons      WinWheelOption[] @relation("WinWheelOptions")
+  winWheelImagePath    String?
+  winWheelSoundPath    String?
+  winWheelSoundMode    String?
+  tripleNothingCtoonId String?
+  tripleNothingCtoon   Ctoon?           @relation("TripleNothingPrize", fields: [tripleNothingCtoonId], references: [id])
 
   // — ReOrbit Match settings —
   reorbitPlaysPerPeriod Int      @default(3)
@@ -2123,12 +2126,12 @@ model ClaimCodePrerequisite {
 model WheelSpinLog {
   id      String  @id @default(uuid())
   userId  String
-  result  String // e.g. 'nothing' | 'points' | 'ctoonLeast' | 'ctoonExclusive'
+  result  String // e.g. 'nothing' | 'points' | 'ctoonLeast' | 'ctoonExclusive' | 'tripleNothing'
   points  Int? // how many points awarded, if any
   ctoonId String? // FK to the minted cToon, if any
   status  String  @default("completed") // 'pending' | 'completed' | 'failed'
 
-  sliceIndex Int // 0–5
+  sliceIndex Int? // 0–5 for an actual wheel spin; null for a bonus grant not tied to a wedge (e.g. 'tripleNothing')
   createdAt  DateTime @default(now())
 
   user  User   @relation("WheelSpinLogToUser", fields: [userId], references: [id])

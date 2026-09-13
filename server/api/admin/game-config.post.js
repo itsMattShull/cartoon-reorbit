@@ -260,6 +260,9 @@ function validatePayload(payload) {
     ) {
       throw createError({ statusCode: 400, statusMessage: '"winWheelSoundMode" must be "repeat", "once", or null' })
     }
+    if (payload.tripleNothingCtoonId != null && typeof payload.tripleNothingCtoonId !== 'string') {
+      throw createError({ statusCode: 400, statusMessage: '"tripleNothingCtoonId" must be a string or null' })
+    }
 
   } else if (payload.gameName === 'ReOrbitMatch') {
     if (payload.reorbitPlaysPerPeriod == null || typeof payload.reorbitPlaysPerPeriod !== 'number' || payload.reorbitPlaysPerPeriod < 1) {
@@ -636,6 +639,7 @@ export default defineEventHandler(async (event) => {
     pointsWon,
     maxDailySpins,
     exclusiveCtoons = [],
+    tripleNothingCtoonId = null,
     winWheelImagePath = null,
     winWheelSoundPath = null,
     winWheelSoundMode = null
@@ -846,7 +850,7 @@ export default defineEventHandler(async (event) => {
         createData = { ...createData, pointsPerWin }
         updateData = { ...updateData, pointsPerWin }
       } else if (gameName === 'Winwheel') {
-        console.log('Upserting Winwheel config with image path:', winWheelImagePath) 
+        console.log('Upserting Winwheel config with image path:', winWheelImagePath)
         createData = {
           ...createData,
           spinCost,
@@ -854,7 +858,8 @@ export default defineEventHandler(async (event) => {
           maxDailySpins,
           winWheelImagePath: winWheelImagePath || null,
           winWheelSoundPath: winWheelSoundPath || null,
-          winWheelSoundMode: winWheelSoundMode || 'repeat'
+          winWheelSoundMode: winWheelSoundMode || 'repeat',
+          tripleNothingCtoonId: tripleNothingCtoonId || null
         }
         updateData = {
           ...updateData,
@@ -863,14 +868,18 @@ export default defineEventHandler(async (event) => {
           maxDailySpins,
           winWheelImagePath: winWheelImagePath || null,
           winWheelSoundPath: winWheelSoundPath || null,
-          winWheelSoundMode: winWheelSoundMode || 'repeat'
+          winWheelSoundMode: winWheelSoundMode || 'repeat',
+          tripleNothingCtoonId: tripleNothingCtoonId || null
         }
       }
 
       const includeOptions = gameName === 'Winball'
         ? { grandPrizeCtoon: { select: { id: true, name: true, rarity: true, assetPath: true } } }
         : gameName === 'Winwheel'
-          ? { exclusiveCtoons: { include: { ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } } } } }
+          ? {
+              exclusiveCtoons: { include: { ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } } } },
+              tripleNothingCtoon: { select: { id: true, name: true, rarity: true, assetPath: true } }
+            }
           : undefined
 
       const cfg = await tx.gameConfig.upsert({
@@ -1135,7 +1144,8 @@ export default defineEventHandler(async (event) => {
             ['maxDailySpins', before?.maxDailySpins, maxDailySpins],
             ['winWheelImagePath', before?.winWheelImagePath || null, winWheelImagePath || null],
             ['winWheelSoundPath', before?.winWheelSoundPath || null, winWheelSoundPath || null],
-            ['winWheelSoundMode', before?.winWheelSoundMode || 'repeat', winWheelSoundMode || 'repeat']
+            ['winWheelSoundMode', before?.winWheelSoundMode || 'repeat', winWheelSoundMode || 'repeat'],
+            ['tripleNothingCtoonId', before?.tripleNothingCtoonId || null, tripleNothingCtoonId || null]
           ]
           for (const [key, prev, next] of changes) {
             if (prev !== next) await logAdminChange(tx, { userId: me.id, area, key, prevValue: prev, newValue: next })
