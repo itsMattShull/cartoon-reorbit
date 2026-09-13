@@ -12,7 +12,7 @@ import sharp from 'sharp'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
-import { MAX_IMAGE_BYTES, sniffImageType } from '@/server/utils/imageUploadValidation'
+import { MAX_IMAGE_BYTES, sniffImageType, resizeAnimatedGif } from '@/server/utils/imageUploadValidation'
 import { uploadDir, uploadFsPath, uploadPublicPath } from '@/server/utils/uploadStorage'
 import { invalidateCMoonList } from '@/server/api/cmoons.get'
 
@@ -23,9 +23,11 @@ const FEATURE = 'cmoons'
 // hoop for the admin to jump through.
 const OUTPUT_WIDTH = 600
 const OUTPUT_HEIGHT = 900
-// GIF is sniffable/allowed elsewhere in this codebase, but an animated poster in a blocking
-// post-login modal costs every player, so this feature only accepts static formats.
-const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+// GIF was previously blocked here on the theory that an animated poster in a blocking
+// post-login modal costs every player. Revisited: it's resized/cropped the same as any other
+// upload (via resizeAnimatedGif) and lazy-loaded in the picker grid, so it's allowed like the
+// other cMoon image slots.
+const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
 // Rough multipart overhead margin on top of the real image cap, checked against the
 // client-declared Content-Length before the body is buffered into memory.
 const MAX_UPLOAD_BYTES = MAX_IMAGE_BYTES + 64 * 1024
@@ -56,18 +58,22 @@ export default defineEventHandler(async (event) => {
   // extension on disk is derived from sniffed bytes below, never from either of those.
   const sniffed = sniffImageType(filePart.data)
   if (!sniffed || !ALLOWED_TYPES.includes(sniffed)) {
-    throw createError({ statusCode: 400, statusMessage: 'Only PNG, JPEG, or WebP images are allowed' })
+    throw createError({ statusCode: 400, statusMessage: 'Only PNG, JPEG, GIF, or WebP images are allowed' })
   }
 
+  const isGif = sniffed === 'image/gif'
   let output
   try {
-    output = await sharp(filePart.data, { limitInputPixels: 40_000_000 })
-      .timeout({ seconds: 15 })
-      .resize({ width: OUTPUT_WIDTH, height: OUTPUT_HEIGHT, fit: 'cover', position: 'attention' })
-      .webp({ quality: 85 })
-      .toBuffer()
-  } catch {
-    throw createError({ statusCode: 400, statusMessage: 'Could not process that image' })
+    output = isGif
+      ? await resizeAnimatedGif(filePart.data, OUTPUT_WIDTH, OUTPUT_HEIGHT)
+      : await sharp(filePart.data, { limitInputPixels: 40_000_000 })
+          .timeout({ seconds: 15 })
+          .resize({ width: OUTPUT_WIDTH, height: OUTPUT_HEIGHT, fit: 'cover', position: 'attention' })
+          .webp({ quality: 85 })
+          .toBuffer()
+  } catch (err) {
+    const message = /too many frames/.test(err?.message || '') ? err.message : 'Could not process that image'
+    throw createError({ statusCode: 400, statusMessage: message })
   }
 
   const dir = uploadDir(FEATURE)
@@ -75,7 +81,7 @@ export default defineEventHandler(async (event) => {
 
   // Server-generated name only — never the client's filename or extension, which is exactly
   // what would let a mislabeled upload land as e.g. a same-origin .html file.
-  const filename = `cmoon-${id}-${Date.now()}.webp`
+  const filename = `cmoon-${id}-${Date.now()}.${isGif ? 'gif' : 'webp'}`
   await writeFile(uploadFsPath(FEATURE, filename), output)
   const newImagePath = uploadPublicPath(FEATURE, filename)
 

@@ -1,11 +1,36 @@
 // server/utils/imageUploadValidation.js
 import { resolve as resolvePath, sep as pathSep } from 'node:path'
+import sharp from 'sharp'
 // Shared image-upload validation: size cap, magic-byte content sniffing (the
 // multipart "type" field is client-supplied and spoofable, so declared mime
 // type alone is not trusted), and filename sanitization against path
 // traversal.
 
 export const MAX_IMAGE_BYTES = 5 * 1024 * 1024 // 5MB
+
+// sharp decodes every frame of an animated GIF into one tall strip before resizing, so the
+// 5MB *input* cap alone doesn't bound decoded memory/CPU cost — a small file can still carry an
+// unreasonable number of frames. This caps frames independently of file size.
+export const MAX_ANIMATED_FRAMES = 200
+
+/**
+ * Resize an animated GIF frame-by-frame to a fixed size, keeping it animated.
+ * sharp/libvips doesn't support entropy/attention gravity for multi-page (animated) input
+ * ("Resize strategy is not supported for multi-page images"), so animated crops are always
+ * centered — callers doing entropy-based cropping for static images are unaffected.
+ */
+export async function resizeAnimatedGif(buffer, width, height, { fit = 'cover', limitInputPixels = 40_000_000 } = {}) {
+  const image = sharp(buffer, { animated: true, limitInputPixels })
+  const { pages } = await image.metadata()
+  if ((pages || 1) > MAX_ANIMATED_FRAMES) {
+    throw new Error(`Animated image has too many frames (max ${MAX_ANIMATED_FRAMES})`)
+  }
+  return image
+    .timeout({ seconds: 15 })
+    .resize(width, height, { fit, position: 'centre' })
+    .gif()
+    .toBuffer()
+}
 
 const SIGNATURES = [
   { type: 'image/png',  bytes: [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a] },

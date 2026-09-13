@@ -10,7 +10,7 @@ import sharp from 'sharp'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
-import { MAX_IMAGE_BYTES, sniffImageType, sanitizePathSegment, assertInside } from '@/server/utils/imageUploadValidation'
+import { MAX_IMAGE_BYTES, sniffImageType, sanitizePathSegment, assertInside, resizeAnimatedGif } from '@/server/utils/imageUploadValidation'
 import { cmoonPageBannerUploadDir, cmoonPageBannerFsPath, cmoonPageBannerPublicPath } from '@/server/utils/cmoonImageStorage'
 import { invalidateCMoonList } from '@/server/api/cmoons.get'
 
@@ -20,7 +20,7 @@ import { invalidateCMoonList } from '@/server/api/cmoons.get'
 // what gets cropped first on a narrow phone screen.
 const BANNER_WIDTH = 1200
 const BANNER_HEIGHT = 100
-const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+const ALLOWED_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
 const MAX_UPLOAD_BYTES = MAX_IMAGE_BYTES + 64 * 1024
 
 export default defineEventHandler(async (event) => {
@@ -45,25 +45,29 @@ export default defineEventHandler(async (event) => {
 
   const sniffed = sniffImageType(filePart.data)
   if (!sniffed || !ALLOWED_TYPES.includes(sniffed)) {
-    throw createError({ statusCode: 400, statusMessage: 'Only PNG, JPEG, or WebP images are allowed' })
+    throw createError({ statusCode: 400, statusMessage: 'Only PNG, JPEG, GIF, or WebP images are allowed' })
   }
 
+  const isGif = sniffed === 'image/gif'
   let output
   try {
-    output = await sharp(filePart.data, { limitInputPixels: 40_000_000 })
-      .timeout({ seconds: 15 })
-      .rotate()
-      .resize(BANNER_WIDTH, BANNER_HEIGHT, { fit: 'cover', position: 'centre' })
-      .webp({ quality: 85 })
-      .toBuffer()
-  } catch {
-    throw createError({ statusCode: 400, statusMessage: 'Could not process that image' })
+    output = isGif
+      ? await resizeAnimatedGif(filePart.data, BANNER_WIDTH, BANNER_HEIGHT)
+      : await sharp(filePart.data, { limitInputPixels: 40_000_000 })
+          .timeout({ seconds: 15 })
+          .rotate()
+          .resize(BANNER_WIDTH, BANNER_HEIGHT, { fit: 'cover', position: 'centre' })
+          .webp({ quality: 85 })
+          .toBuffer()
+  } catch (err) {
+    const message = /too many frames/.test(err?.message || '') ? err.message : 'Could not process that image'
+    throw createError({ statusCode: 400, statusMessage: message })
   }
 
   const dir = cmoonPageBannerUploadDir()
   await mkdir(dir, { recursive: true })
 
-  const filename = `${sanitizePathSegment(id, 'cmoon')}-${Date.now()}.webp`
+  const filename = `${sanitizePathSegment(id, 'cmoon')}-${Date.now()}.${isGif ? 'gif' : 'webp'}`
   const outPath = assertInside(dir, cmoonPageBannerFsPath(filename))
   await writeFile(outPath, output)
   const newPath = cmoonPageBannerPublicPath(filename)
