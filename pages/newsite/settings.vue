@@ -16,8 +16,14 @@
               <button v-if="showTeamChangeButton" class="btn-team" @click="openTeamChangeModal">
                 {{ pendingRequest ? 'Team Change: Pending' : 'Request Team Change' }}
               </button>
+              <button v-if="showJoinCMoonButton" class="btn-team" @click="openJoinCMoonModal">
+                Join a cMoon
+              </button>
               <button class="btn-certificate" @click="showCertificateModal = true">Generate Certificate</button>
             </div>
+            <!-- Only ever rendered in place of the button above (never alongside it), so the row's
+                 height stays stable whether or not a player happens to be mid-cooldown. -->
+            <p v-if="joinCMoonCooldownText" class="settings-cmoon-cooldown">{{ joinCMoonCooldownText }}</p>
           </div>
 
           <div class="settings-body">
@@ -393,6 +399,20 @@ const showTeamChangeButton = computed(() =>
   cMoonEnabled.value && !user.value?.isAdmin && !!currentCMoonId.value
 )
 
+// ── Join a cMoon ─────────────────────────────────────────────────────────
+// Mutually exclusive with Request Team Change above: shown only for players who do NOT currently
+// have a cMoon (fresh, or opted out and past the admin-configured rejoin cooldown). Reuses the
+// same eligibility rule as the identical button on components/newsite/CMoonNav.vue — see
+// composables/useCMoonJoinEligibility.js — computed here from the status response `loadCMoonState`
+// already fetches for the Request Team Change button, rather than firing a second request for it.
+const showJoinCMoonButton = ref(false)
+const joinCMoonCooldownText = ref('')
+const { requestOpen: requestJoinCMoonModal } = useCMoonJoinModal()
+
+function openJoinCMoonModal() {
+  requestJoinCMoonModal()
+}
+
 async function loadCMoonState() {
   try {
     const [status, changeRequest] = await Promise.all([
@@ -402,8 +422,11 @@ async function loadCMoonState() {
     cMoonEnabled.value = !!status?.cMoonEnabled
     currentCMoonId.value = status?.cMoon?.id || null
     pendingRequest.value = changeRequest?.request || null
+    const eligibility = computeCMoonJoinEligibility(status)
+    showJoinCMoonButton.value = eligibility.showJoinCta
+    joinCMoonCooldownText.value = eligibility.cooldownText
   } catch {
-    // Non-critical: the button just stays hidden if this fails to load.
+    // Non-critical: the buttons just stay hidden if this fails to load.
   }
 }
 
@@ -593,6 +616,12 @@ body.page-newsite-settings .main-content { overflow-y: auto !important; scrollba
 }
 
 .btn-certificate:hover { opacity: 0.85; }
+
+.settings-cmoon-cooldown {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.65);
+}
 
 .settings-body {
   padding: 14px;
