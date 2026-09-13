@@ -243,6 +243,7 @@
                 <button
                   v-if="c.effectType"
                   class="cm-tap text-[11px] text-indigo-600 hover:underline"
+                  :disabled="fxActive"
                   @click="previewEffect(c)"
                 >Preview effect</button>
                 <button
@@ -339,7 +340,7 @@
                 <button type="button" class="cm-tap text-[11px] text-indigo-600" @click="startAddRank(c)">+ Add rank</button>
               </div>
               <div v-if="c.ranks.length" class="space-y-1">
-                <div v-for="r in c.ranks" :key="r.id" class="flex items-center gap-2 text-[11px]">
+                <div v-for="r in c.ranks" :key="r.id" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
                   <span class="text-gray-500 w-6 flex-shrink-0">#{{ r.sortOrder }}</span>
                   <span class="flex-1 min-w-0 break-words">{{ r.name }}</span>
                   <span
@@ -347,6 +348,15 @@
                     title="Name, order, and threshold are managed by the universal Rank Ladder above"
                   >Universal</span>
                   <span class="text-gray-500 truncate max-w-[10rem]">{{ r.discordRoleId || 'no role' }}</span>
+                  <!-- Only tier-backed ranks have reward data loaded on this page (legacy custom
+                       ranks' rewards live on a hand-authored Achievement this page never fetches) —
+                       showing Preview for those would open the reveal modal with a false "no
+                       rewards" empty state instead of just omitting the button. -->
+                  <button
+                    v-if="r.tierId" type="button" class="cm-tap text-indigo-600" :disabled="fxActive"
+                    title="Simulates the reveal a member sees on reaching this rank — plays this cMoon's effect (if any) and shows the real reward cToons. Nothing is granted."
+                    @click="previewRankUp(c, r)"
+                  >Preview</button>
                   <button type="button" class="cm-tap text-indigo-600" @click="startEditRank(c, r)">Edit</button>
                   <button v-if="!r.tierId" type="button" class="cm-tap text-red-600" @click="removeRank(c, r)">Delete</button>
                 </div>
@@ -364,7 +374,7 @@
                 <button type="button" class="cm-tap text-[11px] text-indigo-600" @click="startAddLevel(c)">+ Add level</button>
               </div>
               <div v-if="c.affinityLevels.length" class="space-y-1">
-                <div v-for="lvl in c.affinityLevels" :key="lvl.id" class="flex items-center gap-2 text-[11px]">
+                <div v-for="lvl in c.affinityLevels" :key="lvl.id" class="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px]">
                   <span class="text-gray-500 w-6 flex-shrink-0">#{{ lvl.sortOrder }}</span>
                   <span class="flex-1 min-w-0 break-words">{{ lvl.name }}</span>
                   <span class="text-gray-500 flex-shrink-0">{{ lvl.threshold.toLocaleString() }} pts</span>
@@ -372,6 +382,11 @@
                   <span v-if="lvl.grantsGlow" class="flex-shrink-0" title="Grants cZone glow">✨</span>
                   <span v-if="lvl.rewardBackground" class="flex-shrink-0" title="Grants background">🖼️</span>
                   <span v-if="lvl.rewardAvatars?.length" class="flex-shrink-0" :title="`Grants ${lvl.rewardAvatars.length} avatar${lvl.rewardAvatars.length === 1 ? '' : 's'}`">🧑{{ lvl.rewardAvatars.length > 1 ? `×${lvl.rewardAvatars.length}` : '' }}</span>
+                  <button
+                    type="button" class="cm-tap text-indigo-600" :disabled="fxActive"
+                    title="Simulates the reveal a member sees on reaching this affinity level — plays this cMoon's effect (if any) and shows the real reward art. Nothing is granted."
+                    @click="previewAffinityLevel(c, lvl)"
+                  >Preview</button>
                   <button type="button" class="cm-tap text-indigo-600" @click="startEditLevel(c, lvl)">Edit</button>
                   <button type="button" class="cm-tap text-red-600" @click="removeLevel(c, lvl)">Delete</button>
                 </div>
@@ -990,7 +1005,8 @@ import { cMoonPillStyle, isSafeCMoonColor, cMoonContrastRatio } from '~/utils/cm
 import { cMoonPalette } from '~/utils/cmoonPalette'
 
 const rs = useAdminResources()
-const { play: playPreviewEffect } = useFullscreenEffect()
+const { play: playPreviewEffect, active: fxActive } = useFullscreenEffect()
+const { open: openRewardModal, close: closeRewardModal } = useCMoonRewardModal()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -1009,6 +1025,57 @@ const balanceModalOpen = ref(false)
 
 function previewEffect(c) {
   if (c.effectType) playPreviewEffect(c.effectType)
+}
+
+// ── Preview rank up / affinity level up ──────────────────────────────────
+// Mirrors the "Preview join flow" pattern in CMoonSelectModal.vue: no network request, no
+// mutation — just feeds the exact same shared reveal modal real players see with data this page
+// already has in memory, tagged unambiguously as a preview. `closeRewardModal()` first guards
+// against a leftover open preview visually blending with a second one (or a real reveal that
+// happens to fire in the same tab while a preview is still open).
+function tierForRank(r) {
+  return rankTiers.value.find(t => t.id === r.tierId) || null
+}
+
+function previewRankUp(c, r) {
+  const tier = tierForRank(r)
+  if (!tier) return
+  const items = (tier.rewardCtoons || []).map(rc => ({ id: rc.ctoonId, imagePath: rc.assetPath, label: rc.name, variant: 'ctoon' }))
+  const reveal = () => {
+    closeRewardModal()
+    openRewardModal({
+      kind: 'rank',
+      eyebrow: 'cMoon Rank — Promoted! (Preview)',
+      title: tier.name,
+      items,
+      emptyText: 'This rank is a milestone — no cosmetic reward attached.',
+      note: 'Preview only — nothing was added to any account.',
+    })
+  }
+  if (c.effectType) playPreviewEffect(c.effectType, { onComplete: reveal })
+  else reveal()
+}
+
+function previewAffinityLevel(c, lvl) {
+  const items = [
+    ...(lvl.rewardAvatars || []).map(av => ({ id: `av-${av.id}`, imagePath: av.imagePath, label: av.label || 'Avatar', variant: 'avatar' })),
+    ...(lvl.rewardBackground ? [{ id: `bg-${lvl.rewardBackground.id}`, imagePath: lvl.rewardBackground.imagePath, label: lvl.rewardBackground.label || 'Background', variant: 'background' }] : []),
+  ]
+  if (lvl.grantsBorder) items.push({ id: 'border', imagePath: null, label: 'cZone Border', variant: 'swatch', icon: '🔲' })
+  if (lvl.grantsGlow) items.push({ id: 'glow', imagePath: null, label: 'cZone Glow', variant: 'swatch', icon: '✨' })
+  const reveal = () => {
+    closeRewardModal()
+    openRewardModal({
+      kind: 'affinity',
+      eyebrow: `${c.name} Affinity — Rank Up! (Preview)`,
+      title: lvl.name,
+      items,
+      emptyText: 'This rank is a milestone — no cosmetic reward attached.',
+      note: 'Preview only — nothing was added to any account.',
+    })
+  }
+  if (c.effectType) playPreviewEffect(c.effectType, { onComplete: reveal })
+  else reveal()
 }
 
 // ── Members panel (per-cMoon, one open at a time) ───────────────────────

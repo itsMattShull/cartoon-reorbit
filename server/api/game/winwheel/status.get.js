@@ -1,5 +1,6 @@
 import { prisma } from '@/server/prisma'
 import { createError } from 'h3'
+import { getChicagoMorningWindowStart } from '@/server/utils/dailyTaskWindows'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -7,7 +8,9 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
   }
 
-  // Load Winwheel config + exclusive pool
+  // Load Winwheel config + exclusive pool.
+  // tripleNothingCtoonId is intentionally NOT selected/returned here — it stays a
+  // surprise and is only revealed in the spin response at the moment it's won.
   const config = await prisma.gameConfig.findUnique({
     where: { gameName: 'Winwheel' },
     select: {
@@ -60,21 +63,13 @@ export default defineEventHandler(async (event) => {
   }))
 
   // Daily window (8 AM America/Chicago)
-  const now = new Date()
-  const chicagoNowStr = now.toLocaleString('en-US', { timeZone: 'America/Chicago' })
-  const chicagoNow = new Date(chicagoNowStr)
-  const offsetMs = now.getTime() - chicagoNow.getTime()
+  const windowStart = getChicagoMorningWindowStart()
+  const resetUtcMs = windowStart.getTime()
 
-  const year = chicagoNow.getFullYear()
-  const month = chicagoNow.getMonth()
-  const date = chicagoNow.getDate()
-  let resetUtcMs = new Date(year, month, date, 8, 0, 0).getTime() + offsetMs
-  if (now.getTime() < resetUtcMs) resetUtcMs -= 24 * 60 * 60 * 1000
-  const windowStart = new Date(resetUtcMs)
-
-  // Exclude failed spins — those were refunded and should not count against the daily limit
+  // Exclude failed spins (refunded) and 'tripleNothing' bonus rows (a reward layered
+  // on top of an already-counted spin, not a spin of its own) from the daily limit.
   const spinsToday = await prisma.wheelSpinLog.count({
-    where: { userId, createdAt: { gte: windowStart }, status: { not: 'failed' } }
+    where: { userId, createdAt: { gte: windowStart }, status: { not: 'failed' }, result: { not: 'tripleNothing' } }
   })
   const nextReset = new Date(resetUtcMs + 24 * 60 * 60 * 1000)
 

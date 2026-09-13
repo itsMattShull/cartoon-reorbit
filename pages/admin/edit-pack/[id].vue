@@ -240,7 +240,7 @@
               <div class="flex items-center gap-2 ml-auto">
                 <button type="button" @click="rebalance(rarity)"
                         class="even-out-btn">
-                  Even out
+                  Split Evenly
                 </button>
                 <span class="weight-badge"
                       :class="sumWeights(rarity)===100?'weight-ok':'weight-bad'">
@@ -445,17 +445,40 @@ const grouped = computed(() => {
 const sumWeights = rarity =>
   (grouped.value[rarity]||[]).reduce((s,id)=>s+(weights.value[id]||0),0)
 
+/** distribute `total` points evenly (as whole numbers) across `ids`, mutating weights */
+function distributeEvenly(ids, total) {
+  if (!ids.length) return
+  const base  = Math.floor(total/ids.length)
+  let extra   = total - base*ids.length
+  for (const id of ids) {
+    weights.value[id] = base + (extra-- > 0 ? 1 : 0)
+  }
+}
+
 function rebalance (rarity, fixedId=null) {
   const ids = grouped.value[rarity]||[]
   if (!ids.length) return
-  let remaining = 100
-  if (fixedId) remaining -= weights.value[fixedId]
-  const others  = fixedId ? ids.filter(i=>i!==fixedId) : ids
-  const base    = Math.floor(remaining/others.length)
-  let extra     = remaining - base*others.length
-  for (const id of others) {
-    weights.value[id] = base + (extra-- > 0 ? 1 : 0)
+
+  if (fixedId) {
+    let remaining = 100 - weights.value[fixedId]
+    const others  = ids.filter(i=>i!==fixedId)
+    distributeEvenly(others, remaining)
+    return
   }
+
+  // Split Evenly: non-cMart (inCmart=false) cToons share 70%, cMart
+  // (inCmart=true) cToons share the remaining 30%, each split evenly
+  // within their group so the rarity still totals 100%.
+  const notInCmart = ids.filter(id => !lookup.value[id]?.inCmart)
+  const inCmartIds = ids.filter(id => lookup.value[id]?.inCmart)
+
+  if (!notInCmart.length || !inCmartIds.length) {
+    distributeEvenly(ids, 100)
+    return
+  }
+
+  distributeEvenly(notInCmart, 70)
+  distributeEvenly(inCmartIds, 30)
 }
 
 /* rebalance only when totals are off */

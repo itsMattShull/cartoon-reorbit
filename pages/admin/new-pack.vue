@@ -356,14 +356,20 @@
               </div>
             </div>
 
-            <!-- total weight -->
-            <span
-              class="weight-badge"
-              :class="sumWeights(rarity) === 100 ? 'weight-ok' : 'weight-bad'"
-              :title="'Total weight = ' + sumWeights(rarity) + '%' "
-            >
-              {{ sumWeights(rarity) }} %
-            </span>
+            <div class="flex items-center gap-2">
+              <button type="button" @click="rebalance(rarity)"
+                      class="even-out-btn">
+                Split Evenly
+              </button>
+              <!-- total weight -->
+              <span
+                class="weight-badge"
+                :class="sumWeights(rarity) === 100 ? 'weight-ok' : 'weight-bad'"
+                :title="'Total weight = ' + sumWeights(rarity) + '%' "
+              >
+                {{ sumWeights(rarity) }} %
+              </span>
+            </div>
           </div>
 
           <!-- rows -->
@@ -564,6 +570,37 @@ function assignDefaultWeights(rarity) {
 function sumWeights(rarity) {
   return (grouped.value[rarity]||[])
     .reduce((sum,id) => sum + (weights.value[id]||0), 0)
+}
+
+/** distribute `total` points evenly (as whole numbers) across `ids`, mutating weights */
+function distributeEvenly(ids, total) {
+  if (!ids.length) return
+  const base  = Math.floor(total/ids.length)
+  let extra   = total - base*ids.length
+  for (const id of ids) {
+    weights.value[id] = base + (extra-- > 0 ? 1 : 0)
+  }
+}
+
+/**
+ * Split Evenly: non-cMart (inCmart=false) cToons share 70% of the rarity's
+ * weight, cMart (inCmart=true) cToons share the remaining 30%, each split
+ * evenly within their group so the rarity still totals 100%.
+ */
+function rebalance(rarity) {
+  const ids = grouped.value[rarity]||[]
+  if (!ids.length) return
+
+  const notInCmart = ids.filter(id => !lookup.value[id]?.inCmart)
+  const inCmartIds = ids.filter(id => lookup.value[id]?.inCmart)
+
+  if (!notInCmart.length || !inCmartIds.length) {
+    distributeEvenly(ids, 100)
+    return
+  }
+
+  distributeEvenly(notInCmart, 70)
+  distributeEvenly(inCmartIds, 30)
 }
 
 // 5️⃣ Autocomplete & selection (single cToon)
@@ -808,4 +845,5 @@ async function submit() {
 input[type='number'] {
   min-width: 4rem;
 }
+.even-out-btn { @apply text-xs font-semibold text-blue-700 border border-blue-300 rounded-full px-2.5 py-1 hover:bg-blue-100 whitespace-nowrap; }
 </style>

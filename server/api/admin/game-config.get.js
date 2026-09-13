@@ -43,6 +43,9 @@ export default defineEventHandler(async (event) => {
         }
       }
     }
+    includeOptions.tripleNothingCtoon = {
+      select: { id: true, name: true, rarity: true, assetPath: true }
+    }
   }
 
   try {
@@ -124,7 +127,8 @@ export default defineEventHandler(async (event) => {
             maxDailySpins: 2,
             winWheelImagePath: null, // ensure field exists in response
             winWheelSoundPath: null,
-            winWheelSoundMode: 'repeat'
+            winWheelSoundMode: 'repeat',
+            tripleNothingCtoonId: null
           },
           include: includeOptions
         })

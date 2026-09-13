@@ -59,7 +59,8 @@
           <div class="modal-box">
             <div class="modal-header">
               <h2 class="modal-title">
-                <template v-if="spinResult.type === 'nothing'">You got nothing 😢</template>
+                <template v-if="spinResult.tripleNothingCtoon">Oh no! Three misses in a row. Take this! 🎁</template>
+                <template v-else-if="spinResult.type === 'nothing'">You got nothing 😢</template>
                 <template v-else-if="spinResult.type === 'points'">
                   <span v-if="spinResult.amount < spinCost">Small Prize: +{{ Number(spinResult.amount).toLocaleString() }} pts! 🎉</span>
                   <span v-else>You won {{ Number(spinResult.amount).toLocaleString() }} pts! 🏆</span>
@@ -68,7 +69,7 @@
               </h2>
             </div>
             <div class="modal-body">
-              <template v-if="spinResult.type === 'nothing'">
+              <template v-if="spinResult.type === 'nothing' && !spinResult.tripleNothingCtoon">
                 <img src="/images/nothing1225.gif" alt="Nothing" class="nothing-gif" />
               </template>
               <div v-if="spinResult.ctoon" class="modal-ctoon">
@@ -80,6 +81,16 @@
                   image-class="modal-ctoon-img"
                 />
                 <p class="modal-ctoon-name">{{ spinResult.ctoon.name }}</p>
+              </div>
+              <div v-if="spinResult.tripleNothingCtoon" class="modal-ctoon">
+                <CtoonAsset
+                  :src="spinResult.tripleNothingCtoon.assetPath"
+                  :alt="spinResult.tripleNothingCtoon.name"
+                  :name="spinResult.tripleNothingCtoon.name"
+                  :ctoon-id="spinResult.tripleNothingCtoon.id"
+                  image-class="modal-ctoon-img"
+                />
+                <p class="modal-ctoon-name">{{ spinResult.tripleNothingCtoon.name }}</p>
               </div>
             </div>
             <div class="modal-footer">
@@ -108,6 +119,7 @@
                     <li><strong>Exclusive cToon</strong>: a random exclusive cToon.</li>
                   </ul>
                 </li>
+                <li>Land on <strong>Nothing</strong> 3 spins in a row in one day and you'll get a surprise bonus cToon — once per day.</li>
               </ul>
             </div>
             <div class="modal-footer">
@@ -219,7 +231,7 @@ const isSpinning        = ref(false)
 const showResultModal   = ref(false)
 const showHelpModal     = ref(false)
 const showExclusiveModal = ref(false)
-const spinResult        = ref({ type: '', amount: 0, ctoon: null })
+const spinResult        = ref({ type: '', amount: 0, ctoon: null, tripleNothingCtoon: null })
 let countdownTimer      = null
 const maxDailySpins     = ref(0)
 const pointsWon         = ref(0)
@@ -319,8 +331,17 @@ async function spinWheel() {
   isSpinning.value = true
 
   try {
-    const { result, points, sliceIndex, ctoon } = await $fetch('/api/game/winwheel/spin', { method: 'POST' })
-    spinResult.value = { type: result, amount: points || 0, ctoon: ctoon || null }
+    const { result, points, sliceIndex, ctoon, tripleNothingBonus } = await $fetch('/api/game/winwheel/spin', { method: 'POST' })
+    spinResult.value = {
+      type: result,
+      amount: points || 0,
+      ctoon: ctoon || null,
+      tripleNothingCtoon: tripleNothingBonus?.ctoon || null
+    }
+    // Prefetch the reveal image(s) during the 4s spin animation so they're already
+    // decoded/cached by the time the result modal opens.
+    if (spinResult.value.ctoon?.assetPath) preloadImage(spinResult.value.ctoon.assetPath)
+    if (spinResult.value.tripleNothingCtoon?.assetPath) preloadImage(spinResult.value.tripleNothingCtoon.assetPath)
     await scavenger.maybeTrigger('winwheel_spin', { open: false })
     const fullTurns = 5
     const wedgeMid  = startOffset + sliceAngle / 2 + sliceIndex * sliceAngle
@@ -341,6 +362,12 @@ async function spinWheel() {
     isSpinning.value = false
     stopSpinSound()
   }
+}
+
+function preloadImage(src) {
+  if (!src || typeof window === 'undefined') return
+  const img = new window.Image()
+  img.src = src
 }
 
 function closeModal() {

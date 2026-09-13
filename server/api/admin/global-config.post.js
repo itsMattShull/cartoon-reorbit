@@ -205,7 +205,11 @@ export default defineEventHandler(async (event) => {
         newValue: result?.timeBasedPurchaseLimits ?? null
       })
     }
-    return result
+    // faviconVersion is a BigInt, which JSON.stringify can't serialize on its own
+    return {
+      ...result,
+      faviconVersion: result.faviconVersion != null ? result.faviconVersion.toString() : null
+    }
   } catch (err) {
     console.error('Error upserting GlobalGameConfig:', err)
     throw createError({ statusCode: 500, statusMessage: 'Failed to save global settings' })

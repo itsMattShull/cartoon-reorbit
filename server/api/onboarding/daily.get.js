@@ -65,7 +65,7 @@ export default defineEventHandler(async (event) => {
       _sum: { points: true }
     }),
     db.wheelSpinLog.count({
-      where: { userId, createdAt: { gte: morningWindowStart }, status: { not: 'failed' } }
+      where: { userId, createdAt: { gte: morningWindowStart }, status: { not: 'failed' }, result: { not: 'tripleNothing' } }
     }),
     db.lottoUser.findUnique({
       where: { userId },

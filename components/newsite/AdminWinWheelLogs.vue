@@ -89,13 +89,15 @@ const LABELS = {
   nothing: 'Nothing',
   points: 'Points',
   ctoonLeast: 'cToon (Least Rare)',
-  ctoonExclusive: 'cToon (Exclusive)'
+  ctoonExclusive: 'cToon (Exclusive)',
+  tripleNothing: 'Triple Nothing Bonus'
 }
 const COLORS = {
   nothing: '#9CA3AF',
   points: '#F59E0B',
   ctoonLeast: '#3B82F6',
   ctoonExclusive: '#8B5CF6',
+  tripleNothing: '#EC4899',
   default: '#10B981'
 }
 const labelFor = key => LABELS[key] || key

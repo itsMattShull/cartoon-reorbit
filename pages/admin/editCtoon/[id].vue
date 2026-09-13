@@ -9,7 +9,7 @@
         <!-- Image Display -->
         <div>
           <label class="block mb-1 font-medium">Current Image</label>
-          <img :src="assetPath" alt="cToon" class="h-32" />
+          <img :src="assetPath" alt="cToon" class="max-w-full" style="width:auto;height:auto;" />
         </div>
 
         <!-- Upload New Image -->
@@ -20,7 +20,7 @@
           <p v-if="err.image" class="text-red-600 text-sm mt-1">{{ err.image }}</p>
           <div v-if="newImagePreview" class="mt-2">
             <label class="block mb-1 font-medium">Preview</label>
-            <img :src="newImagePreview" class="h-32" />
+            <img :src="newImagePreview" class="max-w-full" style="width:auto;height:auto;" />
           </div>
         </div>
 
