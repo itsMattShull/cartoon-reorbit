@@ -30,7 +30,7 @@
               <span class="cms-poster" :style="{ backgroundColor: safeColor(c.color) }">
                 <img
                   v-if="c.imagePath && !imageErrors[c.id]"
-                  :src="c.imagePath" alt="" width="600" height="900" loading="eager"
+                  :src="c.imagePath" alt="" width="600" height="900" loading="lazy"
                   @error="onImageError(c.id)"
                 />
                 <span v-if="choice === c.id" class="cms-badge" aria-hidden="true">✓ Selected</span>

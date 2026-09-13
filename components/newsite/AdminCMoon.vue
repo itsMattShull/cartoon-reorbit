@@ -515,7 +515,7 @@
               <img v-if="pageBannerImagePreview" :src="pageBannerImagePreview" class="cm-page-banner-image-preview" alt="Selected banner preview" />
               <img v-else-if="currentPageBannerImagePath" :src="currentPageBannerImagePath" class="cm-page-banner-image-preview" alt="Current cMoon page banner" />
               <p v-else class="text-[11px] text-gray-600 mb-1">No banner uploaded yet.</p>
-              <input type="file" accept="image/png,image/jpeg,image/webp" class="cm-field" @change="handlePageBannerImageFile" />
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="cm-field" @change="handlePageBannerImageFile" />
               <button
                 type="button"
                 class="cm-tap mt-2 px-3 border rounded bg-white"
@@ -744,8 +744,8 @@
             <p class="text-[11px] text-gray-600 mb-2">
               Shown as the choice for this cMoon on the "Choose your cMoon" screen new and existing
               players see. Portrait images work best (about a 2:3 ratio, e.g. 600×900) — it's
-              automatically resized and cropped to fit. PNG, JPEG, or WebP, up to 5MB. Leave empty
-              to keep showing the color swatch instead.
+              automatically resized and cropped to fit. PNG, JPEG, GIF, or WebP, up to 5MB. Leave
+              empty to keep showing the color swatch instead.
             </p>
             <div class="flex items-center gap-3 flex-wrap">
               <img
@@ -753,7 +753,7 @@
                 :src="imagePreviewUrl || currentImagePath" alt=""
                 class="w-16 h-24 object-cover rounded border flex-shrink-0"
               />
-              <input type="file" accept="image/png,image/jpeg,image/webp" class="cm-field text-[11px]" @change="onImageFileChange" />
+              <input type="file" accept="image/png,image/jpeg,image/webp,image/gif" class="cm-field text-[11px]" @change="onImageFileChange" />
             </div>
             <p v-if="imageError" class="text-[11px] text-red-600 mt-1">{{ imageError }}</p>
           </div>
@@ -1234,7 +1234,7 @@ async function saveFeaturedCtoons() {
 // Starter-graphic upload state. Kept separate from `form` — the image is a separate multipart
 // request (POST/DELETE .../[id]/image), sent only after the name/color/etc save succeeds.
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024
-const IMAGE_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp']
+const IMAGE_MIME_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif']
 const selectedImageFile = ref(null)
 const imagePreviewUrl = ref('')
 const currentImagePath = ref('')
@@ -1247,7 +1247,7 @@ function onImageFileChange(e) {
   imageError.value = ''
   if (!file) return
   if (!IMAGE_MIME_TYPES.includes(file.type)) {
-    imageError.value = 'Only PNG, JPEG, or WebP images are allowed'
+    imageError.value = 'Only PNG, JPEG, GIF, or WebP images are allowed'
     return
   }
   if (file.size > IMAGE_MAX_BYTES) {
