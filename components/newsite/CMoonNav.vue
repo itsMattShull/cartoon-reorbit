@@ -73,36 +73,25 @@ const cmoons = ref([])
 // Whether to show "Join a cMoon" — true for anyone without a cMoon yet, whether they explicitly
 // opted out of the join modal or just never saw it (feature disabled, logged out, etc.), AND not
 // currently sitting out an admin-configured rejoin cooldown (see cooldownText below). Clicking it
-// force-reopens the same globally-mounted CMoonSelectModal.vue via the shared composable.
-const showJoinCta = ref(false)
-// Set only while a rejoin cooldown is actively blocking this user — shown in the button's place
-// so the page never looks broken (silently missing the CTA) once eligible.
-const cooldownText = ref('')
+// force-reopens the same globally-mounted CMoonSelectModal.vue via the shared composable. The
+// same eligibility rule also backs the "Join a cMoon" button on pages/newsite/settings.vue — see
+// composables/useCMoonJoinEligibility.js for the shared logic.
+const { showJoinCta, cooldownText, refresh: refreshJoinEligibility } = useCMoonJoinEligibility()
 const { requestOpen } = useCMoonJoinModal()
 
 function goBack() {
   router.push('/newsite/MycWorld')
 }
 
-const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-
 onMounted(async () => {
-  const [listResult, statusResult] = await Promise.allSettled([
+  const [listResult] = await Promise.allSettled([
     $fetch('/api/cmoons', { params: { view: 'nav' } }),
-    $fetch('/api/cmoon/status'),
+    refreshJoinEligibility(),
   ])
   if (listResult.status === 'fulfilled') {
     cmoons.value = listResult.value?.cmoons || []
   } else {
     error.value = 'Unable to load cMoons right now.'
-  }
-  if (statusResult.status === 'fulfilled') {
-    const status = statusResult.value
-    const hasNoCMoon = !!status?.cMoonEnabled && !status.cMoon
-    const rejoinAt = status?.cMoonRejoinAvailableAt ? new Date(status.cMoonRejoinAvailableAt) : null
-    const inCooldown = !!(rejoinAt && rejoinAt > new Date())
-    showJoinCta.value = hasNoCMoon && !inCooldown
-    cooldownText.value = (hasNoCMoon && inCooldown) ? `You can rejoin a cMoon on ${dateFormatter.format(rejoinAt)}.` : ''
   }
   loading.value = false
 })
