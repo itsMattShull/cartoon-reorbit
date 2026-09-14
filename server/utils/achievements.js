@@ -540,7 +540,7 @@ export async function claimAchievementReward(userId, achievementId, optionId) {
       cMoon: {
         select: {
           effectType: true,
-          customJoinEffect: { select: { backgroundColor: true, imagePath: true, text: true, textColor: true, textPosition: true } },
+          customJoinEffect: { select: { backgroundColor: true, vignette: true, imagePath: true, text: true, textColor: true, textPosition: true } },
         },
       },
     },

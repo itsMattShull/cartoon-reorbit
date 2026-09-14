@@ -17,6 +17,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const name = body?.name === undefined ? effect.name : String(body.name).trim()
   const backgroundColor = body?.backgroundColor === undefined ? effect.backgroundColor : String(body.backgroundColor).trim()
+  const vignette = body?.vignette === undefined ? effect.vignette : !!body.vignette
   const text = body?.text === undefined ? effect.text : (body.text === null || body.text === '' ? null : String(body.text).trim())
   const textColor = body?.textColor === undefined || !String(body.textColor).trim() ? effect.textColor : String(body.textColor).trim()
   const textPosition = body?.textPosition === undefined || !body.textPosition ? effect.textPosition : body.textPosition
@@ -38,7 +39,7 @@ export default defineEventHandler(async (event) => {
   }
 
   try {
-    await db.cMoonJoinEffect.update({ where: { id }, data: { name, backgroundColor, text, textColor, textPosition } })
+    await db.cMoonJoinEffect.update({ where: { id }, data: { name, backgroundColor, vignette, text, textColor, textPosition } })
   } catch (err) {
     if (err?.code === 'P2002') {
       throw createError({ statusCode: 409, statusMessage: 'A join effect with that name already exists' })

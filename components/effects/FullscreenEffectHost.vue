@@ -18,6 +18,7 @@
 </template>
 
 <script setup>
+import { cmoonJoinEffectBackgroundStyle } from '~/utils/cmoonJoinEffectBackground'
 // Global host for the reusable full-screen cMoon effects. Mounted once, outside
 // `.site-container` (see layouts/newsite-template.vue — that container is a `transform: scale()`
 // stacking/containing-block context on desktop, which would trap a `position: fixed` overlay
@@ -90,9 +91,7 @@ const statusText = computed(() => {
 // belt-and-braces pattern used everywhere else a cMoon color reaches a `:style` binding (see
 // utils/cmoonColor.js).
 const overlayStyle = computed(() => {
-  if (isCustom.value && effect.value?.config?.backgroundColor) {
-    return { background: effect.value.config.backgroundColor }
-  }
+  if (isCustom.value) return cmoonJoinEffectBackgroundStyle(effect.value?.config)
   return {}
 })
 
@@ -121,9 +120,7 @@ function applyReducedMotion(e) {
 
 const reducedClass = computed(() => (!isCustom.value && type.value ? `fxh-reduced-${type.value}` : null))
 const reducedStyle = computed(() => {
-  if (isCustom.value && effect.value?.config?.backgroundColor) {
-    return { background: effect.value.config.backgroundColor }
-  }
+  if (isCustom.value) return cmoonJoinEffectBackgroundStyle(effect.value?.config)
   return {}
 })
 
