@@ -101,11 +101,11 @@ export default defineEventHandler(async (event) => {
         ctoons: {
           include: {
             userCtoon: {
-              include: {
+              select: {
+                mintNumber: true,
                 ctoon: {
                   select: { id: true, name: true, rarity: true, assetPath: true, price: true }
-                },
-                mintNumber: true
+                }
               }
             }
           }
