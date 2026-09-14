@@ -534,8 +534,19 @@ export async function claimAchievementReward(userId, achievementId, optionId) {
   // Read-only and unrelated to the reward grant, so it stays outside the transaction above.
   // Scoped strictly to this same `userId` — never client-suppliable — so a claim can only ever
   // surface the caller's own cMoon effect, never another user's.
-  const claimant = await prisma.user.findUnique({ where: { id: userId }, select: { cMoon: { select: { effectType: true } } } })
+  const claimant = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      cMoon: {
+        select: {
+          effectType: true,
+          customJoinEffect: { select: { backgroundColor: true, imagePath: true, text: true, textColor: true, textPosition: true } },
+        },
+      },
+    },
+  })
   const cMoonEffectType = claimant?.cMoon?.effectType || null
+  const cMoonCustomJoinEffect = claimant?.cMoon?.customJoinEffect || null
 
-  return { label: option.label, points: option.reward.points, ctoons, backgrounds: txResult.backgrounds, cMoonEffectType }
+  return { label: option.label, points: option.reward.points, ctoons, backgrounds: txResult.backgrounds, cMoonEffectType, cMoonCustomJoinEffect }
 }

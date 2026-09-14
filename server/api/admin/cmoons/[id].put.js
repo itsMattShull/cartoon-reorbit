@@ -26,6 +26,9 @@ export default defineEventHandler(async (event) => {
   const effectType = body?.effectType === undefined
     ? cmoon.effectType
     : (body.effectType === '' ? null : body.effectType)
+  const customJoinEffectId = body?.customJoinEffectId === undefined
+    ? cmoon.customJoinEffectId
+    : (body.customJoinEffectId === '' ? null : body.customJoinEffectId)
   const joinLocked = body?.joinLocked === undefined ? cmoon.joinLocked : !!body.joinLocked
   const showOnNav = body?.showOnNav === undefined ? cmoon.showOnNav : !!body.showOnNav
   const showButtonOnPages = body?.showButtonOnPages === undefined ? cmoon.showButtonOnPages : !!body.showButtonOnPages
@@ -38,6 +41,13 @@ export default defineEventHandler(async (event) => {
   }
   if (!isValidCMoonEffectType(effectType)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid effect type' })
+  }
+  if (effectType && customJoinEffectId) {
+    throw createError({ statusCode: 400, statusMessage: 'Choose either a built-in effect or a custom join effect, not both' })
+  }
+  if (customJoinEffectId) {
+    const validEffect = await db.cMoonJoinEffect.findUnique({ where: { id: customJoinEffectId }, select: { id: true } })
+    if (!validEffect) throw createError({ statusCode: 400, statusMessage: 'Invalid custom join effect' })
   }
 
   if (captainIds && captainIds.length) {
@@ -72,7 +82,7 @@ export default defineEventHandler(async (event) => {
   await db.$transaction(async (tx) => {
     await tx.cMoon.update({
       where: { id },
-      data: { name, color, discordRoleId: discordRoleId || null, pageDescription, effectType, joinLocked, showOnNav, showButtonOnPages, allowOptOutJoin },
+      data: { name, color, discordRoleId: discordRoleId || null, pageDescription, effectType, customJoinEffectId, joinLocked, showOnNav, showButtonOnPages, allowOptOutJoin },
     })
     if (captainIds) {
       await tx.cMoonCaptain.deleteMany({ where: { cMoonId: id } })
