@@ -13,6 +13,7 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const name = typeof body?.name === 'string' ? body.name.trim() : ''
   const backgroundColor = typeof body?.backgroundColor === 'string' ? body.backgroundColor.trim() : ''
+  const vignette = !!body?.vignette
   const text = body?.text === undefined || body?.text === null || body.text === '' ? null : String(body.text).trim()
   const textColor = typeof body?.textColor === 'string' && body.textColor.trim() ? body.textColor.trim() : '#FFFFFF'
   const textPosition = typeof body?.textPosition === 'string' && body.textPosition ? body.textPosition : 'BELOW_IMAGE'
@@ -36,7 +37,7 @@ export default defineEventHandler(async (event) => {
   let created
   try {
     created = await db.cMoonJoinEffect.create({
-      data: { name, backgroundColor, text, textColor, textPosition },
+      data: { name, backgroundColor, vignette, text, textColor, textPosition },
     })
   } catch (err) {
     if (err?.code === 'P2002') {

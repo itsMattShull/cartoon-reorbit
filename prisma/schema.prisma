@@ -3187,6 +3187,14 @@ model CMoonJoinEffect {
   id              String                     @id @default(uuid())
   name            String                     @unique
   backgroundColor String // "#RRGGBB", validated server-side (server/utils/cmoon.js#isValidHexColor)
+  // When true, the background renders as a radial gradient (bright center, darkened edges)
+  // derived from backgroundColor instead of a flat fill — matching the look several built-in
+  // effects hand-author per-effect (see the radial-gradient backgrounds in
+  // components/effects/FrogEffect.vue, FireworksEffect.vue, SlimeFloodEffect.vue). Computed from
+  // the single backgroundColor rather than letting an admin pick separate gradient stops, since
+  // this is meant to be a one-click "give it that same vignette look", not a full gradient editor
+  // — see utils/cmoonJoinEffectBackground.js.
+  vignette        Boolean                    @default(false)
   // Uploaded logo/main image, static or animated GIF — resized+re-encoded on upload
   // (server/api/admin/cmoon-join-effects/[id]/image.post.js), never trusted as-is from the
   // client. Null until an admin uploads one; the effect is still usable without it (a plain

@@ -1,5 +1,5 @@
 <template>
-  <div class="cje-root" :style="{ background: config.backgroundColor || '#000' }">
+  <div class="cje-root" :style="backgroundStyle">
     <div class="cje-stack">
       <div v-if="hasText && config.textPosition === 'ABOVE_IMAGE'" class="cje-text" :style="{ color: config.textColor || '#fff' }">{{ displayText }}</div>
 
@@ -18,6 +18,7 @@
 </template>
 
 <script setup>
+import { cmoonJoinEffectBackgroundStyle } from '~/utils/cmoonJoinEffectBackground'
 // Generic admin-composed join effect: background color fades in, the uploaded image scales up
 // from center, an optional caption fades in above or below it — then holds until `done` fires.
 // The overlay-level fade INTO the site (rather than an abrupt cut) is handled once, for every
@@ -28,6 +29,10 @@ const props = defineProps({
   config: { type: Object, required: true },
 })
 const emit = defineEmits(['done'])
+
+// Flat fill, or (when config.vignette is set) the same radial-gradient darkened-edges look
+// several built-in effects hand-author — see utils/cmoonJoinEffectBackground.js.
+const backgroundStyle = computed(() => cmoonJoinEffectBackgroundStyle(props.config))
 
 // Caption is admin-authored but rendered as plain text interpolation below — never v-html —
 // matching every other effect component's convention, as defense in depth against a compromised
