@@ -304,7 +304,7 @@ function closeModal() { showModal.value = false }
 
 // Helpers
 function computeTotalValue(arr) {
-  return arr.reduce((sum, item) => sum + (rarityValues[item.rarity] || 1250), 0)
+  return arr.reduce((sum, item) => sum + (item.value ?? rarityValues[item.rarity] ?? 1250), 0)
 }
 function formatCST(dateLike) {
   if (!dateLike) return '-'
