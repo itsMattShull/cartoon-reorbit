@@ -193,6 +193,7 @@
                   <img :src="item.assetPath" alt class="max-w-[60px] h-auto object-contain rounded mx-auto" />
                   <div class="mt-1 font-medium leading-tight">{{ item.name }}</div>
                   <div class="text-[10px] text-gray-600">{{ item.rarity }}</div>
+                  <div v-if="item.mintNumber != null" class="text-[10px] text-gray-500">#{{ item.mintNumber }}</div>
                 </div>
               </div>
             </div>
@@ -206,6 +207,7 @@
                   <img :src="item.assetPath" alt class="max-w-[60px] h-auto object-contain rounded mx-auto" />
                   <div class="mt-1 font-medium leading-tight">{{ item.name }}</div>
                   <div class="text-[10px] text-gray-600">{{ item.rarity }}</div>
+                  <div v-if="item.mintNumber != null" class="text-[10px] text-gray-500">#{{ item.mintNumber }}</div>
                 </div>
               </div>
               <div class="mt-2"><span class="font-medium">Total Requested Value:</span> {{ computeTotalValue(selectedTrade.ctoonsRequested) }}</div>
@@ -302,7 +304,7 @@ function closeModal() { showModal.value = false }
 
 // Helpers
 function computeTotalValue(arr) {
-  return arr.reduce((sum, item) => sum + (rarityValues[item.rarity] || 1250), 0)
+  return arr.reduce((sum, item) => sum + (item.value ?? rarityValues[item.rarity] ?? 1250), 0)
 }
 function formatCST(dateLike) {
   if (!dateLike) return '-'

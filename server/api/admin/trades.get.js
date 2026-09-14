@@ -1,5 +1,32 @@
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
+import { Prisma } from '@prisma/client'
 import { prisma } from '@/server/prisma'
+
+// Average sale price of a cToon's last 5 completed (sold) auctions, keyed by
+// ctoonId. "Sold" = CLOSED with a winner — an auction that closed with no
+// bids has no winnerId and tells us nothing about market value.
+async function getRecentAuctionAverages(ctoonIds) {
+  const map = new Map()
+  if (!ctoonIds.length) return map
+
+  const rows = await prisma.$queryRaw`
+    SELECT "ctoonId", AVG("highestBid")::float AS "avgPrice"
+    FROM (
+      SELECT uc."ctoonId" AS "ctoonId", a."highestBid" AS "highestBid",
+        ROW_NUMBER() OVER (PARTITION BY uc."ctoonId" ORDER BY a."winnerAt" DESC) AS rn
+      FROM "Auction" a
+      JOIN "UserCtoon" uc ON uc.id = a."userCtoonId"
+      WHERE a.status = 'CLOSED' AND a."winnerId" IS NOT NULL
+        AND uc."ctoonId" IN (${Prisma.join(ctoonIds)})
+    ) sub
+    WHERE rn <= 5
+    GROUP BY "ctoonId"
+  `
+  for (const row of rows) {
+    map.set(row.ctoonId, row.avgPrice)
+  }
+  return map
+}
 
 function parseStartYMD(ymd) {
   if (typeof ymd !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(ymd)) return null
@@ -76,8 +103,9 @@ export default defineEventHandler(async (event) => {
             userCtoon: {
               include: {
                 ctoon: {
-                  select: { id: true, name: true, rarity: true, assetPath: true }
-                }
+                  select: { id: true, name: true, rarity: true, assetPath: true, price: true }
+                },
+                mintNumber: true
               }
             }
           }
@@ -86,10 +114,19 @@ export default defineEventHandler(async (event) => {
     })
   ])
 
-  // 3) Shape for frontend
+  // 3) Value each cToon: average of its last 5 sold auctions, falling back to
+  // cMart price when it's never sold at auction.
+  const ctoonIds = [...new Set(offers.flatMap(o => o.ctoons.map(x => x.userCtoon.ctoon.id)))]
+  const auctionAverages = await getRecentAuctionAverages(ctoonIds)
+  function valueCtoon(ctoon) {
+    const avg = auctionAverages.get(ctoon.id)
+    return avg != null ? Math.round(avg) : ctoon.price
+  }
+
+  // 4) Shape for frontend
   const items = offers.map(o => {
-    const ctoonsOffered = o.ctoons.filter(x => x.role === 'OFFERED').map(x => x.userCtoon.ctoon)
-    const ctoonsRequested = o.ctoons.filter(x => x.role === 'REQUESTED').map(x => x.userCtoon.ctoon)
+    const ctoonsOffered = o.ctoons.filter(x => x.role === 'OFFERED').map(x => ({ ...x.userCtoon.ctoon, mintNumber: x.userCtoon.mintNumber, value: valueCtoon(x.userCtoon.ctoon) }))
+    const ctoonsRequested = o.ctoons.filter(x => x.role === 'REQUESTED').map(x => ({ ...x.userCtoon.ctoon, mintNumber: x.userCtoon.mintNumber, value: valueCtoon(x.userCtoon.ctoon) }))
 
     // Decision timestamp is when status left PENDING. We use updatedAt.
     // COUNTERED is excluded: nobody decided anything, the offer was superseded
