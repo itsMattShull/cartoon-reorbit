@@ -58,6 +58,7 @@
 </template>
 
 <script setup>
+import { cmoonJoinEffectDescriptor } from '~/utils/cmoonJoinEffectDescriptor'
 // `preview` lets admin re-use this exact component (same markup, same joinLocked-filtered
 // cMoon list, same CSS) to fully simulate what a new player experiences: team pick, the full-
 // screen join effect, a real navigation to the real cMoon page, and the same join-prize reveal
@@ -205,7 +206,8 @@ async function confirm() {
         })
       }
     }
-    if (picked?.effectType) play(picked.effectType, { onComplete: goToCMoon })
+    const descriptor = cmoonJoinEffectDescriptor(picked)
+    if (descriptor) play(descriptor, { onComplete: goToCMoon })
     else goToCMoon()
     submitting.value = false
     return
@@ -233,7 +235,8 @@ async function confirm() {
         })
       }
     }
-    if (picked?.effectType) play(picked.effectType, { onComplete: goToCMoon })
+    const descriptor = cmoonJoinEffectDescriptor(picked)
+    if (descriptor) play(descriptor, { onComplete: goToCMoon })
     else goToCMoon()
   } catch (e) {
     error.value = e?.data?.statusMessage || 'Unable to join that cMoon. Please try again.'

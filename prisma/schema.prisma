@@ -3049,7 +3049,9 @@ model AchievementRewardBackground {
 // Full-screen visual played on this cMoon's behalf at two moments: right after a user confirms
 // this cMoon in the "choose your cMoon" modal, and right after a member claims an achievement
 // prize option (server/utils/achievements.js / components/effects/FullscreenEffectHost.vue).
-// Closed set of pre-built animations, not user/admin-authored content — see effectType below.
+// Closed set of pre-built bespoke animations — see effectType below. An admin who wants a
+// custom-branded effect instead uses CMoonJoinEffect (declared after the CMoon model below) via
+// customJoinEffectId; a cMoon uses EITHER effectType OR customJoinEffectId, never both.
 enum CMoonEffectType {
   GLITCH
   SLIME
@@ -3067,8 +3069,18 @@ model CMoon {
   // color a palette is derived from for the cMoon page + themed cToon modals (see utils/cmoonPalette.js).
   discordRoleId String? // Discord role snowflake granted to members (add-only sync)
   // Optional full-screen animation played on cMoon-select and achievement-claim (see enum above).
-  // Null = no effect, proceed immediately.
+  // Null = no effect, proceed immediately. Mutually exclusive with customJoinEffectId below.
   effectType    CMoonEffectType?
+  // Optional admin-authored alternative to effectType above — a simple template (background
+  // color, uploaded image, caption) built and previewed in the "Manage cMoon Join Effects" admin
+  // page, instead of picking one of the fixed bespoke animations. Mutually exclusive with
+  // effectType: validated in every admin endpoint that writes either field, and backstopped by a
+  // DB CHECK constraint (see the migration that added this column) since Prisma's schema
+  // language can't express that XOR directly. onDelete: Restrict — deleting a CMoonJoinEffect
+  // still assigned to a cMoon fails at the DB level; the admin delete endpoint also pre-checks
+  // usage first for a friendlier error message.
+  customJoinEffectId String?
+  customJoinEffect    CMoonJoinEffect? @relation(fields: [customJoinEffectId], references: [id], onDelete: Restrict)
   // Public "choose your cMoon" poster art. Server-normalized to a fixed 2:3 webp on upload
   // (see server/api/admin/cmoons/[id]/image.post.js) — null falls back to the color swatch.
   imagePath     String?
@@ -3162,6 +3174,39 @@ model CMoon {
 
   @@index([memberCount])
   @@index([teamScore])
+}
+
+// Admin-authored full-screen join effect: a simple generic template (background color fade-in,
+// uploaded image scale-up, optional caption) that an admin composes and names in the "Manage
+// cMoon Join Effects" admin page, as an alternative to picking one of the fixed bespoke
+// animations in CMoonEffectType above. Assigned to a cMoon via CMoon.customJoinEffectId — see
+// that field's comment for the mutual-exclusivity rule with CMoon.effectType. Played by the same
+// shared host/composable as the built-in effects (components/effects/FullscreenEffectHost.vue /
+// composables/useFullscreenEffect.js), via components/effects/CustomJoinEffect.vue.
+model CMoonJoinEffect {
+  id              String                     @id @default(uuid())
+  name            String                     @unique
+  backgroundColor String // "#RRGGBB", validated server-side (server/utils/cmoon.js#isValidHexColor)
+  // Uploaded logo/main image, static or animated GIF — resized+re-encoded on upload
+  // (server/api/admin/cmoon-join-effects/[id]/image.post.js), never trusted as-is from the
+  // client. Null until an admin uploads one; the effect is still usable without it (a plain
+  // color-fade-then-caption effect is a valid, if plain, choice).
+  imagePath       String?
+  // Optional caption. Rendered as plain text interpolation ({{ }}), never v-html — defense in
+  // depth against a compromised admin account, matching every existing effect component's
+  // convention (see components/effects/*.vue).
+  text            String?
+  textColor       String                     @default("#FFFFFF")
+  textPosition    CMoonJoinEffectTextPosition @default(BELOW_IMAGE)
+  createdAt       DateTime                   @default(now())
+  updatedAt       DateTime                   @updatedAt
+
+  cmoons CMoon[]
+}
+
+enum CMoonJoinEffectTextPosition {
+  ABOVE_IMAGE
+  BELOW_IMAGE
 }
 
 // Admin-curated "Featured cToons" for one cMoon's page (capped at 12, enforced server-side in

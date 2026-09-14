@@ -18,16 +18,23 @@ export const MAX_ANIMATED_FRAMES = 200
  * sharp/libvips doesn't support entropy/attention gravity for multi-page (animated) input
  * ("Resize strategy is not supported for multi-page images"), so animated crops are always
  * centered — callers doing entropy-based cropping for static images are unaffected.
+ *
+ * `maxFrames` defaults to MAX_ANIMATED_FRAMES but can be tightened per call site — a caller that
+ * plays the GIF full-screen and forced-autoplay on a high-frequency path (e.g. cMoon join
+ * effects) wants a stricter cap than one that shows it small/lazy-loaded (e.g. a thumbnail grid).
+ * `background` is passed straight through to sharp's resize for `fit: 'contain'` callers that
+ * need transparent (rather than opaque black) letterbox padding — omitted, sharp's own default
+ * applies, so existing callers are unaffected.
  */
-export async function resizeAnimatedGif(buffer, width, height, { fit = 'cover', limitInputPixels = 40_000_000 } = {}) {
+export async function resizeAnimatedGif(buffer, width, height, { fit = 'cover', limitInputPixels = 40_000_000, maxFrames = MAX_ANIMATED_FRAMES, background } = {}) {
   const image = sharp(buffer, { animated: true, limitInputPixels })
   const { pages } = await image.metadata()
-  if ((pages || 1) > MAX_ANIMATED_FRAMES) {
-    throw new Error(`Animated image has too many frames (max ${MAX_ANIMATED_FRAMES})`)
+  if ((pages || 1) > maxFrames) {
+    throw new Error(`Animated image has too many frames (max ${maxFrames})`)
   }
   return image
     .timeout({ seconds: 15 })
-    .resize(width, height, { fit, position: 'centre' })
+    .resize(width, height, { fit, position: 'centre', ...(background ? { background } : {}) })
     .gif()
     .toBuffer()
 }
