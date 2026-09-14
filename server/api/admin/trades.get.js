@@ -77,7 +77,8 @@ export default defineEventHandler(async (event) => {
               include: {
                 ctoon: {
                   select: { id: true, name: true, rarity: true, assetPath: true }
-                }
+                },
+                mintNumber: true
               }
             }
           }
@@ -88,8 +89,8 @@ export default defineEventHandler(async (event) => {
 
   // 3) Shape for frontend
   const items = offers.map(o => {
-    const ctoonsOffered = o.ctoons.filter(x => x.role === 'OFFERED').map(x => x.userCtoon.ctoon)
-    const ctoonsRequested = o.ctoons.filter(x => x.role === 'REQUESTED').map(x => x.userCtoon.ctoon)
+    const ctoonsOffered = o.ctoons.filter(x => x.role === 'OFFERED').map(x => ({ ...x.userCtoon.ctoon, mintNumber: x.userCtoon.mintNumber }))
+    const ctoonsRequested = o.ctoons.filter(x => x.role === 'REQUESTED').map(x => ({ ...x.userCtoon.ctoon, mintNumber: x.userCtoon.mintNumber }))
 
     // Decision timestamp is when status left PENDING. We use updatedAt.
     // COUNTERED is excluded: nobody decided anything, the offer was superseded
