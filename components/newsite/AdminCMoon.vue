@@ -241,7 +241,7 @@
               <div class="ml-auto flex items-center gap-3 flex-shrink-0">
                 <button class="cm-tap text-[11px] text-indigo-600 hover:underline" @click="startEdit(c)">Edit</button>
                 <button
-                  v-if="c.effectType"
+                  v-if="c.effectType || c.customJoinEffect"
                   class="cm-tap text-[11px] text-indigo-600 hover:underline"
                   :disabled="fxActive"
                   @click="previewEffect(c)"
@@ -270,7 +270,9 @@
               Prize cToons: {{ c.prizeCtoons.map(p => `${p.name} ×${p.quantity}`).join(', ') || 'none' }}
             </div>
             <div class="text-[11px] text-gray-600 break-words">Discord role ID: {{ c.discordRoleId || 'none' }}</div>
-            <div class="text-[11px] text-gray-600 break-words">Effect: {{ c.effectType ? effectLabel(c.effectType) : 'none' }}</div>
+            <div class="text-[11px] text-gray-600 break-words">
+              Effect: {{ c.effectType ? effectLabel(c.effectType) : (c.customJoinEffect ? `${c.customJoinEffect.name} (custom)` : 'none') }}
+            </div>
             <div class="text-[11px] text-gray-600 break-words">
               cToons displayed: {{ c.displayedCtoonCount }}
               <NuxtLink :to="`/newsite/cmoon/${c.id}`" class="text-indigo-600 hover:underline ml-1">View cMoon page</NuxtLink>
@@ -447,7 +449,11 @@
             </div>
             <div>
               <label class="block text-xs font-medium mb-1">Effect (plays on cMoon select &amp; achievement claim)</label>
-              <select v-model="form.effectType" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px">
+              <select
+                v-model="form.effectType" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px"
+                :disabled="!!form.customJoinEffectId"
+                @change="form.customJoinEffectId = ''"
+              >
                 <option value="">None</option>
                 <option value="GLITCH">Glitch Effect</option>
                 <option value="SLIME">Slime Effect</option>
@@ -456,6 +462,19 @@
                 <option value="TEXT_CALLOUT">"You With Us?" Text Effect</option>
                 <option value="FROG">Frog Effect</option>
                 <option value="FIREWORKS">Fireworks Effect</option>
+              </select>
+              <p class="text-[11px] text-gray-600 mt-1">
+                Or use a custom join effect built in
+                <NuxtLink to="/newsite/admin/cMoonJoinEffects" class="text-indigo-600 hover:underline">Manage cMoon Join Effects</NuxtLink>
+                instead — the two are mutually exclusive.
+              </p>
+              <select
+                v-model="form.customJoinEffectId" class="cm-field w-full border rounded px-2 py-1 mt-1" style="font-size:16px"
+                :disabled="!!form.effectType"
+                @change="form.effectType = ''"
+              >
+                <option value="">No custom effect</option>
+                <option v-for="e in customJoinEffects" :key="e.id" :value="e.id">{{ e.name }} (custom)</option>
               </select>
             </div>
             <div>
@@ -1003,6 +1022,7 @@
 <script setup>
 import { cMoonPillStyle, isSafeCMoonColor, cMoonContrastRatio } from '~/utils/cmoonColor'
 import { cMoonPalette } from '~/utils/cmoonPalette'
+import { cmoonJoinEffectDescriptor } from '~/utils/cmoonJoinEffectDescriptor'
 
 const rs = useAdminResources()
 const { play: playPreviewEffect, active: fxActive } = useFullscreenEffect()
@@ -1022,9 +1042,13 @@ const cooldownSaving = ref(false)
 const cooldownError = ref('')
 const previewModalOpen = ref(false)
 const balanceModalOpen = ref(false)
+// Populated from /api/admin/cmoon-join-effects — admin-authored alternative to the built-in
+// effectType dropdown below (see Manage cMoon Join Effects for creating/editing these).
+const customJoinEffects = ref([])
 
 function previewEffect(c) {
-  if (c.effectType) playPreviewEffect(c.effectType)
+  const descriptor = cmoonJoinEffectDescriptor(c)
+  if (descriptor) playPreviewEffect(descriptor)
 }
 
 // ── Preview rank up / affinity level up ──────────────────────────────────
@@ -1052,7 +1076,8 @@ function previewRankUp(c, r) {
       note: 'Preview only — nothing was added to any account.',
     })
   }
-  if (c.effectType) playPreviewEffect(c.effectType, { onComplete: reveal })
+  const rankDescriptor = cmoonJoinEffectDescriptor(c)
+  if (rankDescriptor) playPreviewEffect(rankDescriptor, { onComplete: reveal })
   else reveal()
 }
 
@@ -1074,7 +1099,8 @@ function previewAffinityLevel(c, lvl) {
       note: 'Preview only — nothing was added to any account.',
     })
   }
-  if (c.effectType) playPreviewEffect(c.effectType, { onComplete: reveal })
+  const affinityDescriptor = cmoonJoinEffectDescriptor(c)
+  if (affinityDescriptor) playPreviewEffect(affinityDescriptor, { onComplete: reveal })
   else reveal()
 }
 
@@ -1181,7 +1207,7 @@ function effectLabel(type) {
 
 const editId = ref('')
 const formOpen = ref(false)
-const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', effectType: '', joinLocked: false, showOnNav: true, showButtonOnPages: false, allowOptOutJoin: true, captainIds: [], prizeCtoons: [] })
+const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', effectType: '', customJoinEffectId: '', joinLocked: false, showOnNav: true, showButtonOnPages: false, allowOptOutJoin: true, captainIds: [], prizeCtoons: [] })
 const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
@@ -1546,6 +1572,7 @@ function startEdit(c) {
     discordRoleId: c.discordRoleId || '',
     pageDescription: c.pageDescription || '',
     effectType: c.effectType || '',
+    customJoinEffectId: c.customJoinEffectId || '',
     joinLocked: !!c.joinLocked,
     showOnNav: c.showOnNav !== false,
     showButtonOnPages: !!c.showButtonOnPages,
@@ -1938,12 +1965,13 @@ async function uploadAvatar() {
 async function load() {
   loading.value = true
   try {
-    const [data, adminsData, ctoonsData, backgroundsData, avatarsData] = await Promise.all([
+    const [data, adminsData, ctoonsData, backgroundsData, avatarsData, joinEffectsData] = await Promise.all([
       $fetch('/api/admin/cmoons'),
       $fetch('/api/admin/cmoon-admins'),
       $fetch('/api/admin/list-ctoons'),
       $fetch('/api/admin/backgrounds'),
       $fetch('/api/admin/avatars'),
+      $fetch('/api/admin/cmoon-join-effects'),
     ])
     cmoons.value = data.cmoons || []
     flagEnabled.value = !!data.cMoonEnabled
@@ -1953,6 +1981,7 @@ async function load() {
     ctoons.value = ctoonsData || []
     backgrounds.value = backgroundsData || []
     avatarsCatalog.value = avatarsData || []
+    customJoinEffects.value = joinEffectsData?.effects || []
   } catch (e) {
     formError.value = e?.data?.statusMessage || 'Failed to load cMoons'
   } finally {
@@ -2128,6 +2157,7 @@ async function save() {
       discordRoleId: form.discordRoleId.trim(),
       pageDescription: form.pageDescription,
       effectType: form.effectType || null,
+      customJoinEffectId: form.customJoinEffectId || null,
       joinLocked: form.joinLocked,
       showOnNav: form.showOnNav,
       showButtonOnPages: form.showButtonOnPages,

@@ -186,6 +186,7 @@
 
 <script setup>
 import { cMoonPillStyle } from '~/utils/cmoonColor'
+import { cmoonJoinEffectDescriptor } from '~/utils/cmoonJoinEffectDescriptor'
 
 const ONLY_MY_CMOON_STORAGE_KEY = 'achievementsOnlyMyCMoon'
 
@@ -299,7 +300,8 @@ async function confirmClaim(a) {
         })
       }
     }
-    if (result?.cMoonEffectType) play(result.cMoonEffectType, { onComplete: reveal })
+    const descriptor = cmoonJoinEffectDescriptor({ effectType: result?.cMoonEffectType, customJoinEffect: result?.cMoonCustomJoinEffect })
+    if (descriptor) play(descriptor, { onComplete: reveal })
     else reveal()
   } catch (e) {
     claimError.value = e?.data?.statusMessage || 'Unable to claim reward. Please try again.'

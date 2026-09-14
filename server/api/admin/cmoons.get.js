@@ -10,6 +10,7 @@ export default defineEventHandler(async (event) => {
     db.cMoon.findMany({
       orderBy: { createdAt: 'asc' },
       include: {
+        customJoinEffect: true,
         captains: { include: { user: { select: { id: true, username: true } } } },
         prizeCtoons: { include: { ctoon: { select: { id: true, name: true, assetPath: true } } } },
         ranks: { orderBy: { sortOrder: 'asc' } },
@@ -40,6 +41,8 @@ export default defineEventHandler(async (event) => {
       avatarPath: c.avatarPath,
       discordRoleId: c.discordRoleId,
       effectType: c.effectType,
+      customJoinEffectId: c.customJoinEffectId,
+      customJoinEffect: c.customJoinEffect,
       joinLocked: c.joinLocked,
       showOnNav: c.showOnNav,
       allowOptOutJoin: c.allowOptOutJoin,
