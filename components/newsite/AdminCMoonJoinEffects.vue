@@ -13,12 +13,12 @@
       <!-- List -->
       <div class="space-y-2">
         <div v-for="e in effects" :key="e.id" class="bg-white rounded border p-3 flex items-center gap-3 flex-wrap">
-          <div class="w-14 h-14 rounded border flex-shrink-0 flex items-center justify-center overflow-hidden" :style="{ background: e.backgroundColor }">
+          <div class="w-14 h-14 rounded border flex-shrink-0 flex items-center justify-center overflow-hidden" :style="cmoonJoinEffectBackgroundStyle(e)">
             <img v-if="e.imagePath" :src="e.imagePath" alt="" class="max-w-full max-h-full object-contain" />
           </div>
           <div class="min-w-0 flex-1">
             <div class="font-semibold break-words">{{ e.name }}</div>
-            <div class="text-[11px] text-gray-600 break-words">{{ e.backgroundColor }}<span v-if="e.text"> · "{{ e.text }}"</span></div>
+            <div class="text-[11px] text-gray-600 break-words">{{ e.backgroundColor }}<span v-if="e.vignette"> · vignette</span><span v-if="e.text"> · "{{ e.text }}"</span></div>
             <div class="text-[11px] text-gray-600">Used by {{ e.usageCount }} cMoon{{ e.usageCount === 1 ? '' : 's' }}</div>
           </div>
           <div class="flex items-center gap-3 flex-shrink-0">
@@ -54,6 +54,17 @@
         </div>
 
         <div>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" v-model="form.vignette" />
+            <span class="text-xs font-medium">Vignette background</span>
+          </label>
+          <p class="text-[11px] text-gray-600 mt-1">
+            Darkens the edges in a radial gradient out from the background color, like the built-in
+            Frog/Fireworks/Slime Flood effects, instead of a flat fill.
+          </p>
+        </div>
+
+        <div>
           <label class="block text-xs font-medium mb-1">Caption text (optional, {{ form.text.length }}/80)</label>
           <input v-model="form.text" maxlength="80" class="w-full border rounded px-2 py-1" placeholder="Welcome to the crew!" />
         </div>
@@ -78,7 +89,7 @@
         <div>
           <label class="block text-xs font-medium mb-1">Image (static or animated GIF)</label>
           <div class="flex items-center gap-4 flex-wrap">
-            <div class="w-28 h-28 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0" :style="{ background: isSafeCMoonColor(form.backgroundColor) ? form.backgroundColor : '#f3f4f6' }">
+            <div class="w-28 h-28 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0" :style="isSafeCMoonColor(form.backgroundColor) ? cmoonJoinEffectBackgroundStyle(form) : {}">
               <img v-if="previewImageSrc" :src="previewImageSrc" alt="" class="max-h-full max-w-full object-contain" />
               <span v-else class="text-gray-400">No image</span>
             </div>
@@ -113,6 +124,7 @@
 
 <script setup>
 import { isSafeCMoonColor } from '~/utils/cmoonColor'
+import { cmoonJoinEffectBackgroundStyle } from '~/utils/cmoonJoinEffectBackground'
 
 const { play: playPreviewEffect, active: fxActive } = useFullscreenEffect()
 
@@ -131,7 +143,7 @@ const uploadingImage = ref(false)
 const imageError = ref('')
 const savedImagePath = ref('')
 
-const emptyForm = () => ({ name: '', backgroundColor: '#3366ff', text: '', textColor: '#ffffff', textPosition: 'BELOW_IMAGE' })
+const emptyForm = () => ({ name: '', backgroundColor: '#3366ff', vignette: false, text: '', textColor: '#ffffff', textPosition: 'BELOW_IMAGE' })
 const form = reactive(emptyForm())
 
 const backgroundColorPicker = computed({
@@ -184,6 +196,7 @@ function startEdit(e) {
   Object.assign(form, {
     name: e.name,
     backgroundColor: e.backgroundColor,
+    vignette: !!e.vignette,
     text: e.text || '',
     textColor: e.textColor,
     textPosition: e.textPosition,
@@ -237,6 +250,7 @@ async function save() {
     const body = {
       name: form.name.trim(),
       backgroundColor: form.backgroundColor,
+      vignette: form.vignette,
       text: form.text.trim() || null,
       textColor: form.textColor,
       textPosition: form.textPosition,
@@ -276,6 +290,7 @@ function preview() {
     type: 'CUSTOM',
     config: {
       backgroundColor: form.backgroundColor,
+      vignette: form.vignette,
       imagePath: previewImageSrc.value || null,
       text: form.text.trim() || null,
       textColor: isSafeCMoonColor(form.textColor) ? form.textColor : '#ffffff',

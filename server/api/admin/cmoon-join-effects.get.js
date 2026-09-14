@@ -16,6 +16,7 @@ export default defineEventHandler(async (event) => {
       id: e.id,
       name: e.name,
       backgroundColor: e.backgroundColor,
+      vignette: e.vignette,
       imagePath: e.imagePath,
       text: e.text,
       textColor: e.textColor,
