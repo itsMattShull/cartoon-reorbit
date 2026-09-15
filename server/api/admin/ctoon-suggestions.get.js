@@ -25,7 +25,12 @@ export default defineEventHandler(async (event) => {
       orderBy: { createdAt: 'desc' },
       include: {
         user: { select: { id: true, username: true, discordTag: true } },
-        ctoon: { select: { id: true, name: true, assetPath: true, series: true, set: true, characters: true, description: true } }
+        ctoon: {
+          select: {
+            id: true, name: true, assetPath: true, series: true, set: true, characters: true, description: true,
+            cMoon: { select: { id: true, name: true } }
+          }
+        }
       },
       skip,
       take: limit
