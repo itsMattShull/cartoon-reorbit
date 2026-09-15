@@ -1,17 +1,8 @@
 import { defineEventHandler, getRequestHeader, createError, readBody } from 'h3'
 import { prisma } from '@/server/prisma'
 import { sendDiscordDMByDiscordId } from '@/server/utils/discord'
-
-function normalizeString(value) {
-  return typeof value === 'string' ? value.trim() : ''
-}
-
-function normalizeCharacters(value) {
-  if (!Array.isArray(value)) return []
-  return value
-    .map(v => String(v || '').trim())
-    .filter(Boolean)
-}
+import { buildCtoonSuggestionUpdateData } from '@/server/utils/ctoonSuggestions'
+import { logAdminChange } from '@/server/utils/adminChangeLog'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody(event).catch(() => ({}))
@@ -38,22 +29,9 @@ export default defineEventHandler(async (event) => {
   const userAccepted = new Map()
 
   for (const suggestion of candidates) {
-    const newValues = suggestion.newValues || {}
-    const name = normalizeString(newValues.name)
-    const series = normalizeString(newValues.series)
-    const set = normalizeString(newValues.set)
-    const characters = normalizeCharacters(newValues.characters)
-    const descriptionProvided = Object.prototype.hasOwnProperty.call(newValues, 'description')
-    const descriptionValue = descriptionProvided && typeof newValues.description === 'string'
-      ? newValues.description.trim()
-      : ''
-    const description = descriptionProvided ? (descriptionValue || null) : null
-
     // Skip suggestions with incomplete data
-    if (!name || !series || !set || !characters.length) continue
-
-    const updateData = { name, series, set, characters }
-    if (descriptionProvided) updateData.description = description
+    const updateData = await buildCtoonSuggestionUpdateData(suggestion.newValues)
+    if (!updateData) continue
 
     try {
       const accepted = await prisma.$transaction(async (tx) => {
@@ -73,6 +51,16 @@ export default defineEventHandler(async (event) => {
       })
 
       if (!accepted) continue
+
+      if (Object.prototype.hasOwnProperty.call(updateData, 'cMoonId')) {
+        await logAdminChange(prisma, {
+          userId: me.id,
+          area: 'Ctoon:suggestionCMoon',
+          key: 'cMoonId',
+          prevValue: { ctoonId: suggestion.ctoonId, cMoonId: suggestion.oldValues?.cMoonId ?? null },
+          newValue: { cMoonId: updateData.cMoonId, suggestionId: suggestion.id }
+        })
+      }
 
       const userId = suggestion.user?.id
       const discordId = suggestion.user?.discordId

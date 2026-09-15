@@ -201,6 +201,7 @@
                 <div><strong>Set:</strong> {{ formatValue(selectedSuggestion.ctoon?.set) }}</div>
                 <div><strong>Characters:</strong> {{ formatCharacters(selectedSuggestion.ctoon?.characters) }}</div>
                 <div class="whitespace-pre-line"><strong>Description:</strong> {{ formatValue(selectedSuggestion.ctoon?.description) }}</div>
+                <div v-if="hasCMoonSuggestion(selectedSuggestion)"><strong>cMoon:</strong> {{ formatValue(selectedSuggestion.ctoon?.cMoon?.name) }}</div>
               </div>
             </div>
 
@@ -212,6 +213,7 @@
                 <div><strong>Set:</strong> {{ formatValue(selectedSuggestion.newValues?.set) }}</div>
                 <div><strong>Characters:</strong> {{ formatCharacters(selectedSuggestion.newValues?.characters) }}</div>
                 <div class="whitespace-pre-line"><strong>Description:</strong> {{ formatValue(selectedSuggestion.newValues?.description) }}</div>
+                <div v-if="hasCMoonSuggestion(selectedSuggestion)"><strong>cMoon:</strong> {{ formatValue(selectedSuggestion.newValues?.cMoonName) }}</div>
               </div>
             </div>
           </div>
@@ -634,6 +636,12 @@ function formatValue(value) {
 function formatCharacters(value) {
   if (!Array.isArray(value) || value.length === 0) return 'N/A'
   return value.join(', ')
+}
+
+// Suggestions submitted before the cMoon field existed have no cMoonId key at all — only render
+// the cMoon row for suggestions that actually carry one, rather than showing "N/A" on every row.
+function hasCMoonSuggestion(suggestion) {
+  return Object.prototype.hasOwnProperty.call(suggestion?.newValues || {}, 'cMoonId')
 }
 
 function formatDateTime(value) {

@@ -53,6 +53,19 @@ export default defineEventHandler(async (event) => {
     return { cMoonEnabled: true, cmoons }
   }
 
+  if (view === 'suggestable') {
+    // The cToon "Suggest Updates" form's cMoon field — every cMoon a display-tag suggestion is
+    // allowed to target. Includes joinLocked cMoons (a cToon's display tag is independent of
+    // team membership) but, like ?view=nav, excludes ones an admin has hidden from every public
+    // surface (showOnNav=false) — those are deliberately unreleased/staged and shouldn't be
+    // suggestible just because this is a different page. id+name only: this list reaches every
+    // logged-in user who opens the tab, not just admins.
+    const cmoons = all
+      .filter(c => c.showOnNav)
+      .map(c => ({ id: c.id, name: c.name }))
+    return { cMoonEnabled: true, cmoons }
+  }
+
   // ?view=nav: the /newsite/cmoon-nav quick-nav page — includes joinLocked cMoons that an admin
   // has opted into `showOnNav` (browsable, still not joinable). Default view: the join
   // flow/cZone/leaderboard list, unchanged — locked cMoons stay hidden here, see
