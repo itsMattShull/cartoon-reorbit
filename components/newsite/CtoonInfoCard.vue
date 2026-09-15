@@ -370,8 +370,16 @@
               <label class="ctic-label">Description</label>
               <textarea v-model="suggestDescription" rows="3" class="ctic-input"></textarea>
             </div>
-            <div v-if="submitError" class="ctic-error">{{ submitError }}</div>
-            <div v-else-if="submitSuccess" class="ctic-success">
+            <div v-if="showCMoonField" class="ctic-field">
+              <label class="ctic-label" for="ctic-suggest-cmoon">cMoon</label>
+              <select id="ctic-suggest-cmoon" v-model="suggestCMoonId" class="ctic-input ctic-select">
+                <option v-if="!suggestCMoonId" value="" disabled>— Select a cMoon —</option>
+                <option v-for="opt in cMoonOptionsForSelect" :key="opt.id" :value="opt.id">{{ opt.name }}</option>
+              </select>
+              <p class="ctic-field-hint">Tags this cToon as belonging to a cMoon on its info page — this doesn't change your own cMoon team.</p>
+            </div>
+            <div v-if="submitError" ref="suggestFeedbackEl" class="ctic-error">{{ submitError }}</div>
+            <div v-else-if="submitSuccess" ref="suggestFeedbackEl" class="ctic-success">
               Suggestion submitted. Thanks for helping improve the collection!
             </div>
             <p v-if="!hasSuggestionChanges" class="ctic-no-change">
@@ -433,6 +441,7 @@ import SecondEditionOverlay from '@/components/newsite/SecondEditionOverlay.vue'
 import abilities from '@/data/abilities.json'
 import { useCtoonModal } from '@/composables/useCtoonModal'
 import { useAuth } from '@/composables/useAuth'
+import { useSuggestibleCMoons } from '@/composables/useSuggestibleCMoons'
 import { formatQuantity, TIME_BASED_CAP } from '@/utils/formatQuantity'
 import { cMoonPaletteStyle } from '@/utils/cmoonPalette'
 
@@ -646,12 +655,15 @@ async function openHolidayCtoon() {
 }
 
 const audioEl = ref(null)
+const suggestFeedbackEl = ref(null)
 const activeTab = ref('info')
 const suggestName = ref('')
 const suggestSeries = ref('')
 const suggestSet = ref('')
 const suggestCharacters = ref('')
 const suggestDescription = ref('')
+const suggestCMoonId = ref('')
+const { cmoons: cMoonOptions, enabled: cMoonFeatureEnabled, ensureLoaded: ensureCMoonOptionsLoaded } = useSuggestibleCMoons()
 const seriesSuggestions = ref([])
 const setSuggestions = ref([])
 const submittingSuggestion = ref(false)
@@ -697,11 +709,14 @@ function abilityLabel(key) {
 }
 
 const suggestionCharacters = computed(() => normalizeCharsText(suggestCharacters.value))
+// The dropdown never offers "no cMoon" once one is assigned, so this should already hold — guarded
+// here too since it gates what actually gets submitted.
 const suggestionValid = computed(() => (
   suggestName.value.trim().length > 0 &&
   suggestSeries.value.trim().length > 0 &&
   suggestSet.value.trim().length > 0 &&
-  suggestionCharacters.value.length > 0
+  suggestionCharacters.value.length > 0 &&
+  (!!suggestCMoonId.value || !ctoon.value?.cMoon?.id)
 ))
 const hasSuggestionChanges = computed(() => {
   if (!ctoon.value?.id) return false
@@ -710,17 +725,20 @@ const hasSuggestionChanges = computed(() => {
   const oldSet = String(ctoon.value?.set || '').trim()
   const oldChars = normalizeCharsList(ctoon.value?.characters || [])
   const oldDescription = String(ctoon.value?.description || '').trim()
+  const oldCMoonId = ctoon.value?.cMoon?.id || ''
   const newName = suggestName.value.trim()
   const newSeries = suggestSeries.value.trim()
   const newSet = suggestSet.value.trim()
   const newChars = normalizeCharsList(suggestionCharacters.value)
   const newDescription = String(suggestDescription.value || '').trim()
+  const newCMoonId = suggestCMoonId.value || ''
   return (
     newName !== oldName ||
     newSeries !== oldSeries ||
     newSet !== oldSet ||
     !arraysEqual(newChars, oldChars) ||
-    newDescription !== oldDescription
+    newDescription !== oldDescription ||
+    newCMoonId !== oldCMoonId
   )
 })
 const suggestionDisabled = computed(() => (
@@ -730,6 +748,19 @@ const suggestionDisabled = computed(() => (
   !suggestionValid.value ||
   !hasSuggestionChanges.value
 ))
+
+// The current cMoon (if any) is always shown, even if it's since been hidden from the public
+// suggestable list (showOnNav=false) — otherwise the dropdown would silently misrepresent the
+// cToon's actual tag.
+const cMoonOptionsForSelect = computed(() => {
+  const list = cMoonOptions.value.slice()
+  const current = ctoon.value?.cMoon
+  if (current?.id && !list.some(c => c.id === current.id)) {
+    list.unshift({ id: current.id, name: current.name })
+  }
+  return list
+})
+const showCMoonField = computed(() => cMoonFeatureEnabled.value && cMoonOptionsForSelect.value.length > 0)
 
 function syncSuggestionForm(nextCtoon) {
   if (!nextCtoon) return
@@ -741,6 +772,7 @@ function syncSuggestionForm(nextCtoon) {
     ? nextCtoon.characters.join(', ')
     : ''
   suggestDescription.value = nextCtoon.description || ''
+  suggestCMoonId.value = nextCtoon.cMoon?.id || ''
   submitError.value = ''
   submitSuccess.value = false
   formTouched.value = false
@@ -802,11 +834,19 @@ watch([isOpen, loading], ([open, isLoading]) => {
   if (!formTouched.value) syncSuggestionForm(ctoon.value)
 })
 
-watch([suggestName, suggestSeries, suggestSet, suggestCharacters, suggestDescription], () => {
+watch([suggestName, suggestSeries, suggestSet, suggestCharacters, suggestDescription, suggestCMoonId], () => {
   if (suppressTouch) return
   formTouched.value = true
   if (submitSuccess.value) submitSuccess.value = false
   if (submitError.value) submitError.value = ''
+})
+
+// Lazy-load the cMoon options only once the Suggest tab is actually opened — CtoonInfoCard is
+// destroyed/recreated on every modal open (v-if in the layout), so without this every browse
+// session would refetch the list even for users who never visit this tab. The composable itself
+// caches the result across every card instance once loaded.
+watch(activeTab, (tab) => {
+  if (tab === 'suggest') ensureCMoonOptionsLoaded()
 })
 
 watch(suggestSeries, (next) => {
@@ -948,7 +988,8 @@ async function submitSuggestion() {
         series: suggestSeries.value.trim(),
         set: suggestSet.value.trim(),
         characters: suggestionCharacters.value,
-        description: suggestDescription.value.trim()
+        description: suggestDescription.value.trim(),
+        cMoonId: suggestCMoonId.value || null
       }
     })
     submitSuccess.value = true
@@ -956,6 +997,10 @@ async function submitSuggestion() {
     submitError.value = err?.data?.statusMessage || err?.message || 'Failed to submit suggestion.'
   } finally {
     submittingSuggestion.value = false
+    await nextTick()
+    // The submit button lives in a fixed footer outside the scrollable body, so on a short phone
+    // screen the result of tapping it can render below the fold with no visible feedback.
+    suggestFeedbackEl.value?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
   }
 }
 
@@ -1379,6 +1424,23 @@ function formatDate(value) {
   outline-offset: 0;
 }
 
+/* font-size:16px (not .ctic-input's 0.85rem) specifically prevents iOS Safari's
+   auto-zoom-on-focus for <select> elements; min-height keeps it a real touch target. */
+.ctic-select {
+  font-size: 16px;
+  min-height: 44px;
+}
+.ctic-select option {
+  background: #0d2a4d;
+  color: white;
+}
+
+.ctic-field-hint {
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.45);
+  margin: 0;
+}
+
 .ctic-success {
   font-size: 0.8rem;
   color: #86efac;
@@ -1585,6 +1647,11 @@ function formatDate(value) {
   color: var(--cm-text);
 }
 .ctic-panel--cmoon .ctic-input:focus { outline-color: var(--cm-focus-ring); }
+.ctic-panel--cmoon .ctic-select option {
+  background: var(--cm-tile-bg);
+  color: var(--cm-text);
+}
+.ctic-panel--cmoon .ctic-field-hint { color: var(--cm-text-muted); }
 .ctic-panel--cmoon .ctic-success { color: var(--cm-success); }
 .ctic-panel--cmoon .ctic-no-change { color: var(--cm-text-muted); }
 .ctic-panel--cmoon .ctic-error { color: var(--cm-danger); }
