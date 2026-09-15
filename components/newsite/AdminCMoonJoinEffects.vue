@@ -101,7 +101,7 @@
                 v-if="editId" type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
                 :disabled="!pendingFile || uploadingImage" @click="uploadImage"
               >{{ uploadingImage ? 'Uploading…' : 'Upload image' }}</button>
-              <p v-else class="text-[11px] text-gray-500">Save the effect first, then upload its image.</p>
+              <p v-else class="text-[11px] text-gray-500">Picking a file here will upload it together with "Create effect" below.</p>
             </div>
           </div>
         </div>
@@ -221,22 +221,31 @@ function onFile(ev) {
   pendingFilePreviewUrl.value = f ? URL.createObjectURL(f) : null
 }
 
-async function uploadImage() {
-  if (!pendingFile.value || !editId.value) return
+// Shared by the standalone "Upload image" button (existing effect, id already known) and by
+// save() (a brand-new effect only gets an id back from the create call, so the image can't be
+// uploaded until that response lands — this is what lets save() upload it in the same action
+// instead of forcing a separate step).
+async function uploadImageFor(id) {
+  if (!pendingFile.value || !id) return
   uploadingImage.value = true
   imageError.value = ''
   try {
     const fd = new FormData()
     fd.append('image', pendingFile.value)
-    const res = await $fetch(`/api/admin/cmoon-join-effects/${editId.value}/image`, { method: 'POST', body: fd })
+    const res = await $fetch(`/api/admin/cmoon-join-effects/${id}/image`, { method: 'POST', body: fd })
     savedImagePath.value = res.imagePath || savedImagePath.value
     clearPendingFile()
-    await load()
   } catch (e) {
     imageError.value = e?.data?.statusMessage || 'Upload failed.'
   } finally {
     uploadingImage.value = false
   }
+}
+
+async function uploadImage() {
+  if (!pendingFile.value || !editId.value) return
+  await uploadImageFor(editId.value)
+  await load()
 }
 
 async function save() {
@@ -261,6 +270,10 @@ async function save() {
       const res = await $fetch('/api/admin/cmoon-join-effects', { method: 'POST', body })
       editId.value = res.id
     }
+    // A file picked before the effect existed couldn't be uploaded yet (the endpoint needs an
+    // id) — now that save() just got or reused one, send it along in this same action rather
+    // than leaving the admin to notice nothing happened and re-upload separately.
+    if (pendingFile.value) await uploadImageFor(editId.value)
     await load()
   } catch (e) {
     formError.value = e?.data?.statusMessage || 'Failed to save join effect'

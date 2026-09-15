@@ -201,8 +201,10 @@ const cmartCtoons = useState('cmartCtoons', () => [])
 const { open: openCtoonModal } = useCtoonModal()
 const { open: openAuctionModal, createdSignal: auctionCreatedSignal } = useAuctionModal()
 const router = useRouter()
+const returningFromDetail = useAuctionHouseReturningFromDetail()
 
 function goToAuction(id) {
+  returningFromDetail.value = true
   router.push(`/newsite/AuctionHouse/${id}`)
 }
 

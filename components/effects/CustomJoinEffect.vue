@@ -124,6 +124,12 @@ onBeforeUnmount(() => {
   font-weight: 700;
   text-align: center;
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+  /* FuturaBdCnBT's space glyph is only ~100/1024 em wide (vs. a typical ~250-300/1024) — verified
+     via the font's own hmtx table — so multi-word captions visually run together ("WELCOME TO"
+     reads as "WELCOMETO") without this. word-spacing adds back what the glyph itself is missing;
+     the space character in the string is intact the whole way through, this is purely a
+     font-metrics gap. */
+  word-spacing: 0.3em;
   /* Scales with viewport but stays readable on a 320px phone and never overruns a short one —
      paired with the 80-character server-side cap so it can't overflow this box regardless. */
   font-size: clamp(1.25rem, 5.5vw, 2.75rem);
