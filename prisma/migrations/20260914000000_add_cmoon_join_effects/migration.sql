@@ -6,7 +6,6 @@ CREATE TABLE "CMoonJoinEffect" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "backgroundColor" TEXT NOT NULL,
-    "vignette" BOOLEAN NOT NULL DEFAULT false,
     "imagePath" TEXT,
     "text" TEXT,
     "textColor" TEXT NOT NULL DEFAULT '#FFFFFF',
