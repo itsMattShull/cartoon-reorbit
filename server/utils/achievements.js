@@ -512,8 +512,12 @@ export async function claimAchievementReward(userId, achievementId, optionId) {
         // made every cMoon-rank-tier claim fail with a 500 before this fix — pre-existing, found
         // while wiring up the rank-reveal modal to this same claim path.
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${userId}:${ach.cMoonRankTierId}`}))`
+        // Excludes a prior claim on THIS SAME achievement — that case is a same-cMoon
+        // double-submit retry, not a cross-cMoon re-claim, and must fall through to the
+        // ordinary create() below so it reports ALREADY_CLAIMED (via the unique constraint),
+        // not the more alarming, and here simply wrong, "claimed in another cMoon" message.
         const alreadyClaimedTier = await tx.achievementClaim.count({
-          where: { userId, achievement: { cMoonRankTierId: ach.cMoonRankTierId } },
+          where: { userId, achievementId: { not: achievementId }, achievement: { cMoonRankTierId: ach.cMoonRankTierId } },
         })
         if (alreadyClaimedTier > 0) throw new AchievementClaimError('TIER_ALREADY_CLAIMED')
       }
