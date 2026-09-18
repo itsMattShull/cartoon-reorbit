@@ -401,7 +401,7 @@ function selectBg(bg) {
   color: #fff; font-size: 0.72rem;
   padding: 3px 6px; outline: none; cursor: pointer;
 }
-.czew-select option { background: #1a3a58; }
+.czew-select option { background: #1a3a58; color: #fff; }
 
 /* ── cToon grid ── */
 .czew-grid {
