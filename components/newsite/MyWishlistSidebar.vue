@@ -183,7 +183,7 @@ function clearFilters() {
   cursor: pointer;
 }
 
-.mws-select option { background: #1a3a58; }
+.mws-select option { background: #1a3a58; color: #fff; }
 
 .mws-sort-dir {
   background: rgba(0, 0, 0, 0.25);
