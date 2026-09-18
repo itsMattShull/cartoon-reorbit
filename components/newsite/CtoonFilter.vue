@@ -309,7 +309,7 @@ function clearFilters() {
   cursor: pointer;
 }
 
-.cf-select option { background: #1a3a58; }
+.cf-select option { background: #1a3a58; color: #fff; }
 
 /* ── Price range ── */
 .cf-price-row {
