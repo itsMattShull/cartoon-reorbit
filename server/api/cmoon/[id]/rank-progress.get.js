@@ -31,6 +31,47 @@ export default defineEventHandler(async (event) => {
   const cMoonPoints = isMember ? (me?.cMoonPoints || 0) : 0
   const nextTier = isMember ? (tiers.find(t => t.pointThreshold > cMoonPoints) || null) : null
 
+  // Rank-up achievements the caller has already unlocked FOR THIS cMoon but never claimed a
+  // reward for — surfaced here so a player who dismissed/missed the claim modal at the moment
+  // they ranked up can still pick their reward from their own team's cMoon page, not only by
+  // digging through the general Achievements list. Scoped to isMember: only ever shows a claim
+  // slot for the cMoon the caller currently belongs to (an unclaimed reward from a cMoon they've
+  // since left is still claimable, just from the Achievements page — see claimAchievementReward,
+  // which never checks current membership). A big point jump can unlock more than one tier's
+  // achievement at once (see server/utils/achievements.js), so this returns every pending one,
+  // lowest tier first, not just the highest.
+  const unclaimedRankRewards = isMember
+    ? await db.achievement.findMany({
+        where: {
+          isClaimable: true,
+          cMoonRankTierId: { not: null },
+          cMoonRank: { cMoonId },
+          users: { some: { userId } },
+          claims: { none: { userId } },
+        },
+        orderBy: { cMoonRankTier: { sortOrder: 'asc' } },
+        select: {
+          id: true,
+          title: true,
+          cMoonRank: { select: { name: true } },
+          claimOptions: {
+            orderBy: { sortOrder: 'asc' },
+            select: {
+              id: true,
+              label: true,
+              reward: {
+                select: {
+                  points: true,
+                  ctoons: { select: { quantity: true, ctoon: { select: { name: true, assetPath: true } } } },
+                  backgrounds: { select: { background: { select: { label: true, imagePath: true } } } },
+                },
+              },
+            },
+          },
+        },
+      })
+    : []
+
   // A captain always displays as "Captain" regardless of their actually-earned rank tier — see
   // displayRankName in server/utils/cmoon.js. sortOrder is left untouched (only the label
   // changes) since CMoonPage.vue's progress bar still needs the REAL rank's sortOrder to find
@@ -49,5 +90,26 @@ export default defineEventHandler(async (event) => {
     currentRank,
     nextTier: nextTier ? { id: nextTier.id, name: nextTier.name, pointThreshold: nextTier.pointThreshold } : null,
     tiers,
+    // Same claimOptions shape GET /api/achievements already returns, so the claim UI can be
+    // reused as-is — each option posts to the existing POST /api/achievements/:id/claim.
+    unclaimedRankRewards: unclaimedRankRewards.map(a => ({
+      achievementId: a.id,
+      title: a.title,
+      rankName: a.cMoonRank?.name || null,
+      claimOptions: a.claimOptions.map(o => ({
+        id: o.id,
+        label: o.label,
+        points: o.reward?.points || 0,
+        ctoons: (o.reward?.ctoons || []).map(rc => ({
+          name: rc.ctoon?.name || 'cToon',
+          quantity: rc.quantity,
+          imagePath: rc.ctoon?.assetPath || null,
+        })),
+        backgrounds: (o.reward?.backgrounds || []).map(rb => ({
+          label: rb.background?.label || '',
+          imagePath: rb.background?.imagePath || null,
+        })),
+      })),
+    })),
   }
 })
