@@ -307,7 +307,7 @@ function clearFilters() {
   cursor: pointer;
 }
 
-.acs-select option { background: #1a3a58; }
+.acs-select option { background: #1a3a58; color: #fff; }
 
 .acs-select-full { width: 100%; }
 

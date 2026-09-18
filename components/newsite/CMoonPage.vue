@@ -117,6 +117,57 @@
           </p>
         </div>
 
+        <!-- Unclaimed rank rewards: a player who ranked up but dismissed/missed the claim
+             modal at the time can still pick their reward here — same claim endpoint the
+             Achievements page uses (POST /api/achievements/:id/claim), just resurfaced on
+             their own team's page. Only ever lists rank-tier achievements this member has
+             already unlocked FOR THIS cMoon and hasn't claimed yet (see rank-progress.get.js's
+             unclaimedRankRewards) — a big point jump can unlock more than one tier at once, so
+             every pending one is shown, lowest tier first, not just the most recent. -->
+        <div v-if="pendingRankClaims.length" class="cmp-rank-claim">
+          <div v-for="a in pendingRankClaims" :key="a.achievementId" class="cmp-rank-claim-item">
+            <h2 class="cmp-section-title">You reached {{ a.rankName || a.title }}! Choose your reward:</h2>
+            <div class="cmp-claim-options" role="radiogroup" :aria-label="`Reward options for ${a.title}`">
+              <button
+                v-for="opt in a.claimOptions" :key="opt.id"
+                type="button"
+                class="cmp-claim-option"
+                :class="{ 'cmp-claim-option--selected': rankClaimChoices[a.achievementId] === opt.id }"
+                role="radio"
+                :aria-checked="rankClaimChoices[a.achievementId] === opt.id"
+                @click="rankClaimChoices[a.achievementId] = opt.id"
+              >
+                <div class="cmp-claim-option-body">
+                  <div class="cmp-claim-option-label">{{ opt.label }}</div>
+                  <div v-if="opt.ctoons?.length || opt.backgrounds?.length" class="cmp-claim-option-thumbs">
+                    <img
+                      v-for="(c, i) in opt.ctoons" v-if="c.imagePath" :key="'c' + i"
+                      :src="c.imagePath" class="cmp-claim-option-thumb" :alt="c.name" :title="`${c.name} × ${c.quantity}`"
+                    />
+                    <img
+                      v-for="(b, i) in opt.backgrounds" v-if="b.imagePath" :key="'b' + i"
+                      :src="b.imagePath" class="cmp-claim-option-thumb" :alt="b.label" :title="b.label"
+                    />
+                  </div>
+                  <div class="cmp-claim-option-detail">
+                    <span v-if="opt.ctoons?.length">{{ opt.ctoons.map(c => `${c.name} × ${c.quantity}`).join(', ') }}</span>
+                    <span v-if="opt.backgrounds?.length">{{ opt.ctoons?.length ? ' + ' : '' }}{{ opt.backgrounds.length }} background{{ opt.backgrounds.length !== 1 ? 's' : '' }}</span>
+                    <span v-if="opt.points">{{ (opt.ctoons?.length || opt.backgrounds?.length) ? ' + ' : '' }}{{ opt.points.toLocaleString() }} pts</span>
+                  </div>
+                </div>
+                <span class="cmp-claim-option-check" aria-hidden="true">{{ rankClaimChoices[a.achievementId] === opt.id ? '●' : '○' }}</span>
+              </button>
+            </div>
+            <button
+              type="button"
+              class="cmp-claim-confirm-btn"
+              :disabled="!rankClaimChoices[a.achievementId] || rankClaiming[a.achievementId]"
+              @click="claimRankReward(a)"
+            >{{ rankClaiming[a.achievementId] ? 'Claiming…' : 'Confirm reward' }}</button>
+            <p v-if="rankClaimErrors[a.achievementId]" class="cmp-offer-error">{{ rankClaimErrors[a.achievementId] }}</p>
+          </div>
+        </div>
+
         <!-- Featured cToons comes first in the markup (the page's visual centerpiece) so a
              narrow/stacked layout shows it before the leaderboard panel; a wide container
              reorders them side by side via the container query below. -->
@@ -274,12 +325,15 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import { cMoonPaletteStyle } from '@/utils/cmoonPalette'
+import { cmoonJoinEffectDescriptor } from '@/utils/cmoonJoinEffectDescriptor'
 import { useCtoonModal } from '@/composables/useCtoonModal'
 import { useCMoonRewardModal } from '@/composables/useCMoonRewardModal'
+import { useFullscreenEffect } from '@/composables/useFullscreenEffect'
 
 const route = useRoute()
 const { open: openCtoonModal } = useCtoonModal()
 const { open: openRewardModal } = useCMoonRewardModal()
+const { play: playJoinEffect } = useFullscreenEffect()
 const { fetchSelf, isAdmin } = useAuth()
 
 // Set only by the admin console's "Preview join modal" flow (CMoonSelectModal.vue, preview
@@ -306,6 +360,14 @@ const eligible = ref(false)
 const offerSelections = reactive({})
 const offerClaiming = reactive({})
 const offerErrors = reactive({})
+
+// Unclaimed cMoon rank-up rewards (see rank-progress.get.js's unclaimedRankRewards) — keyed by
+// achievementId so multiple pending claims (a lump-sum point jump can unlock more than one tier
+// at once) each track their own picked option/in-flight state independently.
+const pendingRankClaims = computed(() => rankProgress.value?.unclaimedRankRewards || [])
+const rankClaimChoices = reactive({})
+const rankClaiming = reactive({})
+const rankClaimErrors = reactive({})
 
 const leaderboardView = ref('points')
 const leaderboardRows = computed(() => {
@@ -466,6 +528,53 @@ async function claimOffer(offer) {
     offerErrors[offer.id] = err?.data?.statusMessage || 'Failed to claim'
   } finally {
     offerClaiming[offer.id] = false
+  }
+}
+
+// Claims one pending rank-up reward from THIS cMoon's page — same POST /api/achievements/:id/claim
+// endpoint MyAchievements.vue's confirmClaim uses, so the server-side claim rules (one option,
+// once ever per universal tier) are identical regardless of which page the player claims from.
+async function claimRankReward(a) {
+  const optionId = rankClaimChoices[a.achievementId]
+  if (!optionId || rankClaiming[a.achievementId]) return
+  rankClaiming[a.achievementId] = true
+  rankClaimErrors[a.achievementId] = ''
+  try {
+    const result = await $fetch(`/api/achievements/${a.achievementId}/claim`, {
+      method: 'POST',
+      body: { optionId },
+    })
+    // Drop it from the pending list immediately rather than waiting on a full reload — the
+    // reveal effect/modal below plays regardless, and a stale second entry for the same
+    // achievement must never linger if the player still has other tiers pending.
+    if (rankProgress.value) {
+      rankProgress.value.unclaimedRankRewards = rankProgress.value.unclaimedRankRewards.filter(
+        (x) => x.achievementId !== a.achievementId
+      )
+    }
+    // Effect plays first, reveal follows once it completes — mirrors the cMoon-select and
+    // MyAchievements.vue claim flows exactly, so a rank claimed from either page looks the same.
+    const reveal = () => {
+      const items = [
+        ...(result.ctoons || []).map((c) => ({ id: c.name, imagePath: c.imagePath, label: c.name, qty: c.quantity, variant: 'ctoon' })),
+        ...(result.backgrounds || []).map((b) => ({ id: b.label, imagePath: b.imagePath, label: b.label || 'Background', variant: 'background' })),
+      ]
+      openRewardModal({
+        kind: 'rank',
+        eyebrow: 'cMoon Rank — Promoted!',
+        title: a.title,
+        items,
+        pointsAwarded: result.points || null,
+        emptyText: 'This rank is a milestone — no cosmetic reward attached.',
+      })
+    }
+    const descriptor = cmoonJoinEffectDescriptor({ effectType: result?.cMoonEffectType, customJoinEffect: result?.cMoonCustomJoinEffect })
+    if (descriptor) playJoinEffect(descriptor, { onComplete: reveal })
+    else reveal()
+  } catch (err) {
+    rankClaimErrors[a.achievementId] = err?.data?.statusMessage || 'Unable to claim reward. Please try again.'
+  } finally {
+    rankClaiming[a.achievementId] = false
   }
 }
 
@@ -962,6 +1071,104 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   background: var(--cm-tile-bg, rgba(255,255,255,0.08));
   color: var(--cm-text, #ffffff);
   font-size: 0.9rem;
+}
+
+.cmp-rank-claim {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-bottom: 20px;
+}
+
+.cmp-rank-claim-item {
+  background: var(--cm-tile-bg, rgba(255,255,255,0.08));
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.cmp-claim-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cmp-claim-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 10px;
+  background: var(--cm-bg, rgba(255,255,255,0.05));
+  border: 2px solid var(--cm-border, rgba(255,255,255,0.15));
+  border-radius: 8px;
+  color: var(--cm-text, #ffffff);
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.cmp-claim-option--selected {
+  border-color: var(--cm-focus-ring, var(--OrbitLightBlue));
+  background: var(--cm-tile-bg, rgba(255,255,255,0.12));
+}
+
+.cmp-claim-option-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cmp-claim-option-label {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.cmp-claim-option-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0;
+}
+
+.cmp-claim-option-thumb {
+  width: 32px;
+  height: 32px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex: 0 0 auto;
+  background: rgba(0,0,0,0.25);
+}
+
+.cmp-claim-option-detail {
+  font-size: 0.75rem;
+  color: var(--cm-text-muted, rgba(255,255,255,0.6));
+}
+
+.cmp-claim-option-check {
+  flex: 0 0 auto;
+  font-size: 1rem;
+  color: var(--cm-focus-ring, var(--OrbitLightBlue));
+}
+
+.cmp-claim-confirm-btn {
+  min-height: 44px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 0 20px;
+  border: none;
+  border-radius: 6px;
+  background: var(--cm-success, #16a34a);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.cmp-claim-confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+@media (hover: hover) and (pointer: fine) {
+  .cmp-claim-confirm-btn:not(:disabled):hover { opacity: 0.9; }
 }
 
 .cmp-offer {

@@ -678,7 +678,7 @@ body {
   color: #fff; font-size: 0.75rem; padding: 4px 8px;
   border-radius: 4px; outline: none;
 }
-.ccd-select option { background: #1a3a58; }
+.ccd-select option { background: #1a3a58; color: #fff; }
 .ccd-submit-error { font-size: 0.68rem; color: #e07a7a; }
 
 /* Image lightbox */
