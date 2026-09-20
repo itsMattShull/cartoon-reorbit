@@ -104,7 +104,7 @@
                     v-if="!u.banned && u.active"
                     class="w-full text-left px-2 py-1 text-[11px] text-purple-700 hover:bg-purple-50"
                     @click="openTransferModal(u); closeMenu()"
-                  >Transfer</button>
+                  >Transfer Account</button>
                   <button
                     v-if="isSuperAdmin && !u.isAdmin"
                     class="w-full text-left px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-50"
