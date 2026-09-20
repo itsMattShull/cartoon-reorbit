@@ -39,7 +39,7 @@ import { WORLD_W, WORLD_H, TICK_HZ, IN_LEFT, IN_RIGHT, IN_THRUST, simulate } fro
 // A run is capped at 5 minutes of simulated time. This bounds the replay cost of a single
 // /end request (~130ms worst case, measured with every difficulty knob maxed) and gives the
 // game a natural "you survived the full mission" ending rather than an unbounded grind.
-export const MAX_TICKS = 5 * 60 * TICK_HZ // 18,000
+export const MAX_TICKS = 5 * 60 * TICK_HZ // 18000
 
 // One entry per change of the held input bitmask. Measured against simulated play, a fast
 // player tapping ~8 times a second for a full five-minute run produces around 4,800 entries, so
