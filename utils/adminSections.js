@@ -38,6 +38,7 @@ export const ADMIN_SECTIONS = [
   S('setAnalytics', 'Set Analytics', 'analytics', nu('AdminSetAnalytics')),
   // Component existed on disk but was wired into neither the nav nor the router.
   S('packAnalytics', 'Pack Analytics', 'analytics', nu('AdminPackAnalytics')),
+  S('checkUserMints', 'Check User Mints', 'analytics', nu('AdminCheckUserMints')),
 
   // ── Users & Moderation ──────────────────────────────────────
   S('manageUsers', 'Manage Users', 'users', nu('AdminManageUsers')),
