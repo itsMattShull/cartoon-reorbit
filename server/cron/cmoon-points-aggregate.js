@@ -1,47 +1,53 @@
 // server/cron/cmoon-points-aggregate.js
-// Recomputes User.cMoonPoints — lifetime points contributed to a user's CURRENT cMoon — for
-// every cMoon member, in one set-based statement (not a per-user loop: this job has no
-// per-user side effects, unlike server/utils/cmoon.js's batch jobs, which loop because each
-// iteration does a transactional row lock + a mint-queue side effect). Mirrors
-// server/cron/czone-display-count.js's advisory-lock + recompute-via-UPDATE...FROM shape.
+// Recomputes User.cMoonPoints — the value the individual cMoon rank ladder (CMoonRankTier /
+// CMoonRank, see server/utils/cmoonRankTiers.js) is measured against — for every cMoon member,
+// in one set-based statement (not a per-user loop: this job has no per-user side effects, unlike
+// server/utils/cmoon.js's batch jobs, which loop because each iteration does a transactional row
+// lock + a mint-queue side effect). Mirrors server/cron/czone-display-count.js's advisory-lock +
+// recompute-via-UPDATE...FROM shape.
 //
-// "Contributed" = SUM of 'increase'-direction PointsLog rows since the user's current
-// cMoonSelectedAt. Bounded by createdAt >= cMoonSelectedAt, not the user's whole history, so
-// this is naturally scoped to their CURRENT cMoon tenure — an admin reassigning someone to a
-// different cMoon means the next run starts summing from that new cMoonSelectedAt, with no
-// explicit reset code needed. Spending points elsewhere (a 'decrease' row) never reduces it.
+// "Contributed" = SUM of this user's own CMoonScoreLog rows for their CURRENT cMoon since their
+// current cMoonSelectedAt — i.e. exactly the same admin-configurable categories that build the
+// weekly TEAM score (HIGH_SCORE: holding #1 on an eligible game; TOP10: a top-N finish on the
+// Points/Total cToons board; DAILY_TASK: completing a daily task), see runWeeklyCMoonScoring in
+// server/utils/cmoon.js and Admin > cMoons > Scoring Rules. Deliberately NOT derived from
+// PointsLog (every point a player earns from anything) as it previously was — that let a
+// brand-new account's large first-week login bonus, or points simply received from another
+// player via trade/auction, buy rank progress with no real skill or teamwork behind it, putting
+// veteran and new/inactive accounts on very uneven footing. Sourcing rank progress from the same
+// pool the team leaderboard uses means every player, regardless of account age or point balance,
+// advances their rank the same way: by actually placing on a leaderboard or showing up daily —
+// and the minimum-account-age gate that already guards weekly scoring (CMOON_SCORING_DEFAULTS.
+// minAccountAgeDays) means a too-new account earns no rank progress at all yet, rather than a
+// head start.
 //
-// Excludes PointsLog methods that represent points a member merely RECEIVED from another
-// player (their side of an auction sale, an accepted trade, or a wishlist trade) rather than
-// points they personally earned through play — otherwise a member could rank up by funneling
-// points from an alt or a low-effort trade/auction instead of actually playing. Every other
-// 'increase' method (games, daily tasks, code redemptions, contest prizes, etc.) still counts.
+// Bounded by createdAt >= cMoonSelectedAt (CMoonScoreLog.createdAt is set when the weekly cron
+// batch-inserts that week's awards), not the user's whole history, so this is naturally scoped
+// to their CURRENT cMoon tenure — an admin reassigning someone to a different cMoon means the
+// next run starts summing from that new cMoonSelectedAt, with no explicit reset code needed.
+// Also joined on csl."cMoonId" = u."cMoonId" (current membership) since a CMoonScoreLog row is
+// permanently tagged with whichever cMoon the player belonged to when it was awarded — a player
+// who has since left that cMoon (or been moved out of it) never has its old rows counted again,
+// matching every other reassignment invariant this feature relies on (see reassignUserCMoon's
+// own comment in server/utils/cmoon.js).
 //
 // Full idempotent recompute each run (not an incrementing cursor) — self-healing if a row is
-// ever missed, at the cost of re-summing each member's whole current-cMoon-tenure history
-// every run. That's the intentional tradeoff for a first cut of this feature; if PointsLog
-// grows large enough for this to matter, revisit with a cursor keyed on PointsLog.id.
+// ever missed, at the cost of re-summing each member's whole current-cMoon-tenure history every
+// run. CMoonScoreLog is tiny per user (a handful of rows per week) compared to PointsLog, so this
+// is cheaper than the PointsLog-based version it replaces, not more expensive.
 import { prisma } from '../prisma.js'
 import { achievementsQueue } from '../utils/queues.js'
 
 const LOCK_KEY = 719284511 // arbitrary constant unique to this job, for pg_try_advisory_lock
 
-// PointsLog.method values for points received FROM ANOTHER PLAYER rather than earned by the
-// recipient's own activity — see the module comment above. Compile-time constants only, never
-// user input, embedded directly into RECOMPUTE_SQL below (same convention documented in
-// server/utils/cmoon.js for its own $queryRawUnsafe calls).
-const CMOON_POINTS_EXCLUDED_METHODS = ['Auction', 'Accepted Trade', 'Wishlist Trade']
-const excludedMethodsSql = CMOON_POINTS_EXCLUDED_METHODS.map(m => `'${m}'`).join(', ')
-
 const RECOMPUTE_SQL = `
   WITH totals AS (
-    SELECT u.id AS user_id, COALESCE(SUM(pl.points), 0) AS total
+    SELECT u.id AS user_id, COALESCE(SUM(csl.points), 0) AS total
     FROM "User" u
-    LEFT JOIN "PointsLog" pl
-      ON pl."userId" = u.id
-     AND pl.direction = 'increase'
-     AND pl."createdAt" >= u."cMoonSelectedAt"
-     AND pl.method NOT IN (${excludedMethodsSql})
+    LEFT JOIN "CMoonScoreLog" csl
+      ON csl."userId" = u.id
+     AND csl."cMoonId" = u."cMoonId"
+     AND csl."createdAt" >= u."cMoonSelectedAt"
     WHERE u."cMoonId" IS NOT NULL
     GROUP BY u.id
   )
