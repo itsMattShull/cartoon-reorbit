@@ -557,7 +557,7 @@ export async function selectCMoonForUser(userId, cMoonId) {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, cMoonId: true, cMoonOptedOut: true, cMoonOptedOutAt: true },
+    select: { id: true, cMoonId: true, cMoonOptedOut: true, cMoonOptedOutAt: true, discordId: true, inGuild: true },
   })
   if (!user) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
   if (user.cMoonId) throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
@@ -569,7 +569,7 @@ export async function selectCMoonForUser(userId, cMoonId) {
     if (rejoinAt && new Date() < rejoinAt) throw new CMoonError(CMOON_SELECT_ERRORS.REJOIN_COOLDOWN)
   }
 
-  const cmoon = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true, joinLocked: true, allowOptOutJoin: true } })
+  const cmoon = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true, joinLocked: true, allowOptOutJoin: true, discordRoleId: true } })
   if (!cmoon) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
   // Locked cMoons are only reachable via admin direct-assign (POST
   // /api/admin/users/[id]/update-cmoon), never through this self-serve path — enforced here,
@@ -612,7 +612,23 @@ export async function selectCMoonForUser(userId, cMoonId) {
   })
 
   const prizes = await grantCMoonPrizes(userId, assigned)
-  return { cMoonId: assigned, prizes }
+
+  // Best-effort real-time Discord role grant, mirroring the admin-reassignment path
+  // (reassignUserCMoon below) instead of leaving a self-selected join waiting on the
+  // once-daily syncCMoonDiscordRoles cron. There's no old role to revoke here — the
+  // ALREADY_ASSIGNED check above guarantees this user had no cMoon before this call — so
+  // this only ever grants. Never lets a Discord-side failure (misconfigured role, rate
+  // limiting, timeout) surface as a failed join: the cMoon assignment/prizes above have
+  // already committed by this point, and cMoonRoleGrantedAt is deliberately left unset on
+  // success (same as reassignUserCMoon) so the nightly cron still re-confirms the grant.
+  let discordRoleSynced = null
+  try {
+    discordRoleSynced = await syncDiscordRolesForReassignment(user, null, cmoon.discordRoleId || null)
+  } catch {
+    discordRoleSynced = false
+  }
+
+  return { cMoonId: assigned, prizes, discordRoleSynced }
 }
 
 // User-initiated decline from the join modal — there is no more time-based auto-assignment, so
@@ -652,13 +668,14 @@ function withTimeout(promise, ms) {
   })
 }
 
-// Real-time (not nightly-cron) Discord role sync for a single reassignment. Revoking a role is
-// new capability, not an existing pattern being reused: every other Discord sync in this codebase
-// (server/cron/sync-guild-members.js's addRoleToMember-backed jobs) is grant-only by deliberate
-// design, so this is scoped tightly — called only from reassignUserCMoon below (one user, one
-// admin-initiated change at a time), never from a bulk or cron path. Returns true/false once both
-// calls resolve within the timeout, or null if either is still in flight (not a failure — the
-// nightly syncCMoonDiscordRoles job will still pick up a late grant via cMoonRoleGrantedAt).
+// Real-time (not nightly-cron) Discord role sync for a single user's cMoon change. Revoking a
+// role is new capability, not an existing pattern being reused: every other Discord sync in this
+// codebase (server/cron/sync-guild-members.js's addRoleToMember-backed jobs) is grant-only by
+// deliberate design, so this is scoped tightly — called only from selectCMoonForUser above (grant
+// only, no prior role to revoke) and reassignUserCMoon below (one user, one admin-initiated change
+// at a time), never from a bulk or cron path. Returns true/false once both calls resolve within
+// the timeout, or null if either is still in flight (not a failure — the nightly
+// syncCMoonDiscordRoles job will still pick up a late grant via cMoonRoleGrantedAt).
 async function syncDiscordRolesForReassignment(user, oldRoleId, newRoleId) {
   if (!user.discordId || !user.inGuild || (!oldRoleId && !newRoleId)) return null
   const [revoked, granted] = await Promise.all([
