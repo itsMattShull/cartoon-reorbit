@@ -11,6 +11,12 @@
 // different cMoon means the next run starts summing from that new cMoonSelectedAt, with no
 // explicit reset code needed. Spending points elsewhere (a 'decrease' row) never reduces it.
 //
+// Excludes PointsLog methods that represent points a member merely RECEIVED from another
+// player (their side of an auction sale, an accepted trade, or a wishlist trade) rather than
+// points they personally earned through play — otherwise a member could rank up by funneling
+// points from an alt or a low-effort trade/auction instead of actually playing. Every other
+// 'increase' method (games, daily tasks, code redemptions, contest prizes, etc.) still counts.
+//
 // Full idempotent recompute each run (not an incrementing cursor) — self-healing if a row is
 // ever missed, at the cost of re-summing each member's whole current-cMoon-tenure history
 // every run. That's the intentional tradeoff for a first cut of this feature; if PointsLog
@@ -20,6 +26,13 @@ import { achievementsQueue } from '../utils/queues.js'
 
 const LOCK_KEY = 719284511 // arbitrary constant unique to this job, for pg_try_advisory_lock
 
+// PointsLog.method values for points received FROM ANOTHER PLAYER rather than earned by the
+// recipient's own activity — see the module comment above. Compile-time constants only, never
+// user input, embedded directly into RECOMPUTE_SQL below (same convention documented in
+// server/utils/cmoon.js for its own $queryRawUnsafe calls).
+const CMOON_POINTS_EXCLUDED_METHODS = ['Auction', 'Accepted Trade', 'Wishlist Trade']
+const excludedMethodsSql = CMOON_POINTS_EXCLUDED_METHODS.map(m => `'${m}'`).join(', ')
+
 const RECOMPUTE_SQL = `
   WITH totals AS (
     SELECT u.id AS user_id, COALESCE(SUM(pl.points), 0) AS total
@@ -28,6 +41,7 @@ const RECOMPUTE_SQL = `
       ON pl."userId" = u.id
      AND pl.direction = 'increase'
      AND pl."createdAt" >= u."cMoonSelectedAt"
+     AND pl.method NOT IN (${excludedMethodsSql})
     WHERE u."cMoonId" IS NOT NULL
     GROUP BY u.id
   )
