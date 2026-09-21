@@ -520,10 +520,15 @@ model User {
   // Set once the daily Discord sync grants this user's cMoon role, so the job
   // only touches never-synced members instead of re-checking everyone daily.
   cMoonRoleGrantedAt     DateTime?
-  // Lifetime points contributed to the CURRENT cMoon: sum of 'increase' PointsLog rows
-  // since cMoonSelectedAt, kept in sync by a periodic cron (never decreases from spending,
-  // and naturally restarts at 0 when a user is reassigned to a different cMoon since the
-  // window is bounded by their current cMoonSelectedAt — including an admin "Balance Teams"
+  // Points contributed to the CURRENT cMoon's individual rank ladder: sum of this user's own
+  // CMoonScoreLog rows (the same admin-configurable HIGH_SCORE/TOP10/DAILY_TASK categories that
+  // build the weekly team score — see runWeeklyCMoonScoring in server/utils/cmoon.js) since
+  // cMoonSelectedAt, kept in sync by a periodic cron (server/cron/cmoon-points-aggregate.js).
+  // Deliberately NOT sourced from PointsLog (every point earned from anything, or received from
+  // another player via trade/auction) — that let account age and passive point transfers drive
+  // rank progress instead of actual leaderboard/daily-task participation. Never decreases from
+  // spending, and naturally restarts at 0 when a user is reassigned to a different cMoon since
+  // the window is bounded by their current cMoonSelectedAt — including an admin "Balance Teams"
   // move or an accepted CMoonChangeRequest, which use the same reassignUserCMoon path as any
   // other admin-driven reassignment). This reset is load-bearing, not incidental: the
   // universal cMoon rank ladder (CMoonRankTier) evaluates against this field, and
@@ -643,6 +648,8 @@ model User {
   // Admin change logs (inverse)
   adminChangeLogs         AdminChangeLog[]
   targetedAdminChangeLogs AdminChangeLog[]    @relation("AdminChangeLogTarget")
+  packLimitResetsReceived UserPackLimitReset[] @relation("UserPackLimitResetUser")
+  packLimitResetsIssued   UserPackLimitReset[] @relation("UserPackLimitResetAdmin")
   lottoUser               LottoUser?
   lottoLogs               LottoLog[]
   // Achievements back‑relation
@@ -981,6 +988,7 @@ model Pack {
   rarityConfigs PackRarityConfig[]
   ctoonOptions  PackCtoonOption[]
   userPacks     UserPack[]
+  limitResets   UserPackLimitReset[]
   rewardPacks   RewardPack[]
 }
 
@@ -1020,6 +1028,29 @@ model UserPack {
   user         User        @relation(fields: [userId], references: [id])
   pack         Pack        @relation(fields: [packId], references: [id])
   mintedCtoons UserCtoon[]
+}
+
+// An admin-issued watermark that exempts a user's already-made purchases of a
+// pack from Pack.dailyPurchaseLimit's rolling window, without touching the
+// UserPack rows themselves (those are the player's real owned sealed packs,
+// and their createdAt is read elsewhere for purchase-history/analytics — see
+// server/api/admin/pack-analytics.get.js — so it must stay untouched). One
+// row per (userId, packId): resetAt is bumped to now() on every reset, and
+// server/utils/packDailyWindow.js's resolveEffectiveWindowStart() only ever
+// needs the latest value.
+model UserPackLimitReset {
+  id        String   @id @default(uuid())
+  userId    String
+  packId    String
+  resetAt   DateTime @default(now())
+  adminId   String
+  createdAt DateTime @default(now())
+
+  user  User @relation("UserPackLimitResetUser", fields: [userId], references: [id], onDelete: Cascade)
+  pack  Pack @relation(fields: [packId], references: [id], onDelete: Cascade)
+  admin User @relation("UserPackLimitResetAdmin", fields: [adminId], references: [id])
+
+  @@unique([userId, packId])
 }
 
 model LoginLog {
