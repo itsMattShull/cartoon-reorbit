@@ -1,32 +1,42 @@
 // server/utils/cmoon.js
 // Shared logic for the cMoon (faction) feature: atomic self-selection/opt-out, prize
-// granting, and the weekly team leaderboard scoring. Kept in one place so the feature
+// granting, and the daily team leaderboard scoring. Kept in one place so the feature
 // is easy to rip out later — see GlobalGameConfig.cMoonEnabled.
 import { Prisma } from '@prisma/client'
 import { prisma } from '../prisma.js'
 import { mintQueue } from './queues.js'
-import { getWeekWindowStart } from './centralTime.js'
 import { getChicagoDailyBoundary, getChicagoMorningWindowStart } from './dailyTaskWindows.js'
 import { COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
 import { EXCLUDED_SYSTEM_USER_ID } from './economyValuation.js'
 import { grantGuildRole, revokeGuildRole } from './discord.js'
 import { CMOON_EFFECT_TYPES } from '../../utils/cmoonEffectTypes.js'
 
-// ── Weekly cMoon team leaderboard scoring ──────────────────────────────────────
+// ── Daily cMoon team leaderboard scoring ──────────────────────────────────────
 //
-// Three bonuses, awarded once per calendar week (Monday 00:00 America/Chicago —
-// see getWeekWindowStart) to whichever cMoon a qualifying player belongs to:
-//   - HIGH_SCORE (default 100 pts/player): holding rank #1 (all-time) on an eligible arcade game.
-//   - TOP10 (default 50 pts/player): a top-N finish on an eligible board (Top Points / Total cToons).
-//   - DAILY_TASK (default 10 pts/player/day): each day that week the player completed at
-//     least one of the existing daily tasks (recorded by recordDailyTaskCompletions,
-//     run daily — see server/cron/record-daily-task-completions.js).
+// Three bonuses, awarded once per calendar day (America/Chicago, at an admin-configurable
+// time of day — see checkAndRunCMoonDailyScoring in server/cron/cmoon-daily-score.js and
+// GlobalGameConfig.cMoonScoringRunHour/Minute) to whichever cMoon a qualifying player belongs to:
+//   - HIGH_SCORE (default 100 pts/WEEK, i.e. ~14/day — see AWARDS_PER_WEEK below): holding rank
+//     #1 (all-time) on an eligible arcade game.
+//   - TOP10 (default 50 pts/week, ~7/day): a top-N finish on an eligible board (Top Points /
+//     Total cToons).
+//   - DAILY_TASK (default 10 pts/player/day, unscaled): completing at least one of the existing
+//     daily tasks that day (recorded by recordDailyTaskCompletions, run every 4h — see
+//     server/cron/record-daily-task-completions.js).
+//
+// This ran once a week (Monday) until admins asked for a fully time-adjustable daily run
+// instead. HIGH_SCORE/TOP10 are a snapshot of who holds a spot RIGHT NOW, not something actually
+// earned per-day — running that snapshot 7x as often would otherwise inflate an unchanged
+// holder's weekly total 7x for no behavioral change, so those two admin-configured point values
+// are still entered/read as "per week" and divided down at award time (see perRunAward). Only
+// DAILY_TASK genuinely already awarded per calendar day (previously just batched into one
+// weekly insert) so it's untouched.
 //
 // All the numbers above, the minimum-account-age anti-abuse gate, which games are
 // HIGH_SCORE-eligible, and which boards/rank-cutoff count for TOP10 are admin-editable
 // (Admin > cMoons > Scoring Rules — see resolveScoringConfig below and
 // server/api/admin/cmoon-scoring.post.js). Changes apply forward-only: they affect
-// only future weekly cron runs, never rewrite past CMoonScoreLog rows/teamScore.
+// only future daily cron runs, never rewrite past CMoonScoreLog rows/teamScore.
 //
 // A minimum account age (default 3 days) gates all three: a brand-new throwaway account
 // can join a cMoon and immediately inflate its score by camping a low-traffic game's #1
@@ -349,10 +359,21 @@ async function recomputeCMoonTeamScores() {
   ])
 }
 
-// Weekly cron entry point (server/cron/cmoon-weekly-score.js). Gathers every qualifying
-// award for the week that just ended, bulk-inserts them (idempotent via the unique
+// Daily checker-cron entry point (server/cron/cmoon-daily-score.js). Gathers every qualifying
+// award for the calendar day that just ended, bulk-inserts them (idempotent via the unique
 // constraint), then recomputes every cMoon's teamScore from the log. Safe to re-run.
-export async function runWeeklyCMoonScoring() {
+//
+// HIGH_SCORE and TOP10 are a snapshot of "who holds this spot right now" — previously taken
+// once a week, they're divided by 7 (rounded) here since moving to a daily cadence means an
+// unchanged holder is now snapshotted 7x as often, and weekly point totals would otherwise
+// balloon 7x for no behavioral change. DAILY_TASK is untouched: it already awarded once per
+// calendar day (just batched into one weekly run before), so its cadence hasn't actually changed.
+const AWARDS_PER_WEEK = 7
+function perRunAward(weeklyPoints) {
+  return Math.max(0, Math.round(weeklyPoints / AWARDS_PER_WEEK))
+}
+
+export async function runDailyCMoonScoring() {
   const config = await getGlobalConfig({ fresh: true })
   if (!config?.cMoonEnabled) return { awarded: 0 }
 
@@ -360,9 +381,11 @@ export async function runWeeklyCMoonScoring() {
     highScorePoints, top10Points, dailyTaskPoints, minAccountAgeDays, top10RankCutoff,
     top10PointsBoardEnabled, top10CtoonsBoardEnabled, activeScoreGames, activeWinGames,
   } = resolveScoringConfig(config)
+  const dailyHighScorePoints = perRunAward(highScorePoints)
+  const dailyTop10Points = perRunAward(top10Points)
 
-  const weekStart = getWeekWindowStart()
-  const weekBegin = new Date(weekStart.getTime() - 7 * 24 * 60 * 60 * 1000)
+  const weekStart = getChicagoDailyBoundary() // see CMoonScoreLog.weekStart's schema comment
+  const weekBegin = new Date(weekStart.getTime() - 24 * 60 * 60 * 1000)
   const minAccountAgeCutoff = new Date(Date.now() - minAccountAgeDays * 24 * 60 * 60 * 1000)
 
   const candidates = []
@@ -377,20 +400,20 @@ export async function runWeeklyCMoonScoring() {
   activeScoreGames.forEach((g, i) => {
     const holder = scoreHolders[i]
     if (isEligibleHolder(holder, minAccountAgeCutoff)) {
-      candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: highScorePoints, weekStart })
+      candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: dailyHighScorePoints, weekStart })
     }
   })
   activeWinGames.forEach((g, i) => {
     const holder = winHolders[i]
     if (isEligibleHolder(holder, minAccountAgeCutoff)) {
-      candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: highScorePoints, weekStart })
+      candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: dailyHighScorePoints, weekStart })
     }
   })
   for (const row of eligibleHolders(top10PointsHolders, minAccountAgeCutoff)) {
-    candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'points', points: top10Points, weekStart })
+    candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'points', points: dailyTop10Points, weekStart })
   }
   for (const row of eligibleHolders(top10CtoonsHolders, minAccountAgeCutoff)) {
-    candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'totalCtoons', points: top10Points, weekStart })
+    candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'totalCtoons', points: dailyTop10Points, weekStart })
   }
 
   const dailyTaskRows = await prisma.userDailyTaskCompletion.findMany({

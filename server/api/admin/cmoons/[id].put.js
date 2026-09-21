@@ -17,6 +17,12 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const name = typeof body?.name === 'string' ? body.name.trim() : cmoon.name
   const color = typeof body?.color === 'string' ? body.color.trim() : cmoon.color
+  // Optional per-role color overrides — undefined leaves the stored value alone (same convention
+  // as pageDescription/effectType below), an explicit null/blank clears the override to auto-derived.
+  const pageBgColor = body?.pageBgColor === undefined ? cmoon.pageBgColor : (typeof body.pageBgColor === 'string' ? body.pageBgColor.trim() || null : null)
+  const accentColor = body?.accentColor === undefined ? cmoon.accentColor : (typeof body.accentColor === 'string' ? body.accentColor.trim() || null : null)
+  const textColor = body?.textColor === undefined ? cmoon.textColor : (typeof body.textColor === 'string' ? body.textColor.trim() || null : null)
+  const cardBgColor = body?.cardBgColor === undefined ? cmoon.cardBgColor : (typeof body.cardBgColor === 'string' ? body.cardBgColor.trim() || null : null)
   const discordRoleId = body?.discordRoleId === undefined ? cmoon.discordRoleId : (typeof body.discordRoleId === 'string' ? body.discordRoleId.trim() : '')
   const captainIds = Array.isArray(body?.captainIds) ? [...new Set(body.captainIds.filter(x => typeof x === 'string'))] : null
   const prizeCtoons = Array.isArray(body?.prizeCtoons) ? body.prizeCtoons : null
@@ -36,6 +42,9 @@ export default defineEventHandler(async (event) => {
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   if (!isValidHexColor(color)) throw createError({ statusCode: 400, statusMessage: 'Color must be a hex value like #3366ff' })
+  for (const [value, label] of [[pageBgColor, 'Page background color'], [accentColor, 'Accent color'], [textColor, 'Text color'], [cardBgColor, 'Card background color']]) {
+    if (value && !isValidHexColor(value)) throw createError({ statusCode: 400, statusMessage: `${label} must be a hex value like #3366ff` })
+  }
   if (discordRoleId && !isValidDiscordSnowflake(discordRoleId)) {
     throw createError({ statusCode: 400, statusMessage: 'Discord Role ID must be a numeric snowflake' })
   }
@@ -82,7 +91,7 @@ export default defineEventHandler(async (event) => {
   await db.$transaction(async (tx) => {
     await tx.cMoon.update({
       where: { id },
-      data: { name, color, discordRoleId: discordRoleId || null, pageDescription, effectType, customJoinEffectId, joinLocked, showOnNav, showButtonOnPages, allowOptOutJoin },
+      data: { name, color, pageBgColor, accentColor, textColor, cardBgColor, discordRoleId: discordRoleId || null, pageDescription, effectType, customJoinEffectId, joinLocked, showOnNav, showButtonOnPages, allowOptOutJoin },
     })
     if (captainIds) {
       await tx.cMoonCaptain.deleteMany({ where: { cMoonId: id } })

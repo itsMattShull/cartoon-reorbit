@@ -14,6 +14,12 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const name = typeof body?.name === 'string' ? body.name.trim() : ''
   const color = typeof body?.color === 'string' ? body.color.trim() : ''
+  // Optional per-role color overrides (see prisma/schema.prisma's CMoon.pageBgColor/accentColor/
+  // textColor/cardBgColor comment) — null/blank clears an override back to auto-derived.
+  const pageBgColor = typeof body?.pageBgColor === 'string' ? body.pageBgColor.trim() : ''
+  const accentColor = typeof body?.accentColor === 'string' ? body.accentColor.trim() : ''
+  const textColor = typeof body?.textColor === 'string' ? body.textColor.trim() : ''
+  const cardBgColor = typeof body?.cardBgColor === 'string' ? body.cardBgColor.trim() : ''
   const discordRoleId = typeof body?.discordRoleId === 'string' ? body.discordRoleId.trim() : ''
   const pageDescription = typeof body?.pageDescription === 'string' ? body.pageDescription.trim().slice(0, 2000) || null : null
   const captainIds = Array.isArray(body?.captainIds) ? [...new Set(body.captainIds.filter(x => typeof x === 'string'))] : []
@@ -27,6 +33,9 @@ export default defineEventHandler(async (event) => {
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   if (!isValidHexColor(color)) throw createError({ statusCode: 400, statusMessage: 'Color must be a hex value like #3366ff' })
+  for (const [value, label] of [[pageBgColor, 'Page background color'], [accentColor, 'Accent color'], [textColor, 'Text color'], [cardBgColor, 'Card background color']]) {
+    if (value && !isValidHexColor(value)) throw createError({ statusCode: 400, statusMessage: `${label} must be a hex value like #3366ff` })
+  }
   if (discordRoleId && !isValidDiscordSnowflake(discordRoleId)) {
     throw createError({ statusCode: 400, statusMessage: 'Discord Role ID must be a numeric snowflake' })
   }
@@ -63,6 +72,10 @@ export default defineEventHandler(async (event) => {
     data: {
       name,
       color,
+      pageBgColor: pageBgColor || null,
+      accentColor: accentColor || null,
+      textColor: textColor || null,
+      cardBgColor: cardBgColor || null,
       discordRoleId: discordRoleId || null,
       pageDescription,
       effectType,

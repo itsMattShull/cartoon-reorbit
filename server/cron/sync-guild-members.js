@@ -19,7 +19,7 @@ import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/aucti
 import { logCronError } from '../utils/cronErrorLog.js'
 import { runCMoonPointsAggregate } from './cmoon-points-aggregate.js'
 import { runRecordDailyTaskCompletions } from './record-daily-task-completions.js'
-import { runCMoonWeeklyScore } from './cmoon-weekly-score.js'
+import { checkAndRunCMoonDailyScoring } from './cmoon-daily-score.js'
 import { reconcileHolidayRedemptions } from './reconcile-holiday-redemptions.js'
 
 const BOT_TOKEN   = process.env.BOT_TOKEN
@@ -1025,7 +1025,11 @@ cron.schedule('45 2 * * *', () => runJob('syncCMoonDiscordRoles', syncCMoonDisco
 // dead zone where activity in the 8am-reset window could go unrecorded. Re-checking an
 // already-recorded day is a no-op (UserDailyTaskCompletion is unique on userId+date).
 cron.schedule('15 */4 * * *', () => runJob('recordDailyTaskCompletions', runRecordDailyTaskCompletions), { timezone: 'America/Chicago' }) // every 4h at :15
-cron.schedule('50 2 * * 1', () => runJob('cmoonWeeklyScore', runCMoonWeeklyScore), { timezone: 'America/Chicago' }) // 02:50 CST Monday
+// Admin-adjustable run time (GlobalGameConfig.cMoonScoringRunHour/Minute, default 00:00 CST) —
+// checked every 5 minutes rather than cron-scheduled at a fixed time, since that time can change
+// at runtime without a server restart. See checkAndRunCMoonDailyScoring's own comment for the
+// early-exit/locking that keeps this cheap and race-free.
+cron.schedule('*/5 * * * *', () => runJob('cmoonDailyScoreCheck', checkAndRunCMoonDailyScoring), { timezone: 'America/Chicago' })
 
 await runJob('recomputeLastActivity', recomputeLastActivity)
 cron.schedule('0 4 * * *', () => runJob('recomputeLastActivity', recomputeLastActivity), { timezone: 'America/Chicago' })  // 04:00 CST daily

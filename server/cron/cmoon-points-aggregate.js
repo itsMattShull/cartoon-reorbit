@@ -9,7 +9,7 @@
 // "Contributed" = SUM of this user's own CMoonScoreLog rows for their CURRENT cMoon since their
 // current cMoonSelectedAt — i.e. exactly the same admin-configurable categories that build the
 // weekly TEAM score (HIGH_SCORE: holding #1 on an eligible game; TOP10: a top-N finish on the
-// Points/Total cToons board; DAILY_TASK: completing a daily task), see runWeeklyCMoonScoring in
+// Points/Total cToons board; DAILY_TASK: completing a daily task), see runDailyCMoonScoring in
 // server/utils/cmoon.js and Admin > cMoons > Scoring Rules. Deliberately NOT derived from
 // PointsLog (every point a player earns from anything) as it previously was — that let a
 // brand-new account's large first-week login bonus, or points simply received from another

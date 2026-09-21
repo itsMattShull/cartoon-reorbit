@@ -77,35 +77,61 @@
         </div>
       </div>
 
-      <!-- Scoring rules: the weekly team-leaderboard bonus job's admin-editable knobs
-           (see server/utils/cmoon.js runWeeklyCMoonScoring). Kept as one panel with
+      <!-- Scoring rules: the daily team-leaderboard bonus job's admin-editable knobs
+           (see server/utils/cmoon.js runDailyCMoonScoring). Kept as one panel with
            sub-sections rather than a separate admin page/tab — it's config for the
            cMoons feature, same as the flag above, not a distinct resource. -->
       <div class="bg-white rounded border p-3 mb-4">
         <h2 class="text-sm font-semibold mb-1">Team Leaderboard Scoring Rules</h2>
         <p class="text-[11px] text-gray-600 mb-3">
-          Controls the weekly cMoon team-leaderboard bonus job (runs Monday 00:00 CST). Changes take
-          effect starting the next weekly run — past scores are never recalculated.
+          Controls the cMoon team-leaderboard bonus job, which now runs once every calendar day
+          (America/Chicago) at the time set below, instead of once a week. Changes take effect
+          starting the next daily run — past scores are never recalculated.
         </p>
 
         <div v-if="scoringLoading" class="text-gray-600">Loading…</div>
         <template v-else>
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label class="block text-xs font-medium mb-1">High Score points</label>
+              <label class="block text-xs font-medium mb-1">High Score points (weekly total)</label>
               <input v-model.number="scoring.highScorePoints" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
-              <p class="text-[11px] text-gray-500 mt-1">Per player, for holding rank #1 on an eligible game.</p>
+              <p class="text-[11px] text-gray-500 mt-1">
+                Per player, for holding rank #1 on an eligible game. Entered/measured as a weekly
+                amount but paid out in daily installments (÷7, rounded) since the job now runs
+                daily — {{ scoring.highScorePoints || 0 }} pts/week ≈ {{ Math.round((scoring.highScorePoints || 0) / 7) }} pts/day.
+              </p>
             </div>
             <div>
-              <label class="block text-xs font-medium mb-1">Top 10 points</label>
+              <label class="block text-xs font-medium mb-1">Top 10 points (weekly total)</label>
               <input v-model.number="scoring.top10Points" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
-              <p class="text-[11px] text-gray-500 mt-1">Per player, for a top-{{ scoring.top10RankCutoff || 10 }} finish on an eligible board.</p>
+              <p class="text-[11px] text-gray-500 mt-1">
+                Per player, for a top-{{ scoring.top10RankCutoff || 10 }} finish on an eligible board — also
+                ÷7/day ≈ {{ Math.round((scoring.top10Points || 0) / 7) }} pts/day.
+              </p>
             </div>
             <div>
               <label class="block text-xs font-medium mb-1">Daily task points</label>
               <input v-model.number="scoring.dailyTaskPoints" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
-              <p class="text-[11px] text-gray-500 mt-1">Per player, per day a daily task was completed that week.</p>
+              <p class="text-[11px] text-gray-500 mt-1">Per player, per day a daily task was completed. Not divided — this already pays out per day.</p>
             </div>
+          </div>
+
+          <div class="border-t pt-3 mt-3">
+            <label class="block text-xs font-medium mb-1">Run time (America/Chicago)</label>
+            <div class="flex items-center gap-2">
+              <select v-model.number="scoring.runHour" class="cm-field border rounded px-2 py-1" style="font-size:16px">
+                <option v-for="h in 24" :key="h - 1" :value="h - 1">{{ String(h - 1).padStart(2, '0') }}</option>
+              </select>
+              <span class="text-gray-500">:</span>
+              <select v-model.number="scoring.runMinute" class="cm-field border rounded px-2 py-1" style="font-size:16px">
+                <option v-for="m in 12" :key="(m - 1) * 5" :value="(m - 1) * 5">{{ String((m - 1) * 5).padStart(2, '0') }}</option>
+              </select>
+              <span class="text-[11px] text-gray-500">CST/CDT</span>
+            </div>
+            <p class="text-[11px] text-gray-500 mt-1">
+              Checked every 5 minutes, so the run can land up to ~5 minutes after this time, not
+              to the exact second.
+            </p>
           </div>
 
           <div class="border-t pt-3 mt-3">
@@ -447,11 +473,55 @@
                   {{ form.name || 'cMoon name' }}
                 </div>
                 <div class="cm-theme-preview-tile" :style="{ background: palettePreview.tileBg }">
-                  <div style="font-size:0.65rem;opacity:0.8;">cWorld</div>
+                  <div style="font-size:0.65rem;opacity:0.8;">cMoon</div>
                   <div :style="{ color: palettePreview.linkText }">{{ form.name || 'cMoon name' }} ›</div>
                 </div>
                 <p style="font-size:0.72rem;" :style="{ color: palettePreview.textMuted }">This is how the themed cToon modal &amp; cMoon page will look.</p>
               </div>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-xs font-medium mb-1">Color overrides (optional)</label>
+              <p class="text-[11px] text-gray-600 mb-2">
+                Leave any of these blank to keep auto-deriving it from the base color above.
+                Setting one gives you direct control over that part of the themed cToon modal,
+                cMoon page, and featured cToon cards — everything else (borders, muted text,
+                error/success colors) still auto-derives for guaranteed readability.
+              </p>
+              <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div>
+                  <label class="block text-[11px] font-medium mb-1">Page background</label>
+                  <div class="flex items-center gap-1">
+                    <input v-model="form.pageBgColor" class="cm-field w-full min-w-0 border rounded px-2 py-1 text-xs" style="font-size:16px" placeholder="Auto" autocapitalize="none" autocorrect="off" spellcheck="false" />
+                    <input v-model="pageBgColorPicker" type="color" class="cm-color-swatch flex-shrink-0" aria-label="Pick page background color" />
+                  </div>
+                  <button v-if="form.pageBgColor" type="button" class="cm-tap text-[10px] text-indigo-600 mt-0.5" @click="form.pageBgColor = ''">Reset to auto</button>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-medium mb-1">Accent (banner)</label>
+                  <div class="flex items-center gap-1">
+                    <input v-model="form.accentColor" class="cm-field w-full min-w-0 border rounded px-2 py-1 text-xs" style="font-size:16px" placeholder="Auto" autocapitalize="none" autocorrect="off" spellcheck="false" />
+                    <input v-model="accentColorPicker" type="color" class="cm-color-swatch flex-shrink-0" aria-label="Pick accent color" />
+                  </div>
+                  <button v-if="form.accentColor" type="button" class="cm-tap text-[10px] text-indigo-600 mt-0.5" @click="form.accentColor = ''">Reset to auto</button>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-medium mb-1">Text</label>
+                  <div class="flex items-center gap-1">
+                    <input v-model="form.textColor" class="cm-field w-full min-w-0 border rounded px-2 py-1 text-xs" style="font-size:16px" placeholder="Auto" autocapitalize="none" autocorrect="off" spellcheck="false" />
+                    <input v-model="textColorPicker" type="color" class="cm-color-swatch flex-shrink-0" aria-label="Pick text color" />
+                  </div>
+                  <button v-if="form.textColor" type="button" class="cm-tap text-[10px] text-indigo-600 mt-0.5" @click="form.textColor = ''">Reset to auto</button>
+                </div>
+                <div>
+                  <label class="block text-[11px] font-medium mb-1">Card background</label>
+                  <div class="flex items-center gap-1">
+                    <input v-model="form.cardBgColor" class="cm-field w-full min-w-0 border rounded px-2 py-1 text-xs" style="font-size:16px" placeholder="Auto" autocapitalize="none" autocorrect="off" spellcheck="false" />
+                    <input v-model="cardBgColorPicker" type="color" class="cm-color-swatch flex-shrink-0" aria-label="Pick card background color" />
+                  </div>
+                  <button v-if="form.cardBgColor" type="button" class="cm-tap text-[10px] text-indigo-600 mt-0.5" @click="form.cardBgColor = ''">Reset to auto</button>
+                </div>
+              </div>
+              <p v-if="paletteContrastWarning" class="text-[11px] text-amber-600 font-medium mt-2">{{ paletteContrastWarning }}</p>
             </div>
             <div>
               <label class="block text-xs font-medium mb-1">Discord Role ID (optional)</label>
@@ -546,11 +616,13 @@
           </div>
 
           <div>
-            <label class="block text-xs font-medium mb-1">cMoon page banner (top of page, ~1200×100 after processing)</label>
+            <label class="block text-xs font-medium mb-1">cMoon page banner (top of page)</label>
             <p class="text-[11px] text-gray-600 mb-2">
-              A wide masthead shown across the top of this cMoon's page. Keep any name/logo art
-              centered — the edges get cropped first on a narrow phone screen. Falls back to a
-              plain colored title bar when not uploaded.
+              A wide masthead shown across the top of this cMoon's page, displayed at your
+              uploaded image's own proportions — it is never cropped. Must be a wide/masthead
+              shape, between 2:1 and 20:1 (width:height); it's downscaled if it's larger than
+              1600×400, but never upscaled or stretched. Falls back to a plain colored title bar
+              when not uploaded.
             </p>
             <template v-if="!editId">
               <p class="text-[11px] text-gray-600">Save this cMoon first, then Edit it to upload a banner.</p>
@@ -1044,7 +1116,7 @@
 </template>
 
 <script setup>
-import { cMoonPillStyle, isSafeCMoonColor, cMoonContrastRatio } from '~/utils/cmoonColor'
+import { cMoonPillStyle, isSafeCMoonColor, cMoonContrastRatio, contrast, relativeLuminance } from '~/utils/cmoonColor'
 import { cMoonPalette } from '~/utils/cmoonPalette'
 import { cmoonJoinEffectDescriptor } from '~/utils/cmoonJoinEffectDescriptor'
 
@@ -1233,7 +1305,7 @@ function effectLabel(type) {
 
 const editId = ref('')
 const formOpen = ref(false)
-const emptyForm = () => ({ name: '', color: '', discordRoleId: '', pageDescription: '', effectType: '', customJoinEffectId: '', joinLocked: false, showOnNav: true, showButtonOnPages: false, allowOptOutJoin: true, captainIds: [], prizeCtoons: [] })
+const emptyForm = () => ({ name: '', color: '', pageBgColor: '', accentColor: '', textColor: '', cardBgColor: '', discordRoleId: '', pageDescription: '', effectType: '', customJoinEffectId: '', joinLocked: false, showOnNav: true, showButtonOnPages: false, allowOptOutJoin: true, captainIds: [], prizeCtoons: [] })
 const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
@@ -1418,7 +1490,42 @@ const avatarImageUploading = ref(false)
 const avatarImageError = ref('')
 const currentAvatarPath = ref('')
 
-const palettePreview = computed(() => isValidColor(form.color) ? cMoonPalette(form.color) : null)
+const palettePreview = computed(() => isValidColor(form.color) ? cMoonPalette({
+  color: form.color,
+  pageBgColor: form.pageBgColor,
+  accentColor: form.accentColor,
+  textColor: form.textColor,
+  cardBgColor: form.cardBgColor,
+}) : null)
+
+// A manual override can defeat the auto-derivation's guaranteed contrast (see
+// utils/cmoonPalette.js's header comment — an override always wins outright). This never blocks
+// saving, same as the single-color badge-contrast check above; it just tells the admin before
+// they ship an unreadable combination.
+const paletteContrastWarning = computed(() => {
+  const p = palettePreview.value
+  if (!p) return ''
+  const bgRatio = contrast(relativeLuminance(p.text), relativeLuminance(p.bg))
+  const tileRatio = contrast(relativeLuminance(p.text), relativeLuminance(p.tileBg))
+  const worst = Math.min(bgRatio, tileRatio)
+  if (worst >= 4.5) return ''
+  const where = bgRatio < tileRatio ? 'the page background' : 'card backgrounds'
+  return `Text contrast against ${where} is only ${worst.toFixed(1)}:1 — below the 4.5:1 minimum. This can still be saved, but may be hard to read.`
+})
+
+// Two-way bridges to <input type="color"> for the per-role overrides, matching `colorPicker`
+// above. Shows the currently-in-effect (auto-derived or overridden) value so an admin who hasn't
+// set an override yet can still open the picker from a sensible starting point rather than black.
+function overridePicker(key, autoKey) {
+  return computed({
+    get: () => (isValidColor(form[key]) ? form[key] : (palettePreview.value ? palettePreview.value[autoKey] : '#ffffff')),
+    set: (v) => { form[key] = v },
+  })
+}
+const pageBgColorPicker = overridePicker('pageBgColor', 'bg')
+const accentColorPicker = overridePicker('accentColor', 'banner')
+const textColorPicker = overridePicker('textColor', 'text')
+const cardBgColorPicker = overridePicker('cardBgColor', 'tileBg')
 
 function handlePageBannerImageFile(e) {
   const file = e.target.files?.[0] || null
@@ -1595,6 +1702,10 @@ function startEdit(c) {
   Object.assign(form, {
     name: c.name,
     color: c.color,
+    pageBgColor: c.pageBgColor || '',
+    accentColor: c.accentColor || '',
+    textColor: c.textColor || '',
+    cardBgColor: c.cardBgColor || '',
     discordRoleId: c.discordRoleId || '',
     pageDescription: c.pageDescription || '',
     effectType: c.effectType || '',
@@ -2026,6 +2137,8 @@ const scoring = reactive({
   top10CtoonsBoardEnabled: true,
   disabledScoreGames: [],
   disabledWinGames: [],
+  runHour: 0,
+  runMinute: 0,
 })
 const scoreGameOptions = ref([])
 const winGameOptions = ref([])
@@ -2078,6 +2191,8 @@ async function loadScoring() {
       top10CtoonsBoardEnabled: data.top10CtoonsBoardEnabled,
       disabledScoreGames: data.disabledScoreGames || [],
       disabledWinGames: data.disabledWinGames || [],
+      runHour: data.runHour ?? 0,
+      runMinute: data.runMinute ?? 0,
     })
     scoreGameOptions.value = data.scoreGameOptions || []
     winGameOptions.value = data.winGameOptions || []
@@ -2107,7 +2222,7 @@ function scoringRiskWarnings() {
 async function saveScoring() {
   scoringError.value = ''
   const warnings = scoringRiskWarnings()
-  if (warnings.length && !confirm(`Starting next week:\n- ${warnings.join('\n- ')}\n\nSave anyway?`)) {
+  if (warnings.length && !confirm(`Starting next daily run:\n- ${warnings.join('\n- ')}\n\nSave anyway?`)) {
     return
   }
   scoringSaving.value = true
@@ -2122,6 +2237,8 @@ async function saveScoring() {
       top10CtoonsBoardEnabled: scoring.top10CtoonsBoardEnabled,
       disabledScoreGames: scoring.disabledScoreGames,
       disabledWinGames: scoring.disabledWinGames,
+      runHour: scoring.runHour,
+      runMinute: scoring.runMinute,
     }
     const res = await $fetch('/api/admin/cmoon-scoring', { method: 'POST', body })
     Object.assign(scoring, {
@@ -2134,6 +2251,8 @@ async function saveScoring() {
       top10CtoonsBoardEnabled: res.top10CtoonsBoardEnabled,
       disabledScoreGames: res.disabledScoreGames || [],
       disabledWinGames: res.disabledWinGames || [],
+      runHour: res.runHour ?? 0,
+      runMinute: res.runMinute ?? 0,
     })
   } catch (e) {
     scoringError.value = e?.data?.statusMessage || 'Save failed'
@@ -2171,15 +2290,30 @@ async function saveCooldown() {
   }
 }
 
+const COLOR_OVERRIDE_FIELDS = [
+  ['pageBgColor', 'Page background color'],
+  ['accentColor', 'Accent (banner) color'],
+  ['textColor', 'Text color'],
+  ['cardBgColor', 'Card background color'],
+]
+
 async function save() {
   if (!form.name.trim()) { formError.value = 'Name is required'; return }
   if (!isValidColor(form.color)) { formError.value = 'Color must be a hex value like #3366ff'; return }
+  for (const [key, label] of COLOR_OVERRIDE_FIELDS) {
+    const v = (form[key] || '').trim()
+    if (v && !isValidColor(v)) { formError.value = `${label} must be a hex value like #3366ff, or left blank to auto-derive`; return }
+  }
   formError.value = ''
   saving.value = true
   try {
     const body = {
       name: form.name.trim(),
       color: form.color,
+      pageBgColor: (form.pageBgColor || '').trim() || null,
+      accentColor: (form.accentColor || '').trim() || null,
+      textColor: (form.textColor || '').trim() || null,
+      cardBgColor: (form.cardBgColor || '').trim() || null,
       discordRoleId: form.discordRoleId.trim(),
       pageDescription: form.pageDescription,
       effectType: form.effectType || null,
@@ -2371,10 +2505,11 @@ onMounted(() => {
 
 .cm-page-banner-image-preview {
   display: block;
-  width: 100%;
+  width: auto;
+  height: auto;
   max-width: 480px;
-  aspect-ratio: 12 / 1;
-  object-fit: cover;
+  max-height: 160px;
+  object-fit: contain;
   border-radius: 4px;
   margin-bottom: 6px;
 }

@@ -1,6 +1,6 @@
 // server/api/admin/cmoon-scoring.post.js
 // Admin-editable knobs for the weekly cMoon team-leaderboard scoring job (see
-// server/utils/cmoon.js runWeeklyCMoonScoring/recordDailyTaskCompletions). Stored on
+// server/utils/cmoon.js runDailyCMoonScoring/recordDailyTaskCompletions). Stored on
 // the shared GlobalGameConfig singleton, same convention as every other feature-scoped
 // config (scavenger, release settings, rarity defaults, etc — see
 // server/api/admin/scavenger/config.post.js). Changes are forward-only: they affect
@@ -63,6 +63,8 @@ export default defineEventHandler(async (event) => {
   const top10CtoonsBoardEnabled = !!body?.top10CtoonsBoardEnabled
   const disabledScoreGames = requireGameKeyList(body?.disabledScoreGames, SCORE_GAME_KEYS, 'Disabled score games')
   const disabledWinGames = requireGameKeyList(body?.disabledWinGames, WIN_GAME_KEYS, 'Disabled win games')
+  const runHour = requireInt(body?.runHour, { min: 0, max: 23, label: 'Run hour' })
+  const runMinute = requireInt(body?.runMinute, { min: 0, max: 59, label: 'Run minute' })
 
   const data = {
     cMoonHighScorePoints: highScorePoints,
@@ -74,6 +76,8 @@ export default defineEventHandler(async (event) => {
     cMoonTop10CtoonsBoardEnabled: top10CtoonsBoardEnabled,
     cMoonDisabledScoreGames: disabledScoreGames,
     cMoonDisabledWinGames: disabledWinGames,
+    cMoonScoringRunHour: runHour,
+    cMoonScoringRunMinute: runMinute,
   }
 
   const before = await db.globalGameConfig.findUnique({ where: { id: 'singleton' } })
@@ -103,5 +107,7 @@ export default defineEventHandler(async (event) => {
     top10CtoonsBoardEnabled: updated.cMoonTop10CtoonsBoardEnabled,
     disabledScoreGames: updated.cMoonDisabledScoreGames,
     disabledWinGames: updated.cMoonDisabledWinGames,
+    runHour: updated.cMoonScoringRunHour,
+    runMinute: updated.cMoonScoringRunMinute,
   }
 })
