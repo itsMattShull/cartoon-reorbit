@@ -364,7 +364,13 @@ async function getVerifiedRoleId() {
   }
 }
 
-async function addRoleToMember(discordUserId, roleId) {
+// `context` is a label identifying which job/role is being granted (e.g.
+// 'syncCMoonDiscordRoles') purely so a failure can be traced back to its cause in
+// CronErrorLog — a non-204/429 Discord response (wrong role snowflake, bot's role
+// positioned below the target role, missing Manage Roles permission, etc.) used to be
+// swallowed here with no trace at all, so a permanently-failing grant would silently
+// retry and fail forever with no way for an admin to ever find out why.
+async function addRoleToMember(discordUserId, roleId, context = 'addRoleToMember') {
   if (!discordUserId || !roleId || !BOT_TOKEN || !GUILD_ID) return false
   const authHeader = BOT_TOKEN.startsWith('Bot ') ? BOT_TOKEN : `Bot ${BOT_TOKEN}`
 
@@ -380,6 +386,11 @@ async function addRoleToMember(discordUserId, roleId) {
       await sleep(Math.ceil((body.retry_after || 5) * 1000))
       continue
     }
+    let bodyText = ''
+    try { bodyText = await res.text() } catch {}
+    const err = new Error(`Discord API ${res.status} granting role ${roleId} to user ${discordUserId}: ${bodyText}`)
+    console.error(`[${context}]`, err.message)
+    await logCronError(context, err)
     return false
   }
   return false
@@ -405,12 +416,13 @@ async function syncVerifiedRoles() {
         AND u."inGuild" = true
         AND u."active" = true
     `)
-  } catch {
+  } catch (err) {
+    await logCronError('syncVerifiedRoles', err)
     return
   }
 
   for (const row of rows) {
-    const ok = await addRoleToMember(row.discordId, roleId)
+    const ok = await addRoleToMember(row.discordId, roleId, 'syncVerifiedRoles')
     if (!ok) continue
     try {
       await prisma.user.update({ where: { id: row.id }, data: { isVerified: true } })
@@ -438,12 +450,13 @@ async function syncCMoonDiscordRoles() {
         AND u."active" = true
       LIMIT 300
     `)
-  } catch {
+  } catch (err) {
+    await logCronError('syncCMoonDiscordRoles', err)
     return
   }
 
   for (const row of rows) {
-    const ok = await addRoleToMember(row.discordId, row.discordRoleId)
+    const ok = await addRoleToMember(row.discordId, row.discordRoleId, 'syncCMoonDiscordRoles')
     if (!ok) continue
     try {
       await prisma.user.update({ where: { id: row.id }, data: { cMoonRoleGrantedAt: new Date() } })
@@ -469,12 +482,13 @@ async function syncCMoonDiscordRoles() {
         AND u."active" = true
       LIMIT 300
     `)
-  } catch {
+  } catch (err) {
+    await logCronError('syncCMoonRankDiscordRoles', err)
     return
   }
 
   for (const row of rankRows) {
-    const ok = await addRoleToMember(row.discordId, row.discordRoleId)
+    const ok = await addRoleToMember(row.discordId, row.discordRoleId, 'syncCMoonRankDiscordRoles')
     if (!ok) continue
     try {
       await prisma.user.update({ where: { id: row.id }, data: { cMoonRankRoleGrantedAt: new Date() } })
