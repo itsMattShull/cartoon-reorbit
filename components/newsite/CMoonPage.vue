@@ -176,11 +176,11 @@
                   <div class="cmp-claim-option-label">{{ opt.label }}</div>
                   <div v-if="opt.ctoons?.length || opt.backgrounds?.length" class="cmp-claim-option-thumbs">
                     <img
-                      v-for="(c, i) in opt.ctoons" v-if="c.imagePath" :key="'c' + i"
+                      v-for="(c, i) in opt.ctoons.filter(c => c.imagePath)" :key="'c' + i"
                       :src="c.imagePath" class="cmp-claim-option-thumb" :alt="c.name" :title="`${c.name} × ${c.quantity}`"
                     />
                     <img
-                      v-for="(b, i) in opt.backgrounds" v-if="b.imagePath" :key="'b' + i"
+                      v-for="(b, i) in opt.backgrounds.filter(b => b.imagePath)" :key="'b' + i"
                       :src="b.imagePath" class="cmp-claim-option-thumb" :alt="b.label" :title="b.label"
                     />
                   </div>
