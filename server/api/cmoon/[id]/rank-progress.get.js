@@ -19,7 +19,17 @@ export default defineEventHandler(async (event) => {
   const [tiers, me] = await Promise.all([
     db.cMoonRankTier.findMany({
       orderBy: { sortOrder: 'asc' },
-      select: { id: true, name: true, sortOrder: true, pointThreshold: true },
+      select: {
+        id: true, name: true, sortOrder: true, pointThreshold: true, maxRewardChoices: true,
+        // Universal reward-cToon choices for this tier (same set for every cMoon — see
+        // CMoonRankTierRewardCtoon's model comment) — each is a quantity-1 cToon reward the
+        // player later picks exactly one of via the claim UI (see cmoonRankTiers.js's
+        // resyncClaimOptions, which always grants { points: 0, quantity: 1 } for these).
+        rewardCtoons: {
+          orderBy: { sortOrder: 'asc' },
+          select: { ctoon: { select: { id: true, name: true, assetPath: true } } },
+        },
+      },
     }),
     db.user.findUnique({
       where: { id: userId },
@@ -89,7 +99,21 @@ export default defineEventHandler(async (event) => {
     cMoonPoints,
     currentRank,
     nextTier: nextTier ? { id: nextTier.id, name: nextTier.name, pointThreshold: nextTier.pointThreshold } : null,
-    tiers,
+    // Flattened for the client (a ladder-preview modal renders these directly, same reasoning as
+    // affinity.get.js's `levels` — this is public/universal data, cheap to always include here
+    // rather than behind a second request).
+    tiers: tiers.map(t => ({
+      id: t.id,
+      name: t.name,
+      sortOrder: t.sortOrder,
+      pointThreshold: t.pointThreshold,
+      maxRewardChoices: t.maxRewardChoices,
+      rewardChoices: t.rewardCtoons.map(r => ({
+        id: r.ctoon.id,
+        name: r.ctoon.name,
+        imagePath: r.ctoon.assetPath,
+      })),
+    })),
     // Same claimOptions shape GET /api/achievements already returns, so the claim UI can be
     // reused as-is — each option posts to the existing POST /api/achievements/:id/claim.
     unclaimedRankRewards: unclaimedRankRewards.map(a => ({
