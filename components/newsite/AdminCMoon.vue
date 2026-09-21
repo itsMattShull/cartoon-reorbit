@@ -23,6 +23,16 @@
             @click="balanceModalOpen = true"
           >Balance teams</button>
           <button
+            class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50"
+            title="Recomputes cMoonPoints (and redoes ranks to match) for every member with more than 1 point, using the current points logic"
+            @click="recalcModalOpen = true"
+          >Recalculate cMoon Points</button>
+          <button
+            class="cm-tap px-3 text-xs font-semibold rounded-md border border-red-300 bg-white text-red-700 hover:bg-red-50"
+            title="Claws back any rank prize a member only received because of the old cMoonPoints bug, and resets that achievement so they can legitimately re-earn it. Run Recalculate cMoon Points first."
+            @click="prizeRevokeModalOpen = true"
+          >Revoke Invalid Rank Prizes</button>
+          <button
             class="cm-tap px-3 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
             @click="openCreateModal"
           >+ Create cMoon</button>
@@ -1016,6 +1026,20 @@
       @close="balanceModalOpen = false"
       @done="load"
     />
+
+    <!-- ── Recalculate cMoon Points modal ────────────────────────────── -->
+    <CMoonRecalcPointsModal
+      v-if="recalcModalOpen"
+      @close="recalcModalOpen = false"
+      @done="load"
+    />
+
+    <!-- ── Revoke Invalid cMoon Rank Prizes modal ─────────────────────── -->
+    <CMoonPrizeRevokeModal
+      v-if="prizeRevokeModalOpen"
+      @close="prizeRevokeModalOpen = false"
+      @done="load"
+    />
   </div>
 </template>
 
@@ -1042,6 +1066,8 @@ const cooldownSaving = ref(false)
 const cooldownError = ref('')
 const previewModalOpen = ref(false)
 const balanceModalOpen = ref(false)
+const recalcModalOpen = ref(false)
+const prizeRevokeModalOpen = ref(false)
 // Populated from /api/admin/cmoon-join-effects — admin-authored alternative to the built-in
 // effectType dropdown below (see Manage cMoon Join Effects for creating/editing these).
 const customJoinEffects = ref([])

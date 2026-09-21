@@ -209,3 +209,33 @@ export const contentAnalysisQueue = new Queue(
     },
   }
 )
+
+// Queue for the admin "Recalculate cMoon Points" tool (server/workers/cmoon-rank-recalc.worker.js)
+// — a one-time, one-user-at-a-time correction pass, not a recurring cron. A single fixed jobId
+// (see server/api/admin/cmoons/recalculate-points.post.js) keeps two admin clicks from starting
+// two overlapping runs.
+export const cmoonRankRecalcQueue = new Queue(
+  process.env.CMOON_RANK_RECALC_QUEUE_KEY || 'cmoonRankRecalcQueue',
+  {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 20 },
+      removeOnFail:     { count: 20 },
+    },
+  }
+)
+
+// Queue for the admin "Revoke Invalid cMoon Rank Prizes" tool
+// (server/workers/cmoon-prize-revoke.worker.js) — claws back rank-tier prize cToons a member
+// only received because of the old cMoonPoints bug, and resets the underlying achievement/claim
+// so they can legitimately re-earn it. Same one-time, fixed-jobId shape as cmoonRankRecalcQueue.
+export const cmoonPrizeRevokeQueue = new Queue(
+  process.env.CMOON_PRIZE_REVOKE_QUEUE_KEY || 'cmoonPrizeRevokeQueue',
+  {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 20 },
+      removeOnFail:     { count: 20 },
+    },
+  }
+)
