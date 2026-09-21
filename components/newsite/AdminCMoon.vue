@@ -24,7 +24,7 @@
           >Balance teams</button>
           <button
             class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50"
-            title="Recomputes cMoonPoints (and redoes ranks to match) for every member with more than 1 point, using the current points logic"
+            title="Recomputes cMoonPoints (and redoes ranks to match) for every current cMoon member, using the current points logic"
             @click="recalcModalOpen = true"
           >Recalculate cMoon Points</button>
           <button

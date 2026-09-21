@@ -1,10 +1,18 @@
 // server/workers/cmoon-rank-recalc.worker.js
-// Admin one-time correction tool: recalculates User.cMoonPoints for every member who has more
-// than 1 (almost certainly stale, PointsLog-era) point, using the current cMoonPoints logic
-// (sum of the member's own CMoonScoreLog rows since cMoonSelectedAt — see
-// server/cron/cmoon-points-aggregate.js), then re-derives their displayed cMoon rank from that
-// corrected number. Triggered from Admin > cMoons ("Recalculate cMoon Points"), see
-// server/api/admin/cmoons/recalculate-points.post.js.
+// Admin one-time correction tool: recalculates User.cMoonPoints for every current cMoon member
+// using the current cMoonPoints logic (sum of the member's own CMoonScoreLog rows since
+// cMoonSelectedAt — see server/cron/cmoon-points-aggregate.js), then re-derives their displayed
+// cMoon rank from that corrected number. Triggered from Admin > cMoons ("Recalculate cMoon
+// Points"), see server/api/admin/cmoons/recalculate-points.post.js.
+//
+// Deliberately does NOT filter candidates by "cMoonPoints > 1" (an earlier version of this tool
+// did, and it was a real bug): the periodic aggregate cron above runs every 15 minutes for every
+// member regardless of this tool, so by the time an admin clicks the button, the cron may have
+// already silently corrected a member's cMoonPoints down to 0/1 on its own — while their
+// currentCMoonRankId (which ONLY this tool, not the cron, ever lowers) is still whatever the old,
+// inflated total earned them. Filtering candidates by current cMoonPoints would skip exactly the
+// members most in need of a rank correction. Scanning every member is cheap (CMoonScoreLog is a
+// handful of rows per user) and always safe to re-run.
 //
 // Deliberately processes members ONE AT A TIME in a single job (not N parallel jobs) so the
 // admin's progress modal can show a simple, steadily-advancing "member X of Y" feed via
@@ -62,7 +70,7 @@ const worker = new Worker(QUEUE_KEY, async (job) => {
   const { adminId } = job.data || {}
 
   const candidates = await prisma.user.findMany({
-    where: { cMoonId: { not: null }, cMoonPoints: { gt: 1 } },
+    where: { cMoonId: { not: null } },
     select: {
       id: true, username: true, cMoonId: true, cMoonSelectedAt: true,
       cMoonPoints: true, currentCMoonRankId: true,
