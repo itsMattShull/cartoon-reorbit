@@ -71,6 +71,7 @@
                 <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openLockedPoints(u); closeMenu()">See Locked Points</button>
                 <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openPendingTrades(u); closeMenu()">View Pending Trades</button>
                 <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openAdditionalZones(u); closeMenu()">Additional Zones</button>
+                <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openResetPackLimit(u); closeMenu()">Reset Pack Limit</button>
                 <button class="w-full text-left px-3 py-2 text-sm hover:bg-gray-50" @click="openUpdateUsername(u); closeMenu()">Update Username</button>
                 <button
                   v-if="!u.isAdmin && !u.banned"
@@ -358,6 +359,45 @@
           @click="saveAdditionalZones"
         >
           {{ additionalZonesWorking ? 'Saving…' : 'Save' }}
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Reset Pack Limit modal -->
+  <div v-if="showResetPackLimitModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/50" @click="closeResetPackLimitModal()"></div>
+    <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
+      <h3 class="text-lg font-semibold">Reset Pack Limit — {{ resetPackLimitTarget?.username || resetPackLimitTarget?.discordTag || 'user' }}</h3>
+      <p class="mt-2 text-sm text-gray-600">Pick a pack to let this user buy up to its daily limit again today.</p>
+
+      <div class="mt-4">
+        <label class="block text-sm font-medium text-gray-700">Pack</label>
+        <select v-model="resetPackLimitPackId" class="mt-2 w-full border rounded-md px-3 py-2 text-sm">
+          <option value="" disabled>{{ resetPackLimitPacksLoading ? 'Loading packs…' : 'Select a pack' }}</option>
+          <option v-for="p in resetPackLimitPacks" :key="p.id" :value="p.id">
+            {{ p.name }} (limit {{ p.dailyPurchaseLimit }}/day)
+          </option>
+        </select>
+        <p v-if="!resetPackLimitPacksLoading && !resetPackLimitPacks.length" class="mt-1 text-xs text-gray-500">
+          No packs currently have a daily purchase limit configured.
+        </p>
+      </div>
+
+      <div v-if="resetPackLimitSuccess" class="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-700">
+        Pack limit reset — this user can buy up to the daily limit again.
+      </div>
+      <div v-if="resetPackLimitError" class="mt-2 text-sm text-red-600">{{ resetPackLimitError }}</div>
+
+      <div class="mt-4 flex items-center justify-end gap-2">
+        <button class="px-3 py-1 text-sm border rounded-md" @click="closeResetPackLimitModal()" :disabled="resetPackLimitWorking">Close</button>
+        <button
+          class="px-3 py-1 text-sm rounded-md text-white"
+          :class="resetPackLimitCanSave ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'"
+          :disabled="!resetPackLimitCanSave || resetPackLimitWorking"
+          @click="saveResetPackLimit"
+        >
+          {{ resetPackLimitWorking ? 'Resetting…' : 'Reset' }}
         </button>
       </div>
     </div>
@@ -923,6 +963,66 @@ async function saveAdditionalZones() {
     additionalZonesError.value = e?.data?.statusMessage || e?.message || 'Failed to update additional cZones.'
   } finally {
     additionalZonesWorking.value = false
+  }
+}
+
+// Reset Pack Limit state
+const showResetPackLimitModal = ref(false)
+const resetPackLimitTarget = ref(null)
+const resetPackLimitPackId = ref('')
+const resetPackLimitError = ref('')
+const resetPackLimitSuccess = ref(false)
+const resetPackLimitWorking = ref(false)
+const resetPackLimitCanSave = computed(() => !!resetPackLimitPackId.value)
+
+// Packs with a daily limit, fetched once and reused across modal opens.
+const resetPackLimitPacks = ref([])
+const resetPackLimitPacksLoading = ref(false)
+let resetPackLimitPacksPromise = null
+async function ensureResetPackLimitPacksLoaded() {
+  if (resetPackLimitPacks.value.length || resetPackLimitPacksPromise) return resetPackLimitPacksPromise
+  resetPackLimitPacksLoading.value = true
+  resetPackLimitPacksPromise = $fetch('/api/admin/packs', { query: { limit: 200 } })
+    .then(res => {
+      resetPackLimitPacks.value = (res?.items || []).filter(p => p.dailyPurchaseLimit != null)
+    })
+    .catch(() => { resetPackLimitPacks.value = [] })
+    .finally(() => { resetPackLimitPacksLoading.value = false })
+  return resetPackLimitPacksPromise
+}
+
+function openResetPackLimit(u) {
+  resetPackLimitTarget.value = u
+  resetPackLimitPackId.value = ''
+  resetPackLimitError.value = ''
+  resetPackLimitSuccess.value = false
+  resetPackLimitWorking.value = false
+  showResetPackLimitModal.value = true
+  ensureResetPackLimitPacksLoaded()
+}
+function closeResetPackLimitModal() {
+  showResetPackLimitModal.value = false
+  resetPackLimitTarget.value = null
+  resetPackLimitPackId.value = ''
+  resetPackLimitError.value = ''
+  resetPackLimitSuccess.value = false
+  resetPackLimitWorking.value = false
+}
+async function saveResetPackLimit() {
+  if (!resetPackLimitTarget.value || !resetPackLimitCanSave.value) return
+  resetPackLimitWorking.value = true
+  resetPackLimitError.value = ''
+  resetPackLimitSuccess.value = false
+  try {
+    await $fetch(`/api/admin/users/${resetPackLimitTarget.value.id}/reset-pack-limit`, {
+      method: 'POST',
+      body: { packId: resetPackLimitPackId.value }
+    })
+    resetPackLimitSuccess.value = true
+  } catch (e) {
+    resetPackLimitError.value = e?.data?.statusMessage || e?.message || 'Failed to reset pack limit.'
+  } finally {
+    resetPackLimitWorking.value = false
   }
 }
 

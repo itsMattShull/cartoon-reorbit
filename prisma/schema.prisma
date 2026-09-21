@@ -643,6 +643,8 @@ model User {
   // Admin change logs (inverse)
   adminChangeLogs         AdminChangeLog[]
   targetedAdminChangeLogs AdminChangeLog[]    @relation("AdminChangeLogTarget")
+  packLimitResetsReceived UserPackLimitReset[] @relation("UserPackLimitResetUser")
+  packLimitResetsIssued   UserPackLimitReset[] @relation("UserPackLimitResetAdmin")
   lottoUser               LottoUser?
   lottoLogs               LottoLog[]
   // Achievements back‑relation
@@ -981,6 +983,7 @@ model Pack {
   rarityConfigs PackRarityConfig[]
   ctoonOptions  PackCtoonOption[]
   userPacks     UserPack[]
+  limitResets   UserPackLimitReset[]
   rewardPacks   RewardPack[]
 }
 
@@ -1020,6 +1023,29 @@ model UserPack {
   user         User        @relation(fields: [userId], references: [id])
   pack         Pack        @relation(fields: [packId], references: [id])
   mintedCtoons UserCtoon[]
+}
+
+// An admin-issued watermark that exempts a user's already-made purchases of a
+// pack from Pack.dailyPurchaseLimit's rolling window, without touching the
+// UserPack rows themselves (those are the player's real owned sealed packs,
+// and their createdAt is read elsewhere for purchase-history/analytics — see
+// server/api/admin/pack-analytics.get.js — so it must stay untouched). One
+// row per (userId, packId): resetAt is bumped to now() on every reset, and
+// server/utils/packDailyWindow.js's resolveEffectiveWindowStart() only ever
+// needs the latest value.
+model UserPackLimitReset {
+  id        String   @id @default(uuid())
+  userId    String
+  packId    String
+  resetAt   DateTime @default(now())
+  adminId   String
+  createdAt DateTime @default(now())
+
+  user  User @relation("UserPackLimitResetUser", fields: [userId], references: [id], onDelete: Cascade)
+  pack  Pack @relation(fields: [packId], references: [id], onDelete: Cascade)
+  admin User @relation("UserPackLimitResetAdmin", fields: [adminId], references: [id])
+
+  @@unique([userId, packId])
 }
 
 model LoginLog {
