@@ -224,3 +224,18 @@ export const cmoonRankRecalcQueue = new Queue(
     },
   }
 )
+
+// Queue for the admin "Revoke Invalid cMoon Rank Prizes" tool
+// (server/workers/cmoon-prize-revoke.worker.js) — claws back rank-tier prize cToons a member
+// only received because of the old cMoonPoints bug, and resets the underlying achievement/claim
+// so they can legitimately re-earn it. Same one-time, fixed-jobId shape as cmoonRankRecalcQueue.
+export const cmoonPrizeRevokeQueue = new Queue(
+  process.env.CMOON_PRIZE_REVOKE_QUEUE_KEY || 'cmoonPrizeRevokeQueue',
+  {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 20 },
+      removeOnFail:     { count: 20 },
+    },
+  }
+)
