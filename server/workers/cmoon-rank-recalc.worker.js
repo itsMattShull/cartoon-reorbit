@@ -45,40 +45,15 @@ async function recomputePointsForUser(userId, cMoonId, cMoonSelectedAt) {
 // below `points` — mirrors exactly how ranks are actually granted (an Achievement's cMoonRankId +
 // cMoonPointsGte; see evaluateUserAgainstAchievement/awardAchievementToUser in
 // server/utils/achievements.js), so this reproduces the same ladder for both tier-provisioned
-// ranks (server/utils/cmoonRankTiers.js) and any point-gated legacy hand-authored rank.
-async function highestPointGatedRank(cMoonId, points) {
+// ranks (server/utils/cmoonRankTiers.js) and any point-gated legacy hand-authored rank. Whatever
+// this returns (including null, if nothing qualifies) IS the user's new rank — this tool redoes
+// the rank straight from the recalculated total, it doesn't preserve the old one.
+async function bestRankForUser(user, newPoints) {
   return prisma.cMoonRank.findFirst({
-    where: { cMoonId, achievements: { some: { cMoonPointsGte: { lte: points } } } },
+    where: { cMoonId: user.cMoonId, achievements: { some: { cMoonPointsGte: { lte: newPoints } } } },
     orderBy: { sortOrder: 'desc' },
     select: { id: true, name: true, sortOrder: true },
   })
-}
-
-// A member's current rank floor — only set when their CURRENT rank was granted by a
-// non-point-based achievement (cMoonPointsGte null on every achievement tied to it). This
-// recalculation only re-evaluates points-driven progress; a rank this tool has no basis to
-// re-evaluate must never be silently downgraded just because it happens to outrank whatever the
-// corrected point total alone would earn.
-async function nonPointRankFloor(currentCMoonRankId) {
-  if (!currentCMoonRankId) return null
-  const grantedByPoints = await prisma.achievement.findFirst({
-    where: { cMoonRankId: currentCMoonRankId, cMoonPointsGte: { not: null } },
-    select: { id: true },
-  })
-  if (grantedByPoints) return null
-  return prisma.cMoonRank.findUnique({
-    where: { id: currentCMoonRankId },
-    select: { id: true, name: true, sortOrder: true },
-  })
-}
-
-async function bestRankForUser(user, newPoints) {
-  const [byPoints, floor] = await Promise.all([
-    highestPointGatedRank(user.cMoonId, newPoints),
-    nonPointRankFloor(user.currentCMoonRankId),
-  ])
-  if (floor && (!byPoints || floor.sortOrder > byPoints.sortOrder)) return floor
-  return byPoints
 }
 
 const RECENT_LIMIT = 25
