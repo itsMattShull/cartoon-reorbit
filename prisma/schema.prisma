@@ -522,7 +522,7 @@ model User {
   cMoonRoleGrantedAt     DateTime?
   // Points contributed to the CURRENT cMoon's individual rank ladder: sum of this user's own
   // CMoonScoreLog rows (the same admin-configurable HIGH_SCORE/TOP10/DAILY_TASK categories that
-  // build the weekly team score — see runWeeklyCMoonScoring in server/utils/cmoon.js) since
+  // build the team score — see runDailyCMoonScoring in server/utils/cmoon.js) since
   // cMoonSelectedAt, kept in sync by a periodic cron (server/cron/cmoon-points-aggregate.js).
   // Deliberately NOT sourced from PointsLog (every point earned from anything, or received from
   // another player via trade/auction) — that let account age and passive point transfers drive
@@ -1594,7 +1594,7 @@ model GlobalGameConfig {
   // applied together with, each CMoon's own allowOptOutJoin toggle below.
   cMoonOptOutCooldownDays            Int       @default(14)
   // Weekly cMoon team-leaderboard scoring rules (see server/utils/cmoon.js
-  // runWeeklyCMoonScoring / recordDailyTaskCompletions). Admin-editable via
+  // runDailyCMoonScoring / recordDailyTaskCompletions). Admin-editable via
   // Admin > cMoons > Scoring Rules; changes apply forward-only to future cron
   // runs, never retroactively rewriting CMoonScoreLog/CMoon.teamScore.
   cMoonHighScorePoints               Int       @default(100) // per-player award for holding rank #1 on an eligible game
@@ -1609,6 +1609,17 @@ model GlobalGameConfig {
   // featuredAuctionHours/featuredDissolve* array-field convention above.
   cMoonDisabledScoreGames            Json      @default("[]")
   cMoonDisabledWinGames              Json      @default("[]")
+  // What time of day (America/Chicago wall clock) the cMoon team-leaderboard scoring job fires,
+  // admin-adjustable via Admin > cMoons instead of the fixed weekly cron it used to be — see
+  // runDailyCMoonScoring / checkAndRunCMoonDailyScoring in server/utils/cmoon.js and
+  // server/cron/cmoon-daily-score.js. The job now runs once per CALENDAR DAY rather than once a
+  // week, so HIGH_SCORE/TOP10 awards are divided by 7 at award time (DAILY_TASK is unaffected —
+  // it already awarded per-day). cMoonScoringLastRunDate is a "yyyy-mm-dd" (Chicago) idempotency
+  // stamp, checked-and-set under the same advisory lock the run itself uses, so the frequent
+  // checker cron can never double-fire a given day even across overlapping ticks.
+  cMoonScoringRunHour                Int       @default(0)   // 0-23 CST
+  cMoonScoringRunMinute              Int       @default(0)   // 0-59
+  cMoonScoringLastRunDate            String?
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }
@@ -3097,8 +3108,21 @@ enum CMoonEffectType {
 model CMoon {
   id            String           @id @default(uuid())
   name          String           @unique
-  color         String // "#RRGGBB", validated server-side; used as text color, and as the base
-  // color a palette is derived from for the cMoon page + themed cToon modals (see utils/cmoonPalette.js).
+  color         String // "#RRGGBB", validated server-side; the required base/fallback color a full
+  // palette is auto-derived from for the cMoon page + themed cToon modals + featured cToon cards
+  // (see utils/cmoonPalette.js) whenever the optional per-role overrides below are unset.
+  // Optional per-role overrides ("#RRGGBB", validated server-side same as color above) letting an
+  // admin independently tune the parts of the auto-generated palette players notice most, instead
+  // of only ever picking the one seed hex. Each is null by default (falls back to the value
+  // cMoonPalette() would have derived from `color` alone) — an admin can set any subset and leave
+  // the rest auto. Everything NOT covered here (muted text, borders, danger/success, hairline) is
+  // still always auto-derived via the existing WCAG contrast-fix loop, seeded from whichever of
+  // these is now in play — see cMoonPalette()'s header comment for why full manual control over
+  // every single slot isn't offered.
+  pageBgColor   String? // overrides the page/modal background (auto: bg)
+  accentColor   String? // overrides the banner/progress-bar/link accent (auto: banner)
+  textColor     String? // overrides primary text (auto: text)
+  cardBgColor   String? // overrides tile/card backgrounds, incl. featured cToon cards (auto: tileBg)
   discordRoleId String? // Discord role snowflake granted to members (add-only sync)
   // Optional full-screen animation played on cMoon-select and achievement-claim (see enum above).
   // Null = no effect, proceed immediately. Mutually exclusive with customJoinEffectId below.
@@ -3167,10 +3191,17 @@ model CMoon {
   // choosers but closed to late/returning joiners, or vice versa. Defaults on (matches the
   // pre-existing behavior of every cMoon being open to a rejoin).
   allowOptOutJoin Boolean @default(true)
-  // Wide masthead banner (normalized to 1200x100) shown at the top of this cMoon's own page —
-  // distinct from buttonImagePath above (that's the small pill shown elsewhere) and from
-  // pageImagePath above (no longer displayed). Falls back to a plain colored title bar when unset.
+  // Wide masthead banner shown at the top of this cMoon's own page — distinct from
+  // buttonImagePath above (that's the small pill shown elsewhere) and from pageImagePath above
+  // (no longer displayed). Falls back to a plain colored title bar when unset. Stored at the
+  // admin's uploaded aspect ratio (downscaled only if it exceeds page-banner-image.post.js's max
+  // box, never cropped) — pageBannerWidth/Height are that stored image's real pixel dimensions,
+  // used by CMoonPage.vue to size the masthead box without layout shift. Null on either (older
+  // rows saved before this pair existed, back when every banner was force-cropped to a fixed
+  // 1200x100) means the front end falls back to that legacy 1200/100 ratio.
   pageBannerImagePath String?
+  pageBannerWidth      Int?
+  pageBannerHeight     Int?
   // Small square "avatar" (normalized ~128x128, like a player avatar) shown next to this
   // cMoon's colored name badge on member cZones — a quick-glance identity separate from the
   // large poster (imagePath) and the page/button art above, which are too large for that spot.
@@ -3711,7 +3742,15 @@ model CMoonScoreLog {
   category  String // 'HIGH_SCORE' | 'DAILY_TASK' | 'TOP10'
   detail    String?
   points    Int
-  weekStart DateTime // the Monday (America/Chicago) this award belongs to
+  // The America/Chicago daily-task boundary (see getChicagoDailyBoundary in
+  // server/utils/dailyTaskWindows.js) this award belongs to — one row per scoring run since
+  // scoring moved from weekly to daily (see runDailyCMoonScoring in server/utils/cmoon.js).
+  // Column name predates that change and is kept as-is rather than migrated, since nothing reads
+  // it as "the current week" — every consumer (recomputeCMoonTeamScores, the leaderboard sum in
+  // cmoon/[id].get.js) sums ALL rows for a cMoon with no date filter; this column exists purely
+  // so the (cMoonId, userId, category, weekStart, detail) unique constraint below can dedupe
+  // re-runs of the same period, whatever that period's granularity currently is.
+  weekStart DateTime
   createdAt DateTime @default(now())
 
   cMoon CMoon @relation(fields: [cMoonId], references: [id], onDelete: Cascade)

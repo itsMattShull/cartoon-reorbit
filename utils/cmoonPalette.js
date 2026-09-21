@@ -103,37 +103,64 @@ function textForFixedBg(h, s, seedL, bgHex, min, iterations = 8) {
 /**
  * Returns a plain object of hex/rgba strings — never a CSS string — meant to
  * be spread into a Vue `:style` object as `--cm-*` custom properties.
+ *
+ * `input` is either a bare hex string (legacy call shape — everything derives from that one
+ * color, exactly as before) or an object `{ color, pageBgColor, accentColor, textColor,
+ * cardBgColor }`. The four optional fields are per-role overrides an admin can set independently
+ * instead of only ever picking one seed hex (see CMoon.pageBgColor/accentColor/textColor/
+ * cardBgColor in prisma/schema.prisma) — `color` is still required and is what every field below
+ * derives from whenever its own override is absent/invalid.
+ *
+ * An override, when present and a valid hex, ALWAYS wins outright — including when it breaks the
+ * "never mix a light-text and a dark-text surface" invariant the auto-derivation otherwise
+ * enforces (e.g. an admin sets both a light textColor and a light pageBgColor). This function
+ * never rejects or silently clamps that combination; utils/cmoonColor.js's cMoonContrastRatio-
+ * style check is how the admin UI warns about it (see AdminCMoon.vue), matching how a bad
+ * single-color contrast has always been a warning here, never a hard block.
  */
-export function cMoonPalette(color) {
-  const base = isSafeCMoonColor(color) ? color : FALLBACK_COLOR
+export function cMoonPalette(input) {
+  const opts = typeof input === 'string' ? { color: input } : (input || {})
+  const base = isSafeCMoonColor(opts.color) ? opts.color : FALLBACK_COLOR
   const { h, s: rawS, l: baseL } = hexToHsl(base)
   const s = Math.min(rawS, 55)
-
-  // One text regime for the whole card (never mix black-text and
-  // white-text surfaces in the same modal) — decided by whether the base
-  // color reads as light or dark.
   const isDarkBase = baseL < 50
-  const text = isDarkBase ? WHITE : BLACK
 
-  const bg = bgForFixedText(h, s, isDarkBase ? 15 : 94, text, 4.5)
-  const tileBg = bgForFixedText(h, s, isDarkBase ? 23 : 86, text, 4.5)
-  const textMuted = textForFixedBg(h, Math.min(rawS, 30), isDarkBase ? 74 : 34, bg, 4.5)
-  const border = textForFixedBg(h, Math.min(rawS, 40), isDarkBase ? 48 : 56, bg, 3)
+  // Base slots: an explicit, validly-formatted override is used as-is; otherwise the same
+  // auto-derivation as before, seeded from `color`.
+  const text = isSafeCMoonColor(opts.textColor) ? opts.textColor : (isDarkBase ? WHITE : BLACK)
+  const bg = isSafeCMoonColor(opts.pageBgColor)
+    ? opts.pageBgColor
+    : bgForFixedText(h, s, isDarkBase ? 15 : 94, text, 4.5)
+  const tileBg = isSafeCMoonColor(opts.cardBgColor)
+    ? opts.cardBgColor
+    : bgForFixedText(h, s, isDarkBase ? 23 : 86, text, 4.5)
+
+  // Secondary slots (never independently overridable — see this function's header comment on
+  // why only a curated set of roles is exposed) always derive from whichever `bg`/`text` are
+  // ACTUALLY in play above, not from the admin's raw base color — seeding their hue/saturation
+  // from `bg` itself keeps them harmonious even when `bg` is an override unrelated to `color`'s
+  // own hue.
+  const bgIsLight = relativeLuminance(bg) > 0.5
+  const { h: bgH, s: bgRawS } = hexToHsl(bg)
+  const textMuted = textForFixedBg(bgH, Math.min(bgRawS, 30), bgIsLight ? 34 : 74, bg, 4.5)
+  const border = textForFixedBg(bgH, Math.min(bgRawS, 40), bgIsLight ? 56 : 48, bg, 3)
 
   // A handful of hardcoded reds/greens in the modal (error text, sale-value
   // text) were tuned only for the old fixed dark-navy background. Once the
   // panel background itself can be an arbitrary light or dark tint, those
   // need their own contrast-verified, hue-locked (red/green) text colors
   // rather than inheriting a fixed hex that assumed a dark backdrop.
-  const danger = textForFixedBg(4, 75, isDarkBase ? 74 : 38, bg, 4.5)
-  const success = textForFixedBg(142, 55, isDarkBase ? 74 : 30, bg, 4.5)
+  const danger = textForFixedBg(4, 75, bgIsLight ? 38 : 74, bg, 4.5)
+  const success = textForFixedBg(142, 55, bgIsLight ? 30 : 74, bg, 4.5)
 
-  // Banner keeps the admin's actual color as its hue/saturation (it's the
-  // one place meant to look like "their" color) — only lightness is nudged,
-  // and only if needed, so a hue that already clears 4.5:1 is left untouched.
-  let bannerL = baseL
-  let banner = hslToHex(h, rawS, bannerL)
-  // Pick whichever of black/white actually contrasts more against the raw base.
+  // Banner keeps its seed color's actual hue/saturation (it's the one place meant to look like
+  // "their" color) — only lightness is nudged, and only if needed, so a hue that already clears
+  // 4.5:1 is left untouched. accentColor (if set) is that seed instead of the raw base color.
+  const accentSeed = isSafeCMoonColor(opts.accentColor) ? opts.accentColor : base
+  const { h: bh, s: bRawS, l: bBaseL } = hexToHsl(accentSeed)
+  let bannerL = bBaseL
+  let banner = hslToHex(bh, bRawS, bannerL)
+  // Pick whichever of black/white actually contrasts more against the raw accent seed.
   const pickBannerText = (hex) => {
     const lum = relativeLuminance(hex)
     const dark = contrast(relativeLuminance(BLACK), lum)
@@ -145,7 +172,7 @@ export function cMoonPalette(color) {
     const ratio = contrast(relativeLuminance(bannerText), relativeLuminance(banner))
     if (ratio >= 4.5) break
     bannerL = bannerText === BLACK ? clamp(bannerL + 5, 0, 90) : clamp(bannerL - 5, 10, 100)
-    banner = hslToHex(h, rawS, bannerL)
+    banner = hslToHex(bh, bRawS, bannerL)
   }
 
   return {
@@ -162,16 +189,17 @@ export function cMoonPalette(color) {
     linkBg: tileBg,
     linkText: text,
     focusRing: text,
-    hairline: isDarkBase ? 'rgba(255,255,255,0.14)' : 'rgba(0,0,0,0.12)',
+    hairline: bgIsLight ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.14)',
     thumbBg: tileBg,
     danger,
     success
   }
 }
 
-/** Converts a cMoonPalette() result into `--cm-*` CSS custom properties for `:style`. */
-export function cMoonPaletteStyle(color) {
-  const p = cMoonPalette(color)
+/** Converts a cMoonPalette() result into `--cm-*` CSS custom properties for `:style`. Takes the
+ * same bare-hex-string-or-per-role-object `input` shape cMoonPalette() does. */
+export function cMoonPaletteStyle(input) {
+  const p = cMoonPalette(input)
   return {
     '--cm-bg': p.bg,
     '--cm-tile-bg': p.tileBg,

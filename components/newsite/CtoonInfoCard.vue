@@ -107,7 +107,7 @@
             </div>
             <div class="ctic-grid">
               <div v-if="showCMoonTheme" class="ctic-tile ctic-tile-wide">
-                <div class="ctic-label">cWorld</div>
+                <div class="ctic-label">cMoon</div>
                 <NuxtLink
                   :to="`/newsite/cmoon/${ctoon.cMoon.id}`"
                   class="ctic-value ctic-value--link ctic-value--wrap"
@@ -457,7 +457,13 @@ const isMarketContext = computed(() => ['market', 'auction'].includes(context.va
 // clean transition into the cMoon palette once real data lands, never a
 // flash of the wrong color while loading.
 const showCMoonTheme = computed(() => !isMarketContext.value && !loading.value && !!ctoon.value?.cMoon)
-const cMoonStyle = computed(() => showCMoonTheme.value ? cMoonPaletteStyle(ctoon.value.cMoon.color) : {})
+const cMoonStyle = computed(() => showCMoonTheme.value ? cMoonPaletteStyle({
+  color: ctoon.value.cMoon.color,
+  pageBgColor: ctoon.value.cMoon.pageBgColor,
+  accentColor: ctoon.value.cMoon.accentColor,
+  textColor: ctoon.value.cMoon.textColor,
+  cardBgColor: ctoon.value.cMoon.cardBgColor,
+}) : {})
 
 function openRelatedEdition(ctoonId) {
   if (!ctoonId) return

@@ -26,7 +26,7 @@ export const MAX_ANIMATED_FRAMES = 200
  * need transparent (rather than opaque black) letterbox padding — omitted, sharp's own default
  * applies, so existing callers are unaffected.
  */
-export async function resizeAnimatedGif(buffer, width, height, { fit = 'cover', limitInputPixels = 40_000_000, maxFrames = MAX_ANIMATED_FRAMES, background } = {}) {
+export async function resizeAnimatedGif(buffer, width, height, { fit = 'cover', limitInputPixels = 40_000_000, maxFrames = MAX_ANIMATED_FRAMES, background, withoutEnlargement = false } = {}) {
   const image = sharp(buffer, { animated: true, limitInputPixels })
   const { pages } = await image.metadata()
   if ((pages || 1) > maxFrames) {
@@ -34,7 +34,7 @@ export async function resizeAnimatedGif(buffer, width, height, { fit = 'cover', 
   }
   return image
     .timeout({ seconds: 15 })
-    .resize(width, height, { fit, position: 'centre', ...(background ? { background } : {}) })
+    .resize(width, height, { fit, position: 'centre', withoutEnlargement, ...(background ? { background } : {}) })
     .gif()
     .toBuffer()
 }

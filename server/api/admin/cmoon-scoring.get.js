@@ -21,6 +21,8 @@ export default defineEventHandler(async (event) => {
     top10CtoonsBoardEnabled: cfg?.cMoonTop10CtoonsBoardEnabled ?? CMOON_SCORING_DEFAULTS.top10CtoonsBoardEnabled,
     disabledScoreGames,
     disabledWinGames,
+    runHour: Number.isInteger(cfg?.cMoonScoringRunHour) ? cfg.cMoonScoringRunHour : 0,
+    runMinute: Number.isInteger(cfg?.cMoonScoringRunMinute) ? cfg.cMoonScoringRunMinute : 0,
     scoreGameOptions: SCORE_GAME_OPTIONS,
     winGameOptions: WIN_GAME_OPTIONS,
   }
