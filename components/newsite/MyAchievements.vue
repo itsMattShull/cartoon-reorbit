@@ -351,19 +351,24 @@ async function confirmClaim(a) {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
+  /* space-between (not center + flex-grow on the label) — the actual bug measured in-browser
+     was that `flex: 1 1 auto` on the label made it GROW to fill the row's leftover space (this
+     label's text is short enough to never need to wrap), pushing its grown box's right edge to
+     overlap the switch even though the visible text itself was nowhere near that wide. Letting
+     both items size to their own content and separating them with space-between removes the
+     overlap at its source; min-width:0 + overflow-wrap below is only a safety net for a genuinely
+     long label/huge font-scaling case, not the fix for this bug. */
+  justify-content: space-between;
   gap: 6px 8px;
   padding: 6px 10px;
   background: rgba(0,0,0,0.15);
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 .ma-toolbar-label {
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: 100%;
   font-size: 0.68rem;
   color: rgba(255,255,255,0.75);
-  text-align: right;
   overflow-wrap: break-word;
 }
 
