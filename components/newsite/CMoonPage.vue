@@ -121,7 +121,16 @@
         <div v-if="rankProgress && rankProgress.isMember" class="cmp-rank">
           <div class="cmp-rank-head">
             <span class="cmp-affinity-label">Your Rank</span>
-            <span class="cmp-affinity-level">{{ rankProgress.currentRank ? rankProgress.currentRank.name : 'Unranked' }}</span>
+            <span class="cmp-rank-head-end">
+              <span class="cmp-affinity-level">{{ rankProgress.currentRank ? rankProgress.currentRank.name : 'Unranked' }}</span>
+              <button
+                ref="rankHelpBtn"
+                type="button"
+                class="cmp-affinity-help cmp-affinity-help--sm"
+                aria-label="About rank rewards"
+                @click="showRankInfo = true"
+              >?</button>
+            </span>
           </div>
           <div class="cmp-affinity-bar-track">
             <div class="cmp-affinity-bar-fill" :style="{ width: rankProgressPct + '%' }"></div>
@@ -134,6 +143,14 @@
             <span v-else>{{ rankProgress.cMoonPoints.toLocaleString() }} pts contributed</span>
           </p>
         </div>
+
+        <CMoonRankLadderModal
+          v-if="showRankInfo && rankProgress"
+          :cmoon-name="cmoon.name"
+          :tiers="rankProgress.tiers"
+          :c-moon-points="rankProgress.cMoonPoints"
+          @close="closeRankInfo"
+        />
 
         <!-- Unclaimed rank rewards: a player who ranked up but dismissed/missed the claim
              modal at the time can still pick their reward here — same claim endpoint the
@@ -348,6 +365,7 @@ import { useCtoonModal } from '@/composables/useCtoonModal'
 import { useCMoonRewardModal } from '@/composables/useCMoonRewardModal'
 import { useFullscreenEffect } from '@/composables/useFullscreenEffect'
 import CMoonAffinityLadderModal from '@/components/newsite/CMoonAffinityLadderModal.vue'
+import CMoonRankLadderModal from '@/components/newsite/CMoonRankLadderModal.vue'
 
 const route = useRoute()
 const { open: openCtoonModal } = useCtoonModal()
@@ -381,6 +399,13 @@ function closeAffinityInfo() {
   // Return focus to the trigger for keyboard/screen-reader users, same as ESC or the close
   // button dismissing any other modal in this file.
   affinityHelpBtn.value?.focus()
+}
+
+const showRankInfo = ref(false)
+const rankHelpBtn = ref(null)
+function closeRankInfo() {
+  showRankInfo.value = false
+  rankHelpBtn.value?.focus()
 }
 
 const offers = ref([])
@@ -894,6 +919,30 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
 .cmp-affinity-help:focus-visible {
   background: rgba(255, 255, 255, 0.18);
   outline: none;
+}
+
+.cmp-rank-head-end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Compact variant for sitting inline next to a short heading (Your Rank/level name) rather than
+   as a wide sibling of a full-width action button — visual circle stays small, but the tap
+   target is still padded out to 44px via a transparent hit-box, same trick as
+   EconomyTicker.vue's .ticker-index-help. */
+.cmp-affinity-help--sm {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  border-radius: 50%;
+  font-size: 0.7rem;
+}
+.cmp-affinity-help--sm::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
 }
 
 .cmp-affinity-form {
