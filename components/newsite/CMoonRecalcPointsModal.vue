@@ -1,7 +1,10 @@
 <!-- components/newsite/CMoonRecalcPointsModal.vue
-     Admin tool: recalculates cMoon rank points for every member who has more than 1 (almost
-     certainly stale, pre-fix) cMoonPoints, using the current logic, then redoes each member's
-     displayed rank from that corrected number. Runs as a queue job (server/workers/
+     Admin tool: recalculates cMoonPoints for every current cMoon member using the current logic,
+     then redoes each member's displayed rank from that corrected number. Every member is
+     checked, not just those still showing a high point total — the periodic aggregate cron keeps
+     cMoonPoints itself correct on its own, but only this tool ever lowers a stale rank, so a
+     member whose points the cron already quietly fixed still needs their rank re-derived here.
+     Runs as a queue job (server/workers/
      cmoon-rank-recalc.worker.js) that processes members one at a time, so this modal is purely a
      progress viewer polling that job's status — closing it does not stop the run, and reopening
      the button will resume showing progress on the same in-flight job.
@@ -25,11 +28,10 @@
 
         <template v-else>
           <p class="text-[11px] text-gray-600">
-            Recomputes <code>cMoonPoints</code> for every member with more than 1 point, from the
-            current logic (weekly High Score / Top 10 / Daily Task awards only), then redoes each
-            member's rank to match. Members are processed one at a time; this can lower a rank if
-            the corrected total no longer qualifies. Already-claimed rank rewards are never
-            revoked.
+            Recomputes <code>cMoonPoints</code> for every current cMoon member, from the current
+            logic (weekly High Score / Top 10 / Daily Task awards only), then redoes each member's
+            rank to match. Members are processed one at a time; this can lower a rank if the
+            corrected total no longer qualifies. Already-claimed rank rewards are never revoked.
           </p>
 
           <div v-if="error" class="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{{ error }}</div>
