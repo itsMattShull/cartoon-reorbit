@@ -51,7 +51,7 @@ import {
 // A run is capped at 5 minutes of simulated time. This bounds the replay cost of one /end
 // request and is an anti-abuse rail rather than the intended ending: the uncapped wave
 // escalation in the sim means every honest run ends in a death well before this.
-export const MAX_TICKS = 5 * 60 * TICK_HZ // 18,000
+export const MAX_TICKS = 5 * 60 * TICK_HZ // 18000
 
 // One entry per pointer-down..pointer-up. Measured against simulated play, an aggressive
 // player producing a stroke every ~6 ticks for a full five-minute run lands near 3,000.

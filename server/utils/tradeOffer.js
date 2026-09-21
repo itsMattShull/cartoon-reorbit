@@ -19,7 +19,7 @@ import {
   UNAVAILABLE_REQUEST_MESSAGE
 } from '@/server/utils/lockRules'
 
-export * from '@/server/utils/tradeOfferRules'
+export * from './tradeOfferRules'
 
 /**
  * Two references on one side that resolve to the same physical cToon.

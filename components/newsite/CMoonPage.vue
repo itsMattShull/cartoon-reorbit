@@ -55,30 +55,40 @@
             <span v-else>{{ affinity.affinitySpent.toLocaleString() }} pts contributed</span>
           </p>
 
-          <button
-            v-if="!contributeOpen"
-            type="button"
-            class="cmp-affinity-toggle"
-            @click="contributeOpen = true"
-          >Contribute to {{ cmoon.name }}</button>
+          <div class="cmp-affinity-action-row">
+            <button
+              v-if="!contributeOpen"
+              type="button"
+              class="cmp-affinity-toggle"
+              @click="contributeOpen = true"
+            >Contribute to {{ cmoon.name }}</button>
 
-          <div v-else class="cmp-affinity-form">
-            <input
-              v-model.number="contributeAmount"
-              type="number"
-              inputmode="numeric"
-              min="1"
-              :max="affinityRemainingToMax ?? undefined"
-              step="1"
-              class="cmp-affinity-input"
-              style="font-size:16px"
-              placeholder="Points"
-              :disabled="contributing || affinityRemainingToMax === 0"
-            />
-            <button type="button" class="cmp-affinity-submit" :disabled="contributing || !contributeAmount || affinityRemainingToMax === 0" @click="submitContribute">
-              {{ contributing ? 'Contributing…' : 'Contribute' }}
-            </button>
-            <button type="button" class="cmp-affinity-cancel" :disabled="contributing" @click="contributeOpen = false">Cancel</button>
+            <div v-else class="cmp-affinity-form">
+              <input
+                v-model.number="contributeAmount"
+                type="number"
+                inputmode="numeric"
+                min="1"
+                :max="affinityRemainingToMax ?? undefined"
+                step="1"
+                class="cmp-affinity-input"
+                style="font-size:16px"
+                placeholder="Points"
+                :disabled="contributing || affinityRemainingToMax === 0"
+              />
+              <button type="button" class="cmp-affinity-submit" :disabled="contributing || !contributeAmount || affinityRemainingToMax === 0" @click="submitContribute">
+                {{ contributing ? 'Contributing…' : 'Contribute' }}
+              </button>
+              <button type="button" class="cmp-affinity-cancel" :disabled="contributing" @click="contributeOpen = false">Cancel</button>
+            </div>
+
+            <button
+              ref="affinityHelpBtn"
+              type="button"
+              class="cmp-affinity-help"
+              aria-label="About affinity rewards"
+              @click="showAffinityInfo = true"
+            >?</button>
           </div>
           <p v-if="affinityRemainingToMax === 0" class="cmp-affinity-error">You've already reached the highest affinity rank for this cMoon.</p>
           <p v-else-if="contributeError" class="cmp-affinity-error">{{ contributeError }}</p>
@@ -96,6 +106,14 @@
           </div>
         </div>
 
+        <CMoonAffinityLadderModal
+          v-if="showAffinityInfo && affinity"
+          :cmoon-name="cmoon.name"
+          :levels="affinity.levels"
+          :affinity-spent="affinity.affinitySpent"
+          @close="closeAffinityInfo"
+        />
+
         <!-- Rank Ladder progress: only shown to a member of THIS cMoon, since rank is per-cMoon
              even though the ladder itself (name/threshold/rewards) is universal — see
              prisma/schema.prisma's CMoonRankTier. Independent of the affinity widget above:
@@ -103,7 +121,16 @@
         <div v-if="rankProgress && rankProgress.isMember" class="cmp-rank">
           <div class="cmp-rank-head">
             <span class="cmp-affinity-label">Your Rank</span>
-            <span class="cmp-affinity-level">{{ rankProgress.currentRank ? rankProgress.currentRank.name : 'Unranked' }}</span>
+            <span class="cmp-rank-head-end">
+              <span class="cmp-affinity-level">{{ rankProgress.currentRank ? rankProgress.currentRank.name : 'Unranked' }}</span>
+              <button
+                ref="rankHelpBtn"
+                type="button"
+                class="cmp-affinity-help cmp-affinity-help--sm"
+                aria-label="About rank rewards"
+                @click="showRankInfo = true"
+              >?</button>
+            </span>
           </div>
           <div class="cmp-affinity-bar-track">
             <div class="cmp-affinity-bar-fill" :style="{ width: rankProgressPct + '%' }"></div>
@@ -116,6 +143,14 @@
             <span v-else>{{ rankProgress.cMoonPoints.toLocaleString() }} pts contributed</span>
           </p>
         </div>
+
+        <CMoonRankLadderModal
+          v-if="showRankInfo && rankProgress"
+          :cmoon-name="cmoon.name"
+          :tiers="rankProgress.tiers"
+          :c-moon-points="rankProgress.cMoonPoints"
+          @close="closeRankInfo"
+        />
 
         <!-- Unclaimed rank rewards: a player who ranked up but dismissed/missed the claim
              modal at the time can still pick their reward here — same claim endpoint the
@@ -329,6 +364,8 @@ import { cmoonJoinEffectDescriptor } from '@/utils/cmoonJoinEffectDescriptor'
 import { useCtoonModal } from '@/composables/useCtoonModal'
 import { useCMoonRewardModal } from '@/composables/useCMoonRewardModal'
 import { useFullscreenEffect } from '@/composables/useFullscreenEffect'
+import CMoonAffinityLadderModal from '@/components/newsite/CMoonAffinityLadderModal.vue'
+import CMoonRankLadderModal from '@/components/newsite/CMoonRankLadderModal.vue'
 
 const route = useRoute()
 const { open: openCtoonModal } = useCtoonModal()
@@ -354,6 +391,22 @@ const contributing = ref(false)
 const contributeError = ref('')
 const justLeveledUp = ref(false)
 let pulseTimer = null
+
+const showAffinityInfo = ref(false)
+const affinityHelpBtn = ref(null)
+function closeAffinityInfo() {
+  showAffinityInfo.value = false
+  // Return focus to the trigger for keyboard/screen-reader users, same as ESC or the close
+  // button dismissing any other modal in this file.
+  affinityHelpBtn.value?.focus()
+}
+
+const showRankInfo = ref(false)
+const rankHelpBtn = ref(null)
+function closeRankInfo() {
+  showRankInfo.value = false
+  rankHelpBtn.value?.focus()
+}
 
 const offers = ref([])
 const eligible = ref(false)
@@ -828,8 +881,14 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   color: var(--cm-text-muted, rgba(255,255,255,0.6));
 }
 
-.cmp-affinity-toggle {
+.cmp-affinity-action-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
   margin-top: 10px;
+}
+
+.cmp-affinity-toggle {
   min-height: 44px;
   padding: 0 16px;
   border: none;
@@ -839,15 +898,59 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   font-weight: 700;
   font-size: 0.85rem;
   cursor: pointer;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
 }
 .cmp-affinity-toggle:hover { opacity: 0.9; }
+
+.cmp-affinity-help {
+  flex-shrink: 0;
+  width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--cm-hairline, rgba(255,255,255,0.3));
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--cm-text, #ffffff);
+  font-weight: 800;
+  font-size: 1rem;
+  cursor: pointer;
+}
+.cmp-affinity-help:hover,
+.cmp-affinity-help:focus-visible {
+  background: rgba(255, 255, 255, 0.18);
+  outline: none;
+}
+
+.cmp-rank-head-end {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Compact variant for sitting inline next to a short heading (Your Rank/level name) rather than
+   as a wide sibling of a full-width action button — visual circle stays small, but the tap
+   target is still padded out to 44px via a transparent hit-box, same trick as
+   EconomyTicker.vue's .ticker-index-help. */
+.cmp-affinity-help--sm {
+  position: relative;
+  width: 20px;
+  height: 20px;
+  min-height: 0;
+  border-radius: 50%;
+  font-size: 0.7rem;
+}
+.cmp-affinity-help--sm::before {
+  content: '';
+  position: absolute;
+  inset: -12px;
+}
 
 .cmp-affinity-form {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  margin-top: 10px;
+  flex: 1;
+  min-width: 0;
 }
 
 .cmp-affinity-input {
