@@ -752,6 +752,13 @@ export async function reassignUserCMoon(userId, newCMoonId) {
         currentCMoonRankId: null,
         cMoonRankRoleGrantedAt: null,
         cMoonRoleGrantedAt: null,
+        // Mirrors selectCMoonForUser's reset on self-join: an admin-driven move (or removal) must
+        // clear these the same way, or a user who once opted out keeps a stale cMoonOptedOut/
+        // cMoonOptedOutAt around forever — harmless while they stay put, but if later removed
+        // again, computeCMoonRejoinAvailableAt() would compute their rejoin cooldown off that old,
+        // unrelated timestamp instead of the actual departure time.
+        cMoonOptedOut: false,
+        cMoonOptedOutAt: null,
         ...(newCMoon && !isNewCaptain ? { cMoonPoints: 0 } : {}),
       },
     })
