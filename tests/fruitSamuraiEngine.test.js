@@ -350,8 +350,11 @@ test('sanitizeStrokes enforces the size rails', () => {
   for (let i = 0; i < MAX_STROKES + 1; i++) tooMany.push({ t: i + 1, p: [0, 1, 1] })
   assert.throws(() => sanitizeStrokes(tooMany), /stroke count/)
 
+  // dt is repeated (not incremented) so this stroke never runs past the tick cap — MAX_SAMPLES
+  // now equals MAX_TICKS, so an incrementing dt here would trip "runs past the tick limit"
+  // before the sample-count check ever fires.
   const p = [0, 1, 1]
-  for (let i = 1; i <= MAX_SAMPLES + 1; i++) p.push(i, 1, 1)
+  for (let i = 1; i <= MAX_SAMPLES + 1; i++) p.push(0, 1, 1)
   assert.throws(() => sanitizeStrokes([{ t: 1, p }]), /sample count/)
 })
 
