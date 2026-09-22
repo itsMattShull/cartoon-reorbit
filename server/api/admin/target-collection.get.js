@@ -1,6 +1,10 @@
 // server/api/admin/target-collection.get.js
-// Admin-only paginated endpoint for browsing a target user's collection on the
-// initiate-trade page. Supports server-side filtering + cross-ownership badge data.
+// Admin-only paginated endpoint for browsing a target user's collection.
+// Originally built for the initiate-trade page (which only ever wants
+// currently-tradeable copies, so that stays the default), and reused by the
+// admin "Manage Collection" view, which needs the opposite: every copy the
+// user holds, tradeable or not, since a locked/untradeable copy is exactly
+// what a moderator most needs to see. Pass includeUntradeable=true for that.
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
@@ -30,6 +34,7 @@ export default defineEventHandler(async (event) => {
   const duplicatesOnly = q.duplicatesOnly === 'true'
   const ownedFilter    = q.ownedFilter    || 'all' // 'all' | 'owned' | 'unowned'
   const ownedByUsername = q.ownedByUsername?.trim() || '' // e.g. official account
+  const includeUntradeable = q.includeUntradeable === 'true'
 
   // Fetch target user
   const targetUser = await prisma.user.findUnique({
@@ -48,7 +53,7 @@ export default defineEventHandler(async (event) => {
   const where = {
     userId: targetUser.id,
     burnedAt: null,
-    isTradeable: true,
+    ...(includeUntradeable ? {} : { isTradeable: true }),
     ...(Object.keys(ctoonWhere).length ? { ctoon: { is: ctoonWhere } } : {})
   }
 
@@ -58,7 +63,7 @@ export default defineEventHandler(async (event) => {
   if (duplicatesOnly) {
     const groups = await prisma.userCtoon.groupBy({
       by: ['ctoonId'],
-      where: { userId: targetUser.id, burnedAt: null, isTradeable: true },
+      where: { userId: targetUser.id, burnedAt: null, ...(includeUntradeable ? {} : { isTradeable: true }) },
       having: { ctoonId: { _count: { gt: 1 } } }
     })
     andConditions.push({ ctoonId: { in: groups.map(g => g.ctoonId) } })
@@ -139,6 +144,8 @@ export default defineEventHandler(async (event) => {
       mintNumber:     uc.mintNumber,
       quantity:       uc.ctoon.quantity,
       isFirstEdition: uc.isFirstEdition,
+      isTradeable:    uc.isTradeable,
+      lockedByUserId: uc.lockedByUserId,
       isHolidayItem:  holidaySet.has(uc.ctoonId),
       inPendingTrade: pendingTradeSet.has(uc.id),
       otherOwns:      otherOwnsSet.has(uc.ctoonId)

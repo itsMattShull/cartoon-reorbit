@@ -2,9 +2,7 @@
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
-
-// Hard-coded super-admin Discord ID allowed to grant admin
-const SUPER_ADMIN_DISCORD_ID = '732319322093125695'
+import { SUPER_ADMIN_DISCORD_ID } from '@/server/utils/adminAuth'
 
 export default defineEventHandler(async (event) => {
   // Authenticate via existing session -> /api/auth/me

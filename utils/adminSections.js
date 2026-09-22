@@ -42,6 +42,7 @@ export const ADMIN_SECTIONS = [
 
   // ── Users & Moderation ──────────────────────────────────────
   S('manageUsers', 'Manage Users', 'users', nu('AdminManageUsers')),
+  S('manageCollection', 'Manage Collection', 'users', nu('AdminManageCollection')),
   S('cheatFinder', 'Cheat Finder', 'users', nu('AdminCheatFinder')),
   S('checkCheating', 'Check Cheating', 'users', legacy('AdminLegacyCheckCheating')),
   S('cheatingTool', 'Cheating Tool', 'users', legacy('AdminLegacyCheatingTool')),
@@ -98,6 +99,7 @@ export const ADMIN_SECTIONS = [
   S('errorLogs', 'Error Logs', 'logs', nu('AdminErrorLogs')),
   S('authLogs', 'Auth Logs', 'logs', nu('AdminAuthLogs')),
   S('tradeLogs', 'Trade Logs', 'logs', nu('AdminTradeLogs')),
+  S('touchTrades', 'Track Touch Trades', 'logs', nu('AdminTouchTrades')),
   S('auctionLogs', 'Auction Logs', 'logs', nu('AdminAuctionLogs')),
   S('ctoonOwnerLogs', 'cToon Owner Logs', 'logs', nu('AdminCtoonOwnerLogs')),
   S('czoneSearchLogs', 'cZone Search Logs', 'logs', nu('AdminCzoneSearchLogs')),

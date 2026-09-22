@@ -15,7 +15,8 @@ import {
   validateTradeOfferInputs,
   createTradeOfferTx,
   assertOfferHasContent,
-  sendTradeOfferDM
+  sendTradeOfferDM,
+  captureRequestMeta
 } from '@/server/utils/tradeOffer'
 import { notifyTradeOfferReceived } from '@/server/utils/notifications'
 
@@ -70,12 +71,15 @@ export default defineEventHandler(async (event) => {
   })
 
   // 5) Create the offer and lock the offered points
+  const { ip: initiatorIp, userAgent: initiatorUserAgent } = captureRequestMeta(event)
   const offer = await prisma.$transaction(async (tx) => createTradeOfferTx(tx, {
     initiatorId,
     recipientId: recipient.id,
     pointsOffered,
     resolvedOffered,
-    resolvedRequested
+    resolvedRequested,
+    initiatorIp,
+    initiatorUserAgent
   }))
 
   // 6) Notify the recipient. Not awaited — the offer is already committed and

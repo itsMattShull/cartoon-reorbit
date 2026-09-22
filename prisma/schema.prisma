@@ -606,6 +606,8 @@ model User {
   tradeListItems            UserTradeListItem[]
   tradeOffersInitiated      TradeOffer[]                  @relation("OfferInitiator")
   tradeOffersReceived       TradeOffer[]                  @relation("OfferRecipient")
+  tradeOffersAccepted       TradeOffer[]                  @relation("OfferAcceptedBy")
+  touchTradeConfirmations   TouchTradeConfirmation[]      @relation("TouchTradeConfirmedBy")
   auctionsAsHighestBid      Auction[]                     @relation("HighestBidder")
   auctionsAsWinner          Auction[]                     @relation("AuctionWinner")
   bids                      Bid[]
@@ -1122,6 +1124,29 @@ model CheatFinderConfirmation {
 
   @@unique([type, groupKey])
   @@index([type])
+  @@index([confirmedAt])
+}
+
+/// One row per (userA, userB, ctoon, mint) pair an admin has reviewed and
+/// dismissed from the "Track Touch Trades" report — mirrors
+/// CheatFinderConfirmation's dismiss pattern above so a reviewed pair stops
+/// resurfacing on every future report run instead of being re-flagged forever.
+/// userAId/userBId are stored in sorted order (lower id first) so groupKey is
+/// stable regardless of who traded which direction.
+model TouchTradeConfirmation {
+  id                  String   @id @default(uuid())
+  groupKey            String   @unique // `${ctoonId}:${mintNumber}:${userAId}:${userBId}` (userAId < userBId)
+  ctoonId             String?
+  mintNumber          Int?
+  userAId             String?
+  userBId             String?
+  note                String?
+  confirmedByUserId   String
+  confirmedByUsername String?
+  confirmedAt         DateTime @default(now())
+
+  confirmedBy User @relation("TouchTradeConfirmedBy", fields: [confirmedByUserId], references: [id])
+
   @@index([confirmedAt])
 }
 
@@ -1730,8 +1755,23 @@ model TradeOffer {
   /// @unique, which lets the database enforce that rather than the app.
   counteredOfferId String? @unique
 
-  initiator User @relation("OfferInitiator", fields: [initiatorId], references: [id])
-  recipient User @relation("OfferRecipient", fields: [recipientId], references: [id])
+  // Request metadata captured at the two points a human actually submits this
+  // offer — creation (by initiatorId) and acceptance (by whoever accepts,
+  // which is usually recipientId but is recorded explicitly rather than
+  // inferred). Encrypted the same way LoginLog/UserIP store IPs (see
+  // server/utils/ip-encrypt.js) and used only by the admin "Track Touch
+  // Trades" report to corroborate a same-mint trade pattern between two
+  // users. IP is self-reported via request headers and can be spoofed —
+  // treat it as corroborating, not conclusive.
+  initiatorIp         String?
+  initiatorUserAgent  String?
+  acceptedByUserId    String?
+  acceptedByIp        String?
+  acceptedByUserAgent String?
+
+  initiator  User  @relation("OfferInitiator", fields: [initiatorId], references: [id])
+  recipient  User  @relation("OfferRecipient", fields: [recipientId], references: [id])
+  acceptedBy User? @relation("OfferAcceptedBy", fields: [acceptedByUserId], references: [id], onDelete: SetNull)
 
   /// The earlier offer this one replaced.
   counteredOffer TradeOffer? @relation("TradeCounter", fields: [counteredOfferId], references: [id], onDelete: SetNull)
@@ -1739,7 +1779,8 @@ model TradeOffer {
   /// The counter that replaced this offer, if any.
   counteredBy TradeOffer? @relation("TradeCounter")
 
-  ctoons TradeOfferCtoon[]
+  ctoons         TradeOfferCtoon[]
+  ctoonOwnerLogs CtoonOwnerLog[]
 
   // incoming.get.js / outgoing.get.js filter on one party and sort by createdAt;
   // pending-trade lookups filter on status. Neither column was indexed.
@@ -2617,14 +2658,28 @@ model CtoonOwnerLog {
   counterpartyUsername String? // snapshot, survives counterparty account deletion
   createdAt            DateTime @default(now())
 
-  user         User?      @relation(fields: [userId], references: [id], onDelete: SetNull)
-  ctoon        Ctoon?     @relation(fields: [ctoonId], references: [id], onDelete: SetNull)
-  userCtoon    UserCtoon? @relation(fields: [userCtoonId], references: [id], onDelete: SetNull)
-  counterparty User?      @relation("CtoonOwnerLogCounterparty", fields: [counterpartyUserId], references: [id], onDelete: SetNull)
+  // Set for method='TRADE' rows going forward, alongside the transfer inside
+  // accept.post.js's transaction — lets the admin "Track Touch Trades" report
+  // join back to the full TradeOffer (items on both sides, points, IP/device
+  // metadata) instead of only this snapshot row. Null on rows written before
+  // this column existed and on non-TRADE methods.
+  tradeOfferId String?
+
+  user         User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  ctoon        Ctoon?      @relation(fields: [ctoonId], references: [id], onDelete: SetNull)
+  userCtoon    UserCtoon?  @relation(fields: [userCtoonId], references: [id], onDelete: SetNull)
+  counterparty User?       @relation("CtoonOwnerLogCounterparty", fields: [counterpartyUserId], references: [id], onDelete: SetNull)
+  tradeOffer   TradeOffer? @relation(fields: [tradeOfferId], references: [id], onDelete: SetNull)
 
   @@index([userCtoonId, createdAt])
   @@index([ctoonId, createdAt])
   @@index([userId, createdAt])
+  // Backs the "Track Touch Trades" self-join: candidate rows are always
+  // method='TRADE' rows for one (ctoonId, mintNumber), ordered/bounded by
+  // createdAt. method leads ahead of createdAt so Postgres can narrow to TRADE
+  // rows within the (ctoonId, mintNumber) bucket before touching the date
+  // range, rather than scanning every method for that mint.
+  @@index([ctoonId, mintNumber, method, createdAt])
 }
 
 // ── Holiday feature ─────────────────────────────────────────────

@@ -24,7 +24,8 @@ import {
   exceedsCounterChainDepth,
   sendTradeOfferDM,
   isUuid,
-  MAX_COUNTER_CHAIN_DEPTH
+  MAX_COUNTER_CHAIN_DEPTH,
+  captureRequestMeta
 } from '@/server/utils/tradeOffer'
 import { notifyTradeOfferReceived } from '@/server/utils/notifications'
 
@@ -141,13 +142,16 @@ export default defineEventHandler(async (event) => {
       data: { status: 'RELEASED' }
     })
 
+    const { ip: initiatorIp, userAgent: initiatorUserAgent } = captureRequestMeta(event)
     return createTradeOfferTx(tx, {
       initiatorId: callerId,
       recipientId: recipient.id,
       pointsOffered,
       resolvedOffered,
       resolvedRequested,
-      counteredOfferId: original.id
+      counteredOfferId: original.id,
+      initiatorIp,
+      initiatorUserAgent
     })
   })
 
