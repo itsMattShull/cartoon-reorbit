@@ -86,6 +86,39 @@ const WIN_GAMES = [
 export const SCORE_GAME_OPTIONS = SCORE_GAMES.map(({ name, label }) => ({ key: name, label }))
 export const WIN_GAME_OPTIONS = WIN_GAMES.map(({ name, label }) => ({ key: name, label }))
 
+// Every category ever written to CMoonScoreLog.category — HIGH_SCORE/TOP10/DAILY_TASK from this
+// file (see runDailyCMoonScoring/recordDailyTaskCompletions above), plus ADMIN_BACKFILL from
+// server/workers/cmoon-daily-task-backfill.worker.js's one-time "Backfill cMoon Points" tool.
+// Exported so the admin points-log endpoint has a fixed filter list without a DISTINCT query.
+export const CMOON_SCORE_LOG_CATEGORIES = ['HIGH_SCORE', 'TOP10', 'DAILY_TASK', 'ADMIN_BACKFILL']
+
+const GAME_LABEL_BY_KEY = new Map([...SCORE_GAMES, ...WIN_GAMES].map(g => [g.name, g.label]))
+
+// Human-readable "how/where" for one CMoonScoreLog row, derived from its (category, detail)
+// pair — see this file's various `candidates.push({ category, detail, ... })` call sites (and
+// the backfill worker's `cMoonScoreLog.create`) for what each combination actually means.
+// Exported so the admin points-log endpoint never has to re-derive this mapping itself.
+export function describeCMoonScoreLogSource(category, detail) {
+  switch (category) {
+    case 'HIGH_SCORE':
+      return `High Score — ${GAME_LABEL_BY_KEY.get(detail) || detail || 'unknown game'}`
+    case 'TOP10':
+      if (detail === 'points') return 'Top 10 — Total Points board'
+      if (detail === 'totalCtoons') return 'Top 10 — Total cToons board'
+      if (typeof detail === 'string' && detail.startsWith('game:')) {
+        const key = detail.slice('game:'.length)
+        return `Top 10 — ${GAME_LABEL_BY_KEY.get(key) || key}`
+      }
+      return 'Top 10'
+    case 'DAILY_TASK':
+      return 'Daily Task completion'
+    case 'ADMIN_BACKFILL':
+      return 'Admin backfill (Backfill cMoon Points tool)'
+    default:
+      return category || 'Unknown'
+  }
+}
+
 // Defaults mirror the GlobalGameConfig column defaults (see the migration) — used both
 // as the fallback when a value is missing/out-of-range and to document the shape.
 export const CMOON_SCORING_DEFAULTS = {
