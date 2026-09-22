@@ -143,6 +143,14 @@
               Checked every 5 minutes, so the run can land up to ~5 minutes after this time, not
               to the exact second.
             </p>
+            <p class="text-[11px] mt-1" :class="scoringJobStale ? 'text-amber-600 font-medium' : 'text-gray-500'">
+              Last ran: {{ scoring.scoringLastRunDate ? formatRunDate(scoring.scoringLastRunDate) : 'never' }}
+              <span v-if="scoringJobStale"> — this job may not be running; check the server.</span>
+            </p>
+            <p class="text-[11px] mt-1" :class="dailyTaskCronStale ? 'text-amber-600 font-medium' : 'text-gray-500'">
+              Live daily-task cron last ran: {{ scoring.dailyTaskCronLastRanAt ? formatDate(scoring.dailyTaskCronLastRanAt) : 'never' }}
+              <span v-if="dailyTaskCronStale"> — this cron may not be running; check the server.</span>
+            </p>
           </div>
 
           <div class="border-t pt-3 mt-3">
@@ -1677,6 +1685,46 @@ function formatDate(d) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(dt)
 }
 
+// cMoonScoringLastRunDate is a Chicago-local "YYYY-MM-DD" calendar date (see
+// server/cron/cmoon-daily-score.js), not a UTC instant — parse it as a literal date via
+// Date.UTC/timeZone:'UTC' so a browser west of UTC doesn't render it as the day before.
+function formatRunDate(d) {
+  if (!d) return ''
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d)
+  if (!m) return ''
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
+  if (Number.isNaN(dt.getTime())) return ''
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(dt)
+}
+
+const chicagoTodayISO = computed(() => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  } catch {
+    return null
+  }
+})
+
+// Amber warning once the once-daily job has gone more than a full day without running — one
+// missed day (e.g. still waiting for today's configured run time) is normal, not a warning sign.
+const scoringJobStale = computed(() => {
+  if (!scoring.scoringLastRunDate) return true
+  if (!chicagoTodayISO.value) return false
+  const last = new Date(`${scoring.scoringLastRunDate}T00:00:00Z`)
+  const today = new Date(`${chicagoTodayISO.value}T00:00:00Z`)
+  if (Number.isNaN(last.getTime()) || Number.isNaN(today.getTime())) return false
+  return Math.round((today - last) / 86400000) > 1
+})
+
+// The live daily-task cron ticks every minute — a heartbeat older than 10 minutes means it's
+// very likely stopped running, not just "no one completed a task yet".
+const dailyTaskCronStale = computed(() => {
+  if (!scoring.dailyTaskCronLastRanAt) return true
+  const last = new Date(scoring.dailyTaskCronLastRanAt)
+  if (Number.isNaN(last.getTime())) return false
+  return (Date.now() - last.getTime()) > 10 * 60 * 1000
+})
+
 function filteredCtoons(input) {
   const v = String(input || '').trim().toLowerCase()
   if (v.length < 3) return []
@@ -2170,6 +2218,9 @@ const scoring = reactive({
   disabledWinGames: [],
   runHour: 0,
   runMinute: 0,
+  // Read-only status from the server, never sent back in saveScoring()'s POST body.
+  scoringLastRunDate: null,
+  dailyTaskCronLastRanAt: null,
 })
 const scoreGameOptions = ref([])
 const winGameOptions = ref([])
@@ -2224,6 +2275,8 @@ async function loadScoring() {
       disabledWinGames: data.disabledWinGames || [],
       runHour: data.runHour ?? 0,
       runMinute: data.runMinute ?? 0,
+      scoringLastRunDate: data.scoringLastRunDate ?? null,
+      dailyTaskCronLastRanAt: data.dailyTaskCronLastRanAt ?? null,
     })
     scoreGameOptions.value = data.scoreGameOptions || []
     winGameOptions.value = data.winGameOptions || []

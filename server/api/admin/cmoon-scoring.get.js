@@ -23,6 +23,10 @@ export default defineEventHandler(async (event) => {
     disabledWinGames,
     runHour: Number.isInteger(cfg?.cMoonScoringRunHour) ? cfg.cMoonScoringRunHour : 0,
     runMinute: Number.isInteger(cfg?.cMoonScoringRunMinute) ? cfg.cMoonScoringRunMinute : 0,
+    // Read-only status, not part of the editable form below — see the schema comments on these
+    // two columns for why they're tracked separately (once-a-day job vs. the every-minute cron).
+    scoringLastRunDate: cfg?.cMoonScoringLastRunDate ?? null,
+    dailyTaskCronLastRanAt: cfg?.cMoonDailyTaskCronLastRanAt ?? null,
     scoreGameOptions: SCORE_GAME_OPTIONS,
     winGameOptions: WIN_GAME_OPTIONS,
   }
