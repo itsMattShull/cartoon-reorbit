@@ -10,8 +10,8 @@ import {
 } from '@/server/utils/fruitSamuraiEngine'
 
 const LOCK_TTL_MS = 15_000
-// A maximal log (MAX_STROKES strokes near MAX_SAMPLES samples) measures ~133KB of JSON, so
-// this leaves comfortable headroom without inviting a multi-megabyte body.
+// A maximal log (MAX_STROKES strokes totalling MAX_SAMPLES samples) measures ~280KB of JSON, so
+// this leaves headroom without inviting a multi-megabyte body.
 const MAX_BODY_BYTES = 512 * 1024
 const RATE_LIMIT_WINDOW_SEC = 60
 const RATE_LIMIT_MAX = 20

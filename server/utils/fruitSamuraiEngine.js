@@ -57,10 +57,14 @@ export const MAX_TICKS = 5 * 60 * TICK_HZ // 18000
 // player producing a stroke every ~6 ticks for a full five-minute run lands near 3,000.
 export const MAX_STROKES = 3000
 
-// Samples across ALL strokes. The client records at most one per tick, so a run that held the
-// pointer down for every one of MAX_TICKS ticks would produce 18,000; 12,000 is the practical
-// ceiling for a run that ever lifts a finger, and it bounds the request body.
-export const MAX_SAMPLES = 12000
+// Samples across ALL strokes. The client records at most one per tick, so the honest ceiling is
+// one per MAX_TICKS — a run that never lifts the pointer produces exactly that many. This is not
+// a hypothetical: the game rewards long unbroken strokes with a growing combo bonus, so a skilled
+// player is actively encouraged to hold the pointer down for most of a run rather than lift
+// between cuts. An earlier, lower cap here (12,000) was reached by real high-scoring runs — the
+// whole run was then discarded server-side even though every sample in it was legitimate. Set
+// this to the true honest bound instead of guessing at a "practical" one below it.
+export const MAX_SAMPLES = MAX_TICKS
 
 // COORD_MARGIN and the clamp helpers now live in lib/fruitSamuraiSim.js, because the client
 // has to apply exactly the same bound as it records. Re-exported so existing importers of this
