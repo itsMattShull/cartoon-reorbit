@@ -305,12 +305,18 @@ model Ctoon {
   abilityData Json?
 
   // Original gToons (2002 Cartoon Orbit game) fields — distinct from the gToon Clash
-  // fields above. Reuses `characters` (below) for Slam gToon effect conditions like
-  // "if any Huntor is in play" instead of adding a separate tagging field.
-  isOgGtoon   Boolean     @default(false)
+  // fields above. Character-name conditions ("if any Duck Dodgers is in play") still reuse
+  // `characters` (below); gtoonType1/2/3 and gtoonGroup are the archive card set's own
+  // classification/team-membership tags (Type 1/2/3 and Group columns), needed so powers like
+  // "+2 to all Heroes" or "each Justice League member in play" can be evaluated by the engine.
+  isOgGtoon   Boolean        @default(false)
   gtoonColor  GtoonColor?
   gtoonValue  Int?
-  isSlamGtoon Boolean     @default(false)
+  gtoonType1  GtoonCardType?
+  gtoonType2  GtoonCardType?
+  gtoonType3  GtoonCardType?
+  gtoonGroup  GtoonGroup?
+  isSlamGtoon Boolean        @default(false)
   gtoonEffect Json? // array of OgGtoonEffect definitions; see server/utils/ogGtoonEffects.js
 
   // Second Edition fields
@@ -1960,6 +1966,39 @@ enum GtoonColor {
   PURPLE
   ORANGE
   PINK
+}
+
+// The archive card set's "Type 1/2/3" classification tags — a card can carry up to three.
+enum GtoonCardType {
+  ANIMAL
+  FEMALE
+  HERO
+  MALE
+  MONSTER
+  PLACE
+  PROP
+  VEHICLE
+  VILLAIN
+}
+
+// The archive card set's "Group" (team membership) tag — powers like "each Justice League
+// member in play" key off this. @map preserves the original label for values Prisma's enum
+// identifier syntax can't spell directly (punctuation/spaces).
+enum GtoonGroup {
+  BEAN_SCOUTS      @map("Bean Scouts")
+  DAILY_PLANET     @map("Daily Planet")
+  GLOBAL           @map("G.L.O.B.A.L.")
+  IMAGINARY_FRIEND @map("Imaginary Friend")
+  INJUSTICE_GANG   @map("Injustice Gang")
+  JUSTICE_FRIENDS  @map("Justice Friends")
+  JUSTICE_LEAGUE   @map("Justice League")
+  MUCHA_LUCHA      @map("Mucha Lucha")
+  MYSTERY_INC      @map("Mystery, Inc.")
+  POWERPUFF_GIRLS  @map("Powerpuff Girls")
+  SQUIRREL_SCOUTS  @map("Squirrel Scouts")
+  TEEN_TITANS      @map("Teen Titans")
+  TIME_SQUAD       @map("Time Squad")
+  WOOHP            @map("WOOHP")
 }
 
 enum OgGtoonMatchOutcome {
