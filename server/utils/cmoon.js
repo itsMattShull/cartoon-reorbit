@@ -21,22 +21,24 @@ import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 //     #1 (all-time) on an eligible arcade game.
 //   - TOP10 (default 50 pts/week, ~7/day): a top-N finish on an eligible board (Top Points /
 //     Total cToons).
-//   - DAILY_TASK (default 10 pts/player/day, unscaled): completing at least one of the existing
-//     daily tasks that day. Awarded LIVE, directly inside recordDailyTaskCompletions itself
-//     (run frequently — see server/cron/record-daily-task-completions.js) the moment a
-//     completion is first detected, rather than waiting for this once-daily job — see that
-//     function's own comment. This job's DAILY_TASK handling below is a harmless backstop:
-//     the CMoonScoreLog unique constraint means it can never double-award what was already
-//     credited live.
+//   - DAILY_TASK (default 10 pts/WEEK, ~2/day — see DAILY_TASK_AWARDS_PER_WEEK below):
+//     completing at least one of the existing daily tasks that day. Awarded LIVE, directly
+//     inside recordDailyTaskCompletions itself (run frequently — see
+//     server/cron/record-daily-task-completions.js) the moment a completion is first detected,
+//     rather than waiting for this once-daily job — see that function's own comment. This job's
+//     DAILY_TASK handling below is a harmless backstop: the CMoonScoreLog unique constraint
+//     means it can never double-award what was already credited live.
 //
 // This ran once a week (Monday) until admins asked for a fully time-adjustable daily run
 // instead. HIGH_SCORE/TOP10 are a snapshot of who holds a spot RIGHT NOW, not something actually
 // earned per-day — running that snapshot 7x as often would otherwise inflate an unchanged
 // holder's weekly total 7x for no behavioral change, so those two admin-configured point values
 // are still entered/read as "per week" and divided down at award time (see perRunAward), and stay
-// on this job's admin-configurable once-daily cadence — never awarded live. Only DAILY_TASK
-// genuinely already awarded per calendar day (previously just batched into one weekly insert),
-// which is what makes live-awarding it safe.
+// on this job's admin-configurable once-daily cadence — never awarded live. DAILY_TASK genuinely
+// already awards per calendar day (one completion = one award, no daily-cadence multiplication to
+// correct for), but it's ALSO entered as a weekly total and divided down (see
+// DAILY_TASK_AWARDS_PER_WEEK/dailyTaskAward below) — divided by 6 rather than 7, on the
+// expectation that most players won't complete a qualifying task every single day of the week.
 //
 // All the numbers above, the minimum-account-age anti-abuse gate, which games are
 // HIGH_SCORE-eligible, and which boards/rank-cutoff count for TOP10 are admin-editable
@@ -94,6 +96,18 @@ export const CMOON_SCORING_DEFAULTS = {
   top10RankCutoff: 10,
   top10PointsBoardEnabled: true,
   top10CtoonsBoardEnabled: true,
+}
+
+// How many of the 7 days in a week a player is expected to complete a qualifying daily task —
+// dailyTaskPoints is entered as a weekly total (same convention as highScorePoints/top10Points
+// below) and divided by this to get the actual per-completion award. 6, not 7: unlike
+// HIGH_SCORE/TOP10 (a snapshot re-taken daily that has to be divided down to avoid inflating an
+// unchanged holder's total), a player who completes a daily task every single day of the week
+// would otherwise cap out below the configured weekly figure under a ÷7 split — ÷6 leaves one
+// rest day of headroom before that happens.
+export const DAILY_TASK_AWARDS_PER_WEEK = 6
+export function dailyTaskAward(weeklyPoints) {
+  return Math.max(0, Math.round(weeklyPoints / DAILY_TASK_AWARDS_PER_WEEK))
 }
 
 function parseDisabledGameKeys(value) {
@@ -360,9 +374,10 @@ export async function recordDailyTaskCompletions() {
       select: { id: true, cMoonId: true },
     })
     if (members.length) {
+      const awardPoints = dailyTaskAward(dailyTaskPoints)
       const candidates = members.map(u => ({
         cMoonId: u.cMoonId, userId: u.id, category: 'DAILY_TASK',
-        detail: dailyBoundary.toISOString(), points: dailyTaskPoints, weekStart: dailyBoundary,
+        detail: dailyBoundary.toISOString(), points: awardPoints, weekStart: dailyBoundary,
       }))
       await prisma.cMoonScoreLog.createMany({ data: candidates, skipDuplicates: true })
       await recomputeCMoonTeamScores()
@@ -376,7 +391,7 @@ export async function recordDailyTaskCompletions() {
 // Fully recomputes CMoon.teamScore from CMoonScoreLog (never incremented directly — see
 // the module-level comment above). Two-statement reset-then-recompute, both in one
 // transaction, mirrors server/cron/czone-display-count.js's runCzoneDisplayCountAggregate.
-async function recomputeCMoonTeamScores() {
+export async function recomputeCMoonTeamScores() {
   await prisma.$transaction([
     prisma.$executeRaw`UPDATE "CMoon" SET "teamScore" = 0`,
     prisma.$executeRaw`
@@ -415,6 +430,7 @@ export async function runDailyCMoonScoring() {
   } = resolveScoringConfig(config)
   const dailyHighScorePoints = perRunAward(highScorePoints)
   const dailyTop10Points = perRunAward(top10Points)
+  const dailyTaskAwardPoints = dailyTaskAward(dailyTaskPoints)
 
   const weekStart = getChicagoDailyBoundary() // see CMoonScoreLog.weekStart's schema comment
   const weekBegin = new Date(weekStart.getTime() - 24 * 60 * 60 * 1000)
@@ -455,7 +471,7 @@ export async function runDailyCMoonScoring() {
   for (const row of dailyTaskRows) {
     candidates.push({
       cMoonId: row.user.cMoonId, userId: row.userId, category: 'DAILY_TASK',
-      detail: row.date.toISOString(), points: dailyTaskPoints, weekStart
+      detail: row.date.toISOString(), points: dailyTaskAwardPoints, weekStart
     })
   }
 
