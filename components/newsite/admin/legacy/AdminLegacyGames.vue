@@ -977,6 +977,61 @@
             </span>
           </div>
 
+          <!-- Triple Nothing bonus prize -->
+          <div class="mb-6 border rounded-md p-3">
+            <h3 class="text-xs font-semibold mb-1">Triple Nothing Prize</h3>
+            <p class="text-xs text-gray-600 mb-3">
+              Given automatically when a player lands on "Nothing" 3 spins in a row in one day
+              (at most once per player per day). Leave empty to disable.
+            </p>
+            <div v-if="maxDailySpinsWW < 3" class="mb-3 p-2 text-xs rounded bg-amber-50 border border-amber-300 text-amber-800">
+              Max Daily Spins is currently {{ maxDailySpinsWW }} — a player can't get 3 spins in a
+              row until this is raised to at least 3.
+            </div>
+            <div class="mb-3 relative">
+              <label class="block text-xs font-medium text-gray-700 mb-1">Triple Nothing Prize cToon</label>
+              <input
+                type="text"
+                v-model="searchTermTN"
+                @focus="showDropdownTN = true"
+                @input="onSearchInputTN"
+                :placeholder="tripleNothingCtoon ? tripleNothingCtoon.name : 'Type a cToon name…'"
+                class="border rounded-md px-2 py-1.5 text-sm w-full"
+              />
+              <ul
+                v-if="showDropdownTN && filteredMatchesTN.length"
+                class="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto"
+              >
+                <li
+                  v-for="c in filteredMatchesTN"
+                  :key="c.id"
+                  @mousedown.prevent="selectTripleNothingCtoon(c)"
+                  class="flex items-center px-3 py-2 cursor-pointer hover:bg-blue-50"
+                >
+                  <img :src="c.assetPath" alt="" class="w-8 h-8 rounded mr-3 object-cover border" />
+                  <div>
+                    <p class="text-sm font-medium">{{ c.name }}</p>
+                    <p class="text-xs text-gray-500 capitalize">{{ c.rarity }}</p>
+                  </div>
+                </li>
+              </ul>
+              <button
+                v-if="tripleNothingCtoon"
+                type="button"
+                @click="clearTripleNothingSelection"
+                class="absolute top-0 right-0 mt-2 mr-2 text-gray-500 hover:text-gray-700"
+              >✕</button>
+            </div>
+
+            <div v-if="tripleNothingCtoon" class="mt-4 flex items-center space-x-4">
+              <img :src="tripleNothingCtoon.assetPath" alt="Triple Nothing Prize Preview" class="w-16 h-16 rounded border" />
+              <div>
+                <p class="text-sm font-medium">{{ tripleNothingCtoon.name }}</p>
+                <p class="text-xs text-gray-600 capitalize">{{ tripleNothingCtoon.rarity }}</p>
+              </div>
+            </div>
+          </div>
+
           <button @click="saveWinWheelConfig" :disabled="loadingWinWheel" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingWinWheel">Save Win Wheel Settings</span>
             <span v-else>Saving…</span>
@@ -2571,6 +2626,29 @@ function removePoolCtoon(c) {
   poolCtoons.value = poolCtoons.value.filter(x => x.id !== c.id)
 }
 
+// Triple Nothing prize cToon (single-select, same pattern as the pool cToon search above)
+const tripleNothingCtoon = ref(null)
+const searchTermTN       = ref('')
+const showDropdownTN     = ref(false)
+
+const filteredMatchesTN = computed(() => {
+  const t = searchTermTN.value.trim().toLowerCase()
+  if (!t) return []
+  return allCtoons.value
+    .filter(c => c.name.toLowerCase().includes(t))
+    .slice(0, 8)
+})
+function onSearchInputTN() { showDropdownTN.value = !!searchTermTN.value.trim() }
+function selectTripleNothingCtoon(c) {
+  tripleNothingCtoon.value = c
+  searchTermTN.value       = c.name
+  showDropdownTN.value     = false
+}
+function clearTripleNothingSelection() {
+  tripleNothingCtoon.value = null
+  searchTermTN.value       = ''
+}
+
 async function loadWinWheelConfig() {
   const ww = await $fetch('/api/admin/game-config?gameName=Winwheel')
   spinCostWW.value        = ww.spinCost
@@ -2580,6 +2658,8 @@ async function loadWinWheelConfig() {
   winWheelSoundPath.value = ww.winWheelSoundPath || ''
   winWheelSoundMode.value = ww.winWheelSoundMode || 'repeat'
   poolCtoons.value        = (ww.exclusiveCtoons || []).map(o => o.ctoon)
+  tripleNothingCtoon.value = ww.tripleNothingCtoon || null
+  searchTermTN.value       = ww.tripleNothingCtoon?.name || ''
 }
 
 // ── Image upload handlers ────────────────────
@@ -2733,7 +2813,8 @@ async function saveWinWheelConfig() {
         exclusiveCtoons:   poolCtoons.value.map(c => c.id),
         winWheelImagePath: winWheelImagePath.value || null,
         winWheelSoundPath: winWheelSoundPath.value || null,
-        winWheelSoundMode: winWheelSoundMode.value || 'repeat'
+        winWheelSoundMode: winWheelSoundMode.value || 'repeat',
+        tripleNothingCtoonId: tripleNothingCtoon.value?.id || null
       }
     })
     toastMessage.value = 'Win Wheel settings saved!'

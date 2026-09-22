@@ -35,6 +35,7 @@
 // ever missed, at the cost of re-summing each member's whole current-cMoon-tenure history every
 // run. CMoonScoreLog is tiny per user (a handful of rows per week) compared to PointsLog, so this
 // is cheaper than the PointsLog-based version it replaces, not more expensive.
+import { Prisma } from '@prisma/client'
 import { prisma } from '../prisma.js'
 import { achievementsQueue } from '../utils/queues.js'
 
@@ -59,6 +60,19 @@ const RECOMPUTE_SQL = `
   RETURNING u.id
 `
 
+async function enqueueAchievementChecks(changedUserIds) {
+  // A points-total change is the only thing that can newly satisfy a cMoonPointsGte
+  // achievement, so this is the trigger for re-evaluating those users well before the
+  // once-daily enqueueAchievementsDaily batch would otherwise reach them.
+  for (const userId of changedUserIds) {
+    try {
+      await achievementsQueue.add('processUserAchievements', { userId })
+    } catch (err) {
+      console.error('[cmoon-points-aggregate] failed to enqueue achievement check', { userId, error: err?.message })
+    }
+  }
+}
+
 export async function runCMoonPointsAggregate() {
   const [{ locked }] = await prisma.$queryRaw`SELECT pg_try_advisory_lock(${LOCK_KEY}::bigint) AS locked`
   if (!locked) {
@@ -69,21 +83,44 @@ export async function runCMoonPointsAggregate() {
   try {
     const changedRows = await prisma.$queryRawUnsafe(RECOMPUTE_SQL)
     const changedUserIds = changedRows.map(r => r.id)
-
-    // A points-total change is the only thing that can newly satisfy a cMoonPointsGte
-    // achievement, so this is the trigger for re-evaluating those users well before the
-    // once-daily enqueueAchievementsDaily batch would otherwise reach them.
-    for (const userId of changedUserIds) {
-      try {
-        await achievementsQueue.add('processUserAchievements', { userId })
-      } catch (err) {
-        console.error('[cmoon-points-aggregate] failed to enqueue achievement check', { userId, error: err?.message })
-      }
-    }
-
+    await enqueueAchievementChecks(changedUserIds)
     console.log(`[cmoon-points-aggregate] recomputed cMoonPoints, ${changedUserIds.length} user(s) changed`)
     return { changed: changedUserIds.length }
   } finally {
     await prisma.$queryRaw`SELECT pg_advisory_unlock(${LOCK_KEY}::bigint)`
   }
+}
+
+// Same recompute as runCMoonPointsAggregate, scoped to a specific set of just-affected users —
+// used by the live DAILY_TASK award path (see recordDailyTaskCompletions in
+// server/utils/cmoon.js) so a player's rank bar reflects a completion within moments rather than
+// waiting for this job's own next scheduled tick. No advisory lock: unlike the full recompute,
+// this only ever touches rows for the userIds the caller just awarded, so two overlapping calls
+// (this scoped path and the periodic full sweep) can safely run concurrently — same UPDATE...FROM
+// idempotence the full recompute already relies on.
+export async function recomputeCMoonPointsForUsers(userIds) {
+  const ids = [...new Set(userIds)].filter(Boolean)
+  if (ids.length === 0) return { changed: 0 }
+
+  const changedRows = await prisma.$queryRaw`
+    WITH totals AS (
+      SELECT u.id AS user_id, COALESCE(SUM(csl.points), 0) AS total
+      FROM "User" u
+      LEFT JOIN "CMoonScoreLog" csl
+        ON csl."userId" = u.id
+       AND csl."cMoonId" = u."cMoonId"
+       AND csl."createdAt" >= u."cMoonSelectedAt"
+      WHERE u."cMoonId" IS NOT NULL AND u.id IN (${Prisma.join(ids)})
+      GROUP BY u.id
+    )
+    UPDATE "User" u
+    SET "cMoonPoints" = totals.total
+    FROM totals
+    WHERE u.id = totals.user_id
+      AND u."cMoonPoints" IS DISTINCT FROM totals.total
+    RETURNING u.id
+  `
+  const changedUserIds = changedRows.map(r => r.id)
+  await enqueueAchievementChecks(changedUserIds)
+  return { changed: changedUserIds.length }
 }

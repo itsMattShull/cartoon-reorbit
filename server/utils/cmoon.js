@@ -10,6 +10,7 @@ import { COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
 import { EXCLUDED_SYSTEM_USER_ID } from './economyValuation.js'
 import { grantGuildRole, revokeGuildRole } from './discord.js'
 import { CMOON_EFFECT_TYPES } from '../../utils/cmoonEffectTypes.js'
+import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 
 // ── Daily cMoon team leaderboard scoring ──────────────────────────────────────
 //
@@ -21,16 +22,21 @@ import { CMOON_EFFECT_TYPES } from '../../utils/cmoonEffectTypes.js'
 //   - TOP10 (default 50 pts/week, ~7/day): a top-N finish on an eligible board (Top Points /
 //     Total cToons).
 //   - DAILY_TASK (default 10 pts/player/day, unscaled): completing at least one of the existing
-//     daily tasks that day (recorded by recordDailyTaskCompletions, run every 4h — see
-//     server/cron/record-daily-task-completions.js).
+//     daily tasks that day. Awarded LIVE, directly inside recordDailyTaskCompletions itself
+//     (run frequently — see server/cron/record-daily-task-completions.js) the moment a
+//     completion is first detected, rather than waiting for this once-daily job — see that
+//     function's own comment. This job's DAILY_TASK handling below is a harmless backstop:
+//     the CMoonScoreLog unique constraint means it can never double-award what was already
+//     credited live.
 //
 // This ran once a week (Monday) until admins asked for a fully time-adjustable daily run
 // instead. HIGH_SCORE/TOP10 are a snapshot of who holds a spot RIGHT NOW, not something actually
 // earned per-day — running that snapshot 7x as often would otherwise inflate an unchanged
 // holder's weekly total 7x for no behavioral change, so those two admin-configured point values
-// are still entered/read as "per week" and divided down at award time (see perRunAward). Only
-// DAILY_TASK genuinely already awarded per calendar day (previously just batched into one
-// weekly insert) so it's untouched.
+// are still entered/read as "per week" and divided down at award time (see perRunAward), and stay
+// on this job's admin-configurable once-daily cadence — never awarded live. Only DAILY_TASK
+// genuinely already awarded per calendar day (previously just batched into one weekly insert),
+// which is what makes live-awarding it safe.
 //
 // All the numbers above, the minimum-account-age anti-abuse gate, which games are
 // HIGH_SCORE-eligible, and which boards/rank-cutoff count for TOP10 are admin-editable
@@ -225,10 +231,12 @@ function eligibleHolders(rows, minAccountAgeCutoff) {
 // Set-based daily task completion check, restricted to current cMoon members past the
 // minimum account age gate. Mirrors the 7 status checks in server/api/onboarding/daily.get.js
 // exactly (same boundaries, same thresholds) so a player's onboarding checklist and this job
-// can never silently disagree about whether "today" was completed. Runs every 4 hours (see
+// can never silently disagree about whether "today" was completed. Runs frequently (see
 // server/cron/record-daily-task-completions.js) rather than once daily: the underlying tasks
 // reset at two different times (8pm Chicago for most, 8am for Winwheel/Lotto/monster scans),
-// so a single daily run would leave a window where 8am-boundary activity could go unrecorded.
+// so a single daily run would leave a window where 8am-boundary activity could go unrecorded —
+// and, since DAILY_TASK points below are now awarded live off each newly-detected completion,
+// running this often is also what makes a player's rank bar feel like it updates in real time.
 // Idempotent either way — UserDailyTaskCompletion is unique on (userId, date).
 export async function recordDailyTaskCompletions() {
   const config = await getGlobalConfig({ fresh: true })
@@ -255,7 +263,7 @@ export async function recordDailyTaskCompletions() {
 
   const dailyBoundary = getChicagoDailyBoundary()
   const morningBoundary = getChicagoMorningWindowStart()
-  const { minAccountAgeDays } = resolveScoringConfig(config)
+  const { minAccountAgeDays, dailyTaskPoints } = resolveScoringConfig(config)
   const minAccountAgeCutoff = new Date(Date.now() - minAccountAgeDays * 24 * 60 * 60 * 1000)
   const combatNames = Prisma.join(COMBAT_POOL_GAME_NAMES)
 
@@ -336,8 +344,32 @@ export async function recordDailyTaskCompletions() {
     INSERT INTO "UserDailyTaskCompletion" (id, "userId", "date")
     SELECT gen_random_uuid()::text, "userId", ${dailyBoundary} FROM qualifying
     ON CONFLICT ("userId", "date") DO NOTHING
-    RETURNING id
+    RETURNING id, "userId"
   `
+
+  // Live-award DAILY_TASK the moment a completion is first detected, rather than waiting for
+  // runDailyCMoonScoring's own once-daily pass (see that function's comment) — every userId here
+  // is a brand-new UserDailyTaskCompletion row (ON CONFLICT DO NOTHING excludes already-recorded
+  // ones), so this can never re-award the same day twice on its own; the CMoonScoreLog unique
+  // constraint (cMoonId, userId, category, weekStart, detail) is still the actual idempotency
+  // guard, exactly as it is everywhere else in this module.
+  if (dailyTaskPoints > 0 && rows.length) {
+    const newUserIds = rows.map(r => r.userId)
+    const members = await prisma.user.findMany({
+      where: { id: { in: newUserIds }, cMoonId: { not: null } },
+      select: { id: true, cMoonId: true },
+    })
+    if (members.length) {
+      const candidates = members.map(u => ({
+        cMoonId: u.cMoonId, userId: u.id, category: 'DAILY_TASK',
+        detail: dailyBoundary.toISOString(), points: dailyTaskPoints, weekStart: dailyBoundary,
+      }))
+      await prisma.cMoonScoreLog.createMany({ data: candidates, skipDuplicates: true })
+      await recomputeCMoonTeamScores()
+      await recomputeCMoonPointsForUsers(members.map(u => u.id))
+    }
+  }
+
   return { recorded: rows.length }
 }
 
@@ -433,6 +465,94 @@ export async function runDailyCMoonScoring() {
   await recomputeCMoonTeamScores()
 
   return { awarded: candidates.length }
+}
+
+// ── Live scoring preview (for the "Your Rank" progress bar) ────────────────────────────
+//
+// Shows a member "if the daily leaderboard job ran right now, what would I earn" — NOT a
+// commitment. Covers ONLY HIGH_SCORE/TOP10 (the two snapshot-based, admin-configured-as-weekly
+// categories that genuinely still wait for runDailyCMoonScoring's once-a-day run, see that
+// function's comment) — DAILY_TASK is deliberately excluded here since it's now awarded live,
+// directly inside recordDailyTaskCompletions, the moment a completion is first detected, so it's
+// already reflected in cMoonPoints itself by the time this preview would otherwise show it as
+// pending. Nothing here is ever written to CMoonScoreLog; standings can still change before the
+// real job actually runs, so the UI consuming this must present it as pending/estimated, never
+// as already-earned points.
+//
+// Reuses the SAME holder-finding queries runDailyCMoonScoring uses (so the preview can never
+// drift from what the real job would actually award), but batches them behind a short-TTL
+// shared cache rather than re-running per request: this preview is read on every cMoon page
+// view by every member (server/api/cmoon/[id]/rank-progress.get.js), orders of magnitude more
+// often than the real job runs, and each "who currently holds #1/top-10" computation is the
+// same handful of queries the once-a-day job pays for — fine once a day, not fine per page view.
+let cachedHolderSnapshot = null
+let cachedHolderSnapshotAt = 0
+const HOLDER_SNAPSHOT_TTL_MS = 60_000
+
+async function getHolderSnapshot() {
+  const now = Date.now()
+  if (cachedHolderSnapshot && (now - cachedHolderSnapshotAt) < HOLDER_SNAPSHOT_TTL_MS) return cachedHolderSnapshot
+
+  const config = await getGlobalConfig()
+  if (!config?.cMoonEnabled) {
+    cachedHolderSnapshot = { resolvedConfig: null }
+    cachedHolderSnapshotAt = now
+    return cachedHolderSnapshot
+  }
+
+  const resolvedConfig = resolveScoringConfig(config)
+  const { activeScoreGames, activeWinGames, top10PointsBoardEnabled, top10CtoonsBoardEnabled, top10RankCutoff } = resolvedConfig
+
+  const [scoreHolders, winHolders, top10PointsHolders, top10CtoonsHolders] = await Promise.all([
+    Promise.all(activeScoreGames.map(g => findTopScoreHolder(g))),
+    Promise.all(activeWinGames.map(g => findTopWinsHolder(g))),
+    top10PointsBoardEnabled ? getTop10PointsHolders(top10RankCutoff) : Promise.resolve([]),
+    top10CtoonsBoardEnabled ? getTop10TotalCtoonsHolders(top10RankCutoff) : Promise.resolve([]),
+  ])
+
+  cachedHolderSnapshot = { resolvedConfig, activeScoreGames, activeWinGames, scoreHolders, winHolders, top10PointsHolders, top10CtoonsHolders }
+  cachedHolderSnapshotAt = now
+  return cachedHolderSnapshot
+}
+
+// Mainly for tests/admin tooling — the 60s TTL alone keeps this fresh enough for the UI.
+export function invalidateHolderSnapshotCache() {
+  cachedHolderSnapshot = null
+  cachedHolderSnapshotAt = 0
+}
+
+// `userCreatedAt` is passed in (rather than re-queried) since the caller already has it from
+// the same User row it loaded for isMember/cMoonPoints.
+export async function getPendingScoringPreview(userId, cMoonId, userCreatedAt) {
+  const empty = { pendingPoints: 0, breakdown: [] }
+  const snapshot = await getHolderSnapshot()
+  if (!snapshot.resolvedConfig) return empty
+
+  const { highScorePoints, top10Points, minAccountAgeDays } = snapshot.resolvedConfig
+  const minAccountAgeCutoff = new Date(Date.now() - minAccountAgeDays * 24 * 60 * 60 * 1000)
+  if (new Date(userCreatedAt) > minAccountAgeCutoff) return empty // same anti-abuse gate as the real job
+
+  const dailyHighScorePoints = perRunAward(highScorePoints)
+  const dailyTop10Points = perRunAward(top10Points)
+  const breakdown = []
+
+  const isThisUser = (row) => row?.userId === userId && row?.cMoonId === cMoonId
+
+  snapshot.activeScoreGames.forEach((g, i) => {
+    if (isThisUser(snapshot.scoreHolders[i])) breakdown.push({ category: 'HIGH_SCORE', label: g.label, points: dailyHighScorePoints })
+  })
+  snapshot.activeWinGames.forEach((g, i) => {
+    if (isThisUser(snapshot.winHolders[i])) breakdown.push({ category: 'HIGH_SCORE', label: g.label, points: dailyHighScorePoints })
+  })
+  if (snapshot.top10PointsHolders.some(isThisUser)) {
+    breakdown.push({ category: 'TOP10', label: 'Total Points board', points: dailyTop10Points })
+  }
+  if (snapshot.top10CtoonsHolders.some(isThisUser)) {
+    breakdown.push({ category: 'TOP10', label: 'Total cToons board', points: dailyTop10Points })
+  }
+
+  const pendingPoints = breakdown.reduce((sum, b) => sum + b.points, 0)
+  return { pendingPoints, breakdown }
 }
 
 export const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/

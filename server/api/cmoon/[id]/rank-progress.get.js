@@ -7,7 +7,7 @@
 // the authenticated caller's own progress.
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
-import { isCMoonCaptain, displayRankName } from '@/server/utils/cmoon'
+import { isCMoonCaptain, displayRankName, getPendingScoringPreview } from '@/server/utils/cmoon'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -33,13 +33,20 @@ export default defineEventHandler(async (event) => {
     }),
     db.user.findUnique({
       where: { id: userId },
-      select: { cMoonId: true, cMoonPoints: true, currentCMoonRank: { select: { id: true, name: true, sortOrder: true } } },
+      select: { cMoonId: true, cMoonPoints: true, createdAt: true, currentCMoonRank: { select: { id: true, name: true, sortOrder: true } } },
     }),
   ])
 
   const isMember = me?.cMoonId === cMoonId
   const cMoonPoints = isMember ? (me?.cMoonPoints || 0) : 0
   const nextTier = isMember ? (tiers.find(t => t.pointThreshold > cMoonPoints) || null) : null
+
+  // "If the daily scoring job ran right now" preview — never a commitment, see
+  // getPendingScoringPreview's own header comment. Only worth computing for an actual member;
+  // a non-member's progress bar isn't shown at all (see CMoonPage.vue's rankProgress.isMember gate).
+  const pendingScoring = isMember
+    ? await getPendingScoringPreview(userId, cMoonId, me.createdAt)
+    : { pendingPoints: 0, breakdown: [] }
 
   // Rank-up achievements the caller has already unlocked FOR THIS cMoon but never claimed a
   // reward for — surfaced here so a player who dismissed/missed the claim modal at the moment
@@ -97,6 +104,10 @@ export default defineEventHandler(async (event) => {
   return {
     isMember,
     cMoonPoints,
+    // Pending/estimated only — see getPendingScoringPreview's header comment. The client must
+    // render this as a distinct "pending today" segment, never merge it into cMoonPoints itself.
+    pendingPoints: pendingScoring.pendingPoints,
+    pendingBreakdown: pendingScoring.breakdown,
     currentRank,
     nextTier: nextTier ? { id: nextTier.id, name: nextTier.name, pointThreshold: nextTier.pointThreshold } : null,
     // Flattened for the client (a ladder-preview modal renders these directly, same reasoning as

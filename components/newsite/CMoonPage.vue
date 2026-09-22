@@ -134,6 +134,12 @@
             </span>
           </div>
           <div class="cmp-affinity-bar-track">
+            <div
+              v-if="rankProgress.nextTier && rankProgress.pendingPoints"
+              class="cmp-affinity-bar-fill cmp-affinity-bar-fill--pending"
+              :style="{ width: rankPendingPct + '%' }"
+              :title="`+${rankProgress.pendingPoints.toLocaleString()} pts pending today (${rankPendingSummary}) — not earned until today's scoring run`"
+            ></div>
             <div class="cmp-affinity-bar-fill" :style="{ width: rankProgressPct + '%' }"></div>
           </div>
           <p class="cmp-affinity-next">
@@ -142,6 +148,10 @@
             </span>
             <span v-else-if="rankProgress.tiers.length">Max rank reached — {{ rankProgress.cMoonPoints.toLocaleString() }} pts</span>
             <span v-else>{{ rankProgress.cMoonPoints.toLocaleString() }} pts contributed</span>
+          </p>
+          <p v-if="rankProgress.nextTier && rankProgress.pendingPoints" class="cmp-affinity-pending-note">
+            +{{ rankProgress.pendingPoints.toLocaleString() }} pt{{ rankProgress.pendingPoints === 1 ? '' : 's' }} pending today
+            (<span>{{ rankPendingSummary }}</span>) — not earned until today's scoring run
           </p>
         </div>
 
@@ -546,19 +556,41 @@ async function loadRankProgress(id) {
   }
 }
 
+// Shared floor/span math for both the confirmed and pending bar segments below — see
+// rankProgressPct's original comment (unchanged) for why the floor is found by sortOrder.
+const rankFloorAndSpan = computed(() => {
+  const rp = rankProgress.value
+  if (!rp || !rp.nextTier) return null
+  const floor = rp.currentRank ? (rp.tiers.find(t => t.sortOrder === rp.currentRank.sortOrder)?.pointThreshold ?? 0) : 0
+  const span = rp.nextTier.pointThreshold - floor
+  return span > 0 ? { floor, span } : null
+})
+
 const rankProgressPct = computed(() => {
   const rp = rankProgress.value
   if (!rp || !rp.nextTier) return 100
-  // Match the current rank to its tier by sortOrder, not id — CMoonRank.id (per-cMoon) and
-  // CMoonRankTier.id (global) are different rows entirely; a tier-linked rank's sortOrder is
-  // always kept in sync with its tier's (see server/utils/cmoonRankTiers.js), and is unique per
-  // cMoon, so this reliably finds "the floor" for a tier-managed rank. A legacy custom rank
-  // (not tier-linked) simply won't match anything here — falls back to a floor of 0, which is
-  // an acceptable approximation for that now-secondary path.
-  const floor = rp.currentRank ? (rp.tiers.find(t => t.sortOrder === rp.currentRank.sortOrder)?.pointThreshold ?? 0) : 0
-  const span = rp.nextTier.pointThreshold - floor
-  if (span <= 0) return 100
-  return Math.max(0, Math.min(100, Math.round(((rp.cMoonPoints - floor) / span) * 100)))
+  const fs = rankFloorAndSpan.value
+  if (!fs) return 100
+  return Math.max(0, Math.min(100, Math.round(((rp.cMoonPoints - fs.floor) / fs.span) * 100)))
+})
+
+// "If the daily scoring job ran right now" preview segment — see rank-progress.get.js's
+// pendingPoints/pendingBreakdown (never a commitment; the template renders this as a visually
+// distinct, separately-labeled sliver so it never reads as already-earned progress). Only
+// meaningful short of the next tier — at max rank there's nothing left to preview progress
+// toward, so this is 0 there regardless of any pendingPoints the API still reports.
+const rankPendingPct = computed(() => {
+  const rp = rankProgress.value
+  if (!rp || !rp.nextTier || !rp.pendingPoints) return rankProgressPct.value
+  const fs = rankFloorAndSpan.value
+  if (!fs) return rankProgressPct.value
+  return Math.max(0, Math.min(100, Math.round(((rp.cMoonPoints + rp.pendingPoints - fs.floor) / fs.span) * 100)))
+})
+
+const rankPendingSummary = computed(() => {
+  const rp = rankProgress.value
+  if (!rp || !rp.nextTier || !rp.pendingPoints || !rp.pendingBreakdown?.length) return ''
+  return rp.pendingBreakdown.map(b => b.label).join(', ')
 })
 
 async function loadOffers(id) {
@@ -894,13 +926,50 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   border-radius: 999px;
   background: var(--cm-hairline, rgba(255,255,255,0.14));
   overflow: hidden;
+  /* Positioned so the rank bar's two fill segments (confirmed + pending) can stack on top of
+     each other instead of side by side — harmless for the affinity bar above, which only ever
+     renders one fill child. */
+  position: relative;
 }
 
 .cmp-affinity-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
   height: 100%;
   border-radius: 999px;
   background: var(--cm-banner, var(--OrbitLightBlue));
   transition: width 0.4s ease;
+}
+
+/* "If the daily scoring job ran right now" preview (see rank-progress.get.js's pendingPoints) —
+   a striped, translucent extension past the confirmed fill. Rendered BEFORE .cmp-affinity-bar-fill
+   in the template so the solid confirmed color paints on top of it (both are position:absolute
+   with no z-index, so DOM order alone decides paint order) — only the sliver between the two
+   widths ever shows the stripe. Never the same color/opacity as the confirmed fill: this must
+   read as "not yet real" at a glance, not blend into it. */
+.cmp-affinity-bar-fill--pending {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--cm-banner, var(--OrbitLightBlue)) 0px,
+    var(--cm-banner, var(--OrbitLightBlue)) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  opacity: 0.55;
+  transition: width 0.4s ease;
+}
+
+.cmp-affinity-pending-note {
+  margin: 4px 0 0;
+  font-size: 0.7rem;
+  font-style: italic;
+  color: var(--cm-text-muted, rgba(255,255,255,0.6));
 }
 
 .cmp-affinity-next {
