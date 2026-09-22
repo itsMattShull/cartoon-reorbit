@@ -5,6 +5,7 @@ import { isPrivateIp } from '@/server/utils/vpn-check'
 import { encryptIp } from '@/server/utils/ip-encrypt'
 import { enqueueVpnCheck } from '@/server/utils/vpn-queue'
 import { isHotPath } from '@/server/utils/hotPaths'
+import { getRequestIP } from '@/server/utils/request-ip'
 
 export default defineEventHandler(async (event) => {
   // Per-interaction game endpoints skip the login/IP bookkeeping — a 25-question run would
@@ -61,13 +62,3 @@ export default defineEventHandler(async (event) => {
     }
   }
 })
-
-function getRequestIP(event) {
-  const headers = event.node.req.headers
-  const forwarded = headers['x-forwarded-for']
-  if (forwarded) {
-    const firstIp = forwarded.split(',')[0].trim()
-    if (firstIp) return firstIp
-  }
-  return event.node.req.socket?.remoteAddress || null
-}

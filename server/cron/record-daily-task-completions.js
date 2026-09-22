@@ -1,8 +1,8 @@
 // server/cron/record-daily-task-completions.js
 // Thin entrypoint: the actual logic lives in server/utils/cmoon.js so every cMoon-scoring
-// concern stays in one file (see that file's header comment on why). Scheduled every 4 hours
+// concern stays in one file (see that file's header comment on why). Scheduled every minute
 // from server/cron/sync-guild-members.js — see the scoring-logic comment in
-// server/utils/cmoon.js for why not just once daily.
+// server/utils/cmoon.js for why not just once daily (or every few hours).
 import { prisma } from '../prisma.js'
 import { recordDailyTaskCompletions } from '../utils/cmoon.js'
 

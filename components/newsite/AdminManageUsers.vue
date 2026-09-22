@@ -74,6 +74,7 @@
                   class="absolute right-0 mt-1 w-40 bg-white border rounded-md shadow-lg z-40 py-1"
                 >
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openNotes(u); closeMenu()">Account History</button>
+                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="viewCollection(u); closeMenu()">View Collection</button>
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openLockedPoints(u); closeMenu()">See Locked Points</button>
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openPendingTrades(u); closeMenu()">View Pending Trades</button>
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openAdditionalZones(u); closeMenu()">Additional Zones</button>
@@ -621,13 +622,21 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+
+const route = useRoute()
+const router = useRouter()
+function viewCollection(u) {
+  if (!u?.username) return
+  router.push({ path: '/newsite/admin/manageCollection', query: { username: u.username } })
+}
 import AdminTransferModal from '@/components/newsite/AdminTransferModal.vue'
 
 const users    = ref([])
 const official = ref(null)
 const meData   = ref(null)
 const stats    = ref(null)
-const filter   = ref('')
+const filter   = ref(typeof route.query.username === 'string' ? route.query.username : '')
 
 const superAdminId = '732319322093125695'
 const isSuperAdmin = computed(() => meData.value?.discordId === superAdminId)

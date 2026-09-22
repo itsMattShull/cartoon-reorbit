@@ -15,6 +15,24 @@ import { join, dirname, extname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { sanitizePathSegment, sanitizeFilename, assertInside, sniffImageType, MAX_IMAGE_BYTES } from '@/server/utils/imageUploadValidation'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
+import { validateEffectSchema } from '@/server/utils/ogGtoonEffects'
+
+const OG_GTOON_COLORS = new Set(['BLACK', 'SILVER', 'BLUE', 'RED', 'YELLOW', 'GREEN', 'PURPLE', 'ORANGE', 'PINK'])
+const OG_GTOON_CARD_TYPES = new Set(['ANIMAL', 'FEMALE', 'HERO', 'MALE', 'MONSTER', 'PLACE', 'PROP', 'VEHICLE', 'VILLAIN'])
+const OG_GTOON_GROUPS = new Set([
+  'BEAN_SCOUTS', 'DAILY_PLANET', 'GLOBAL', 'IMAGINARY_FRIEND', 'INJUSTICE_GANG',
+  'JUSTICE_FRIENDS', 'JUSTICE_LEAGUE', 'MUCHA_LUCHA', 'MYSTERY_INC', 'POWERPUFF_GIRLS',
+  'SQUIRREL_SCOUTS', 'TEEN_TITANS', 'TIME_SQUAD', 'WOOHP'
+])
+const MAX_EFFECT_AMOUNT = 999
+
+/** Blank/undefined -> null; otherwise must be one of `validSet`. Throws a 400 on anything else. */
+function parseOptionalEnum(raw, validSet, label) {
+  if (raw == null || raw === '') return null
+  const v = String(raw).trim()
+  if (!validSet.has(v)) throw createError({ statusCode: 400, statusMessage: `Invalid ${label}: ${v}` })
+  return v
+}
 
 // paths
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -52,6 +70,8 @@ export default defineEventHandler(async (event) => {
     quantity, initialQuantity, inCmart, set, description, characters,
     cMoonId: cMoonIdRaw,
     isGtoon, cost, power, abilityKey, abilityData, gtoonType,
+    isOgGtoon, gtoonColor, gtoonValue, isSlamGtoon, gtoonEffect,
+    gtoonType1, gtoonType2, gtoonType3, gtoonGroup,
     initialReleaseAt, finalReleaseAt, initialReleaseQty, finalReleaseQty,
     clearSound,
     mintLimitType: mintLimitTypeRaw, mintEndDate: mintEndDateRaw,
@@ -135,6 +155,47 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // Original gToons
+  const isOgGtoonBool = String(isOgGtoon) === 'true' || isOgGtoon === true
+  const isSlamGtoonBool = isOgGtoonBool && (String(isSlamGtoon) === 'true' || isSlamGtoon === true)
+  let gtoonValueInt = null
+  let gtoonEffectArr = null
+  const gtoonType1Val = parseOptionalEnum(gtoonType1, OG_GTOON_CARD_TYPES, 'Type 1')
+  const gtoonType2Val = parseOptionalEnum(gtoonType2, OG_GTOON_CARD_TYPES, 'Type 2')
+  const gtoonType3Val = parseOptionalEnum(gtoonType3, OG_GTOON_CARD_TYPES, 'Type 3')
+  const gtoonGroupVal = parseOptionalEnum(gtoonGroup, OG_GTOON_GROUPS, 'Group')
+
+  if (isOgGtoonBool) {
+    if (!OG_GTOON_COLORS.has(gtoonColor)) {
+      throw createError({ statusCode: 400, statusMessage: 'A valid gToon color is required.' })
+    }
+    gtoonValueInt = Number(gtoonValue)
+    if (isNaN(gtoonValueInt) || gtoonValueInt < 0 || gtoonValueInt > 99) {
+      throw createError({ statusCode: 400, statusMessage: 'gToon value must be between 0 and 99.' })
+    }
+    if (isSlamGtoonBool) {
+      try {
+        gtoonEffectArr = gtoonEffect
+          ? (typeof gtoonEffect === 'string' ? JSON.parse(gtoonEffect) : gtoonEffect)
+          : []
+      } catch {
+        throw createError({ statusCode: 400, statusMessage: 'Slam gToon effect must be valid JSON.' })
+      }
+      if (!Array.isArray(gtoonEffectArr) || gtoonEffectArr.length === 0) {
+        throw createError({ statusCode: 400, statusMessage: 'A Slam gToon needs at least one effect.' })
+      }
+      for (const e of gtoonEffectArr) {
+        if (e?.action?.type === 'modifyValue') {
+          e.action.amount = Math.max(-MAX_EFFECT_AMOUNT, Math.min(MAX_EFFECT_AMOUNT, Number(e.action.amount)))
+        }
+      }
+      const { ok, errors: effectErrors } = validateEffectSchema(gtoonEffectArr)
+      if (!ok) {
+        throw createError({ statusCode: 400, statusMessage: `Invalid Slam gToon effect: ${effectErrors.join('; ')}` })
+      }
+    }
+  }
+
   const secondEdition = await parseSecondEditionFields(
     { isSecondEdition, relatedFirstEditionId, secondEditionOverlayX, secondEditionOverlayY, secondEditionOverlaySize },
     prisma,
@@ -165,6 +226,16 @@ export default defineEventHandler(async (event) => {
     power:      isGtoonBool ? powerInt : null,
     abilityKey: isGtoonBool ? abilityKey : null,
     abilityData: isGtoonBool ? abilityDataObj : null,
+
+    isOgGtoon:   isOgGtoonBool,
+    gtoonColor:  isOgGtoonBool ? gtoonColor : null,
+    gtoonValue:  isOgGtoonBool ? gtoonValueInt : null,
+    isSlamGtoon: isSlamGtoonBool,
+    gtoonEffect: isSlamGtoonBool ? gtoonEffectArr : null,
+    gtoonType1: isOgGtoonBool ? gtoonType1Val : null,
+    gtoonType2: isOgGtoonBool ? gtoonType2Val : null,
+    gtoonType3: isOgGtoonBool ? gtoonType3Val : null,
+    gtoonGroup: isOgGtoonBool ? gtoonGroupVal : null,
 
     // Second Edition fields
     isSecondEdition: secondEdition.isSecondEdition,
@@ -272,6 +343,8 @@ export default defineEventHandler(async (event) => {
     const keys = [
       'name','series','description','rarity','price','releaseDate','perUserLimit','quantity','initialQuantity','inCmart','set','characters','cMoonId',
       'isGtoon','gtoonType','cost','power','abilityKey','abilityData','assetPath','type','soundPath',
+      'isOgGtoon','gtoonColor','gtoonValue','isSlamGtoon','gtoonEffect',
+      'gtoonType1','gtoonType2','gtoonType3','gtoonGroup',
       'initialReleaseAt','finalReleaseAt','initialReleaseQty','finalReleaseQty',
       'mintLimitType','mintEndDate',
       'timeBasedLimitCount','timeBasedLimitWindowDays',

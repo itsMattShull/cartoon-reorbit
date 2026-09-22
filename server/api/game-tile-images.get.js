@@ -1,6 +1,7 @@
 import { defineEventHandler } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { getPokemonBattleAssets } from '@/server/utils/pokemonBattleAssets'
+import { getOgGtoonsConfig } from '@/server/utils/ogGtoonsConfig'
 
 export default defineEventHandler(async () => {
   const cfg = await db.globalGameConfig.findUnique({
@@ -28,7 +29,13 @@ export default defineEventHandler(async () => {
   // tile only means "no image uploaded" -- GamesHome still renders a text tile in that case,
   // which would leave a switched-off game plainly visible.
   const { config } = await getPokemonBattleAssets()
-  const hidden = config.enabled ? [] : ['pokemonbattle']
+  const og = await getOgGtoonsConfig()
+  const hidden = [
+    ...(config.enabled ? [] : ['pokemonbattle']),
+    // Hidden only once every section is closed — same as the hub page itself, which shows an
+    // "unavailable" notice rather than an empty shell whenever a section is still open.
+    ...(og.matchmakingEnabled || og.gameEnabled || og.deckBuildingEnabled || og.leaderboardEnabled ? [] : ['gtoonsclassic'])
+  ]
 
   return {
     hidden,

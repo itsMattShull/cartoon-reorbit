@@ -18,6 +18,7 @@
           :src="cmoon.pageBannerImagePath"
           :alt="`${cmoon.name} cMoon`"
           class="cmp-masthead-img"
+          :style="bannerStyle"
           loading="eager"
           fetchpriority="high"
         />
@@ -86,9 +87,9 @@
               ref="affinityHelpBtn"
               type="button"
               class="cmp-affinity-help"
-              aria-label="About affinity rewards"
+              aria-label="View affinity rewards"
               @click="showAffinityInfo = true"
-            >?</button>
+            >View Rewards</button>
           </div>
           <p v-if="affinityRemainingToMax === 0" class="cmp-affinity-error">You've already reached the highest affinity rank for this cMoon.</p>
           <p v-else-if="contributeError" class="cmp-affinity-error">{{ contributeError }}</p>
@@ -127,12 +128,18 @@
                 ref="rankHelpBtn"
                 type="button"
                 class="cmp-affinity-help cmp-affinity-help--sm"
-                aria-label="About rank rewards"
+                aria-label="View rank rewards"
                 @click="showRankInfo = true"
-              >?</button>
+              >Rewards</button>
             </span>
           </div>
           <div class="cmp-affinity-bar-track">
+            <div
+              v-if="rankProgress.nextTier && rankProgress.pendingPoints"
+              class="cmp-affinity-bar-fill cmp-affinity-bar-fill--pending"
+              :style="{ width: rankPendingPct + '%' }"
+              :title="`+${rankProgress.pendingPoints.toLocaleString()} pts pending today (${rankPendingSummary}) — not earned until today's scoring run`"
+            ></div>
             <div class="cmp-affinity-bar-fill" :style="{ width: rankProgressPct + '%' }"></div>
           </div>
           <p class="cmp-affinity-next">
@@ -141,6 +148,10 @@
             </span>
             <span v-else-if="rankProgress.tiers.length">Max rank reached — {{ rankProgress.cMoonPoints.toLocaleString() }} pts</span>
             <span v-else>{{ rankProgress.cMoonPoints.toLocaleString() }} pts contributed</span>
+          </p>
+          <p v-if="rankProgress.nextTier && rankProgress.pendingPoints" class="cmp-affinity-pending-note">
+            +{{ rankProgress.pendingPoints.toLocaleString() }} pt{{ rankProgress.pendingPoints === 1 ? '' : 's' }} pending today
+            (<span>{{ rankPendingSummary }}</span>) — not earned until today's scoring run
           </p>
         </div>
 
@@ -215,11 +226,18 @@
                 v-for="c in cmoon.featuredCtoons"
                 :key="c.id"
                 type="button"
-                class="cmp-card"
+                class="cmp-featured-card-btn"
+                :aria-label="c.name"
                 @click="openInfo(c)"
               >
-                <img :src="c.assetPath" :alt="c.name" class="cmp-card-img" loading="lazy" />
-                <span class="cmp-card-name">{{ c.name }}</span>
+                <ShortCard>
+                  <template #header>
+                    <img :src="c.assetPath" :alt="c.name" class="cmp-featured-img" loading="lazy" />
+                  </template>
+                  <template #middle>
+                    <span class="cmp-featured-name">{{ c.name }}</span>
+                  </template>
+                </ShortCard>
               </button>
             </div>
           </section>
@@ -366,6 +384,7 @@ import { useCMoonRewardModal } from '@/composables/useCMoonRewardModal'
 import { useFullscreenEffect } from '@/composables/useFullscreenEffect'
 import CMoonAffinityLadderModal from '@/components/newsite/CMoonAffinityLadderModal.vue'
 import CMoonRankLadderModal from '@/components/newsite/CMoonRankLadderModal.vue'
+import ShortCard from '@/components/newsite/ShortCard.vue'
 
 const route = useRoute()
 const { open: openCtoonModal } = useCtoonModal()
@@ -460,7 +479,21 @@ async function voteOnPoll() {
   }
 }
 
-const paletteStyle = computed(() => cmoon.value ? cMoonPaletteStyle(cmoon.value.color) : {})
+const paletteStyle = computed(() => cmoon.value ? cMoonPaletteStyle({
+  color: cmoon.value.color,
+  pageBgColor: cmoon.value.pageBgColor,
+  accentColor: cmoon.value.accentColor,
+  textColor: cmoon.value.textColor,
+  cardBgColor: cmoon.value.cardBgColor,
+}) : {})
+
+// Older rows saved before pageBannerWidth/Height existed (every banner force-cropped to a fixed
+// 1200x100 back then) have no stored dimensions — fall back to that legacy ratio for them only.
+const bannerStyle = computed(() => {
+  const w = cmoon.value?.pageBannerWidth || 1200
+  const h = cmoon.value?.pageBannerHeight || 100
+  return { aspectRatio: `${w} / ${h}` }
+})
 
 const currentLevelName = computed(() => {
   if (!affinity.value) return ''
@@ -523,19 +556,41 @@ async function loadRankProgress(id) {
   }
 }
 
+// Shared floor/span math for both the confirmed and pending bar segments below — see
+// rankProgressPct's original comment (unchanged) for why the floor is found by sortOrder.
+const rankFloorAndSpan = computed(() => {
+  const rp = rankProgress.value
+  if (!rp || !rp.nextTier) return null
+  const floor = rp.currentRank ? (rp.tiers.find(t => t.sortOrder === rp.currentRank.sortOrder)?.pointThreshold ?? 0) : 0
+  const span = rp.nextTier.pointThreshold - floor
+  return span > 0 ? { floor, span } : null
+})
+
 const rankProgressPct = computed(() => {
   const rp = rankProgress.value
   if (!rp || !rp.nextTier) return 100
-  // Match the current rank to its tier by sortOrder, not id — CMoonRank.id (per-cMoon) and
-  // CMoonRankTier.id (global) are different rows entirely; a tier-linked rank's sortOrder is
-  // always kept in sync with its tier's (see server/utils/cmoonRankTiers.js), and is unique per
-  // cMoon, so this reliably finds "the floor" for a tier-managed rank. A legacy custom rank
-  // (not tier-linked) simply won't match anything here — falls back to a floor of 0, which is
-  // an acceptable approximation for that now-secondary path.
-  const floor = rp.currentRank ? (rp.tiers.find(t => t.sortOrder === rp.currentRank.sortOrder)?.pointThreshold ?? 0) : 0
-  const span = rp.nextTier.pointThreshold - floor
-  if (span <= 0) return 100
-  return Math.max(0, Math.min(100, Math.round(((rp.cMoonPoints - floor) / span) * 100)))
+  const fs = rankFloorAndSpan.value
+  if (!fs) return 100
+  return Math.max(0, Math.min(100, Math.round(((rp.cMoonPoints - fs.floor) / fs.span) * 100)))
+})
+
+// "If the daily scoring job ran right now" preview segment — see rank-progress.get.js's
+// pendingPoints/pendingBreakdown (never a commitment; the template renders this as a visually
+// distinct, separately-labeled sliver so it never reads as already-earned progress). Only
+// meaningful short of the next tier — at max rank there's nothing left to preview progress
+// toward, so this is 0 there regardless of any pendingPoints the API still reports.
+const rankPendingPct = computed(() => {
+  const rp = rankProgress.value
+  if (!rp || !rp.nextTier || !rp.pendingPoints) return rankProgressPct.value
+  const fs = rankFloorAndSpan.value
+  if (!fs) return rankProgressPct.value
+  return Math.max(0, Math.min(100, Math.round(((rp.cMoonPoints + rp.pendingPoints - fs.floor) / fs.span) * 100)))
+})
+
+const rankPendingSummary = computed(() => {
+  const rp = rankProgress.value
+  if (!rp || !rp.nextTier || !rp.pendingPoints || !rp.pendingBreakdown?.length) return ''
+  return rp.pendingBreakdown.map(b => b.label).join(', ')
 })
 
 async function loadOffers(id) {
@@ -753,17 +808,21 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   width: 100%;
 }
 
-/* Locked to the upload's real stored aspect ratio (the backend always normalizes to exactly
-   1200x100 — see page-banner-image.post.js) rather than a fixed height: with the box's aspect
-   ratio matching the image's exactly, object-fit has nothing to crop, so the full banner is
-   always visible edge to edge. On a narrow phone this does mean a shorter strip in absolute
-   pixels, but a cropped side is worse than a shorter (fully visible) banner. */
+/* aspect-ratio is bound per-cMoon inline (bannerStyle) to the upload's real stored dimensions
+   (page-banner-image.post.js downscales but never crops or upscales) — with the box's ratio
+   matching the image's exactly, object-fit has nothing to crop under normal circumstances.
+   max-height is still a hard clamp for the (now-possible) extreme end of the allowed 2:1-20:1
+   upload band: a very wide, short-in-absolute-pixels banner would otherwise render taller than
+   is reasonable on a wide desktop viewport. When that clamp actually changes the rendered box's
+   ratio away from the image's own, object-fit:contain + a palette-matched background letterboxes
+   rather than cropping, so the full banner stays visible either way. */
 .cmp-masthead-img {
   display: block;
   width: 100%;
   height: auto;
-  aspect-ratio: 1200 / 100;
-  object-fit: cover;
+  max-height: clamp(80px, 24vw, 220px);
+  object-fit: contain;
+  background: var(--cm-bg, var(--OrbitDarkBlue));
 }
 
 .cmp-banner {
@@ -836,7 +895,8 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 8px;
   margin-bottom: 6px;
 }
 
@@ -866,13 +926,50 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   border-radius: 999px;
   background: var(--cm-hairline, rgba(255,255,255,0.14));
   overflow: hidden;
+  /* Positioned so the rank bar's two fill segments (confirmed + pending) can stack on top of
+     each other instead of side by side — harmless for the affinity bar above, which only ever
+     renders one fill child. */
+  position: relative;
 }
 
 .cmp-affinity-bar-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
   height: 100%;
   border-radius: 999px;
   background: var(--cm-banner, var(--OrbitLightBlue));
   transition: width 0.4s ease;
+}
+
+/* "If the daily scoring job ran right now" preview (see rank-progress.get.js's pendingPoints) —
+   a striped, translucent extension past the confirmed fill. Rendered BEFORE .cmp-affinity-bar-fill
+   in the template so the solid confirmed color paints on top of it (both are position:absolute
+   with no z-index, so DOM order alone decides paint order) — only the sliver between the two
+   widths ever shows the stripe. Never the same color/opacity as the confirmed fill: this must
+   read as "not yet real" at a glance, not blend into it. */
+.cmp-affinity-bar-fill--pending {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 999px;
+  background: repeating-linear-gradient(
+    135deg,
+    var(--cm-banner, var(--OrbitLightBlue)) 0px,
+    var(--cm-banner, var(--OrbitLightBlue)) 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  opacity: 0.55;
+  transition: width 0.4s ease;
+}
+
+.cmp-affinity-pending-note {
+  margin: 4px 0 0;
+  font-size: 0.7rem;
+  font-style: italic;
+  color: var(--cm-text-muted, rgba(255,255,255,0.6));
 }
 
 .cmp-affinity-next {
@@ -884,6 +981,7 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
 .cmp-affinity-action-row {
   display: flex;
   align-items: stretch;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
 }
@@ -905,14 +1003,15 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
 
 .cmp-affinity-help {
   flex-shrink: 0;
-  width: 44px;
+  padding: 0 14px;
   min-height: 44px;
   border: 1px solid var(--cm-hairline, rgba(255,255,255,0.3));
   border-radius: 6px;
   background: rgba(255, 255, 255, 0.08);
   color: var(--cm-text, #ffffff);
-  font-weight: 800;
-  font-size: 1rem;
+  font-weight: 700;
+  font-size: 0.8rem;
+  white-space: nowrap;
   cursor: pointer;
 }
 .cmp-affinity-help:hover,
@@ -928,21 +1027,24 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
 }
 
 /* Compact variant for sitting inline next to a short heading (Your Rank/level name) rather than
-   as a wide sibling of a full-width action button — visual circle stays small, but the tap
-   target is still padded out to 44px via a transparent hit-box, same trick as
+   as a wide sibling of a full-width action button — a small pill (shorter label than the
+   full-size button so it doesn't blow out this row's space-between layout next to a rank name),
+   with the tap target still padded out toward 44px via a transparent hit-box, same trick as
    EconomyTicker.vue's .ticker-index-help. */
 .cmp-affinity-help--sm {
   position: relative;
-  width: 20px;
-  height: 20px;
+  width: auto;
+  height: auto;
   min-height: 0;
-  border-radius: 50%;
-  font-size: 0.7rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  white-space: nowrap;
 }
 .cmp-affinity-help--sm::before {
   content: '';
   position: absolute;
-  inset: -12px;
+  inset: -10px;
 }
 
 .cmp-affinity-form {
@@ -1051,24 +1153,20 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   .cmp-affinity-bar-fill { transition: none; }
 }
 
-/* The Featured cToons panel is deliberately NOT themed off the cMoon's color like the rest of the
-   page (.cmp-body's --cm-bg) — it's the site's fixed classic blue, matching the reference layout
-   where the center "Featured cToons" panel stays blue regardless of which world's colors surround
-   it. Cards get their own fixed light tile + dark text here too, rather than the cMoon-derived
-   --cm-tile-bg/--cm-text, since those are only contrast-tuned against --cm-bg and could clash
-   against a fixed blue an admin's chosen color was never checked against. */
+/* Previously a fixed classic blue regardless of the surrounding cMoon's colors, on the theory
+   that an admin's one auto-derived color was never checked for contrast against featured-card
+   content specifically. Now themed like every other panel (--cm-tile-bg to match .cmp-affinity/
+   .cmp-rank's raised-panel convention) — admins get a dedicated, contrast-warned cardBgColor
+   role (see utils/cmoonPalette.js) precisely so featured cToons can safely pick up the cMoon's
+   own look instead of standing apart from it. */
 .cmp-featured-panel {
-  background: var(--OrbitDarkBlue, #336699);
-  color: #ffffff;
+  background: var(--cm-tile-bg, var(--OrbitDarkBlue, #336699));
+  color: var(--cm-text, #ffffff);
   border-radius: 10px;
   padding: 14px;
 }
 .cmp-featured-panel .cmp-empty {
-  color: rgba(255, 255, 255, 0.75);
-}
-.cmp-featured-panel .cmp-card {
-  background: rgba(255, 255, 255, 0.94);
-  color: #1a2b3d;
+  color: var(--cm-text-muted, rgba(255, 255, 255, 0.75));
 }
 
 .cmp-middle-row,
@@ -1129,6 +1227,59 @@ watch(() => route.params.id, (id) => load(id), { immediate: true })
   grid-template-columns: repeat(auto-fill, minmax(90px, 100px));
   justify-content: center;
   gap: 10px;
+  /* Themes the real shared ShortCard component (see components/newsite/ShortCard.vue) to match
+     this cMoon's palette — set here on an ancestor, never on ShortCard itself, per its own
+     --sc-* var contract (enforced by tests/shortCardVarContract.test.js). --cm-tile-bg/--cm-border
+     are already contrast-verified against --cm-text by utils/cmoonPalette.js, so the card's own
+     name text (which reads --cm-text via .cmp-featured-name below) stays legible regardless of
+     which cMoon this is. Width/height/footer overrides keep ShortCard's normal (132x176, footer
+     visible) proportions from replacing this grid's original compact ~90-100px square-ish cards —
+     without them every featured card would balloon in height and the "2 rows of 6" layout above
+     would collapse to far fewer, much taller cards. */
+  --sc-bg: var(--cm-tile-bg, rgba(255,255,255,0.08));
+  --sc-border-color: var(--cm-border, transparent);
+  --sc-border-width: 1px;
+  --sc-radius: 6px;
+  --sc-width: 100%;
+  --sc-height: 132px;
+  --sc-middle-height: 28px;
+  --sc-footer-min-height: 0px;
+  --sc-footer-padding: 0px;
+}
+
+.cmp-featured-card-btn {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  text-align: inherit;
+}
+.cmp-featured-card-btn:focus-visible {
+  outline: 2px solid var(--cm-focus-ring, var(--OrbitLightBlue));
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .cmp-featured-card-btn:hover { opacity: 0.85; }
+}
+
+.cmp-featured-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.cmp-featured-name {
+  font-size: 0.7rem;
+  text-align: center;
+  color: var(--cm-text, #ffffff);
+  overflow-wrap: anywhere;
+  line-height: 1.15;
 }
 
 .cmp-card {

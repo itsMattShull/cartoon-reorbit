@@ -8,6 +8,7 @@ import {
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { invalidateAssets } from '@/server/utils/pokemonBattleAssets'
+import { invalidateOgGtoonsConfigCache } from '@/server/utils/ogGtoonsConfig'
 
 // ── Operation A.S.T.E.R.O.I.D. field tables ──────────────────────────────────────────────
 // Kept as data rather than 26 hand-written if-blocks so the validation, the Prisma write and
@@ -498,6 +499,8 @@ function validatePayload(payload) {
     if (!Number.isInteger(payload.pointsPerWin) || payload.pointsPerWin < 0) {
       throw createError({ statusCode: 400, statusMessage: '"pointsPerWin" must be a whole number of 0 or more' })
     }
+  } else if (payload.gameName === 'OgGtoons') {
+    // Four independent visibility switches, no numeric tuning — nothing to range-check.
   } else {
     throw createError({ statusCode: 400, statusMessage: `Unknown gameName "${payload.gameName}"` })
   }
@@ -846,6 +849,14 @@ export default defineEventHandler(async (event) => {
         }
         createData = { ...createData, ...pkmnData }
         updateData = { ...updateData, ...pkmnData }
+      } else if (gameName === 'OgGtoons') {
+        // Explicit null checks, not truthiness ones: `false` is the whole point of each field.
+        const ogGtoonsData = {}
+        for (const key of ['ogGtoonsMatchmakingEnabled', 'ogGtoonsGameEnabled', 'ogGtoonsDeckBuildingEnabled', 'ogGtoonsLeaderboardEnabled']) {
+          if (body[key] != null) ogGtoonsData[key] = Boolean(body[key])
+        }
+        createData = { ...createData, ...ogGtoonsData }
+        updateData = { ...updateData, ...ogGtoonsData }
       } else if (gameName === 'Clash' || gameName === 'TKO') {
         createData = { ...createData, pointsPerWin }
         updateData = { ...updateData, pointsPerWin }
@@ -1171,6 +1182,7 @@ export default defineEventHandler(async (event) => {
     // The public asset/config read is cached for a minute; without this the "Game is live"
     // toggle would silently lag on the Games Home page and the game route itself.
     if (gameName === 'PokemonBattle') invalidateAssets()
+    if (gameName === 'OgGtoons') invalidateOgGtoonsConfigCache()
 
     return result
   } catch (err) {

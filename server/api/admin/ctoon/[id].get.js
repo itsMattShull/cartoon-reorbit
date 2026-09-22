@@ -30,6 +30,17 @@ export default defineEventHandler(async (event) => {
         abilityKey: true,
         abilityData:true,
 
+        // Original gToons (2002) fields
+        isOgGtoon:   true,
+        gtoonColor:  true,
+        gtoonValue:  true,
+        isSlamGtoon: true,
+        gtoonEffect: true,
+        gtoonType1:  true,
+        gtoonType2:  true,
+        gtoonType3:  true,
+        gtoonGroup:  true,
+
         // mint limit fields
         mintLimitType: true,
         mintEndDate: true,

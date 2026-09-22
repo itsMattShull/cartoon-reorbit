@@ -229,8 +229,13 @@ function toggleOnlyMyCMoon() {
 }
 
 onMounted(() => {
+  // An explicit prior choice (even "off") is always honored as-is. A visitor who has never
+  // touched this toggle has no stored key at all — that "unset" case is resolved below, once
+  // loadAchievements knows whether they actually belong to a cMoon, rather than defaulting to
+  // false here and flipping it on a moment later.
   if (import.meta.client) {
-    onlyMyCMoon.value = localStorage.getItem(ONLY_MY_CMOON_STORAGE_KEY) === '1'
+    const stored = localStorage.getItem(ONLY_MY_CMOON_STORAGE_KEY)
+    if (stored !== null) onlyMyCMoon.value = stored === '1'
   }
   loadAchievements()
 })
@@ -250,6 +255,11 @@ async function loadAchievements() {
     if (statusResult.status === 'fulfilled') {
       cMoonEnabled.value = !!statusResult.value?.cMoonEnabled
       myCMoonId.value = statusResult.value?.cMoon?.id || null
+      // Default a first-time visitor who actually belongs to a cMoon to "only mine" — everyone
+      // else (no cMoon, or an explicit prior choice already applied above) is left alone.
+      if (import.meta.client && myCMoonId.value && localStorage.getItem(ONLY_MY_CMOON_STORAGE_KEY) === null) {
+        onlyMyCMoon.value = true
+      }
     }
   } finally {
     loading.value = false
@@ -339,16 +349,27 @@ async function confirmClaim(a) {
 .ma-toolbar {
   flex-shrink: 0;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
+  /* space-between (not center + flex-grow on the label) — the actual bug measured in-browser
+     was that `flex: 1 1 auto` on the label made it GROW to fill the row's leftover space (this
+     label's text is short enough to never need to wrap), pushing its grown box's right edge to
+     overlap the switch even though the visible text itself was nowhere near that wide. Letting
+     both items size to their own content and separating them with space-between removes the
+     overlap at its source; min-width:0 + overflow-wrap below is only a safety net for a genuinely
+     long label/huge font-scaling case, not the fix for this bug. */
+  justify-content: space-between;
+  gap: 6px 8px;
   padding: 6px 10px;
   background: rgba(0,0,0,0.15);
   border-bottom: 1px solid rgba(255,255,255,0.08);
 }
 .ma-toolbar-label {
+  flex: 0 1 auto;
+  min-width: 0;
   font-size: 0.68rem;
   color: rgba(255,255,255,0.75);
+  overflow-wrap: break-word;
 }
 
 /* Small switch matching the track/thumb proportions used elsewhere in the app (e.g. the
@@ -358,6 +379,7 @@ async function confirmClaim(a) {
 .ma-switch {
   position: relative;
   display: inline-flex;
+  flex-shrink: 0;
   width: 36px;
   height: 20px;
   padding: 12px;

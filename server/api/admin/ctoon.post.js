@@ -13,6 +13,26 @@ import { scheduleMintEnd } from '@/server/utils/queues'
 import { parseSecondEditionFields } from '@/server/utils/secondEdition'
 import { sanitizePathSegment, sanitizeFilename, assertInside, sniffImageType, MAX_IMAGE_BYTES } from '@/server/utils/imageUploadValidation'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
+import { validateEffectSchema } from '@/server/utils/ogGtoonEffects'
+
+const OG_GTOON_COLORS = new Set(['BLACK', 'SILVER', 'BLUE', 'RED', 'YELLOW', 'GREEN', 'PURPLE', 'ORANGE', 'PINK'])
+const OG_GTOON_CARD_TYPES = new Set(['ANIMAL', 'FEMALE', 'HERO', 'MALE', 'MONSTER', 'PLACE', 'PROP', 'VEHICLE', 'VILLAIN'])
+const OG_GTOON_GROUPS = new Set([
+  'BEAN_SCOUTS', 'DAILY_PLANET', 'GLOBAL', 'IMAGINARY_FRIEND', 'INJUSTICE_GANG',
+  'JUSTICE_FRIENDS', 'JUSTICE_LEAGUE', 'MUCHA_LUCHA', 'MYSTERY_INC', 'POWERPUFF_GIRLS',
+  'SQUIRREL_SCOUTS', 'TEEN_TITANS', 'TIME_SQUAD', 'WOOHP'
+])
+
+/** Blank/undefined -> null; otherwise must be one of `validSet`. Throws a 400 on anything else. */
+function parseOptionalEnum(raw, validSet, label) {
+  if (raw == null || raw === '') return null
+  const v = String(raw).trim()
+  if (!validSet.has(v)) throw createError({ statusCode: 400, statusMessage: `Invalid ${label}: ${v}` })
+  return v
+}
+// Clamp admin-authored magnitudes so a typo (or a compromised admin account) can't create a
+// card worth e.g. 1e9 — this is a runtime-untyped JSON field with no DB-level constraint.
+const MAX_EFFECT_AMOUNT = 999
 
 // ── path helpers ──────────────────────────────────────────────
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -51,6 +71,10 @@ export default defineEventHandler(async (event) => {
 
     /* NEW G-toon fields */
     isGtoon, cost, power, abilityKey, abilityData, gtoonType,
+
+    /* Original gToons (2002) fields */
+    isOgGtoon, gtoonColor, gtoonValue, isSlamGtoon, gtoonEffect,
+    gtoonType1, gtoonType2, gtoonType3, gtoonGroup,
 
     /* Two-phase advisory fields (optional) */
     initialReleaseAt, finalReleaseAt, initialReleaseQty, finalReleaseQty,
@@ -143,6 +167,45 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  /* 3b. Original gToons-specific validation ------------------ */
+  const isOgGtoonBool = String(isOgGtoon) === 'true'
+  const isSlamGtoonBool = isOgGtoonBool && String(isSlamGtoon) === 'true'
+  let gtoonValueInt = null
+  let gtoonEffectArr = null
+  const gtoonType1Val = parseOptionalEnum(gtoonType1, OG_GTOON_CARD_TYPES, 'Type 1')
+  const gtoonType2Val = parseOptionalEnum(gtoonType2, OG_GTOON_CARD_TYPES, 'Type 2')
+  const gtoonType3Val = parseOptionalEnum(gtoonType3, OG_GTOON_CARD_TYPES, 'Type 3')
+  const gtoonGroupVal = parseOptionalEnum(gtoonGroup, OG_GTOON_GROUPS, 'Group')
+
+  if (isOgGtoonBool) {
+    if (!OG_GTOON_COLORS.has(gtoonColor)) {
+      throw createError({ statusCode: 400, statusMessage: 'A valid gToon color is required.' })
+    }
+    gtoonValueInt = parseInt(gtoonValue, 10)
+    if (isNaN(gtoonValueInt) || gtoonValueInt < 0 || gtoonValueInt > 99) {
+      throw createError({ statusCode: 400, statusMessage: 'gToon value must be between 0 and 99.' })
+    }
+    if (isSlamGtoonBool) {
+      try {
+        gtoonEffectArr = gtoonEffect ? JSON.parse(gtoonEffect) : []
+      } catch {
+        throw createError({ statusCode: 400, statusMessage: 'Slam gToon effect must be valid JSON.' })
+      }
+      if (!Array.isArray(gtoonEffectArr) || gtoonEffectArr.length === 0) {
+        throw createError({ statusCode: 400, statusMessage: 'A Slam gToon needs at least one effect.' })
+      }
+      for (const e of gtoonEffectArr) {
+        if (e?.action?.type === 'modifyValue') {
+          e.action.amount = Math.max(-MAX_EFFECT_AMOUNT, Math.min(MAX_EFFECT_AMOUNT, Number(e.action.amount)))
+        }
+      }
+      const { ok, errors: effectErrors } = validateEffectSchema(gtoonEffectArr)
+      if (!ok) {
+        throw createError({ statusCode: 400, statusMessage: `Invalid Slam gToon effect: ${effectErrors.join('; ')}` })
+      }
+    }
+  }
+
   const { phash, dhash } = await computeMultiHash(imagePart.data)
   const bucket = bucketFromHash(phash)
 
@@ -216,6 +279,17 @@ export default defineEventHandler(async (event) => {
       power:      isGtoonBool ? powerInt : null,
       abilityKey: isGtoonBool ? abilityKey : null,
       abilityData: isGtoonBool ? abilityDataObj : null,
+
+      /* Original gToons (2002) columns */
+      isOgGtoon:   isOgGtoonBool,
+      gtoonColor:  isOgGtoonBool ? gtoonColor : null,
+      gtoonValue:  isOgGtoonBool ? gtoonValueInt : null,
+      isSlamGtoon: isSlamGtoonBool,
+      gtoonEffect: isSlamGtoonBool ? gtoonEffectArr : null,
+      gtoonType1: isOgGtoonBool ? gtoonType1Val : null,
+      gtoonType2: isOgGtoonBool ? gtoonType2Val : null,
+      gtoonType3: isOgGtoonBool ? gtoonType3Val : null,
+      gtoonGroup: isOgGtoonBool ? gtoonGroupVal : null,
 
       // Second Edition fields
       isSecondEdition: secondEdition.isSecondEdition,
