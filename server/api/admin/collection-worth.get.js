@@ -11,7 +11,7 @@
 import { defineEventHandler, getQuery, createError, setHeader } from 'h3'
 import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
-import { requireAdmin } from '@/server/utils/adminAuth'
+import { requireAdmin } from '@/server/utils/requireAdmin'
 import { ensureEconomyDataFresh } from '@/server/utils/economyFreshness'
 import {
   getDailyReferenceValues,
