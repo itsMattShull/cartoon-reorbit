@@ -28,6 +28,11 @@
             @click="recalcModalOpen = true"
           >Recalculate cMoon Points</button>
           <button
+            class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50"
+            title="Grants a flat bonus to every current cMoon member — a catch-up for members blocked from ever earning a live award by a scoring setting since corrected"
+            @click="backfillModalOpen = true"
+          >Backfill cMoon Points</button>
+          <button
             class="cm-tap px-3 text-xs font-semibold rounded-md border border-red-300 bg-white text-red-700 hover:bg-red-50"
             title="Claws back any rank prize a member only received because of the old cMoonPoints bug, and resets that achievement so they can legitimately re-earn it. Run Recalculate cMoon Points first."
             @click="prizeRevokeModalOpen = true"
@@ -110,9 +115,13 @@
               </p>
             </div>
             <div>
-              <label class="block text-xs font-medium mb-1">Daily task points</label>
+              <label class="block text-xs font-medium mb-1">Daily task points (weekly total)</label>
               <input v-model.number="scoring.dailyTaskPoints" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
-              <p class="text-[11px] text-gray-500 mt-1">Per player, per day a daily task was completed. Not divided — this already pays out per day.</p>
+              <p class="text-[11px] text-gray-500 mt-1">
+                Per player, per day a daily task was completed. Entered/measured as a weekly amount
+                but paid out per completion (÷6, rounded) — {{ scoring.dailyTaskPoints || 0 }} pts/week
+                ≈ {{ Math.round((scoring.dailyTaskPoints || 0) / 6) }} pts/completion.
+              </p>
             </div>
           </div>
 
@@ -1106,6 +1115,13 @@
       @done="load"
     />
 
+    <!-- ── Backfill cMoon Points modal ─────────────────────────────────── -->
+    <CMoonBackfillPointsModal
+      v-if="backfillModalOpen"
+      @close="backfillModalOpen = false"
+      @done="load"
+    />
+
     <!-- ── Revoke Invalid cMoon Rank Prizes modal ─────────────────────── -->
     <CMoonPrizeRevokeModal
       v-if="prizeRevokeModalOpen"
@@ -1139,6 +1155,7 @@ const cooldownError = ref('')
 const previewModalOpen = ref(false)
 const balanceModalOpen = ref(false)
 const recalcModalOpen = ref(false)
+const backfillModalOpen = ref(false)
 const prizeRevokeModalOpen = ref(false)
 // Populated from /api/admin/cmoon-join-effects — admin-authored alternative to the built-in
 // effectType dropdown below (see Manage cMoon Join Effects for creating/editing these).
