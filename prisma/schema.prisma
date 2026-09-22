@@ -304,6 +304,15 @@ model Ctoon {
   abilityKey  String?
   abilityData Json?
 
+  // Original gToons (2002 Cartoon Orbit game) fields — distinct from the gToon Clash
+  // fields above. Reuses `characters` (below) for Slam gToon effect conditions like
+  // "if any Huntor is in play" instead of adding a separate tagging field.
+  isOgGtoon   Boolean     @default(false)
+  gtoonColor  GtoonColor?
+  gtoonValue  Int?
+  isSlamGtoon Boolean     @default(false)
+  gtoonEffect Json? // array of OgGtoonEffect definitions; see server/utils/ogGtoonEffects.js
+
   // Second Edition fields
   isSecondEdition          Boolean @default(false)
   relatedFirstEditionId    String? @unique
@@ -316,6 +325,7 @@ model Ctoon {
 
   owners                     UserCtoon[]
   deckCards                  ClashDeckCard[]
+  ogGtoonDeckCards           OgGtoonDeckCard[]
   rewardCtoons               RewardCtoon[]
   packOptions                PackCtoonOption[]
   gameConfigsAsGrandPrize    GameConfig[]                @relation("GrandPrize", fields: [], references: [])
@@ -344,18 +354,18 @@ model Ctoon {
   achievementRequiredCtoons  AchievementRequiredCtoon[]
 
   // cMoon back-relation (prize-on-join — distinct from the display assignment below)
-  cMoonPrizeRows   CMoonPrizeCtoon[]
+  cMoonPrizeRows          CMoonPrizeCtoon[]
   // Admin-created "pick one of these" offer options featuring this cToon, and the resulting
   // claims (distinct from cMoonPrizeRows, which is auto-granted on join with no choice).
-  dispersalOptions CMoonDispersalOption[]
-  dispersalClaims  CMoonDispersalClaim[]
+  dispersalOptions        CMoonDispersalOption[]
+  dispersalClaims         CMoonDispersalClaim[]
   // Universal rank-tier reward choices featuring this cToon (see CMoonRankTierRewardCtoon).
   cMoonRankTierRewardRows CMoonRankTierRewardCtoon[]
 
   // Optional cMoon this cToon is thematically displayed under (admin-assigned in the cToon
   // editor). Purely a catalog/display categorization — unrelated to the player-faction system.
-  cMoonId String?
-  cMoon   CMoon?  @relation("CtoonCMoonDisplay", fields: [cMoonId], references: [id], onDelete: SetNull)
+  cMoonId           String?
+  cMoon             CMoon?               @relation("CtoonCMoonDisplay", fields: [cMoonId], references: [id], onDelete: SetNull)
   cMoonFeaturedRows CMoonFeaturedCtoon[]
 
   cZoneSearchPrizeRows   CZoneSearchPrize[]
@@ -503,20 +513,20 @@ model User {
   vpnDetected                       Boolean   @default(false)
 
   // cMoon (faction) membership
-  cMoonId            String?
-  cMoon              CMoon?    @relation(fields: [cMoonId], references: [id], onDelete: SetNull)
-  cMoonSelectedAt    DateTime?
-  cMoonAutoAssigned  Boolean   @default(false)
+  cMoonId                String?
+  cMoon                  CMoon?          @relation(fields: [cMoonId], references: [id], onDelete: SetNull)
+  cMoonSelectedAt        DateTime?
+  cMoonAutoAssigned      Boolean         @default(false)
   // Set when a player explicitly declines to pick a cMoon from the initial join modal (there is no
   // more time-based auto-assignment — see server/utils/cmoon.js). Only meaningful while cMoonId is
   // null; cleared back to false on a successful selectCMoonForUser. Lets the modal stop popping up
   // automatically (see canChoose in server/api/cmoon/status.get.js) while /newsite/cmoon-nav still
   // offers a "Join a cMoon" button that reopens the same modal on demand.
-  cMoonOptedOut      Boolean   @default(false)
+  cMoonOptedOut          Boolean         @default(false)
   // When cMoonOptedOut was last set true — the anchor for the admin-configurable rejoin cooldown
   // (GlobalGameConfig.cMoonOptOutCooldownDays, see computeCMoonRejoinAvailableAt in
   // server/utils/cmoon.js). Cleared back to null alongside cMoonOptedOut on a successful rejoin.
-  cMoonOptedOutAt    DateTime?
+  cMoonOptedOutAt        DateTime?
   // Set once the daily Discord sync grants this user's cMoon role, so the job
   // only touches never-synced members instead of re-checking everyone daily.
   cMoonRoleGrantedAt     DateTime?
@@ -537,9 +547,9 @@ model User {
   // the player" progress (CMoonAffinity.affinitySpent, UserCMoonBorder ownership) is a
   // separate, permanent, per-(user, cMoon) track untouched by any cMoonId change — see
   // CMoonAffinity's own doc comment. See server/cron/cmoon-points-aggregate.js.
-  cMoonPoints            Int        @default(0)
+  cMoonPoints            Int             @default(0)
   currentCMoonRankId     String?
-  currentCMoonRank       CMoonRank? @relation(fields: [currentCMoonRankId], references: [id], onDelete: SetNull)
+  currentCMoonRank       CMoonRank?      @relation(fields: [currentCMoonRankId], references: [id], onDelete: SetNull)
   // Mirrors cMoonRoleGrantedAt but for the rank's own Discord role, granted by the same
   // nightly reconciliation cron (syncCMoonDiscordRoles) rather than synchronously on unlock.
   cMoonRankRoleGrantedAt DateTime?
@@ -552,7 +562,7 @@ model User {
   // CMoonAffinity at read time) specifically so the public cZone view never has to join/scan
   // affinity rows on a hot, high-traffic route — see server/api/czone/[username].get.js.
   equippedBorderCMoonId String?
-  equippedBorder        CMoon?          @relation("CMoon_BorderEquippedBy", fields: [equippedBorderCMoonId], references: [id], onDelete: SetNull)
+  equippedBorder        CMoon?  @relation("CMoon_BorderEquippedBy", fields: [equippedBorderCMoonId], references: [id], onDelete: SetNull)
 
   // Same idea as equippedBorderCMoonId above, for the alternative glow cosmetic (see
   // UserCMoonGlow). Mutually exclusive with equippedBorderCMoonId at the application layer —
@@ -561,7 +571,7 @@ model User {
   // these two" check without raw SQL, and the existing single-writer equip endpoints already
   // guarantee it in practice.
   equippedGlowCMoonId String?
-  equippedGlow        CMoon?          @relation("CMoon_GlowEquippedBy", fields: [equippedGlowCMoonId], references: [id], onDelete: SetNull)
+  equippedGlow        CMoon?  @relation("CMoon_GlowEquippedBy", fields: [equippedGlowCMoonId], references: [id], onDelete: SetNull)
 
   cZones                    CZone[]
   clashDecks                ClashDeck[]
@@ -599,6 +609,11 @@ model User {
   clashGamesAsPlayer2       ClashGame[]                   @relation("ClashGamePlayer2")
   clashGamesWhoLeft         ClashGame[]                   @relation("ClashGameWhoLeft")
   clashGamesAsWinner        ClashGame[]                   @relation("ClashGameWinner")
+  ogGtoonDecks              OgGtoonDeck[]
+  ogGtoonMatchesAsPlayer1   OgGtoonMatch[]                @relation("OgGtoonMatchPlayer1")
+  ogGtoonMatchesAsPlayer2   OgGtoonMatch[]                @relation("OgGtoonMatchPlayer2")
+  ogGtoonMatchesWhoLeft     OgGtoonMatch[]                @relation("OgGtoonMatchWhoLeft")
+  ogGtoonMatchesAsWinner    OgGtoonMatch[]                @relation("OgGtoonMatchWinner")
   edRpsMatchesAsPlayer1     EdRpsMatch[]                  @relation("EdRpsMatchPlayer1")
   edRpsMatchesAsPlayer2     EdRpsMatch[]                  @relation("EdRpsMatchPlayer2")
   edRpsMatchesAsWinner      EdRpsMatch[]                  @relation("EdRpsMatchWinner")
@@ -647,7 +662,7 @@ model User {
 
   // Admin change logs (inverse)
   adminChangeLogs         AdminChangeLog[]
-  targetedAdminChangeLogs AdminChangeLog[]    @relation("AdminChangeLogTarget")
+  targetedAdminChangeLogs AdminChangeLog[]     @relation("AdminChangeLogTarget")
   packLimitResetsReceived UserPackLimitReset[] @relation("UserPackLimitResetUser")
   packLimitResetsIssued   UserPackLimitReset[] @relation("UserPackLimitResetAdmin")
   lottoUser               LottoUser?
@@ -1617,8 +1632,8 @@ model GlobalGameConfig {
   // it already awarded per-day). cMoonScoringLastRunDate is a "yyyy-mm-dd" (Chicago) idempotency
   // stamp, checked-and-set under the same advisory lock the run itself uses, so the frequent
   // checker cron can never double-fire a given day even across overlapping ticks.
-  cMoonScoringRunHour                Int       @default(0)   // 0-23 CST
-  cMoonScoringRunMinute              Int       @default(0)   // 0-59
+  cMoonScoringRunHour                Int       @default(0) // 0-23 CST
+  cMoonScoringRunMinute              Int       @default(0) // 0-59
   cMoonScoringLastRunDate            String?
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
@@ -1822,6 +1837,14 @@ model Auction {
 
   bids     Bid[] // one-to-many on Bid
   autoBids AuctionAutoBid[]
+  // NOTE: a partial index, "Auction_active_highestBid_idx" ON ("highestBid" DESC)
+  // WHERE status = 'ACTIVE' AND "highestBid" > 0, also exists on this table.
+  // Supports server/api/economy/active-top-auctions.get.js's ORDER BY
+  // "highestBid" DESC LIMIT 10 — without it Postgres would sort every ACTIVE
+  // row before applying the LIMIT. Partial indexes are not expressible in the
+  // Prisma schema language, so it lives only in migration
+  // 20260906130000_add_auction_active_highestbid_idx and shows up as drift in
+  // `prisma migrate dev`. Do not drop it.
 
   // NOTE: a partial unique index, "Auction_active_userCtoonId_key" ON
   // ("userCtoonId") WHERE status = 'ACTIVE', also exists on this table. It stops
@@ -1846,14 +1869,6 @@ model Auction {
   // Without winnerAt in the index, Postgres has to sort every matching row
   // before applying the LIMIT.
   @@index([userCtoonId, status, winnerAt])
-  // NOTE: a partial index, "Auction_active_highestBid_idx" ON ("highestBid" DESC)
-  // WHERE status = 'ACTIVE' AND "highestBid" > 0, also exists on this table.
-  // Supports server/api/economy/active-top-auctions.get.js's ORDER BY
-  // "highestBid" DESC LIMIT 10 — without it Postgres would sort every ACTIVE
-  // row before applying the LIMIT. Partial indexes are not expressible in the
-  // Prisma schema language, so it lives only in migration
-  // 20260906130000_add_auction_active_highestbid_idx and shows up as drift in
-  // `prisma migrate dev`. Do not drop it.
 }
 
 model Bid {
@@ -1935,6 +1950,64 @@ model ClashGame {
   winner  User? @relation("ClashGameWinner", fields: [winnerUserId], references: [id])
 }
 
+enum GtoonColor {
+  BLACK
+  SILVER
+  BLUE
+  RED
+  YELLOW
+  GREEN
+  PURPLE
+  ORANGE
+  PINK
+}
+
+enum OgGtoonMatchOutcome {
+  PLAYER1
+  PLAYER2
+  TIE
+  INCOMPLETE
+}
+
+// One original gToons (2002 game) match. Unlike ClashGame, both players are required
+// (no AI opponent in v1 — see gtoons-plan.md). roundLog is written ONCE, at match
+// completion — live round-by-round state lives in Redis/in-memory during play
+// (server/utils/ogGtoonsSocket.js), never updated per-round here, to avoid repeated
+// full-row JSON rewrites on a hot path.
+model OgGtoonMatch {
+  id                  String     @id @default(uuid())
+  player1UserId       String
+  player2UserId       String
+  player1Points       Int        @default(0) // staked
+  player2Points       Int        @default(0) // staked
+  player1DeckSnapshot Json // ordered 12-card snapshot incl. name/color/value/isSlam/effect/characters/assetPath
+  player2DeckSnapshot Json
+  player1GoalColor    GtoonColor
+  player2GoalColor    GtoonColor
+  player1SwapUsed     Boolean    @default(false)
+  player2SwapUsed     Boolean    @default(false)
+  player1Score        Int        @default(0) // final total value incl. bonuses
+  player2Score        Int        @default(0)
+  roundLog            Json // array of round result objects, see gtoons-plan.md
+  isChallenge         Boolean    @default(false) // true = direct challenge, false = random queue
+
+  winnerUserId  String?
+  outcome       OgGtoonMatchOutcome?
+  startedAt     DateTime             @default(now())
+  endedAt       DateTime?
+  whoLeftUserId String?
+
+  player1 User  @relation("OgGtoonMatchPlayer1", fields: [player1UserId], references: [id])
+  player2 User  @relation("OgGtoonMatchPlayer2", fields: [player2UserId], references: [id])
+  winner  User? @relation("OgGtoonMatchWinner", fields: [winnerUserId], references: [id])
+  whoLeft User? @relation("OgGtoonMatchWhoLeft", fields: [whoLeftUserId], references: [id])
+
+  @@index([player1UserId, startedAt])
+  @@index([player2UserId, startedAt])
+  @@index([winnerUserId])
+  @@index([outcome, startedAt])
+}
+
 // One completed Ed, Edd n Eddy RPS match.
 //
 // Written ONCE, at match end, inside the same transaction that awards the points — there is no
@@ -1964,8 +2037,8 @@ model EdRpsMatch {
   player2IsAi      Boolean @default(false)
   player1Character String
   player2Character String
-  player1Score     Int    @default(0)
-  player2Score     Int    @default(0)
+  player1Score     Int     @default(0)
+  player2Score     Int     @default(0)
 
   winnerUserId  String?
   winnerIsAi    Boolean @default(false)
@@ -2215,6 +2288,36 @@ model ClashDeckCard {
 
   deck  ClashDeck @relation(fields: [deckId], references: [id])
   ctoon Ctoon     @relation(fields: [ctoonId], references: [id])
+}
+
+// Original gToons (2002 game) deck — a separate table from ClashDeck since this is a
+// distinct game mode with its own 12-card, ordered-deck rules (unlike Clash's unordered
+// deck). Prefixed OgGtoon (not Gtoon) to avoid colliding with GtoonTournament*, which
+// actually belongs to gToon Clash's tournament system.
+model OgGtoonDeck {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User              @relation(fields: [userId], references: [id])
+  cards OgGtoonDeckCard[]
+
+  @@index([userId])
+}
+
+model OgGtoonDeckCard {
+  id       String @id @default(uuid())
+  deckId   String
+  ctoonId  String
+  position Int // 0-11; position 11 = bottom card = goal color/goal card
+
+  deck  OgGtoonDeck @relation(fields: [deckId], references: [id], onDelete: Cascade)
+  ctoon Ctoon       @relation(fields: [ctoonId], references: [id])
+
+  @@unique([deckId, position])
+  @@index([ctoonId])
 }
 
 model GtoonTournament {
@@ -2542,20 +2645,20 @@ model HolidayRedemption {
 }
 
 model AuctionOnly {
-  id          String   @id @default(uuid())
-  userCtoonId String
-  pricePoints Int
-  startsAt    DateTime // stored in UTC
-  endsAt      DateTime // stored in UTC
-  isStarted   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  createdById String?
-  isFeatured  Boolean  @default(false)
+  id               String   @id @default(uuid())
+  userCtoonId      String
+  pricePoints      Int
+  startsAt         DateTime // stored in UTC
+  endsAt           DateTime // stored in UTC
+  isStarted        Boolean  @default(false)
+  createdAt        DateTime @default(now())
+  createdById      String?
+  isFeatured       Boolean  @default(false)
   // Only meaningful when isFeatured. A user can't bid once they own, or have
   // received in the last 30 days, this many copies — 2 (Standard, the
   // long-standing default) or 1 (Strict), chosen at creation time. See
   // server/utils/featuredEligibility.js.
-  featuredOwnLimit Int @default(2)
+  featuredOwnLimit Int      @default(2)
 
   // relations
   userCtoon UserCtoon @relation(fields: [userCtoonId], references: [id])
@@ -2949,13 +3052,13 @@ model Achievement {
   // CMoonRankTier (see cMoonRankTierId below and server/utils/cmoonRankTiers.js): those rows ARE
   // both cMoonRankId and isClaimable, written directly via Prisma from that internal sync path,
   // never through the public admin HTTP validation above.
-  cMoonRankId                  String?
+  cMoonRankId                 String?
   // Set only on an achievement auto-provisioned by a universal rank tier (never set by the admin
   // achievement editor) — identifies which CMoonRankTier this per-cMoon achievement mirrors, so
   // server/utils/cmoonRankTiers.js can find and resync it later, and claimAchievementReward can
   // block a player from claiming the same tier's reward twice by cMoon-hopping. Purely bookkeeping;
   // does not itself affect evaluation.
-  cMoonRankTierId              String?
+  cMoonRankTierId             String?
   // When true, unlocking this achievement does NOT auto-grant `rewards` —
   // instead the user picks exactly one of `claimOptions` (up to 4) via the claim UI.
   isClaimable                 Boolean   @default(false)
@@ -3106,9 +3209,9 @@ enum CMoonEffectType {
 }
 
 model CMoon {
-  id            String           @id @default(uuid())
-  name          String           @unique
-  color         String // "#RRGGBB", validated server-side; the required base/fallback color a full
+  id                 String           @id @default(uuid())
+  name               String           @unique
+  color              String // "#RRGGBB", validated server-side; the required base/fallback color a full
   // palette is auto-derived from for the cMoon page + themed cToon modals + featured cToon cards
   // (see utils/cmoonPalette.js) whenever the optional per-role overrides below are unset.
   // Optional per-role overrides ("#RRGGBB", validated server-side same as color above) letting an
@@ -3119,14 +3222,14 @@ model CMoon {
   // still always auto-derived via the existing WCAG contrast-fix loop, seeded from whichever of
   // these is now in play — see cMoonPalette()'s header comment for why full manual control over
   // every single slot isn't offered.
-  pageBgColor   String? // overrides the page/modal background (auto: bg)
-  accentColor   String? // overrides the banner/progress-bar/link accent (auto: banner)
-  textColor     String? // overrides primary text (auto: text)
-  cardBgColor   String? // overrides tile/card backgrounds, incl. featured cToon cards (auto: tileBg)
-  discordRoleId String? // Discord role snowflake granted to members (add-only sync)
+  pageBgColor        String? // overrides the page/modal background (auto: bg)
+  accentColor        String? // overrides the banner/progress-bar/link accent (auto: banner)
+  textColor          String? // overrides primary text (auto: text)
+  cardBgColor        String? // overrides tile/card backgrounds, incl. featured cToon cards (auto: tileBg)
+  discordRoleId      String? // Discord role snowflake granted to members (add-only sync)
   // Optional full-screen animation played on cMoon-select and achievement-claim (see enum above).
   // Null = no effect, proceed immediately. Mutually exclusive with customJoinEffectId below.
-  effectType    CMoonEffectType?
+  effectType         CMoonEffectType?
   // Optional admin-authored alternative to effectType above — a simple template (background
   // color, uploaded image, caption) built and previewed in the "Manage cMoon Join Effects" admin
   // page, instead of picking one of the fixed bespoke animations. Mutually exclusive with
@@ -3136,17 +3239,17 @@ model CMoon {
   // still assigned to a cMoon fails at the DB level; the admin delete endpoint also pre-checks
   // usage first for a friendlier error message.
   customJoinEffectId String?
-  customJoinEffect    CMoonJoinEffect? @relation(fields: [customJoinEffectId], references: [id], onDelete: Restrict)
+  customJoinEffect   CMoonJoinEffect? @relation(fields: [customJoinEffectId], references: [id], onDelete: Restrict)
   // Public "choose your cMoon" poster art. Server-normalized to a fixed 2:3 webp on upload
   // (see server/api/admin/cmoons/[id]/image.post.js) — null falls back to the color swatch.
-  imagePath     String?
+  imagePath          String?
   // Denormalized to avoid COUNT(*) races/scans on every selection + the daily auto-assign job.
-  memberCount   Int              @default(0)
+  memberCount        Int              @default(0)
   // Cumulative cMoon team leaderboard score (server/utils/cmoon.js weekly scoring). Never
   // resets — a running season total incremented by CMoonScoreLog-backed awards.
-  teamScore     Int              @default(0)
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  teamScore          Int              @default(0)
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
   // When true, this cMoon is hidden from the self-serve "choose your cMoon" list/modal, and
   // blocked server-side in selectCMoonForUser (server/utils/cmoon.js)
@@ -3172,25 +3275,25 @@ model CMoon {
   // No longer rendered on the redesigned cMoon page (superseded by pageBannerImagePath +
   // featuredCtoons below) — left in place rather than migrated away since it's a harmless,
   // easily-resurrected no-op otherwise.
-  pageImagePath   String?
-  pageImageWidth  Int?
-  pageImageHeight Int?
-  pageDescription String?
+  pageImagePath       String?
+  pageImageWidth      Int?
+  pageImageHeight     Int?
+  pageDescription     String?
   // Small pill-shaped button (normalized to 232x62) linking to this cMoon's page — shown on every
   // cToon's ID card in place of the old full-width banner it replaced (see the migration that
   // renamed this from bannerImagePath), and optionally on other cMoons' pages too (see
   // showButtonOnPages below).
-  buttonImagePath String?
+  buttonImagePath     String?
   // Whether this cMoon's buttonImagePath appears in the button-pill list on OTHER cMoons' pages
   // (never on its own page). Independent of joinLocked/showOnNav — a locked cMoon can still opt
   // into this cross-promotion. Defaults off: an admin must upload art and explicitly turn it on.
-  showButtonOnPages Boolean @default(false)
+  showButtonOnPages   Boolean @default(false)
   // Whether a player who previously opted out of picking a cMoon can choose THIS cMoon when they
   // come back to join later (after any cooldown — see GlobalGameConfig.cMoonOptOutCooldownDays).
   // A team-balance safeguard, independent of joinLocked: a cMoon can stay open to first-time
   // choosers but closed to late/returning joiners, or vice versa. Defaults on (matches the
   // pre-existing behavior of every cMoon being open to a rejoin).
-  allowOptOutJoin Boolean @default(true)
+  allowOptOutJoin     Boolean @default(true)
   // Wide masthead banner shown at the top of this cMoon's own page — distinct from
   // buttonImagePath above (that's the small pill shown elsewhere) and from pageImagePath above
   // (no longer displayed). Falls back to a plain colored title bar when unset. Stored at the
@@ -3200,12 +3303,12 @@ model CMoon {
   // rows saved before this pair existed, back when every banner was force-cropped to a fixed
   // 1200x100) means the front end falls back to that legacy 1200/100 ratio.
   pageBannerImagePath String?
-  pageBannerWidth      Int?
-  pageBannerHeight     Int?
+  pageBannerWidth     Int?
+  pageBannerHeight    Int?
   // Small square "avatar" (normalized ~128x128, like a player avatar) shown next to this
   // cMoon's colored name badge on member cZones — a quick-glance identity separate from the
   // large poster (imagePath) and the page/button art above, which are too large for that spot.
-  avatarPath      String?
+  avatarPath          String?
 
   members             User[]
   captains            CMoonCaptain[]
@@ -3218,22 +3321,22 @@ model CMoon {
   changeRequestsTo    CMoonChangeRequest[]       @relation("CMoonChangeRequestRequested")
   // No longer rendered directly on the cMoon page (see featuredCtoons below), but still the pool
   // admins pick featured cToons from, and still used wherever else the cToon editor relies on it.
-  displayedCtoons      Ctoon[]                    @relation("CtoonCMoonDisplay")
+  displayedCtoons     Ctoon[]                    @relation("CtoonCMoonDisplay")
   // Up to 12 admin-curated cToons shown in the page's centerpiece grid — a curated subset of
   // displayedCtoons above, not a replacement for it. See server/api/cmoon/[id].get.js for the
   // fallback behavior when an admin hasn't curated one yet.
-  featuredCtoons       CMoonFeaturedCtoon[]
-  poll                 CMoonPoll?
+  featuredCtoons      CMoonFeaturedCtoon[]
+  poll                CMoonPoll?
 
   // Admin-configured "contribute to cMoon" affinity ladder (see CMoonAffinityLevel) and every
   // member's progress on it (see CMoonAffinity) — a personal spend-driven track, independent of
   // teamScore above.
-  affinityLevels CMoonAffinityLevel[]
-  affinities     CMoonAffinity[]
-  borderOwners     UserCMoonBorder[] @relation("CMoon_BorderOwners")
-  borderEquippedBy User[]            @relation("CMoon_BorderEquippedBy")
-  glowOwners       UserCMoonGlow[]   @relation("CMoon_GlowOwners")
-  glowEquippedBy   User[]            @relation("CMoon_GlowEquippedBy")
+  affinityLevels   CMoonAffinityLevel[]
+  affinities       CMoonAffinity[]
+  borderOwners     UserCMoonBorder[]    @relation("CMoon_BorderOwners")
+  borderEquippedBy User[]               @relation("CMoon_BorderEquippedBy")
+  glowOwners       UserCMoonGlow[]      @relation("CMoon_GlowOwners")
+  glowEquippedBy   User[]               @relation("CMoon_GlowEquippedBy")
 
   @@index([memberCount])
   @@index([teamScore])
@@ -3247,8 +3350,8 @@ model CMoon {
 // shared host/composable as the built-in effects (components/effects/FullscreenEffectHost.vue /
 // composables/useFullscreenEffect.js), via components/effects/CustomJoinEffect.vue.
 model CMoonJoinEffect {
-  id              String                     @id @default(uuid())
-  name            String                     @unique
+  id              String                      @id @default(uuid())
+  name            String                      @unique
   backgroundColor String // "#RRGGBB", validated server-side (server/utils/cmoon.js#isValidHexColor)
   // When true, the background renders as a radial gradient (bright center, darkened edges)
   // derived from backgroundColor instead of a flat fill — matching the look several built-in
@@ -3257,7 +3360,7 @@ model CMoonJoinEffect {
   // the single backgroundColor rather than letting an admin pick separate gradient stops, since
   // this is meant to be a one-click "give it that same vignette look", not a full gradient editor
   // — see utils/cmoonJoinEffectBackground.js.
-  vignette        Boolean                    @default(false)
+  vignette        Boolean                     @default(false)
   // Uploaded logo/main image, static or animated GIF — resized+re-encoded on upload
   // (server/api/admin/cmoon-join-effects/[id]/image.post.js), never trusted as-is from the
   // client. Null until an admin uploads one; the effect is still usable without it (a plain
@@ -3267,10 +3370,10 @@ model CMoonJoinEffect {
   // depth against a compromised admin account, matching every existing effect component's
   // convention (see components/effects/*.vue).
   text            String?
-  textColor       String                     @default("#FFFFFF")
+  textColor       String                      @default("#FFFFFF")
   textPosition    CMoonJoinEffectTextPosition @default(BELOW_IMAGE)
-  createdAt       DateTime                   @default(now())
-  updatedAt       DateTime                   @updatedAt
+  createdAt       DateTime                    @default(now())
+  updatedAt       DateTime                    @updatedAt
 
   cmoons CMoon[]
 }
@@ -3313,7 +3416,7 @@ model CMoonPoll {
 }
 
 model CMoonPollOption {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   pollId    String
   poll      CMoonPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
   label     String
@@ -3329,14 +3432,14 @@ model CMoonPollOption {
 // selectCMoonForUser uses in server/utils/cmoon.js: the write itself either succeeds once or fails
 // with a Prisma P2002, which server/api/cmoon/[id]/poll-vote.post.js turns into a clean 409.
 model CMoonPollVote {
-  id        String    @id @default(uuid())
+  id        String          @id @default(uuid())
   pollId    String
-  poll      CMoonPoll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  poll      CMoonPoll       @relation(fields: [pollId], references: [id], onDelete: Cascade)
   optionId  String
   option    CMoonPollOption @relation(fields: [optionId], references: [id], onDelete: Cascade)
   userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime  @default(now())
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime        @default(now())
 
   @@unique([pollId, userId])
   @@index([pollId, optionId])
@@ -3350,23 +3453,23 @@ model CMoonPollVote {
 // permanently, the moment a member's cumulative affinitySpent first reaches `threshold` — see
 // grantRewardInTx in server/utils/achievements.js, reused here as the single reward-granting path.
 model CMoonAffinityLevel {
-  id        String   @id @default(uuid())
-  cMoonId   String
-  name      String
-  threshold Int // cumulative points spent on this cMoon required to reach this level
-  sortOrder Int      @default(0)
+  id                 String   @id @default(uuid())
+  cMoonId            String
+  name               String
+  threshold          Int // cumulative points spent on this cMoon required to reach this level
+  sortOrder          Int      @default(0)
   // Grants a permanent UserCMoonBorder(userId, this cMoonId) row — a persistent, static colorized
   // border around the member's cZone in this cMoon's live `color` (not snapshotted, so an admin
   // re-coloring the cMoon updates every border it already granted). Purely cosmetic; never
   // re-evaluated downward.
-  grantsBorder Boolean @default(false)
+  grantsBorder       Boolean  @default(false)
   // Grants a permanent UserCMoonGlow(userId, this cMoonId) row — a pulsing colored glow around
   // the cZone, as an alternative to the solid border above. A member can hold both a border and
   // a glow (from this or other cMoons) at once, but only one can be equipped/displayed on their
   // cZone at a time — see server/api/czone/border.post.js and glow.post.js, which each clear the
   // other's equip field when set. Independent of grantsBorder: a level can grant neither, either,
   // or both (a member who owns both then simply picks which one to display).
-  grantsGlow Boolean @default(false)
+  grantsGlow         Boolean  @default(false)
   // Optional cosmetic rewards granted alongside the border/glow above. All independent of each
   // other — a level can grant any combination. Background stays a single optional slot; avatars
   // are many-to-many (CMoonAffinityLevelRewardAvatar) since a level can hand out more than one.
@@ -3528,17 +3631,17 @@ model CMoonRank {
 // (see the admin endpoint) once any player has actually earned one of its per-cMoon achievements,
 // the same "never silently orphan a grant" caution CMoonPrizeCtoon's Restrict FK documents.
 model CMoonRankTier {
-  id             String   @id @default(uuid())
-  name           String   @unique
-  sortOrder      Int      @unique
-  pointThreshold Int // cumulative User.cMoonPoints required to reach this rank
+  id               String   @id @default(uuid())
+  name             String   @unique
+  sortOrder        Int      @unique
+  pointThreshold   Int // cumulative User.cMoonPoints required to reach this rank
   // How many reward-cToon choices this tier offers (the player picks exactly one) — admin-
   // configurable per tier rather than a single fixed cap, clamped to [1, 6] at the API layer
   // (see MIN_TIER_REWARD_CHOICES/MAX_TIER_REWARD_CTOONS in server/utils/cmoonRankTiers.js).
   // Defaults to 5 for newly created tiers.
-  maxRewardChoices Int    @default(5)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  maxRewardChoices Int      @default(5)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   ranks        CMoonRank[]
   achievements Achievement[]
