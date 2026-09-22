@@ -5,6 +5,7 @@ import {
 } from 'h3'
 import { prisma } from '@/server/prisma'
 import { notifyTradeOfferAccepted } from '@/server/utils/notifications'
+import { captureRequestMeta } from '@/server/utils/tradeOffer'
 
 export default defineEventHandler(async (event) => {
   // 1) Authenticate
@@ -97,6 +98,7 @@ export default defineEventHandler(async (event) => {
   }
 
   // 6) Transfer cToons, move points, log, accept
+  const { ip: acceptedByIp, userAgent: acceptedByUserAgent } = captureRequestMeta(event)
   await prisma.$transaction(async (tx) => {
     // Claim the offer before touching anything else. The status check above
     // runs outside this transaction, so without this a counter or a second
@@ -110,7 +112,13 @@ export default defineEventHandler(async (event) => {
     // deadlocking.
     const claimed = await tx.tradeOffer.updateMany({
       where: { id: offerId, status: 'PENDING' },
-      data: { status: 'ACCEPTED', updatedAt: new Date() }
+      data: {
+        status: 'ACCEPTED',
+        updatedAt: new Date(),
+        acceptedByUserId: userId,
+        acceptedByIp,
+        acceptedByUserAgent
+      }
     })
     if (claimed.count !== 1) {
       throw createError({
@@ -213,7 +221,8 @@ export default defineEventHandler(async (event) => {
           mintNumber:  tc.userCtoon.mintNumber,
           method:      'TRADE',
           counterpartyUserId: tc.role === 'OFFERED' ? offer.initiatorId : offer.recipientId,
-          counterpartyUsername: tc.role === 'OFFERED' ? initiator.username : me.username
+          counterpartyUsername: tc.role === 'OFFERED' ? initiator.username : me.username,
+          tradeOfferId: offerId
         }))
       })
     }

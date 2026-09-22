@@ -5,7 +5,7 @@
 //
 // The pure decision logic lives in server/utils/tradeOfferRules.js so it can be
 // unit-tested without a database; this module composes it with Prisma.
-import { createError } from 'h3'
+import { createError, getRequestHeader } from 'h3'
 import { prisma } from '@/server/prisma'
 import { resolveUserCtoonIds } from '@/server/utils/userCtoonId'
 import {
@@ -18,8 +18,35 @@ import {
   lockedRequestedIds,
   UNAVAILABLE_REQUEST_MESSAGE
 } from '@/server/utils/lockRules'
+import { getRequestIP } from '@/server/utils/request-ip'
+import { encryptIp } from '@/server/utils/ip-encrypt'
 
 export * from './tradeOfferRules'
+
+// Headers can be arbitrarily long; this only needs to be enough to identify a
+// browser/OS/device for the admin touch-trade report, not to store the raw
+// header verbatim.
+const MAX_USER_AGENT_LEN = 512
+
+/**
+ * Captures the requesting client's IP (encrypted, see server/utils/ip-encrypt.js)
+ * and User-Agent at the moment a trade offer is created, countered, or
+ * accepted — used only by the admin "Track Touch Trades" report to
+ * corroborate a same-mint trade pattern between two users. Best-effort: never
+ * throws, since a trade must not fail because IP encryption is misconfigured.
+ */
+export function captureRequestMeta (event) {
+  try {
+    const ip = getRequestIP(event)
+    const userAgent = getRequestHeader(event, 'user-agent') || null
+    return {
+      ip: ip ? encryptIp(ip) : null,
+      userAgent: userAgent ? userAgent.slice(0, MAX_USER_AGENT_LEN) : null
+    }
+  } catch {
+    return { ip: null, userAgent: null }
+  }
+}
 
 /**
  * Two references on one side that resolve to the same physical cToon.
@@ -216,7 +243,12 @@ export async function createTradeOfferTx (tx, {
   pointsOffered,
   resolvedOffered,
   resolvedRequested,
-  counteredOfferId = null
+  counteredOfferId = null,
+  // Request metadata for the offer's creator, captured by the caller (see
+  // offers.post.js / counter.post.js) and stored encrypted for the admin
+  // "Track Touch Trades" report — see TradeOffer.initiatorIp in schema.prisma.
+  initiatorIp = null,
+  initiatorUserAgent = null
 }) {
   if (pointsOffered > 0) {
     const ptsNow = await tx.userPoints.findUnique({
@@ -245,6 +277,8 @@ export async function createTradeOfferTx (tx, {
       recipientId,
       pointsOffered,
       counteredOfferId,
+      initiatorIp,
+      initiatorUserAgent,
       // createMany, not create: a nested `create` array emits one INSERT per
       // element, so a full-size offer would be 500 statements inside this
       // transaction instead of one.
