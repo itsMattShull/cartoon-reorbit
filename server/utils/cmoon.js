@@ -86,6 +86,39 @@ const WIN_GAMES = [
 export const SCORE_GAME_OPTIONS = SCORE_GAMES.map(({ name, label }) => ({ key: name, label }))
 export const WIN_GAME_OPTIONS = WIN_GAMES.map(({ name, label }) => ({ key: name, label }))
 
+// Every category ever written to CMoonScoreLog.category — HIGH_SCORE/TOP10/DAILY_TASK from this
+// file (see runDailyCMoonScoring/recordDailyTaskCompletions above), plus ADMIN_BACKFILL from
+// server/workers/cmoon-daily-task-backfill.worker.js's one-time "Backfill cMoon Points" tool.
+// Exported so the admin points-log endpoint has a fixed filter list without a DISTINCT query.
+export const CMOON_SCORE_LOG_CATEGORIES = ['HIGH_SCORE', 'TOP10', 'DAILY_TASK', 'ADMIN_BACKFILL']
+
+const GAME_LABEL_BY_KEY = new Map([...SCORE_GAMES, ...WIN_GAMES].map(g => [g.name, g.label]))
+
+// Human-readable "how/where" for one CMoonScoreLog row, derived from its (category, detail)
+// pair — see this file's various `candidates.push({ category, detail, ... })` call sites (and
+// the backfill worker's `cMoonScoreLog.create`) for what each combination actually means.
+// Exported so the admin points-log endpoint never has to re-derive this mapping itself.
+export function describeCMoonScoreLogSource(category, detail) {
+  switch (category) {
+    case 'HIGH_SCORE':
+      return `High Score — ${GAME_LABEL_BY_KEY.get(detail) || detail || 'unknown game'}`
+    case 'TOP10':
+      if (detail === 'points') return 'Top 10 — Total Points board'
+      if (detail === 'totalCtoons') return 'Top 10 — Total cToons board'
+      if (typeof detail === 'string' && detail.startsWith('game:')) {
+        const key = detail.slice('game:'.length)
+        return `Top 10 — ${GAME_LABEL_BY_KEY.get(key) || key}`
+      }
+      return 'Top 10'
+    case 'DAILY_TASK':
+      return 'Daily Task completion'
+    case 'ADMIN_BACKFILL':
+      return 'Admin backfill (Backfill cMoon Points tool)'
+    default:
+      return category || 'Unknown'
+  }
+}
+
 // Defaults mirror the GlobalGameConfig column defaults (see the migration) — used both
 // as the fallback when a value is missing/out-of-range and to document the shape.
 export const CMOON_SCORING_DEFAULTS = {
@@ -266,6 +299,14 @@ export async function recordDailyTaskCompletions() {
   const config = await getGlobalConfig({ fresh: true })
   if (!config?.cMoonEnabled) return { recorded: 0 }
 
+  // Heartbeat: stamped every tick this cron actually runs, regardless of whether anyone
+  // qualified — see the schema comment on cMoonDailyTaskCronLastRanAt. Fire-and-forget: this
+  // must never slow down or fail the real work below over a heartbeat write.
+  prisma.globalGameConfig
+    .update({ where: { id: 'singleton' }, data: { cMoonDailyTaskCronLastRanAt: new Date() } })
+    .then(() => invalidateGlobalConfigCache())
+    .catch(() => {})
+
   const [globalConfig, winwheelConfig, lottoSettings, barcodeConfig] = await Promise.all([
     prisma.globalGameConfig.findUnique({
       where: { id: 'singleton' },
@@ -321,7 +362,7 @@ export async function recordDailyTaskCompletions() {
   const wheelBranch = winwheelMaxDailySpins > 0
     ? Prisma.sql`
         SELECT "userId" FROM "WheelSpinLog"
-        WHERE "createdAt" >= ${morningBoundary} AND "status" <> 'failed'
+        WHERE "createdAt" >= ${morningBoundary} AND "status" <> 'failed' AND "result" <> 'tripleNothing'
           AND "userId" IN (SELECT id FROM eligible)
         GROUP BY "userId" HAVING COUNT(*) >= ${winwheelMaxDailySpins}`
     : inert
@@ -339,6 +380,19 @@ export async function recordDailyTaskCompletions() {
         GROUP BY "userId" HAVING COUNT(*) >= ${monsterDailyScanLimit}`
     : inert
 
+  // Two separate qualifying groups, each recorded under ITS OWN boundary as the completion
+  // "date" — login/czone/gamepts/tkopts reset at 8pm (dailyBoundary), wheel/lotto/scans reset
+  // at 8am (morningBoundary). Recording every group under one shared date used to let the two
+  // clocks drift apart: a player who qualified via wheel/lotto/scans earlier in the day was
+  // still "qualifying" (their cumulative count doesn't disappear) once dailyBoundary rolled
+  // over at 8pm, so the very same activity could insert a second, distinct-date completion row
+  // a few minutes after 8pm — a real double-award, not a hypothetical, hit by any player doing
+  // those three tasks during normal daytime hours. Recording each group under its own boundary
+  // means a row only becomes insertable again once that group's OWN reset actually happens.
+  //
+  // A player who satisfies both groups in the same real day now gets two completion rows (one
+  // per boundary) rather than one — an accepted, much narrower trade-off: two genuinely
+  // independent reset cycles being satisfied, instead of one activity being double-counted.
   const rows = await prisma.$queryRaw`
     WITH eligible AS (
       SELECT id FROM "User"
@@ -356,27 +410,33 @@ export async function recordDailyTaskCompletions() {
     wheel AS (${wheelBranch}),
     lotto AS (${lottoBranch}),
     scans AS (${scansBranch}),
-    qualifying AS (
+    eveningQualifying AS (
       SELECT "userId" FROM login
       UNION SELECT "userId" FROM czone
       UNION SELECT "userId" FROM gamepts
       UNION SELECT "userId" FROM tkopts
-      UNION SELECT "userId" FROM wheel
+    ),
+    morningQualifying AS (
+      SELECT "userId" FROM wheel
       UNION SELECT "userId" FROM lotto
       UNION SELECT "userId" FROM scans
     )
     INSERT INTO "UserDailyTaskCompletion" (id, "userId", "date")
-    SELECT gen_random_uuid()::text, "userId", ${dailyBoundary} FROM qualifying
+    SELECT gen_random_uuid()::text, "userId", ${dailyBoundary} FROM eveningQualifying
+    UNION ALL
+    SELECT gen_random_uuid()::text, "userId", ${morningBoundary} FROM morningQualifying
     ON CONFLICT ("userId", "date") DO NOTHING
-    RETURNING id, "userId"
+    RETURNING id, "userId", "date"
   `
 
   // Live-award DAILY_TASK the moment a completion is first detected, rather than waiting for
-  // runDailyCMoonScoring's own once-daily pass (see that function's comment) — every userId here
+  // runDailyCMoonScoring's own once-daily pass (see that function's comment) — every row here
   // is a brand-new UserDailyTaskCompletion row (ON CONFLICT DO NOTHING excludes already-recorded
-  // ones), so this can never re-award the same day twice on its own; the CMoonScoreLog unique
-  // constraint (cMoonId, userId, category, weekStart, detail) is still the actual idempotency
-  // guard, exactly as it is everywhere else in this module.
+  // ones), so this can never re-award the same (user, boundary) twice on its own; the
+  // CMoonScoreLog unique constraint (cMoonId, userId, category, weekStart, detail) is still the
+  // actual idempotency guard, exactly as it is everywhere else in this module. Each row's own
+  // `date` (not a single shared value) becomes that award's weekStart/detail, matching whichever
+  // boundary actually produced it.
   if (dailyTaskPoints > 0 && rows.length) {
     const newUserIds = rows.map(r => r.userId)
     const members = await prisma.user.findMany({
@@ -384,11 +444,14 @@ export async function recordDailyTaskCompletions() {
       select: { id: true, cMoonId: true },
     })
     if (members.length) {
+      const cMoonIdByUser = new Map(members.map(m => [m.id, m.cMoonId]))
       const awardPoints = dailyTaskAward(dailyTaskPoints)
-      const candidates = members.map(u => ({
-        cMoonId: u.cMoonId, userId: u.id, category: 'DAILY_TASK',
-        detail: dailyBoundary.toISOString(), points: awardPoints, weekStart: dailyBoundary,
-      }))
+      const candidates = rows
+        .filter(r => cMoonIdByUser.has(r.userId))
+        .map(r => ({
+          cMoonId: cMoonIdByUser.get(r.userId), userId: r.userId, category: 'DAILY_TASK',
+          detail: r.date.toISOString(), points: awardPoints, weekStart: r.date,
+        }))
       await prisma.cMoonScoreLog.createMany({ data: candidates, skipDuplicates: true })
       await recomputeCMoonTeamScores()
       await recomputeCMoonPointsForUsers(members.map(u => u.id))
@@ -488,6 +551,10 @@ export async function runDailyCMoonScoring() {
     candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'totalCtoons', points: dailyTop10Points, weekStart })
   }
 
+  // weekStart here is deliberately row.date, not the outer weekStart — a completion recorded
+  // under morningBoundary (wheel/lotto/scans, see recordDailyTaskCompletions) must produce the
+  // exact same (weekStart, detail) pair here as it would have from the live-award path, or the
+  // CMoonScoreLog unique constraint stops deduping it and this backstop double-awards it.
   const dailyTaskRows = await prisma.userDailyTaskCompletion.findMany({
     where: { date: { gte: weekBegin, lt: weekStart }, user: { cMoonId: { not: null } } },
     select: { userId: true, date: true, user: { select: { cMoonId: true } } }
@@ -495,7 +562,7 @@ export async function runDailyCMoonScoring() {
   for (const row of dailyTaskRows) {
     candidates.push({
       cMoonId: row.user.cMoonId, userId: row.userId, category: 'DAILY_TASK',
-      detail: row.date.toISOString(), points: dailyTaskAwardPoints, weekStart
+      detail: row.date.toISOString(), points: dailyTaskAwardPoints, weekStart: row.date
     })
   }
 

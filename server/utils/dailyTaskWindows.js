@@ -16,13 +16,16 @@ export function getChicagoDailyBoundary() {
 }
 
 export function getChicagoMorningWindowStart() {
-  const now = new Date()
-  const chicagoNow = new Date(now.toLocaleString('en-US', { timeZone: 'America/Chicago' }))
-  const offsetMs = now.getTime() - chicagoNow.getTime()
-  const y = chicagoNow.getFullYear()
-  const m = chicagoNow.getMonth()
-  const d = chicagoNow.getDate()
-  let resetUtcMs = new Date(y, m, d, 8, 0, 0).getTime() + offsetMs
-  if (now.getTime() < resetUtcMs) resetUtcMs -= 24 * 60 * 60 * 1000
-  return new Date(resetUtcMs)
+  // Previously computed via now.toLocaleString(...) round-tripped back through `new Date(...)`,
+  // which loses now's millisecond component and leaks it into the computed offset — the returned
+  // instant jittered by up to ~1s between calls instead of landing on a stable, repeatable 08:00
+  // Chicago boundary. Harmless while this value was only ever used as a WHERE >= filter threshold,
+  // but server/utils/cmoon.js's recordDailyTaskCompletions now also uses it as a completion row's
+  // dedup key (UserDailyTaskCompletion's unique (userId, date) constraint) — there, jitter would
+  // defeat ON CONFLICT DO NOTHING and re-award the same morning-window completion on every tick.
+  // Luxon's .set(...) mirrors getChicagoDailyBoundary above and is stable across calls.
+  const chicagoNow = DateTime.now().setZone('America/Chicago')
+  let boundaryLocal = chicagoNow.set({ hour: 8, minute: 0, second: 0, millisecond: 0 })
+  if (chicagoNow < boundaryLocal) boundaryLocal = boundaryLocal.minus({ days: 1 })
+  return boundaryLocal.toUTC().toJSDate()
 }
