@@ -4,6 +4,7 @@
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { Prisma } from '@prisma/client'
+import { getOgGtoonsConfig } from '@/server/utils/ogGtoonsConfig'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -11,6 +12,11 @@ export default defineEventHandler(async (event) => {
   try { me = await $fetch('/api/auth/me', { headers: { cookie } }) }
   catch { throw createError({ statusCode: 401, statusMessage: 'Unauthorized' }) }
   if (!me?.id) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+
+  const { leaderboardEnabled } = await getOgGtoonsConfig()
+  if (!leaderboardEnabled) {
+    throw createError({ statusCode: 403, statusMessage: 'The gToons leaderboard is currently unavailable.' })
+  }
 
   const { timeframe = '1m', minGames = '3' } = getQuery(event)
   const minFinished = Math.max(parseInt(minGames, 10) || 0, 0)

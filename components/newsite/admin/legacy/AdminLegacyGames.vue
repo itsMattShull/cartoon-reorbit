@@ -780,6 +780,66 @@
           </button>
         </section>
 
+        <!-- gToons (Original) -->
+        <section v-if="activeTab === 'OgGtoons'" role="tabpanel" aria-label="Original gToons Settings">
+          <h2 class="text-sm font-semibold mb-3">gToons (Original) Settings</h2>
+          <p class="text-[11px] text-gray-500 mb-3">
+            The original 2002 Cartoon Orbit card game — a separate feature from gToon Clash
+            above, with its own deck builder, matchmaking, live matches, and leaderboard. Each
+            section below can be closed independently. Unchecking a section hides it from the
+            gToons hub page AND refuses the underlying action server-side (queueing, challenging,
+            saving a deck, fetching the leaderboard) — hiding the tab alone would leave it
+            reachable by anyone who already has the page open. A match already in progress when
+            "Live Matches" is unchecked is allowed to finish rather than being cut off mid-round.
+          </p>
+
+          <div v-if="ogGtoonsConfigError" class="mb-3 p-2 border border-red-300 bg-red-50 rounded">
+            <p class="text-xs font-semibold text-red-800">These settings could not be loaded.</p>
+            <p class="text-[11px] text-red-700 mt-1">{{ ogGtoonsConfigError }}</p>
+            <p class="text-[11px] text-red-700 mt-1">
+              The values below are defaults, not what is saved. If this database hasn't had the
+              gToons feature-toggle migration applied yet, run it and reload before saving —
+              saving now would write these defaults.
+            </p>
+          </div>
+
+          <div class="space-y-2 mb-4">
+            <label class="flex items-start gap-2 p-2 border rounded bg-white">
+              <input type="checkbox" v-model="ogGtoonsMatchmakingEnabled" class="mt-0.5" />
+              <span>
+                <span class="text-xs font-semibold text-gray-800">Matchmaking</span>
+                <span class="block text-[11px] text-gray-500">Random queue and direct challenges. Off hides the Matchmaking tab and rejects new queue joins/challenges.</span>
+              </span>
+            </label>
+            <label class="flex items-start gap-2 p-2 border rounded bg-white">
+              <input type="checkbox" v-model="ogGtoonsGameEnabled" class="mt-0.5" />
+              <span>
+                <span class="text-xs font-semibold text-gray-800">Live Matches</span>
+                <span class="block text-[11px] text-gray-500">The match itself. Off refuses to start any new match, even one already paired via matchmaking. In-progress matches finish normally.</span>
+              </span>
+            </label>
+            <label class="flex items-start gap-2 p-2 border rounded bg-white">
+              <input type="checkbox" v-model="ogGtoonsDeckBuildingEnabled" class="mt-0.5" />
+              <span>
+                <span class="text-xs font-semibold text-gray-800">Deck Building</span>
+                <span class="block text-[11px] text-gray-500">Off hides the Manage Deck tab and rejects new deck saves. Existing decks are unaffected and still usable for matches.</span>
+              </span>
+            </label>
+            <label class="flex items-start gap-2 p-2 border rounded bg-white">
+              <input type="checkbox" v-model="ogGtoonsLeaderboardEnabled" class="mt-0.5" />
+              <span>
+                <span class="text-xs font-semibold text-gray-800">Leaderboard</span>
+                <span class="block text-[11px] text-gray-500">Off hides the Leaderboard tab and rejects the leaderboard fetch.</span>
+              </span>
+            </label>
+          </div>
+
+          <button @click="saveOgGtoonsConfig" :disabled="loadingOgGtoons || !!ogGtoonsConfigError" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+            <span v-if="!loadingOgGtoons">Save gToons Settings</span>
+            <span v-else>Saving…</span>
+          </button>
+        </section>
+
         <!-- Win Wheel -->
         <section v-if="activeTab === 'Winwheel'" role="tabpanel" aria-label="Win Wheel Settings">
           <h2 class="text-sm font-semibold mb-3">Win Wheel Settings</h2>
@@ -1879,6 +1939,7 @@ const tabs = [
   { key: 'TKO',          label: 'TKO' },
   { key: 'EdRps',        label: 'Ed, Edd n Eddy RPS' },
   { key: 'PokemonBattle', label: 'Pokemon: Fire, Water, Grass!' },
+  { key: 'OgGtoons',     label: 'gToons (Original)' },
   { key: 'Winwheel',     label: 'Win Wheel' },
   { key: 'ReOrbitMatch', label: 'ReOrbit Match' },
   { key: 'TowerStack',   label: 'Tower Stack' },
@@ -1963,6 +2024,13 @@ const pkmnTrainerFile           = ref(null)
 const loadingPkmn               = ref(false)
 const pkmnConfigError           = ref('')
 const loadingTkoConfig      = ref(false)
+
+const ogGtoonsMatchmakingEnabled  = ref(true)
+const ogGtoonsGameEnabled         = ref(true)
+const ogGtoonsDeckBuildingEnabled = ref(true)
+const ogGtoonsLeaderboardEnabled  = ref(true)
+const loadingOgGtoons             = ref(false)
+const ogGtoonsConfigError         = ref('')
 
 const winballBumperGeometry = ref([
   { radius: 6, height: 6, x: -8, z: -9 },
@@ -2361,6 +2429,20 @@ async function loadSettings() {
   try {
     pkmnTrainers.value = await $fetch('/api/admin/pokemonbattle-trainers')
   } catch { pkmnTrainers.value = [] }
+
+  // Wrapped in its own try for the same reason the EdRps/Pokemon fetches are: loadSettings()
+  // is one unbroken await chain, so an unguarded rejection here silently abandons every config
+  // loaded after it, leaving those tabs showing defaults that a save would then write over.
+  try {
+    const og = await $fetch('/api/admin/game-config?gameName=OgGtoons')
+    ogGtoonsMatchmakingEnabled.value  = og.ogGtoonsMatchmakingEnabled  !== false
+    ogGtoonsGameEnabled.value         = og.ogGtoonsGameEnabled         !== false
+    ogGtoonsDeckBuildingEnabled.value = og.ogGtoonsDeckBuildingEnabled !== false
+    ogGtoonsLeaderboardEnabled.value  = og.ogGtoonsLeaderboardEnabled  !== false
+    ogGtoonsConfigError.value = ''
+  } catch (e) {
+    ogGtoonsConfigError.value = e?.data?.statusMessage || e?.message || 'Could not load these settings.'
+  }
 
   const tc = await $fetch('/api/admin/game-config?gameName=TKO')
   tkoPointsPerWin.value = tc.pointsPerWin ?? 300
@@ -2781,6 +2863,28 @@ async function savePkmnConfig() {
     toastType.value = 'error'
   } finally {
     loadingPkmn.value = false
+  }
+}
+
+async function saveOgGtoonsConfig() {
+  loadingOgGtoons.value = true; toastMessage.value = ''
+  try {
+    await $fetch('/api/admin/game-config', {
+      method: 'POST',
+      body: {
+        gameName:                    'OgGtoons',
+        ogGtoonsMatchmakingEnabled:  ogGtoonsMatchmakingEnabled.value,
+        ogGtoonsGameEnabled:         ogGtoonsGameEnabled.value,
+        ogGtoonsDeckBuildingEnabled: ogGtoonsDeckBuildingEnabled.value,
+        ogGtoonsLeaderboardEnabled:  ogGtoonsLeaderboardEnabled.value
+      }
+    })
+    toastMessage.value = 'gToons settings saved!'; toastType.value = 'success'
+  } catch (e) {
+    toastMessage.value = e?.data?.statusMessage || 'Error saving gToons settings'
+    toastType.value = 'error'
+  } finally {
+    loadingOgGtoons.value = false
   }
 }
 

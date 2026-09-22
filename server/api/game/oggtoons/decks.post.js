@@ -4,6 +4,7 @@
 import { defineEventHandler, readBody, createError, getRequestHeader } from 'h3'
 import { prisma } from '~/server/prisma'
 import { validateDeckPositions } from '~/server/utils/ogGtoonEngine'
+import { getOgGtoonsConfig } from '~/server/utils/ogGtoonsConfig'
 
 export default defineEventHandler(async (event) => {
   // 1) Authenticate
@@ -17,6 +18,11 @@ export default defineEventHandler(async (event) => {
   const userId = me?.id
   if (!userId) {
     throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
+  }
+
+  const { deckBuildingEnabled } = await getOgGtoonsConfig()
+  if (!deckBuildingEnabled) {
+    throw createError({ statusCode: 403, statusMessage: 'gToons deck building is currently unavailable.' })
   }
 
   // 2) Parse and validate payload

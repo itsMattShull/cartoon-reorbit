@@ -3,7 +3,7 @@
     <div class="ah-topbar">
       <div class="ah-tabs">
         <button
-          v-for="t in TABS"
+          v-for="t in visibleTabs"
           :key="t.id"
           class="ah-tab"
           :class="{ active: activeTab === t.id }"
@@ -13,7 +13,10 @@
     </div>
 
     <div class="gtoons-classic-content">
-      <OgGtoonDecks v-if="activeTab === 'decks'" />
+      <p v-if="!visibleTabs.length" class="gtoons-classic-unavailable">
+        gToons is currently unavailable. Check back soon!
+      </p>
+      <OgGtoonDecks v-else-if="activeTab === 'decks'" />
       <OgGtoonMatchmaking v-else-if="activeTab === 'matchmaking'" />
       <OgGtoonLeaderboard v-else-if="activeTab === 'leaderboard'" />
     </div>
@@ -21,7 +24,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import OgGtoonDecks from '@/components/oggtoons/OgGtoonDecks.vue'
 import OgGtoonMatchmaking from '@/components/oggtoons/OgGtoonMatchmaking.vue'
 import OgGtoonLeaderboard from '@/components/oggtoons/OgGtoonLeaderboard.vue'
@@ -39,11 +42,29 @@ const { clearSidebarMiddle } = useNewsiteLayout()
 clearSidebarMiddle()
 
 const TABS = [
-  { id: 'decks',       label: 'Manage Deck' },
-  { id: 'matchmaking', label: 'Matchmaking' },
-  { id: 'leaderboard', label: 'Leaderboard' }
+  { id: 'decks',       label: 'Manage Deck',  flag: 'deckBuildingEnabled' },
+  { id: 'matchmaking', label: 'Matchmaking',  flag: 'matchmakingEnabled' },
+  { id: 'leaderboard', label: 'Leaderboard',  flag: 'leaderboardEnabled' }
 ]
+// Defaults to everything on so the tabs don't flash hidden-then-shown while the config fetch
+// is in flight — an admin closing a section is a rare, deliberate action, not something that
+// needs to race the page's first paint.
+const config = ref({ matchmakingEnabled: true, gameEnabled: true, deckBuildingEnabled: true, leaderboardEnabled: true })
+const visibleTabs = computed(() => TABS.filter(t => config.value[t.flag] !== false))
 const activeTab = ref('decks')
+
+watch(visibleTabs, (tabs) => {
+  if (tabs.length && !tabs.some(t => t.id === activeTab.value)) activeTab.value = tabs[0].id
+}, { immediate: true })
+
+onMounted(async () => {
+  try {
+    config.value = await $fetch('/api/game/oggtoons/config')
+  } catch {
+    // Leave the optimistic defaults in place — a failed config fetch shouldn't hide gameplay
+    // that server-side enforcement will still gate correctly per-action.
+  }
+})
 </script>
 
 <style>
