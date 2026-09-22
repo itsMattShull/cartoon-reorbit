@@ -1539,10 +1539,10 @@ model GameConfig {
   // engine). Same "off hides the section AND refuses the action" philosophy as
   // pokemonBattleEnabled: each is read server-side at the point of action (queue/challenge,
   // match start, deck save, leaderboard fetch), not just used to hide UI.
-  ogGtoonsMatchmakingEnabled  Boolean? @default(true)
-  ogGtoonsGameEnabled         Boolean? @default(true)
-  ogGtoonsDeckBuildingEnabled Boolean? @default(true)
-  ogGtoonsLeaderboardEnabled  Boolean? @default(true)
+  ogGtoonsMatchmakingEnabled  Boolean? @default(false)
+  ogGtoonsGameEnabled         Boolean? @default(false)
+  ogGtoonsDeckBuildingEnabled Boolean? @default(false)
+  ogGtoonsLeaderboardEnabled  Boolean? @default(false)
 }
 
 model GlobalGameConfig {

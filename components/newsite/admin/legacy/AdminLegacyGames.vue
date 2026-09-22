@@ -2080,10 +2080,10 @@ const loadingPkmn               = ref(false)
 const pkmnConfigError           = ref('')
 const loadingTkoConfig      = ref(false)
 
-const ogGtoonsMatchmakingEnabled  = ref(true)
-const ogGtoonsGameEnabled         = ref(true)
-const ogGtoonsDeckBuildingEnabled = ref(true)
-const ogGtoonsLeaderboardEnabled  = ref(true)
+const ogGtoonsMatchmakingEnabled  = ref(false)
+const ogGtoonsGameEnabled         = ref(false)
+const ogGtoonsDeckBuildingEnabled = ref(false)
+const ogGtoonsLeaderboardEnabled  = ref(false)
 const loadingOgGtoons             = ref(false)
 const ogGtoonsConfigError         = ref('')
 
@@ -2490,10 +2490,10 @@ async function loadSettings() {
   // loaded after it, leaving those tabs showing defaults that a save would then write over.
   try {
     const og = await $fetch('/api/admin/game-config?gameName=OgGtoons')
-    ogGtoonsMatchmakingEnabled.value  = og.ogGtoonsMatchmakingEnabled  !== false
-    ogGtoonsGameEnabled.value         = og.ogGtoonsGameEnabled         !== false
-    ogGtoonsDeckBuildingEnabled.value = og.ogGtoonsDeckBuildingEnabled !== false
-    ogGtoonsLeaderboardEnabled.value  = og.ogGtoonsLeaderboardEnabled  !== false
+    ogGtoonsMatchmakingEnabled.value  = og.ogGtoonsMatchmakingEnabled  === true
+    ogGtoonsGameEnabled.value         = og.ogGtoonsGameEnabled         === true
+    ogGtoonsDeckBuildingEnabled.value = og.ogGtoonsDeckBuildingEnabled === true
+    ogGtoonsLeaderboardEnabled.value  = og.ogGtoonsLeaderboardEnabled  === true
     ogGtoonsConfigError.value = ''
   } catch (e) {
     ogGtoonsConfigError.value = e?.data?.statusMessage || e?.message || 'Could not load these settings.'

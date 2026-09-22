@@ -24,16 +24,17 @@ async function load() {
       }
     })
     return {
-      // Only an explicit `false` disables a section. A missing row or a database that predates
-      // the migration must leave every section available rather than silently switching it off.
-      matchmakingEnabled: row?.ogGtoonsMatchmakingEnabled !== false,
-      gameEnabled: row?.ogGtoonsGameEnabled !== false,
-      deckBuildingEnabled: row?.ogGtoonsDeckBuildingEnabled !== false,
-      leaderboardEnabled: row?.ogGtoonsLeaderboardEnabled !== false
+      // Only an explicit `true` enables a section. This feature is still being rolled out, so a
+      // missing row or a database that predates the migration must leave every section hidden
+      // rather than silently switching it on.
+      matchmakingEnabled: row?.ogGtoonsMatchmakingEnabled === true,
+      gameEnabled: row?.ogGtoonsGameEnabled === true,
+      deckBuildingEnabled: row?.ogGtoonsDeckBuildingEnabled === true,
+      leaderboardEnabled: row?.ogGtoonsLeaderboardEnabled === true
     }
   } catch (err) {
     console.error('[ogGtoons] config read failed:', err)
-    return { matchmakingEnabled: true, gameEnabled: true, deckBuildingEnabled: true, leaderboardEnabled: true }
+    return { matchmakingEnabled: false, gameEnabled: false, deckBuildingEnabled: false, leaderboardEnabled: false }
   }
 }
 

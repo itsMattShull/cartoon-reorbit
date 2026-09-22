@@ -221,8 +221,8 @@ export default defineEventHandler(async (event) => {
         // normalizeConfig() in lib/fruitSamuraiSim.js clamps them on every read.
         config = await db.gameConfig.create({ data: { gameName } })
       } else if (gameName === 'OgGtoons') {
-        // Same story: every ogGtoons* column carries a schema default (true), so an empty
-        // create() already leaves every switch on.
+        // Same story: every ogGtoons* column carries a schema default (false — this feature is
+        // still being rolled out), so an empty create() already leaves every switch off.
         config = await db.gameConfig.create({ data: { gameName } })
       } else {
         throw createError({
