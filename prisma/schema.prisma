@@ -1506,6 +1506,18 @@ model GameConfig {
   // Dimensions are stored alongside each path because the art is admin-supplied: the page
   // needs the real aspect ratio to reserve space, and hardcoding one guarantees layout shift.
   pokemonBattleAssets Json?
+
+  // — Original gToons (2002 game) —
+  // Four independent switches rather than one master flag, since deck building and the
+  // leaderboard stay meaningfully useful on their own even while matchmaking or live play is
+  // paused (e.g. let players keep building decks during a maintenance window on the match
+  // engine). Same "off hides the section AND refuses the action" philosophy as
+  // pokemonBattleEnabled: each is read server-side at the point of action (queue/challenge,
+  // match start, deck save, leaderboard fetch), not just used to hide UI.
+  ogGtoonsMatchmakingEnabled  Boolean? @default(true)
+  ogGtoonsGameEnabled         Boolean? @default(true)
+  ogGtoonsDeckBuildingEnabled Boolean? @default(true)
+  ogGtoonsLeaderboardEnabled  Boolean? @default(true)
 }
 
 model GlobalGameConfig {
