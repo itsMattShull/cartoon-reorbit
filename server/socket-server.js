@@ -28,6 +28,10 @@ import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './utils/gamePoint
 import { registerEdRps, startEdRpsSweep } from './utils/edRpsRuntime.js'
 import { registerEdRpsAi, startEdRpsAiSweep } from './utils/edRpsAiMatch.js'
 import { registerPokemonBattle, startPokemonBattleSweep } from './utils/pokemonBattleRuntime.js'
+// Original gToons (2002) — its own module, isolated from the Clash code below (separate
+// in-memory state, separate socket.data namespace via socket.data.ogGtoonsMatchId). See the
+// header of server/utils/ogGtoonsSocket.js for the full rationale.
+import { registerOgGtoons, startOgGtoonsSweep, restoreOgGtoonsMatches } from './utils/ogGtoonsSocket.js'
 
 startDiagnostics().catch((err) => {
   console.error('[Diagnostics] failed to start (socket server):', err)
@@ -1888,6 +1892,10 @@ io.on('connection', socket => {
   // the abandoned match hanging until the sweep instead of forfeiting.
   registerPokemonBattle(io, socket, resolveSocketUser)
 
+  // Original gToons (2002) — see server/utils/ogGtoonsSocket.js. Deliberately its own module
+  // registered the same way as the games above, not folded into the Clash code further down.
+  registerOgGtoons(io, socket, resolveSocketUser)
+
   socket.on('battle:create', async ({ player1MonsterId, opponent }) => {
     try {
       // Same rule as the Clash handlers: the battle belongs to whoever the cookie says is
@@ -3026,6 +3034,10 @@ setInterval(() => {
 startEdRpsSweep(io)
 startEdRpsAiSweep()
 startPokemonBattleSweep(io)
+startOgGtoonsSweep(io)
+restoreOgGtoonsMatches()
+  .then(n => { if (n) console.log(`[ogGtoons] restored ${n} in-progress match(es) from Redis`) })
+  .catch(err => console.error('[ogGtoons] failed to restore matches from Redis:', err))
 
 // Extracted close logic — called by the BullMQ worker for each auction job.
 async function performAuctionClose(auctionId) {

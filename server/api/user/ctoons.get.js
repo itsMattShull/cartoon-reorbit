@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
   }
 
   /* 2. Parse query params --------------------------------------- */
-  const { exclude, isGtoon } = getQuery(event)
+  const { exclude, isGtoon, isOgGtoon } = getQuery(event)
 
   // a) optional “exclude” list of UserCtoon IDs
   let excludeIds = []
@@ -18,8 +18,10 @@ export default defineEventHandler(async (event) => {
     try { excludeIds = JSON.parse(exclude) } catch (_) { /* ignore */ }
   }
 
-  // b) optional “isGtoon=true” → boolean
+  // b) optional “isGtoon=true” / “isOgGtoon=true” → boolean. Original gToons (2002) is a
+  // separate flag from gToons Clash's isGtoon — see prisma/schema.prisma's Ctoon model.
   const filterGtoon = String(isGtoon).toLowerCase() === 'true'
+  const filterOgGtoon = String(isOgGtoon).toLowerCase() === 'true'
 
   /* 3. Query UserCtoons ----------------------------------------- */
   const rows = await prisma.userCtoon.findMany({
@@ -30,6 +32,11 @@ export default defineEventHandler(async (event) => {
       ...(filterGtoon && {
         ctoon: {  // relation filter
           is: { isGtoon: true }
+        }
+      }),
+      ...(filterOgGtoon && {
+        ctoon: {
+          is: { isOgGtoon: true }
         }
       })
     },
@@ -50,7 +57,13 @@ export default defineEventHandler(async (event) => {
           cost:      true,
           power:     true,
           abilityKey:true,
-          abilityData:true
+          abilityData:true,
+          characters:  true,
+          isOgGtoon:   true,
+          gtoonColor:  true,
+          gtoonValue:  true,
+          isSlamGtoon: true,
+          gtoonEffect: true
         }
       }
     }
@@ -73,5 +86,11 @@ export default defineEventHandler(async (event) => {
     power:         uc.ctoon.power,
     abilityData:   uc.ctoon.abilityData,
     abilityKey:    uc.ctoon.abilityKey,
+    characters:    uc.ctoon.characters,
+    isOgGtoon:     uc.ctoon.isOgGtoon,
+    gtoonColor:    uc.ctoon.gtoonColor,
+    gtoonValue:    uc.ctoon.gtoonValue,
+    isSlamGtoon:   uc.ctoon.isSlamGtoon,
+    gtoonEffect:   uc.ctoon.gtoonEffect,
   }))
 })
