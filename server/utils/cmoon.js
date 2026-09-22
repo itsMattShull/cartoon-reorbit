@@ -142,12 +142,15 @@ export function resolveScoringConfig(config) {
   }
 }
 
-// Current all-time #1 for a score-based game (highest, or lowest for ReOrbit Memory's
-// move count). Shape/exclusions mirror server/utils/gameLeaderboard.js's buildTop11.
+// All-time top N for a score-based game (highest, or lowest for ReOrbit Memory's move count),
+// one row per user. Shape/exclusions mirror server/utils/gameLeaderboard.js's buildTop11.
 // `table`/`column` are compile-time constants from SCORE_GAMES above, never runtime input —
 // same convention gameLeaderboard.js documents for the identical reason: they can't be bind
-// parameters, so $queryRawUnsafe is used with every actual value still bound.
-async function findTopScoreHolder({ table, column, direction, extraWhere }) {
+// parameters, so $queryRawUnsafe is used with every actual value (including rankCutoff) still
+// bound. Backs both findTopScoreHolder (rankCutoff=1, for HIGH_SCORE) and the per-game TOP10
+// award below (rankCutoff=top10RankCutoff) — the same "who's currently on this game's board"
+// computation either way, just truncated at a different depth.
+async function getTopNScoreHolders({ table, column, direction, extraWhere }, rankCutoff) {
   const agg = direction === 'asc' ? 'MIN' : 'MAX'
   const order = direction === 'asc' ? 'ASC' : 'DESC'
   const sql = `
@@ -160,16 +163,20 @@ async function findTopScoreHolder({ table, column, direction, extraWhere }) {
       ${extraWhere || ''}
     GROUP BY u."id", u."cMoonId", u."createdAt"
     ORDER BY ${agg}(s."${column}") ${order}
-    LIMIT 1
+    LIMIT $2
   `
-  const rows = await prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID)
+  return prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff)
+}
+async function findTopScoreHolder(game) {
+  const rows = await getTopNScoreHolders(game, 1)
   return rows[0] || null
 }
 
-// Current all-time #1 by win count for a duel-match game. Shape mirrors
+// All-time top N by win count for a duel-match game, one row per user. Shape mirrors
 // server/utils/duelLeaderboard.js's rankedRows (all-time period, natural endings only).
-// `table` is a compile-time constant from WIN_GAMES above — see the note on findTopScoreHolder.
-async function findTopWinsHolder({ table }) {
+// `table` is a compile-time constant from WIN_GAMES above — see the note on getTopNScoreHolders.
+// Backs findTopWinsHolder (rankCutoff=1) and the per-game TOP10 award the same way.
+async function getTopNWinsHolders({ table }, rankCutoff) {
   const sql = `
     WITH participants AS (
       SELECT m."player1UserId" AS uid, (m."winnerUserId" = m."player1UserId") AS won
@@ -193,9 +200,12 @@ async function findTopWinsHolder({ table }) {
       AND COALESCE(u."banned", false) = false
       AND a.wins > 0
     ORDER BY a.wins DESC
-    LIMIT 1
+    LIMIT $2
   `
-  const rows = await prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID)
+  return prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff)
+}
+async function findTopWinsHolder(game) {
+  const rows = await getTopNWinsHolders(game, 1)
   return rows[0] || null
 }
 
@@ -438,23 +448,37 @@ export async function runDailyCMoonScoring() {
 
   const candidates = []
 
-  const [scoreHolders, winHolders, top10PointsHolders, top10CtoonsHolders] = await Promise.all([
-    Promise.all(activeScoreGames.map(g => findTopScoreHolder(g))),
-    Promise.all(activeWinGames.map(g => findTopWinsHolder(g))),
+  // Top N (not just #1) per eligible game, fetched once and reused for both categories: row 0
+  // is this game's HIGH_SCORE holder (unchanged behavior), and every eligible row in the full
+  // list earns TOP10 for placing in this game's own top `top10RankCutoff` — the same games list
+  // (activeScoreGames/activeWinGames, admin-editable via the existing per-game disable toggles)
+  // as HIGH_SCORE, just a deeper cut. #1 naturally earns both categories for the same game,
+  // same as it already could for, say, HIGH_SCORE plus a Top Points board finish.
+  const [scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders] = await Promise.all([
+    Promise.all(activeScoreGames.map(g => getTopNScoreHolders(g, top10RankCutoff))),
+    Promise.all(activeWinGames.map(g => getTopNWinsHolders(g, top10RankCutoff))),
     top10PointsBoardEnabled ? getTop10PointsHolders(top10RankCutoff) : Promise.resolve([]),
     top10CtoonsBoardEnabled ? getTop10TotalCtoonsHolders(top10RankCutoff) : Promise.resolve([]),
   ])
 
   activeScoreGames.forEach((g, i) => {
-    const holder = scoreHolders[i]
+    const rows = scoreTopN[i]
+    const holder = rows[0] || null
     if (isEligibleHolder(holder, minAccountAgeCutoff)) {
       candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: dailyHighScorePoints, weekStart })
     }
+    for (const row of eligibleHolders(rows, minAccountAgeCutoff)) {
+      candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: `game:${g.name}`, points: dailyTop10Points, weekStart })
+    }
   })
   activeWinGames.forEach((g, i) => {
-    const holder = winHolders[i]
+    const rows = winTopN[i]
+    const holder = rows[0] || null
     if (isEligibleHolder(holder, minAccountAgeCutoff)) {
       candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: dailyHighScorePoints, weekStart })
+    }
+    for (const row of eligibleHolders(rows, minAccountAgeCutoff)) {
+      candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: `game:${g.name}`, points: dailyTop10Points, weekStart })
     }
   })
   for (const row of eligibleHolders(top10PointsHolders, minAccountAgeCutoff)) {
@@ -519,14 +543,14 @@ async function getHolderSnapshot() {
   const resolvedConfig = resolveScoringConfig(config)
   const { activeScoreGames, activeWinGames, top10PointsBoardEnabled, top10CtoonsBoardEnabled, top10RankCutoff } = resolvedConfig
 
-  const [scoreHolders, winHolders, top10PointsHolders, top10CtoonsHolders] = await Promise.all([
-    Promise.all(activeScoreGames.map(g => findTopScoreHolder(g))),
-    Promise.all(activeWinGames.map(g => findTopWinsHolder(g))),
+  const [scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders] = await Promise.all([
+    Promise.all(activeScoreGames.map(g => getTopNScoreHolders(g, top10RankCutoff))),
+    Promise.all(activeWinGames.map(g => getTopNWinsHolders(g, top10RankCutoff))),
     top10PointsBoardEnabled ? getTop10PointsHolders(top10RankCutoff) : Promise.resolve([]),
     top10CtoonsBoardEnabled ? getTop10TotalCtoonsHolders(top10RankCutoff) : Promise.resolve([]),
   ])
 
-  cachedHolderSnapshot = { resolvedConfig, activeScoreGames, activeWinGames, scoreHolders, winHolders, top10PointsHolders, top10CtoonsHolders }
+  cachedHolderSnapshot = { resolvedConfig, activeScoreGames, activeWinGames, scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders }
   cachedHolderSnapshotAt = now
   return cachedHolderSnapshot
 }
@@ -555,10 +579,14 @@ export async function getPendingScoringPreview(userId, cMoonId, userCreatedAt) {
   const isThisUser = (row) => row?.userId === userId && row?.cMoonId === cMoonId
 
   snapshot.activeScoreGames.forEach((g, i) => {
-    if (isThisUser(snapshot.scoreHolders[i])) breakdown.push({ category: 'HIGH_SCORE', label: g.label, points: dailyHighScorePoints })
+    const rows = snapshot.scoreTopN[i]
+    if (isThisUser(rows[0])) breakdown.push({ category: 'HIGH_SCORE', label: g.label, points: dailyHighScorePoints })
+    if (rows.some(isThisUser)) breakdown.push({ category: 'TOP10', label: `${g.label} leaderboard`, points: dailyTop10Points })
   })
   snapshot.activeWinGames.forEach((g, i) => {
-    if (isThisUser(snapshot.winHolders[i])) breakdown.push({ category: 'HIGH_SCORE', label: g.label, points: dailyHighScorePoints })
+    const rows = snapshot.winTopN[i]
+    if (isThisUser(rows[0])) breakdown.push({ category: 'HIGH_SCORE', label: g.label, points: dailyHighScorePoints })
+    if (rows.some(isThisUser)) breakdown.push({ category: 'TOP10', label: `${g.label} leaderboard`, points: dailyTop10Points })
   })
   if (snapshot.top10PointsHolders.some(isThisUser)) {
     breakdown.push({ category: 'TOP10', label: 'Total Points board', points: dailyTop10Points })
