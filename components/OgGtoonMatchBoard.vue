@@ -36,10 +36,13 @@
             <span class="text-xs text-gray-300">Goal: {{ matchState.you.goalColor }}</span>
           </div>
           <div class="grid grid-cols-4 gap-1.5 w-full max-w-sm">
-            <div v-for="n in matchState.totalRounds" :key="'you-'+n" class="h-20 rounded border flex items-center justify-center bg-white/5"
+            <div v-for="n in matchState.totalRounds" :key="'you-'+n" class="relative h-20 rounded border flex items-center justify-center bg-white/5"
                  :class="youRevealed[n-1] ? 'border-indigo-400' : 'border-dashed border-white/20'">
               <img v-if="youRevealed[n-1]" :src="youRevealed[n-1].assetPath" class="h-16 object-contain" :title="`${youRevealed[n-1].name} (${youRevealed[n-1].finalValue})`" />
               <span v-else class="text-[10px] text-gray-400">{{ n }}</span>
+              <div v-if="youRevealed[n-1]" class="absolute bottom-0 inset-x-0 flex flex-wrap justify-center gap-0.5 px-0.5 pb-0.5">
+                <span v-for="badge in cardBadges(youRevealed[n-1])" :key="badge" class="text-[8px] leading-none px-1 py-0.5 rounded bg-black/50 text-gray-100">{{ badge }}</span>
+              </div>
             </div>
           </div>
           <div class="flex gap-2 items-center mt-1">
@@ -64,10 +67,13 @@
             <span class="text-xs text-gray-300">Goal: {{ matchState.opponent.goalColor }}</span>
           </div>
           <div class="grid grid-cols-4 gap-1.5 w-full max-w-sm">
-            <div v-for="n in matchState.totalRounds" :key="'opp-'+n" class="h-20 rounded border flex items-center justify-center bg-white/5"
+            <div v-for="n in matchState.totalRounds" :key="'opp-'+n" class="relative h-20 rounded border flex items-center justify-center bg-white/5"
                  :class="oppRevealed[n-1] ? 'border-indigo-400' : 'border-dashed border-white/20'">
               <img v-if="oppRevealed[n-1]" :src="oppRevealed[n-1].assetPath" class="h-16 object-contain" :title="`${oppRevealed[n-1].name} (${oppRevealed[n-1].finalValue})`" />
               <span v-else class="text-[10px] text-gray-400">{{ n }}</span>
+              <div v-if="oppRevealed[n-1]" class="absolute bottom-0 inset-x-0 flex flex-wrap justify-center gap-0.5 px-0.5 pb-0.5">
+                <span v-for="badge in cardBadges(oppRevealed[n-1])" :key="badge" class="text-[8px] leading-none px-1 py-0.5 rounded bg-black/50 text-gray-100">{{ badge }}</span>
+              </div>
             </div>
           </div>
           <span class="text-xs" :class="matchState.opponent.ready ? 'text-green-400' : 'text-gray-400'">
@@ -90,11 +96,20 @@
         <button @click="logOpen = !logOpen" class="w-full text-xs px-3 py-1.5 bg-black/30 text-left">
           {{ logOpen ? '▼' : '▶' }} Match Log
         </button>
-        <div v-if="logOpen" class="max-h-32 overflow-y-auto px-3 py-2 text-xs space-y-1 bg-black/20">
+        <div v-if="logOpen" class="max-h-48 overflow-y-auto px-3 py-2 text-xs space-y-2 bg-black/20">
           <div v-for="(r, i) in matchLog" :key="i">
             R{{ i + 1 }}: You {{ r.you }} vs Opp {{ r.opp }}
           </div>
           <p v-if="!matchLog.length" class="text-gray-400">No rounds revealed yet.</p>
+          <div v-if="groupedEffectsLog.length" class="pt-2 mt-2 border-t border-white/10 space-y-1">
+            <p class="text-gray-400 font-semibold">Effects (final scoring)</p>
+            <div v-for="(g, gi) in groupedEffectsLog" :key="gi" class="text-gray-300">
+              <span class="font-medium">{{ g.sourceName }}</span>:
+              <span v-for="(line, li) in g.lines" :key="li">
+                {{ line }}<span v-if="li < g.lines.length - 1">; </span>
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -138,7 +153,16 @@
               {{ matchEnded.outcome === 'TIE' ? "It's a Tie!" : (matchEnded.won ? 'You Win!' : 'You Lose') }}
             </h2>
             <p class="text-sm text-gray-300 mb-1">Final Score: {{ matchEnded.player1Score }} - {{ matchEnded.player2Score }}</p>
-            <p class="text-xs text-gray-400 mb-4">{{ endReasonLabel }}</p>
+            <p class="text-xs text-gray-400 mb-2">{{ endReasonLabel }}</p>
+            <div v-if="groupedEffectsLog.length" class="text-left max-h-32 overflow-y-auto bg-black/30 rounded p-2 mb-3 space-y-1">
+              <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Powers that fired</p>
+              <div v-for="(g, gi) in groupedEffectsLog" :key="gi" class="text-[11px] text-gray-300">
+                <span class="font-medium">{{ g.sourceName }}</span>:
+                <span v-for="(line, li) in g.lines" :key="li">
+                  {{ line }}<span v-if="li < g.lines.length - 1">; </span>
+                </span>
+              </div>
+            </div>
             <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">Back to Lobby</button>
           </div>
         </div>
@@ -161,6 +185,22 @@ const COLOR_HEX = {
 }
 function colorHex(c) { return COLOR_HEX[c] || '#ffffff' }
 
+const GROUP_LABELS = {
+  BEAN_SCOUTS: 'Bean Scouts', DAILY_PLANET: 'Daily Planet', GLOBAL: 'G.L.O.B.A.L.',
+  IMAGINARY_FRIEND: 'Imaginary Friend', INJUSTICE_GANG: 'Injustice Gang', JUSTICE_FRIENDS: 'Justice Friends',
+  JUSTICE_LEAGUE: 'Justice League', MUCHA_LUCHA: 'Mucha Lucha', MYSTERY_INC: 'Mystery, Inc.',
+  POWERPUFF_GIRLS: 'Powerpuff Girls', SQUIRREL_SCOUTS: 'Squirrel Scouts', TEEN_TITANS: 'Teen Titans',
+  TIME_SQUAD: 'Time Squad', WOOHP: 'WOOHP'
+}
+function titleCase(s) { return s ? s.charAt(0) + s.slice(1).toLowerCase() : s }
+/** Small badge strings (type1/2/3 + group) for a revealed card entry. */
+function cardBadges(card) {
+  if (!card) return []
+  const out = [card.type1, card.type2, card.type3].filter(Boolean).map(titleCase)
+  if (card.group) out.push(GROUP_LABELS[card.group] || card.group)
+  return out
+}
+
 const youRevealed = computed(() => matchState.value?.you?.revealed || [])
 const oppRevealed = computed(() => matchState.value?.opponent?.revealed || [])
 const youScore = computed(() => youRevealed.value.reduce((a, r) => a + (r.finalValue || 0), 0))
@@ -177,6 +217,36 @@ const matchLog = computed(() => {
 })
 
 const logOpen = ref(false)
+
+/** Groups the final-board effectsResolved log (server/utils/ogGtoonEffects.js) by source card,
+ *  turning each raw application into a short readable line instead of a JSON dump. */
+const groupedEffectsLog = computed(() => {
+  const log = matchEnded.value?.effectsResolved || []
+  if (!log.length) return []
+  const nameById = {}
+  for (const r of [...youRevealed.value, ...oppRevealed.value]) nameById[r.ctoonId] = r.name
+  const nameOf = (id) => nameById[id] || id
+  const bySource = new Map()
+  for (const e of log) {
+    const key = `${e.source}:${e.sourceCtoonId}:${e.sourceRound}`
+    if (!bySource.has(key)) bySource.set(key, { sourceName: nameOf(e.sourceCtoonId), lines: [] })
+    const targetName = nameOf(e.targetCtoonId)
+    let line
+    if (e.action === 'negateEffect') {
+      line = `negated ${targetName}'s effect`
+    } else if (e.action === 'setColor') {
+      line = `set ${targetName} to ${e.color}`
+    } else if (e.operation === 'add') {
+      line = `${targetName} ${e.amount >= 0 ? '+' : ''}${e.amount}${e.perMatchCount != null ? ` (${e.perMatchAmount} x ${e.perMatchCount} matches)` : ''}`
+    } else if (e.operation === 'multiply') {
+      line = `${targetName} x${e.amount}`
+    } else {
+      line = `${targetName} set to ${e.amount}`
+    }
+    bySource.get(key).lines.push(line)
+  }
+  return [...bySource.values()]
+})
 
 const endReasonLabel = computed(() => {
   const r = matchEnded.value?.endReason

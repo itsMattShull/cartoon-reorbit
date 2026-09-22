@@ -75,6 +75,43 @@ const CARDS = [
       target: { selector: 'opponentActiveCard' },
       action: { type: 'negateEffect' }
     }]
+  },
+
+  // ── Type/Group/full-board-mechanic test data (added alongside the Type1/2/3, Group columns
+  // and resolveFinalBoard's new mechanics) — exercises gtoonType1/2/3 + gtoonGroup without any
+  // effect, plus one Slam gToon each for perMatch, allMatching and neighborOwn.
+  {
+    name: 'Sentinel Pup', characters: ['Sentinel Pup'], color: 'YELLOW', value: 4,
+    type1: 'ANIMAL', type2: 'HERO', group: 'JUSTICE_LEAGUE'
+    // No power — just exercises gtoonType1/gtoonType2/gtoonGroup persistence and the match
+    // board's type/group badges.
+  },
+  {
+    name: 'Junk Sprocket', characters: ['Junk Sprocket'], color: 'ORANGE', value: 2,
+    type1: 'PROP', isSlamGtoon: true,
+    // Catalog power "+2 for each Prop in play" — perMatch aggregation, scope 'both'.
+    gtoonEffect: [{
+      trigger: 'onReveal', target: { selector: 'self' },
+      action: { type: 'modifyValue', operation: 'add', amount: 2, perMatch: { by: 'type', value: 'PROP', scope: 'both' } }
+    }]
+  },
+  {
+    name: 'Skyline Herald', characters: ['Skyline Herald'], color: 'BLUE', value: 3,
+    type1: 'HERO', isSlamGtoon: true,
+    // Catalog power "+2 to all Blue cards" — allMatching, scope 'both', no self-exclusion.
+    gtoonEffect: [{
+      trigger: 'onReveal', target: { selector: 'allMatching', scope: 'both', filters: [{ by: 'color', value: 'BLUE' }] },
+      action: { type: 'modifyValue', operation: 'add', amount: 2 }
+    }]
+  },
+  {
+    name: 'Warren Scout', characters: ['Warren Scout'], color: 'GREEN', value: 5,
+    type1: 'ANIMAL', group: 'SQUIRREL_SCOUTS', isSlamGtoon: true,
+    // Catalog power "+5 to each neighboring Animal" — neighborOwn target with a type filter.
+    gtoonEffect: [{
+      trigger: 'onReveal', target: { selector: 'neighborOwn', filter: { by: 'type', value: 'ANIMAL' } },
+      action: { type: 'modifyValue', operation: 'add', amount: 5 }
+    }]
   }
 ]
 
@@ -94,6 +131,10 @@ async function ensureCard(card) {
       isOgGtoon: true,
       gtoonColor: card.color,
       gtoonValue: card.value,
+      gtoonType1: card.type1 || null,
+      gtoonType2: card.type2 || null,
+      gtoonType3: card.type3 || null,
+      gtoonGroup: card.group || null,
       isSlamGtoon: !!card.isSlamGtoon,
       gtoonEffect: card.gtoonEffect || null,
       inCmart: false,

@@ -39,12 +39,13 @@
 
 import { randomUUID } from 'crypto'
 import { prisma as db } from '../prisma.js'
-import { resolveRoundEffects } from './ogGtoonEffects.js'
+import { resolveFinalBoard } from './ogGtoonEffects.js'
 import {
   deriveGoalColor, canSwap, applySwap, SWAP_COST,
   determineWinner, hasSuddenDeathCardsRemaining
 } from './ogGtoonEngine.js'
 import * as ogRedis from './ogGtoonsRedisState.js'
+import { getOgGtoonsConfig } from './ogGtoonsConfig.js'
 
 const TOTAL_ROUNDS = 7
 const RECONNECT_GRACE_MS = 20_000
@@ -75,7 +76,7 @@ function fireDelete(matchId) {
     console.error('[ogGtoonsRedisState] delOgGtoonMatch:', e))
 }
 
-/** Builds an immutable per-card snapshot embedding everything round resolution ever needs. */
+/** Builds an immutable per-card snapshot embedding everything round/final-board resolution ever needs. */
 function toSnapshotCard(ctoon, position) {
   return {
     ctoonId: ctoon.id,
@@ -84,6 +85,10 @@ function toSnapshotCard(ctoon, position) {
     characters: Array.isArray(ctoon.characters) ? ctoon.characters : [],
     color: ctoon.gtoonColor,
     value: ctoon.gtoonValue ?? 0,
+    type1: ctoon.gtoonType1 ?? null,
+    type2: ctoon.gtoonType2 ?? null,
+    type3: ctoon.gtoonType3 ?? null,
+    group: ctoon.gtoonGroup ?? null,
     isSlam: !!ctoon.isSlamGtoon,
     effect: ctoon.gtoonEffect ?? null,
     position
@@ -179,6 +184,17 @@ function destroyMatch(matchId) {
 
 async function startMatch(io, a, b, { isChallenge }) {
   // a, b: { userId, username, deckId, socket, stake }
+  // Checked here, not just at queueJoin/challengeSend, because "Live Matches" (gameEnabled) is
+  // independent of "Matchmaking" (matchmakingEnabled) — an admin can close live play while still
+  // letting a queue/challenge exist, and this is the one choke point both flows share.
+  const { gameEnabled } = await getOgGtoonsConfig()
+  if (!gameEnabled) {
+    for (const p of [a, b]) {
+      p.socket.emit(EV('error'), { code: 'gameDisabled', message: 'gToons matches are currently unavailable.' })
+    }
+    return null
+  }
+
   const [deckA, deckB] = await Promise.all([
     loadVerifiedDeckSnapshot(a.userId, a.deckId),
     loadVerifiedDeckSnapshot(b.userId, b.deckId)
@@ -208,8 +224,7 @@ async function startMatch(io, a, b, { isChallenge }) {
     goalColor: [deriveGoalColor(deckA), deriveGoalColor(deckB)],
     swapUsed: [false, false],
     ready: [false, false],
-    revealed: [[], []],
-    roundLog: [],
+    revealed: [[], []], // roundLog itself is built once, at match completion — see buildRoundLog
     stake: [stake, stake],
     currentRound: 1,
     isChallenge: !!isChallenge,
@@ -263,10 +278,67 @@ async function startMatch(io, a, b, { isChallenge }) {
   return match
 }
 
-/* ── Round resolution ────────────────────────────────────────────────────────────────────── */
+/* ── Round resolution ─────────────────────────────────────────────────────────────────────
+ *
+ * Effects are NOT applied per round anymore. Each round only reveals the two cards' BASE
+ * values/color/type/group for the live board animation — matching the original 2002 game's UX
+ * (cards flip and briefly show base values, then a single "Scoring..." step computes the real
+ * totals). The one full-board effects pass happens in `runFinalBoardResolution` below, exactly
+ * once, when the match is actually over (round 7 with no tie, or a sudden-death round that
+ * breaks it). See server/utils/ogGtoonEffects.js's module header for the resolution order.
+ * ────────────────────────────────────────────────────────────────────────────────────────── */
 
-function priorRevealedFor(match, idx) {
-  return match.revealed[idx].map(r => ({ characters: r.characters || [] }))
+/** Builds the { revealed, goalCard } shape resolveFinalBoard expects for one side of the match. */
+function finalBoardInputFor(match, idx) {
+  return {
+    revealed: match.revealed[idx].map(r => ({
+      ctoonId: r.ctoonId, name: r.name, characters: r.characters, color: r.color, value: r.baseValue,
+      type1: r.type1, type2: r.type2, type3: r.type3, group: r.group,
+      isSlam: r.isSlam, effect: r.effect, round: r.round
+    })),
+    goalCard: match.deckOrder[idx][11]
+  }
+}
+
+/**
+ * Runs the ONE full-board effects pass for a (possibly still-tied) completed round 7+, mutating
+ * `match.revealed[*][*].finalValue/color` in place with the resolved values so `publicMatchView`
+ * naturally reflects final scoring, and returns { outcome, final } for the caller to act on.
+ * Safe to call speculatively (e.g. to check whether a tie actually broke) — it does not touch
+ * the database or roundLog; only `endMatch` persists anything.
+ */
+function runFinalBoardResolution(match) {
+  let final
+  try {
+    final = resolveFinalBoard({
+      player1: finalBoardInputFor(match, 0),
+      player2: finalBoardInputFor(match, 1)
+    })
+  } catch (err) {
+    // A malformed admin-authored gtoonEffect must never take the shared socket process down —
+    // fall back to plain base values with no effects applied.
+    console.error(`[ogGtoons] final board resolution failed for match ${match.id}:`, err)
+    final = {
+      player1: { revealed: match.revealed[0].map(r => ({ ctoonId: r.ctoonId, round: r.round, baseValue: r.baseValue, finalValue: r.baseValue, color: r.color })), totalValue: 0 },
+      player2: { revealed: match.revealed[1].map(r => ({ ctoonId: r.ctoonId, round: r.round, baseValue: r.baseValue, finalValue: r.baseValue, color: r.color })), totalValue: 0 },
+      effectsResolved: []
+    }
+  }
+  for (const idx of [0, 1]) {
+    const key = idx === 0 ? 'player1' : 'player2'
+    final[key].revealed.forEach((r, i) => {
+      if (!match.revealed[idx][i]) return
+      match.revealed[idx][i].finalValue = r.finalValue
+      match.revealed[idx][i].color = r.color
+    })
+  }
+  const outcome = determineWinner({
+    player1GoalColor: match.goalColor[0],
+    player2GoalColor: match.goalColor[1],
+    player1Revealed: final.player1.revealed,
+    player2Revealed: final.player2.revealed
+  })
+  return { outcome, final }
 }
 
 async function resolveRound(io, match) {
@@ -277,40 +349,25 @@ async function resolveRound(io, match) {
   const idx1 = match.remainingIdx[1][0]
   const card1 = match.deckOrder[0][idx0]
   const card2 = match.deckOrder[1][idx1]
-  const goal1 = match.deckOrder[0][11]
-  const goal2 = match.deckOrder[1][11]
-
-  let result
-  try {
-    result = resolveRoundEffects({
-      player1: { card: card1, goalCard: goal1, priorRevealed: priorRevealedFor(match, 0) },
-      player2: { card: card2, goalCard: goal2, priorRevealed: priorRevealedFor(match, 1) }
-    })
-  } catch (err) {
-    // A malformed admin-authored gtoonEffect must never take the shared socket process down.
-    // Fall back to the cards' plain base values with no effects applied.
-    console.error(`[ogGtoons] effect resolution failed for match ${match.id}:`, err)
-    result = {
-      player1: { ctoonId: card1.ctoonId, baseValue: card1.value, finalValue: card1.value, color: card1.color },
-      player2: { ctoonId: card2.ctoonId, baseValue: card2.value, finalValue: card2.value, color: card2.color },
-      effectsResolved: []
-    }
-  }
 
   match.remainingIdx[0] = match.remainingIdx[0].slice(1)
   match.remainingIdx[1] = match.remainingIdx[1].slice(1)
 
-  const entry1 = { ...result.player1, name: card1.name, assetPath: card1.assetPath, characters: card1.characters, round: match.currentRound }
-  const entry2 = { ...result.player2, name: card2.name, assetPath: card2.assetPath, characters: card2.characters, round: match.currentRound }
+  // finalValue === baseValue at reveal time: effects have not been applied yet (see header).
+  const entry1 = {
+    ctoonId: card1.ctoonId, name: card1.name, assetPath: card1.assetPath, characters: card1.characters,
+    color: card1.color, baseValue: card1.value, finalValue: card1.value,
+    type1: card1.type1, type2: card1.type2, type3: card1.type3, group: card1.group,
+    isSlam: card1.isSlam, effect: card1.effect, round: match.currentRound
+  }
+  const entry2 = {
+    ctoonId: card2.ctoonId, name: card2.name, assetPath: card2.assetPath, characters: card2.characters,
+    color: card2.color, baseValue: card2.value, finalValue: card2.value,
+    type1: card2.type1, type2: card2.type2, type3: card2.type3, group: card2.group,
+    isSlam: card2.isSlam, effect: card2.effect, round: match.currentRound
+  }
   match.revealed[0].push(entry1)
   match.revealed[1].push(entry2)
-
-  match.roundLog.push({
-    round: match.currentRound,
-    player1: { ctoonId: entry1.ctoonId, baseValue: entry1.baseValue, finalValue: entry1.finalValue, color: entry1.color },
-    player2: { ctoonId: entry2.ctoonId, baseValue: entry2.baseValue, finalValue: entry2.finalValue, color: entry2.color },
-    effectsResolved: result.effectsResolved
-  })
 
   match.ready = [false, false]
   match.lastActivity = Date.now()
@@ -325,14 +382,11 @@ async function resolveRound(io, match) {
   }))
 
   // Decide whether the match is over: after round 7, and every sudden-death round after that,
-  // re-run scoring; only a genuine tie with cards remaining on both sides continues.
+  // run the ONE full-board effects pass to see whether the tie actually breaks (a Slam gToon
+  // effect can turn an apparent base-value tie into a real result) — only a genuine tie with
+  // cards remaining on both sides continues into another sudden-death round.
   if (match.currentRound >= TOTAL_ROUNDS) {
-    const outcome = determineWinner({
-      player1GoalColor: match.goalColor[0],
-      player2GoalColor: match.goalColor[1],
-      player1Revealed: match.revealed[0],
-      player2Revealed: match.revealed[1]
-    })
+    const { outcome, final } = runFinalBoardResolution(match)
     const bothHaveCards = hasSuddenDeathCardsRemaining(match.remainingIdx[0]) &&
       hasSuddenDeathCardsRemaining(match.remainingIdx[1])
     if (outcome.winner !== null || !bothHaveCards) {
@@ -341,7 +395,8 @@ async function resolveRound(io, match) {
         winnerUserId: outcome.winner ? match.players[outcome.winner === 'player1' ? 0 : 1] : null,
         player1Score: outcome.player1Score,
         player2Score: outcome.player2Score,
-        endReason: 'natural'
+        endReason: 'natural',
+        effectsResolved: final.effectsResolved
       })
       return
     }
@@ -353,7 +408,30 @@ async function resolveRound(io, match) {
 
 /* ── Ending a match + settling stakes ────────────────────────────────────────────────────── */
 
-async function persistAndSettle(match, { outcome, winnerUserId, player1Score, player2Score, endReason, whoLeftUserId }) {
+/**
+ * Builds the match's roundLog — WRITTEN ONCE, HERE, at match completion (never per-round; see
+ * this file's header "Performance" note and OgGtoonMatch's schema comment). By the time this
+ * runs, `match.revealed[*][*].finalValue/color` already reflect the one full-board effects pass
+ * (see runFinalBoardResolution) if the match reached that point naturally; a match ended early
+ * (forfeit/sweep) simply logs base values with an empty effectsResolved, since no full-board
+ * resolution pass ever ran for it.
+ */
+function buildRoundLog(match, effectsResolved) {
+  const n = Math.max(match.revealed[0].length, match.revealed[1].length)
+  const rounds = []
+  for (let i = 0; i < n; i++) {
+    const r1 = match.revealed[0][i] || null
+    const r2 = match.revealed[1][i] || null
+    rounds.push({
+      round: r1?.round ?? r2?.round ?? i + 1,
+      player1: r1 ? { ctoonId: r1.ctoonId, name: r1.name, baseValue: r1.baseValue, finalValue: r1.finalValue, color: r1.color } : null,
+      player2: r2 ? { ctoonId: r2.ctoonId, name: r2.name, baseValue: r2.baseValue, finalValue: r2.finalValue, color: r2.color } : null
+    })
+  }
+  return { rounds, effectsResolved: effectsResolved || [] }
+}
+
+async function persistAndSettle(match, { outcome, winnerUserId, player1Score, player2Score, endReason, whoLeftUserId, effectsResolved }) {
   const [p1, p2] = match.players
   const s1 = match.stake[0] || 0
   const s2 = match.stake[1] || 0
@@ -375,7 +453,7 @@ async function persistAndSettle(match, { outcome, winnerUserId, player1Score, pl
         player2SwapUsed: match.swapUsed[1],
         player1Score: player1Score ?? 0,
         player2Score: player2Score ?? 0,
-        roundLog: match.roundLog,
+        roundLog: buildRoundLog(match, effectsResolved),
         isChallenge: match.isChallenge,
         winnerUserId: winnerUserId || null,
         outcome,
@@ -418,7 +496,8 @@ async function endMatch(io, match, params) {
     won: params.winnerUserId === uid,
     endReason: params.endReason,
     player1Score: params.player1Score,
-    player2Score: params.player2Score
+    player2Score: params.player2Score,
+    effectsResolved: params.effectsResolved || []
   }))
 
   destroyMatch(match.id)
@@ -590,6 +669,10 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
   socket.on(EV('queueJoin'), async ({ deckId, stake } = {}) => {
     const user = await auth()
     if (!user) return
+    const { matchmakingEnabled } = await getOgGtoonsConfig()
+    if (!matchmakingEnabled) {
+      return socket.emit(EV('error'), { code: 'matchmakingDisabled', message: 'gToons matchmaking is currently unavailable.' })
+    }
     if (matchByUser.has(user.id)) {
       return socket.emit(EV('error'), { code: 'inMatch', message: 'You are already in a match.' })
     }
@@ -624,6 +707,10 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
   socket.on(EV('challengeSend'), async ({ targetUsername, deckId, stake } = {}) => {
     const user = await auth()
     if (!user) return
+    const { matchmakingEnabled } = await getOgGtoonsConfig()
+    if (!matchmakingEnabled) {
+      return socket.emit(EV('error'), { code: 'matchmakingDisabled', message: 'gToons matchmaking is currently unavailable.' })
+    }
     if (matchByUser.has(user.id)) {
       return socket.emit(EV('error'), { code: 'inMatch', message: 'You are already in a match.' })
     }

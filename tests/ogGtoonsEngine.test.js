@@ -3,7 +3,10 @@ import assert from 'node:assert/strict'
 import {
   deriveGoalColor, validateDeckPositions, canSwap, applySwap, SWAP_COST, determineWinner
 } from '../server/utils/ogGtoonEngine.js'
-import { resolveRoundEffects, isValidEffect, validateEffectSchema } from '../server/utils/ogGtoonEffects.js'
+import {
+  resolveRoundEffects, resolveFinalBoard, isValidEffect, validateEffectSchema
+} from '../server/utils/ogGtoonEffects.js'
+import { OG_GTOON_POWER_CATALOG, lookupPower } from '../server/utils/ogGtoonPowerCatalog.js'
 
 test('deriveGoalColor reads position 11', () => {
   const deck = new Array(12).fill(null).map((_, i) => ({ color: 'RED' }))
@@ -180,4 +183,159 @@ test('a malformed effect on a card does not throw resolveRoundEffects (normalize
     })
     assert.equal(out.player1.finalValue, 5)
   })
+})
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+ * Extended schema + resolveFinalBoard coverage (added alongside gtoonType1/2/3, gtoonGroup and
+ * the historical power catalog — see server/utils/ogGtoonEffects.js's module header).
+ * ══════════════════════════════════════════════════════════════════════════════════════════ */
+
+test('isValidEffect accepts every new condition type, target selector, and perMatch action', () => {
+  assert.equal(isValidEffect({ trigger: 'onReveal', target: { selector: 'self' }, condition: { type: 'typeInPlay', cardType: 'PROP', side: 'either' }, action: { type: 'modifyValue', operation: 'add', amount: 1 } }), true)
+  assert.equal(isValidEffect({ trigger: 'onReveal', target: { selector: 'self' }, condition: { type: 'groupInPlay', group: 'JUSTICE_LEAGUE', side: 'own' }, action: { type: 'modifyValue', operation: 'add', amount: 1 } }), true)
+  assert.equal(isValidEffect({ trigger: 'onReveal', target: { selector: 'self' }, condition: { type: 'colorInPlay', color: 'RED', side: 'opponent' }, action: { type: 'modifyValue', operation: 'add', amount: 1 } }), true)
+  assert.equal(isValidEffect({ trigger: 'onReveal', target: { selector: 'self' }, condition: { type: 'valueInPlay', value: 8, side: 'either' }, action: { type: 'modifyValue', operation: 'add', amount: 1 } }), true)
+  assert.equal(isValidEffect({ trigger: 'onReveal', target: { selector: 'opponentActiveCard' }, condition: { type: 'targetLacksType', cardType: 'VILLAIN' }, action: { type: 'modifyValue', operation: 'add', amount: -5 } }), true)
+  assert.equal(isValidEffect({ trigger: 'onReveal', target: { selector: 'neighborOwn', positions: ['prev', 'next'], filter: { by: 'color', value: 'RED' } }, action: { type: 'modifyValue', operation: 'add', amount: 2 } }), true)
+  assert.equal(isValidEffect({ trigger: 'onReveal', target: { selector: 'allMatching', scope: 'both', filters: [{ by: 'type', value: 'HERO' }], excludeSelf: true }, action: { type: 'modifyValue', operation: 'add', amount: 2 } }), true)
+  assert.equal(isValidEffect({ trigger: 'onReveal', target: { selector: 'self' }, action: { type: 'modifyValue', operation: 'add', amount: 2, perMatch: { by: 'type', value: 'PROP', scope: 'both' } } }), true)
+  // rejections
+  assert.equal(isValidEffect({ trigger: 'onReveal', target: { selector: 'self' }, condition: { type: 'typeInPlay', cardType: 'NOT_A_TYPE' }, action: { type: 'modifyValue', operation: 'add', amount: 1 } }), false)
+  assert.equal(isValidEffect({ trigger: 'onReveal', target: { selector: 'allMatching', scope: 'bogus' }, action: { type: 'modifyValue', operation: 'add', amount: 1 } }), false)
+  assert.equal(isValidEffect({ trigger: 'onReveal', target: { selector: 'self' }, action: { type: 'modifyValue', operation: 'add', amount: 2, perMatch: { by: 'type', value: 'PROP', scope: 'bogus' } } }), false)
+})
+
+function revealedCard(ctoonId, name, { color = 'RED', value = 1, type1 = null, type2 = null, type3 = null, group = null, characters = [name], effect = null } = {}) {
+  return { ctoonId, name, characters, color, value, type1, type2, type3, group, effect, round: null }
+}
+
+test('resolveFinalBoard: perMatch aggregation counts board-wide matches ("+2 for each Prop in play")', () => {
+  const propBuffer = revealedCard('p1', 'Prop Buffer', {
+    value: 2, type1: 'PROP',
+    effect: [{ trigger: 'onReveal', target: { selector: 'self' }, action: { type: 'modifyValue', operation: 'add', amount: 2, perMatch: { by: 'type', value: 'PROP', scope: 'both' } } }]
+  })
+  const p1b = revealedCard('p1b', 'Another Prop', { value: 1, type1: 'PROP' })
+  const p2a = revealedCard('p2a', 'Opponent Prop', { value: 1, type1: 'PROP' })
+  const out = resolveFinalBoard({
+    player1: { revealed: [propBuffer, p1b], goalCard: null },
+    player2: { revealed: [p2a], goalCard: null }
+  })
+  // 3 total Props in play (propBuffer itself + p1b + p2a) -> +2*3 = +6 -> 2 + 6 = 8
+  assert.equal(out.player1.revealed[0].finalValue, 8)
+})
+
+test('resolveFinalBoard: allMatching applies a flat buff to every matching card on the board (blanket color buff)', () => {
+  const buffer = revealedCard('b1', 'Blue Buffer', {
+    color: 'BLUE', value: 1,
+    effect: [{ trigger: 'onReveal', target: { selector: 'allMatching', scope: 'both', filters: [{ by: 'color', value: 'BLUE' }] }, action: { type: 'modifyValue', operation: 'add', amount: 2 } }]
+  })
+  const ownBlue = revealedCard('b2', 'Own Blue', { color: 'BLUE', value: 3 })
+  const oppBlue = revealedCard('b3', 'Opp Blue', { color: 'BLUE', value: 4 })
+  const oppRed = revealedCard('b4', 'Opp Red', { color: 'RED', value: 5 })
+  const out = resolveFinalBoard({
+    player1: { revealed: [buffer, ownBlue], goalCard: null },
+    player2: { revealed: [oppBlue, oppRed], goalCard: null }
+  })
+  assert.equal(out.player1.revealed[0].finalValue, 3) // buffer itself is Blue too: 1 + 2
+  assert.equal(out.player1.revealed[1].finalValue, 5) // ownBlue: 3 + 2
+  assert.equal(out.player2.revealed[0].finalValue, 6) // oppBlue: 4 + 2
+  assert.equal(out.player2.revealed[1].finalValue, 5) // oppRed unaffected
+})
+
+test('resolveFinalBoard: neighborOwn applies a flat buff to the source card\'s own adjacent revealed cards', () => {
+  const before = revealedCard('n1', 'Before', { value: 1, type1: 'ANIMAL' })
+  const buffer = revealedCard('n2', 'Neighbor Buffer', {
+    value: 5,
+    effect: [{ trigger: 'onReveal', target: { selector: 'neighborOwn', filter: { by: 'type', value: 'ANIMAL' } }, action: { type: 'modifyValue', operation: 'add', amount: 5 } }]
+  })
+  const after = revealedCard('n3', 'After', { value: 2, type1: 'ANIMAL' })
+  const oppCard = revealedCard('n4', 'Opp Filler', { value: 0 })
+  const out = resolveFinalBoard({
+    player1: { revealed: [before, buffer, after], goalCard: null },
+    player2: { revealed: [oppCard], goalCard: null }
+  })
+  assert.equal(out.player1.revealed[0].finalValue, 6) // before: 1 + 5
+  assert.equal(out.player1.revealed[1].finalValue, 5) // buffer itself untouched by its own neighborOwn target
+  assert.equal(out.player1.revealed[2].finalValue, 7) // after: 2 + 5
+})
+
+test('resolveFinalBoard: targetLacksType on opponentActiveCard ("-5 to opposing card if not a Villain")', () => {
+  const attacker = revealedCard('a1', 'Attacker', {
+    value: 3,
+    effect: [{ trigger: 'onReveal', target: { selector: 'opponentActiveCard' }, condition: { type: 'targetLacksType', cardType: 'VILLAIN' }, action: { type: 'modifyValue', operation: 'add', amount: -5 } }]
+  })
+  const nonVillain = revealedCard('t1', 'Non-Villain', { value: 10, type1: 'HERO' })
+  const outHit = resolveFinalBoard({
+    player1: { revealed: [attacker], goalCard: null },
+    player2: { revealed: [nonVillain], goalCard: null }
+  })
+  assert.equal(outHit.player2.revealed[0].finalValue, 5) // 10 - 5
+
+  const villain = revealedCard('t2', 'A Villain', { value: 10, type1: 'VILLAIN' })
+  const outSpared = resolveFinalBoard({
+    player1: { revealed: [attacker], goalCard: null },
+    player2: { revealed: [villain], goalCard: null }
+  })
+  assert.equal(outSpared.player2.revealed[0].finalValue, 10) // unaffected -- target has the type
+})
+
+test('resolveFinalBoard: allOwnRevealed now covers the WHOLE match history (upgraded from the v1 per-round simplification)', () => {
+  const auraCard = revealedCard('h1', 'History Buffer', {
+    value: 1,
+    effect: [{ trigger: 'onReveal', target: { selector: 'allOwnRevealed' }, action: { type: 'modifyValue', operation: 'add', amount: 1 } }]
+  })
+  const earlier = revealedCard('h0', 'Earlier Card', { value: 2 })
+  const later = revealedCard('h2', 'Later Card', { value: 3 })
+  const out = resolveFinalBoard({
+    player1: { revealed: [earlier, auraCard, later], goalCard: null },
+    player2: { revealed: [revealedCard('opp', 'Opp Filler', { value: 0 })], goalCard: null }
+  })
+  assert.equal(out.player1.revealed[0].finalValue, 3) // earlier: 2 + 1
+  assert.equal(out.player1.revealed[1].finalValue, 2) // auraCard itself: 1 + 1
+  assert.equal(out.player1.revealed[2].finalValue, 4) // later: 3 + 1
+})
+
+test('resolveFinalBoard: negation suppresses a card\'s own effects for the whole pass, same as resolveRoundEffects', () => {
+  const grimjaw = revealedCard('g1', 'Grimjaw', {
+    value: 6,
+    effect: [{ trigger: 'onReveal', target: { selector: 'opponentActiveCard' }, action: { type: 'negateEffect' } }]
+  })
+  const slycat = revealedCard('s1', 'Slycat', {
+    value: 3,
+    effect: [{ trigger: 'onReveal', target: { selector: 'self' }, condition: { type: 'characterInPlay', character: 'Bramble Fox', side: 'either' }, action: { type: 'modifyValue', operation: 'multiply', amount: 2 } }],
+    characters: ['Slycat']
+  })
+  const brambleFox = revealedCard('bf1', 'Bramble Fox', { value: 1, characters: ['Bramble Fox'] })
+  const out = resolveFinalBoard({
+    player1: { revealed: [slycat], goalCard: null },
+    player2: { revealed: [grimjaw, brambleFox], goalCard: null }
+  })
+  // Grimjaw is at round 0, same as Slycat's round -> opponentActiveCard hits Slycat and negates it.
+  assert.equal(out.player1.revealed[0].finalValue, 3) // un-doubled
+})
+
+test('resolveFinalBoard feeds determineWinner directly (its revealed entries already have finalValue/color)', () => {
+  const p1card = revealedCard('w1', 'P1 Card', { value: 5, color: 'RED' })
+  const p2card = revealedCard('w2', 'P2 Card', { value: 3, color: 'BLUE' })
+  const final = resolveFinalBoard({
+    player1: { revealed: [p1card], goalCard: null },
+    player2: { revealed: [p2card], goalCard: null }
+  })
+  const outcome = determineWinner({
+    player1GoalColor: 'BLACK', player2GoalColor: 'SILVER',
+    player1Revealed: final.player1.revealed, player2Revealed: final.player2.revealed
+  })
+  assert.equal(outcome.winner, 'player1')
+})
+
+test('ogGtoonPowerCatalog: every one of the 198 historical powers has a valid, schema-conformant catalog entry', () => {
+  assert.equal(OG_GTOON_POWER_CATALOG.length, 198)
+  for (const entry of OG_GTOON_POWER_CATALOG) {
+    assert.equal(typeof entry.description, 'string')
+    assert.ok(Array.isArray(entry.effect))
+    for (const eff of entry.effect) assert.equal(isValidEffect(eff), true, `invalid effect for "${entry.description}"`)
+  }
+  assert.deepEqual(lookupPower('No Power'), { description: 'No Power', effect: [], note: null })
+  assert.deepEqual(lookupPower('No power'), { description: 'No power', effect: [], note: null })
+  assert.equal(lookupPower('not a real power'), null)
 })
