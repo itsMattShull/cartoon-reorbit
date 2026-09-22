@@ -4,7 +4,7 @@ import { defineEventHandler, readBody, createError } from 'h3'
 
 import { prisma, rawPrisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
-import { isSyntheticUserCtoonId } from '@/server/utils/userCtoonId'
+import { isSyntheticUserCtoonId } from '@/server/utils/userCtoonToken'
 import { NAV_CACHE_KEY } from './[username]/next.get.js'
 
 export default defineEventHandler(async (event) => {

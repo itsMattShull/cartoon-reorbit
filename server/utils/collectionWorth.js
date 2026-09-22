@@ -5,8 +5,6 @@ import { prisma } from '../prisma.js'
 import { Prisma } from '@prisma/client'
 import { MIN_SAMPLE_SIZE } from './economyValuation.js'
 
-export { MIN_SAMPLE_SIZE }
-
 // Defensive cap on how many distinct cToon types one request will price. A
 // realistic collector sits far below this; it exists so a pathological
 // collection can't turn a page load into an unbounded IN-list query. Far

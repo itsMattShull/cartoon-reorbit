@@ -22,8 +22,6 @@ import { createError } from 'h3'
 // above gives for keeping prisma out of here.
 import { MAX_CTOONS_PER_SIDE, MAX_COUNTER_CHAIN_DEPTH } from './tradeOfferLimits.js'
 
-export { MAX_CTOONS_PER_SIDE, MAX_COUNTER_CHAIN_DEPTH }
-
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
 
 export function isUuid (value) {

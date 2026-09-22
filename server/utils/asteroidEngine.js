@@ -146,4 +146,4 @@ export function replayAsteroidGame({ seedInt, cfg, inputLog, elapsedMs }) {
   }
 }
 
-export { WORLD_W, WORLD_H, TICK_HZ }
+export { TICK_HZ }

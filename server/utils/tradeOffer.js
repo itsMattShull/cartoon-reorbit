@@ -18,7 +18,7 @@ import {
   lockedRequestedIds,
   UNAVAILABLE_REQUEST_MESSAGE
 } from '@/server/utils/lockRules'
-import { getRequestIP } from '@/server/utils/request-ip'
+import { getClientRequestIP } from '@/server/utils/request-ip'
 import { encryptIp } from '@/server/utils/ip-encrypt'
 
 export * from './tradeOfferRules'
@@ -37,7 +37,7 @@ const MAX_USER_AGENT_LEN = 512
  */
 export function captureRequestMeta (event) {
   try {
-    const ip = getRequestIP(event)
+    const ip = getClientRequestIP(event)
     const userAgent = getRequestHeader(event, 'user-agent') || null
     return {
       ip: ip ? encryptIp(ip) : null,

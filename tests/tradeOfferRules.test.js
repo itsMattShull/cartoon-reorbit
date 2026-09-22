@@ -8,10 +8,9 @@ import {
   assertNoCrossSideOverlap,
   pendingTradeGuardWhere,
   counterAuthorizationError,
-  exceedsCounterChainDepth,
-  MAX_CTOONS_PER_SIDE,
-  MAX_COUNTER_CHAIN_DEPTH
+  exceedsCounterChainDepth
 } from '../server/utils/tradeOfferRules.js'
+import { MAX_CTOONS_PER_SIDE, MAX_COUNTER_CHAIN_DEPTH } from '../server/utils/tradeOfferLimits.js'
 
 const OFFER_A = '11111111-1111-4111-8111-111111111111'
 const OFFER_B = '22222222-2222-4222-8222-222222222222'
