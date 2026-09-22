@@ -1,7 +1,7 @@
 // server/api/collection/[username].get.js
 import { createError, defineEventHandler, getQuery } from 'h3'
 import { prisma } from '@/server/prisma'
-import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
+import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 import { isLockedCopy, isUnavailableToOthers } from '@/server/utils/lockRules'
 
 export default defineEventHandler(async (event) => {

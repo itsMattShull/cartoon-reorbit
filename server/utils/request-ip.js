@@ -6,7 +6,7 @@
 // login-log middleware always has — spoofable by the client, since nothing
 // here validates a trusted-proxy count. Treat any IP captured this way as
 // corroborating evidence, never as proof.
-export function getRequestIP(event) {
+export function getClientRequestIP(event) {
   const headers = event.node.req.headers
   const forwarded = headers['x-forwarded-for']
   if (forwarded) {

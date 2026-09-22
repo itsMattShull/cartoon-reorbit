@@ -3,7 +3,8 @@ import { defineEventHandler, getRequestHeader, createError, getQuery } from 'h3'
 import { prisma } from '@/server/prisma'
 import { isLockedCopy } from '@/server/utils/lockRules'
 import { ensureEconomyDataFresh } from '@/server/utils/economyFreshness'
-import { getDailyReferenceValues, MIN_SAMPLE_SIZE, MAX_WORTH_CTOON_TYPES } from '@/server/utils/collectionWorth'
+import { getDailyReferenceValues, MAX_WORTH_CTOON_TYPES } from '@/server/utils/collectionWorth'
+import { MIN_SAMPLE_SIZE } from '@/server/utils/economyValuation'
 
 export default defineEventHandler(async (event) => {
   // auth

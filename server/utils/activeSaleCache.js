@@ -6,7 +6,7 @@
 
 import { prisma } from '@/server/prisma'
 
-export const CACHE_TTL_MS = 30 * 1000 // 30 seconds
+const CACHE_TTL_MS = 30 * 1000 // 30 seconds
 
 // Lookahead window for the "featured" sale (active OR starting soon) shown
 // in the cMart showcase, so shoppers see a countdown before it goes live.

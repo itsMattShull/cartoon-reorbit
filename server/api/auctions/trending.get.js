@@ -1,7 +1,7 @@
 // server/api/auctions/trending.get.js
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
-import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
+import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 
 const ONE_DAY_MS = 24 * 60 * 60 * 1000
 

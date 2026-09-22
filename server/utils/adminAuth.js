@@ -26,7 +26,7 @@ export async function requireSession(event) {
 }
 
 /** Requires an authenticated admin. Returns the session user. */
-export async function requireAdmin(event) {
+export async function requireAdminBySession(event) {
   const me = await requireSession(event)
   if (!me?.isAdmin) {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })

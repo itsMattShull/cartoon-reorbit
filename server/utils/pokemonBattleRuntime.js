@@ -71,4 +71,4 @@ export const registerPokemonBattle = runtime.register
 export const startPokemonBattleSweep = runtime.startSweep
 
 // Exposed for tests.
-export const __testing = runtime.__testing
+export const __pokemonBattleTesting = runtime.__testing

@@ -24,9 +24,9 @@ import {
   exceedsCounterChainDepth,
   sendTradeOfferDM,
   isUuid,
-  MAX_COUNTER_CHAIN_DEPTH,
   captureRequestMeta
 } from '@/server/utils/tradeOffer'
+import { MAX_COUNTER_CHAIN_DEPTH } from '@/server/utils/tradeOfferLimits'
 import { notifyTradeOfferReceived } from '@/server/utils/notifications'
 
 /// One response for every "you may not counter this" case. Distinguishing

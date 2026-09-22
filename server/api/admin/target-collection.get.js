@@ -7,7 +7,7 @@
 // what a moderator most needs to see. Pass includeUntradeable=true for that.
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
-import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
+import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''

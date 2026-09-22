@@ -11,7 +11,7 @@
 import { defineEventHandler, getQuery, createError, setHeader } from 'h3'
 import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
-import { requireAdmin } from '@/server/utils/adminAuth'
+import { requireAdminBySession } from '@/server/utils/adminAuth'
 import { ensureEconomyDataFresh } from '@/server/utils/economyFreshness'
 import {
   getDailyReferenceValues,
@@ -34,7 +34,7 @@ const emptyResult = (target) => ({
 })
 
 export default defineEventHandler(async (event) => {
-  await requireAdmin(event)
+  await requireAdminBySession(event)
 
   const username = getQuery(event).username?.trim()
   if (!username) throw createError({ statusCode: 400, statusMessage: 'Missing username' })

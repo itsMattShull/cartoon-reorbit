@@ -1,6 +1,7 @@
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
-import { isSyntheticUserCtoonId, resolveUserCtoonId, encodeUserCtoonId } from '@/server/utils/userCtoonId'
+import { resolveUserCtoonId } from '@/server/utils/userCtoonId'
+import { isSyntheticUserCtoonId, encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 import { getActiveSale } from '@/server/utils/activeSaleCache'
 import { isLockedCopy } from '@/server/utils/lockRules'
 

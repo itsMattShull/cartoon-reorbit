@@ -62,4 +62,4 @@ export const startEdRpsSweep = runtime.startSweep
 export const hasLiveEdRpsMatch = runtime.hasLiveMatch
 
 // Exposed for tests.
-export const __testing = { ...runtime.__testing, HANDS }
+export const __edRpsTesting = { ...runtime.__testing, HANDS }
