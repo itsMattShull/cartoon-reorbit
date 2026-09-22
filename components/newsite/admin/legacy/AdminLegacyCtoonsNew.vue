@@ -310,6 +310,124 @@
             </div>
           </section>
 
+          <!-- ── Original gToons Gameplay ─────────────────────────── -->
+          <section class="border rounded-lg p-3 space-y-3">
+            <div>
+              <h2 class="text-xs font-semibold text-gray-700 uppercase tracking-wide">Original gToons Gameplay</h2>
+              <p class="text-[11px] text-gray-500 mt-0.5">Only needed if this cToon will be playable as a card in the original gToons game (separate from Clash).</p>
+            </div>
+
+            <label class="flex items-center gap-2">
+              <input type="checkbox" v-model="isOgGtoon" />
+              <span class="text-xs font-medium">Is this an original gToon?</span>
+            </label>
+
+            <div v-if="isOgGtoon" class="border rounded-md bg-amber-50 p-3 space-y-3">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Color</label>
+                <select v-model="gtoonColor" required class="border rounded-md px-2 py-1.5 text-sm bg-white">
+                  <option disabled value="">Select a color</option>
+                  <option v-for="c in gtoonColorOptions" :key="c" :value="c">{{ c }}</option>
+                </select>
+                <p class="text-[11px] text-gray-500">Black/Silver are neutral goal colors; every other color is non-neutral for the color-bonus scoring rule.</p>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Value <span class="text-[11px] font-normal text-gray-500">(0 – 99)</span></label>
+                <input v-model.number="gtoonValue" type="number" min="0" max="99" required class="border rounded-md px-2 py-1.5 text-sm" />
+                <p class="text-[11px] text-gray-500">Point value revealed each round.</p>
+                <p v-if="errors.gtoonValue" class="text-red-600 text-[11px] mt-1">{{ errors.gtoonValue }}</p>
+              </div>
+
+              <label class="flex items-center gap-2">
+                <input type="checkbox" v-model="isSlamGtoon" />
+                <span class="text-xs font-medium">Slam gToon (has a special ability)</span>
+              </label>
+
+              <div v-if="isSlamGtoon" class="space-y-2">
+                <div v-for="(effect, i) in gtoonEffects" :key="i" class="border rounded-md bg-white p-2 space-y-2">
+                  <div class="flex justify-between items-center">
+                    <span class="text-[11px] font-semibold text-gray-600">Effect {{ i + 1 }}</span>
+                    <button type="button" class="text-red-600 text-[11px]" @click="gtoonEffects.splice(i, 1)">Remove</button>
+                  </div>
+                  <div class="grid grid-cols-2 gap-2">
+                    <div class="flex flex-col gap-1">
+                      <label class="text-[11px] font-medium">Trigger</label>
+                      <select v-model="effect.trigger" class="border rounded-md px-2 py-1 text-xs bg-white">
+                        <option value="onReveal">On reveal</option>
+                        <option value="static">Static (goal card only)</option>
+                      </select>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                      <label class="text-[11px] font-medium">Target</label>
+                      <select v-model="effect.target.selector" class="border rounded-md px-2 py-1 text-xs bg-white">
+                        <option value="self">Self</option>
+                        <option value="ownActiveCard">Your card this round</option>
+                        <option value="opponentActiveCard">Opponent's card this round</option>
+                        <option value="allOwnRevealed">All your revealed cards</option>
+                        <option value="allOpponentRevealed">All opponent's revealed cards</option>
+                        <option value="cardByCharacter">Card by character name</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div v-if="effect.target.selector === 'cardByCharacter'" class="flex flex-col gap-1">
+                    <label class="text-[11px] font-medium">Target character</label>
+                    <input v-model="effect.target.character" type="text" class="border rounded-md px-2 py-1 text-xs" placeholder="e.g. Porky Pig" />
+                  </div>
+
+                  <label class="flex items-center gap-2">
+                    <input type="checkbox" v-model="effect.hasCondition" />
+                    <span class="text-[11px] font-medium">Only if a character is in play</span>
+                  </label>
+                  <div v-if="effect.hasCondition" class="grid grid-cols-2 gap-2">
+                    <div class="flex flex-col gap-1">
+                      <label class="text-[11px] font-medium">Character</label>
+                      <input v-model="effect.condition.character" type="text" class="border rounded-md px-2 py-1 text-xs" placeholder="e.g. Duck Dodgers" />
+                    </div>
+                    <div class="flex flex-col gap-1">
+                      <label class="text-[11px] font-medium">Side</label>
+                      <select v-model="effect.condition.side" class="border rounded-md px-2 py-1 text-xs bg-white">
+                        <option value="either">Either side</option>
+                        <option value="own">Own side</option>
+                        <option value="opponent">Opponent side</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div class="flex flex-col gap-1">
+                    <label class="text-[11px] font-medium">Action</label>
+                    <select v-model="effect.action.type" class="border rounded-md px-2 py-1 text-xs bg-white">
+                      <option value="modifyValue">Modify value</option>
+                      <option value="setColor">Change color</option>
+                      <option value="negateEffect">Negate effect</option>
+                    </select>
+                  </div>
+                  <div v-if="effect.action.type === 'modifyValue'" class="grid grid-cols-2 gap-2">
+                    <div class="flex flex-col gap-1">
+                      <label class="text-[11px] font-medium">Operation</label>
+                      <select v-model="effect.action.operation" class="border rounded-md px-2 py-1 text-xs bg-white">
+                        <option value="add">Add</option>
+                        <option value="multiply">Multiply</option>
+                        <option value="set">Set to</option>
+                      </select>
+                    </div>
+                    <div class="flex flex-col gap-1">
+                      <label class="text-[11px] font-medium">Amount</label>
+                      <input v-model.number="effect.action.amount" type="number" class="border rounded-md px-2 py-1 text-xs" />
+                    </div>
+                  </div>
+                  <div v-if="effect.action.type === 'setColor'" class="flex flex-col gap-1">
+                    <label class="text-[11px] font-medium">New color</label>
+                    <select v-model="effect.action.color" class="border rounded-md px-2 py-1 text-xs bg-white">
+                      <option v-for="c in gtoonColorOptions" :key="c" :value="c">{{ c }}</option>
+                    </select>
+                  </div>
+                </div>
+                <button type="button" class="text-xs text-indigo-700 font-medium" @click="addGtoonEffect">+ Add effect</button>
+                <p v-if="errors.gtoonEffects" class="text-red-600 text-[11px] mt-1">{{ errors.gtoonEffects }}</p>
+              </div>
+            </div>
+          </section>
+
           <!-- ── Second Edition ────────────────────────────────────── -->
           <section class="border rounded-lg p-3 space-y-3">
             <div>
@@ -383,7 +501,50 @@ const cost        = ref(1)
 const power       = ref(1)
 const abilityKey  = ref('')
 const abilityParam = ref(null)
-const gtoonType = ref('') 
+const gtoonType = ref('')
+
+/* ── NEW: Original gToons state ─────────────────────── */
+const gtoonColorOptions = ['BLACK', 'SILVER', 'BLUE', 'RED', 'YELLOW', 'GREEN', 'PURPLE', 'ORANGE', 'PINK']
+const isOgGtoon   = ref(false)
+const gtoonColor  = ref('')
+const gtoonValue  = ref(1)
+const isSlamGtoon = ref(false)
+const gtoonEffects = ref([])
+
+function newGtoonEffect() {
+  return {
+    trigger: 'onReveal',
+    target: { selector: 'self', character: '' },
+    hasCondition: false,
+    condition: { character: '', side: 'either' },
+    action: { type: 'modifyValue', operation: 'add', amount: 1, color: 'BLACK' }
+  }
+}
+function addGtoonEffect() { gtoonEffects.value.push(newGtoonEffect()) }
+watch(isSlamGtoon, val => {
+  if (val && gtoonEffects.value.length === 0) addGtoonEffect()
+  if (!val) gtoonEffects.value = []
+})
+/** Strips UI-only fields (hasCondition) and maps each effect to the server's schema shape. */
+function buildGtoonEffectPayload() {
+  return gtoonEffects.value.map(e => {
+    const target = e.target.selector === 'cardByCharacter'
+      ? { selector: 'cardByCharacter', character: (e.target.character || '').trim() }
+      : { selector: e.target.selector }
+    const out = { trigger: e.trigger, target }
+    if (e.hasCondition && (e.condition.character || '').trim()) {
+      out.condition = { type: 'characterInPlay', character: e.condition.character.trim(), side: e.condition.side }
+    }
+    if (e.action.type === 'modifyValue') {
+      out.action = { type: 'modifyValue', operation: e.action.operation, amount: Number(e.action.amount) }
+    } else if (e.action.type === 'setColor') {
+      out.action = { type: 'setColor', color: e.action.color }
+    } else {
+      out.action = { type: 'negateEffect' }
+    }
+    return out
+  })
+}
 
 const abilityKeyOptions = abilityMeta
 
@@ -399,7 +560,7 @@ watch(abilityKey, () => { abilityParam.value = null })
 const rarityOptions = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare', 'Prize Only', 'Code Only', 'Auction Only']
 
 const soundFile = ref(null)
-const errors = reactive({ image: '', name: '', series: '', rarity: '', cost: '', power: '', sound: '' })
+const errors = reactive({ image: '', name: '', series: '', rarity: '', cost: '', power: '', sound: '', gtoonValue: '', gtoonEffects: '' })
 
 // only show suggestions once the user has typed ≥3 chars
 const filteredSeriesOptions = computed(() => {
@@ -586,6 +747,10 @@ async function submitForm() {
   if (!name.value.trim()) errors.name = 'Name is required.'
   if (!series.value.trim()) errors.series = 'Series is required.'
   if (!rarity.value) errors.rarity = 'Rarity is required.'
+  if (isOgGtoon.value) {
+    if (!gtoonColor.value) errors.gtoonValue = 'Color and value are required.'
+    else if (gtoonValue.value == null || gtoonValue.value < 0 || gtoonValue.value > 99) errors.gtoonValue = 'Value must be 0-99.'
+  }
   if (Object.values(errors).some(e => e)) return
 
   // Build form data
@@ -637,6 +802,13 @@ async function submitForm() {
       ? JSON.stringify({ [selectedAbility.value.paramLabel.toLowerCase().split(' ')[0]]: abilityParam.value })
       : '{}'
     formData.append('abilityData', abilityData)
+  }
+  formData.append('isOgGtoon', isOgGtoon.value)
+  if (isOgGtoon.value) {
+    formData.append('gtoonColor', gtoonColor.value)
+    formData.append('gtoonValue', gtoonValue.value)
+    formData.append('isSlamGtoon', isSlamGtoon.value)
+    formData.append('gtoonEffect', isSlamGtoon.value ? JSON.stringify(buildGtoonEffectPayload()) : '')
   }
 
   if (soundFile.value) formData.append('sound', soundFile.value)
