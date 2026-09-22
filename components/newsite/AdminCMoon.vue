@@ -110,8 +110,10 @@
               <label class="block text-xs font-medium mb-1">Top 10 points (weekly total)</label>
               <input v-model.number="scoring.top10Points" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
               <p class="text-[11px] text-gray-500 mt-1">
-                Per player, for a top-{{ scoring.top10RankCutoff || 10 }} finish on an eligible board — also
-                ÷7/day ≈ {{ Math.round((scoring.top10Points || 0) / 7) }} pts/day.
+                Per player, per source, for a top-{{ scoring.top10RankCutoff || 10 }} finish — on an
+                enabled site-wide board below, or on any eligible game's own leaderboard (same games
+                list as High Score) — also ÷7/day ≈ {{ Math.round((scoring.top10Points || 0) / 7) }} pts/day.
+                Stacks: placing top-{{ scoring.top10RankCutoff || 10 }} in more than one source pays out for each.
               </p>
             </div>
             <div>
@@ -156,7 +158,13 @@
           </div>
 
           <div class="border-t pt-3 mt-3">
-            <div class="text-xs font-medium mb-1.5">Top 10 boards</div>
+            <div class="text-xs font-medium mb-1.5">Top 10 site-wide boards</div>
+            <p class="text-[11px] text-gray-500 mb-1">
+              These two site-wide boards are one source of Top 10 points — a top-
+              {{ scoring.top10RankCutoff || 10 }} finish on any eligible game's own leaderboard
+              (see "High Score / Top 10 eligible games" below) always counts too, independent of
+              these toggles.
+            </p>
             <div class="flex flex-col gap-1.5">
               <label class="cm-tap flex items-center gap-2">
                 <input type="checkbox" v-model="scoring.top10PointsBoardEnabled" />
@@ -170,16 +178,22 @@
             <div class="mt-2">
               <label class="block text-xs font-medium mb-1">Rank cutoff</label>
               <input v-model.number="scoring.top10RankCutoff" type="number" min="1" max="250" inputmode="numeric" class="cm-field w-full sm:w-40 border rounded px-2 py-1" style="font-size:16px" />
-              <p class="text-[11px] text-gray-500 mt-1">How many ranks count as "top 10" on each enabled board.</p>
+              <p class="text-[11px] text-gray-500 mt-1">
+                How many ranks count as "top 10" — applied to these two boards and to every eligible
+                game's own leaderboard.
+              </p>
             </div>
             <p v-if="!scoring.top10PointsBoardEnabled && !scoring.top10CtoonsBoardEnabled" class="text-[11px] text-amber-600 font-medium mt-1">
-              Both boards are off — the Top 10 bonus is effectively disabled.
+              Both site-wide boards are off — Top 10 points can still come from per-game leaderboards below.
             </p>
           </div>
 
           <div class="border-t pt-3 mt-3">
-            <div class="text-xs font-medium mb-1">High Score eligible games</div>
-            <p class="text-[11px] text-gray-500 mb-2">Only checked games can earn the High Score bonus.</p>
+            <div class="text-xs font-medium mb-1">High Score / Top 10 eligible games</div>
+            <p class="text-[11px] text-gray-500 mb-2">
+              A checked game's #1 holder earns High Score; everyone in its top-{{ scoring.top10RankCutoff || 10 }}
+              (rank cutoff above), #1 included, earns Top 10. Unchecking a game turns off both bonuses for it.
+            </p>
 
             <div class="flex items-center justify-between mb-1">
               <span class="text-[11px] text-gray-600">Score-based games</span>
@@ -219,7 +233,7 @@
 
             <p class="text-[11px] text-gray-500 mt-2">{{ enabledGameSummary }}</p>
             <p v-if="enabledGameCount === 0" class="text-[11px] text-amber-600 font-medium mt-1">
-              No games selected — the High Score bonus is effectively disabled.
+              No games selected — the High Score bonus and per-game Top 10 points are both effectively disabled.
             </p>
           </div>
 
