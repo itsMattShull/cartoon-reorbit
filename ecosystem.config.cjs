@@ -217,6 +217,16 @@ module.exports = {
       env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
+    // ── BullMQ worker: admin "Backfill cMoon Points" one-time correction ──
+    {
+      name:      'worker-cmoon-daily-task-backfill',
+      script:    'server/workers/cmoon-daily-task-backfill.worker.js',
+      exec_mode: 'fork',
+      instances: 1,
+      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+    },
+
     // ── Cron: Discord guild member sync ───────────────────────────────────
     {
       name:      'guild-checker',

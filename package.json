@@ -9,7 +9,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "dev": "concurrently \"nuxt dev\" \"npm:worker\" \"npm:mint-end\" \"npm:holiday-redeem\" \"npm:guildchecker\" \"npm:achievements\" \"npm:dissolve\" \"npm:dissolve-launch\" \"npm:transfer\" \"npm:content-analyzer\" \"npm:cmoon-rank-recalc\" \"npm:cmoon-prize-revoke\"",
+    "dev": "concurrently \"nuxt dev\" \"npm:worker\" \"npm:mint-end\" \"npm:holiday-redeem\" \"npm:guildchecker\" \"npm:achievements\" \"npm:dissolve\" \"npm:dissolve-launch\" \"npm:transfer\" \"npm:content-analyzer\" \"npm:cmoon-rank-recalc\" \"npm:cmoon-prize-revoke\" \"npm:cmoon-daily-task-backfill\"",
     "worker": "node server/workers/mint.worker.js",
     "mint-end": "node server/workers/mint-end.worker.js",
     "holiday-redeem": "node server/workers/holiday-redeem.worker.js",
@@ -20,6 +20,7 @@
     "content-analyzer": "node server/workers/content-analyzer.worker.js",
     "cmoon-rank-recalc": "node server/workers/cmoon-rank-recalc.worker.js",
     "cmoon-prize-revoke": "node server/workers/cmoon-prize-revoke.worker.js",
+    "cmoon-daily-task-backfill": "node server/workers/cmoon-daily-task-backfill.worker.js",
     "guildchecker": "node ./server/cron/sync-guild-members.js",
     "economy:aggregate": "node ./server/cron/economy-aggregate-run.js",
     "build": "nuxt build",
