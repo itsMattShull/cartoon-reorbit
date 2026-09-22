@@ -376,7 +376,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { cMoonPaletteStyle } from '@/utils/cmoonPalette'
 import { cmoonJoinEffectDescriptor } from '@/utils/cmoonJoinEffectDescriptor'
 import { useCtoonModal } from '@/composables/useCtoonModal'
@@ -758,6 +758,24 @@ async function submitContribute() {
 }
 
 watch(() => route.params.id, (id) => load(id), { immediate: true })
+
+// Poll the rank-progress endpoint while this page stays open, so a player's own DAILY_TASK
+// gains — now awarded live server-side the moment they're detected, see
+// recordDailyTaskCompletions in server/utils/cmoon.js — show up on the "Your Rank" bar without
+// needing a manual reload. Cheap: per-request cost is a couple of indexed per-user queries plus
+// the shared 60s-TTL holder snapshot (see getHolderSnapshot in that same file), same pattern as
+// Economy.vue's pollHandle. HIGH_SCORE/TOP10 still only change once a day, but this keeps
+// pendingPoints/pendingBreakdown for those fresh too rather than stuck at whatever they were on
+// initial page load.
+let rankPollHandle = null
+onMounted(() => {
+  rankPollHandle = setInterval(() => {
+    if (cmoon.value?.id && !loading.value) loadRankProgress(cmoon.value.id)
+  }, 30000)
+})
+onBeforeUnmount(() => {
+  if (rankPollHandle) clearInterval(rankPollHandle)
+})
 </script>
 
 <style scoped>
