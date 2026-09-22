@@ -1016,15 +1016,20 @@ cron.schedule('35 2 * * *', () => runJob('syncVerifiedRoles', syncVerifiedRoles)
 await runJob('syncCMoonDiscordRoles', syncCMoonDiscordRoles)
 cron.schedule('45 2 * * *', () => runJob('syncCMoonDiscordRoles', syncCMoonDiscordRoles), { timezone: 'America/Chicago' }) // 02:45 CST daily
 
-// cMoon team leaderboard: record which cMoon members completed at least one daily task,
-// then once a week roll the past week's completions plus current game-leaderboard standings
-// into each cMoon's team score. Both no-op immediately when GlobalGameConfig.cMoonEnabled is
-// off. The completion check runs every 4 hours rather than once daily — the underlying daily
-// tasks reset at two different times (8pm Chicago for most, 8am for Winwheel/Lotto/monster
-// scans; see server/utils/dailyTaskWindows.js), so a single daily run would leave a ~12-hour
-// dead zone where activity in the 8am-reset window could go unrecorded. Re-checking an
-// already-recorded day is a no-op (UserDailyTaskCompletion is unique on userId+date).
-cron.schedule('15 */4 * * *', () => runJob('recordDailyTaskCompletions', runRecordDailyTaskCompletions), { timezone: 'America/Chicago' }) // every 4h at :15
+// cMoon team leaderboard: record which cMoon members completed at least one daily task
+// (awarding DAILY_TASK points live off each newly-detected completion — see
+// recordDailyTaskCompletions in server/utils/cmoon.js), plus a once-daily admin-adjustable pass
+// that rolls current game-leaderboard standings into each cMoon's team score. Both no-op
+// immediately when GlobalGameConfig.cMoonEnabled is off. The completion check runs every minute
+// rather than every 4 hours: with the underlying daily tasks resetting at two different times
+// (8pm Chicago for most, 8am for Winwheel/Lotto/monster scans; see
+// server/utils/dailyTaskWindows.js), a wide gap here used to just mean a delayed detection
+// window, but now that a completion is awarded live the moment it's detected, this interval is
+// how quickly a player's rank bar actually reflects it. Each run's own query is cheap/indexed
+// (scoped to "since the current day/morning boundary"), and it's already advisory-lock-guarded
+// against overlap (see runRecordDailyTaskCompletions) — re-checking an already-recorded day is a
+// no-op (UserDailyTaskCompletion is unique on userId+date).
+cron.schedule('* * * * *', () => runJob('recordDailyTaskCompletions', runRecordDailyTaskCompletions), { timezone: 'America/Chicago' }) // every minute
 // Admin-adjustable run time (GlobalGameConfig.cMoonScoringRunHour/Minute, default 00:00 CST) —
 // checked every 5 minutes rather than cron-scheduled at a fixed time, since that time can change
 // at runtime without a server restart. See checkAndRunCMoonDailyScoring's own comment for the
