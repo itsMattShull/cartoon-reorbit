@@ -91,7 +91,14 @@ export default defineEventHandler(async (event) => {
   // cMoons being compared against are filtered.
   const thisAvgScore = cmoon.memberCount > 0 ? cmoon.teamScore / cmoon.memberCount : 0
 
-  const [featuredCtoons, rankRows, topPointContributors, topRankMembers, poll] = await Promise.all([
+  // Captains never earn a different actual rank tier for this — see displayRankName's own
+  // comment, this only decides what the "Top Ranking Members" list SHOWS captains as (always
+  // "Captain", already true before this change) and now also WHERE it shows them (pinned first,
+  // ahead of their real tier's position). Computed up front (cheap — `cmoon.captains` is already
+  // loaded) so the captain-pinning query below and the final display mapping can both use it.
+  const captainUsernames = new Set(cmoon.captains.map(cap => cap.user?.username).filter(Boolean))
+
+  const [featuredCtoons, rankRows, topPointContributors, topRankMembers, captainMembers, poll] = await Promise.all([
     featuredCtoonsQuery,
     db.$queryRaw`
       SELECT COUNT(*)::int AS count FROM "CMoon"
@@ -117,6 +124,19 @@ export default defineEventHandler(async (event) => {
       take: LEADERBOARD_LIMIT,
       select: { username: true, avatar: true, currentCMoonRank: { select: { name: true } } },
     }),
+    // Every captain, regardless of their own tier's sortOrder (or even whether they've earned a
+    // tier at all — displayRankName ignores rankName entirely when isCaptain is true, so no rank
+    // data is needed for these rows). A tiny, bounded query (there are only ever a handful of
+    // captains per cMoon) rather than dropping topRankMembers' own `take` limit and re-sorting a
+    // whole roster, which for a large team could mean fetching and sorting far more rows just to
+    // find captains that might not even be near the top by tier.
+    captainUsernames.size
+      ? db.user.findMany({
+          where: { cMoonId: id, active: true, banned: false, id: { not: EXCLUDED_SYSTEM_USER_ID }, username: { in: [...captainUsernames] } },
+          orderBy: { username: 'asc' },
+          select: { username: true, avatar: true },
+        })
+      : Promise.resolve([]),
     db.cMoonPoll.findUnique({
       where: { cMoonId: id },
       select: {
@@ -144,10 +164,13 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // A captain always displays as "Captain" regardless of their actually-earned rank tier — see
-  // displayRankName in server/utils/cmoon.js. Reuses the captains list already fetched above
-  // rather than an extra query.
-  const captainUsernames = new Set(cmoon.captains.map(cap => cap.user?.username).filter(Boolean))
+  // Captains pinned first (in the order captainMembers came back, username asc), then whoever
+  // from the tier-ordered topRankMembers isn't already a captain, filling the rest of the list —
+  // never changes anyone's actual rank/points, only where a captain's row sits in this one list.
+  const mergedTopRankMembers = [
+    ...captainMembers,
+    ...topRankMembers.filter(u => !captainUsernames.has(u.username)),
+  ].slice(0, LEADERBOARD_LIMIT)
 
   return {
     id: cmoon.id,
@@ -167,7 +190,7 @@ export default defineEventHandler(async (event) => {
     rank: rankRows[0].count + 1,
     captains: [...captainUsernames],
     topPointContributors: topPointContributors.map(u => ({ username: u.username, avatar: u.avatar, points: u.points })),
-    topRankMembers: topRankMembers.map(u => ({
+    topRankMembers: mergedTopRankMembers.map(u => ({
       username: u.username,
       avatar: u.avatar,
       rankName: displayRankName(u.currentCMoonRank?.name, captainUsernames.has(u.username)) || '',
