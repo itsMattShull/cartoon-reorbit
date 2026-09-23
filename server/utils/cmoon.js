@@ -589,6 +589,16 @@ export async function runDailyCMoonScoring() {
     await prisma.cMoonScoreLog.createMany({ data: candidates, skipDuplicates: true })
   }
   await recomputeCMoonTeamScores()
+  // Team score above covers the team-wide leaderboard, but a member's own "Your Rank" progress
+  // bar reads User.cMoonPoints specifically (see rank-progress.get.js) — without this, a HIGH_
+  // SCORE/TOP10 award here would only reach that field via the separate, up-to-15-minute
+  // runCMoonPointsAggregate sweep, which is exactly what made a manual "Re-run Scoring Now"
+  // catch-up look like it hadn't worked (team total updated instantly, personal bar didn't).
+  // DAILY_TASK's own live-award path already does this same thing for its own awards; this
+  // mirrors it here so every category updates a member's personal total immediately.
+  if (candidates.length) {
+    await recomputeCMoonPointsForUsers([...new Set(candidates.map(c => c.userId))])
+  }
 
   return { awarded: candidates.length }
 }
@@ -660,29 +670,46 @@ export async function getPendingScoringPreview(userId, cMoonId, userCreatedAt) {
 
   const dailyHighScorePoints = perRunAward(highScorePoints)
   const dailyTop10Points = perRunAward(top10Points)
-  const breakdown = []
+  // `detail` mirrors exactly what runDailyCMoonScoring would write for the same holder (see its
+  // own candidates.push(...) calls) — needed below to check what's already been credited today,
+  // stripped from the returned breakdown afterward since callers only ever cared about label.
+  let breakdown = []
 
   const isThisUser = (row) => row?.userId === userId && row?.cMoonId === cMoonId
 
   snapshot.activeScoreGames.forEach((g, i) => {
     const rows = snapshot.scoreTopN[i]
-    if (isThisUser(rows[0])) breakdown.push({ category: 'HIGH_SCORE', label: g.label, points: dailyHighScorePoints })
-    if (rows.some(isThisUser)) breakdown.push({ category: 'TOP10', label: `${g.label} leaderboard`, points: dailyTop10Points })
+    if (isThisUser(rows[0])) breakdown.push({ category: 'HIGH_SCORE', detail: g.name, label: g.label, points: dailyHighScorePoints })
+    if (rows.some(isThisUser)) breakdown.push({ category: 'TOP10', detail: `game:${g.name}`, label: `${g.label} leaderboard`, points: dailyTop10Points })
   })
   snapshot.activeWinGames.forEach((g, i) => {
     const rows = snapshot.winTopN[i]
-    if (isThisUser(rows[0])) breakdown.push({ category: 'HIGH_SCORE', label: g.label, points: dailyHighScorePoints })
-    if (rows.some(isThisUser)) breakdown.push({ category: 'TOP10', label: `${g.label} leaderboard`, points: dailyTop10Points })
+    if (isThisUser(rows[0])) breakdown.push({ category: 'HIGH_SCORE', detail: g.name, label: g.label, points: dailyHighScorePoints })
+    if (rows.some(isThisUser)) breakdown.push({ category: 'TOP10', detail: `game:${g.name}`, label: `${g.label} leaderboard`, points: dailyTop10Points })
   })
   if (snapshot.top10PointsHolders.some(isThisUser)) {
-    breakdown.push({ category: 'TOP10', label: 'Total Points board', points: dailyTop10Points })
+    breakdown.push({ category: 'TOP10', detail: 'points', label: 'Total Points board', points: dailyTop10Points })
   }
   if (snapshot.top10CtoonsHolders.some(isThisUser)) {
-    breakdown.push({ category: 'TOP10', label: 'Total cToons board', points: dailyTop10Points })
+    breakdown.push({ category: 'TOP10', detail: 'totalCtoons', label: 'Total cToons board', points: dailyTop10Points })
+  }
+
+  // Drop anything already credited TODAY — otherwise this preview keeps claiming a spot is
+  // "pending" (implying more points are still coming) even after the real award already landed
+  // and is sitting in cMoonPoints, which is exactly what made a just-completed catch-up run look
+  // like nothing had happened.
+  if (breakdown.length) {
+    const todayStart = getChicagoCalendarDayStart()
+    const alreadyToday = await prisma.cMoonScoreLog.findMany({
+      where: { userId, cMoonId, category: { in: ['HIGH_SCORE', 'TOP10'] }, createdAt: { gte: todayStart } },
+      select: { category: true, detail: true },
+    })
+    const alreadyKeys = new Set(alreadyToday.map(r => `${r.category}|${r.detail}`))
+    breakdown = breakdown.filter(b => !alreadyKeys.has(`${b.category}|${b.detail}`))
   }
 
   const pendingPoints = breakdown.reduce((sum, b) => sum + b.points, 0)
-  return { pendingPoints, breakdown }
+  return { pendingPoints, breakdown: breakdown.map(({ category, label, points }) => ({ category, label, points })) }
 }
 
 export const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/
