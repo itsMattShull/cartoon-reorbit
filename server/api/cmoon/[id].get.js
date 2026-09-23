@@ -85,13 +85,18 @@ export default defineEventHandler(async (event) => {
   // #1 purely by having more members. Raw SQL since the average isn't a stored column; "memberCount"
   // > 0 excludes empty cMoons from ever counting as "ahead" (their true average is 0, and dividing
   // by zero would otherwise error the whole query) rather than needing a JS-side fallback per row.
+  // "joinLocked" = false mirrors that same Leaderboards query's exclusion of locked cMoons from
+  // the comparison set, so a locked team's average never shifts a visible team's rank badge —
+  // this cMoon's own page still renders regardless of ITS OWN joinLocked state, only the OTHER
+  // cMoons being compared against are filtered.
   const thisAvgScore = cmoon.memberCount > 0 ? cmoon.teamScore / cmoon.memberCount : 0
 
   const [featuredCtoons, rankRows, topPointContributors, topRankMembers, poll] = await Promise.all([
     featuredCtoonsQuery,
     db.$queryRaw`
       SELECT COUNT(*)::int AS count FROM "CMoon"
-      WHERE "memberCount" > 0 AND ("teamScore"::float8 / "memberCount") > ${thisAvgScore}
+      WHERE "memberCount" > 0 AND "joinLocked" = false
+        AND ("teamScore"::float8 / "memberCount") > ${thisAvgScore}
     `,
     db.$queryRaw`
       SELECT u."username", u."avatar", SUM(csl."points")::int AS "points"

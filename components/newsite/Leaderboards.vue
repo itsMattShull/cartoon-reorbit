@@ -12,8 +12,9 @@
       </div>
     </div>
 
-    <!-- cMoons Tab: weekly team-score standings, plus each cMoon's top individual point
-         contributors (a different, complementary metric — see the script section) -->
+    <!-- cMoons Tab: team standings ranked by average points per member (see cmoons.get.js),
+         plus each cMoon's top individual point contributors (a different, complementary
+         metric — see the script section) -->
     <div v-if="activeTab === 'cmoons'" class="lb-content">
       <div class="lb-card lb-cmoons-card">
         <div class="lb-card-header lb-card-header--cmoons">cMoon Team Leaderboard (avg pts/player)</div>
@@ -273,8 +274,8 @@ function cMoonForRow(row) {
 }
 
 // Top individual point contributors per cMoon — a per-player breakdown of the same weekly
-// team-score log (CMoonScoreLog) the team totals above (row.teamScore) are summed from, see
-// server/api/leaderboard/cmoon-standings.get.js. Fetched eagerly like the boards above.
+// team-score log (CMoonScoreLog) the team totals above (row.teamScore, row.avgScore) are summed
+// from, see server/api/leaderboard/cmoon-standings.get.js. Fetched eagerly like the boards above.
 const { data: cMoonContributorsData } = useFetch('/api/leaderboard/cmoon-standings', { default: () => ({ cMoonEnabled: false, contributorsByCMoonId: {} }), headers })
 const contributorsByCMoonId = computed(() => cMoonContributorsData.value?.contributorsByCMoonId || {})
 </script>
