@@ -16,7 +16,7 @@
          contributors (a different, complementary metric — see the script section) -->
     <div v-if="activeTab === 'cmoons'" class="lb-content">
       <div class="lb-card lb-cmoons-card">
-        <div class="lb-card-header lb-card-header--cmoons">cMoon Team Leaderboard</div>
+        <div class="lb-card-header lb-card-header--cmoons">cMoon Team Leaderboard (avg pts/player)</div>
         <div v-if="cmoonsPending" class="lb-loading">Loading…</div>
         <ul v-else class="lb-list">
           <li v-for="row in cmoonsData" :key="row.id" class="lb-row">
@@ -26,7 +26,7 @@
               <NuxtLink :to="`/newsite/cmoon/${row.id}`" class="lb-username">{{ row.name }}</NuxtLink>
               <span class="lb-cmoon-members">{{ row.memberCount }} member{{ row.memberCount === 1 ? '' : 's' }}</span>
             </div>
-            <span class="lb-value">{{ Number(row.teamScore).toLocaleString() }}</span>
+            <span class="lb-value">{{ Math.round(row.avgScore).toLocaleString() }}<span class="lb-cmoon-avg-unit"> avg</span></span>
           </li>
           <li v-if="!cmoonsData?.length" class="lb-empty">No cMoons yet</li>
         </ul>
@@ -473,6 +473,12 @@ const contributorsByCMoonId = computed(() => cMoonContributorsData.value?.contri
   font-weight: 700;
   color: #fff;
   font-size: 0.75rem;
+}
+
+.lb-cmoon-avg-unit {
+  font-weight: 400;
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.5);
 }
 
 .lb-empty {

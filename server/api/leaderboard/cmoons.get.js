@@ -17,9 +17,17 @@ export default defineEventHandler(async () => {
     // concern from the general per-user cMoon badge lookup (leaderboard/cmoon-badges.post.js),
     // which stays unfiltered so locked-cMoon members keep their badge on non-cMoon boards.
     where: { joinLocked: false },
-    orderBy: [{ teamScore: 'desc' }, { name: 'asc' }],
     select: { id: true, name: true, color: true, memberCount: true, teamScore: true },
   })
 
-  return cmoons.map((c, i) => ({ ...c, rank: i + 1 }))
+  // Ranked by average points per member, not raw teamScore — a purely presentational choice for
+  // THIS board only (teamScore itself, individual rank progression, and every scoring rule are
+  // untouched) so a large team isn't automatically #1 just by having more members. Sorted in JS
+  // rather than via Prisma's orderBy since the average isn't a stored column; fine at this scale
+  // (see this file's header comment — cMoon count is tens, not thousands).
+  const ranked = cmoons
+    .map(c => ({ ...c, avgScore: c.memberCount > 0 ? c.teamScore / c.memberCount : 0 }))
+    .sort((a, b) => b.avgScore - a.avgScore || a.name.localeCompare(b.name))
+
+  return ranked.map((c, i) => ({ ...c, rank: i + 1 }))
 })
