@@ -118,10 +118,13 @@ export default defineEventHandler(async (event) => {
     `,
     // Same population the Leaderboards board ranks (unlocked cMoons only) — see that file's own
     // siteAvg comment for why small teams get pulled toward this rather than staying unshrunk.
+    // totalPoints casts to float8, not int: it sums every current member's points across every
+    // unlocked cMoon — the largest aggregate this feature computes — so it's the first to risk
+    // overflowing Postgres's int4 range as the site accumulates points over time.
     db.$queryRaw`
       SELECT
         COALESCE((
-          SELECT SUM(csl."points")::int
+          SELECT SUM(csl."points")::float8
           FROM "CMoonScoreLog" csl
           JOIN "User" u ON u."id" = csl."userId" AND u."cMoonId" = csl."cMoonId"
           JOIN "CMoon" c ON c.id = u."cMoonId"
@@ -134,7 +137,11 @@ export default defineEventHandler(async (event) => {
     getGlobalConfig(),
   ])
   const siteAvg = siteWideTotals[0].totalMembers > 0 ? siteWideTotals[0].totalPoints / siteWideTotals[0].totalMembers : 0
-  const shrinkageK = Number.isInteger(config?.cMoonAvgShrinkageK) ? config.cMoonAvgShrinkageK : 10
+  // >= 0 guard, not just Number.isInteger: a negative k (e.g. a stale/raw-edited config row)
+  // would make memberCount + k reach 0 for some team and divide by zero.
+  const shrinkageK = Number.isInteger(config?.cMoonAvgShrinkageK) && config.cMoonAvgShrinkageK >= 0
+    ? config.cMoonAvgShrinkageK
+    : 10
   const thisOwnAvg = cmoon.memberCount > 0 ? thisCurrentMembersTotal[0].total / cmoon.memberCount : 0
   const thisAvgScore = cmoon.memberCount > 0
     ? (cmoon.memberCount / (cmoon.memberCount + shrinkageK)) * thisOwnAvg + (shrinkageK / (cmoon.memberCount + shrinkageK)) * siteAvg

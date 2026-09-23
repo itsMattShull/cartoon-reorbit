@@ -67,7 +67,11 @@ export default defineEventHandler(async () => {
   // pulled toward siteAvg until it has "earned" enough members for its own average to be trusted.
   // k=0 degenerates to memberCount/(memberCount+0) = 1, i.e. the plain average, no special-casing
   // needed.
-  const shrinkageK = Number.isInteger(config.cMoonAvgShrinkageK) ? config.cMoonAvgShrinkageK : 10
+  // >= 0 guard, not just Number.isInteger: a negative k (e.g. a stale/raw-edited config row)
+  // would make memberCount + k reach 0 for some team and divide by zero.
+  const shrinkageK = Number.isInteger(config.cMoonAvgShrinkageK) && config.cMoonAvgShrinkageK >= 0
+    ? config.cMoonAvgShrinkageK
+    : 10
 
   // Ranked by (shrunk) average points per CURRENT member, not raw teamScore — a purely
   // presentational choice for THIS board only (teamScore itself, individual rank progression,

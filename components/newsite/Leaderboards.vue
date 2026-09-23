@@ -12,12 +12,14 @@
       </div>
     </div>
 
-    <!-- cMoons Tab: team standings ranked by average points per member (see cmoons.get.js),
-         plus each cMoon's top individual point contributors (a different, complementary
-         metric — see the script section) -->
+    <!-- cMoons Tab: team standings ranked by a shrinkage-adjusted average points per member
+         (see cmoons.get.js — row.avgScore is NOT the plain average; small teams' averages are
+         blended toward the site-wide average so a lucky one- or two-member team can't dominate
+         on noise), plus each cMoon's top individual point contributors (a different,
+         complementary metric — see the script section) -->
     <div v-if="activeTab === 'cmoons'" class="lb-content">
       <div class="lb-card lb-cmoons-card">
-        <div class="lb-card-header lb-card-header--cmoons">cMoon Team Leaderboard (avg pts/player)</div>
+        <div class="lb-card-header lb-card-header--cmoons">cMoon Team Leaderboard (weighted avg pts/player)</div>
         <div v-if="cmoonsPending" class="lb-loading">Loading…</div>
         <ul v-else class="lb-list">
           <li v-for="row in cmoonsData" :key="row.id" class="lb-row">
@@ -27,7 +29,7 @@
               <NuxtLink :to="`/newsite/cmoon/${row.id}`" class="lb-username">{{ row.name }}</NuxtLink>
               <span class="lb-cmoon-members">{{ row.memberCount }} member{{ row.memberCount === 1 ? '' : 's' }}</span>
             </div>
-            <span class="lb-value">{{ Math.round(row.avgScore).toLocaleString() }}<span class="lb-cmoon-avg-unit"> avg</span></span>
+            <span class="lb-value">{{ Math.round(row.avgScore).toLocaleString() }}<span class="lb-cmoon-avg-unit"> wtd avg</span></span>
           </li>
           <li v-if="!cmoonsData?.length" class="lb-empty">No cMoons yet</li>
         </ul>
@@ -275,8 +277,10 @@ function cMoonForRow(row) {
 
 // Top individual point contributors per cMoon — a per-player breakdown of the same team-score
 // log (CMoonScoreLog) row.teamScore is summed from. row.avgScore is a different, narrower sum
-// of that same log (current members' own rows only, see this file's own cmoons.get.js query) —
-// see server/api/leaderboard/cmoon-standings.get.js. Fetched eagerly like the boards above.
+// of that same log (current members' own rows only, see this file's own cmoons.get.js query),
+// then shrunk toward the site-wide average (see that endpoint's shrinkage comment) — it is NOT
+// the plain average — see server/api/leaderboard/cmoon-standings.get.js. Fetched eagerly like
+// the boards above.
 const { data: cMoonContributorsData } = useFetch('/api/leaderboard/cmoon-standings', { default: () => ({ cMoonEnabled: false, contributorsByCMoonId: {} }), headers })
 const contributorsByCMoonId = computed(() => cMoonContributorsData.value?.contributorsByCMoonId || {})
 </script>
