@@ -21,21 +21,32 @@ export default defineEventHandler(async () => {
       where: { joinLocked: false },
       select: { id: true, name: true, color: true, memberCount: true, teamScore: true },
     }),
-    // Sum of CMoonScoreLog points earned by whoever is CURRENTLY on each team, not teamScore
-    // (which sums every point the team has EVER earned, including from members who've since
-    // left — see recomputeCMoonTeamScores in server/utils/cmoon.js, which never re-scopes it to
-    // current membership). Using teamScore for an average-per-player ranking would let a team
-    // that churned through big-earning members who then left show an inflated average relative
-    // to what its actual current roster is earning. One query across every cMoon at once — same
-    // JOIN condition (u."cMoonId" = <this team>) the per-team "Top Point Contributors" query
-    // uses (server/api/cmoon/[id].get.js), just grouped by team instead of scoped to one.
+    // Sum of CMoonScoreLog points actually earned FOR each team, not teamScore (which sums every
+    // point the team has EVER earned, including from members who've since left — see
+    // recomputeCMoonTeamScores in server/utils/cmoon.js, which never re-scopes it to current
+    // membership). Using teamScore for an average-per-player ranking would let a team that
+    // churned through big-earning members who then left show an inflated average relative to
+    // what its actual current roster is earning.
+    //
+    // "csl.cMoonId" = u."cMoonId" is the critical condition, not just grouping by the user's
+    // current cMoonId: a CMoonScoreLog row is permanently tagged with whichever cMoon it was
+    // earned for and never moves when a player changes teams (admin reassignment, Balance Teams,
+    // accepted change requests — see reassignUserCMoon's own comment in server/utils/cmoon.js).
+    // Without this, a player who switches teams would carry every point they ever earned on
+    // their OLD team into their new team's average.
+    //
+    // No active/banned filter — unlike "Top Point Contributors" (server/api/cmoon/[id].get.js),
+    // a public leaderboard of named individuals where hiding a banned player makes sense, this
+    // total is divided by memberCount, which does NOT exclude banned/inactive members (neither
+    // banning nor the inactive-account sweep touches cMoonId or memberCount). Filtering the
+    // numerator but not the denominator would unfairly lower a team's average for every banned/
+    // inactive member it has — matches recomputeCMoonTeamScores's own convention (no such filter)
+    // for the same reason. One query across every cMoon at once rather than per-team.
     db.$queryRaw`
       SELECT u."cMoonId", SUM(csl."points")::int AS total
       FROM "CMoonScoreLog" csl
-      JOIN "User" u ON u."id" = csl."userId"
+      JOIN "User" u ON u."id" = csl."userId" AND u."cMoonId" = csl."cMoonId"
       WHERE u."cMoonId" IS NOT NULL
-        AND u."active" = true
-        AND COALESCE(u."banned", false) = false
         AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
       GROUP BY u."cMoonId"
     `,

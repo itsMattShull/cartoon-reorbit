@@ -86,15 +86,29 @@ export default defineEventHandler(async (event) => {
   // has EVER earned, including from members who've since left (recomputeCMoonTeamScores never
   // re-scopes it to current membership) — dividing that lifetime total by the CURRENT headcount
   // would inflate the average for any team that churned through big-earning members who then
-  // left. Summing CMoonScoreLog for whoever is actually on the roster right now (same JOIN
-  // condition "Top Point Contributors" below already uses) keeps the average meaning what it's
-  // supposed to: what THIS roster is actually earning per player.
+  // left. Summing CMoonScoreLog for rows actually earned for THIS team keeps the average meaning
+  // what it's supposed to: what THIS roster is actually earning per player.
+  //
+  // "csl.cMoonId" = u."cMoonId" is the critical condition, not just u."cMoonId" = ${id}: a
+  // CMoonScoreLog row is permanently tagged with whichever cMoon it was earned for (see
+  // reassignUserCMoon's own comment in server/utils/cmoon.js) and never moves when a player
+  // changes teams (admin reassignment, Balance Teams, accepted change requests). Filtering only
+  // on the user's CURRENT cMoonId — without also requiring the row itself belong to that same
+  // team — would let a player who switches teams carry every point they ever earned on their OLD
+  // team into their new team's average, exactly the kind of distortion this fix exists to remove.
+  //
+  // No active/banned filter here, unlike "Top Point Contributors" below — that query is a public
+  // leaderboard of named individuals (hiding a banned player from it makes sense), this is a
+  // team-wide total divided by memberCount, which does NOT exclude banned/inactive members (see
+  // ban.post.js / the inactive-account sweep in sync-guild-members.js — neither touches cMoonId
+  // or memberCount). Filtering the numerator but not the denominator would unfairly lower a
+  // team's average for every banned/inactive member it has. Matches recomputeCMoonTeamScores's
+  // own convention (no active/banned filter) for this same reason.
   const thisCurrentMembersTotal = await db.$queryRaw`
     SELECT COALESCE(SUM(csl."points"), 0)::int AS total
     FROM "CMoonScoreLog" csl
     JOIN "User" u ON u."id" = csl."userId" AND u."cMoonId" = ${id}
-    WHERE u."active" = true
-      AND COALESCE(u."banned", false) = false
+    WHERE csl."cMoonId" = ${id}
       AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
   `
   const thisAvgScore = cmoon.memberCount > 0 ? thisCurrentMembersTotal[0].total / cmoon.memberCount : 0
@@ -109,21 +123,20 @@ export default defineEventHandler(async (event) => {
   const [featuredCtoons, rankRows, topPointContributors, topRankMembers, captainMembers, poll] = await Promise.all([
     featuredCtoonsQuery,
     // Every OTHER cMoon's own current-members average, computed the exact same way as
-    // thisAvgScore above (a CTE rather than reading teamScore) — "joinLocked" = false mirrors the
-    // Leaderboards query's exclusion of locked cMoons from the comparison set, so a locked team's
-    // average never shifts a visible team's rank badge; this cMoon's own page still renders
-    // regardless of ITS OWN joinLocked state, only the OTHER cMoons compared against are filtered.
-    // LEFT JOIN + COALESCE handles a cMoon with no current-member CMoonScoreLog rows at all
-    // (average 0, same as the "memberCount > 0" guard handles a cMoon with no members).
+    // thisAvgScore above (a CTE rather than reading teamScore, csl."cMoonId" = u."cMoonId" so a
+    // row only counts toward the team it was actually earned for, no active/banned filter — see
+    // that comment for why) — "joinLocked" = false mirrors the Leaderboards query's exclusion of
+    // locked cMoons from the comparison set, so a locked team's average never shifts a visible
+    // team's rank badge; this cMoon's own page still renders regardless of ITS OWN joinLocked
+    // state, only the OTHER cMoons compared against are filtered. LEFT JOIN + COALESCE handles a
+    // cMoon with no current-member CMoonScoreLog rows at all (average 0, same as the
+    // "memberCount > 0" guard handles a cMoon with no members).
     db.$queryRaw`
       WITH current_totals AS (
         SELECT u."cMoonId", SUM(csl."points")::int AS total
         FROM "CMoonScoreLog" csl
-        JOIN "User" u ON u."id" = csl."userId"
-        WHERE u."cMoonId" IS NOT NULL
-          AND u."active" = true
-          AND COALESCE(u."banned", false) = false
-          AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
+        JOIN "User" u ON u."id" = csl."userId" AND u."cMoonId" = csl."cMoonId"
+        WHERE u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
         GROUP BY u."cMoonId"
       )
       SELECT COUNT(*)::int AS count
