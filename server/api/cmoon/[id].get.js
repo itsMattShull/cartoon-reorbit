@@ -80,16 +80,24 @@ export default defineEventHandler(async (event) => {
   // a lifetime points-earned-from-anything counter that converges toward a player's whole account
   // balance, not what they've actually contributed to this team. Raw SQL (JOIN + GROUP BY +
   // ORDER BY + LIMIT), mirroring that same endpoint, rather than a denormalized-column read.
-  // Rank is by average points per member (teamScore / memberCount), matching the Leaderboards
-  // page's cMoons tab (see server/api/leaderboard/cmoons.get.js) — a large team no longer ranks
-  // #1 purely by having more members. Raw SQL since the average isn't a stored column; "memberCount"
-  // > 0 excludes empty cMoons from ever counting as "ahead" (their true average is 0, and dividing
-  // by zero would otherwise error the whole query) rather than needing a JS-side fallback per row.
-  // "joinLocked" = false mirrors that same Leaderboards query's exclusion of locked cMoons from
-  // the comparison set, so a locked team's average never shifts a visible team's rank badge —
-  // this cMoon's own page still renders regardless of ITS OWN joinLocked state, only the OTHER
-  // cMoons being compared against are filtered.
-  const thisAvgScore = cmoon.memberCount > 0 ? cmoon.teamScore / cmoon.memberCount : 0
+  // Rank is by average points per CURRENT member, matching the Leaderboards page's cMoons tab
+  // (see server/api/leaderboard/cmoons.get.js) — a large team no longer ranks #1 purely by having
+  // more members. Deliberately NOT teamScore / memberCount: teamScore sums every point the team
+  // has EVER earned, including from members who've since left (recomputeCMoonTeamScores never
+  // re-scopes it to current membership) — dividing that lifetime total by the CURRENT headcount
+  // would inflate the average for any team that churned through big-earning members who then
+  // left. Summing CMoonScoreLog for whoever is actually on the roster right now (same JOIN
+  // condition "Top Point Contributors" below already uses) keeps the average meaning what it's
+  // supposed to: what THIS roster is actually earning per player.
+  const thisCurrentMembersTotal = await db.$queryRaw`
+    SELECT COALESCE(SUM(csl."points"), 0)::int AS total
+    FROM "CMoonScoreLog" csl
+    JOIN "User" u ON u."id" = csl."userId" AND u."cMoonId" = ${id}
+    WHERE u."active" = true
+      AND COALESCE(u."banned", false) = false
+      AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
+  `
+  const thisAvgScore = cmoon.memberCount > 0 ? thisCurrentMembersTotal[0].total / cmoon.memberCount : 0
 
   // Captains never earn a different actual rank tier for this — see displayRankName's own
   // comment, this only decides what the "Top Ranking Members" list SHOWS captains as (always
@@ -100,10 +108,29 @@ export default defineEventHandler(async (event) => {
 
   const [featuredCtoons, rankRows, topPointContributors, topRankMembers, captainMembers, poll] = await Promise.all([
     featuredCtoonsQuery,
+    // Every OTHER cMoon's own current-members average, computed the exact same way as
+    // thisAvgScore above (a CTE rather than reading teamScore) — "joinLocked" = false mirrors the
+    // Leaderboards query's exclusion of locked cMoons from the comparison set, so a locked team's
+    // average never shifts a visible team's rank badge; this cMoon's own page still renders
+    // regardless of ITS OWN joinLocked state, only the OTHER cMoons compared against are filtered.
+    // LEFT JOIN + COALESCE handles a cMoon with no current-member CMoonScoreLog rows at all
+    // (average 0, same as the "memberCount > 0" guard handles a cMoon with no members).
     db.$queryRaw`
-      SELECT COUNT(*)::int AS count FROM "CMoon"
-      WHERE "memberCount" > 0 AND "joinLocked" = false
-        AND ("teamScore"::float8 / "memberCount") > ${thisAvgScore}
+      WITH current_totals AS (
+        SELECT u."cMoonId", SUM(csl."points")::int AS total
+        FROM "CMoonScoreLog" csl
+        JOIN "User" u ON u."id" = csl."userId"
+        WHERE u."cMoonId" IS NOT NULL
+          AND u."active" = true
+          AND COALESCE(u."banned", false) = false
+          AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
+        GROUP BY u."cMoonId"
+      )
+      SELECT COUNT(*)::int AS count
+      FROM "CMoon" c
+      LEFT JOIN current_totals ct ON ct."cMoonId" = c.id
+      WHERE c."memberCount" > 0 AND c."joinLocked" = false
+        AND (COALESCE(ct.total, 0)::float8 / c."memberCount") > ${thisAvgScore}
     `,
     db.$queryRaw`
       SELECT u."username", u."avatar", SUM(csl."points")::int AS "points"
