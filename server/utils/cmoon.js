@@ -21,22 +21,24 @@ import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 //     #1 (all-time) on an eligible arcade game.
 //   - TOP10 (default 50 pts/week, ~7/day): a top-N finish on an eligible board (Top Points /
 //     Total cToons).
-//   - DAILY_TASK (default 10 pts/player/day, unscaled): completing at least one of the existing
-//     daily tasks that day. Awarded LIVE, directly inside recordDailyTaskCompletions itself
-//     (run frequently — see server/cron/record-daily-task-completions.js) the moment a
-//     completion is first detected, rather than waiting for this once-daily job — see that
-//     function's own comment. This job's DAILY_TASK handling below is a harmless backstop:
-//     the CMoonScoreLog unique constraint means it can never double-award what was already
-//     credited live.
+//   - DAILY_TASK (default 10 pts/WEEK, ~2/day — see DAILY_TASK_AWARDS_PER_WEEK below):
+//     completing at least one of the existing daily tasks that day. Awarded LIVE, directly
+//     inside recordDailyTaskCompletions itself (run frequently — see
+//     server/cron/record-daily-task-completions.js) the moment a completion is first detected,
+//     rather than waiting for this once-daily job — see that function's own comment. This job's
+//     DAILY_TASK handling below is a harmless backstop: the CMoonScoreLog unique constraint
+//     means it can never double-award what was already credited live.
 //
 // This ran once a week (Monday) until admins asked for a fully time-adjustable daily run
 // instead. HIGH_SCORE/TOP10 are a snapshot of who holds a spot RIGHT NOW, not something actually
 // earned per-day — running that snapshot 7x as often would otherwise inflate an unchanged
 // holder's weekly total 7x for no behavioral change, so those two admin-configured point values
 // are still entered/read as "per week" and divided down at award time (see perRunAward), and stay
-// on this job's admin-configurable once-daily cadence — never awarded live. Only DAILY_TASK
-// genuinely already awarded per calendar day (previously just batched into one weekly insert),
-// which is what makes live-awarding it safe.
+// on this job's admin-configurable once-daily cadence — never awarded live. DAILY_TASK genuinely
+// already awards per calendar day (one completion = one award, no daily-cadence multiplication to
+// correct for), but it's ALSO entered as a weekly total and divided down (see
+// DAILY_TASK_AWARDS_PER_WEEK/dailyTaskAward below) — divided by 6 rather than 7, on the
+// expectation that most players won't complete a qualifying task every single day of the week.
 //
 // All the numbers above, the minimum-account-age anti-abuse gate, which games are
 // HIGH_SCORE-eligible, and which boards/rank-cutoff count for TOP10 are admin-editable
@@ -84,6 +86,39 @@ const WIN_GAMES = [
 export const SCORE_GAME_OPTIONS = SCORE_GAMES.map(({ name, label }) => ({ key: name, label }))
 export const WIN_GAME_OPTIONS = WIN_GAMES.map(({ name, label }) => ({ key: name, label }))
 
+// Every category ever written to CMoonScoreLog.category — HIGH_SCORE/TOP10/DAILY_TASK from this
+// file (see runDailyCMoonScoring/recordDailyTaskCompletions above), plus ADMIN_BACKFILL from
+// server/workers/cmoon-daily-task-backfill.worker.js's one-time "Backfill cMoon Points" tool.
+// Exported so the admin points-log endpoint has a fixed filter list without a DISTINCT query.
+export const CMOON_SCORE_LOG_CATEGORIES = ['HIGH_SCORE', 'TOP10', 'DAILY_TASK', 'ADMIN_BACKFILL']
+
+const GAME_LABEL_BY_KEY = new Map([...SCORE_GAMES, ...WIN_GAMES].map(g => [g.name, g.label]))
+
+// Human-readable "how/where" for one CMoonScoreLog row, derived from its (category, detail)
+// pair — see this file's various `candidates.push({ category, detail, ... })` call sites (and
+// the backfill worker's `cMoonScoreLog.create`) for what each combination actually means.
+// Exported so the admin points-log endpoint never has to re-derive this mapping itself.
+export function describeCMoonScoreLogSource(category, detail) {
+  switch (category) {
+    case 'HIGH_SCORE':
+      return `High Score — ${GAME_LABEL_BY_KEY.get(detail) || detail || 'unknown game'}`
+    case 'TOP10':
+      if (detail === 'points') return 'Top 10 — Total Points board'
+      if (detail === 'totalCtoons') return 'Top 10 — Total cToons board'
+      if (typeof detail === 'string' && detail.startsWith('game:')) {
+        const key = detail.slice('game:'.length)
+        return `Top 10 — ${GAME_LABEL_BY_KEY.get(key) || key}`
+      }
+      return 'Top 10'
+    case 'DAILY_TASK':
+      return 'Daily Task completion'
+    case 'ADMIN_BACKFILL':
+      return 'Admin backfill (Backfill cMoon Points tool)'
+    default:
+      return category || 'Unknown'
+  }
+}
+
 // Defaults mirror the GlobalGameConfig column defaults (see the migration) — used both
 // as the fallback when a value is missing/out-of-range and to document the shape.
 export const CMOON_SCORING_DEFAULTS = {
@@ -94,6 +129,18 @@ export const CMOON_SCORING_DEFAULTS = {
   top10RankCutoff: 10,
   top10PointsBoardEnabled: true,
   top10CtoonsBoardEnabled: true,
+}
+
+// How many of the 7 days in a week a player is expected to complete a qualifying daily task —
+// dailyTaskPoints is entered as a weekly total (same convention as highScorePoints/top10Points
+// below) and divided by this to get the actual per-completion award. 6, not 7: unlike
+// HIGH_SCORE/TOP10 (a snapshot re-taken daily that has to be divided down to avoid inflating an
+// unchanged holder's total), a player who completes a daily task every single day of the week
+// would otherwise cap out below the configured weekly figure under a ÷7 split — ÷6 leaves one
+// rest day of headroom before that happens.
+export const DAILY_TASK_AWARDS_PER_WEEK = 6
+export function dailyTaskAward(weeklyPoints) {
+  return Math.max(0, Math.round(weeklyPoints / DAILY_TASK_AWARDS_PER_WEEK))
 }
 
 function parseDisabledGameKeys(value) {
@@ -128,12 +175,15 @@ export function resolveScoringConfig(config) {
   }
 }
 
-// Current all-time #1 for a score-based game (highest, or lowest for ReOrbit Memory's
-// move count). Shape/exclusions mirror server/utils/gameLeaderboard.js's buildTop11.
+// All-time top N for a score-based game (highest, or lowest for ReOrbit Memory's move count),
+// one row per user. Shape/exclusions mirror server/utils/gameLeaderboard.js's buildTop11.
 // `table`/`column` are compile-time constants from SCORE_GAMES above, never runtime input —
 // same convention gameLeaderboard.js documents for the identical reason: they can't be bind
-// parameters, so $queryRawUnsafe is used with every actual value still bound.
-async function findTopScoreHolder({ table, column, direction, extraWhere }) {
+// parameters, so $queryRawUnsafe is used with every actual value (including rankCutoff) still
+// bound. Backs both findTopScoreHolder (rankCutoff=1, for HIGH_SCORE) and the per-game TOP10
+// award below (rankCutoff=top10RankCutoff) — the same "who's currently on this game's board"
+// computation either way, just truncated at a different depth.
+async function getTopNScoreHolders({ table, column, direction, extraWhere }, rankCutoff) {
   const agg = direction === 'asc' ? 'MIN' : 'MAX'
   const order = direction === 'asc' ? 'ASC' : 'DESC'
   const sql = `
@@ -146,16 +196,20 @@ async function findTopScoreHolder({ table, column, direction, extraWhere }) {
       ${extraWhere || ''}
     GROUP BY u."id", u."cMoonId", u."createdAt"
     ORDER BY ${agg}(s."${column}") ${order}
-    LIMIT 1
+    LIMIT $2
   `
-  const rows = await prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID)
+  return prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff)
+}
+async function findTopScoreHolder(game) {
+  const rows = await getTopNScoreHolders(game, 1)
   return rows[0] || null
 }
 
-// Current all-time #1 by win count for a duel-match game. Shape mirrors
+// All-time top N by win count for a duel-match game, one row per user. Shape mirrors
 // server/utils/duelLeaderboard.js's rankedRows (all-time period, natural endings only).
-// `table` is a compile-time constant from WIN_GAMES above — see the note on findTopScoreHolder.
-async function findTopWinsHolder({ table }) {
+// `table` is a compile-time constant from WIN_GAMES above — see the note on getTopNScoreHolders.
+// Backs findTopWinsHolder (rankCutoff=1) and the per-game TOP10 award the same way.
+async function getTopNWinsHolders({ table }, rankCutoff) {
   const sql = `
     WITH participants AS (
       SELECT m."player1UserId" AS uid, (m."winnerUserId" = m."player1UserId") AS won
@@ -179,9 +233,12 @@ async function findTopWinsHolder({ table }) {
       AND COALESCE(u."banned", false) = false
       AND a.wins > 0
     ORDER BY a.wins DESC
-    LIMIT 1
+    LIMIT $2
   `
-  const rows = await prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID)
+  return prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff)
+}
+async function findTopWinsHolder(game) {
+  const rows = await getTopNWinsHolders(game, 1)
   return rows[0] || null
 }
 
@@ -242,6 +299,14 @@ export async function recordDailyTaskCompletions() {
   const config = await getGlobalConfig({ fresh: true })
   if (!config?.cMoonEnabled) return { recorded: 0 }
 
+  // Heartbeat: stamped every tick this cron actually runs, regardless of whether anyone
+  // qualified — see the schema comment on cMoonDailyTaskCronLastRanAt. Fire-and-forget: this
+  // must never slow down or fail the real work below over a heartbeat write.
+  prisma.globalGameConfig
+    .update({ where: { id: 'singleton' }, data: { cMoonDailyTaskCronLastRanAt: new Date() } })
+    .then(() => invalidateGlobalConfigCache())
+    .catch(() => {})
+
   const [globalConfig, winwheelConfig, lottoSettings, barcodeConfig] = await Promise.all([
     prisma.globalGameConfig.findUnique({
       where: { id: 'singleton' },
@@ -297,7 +362,7 @@ export async function recordDailyTaskCompletions() {
   const wheelBranch = winwheelMaxDailySpins > 0
     ? Prisma.sql`
         SELECT "userId" FROM "WheelSpinLog"
-        WHERE "createdAt" >= ${morningBoundary} AND "status" <> 'failed'
+        WHERE "createdAt" >= ${morningBoundary} AND "status" <> 'failed' AND "result" <> 'tripleNothing'
           AND "userId" IN (SELECT id FROM eligible)
         GROUP BY "userId" HAVING COUNT(*) >= ${winwheelMaxDailySpins}`
     : inert
@@ -315,6 +380,19 @@ export async function recordDailyTaskCompletions() {
         GROUP BY "userId" HAVING COUNT(*) >= ${monsterDailyScanLimit}`
     : inert
 
+  // Two separate qualifying groups, each recorded under ITS OWN boundary as the completion
+  // "date" — login/czone/gamepts/tkopts reset at 8pm (dailyBoundary), wheel/lotto/scans reset
+  // at 8am (morningBoundary). Recording every group under one shared date used to let the two
+  // clocks drift apart: a player who qualified via wheel/lotto/scans earlier in the day was
+  // still "qualifying" (their cumulative count doesn't disappear) once dailyBoundary rolled
+  // over at 8pm, so the very same activity could insert a second, distinct-date completion row
+  // a few minutes after 8pm — a real double-award, not a hypothetical, hit by any player doing
+  // those three tasks during normal daytime hours. Recording each group under its own boundary
+  // means a row only becomes insertable again once that group's OWN reset actually happens.
+  //
+  // A player who satisfies both groups in the same real day now gets two completion rows (one
+  // per boundary) rather than one — an accepted, much narrower trade-off: two genuinely
+  // independent reset cycles being satisfied, instead of one activity being double-counted.
   const rows = await prisma.$queryRaw`
     WITH eligible AS (
       SELECT id FROM "User"
@@ -332,27 +410,33 @@ export async function recordDailyTaskCompletions() {
     wheel AS (${wheelBranch}),
     lotto AS (${lottoBranch}),
     scans AS (${scansBranch}),
-    qualifying AS (
+    eveningQualifying AS (
       SELECT "userId" FROM login
       UNION SELECT "userId" FROM czone
       UNION SELECT "userId" FROM gamepts
       UNION SELECT "userId" FROM tkopts
-      UNION SELECT "userId" FROM wheel
+    ),
+    morningQualifying AS (
+      SELECT "userId" FROM wheel
       UNION SELECT "userId" FROM lotto
       UNION SELECT "userId" FROM scans
     )
     INSERT INTO "UserDailyTaskCompletion" (id, "userId", "date")
-    SELECT gen_random_uuid()::text, "userId", ${dailyBoundary} FROM qualifying
+    SELECT gen_random_uuid()::text, "userId", ${dailyBoundary} FROM eveningQualifying
+    UNION ALL
+    SELECT gen_random_uuid()::text, "userId", ${morningBoundary} FROM morningQualifying
     ON CONFLICT ("userId", "date") DO NOTHING
-    RETURNING id, "userId"
+    RETURNING id, "userId", "date"
   `
 
   // Live-award DAILY_TASK the moment a completion is first detected, rather than waiting for
-  // runDailyCMoonScoring's own once-daily pass (see that function's comment) — every userId here
+  // runDailyCMoonScoring's own once-daily pass (see that function's comment) — every row here
   // is a brand-new UserDailyTaskCompletion row (ON CONFLICT DO NOTHING excludes already-recorded
-  // ones), so this can never re-award the same day twice on its own; the CMoonScoreLog unique
-  // constraint (cMoonId, userId, category, weekStart, detail) is still the actual idempotency
-  // guard, exactly as it is everywhere else in this module.
+  // ones), so this can never re-award the same (user, boundary) twice on its own; the
+  // CMoonScoreLog unique constraint (cMoonId, userId, category, weekStart, detail) is still the
+  // actual idempotency guard, exactly as it is everywhere else in this module. Each row's own
+  // `date` (not a single shared value) becomes that award's weekStart/detail, matching whichever
+  // boundary actually produced it.
   if (dailyTaskPoints > 0 && rows.length) {
     const newUserIds = rows.map(r => r.userId)
     const members = await prisma.user.findMany({
@@ -360,10 +444,14 @@ export async function recordDailyTaskCompletions() {
       select: { id: true, cMoonId: true },
     })
     if (members.length) {
-      const candidates = members.map(u => ({
-        cMoonId: u.cMoonId, userId: u.id, category: 'DAILY_TASK',
-        detail: dailyBoundary.toISOString(), points: dailyTaskPoints, weekStart: dailyBoundary,
-      }))
+      const cMoonIdByUser = new Map(members.map(m => [m.id, m.cMoonId]))
+      const awardPoints = dailyTaskAward(dailyTaskPoints)
+      const candidates = rows
+        .filter(r => cMoonIdByUser.has(r.userId))
+        .map(r => ({
+          cMoonId: cMoonIdByUser.get(r.userId), userId: r.userId, category: 'DAILY_TASK',
+          detail: r.date.toISOString(), points: awardPoints, weekStart: r.date,
+        }))
       await prisma.cMoonScoreLog.createMany({ data: candidates, skipDuplicates: true })
       await recomputeCMoonTeamScores()
       await recomputeCMoonPointsForUsers(members.map(u => u.id))
@@ -376,7 +464,7 @@ export async function recordDailyTaskCompletions() {
 // Fully recomputes CMoon.teamScore from CMoonScoreLog (never incremented directly — see
 // the module-level comment above). Two-statement reset-then-recompute, both in one
 // transaction, mirrors server/cron/czone-display-count.js's runCzoneDisplayCountAggregate.
-async function recomputeCMoonTeamScores() {
+export async function recomputeCMoonTeamScores() {
   await prisma.$transaction([
     prisma.$executeRaw`UPDATE "CMoon" SET "teamScore" = 0`,
     prisma.$executeRaw`
@@ -415,6 +503,7 @@ export async function runDailyCMoonScoring() {
   } = resolveScoringConfig(config)
   const dailyHighScorePoints = perRunAward(highScorePoints)
   const dailyTop10Points = perRunAward(top10Points)
+  const dailyTaskAwardPoints = dailyTaskAward(dailyTaskPoints)
 
   const weekStart = getChicagoDailyBoundary() // see CMoonScoreLog.weekStart's schema comment
   const weekBegin = new Date(weekStart.getTime() - 24 * 60 * 60 * 1000)
@@ -422,23 +511,37 @@ export async function runDailyCMoonScoring() {
 
   const candidates = []
 
-  const [scoreHolders, winHolders, top10PointsHolders, top10CtoonsHolders] = await Promise.all([
-    Promise.all(activeScoreGames.map(g => findTopScoreHolder(g))),
-    Promise.all(activeWinGames.map(g => findTopWinsHolder(g))),
+  // Top N (not just #1) per eligible game, fetched once and reused for both categories: row 0
+  // is this game's HIGH_SCORE holder (unchanged behavior), and every eligible row in the full
+  // list earns TOP10 for placing in this game's own top `top10RankCutoff` — the same games list
+  // (activeScoreGames/activeWinGames, admin-editable via the existing per-game disable toggles)
+  // as HIGH_SCORE, just a deeper cut. #1 naturally earns both categories for the same game,
+  // same as it already could for, say, HIGH_SCORE plus a Top Points board finish.
+  const [scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders] = await Promise.all([
+    Promise.all(activeScoreGames.map(g => getTopNScoreHolders(g, top10RankCutoff))),
+    Promise.all(activeWinGames.map(g => getTopNWinsHolders(g, top10RankCutoff))),
     top10PointsBoardEnabled ? getTop10PointsHolders(top10RankCutoff) : Promise.resolve([]),
     top10CtoonsBoardEnabled ? getTop10TotalCtoonsHolders(top10RankCutoff) : Promise.resolve([]),
   ])
 
   activeScoreGames.forEach((g, i) => {
-    const holder = scoreHolders[i]
+    const rows = scoreTopN[i]
+    const holder = rows[0] || null
     if (isEligibleHolder(holder, minAccountAgeCutoff)) {
       candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: dailyHighScorePoints, weekStart })
     }
+    for (const row of eligibleHolders(rows, minAccountAgeCutoff)) {
+      candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: `game:${g.name}`, points: dailyTop10Points, weekStart })
+    }
   })
   activeWinGames.forEach((g, i) => {
-    const holder = winHolders[i]
+    const rows = winTopN[i]
+    const holder = rows[0] || null
     if (isEligibleHolder(holder, minAccountAgeCutoff)) {
       candidates.push({ cMoonId: holder.cMoonId, userId: holder.userId, category: 'HIGH_SCORE', detail: g.name, points: dailyHighScorePoints, weekStart })
+    }
+    for (const row of eligibleHolders(rows, minAccountAgeCutoff)) {
+      candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: `game:${g.name}`, points: dailyTop10Points, weekStart })
     }
   })
   for (const row of eligibleHolders(top10PointsHolders, minAccountAgeCutoff)) {
@@ -448,6 +551,10 @@ export async function runDailyCMoonScoring() {
     candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'totalCtoons', points: dailyTop10Points, weekStart })
   }
 
+  // weekStart here is deliberately row.date, not the outer weekStart — a completion recorded
+  // under morningBoundary (wheel/lotto/scans, see recordDailyTaskCompletions) must produce the
+  // exact same (weekStart, detail) pair here as it would have from the live-award path, or the
+  // CMoonScoreLog unique constraint stops deduping it and this backstop double-awards it.
   const dailyTaskRows = await prisma.userDailyTaskCompletion.findMany({
     where: { date: { gte: weekBegin, lt: weekStart }, user: { cMoonId: { not: null } } },
     select: { userId: true, date: true, user: { select: { cMoonId: true } } }
@@ -455,7 +562,7 @@ export async function runDailyCMoonScoring() {
   for (const row of dailyTaskRows) {
     candidates.push({
       cMoonId: row.user.cMoonId, userId: row.userId, category: 'DAILY_TASK',
-      detail: row.date.toISOString(), points: dailyTaskPoints, weekStart
+      detail: row.date.toISOString(), points: dailyTaskAwardPoints, weekStart: row.date
     })
   }
 
@@ -503,14 +610,14 @@ async function getHolderSnapshot() {
   const resolvedConfig = resolveScoringConfig(config)
   const { activeScoreGames, activeWinGames, top10PointsBoardEnabled, top10CtoonsBoardEnabled, top10RankCutoff } = resolvedConfig
 
-  const [scoreHolders, winHolders, top10PointsHolders, top10CtoonsHolders] = await Promise.all([
-    Promise.all(activeScoreGames.map(g => findTopScoreHolder(g))),
-    Promise.all(activeWinGames.map(g => findTopWinsHolder(g))),
+  const [scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders] = await Promise.all([
+    Promise.all(activeScoreGames.map(g => getTopNScoreHolders(g, top10RankCutoff))),
+    Promise.all(activeWinGames.map(g => getTopNWinsHolders(g, top10RankCutoff))),
     top10PointsBoardEnabled ? getTop10PointsHolders(top10RankCutoff) : Promise.resolve([]),
     top10CtoonsBoardEnabled ? getTop10TotalCtoonsHolders(top10RankCutoff) : Promise.resolve([]),
   ])
 
-  cachedHolderSnapshot = { resolvedConfig, activeScoreGames, activeWinGames, scoreHolders, winHolders, top10PointsHolders, top10CtoonsHolders }
+  cachedHolderSnapshot = { resolvedConfig, activeScoreGames, activeWinGames, scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders }
   cachedHolderSnapshotAt = now
   return cachedHolderSnapshot
 }
@@ -539,10 +646,14 @@ export async function getPendingScoringPreview(userId, cMoonId, userCreatedAt) {
   const isThisUser = (row) => row?.userId === userId && row?.cMoonId === cMoonId
 
   snapshot.activeScoreGames.forEach((g, i) => {
-    if (isThisUser(snapshot.scoreHolders[i])) breakdown.push({ category: 'HIGH_SCORE', label: g.label, points: dailyHighScorePoints })
+    const rows = snapshot.scoreTopN[i]
+    if (isThisUser(rows[0])) breakdown.push({ category: 'HIGH_SCORE', label: g.label, points: dailyHighScorePoints })
+    if (rows.some(isThisUser)) breakdown.push({ category: 'TOP10', label: `${g.label} leaderboard`, points: dailyTop10Points })
   })
   snapshot.activeWinGames.forEach((g, i) => {
-    if (isThisUser(snapshot.winHolders[i])) breakdown.push({ category: 'HIGH_SCORE', label: g.label, points: dailyHighScorePoints })
+    const rows = snapshot.winTopN[i]
+    if (isThisUser(rows[0])) breakdown.push({ category: 'HIGH_SCORE', label: g.label, points: dailyHighScorePoints })
+    if (rows.some(isThisUser)) breakdown.push({ category: 'TOP10', label: `${g.label} leaderboard`, points: dailyTop10Points })
   })
   if (snapshot.top10PointsHolders.some(isThisUser)) {
     breakdown.push({ category: 'TOP10', label: 'Total Points board', points: dailyTop10Points })

@@ -26,7 +26,7 @@ import {
   sanitizeStrokes,
   sanitizeFruitSamuraiCfg,
   replayFruitSamuraiGame,
-  MAX_TICKS,
+  FRUIT_SAMURAI_MAX_TICKS as MAX_TICKS,
   MAX_STROKES,
   MAX_SAMPLES,
   MAX_SESSION_SECONDS

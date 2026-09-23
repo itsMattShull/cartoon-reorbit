@@ -6,7 +6,8 @@ import {
   createError
 } from 'h3'
 import { prisma } from '@/server/prisma'
-import { isSyntheticUserCtoonId, resolveUserCtoonId } from '@/server/utils/userCtoonId'
+import { resolveUserCtoonId } from '@/server/utils/userCtoonId'
+import { isSyntheticUserCtoonId } from '@/server/utils/userCtoonToken'
 
 async function resolveIds(ids) {
   return Promise.all(ids.map(id => isSyntheticUserCtoonId(id) ? resolveUserCtoonId(id) : id))

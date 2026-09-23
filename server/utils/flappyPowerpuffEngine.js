@@ -369,8 +369,6 @@ export function hasSolverClustering(result) {
 }
 
 export {
-  WORLD_W,
-  WORLD_H,
   BIRD_X,
   BIRD_W,
   BIRD_H,

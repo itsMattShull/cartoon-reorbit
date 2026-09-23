@@ -17,6 +17,7 @@ import { applyDissolveSchedule, getDissolveScheduleConfig } from '../utils/disso
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
 import { logCronError } from '../utils/cronErrorLog.js'
+import { USER_TABLE_BULK_WRITE_LOCK_KEY } from '../utils/dbLocks.js'
 import { runCMoonPointsAggregate } from './cmoon-points-aggregate.js'
 import { runRecordDailyTaskCompletions } from './record-daily-task-completions.js'
 import { checkAndRunCMoonDailyScoring } from './cmoon-daily-score.js'
@@ -242,22 +243,38 @@ async function discordDm(discordUserId, content) {
 }
 
 async function recomputeLastActivity() {
-  // Note: PostgreSQL quoted identifiers must match your table/column names.
-  const sql = `
-  UPDATE "User" u SET "lastActivity" = GREATEST(
-    COALESCE(u."lastLogin", TIMESTAMP 'epoch'),
-    COALESCE( (SELECT MAX(l."createdAt") FROM "LoginLog" l WHERE l."userId" = u."id"),   TIMESTAMP 'epoch'),
-    COALESCE( (SELECT MAX(p."createdAt") FROM "PointsLog" p WHERE p."userId" = u."id"),  TIMESTAMP 'epoch'),
-    COALESCE( (SELECT MAX(g."createdAt") FROM "GamePointLog" g WHERE g."userId" = u."id"), TIMESTAMP 'epoch'),
-    COALESCE( (SELECT MAX(v."createdAt") FROM "Visit" v WHERE v."userId" = u."id"),      TIMESTAMP 'epoch'),
-    COALESCE( (SELECT MAX(w."createdAt") FROM "WheelSpinLog" w WHERE w."userId" = u."id"), TIMESTAMP 'epoch'),
-    COALESCE(u."createdAt", TIMESTAMP 'epoch')
-  )
-  WHERE TRUE;`
-  // No inner try/catch: let a failure here propagate to the runJob() wrapper at the call
-  // site so it lands in CronErrorLog instead of vanishing silently, as it did for a long
-  // time when this only had a bare `catch {}`.
-  await prisma.$executeRawUnsafe(sql)
+  // This is a full-table UPDATE...FROM-shaped statement (via correlated subqueries), same
+  // as runCMoonPointsAggregate's (server/cron/cmoon-points-aggregate.js) recompute of
+  // "User"."cMoonPoints". Two such statements running at once lock overlapping User rows
+  // in whatever order their own query plan happens to visit them — which doesn't agree
+  // between the two — and Postgres deadlocks one of them. Sharing that job's advisory
+  // lock key (see server/utils/dbLocks.js) serializes the two instead: whoever loses just
+  // skips and picks the work up on its own next scheduled tick.
+  const [{ locked }] = await prisma.$queryRaw`SELECT pg_try_advisory_lock(${USER_TABLE_BULK_WRITE_LOCK_KEY}::bigint) AS locked`
+  if (!locked) {
+    console.log('[recomputeLastActivity] another bulk User-table job holds the lock, skipping')
+    return
+  }
+  try {
+    // Note: PostgreSQL quoted identifiers must match your table/column names.
+    const sql = `
+    UPDATE "User" u SET "lastActivity" = GREATEST(
+      COALESCE(u."lastLogin", TIMESTAMP 'epoch'),
+      COALESCE( (SELECT MAX(l."createdAt") FROM "LoginLog" l WHERE l."userId" = u."id"),   TIMESTAMP 'epoch'),
+      COALESCE( (SELECT MAX(p."createdAt") FROM "PointsLog" p WHERE p."userId" = u."id"),  TIMESTAMP 'epoch'),
+      COALESCE( (SELECT MAX(g."createdAt") FROM "GamePointLog" g WHERE g."userId" = u."id"), TIMESTAMP 'epoch'),
+      COALESCE( (SELECT MAX(v."createdAt") FROM "Visit" v WHERE v."userId" = u."id"),      TIMESTAMP 'epoch'),
+      COALESCE( (SELECT MAX(w."createdAt") FROM "WheelSpinLog" w WHERE w."userId" = u."id"), TIMESTAMP 'epoch'),
+      COALESCE(u."createdAt", TIMESTAMP 'epoch')
+    )
+    WHERE TRUE;`
+    // No inner try/catch: let a failure here propagate to the runJob() wrapper at the call
+    // site so it lands in CronErrorLog instead of vanishing silently, as it did for a long
+    // time when this only had a bare `catch {}`.
+    await prisma.$executeRawUnsafe(sql)
+  } finally {
+    await prisma.$queryRaw`SELECT pg_advisory_unlock(${USER_TABLE_BULK_WRITE_LOCK_KEY}::bigint)`
+  }
 }
 
 const MS_PER_DAY = 86_400_000

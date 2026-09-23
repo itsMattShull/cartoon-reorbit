@@ -1,7 +1,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 
-import { computeCollectionWorth, MIN_SAMPLE_SIZE } from '../server/utils/collectionWorth.js'
+import { computeCollectionWorth } from '../server/utils/collectionWorth.js'
+import { MIN_SAMPLE_SIZE } from '../server/utils/economyValuation.js'
 
 test('computeCollectionWorth sums face value straightforwardly', () => {
   const ctoons = new Map([

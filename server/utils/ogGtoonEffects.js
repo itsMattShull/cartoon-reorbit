@@ -109,12 +109,6 @@
 // (player1 before player2) -> value mods (set -> multiply -> add, player1 before player2 within
 // each) -> every resolved effect recorded.
 
-const NEUTRAL_COLORS = new Set(['BLACK', 'SILVER'])
-
-export function isNeutralColor(color) {
-  return NEUTRAL_COLORS.has(color)
-}
-
 const CARD_TYPES = new Set(['ANIMAL', 'FEMALE', 'HERO', 'MALE', 'MONSTER', 'PLACE', 'PROP', 'VEHICLE', 'VILLAIN'])
 const GROUPS = new Set([
   'BEAN_SCOUTS', 'DAILY_PLANET', 'GLOBAL', 'IMAGINARY_FRIEND', 'INJUSTICE_GANG',

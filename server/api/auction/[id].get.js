@@ -1,6 +1,6 @@
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
-import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
+import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 import { findConcurrentFeaturedLead } from '@/server/utils/featuredEligibility'
 
 export default defineEventHandler(async (event) => {

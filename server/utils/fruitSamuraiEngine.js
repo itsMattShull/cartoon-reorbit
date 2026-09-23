@@ -51,7 +51,8 @@ import {
 // A run is capped at 5 minutes of simulated time. This bounds the replay cost of one /end
 // request and is an anti-abuse rail rather than the intended ending: the uncapped wave
 // escalation in the sim means every honest run ends in a death well before this.
-export const MAX_TICKS = 5 * 60 * TICK_HZ // 18000
+const MAX_TICKS = 5 * 60 * TICK_HZ // 18000
+export { MAX_TICKS as FRUIT_SAMURAI_MAX_TICKS }
 
 // One entry per pointer-down..pointer-up. Measured against simulated play, an aggressive
 // player producing a stroke every ~6 ticks for a full five-minute run lands near 3,000.
@@ -73,7 +74,8 @@ export { COORD_MARGIN }
 
 // A run claiming N ticks must have taken at least this fraction of N/60 seconds of real time.
 // 0.75 leaves headroom for clock skew, a slow /start round trip, and rAF throttling.
-export const MIN_REALTIME_RATIO = 0.75
+const MIN_REALTIME_RATIO = 0.75
+export { MIN_REALTIME_RATIO as FRUIT_SAMURAI_MIN_REALTIME_RATIO }
 
 // Upper bound on a session's real duration. See the note above on why this exists here and
 // not in asteroidEngine.js.

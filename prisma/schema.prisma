@@ -946,6 +946,8 @@ model Visit {
   createdAt   DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
 }
 
 model TradeRoom {
@@ -1086,6 +1088,7 @@ model LoginLog {
 
   @@index([ip])
   @@index([createdAt])
+  @@index([userId, createdAt])
 }
 
 model DeviceFingerprintLog {
@@ -1539,10 +1542,10 @@ model GameConfig {
   // engine). Same "off hides the section AND refuses the action" philosophy as
   // pokemonBattleEnabled: each is read server-side at the point of action (queue/challenge,
   // match start, deck save, leaderboard fetch), not just used to hide UI.
-  ogGtoonsMatchmakingEnabled  Boolean? @default(true)
-  ogGtoonsGameEnabled         Boolean? @default(true)
-  ogGtoonsDeckBuildingEnabled Boolean? @default(true)
-  ogGtoonsLeaderboardEnabled  Boolean? @default(true)
+  ogGtoonsMatchmakingEnabled  Boolean? @default(false)
+  ogGtoonsGameEnabled         Boolean? @default(false)
+  ogGtoonsDeckBuildingEnabled Boolean? @default(false)
+  ogGtoonsLeaderboardEnabled  Boolean? @default(false)
 }
 
 model GlobalGameConfig {
@@ -1678,6 +1681,14 @@ model GlobalGameConfig {
   cMoonScoringRunHour                Int       @default(0) // 0-23 CST
   cMoonScoringRunMinute              Int       @default(0) // 0-59
   cMoonScoringLastRunDate            String?
+  // Heartbeat for the SEPARATE, every-minute live daily-task cron (recordDailyTaskCompletions,
+  // see server/cron/record-daily-task-completions.js) — unlike cMoonScoringLastRunDate above
+  // (which only advances once a calendar day, for the HIGH_SCORE/TOP10 job), this is stamped on
+  // every tick the daily-task cron actually executes, whether or not anyone qualified that
+  // minute, so a stale value is a direct signal the cron process itself has stopped running —
+  // there is otherwise no admin-visible way to tell "no one's completed a task in a while" apart
+  // from "the cron died." Surfaced on Admin > cMoons > Scoring Rules.
+  cMoonDailyTaskCronLastRanAt        DateTime?
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }

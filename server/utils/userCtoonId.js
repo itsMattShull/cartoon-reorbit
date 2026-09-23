@@ -7,8 +7,6 @@ import {
   groupTokensByUser
 } from '@/server/utils/userCtoonToken'
 
-export { encodeUserCtoonId, isSyntheticUserCtoonId }
-
 /**
  * Resolves a list of cToon references to real UserCtoon ids in one query.
  *

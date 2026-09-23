@@ -1,7 +1,7 @@
 // server/api/collections/owners.get.js
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
-import { encodeUserCtoonId } from '@/server/utils/userCtoonId'
+import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 
 export default defineEventHandler(async (event) => {
   // 1) Authenticate

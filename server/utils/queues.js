@@ -239,3 +239,22 @@ export const cmoonPrizeRevokeQueue = new Queue(
     },
   }
 )
+
+// Queue for the admin "Backfill cMoon Points" tool (server/workers/cmoon-daily-task-backfill.worker.js)
+// — a one-time, admin-triggered, one-user-at-a-time grant of a flat bonus to every current cMoon
+// member (optionally skipping anyone who already has cMoon points). Unlike cmoonRankRecalcQueue,
+// this is NOT given a single fixed jobId: an admin may legitimately want to run it again later
+// (a fresh batch of members, a different amount), each run's own CMoonScoreLog rows are keyed by
+// that run's jobId (see the worker), so a stale jobId would only block re-running, never protect
+// against it — see server/api/admin/cmoons/backfill-points.post.js for how in-flight runs are
+// instead detected by scanning the queue's active/waiting jobs.
+export const cmoonDailyTaskBackfillQueue = new Queue(
+  process.env.CMOON_DAILY_TASK_BACKFILL_QUEUE_KEY || 'cmoonDailyTaskBackfillQueue',
+  {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 20 },
+      removeOnFail:     { count: 20 },
+    },
+  }
+)

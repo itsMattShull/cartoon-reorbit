@@ -5,7 +5,7 @@ import { isPrivateIp } from '@/server/utils/vpn-check'
 import { encryptIp } from '@/server/utils/ip-encrypt'
 import { enqueueVpnCheck } from '@/server/utils/vpn-queue'
 import { isHotPath } from '@/server/utils/hotPaths'
-import { getRequestIP } from '@/server/utils/request-ip'
+import { getClientRequestIP } from '@/server/utils/request-ip'
 
 export default defineEventHandler(async (event) => {
   // Per-interaction game endpoints skip the login/IP bookkeeping — a 25-question run would
@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
   const userId = event.context?.userId
   if (!userId) return
 
-  const ip = getRequestIP(event)
+  const ip = getClientRequestIP(event)
   if (!ip) return
 
   const encryptedLoginIp = encryptIp(ip)

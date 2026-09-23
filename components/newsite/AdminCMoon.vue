@@ -28,6 +28,11 @@
             @click="recalcModalOpen = true"
           >Recalculate cMoon Points</button>
           <button
+            class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50"
+            title="Grants a flat bonus to every current cMoon member — a catch-up for members blocked from ever earning a live award by a scoring setting since corrected"
+            @click="backfillModalOpen = true"
+          >Backfill cMoon Points</button>
+          <button
             class="cm-tap px-3 text-xs font-semibold rounded-md border border-red-300 bg-white text-red-700 hover:bg-red-50"
             title="Claws back any rank prize a member only received because of the old cMoonPoints bug, and resets that achievement so they can legitimately re-earn it. Run Recalculate cMoon Points first."
             @click="prizeRevokeModalOpen = true"
@@ -105,14 +110,20 @@
               <label class="block text-xs font-medium mb-1">Top 10 points (weekly total)</label>
               <input v-model.number="scoring.top10Points" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
               <p class="text-[11px] text-gray-500 mt-1">
-                Per player, for a top-{{ scoring.top10RankCutoff || 10 }} finish on an eligible board — also
-                ÷7/day ≈ {{ Math.round((scoring.top10Points || 0) / 7) }} pts/day.
+                Per player, per source, for a top-{{ scoring.top10RankCutoff || 10 }} finish — on an
+                enabled site-wide board below, or on any eligible game's own leaderboard (same games
+                list as High Score) — also ÷7/day ≈ {{ Math.round((scoring.top10Points || 0) / 7) }} pts/day.
+                Stacks: placing top-{{ scoring.top10RankCutoff || 10 }} in more than one source pays out for each.
               </p>
             </div>
             <div>
-              <label class="block text-xs font-medium mb-1">Daily task points</label>
+              <label class="block text-xs font-medium mb-1">Daily task points (weekly total)</label>
               <input v-model.number="scoring.dailyTaskPoints" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
-              <p class="text-[11px] text-gray-500 mt-1">Per player, per day a daily task was completed. Not divided — this already pays out per day.</p>
+              <p class="text-[11px] text-gray-500 mt-1">
+                Per player, per day a daily task was completed. Entered/measured as a weekly amount
+                but paid out per completion (÷6, rounded) — {{ scoring.dailyTaskPoints || 0 }} pts/week
+                ≈ {{ Math.round((scoring.dailyTaskPoints || 0) / 6) }} pts/completion.
+              </p>
             </div>
           </div>
 
@@ -132,6 +143,14 @@
               Checked every 5 minutes, so the run can land up to ~5 minutes after this time, not
               to the exact second.
             </p>
+            <p class="text-[11px] mt-1" :class="scoringJobStale ? 'text-amber-600 font-medium' : 'text-gray-500'">
+              Last ran: {{ scoring.scoringLastRunDate ? formatRunDate(scoring.scoringLastRunDate) : 'never' }}
+              <span v-if="scoringJobStale"> — this job may not be running; check the server.</span>
+            </p>
+            <p class="text-[11px] mt-1" :class="dailyTaskCronStale ? 'text-amber-600 font-medium' : 'text-gray-500'">
+              Live daily-task cron last ran: {{ scoring.dailyTaskCronLastRanAt ? formatDate(scoring.dailyTaskCronLastRanAt) : 'never' }}
+              <span v-if="dailyTaskCronStale"> — this cron may not be running; check the server.</span>
+            </p>
           </div>
 
           <div class="border-t pt-3 mt-3">
@@ -147,7 +166,13 @@
           </div>
 
           <div class="border-t pt-3 mt-3">
-            <div class="text-xs font-medium mb-1.5">Top 10 boards</div>
+            <div class="text-xs font-medium mb-1.5">Top 10 site-wide boards</div>
+            <p class="text-[11px] text-gray-500 mb-1">
+              These two site-wide boards are one source of Top 10 points — a top-
+              {{ scoring.top10RankCutoff || 10 }} finish on any eligible game's own leaderboard
+              (see "High Score / Top 10 eligible games" below) always counts too, independent of
+              these toggles.
+            </p>
             <div class="flex flex-col gap-1.5">
               <label class="cm-tap flex items-center gap-2">
                 <input type="checkbox" v-model="scoring.top10PointsBoardEnabled" />
@@ -161,16 +186,22 @@
             <div class="mt-2">
               <label class="block text-xs font-medium mb-1">Rank cutoff</label>
               <input v-model.number="scoring.top10RankCutoff" type="number" min="1" max="250" inputmode="numeric" class="cm-field w-full sm:w-40 border rounded px-2 py-1" style="font-size:16px" />
-              <p class="text-[11px] text-gray-500 mt-1">How many ranks count as "top 10" on each enabled board.</p>
+              <p class="text-[11px] text-gray-500 mt-1">
+                How many ranks count as "top 10" — applied to these two boards and to every eligible
+                game's own leaderboard.
+              </p>
             </div>
             <p v-if="!scoring.top10PointsBoardEnabled && !scoring.top10CtoonsBoardEnabled" class="text-[11px] text-amber-600 font-medium mt-1">
-              Both boards are off — the Top 10 bonus is effectively disabled.
+              Both site-wide boards are off — Top 10 points can still come from per-game leaderboards below.
             </p>
           </div>
 
           <div class="border-t pt-3 mt-3">
-            <div class="text-xs font-medium mb-1">High Score eligible games</div>
-            <p class="text-[11px] text-gray-500 mb-2">Only checked games can earn the High Score bonus.</p>
+            <div class="text-xs font-medium mb-1">High Score / Top 10 eligible games</div>
+            <p class="text-[11px] text-gray-500 mb-2">
+              A checked game's #1 holder earns High Score; everyone in its top-{{ scoring.top10RankCutoff || 10 }}
+              (rank cutoff above), #1 included, earns Top 10. Unchecking a game turns off both bonuses for it.
+            </p>
 
             <div class="flex items-center justify-between mb-1">
               <span class="text-[11px] text-gray-600">Score-based games</span>
@@ -210,7 +241,7 @@
 
             <p class="text-[11px] text-gray-500 mt-2">{{ enabledGameSummary }}</p>
             <p v-if="enabledGameCount === 0" class="text-[11px] text-amber-600 font-medium mt-1">
-              No games selected — the High Score bonus is effectively disabled.
+              No games selected — the High Score bonus and per-game Top 10 points are both effectively disabled.
             </p>
           </div>
 
@@ -1106,6 +1137,13 @@
       @done="load"
     />
 
+    <!-- ── Backfill cMoon Points modal ─────────────────────────────────── -->
+    <CMoonBackfillPointsModal
+      v-if="backfillModalOpen"
+      @close="backfillModalOpen = false"
+      @done="load"
+    />
+
     <!-- ── Revoke Invalid cMoon Rank Prizes modal ─────────────────────── -->
     <CMoonPrizeRevokeModal
       v-if="prizeRevokeModalOpen"
@@ -1139,6 +1177,7 @@ const cooldownError = ref('')
 const previewModalOpen = ref(false)
 const balanceModalOpen = ref(false)
 const recalcModalOpen = ref(false)
+const backfillModalOpen = ref(false)
 const prizeRevokeModalOpen = ref(false)
 // Populated from /api/admin/cmoon-join-effects — admin-authored alternative to the built-in
 // effectType dropdown below (see Manage cMoon Join Effects for creating/editing these).
@@ -1646,6 +1685,46 @@ function formatDate(d) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' }).format(dt)
 }
 
+// cMoonScoringLastRunDate is a Chicago-local "YYYY-MM-DD" calendar date (see
+// server/cron/cmoon-daily-score.js), not a UTC instant — parse it as a literal date via
+// Date.UTC/timeZone:'UTC' so a browser west of UTC doesn't render it as the day before.
+function formatRunDate(d) {
+  if (!d) return ''
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d)
+  if (!m) return ''
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
+  if (Number.isNaN(dt.getTime())) return ''
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' }).format(dt)
+}
+
+const chicagoTodayISO = computed(() => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Chicago', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  } catch {
+    return null
+  }
+})
+
+// Amber warning once the once-daily job has gone more than a full day without running — one
+// missed day (e.g. still waiting for today's configured run time) is normal, not a warning sign.
+const scoringJobStale = computed(() => {
+  if (!scoring.scoringLastRunDate) return true
+  if (!chicagoTodayISO.value) return false
+  const last = new Date(`${scoring.scoringLastRunDate}T00:00:00Z`)
+  const today = new Date(`${chicagoTodayISO.value}T00:00:00Z`)
+  if (Number.isNaN(last.getTime()) || Number.isNaN(today.getTime())) return false
+  return Math.round((today - last) / 86400000) > 1
+})
+
+// The live daily-task cron ticks every minute — a heartbeat older than 10 minutes means it's
+// very likely stopped running, not just "no one completed a task yet".
+const dailyTaskCronStale = computed(() => {
+  if (!scoring.dailyTaskCronLastRanAt) return true
+  const last = new Date(scoring.dailyTaskCronLastRanAt)
+  if (Number.isNaN(last.getTime())) return false
+  return (Date.now() - last.getTime()) > 10 * 60 * 1000
+})
+
 function filteredCtoons(input) {
   const v = String(input || '').trim().toLowerCase()
   if (v.length < 3) return []
@@ -2139,6 +2218,9 @@ const scoring = reactive({
   disabledWinGames: [],
   runHour: 0,
   runMinute: 0,
+  // Read-only status from the server, never sent back in saveScoring()'s POST body.
+  scoringLastRunDate: null,
+  dailyTaskCronLastRanAt: null,
 })
 const scoreGameOptions = ref([])
 const winGameOptions = ref([])
@@ -2193,6 +2275,8 @@ async function loadScoring() {
       disabledWinGames: data.disabledWinGames || [],
       runHour: data.runHour ?? 0,
       runMinute: data.runMinute ?? 0,
+      scoringLastRunDate: data.scoringLastRunDate ?? null,
+      dailyTaskCronLastRanAt: data.dailyTaskCronLastRanAt ?? null,
     })
     scoreGameOptions.value = data.scoreGameOptions || []
     winGameOptions.value = data.winGameOptions || []
