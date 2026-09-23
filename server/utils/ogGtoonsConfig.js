@@ -20,7 +20,8 @@ async function load() {
         ogGtoonsMatchmakingEnabled: true,
         ogGtoonsGameEnabled: true,
         ogGtoonsDeckBuildingEnabled: true,
-        ogGtoonsLeaderboardEnabled: true
+        ogGtoonsLeaderboardEnabled: true,
+        ogGtoonsGamesPageVisible: true
       }
     })
     return {
@@ -30,15 +31,20 @@ async function load() {
       matchmakingEnabled: row?.ogGtoonsMatchmakingEnabled === true,
       gameEnabled: row?.ogGtoonsGameEnabled === true,
       deckBuildingEnabled: row?.ogGtoonsDeckBuildingEnabled === true,
-      leaderboardEnabled: row?.ogGtoonsLeaderboardEnabled === true
+      leaderboardEnabled: row?.ogGtoonsLeaderboardEnabled === true,
+      // Independent of the four above, and opposite polarity on purpose — see this column's
+      // schema comment. It isn't part of the rollout-safety gate those four exist for, so a
+      // missing row (or a read failure) leaves it visible by default; only an explicit `false`
+      // hides the Games page tile, and it never gates the feature itself.
+      gamesPageVisible: row?.ogGtoonsGamesPageVisible !== false
     }
   } catch (err) {
     console.error('[ogGtoons] config read failed:', err)
-    return { matchmakingEnabled: false, gameEnabled: false, deckBuildingEnabled: false, leaderboardEnabled: false }
+    return { matchmakingEnabled: false, gameEnabled: false, deckBuildingEnabled: false, leaderboardEnabled: false, gamesPageVisible: true }
   }
 }
 
-/** { matchmakingEnabled, gameEnabled, deckBuildingEnabled, leaderboardEnabled } */
+/** { matchmakingEnabled, gameEnabled, deckBuildingEnabled, leaderboardEnabled, gamesPageVisible } */
 export async function getOgGtoonsConfig() {
   const now = Date.now()
   if (cache && now - cachedAt < TTL_MS) return cache

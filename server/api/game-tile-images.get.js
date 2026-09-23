@@ -30,11 +30,14 @@ export default defineEventHandler(async () => {
   // which would leave a switched-off game plainly visible.
   const { config } = await getPokemonBattleAssets()
   const og = await getOgGtoonsConfig()
+  // gtoonsclassic is hidden either when an admin has explicitly switched off its Games page
+  // tile (ogGtoonsGamesPageVisible), or — same as before that flag existed — once every
+  // functional section is closed, matching the hub page itself, which shows an "unavailable"
+  // notice rather than an empty shell whenever a section is still open.
+  const ogGtoonsFunctionallyOpen = og.matchmakingEnabled || og.gameEnabled || og.deckBuildingEnabled || og.leaderboardEnabled
   const hidden = [
     ...(config.enabled ? [] : ['pokemonbattle']),
-    // Hidden only once every section is closed — same as the hub page itself, which shows an
-    // "unavailable" notice rather than an empty shell whenever a section is still open.
-    ...(og.matchmakingEnabled || og.gameEnabled || og.deckBuildingEnabled || og.leaderboardEnabled ? [] : ['gtoonsclassic'])
+    ...(og.gamesPageVisible && ogGtoonsFunctionallyOpen ? [] : ['gtoonsclassic'])
   ]
 
   return {

@@ -1546,6 +1546,15 @@ model GameConfig {
   ogGtoonsGameEnabled         Boolean? @default(false)
   ogGtoonsDeckBuildingEnabled Boolean? @default(false)
   ogGtoonsLeaderboardEnabled  Boolean? @default(false)
+
+  // Separate from the four switches above: those gate the actual feature (server-side, even
+  // when hit directly by URL), while this ONLY controls whether the Games page advertises a
+  // tile for it — e.g. a soft-launch or a "still reachable by direct link, just not on the
+  // hub" state. See server/api/game-tile-images.get.js, which also still hides the tile
+  // whenever every section above is closed, regardless of this flag. Defaults to true (not
+  // false like the four above): this flag isn't part of the rollout-safety gate those switches
+  // exist for, it's just "don't bother showing a tile once the feature IS on."
+  ogGtoonsGamesPageVisible Boolean? @default(true)
 }
 
 model GlobalGameConfig {

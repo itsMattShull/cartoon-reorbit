@@ -834,6 +834,25 @@
             </label>
           </div>
 
+          <hr class="my-4 border-gray-200" />
+
+          <p class="text-[11px] text-gray-500 mb-2">
+            Separate from the sections above — this only controls whether the Games page
+            advertises a tile for gToons. It never disables the feature itself: with everything
+            above still on, the game stays fully playable at its own URL for anyone who already
+            has the link, just not listed on the Games page. It's still automatically hidden from
+            the Games page whenever every section above is off, regardless of this setting.
+          </p>
+          <div class="space-y-2 mb-4">
+            <label class="flex items-start gap-2 p-2 border rounded bg-white">
+              <input type="checkbox" v-model="ogGtoonsGamesPageVisible" class="mt-0.5" />
+              <span>
+                <span class="text-xs font-semibold text-gray-800">Show on Games page</span>
+                <span class="block text-[11px] text-gray-500">Off removes the gToons tile from the Games page. The game remains reachable directly at its URL.</span>
+              </span>
+            </label>
+          </div>
+
           <button @click="saveOgGtoonsConfig" :disabled="loadingOgGtoons || !!ogGtoonsConfigError" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingOgGtoons">Save gToons Settings</span>
             <span v-else>Saving…</span>
@@ -2084,6 +2103,7 @@ const ogGtoonsMatchmakingEnabled  = ref(false)
 const ogGtoonsGameEnabled         = ref(false)
 const ogGtoonsDeckBuildingEnabled = ref(false)
 const ogGtoonsLeaderboardEnabled  = ref(false)
+const ogGtoonsGamesPageVisible    = ref(true)
 const loadingOgGtoons             = ref(false)
 const ogGtoonsConfigError         = ref('')
 
@@ -2494,6 +2514,7 @@ async function loadSettings() {
     ogGtoonsGameEnabled.value         = og.ogGtoonsGameEnabled         === true
     ogGtoonsDeckBuildingEnabled.value = og.ogGtoonsDeckBuildingEnabled === true
     ogGtoonsLeaderboardEnabled.value  = og.ogGtoonsLeaderboardEnabled  === true
+    ogGtoonsGamesPageVisible.value    = og.ogGtoonsGamesPageVisible    !== false
     ogGtoonsConfigError.value = ''
   } catch (e) {
     ogGtoonsConfigError.value = e?.data?.statusMessage || e?.message || 'Could not load these settings.'
@@ -2957,7 +2978,8 @@ async function saveOgGtoonsConfig() {
         ogGtoonsMatchmakingEnabled:  ogGtoonsMatchmakingEnabled.value,
         ogGtoonsGameEnabled:         ogGtoonsGameEnabled.value,
         ogGtoonsDeckBuildingEnabled: ogGtoonsDeckBuildingEnabled.value,
-        ogGtoonsLeaderboardEnabled:  ogGtoonsLeaderboardEnabled.value
+        ogGtoonsLeaderboardEnabled:  ogGtoonsLeaderboardEnabled.value,
+        ogGtoonsGamesPageVisible:    ogGtoonsGamesPageVisible.value
       }
     })
     toastMessage.value = 'gToons settings saved!'; toastType.value = 'success'
