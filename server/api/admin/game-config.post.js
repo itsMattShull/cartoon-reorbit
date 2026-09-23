@@ -852,7 +852,7 @@ export default defineEventHandler(async (event) => {
       } else if (gameName === 'OgGtoons') {
         // Explicit null checks, not truthiness ones: `false` is the whole point of each field.
         const ogGtoonsData = {}
-        for (const key of ['ogGtoonsMatchmakingEnabled', 'ogGtoonsGameEnabled', 'ogGtoonsDeckBuildingEnabled', 'ogGtoonsLeaderboardEnabled']) {
+        for (const key of ['ogGtoonsMatchmakingEnabled', 'ogGtoonsGameEnabled', 'ogGtoonsDeckBuildingEnabled', 'ogGtoonsLeaderboardEnabled', 'ogGtoonsGamesPageVisible']) {
           if (body[key] != null) ogGtoonsData[key] = Boolean(body[key])
         }
         createData = { ...createData, ...ogGtoonsData }
