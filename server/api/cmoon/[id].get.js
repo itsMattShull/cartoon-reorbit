@@ -80,9 +80,19 @@ export default defineEventHandler(async (event) => {
   // a lifetime points-earned-from-anything counter that converges toward a player's whole account
   // balance, not what they've actually contributed to this team. Raw SQL (JOIN + GROUP BY +
   // ORDER BY + LIMIT), mirroring that same endpoint, rather than a denormalized-column read.
+  // Rank is by average points per member (teamScore / memberCount), matching the Leaderboards
+  // page's cMoons tab (see server/api/leaderboard/cmoons.get.js) — a large team no longer ranks
+  // #1 purely by having more members. Raw SQL since the average isn't a stored column; "memberCount"
+  // > 0 excludes empty cMoons from ever counting as "ahead" (their true average is 0, and dividing
+  // by zero would otherwise error the whole query) rather than needing a JS-side fallback per row.
+  const thisAvgScore = cmoon.memberCount > 0 ? cmoon.teamScore / cmoon.memberCount : 0
+
   const [featuredCtoons, rankRows, topPointContributors, topRankMembers, poll] = await Promise.all([
     featuredCtoonsQuery,
-    db.cMoon.count({ where: { teamScore: { gt: cmoon.teamScore } } }),
+    db.$queryRaw`
+      SELECT COUNT(*)::int AS count FROM "CMoon"
+      WHERE "memberCount" > 0 AND ("teamScore"::float8 / "memberCount") > ${thisAvgScore}
+    `,
     db.$queryRaw`
       SELECT u."username", u."avatar", SUM(csl."points")::int AS "points"
       FROM "CMoonScoreLog" csl
@@ -149,7 +159,7 @@ export default defineEventHandler(async (event) => {
     featuredCtoons,
     memberCount: cmoon.memberCount,
     teamScore: cmoon.teamScore,
-    rank: rankRows + 1,
+    rank: rankRows[0].count + 1,
     captains: [...captainUsernames],
     topPointContributors: topPointContributors.map(u => ({ username: u.username, avatar: u.avatar, points: u.points })),
     topRankMembers: topRankMembers.map(u => ({
