@@ -193,28 +193,16 @@
         </div>
 
         <div class="flex-1 min-h-0 overflow-y-auto py-3 space-y-3">
-          <div class="grid grid-cols-1 gap-3">
-            <div class="rounded bg-gray-700/60 p-2">
-              <div class="text-[10px] uppercase text-gray-300 mb-1.5">Current Values</div>
-              <div class="text-xs text-gray-100 space-y-1">
-                <div><strong>Name:</strong> {{ formatValue(selectedSuggestion.ctoon?.name) }}</div>
-                <div><strong>Series:</strong> {{ formatValue(selectedSuggestion.ctoon?.series) }}</div>
-                <div><strong>Set:</strong> {{ formatValue(selectedSuggestion.ctoon?.set) }}</div>
-                <div><strong>Characters:</strong> {{ formatCharacters(selectedSuggestion.ctoon?.characters) }}</div>
-                <div class="whitespace-pre-line"><strong>Description:</strong> {{ formatValue(selectedSuggestion.ctoon?.description) }}</div>
+          <div class="rounded bg-gray-700/60 p-2">
+            <div class="text-[10px] uppercase text-gray-300 mb-1.5">Suggested Changes</div>
+            <div v-if="changedFields.length" class="text-xs text-gray-100 space-y-2">
+              <div v-for="field in changedFields" :key="field.label">
+                <div class="font-semibold">{{ field.label }}</div>
+                <div class="text-gray-400 line-through whitespace-pre-line">{{ field.oldValue }}</div>
+                <div class="text-green-300 whitespace-pre-line">{{ field.newValue }}</div>
               </div>
             </div>
-
-            <div class="rounded bg-gray-700/60 p-2">
-              <div class="text-[10px] uppercase text-gray-300 mb-1.5">Suggested Values</div>
-              <div class="text-xs text-gray-100 space-y-1">
-                <div><strong>Name:</strong> {{ formatValue(selectedSuggestion.newValues?.name) }}</div>
-                <div><strong>Series:</strong> {{ formatValue(selectedSuggestion.newValues?.series) }}</div>
-                <div><strong>Set:</strong> {{ formatValue(selectedSuggestion.newValues?.set) }}</div>
-                <div><strong>Characters:</strong> {{ formatCharacters(selectedSuggestion.newValues?.characters) }}</div>
-                <div class="whitespace-pre-line"><strong>Description:</strong> {{ formatValue(selectedSuggestion.newValues?.description) }}</div>
-              </div>
-            </div>
+            <div v-else class="text-xs text-gray-400">No differences found.</div>
           </div>
 
           <div class="text-[10px] text-gray-400">
@@ -389,6 +377,35 @@ const bulkActionLoading = ref(false)
 const bulkActionError = ref('')
 
 const canReview = computed(() => selectedSuggestion.value?.status === 'IN_REVIEW')
+// Only the fields the user actually changed are worth an admin's attention — the old
+// design showed every field twice (current vs. suggested) even when most were untouched.
+const changedFields = computed(() => {
+  const s = selectedSuggestion.value
+  if (!s) return []
+  const oldValues = s.oldValues || {}
+  const newValues = s.newValues || {}
+  const fields = []
+
+  const pushIfChanged = (label, oldValue, newValue) => {
+    if (oldValue !== newValue) fields.push({ label, oldValue, newValue })
+  }
+
+  pushIfChanged('Name', formatValue(oldValues.name), formatValue(newValues.name))
+  pushIfChanged('Series', formatValue(oldValues.series), formatValue(newValues.series))
+  pushIfChanged('Set', formatValue(oldValues.set), formatValue(newValues.set))
+  pushIfChanged('Characters', formatCharacters(oldValues.characters), formatCharacters(newValues.characters))
+
+  if (Object.prototype.hasOwnProperty.call(newValues, 'description')) {
+    pushIfChanged('Description', formatValue(oldValues.description), formatValue(newValues.description))
+  }
+  // cMoonId is only present in newValues when the cMoon feature was enabled at submission time —
+  // its absence means no cMoon change was suggested, distinct from a change back to "no cMoon".
+  if (Object.prototype.hasOwnProperty.call(newValues, 'cMoonId')) {
+    pushIfChanged('cMoon', formatValue(oldValues.cMoonName), formatValue(newValues.cMoonName))
+  }
+
+  return fields
+})
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize)))
 const allSelected = computed(() =>
   suggestions.value.length > 0 && suggestions.value.every(s => selectedIds.value.has(s.id))
