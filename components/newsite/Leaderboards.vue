@@ -273,9 +273,10 @@ function cMoonForRow(row) {
   return cMoonBadges.value[row.username] || null
 }
 
-// Top individual point contributors per cMoon — a per-player breakdown of the same weekly
-// team-score log (CMoonScoreLog) the team totals above (row.teamScore, row.avgScore) are summed
-// from, see server/api/leaderboard/cmoon-standings.get.js. Fetched eagerly like the boards above.
+// Top individual point contributors per cMoon — a per-player breakdown of the same team-score
+// log (CMoonScoreLog) row.teamScore is summed from. row.avgScore is a different, narrower sum
+// of that same log (current members' own rows only, see this file's own cmoons.get.js query) —
+// see server/api/leaderboard/cmoon-standings.get.js. Fetched eagerly like the boards above.
 const { data: cMoonContributorsData } = useFetch('/api/leaderboard/cmoon-standings', { default: () => ({ cMoonEnabled: false, contributorsByCMoonId: {} }), headers })
 const contributorsByCMoonId = computed(() => cMoonContributorsData.value?.contributorsByCMoonId || {})
 </script>
