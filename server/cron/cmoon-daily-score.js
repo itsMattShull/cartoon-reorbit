@@ -10,7 +10,9 @@ import { DateTime } from 'luxon'
 import { prisma } from '../prisma.js'
 import { getGlobalConfig, invalidateGlobalConfigCache, runDailyCMoonScoring } from '../utils/cmoon.js'
 
-const LOCK_KEY = 519284802 // arbitrary constant unique to this job, for pg_try_advisory_lock
+// Exported so a manual admin-triggered run (server/api/admin/cmoons/run-scoring-now.post.js) can
+// hold the SAME lock and never overlap with the scheduled checker below.
+export const LOCK_KEY = 519284802 // arbitrary constant unique to this job, for pg_try_advisory_lock
 
 export async function checkAndRunCMoonDailyScoring() {
   // The cached getter (30s TTL) is deliberate here: this checker ticks every 5 minutes purely to

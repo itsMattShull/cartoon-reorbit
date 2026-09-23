@@ -15,6 +15,23 @@ export function getChicagoDailyBoundary() {
   return boundaryLocal.toUTC().toJSDate()
 }
 
+// Midnight of the current America/Chicago calendar day — used by runDailyCMoonScoring
+// (server/utils/cmoon.js) as CMoonScoreLog.weekStart, deliberately NOT getChicagoDailyBoundary
+// above. That function is pinned to a hardcoded 8pm boundary for the DAILY_TASK reset clock
+// specifically (shared with daily.get.js) and has nothing to do with when the once-daily
+// HIGH_SCORE/TOP10 job itself runs, which is admin-configurable (GlobalGameConfig.
+// cMoonScoringRunHour/Minute). The two coincided as long as that run time defaulted to 8pm, but
+// the moment an admin configures any other run time, getChicagoDailyBoundary() called BEFORE
+// 8pm resolves to YESTERDAY's date — colliding with whatever weekStart yesterday's run (fired at
+// the old, or any earlier, time) already used, and silently discarding today's award for anyone
+// who also qualified yesterday (via the CMoonScoreLog unique constraint's skipDuplicates). A
+// Chicago-midnight boundary advances exactly once per calendar day regardless of what hour the
+// job actually executes at, so it never collides with a prior day's value no matter when the
+// run time is configured.
+export function getChicagoCalendarDayStart() {
+  return DateTime.now().setZone('America/Chicago').startOf('day').toUTC().toJSDate()
+}
+
 export function getChicagoMorningWindowStart() {
   // Previously computed via now.toLocaleString(...) round-tripped back through `new Date(...)`,
   // which loses now's millisecond component and leaks it into the computed offset — the returned

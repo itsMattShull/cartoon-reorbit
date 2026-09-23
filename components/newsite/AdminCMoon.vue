@@ -151,6 +151,17 @@
               Live daily-task cron last ran: {{ scoring.dailyTaskCronLastRanAt ? formatDate(scoring.dailyTaskCronLastRanAt) : 'never' }}
               <span v-if="dailyTaskCronStale"> — this cron may not be running; check the server.</span>
             </p>
+            <div class="mt-2">
+              <button
+                type="button"
+                class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                :disabled="runScoringNowLoading"
+                title="Runs High Score/Top 10 scoring right now. Safe to click any time, including right after today's automatic run — anyone already credited today is skipped, so this only ever fills in gaps (e.g. after changing the run time mid-day)."
+                @click="runScoringNow"
+              >{{ runScoringNowLoading ? 'Running…' : 'Re-run Scoring Now (catch-up)' }}</button>
+              <p v-if="runScoringNowResult" class="text-[11px] text-gray-600 mt-1">{{ runScoringNowResult }}</p>
+              <p v-if="runScoringNowError" class="text-[11px] text-red-600 mt-1">{{ runScoringNowError }}</p>
+            </div>
           </div>
 
           <div class="border-t pt-3 mt-3">
@@ -2226,6 +2237,9 @@ const scoreGameOptions = ref([])
 const winGameOptions = ref([])
 const scoringLoading = ref(false)
 const scoringSaving = ref(false)
+const runScoringNowLoading = ref(false)
+const runScoringNowResult = ref('')
+const runScoringNowError = ref('')
 const scoringError = ref('')
 
 function disabledListKey(kind) {
@@ -2284,6 +2298,24 @@ async function loadScoring() {
     scoringError.value = e?.data?.statusMessage || 'Failed to load scoring rules'
   } finally {
     scoringLoading.value = false
+  }
+}
+
+// Manually triggers runDailyCMoonScoring right now — see run-scoring-now.post.js's own comment
+// for why this is safe to click even right after today's automatic run already happened (it only
+// ever fills in gaps, never double-awards). Also refreshes the "Last ran" status afterward.
+async function runScoringNow() {
+  runScoringNowResult.value = ''
+  runScoringNowError.value = ''
+  runScoringNowLoading.value = true
+  try {
+    const res = await $fetch('/api/admin/cmoons/run-scoring-now', { method: 'POST' })
+    runScoringNowResult.value = `Done — ${res.awarded} award(s) applied.`
+    await loadScoring()
+  } catch (e) {
+    runScoringNowError.value = e?.data?.statusMessage || 'Failed to run scoring'
+  } finally {
+    runScoringNowLoading.value = false
   }
 }
 
