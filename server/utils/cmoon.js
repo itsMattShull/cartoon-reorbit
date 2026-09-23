@@ -5,7 +5,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../prisma.js'
 import { mintQueue } from './queues.js'
-import { getChicagoDailyBoundary, getChicagoMorningWindowStart } from './dailyTaskWindows.js'
+import { getChicagoDailyBoundary, getChicagoMorningWindowStart, getChicagoCalendarDayStart } from './dailyTaskWindows.js'
 import { COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
 import { EXCLUDED_SYSTEM_USER_ID } from './economyValuation.js'
 import { grantGuildRole, revokeGuildRole } from './discord.js'
@@ -505,8 +505,12 @@ export async function runDailyCMoonScoring() {
   const dailyTop10Points = perRunAward(top10Points)
   const dailyTaskAwardPoints = dailyTaskAward(dailyTaskPoints)
 
-  const weekStart = getChicagoDailyBoundary() // see CMoonScoreLog.weekStart's schema comment
+  // Chicago-midnight, NOT getChicagoDailyBoundary's hardcoded 8pm — see getChicagoCalendarDayStart's
+  // own comment for why: that function is pinned to the DAILY_TASK reset clock, unrelated to (and
+  // capable of silently colliding with) this job's own admin-configurable run time.
+  const weekStart = getChicagoCalendarDayStart()
   const weekBegin = new Date(weekStart.getTime() - 24 * 60 * 60 * 1000)
+  const weekEnd = new Date(weekStart.getTime() + 24 * 60 * 60 * 1000)
   const minAccountAgeCutoff = new Date(Date.now() - minAccountAgeDays * 24 * 60 * 60 * 1000)
 
   const candidates = []
@@ -550,6 +554,21 @@ export async function runDailyCMoonScoring() {
   for (const row of eligibleHolders(top10CtoonsHolders, minAccountAgeCutoff)) {
     candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'totalCtoons', points: dailyTop10Points, weekStart })
   }
+
+  // Extra guard on top of the (cMoonId, userId, category, weekStart, detail) unique constraint,
+  // covering HIGH_SCORE/TOP10 only (DAILY_TASK already has its own per-row dedup via
+  // UserDailyTaskCompletion, untouched below): makes this function safe to invoke more than once
+  // on the same Chicago calendar day — e.g. an admin manually re-running it to backfill whatever
+  // a bad run time skipped — without double-awarding anyone already credited earlier today, by
+  // checking actual createdAt rather than trusting weekStart to be a fresh value.
+  const alreadyToday = await prisma.cMoonScoreLog.findMany({
+    where: { createdAt: { gte: weekStart, lt: weekEnd }, category: { in: ['HIGH_SCORE', 'TOP10'] } },
+    select: { cMoonId: true, userId: true, category: true, detail: true },
+  })
+  const alreadyTodayKeys = new Set(alreadyToday.map(r => `${r.cMoonId}|${r.userId}|${r.category}|${r.detail}`))
+  const newCandidates = candidates.filter(c => !alreadyTodayKeys.has(`${c.cMoonId}|${c.userId}|${c.category}|${c.detail}`))
+  candidates.length = 0
+  candidates.push(...newCandidates)
 
   // weekStart here is deliberately row.date, not the outer weekStart — a completion recorded
   // under morningBoundary (wheel/lotto/scans, see recordDailyTaskCompletions) must produce the
