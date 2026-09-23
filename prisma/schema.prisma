@@ -946,6 +946,8 @@ model Visit {
   createdAt   DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
 }
 
 model TradeRoom {
@@ -1086,6 +1088,7 @@ model LoginLog {
 
   @@index([ip])
   @@index([createdAt])
+  @@index([userId, createdAt])
 }
 
 model DeviceFingerprintLog {

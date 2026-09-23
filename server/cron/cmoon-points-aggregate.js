@@ -38,8 +38,12 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../prisma.js'
 import { achievementsQueue } from '../utils/queues.js'
+import { USER_TABLE_BULK_WRITE_LOCK_KEY } from '../utils/dbLocks.js'
 
-const LOCK_KEY = 719284511 // arbitrary constant unique to this job, for pg_try_advisory_lock
+// Shared with recomputeLastActivity (server/cron/sync-guild-members.js) — see
+// server/utils/dbLocks.js. Both do a full-table UPDATE...FROM against "User"
+// and used to be able to land in the same tick and deadlock each other.
+const LOCK_KEY = USER_TABLE_BULK_WRITE_LOCK_KEY
 
 const RECOMPUTE_SQL = `
   WITH totals AS (
