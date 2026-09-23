@@ -6,8 +6,8 @@
 // (server/socket-server.js). Anything they "win" is a system transfer, not a
 // market sale, so valuation code needs to be able to exclude them.
 
-import { prisma } from '@/server/prisma'
-import { EXCLUDED_SYSTEM_USER_ID } from '@/server/utils/economyValuation'
+import { prisma } from '../prisma.js'
+import { EXCLUDED_SYSTEM_USER_ID } from './economyValuation.js'
 
 const OFFICIAL_AUCTION_USERNAME = 'CartoonReOrbitOfficial'
 
