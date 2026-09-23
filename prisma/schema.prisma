@@ -1698,6 +1698,18 @@ model GlobalGameConfig {
   // there is otherwise no admin-visible way to tell "no one's completed a task in a while" apart
   // from "the cron died." Surfaced on Admin > cMoons > Scoring Rules.
   cMoonDailyTaskCronLastRanAt        DateTime?
+  // Shrinkage constant for the average-points-per-player TEAM ranking (Admin > Leaderboards'
+  // cMoons tab, and each cMoon's own "Team Rank" badge — see server/api/leaderboard/cmoons.get.js
+  // and server/api/cmoon/[id].get.js). Purely a display/ranking-presentation knob, NOT part of
+  // the actual scoring rules above — never affects CMoonScoreLog, teamScore, or any award.
+  // A tiny team can post a huge PLAIN average off one or two lucky/active members, dominating the
+  // ranking on noise rather than sustained performance. Bayesian/IMDb-style shrinkage instead
+  // blends each team's own average with the site-wide average, weighted by memberCount:
+  //   weighted = (memberCount / (memberCount + k)) * ownAvg + (k / (memberCount + k)) * siteAvg
+  // k is "how many members before a team's own average is trusted over the site average" — a
+  // 1-member team is almost entirely pulled toward siteAvg, a team with memberCount >> k is
+  // barely shrunk at all. 0 disables shrinkage (falls back to the plain average).
+  cMoonAvgShrinkageK                 Int       @default(10)
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }

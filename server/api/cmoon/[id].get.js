@@ -13,7 +13,7 @@
 import { defineEventHandler, createError, setHeader } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { EXCLUDED_SYSTEM_USER_ID } from '@/server/utils/economyValuation'
-import { getPollResults, displayRankName } from '@/server/utils/cmoon'
+import { getPollResults, displayRankName, getGlobalConfig } from '@/server/utils/cmoon'
 
 const FEATURED_CTOON_LIMIT = 12
 const LEADERBOARD_LIMIT = 15
@@ -104,14 +104,41 @@ export default defineEventHandler(async (event) => {
   // or memberCount). Filtering the numerator but not the denominator would unfairly lower a
   // team's average for every banned/inactive member it has. Matches recomputeCMoonTeamScores's
   // own convention (no active/banned filter) for this same reason.
-  const thisCurrentMembersTotal = await db.$queryRaw`
-    SELECT COALESCE(SUM(csl."points"), 0)::int AS total
-    FROM "CMoonScoreLog" csl
-    JOIN "User" u ON u."id" = csl."userId" AND u."cMoonId" = ${id}
-    WHERE csl."cMoonId" = ${id}
-      AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
-  `
-  const thisAvgScore = cmoon.memberCount > 0 ? thisCurrentMembersTotal[0].total / cmoon.memberCount : 0
+  // Bayesian/IMDb-style shrinkage (see GlobalGameConfig.cMoonAvgShrinkageK's schema comment for
+  // the full rationale): blends this team's own average with the site-wide average, weighted by
+  // memberCount, so a tiny team's noisy average (one or two lucky/active members) can't dominate
+  // the rank badge the way a plain average would. k=0 degenerates to the plain average.
+  const [thisCurrentMembersTotal, siteWideTotals, config] = await Promise.all([
+    db.$queryRaw`
+      SELECT COALESCE(SUM(csl."points"), 0)::int AS total
+      FROM "CMoonScoreLog" csl
+      JOIN "User" u ON u."id" = csl."userId" AND u."cMoonId" = ${id}
+      WHERE csl."cMoonId" = ${id}
+        AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
+    `,
+    // Same population the Leaderboards board ranks (unlocked cMoons only) — see that file's own
+    // siteAvg comment for why small teams get pulled toward this rather than staying unshrunk.
+    db.$queryRaw`
+      SELECT
+        COALESCE((
+          SELECT SUM(csl."points")::int
+          FROM "CMoonScoreLog" csl
+          JOIN "User" u ON u."id" = csl."userId" AND u."cMoonId" = csl."cMoonId"
+          JOIN "CMoon" c ON c.id = u."cMoonId"
+          WHERE u."id" <> ${EXCLUDED_SYSTEM_USER_ID} AND c."joinLocked" = false
+        ), 0) AS "totalPoints",
+        COALESCE((
+          SELECT SUM("memberCount")::int FROM "CMoon" WHERE "joinLocked" = false
+        ), 0) AS "totalMembers"
+    `,
+    getGlobalConfig(),
+  ])
+  const siteAvg = siteWideTotals[0].totalMembers > 0 ? siteWideTotals[0].totalPoints / siteWideTotals[0].totalMembers : 0
+  const shrinkageK = Number.isInteger(config?.cMoonAvgShrinkageK) ? config.cMoonAvgShrinkageK : 10
+  const thisOwnAvg = cmoon.memberCount > 0 ? thisCurrentMembersTotal[0].total / cmoon.memberCount : 0
+  const thisAvgScore = cmoon.memberCount > 0
+    ? (cmoon.memberCount / (cmoon.memberCount + shrinkageK)) * thisOwnAvg + (shrinkageK / (cmoon.memberCount + shrinkageK)) * siteAvg
+    : 0
 
   // Captains never earn a different actual rank tier for this — see displayRankName's own
   // comment, this only decides what the "Top Ranking Members" list SHOWS captains as (always
@@ -122,15 +149,15 @@ export default defineEventHandler(async (event) => {
 
   const [featuredCtoons, rankRows, topPointContributors, topRankMembers, captainMembers, poll] = await Promise.all([
     featuredCtoonsQuery,
-    // Every OTHER cMoon's own current-members average, computed the exact same way as
-    // thisAvgScore above (a CTE rather than reading teamScore, csl."cMoonId" = u."cMoonId" so a
-    // row only counts toward the team it was actually earned for, no active/banned filter — see
-    // that comment for why) — "joinLocked" = false mirrors the Leaderboards query's exclusion of
-    // locked cMoons from the comparison set, so a locked team's average never shifts a visible
-    // team's rank badge; this cMoon's own page still renders regardless of ITS OWN joinLocked
-    // state, only the OTHER cMoons compared against are filtered. LEFT JOIN + COALESCE handles a
-    // cMoon with no current-member CMoonScoreLog rows at all (average 0, same as the
-    // "memberCount > 0" guard handles a cMoon with no members).
+    // Every OTHER cMoon's own SHRUNK average, computed the exact same way as thisAvgScore above
+    // (csl."cMoonId" = u."cMoonId" so a row only counts toward the team it was actually earned
+    // for, no active/banned filter — see that comment for why, same shrinkageK/siteAvg blend as
+    // thisAvgScore) — "joinLocked" = false mirrors the Leaderboards query's exclusion of locked
+    // cMoons from the comparison set, so a locked team's average never shifts a visible team's
+    // rank badge; this cMoon's own page still renders regardless of ITS OWN joinLocked state,
+    // only the OTHER cMoons compared against are filtered. LEFT JOIN + COALESCE handles a cMoon
+    // with no current-member CMoonScoreLog rows at all (average 0, same as the "memberCount > 0"
+    // guard handles a cMoon with no members).
     db.$queryRaw`
       WITH current_totals AS (
         SELECT u."cMoonId", SUM(csl."points")::int AS total
@@ -143,7 +170,11 @@ export default defineEventHandler(async (event) => {
       FROM "CMoon" c
       LEFT JOIN current_totals ct ON ct."cMoonId" = c.id
       WHERE c."memberCount" > 0 AND c."joinLocked" = false
-        AND (COALESCE(ct.total, 0)::float8 / c."memberCount") > ${thisAvgScore}
+        AND (
+          (c."memberCount"::float8 / (c."memberCount" + ${shrinkageK}))
+            * (COALESCE(ct.total, 0)::float8 / c."memberCount")
+          + (${shrinkageK}::float8 / (c."memberCount" + ${shrinkageK})) * ${siteAvg}
+        ) > ${thisAvgScore}
     `,
     db.$queryRaw`
       SELECT u."username", u."avatar", SUM(csl."points")::int AS "points"

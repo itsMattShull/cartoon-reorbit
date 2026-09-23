@@ -177,6 +177,21 @@
           </div>
 
           <div class="border-t pt-3 mt-3">
+            <label class="block text-xs font-medium mb-1">Team ranking shrinkage (k)</label>
+            <input v-model.number="scoring.avgShrinkageK" type="number" min="0" max="1000" inputmode="numeric" class="cm-field w-full sm:w-40 border rounded px-2 py-1" style="font-size:16px" />
+            <p class="text-[11px] text-gray-500 mt-1">
+              Display-only — never affects points, individual ranks, or scoring. The Leaderboards
+              page's cMoons tab and each team's "Team Rank" badge rank teams by average points per
+              member, not raw total, so a large team can't win purely by having more members. A
+              tiny team could then dominate on a noisy average from just one or two lucky/active
+              members — this blends each team's own average with the site-wide average, weighted
+              by member count, so a team needs roughly this many members before its own average is
+              trusted over the site average. Higher = small teams pulled harder toward the middle.
+              0 disables this and uses the plain average.
+            </p>
+          </div>
+
+          <div class="border-t pt-3 mt-3">
             <div class="text-xs font-medium mb-1.5">Top 10 site-wide boards</div>
             <p class="text-[11px] text-gray-500 mb-1">
               These two site-wide boards are one source of Top 10 points — a top-
@@ -2229,6 +2244,7 @@ const scoring = reactive({
   disabledWinGames: [],
   runHour: 0,
   runMinute: 0,
+  avgShrinkageK: 10,
   // Read-only status from the server, never sent back in saveScoring()'s POST body.
   scoringLastRunDate: null,
   dailyTaskCronLastRanAt: null,
@@ -2289,6 +2305,7 @@ async function loadScoring() {
       disabledWinGames: data.disabledWinGames || [],
       runHour: data.runHour ?? 0,
       runMinute: data.runMinute ?? 0,
+      avgShrinkageK: data.avgShrinkageK ?? 10,
       scoringLastRunDate: data.scoringLastRunDate ?? null,
       dailyTaskCronLastRanAt: data.dailyTaskCronLastRanAt ?? null,
     })
@@ -2355,6 +2372,7 @@ async function saveScoring() {
       disabledWinGames: scoring.disabledWinGames,
       runHour: scoring.runHour,
       runMinute: scoring.runMinute,
+      avgShrinkageK: scoring.avgShrinkageK,
     }
     const res = await $fetch('/api/admin/cmoon-scoring', { method: 'POST', body })
     Object.assign(scoring, {
@@ -2369,6 +2387,7 @@ async function saveScoring() {
       disabledWinGames: res.disabledWinGames || [],
       runHour: res.runHour ?? 0,
       runMinute: res.runMinute ?? 0,
+      avgShrinkageK: res.avgShrinkageK ?? 10,
     })
   } catch (e) {
     scoringError.value = e?.data?.statusMessage || 'Save failed'

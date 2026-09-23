@@ -23,6 +23,10 @@ export default defineEventHandler(async (event) => {
     disabledWinGames,
     runHour: Number.isInteger(cfg?.cMoonScoringRunHour) ? cfg.cMoonScoringRunHour : 0,
     runMinute: Number.isInteger(cfg?.cMoonScoringRunMinute) ? cfg.cMoonScoringRunMinute : 0,
+    // Display/ranking-presentation only — see the schema comment on this column. Never affects
+    // CMoonScoreLog, teamScore, or any award; only how the two team-vs-team average rankings
+    // (Leaderboards' cMoons tab, a cMoon's own "Team Rank" badge) weigh a small team's average.
+    avgShrinkageK: Number.isInteger(cfg?.cMoonAvgShrinkageK) ? cfg.cMoonAvgShrinkageK : 10,
     // Read-only status, not part of the editable form below — see the schema comments on these
     // two columns for why they're tracked separately (once-a-day job vs. the every-minute cron).
     scoringLastRunDate: cfg?.cMoonScoringLastRunDate ?? null,

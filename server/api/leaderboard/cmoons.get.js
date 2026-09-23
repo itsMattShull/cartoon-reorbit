@@ -54,13 +54,35 @@ export default defineEventHandler(async () => {
 
   const currentMemberTotalById = new Map(currentMemberTotals.map(r => [r.cMoonId, r.total]))
 
-  // Ranked by average points per CURRENT member, not raw teamScore — a purely presentational
-  // choice for THIS board only (teamScore itself, individual rank progression, and every scoring
-  // rule are untouched) so a large team isn't automatically #1 just by having more members.
-  // Sorted in JS rather than via Prisma's orderBy since the average isn't a stored column; fine
-  // at this scale (see this file's header comment — cMoon count is tens, not thousands).
+  // Site-wide average (across every unlocked cMoon being ranked here) that small teams' averages
+  // get shrunk toward below — computed from the same totals already fetched above, no extra query.
+  const totalPointsAllTeams = cmoons.reduce((sum, c) => sum + (currentMemberTotalById.get(c.id) || 0), 0)
+  const totalMembersAllTeams = cmoons.reduce((sum, c) => sum + c.memberCount, 0)
+  const siteAvg = totalMembersAllTeams > 0 ? totalPointsAllTeams / totalMembersAllTeams : 0
+
+  // See GlobalGameConfig.cMoonAvgShrinkageK's schema comment for the full explanation: a tiny
+  // team can post a huge PLAIN average off one or two lucky/active members, dominating the
+  // ranking on noise rather than sustained performance. Bayesian/IMDb-style shrinkage blends a
+  // team's own average with the site-wide average, weighted by memberCount, so a small team is
+  // pulled toward siteAvg until it has "earned" enough members for its own average to be trusted.
+  // k=0 degenerates to memberCount/(memberCount+0) = 1, i.e. the plain average, no special-casing
+  // needed.
+  const shrinkageK = Number.isInteger(config.cMoonAvgShrinkageK) ? config.cMoonAvgShrinkageK : 10
+
+  // Ranked by (shrunk) average points per CURRENT member, not raw teamScore — a purely
+  // presentational choice for THIS board only (teamScore itself, individual rank progression,
+  // and every scoring rule are untouched) so a large team isn't automatically #1 just by having
+  // more members, and a tiny team isn't automatically #1 just by a small, noisy sample. Sorted in
+  // JS rather than via Prisma's orderBy since the average isn't a stored column; fine at this
+  // scale (see this file's header comment — cMoon count is tens, not thousands).
   const ranked = cmoons
-    .map(c => ({ ...c, avgScore: c.memberCount > 0 ? (currentMemberTotalById.get(c.id) || 0) / c.memberCount : 0 }))
+    .map(c => {
+      const ownAvg = c.memberCount > 0 ? (currentMemberTotalById.get(c.id) || 0) / c.memberCount : 0
+      const avgScore = c.memberCount > 0
+        ? (c.memberCount / (c.memberCount + shrinkageK)) * ownAvg + (shrinkageK / (c.memberCount + shrinkageK)) * siteAvg
+        : 0
+      return { ...c, avgScore }
+    })
     .sort((a, b) => b.avgScore - a.avgScore || a.name.localeCompare(b.name))
 
   return ranked.map((c, i) => ({ ...c, rank: i + 1 }))
