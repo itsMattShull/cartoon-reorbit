@@ -5,6 +5,12 @@
 // config (scavenger, release settings, rarity defaults, etc — see
 // server/api/admin/scavenger/config.post.js). Changes are forward-only: they affect
 // only future cron runs, never rewrite past CMoonScoreLog rows or CMoon.teamScore.
+//
+// One exception: avgShrinkageK (cMoonAvgShrinkageK) is a display/ranking-presentation knob for
+// the average-per-player TEAM ranking (server/api/leaderboard/cmoons.get.js, server/api/cmoon/
+// [id].get.js), not the scoring job — it's read live on every page view, has no "cron run" to
+// wait for, and never affects CMoonScoreLog/teamScore/any award. Kept on this same endpoint
+// purely for UI convenience (one Scoring Rules page for every cMoon admin knob).
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
@@ -16,6 +22,8 @@ const POINTS_MAX = 100000
 const MIN_ACCOUNT_AGE_DAYS_MAX = 365
 const RANK_CUTOFF_MIN = 1
 const RANK_CUTOFF_MAX = 250
+const SHRINKAGE_K_MIN = 0
+const SHRINKAGE_K_MAX = 1000
 
 const SCORE_GAME_KEYS = new Set(SCORE_GAME_OPTIONS.map(g => g.key))
 const WIN_GAME_KEYS = new Set(WIN_GAME_OPTIONS.map(g => g.key))
@@ -65,6 +73,7 @@ export default defineEventHandler(async (event) => {
   const disabledWinGames = requireGameKeyList(body?.disabledWinGames, WIN_GAME_KEYS, 'Disabled win games')
   const runHour = requireInt(body?.runHour, { min: 0, max: 23, label: 'Run hour' })
   const runMinute = requireInt(body?.runMinute, { min: 0, max: 59, label: 'Run minute' })
+  const avgShrinkageK = requireInt(body?.avgShrinkageK, { min: SHRINKAGE_K_MIN, max: SHRINKAGE_K_MAX, label: 'Team average shrinkage k' })
 
   const data = {
     cMoonHighScorePoints: highScorePoints,
@@ -78,6 +87,7 @@ export default defineEventHandler(async (event) => {
     cMoonDisabledWinGames: disabledWinGames,
     cMoonScoringRunHour: runHour,
     cMoonScoringRunMinute: runMinute,
+    cMoonAvgShrinkageK: avgShrinkageK,
   }
 
   const before = await db.globalGameConfig.findUnique({ where: { id: 'singleton' } })
@@ -109,5 +119,6 @@ export default defineEventHandler(async (event) => {
     disabledWinGames: updated.cMoonDisabledWinGames,
     runHour: updated.cMoonScoringRunHour,
     runMinute: updated.cMoonScoringRunMinute,
+    avgShrinkageK: updated.cMoonAvgShrinkageK,
   }
 })
