@@ -1698,6 +1698,21 @@ model GlobalGameConfig {
   // there is otherwise no admin-visible way to tell "no one's completed a task in a while" apart
   // from "the cron died." Surfaced on Admin > cMoons > Scoring Rules.
   cMoonDailyTaskCronLastRanAt        DateTime?
+  // Mutual-exclusion lease for the same every-minute cron, replacing a Postgres session-scoped
+  // advisory lock (pg_try_advisory_lock/pg_advisory_unlock) that this job used to take out and
+  // release as two SEPARATE non-transactional queries — under Prisma's pooled client, those two
+  // queries aren't guaranteed to land on the same physical connection, so the unlock could
+  // silently no-op on a connection that never held the lock, leaking it forever on whichever
+  // connection actually did (an advisory lock only releases when ITS OWNING connection closes,
+  // which for a long-lived pooled connection can be a very long time) — the every-minute cron
+  // would then find itself "locked" and skip forever, which is exactly this job's own recurring
+  // "jams up" symptom, restart-fixable because restarting the process closes every connection and
+  // so releases every advisory lock it was holding. A lease sidesteps connection affinity
+  // entirely: claimed by ONE atomic conditional UPDATE (claim succeeds only if this column is
+  // null or older than the lease window), never explicitly released, and self-expires — so a run
+  // that crashes mid-flight can never jam this cron for more than one lease window. See
+  // server/cron/record-daily-task-completions.js.
+  cMoonDailyTaskCronClaimedAt        DateTime?
   // Shrinkage constant for the average-points-per-player TEAM ranking (Admin > Leaderboards'
   // cMoons tab, and each cMoon's own "Team Rank" badge — see server/api/leaderboard/cmoons.get.js
   // and server/api/cmoon/[id].get.js). Purely a display/ranking-presentation knob, NOT part of

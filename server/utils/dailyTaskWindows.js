@@ -8,8 +8,12 @@
 //  - 8am America/Chicago: Winwheel spins, Lotto purchases, monster barcode scans
 import { DateTime } from 'luxon'
 
-export function getChicagoDailyBoundary() {
-  const chicagoNow = DateTime.now().setZone('America/Chicago')
+// `asOf` (default: now) lets a caller ask "what was the applicable boundary at this past
+// instant" instead of always the current one — used by the daily-task backfill tool
+// (server/api/admin/cmoons/backfill-daily-tasks.post.js) to re-run this same detection logic for
+// a day the live cron missed, without duplicating its boundary math.
+export function getChicagoDailyBoundary(asOf = new Date()) {
+  const chicagoNow = DateTime.fromJSDate(asOf).setZone('America/Chicago')
   let boundaryLocal = chicagoNow.set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
   if (chicagoNow < boundaryLocal) boundaryLocal = boundaryLocal.minus({ days: 1 })
   return boundaryLocal.toUTC().toJSDate()
@@ -32,7 +36,8 @@ export function getChicagoCalendarDayStart() {
   return DateTime.now().setZone('America/Chicago').startOf('day').toUTC().toJSDate()
 }
 
-export function getChicagoMorningWindowStart() {
+// `asOf` — see getChicagoDailyBoundary's own comment above.
+export function getChicagoMorningWindowStart(asOf = new Date()) {
   // Previously computed via now.toLocaleString(...) round-tripped back through `new Date(...)`,
   // which loses now's millisecond component and leaks it into the computed offset — the returned
   // instant jittered by up to ~1s between calls instead of landing on a stable, repeatable 08:00
@@ -41,7 +46,7 @@ export function getChicagoMorningWindowStart() {
   // dedup key (UserDailyTaskCompletion's unique (userId, date) constraint) — there, jitter would
   // defeat ON CONFLICT DO NOTHING and re-award the same morning-window completion on every tick.
   // Luxon's .set(...) mirrors getChicagoDailyBoundary above and is stable across calls.
-  const chicagoNow = DateTime.now().setZone('America/Chicago')
+  const chicagoNow = DateTime.fromJSDate(asOf).setZone('America/Chicago')
   let boundaryLocal = chicagoNow.set({ hour: 8, minute: 0, second: 0, millisecond: 0 })
   if (chicagoNow < boundaryLocal) boundaryLocal = boundaryLocal.minus({ days: 1 })
   return boundaryLocal.toUTC().toJSDate()

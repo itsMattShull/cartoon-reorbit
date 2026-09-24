@@ -162,6 +162,17 @@
               <p v-if="runScoringNowResult" class="text-[11px] text-gray-600 mt-1">{{ runScoringNowResult }}</p>
               <p v-if="runScoringNowError" class="text-[11px] text-red-600 mt-1">{{ runScoringNowError }}</p>
             </div>
+            <div class="mt-2">
+              <button
+                type="button"
+                class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                :disabled="backfillDailyTasksLoading"
+                title="Re-checks the last few days' daily-task completions against the live cron's own boundaries and awards anything it missed while it wasn't running. Safe to click any time — already-recorded completions are skipped, so this only ever fills in gaps, never double-awards."
+                @click="backfillDailyTasks"
+              >{{ backfillDailyTasksLoading ? 'Backfilling…' : 'Backfill Missed Daily Tasks (last 3 days)' }}</button>
+              <p v-if="backfillDailyTasksResult" class="text-[11px] text-gray-600 mt-1">{{ backfillDailyTasksResult }}</p>
+              <p v-if="backfillDailyTasksError" class="text-[11px] text-red-600 mt-1">{{ backfillDailyTasksError }}</p>
+            </div>
           </div>
 
           <div class="border-t pt-3 mt-3">
@@ -2256,6 +2267,9 @@ const scoringSaving = ref(false)
 const runScoringNowLoading = ref(false)
 const runScoringNowResult = ref('')
 const runScoringNowError = ref('')
+const backfillDailyTasksLoading = ref(false)
+const backfillDailyTasksResult = ref('')
+const backfillDailyTasksError = ref('')
 const scoringError = ref('')
 
 function disabledListKey(kind) {
@@ -2333,6 +2347,26 @@ async function runScoringNow() {
     runScoringNowError.value = e?.data?.statusMessage || 'Failed to run scoring'
   } finally {
     runScoringNowLoading.value = false
+  }
+}
+
+// Manually re-checks the last few days' daily-task completions against the live cron's own
+// boundaries — see backfill-daily-tasks.post.js's own comment for why this is needed on top of
+// the live cron itself (an outage that spans a boundary rollover permanently loses that day's
+// completions to the live cron alone; this catches up using each day's own past boundary instead
+// of "right now"'s). Also refreshes the "last ran" status afterward.
+async function backfillDailyTasks() {
+  backfillDailyTasksResult.value = ''
+  backfillDailyTasksError.value = ''
+  backfillDailyTasksLoading.value = true
+  try {
+    const res = await $fetch('/api/admin/cmoons/backfill-daily-tasks', { method: 'POST', body: { days: 3 } })
+    backfillDailyTasksResult.value = `Done — ${res.recorded} missed completion(s) recorded across the last ${res.days} day(s).`
+    await loadScoring()
+  } catch (e) {
+    backfillDailyTasksError.value = e?.data?.statusMessage || 'Failed to backfill daily tasks'
+  } finally {
+    backfillDailyTasksLoading.value = false
   }
 }
 

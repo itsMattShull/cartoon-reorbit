@@ -295,17 +295,32 @@ function eligibleHolders(rows, minAccountAgeCutoff) {
 // and, since DAILY_TASK points below are now awarded live off each newly-detected completion,
 // running this often is also what makes a player's rank bar feel like it updates in real time.
 // Idempotent either way — UserDailyTaskCompletion is unique on (userId, date).
-export async function recordDailyTaskCompletions() {
+// `dailyBoundary`/`morningBoundary` default to the CURRENT boundaries (the live per-minute
+// cron's own behavior, unchanged) but can be overridden to re-run this exact detection logic
+// against a PAST pair of boundaries instead — see the daily-task backfill tool
+// (server/api/admin/cmoons/backfill-daily-tasks.post.js), which reuses this function rather than
+// re-implementing its SQL, for catching up on completions the live cron missed while it wasn't
+// running. `writeHeartbeat: false` is passed by that tool: the heartbeat exists to tell an admin
+// "the live per-minute cron is still actually running" (see cMoonDailyTaskCronLastRanAt's schema
+// comment) — stamping it from an admin-triggered backfill would mask a real outage by making the
+// cron look healthy when it wasn't the one that ran.
+export async function recordDailyTaskCompletions({
+  dailyBoundary: dailyBoundaryOverride,
+  morningBoundary: morningBoundaryOverride,
+  writeHeartbeat = true,
+} = {}) {
   const config = await getGlobalConfig({ fresh: true })
   if (!config?.cMoonEnabled) return { recorded: 0 }
 
-  // Heartbeat: stamped every tick this cron actually runs, regardless of whether anyone
-  // qualified — see the schema comment on cMoonDailyTaskCronLastRanAt. Fire-and-forget: this
-  // must never slow down or fail the real work below over a heartbeat write.
-  prisma.globalGameConfig
-    .update({ where: { id: 'singleton' }, data: { cMoonDailyTaskCronLastRanAt: new Date() } })
-    .then(() => invalidateGlobalConfigCache())
-    .catch(() => {})
+  if (writeHeartbeat) {
+    // Heartbeat: stamped every tick this cron actually runs, regardless of whether anyone
+    // qualified — see the schema comment on cMoonDailyTaskCronLastRanAt. Fire-and-forget: this
+    // must never slow down or fail the real work below over a heartbeat write.
+    prisma.globalGameConfig
+      .update({ where: { id: 'singleton' }, data: { cMoonDailyTaskCronLastRanAt: new Date() } })
+      .then(() => invalidateGlobalConfigCache())
+      .catch(() => {})
+  }
 
   const [globalConfig, winwheelConfig, lottoSettings, barcodeConfig] = await Promise.all([
     prisma.globalGameConfig.findUnique({
@@ -326,8 +341,8 @@ export async function recordDailyTaskCompletions() {
   const lottoCountPerDay = Number(lottoSettings?.countPerDay ?? 0)
   const monsterDailyScanLimit = Number(barcodeConfig?.monsterDailyScanLimit ?? 0)
 
-  const dailyBoundary = getChicagoDailyBoundary()
-  const morningBoundary = getChicagoMorningWindowStart()
+  const dailyBoundary = dailyBoundaryOverride ?? getChicagoDailyBoundary()
+  const morningBoundary = morningBoundaryOverride ?? getChicagoMorningWindowStart()
   const { minAccountAgeDays, dailyTaskPoints } = resolveScoringConfig(config)
   const minAccountAgeCutoff = new Date(Date.now() - minAccountAgeDays * 24 * 60 * 60 * 1000)
   const combatNames = Prisma.join(COMBAT_POOL_GAME_NAMES)
