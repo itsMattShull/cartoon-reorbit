@@ -3736,15 +3736,17 @@ model UserCMoonBorder {
   // a live reference, not a copy of its field values: editing the effect's own row restyles this
   // retroactively, but reassigning the GRANTING LEVEL to a different effect does not touch this
   // row). Every row that already existed when the migration introducing this feature ran was
-  // backfilled to point at that cMoon's seeded "legacy" effect (matching the exact pre-CZoneEffect
-  // hardcoded look), so an already-purchased/displayed border cleanly carries over onto the new
-  // system rather than staying on a separate fallback forever — a member who already had a border
-  // equipped keeps seeing the exact same thing, and if an admin later customizes that legacy
-  // effect (or any other cMoon's), every current holder sees it change together with everyone
-  // granted after them. Null only happens for a row whose cMoon had no grantsBorder=true level at
-  // migration time to seed a legacy effect from (i.e. one already unassigned before this feature
-  // shipped) — renders as a plain solid ring in this cMoon's live `color`, the pre-CZoneEffect
-  // behavior, rather than disappearing.
+  // backfilled to point at that cMoon's seeded "legacy" effect — same color (copied once, no
+  // longer live-following the cMoon's) and the same thickness/size numbers the old hardcoded
+  // rendering used, though NOT byte-identical CSS: .cz-frame's rendering was redesigned alongside
+  // this feature (rim highlight, depth shadow) for every border/glow, seeded legacy ones included.
+  // An already-purchased/displayed border cleanly carries the SAME cMoon and color forward onto
+  // the new system rather than staying on a separate fallback forever, and if an admin later
+  // customizes that legacy effect (or any other cMoon's), every current holder sees it change
+  // together with everyone granted after them. Null only happens for a row whose cMoon had no
+  // grantsBorder=true level at migration time to seed a legacy effect from (i.e. one already
+  // unassigned before this feature shipped) — renders as a plain solid ring in this cMoon's live
+  // `color`, the pre-CZoneEffect behavior, rather than disappearing.
   effectId   String?
   unlockedAt DateTime @default(now())
 
