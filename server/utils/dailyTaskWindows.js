@@ -36,6 +36,21 @@ export function getChicagoCalendarDayStart() {
   return DateTime.now().setZone('America/Chicago').startOf('day').toUTC().toJSDate()
 }
 
+// The NEXT occurrence of the exact same wall-clock boundary a `getChicagoDailyBoundary`/
+// getChicagoMorningWindowStart` result represents, one Chicago calendar day later — used as a
+// detection window's END bound (server/utils/cmoon.js's recordDailyTaskCompletions). Deliberately
+// NOT `new Date(boundary.getTime() + 24*60*60*1000)`: a Chicago calendar day is only 24 hours on
+// 363 days a year — it's 23 hours on the spring-forward transition and 25 on the fall-back one —
+// so a flat +24h either cuts an hour off the end of the window (spring-forward, silently missing
+// real activity in that last hour) or lets it run an hour into the NEXT window (fall-back,
+// double-counting that hour's activity across two consecutive days). Stepping the boundary
+// forward via Luxon's calendar-aware `.plus({ days: 1 })` in the Chicago zone always lands on the
+// correct wall-clock instant regardless of DST, exactly like getChicagoDailyBoundary's own
+// `asOf` stepping does.
+export function addOneChicagoDay(boundary) {
+  return DateTime.fromJSDate(boundary).setZone('America/Chicago').plus({ days: 1 }).toUTC().toJSDate()
+}
+
 // `asOf` — see getChicagoDailyBoundary's own comment above.
 export function getChicagoMorningWindowStart(asOf = new Date()) {
   // Previously computed via now.toLocaleString(...) round-tripped back through `new Date(...)`,

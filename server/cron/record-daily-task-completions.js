@@ -11,12 +11,17 @@
 // often, which is exactly this job's own recurring "stops running until the server is restarted"
 // symptom.
 //
-// Claim is one atomic conditional UPDATE; release is a second UPDATE guarded by the exact
-// timestamp THIS run's own claim wrote (`claimedAt`), not an unconditional clear — so a run that
-// finishes late, after its lease has already expired and been re-claimed by a newer run, can't
-// clobber that newer run's still-active claim. Both are plain column writes with no session/
-// connection affinity requirement at all (unlike an advisory lock), so there's nothing for
-// connection pooling to break here.
+// Claim is one atomic conditional UPDATE; release is a second UPDATE guarded by a fresh random
+// token THIS run generated and wrote as part of its own claim, not an unconditional clear — so a
+// run that finishes late, after its lease has already expired and been re-claimed by a newer run,
+// can't clobber that newer run's still-active claim (its own stale token no longer matches what's
+// stored). The token — not the claimed-at timestamp itself — is what ownership is compared on:
+// a timestamp round-tripped out through Prisma and back into a fresh query's parameter depends on
+// the DB session's timezone setting to compare equal again, while a plain opaque string never
+// does. Staleness is still checked via NOW() against the timestamp, but only ever within the SAME
+// statement that reads it, which is safe regardless of session timezone. Both claim and release
+// are plain column writes with no session/connection affinity requirement at all (unlike an
+// advisory lock), so there's nothing for connection pooling to break here.
 //
 // The explicit release (not just letting every run's lease expire on its own after
 // LEASE_SECONDS) matters at scale: a run that's merely slow, not actually stuck, still finishes
@@ -29,33 +34,34 @@
 // makes is independently idempotent regardless (UserDailyTaskCompletion's unique (userId, date),
 // CMoonScoreLog's unique award constraint), so even a genuine overlap can only ever produce
 // redundant no-op writes, never a double-award.
+import { randomUUID } from 'node:crypto'
 import { prisma } from '../prisma.js'
 import { recordDailyTaskCompletions } from '../utils/cmoon.js'
 
 const LEASE_SECONDS = 240 // generous headroom above any realistic run time — see header comment
 
 export async function runRecordDailyTaskCompletions() {
+  const token = randomUUID()
   const claimed = await prisma.$queryRaw`
     UPDATE "GlobalGameConfig"
-    SET "cMoonDailyTaskCronClaimedAt" = NOW()
+    SET "cMoonDailyTaskCronClaimedAt" = NOW(), "cMoonDailyTaskCronClaimToken" = ${token}
     WHERE id = 'singleton'
       AND ("cMoonDailyTaskCronClaimedAt" IS NULL
         OR "cMoonDailyTaskCronClaimedAt" < NOW() - make_interval(secs => ${LEASE_SECONDS}))
-    RETURNING "cMoonDailyTaskCronClaimedAt" AS "claimedAt"
+    RETURNING id
   `
   if (!claimed.length) {
     console.log('[record-daily-task-completions] another run claimed the lease recently, skipping')
     return
   }
-  const { claimedAt } = claimed[0]
   try {
     const { recorded } = await recordDailyTaskCompletions()
     console.log(`[record-daily-task-completions] recorded ${recorded} completion(s)`)
   } finally {
     await prisma.$queryRaw`
       UPDATE "GlobalGameConfig"
-      SET "cMoonDailyTaskCronClaimedAt" = NULL
-      WHERE id = 'singleton' AND "cMoonDailyTaskCronClaimedAt" = ${claimedAt}
+      SET "cMoonDailyTaskCronClaimedAt" = NULL, "cMoonDailyTaskCronClaimToken" = NULL
+      WHERE id = 'singleton' AND "cMoonDailyTaskCronClaimToken" = ${token}
     `
   }
 }

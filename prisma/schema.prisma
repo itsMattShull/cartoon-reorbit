@@ -1707,12 +1707,22 @@ model GlobalGameConfig {
   // which for a long-lived pooled connection can be a very long time) — the every-minute cron
   // would then find itself "locked" and skip forever, which is exactly this job's own recurring
   // "jams up" symptom, restart-fixable because restarting the process closes every connection and
-  // so releases every advisory lock it was holding. A lease sidesteps connection affinity
-  // entirely: claimed by ONE atomic conditional UPDATE (claim succeeds only if this column is
-  // null or older than the lease window), never explicitly released, and self-expires — so a run
-  // that crashes mid-flight can never jam this cron for more than one lease window. See
-  // server/cron/record-daily-task-completions.js.
+  // so releases every advisory lock it was holding. A lease is claimed by ONE atomic conditional
+  // UPDATE (succeeds only if this column is null or older than the lease window) and self-expires
+  // if never explicitly released, so a run that crashes mid-flight can never jam this cron for
+  // more than one lease window — see server/cron/record-daily-task-completions.js. Staleness is
+  // checked via NOW() in the SAME statement that reads this column, so it's safe regardless of
+  // the DB session's timezone setting; ownership for the explicit release is instead tracked by
+  // cMoonDailyTaskCronClaimToken below, deliberately NOT by comparing this timestamp back
+  // (a value round-tripped out through Prisma and back into a fresh query is exactly the kind of
+  // comparison a session timezone OTHER than UTC could silently break).
   cMoonDailyTaskCronClaimedAt        DateTime?
+  // Opaque per-claim token (see cMoonDailyTaskCronClaimedAt above): a run captures a fresh random
+  // value on every successful claim and clears both columns together only if this still matches
+  // what it wrote, so a run whose lease already expired and was re-claimed by someone else can
+  // never clobber that newer claim by releasing late. Plain string equality — no timestamp
+  // precision or timezone round-trip involved at all.
+  cMoonDailyTaskCronClaimToken       String?
   // Shrinkage constant for the average-points-per-player TEAM ranking (Admin > Leaderboards'
   // cMoons tab, and each cMoon's own "Team Rank" badge — see server/api/leaderboard/cmoons.get.js
   // and server/api/cmoon/[id].get.js). Purely a display/ranking-presentation knob, NOT part of

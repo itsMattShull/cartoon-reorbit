@@ -5,7 +5,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../prisma.js'
 import { mintQueue } from './queues.js'
-import { getChicagoDailyBoundary, getChicagoMorningWindowStart, getChicagoCalendarDayStart } from './dailyTaskWindows.js'
+import { getChicagoDailyBoundary, getChicagoMorningWindowStart, getChicagoCalendarDayStart, addOneChicagoDay } from './dailyTaskWindows.js'
 import { COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
 import { EXCLUDED_SYSTEM_USER_ID } from './economyValuation.js'
 import { grantGuildRole, revokeGuildRole } from './discord.js'
@@ -311,7 +311,7 @@ export async function recordDailyTaskCompletions({
   skipRecompute = false,
 } = {}) {
   const config = await getGlobalConfig({ fresh: true })
-  if (!config?.cMoonEnabled) return { recorded: 0 }
+  if (!config?.cMoonEnabled) return { recorded: 0, awardedUserIds: [] }
 
   if (writeHeartbeat) {
     // Heartbeat: stamped every tick this cron actually runs, regardless of whether anyone
@@ -346,17 +346,18 @@ export async function recordDailyTaskCompletions({
   const morningBoundary = morningBoundaryOverride ?? getChicagoMorningWindowStart()
   // Only the LIVE call (no explicit boundary passed in) ever has "now" fall inside these two
   // windows — a historical call (the backfill tool) is always re-checking a day that has already
-  // fully elapsed. Every append-only-log branch below gets an explicit end bound of boundary+24h
-  // for exactly this reason: with no end bound, "createdAt >= boundary" alone is harmless for the
+  // fully elapsed. Every append-only-log branch below gets an explicit end bound (the NEXT
+  // occurrence of this same boundary, one Chicago calendar day later — see addOneChicagoDay,
+  // deliberately not a flat +24h, which is wrong on the two DST-transition days a year) for
+  // exactly this reason: with no end bound, "createdAt >= boundary" alone is harmless for the
   // live call (nothing has a future createdAt, so it's equivalent to "since boundary, through
   // now") but silently means "since boundary, through RIGHT NOW" for a historical call too — i.e.
   // every day *since* that boundary, not just the one day it names. A user who was merely active
   // TODAY would then satisfy every past boundary the backfill tool re-checks, and get awarded for
   // days they did nothing on. The end bound makes both calls check exactly one real day, live or not.
   const isHistorical = Boolean(dailyBoundaryOverride || morningBoundaryOverride)
-  const ONE_DAY_MS = 24 * 60 * 60 * 1000
-  const dailyBoundaryEnd = new Date(dailyBoundary.getTime() + ONE_DAY_MS)
-  const morningBoundaryEnd = new Date(morningBoundary.getTime() + ONE_DAY_MS)
+  const dailyBoundaryEnd = addOneChicagoDay(dailyBoundary)
+  const morningBoundaryEnd = addOneChicagoDay(morningBoundary)
   const { minAccountAgeDays, dailyTaskPoints } = resolveScoringConfig(config)
   const minAccountAgeCutoff = new Date(Date.now() - minAccountAgeDays * 24 * 60 * 60 * 1000)
   const combatNames = Prisma.join(COMBAT_POOL_GAME_NAMES)
