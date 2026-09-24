@@ -4,6 +4,7 @@ import { defineEventHandler, createError } from 'h3'
 
 import { prisma } from '@/server/prisma'
 import { getGlobalConfig, isCMoonCaptain, displayRankName } from '@/server/utils/cmoon'
+import { resolveBorderStyle, resolveGlowStyle } from '@/server/utils/czoneEffect'
 
 function normalizeZones(layoutData, background, targetCount) {
   let zones = []
@@ -70,7 +71,7 @@ export default defineEventHandler(async (event) => {
   // Independent lookups run concurrently — this route already treats latency as
   // worth engineering around (see the ownedUserCtoons comment above). isFavorited
   // is never allowed to fail the whole zone view: default to false on error.
-  const [cMoonConfig, config, isFavorited] = await Promise.all([
+  const [cMoonConfig, config, isFavorited, equippedBorderRow, equippedGlowRow] = await Promise.all([
     getGlobalConfig(),
     prisma.globalGameConfig.findUnique({
       where: { id: 'singleton' },
@@ -81,7 +82,24 @@ export default defineEventHandler(async (event) => {
           .findUnique({ where: { userId_favoritedUserId: { userId: viewerId, favoritedUserId: user.id } } })
           .then(row => !!row)
           .catch(() => false)
-      : Promise.resolve(false)
+      : Promise.resolve(false),
+    // The equippedBorder relation above only carries the CMoon's own {id, name, color} — the
+    // actual granted CZoneEffect (if any) lives on the UserCMoonBorder row for this specific
+    // (user, cMoon) pair, since which effect was granted depends on which affinity level the user
+    // crossed, not just which cMoon. A single indexed lookup on the compound unique key, same
+    // "cheap enough for this hot route" bar as the rest of this Promise.all.
+    user.equippedBorderCMoonId
+      ? prisma.userCMoonBorder.findUnique({
+          where: { userId_cMoonId: { userId: user.id, cMoonId: user.equippedBorderCMoonId } },
+          include: { effect: true, cMoon: { select: { name: true, color: true } } }
+        })
+      : Promise.resolve(null),
+    user.equippedGlowCMoonId
+      ? prisma.userCMoonGlow.findUnique({
+          where: { userId_cMoonId: { userId: user.id, cMoonId: user.equippedGlowCMoonId } },
+          include: { effect: true, cMoon: { select: { name: true, color: true } } }
+        })
+      : Promise.resolve(null)
   ])
   const cMoonEnabled = !!cMoonConfig?.cMoonEnabled
   const baseCount = Number(config?.czoneCount ?? 3)
@@ -280,8 +298,17 @@ export default defineEventHandler(async (event) => {
     // Independent of cMoonEnabled/membership above — an earned border/glow is a permanent
     // personal cosmetic, visible even if the member later leaves the cMoon that granted it.
     // Mutually exclusive at equip time, so at most one of these two is ever non-null.
-    border: user.equippedBorder ? { cMoonId: user.equippedBorder.id, name: user.equippedBorder.name, color: user.equippedBorder.color } : null,
-    glow: user.equippedGlow ? { cMoonId: user.equippedGlow.id, name: user.equippedGlow.name, color: user.equippedGlow.color } : null,
+    // Prefer the (user, cMoon) UserCMoonBorder/Glow row fetched above, which carries the actual
+    // granted effect; equippedBorderRow/equippedGlowRow should always exist whenever
+    // equippedBorderCMoonId/equippedGlowCMoonId is set (equip only ever targets an already-owned
+    // cMoon — see server/api/czone/border.post.js), but fall back to the plain CMoon relation
+    // (still resolves to the legacy defaults, never crashes) in case that invariant is ever violated.
+    border: equippedBorderRow
+      ? resolveBorderStyle(equippedBorderRow)
+      : (user.equippedBorder ? resolveBorderStyle({ cMoonId: user.equippedBorder.id, cMoon: user.equippedBorder, effect: null }) : null),
+    glow: equippedGlowRow
+      ? resolveGlowStyle(equippedGlowRow)
+      : (user.equippedGlow ? resolveGlowStyle({ cMoonId: user.equippedGlow.id, cMoon: user.equippedGlow, effect: null }) : null),
     cZone: {
       id: chosenZone.id,
       zones: enrichedZones,

@@ -18,6 +18,8 @@ export default defineEventHandler(async (event) => {
         affinityLevels: {
           orderBy: { sortOrder: 'asc' },
           include: {
+            borderEffect: true,
+            glowEffect: true,
             rewardBackground: { select: { id: true, label: true, imagePath: true } },
             rewardAvatars: { include: { avatar: { select: { id: true, label: true, imagePath: true } } } },
           },
@@ -62,7 +64,9 @@ export default defineEventHandler(async (event) => {
       prizeCtoons: c.prizeCtoons.map(pc => ({ ctoonId: pc.ctoonId, quantity: pc.quantity, name: pc.ctoon?.name || '', assetPath: pc.ctoon?.assetPath || null })),
       ranks: c.ranks.map(r => ({ id: r.id, name: r.name, sortOrder: r.sortOrder, discordRoleId: r.discordRoleId, tierId: r.tierId })),
       affinityLevels: c.affinityLevels.map(l => ({
-        id: l.id, name: l.name, threshold: l.threshold, sortOrder: l.sortOrder, grantsBorder: l.grantsBorder, grantsGlow: l.grantsGlow,
+        id: l.id, name: l.name, threshold: l.threshold, sortOrder: l.sortOrder,
+        borderEffectId: l.borderEffectId, borderEffect: l.borderEffect,
+        glowEffectId: l.glowEffectId, glowEffect: l.glowEffect,
         rewardBackgroundId: l.rewardBackgroundId,
         rewardBackground: l.rewardBackground,
         rewardAvatarIds: l.rewardAvatars.map(ra => ra.avatar.id),
