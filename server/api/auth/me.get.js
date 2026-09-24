@@ -3,6 +3,7 @@ import { defineEventHandler, createError, getCookie } from 'h3'
 import jwt from 'jsonwebtoken'
 import { prisma } from '@/server/prisma'
 import { refreshDiscordTokenAndRoles } from '../../utils/refreshDiscordTokenAndRoles.js'
+import { resolveBorderStyle, resolveGlowStyle } from '@/server/utils/czoneEffect'
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
@@ -97,12 +98,12 @@ export default defineEventHandler(async (event) => {
     // picker without a dedicated round trip.
     prisma.userCMoonBorder.findMany({
       where: { userId: user.id },
-      select: { cMoonId: true, cMoon: { select: { name: true, color: true } } }
+      select: { cMoonId: true, cMoon: { select: { name: true, color: true } }, effect: true }
     }),
     // Same idea as ownedBorders above, for the alternative glow cosmetic.
     prisma.userCMoonGlow.findMany({
       where: { userId: user.id },
-      select: { cMoonId: true, cMoon: { select: { name: true, color: true } } }
+      select: { cMoonId: true, cMoon: { select: { name: true, color: true } }, effect: true }
     })
   ])
 
@@ -134,8 +135,8 @@ export default defineEventHandler(async (event) => {
     additionalCzones: user.additionalCzones ?? 0,
     surveyComplete: !!user.surveyAnswers,
     equippedBorderCMoonId: user.equippedBorderCMoonId || null,
-    ownedBorders: ownedBorders.map(b => ({ cMoonId: b.cMoonId, name: b.cMoon?.name || '', color: b.cMoon?.color || '#888888' })),
+    ownedBorders: ownedBorders.map(resolveBorderStyle),
     equippedGlowCMoonId: user.equippedGlowCMoonId || null,
-    ownedGlows: ownedGlows.map(g => ({ cMoonId: g.cMoonId, name: g.cMoon?.name || '', color: g.cMoon?.color || '#888888' })),
+    ownedGlows: ownedGlows.map(resolveGlowStyle),
   }
 })

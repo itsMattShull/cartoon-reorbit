@@ -13,6 +13,20 @@ export function isSafeCMoonColor(color) {
   return typeof color === 'string' && HEX_RE.test(color)
 }
 
+// Mixes hex toward white by `amount` (0..1) — used for a bright "rim highlight" layer on cZone
+// border/glow cosmetics (see components/newsite/MyCzone.vue's .cz-frame CSS) so a single
+// admin-picked color still reads as having depth/shine rather than one flat tone. Falls back to
+// plain white on an invalid input rather than throwing, since this only ever feeds a CSS custom
+// property (a bad value there is just visually wrong, never a crash).
+export function lightenHex(hex, amount = 0.5) {
+  if (!isSafeCMoonColor(hex)) return '#ffffff'
+  const mix = (channelHex) => {
+    const c = parseInt(channelHex, 16)
+    return Math.round(c + (255 - c) * amount).toString(16).padStart(2, '0')
+  }
+  return `#${mix(hex.slice(1, 3))}${mix(hex.slice(3, 5))}${mix(hex.slice(5, 7))}`
+}
+
 // Exported so other palette math (utils/cmoonPalette.js) shares one WCAG
 // implementation instead of re-deriving it.
 export function relativeLuminance(hex) {

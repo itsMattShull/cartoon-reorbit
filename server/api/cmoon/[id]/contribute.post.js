@@ -143,8 +143,10 @@ export default defineEventHandler(async (event) => {
           const reward = {
             backgrounds: [],
             avatars: [],
-            borderCMoonId: lvl.grantsBorder ? cMoonId : null,
-            glowCMoonId: lvl.grantsGlow ? cMoonId : null,
+            borderCMoonId: lvl.borderEffectId ? cMoonId : null,
+            borderEffectId: lvl.borderEffectId || null,
+            glowCMoonId: lvl.glowEffectId ? cMoonId : null,
+            glowEffectId: lvl.glowEffectId || null,
           }
           if (lvl.rewardBackground) {
             reward.backgrounds.push({ backgroundId: lvl.rewardBackground.id })
@@ -154,8 +156,8 @@ export default defineEventHandler(async (event) => {
             reward.avatars.push({ avatarId: ra.avatar.id })
             revealedAvatars.push(ra.avatar)
           }
-          if (lvl.grantsBorder) revealedBorder = true
-          if (lvl.grantsGlow) revealedGlow = true
+          if (lvl.borderEffectId) revealedBorder = true
+          if (lvl.glowEffectId) revealedGlow = true
           await grantRewardInTx(tx, userId, reward, `cmoonAffinity:level:${lvl.id}`)
 
           // Auto-equip the member's first-ever border/glow so it's visible without an extra
@@ -167,13 +169,13 @@ export default defineEventHandler(async (event) => {
           // is no longer null by the time the glow update's WHERE clause is evaluated, so glow
           // is deliberately skipped that one time — border wins the auto-equip, glow is still
           // granted/owned and can be switched to manually.
-          if (lvl.grantsBorder) {
+          if (lvl.borderEffectId) {
             await tx.user.updateMany({
               where: { id: userId, equippedBorderCMoonId: null, equippedGlowCMoonId: null },
               data: { equippedBorderCMoonId: cMoonId },
             })
           }
-          if (lvl.grantsGlow) {
+          if (lvl.glowEffectId) {
             await tx.user.updateMany({
               where: { id: userId, equippedBorderCMoonId: null, equippedGlowCMoonId: null },
               data: { equippedGlowCMoonId: cMoonId },
@@ -184,8 +186,8 @@ export default defineEventHandler(async (event) => {
         leveledUpTo = {
           id: highest.id,
           name: highest.name,
-          grantsBorder: highest.grantsBorder,
-          grantsGlow: highest.grantsGlow,
+          grantsBorder: !!highest.borderEffectId,
+          grantsGlow: !!highest.glowEffectId,
           // Every level name crossed in this one contribution, oldest first — usually just
           // [highest.name], but a big lump sum can skip several at once.
           levelNames: crossedLevels.map(l => l.name),

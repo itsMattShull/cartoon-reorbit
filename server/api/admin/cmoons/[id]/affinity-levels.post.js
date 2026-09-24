@@ -19,8 +19,8 @@ export default defineEventHandler(async (event) => {
   const name = typeof body?.name === 'string' ? body.name.trim() : ''
   const threshold = Number(body?.threshold)
   const sortOrder = Number.isFinite(Number(body?.sortOrder)) ? Math.trunc(Number(body.sortOrder)) : 0
-  const grantsBorder = !!body?.grantsBorder
-  const grantsGlow = !!body?.grantsGlow
+  const borderEffectId = typeof body?.borderEffectId === 'string' && body.borderEffectId ? body.borderEffectId : null
+  const glowEffectId = typeof body?.glowEffectId === 'string' && body.glowEffectId ? body.glowEffectId : null
   const rewardBackgroundId = typeof body?.rewardBackgroundId === 'string' && body.rewardBackgroundId ? body.rewardBackgroundId : null
   const rewardAvatarIds = Array.isArray(body?.rewardAvatarIds)
     ? [...new Set(body.rewardAvatarIds.filter(v => typeof v === 'string' && v))]
@@ -31,6 +31,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Threshold must be a positive whole number of points' })
   }
 
+  if (borderEffectId) {
+    const fx = await db.cZoneEffect.findUnique({ where: { id: borderEffectId }, select: { kind: true } })
+    if (!fx || fx.kind !== 'BORDER') throw createError({ statusCode: 400, statusMessage: 'Border effect not found or is not a BORDER-kind effect' })
+  }
+  if (glowEffectId) {
+    const fx = await db.cZoneEffect.findUnique({ where: { id: glowEffectId }, select: { kind: true } })
+    if (!fx || fx.kind !== 'GLOW') throw createError({ statusCode: 400, statusMessage: 'Glow effect not found or is not a GLOW-kind effect' })
+  }
   if (rewardBackgroundId) {
     const bg = await db.background.count({ where: { id: rewardBackgroundId } })
     if (!bg) throw createError({ statusCode: 400, statusMessage: 'Reward background not found' })
@@ -44,7 +52,7 @@ export default defineEventHandler(async (event) => {
   try {
     created = await db.$transaction(async (tx) => {
       const lvl = await tx.cMoonAffinityLevel.create({
-        data: { cMoonId, name, threshold, sortOrder, grantsBorder, grantsGlow, rewardBackgroundId },
+        data: { cMoonId, name, threshold, sortOrder, borderEffectId, glowEffectId, rewardBackgroundId },
       })
       if (rewardAvatarIds.length) {
         await tx.cMoonAffinityLevelRewardAvatar.createMany({
@@ -57,10 +65,16 @@ export default defineEventHandler(async (event) => {
     if (err?.code === 'P2002') {
       throw createError({ statusCode: 409, statusMessage: 'Another level in this cMoon already uses that threshold or order' })
     }
+    // Effect existed at the check above but was deleted by another admin request before this
+    // write landed (only possible while it wasn't yet in use — see CZoneEffect's onDelete:
+    // Restrict, which blocks deleting one already in use).
+    if (err?.code === 'P2003') {
+      throw createError({ statusCode: 400, statusMessage: 'Border or glow effect was deleted by another request — pick again' })
+    }
     throw err
   }
 
-  await logAdminChange(db, { userId: me.id, area: 'CMoonAffinityLevel', key: `create:${created.id}`, prevValue: null, newValue: { cMoonId, name, threshold, sortOrder, grantsBorder, grantsGlow } })
+  await logAdminChange(db, { userId: me.id, area: 'CMoonAffinityLevel', key: `create:${created.id}`, prevValue: null, newValue: { cMoonId, name, threshold, sortOrder, borderEffectId, glowEffectId } })
 
   return { id: created.id }
 })

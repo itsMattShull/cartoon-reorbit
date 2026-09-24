@@ -471,9 +471,11 @@
             </div>
 
             <!-- Affinity Levels: "contribute to cMoon" ladder — spend points to reach a level,
-                 which can grant a cZone border (in this cMoon's color), an exclusive avatar, and/or
-                 an exclusive cZone background. Independent of the Ranks ladder above (Ranks are
-                 achievement-granted; affinity is spend-driven and personal, not team score). -->
+                 which can grant a cZone border or glow (styled by an admin-authored CZoneEffect,
+                 see the cZone Effects page — independent of this cMoon's own color once assigned),
+                 an exclusive avatar, and/or an exclusive cZone background. Independent of the
+                 Ranks ladder above (Ranks are achievement-granted; affinity is spend-driven and
+                 personal, not team score). -->
             <div class="mt-2 pt-2 border-t">
               <div class="flex items-center justify-between mb-1">
                 <div class="text-[11px] font-medium">Affinity Levels</div>
@@ -484,8 +486,8 @@
                   <span class="text-gray-500 w-6 flex-shrink-0">#{{ lvl.sortOrder }}</span>
                   <span class="flex-1 min-w-0 break-words">{{ lvl.name }}</span>
                   <span class="text-gray-500 flex-shrink-0">{{ lvl.threshold.toLocaleString() }} pts</span>
-                  <span v-if="lvl.grantsBorder" class="flex-shrink-0" title="Grants cZone border">🔲</span>
-                  <span v-if="lvl.grantsGlow" class="flex-shrink-0" title="Grants cZone glow">✨</span>
+                  <span v-if="lvl.borderEffect" class="flex-shrink-0" :title="`Grants cZone border: ${lvl.borderEffect.name}`">🔲</span>
+                  <span v-if="lvl.glowEffect" class="flex-shrink-0" :title="`Grants cZone glow: ${lvl.glowEffect.name}`">✨</span>
                   <span v-if="lvl.rewardBackground" class="flex-shrink-0" title="Grants background">🖼️</span>
                   <span v-if="lvl.rewardAvatars?.length" class="flex-shrink-0" :title="`Grants ${lvl.rewardAvatars.length} avatar${lvl.rewardAvatars.length === 1 ? '' : 's'}`">🧑{{ lvl.rewardAvatars.length > 1 ? `×${lvl.rewardAvatars.length}` : '' }}</span>
                   <button
@@ -1091,16 +1093,26 @@
             </div>
           </div>
 
-          <label class="flex items-center gap-2 pt-1">
-            <input type="checkbox" v-model="levelForm.grantsBorder" />
-            <span class="text-xs">Grants cZone border (in this cMoon's color)</span>
-          </label>
+          <div>
+            <label class="block text-xs font-medium mb-1">Grants cZone border</label>
+            <select v-model="levelForm.borderEffectId" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px">
+              <option value="">None</option>
+              <option v-for="fx in borderEffects" :key="fx.id" :value="fx.id">{{ fx.name }}</option>
+            </select>
+          </div>
 
-          <label class="flex items-center gap-2">
-            <input type="checkbox" v-model="levelForm.grantsGlow" />
-            <span class="text-xs">Grants cZone glow (in this cMoon's color)</span>
-          </label>
-          <p class="text-[11px] text-gray-500 -mt-1">Border and glow are separate, permanent unlocks — a member can earn both, but can only display one on their cZone at a time.</p>
+          <div>
+            <label class="block text-xs font-medium mb-1">Grants cZone glow</label>
+            <select v-model="levelForm.glowEffectId" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px">
+              <option value="">None</option>
+              <option v-for="fx in glowEffects" :key="fx.id" :value="fx.id">{{ fx.name }}</option>
+            </select>
+          </div>
+          <p class="text-[11px] text-gray-500 -mt-1">
+            Border and glow are separate, permanent unlocks — a member can earn both, but can only display one on
+            their cZone at a time. Effects are styled independently of this cMoon's color — manage them on the
+            <NuxtLink to="/newsite/admin/czoneEffects" class="text-indigo-600 hover:underline">cZone Effects</NuxtLink> page.
+          </p>
 
           <div>
             <label class="block text-xs font-medium mb-1">Reward background (optional)</label>
@@ -1260,8 +1272,8 @@ function previewAffinityLevel(c, lvl) {
     ...(lvl.rewardAvatars || []).map(av => ({ id: `av-${av.id}`, imagePath: av.imagePath, label: av.label || 'Avatar', variant: 'avatar' })),
     ...(lvl.rewardBackground ? [{ id: `bg-${lvl.rewardBackground.id}`, imagePath: lvl.rewardBackground.imagePath, label: lvl.rewardBackground.label || 'Background', variant: 'background' }] : []),
   ]
-  if (lvl.grantsBorder) items.push({ id: 'border', imagePath: null, label: 'cZone Border', variant: 'swatch', icon: '🔲' })
-  if (lvl.grantsGlow) items.push({ id: 'glow', imagePath: null, label: 'cZone Glow', variant: 'swatch', icon: '✨' })
+  if (lvl.borderEffect) items.push({ id: 'border', imagePath: null, label: `cZone Border: ${lvl.borderEffect.name}`, variant: 'swatch', icon: '🔲' })
+  if (lvl.glowEffect) items.push({ id: 'glow', imagePath: null, label: `cZone Glow: ${lvl.glowEffect.name}`, variant: 'swatch', icon: '✨' })
   const reveal = () => {
     closeRewardModal()
     openRewardModal({
@@ -2099,11 +2111,16 @@ async function removeTier(t) {
 
 // Affinity Levels: same single-shared-form-at-a-time pattern as Ranks above. `backgrounds` and
 // `avatarsCatalog` back the two reward pickers — loaded once in load(), refreshed after an
-// inline avatar upload so the new avatar is immediately selectable.
+// inline avatar upload so the new avatar is immediately selectable. `czoneEffects` backs the
+// border/glow effect pickers the same way — loaded once in load(), managed on the separate
+// cZone Effects admin page (components/newsite/AdminCZoneEffects.vue).
 const backgrounds = ref([])
 const avatarsCatalog = ref([])
+const czoneEffects = ref([])
+const borderEffects = computed(() => czoneEffects.value.filter(e => e.kind === 'BORDER'))
+const glowEffects = computed(() => czoneEffects.value.filter(e => e.kind === 'GLOW'))
 
-const emptyLevelForm = () => ({ id: '', name: '', threshold: 0, sortOrder: 0, grantsBorder: false, grantsGlow: false, rewardBackgroundId: '', rewardAvatarIds: [] })
+const emptyLevelForm = () => ({ id: '', name: '', threshold: 0, sortOrder: 0, borderEffectId: '', glowEffectId: '', rewardBackgroundId: '', rewardAvatarIds: [] })
 const levelForm = reactive(emptyLevelForm())
 const levelCMoon = ref(null)
 const levelModalOpen = ref(false)
@@ -2143,7 +2160,7 @@ function startEditLevel(c, lvl) {
   levelCMoon.value = c
   Object.assign(levelForm, {
     id: lvl.id, name: lvl.name, threshold: lvl.threshold, sortOrder: lvl.sortOrder,
-    grantsBorder: lvl.grantsBorder, grantsGlow: lvl.grantsGlow,
+    borderEffectId: lvl.borderEffectId || '', glowEffectId: lvl.glowEffectId || '',
     rewardBackgroundId: lvl.rewardBackgroundId || '', rewardAvatarIds: (lvl.rewardAvatarIds || []).slice(),
   })
   levelModalOpen.value = true
@@ -2160,8 +2177,8 @@ async function saveLevel(c) {
       name: levelForm.name.trim(),
       threshold: levelForm.threshold,
       sortOrder: levelForm.sortOrder,
-      grantsBorder: levelForm.grantsBorder,
-      grantsGlow: levelForm.grantsGlow,
+      borderEffectId: levelForm.borderEffectId || '',
+      glowEffectId: levelForm.glowEffectId || '',
       rewardBackgroundId: levelForm.rewardBackgroundId || '',
       rewardAvatarIds: levelForm.rewardAvatarIds,
     }
@@ -2220,13 +2237,14 @@ async function uploadAvatar() {
 async function load() {
   loading.value = true
   try {
-    const [data, adminsData, ctoonsData, backgroundsData, avatarsData, joinEffectsData] = await Promise.all([
+    const [data, adminsData, ctoonsData, backgroundsData, avatarsData, joinEffectsData, czoneEffectsData] = await Promise.all([
       $fetch('/api/admin/cmoons'),
       $fetch('/api/admin/cmoon-admins'),
       $fetch('/api/admin/list-ctoons'),
       $fetch('/api/admin/backgrounds'),
       $fetch('/api/admin/avatars'),
       $fetch('/api/admin/cmoon-join-effects'),
+      $fetch('/api/admin/czone-effects'),
     ])
     cmoons.value = data.cmoons || []
     flagEnabled.value = !!data.cMoonEnabled
@@ -2237,6 +2255,7 @@ async function load() {
     backgrounds.value = backgroundsData || []
     avatarsCatalog.value = avatarsData || []
     customJoinEffects.value = joinEffectsData?.effects || []
+    czoneEffects.value = czoneEffectsData?.effects || []
   } catch (e) {
     formError.value = e?.data?.statusMessage || 'Failed to load cMoons'
   } finally {

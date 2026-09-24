@@ -3608,6 +3608,38 @@ model CMoonPollVote {
   @@index([pollId, optionId])
 }
 
+enum CZoneEffectKind {
+  BORDER
+  GLOW
+}
+
+// Admin-authored, fully-customizable cZone border/glow visual — an alternative to the old
+// "always the owning cMoon's flat live color" look. An admin composes and names one of these in
+// the "cZone Effects" admin page (mirrors how CMoonJoinEffect is an admin-authored template for
+// full-screen join effects), and assigns it to a CMoonAffinityLevel below via borderEffectId or
+// glowEffectId. kind is fixed at creation and determines which fields actually render: BORDER is
+// a static ring (glowRadius/speed are ignored); GLOW pulses using speed as its cycle length in
+// seconds and glowRadius as how far outward it radiates, both layered on top of thickness's solid
+// inner ring. See .cz-frame's CSS in components/newsite/MyCzone.vue for exactly how each field
+// maps to the rendered effect.
+model CZoneEffect {
+  id         String          @id @default(uuid())
+  name       String          @unique
+  kind       CZoneEffectKind
+  color      String // "#RRGGBB", validated server-side (server/utils/cmoon.js#isValidHexColor)
+  thickness  Int             @default(6) // px, solid ring width
+  glowRadius Int             @default(18) // px, outward blur/spread — GLOW only, ignored for BORDER
+  opacity    Float           @default(1) // 0..1, overall effect transparency
+  speed      Float           @default(2.4) // seconds per pulse cycle — GLOW only, ignored for BORDER
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  affinityLevelsAsBorder CMoonAffinityLevel[] @relation("AffinityLevel_BorderEffect")
+  affinityLevelsAsGlow   CMoonAffinityLevel[] @relation("AffinityLevel_GlowEffect")
+  grantedBorders         UserCMoonBorder[]
+  grantedGlows           UserCMoonGlow[]
+}
+
 // One rung of a per-cMoon "affinity" ladder: an admin-defined point threshold a member reaches
 // by spending points via POST /api/cmoon/:id/contribute (see CMoonAffinity.affinitySpent). Each
 // cMoon has its OWN ladder (unlike the shared point-threshold-free CMoonRank ladder above, which
@@ -3621,18 +3653,21 @@ model CMoonAffinityLevel {
   name               String
   threshold          Int // cumulative points spent on this cMoon required to reach this level
   sortOrder          Int      @default(0)
-  // Grants a permanent UserCMoonBorder(userId, this cMoonId) row — a persistent, static colorized
-  // border around the member's cZone in this cMoon's live `color` (not snapshotted, so an admin
-  // re-coloring the cMoon updates every border it already granted). Purely cosmetic; never
-  // re-evaluated downward.
-  grantsBorder       Boolean  @default(false)
-  // Grants a permanent UserCMoonGlow(userId, this cMoonId) row — a pulsing colored glow around
-  // the cZone, as an alternative to the solid border above. A member can hold both a border and
-  // a glow (from this or other cMoons) at once, but only one can be equipped/displayed on their
-  // cZone at a time — see server/api/czone/border.post.js and glow.post.js, which each clear the
-  // other's equip field when set. Independent of grantsBorder: a level can grant neither, either,
-  // or both (a member who owns both then simply picks which one to display).
-  grantsGlow         Boolean  @default(false)
+  // Grants a permanent UserCMoonBorder(userId, this cMoonId) row, styled with THIS specific
+  // CZoneEffect — its id is copied onto the grant at the moment it's earned
+  // (UserCMoonBorder.effectId), so pointing THIS LEVEL at a different effect afterward does NOT
+  // retroactively restyle borders already granted by it; only re-crossing the threshold (or the
+  // admin backfill tool) applies a changed assignment. Editing the SAME effect row's own fields
+  // (color/thickness/etc, via PUT /api/admin/czone-effects/:id) is a different thing and DOES
+  // apply live to every holder, the same way editing a CMoonJoinEffect changes what every cMoon
+  // using it plays next. Must reference a CZoneEffect with kind = BORDER — enforced at the API
+  // layer (Prisma can't express a conditional/kind-scoped FK).
+  borderEffectId     String?
+  // Same as borderEffectId but for UserCMoonGlow; must reference kind = GLOW. Independent of
+  // borderEffectId — a level can grant neither, either, or both (a member who owns both then
+  // simply picks which one to display/equip — see server/api/czone/border.post.js and
+  // glow.post.js, which each clear the other's equip field when set).
+  glowEffectId       String?
   // Optional cosmetic rewards granted alongside the border/glow above. All independent of each
   // other — a level can grant any combination. Background stays a single optional slot; avatars
   // are many-to-many (CMoonAffinityLevelRewardAvatar) since a level can hand out more than one.
@@ -3641,6 +3676,12 @@ model CMoonAffinityLevel {
   updatedAt          DateTime @updatedAt
 
   cMoon            CMoon                            @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  // Restrict, not SetNull: DELETE /api/admin/czone-effects/:id already blocks deleting an
+  // in-use effect at the app layer (see that endpoint's own comment), but that check and the
+  // delete itself are separate statements — Restrict is the race-proof DB-level backstop, same
+  // reasoning as CMoon.customJoinEffect's own onDelete: Restrict.
+  borderEffect     CZoneEffect?                     @relation("AffinityLevel_BorderEffect", fields: [borderEffectId], references: [id], onDelete: Restrict)
+  glowEffect       CZoneEffect?                     @relation("AffinityLevel_GlowEffect", fields: [glowEffectId], references: [id], onDelete: Restrict)
   rewardBackground Background?                      @relation(fields: [rewardBackgroundId], references: [id], onDelete: SetNull)
   rewardAvatars    CMoonAffinityLevelRewardAvatar[]
   reachedBy        CMoonAffinity[]
@@ -3684,22 +3725,41 @@ model CMoonAffinity {
   @@index([cMoonId, affinitySpent])
 }
 
-// Ownership record for a persistent per-cMoon cZone border, granted by CMoonAffinityLevel.grantsBorder.
+// Ownership record for a persistent per-cMoon cZone border, granted by CMoonAffinityLevel.borderEffectId.
 // A member can own more than one (affinity from multiple cMoons over time); which one is actually
 // displayed is the separate, explicit User.equippedBorderCMoonId choice.
 model UserCMoonBorder {
   id         String   @id @default(uuid())
   userId     String
   cMoonId    String
+  // Which CZoneEffect this was granted with (see CMoonAffinityLevel.borderEffectId's comment —
+  // a live reference, not a copy of its field values: editing the effect's own row restyles this
+  // retroactively, but reassigning the GRANTING LEVEL to a different effect does not touch this
+  // row). Every row that already existed when the migration introducing this feature ran was
+  // backfilled to point at that cMoon's seeded "legacy" effect — same color (copied once, no
+  // longer live-following the cMoon's) and the same thickness/size numbers the old hardcoded
+  // rendering used, though NOT byte-identical CSS: .cz-frame's rendering was redesigned alongside
+  // this feature (rim highlight, depth shadow) for every border/glow, seeded legacy ones included.
+  // An already-purchased/displayed border cleanly carries the SAME cMoon and color forward onto
+  // the new system rather than staying on a separate fallback forever, and if an admin later
+  // customizes that legacy effect (or any other cMoon's), every current holder sees it change
+  // together with everyone granted after them. Null only happens for a row whose cMoon had no
+  // grantsBorder=true level at migration time to seed a legacy effect from (i.e. one already
+  // unassigned before this feature shipped) — renders as a plain solid ring in this cMoon's live
+  // `color`, the pre-CZoneEffect behavior, rather than disappearing.
+  effectId   String?
   unlockedAt DateTime @default(now())
 
-  user  User  @relation("User_UserCMoonBorders", fields: [userId], references: [id], onDelete: Cascade)
-  cMoon CMoon @relation("CMoon_BorderOwners", fields: [cMoonId], references: [id], onDelete: Cascade)
+  user   User         @relation("User_UserCMoonBorders", fields: [userId], references: [id], onDelete: Cascade)
+  cMoon  CMoon        @relation("CMoon_BorderOwners", fields: [cMoonId], references: [id], onDelete: Cascade)
+  // Restrict — see CMoonAffinityLevel.borderEffect's identical comment; DELETE /czone-effects/:id
+  // already counts grants (not just level assignments) toward its in-use check.
+  effect CZoneEffect? @relation(fields: [effectId], references: [id], onDelete: Restrict)
 
   @@unique([userId, cMoonId])
 }
 
-// Ownership record for a persistent per-cMoon cZone glow, granted by CMoonAffinityLevel.grantsGlow.
+// Ownership record for a persistent per-cMoon cZone glow, granted by CMoonAffinityLevel.glowEffectId.
 // Mirrors UserCMoonBorder exactly — a separate cosmetic type, not a variant of it, since a member
 // can hold both a border and a glow at once (they just can't display both simultaneously; see
 // User.equippedGlowCMoonId below and server/api/czone/glow.post.js).
@@ -3707,10 +3767,12 @@ model UserCMoonGlow {
   id         String   @id @default(uuid())
   userId     String
   cMoonId    String
+  effectId   String? // see UserCMoonBorder.effectId's comment — same reference/fallback behavior
   unlockedAt DateTime @default(now())
 
-  user  User  @relation("User_UserCMoonGlows", fields: [userId], references: [id], onDelete: Cascade)
-  cMoon CMoon @relation("CMoon_GlowOwners", fields: [cMoonId], references: [id], onDelete: Cascade)
+  user   User         @relation("User_UserCMoonGlows", fields: [userId], references: [id], onDelete: Cascade)
+  cMoon  CMoon        @relation("CMoon_GlowOwners", fields: [cMoonId], references: [id], onDelete: Cascade)
+  effect CZoneEffect? @relation(fields: [effectId], references: [id], onDelete: Restrict)
 
   @@unique([userId, cMoonId])
 }
