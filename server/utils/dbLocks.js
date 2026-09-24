@@ -13,8 +13,9 @@
 // which doesn't agree between the two statements; if they land in the same
 // tick (they used to: recomputeLastActivity fires at 04:00 America/Chicago,
 // always on a :00 UTC minute, exactly matching one of runCMoonPointsAggregate's
-// */15 firings) they can each hold locks the other is waiting on and Postgres
-// kills one with a deadlock error. Sharing one advisory-lock key serializes
+// */45 firings — those land on :00 and :45 past every hour) they can each
+// hold locks the other is waiting on and Postgres kills one with a deadlock
+// error. Sharing one advisory-lock key serializes
 // them for free — whichever loses pg_try_advisory_lock just skips and picks
 // the work up on its own next tick, same as the existing skip-and-log
 // behavior every one of these jobs already has for self-overlap.

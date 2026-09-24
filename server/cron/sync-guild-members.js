@@ -1121,6 +1121,6 @@ await runJob('runCzoneDisplayCountAggregate', runCzoneDisplayCountAggregate)
 cron.schedule('0 5 * * *', () => runJob('runCzoneDisplayCountAggregate', runCzoneDisplayCountAggregate), { timezone: 'America/Chicago' })  // 05:00 CST daily
 
 await runJob('runCMoonPointsAggregate', runCMoonPointsAggregate)
-cron.schedule('*/15 * * * *', () => runJob('runCMoonPointsAggregate', runCMoonPointsAggregate))  // every 15 minutes
+cron.schedule('*/45 * * * *', () => runJob('runCMoonPointsAggregate', runCMoonPointsAggregate))  // every 45 minutes
 
 cron.schedule('*/5 * * * *', () => runJob('reconcileHolidayRedemptions', reconcileHolidayRedemptions))  // every 5 minutes

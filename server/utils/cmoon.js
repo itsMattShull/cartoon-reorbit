@@ -648,7 +648,7 @@ export async function runDailyCMoonScoring() {
   await recomputeCMoonTeamScores()
   // Team score above covers the team-wide leaderboard, but a member's own "Your Rank" progress
   // bar reads User.cMoonPoints specifically (see rank-progress.get.js) — without this, a HIGH_
-  // SCORE/TOP10 award here would only reach that field via the separate, up-to-15-minute
+  // SCORE/TOP10 award here would only reach that field via the separate, up-to-45-minute
   // runCMoonPointsAggregate sweep, which is exactly what made a manual "Re-run Scoring Now"
   // catch-up look like it hadn't worked (team total updated instantly, personal bar didn't).
   // DAILY_TASK's own live-award path already does this same thing for its own awards; this
