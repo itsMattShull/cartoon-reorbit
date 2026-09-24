@@ -868,7 +868,7 @@ watch(() => [viewedOwner.value?.username, viewedOwner.value?.cMoonRankName], () 
 // mobile (see comment above topbarRightEl): build mode toggles the cZone Options / My cZone
 // buttons' visibility without changing .cz-topbar-right's own box width there, since it's
 // CSS-pinned to width:100% at that breakpoint.
-watch(() => cz.buildMode, () => {
+watch(() => cz.value.buildMode, () => {
   nextTick(() => recalcOwnerRankScale())
 })
 
@@ -917,6 +917,15 @@ const buildLoading = ref(false)
 
 // True while a zone is being fetched – drives skeleton placeholders in the topbar
 const zoneLoading = ref(false)
+// The skeleton branch above doesn't set ownerLabelEl/ownerCMoonRankEl, so
+// recalcOwnerRankScale() resets both scales to 1 while it's showing (see its own guard). If the
+// same username reloads (e.g. a holiday redeem refresh) neither the username nor the rank name
+// necessarily changes when loading finishes, so the watch below (keyed on those values) and the
+// ResizeObservers (which may see no size change between skeleton and real content) can both stay
+// silent — re-trigger explicitly once real content is back.
+watch(zoneLoading, (loading) => {
+  if (!loading) nextTick(() => recalcOwnerRankScale())
+})
 
 // Local drag: repositioning toons already on the canvas
 // Single-toon drag: { toon, offsetX, offsetY }
