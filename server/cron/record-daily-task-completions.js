@@ -1,15 +1,16 @@
 // server/cron/record-daily-task-completions.js
 // Thin entrypoint: the actual logic lives in server/utils/cmoon.js so every cMoon-scoring
-// concern stays in one file (see that file's header comment on why). Scheduled every minute
-// from server/cron/sync-guild-members.js — see the scoring-logic comment in
-// server/utils/cmoon.js for why not just once daily (or every few hours).
+// concern stays in one file (see that file's header comment on why). Scheduled every 30 minutes
+// from server/cron/sync-guild-members.js — see the scoring-logic comment there for why 30
+// minutes rather than once daily.
 //
 // Overlap guard: a lease (GlobalGameConfig.cMoonDailyTaskCronClaimedAt), not a Postgres
 // session-scoped advisory lock like every other cron job in this directory uses — see that
-// column's schema comment for why. This job runs every minute (far more often than any other
-// advisory-lock user here), so it hits that pattern's rare connection-pooling race far more
-// often, which is exactly this job's own recurring "stops running until the server is restarted"
-// symptom.
+// column's schema comment for why. This job originally ran every minute, far more often than any
+// other advisory-lock user here, and hit that pattern's rare connection-pooling race often enough
+// to be this job's own recurring "stops running until the server is restarted" symptom — the race
+// itself isn't tied to any particular interval (any tick can hit it), so the lease stays even now
+// that this runs less often than several of its neighbors.
 //
 // Claim is one atomic conditional UPDATE; release is a second UPDATE guarded by a fresh random
 // token THIS run generated and wrote as part of its own claim, not an unconditional clear — so a
@@ -29,16 +30,16 @@
 // scheduled tick starts with a clean slate rather than skipping. Only a run that's genuinely
 // hung (never reaches the `finally` at all) leans on the TTL — and even then, a hung run's own
 // connection stays busy until ITS query finally returns or its connection is reaped, so only ONE
-// new attempt can be admitted per lease window, not one per minute — a hung run can't cause new
-// attempts to pile up faster than the lease window allows. Every write recordDailyTaskCompletions
-// makes is independently idempotent regardless (UserDailyTaskCompletion's unique (userId, date),
-// CMoonScoreLog's unique award constraint), so even a genuine overlap can only ever produce
-// redundant no-op writes, never a double-award.
+// new attempt can be admitted per lease window — a hung run can't cause new attempts to pile up
+// faster than the lease window allows, regardless of how often this job is scheduled. Every write
+// recordDailyTaskCompletions makes is independently idempotent regardless (UserDailyTaskCompletion's
+// unique (userId, date), CMoonScoreLog's unique award constraint), so even a genuine overlap can
+// only ever produce redundant no-op writes, never a double-award.
 import { randomUUID } from 'node:crypto'
 import { prisma } from '../prisma.js'
 import { recordDailyTaskCompletions } from '../utils/cmoon.js'
 
-const LEASE_SECONDS = 240 // generous headroom above any realistic run time — see header comment
+const LEASE_SECONDS = 240 // generous headroom above any realistic run time, well under the 30-minute tick interval
 
 export async function runRecordDailyTaskCompletions() {
   const token = randomUUID()

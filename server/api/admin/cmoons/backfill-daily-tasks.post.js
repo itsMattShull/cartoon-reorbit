@@ -1,5 +1,5 @@
 // server/api/admin/cmoons/backfill-daily-tasks.post.js
-// Catches up on DAILY_TASK completions the live per-minute cron
+// Catches up on DAILY_TASK completions the live daily-task cron
 // (server/cron/record-daily-task-completions.js) missed while it wasn't running — e.g. during an
 // outage like the one cMoonDailyTaskCronClaimedAt's lease-based lock now recovers from on its
 // own. Re-running the live cron once it's healthy again only catches up completions under the

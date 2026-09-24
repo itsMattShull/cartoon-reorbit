@@ -1753,13 +1753,15 @@ const scoringJobStale = computed(() => {
   return Math.round((today - last) / 86400000) > 1
 })
 
-// The live daily-task cron ticks every minute — a heartbeat older than 10 minutes means it's
-// very likely stopped running, not just "no one completed a task yet".
+// The live daily-task cron ticks every 30 minutes — a heartbeat older than 45 minutes (30 plus a
+// generous buffer for a slow tick) means it's very likely stopped running, not just "no one
+// completed a task yet". Keep this comfortably above the actual tick interval (server/cron/
+// sync-guild-members.js) or every normal cycle falsely trips the warning.
 const dailyTaskCronStale = computed(() => {
   if (!scoring.dailyTaskCronLastRanAt) return true
   const last = new Date(scoring.dailyTaskCronLastRanAt)
   if (Number.isNaN(last.getTime())) return false
-  return (Date.now() - last.getTime()) > 10 * 60 * 1000
+  return (Date.now() - last.getTime()) > 45 * 60 * 1000
 })
 
 function filteredCtoons(input) {

@@ -293,7 +293,8 @@ function eligibleHolders(rows, minAccountAgeCutoff) {
 // reset at two different times (8pm Chicago for most, 8am for Winwheel/Lotto/monster scans),
 // so a single daily run would leave a window where 8am-boundary activity could go unrecorded —
 // and, since DAILY_TASK points below are now awarded live off each newly-detected completion,
-// running this often is also what makes a player's rank bar feel like it updates in real time.
+// how often this runs is also how soon a player's rank bar reflects it — every 30 minutes rather
+// than every minute, to keep the query load this adds on the shared connection pool low.
 // Idempotent either way — UserDailyTaskCompletion is unique on (userId, date).
 // `dailyBoundary`/`morningBoundary` default to the CURRENT boundaries (the live per-minute
 // cron's own behavior, unchanged) but can be overridden to re-run this exact detection logic
