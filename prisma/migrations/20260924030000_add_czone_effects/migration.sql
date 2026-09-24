@@ -33,9 +33,13 @@ ALTER TABLE "CMoonAffinityLevel" ADD COLUMN     "borderEffectId" TEXT,
 
 -- Seed one BORDER and/or one GLOW "legacy" CZoneEffect per cMoon that has at least one
 -- CMoonAffinityLevel still granting the old flat-color cosmetic (grantsBorder/grantsGlow, dropped
--- below), colored with that cMoon's own live color and sized to match the exact pre-CZoneEffect
--- hardcoded look (10px solid border; 6px ring / 16px radius / 2.4s pulse glow — see
--- server/utils/czoneEffect.js's LEGACY_* constants). Without this, every affinity level that
+-- below), colored with that cMoon's own live color (a one-time copy — this effect's color no
+-- longer live-follows the cMoon's after this) and matching the old hardcoded NUMBERS (10px solid
+-- border; 6px ring / 16px radius / 2.4s pulse glow — see server/utils/czoneEffect.js's LEGACY_*
+-- constants), though NOT the old single-shadow CSS treatment, since .cz-frame's rendering was
+-- redesigned alongside this feature to layer in a rim highlight/depth shadow for every border and
+-- glow, seeded legacy ones included — same color/size identity, a richer look. Without this,
+-- every affinity level that
 -- currently grants a border/glow would silently stop granting anything the moment its boolean
 -- columns are dropped, and any member crossing one of those levels after this migration (but
 -- before an admin manually recreates and reassigns effects) would lose a reward they're entitled

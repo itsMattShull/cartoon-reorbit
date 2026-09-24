@@ -471,9 +471,11 @@
             </div>
 
             <!-- Affinity Levels: "contribute to cMoon" ladder — spend points to reach a level,
-                 which can grant a cZone border (in this cMoon's color), an exclusive avatar, and/or
-                 an exclusive cZone background. Independent of the Ranks ladder above (Ranks are
-                 achievement-granted; affinity is spend-driven and personal, not team score). -->
+                 which can grant a cZone border or glow (styled by an admin-authored CZoneEffect,
+                 see the cZone Effects page — independent of this cMoon's own color once assigned),
+                 an exclusive avatar, and/or an exclusive cZone background. Independent of the
+                 Ranks ladder above (Ranks are achievement-granted; affinity is spend-driven and
+                 personal, not team score). -->
             <div class="mt-2 pt-2 border-t">
               <div class="flex items-center justify-between mb-1">
                 <div class="text-[11px] font-medium">Affinity Levels</div>

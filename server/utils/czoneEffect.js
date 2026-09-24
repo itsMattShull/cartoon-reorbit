@@ -63,11 +63,13 @@ export function isValidCZoneEffectSpeed(value) {
 // introduced CZoneEffect backfilled effectId on every pre-existing grant it could (pointing each
 // at that cMoon's seeded "legacy" effect — see that migration's own comment), so this null case is
 // now the narrow leftover: a grant whose cMoon had no grantsBorder/grantsGlow=true level left to
-// seed a legacy effect from at migration time. These constants exist so even that edge case
-// renders the exact pre-CZoneEffect hardcoded look (a flat 10px border / a 6px-16px pulsing glow
-// at a 2.4s cycle) rather than silently jumping to whatever this file's CZoneEffect model defaults
-// happen to be. Deletion of an in-use effect is blocked, so null can never mean "the effect it
-// pointed at was deleted" either.
+// seed a legacy effect from at migration time. These constants match the OLD hardcoded NUMBERS
+// (10px border; 6px/16px/2.4s glow) so even that edge case keeps the same color, thickness and
+// pulse timing it had before — NOT a pixel-identical render of the old flat single-shadow CSS,
+// since .cz-frame's rendering was redesigned alongside this feature (see its own CSS comment in
+// components/newsite/MyCzone.vue) to layer in a rim highlight/depth shadow for every border and
+// glow, seeded legacy ones included. Deletion of an in-use effect is blocked, so null can never
+// mean "the effect it pointed at was deleted" either.
 export const LEGACY_BORDER_THICKNESS = 10
 export const LEGACY_GLOW_THICKNESS = 6
 export const LEGACY_GLOW_RADIUS = 16
