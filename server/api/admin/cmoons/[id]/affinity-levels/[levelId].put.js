@@ -77,6 +77,11 @@ export default defineEventHandler(async (event) => {
     if (err?.code === 'P2002') {
       throw createError({ statusCode: 409, statusMessage: 'Another level in this cMoon already uses that threshold or order' })
     }
+    // See affinity-levels.post.js's identical catch: the effect existed at the check above but
+    // was deleted by another admin request before this write landed.
+    if (err?.code === 'P2003') {
+      throw createError({ statusCode: 400, statusMessage: 'Border or glow effect was deleted by another request — pick again' })
+    }
     throw err
   }
 

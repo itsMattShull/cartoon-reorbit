@@ -3654,10 +3654,13 @@ model CMoonAffinityLevel {
   threshold          Int // cumulative points spent on this cMoon required to reach this level
   sortOrder          Int      @default(0)
   // Grants a permanent UserCMoonBorder(userId, this cMoonId) row, styled with THIS specific
-  // CZoneEffect — snapshotted onto the grant at the moment it's earned (UserCMoonBorder.effectId),
-  // so re-editing this level's assigned effect afterward does NOT retroactively restyle borders
-  // already granted by it; only re-crossing the threshold (or the admin backfill tool) applies a
-  // changed assignment. Must reference a CZoneEffect with kind = BORDER — enforced at the API
+  // CZoneEffect — its id is copied onto the grant at the moment it's earned
+  // (UserCMoonBorder.effectId), so pointing THIS LEVEL at a different effect afterward does NOT
+  // retroactively restyle borders already granted by it; only re-crossing the threshold (or the
+  // admin backfill tool) applies a changed assignment. Editing the SAME effect row's own fields
+  // (color/thickness/etc, via PUT /api/admin/czone-effects/:id) is a different thing and DOES
+  // apply live to every holder, the same way editing a CMoonJoinEffect changes what every cMoon
+  // using it plays next. Must reference a CZoneEffect with kind = BORDER — enforced at the API
   // layer (Prisma can't express a conditional/kind-scoped FK).
   borderEffectId     String?
   // Same as borderEffectId but for UserCMoonGlow; must reference kind = GLOW. Independent of
@@ -3673,8 +3676,12 @@ model CMoonAffinityLevel {
   updatedAt          DateTime @updatedAt
 
   cMoon            CMoon                            @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
-  borderEffect     CZoneEffect?                     @relation("AffinityLevel_BorderEffect", fields: [borderEffectId], references: [id], onDelete: SetNull)
-  glowEffect       CZoneEffect?                     @relation("AffinityLevel_GlowEffect", fields: [glowEffectId], references: [id], onDelete: SetNull)
+  // Restrict, not SetNull: DELETE /api/admin/czone-effects/:id already blocks deleting an
+  // in-use effect at the app layer (see that endpoint's own comment), but that check and the
+  // delete itself are separate statements — Restrict is the race-proof DB-level backstop, same
+  // reasoning as CMoon.customJoinEffect's own onDelete: Restrict.
+  borderEffect     CZoneEffect?                     @relation("AffinityLevel_BorderEffect", fields: [borderEffectId], references: [id], onDelete: Restrict)
+  glowEffect       CZoneEffect?                     @relation("AffinityLevel_GlowEffect", fields: [glowEffectId], references: [id], onDelete: Restrict)
   rewardBackground Background?                      @relation(fields: [rewardBackgroundId], references: [id], onDelete: SetNull)
   rewardAvatars    CMoonAffinityLevelRewardAvatar[]
   reachedBy        CMoonAffinity[]
@@ -3725,16 +3732,21 @@ model UserCMoonBorder {
   id         String   @id @default(uuid())
   userId     String
   cMoonId    String
-  // Snapshot of the CZoneEffect this was granted with (see CMoonAffinityLevel.borderEffectId's
-  // comment). Null means either a legacy grant from before CZoneEffect existed, or the granting
-  // level's effect was since unassigned/deleted — both render as a plain solid ring in this
-  // cMoon's live `color`, the pre-CZoneEffect behavior, rather than disappearing.
+  // Which CZoneEffect this was granted with (see CMoonAffinityLevel.borderEffectId's comment —
+  // a live reference, not a copy of its field values: editing the effect's own row restyles this
+  // retroactively, but reassigning the GRANTING LEVEL to a different effect does not touch this
+  // row). Null means a legacy grant made before CZoneEffect existed — including every row that
+  // already existed when the migration introducing this feature ran, which deliberately leaves
+  // past grants alone rather than guessing at a mapping — and renders as a plain solid ring in
+  // this cMoon's live `color`, the pre-CZoneEffect behavior, rather than disappearing.
   effectId   String?
   unlockedAt DateTime @default(now())
 
   user   User         @relation("User_UserCMoonBorders", fields: [userId], references: [id], onDelete: Cascade)
   cMoon  CMoon        @relation("CMoon_BorderOwners", fields: [cMoonId], references: [id], onDelete: Cascade)
-  effect CZoneEffect? @relation(fields: [effectId], references: [id], onDelete: SetNull)
+  // Restrict — see CMoonAffinityLevel.borderEffect's identical comment; DELETE /czone-effects/:id
+  // already counts grants (not just level assignments) toward its in-use check.
+  effect CZoneEffect? @relation(fields: [effectId], references: [id], onDelete: Restrict)
 
   @@unique([userId, cMoonId])
 }
@@ -3747,12 +3759,12 @@ model UserCMoonGlow {
   id         String   @id @default(uuid())
   userId     String
   cMoonId    String
-  effectId   String? // see UserCMoonBorder.effectId's comment — same snapshot/fallback behavior
+  effectId   String? // see UserCMoonBorder.effectId's comment — same reference/fallback behavior
   unlockedAt DateTime @default(now())
 
   user   User         @relation("User_UserCMoonGlows", fields: [userId], references: [id], onDelete: Cascade)
   cMoon  CMoon        @relation("CMoon_GlowOwners", fields: [cMoonId], references: [id], onDelete: Cascade)
-  effect CZoneEffect? @relation(fields: [effectId], references: [id], onDelete: SetNull)
+  effect CZoneEffect? @relation(fields: [effectId], references: [id], onDelete: Restrict)
 
   @@unique([userId, cMoonId])
 }

@@ -9,15 +9,18 @@
          one without: recalcScale() needs no reserve for either, and neither can ever be clipped
          by an ancestor's overflow:hidden. Border and glow are meant to be mutually exclusive (the
          equip endpoints each clear the other's field), so normally at most one of these two
-         modifier classes is applied — but each reads its OWN full set of custom properties
+         modifier classes is applied — each reads its OWN full set of custom properties
          (--cz-border-* / --cz-glow-*, see czFrameCosmeticStyle) rather than sharing one
-         namespace, so if the two ever DID end up active together (equipped from different
-         cMoons, or a future state that allows stacking them), the glow still renders with its own
-         correct color/thickness/etc. instead of silently inheriting the border's — never
-         invisible, never mis-styled, regardless of which one, if either, is equipped. Every
-         customizable value (color, thickness, glow radius, opacity, pulse speed) comes from the
-         admin-authored CZoneEffect the owner's affinity level granted them — see
-         prisma/schema.prisma's CZoneEffect model and server/utils/czoneEffect.js. ── -->
+         namespace, so at least neither can smuggle a stale value into the other's rendering if
+         one is toggled off without the other's vars being cleared. Both classes paint the SAME
+         ::after pseudo-element, though, so this isn't full isolation: if the two ever did end up
+         active together (equipped from different cMoons, or a future state that allows stacking
+         them), CSS source order decides, and .cz-frame--glowing (declared after --bordered below)
+         would simply win outright for box-shadow/opacity/animation — not a blend of both, and not
+         a crash or invisible render either way. Every customizable value (color, thickness, glow
+         radius, opacity, pulse speed) comes from the admin-authored CZoneEffect the owner's
+         affinity level granted them — see prisma/schema.prisma's CZoneEffect model and
+         server/utils/czoneEffect.js. ── -->
     <div
       class="cz-frame"
       :class="{ 'cz-frame--bordered': displayedBorder, 'cz-frame--glowing': displayedGlow }"
@@ -645,27 +648,35 @@ const displayedGlow = computed(() => {
 })
 
 // Drives every customizable knob on the .cz-frame cosmetic (see its CSS below) via CSS custom
-// properties — separate --cz-border-*/--cz-glow-* namespaces (not one shared set) so that if
-// border and glow were ever both active at once (not possible through the current equip flow,
-// which keeps them mutually exclusive, but the CSS itself doesn't assume that), each still
-// renders fully and correctly from its own values rather than one silently overwriting the
-// other's custom properties. `-light` is a brightened tint of the same base color (see
-// utils/cmoonColor.js#lightenHex) used for the rim-highlight/shimmer layers, computed here rather
-// than per-render in CSS since CSS alone can't derive a new color from an admin-picked hex.
+// properties — separate --cz-border-*/--cz-glow-* namespaces (not one shared set) so an
+// unexpectedly-still-set border value can't bleed into the glow's rendering, or vice versa, if
+// the two were ever both active (not possible through the current equip flow, which keeps them
+// mutually exclusive server-side — both classes paint the same ::after, so if they somehow were
+// both applied at once, the later-declared .cz-frame--glowing rule would simply win outright for
+// box-shadow/opacity/animation, not blend with the border's). `-light` is a brightened tint of the
+// same base color (see utils/cmoonColor.js#lightenHex) used for the rim-highlight/shimmer layers,
+// computed here rather than per-render in CSS since CSS alone can't derive a new color from an
+// admin-picked hex. px()/numOrUndef() guard against a non-finite value (e.g. session data cached
+// from before this field existed) turning into the literal string "undefinedpx" — CSS var()
+// fallbacks only kick in when a property is entirely UNSET, not when it holds a garbage string
+// like that, so an unguarded bad value would make the whole box-shadow/animation silently vanish
+// rather than falling back to anything visible.
+function px(n) { return Number.isFinite(n) ? `${n}px` : undefined }
+function numOrUndef(n) { return Number.isFinite(n) ? n : undefined }
 const czFrameCosmeticStyle = computed(() => ({
   ...(displayedBorder.value ? {
     '--cz-border-color': displayedBorder.value.color,
     '--cz-border-color-light': lightenHex(displayedBorder.value.color, 0.55),
-    '--cz-border-thickness': `${displayedBorder.value.thickness}px`,
-    '--cz-border-opacity': displayedBorder.value.opacity,
+    '--cz-border-thickness': px(displayedBorder.value.thickness),
+    '--cz-border-opacity': numOrUndef(displayedBorder.value.opacity),
   } : {}),
   ...(displayedGlow.value ? {
     '--cz-glow-color': displayedGlow.value.color,
     '--cz-glow-color-light': lightenHex(displayedGlow.value.color, 0.55),
-    '--cz-glow-thickness': `${displayedGlow.value.thickness}px`,
-    '--cz-glow-radius': `${displayedGlow.value.glowRadius}px`,
-    '--cz-glow-opacity': displayedGlow.value.opacity,
-    '--cz-glow-speed': `${displayedGlow.value.speed}s`,
+    '--cz-glow-thickness': px(displayedGlow.value.thickness),
+    '--cz-glow-radius': px(displayedGlow.value.glowRadius),
+    '--cz-glow-opacity': numOrUndef(displayedGlow.value.opacity),
+    '--cz-glow-speed': Number.isFinite(displayedGlow.value.speed) ? `${displayedGlow.value.speed}s` : undefined,
   } : {}),
 }))
 

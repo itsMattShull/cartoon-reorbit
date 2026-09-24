@@ -23,14 +23,17 @@
               <template v-if="e.kind === 'GLOW'"> · radius {{ e.glowRadius }}px · {{ e.speed }}s cycle</template>
               · opacity {{ e.opacity }}
             </div>
-            <div class="text-[11px] text-gray-600">Used by {{ e.usageCount }} affinity level{{ e.usageCount === 1 ? '' : 's' }}</div>
+            <div class="text-[11px] text-gray-600">
+              Assigned to {{ e.assignedCount }} affinity level{{ e.assignedCount === 1 ? '' : 's' }}
+              <span v-if="e.grantedCount">, granted to {{ e.grantedCount }} player{{ e.grantedCount === 1 ? '' : 's' }} (permanent — can't be undone)</span>
+            </div>
           </div>
           <div class="flex items-center gap-3 flex-shrink-0">
             <button type="button" class="text-indigo-600 hover:underline" @click="startEdit(e)">Edit</button>
             <button
               type="button" class="text-red-600 hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
-              :disabled="e.usageCount > 0 || deletingId === e.id"
-              :title="e.usageCount > 0 ? 'Unassign every affinity level using this effect first' : ''"
+              :disabled="isInUse(e) || deletingId === e.id"
+              :title="deleteBlockedReason(e)"
               @click="remove(e)"
             >{{ deletingId === e.id ? 'Deleting…' : 'Delete' }}</button>
           </div>
@@ -112,10 +115,13 @@
 <script setup>
 import { isSafeCMoonColor, lightenHex } from '~/utils/cmoonColor'
 
+// Keep these bounds in sync with server/utils/czoneEffect.js — see that file's comment for why
+// THICKNESS_MAX/GLOW_RADIUS_MAX are capped well below what "looks epic in isolation" might
+// suggest (the topbar/bottombar's own fixed heights).
 const THICKNESS_MIN = 1
-const THICKNESS_MAX = 30
+const THICKNESS_MAX = 14
 const GLOW_RADIUS_MIN = 0
-const GLOW_RADIUS_MAX = 60
+const GLOW_RADIUS_MAX = 30
 const OPACITY_MIN = 0.1
 const OPACITY_MAX = 1
 const SPEED_MIN = 0.6
@@ -230,8 +236,15 @@ async function save() {
   }
 }
 
+function isInUse(e) { return e.assignedCount > 0 || e.grantedCount > 0 }
+function deleteBlockedReason(e) {
+  if (e.grantedCount > 0) return "Already granted to a player — can't be deleted"
+  if (e.assignedCount > 0) return 'Unassign every affinity level using this effect first'
+  return ''
+}
+
 async function remove(e) {
-  if (e.usageCount > 0) return
+  if (isInUse(e)) return
   if (!confirm(`Delete "${e.name}"? This can't be undone.`)) return
   deletingId.value = e.id
   try {
