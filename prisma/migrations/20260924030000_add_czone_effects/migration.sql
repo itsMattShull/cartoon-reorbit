@@ -33,13 +33,17 @@ CREATE UNIQUE INDEX "CZoneEffect_name_key" ON "CZoneEffect"("name");
 -- can never be re-evaluated later. Already-granted borders/glows are untouched by this migration
 -- (their effectId stays NULL, which resolveBorderStyle/resolveGlowStyle already render exactly
 -- like this seeded row), so nothing already earned changes appearance.
+-- LEFT(..., 60) guards CZoneEffect.name's 60-char limit (validated app-side by
+-- isValidCZoneEffectName, not DB-enforced, but this seed bypasses the app layer) against a
+-- CMoon.name long enough to push the concatenated string past it — used identically in the
+-- matching UPDATE below so the join still finds this exact row.
 INSERT INTO "CZoneEffect" ("id", "name", "kind", "color", "thickness", "glowRadius", "opacity", "speed", "updatedAt")
-SELECT gen_random_uuid()::text, 'Legacy Border — ' || c."name", 'BORDER', c."color", 10, 18, 1, 2.4, CURRENT_TIMESTAMP
+SELECT gen_random_uuid()::text, LEFT('Legacy Border — ' || c."name", 60), 'BORDER', c."color", 10, 18, 1, 2.4, CURRENT_TIMESTAMP
 FROM "CMoon" c
 WHERE EXISTS (SELECT 1 FROM "CMoonAffinityLevel" l WHERE l."cMoonId" = c."id" AND l."grantsBorder" = true);
 
 INSERT INTO "CZoneEffect" ("id", "name", "kind", "color", "thickness", "glowRadius", "opacity", "speed", "updatedAt")
-SELECT gen_random_uuid()::text, 'Legacy Glow — ' || c."name", 'GLOW', c."color", 6, 16, 1, 2.4, CURRENT_TIMESTAMP
+SELECT gen_random_uuid()::text, LEFT('Legacy Glow — ' || c."name", 60), 'GLOW', c."color", 6, 16, 1, 2.4, CURRENT_TIMESTAMP
 FROM "CMoon" c
 WHERE EXISTS (SELECT 1 FROM "CMoonAffinityLevel" l WHERE l."cMoonId" = c."id" AND l."grantsGlow" = true);
 
@@ -53,7 +57,7 @@ UPDATE "CMoonAffinityLevel" l
 SET "borderEffectId" = fx."id"
 FROM "CZoneEffect" fx, "CMoon" c
 WHERE l."cMoonId" = c."id"
-  AND fx."name" = 'Legacy Border — ' || c."name"
+  AND fx."name" = LEFT('Legacy Border — ' || c."name", 60)
   AND fx."kind" = 'BORDER'
   AND l."grantsBorder" = true;
 
@@ -61,7 +65,7 @@ UPDATE "CMoonAffinityLevel" l
 SET "glowEffectId" = fx."id"
 FROM "CZoneEffect" fx, "CMoon" c
 WHERE l."cMoonId" = c."id"
-  AND fx."name" = 'Legacy Glow — ' || c."name"
+  AND fx."name" = LEFT('Legacy Glow — ' || c."name", 60)
   AND fx."kind" = 'GLOW'
   AND l."grantsGlow" = true;
 

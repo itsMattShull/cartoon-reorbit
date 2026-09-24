@@ -59,9 +59,11 @@ export function isValidCZoneEffectSpeed(value) {
 // two-color-field CMoonJoinEffect endpoints this otherwise mirrors). `existing` is the current row
 // on an update (undefined on create), used the same way the join-effect PUT endpoint keeps
 // unspecified fields: `body.field === undefined` means "leave unchanged".
-// Defaults applied when a UserCMoonBorder/UserCMoonGlow row has no effectId — either a grant from
-// before CZoneEffect existed, or one whose granting level's effect was since unassigned/deleted
-// (see UserCMoonBorder.effectId's schema comment). Chosen to reproduce the ORIGINAL hardcoded
+// Defaults applied when a UserCMoonBorder/UserCMoonGlow row has no effectId — always a grant made
+// before CZoneEffect existed (see UserCMoonBorder.effectId's schema comment; deletion of an
+// in-use effect is blocked, so this can never mean "the effect it pointed at was deleted", and
+// reassigning the GRANTING LEVEL to a different effect doesn't touch already-granted rows either).
+// Chosen to reproduce the ORIGINAL hardcoded
 // look (a flat 10px border / a 6px-16px pulsing glow at a 2.4s cycle) as closely as possible, so
 // a pre-existing grant renders basically unchanged rather than silently jumping to whatever this
 // file's CZoneEffect model defaults happen to be.
