@@ -1121,6 +1121,10 @@ await runJob('runCzoneDisplayCountAggregate', runCzoneDisplayCountAggregate)
 cron.schedule('0 5 * * *', () => runJob('runCzoneDisplayCountAggregate', runCzoneDisplayCountAggregate), { timezone: 'America/Chicago' })  // 05:00 CST daily
 
 await runJob('runCMoonPointsAggregate', runCMoonPointsAggregate)
-cron.schedule('*/45 * * * *', () => runJob('runCMoonPointsAggregate', runCMoonPointsAggregate))  // every 45 minutes
+// */45 fires at :00 and :45 past every hour (a step field can't land on genuinely even
+// 45-minute marks, since those drift across the hour boundary) — an uneven 45-then-15-minute
+// gap, not a flat 45-minute one, but the worst case is still capped at 45 minutes and this halves
+// the run count from the previous */15 schedule, which is all this change needs.
+cron.schedule('*/45 * * * *', () => runJob('runCMoonPointsAggregate', runCMoonPointsAggregate))
 
 cron.schedule('*/5 * * * *', () => runJob('reconcileHolidayRedemptions', reconcileHolidayRedemptions))  // every 5 minutes

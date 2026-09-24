@@ -947,7 +947,7 @@ export async function selectCMoonForUser(userId, cMoonId) {
       // Self-selection always starts a member at 0 cMoonPoints / no rank, regardless of
       // whatever they'd accumulated in a cMoon they previously left — cMoonPoints is only
       // ever written going forward by the aggregate cron (see cmoon-points-aggregate.js),
-      // so a former member's stale total would otherwise linger until its next 15-minute
+      // so a former member's stale total would otherwise linger until its next 45-minute
       // run. currentCMoonRankId/cMoonRankRoleGrantedAt are already guaranteed null here
       // (reassignUserCMoon nulls them whenever cMoonId is cleared), included for clarity.
       data: {
