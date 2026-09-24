@@ -51,7 +51,7 @@
 
         <GreenButton v-if="!isOwnZone" v-show="!cz.buildMode" class="cz-myczone-btn" @click="goToMyCzone">My cZone</GreenButton>
       </div>
-      <div class="cz-topbar-right">
+      <div class="cz-topbar-right" ref="topbarRightEl">
         <!-- "cZone Options" — replaces the old standalone Art Mode button. Art Mode (any
              viewer) always shows; the Border/Glow pickers (formerly their own topbar buttons,
              see cz-cosmetic-option below) only show for the owner, and only when they own at
@@ -644,6 +644,156 @@ const displayedGlow = computed(() => {
   return viewedOwner.value?.glow || null
 })
 
+// cz-topbar-right (cZone Options / favorite star / owner-info) is flex-shrink: 0 — unlike
+// cz-topbar-left, which guarantees it's never clipped by wrapping to a second line instead of
+// overflowing (see that rule's own comment), cz-topbar-right just keeps its full natural width
+// forever. cz-topbar itself is NOT inside the 800x600 transform-scaled canvas below it (that
+// transform only applies to cz-canvas-outer/inner) — it renders at myczone's own fluid width
+// (100%, capped at 800px), which on a phone is the phone's actual narrow viewport width. A long
+// cMoon rank name (e.g. "Toon Collector First Class") next to a long username can easily push
+// cz-topbar-right's natural width past that, and the excess is silently sliced off by cz-frame's
+// own overflow: hidden — not an ellipsis, not a wrap, just cut-off pixels.
+//
+// Fixed with a two-tier shrink, both driven by the same measurement loop (scrollWidth vs.
+// clientWidth on cz-topbar, not a guessed-at fixed breakpoint, so this holds for every real
+// combination of username length, rank name length, and viewport width, not just the ones
+// tested):
+//   1. Shrink ONLY the rank text's own font-size first (cMoonRankScale) — the piece named in the
+//      original report, and the one whose length varies most from one player to the next.
+//   2. If cz-topbar can still be overflowing even with the rank text shrunk as far as tier 1
+//      allows (confirmed while building this: on a ~390px-wide phone, "OWNER CyberLionOverlord"
+//      alone, with NO rank text at all, already overflows a narrow enough topbar on its own — a
+//      length of username this app actually allows, not a contrived one), fall back to also
+//      shrinking the WHOLE owner-info label (ownerLabelScale) — username, avatar-adjacent text,
+//      last-seen line, cMoon pill, everything — until the overflow is actually gone. This tier
+//      only ever engages once tier 1 has done everything USEFUL it can; the common case (a
+//      short-to-medium username) never reaches it and cz-owner-label renders at its normal full
+//      size.
+// Each tier also bails out of ITSELF early if a pass didn't actually reduce cz-topbar's measured
+// overflow (not just "the math says a smaller number"), handing off to the next tier immediately
+// instead of wastefully shrinking something that isn't the actual bottleneck — .cz-owner-label's
+// rendered width is the WIDER of its two lines (username+rank, or last-seen+cMoon pill), so if the
+// second line is the wider one, shrinking the rank alone (tier 1) does nothing to relieve overflow
+// and would otherwise still burn its whole budget for no benefit before tier 2 ever got a chance.
+//
+// Not a mathematically absolute guarantee against every conceivable combination: the avatar
+// images, the cZone Options button, and the favorite star are all fixed pixel sizes that neither
+// tier scales, so an extreme enough combination (a very long username AND a very long admin-
+// authored rank name AND a very narrow viewport, all three at once) could theoretically still
+// leave a sliver of overflow even at both floors. Every case actually tested — including the
+// original report's real username and a real, unusually long rank name, at a realistic ~390px
+// phone width — resolves to exactly zero overflow well before either floor is a concern.
+//
+// font-size (not transform: scale) is essential for both tiers: a transform doesn't change an
+// element's layout box, so shrinking via transform would leave cz-topbar's scrollWidth completely
+// unchanged — this measurement loop needs the shrink to actually show up in layout to know it
+// worked, and to know when to stop. These consts/refs are declared here, BEFORE recalcScale below
+// (which calls into recalcOwnerRankScale), specifically so they're initialized before that
+// function can ever run — recalcScale is invoked once synchronously at the bottom of this block
+// (`if (process.client) recalcScale()`), and declaring these any later would throw
+// "Cannot access before initialization" on every client render.
+const cMoonRankScale = ref(1)
+const ownerLabelScale = ref(1)
+const ownerCMoonRankEl = ref(null) // ref on .cz-owner-cmoon-rank (see template) — null whenever
+                                    // the viewed owner has no cMoon rank at all (v-if'd out); tier
+                                    // 1 handles that by immediately deferring to tier 2, see below
+const ownerLabelEl = ref(null)     // ref on .cz-owner-label (see template)
+// Both floors keep tier 1 (rank only) from shrinking the rank text into practical invisibility
+// before tier 2 (whole label) ever gets a chance to help — an early build of this fix let tier 1
+// run all the way down to 0.1 first, which "worked" (truly zero overflow) but did it by shrinking
+// "Toon Collector First Class" down to a sliver of a pixel, defeating the point of showing a rank
+// at all. 0.65 keeps the rank legibly smaller-but-readable, and lets tier 2 pick up whatever's
+// still needed (confirmed on a real long-username case: rank alone often can't fully resolve the
+// overflow no matter how far it shrinks, since a long username/avatar/other topbar-right content
+// can already be too wide even with ZERO rank text — this isn't a fallback for a rare edge case).
+const OWNER_RANK_MIN_SCALE = 0.65
+const OWNER_LABEL_MIN_SCALE = 0.5  // shrinking the WHOLE label (not just the rank) is the
+                                    // last-resort tier, so its floor stays a bit more conservative
+const OWNER_RANK_MAX_SHRINK_PASSES = 6
+
+function recalcOwnerRankScale() {
+  if (typeof window === 'undefined') return
+  // Deliberately does NOT require ownerCMoonRankEl here — a viewed owner with no cMoon rank at
+  // all never renders that span (v-if), and requiring it here would skip tier 2 entirely for
+  // that owner even when their username alone overflows, leaving them clipped forever.
+  if (!topbarEl.value || !ownerLabelEl.value) {
+    cMoonRankScale.value = 1
+    ownerLabelScale.value = 1
+    return
+  }
+  // Reset both to full size first: scrollWidth must reflect THIS username/rank name's true
+  // natural width, not whatever scale a previously-viewed (possibly longer) one left applied —
+  // otherwise a shorter combination could stay wrongly shrunk after navigating from a cZone whose
+  // owner had a longer one.
+  cMoonRankScale.value = 1
+  ownerLabelScale.value = 1
+  nextTick(() => shrinkOwnerRankToFit(0, undefined))
+}
+
+// previousOverflow is the overflow measured just BEFORE the shrink that led to this call — undefined
+// on the very first pass (nothing to compare against yet). Comparing it against this pass's fresh
+// measurement is what lets this bail out into tier 2 the moment shrinking the rank text stops
+// actually helping, rather than only stopping once it's out of its own font-size budget.
+function shrinkOwnerRankToFit(pass, previousOverflow) {
+  const topbar = topbarEl.value
+  const rankEl = ownerCMoonRankEl.value
+  if (!topbar || !rankEl) { nextTick(() => shrinkOwnerLabelToFit(0, undefined)); return }
+  const overflow = topbar.scrollWidth - topbar.clientWidth
+  if (overflow <= 0) return
+  if (previousOverflow !== undefined && overflow >= previousOverflow) {
+    // The last shrink didn't actually reduce cz-topbar's overflow — the OTHER line in the label
+    // (last-seen + cMoon pill) is the wider, unaffected bottleneck. Stop spending tier 1's budget
+    // on something that isn't helping and let tier 2 (which affects both lines) take over.
+    nextTick(() => shrinkOwnerLabelToFit(0, undefined))
+    return
+  }
+  if (pass >= OWNER_RANK_MAX_SHRINK_PASSES || cMoonRankScale.value <= OWNER_RANK_MIN_SCALE) {
+    nextTick(() => shrinkOwnerLabelToFit(0, undefined))
+    return
+  }
+
+  const rankWidth = rankEl.getBoundingClientRect().width
+  if (rankWidth <= 0) { nextTick(() => shrinkOwnerLabelToFit(0, undefined)); return }
+
+  // ratio is relative to the rank element's CURRENT (possibly already-shrunk) width, so each pass
+  // multiplies the running scale rather than recomputing it from the original full size — needed
+  // because font-size-to-rendered-width isn't perfectly linear (kerning, sub-pixel rounding), so
+  // one estimate can occasionally leave a sliver of overflow that a second pass then corrects.
+  const targetWidth = Math.max(rankWidth - overflow, 0)
+  const ratio = targetWidth / rankWidth
+  const nextScale = Math.max(OWNER_RANK_MIN_SCALE, Math.min(cMoonRankScale.value, cMoonRankScale.value * ratio))
+  if (nextScale >= cMoonRankScale.value) {
+    // No more progress possible from this tier — move on to tier 2 rather than looping forever.
+    nextTick(() => shrinkOwnerLabelToFit(0, undefined))
+    return
+  }
+  cMoonRankScale.value = nextScale
+  nextTick(() => shrinkOwnerRankToFit(pass + 1, overflow))
+}
+
+// Tier 2 (see this block's own header comment): only ever runs once tier 1 has exhausted what
+// shrinking the rank text alone can usefully do. Same convergence approach (including the
+// previousOverflow "did that actually help" check), applied to the whole label.
+function shrinkOwnerLabelToFit(pass, previousOverflow) {
+  const topbar = topbarEl.value
+  const labelEl = ownerLabelEl.value
+  if (!topbar || !labelEl) return
+  const overflow = topbar.scrollWidth - topbar.clientWidth
+  if (overflow <= 0) return
+  if (previousOverflow !== undefined && overflow >= previousOverflow) return // no more progress possible
+  if (pass >= OWNER_RANK_MAX_SHRINK_PASSES || ownerLabelScale.value <= OWNER_LABEL_MIN_SCALE) return
+
+  const labelWidth = labelEl.getBoundingClientRect().width
+  if (labelWidth <= 0) return
+
+  const targetWidth = Math.max(labelWidth - overflow, 0)
+  const ratio = targetWidth / labelWidth
+  const nextScale = Math.max(OWNER_LABEL_MIN_SCALE, Math.min(ownerLabelScale.value, ownerLabelScale.value * ratio))
+  if (nextScale >= ownerLabelScale.value) return
+  ownerLabelScale.value = nextScale
+  nextTick(() => shrinkOwnerLabelToFit(pass + 1, overflow))
+}
+
 // ── Scale logic (mirrors pages/czone/[username].vue) ──────────
 // Identical for every cZone regardless of cMoon affiliation — see the FRAME_BORDER_PX-removal
 // comment above CANVAS_W/CANVAS_H for why this no longer reserves any WIDTH for the border/glow
@@ -658,6 +808,14 @@ const scale = ref(1)
 // from onMounted and on every subsequent resize once the ResizeObserver below is attached, so
 // this self-corrects to the true height immediately after.
 const topbarEl = ref(null)
+// Ref on .cz-topbar-right specifically (see template) — observed by its own ResizeObserver
+// (see onMounted below) alongside topbarEl, so recalcOwnerRankScale re-runs whenever THIS
+// element's own natural width changes for any reason: a longer/shorter username or rank name
+// (also covered by the watch below, belt-and-suspenders), but also the cZone Options button or
+// favorite star appearing/disappearing (build mode toggling, viewing your own zone vs. someone
+// else's), or the cMoon pill's text changing — none of which change cz-topbar's own HEIGHT, so
+// the pre-existing topbarEl-only observer wouldn't have caught them on its own.
+const topbarRightEl = ref(null)
 function recalcScale() {
   if (typeof window === 'undefined') return
   const gutter = 32 // account for page padding / scrollbar
@@ -682,123 +840,24 @@ function recalcScale() {
 // layout flash where the canvas briefly renders at full 800px width.
 if (process.client) recalcScale()
 
-// cz-topbar-right (cZone Options / favorite star / owner-info) is flex-shrink: 0 — unlike
-// cz-topbar-left, which guarantees it's never clipped by wrapping to a second line instead of
-// overflowing (see that rule's own comment), cz-topbar-right just keeps its full natural width
-// forever. cz-topbar itself is NOT inside the 800x600 transform-scaled canvas below it (that
-// transform only applies to cz-canvas-outer/inner) — it renders at myczone's own fluid width
-// (100%, capped at 800px), which on a phone is the phone's actual narrow viewport width. A long
-// cMoon rank name (e.g. "Toon Collector First Class") next to a long username can easily push
-// cz-topbar-right's natural width past that, and the excess is silently sliced off by cz-frame's
-// own overflow: hidden — not an ellipsis, not a wrap, just cut-off pixels.
-//
-// Fixed with a two-tier shrink, both driven by the same measurement loop (scrollWidth vs.
-// clientWidth on cz-topbar, not a guessed-at fixed breakpoint, so this holds for every real
-// combination of username length, rank name length, and viewport width, not just the ones
-// tested):
-//   1. Shrink ONLY the rank text's own font-size first (cMoonRankScale) — the piece named in the
-//      original report, and the one whose length varies most from one player to the next.
-//   2. If cz-topbar can still be overflowing even with the rank text shrunk all the way down
-//      (confirmed while building this: on a ~390px-wide phone, "OWNER CyberLionOverlord" alone,
-//      with NO rank text at all, already overflows a narrow enough topbar on its own — a length
-//      of username this app actually allows, not a contrived one), fall back to also shrinking
-//      the WHOLE owner-info label (ownerLabelScale) — username, avatar-adjacent text, last-seen
-//      line, cMoon pill, everything — until the overflow is actually gone. This tier only ever
-//      engages once tier 1 has done everything it can; the common case (a short-to-medium
-//      username) never reaches it and cz-owner-label renders at its normal full size.
-// font-size (not transform: scale) is essential for both tiers: a transform doesn't change an
-// element's layout box, so shrinking via transform would leave cz-topbar's scrollWidth completely
-// unchanged — this measurement loop needs the shrink to actually show up in layout to know it
-// worked, and to know when to stop.
-const cMoonRankScale = ref(1)
-const ownerLabelScale = ref(1)
-const ownerCMoonRankEl = ref(null) // ref on .cz-owner-cmoon-rank (see template)
-const ownerLabelEl = ref(null)     // ref on .cz-owner-label (see template)
-// Both floors keep tier 1 (rank only) from shrinking the rank text into practical invisibility
-// before tier 2 (whole label) ever gets a chance to help — an early build of this fix let tier 1
-// run all the way down to 0.1 first, which "worked" (truly zero overflow) but did it by shrinking
-// "Toon Collector First Class" down to a sliver of a pixel, defeating the point of showing a rank
-// at all. 0.65 keeps the rank legibly smaller-but-readable, and lets tier 2 pick up whatever's
-// still needed (confirmed on a real long-username case: rank alone often can't fully resolve the
-// overflow no matter how far it shrinks, since a long username/avatar/other topbar-right content
-// can already be too wide even with ZERO rank text — this isn't a fallback for a rare edge case).
-const OWNER_RANK_MIN_SCALE = 0.65
-const OWNER_LABEL_MIN_SCALE = 0.5  // shrinking the WHOLE label (not just the rank) is the
-                                    // last-resort tier, so its floor stays a bit more conservative
-const OWNER_RANK_MAX_SHRINK_PASSES = 6
-
-function recalcOwnerRankScale() {
-  if (typeof window === 'undefined') return
-  if (!topbarEl.value || !ownerCMoonRankEl.value || !ownerLabelEl.value) {
-    cMoonRankScale.value = 1
-    ownerLabelScale.value = 1
-    return
-  }
-  // Reset both to full size first: scrollWidth must reflect THIS username/rank name's true
-  // natural width, not whatever scale a previously-viewed (possibly longer) one left applied —
-  // otherwise a shorter combination could stay wrongly shrunk after navigating from a cZone whose
-  // owner had a longer one.
-  cMoonRankScale.value = 1
-  ownerLabelScale.value = 1
-  nextTick(() => shrinkOwnerRankToFit(0))
+// window resize fires on mobile for reasons that don't change layout at all (the address bar
+// hiding/showing while scrolling can fire it repeatedly, sometimes several times a second) —
+// recalcScale (and the recalcOwnerRankScale it chains into) does real getBoundingClientRect
+// reads and up to a dozen font-size writes when there's actual overflow to resolve, so this
+// wrapper — used ONLY for the window resize listener below, not for the ResizeObservers or the
+// content watch, all of which already only fire on a genuine, meaningful change — skips the
+// whole recalculation when the width it actually cares about hasn't moved.
+let lastWindowWidthForResize = null
+function handleWindowResize() {
+  const w = window.innerWidth || document.documentElement?.clientWidth || CANVAS_W
+  if (w === lastWindowWidthForResize) return
+  lastWindowWidthForResize = w
+  recalcScale()
 }
 
-function shrinkOwnerRankToFit(pass) {
-  const topbar = topbarEl.value
-  const rankEl = ownerCMoonRankEl.value
-  if (!topbar || !rankEl) { nextTick(() => shrinkOwnerLabelToFit(0)); return }
-  const overflow = topbar.scrollWidth - topbar.clientWidth
-  if (overflow <= 0) return
-  if (pass >= OWNER_RANK_MAX_SHRINK_PASSES || cMoonRankScale.value <= OWNER_RANK_MIN_SCALE) {
-    nextTick(() => shrinkOwnerLabelToFit(0))
-    return
-  }
-
-  const rankWidth = rankEl.getBoundingClientRect().width
-  if (rankWidth <= 0) { nextTick(() => shrinkOwnerLabelToFit(0)); return }
-
-  // ratio is relative to the rank element's CURRENT (possibly already-shrunk) width, so each pass
-  // multiplies the running scale rather than recomputing it from the original full size — needed
-  // because font-size-to-rendered-width isn't perfectly linear (kerning, sub-pixel rounding), so
-  // one estimate can occasionally leave a sliver of overflow that a second pass then corrects.
-  const targetWidth = Math.max(rankWidth - overflow, 0)
-  const ratio = targetWidth / rankWidth
-  const nextScale = Math.max(OWNER_RANK_MIN_SCALE, Math.min(cMoonRankScale.value, cMoonRankScale.value * ratio))
-  if (nextScale >= cMoonRankScale.value) {
-    // No more progress possible from this tier — move on to tier 2 rather than looping forever.
-    nextTick(() => shrinkOwnerLabelToFit(0))
-    return
-  }
-  cMoonRankScale.value = nextScale
-  nextTick(() => shrinkOwnerRankToFit(pass + 1))
-}
-
-// Tier 2 (see this block's own header comment): only ever runs once tier 1 has exhausted what
-// shrinking the rank text alone can do. Same convergence approach, applied to the whole label.
-function shrinkOwnerLabelToFit(pass) {
-  const topbar = topbarEl.value
-  const labelEl = ownerLabelEl.value
-  if (!topbar || !labelEl) return
-  const overflow = topbar.scrollWidth - topbar.clientWidth
-  if (overflow <= 0) return
-  if (pass >= OWNER_RANK_MAX_SHRINK_PASSES || ownerLabelScale.value <= OWNER_LABEL_MIN_SCALE) return
-
-  const labelWidth = labelEl.getBoundingClientRect().width
-  if (labelWidth <= 0) return
-
-  const targetWidth = Math.max(labelWidth - overflow, 0)
-  const ratio = targetWidth / labelWidth
-  const nextScale = Math.max(OWNER_LABEL_MIN_SCALE, Math.min(ownerLabelScale.value, ownerLabelScale.value * ratio))
-  if (nextScale >= ownerLabelScale.value) return
-  ownerLabelScale.value = nextScale
-  nextTick(() => shrinkOwnerLabelToFit(pass + 1))
-}
-
-// recalcScale() (chained above) already re-checks this on window resize and on the topbar's own
-// ResizeObserver — but neither fires from a content-only change that doesn't affect the topbar's
-// own HEIGHT (its WIDTH is fixed by its fixed-width parent regardless of how much its children
-// overflow it), which is exactly what happens when navigating to a different cZone with a
-// different username/rank name length. This watcher covers that case directly.
+// Belt-and-suspenders alongside the topbarRightEl ResizeObserver above: a username/rank name
+// change is the single most common trigger for this whole fix, so it gets its own direct,
+// explicit watcher rather than relying solely on the observer noticing the resulting width change.
 watch(() => [viewedOwner.value?.username, viewedOwner.value?.cMoonRankName], () => {
   nextTick(() => recalcOwnerRankScale())
 })
@@ -1398,7 +1457,7 @@ const czoneActions = useCzoneActions()
 onMounted(() => {
   czoneActions.register(save, clearZone)
   recalcScale()
-  window.addEventListener('resize',    recalcScale)
+  window.addEventListener('resize',    handleWindowResize)
   window.addEventListener('mousemove', onGlobalMove)
   window.addEventListener('mouseup',   onGlobalUp)
   window.addEventListener('touchmove', onGlobalMove, { passive: false })
@@ -1408,6 +1467,11 @@ onMounted(() => {
   if (topbarEl.value && typeof ResizeObserver !== 'undefined') {
     topbarResizeObserver = new ResizeObserver(() => recalcScale())
     topbarResizeObserver.observe(topbarEl.value)
+    // Also observe cz-topbar-right specifically (see that ref's own comment) — its own natural
+    // width changing (a longer/shorter username or rank, the cZone Options button or favorite
+    // star appearing/disappearing, the cMoon pill's text changing) doesn't necessarily change
+    // topbarEl's HEIGHT, which is the only thing the observer above actually reacts to.
+    if (topbarRightEl.value) topbarResizeObserver.observe(topbarRightEl.value)
   }
 })
 
@@ -1427,7 +1491,7 @@ watch(() => route.params.username, async (paramUsername) => {
 
 onUnmounted(() => {
   czoneActions.unregister()
-  window.removeEventListener('resize',    recalcScale)
+  window.removeEventListener('resize',    handleWindowResize)
   window.removeEventListener('mousemove', onGlobalMove)
   window.removeEventListener('mouseup',   onGlobalUp)
   window.removeEventListener('touchmove', onGlobalMove)
