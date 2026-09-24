@@ -5,7 +5,7 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../prisma.js'
 import { mintQueue } from './queues.js'
-import { getChicagoDailyBoundary, getChicagoMorningWindowStart, getChicagoCalendarDayStart } from './dailyTaskWindows.js'
+import { getChicagoDailyBoundary, getChicagoMorningWindowStart, getChicagoCalendarDayStart, addOneChicagoDay } from './dailyTaskWindows.js'
 import { COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
 import { EXCLUDED_SYSTEM_USER_ID } from './economyValuation.js'
 import { grantGuildRole, revokeGuildRole } from './discord.js'
@@ -293,19 +293,36 @@ function eligibleHolders(rows, minAccountAgeCutoff) {
 // reset at two different times (8pm Chicago for most, 8am for Winwheel/Lotto/monster scans),
 // so a single daily run would leave a window where 8am-boundary activity could go unrecorded —
 // and, since DAILY_TASK points below are now awarded live off each newly-detected completion,
-// running this often is also what makes a player's rank bar feel like it updates in real time.
+// how often this runs is also how soon a player's rank bar reflects it — every 30 minutes rather
+// than every minute, to keep the query load this adds on the shared connection pool low.
 // Idempotent either way — UserDailyTaskCompletion is unique on (userId, date).
-export async function recordDailyTaskCompletions() {
+// `dailyBoundary`/`morningBoundary` default to the CURRENT boundaries (the live per-minute
+// cron's own behavior, unchanged) but can be overridden to re-run this exact detection logic
+// against a PAST pair of boundaries instead — see the daily-task backfill tool
+// (server/api/admin/cmoons/backfill-daily-tasks.post.js), which reuses this function rather than
+// re-implementing its SQL, for catching up on completions the live cron missed while it wasn't
+// running. `writeHeartbeat: false` is passed by that tool: the heartbeat exists to tell an admin
+// "the live per-minute cron is still actually running" (see cMoonDailyTaskCronLastRanAt's schema
+// comment) — stamping it from an admin-triggered backfill would mask a real outage by making the
+// cron look healthy when it wasn't the one that ran.
+export async function recordDailyTaskCompletions({
+  dailyBoundary: dailyBoundaryOverride,
+  morningBoundary: morningBoundaryOverride,
+  writeHeartbeat = true,
+  skipRecompute = false,
+} = {}) {
   const config = await getGlobalConfig({ fresh: true })
-  if (!config?.cMoonEnabled) return { recorded: 0 }
+  if (!config?.cMoonEnabled) return { recorded: 0, awardedUserIds: [] }
 
-  // Heartbeat: stamped every tick this cron actually runs, regardless of whether anyone
-  // qualified — see the schema comment on cMoonDailyTaskCronLastRanAt. Fire-and-forget: this
-  // must never slow down or fail the real work below over a heartbeat write.
-  prisma.globalGameConfig
-    .update({ where: { id: 'singleton' }, data: { cMoonDailyTaskCronLastRanAt: new Date() } })
-    .then(() => invalidateGlobalConfigCache())
-    .catch(() => {})
+  if (writeHeartbeat) {
+    // Heartbeat: stamped every tick this cron actually runs, regardless of whether anyone
+    // qualified — see the schema comment on cMoonDailyTaskCronLastRanAt. Fire-and-forget: this
+    // must never slow down or fail the real work below over a heartbeat write.
+    prisma.globalGameConfig
+      .update({ where: { id: 'singleton' }, data: { cMoonDailyTaskCronLastRanAt: new Date() } })
+      .then(() => invalidateGlobalConfigCache())
+      .catch(() => {})
+  }
 
   const [globalConfig, winwheelConfig, lottoSettings, barcodeConfig] = await Promise.all([
     prisma.globalGameConfig.findUnique({
@@ -326,8 +343,22 @@ export async function recordDailyTaskCompletions() {
   const lottoCountPerDay = Number(lottoSettings?.countPerDay ?? 0)
   const monsterDailyScanLimit = Number(barcodeConfig?.monsterDailyScanLimit ?? 0)
 
-  const dailyBoundary = getChicagoDailyBoundary()
-  const morningBoundary = getChicagoMorningWindowStart()
+  const dailyBoundary = dailyBoundaryOverride ?? getChicagoDailyBoundary()
+  const morningBoundary = morningBoundaryOverride ?? getChicagoMorningWindowStart()
+  // Only the LIVE call (no explicit boundary passed in) ever has "now" fall inside these two
+  // windows — a historical call (the backfill tool) is always re-checking a day that has already
+  // fully elapsed. Every append-only-log branch below gets an explicit end bound (the NEXT
+  // occurrence of this same boundary, one Chicago calendar day later — see addOneChicagoDay,
+  // deliberately not a flat +24h, which is wrong on the two DST-transition days a year) for
+  // exactly this reason: with no end bound, "createdAt >= boundary" alone is harmless for the
+  // live call (nothing has a future createdAt, so it's equivalent to "since boundary, through
+  // now") but silently means "since boundary, through RIGHT NOW" for a historical call too — i.e.
+  // every day *since* that boundary, not just the one day it names. A user who was merely active
+  // TODAY would then satisfy every past boundary the backfill tool re-checks, and get awarded for
+  // days they did nothing on. The end bound makes both calls check exactly one real day, live or not.
+  const isHistorical = Boolean(dailyBoundaryOverride || morningBoundaryOverride)
+  const dailyBoundaryEnd = addOneChicagoDay(dailyBoundary)
+  const morningBoundaryEnd = addOneChicagoDay(morningBoundary)
   const { minAccountAgeDays, dailyTaskPoints } = resolveScoringConfig(config)
   const minAccountAgeCutoff = new Date(Date.now() - minAccountAgeDays * 24 * 60 * 60 * 1000)
   const combatNames = Prisma.join(COMBAT_POOL_GAME_NAMES)
@@ -339,14 +370,14 @@ export async function recordDailyTaskCompletions() {
   const czoneBranch = czoneVisitMaxPerDay > 0
     ? Prisma.sql`
         SELECT "userId" FROM "PointsLog"
-        WHERE "method" = 'cZone Visit' AND "createdAt" >= ${dailyBoundary}
+        WHERE "method" = 'cZone Visit' AND "createdAt" >= ${dailyBoundary} AND "createdAt" < ${dailyBoundaryEnd}
           AND "userId" IN (SELECT id FROM eligible)
         GROUP BY "userId" HAVING COUNT(*) >= ${czoneVisitMaxPerDay}`
     : inert
   const gameptsBranch = dailyPointLimit > 0
     ? Prisma.sql`
         SELECT "userId" FROM "GamePointLog"
-        WHERE "createdAt" >= ${dailyBoundary}
+        WHERE "createdAt" >= ${dailyBoundary} AND "createdAt" < ${dailyBoundaryEnd}
           AND ("gameName" IS NULL OR "gameName" NOT IN (${combatNames}))
           AND "userId" IN (SELECT id FROM eligible)
         GROUP BY "userId" HAVING SUM("points") >= ${dailyPointLimit}`
@@ -354,7 +385,7 @@ export async function recordDailyTaskCompletions() {
   const tkoptsBranch = tkoDailyPointLimit > 0
     ? Prisma.sql`
         SELECT "userId" FROM "GamePointLog"
-        WHERE "createdAt" >= ${dailyBoundary}
+        WHERE "createdAt" >= ${dailyBoundary} AND "createdAt" < ${dailyBoundaryEnd}
           AND "gameName" IN (${combatNames})
           AND "userId" IN (SELECT id FROM eligible)
         GROUP BY "userId" HAVING SUM("points") >= ${tkoDailyPointLimit}`
@@ -362,17 +393,26 @@ export async function recordDailyTaskCompletions() {
   const wheelBranch = winwheelMaxDailySpins > 0
     ? Prisma.sql`
         SELECT "userId" FROM "WheelSpinLog"
-        WHERE "createdAt" >= ${morningBoundary} AND "status" <> 'failed' AND "result" <> 'tripleNothing'
+        WHERE "createdAt" >= ${morningBoundary} AND "createdAt" < ${morningBoundaryEnd}
+          AND "status" <> 'failed' AND "result" <> 'tripleNothing'
           AND "userId" IN (SELECT id FROM eligible)
         GROUP BY "userId" HAVING COUNT(*) >= ${winwheelMaxDailySpins}`
     : inert
-  const lottoBranch = lottoCountPerDay > 0
+  // lotto/scans can only ever be checked LIVE, never backfilled: LottoUser.purchasesToday and
+  // UserBarcodeScan.lastScannedAt are both current-state columns upserted in place on every new
+  // purchase/scan (LottoUser has one row per user; UserBarcodeScan is unique on (userId,
+  // mappingId)), not append-only logs — a later purchase/scan overwrites the very value a
+  // historical boundary would need to check, so there is no way to reconstruct "did this user
+  // qualify on that past day" from either table once time has moved on. Forcing both inert
+  // whenever a historical boundary is passed in avoids crediting (or wrongly denying) a past day
+  // using data that actually reflects a totally different, more recent day.
+  const lottoBranch = lottoCountPerDay > 0 && !isHistorical
     ? Prisma.sql`
         SELECT "userId" FROM "LottoUser"
         WHERE "lastReset" >= ${morningBoundary} AND "purchasesToday" >= ${lottoCountPerDay}
           AND "userId" IN (SELECT id FROM eligible)`
     : inert
-  const scansBranch = monsterDailyScanLimit > 0
+  const scansBranch = monsterDailyScanLimit > 0 && !isHistorical
     ? Prisma.sql`
         SELECT "userId" FROM "UserBarcodeScan"
         WHERE "lastScannedAt" >= ${morningBoundary}
@@ -401,7 +441,7 @@ export async function recordDailyTaskCompletions() {
     ),
     login AS (
       SELECT DISTINCT "userId" FROM "PointsLog"
-      WHERE "method" = 'Daily Login' AND "createdAt" >= ${dailyBoundary}
+      WHERE "method" = 'Daily Login' AND "createdAt" >= ${dailyBoundary} AND "createdAt" < ${dailyBoundaryEnd}
         AND "userId" IN (SELECT id FROM eligible)
     ),
     czone AS (${czoneBranch}),
@@ -437,6 +477,14 @@ export async function recordDailyTaskCompletions() {
   // actual idempotency guard, exactly as it is everywhere else in this module. Each row's own
   // `date` (not a single shared value) becomes that award's weekStart/detail, matching whichever
   // boundary actually produced it.
+  //
+  // A historical (backfilled) award is attributed using the member's CURRENT cMoinId/eligibility,
+  // not whatever they were on the day being backfilled — this module has no membership-history
+  // table to look up "what team was this user on, X days ago" from. In practice this only
+  // matters for a user who switched teams (or joined/left) in the narrow gap between the missed
+  // day and the backfill running, and the live cron carries the exact same limitation for its own
+  // (much smaller, minutes-wide) gap between an activity and the cron tick that records it.
+  let awardedUserIds = []
   if (dailyTaskPoints > 0 && rows.length) {
     const newUserIds = rows.map(r => r.userId)
     const members = await prisma.user.findMany({
@@ -453,12 +501,21 @@ export async function recordDailyTaskCompletions() {
           detail: r.date.toISOString(), points: awardPoints, weekStart: r.date,
         }))
       await prisma.cMoonScoreLog.createMany({ data: candidates, skipDuplicates: true })
-      await recomputeCMoonTeamScores()
-      await recomputeCMoonPointsForUsers(members.map(u => u.id))
+      awardedUserIds = members.map(u => u.id)
+      // skipRecompute: true lets a caller doing several passes in one request (the backfill tool,
+      // one pass per day) defer both of these to a single call at the end instead of once per
+      // pass — recomputeCMoonTeamScores in particular recomputes teamScore for every cMoon from
+      // the WHOLE CMoonScoreLog table each time it runs, so paying that cost N times in one
+      // request when N-1 of them are immediately superseded by the next pass's recompute is pure
+      // waste, and only gets more expensive as CMoonScoreLog grows with the user base.
+      if (!skipRecompute) {
+        await recomputeCMoonTeamScores()
+        await recomputeCMoonPointsForUsers(awardedUserIds)
+      }
     }
   }
 
-  return { recorded: rows.length }
+  return { recorded: rows.length, awardedUserIds }
 }
 
 // Fully recomputes CMoon.teamScore from CMoonScoreLog (never incremented directly — see
@@ -591,7 +648,7 @@ export async function runDailyCMoonScoring() {
   await recomputeCMoonTeamScores()
   // Team score above covers the team-wide leaderboard, but a member's own "Your Rank" progress
   // bar reads User.cMoonPoints specifically (see rank-progress.get.js) — without this, a HIGH_
-  // SCORE/TOP10 award here would only reach that field via the separate, up-to-15-minute
+  // SCORE/TOP10 award here would only reach that field via the separate, up-to-45-minute
   // runCMoonPointsAggregate sweep, which is exactly what made a manual "Re-run Scoring Now"
   // catch-up look like it hadn't worked (team total updated instantly, personal bar didn't).
   // DAILY_TASK's own live-award path already does this same thing for its own awards; this
@@ -890,7 +947,7 @@ export async function selectCMoonForUser(userId, cMoonId) {
       // Self-selection always starts a member at 0 cMoonPoints / no rank, regardless of
       // whatever they'd accumulated in a cMoon they previously left — cMoonPoints is only
       // ever written going forward by the aggregate cron (see cmoon-points-aggregate.js),
-      // so a former member's stale total would otherwise linger until its next 15-minute
+      // so a former member's stale total would otherwise linger until its next 45-minute
       // run. currentCMoonRankId/cMoonRankRoleGrantedAt are already guaranteed null here
       // (reassignUserCMoon nulls them whenever cMoonId is cleared), included for clarity.
       data: {

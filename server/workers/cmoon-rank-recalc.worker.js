@@ -6,7 +6,7 @@
 // Points"), see server/api/admin/cmoons/recalculate-points.post.js.
 //
 // Deliberately does NOT filter candidates by "cMoonPoints > 1" (an earlier version of this tool
-// did, and it was a real bug): the periodic aggregate cron above runs every 15 minutes for every
+// did, and it was a real bug): the periodic aggregate cron above runs every 45 minutes for every
 // member regardless of this tool, so by the time an admin clicks the button, the cron may have
 // already silently corrected a member's cMoonPoints down to 0/1 on its own — while their
 // currentCMoonRankId (which ONLY this tool, not the cron, ever lowers) is still whatever the old,
