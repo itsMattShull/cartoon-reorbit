@@ -8,11 +8,17 @@ export const NAME_MAX_LENGTH = 60
 
 export const KINDS = ['BORDER', 'GLOW']
 
+// Capped well below the topbar/bottombar's own fixed heights (34px/35px — see TOPBAR_H/
+// BOTTOMBAR_H in components/newsite/MyCzone.vue) rather than at some larger "looks cool in
+// isolation" number: the border/glow is an inset effect eating into the frame from all four
+// edges at once, so an unbounded thickness/radius can visually bury the topbar's buttons and the
+// bottombar's nav controls under solid color long before it looks like a design choice — verified
+// against the real bar heights via an isolated Playwright render at these exact maximums.
 export const THICKNESS_MIN = 1
-export const THICKNESS_MAX = 30
+export const THICKNESS_MAX = 14
 
 export const GLOW_RADIUS_MIN = 0
-export const GLOW_RADIUS_MAX = 60
+export const GLOW_RADIUS_MAX = 30
 
 export const OPACITY_MIN = 0.1
 export const OPACITY_MAX = 1

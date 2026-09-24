@@ -24,12 +24,11 @@ export default defineEventHandler(async (event) => {
   })
   if (!effect) throw createError({ statusCode: 404, statusMessage: 'cZone effect not found' })
 
-  // The FKs referencing this row are all ON DELETE SET NULL (a player's already-granted
-  // border/glow shouldn't vanish or crash just because an admin deletes the effect it was styled
-  // with — see UserCMoonBorder.effectId's comment), so nothing here will actually fail at the DB
-  // layer. Block it at the app layer instead: deleting an in-use effect would silently strip the
-  // styling from every affinity level assignment and every player who already has it equipped,
-  // reverting them all to the plain legacy solid-color ring with no admin review of that change.
+  // Friendly pre-check message; the FKs' ON DELETE RESTRICT (see CMoonAffinityLevel.borderEffect
+  // and UserCMoonBorder.effect in prisma/schema.prisma) is the real race-proof backstop below,
+  // same pattern as server/api/admin/cmoon-join-effects/[id].delete.js's own P2003 catch — this
+  // check and the delete itself are separate statements, so another admin could assign or grant
+  // this effect in between.
   const { affinityLevelsAsBorder, affinityLevelsAsGlow, grantedBorders, grantedGlows } = effect._count || {}
   const usageCount = (affinityLevelsAsBorder ?? 0) + (affinityLevelsAsGlow ?? 0) + (grantedBorders ?? 0) + (grantedGlows ?? 0)
   if (usageCount > 0) {
@@ -39,7 +38,14 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  await db.cZoneEffect.delete({ where: { id } })
+  try {
+    await db.cZoneEffect.delete({ where: { id } })
+  } catch (err) {
+    if (err?.code === 'P2003') {
+      throw createError({ statusCode: 409, statusMessage: 'Cannot delete — this effect is still assigned or granted. Unassign it first.' })
+    }
+    throw err
+  }
 
   await logAdminChange(db, { userId: me.id, area: 'CZoneEffect', key: `delete:${id}`, prevValue: { name: effect.name }, newValue: null })
 

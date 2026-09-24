@@ -10,7 +10,14 @@ export default defineEventHandler(async (event) => {
     orderBy: { name: 'asc' },
     include: {
       _count: {
-        select: { affinityLevelsAsBorder: true, affinityLevelsAsGlow: true },
+        // All four counted here, not just the affinity-level ones — DELETE /czone-effects/:id
+        // blocks on ALL of them (grants are permanent and can never be reassigned away, unlike a
+        // level's assignment), so this list has to agree with that endpoint or the delete button
+        // looks enabled right up until it 409s.
+        select: {
+          affinityLevelsAsBorder: true, affinityLevelsAsGlow: true,
+          grantedBorders: true, grantedGlows: true,
+        },
       },
     },
   })
@@ -25,7 +32,8 @@ export default defineEventHandler(async (event) => {
       glowRadius: e.glowRadius,
       opacity: e.opacity,
       speed: e.speed,
-      usageCount: (e._count?.affinityLevelsAsBorder ?? 0) + (e._count?.affinityLevelsAsGlow ?? 0),
+      assignedCount: (e._count?.affinityLevelsAsBorder ?? 0) + (e._count?.affinityLevelsAsGlow ?? 0),
+      grantedCount: (e._count?.grantedBorders ?? 0) + (e._count?.grantedGlows ?? 0),
     })),
   }
 })

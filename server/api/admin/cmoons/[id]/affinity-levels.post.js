@@ -65,6 +65,12 @@ export default defineEventHandler(async (event) => {
     if (err?.code === 'P2002') {
       throw createError({ statusCode: 409, statusMessage: 'Another level in this cMoon already uses that threshold or order' })
     }
+    // Effect existed at the check above but was deleted by another admin request before this
+    // write landed (only possible while it wasn't yet in use — see CZoneEffect's onDelete:
+    // Restrict, which blocks deleting one already in use).
+    if (err?.code === 'P2003') {
+      throw createError({ statusCode: 400, statusMessage: 'Border or glow effect was deleted by another request — pick again' })
+    }
     throw err
   }
 
