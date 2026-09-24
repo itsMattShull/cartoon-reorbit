@@ -23,10 +23,7 @@
               <template v-if="e.kind === 'GLOW'"> · radius {{ e.glowRadius }}px · {{ e.speed }}s cycle</template>
               · opacity {{ e.opacity }}
             </div>
-            <div class="text-[11px] text-gray-600">
-              Assigned to {{ e.assignedCount }} affinity level{{ e.assignedCount === 1 ? '' : 's' }}
-              <span v-if="e.grantedCount">, granted to {{ e.grantedCount }} player{{ e.grantedCount === 1 ? '' : 's' }} (permanent — can't be undone)</span>
-            </div>
+            <div class="text-[11px] text-gray-600">{{ usageSummary(e) }}</div>
           </div>
           <div class="flex items-center gap-3 flex-shrink-0">
             <button type="button" class="text-indigo-600 hover:underline" @click="startEdit(e)">Edit</button>
@@ -236,6 +233,11 @@ async function save() {
   }
 }
 
+function usageSummary(e) {
+  const parts = [`Assigned to ${e.assignedCount} affinity level${e.assignedCount === 1 ? '' : 's'}`]
+  if (e.grantedCount) parts.push(`granted to ${e.grantedCount} player${e.grantedCount === 1 ? '' : 's'} (permanent — can't be undone)`)
+  return parts.join(', ')
+}
 function isInUse(e) { return e.assignedCount > 0 || e.grantedCount > 0 }
 function deleteBlockedReason(e) {
   if (e.grantedCount > 0) return "Already granted to a player — can't be deleted"
