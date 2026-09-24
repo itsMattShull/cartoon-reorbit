@@ -44,8 +44,10 @@ export default defineEventHandler(async (event) => {
         const reward = {
           backgrounds: [],
           avatars: [],
-          borderCMoonId: lvl.grantsBorder ? a.cMoonId : null,
-          glowCMoonId: lvl.grantsGlow ? a.cMoonId : null,
+          borderCMoonId: lvl.borderEffectId ? a.cMoonId : null,
+          borderEffectId: lvl.borderEffectId || null,
+          glowCMoonId: lvl.glowEffectId ? a.cMoonId : null,
+          glowEffectId: lvl.glowEffectId || null,
         }
         if (lvl.rewardBackgroundId) reward.backgrounds.push({ backgroundId: lvl.rewardBackgroundId })
         reward.avatars.push(...lvl.rewardAvatars.map(ra => ({ avatarId: ra.avatarId })))
@@ -56,13 +58,13 @@ export default defineEventHandler(async (event) => {
         // See contribute.post.js's identical auto-equip comment: mutually exclusive with each
         // other, so both checks require neither field set yet, and border (checked first) wins
         // if a single level somehow grants both.
-        if (lvl.grantsBorder) {
+        if (lvl.borderEffectId) {
           await tx.user.updateMany({
             where: { id: a.userId, equippedBorderCMoonId: null, equippedGlowCMoonId: null },
             data: { equippedBorderCMoonId: a.cMoonId },
           })
         }
-        if (lvl.grantsGlow) {
+        if (lvl.glowEffectId) {
           await tx.user.updateMany({
             where: { id: a.userId, equippedBorderCMoonId: null, equippedGlowCMoonId: null },
             data: { equippedGlowCMoonId: a.cMoonId },

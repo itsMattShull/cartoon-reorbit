@@ -259,12 +259,18 @@ export async function grantRewardInTx(tx, userId, reward, method) {
 
   // cMoon border — idempotent grant of a persistent cZone border for one cMoon (upsert rather
   // than create+catch, since re-granting an already-owned border must be a silent no-op, not an
-  // error).
+  // error). reward.borderEffectId snapshots which CZoneEffect this border is styled with (see
+  // UserCMoonBorder.effectId's schema comment) — set on `update` too, not just `create`, so
+  // reaching a LATER, higher affinity level with a different assigned effect moves an already-
+  // owned border up to that newer styling rather than leaving it frozen at whatever the first
+  // grant happened to be. A caller with no effect to snapshot (or the legacy pre-CZoneEffect
+  // callers) simply omits/nulls reward.borderEffectId, which is exactly the "no effect" state
+  // resolveBorderStyle already falls back from.
   if (reward.borderCMoonId) {
     await tx.userCMoonBorder.upsert({
       where: { userId_cMoonId: { userId, cMoonId: reward.borderCMoonId } },
-      create: { userId, cMoonId: reward.borderCMoonId },
-      update: {}
+      create: { userId, cMoonId: reward.borderCMoonId, effectId: reward.borderEffectId || null },
+      update: { effectId: reward.borderEffectId || null }
     })
     summary.border = true
   }
@@ -273,12 +279,13 @@ export async function grantRewardInTx(tx, userId, reward, method) {
   // border colors the whole cZone container, glow is a pulsing colored glow around it. A member
   // can own both from different levels/cMoons, but only one can be equipped/displayed at a time
   // (see server/api/czone/border.post.js and glow.post.js, which each clear the other's equip
-  // field) — ownership here is independent of that display choice.
+  // field) — ownership here is independent of that display choice. See the border case above for
+  // why effectId is set on `update` as well as `create`.
   if (reward.glowCMoonId) {
     await tx.userCMoonGlow.upsert({
       where: { userId_cMoonId: { userId, cMoonId: reward.glowCMoonId } },
-      create: { userId, cMoonId: reward.glowCMoonId },
-      update: {}
+      create: { userId, cMoonId: reward.glowCMoonId, effectId: reward.glowEffectId || null },
+      update: { effectId: reward.glowEffectId || null }
     })
     summary.glow = true
   }

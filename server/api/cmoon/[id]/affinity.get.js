@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
       where: { cMoonId },
       orderBy: { sortOrder: 'asc' },
       select: {
-        id: true, name: true, threshold: true, sortOrder: true, grantsBorder: true, grantsGlow: true,
+        id: true, name: true, threshold: true, sortOrder: true, borderEffectId: true, glowEffectId: true,
         rewardBackground: { select: { id: true, label: true, imagePath: true } },
         rewardAvatars: { select: { avatar: { select: { id: true, label: true, imagePath: true } } } },
       }
@@ -40,6 +40,11 @@ export default defineEventHandler(async (event) => {
     affinitySpent,
     currentLevelId: affinity?.currentLevelId || null,
     nextLevel: nextLevel ? { id: nextLevel.id, name: nextLevel.name, threshold: nextLevel.threshold } : null,
-    levels: levels.map(l => ({ ...l, rewardAvatars: l.rewardAvatars.map(ra => ra.avatar) })),
+    levels: levels.map(l => ({
+      ...l,
+      grantsBorder: !!l.borderEffectId,
+      grantsGlow: !!l.glowEffectId,
+      rewardAvatars: l.rewardAvatars.map(ra => ra.avatar),
+    })),
   }
 })

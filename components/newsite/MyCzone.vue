@@ -9,19 +9,19 @@
          one without: recalcScale() needs no reserve for either, and neither can ever be clipped
          by an ancestor's overflow:hidden. Border and glow are meant to be mutually exclusive (the
          equip endpoints each clear the other's field), so normally at most one of these two
-         modifier classes is applied — but each reads its OWN color custom property
-         (--cz-border-color / --cz-glow-color) rather than sharing one, so if the two ever DID
-         end up active together (equipped from different cMoons, or a future state that allows
-         stacking them), the glow still renders in its own correct color instead of silently
-         inheriting the border's — never invisible, never mis-colored, regardless of which one,
-         if either, is equipped. ── -->
+         modifier classes is applied — but each reads its OWN full set of custom properties
+         (--cz-border-* / --cz-glow-*, see czFrameCosmeticStyle) rather than sharing one
+         namespace, so if the two ever DID end up active together (equipped from different
+         cMoons, or a future state that allows stacking them), the glow still renders with its own
+         correct color/thickness/etc. instead of silently inheriting the border's — never
+         invisible, never mis-styled, regardless of which one, if either, is equipped. Every
+         customizable value (color, thickness, glow radius, opacity, pulse speed) comes from the
+         admin-authored CZoneEffect the owner's affinity level granted them — see
+         prisma/schema.prisma's CZoneEffect model and server/utils/czoneEffect.js. ── -->
     <div
       class="cz-frame"
       :class="{ 'cz-frame--bordered': displayedBorder, 'cz-frame--glowing': displayedGlow }"
-      :style="{
-        ...(displayedBorder ? { '--cz-border-color': displayedBorder.color } : {}),
-        ...(displayedGlow ? { '--cz-glow-color': displayedGlow.color } : {}),
-      }"
+      :style="czFrameCosmeticStyle"
     >
 
     <!-- ── Top bar ─────────────────────────────────────────── -->
@@ -643,6 +643,31 @@ const displayedGlow = computed(() => {
   }
   return viewedOwner.value?.glow || null
 })
+
+// Drives every customizable knob on the .cz-frame cosmetic (see its CSS below) via CSS custom
+// properties — separate --cz-border-*/--cz-glow-* namespaces (not one shared set) so that if
+// border and glow were ever both active at once (not possible through the current equip flow,
+// which keeps them mutually exclusive, but the CSS itself doesn't assume that), each still
+// renders fully and correctly from its own values rather than one silently overwriting the
+// other's custom properties. `-light` is a brightened tint of the same base color (see
+// utils/cmoonColor.js#lightenHex) used for the rim-highlight/shimmer layers, computed here rather
+// than per-render in CSS since CSS alone can't derive a new color from an admin-picked hex.
+const czFrameCosmeticStyle = computed(() => ({
+  ...(displayedBorder.value ? {
+    '--cz-border-color': displayedBorder.value.color,
+    '--cz-border-color-light': lightenHex(displayedBorder.value.color, 0.55),
+    '--cz-border-thickness': `${displayedBorder.value.thickness}px`,
+    '--cz-border-opacity': displayedBorder.value.opacity,
+  } : {}),
+  ...(displayedGlow.value ? {
+    '--cz-glow-color': displayedGlow.value.color,
+    '--cz-glow-color-light': lightenHex(displayedGlow.value.color, 0.55),
+    '--cz-glow-thickness': `${displayedGlow.value.thickness}px`,
+    '--cz-glow-radius': `${displayedGlow.value.glowRadius}px`,
+    '--cz-glow-opacity': displayedGlow.value.opacity,
+    '--cz-glow-speed': `${displayedGlow.value.speed}s`,
+  } : {}),
+}))
 
 // ── Scale logic (mirrors pages/czone/[username].vue) ──────────
 // Identical for every cZone regardless of cMoon affiliation — see the FRAME_BORDER_PX-removal
@@ -1874,26 +1899,60 @@ defineExpose({ save, clearZone })
   border-radius: inherit;
   pointer-events: none;
 }
+
+/* A single flat-color ring reads as plain, so this layers three inset shadows instead: the solid
+   color ring itself (--cz-border-thickness wide, admin-set), a thin bright rim just inside its
+   edge (a lightened tint of the same color, computed once in czFrameCosmeticStyle since CSS alone
+   can't derive a new color from an arbitrary hex) for a beveled "catching the light" look, and a
+   soft dark inner shadow further in for depth — together reading as a crafted ring sitting proud
+   of the frame rather than a flat color painted onto it. --cz-border-opacity fades the whole
+   pseudo-element as one unit (every layer at once) rather than needing a separate alpha baked
+   into each shadow color. */
 .cz-frame--bordered::after {
-  box-shadow: inset 0 0 0 10px var(--cz-border-color, transparent);
+  box-shadow:
+    inset 0 0 0 var(--cz-border-thickness, 10px) var(--cz-border-color, transparent),
+    inset 0 0 0 calc(var(--cz-border-thickness, 10px) + 3px) var(--cz-border-color-light, transparent),
+    inset 0 0 14px 2px rgba(0, 0, 0, 0.35);
+  opacity: var(--cz-border-opacity, 1);
 }
 
 /* The alternative cosmetic to the solid border above — a pulsing colored glow around the same
-   frame, instead of a hard-edged color fill. Reads its own --cz-glow-color (not the border's
-   --cz-border-color) so it renders in its own correct color and stays visible even in the
-   (normally-prevented, but not CSS-enforced) case where a border happens to be active at the
-   same time from a different cMoon. */
+   frame, instead of a hard-edged color fill. Reads its own --cz-glow-* custom properties (not the
+   border's --cz-border-*) so it renders correctly and stays visible even in the (normally-
+   prevented, but not CSS-enforced) case where a border happens to be active at the same time from
+   a different cMoon. Three shadow layers pulse together — a solid inner ring (--cz-glow-
+   thickness), a bright rim sliver (the lightened tint, for shimmer), and a soft bloom
+   (--cz-glow-radius, the "glow" itself) — plus a filter: brightness() pulse riding along on top,
+   so it reads as genuinely radiant rather than just a shadow changing size. --cz-glow-speed sets
+   the whole cycle's duration (admin-customizable "how fast it glows"). */
 .cz-frame--glowing::after {
-  animation: cz-frame-glow-pulse 2.4s ease-in-out infinite;
+  animation: cz-frame-glow-pulse var(--cz-glow-speed, 2.4s) ease-in-out infinite;
+  opacity: var(--cz-glow-opacity, 1);
 }
 @keyframes cz-frame-glow-pulse {
-  0%, 100% { box-shadow: inset 0 0 0 6px var(--cz-glow-color, #fff), inset 0 0 16px 4px var(--cz-glow-color, #fff); }
-  50%      { box-shadow: inset 0 0 0 10px var(--cz-glow-color, #fff), inset 0 0 24px 8px var(--cz-glow-color, #fff); }
+  0%, 100% {
+    box-shadow:
+      inset 0 0 0 var(--cz-glow-thickness, 6px) var(--cz-glow-color, #fff),
+      inset 0 0 0 calc(var(--cz-glow-thickness, 6px) + 2px) var(--cz-glow-color-light, #fff),
+      inset 0 0 calc(var(--cz-glow-radius, 16px) * 0.7) calc(var(--cz-glow-radius, 16px) * 0.35) var(--cz-glow-color, #fff);
+    filter: brightness(1);
+  }
+  50% {
+    box-shadow:
+      inset 0 0 0 calc(var(--cz-glow-thickness, 6px) + 3px) var(--cz-glow-color, #fff),
+      inset 0 0 0 calc(var(--cz-glow-thickness, 6px) + 6px) var(--cz-glow-color-light, #fff),
+      inset 0 0 var(--cz-glow-radius, 16px) calc(var(--cz-glow-radius, 16px) * 0.65) var(--cz-glow-color, #fff);
+    filter: brightness(1.35);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .cz-frame--glowing::after {
     animation: none;
-    box-shadow: inset 0 0 0 8px var(--cz-glow-color, #fff), inset 0 0 20px 6px var(--cz-glow-color, #fff);
+    filter: brightness(1.15);
+    box-shadow:
+      inset 0 0 0 calc(var(--cz-glow-thickness, 6px) + 2px) var(--cz-glow-color, #fff),
+      inset 0 0 0 calc(var(--cz-glow-thickness, 6px) + 5px) var(--cz-glow-color-light, #fff),
+      inset 0 0 calc(var(--cz-glow-radius, 16px) * 0.85) calc(var(--cz-glow-radius, 16px) * 0.5) var(--cz-glow-color, #fff);
   }
 }
 
