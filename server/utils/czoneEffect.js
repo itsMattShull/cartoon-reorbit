@@ -59,14 +59,15 @@ export function isValidCZoneEffectSpeed(value) {
 // two-color-field CMoonJoinEffect endpoints this otherwise mirrors). `existing` is the current row
 // on an update (undefined on create), used the same way the join-effect PUT endpoint keeps
 // unspecified fields: `body.field === undefined` means "leave unchanged".
-// Defaults applied when a UserCMoonBorder/UserCMoonGlow row has no effectId — always a grant made
-// before CZoneEffect existed (see UserCMoonBorder.effectId's schema comment; deletion of an
-// in-use effect is blocked, so this can never mean "the effect it pointed at was deleted", and
-// reassigning the GRANTING LEVEL to a different effect doesn't touch already-granted rows either).
-// Chosen to reproduce the ORIGINAL hardcoded
-// look (a flat 10px border / a 6px-16px pulsing glow at a 2.4s cycle) as closely as possible, so
-// a pre-existing grant renders basically unchanged rather than silently jumping to whatever this
-// file's CZoneEffect model defaults happen to be.
+// Defaults applied when a UserCMoonBorder/UserCMoonGlow row has no effectId. The migration that
+// introduced CZoneEffect backfilled effectId on every pre-existing grant it could (pointing each
+// at that cMoon's seeded "legacy" effect — see that migration's own comment), so this null case is
+// now the narrow leftover: a grant whose cMoon had no grantsBorder/grantsGlow=true level left to
+// seed a legacy effect from at migration time. These constants exist so even that edge case
+// renders the exact pre-CZoneEffect hardcoded look (a flat 10px border / a 6px-16px pulsing glow
+// at a 2.4s cycle) rather than silently jumping to whatever this file's CZoneEffect model defaults
+// happen to be. Deletion of an in-use effect is blocked, so null can never mean "the effect it
+// pointed at was deleted" either.
 export const LEGACY_BORDER_THICKNESS = 10
 export const LEGACY_GLOW_THICKNESS = 6
 export const LEGACY_GLOW_RADIUS = 16
