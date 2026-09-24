@@ -1043,9 +1043,9 @@ cron.schedule('45 2 * * *', () => runJob('syncCMoonDiscordRoles', syncCMoonDisco
 // server/utils/dailyTaskWindows.js), a wide gap here used to just mean a delayed detection
 // window, but now that a completion is awarded live the moment it's detected, this interval is
 // how quickly a player's rank bar actually reflects it. Each run's own query is cheap/indexed
-// (scoped to "since the current day/morning boundary"), and it's already advisory-lock-guarded
-// against overlap (see runRecordDailyTaskCompletions) — re-checking an already-recorded day is a
-// no-op (UserDailyTaskCompletion is unique on userId+date).
+// (scoped to "since the current day/morning boundary"), and it's already lease-guarded against
+// overlap (see runRecordDailyTaskCompletions) — re-checking an already-recorded day is a no-op
+// (UserDailyTaskCompletion is unique on userId+date).
 cron.schedule('* * * * *', () => runJob('recordDailyTaskCompletions', runRecordDailyTaskCompletions), { timezone: 'America/Chicago' }) // every minute
 // Admin-adjustable run time (GlobalGameConfig.cMoonScoringRunHour/Minute, default 00:00 CST) —
 // checked every 5 minutes rather than cron-scheduled at a fixed time, since that time can change

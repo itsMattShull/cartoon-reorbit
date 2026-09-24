@@ -167,7 +167,7 @@
                 type="button"
                 class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 :disabled="backfillDailyTasksLoading"
-                title="Re-checks the last few days' daily-task completions against the live cron's own boundaries and awards anything it missed while it wasn't running. Safe to click any time — already-recorded completions are skipped, so this only ever fills in gaps, never double-awards."
+                title="Re-checks the last 3 days' daily-task completions (login, cZone, game points, TKO points, wheel spins) and awards anything the live cron missed while it wasn't running. Safe to click any time — already-recorded completions are skipped, so this only ever fills in gaps, never double-awards. Lotto and monster-scan completions can't be recovered this way once their day has passed — only this run's own live data reflects those."
                 @click="backfillDailyTasks"
               >{{ backfillDailyTasksLoading ? 'Backfilling…' : 'Backfill Missed Daily Tasks (last 3 days)' }}</button>
               <p v-if="backfillDailyTasksResult" class="text-[11px] text-gray-600 mt-1">{{ backfillDailyTasksResult }}</p>
