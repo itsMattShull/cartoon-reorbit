@@ -711,8 +711,19 @@ const OWNER_LABEL_MIN_SCALE = 0.5  // shrinking the WHOLE label (not just the ra
                                     // last-resort tier, so its floor stays a bit more conservative
 const OWNER_RANK_MAX_SHRINK_PASSES = 6
 
+// Bumped at the start of every recalcOwnerRankScale() call and captured by each shrink chain it
+// schedules. Two triggers can fire in the same tick (e.g. the username/rank watch and the
+// zoneLoading watch both firing off the same load completing) — without this, their two chains
+// would interleave: each reads/writes the same cMoonRankScale/ownerLabelScale refs directly, so a
+// stale chain's pass would compound onto a newer chain's already-shrunk scale (ratio applied
+// twice) instead of measuring fresh from the reset. A chain that finds its generation stale
+// simply stops; the newer chain (whose reset ran after the older one's, per JS's synchronous
+// call order within recalcOwnerRankScale) is the one left to actually converge.
+let ownerRankScaleGeneration = 0
+
 function recalcOwnerRankScale() {
   if (typeof window === 'undefined') return
+  const generation = ++ownerRankScaleGeneration
   // Deliberately does NOT require ownerCMoonRankEl here — a viewed owner with no cMoon rank at
   // all never renders that span (v-if), and requiring it here would skip tier 2 entirely for
   // that owner even when their username alone overflows, leaving them clipped forever.
@@ -727,33 +738,34 @@ function recalcOwnerRankScale() {
   // owner had a longer one.
   cMoonRankScale.value = 1
   ownerLabelScale.value = 1
-  nextTick(() => shrinkOwnerRankToFit(0, undefined))
+  nextTick(() => shrinkOwnerRankToFit(generation, 0, undefined))
 }
 
 // previousOverflow is the overflow measured just BEFORE the shrink that led to this call — undefined
 // on the very first pass (nothing to compare against yet). Comparing it against this pass's fresh
 // measurement is what lets this bail out into tier 2 the moment shrinking the rank text stops
 // actually helping, rather than only stopping once it's out of its own font-size budget.
-function shrinkOwnerRankToFit(pass, previousOverflow) {
+function shrinkOwnerRankToFit(generation, pass, previousOverflow) {
+  if (generation !== ownerRankScaleGeneration) return // superseded by a newer recalcOwnerRankScale()
   const topbar = topbarEl.value
   const rankEl = ownerCMoonRankEl.value
-  if (!topbar || !rankEl) { nextTick(() => shrinkOwnerLabelToFit(0, undefined)); return }
+  if (!topbar || !rankEl) { nextTick(() => shrinkOwnerLabelToFit(generation, 0, undefined)); return }
   const overflow = topbar.scrollWidth - topbar.clientWidth
   if (overflow <= 0) return
   if (previousOverflow !== undefined && overflow >= previousOverflow) {
     // The last shrink didn't actually reduce cz-topbar's overflow — the OTHER line in the label
     // (last-seen + cMoon pill) is the wider, unaffected bottleneck. Stop spending tier 1's budget
     // on something that isn't helping and let tier 2 (which affects both lines) take over.
-    nextTick(() => shrinkOwnerLabelToFit(0, undefined))
+    nextTick(() => shrinkOwnerLabelToFit(generation, 0, undefined))
     return
   }
   if (pass >= OWNER_RANK_MAX_SHRINK_PASSES || cMoonRankScale.value <= OWNER_RANK_MIN_SCALE) {
-    nextTick(() => shrinkOwnerLabelToFit(0, undefined))
+    nextTick(() => shrinkOwnerLabelToFit(generation, 0, undefined))
     return
   }
 
   const rankWidth = rankEl.getBoundingClientRect().width
-  if (rankWidth <= 0) { nextTick(() => shrinkOwnerLabelToFit(0, undefined)); return }
+  if (rankWidth <= 0) { nextTick(() => shrinkOwnerLabelToFit(generation, 0, undefined)); return }
 
   // ratio is relative to the rank element's CURRENT (possibly already-shrunk) width, so each pass
   // multiplies the running scale rather than recomputing it from the original full size — needed
@@ -764,17 +776,18 @@ function shrinkOwnerRankToFit(pass, previousOverflow) {
   const nextScale = Math.max(OWNER_RANK_MIN_SCALE, Math.min(cMoonRankScale.value, cMoonRankScale.value * ratio))
   if (nextScale >= cMoonRankScale.value) {
     // No more progress possible from this tier — move on to tier 2 rather than looping forever.
-    nextTick(() => shrinkOwnerLabelToFit(0, undefined))
+    nextTick(() => shrinkOwnerLabelToFit(generation, 0, undefined))
     return
   }
   cMoonRankScale.value = nextScale
-  nextTick(() => shrinkOwnerRankToFit(pass + 1, overflow))
+  nextTick(() => shrinkOwnerRankToFit(generation, pass + 1, overflow))
 }
 
 // Tier 2 (see this block's own header comment): only ever runs once tier 1 has exhausted what
 // shrinking the rank text alone can usefully do. Same convergence approach (including the
 // previousOverflow "did that actually help" check), applied to the whole label.
-function shrinkOwnerLabelToFit(pass, previousOverflow) {
+function shrinkOwnerLabelToFit(generation, pass, previousOverflow) {
+  if (generation !== ownerRankScaleGeneration) return // superseded by a newer recalcOwnerRankScale()
   const topbar = topbarEl.value
   const labelEl = ownerLabelEl.value
   if (!topbar || !labelEl) return
@@ -791,7 +804,7 @@ function shrinkOwnerLabelToFit(pass, previousOverflow) {
   const nextScale = Math.max(OWNER_LABEL_MIN_SCALE, Math.min(ownerLabelScale.value, ownerLabelScale.value * ratio))
   if (nextScale >= ownerLabelScale.value) return
   ownerLabelScale.value = nextScale
-  nextTick(() => shrinkOwnerLabelToFit(pass + 1, overflow))
+  nextTick(() => shrinkOwnerLabelToFit(generation, pass + 1, overflow))
 }
 
 // ── Scale logic (mirrors pages/czone/[username].vue) ──────────
