@@ -810,11 +810,13 @@ const scale = ref(1)
 const topbarEl = ref(null)
 // Ref on .cz-topbar-right specifically (see template) — observed by its own ResizeObserver
 // (see onMounted below) alongside topbarEl, so recalcOwnerRankScale re-runs whenever THIS
-// element's own natural width changes for any reason: a longer/shorter username or rank name
-// (also covered by the watch below, belt-and-suspenders), but also the cZone Options button or
-// favorite star appearing/disappearing (build mode toggling, viewing your own zone vs. someone
-// else's), or the cMoon pill's text changing — none of which change cz-topbar's own HEIGHT, so
-// the pre-existing topbarEl-only observer wouldn't have caught them on its own.
+// element's own natural width changes: the cZone Options button or favorite star
+// appearing/disappearing, or the cMoon pill's text changing — none of which change cz-topbar's
+// own HEIGHT, so the pre-existing topbarEl-only observer wouldn't have caught them on its own.
+// Only effective above the @media (max-width: 768px) breakpoint, though: below it,
+// .cz-topbar-right is CSS-pinned to width:100%, so its own box size no longer reflects its
+// content and this observer won't fire for these same changes — the buildMode watch below
+// covers the build-mode-toggle case on mobile too.
 const topbarRightEl = ref(null)
 function recalcScale() {
   if (typeof window === 'undefined') return
@@ -859,6 +861,14 @@ function handleWindowResize() {
 // change is the single most common trigger for this whole fix, so it gets its own direct,
 // explicit watcher rather than relying solely on the observer noticing the resulting width change.
 watch(() => [viewedOwner.value?.username, viewedOwner.value?.cMoonRankName], () => {
+  nextTick(() => recalcOwnerRankScale())
+})
+
+// Explicit trigger for the one topbarRightEl-content-change case its ResizeObserver can miss on
+// mobile (see comment above topbarRightEl): build mode toggles the cZone Options / My cZone
+// buttons' visibility without changing .cz-topbar-right's own box width there, since it's
+// CSS-pinned to width:100% at that breakpoint.
+watch(() => cz.buildMode, () => {
   nextTick(() => recalcOwnerRankScale())
 })
 
