@@ -1104,16 +1104,18 @@ export async function reassignUserCMoon(userId, newCMoonId) {
     : null
 
   await prisma.$transaction(async (tx) => {
-    // Captains are placed into their cMoon by this same function (see cmoons.post.js /
-    // cmoons/[id].put.js — the CMoonCaptain row is always created first), so this check
-    // reflects captaincy of the DESTINATION cMoon at the moment of the move. Everyone else
-    // moving in — an ordinary admin reassignment, Balance Teams, or an accepted change
-    // request — starts that cMoon fresh at 0 cMoonPoints, same as a self-selected join (see
-    // selectCMoonForUser), rather than carrying over whatever they'd earned in a cMoon they
-    // previously belonged to.
-    const isNewCaptain = newCMoon
-      ? !!(await tx.cMoonCaptain.findUnique({ where: { cMoonId_userId: { cMoonId: newCMoon.id, userId } } }))
-      : false
+    // Every mover here starts the DESTINATION cMoon fresh at 0 cMoonPoints, same as a
+    // self-selected join (see selectCMoonForUser) — no exception for a captain. This used to
+    // skip the reset whenever the mover was already recorded as captain of the destination cMoon
+    // (captains are placed into their cMoon by this same function — see cmoons.post.js /
+    // cmoons/[id].put.js, where the CMoonCaptain row is always created first), on the reasoning
+    // that a captain might already belong to that cMoon and shouldn't lose their earned points.
+    // But the no-op guard above (`target.cMoonId === newCMoonId`) already returns before this
+    // transaction runs for exactly that "already belongs there" case — every captain who reaches
+    // HERE is, by construction, moving in from a genuinely DIFFERENT cMoon (or none), so the old
+    // exception only ever preserved a NEW captain's stale points from their PREVIOUS team, e.g.
+    // letting an achievement check briefly grant a cMoonPointsGte rank tier off the wrong team's
+    // total until the next periodic cMoonPoints sweep corrected it (see cmoon-points-aggregate.js).
     const result = await tx.user.updateMany({
       where: { id: userId, cMoonId: target.cMoonId },
       data: {
@@ -1133,7 +1135,7 @@ export async function reassignUserCMoon(userId, newCMoonId) {
         // unrelated timestamp instead of the actual departure time.
         cMoonOptedOut: false,
         cMoonOptedOutAt: null,
-        ...(newCMoon && !isNewCaptain ? { cMoonPoints: 0 } : {}),
+        ...(newCMoon ? { cMoonPoints: 0 } : {}),
       },
     })
     if (result.count === 0) throw new CMoonError(CMOON_SELECT_ERRORS.STALE_STATE)
