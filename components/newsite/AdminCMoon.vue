@@ -162,6 +162,17 @@
               <p v-if="runScoringNowResult" class="text-[11px] text-gray-600 mt-1">{{ runScoringNowResult }}</p>
               <p v-if="runScoringNowError" class="text-[11px] text-red-600 mt-1">{{ runScoringNowError }}</p>
             </div>
+            <div class="mt-2">
+              <button
+                type="button"
+                class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                :disabled="backfillDailyTasksLoading"
+                title="Re-checks the last 3 days' daily-task completions (login, cZone, game points, TKO points, wheel spins) and awards anything the live cron missed while it wasn't running. Safe to click any time — already-recorded completions are skipped, so this only ever fills in gaps, never double-awards. Lotto and monster-scan completions can't be recovered this way once their day has passed — only this run's own live data reflects those."
+                @click="backfillDailyTasks"
+              >{{ backfillDailyTasksLoading ? 'Backfilling…' : 'Backfill Missed Daily Tasks (last 3 days)' }}</button>
+              <p v-if="backfillDailyTasksResult" class="text-[11px] text-gray-600 mt-1">{{ backfillDailyTasksResult }}</p>
+              <p v-if="backfillDailyTasksError" class="text-[11px] text-red-600 mt-1">{{ backfillDailyTasksError }}</p>
+            </div>
           </div>
 
           <div class="border-t pt-3 mt-3">
@@ -1742,13 +1753,15 @@ const scoringJobStale = computed(() => {
   return Math.round((today - last) / 86400000) > 1
 })
 
-// The live daily-task cron ticks every minute — a heartbeat older than 10 minutes means it's
-// very likely stopped running, not just "no one completed a task yet".
+// The live daily-task cron ticks every 30 minutes — a heartbeat older than 45 minutes (30 plus a
+// generous buffer for a slow tick) means it's very likely stopped running, not just "no one
+// completed a task yet". Keep this comfortably above the actual tick interval (server/cron/
+// sync-guild-members.js) or every normal cycle falsely trips the warning.
 const dailyTaskCronStale = computed(() => {
   if (!scoring.dailyTaskCronLastRanAt) return true
   const last = new Date(scoring.dailyTaskCronLastRanAt)
   if (Number.isNaN(last.getTime())) return false
-  return (Date.now() - last.getTime()) > 10 * 60 * 1000
+  return (Date.now() - last.getTime()) > 45 * 60 * 1000
 })
 
 function filteredCtoons(input) {
@@ -2256,6 +2269,9 @@ const scoringSaving = ref(false)
 const runScoringNowLoading = ref(false)
 const runScoringNowResult = ref('')
 const runScoringNowError = ref('')
+const backfillDailyTasksLoading = ref(false)
+const backfillDailyTasksResult = ref('')
+const backfillDailyTasksError = ref('')
 const scoringError = ref('')
 
 function disabledListKey(kind) {
@@ -2333,6 +2349,26 @@ async function runScoringNow() {
     runScoringNowError.value = e?.data?.statusMessage || 'Failed to run scoring'
   } finally {
     runScoringNowLoading.value = false
+  }
+}
+
+// Manually re-checks the last few days' daily-task completions against the live cron's own
+// boundaries — see backfill-daily-tasks.post.js's own comment for why this is needed on top of
+// the live cron itself (an outage that spans a boundary rollover permanently loses that day's
+// completions to the live cron alone; this catches up using each day's own past boundary instead
+// of "right now"'s). Also refreshes the "last ran" status afterward.
+async function backfillDailyTasks() {
+  backfillDailyTasksResult.value = ''
+  backfillDailyTasksError.value = ''
+  backfillDailyTasksLoading.value = true
+  try {
+    const res = await $fetch('/api/admin/cmoons/backfill-daily-tasks', { method: 'POST', body: { days: 3 } })
+    backfillDailyTasksResult.value = `Done — ${res.recorded} missed completion(s) recorded across the last ${res.days} day(s).`
+    await loadScoring()
+  } catch (e) {
+    backfillDailyTasksError.value = e?.data?.statusMessage || 'Failed to backfill daily tasks'
+  } finally {
+    backfillDailyTasksLoading.value = false
   }
 }
 

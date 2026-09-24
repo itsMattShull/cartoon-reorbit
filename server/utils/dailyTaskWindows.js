@@ -8,8 +8,12 @@
 //  - 8am America/Chicago: Winwheel spins, Lotto purchases, monster barcode scans
 import { DateTime } from 'luxon'
 
-export function getChicagoDailyBoundary() {
-  const chicagoNow = DateTime.now().setZone('America/Chicago')
+// `asOf` (default: now) lets a caller ask "what was the applicable boundary at this past
+// instant" instead of always the current one — used by the daily-task backfill tool
+// (server/api/admin/cmoons/backfill-daily-tasks.post.js) to re-run this same detection logic for
+// a day the live cron missed, without duplicating its boundary math.
+export function getChicagoDailyBoundary(asOf = new Date()) {
+  const chicagoNow = DateTime.fromJSDate(asOf).setZone('America/Chicago')
   let boundaryLocal = chicagoNow.set({ hour: 20, minute: 0, second: 0, millisecond: 0 })
   if (chicagoNow < boundaryLocal) boundaryLocal = boundaryLocal.minus({ days: 1 })
   return boundaryLocal.toUTC().toJSDate()
@@ -32,7 +36,24 @@ export function getChicagoCalendarDayStart() {
   return DateTime.now().setZone('America/Chicago').startOf('day').toUTC().toJSDate()
 }
 
-export function getChicagoMorningWindowStart() {
+// The NEXT occurrence of the exact same wall-clock boundary a `getChicagoDailyBoundary`/
+// getChicagoMorningWindowStart` result represents, one Chicago calendar day later — used as a
+// detection window's END bound (server/utils/cmoon.js's recordDailyTaskCompletions). Deliberately
+// NOT `new Date(boundary.getTime() + 24*60*60*1000)`: a Chicago calendar day is only 24 hours on
+// 363 days a year — it's 23 hours on the spring-forward transition and 25 on the fall-back one —
+// so a flat +24h either cuts an hour off the end of the window (fall-back, whose real window is
+// 25 hours — +24h lands an hour short, silently missing real activity in that last hour) or lets
+// it run an hour into the NEXT window (spring-forward, whose real window is only 23 hours — +24h
+// overshoots by an hour, double-counting that hour's activity across two consecutive days).
+// Stepping the boundary forward via Luxon's calendar-aware `.plus({ days: 1 })` in the Chicago
+// zone always lands on the correct wall-clock instant regardless of DST, exactly like
+// getChicagoDailyBoundary's own `asOf` stepping does.
+export function addOneChicagoDay(boundary) {
+  return DateTime.fromJSDate(boundary).setZone('America/Chicago').plus({ days: 1 }).toUTC().toJSDate()
+}
+
+// `asOf` — see getChicagoDailyBoundary's own comment above.
+export function getChicagoMorningWindowStart(asOf = new Date()) {
   // Previously computed via now.toLocaleString(...) round-tripped back through `new Date(...)`,
   // which loses now's millisecond component and leaks it into the computed offset — the returned
   // instant jittered by up to ~1s between calls instead of landing on a stable, repeatable 08:00
@@ -41,7 +62,7 @@ export function getChicagoMorningWindowStart() {
   // dedup key (UserDailyTaskCompletion's unique (userId, date) constraint) — there, jitter would
   // defeat ON CONFLICT DO NOTHING and re-award the same morning-window completion on every tick.
   // Luxon's .set(...) mirrors getChicagoDailyBoundary above and is stable across calls.
-  const chicagoNow = DateTime.now().setZone('America/Chicago')
+  const chicagoNow = DateTime.fromJSDate(asOf).setZone('America/Chicago')
   let boundaryLocal = chicagoNow.set({ hour: 8, minute: 0, second: 0, millisecond: 0 })
   if (chicagoNow < boundaryLocal) boundaryLocal = boundaryLocal.minus({ days: 1 })
   return boundaryLocal.toUTC().toJSDate()
