@@ -87,6 +87,7 @@ export const ADMIN_SECTIONS = [
   S('cMoonJoinEffects', 'cMoon Join Effects', 'games', nu('AdminCMoonJoinEffects')),
   S('czoneEffects', 'cZone Effects', 'games', nu('AdminCZoneEffects')),
   S('cmoonChangeRequests', 'cMoon Change Requests', 'games', nu('AdminCMoonChangeRequests')),
+  S('cMoonEnemies', 'Manage cMoon Enemies', 'games', nu('AdminCMoonEnemies')),
   S('lotto', 'Manage Lotto', 'games', legacy('AdminLegacyLotto')),
   S('clashTournaments', 'Clash Tournaments', 'games', legacy('AdminLegacyClashTournaments')),
   S('monsters', 'Manage Monsters', 'games', legacy('AdminLegacyMonsters'), { dense: true }),
