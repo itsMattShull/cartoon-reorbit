@@ -340,6 +340,7 @@ html.newsite-active [role="button"]:not([aria-disabled="true"]) {
   <CMoonSelectModal />
   <FullscreenEffectHost />
   <CMoonRewardModal />
+  <CMoonBattlePopupHost />
 </template>
 
 <script setup>
