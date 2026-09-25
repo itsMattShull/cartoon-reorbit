@@ -135,7 +135,7 @@ ALTER TABLE "CMoonEnemyReward" ADD CONSTRAINT "CMoonEnemyReward_backgroundId_fke
 ALTER TABLE "CMoonEnemyBattle" ADD CONSTRAINT "CMoonEnemyBattle_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "CMoonEnemyBattle" ADD CONSTRAINT "CMoonEnemyBattle_enemyMemberId_fkey" FOREIGN KEY ("enemyMemberId") REFERENCES "CMoonEnemyMember"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "CMoonEnemyBattle" ADD CONSTRAINT "CMoonEnemyBattle_enemyMemberId_fkey" FOREIGN KEY ("enemyMemberId") REFERENCES "CMoonEnemyMember"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "CMoonEnemyBattle" ADD CONSTRAINT "CMoonEnemyBattle_cMoonId_fkey" FOREIGN KEY ("cMoonId") REFERENCES "CMoon"("id") ON DELETE CASCADE ON UPDATE CASCADE;

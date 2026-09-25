@@ -5201,7 +5201,13 @@ model CMoonEnemyBattle {
   endedAt           DateTime?
 
   user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  enemyMember CMoonEnemyMember @relation(fields: [enemyMemberId], references: [id], onDelete: Cascade)
+  // Restrict, NOT Cascade: this table is the permanent battle-log audit trail (see the admin
+  // cMoon Battle Logs page) — a Cascade here would silently destroy history the moment an admin
+  // deleted the enemy member it was fought against. The admin delete endpoint for
+  // CMoonEnemyMember pre-checks for this (friendlier message) and this FK is the real backstop;
+  // an admin who wants a member gone should deactivate it (active: false) instead, which is
+  // enough to stop it from being offered by the popup without touching any history.
+  enemyMember CMoonEnemyMember @relation(fields: [enemyMemberId], references: [id], onDelete: Restrict)
   cMoon       CMoon            @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
 
   // "At most one in-progress battle per user" as a real DB constraint, not just an API-layer
