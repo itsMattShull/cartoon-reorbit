@@ -19,7 +19,7 @@ export default defineEventHandler(async () => {
       // concern from the general per-user cMoon badge lookup (leaderboard/cmoon-badges.post.js),
       // which stays unfiltered so locked-cMoon members keep their badge on non-cMoon boards.
       where: { joinLocked: false },
-      select: { id: true, name: true, color: true, memberCount: true, teamScore: true },
+      select: { id: true, name: true, color: true, memberCount: true, teamScore: true, battleWins: true, battleLosses: true },
     }),
     // Sum of CMoonScoreLog points actually earned FOR each team, not teamScore (which sums every
     // point the team has EVER earned, including from members who've since left — see
