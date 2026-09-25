@@ -39,6 +39,24 @@ export default defineEventHandler(async (event) => {
     data.cMoonOptOutCooldownDays = days
   }
 
+  // How often the cMoon Enemy Battles popup rolls on page navigation, and how long a player must
+  // wait after being offered one (whether they fought or declined) before being offered again —
+  // see server/api/cmoon/battle/consider.post.js, the only reader of either field.
+  if (body?.cMoonBattlePopupChancePercent !== undefined) {
+    const pct = Number(body.cMoonBattlePopupChancePercent)
+    if (!Number.isInteger(pct) || pct < 0 || pct > 100) {
+      throw createError({ statusCode: 400, statusMessage: 'Battle popup chance must be a whole number between 0 and 100' })
+    }
+    data.cMoonBattlePopupChancePercent = pct
+  }
+  if (body?.cMoonBattlePopupCooldownMinutes !== undefined) {
+    const minutes = Number(body.cMoonBattlePopupCooldownMinutes)
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
+      throw createError({ statusCode: 400, statusMessage: 'Battle popup cooldown must be a whole number of minutes between 0 and 1440' })
+    }
+    data.cMoonBattlePopupCooldownMinutes = minutes
+  }
+
   const updated = await db.globalGameConfig.upsert({
     where: { id: 'singleton' },
     create: { id: 'singleton', dailyPointLimit: 100, ...data },
@@ -50,13 +68,26 @@ export default defineEventHandler(async (event) => {
     userId: me.id,
     area: 'cMoon',
     key: 'cMoonEnabled',
-    prevValue: { cMoonEnabled: wasEnabled, cMoonOptOutCooldownDays: existing?.cMoonOptOutCooldownDays },
-    newValue: { cMoonEnabled: enabled, cMoonEnabledAt: updated.cMoonEnabledAt, cMoonOptOutCooldownDays: updated.cMoonOptOutCooldownDays },
+    prevValue: {
+      cMoonEnabled: wasEnabled,
+      cMoonOptOutCooldownDays: existing?.cMoonOptOutCooldownDays,
+      cMoonBattlePopupChancePercent: existing?.cMoonBattlePopupChancePercent,
+      cMoonBattlePopupCooldownMinutes: existing?.cMoonBattlePopupCooldownMinutes,
+    },
+    newValue: {
+      cMoonEnabled: enabled,
+      cMoonEnabledAt: updated.cMoonEnabledAt,
+      cMoonOptOutCooldownDays: updated.cMoonOptOutCooldownDays,
+      cMoonBattlePopupChancePercent: updated.cMoonBattlePopupChancePercent,
+      cMoonBattlePopupCooldownMinutes: updated.cMoonBattlePopupCooldownMinutes,
+    },
   })
 
   return {
     cMoonEnabled: updated.cMoonEnabled,
     cMoonEnabledAt: updated.cMoonEnabledAt,
     cMoonOptOutCooldownDays: updated.cMoonOptOutCooldownDays,
+    cMoonBattlePopupChancePercent: updated.cMoonBattlePopupChancePercent,
+    cMoonBattlePopupCooldownMinutes: updated.cMoonBattlePopupCooldownMinutes,
   }
 })
