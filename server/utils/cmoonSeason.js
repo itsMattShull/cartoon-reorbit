@@ -15,7 +15,19 @@ export async function getSeasonConfig() {
   // Auto-provision on first read — no separate "enable this feature" admin step needed before
   // the section can render its (empty-tracker) defaults, same convention GlobalGameConfig
   // callers use for their own singleton row.
-  return prisma.cMoonSeasonConfig.create({ data: { id: SEASON_CONFIG_ID } })
+  try {
+    return await prisma.cMoonSeasonConfig.create({ data: { id: SEASON_CONFIG_ID } })
+  } catch (err) {
+    // Lost a race against another concurrent first-read that also saw no row and tried to create
+    // it (this function is called from the public, unauthenticated cmoon-season endpoint, which
+    // any number of players can hit at once on a fresh install) — the loser just re-reads what
+    // the winner created instead of crashing.
+    if (err?.code === 'P2002') {
+      const existing = await prisma.cMoonSeasonConfig.findUnique({ where: { id: SEASON_CONFIG_ID } })
+      if (existing) return existing
+    }
+    throw err
+  }
 }
 
 async function battleCounts(startedAt, outcome) {
