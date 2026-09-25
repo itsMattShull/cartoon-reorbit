@@ -87,10 +87,11 @@ export const SCORE_GAME_OPTIONS = SCORE_GAMES.map(({ name, label }) => ({ key: n
 export const WIN_GAME_OPTIONS = WIN_GAMES.map(({ name, label }) => ({ key: name, label }))
 
 // Every category ever written to CMoonScoreLog.category — HIGH_SCORE/TOP10/DAILY_TASK from this
-// file (see runDailyCMoonScoring/recordDailyTaskCompletions above), plus ADMIN_BACKFILL from
-// server/workers/cmoon-daily-task-backfill.worker.js's one-time "Backfill cMoon Points" tool.
+// file (see runDailyCMoonScoring/recordDailyTaskCompletions above), ADMIN_BACKFILL from
+// server/workers/cmoon-daily-task-backfill.worker.js's one-time "Backfill cMoon Points" tool, and
+// ENEMY_BATTLE_WIN from server/utils/cmoonEnemyBattle.js (the cMoon Enemy Battles mini-game).
 // Exported so the admin points-log endpoint has a fixed filter list without a DISTINCT query.
-export const CMOON_SCORE_LOG_CATEGORIES = ['HIGH_SCORE', 'TOP10', 'DAILY_TASK', 'ADMIN_BACKFILL']
+export const CMOON_SCORE_LOG_CATEGORIES = ['HIGH_SCORE', 'TOP10', 'DAILY_TASK', 'ADMIN_BACKFILL', 'ENEMY_BATTLE_WIN']
 
 const GAME_LABEL_BY_KEY = new Map([...SCORE_GAMES, ...WIN_GAMES].map(g => [g.name, g.label]))
 
@@ -114,6 +115,8 @@ export function describeCMoonScoreLogSource(category, detail) {
       return 'Daily Task completion'
     case 'ADMIN_BACKFILL':
       return 'Admin backfill (Backfill cMoon Points tool)'
+    case 'ENEMY_BATTLE_WIN':
+      return 'Enemy Battle victory'
     default:
       return category || 'Unknown'
   }

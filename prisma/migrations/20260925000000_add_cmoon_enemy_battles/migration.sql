@@ -14,6 +14,9 @@ CREATE TYPE "CMoonEnemyBattleOutcome" AS ENUM ('WIN', 'LOSS', 'ABANDONED');
 CREATE TYPE "CMoonEnemyRewardType" AS ENUM ('CTOON', 'AVATAR', 'BACKGROUND');
 
 -- AlterTable
+ALTER TABLE "User" ADD COLUMN     "lastCMoonBattlePopupAt" TIMESTAMP(3);
+
+-- AlterTable
 ALTER TABLE "GlobalGameConfig" ADD COLUMN     "cMoonBattlePopupChancePercent" INTEGER NOT NULL DEFAULT 3,
 ADD COLUMN     "cMoonBattlePopupCooldownMinutes" INTEGER NOT NULL DEFAULT 20;
 

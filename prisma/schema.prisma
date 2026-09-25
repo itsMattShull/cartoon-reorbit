@@ -524,6 +524,13 @@ model User {
   cMoon                  CMoon?          @relation(fields: [cMoonId], references: [id], onDelete: SetNull)
   cMoonSelectedAt        DateTime?
   cMoonAutoAssigned      Boolean         @default(false)
+  // cMoon Enemy Battles: when the site-wide battle popup was last SHOWN to this user (a chance
+  // roll that hit — see server/api/cmoon/battle/consider.post.js), regardless of whether they
+  // went on to fight or just dismissed it. Distinct from CMoonEnemyBattle.startedAt, which is
+  // only set once a battle is actually started — without this separate field, a user who
+  // repeatedly dismisses the popup without ever fighting would have no record to cool down
+  // against, and the chance would re-roll (and could re-hit) on every single page navigation.
+  lastCMoonBattlePopupAt DateTime?
   // Set when a player explicitly declines to pick a cMoon from the initial join modal (there is no
   // more time-based auto-assignment — see server/utils/cmoon.js). Only meaningful while cMoonId is
   // null; cleared back to false on a successful selectCMoonForUser. Lets the modal stop popping up
