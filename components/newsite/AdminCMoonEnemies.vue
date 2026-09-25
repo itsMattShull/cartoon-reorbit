@@ -8,7 +8,7 @@
         member. Popup appearance rate and cooldown live on the
         <NuxtLink to="/newsite/admin/cMoon" class="text-indigo-600 hover:underline">cMoons</NuxtLink> page;
         results are recorded on the
-        <NuxtLink to="/newsite/admin/cmoonBattleLogs" class="text-indigo-600 hover:underline">cMoon Battle Logs</NuxtLink> page.
+        <NuxtLink to="/newsite/admin/cMoonBattleLogs" class="text-indigo-600 hover:underline">cMoon Battle Logs</NuxtLink> page.
       </p>
 
       <p v-if="loadError" class="text-red-600">{{ loadError }}</p>
