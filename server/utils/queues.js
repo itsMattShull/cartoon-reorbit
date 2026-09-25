@@ -1,4 +1,7 @@
 import { Queue } from 'bullmq'
+import { isStaleDissolveLaunchJob } from './dissolveAuctionLaunchStaleness.js'
+
+export { isStaleDissolveLaunchJob }
 
 export const redisConnection = {
   host: process.env.REDIS_HOST,
@@ -154,11 +157,20 @@ export const dissolveAuctionLaunchQueue = new Queue(
 /**
  * Schedule (or reschedule) a delayed BullMQ job that creates one dissolve auction.
  * Uses the DissolveAuctionQueue.id as the BullMQ job ID for easy lookup/cancellation.
+ *
+ * The target time is stamped onto the job itself (scheduledForMs) so the
+ * worker can tell a stale job apart from the entry's current schedule — if a
+ * job is already `active` when a reschedule comes in (its delay already
+ * elapsed and BullMQ has dequeued it), this function can't cancel or replace
+ * it, but the worker can detect the mismatch against the entry's freshly
+ * updated scheduledFor and defer instead of acting on out-of-date data. See
+ * server/workers/dissolve-auction-launch.worker.js.
  * @param {string} queueEntryId
  * @param {Date|string} scheduledFor
  */
 export async function scheduleDissolveAuctionLaunch(queueEntryId, scheduledFor) {
-  const delay = Math.max(0, new Date(scheduledFor).getTime() - Date.now())
+  const scheduledForMs = new Date(scheduledFor).getTime()
+  const delay = Math.max(0, scheduledForMs - Date.now())
   const existing = await dissolveAuctionLaunchQueue.getJob(queueEntryId)
   if (existing) {
     const state = await existing.getState()
@@ -167,7 +179,7 @@ export async function scheduleDissolveAuctionLaunch(queueEntryId, scheduledFor) 
   }
   await dissolveAuctionLaunchQueue.add(
     'launch',
-    { queueEntryId },
+    { queueEntryId, scheduledForMs },
     { jobId: queueEntryId, delay }
   )
 }
