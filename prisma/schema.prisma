@@ -4994,3 +4994,79 @@ model BlackjackSession {
   // Serves the stale-session sweeper, which filters on status alone.
   @@index([status, windowStart])
 }
+
+// ── Encyclopedia feature ────────────────────────────────────────────────
+// Admin-authored wiki-style reference pages, reachable from the top nav (Encyclopedia) and
+// searchable by title. Body content is sanitized HTML — see server/utils/sanitizeEncyclopediaHtml.js
+// for the allowlist, which additionally permits an <a> whose href is a relative link to another
+// entry's own page (/newsite/encyclopedia/{slug}), on top of the same http/https/mailto scheme
+// allowance server/utils/sanitizeTutorialHtml.js uses for the Tutorial page this is styled after.
+// A dead cross-entry link (the target entry was later deleted or deactivated) is a normal,
+// accepted outcome of storing links as plain hrefs in prose rather than a real FK — the entry
+// detail page shows a friendly "not found" state for an unresolved slug, same as any wiki.
+model EncyclopediaEntry {
+  id            String   @id @default(uuid())
+  title         String
+  // URL segment, kebab-cased from the title at creation and independently editable after (so a
+  // later title edit never breaks existing inbound links/bookmarks unless the admin explicitly
+  // changes the slug too).
+  slug          String   @unique
+  heroImagePath String?
+  // Sanitized HTML — see this model's own comment above. Defaults to '' (not null) so every
+  // consumer can render it directly with no null-guard.
+  body          String   @default("")
+  // Inactive entries are hidden from the public index, search, and direct-slug lookup (a 404,
+  // not a partial/broken page) but stay editable in the admin list — same "deactivate rather
+  // than force a delete-or-orphan-links choice" stance as the cMoon Enemy Battles admin pages.
+  active        Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([active, sortOrder])
+}
+
+// ── cMoon Season Nav feature ─────────────────────────────────────────────
+// Powers the customizable "seasonal updates" section on the bottom half of the cMoon navigation
+// page (components/newsite/CMoonNav.vue): an editable header/blurb plus a small set of
+// admin-defined progress trackers (e.g. "100 NPC battle wins", "500 average points") shown as one
+// progress bar per cMoon team. Deliberately season-scoped, not all-time: every tracker's current
+// value is computed fresh from CMoonEnemyBattle/CMoonScoreLog rows dated on/after `startedAt`
+// (see server/utils/cmoonSeason.js), never from the lifetime running totals on CMoon itself
+// (battleWins/battleLosses/teamScore) — those never reset, so a goal meant to describe "this
+// season" would otherwise silently keep counting a previous season's progress forever. Starting a
+// new season (server/api/admin/cmoon-season.post.js) only ever moves `startedAt` forward; it never
+// deletes CMoonEnemyBattle/CMoonScoreLog history, so a later admin change is non-destructive and a
+// past season's raw data is still there if ever needed, just no longer in any tracker's window.
+model CMoonSeasonConfig {
+  id        String   @id // always 'singleton', same convention as GlobalGameConfig
+  header    String   @default("cMoons Season 1")
+  startedAt DateTime @default(now())
+  // Sanitized HTML — see server/utils/sanitizeEncyclopediaHtml.js (reused as-is; this blurb has
+  // the exact same "short admin-authored prose, styled like the Tutorial page" shape as an
+  // Encyclopedia entry's body, so a second sanitizer would just be the same allowlist twice).
+  blurb     String   @default("")
+  updatedAt DateTime @updatedAt
+}
+
+enum CMoonSeasonTrackerMetric {
+  BATTLE_WINS // count of CMoonEnemyBattle rows with outcome=WIN, endedAt >= startedAt
+  BATTLE_LOSSES // same, outcome=LOSS
+  TEAM_SCORE // SUM(CMoonScoreLog.points) where createdAt >= startedAt — season-scoped teamScore
+  AVG_POINTS // the same sum divided by the cMoon's current memberCount (plain average, no
+  // small-team shrinkage — shrinkage exists to keep the competitive leaderboard's RANKING fair to
+  // small teams, which doesn't apply to a single team's own progress toward its own goal)
+}
+
+model CMoonSeasonTracker {
+  id          String                   @id @default(uuid())
+  label       String
+  metricType  CMoonSeasonTrackerMetric
+  targetValue Float
+  active      Boolean                  @default(true)
+  sortOrder   Int                      @default(0)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  @@index([active, sortOrder])
+}
