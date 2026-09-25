@@ -15,7 +15,7 @@
 // link to another Encyclopedia entry's own page, since "entries can link to each other" is a
 // named requirement of this feature the Tutorial page never had. That allowance is intentionally
 // narrow — only `/newsite/encyclopedia/{slug}` (letters/digits/hyphens only, matching how a slug
-// is generated in server/utils/encyclopediaSlug.js), nothing else relative, so this can't become
+// is generated in utils/encyclopediaSlug.js), nothing else relative, so this can't become
 // an open redirect or a way to reference an arbitrary internal route.
 //
 // Security model: identical to sanitizeTutorialHtml.js — a linear tag-boundary scanner, not a
@@ -27,7 +27,7 @@ const ALLOWED_TAGS = new Set(['p', 'b', 'strong', 'i', 'em', 'u', 'ul', 'ol', 'l
 const SELF_CLOSING_TAGS = new Set(['br'])
 const DROP_CONTENT_TAGS = new Set(['script', 'style', 'iframe', 'object', 'embed', 'svg', 'math', 'template', 'noscript'])
 const ALLOWED_SCHEMES = new Set(['http:', 'https:', 'mailto:'])
-// Mirrors the slug shape server/utils/encyclopediaSlug.js produces (lowercase letters, digits,
+// Mirrors the slug shape utils/encyclopediaSlug.js produces (lowercase letters, digits,
 // hyphens, 1-96 chars) — kept as a literal regex here rather than importing that file, so this
 // sanitizer's safety property doesn't depend on a second file's own definition ever changing
 // compatibly; a slug format change is a deliberate, reviewable edit to this line too.

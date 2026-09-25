@@ -4,13 +4,14 @@
 // (slug uniqueness) are the calling endpoint's job, since that needs Prisma and this module
 // deliberately doesn't.
 import { sanitizeEncyclopediaHtml } from './sanitizeEncyclopediaHtml.js'
+// Relative import of a root utils/ file, same convention server/utils/cmoon.js uses for
+// utils/cmoonEffectTypes.js — see that file's own comment. Keeps slugify/isValidSlug identical
+// between this server-side validator and the admin editor's live title→slug preview.
+import { slugify, isValidSlug, SLUG_MAX_LENGTH } from '../../utils/encyclopediaSlug.js'
+
+export { slugify, isValidSlug, SLUG_MAX_LENGTH }
 
 export const TITLE_MAX_LENGTH = 120
-export const SLUG_MAX_LENGTH = 96
-// Kept as a literal here (not imported from sanitizeEncyclopediaHtml.js) for the same reason
-// that file gives for not importing this one back — see its own header comment.
-export const SLUG_RE = /^[a-z0-9-]{1,96}$/
-
 export const SORT_ORDER_MIN = -9999
 export const SORT_ORDER_MAX = 9999
 
@@ -20,26 +21,8 @@ export const SORT_ORDER_MAX = 9999
 // entries.get.js's own list handler) if this weren't blocked here.
 const RESERVED_SLUGS = new Set(['entries'])
 
-// Kebab-cases a title into a candidate slug: lowercase, non-alphanumeric runs collapsed to a
-// single hyphen, leading/trailing hyphens trimmed, capped at SLUG_MAX_LENGTH. Purely a starting
-// suggestion for a NEW entry — an admin can always override it, and editing the title later never
-// re-derives or touches an existing slug (see parseEntryBody's own comment).
-export function slugify(title) {
-  return String(title || '')
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, SLUG_MAX_LENGTH)
-    .replace(/-+$/g, '')
-}
-
 export function isValidTitle(value) {
   return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= TITLE_MAX_LENGTH
-}
-
-export function isValidSlug(value) {
-  return typeof value === 'string' && SLUG_RE.test(value)
 }
 
 export function isValidSortOrder(value) {
