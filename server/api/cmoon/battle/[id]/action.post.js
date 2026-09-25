@@ -11,7 +11,7 @@ import { grantRewardInTx, enqueueCtoonJobs } from '@/server/utils/achievements'
 import { recomputeCMoonPointsForUsers } from '@/server/cron/cmoon-points-aggregate'
 import {
   isValidBattleAction, resolveBattleRound, rollEnemyAction, rollEnemyRewards, buildGrantableReward,
-  serializeBattleForClient,
+  serializeBattleForClient, MAX_ROUNDS_SAFETY,
 } from '@/server/utils/cmoonEnemyBattle'
 
 export default defineEventHandler(async (event) => {
@@ -99,6 +99,13 @@ export default defineEventHandler(async (event) => {
     const result = await resolveLoss(battle, roundLog, submittedRound)
     return { round: roundEntry, battle: serializeBattleForClient(result) }
   }
+  // Neither side reached 0 this round — under a pathological RNG streak (see this constant's own
+  // comment) a battle could otherwise run indefinitely, one round per request, so cap it here the
+  // same way an idle timeout does: no penalty, just ended.
+  if (submittedRound + 1 >= MAX_ROUNDS_SAFETY) {
+    const result = await resolveAbandoned(battle, roundLog, submittedRound, newPlayerHp, newEnemyHp)
+    return { round: roundEntry, battle: serializeBattleForClient(result) }
+  }
 
   const updated = await db.cMoonEnemyBattle.update({
     where: { id: battleId },
@@ -173,5 +180,20 @@ async function resolveLoss(battle, roundLog, submittedRound) {
       },
       include: { enemyMember: { include: { faction: true } } },
     })
+  })
+}
+
+// MAX_ROUNDS_SAFETY was reached with neither side at 0 — ends the battle the same way the idle
+// timeout does (ABANDONED: no CMoon.battleLosses increment, no penalty — see that enum value's
+// own schema comment), just triggered by round count instead of elapsed time.
+async function resolveAbandoned(battle, roundLog, submittedRound, playerHpRemaining, enemyHpRemaining) {
+  return db.cMoonEnemyBattle.update({
+    where: { id: battle.id },
+    data: {
+      status: 'RESOLVED', outcome: 'ABANDONED', roundNumber: submittedRound + 1,
+      playerHpRemaining, enemyHpRemaining,
+      roundLog, endedAt: new Date(), activeUserId: null,
+    },
+    include: { enemyMember: { include: { faction: true } } },
   })
 }

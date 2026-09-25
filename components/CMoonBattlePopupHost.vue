@@ -168,10 +168,19 @@ function onClose() {
   else close()
 }
 
-watch(() => route.path, () => {
+// Client-only, deliberately not `{ immediate: true }` on a bare top-level watch: this component
+// is unconditionally in the layout, so a top-level immediate watch would also run during SSR
+// (every component's setup() executes server-side too) — an extra server-side roll against
+// /api/cmoon/battle/consider on every full page load, on top of the one this onMounted below
+// fires once hydration completes, effectively giving a cold load double the configured chance.
+// onMounted never runs during SSR, so this fires exactly once per real page view: on mount for
+// the first load, then again on each subsequent client-side route change below.
+function maybeCheck() {
   if (isAdminRoute.value) return
   checkOnNavigate()
-}, { immediate: true })
+}
+onMounted(maybeCheck)
+watch(() => route.path, maybeCheck)
 </script>
 
 <style scoped>
