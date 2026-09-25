@@ -6,8 +6,13 @@ import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { invalidateGlobalConfigCache } from '@/server/utils/cmoon'
+import { assertSameOrigin } from '@/server/utils/requireAdmin'
 
 export default defineEventHandler(async (event) => {
+  // Pre-existing gap: this endpoint had no CSRF check before it also grew the two
+  // cMoonBattlePopup* fields below — added while touching this file for that, matching every
+  // other admin mutation endpoint's convention (see server/utils/requireAdmin.js).
+  assertSameOrigin(event)
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try { me = await $fetch('/api/auth/me', { headers: { cookie } }) } catch { throw createError({ statusCode: 401, statusMessage: 'Unauthorized' }) }
