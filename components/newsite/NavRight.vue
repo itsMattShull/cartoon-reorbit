@@ -55,6 +55,20 @@ const props = defineProps({
   box-sizing: border-box;
 }
 
+/* .topbar-nav-right is `overflow: hidden` (layouts/newsite-template.vue), so any row content
+   wider than its allotted space is silently clipped rather than wrapped or shrunk — `white-space:
+   nowrap` on .blue-button plus flexbox's `min-width: auto` default means these 8 buttons can
+   never compress below their own text width no matter how tight the row gets. Reported as
+   "Settings" getting cut off on desktop: --font-family loads Nunito from Google Fonts with
+   `display: swap` (see the @import above), so any request that's slow, blocked, or briefly
+   between the fallback-font paint and the swap renders this row in a bolder/wider fallback
+   sans-serif — exactly the kind of few-extra-pixels-per-button variance a fixed-width row with no
+   slack can't absorb. Trimmed here (not in BlueButton.vue) so only this specific row gets the
+   extra breathing room. */
+.nav-right :deep(.blue-button) {
+  padding: 4px 10px;
+}
+
 @media (max-width: 768px) {
   .nav-right {
     flex-wrap: wrap;
