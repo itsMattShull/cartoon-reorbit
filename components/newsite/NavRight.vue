@@ -61,5 +61,18 @@ const props = defineProps({
     height: auto;
     padding: 4px 6px;
   }
+
+  /* On mobile this row always renders exactly 6 buttons (My cWorld/cMart/Auctions/Trades/Games/
+     the Encyclopedia dropdown trigger — Redeem/Settings move to NavLeft.vue instead), one more
+     than BlueButton's own shared mobile size leaves room for: at BlueButton's default mobile
+     size the 6th button had nowhere to go but its own wrapped row, landing centered and alone
+     beneath the other five. Sized here (not in BlueButton.vue itself) so the shrink is scoped to
+     this specific row instead of every blue button on the site. :deep() reaches into BlueButton's
+     own scoped style, and into NavEncyclopediaDropdown's trigger button, since both render as
+     genuine DOM descendants of .nav-right despite being separate components. */
+  .nav-right :deep(.blue-button) {
+    font-size: 0.64rem;
+    padding: 3px 5px;
+  }
 }
 </style>

@@ -155,6 +155,15 @@ onBeforeUnmount(() => {
   gap: 4px;
 }
 
+@media (max-width: 768px) {
+  /* Matches the .blue-button shrink NavRight.vue applies at this breakpoint (see its own
+     comment) — without this, the caret would keep its full-size gap while the button's own
+     font/padding shrink around it, throwing off the otherwise-tightened row. */
+  .encyclopedia-trigger {
+    gap: 2px;
+  }
+}
+
 .encyclopedia-caret {
   display: inline-block;
   font-size: 0.7em;
