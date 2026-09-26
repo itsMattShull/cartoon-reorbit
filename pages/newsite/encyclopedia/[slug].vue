@@ -12,14 +12,14 @@
         class="encyclopedia-hero"
       />
 
-      <NuxtLink to="/newsite/encyclopedia" class="encyclopedia-back">← Encyclopedia</NuxtLink>
+      <NuxtLink to="/newsite/encyclopedia" class="encyclopedia-back">← Lore</NuxtLink>
       <h1 class="encyclopedia-entry-title">{{ entry.title }}</h1>
 
       <div class="encyclopedia-prose" v-html="entry.body" @click="onProseClick"></div>
     </template>
 
     <template v-else>
-      <NuxtLink to="/newsite/encyclopedia" class="encyclopedia-back">← Encyclopedia</NuxtLink>
+      <NuxtLink to="/newsite/encyclopedia" class="encyclopedia-back">← Lore</NuxtLink>
       <h1 class="encyclopedia-entry-title">Entry not found</h1>
       <p class="encyclopedia-error">This entry doesn't exist, or is no longer available.</p>
     </template>
@@ -35,7 +35,7 @@ definePageMeta({
   middleware: 'newsite',
   showAdbar: true,
   showNav: true,
-  title: 'Encyclopedia',
+  title: 'Lore',
   mainContentScrollY: true,
 })
 
@@ -56,7 +56,7 @@ const { data } = await useFetch(() => `/api/encyclopedia/${slug.value}`, {
 })
 const entry = computed(() => data.value || null)
 
-useHead({ title: computed(() => entry.value ? `${entry.value.title} | Encyclopedia | Cartoon ReOrbit` : 'Encyclopedia | Cartoon ReOrbit') })
+useHead({ title: computed(() => entry.value ? `${entry.value.title} | Lore | Cartoon ReOrbit` : 'Lore | Cartoon ReOrbit') })
 
 // Sanitized body HTML lands here via v-html, not NuxtLink, so a link to another entry is a plain
 // <a> that would otherwise trigger a full page reload. Intercepting only the exact internal-entry

@@ -1,16 +1,16 @@
 <template>
-  <div ref="triggerWrap" class="economy-trigger-wrap">
+  <div ref="triggerWrap" class="encyclopedia-trigger-wrap">
     <BlueButton
       type="button"
-      class="economy-trigger"
+      class="encyclopedia-trigger"
       :style="{ height: buttonHeight }"
-      data-nav-sound="economy"
+      data-nav-sound="encyclopedia"
       aria-haspopup="true"
       :aria-expanded="open"
       @click="toggle"
     >
-      Economy
-      <span class="economy-caret" :class="{ 'economy-caret-open': open }" aria-hidden="true">▾</span>
+      Encyclopedia
+      <span class="encyclopedia-caret" :class="{ 'encyclopedia-caret-open': open }" aria-hidden="true">▾</span>
     </BlueButton>
 
     <!-- Teleported to <body>, not just position:absolute in place — `.site-container` gets
@@ -23,18 +23,18 @@
       <div
         v-if="open"
         ref="panelRef"
-        class="nav-economy-dropdown-panel"
+        class="nav-encyclopedia-dropdown-panel"
         role="menu"
         :style="panelStyle"
       >
-        <NuxtLink to="/newsite/trade" class="nav-economy-dropdown-item" data-nav-sound="trades" role="menuitem" @click="close">
-          Trades
-        </NuxtLink>
-        <NuxtLink to="/newsite/AuctionHouse" class="nav-economy-dropdown-item" data-nav-sound="auctions" role="menuitem" @click="close">
-          Auctions
-        </NuxtLink>
-        <NuxtLink to="/newsite/economy" class="nav-economy-dropdown-item" data-nav-sound="toononomics" role="menuitem" @click="close">
+        <NuxtLink to="/newsite/economy" class="nav-encyclopedia-dropdown-item" data-nav-sound="toononomics" role="menuitem" @click="close">
           Toononomics
+        </NuxtLink>
+        <NuxtLink to="/newsite/encyclopedia" class="nav-encyclopedia-dropdown-item" data-nav-sound="lore" role="menuitem" @click="close">
+          Lore
+        </NuxtLink>
+        <NuxtLink to="/newsite/tutorial" class="nav-encyclopedia-dropdown-item" data-nav-sound="tutorial" role="menuitem" @click="close">
+          Tutorial
         </NuxtLink>
       </div>
     </Teleport>
@@ -139,7 +139,7 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.economy-trigger-wrap {
+.encyclopedia-trigger-wrap {
   /* NOT display:contents (the old .nav-link wrapper pattern in NavRight.vue/NavLeft.vue) — that
      generates no box at all, so getBoundingClientRect() on it in positionPanel() below would
      return a zero/(0,0) rect instead of the trigger's real on-screen position. inline-flex keeps
@@ -149,20 +149,20 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
-.economy-trigger {
+.encyclopedia-trigger {
   display: inline-flex !important;
   align-items: center;
   gap: 4px;
 }
 
-.economy-caret {
+.encyclopedia-caret {
   display: inline-block;
   font-size: 0.7em;
   line-height: 1;
   transition: transform 0.15s ease;
 }
 
-.economy-caret-open {
+.encyclopedia-caret-open {
   transform: rotate(180deg);
 }
 </style>
@@ -171,7 +171,7 @@ onBeforeUnmount(() => {
 /* Unscoped: this panel is teleported to <body>, outside this component's own scoped-style
    subtree, so a `scoped` block (which relies on a data-v-* attribute Vue only adds within the
    component's own rendered tree) would never match it. */
-.nav-economy-dropdown-panel {
+.nav-encyclopedia-dropdown-panel {
   z-index: 1100;
   background: #062a4a;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -182,7 +182,7 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
-.nav-economy-dropdown-item {
+.nav-encyclopedia-dropdown-item {
   display: block;
   padding: 8px 10px;
   font-size: 0.85rem;
@@ -193,8 +193,8 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.nav-economy-dropdown-item:hover,
-.nav-economy-dropdown-item:focus {
+.nav-encyclopedia-dropdown-item:hover,
+.nav-encyclopedia-dropdown-item:focus {
   background: rgba(255, 255, 255, 0.12);
 }
 </style>

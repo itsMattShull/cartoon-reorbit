@@ -8,7 +8,7 @@
         </NuxtLink>
       </div>
       <p class="text-gray-500">
-        Wiki-style reference entries, reachable from the Encyclopedia nav link and its search bar.
+        Wiki-style reference entries, shown as "Lore" in the Encyclopedia nav dropdown and reachable via its search bar.
         An entry's body can link to another entry — pick one from the "Link to entry" list below
         the editor toolbar while writing.
       </p>
