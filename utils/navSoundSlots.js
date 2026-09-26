@@ -19,6 +19,7 @@ export const NAV_SOUND_SLOTS = [
   { key: 'trades', label: 'Trades' },
   { key: 'economy', label: 'Economy' },
   { key: 'games', label: 'Games' },
+  { key: 'encyclopedia', label: 'Encyclopedia' },
   { key: 'redeem', label: 'Redeem' },
   { key: 'settings', label: 'Settings' },
   { key: 'logout', label: 'Logout' },
