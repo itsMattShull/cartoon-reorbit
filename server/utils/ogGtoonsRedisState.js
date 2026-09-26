@@ -38,12 +38,11 @@ function serializeMatch(match) {
     usernames: match.usernames,
     deckOrder: match.deckOrder,
     remainingIdx: match.remainingIdx,
+    pending: match.pending, // this batch's committed-but-unrevealed picks, per side
     goalColor: match.goalColor,
-    swapUsed: match.swapUsed,
-    ready: match.ready,
     revealed: match.revealed, // roundLog itself is built once, at match completion, not carried live
     stake: match.stake,
-    currentRound: match.currentRound,
+    currentBatch: match.currentBatch,
     isChallenge: match.isChallenge,
     startedAt: match.startedAt,
     lastActivity: match.lastActivity

@@ -14,7 +14,7 @@
           <span class="text-gray-300">({{ youScore }})</span>
         </div>
         <div class="font-bold">
-          {{ matchState.suddenDeath ? 'Sudden Death' : `Round ${matchState.round} / ${matchState.totalRounds}` }}
+          {{ matchState.suddenDeath ? 'Sudden Death' : `Batch ${matchState.currentBatch} / ${matchState.totalBatches}` }}
         </div>
         <div class="flex items-center gap-1.5">
           <span class="text-gray-300">({{ oppScore }})</span>
@@ -38,25 +38,40 @@
           <div class="grid grid-cols-4 gap-1.5 w-full max-w-sm">
             <div v-for="n in matchState.totalRounds" :key="'you-'+n" class="relative h-20 rounded border flex items-center justify-center bg-white/5"
                  :class="youRevealed[n-1] ? 'border-indigo-400' : 'border-dashed border-white/20'">
-              <img v-if="youRevealed[n-1]" :src="youRevealed[n-1].assetPath" class="h-16 object-contain" :title="`${youRevealed[n-1].name} (${youRevealed[n-1].finalValue})`" />
+              <img v-if="youRevealed[n-1]" :src="youRevealed[n-1].assetPath" class="h-16 object-contain" :class="{ 'grayscale opacity-40': youRevealed[n-1].cancelled }" :title="`${youRevealed[n-1].name} (${youRevealed[n-1].finalValue})`" />
               <span v-else class="text-[10px] text-gray-400">{{ n }}</span>
+              <span v-if="youRevealed[n-1]?.cancelled" class="absolute top-0 inset-x-0 text-center text-[8px] font-bold uppercase tracking-wide bg-red-600/80 text-white">Cancelled</span>
               <div v-if="youRevealed[n-1]" class="absolute bottom-0 inset-x-0 flex flex-wrap justify-center gap-0.5 px-0.5 pb-0.5">
                 <span v-for="badge in cardBadges(youRevealed[n-1])" :key="badge" class="text-[8px] leading-none px-1 py-0.5 rounded bg-black/50 text-gray-100">{{ badge }}</span>
               </div>
             </div>
           </div>
-          <div class="flex gap-2 items-center mt-1">
-            <button
-              v-if="canCommit"
-              @click="commit(matchState.round)"
-              class="bg-green-500 hover:bg-green-600 text-white px-4 py-1.5 rounded text-sm"
-            >Reveal Next Card ({{ matchState.you.cardsRemaining }} left)</button>
-            <span v-else-if="matchState.you.ready" class="text-xs text-amber-300">Waiting for opponent...</span>
-            <button
-              v-if="!matchState.you.swapUsed && canCommit"
-              @click="openSwapSheet"
-              class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1.5 rounded text-xs"
-            >Swap (10 pts)</button>
+          <div class="flex flex-col items-center gap-2 mt-1 w-full max-w-sm">
+            <div v-if="matchState.you.ready" class="text-xs text-amber-300">
+              Waiting for opponent... ({{ pendingCount }}/{{ batchQuota }} chosen)
+            </div>
+            <template v-else-if="hand.length">
+              <p class="text-xs text-gray-300">Choose a card to play ({{ pendingCount }}/{{ batchQuota }} chosen this batch)</p>
+              <div class="grid grid-cols-4 gap-1.5 w-full">
+                <div
+                  v-for="c in hand"
+                  :key="c.ctoonId"
+                  @click="selectCard(c.ctoonId)"
+                  :class="[
+                    'relative h-16 rounded border-2 flex items-center justify-center cursor-pointer bg-white/5',
+                    selectedCtoonId === c.ctoonId ? 'border-amber-400 bg-amber-500/10' : 'border-white/20'
+                  ]"
+                >
+                  <img :src="c.assetPath" :alt="c.name" class="h-12 object-contain" :title="`${c.name} (${c.value})`" />
+                </div>
+              </div>
+              <button
+                :disabled="!selectedCtoonId"
+                @click="playSelected"
+                class="bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white px-4 py-1.5 rounded text-sm"
+              >Play Card</button>
+            </template>
+            <span v-else class="text-xs text-gray-400">No cards left to play.</span>
           </div>
         </div>
 
@@ -69,25 +84,28 @@
           <div class="grid grid-cols-4 gap-1.5 w-full max-w-sm">
             <div v-for="n in matchState.totalRounds" :key="'opp-'+n" class="relative h-20 rounded border flex items-center justify-center bg-white/5"
                  :class="oppRevealed[n-1] ? 'border-indigo-400' : 'border-dashed border-white/20'">
-              <img v-if="oppRevealed[n-1]" :src="oppRevealed[n-1].assetPath" class="h-16 object-contain" :title="`${oppRevealed[n-1].name} (${oppRevealed[n-1].finalValue})`" />
+              <img v-if="oppRevealed[n-1]" :src="oppRevealed[n-1].assetPath" class="h-16 object-contain" :class="{ 'grayscale opacity-40': oppRevealed[n-1].cancelled }" :title="`${oppRevealed[n-1].name} (${oppRevealed[n-1].finalValue})`" />
               <span v-else class="text-[10px] text-gray-400">{{ n }}</span>
+              <span v-if="oppRevealed[n-1]?.cancelled" class="absolute top-0 inset-x-0 text-center text-[8px] font-bold uppercase tracking-wide bg-red-600/80 text-white">Cancelled</span>
               <div v-if="oppRevealed[n-1]" class="absolute bottom-0 inset-x-0 flex flex-wrap justify-center gap-0.5 px-0.5 pb-0.5">
                 <span v-for="badge in cardBadges(oppRevealed[n-1])" :key="badge" class="text-[8px] leading-none px-1 py-0.5 rounded bg-black/50 text-gray-100">{{ badge }}</span>
               </div>
             </div>
           </div>
           <span class="text-xs" :class="matchState.opponent.ready ? 'text-green-400' : 'text-gray-400'">
-            {{ matchState.opponent.ready ? 'Committed' : 'Thinking...' }}
+            {{ matchState.opponent.ready ? 'Committed' : `Picking (${matchState.opponent.pendingCount}/${batchQuota})` }}
           </span>
         </div>
       </div>
 
-      <!-- Reveal flash -->
+      <!-- Reveal flash: a whole batch reveals at once -->
       <transition name="fade">
-        <div v-if="lastReveal" class="px-3 py-2 bg-black/40 text-xs flex items-center justify-center gap-3 flex-shrink-0">
-          <span>You: <strong>{{ lastReveal.you.name }}</strong> ({{ lastReveal.you.finalValue }})</span>
-          <span class="text-gray-400">vs</span>
-          <span>Opp: <strong>{{ lastReveal.opponent.name }}</strong> ({{ lastReveal.opponent.finalValue }})</span>
+        <div v-if="lastReveal" class="px-3 py-2 bg-black/40 text-xs flex flex-col items-center justify-center gap-1 flex-shrink-0">
+          <div class="font-semibold text-gray-300">Batch {{ lastReveal.batch }} revealed</div>
+          <div class="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5">
+            <span v-for="(c, i) in lastReveal.you" :key="'ly'+i">You: <strong>{{ c.name }}</strong> ({{ c.finalValue }})</span>
+            <span v-for="(c, i) in lastReveal.opponent" :key="'lo'+i">Opp: <strong>{{ c.name }}</strong> ({{ c.finalValue }})</span>
+          </div>
         </div>
       </transition>
 
@@ -112,38 +130,6 @@
           </div>
         </div>
       </div>
-
-      <!-- Swap bottom sheet: pick a card, then confirm -->
-      <transition name="fade">
-        <div v-if="swapSheetOpen" class="fixed inset-0 bg-black/50 z-40" @click="closeSwapSheet"></div>
-      </transition>
-      <transition name="slide-up">
-        <div v-if="swapSheetOpen" class="fixed inset-x-0 bottom-0 bg-gray-900 border-t border-white/20 rounded-t-xl z-50 p-4 max-h-[70vh] overflow-y-auto">
-          <h3 class="font-bold mb-3">Swap your up-next card</h3>
-          <p class="text-xs text-gray-400 mb-3">Costs 10 points. You can only do this once per match, and only before you commit for the round.</p>
-          <div class="grid grid-cols-4 gap-2 mb-4">
-            <div
-              v-for="(c, idx) in swapOptions"
-              :key="idx"
-              @click="swapPick = idx"
-              :class="[
-                'h-20 rounded border-2 flex items-center justify-center cursor-pointer',
-                swapPick === idx ? 'border-amber-400 bg-amber-500/10' : 'border-white/20 bg-white/5'
-              ]"
-            >
-              <span class="text-[10px] text-gray-300">Card {{ idx + 2 }}</span>
-            </div>
-          </div>
-          <div class="flex justify-end gap-2">
-            <button @click="closeSwapSheet" class="px-4 py-2 bg-gray-700 rounded text-sm">Cancel</button>
-            <button
-              :disabled="swapPick === null"
-              @click="confirmSwap"
-              class="px-4 py-2 bg-indigo-500 disabled:opacity-50 rounded text-sm"
-            >Swap for 10 pts</button>
-          </div>
-        </div>
-      </transition>
 
       <!-- End-of-match result screen -->
       <transition name="fade">
@@ -177,7 +163,7 @@ import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 
 defineEmits(['exit'])
 
-const { matchState, lastReveal, matchEnded, commit, swap } = useOgGtoonsSocket()
+const { matchState, lastReveal, matchEnded, commit } = useOgGtoonsSocket()
 
 const COLOR_HEX = {
   BLACK: '#cccccc', SILVER: '#c0c0c0', BLUE: '#60a5fa', RED: '#f87171',
@@ -205,7 +191,23 @@ const youRevealed = computed(() => matchState.value?.you?.revealed || [])
 const oppRevealed = computed(() => matchState.value?.opponent?.revealed || [])
 const youScore = computed(() => youRevealed.value.reduce((a, r) => a + (r.finalValue || 0), 0))
 const oppScore = computed(() => oppRevealed.value.reduce((a, r) => a + (r.finalValue || 0), 0))
-const canCommit = computed(() => matchState.value && !matchState.value.you.ready && matchState.value.you.cardsRemaining > 0)
+
+// Hand selection (feature 1): pick one of your own remaining cards, then confirm; the server
+// buffers each pick and only reveals once both sides have filled the current batch's quota.
+const hand = computed(() => matchState.value?.you?.hand || [])
+const pendingCount = computed(() => matchState.value?.you?.pendingCount || 0)
+const batchQuota = computed(() => matchState.value?.batchQuota || 0)
+const selectedCtoonId = ref(null)
+
+function selectCard(ctoonId) {
+  if (matchState.value?.you?.ready) return
+  selectedCtoonId.value = selectedCtoonId.value === ctoonId ? null : ctoonId
+}
+function playSelected() {
+  if (!selectedCtoonId.value) return
+  commit(selectedCtoonId.value)
+  selectedCtoonId.value = null
+}
 
 const matchLog = computed(() => {
   const n = Math.min(youRevealed.value.length, oppRevealed.value.length)
@@ -232,7 +234,9 @@ const groupedEffectsLog = computed(() => {
     if (!bySource.has(key)) bySource.set(key, { sourceName: nameOf(e.sourceCtoonId), lines: [] })
     const targetName = nameOf(e.targetCtoonId)
     let line
-    if (e.action === 'negateEffect') {
+    if (e.action === 'cancel') {
+      line = `cancelled (duplicate of ${targetName})`
+    } else if (e.action === 'negateEffect') {
       line = `negated ${targetName}'s effect`
     } else if (e.action === 'setColor') {
       line = `set ${targetName} to ${e.color}`
@@ -254,29 +258,9 @@ const endReasonLabel = computed(() => {
   if (r === 'sweep') return 'The match timed out.'
   return ''
 })
-
-// Swap: two-step confirm — pick a card, then a separate confirm button actually sends it.
-const swapSheetOpen = ref(false)
-const swapPick = ref(null)
-const swapOptions = computed(() => {
-  const remaining = matchState.value?.you?.cardsRemaining || 0
-  // Only the count of still-unplayed cards (positions 1..remaining-1 relative to up-next) is
-  // known client-side — their identities are intentionally never revealed before they're played.
-  return Math.max(0, remaining - 1)
-})
-
-function openSwapSheet() { swapSheetOpen.value = true; swapPick.value = null }
-function closeSwapSheet() { swapSheetOpen.value = false; swapPick.value = null }
-function confirmSwap() {
-  if (swapPick.value === null) return
-  swap(swapPick.value + 1) // +1: index 0 is the up-next card itself, not swappable with itself
-  closeSwapSheet()
-}
 </script>
 
 <style scoped>
 .fade-enter-active, .fade-leave-active { transition: opacity .2s ease }
 .fade-enter-from, .fade-leave-to { opacity: 0 }
-.slide-up-enter-active, .slide-up-leave-active { transition: transform .25s ease }
-.slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%) }
 </style>

@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  deriveGoalColor, validateDeckPositions, canSwap, applySwap, SWAP_COST, determineWinner
+  deriveGoalColor, validateDeckPositions, canCommitCard, applyBatchCommit, isBatchFull,
+  BATCH_QUOTAS, determineWinner
 } from '../server/utils/ogGtoonEngine.js'
 import {
   resolveRoundEffects, resolveFinalBoard, isValidEffect, validateEffectSchema
@@ -23,20 +24,35 @@ test('validateDeckPositions requires exactly 12 unique positions 0-11', () => {
   assert.equal(validateDeckPositions(null), false)
 })
 
-test('canSwap blocks reuse, post-reveal, and insufficient balance', () => {
-  assert.equal(canSwap({ swapUsed: true, pointBalance: 100, roundRevealed: false }).ok, false)
-  assert.equal(canSwap({ swapUsed: false, pointBalance: 100, roundRevealed: true }).ok, false)
-  assert.equal(canSwap({ swapUsed: false, pointBalance: 5, roundRevealed: false }).ok, false)
-  assert.equal(canSwap({ swapUsed: false, pointBalance: SWAP_COST, roundRevealed: false }).ok, true)
+test('BATCH_QUOTAS sums to the 7-round total', () => {
+  assert.deepEqual(BATCH_QUOTAS, [4, 2, 1])
+  assert.equal(BATCH_QUOTAS.reduce((a, b) => a + b, 0), 7)
 })
 
-test('applySwap swaps index 0 with the chosen index, never mutating the input', () => {
-  const deck = [10, 11, 12, 13]
-  const next = applySwap(deck, 2)
-  assert.deepEqual(next, [12, 11, 10, 13])
-  assert.deepEqual(deck, [10, 11, 12, 13]) // unchanged
-  assert.throws(() => applySwap(deck, 0))
-  assert.throws(() => applySwap(deck, 4))
+test('canCommitCard rejects an unavailable position, a duplicate pending pick, a full batch, and the reserved goal card', () => {
+  const remainingIdx = [0, 1, 2, 11]
+  assert.equal(canCommitCard({ remainingIdx, pending: [], position: 5, quota: 4, allowGoalCard: false }).ok, false) // not in remainingIdx
+  assert.equal(canCommitCard({ remainingIdx, pending: [0], position: 0, quota: 4, allowGoalCard: false }).ok, false) // already pending
+  assert.equal(canCommitCard({ remainingIdx, pending: [0, 1, 2], position: 1, quota: 3, allowGoalCard: false }).ok, false) // batch already full
+  assert.equal(canCommitCard({ remainingIdx, pending: [], position: 11, quota: 1, allowGoalCard: false }).ok, false) // goal card reserved
+  assert.equal(canCommitCard({ remainingIdx, pending: [], position: 11, quota: 1, allowGoalCard: true }).ok, true) // goal card allowed in sudden death
+  assert.equal(canCommitCard({ remainingIdx, pending: [], position: 0, quota: 4, allowGoalCard: false }).ok, true)
+})
+
+test('applyBatchCommit moves a position from remainingIdx to pending, never mutating the input', () => {
+  const remainingIdx = [0, 1, 2, 3]
+  const pending = [0]
+  const next = applyBatchCommit(remainingIdx, pending, 2)
+  assert.deepEqual(next.remainingIdx, [0, 1, 3])
+  assert.deepEqual(next.pending, [0, 2])
+  assert.deepEqual(remainingIdx, [0, 1, 2, 3]) // unchanged
+  assert.deepEqual(pending, [0]) // unchanged
+})
+
+test('isBatchFull compares pending length against the quota', () => {
+  assert.equal(isBatchFull([0, 1, 2], 4), false)
+  assert.equal(isBatchFull([0, 1, 2, 3], 4), true)
+  assert.equal(isBatchFull([], 1), false)
 })
 
 function revealed(entries) {
@@ -326,6 +342,174 @@ test('resolveFinalBoard feeds determineWinner directly (its revealed entries alr
     player1Revealed: final.player1.revealed, player2Revealed: final.player2.revealed
   })
   assert.equal(outcome.winner, 'player1')
+})
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+ * Feature 5: duplicate-character cancellation (phase 0 of resolveFinalBoard).
+ * ══════════════════════════════════════════════════════════════════════════════════════════ */
+
+test('resolveFinalBoard: duplicate-character cancellation destroys the lower-baseValue copy', () => {
+  const strong = revealedCard('c1', 'Bugs Bunny (Strong)', { value: 8, characters: ['Bugs Bunny'] })
+  const weak = revealedCard('c2', 'Bugs Bunny (Weak)', { value: 3, characters: ['Bugs Bunny'] })
+  const out = resolveFinalBoard({
+    player1: { revealed: [strong], goalCard: null },
+    player2: { revealed: [weak], goalCard: null }
+  })
+  assert.equal(out.player1.revealed[0].finalValue, 8)
+  assert.equal(out.player1.revealed[0].cancelled, false)
+  assert.equal(out.player2.revealed[0].finalValue, 0)
+  assert.equal(out.player2.revealed[0].cancelled, true)
+  assert.ok(out.effectsResolved.some(e => e.action === 'cancel' && e.sourceCtoonId === 'c2'))
+})
+
+test('resolveFinalBoard: an exact-tie duplicate-character pair cancels BOTH sides', () => {
+  const a = revealedCard('t1', 'Tie A', { value: 5, characters: ['Same Guy'] })
+  const b = revealedCard('t2', 'Tie B', { value: 5, characters: ['Same Guy'] })
+  const out = resolveFinalBoard({
+    player1: { revealed: [a], goalCard: null },
+    player2: { revealed: [b], goalCard: null }
+  })
+  assert.equal(out.player1.revealed[0].finalValue, 0)
+  assert.equal(out.player1.revealed[0].cancelled, true)
+  assert.equal(out.player2.revealed[0].finalValue, 0)
+  assert.equal(out.player2.revealed[0].cancelled, true)
+})
+
+test('resolveFinalBoard: a cancelled card\'s own onReveal effect never fires', () => {
+  const weak = revealedCard('w1', 'Weak Duplicate', {
+    value: 1, characters: ['Duped'],
+    effect: [{ trigger: 'onReveal', target: { selector: 'self' }, action: { type: 'modifyValue', operation: 'add', amount: 100 } }]
+  })
+  const strong = revealedCard('s1', 'Strong Duplicate', { value: 9, characters: ['Duped'] })
+  const out = resolveFinalBoard({
+    player1: { revealed: [weak], goalCard: null },
+    player2: { revealed: [strong], goalCard: null }
+  })
+  assert.equal(out.player1.revealed[0].finalValue, 0) // cancelled -- its own +100 never applies
+  assert.ok(!out.effectsResolved.some(e => e.action === 'modifyValue' && e.sourceCtoonId === 'w1'))
+})
+
+test('resolveFinalBoard: a cancelled card is invisible to an opponent\'s perMatch count', () => {
+  const cancelledProp = revealedCard('cp1', 'Cancelled Prop', { value: 1, type1: 'PROP', characters: ['Duped Prop'] })
+  const survivorSameChar = revealedCard('cp2', 'Surviving Prop', { value: 5, type1: 'PROP', characters: ['Duped Prop'] })
+  const counter = revealedCard('cp3', 'Prop Counter', {
+    value: 0,
+    effect: [{ trigger: 'onReveal', target: { selector: 'self' }, action: { type: 'modifyValue', operation: 'add', amount: 1, perMatch: { by: 'type', value: 'PROP', scope: 'both' } } }]
+  })
+  const out = resolveFinalBoard({
+    player1: { revealed: [cancelledProp], goalCard: null },
+    player2: { revealed: [survivorSameChar, counter], goalCard: null }
+  })
+  assert.equal(out.player1.revealed[0].cancelled, true) // cancelledProp: value 1 < 5
+  // Only survivorSameChar counts as an in-play PROP -- cancelledProp is excluded, counter itself isn't a PROP.
+  assert.equal(out.player2.revealed[1].finalValue, 1) // 0 + 1*1
+})
+
+test('resolveFinalBoard: cancellation does not manufacture new adjacency (a gap stays a gap)', () => {
+  const first = revealedCard('adj0', 'First', { value: 1, type1: 'ANIMAL' })
+  const cancelledMiddle = revealedCard('adjM', 'Middle (will cancel)', { value: 1, characters: ['Doomed'] })
+  const strongerDup = revealedCard('adjD', 'Stronger Duplicate', { value: 9, characters: ['Doomed'] })
+  const third = revealedCard('adj2', 'Third', {
+    value: 5,
+    effect: [{ trigger: 'onReveal', target: { selector: 'neighborOwn', filter: { by: 'type', value: 'ANIMAL' } }, action: { type: 'modifyValue', operation: 'add', amount: 100 } }]
+  })
+  // Own-side order: [first, cancelledMiddle, third] -> roundIndex 0,1,2. If cancellation
+  // re-indexed the remaining cards after filtering, third would become "array index 1" and its
+  // linear -1 neighbor would wrongly resolve to first. It must not: third's roundIndex stays 2,
+  // whose only linear neighbors are roundIndex 1 (the now-absent cancelledMiddle) and 3
+  // (nonexistent) -- so first (roundIndex 0) must be completely untouched.
+  const out = resolveFinalBoard({
+    player1: { revealed: [first, cancelledMiddle, third], goalCard: null },
+    player2: { revealed: [strongerDup], goalCard: null }
+  })
+  assert.equal(out.player1.revealed[1].cancelled, true) // cancelledMiddle: value 1 < 9
+  assert.equal(out.player1.revealed[0].finalValue, 1) // first: unaffected
+})
+
+/* ════════════════════════════════════════════════════════════════════════════════════════════
+ * Feature 6: adjacencyMode 'graph' + bounded setColor cascade.
+ * ══════════════════════════════════════════════════════════════════════════════════════════ */
+
+test('resolveFinalBoard: adjacencyMode "graph" reaches the richer 7-node neighbor graph, not just linear prev/next', () => {
+  const buffer = revealedCard('g0', 'Graph Buffer', {
+    value: 0,
+    effect: [{ trigger: 'onReveal', target: { selector: 'neighborOwn', adjacencyMode: 'graph' }, action: { type: 'modifyValue', operation: 'add', amount: 10 } }]
+  })
+  const cards = [buffer]
+  for (let i = 1; i <= 6; i++) cards.push(revealedCard(`g${i}`, `Card ${i}`, { value: i }))
+  const out = resolveFinalBoard({
+    player1: { revealed: cards, goalCard: null },
+    player2: { revealed: [revealedCard('opp', 'Opp Filler', { value: 0 })], goalCard: null }
+  })
+  // buffer is roundIndex 0; ADJACENCY_GRAPH[0] = [1, 4] -> only roundIndex 1 and 4 get +10.
+  assert.equal(out.player1.revealed[1].finalValue, 11) // Card 1: 1 + 10
+  assert.equal(out.player1.revealed[2].finalValue, 2) // Card 2: untouched
+  assert.equal(out.player1.revealed[3].finalValue, 3) // Card 3: untouched
+  assert.equal(out.player1.revealed[4].finalValue, 14) // Card 4: 4 + 10
+  assert.equal(out.player1.revealed[5].finalValue, 5) // Card 5: untouched
+  assert.equal(out.player1.revealed[6].finalValue, 6) // Card 6: untouched
+})
+
+test('resolveFinalBoard: omitting adjacencyMode keeps the original strict linear prev/next behavior', () => {
+  const buffer = revealedCard('l0', 'Linear Buffer', {
+    value: 0,
+    effect: [{ trigger: 'onReveal', target: { selector: 'neighborOwn' }, action: { type: 'modifyValue', operation: 'add', amount: 10 } }]
+  })
+  const cards = [buffer]
+  for (let i = 1; i <= 6; i++) cards.push(revealedCard(`l${i}`, `Card ${i}`, { value: i }))
+  const out = resolveFinalBoard({
+    player1: { revealed: cards, goalCard: null },
+    player2: { revealed: [revealedCard('opp2', 'Opp Filler', { value: 0 })], goalCard: null }
+  })
+  assert.equal(out.player1.revealed[1].finalValue, 11) // Card 1: only linear neighbor, 1 + 10
+  assert.equal(out.player1.revealed[4].finalValue, 4) // Card 4: a graph neighbor, but NOT a linear one -- untouched
+})
+
+test('resolveFinalBoard: setColor cascades across passes when one effect depends on a color another effect just set', () => {
+  const cardA = revealedCard('ca', 'Card A', {
+    value: 0, color: 'BLUE',
+    effect: [{ trigger: 'onReveal', target: { selector: 'self' }, condition: { type: 'colorInPlay', color: 'RED', side: 'opponent' }, action: { type: 'setColor', color: 'GREEN' } }]
+  })
+  const cardB = revealedCard('cb', 'Card B', {
+    value: 0, color: 'BLUE',
+    effect: [{ trigger: 'onReveal', target: { selector: 'self' }, condition: { type: 'colorInPlay', color: 'BLUE', side: 'opponent' }, action: { type: 'setColor', color: 'RED' } }]
+  })
+  const out = resolveFinalBoard({
+    player1: { revealed: [cardA], goalCard: null },
+    player2: { revealed: [cardB], goalCard: null }
+  })
+  // Pass 1: B sees A=BLUE (opponent, unconditioned yet) -> B becomes RED. A sees B=BLUE (still,
+  // checked before B's own change since player1 resolves first within the pass) -> no change.
+  // Pass 2: A now sees B=RED (set last pass) -> A becomes GREEN. A single-pass resolver could
+  // never reach this -- it would have stopped after pass 1 with A still BLUE.
+  assert.equal(out.player1.revealed[0].color, 'GREEN')
+  assert.equal(out.player2.revealed[0].color, 'RED')
+  assert.equal(out.effectsResolved.filter(e => e.action === 'setColor').length, 2)
+})
+
+test('resolveFinalBoard: an oscillating color pair terminates at the pass cap instead of hanging', () => {
+  const cardA = revealedCard('oa', 'Oscillator A', {
+    value: 0, color: 'BLUE',
+    effect: [
+      { trigger: 'onReveal', target: { selector: 'self' }, condition: { type: 'colorInPlay', color: 'BLUE', side: 'opponent' }, action: { type: 'setColor', color: 'RED' } },
+      { trigger: 'onReveal', target: { selector: 'self' }, condition: { type: 'colorInPlay', color: 'RED', side: 'opponent' }, action: { type: 'setColor', color: 'BLUE' } }
+    ]
+  })
+  const cardB = revealedCard('ob', 'Oscillator B', {
+    value: 0, color: 'BLUE',
+    effect: [
+      { trigger: 'onReveal', target: { selector: 'self' }, condition: { type: 'colorInPlay', color: 'BLUE', side: 'opponent' }, action: { type: 'setColor', color: 'BLUE' } },
+      { trigger: 'onReveal', target: { selector: 'self' }, condition: { type: 'colorInPlay', color: 'RED', side: 'opponent' }, action: { type: 'setColor', color: 'RED' } }
+    ]
+  })
+  const start = Date.now()
+  const out = resolveFinalBoard({
+    player1: { revealed: [cardA], goalCard: null },
+    player2: { revealed: [cardB], goalCard: null }
+  })
+  assert.ok(Date.now() - start < 2000, 'must terminate promptly, not hang')
+  const colorChanges = out.effectsResolved.filter(e => e.action === 'setColor')
+  assert.equal(colorChanges.length, 20) // 10 passes (the cap) x 2 real flips/pass, never stabilizes
 })
 
 test('ogGtoonPowerCatalog: every one of the 198 historical powers has a valid, schema-conformant catalog entry', () => {

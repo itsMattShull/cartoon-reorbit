@@ -64,7 +64,9 @@
 
           <p class="mb-1 text-sm">
             Tap a gToon below to add it to the next open slot. Tap a filled slot to remove it.
-            <span class="font-semibold">Slot 12 is your Goal Card</span> — its color sets your goal color for the match.
+            Slots 1-11 are your battle pool — during a match you'll choose which of these to play
+            and when, in any order. <span class="font-semibold">Slot 12 is your Goal Card</span> —
+            its color sets your goal color for the match.
           </p>
 
           <!-- The 12 ordered slots -->

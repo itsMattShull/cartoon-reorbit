@@ -31,6 +31,7 @@
 //     character?: string,                 // cardByCharacter
 //     positions?: ['prev','next'],         // neighborOwn — which neighbor slot(s); default both
 //     filter?: { by, value } | { filters: [{by,value}, ...] },   // neighborOwn (optional)
+//     adjacencyMode?: 'linear' | 'graph',  // neighborOwn — see ADJACENCY_GRAPH below; default 'linear'
 //     scope?: 'own' | 'opponent' | 'both', // allMatching
 //     filters?: [{ by: 'type'|'color'|'group'|'value', value }, ...], // allMatching (AND'ed)
 //     excludeSelf?: boolean                // allMatching — omit the source card itself
@@ -40,6 +41,8 @@
 //           'targetLacksType',
 //     side?: 'own' | 'opponent' | 'either', // board-scan conditions only (not targetLacksType)
 //     character?, cardType?, group?, color?, value?   // one of these per condition.type
+//     adjacentOnly?: boolean,              // "next to X" — see design notes below
+//     adjacencyMode?: 'linear' | 'graph'   // adjacentOnly only — see ADJACENCY_GRAPH; default 'linear'
 //   },
 //   action: {
 //     type: 'modifyValue' | 'setColor' | 'negateEffect',
@@ -48,7 +51,8 @@
 //     perMatch?: {                          // "+N for each X in play" aggregation
 //       by?: 'type'|'color'|'group'|'character', value?,   // shorthand single clause
 //       filters?: [{ by, value }, ...],      // or an explicit AND'ed list (e.g. "Female Animal")
-//       scope: 'own' | 'opponent' | 'both' | 'neighborOwn'
+//       scope: 'own' | 'opponent' | 'both' | 'neighborOwn',
+//       adjacencyMode?: 'linear' | 'graph'   // neighborOwn scope only; default 'linear'
 //     },
 //     color?: string
 //   }
@@ -90,18 +94,44 @@
 //     wording — it removes the source card from that effect's own match set. Anywhere the source
 //     text says "all X" with no "other," `excludeSelf` is left false/omitted (self may or may not
 //     match the filter; if it does, it's included like the rest of the board).
+//   - `adjacencyMode` (on `neighborOwn` targets, `adjacentOnly` conditions, and `perMatch` with
+//     `scope: 'neighborOwn'`) picks which notion of "neighbor" `neighborsOf()` uses. Default/
+//     omitted is `'linear'` — strict roundIndex ±1, the original behavior, byte-for-byte
+//     unchanged for every effect that doesn't set this field. `'graph'` instead looks up
+//     ADJACENCY_GRAPH, a richer 7-node-per-side adjacency graph (ported from the original 2002
+//     game's physical board topology) where a card can have up to 4 neighbors spanning multiple
+//     "batches" of the match, not just its immediate prev/next reveal. This is opt-in by design:
+//     it was added alongside existing catalog content that already relies on strict prev/next
+//     semantics, and flipping the default would silently re-balance every one of those powers.
+//   - Duplicate-character cancellation (phase 0, below) and the `setColor` cascade (phase 2) are
+//     the other two mechanics ported from the original game — see their own inline comments in
+//     `resolveFinalBoard`. Deliberately NOT ported: the original's "invert my neighbor's effect"
+//     mechanic — it doesn't fit this schema's action taxonomy (negate/setColor/modifyValue) and
+//     would need a new action type with cross-instance mutation semantics to express correctly.
 //
 // ── Resolution order (final board pass) — read this before changing phase ordering ─────────
-//   1. Collect every active effect instance: both sides' `onReveal` effects on EVERY card they
-//      revealed the whole match, plus `static` effects from either player's goal card (always
-//      active once a match starts).
+//   0. Duplicate-character cancellation: for every cross-side pair of cards sharing a character,
+//      the lower-BASE-value one is destroyed (an exact tie destroys both). Runs against PRINTED
+//      values, before any effect fires — a cancelled card's own effects never activate, and it is
+//      invisible to every other card's scope/condition/target scan for the rest of this pass. It
+//      still appears in the returned `revealed` list (tagged `cancelled: true`, `finalValue: 0`)
+//      so the match log/UI can show it was destroyed rather than silently dropping it.
+//   1. Collect every active effect instance: both (non-cancelled) sides' `onReveal` effects on
+//      EVERY card they revealed the whole match, plus `static` effects from either player's goal
+//      card (always active once a match starts).
 //   2. Negations first — `negateEffect` suppresses the TARGET card's own effect instances for the
 //      rest of this pass (a negated card's onReveal/static effects never fire in this call).
-//   3. Color changes next — `setColor`, player1's effects before player2's.
+//   3. Color changes next — `setColor`, player1's effects before player2's, run in a bounded
+//      cascade: every pass re-checks every setColor instance's condition against CURRENT colors
+//      (so one card's color change can flip another's condition, including on a later pass) and
+//      applies only actual changes, stopping at a fixed point (a pass with zero changes) or after
+//      MAX_COLOR_PASSES, whichever comes first — the cap guards against a malformed or
+//      intentionally-oscillating admin-authored pair of effects looping forever.
 //   4. Value modifications last, sub-ordered set -> multiply -> add; within each operation
 //      bucket, player1's effects resolve before player2's. `perMatch`/`allMatching` effects slot
 //      into whichever operation-type bucket their `action.operation` specifies, exactly like any
-//      other `modifyValue` effect — they are not a separate phase.
+//      other `modifyValue` effect — they are not a separate phase. Runs once, after colors have
+//      fully stabilized from phase 3.
 //   5. Every individual application (source, target, action) is recorded in `effectsResolved` for
 //      the match-log UI, in the order it was actually applied.
 //
@@ -116,6 +146,16 @@ const GROUPS = new Set([
   'SQUIRREL_SCOUTS', 'TEEN_TITANS', 'TIME_SQUAD', 'WOOHP'
 ])
 const COLORS = new Set(['BLACK', 'SILVER', 'BLUE', 'RED', 'YELLOW', 'GREEN', 'PURPLE', 'ORANGE', 'PINK'])
+
+/** `adjacencyMode: 'graph'` neighbor graph, roundIndex 0-6 -> neighbor roundIndexes. Translated
+ *  index-for-index from the original 2002 game's 7-node-per-side board (its play-order nodes
+ *  1,3,5,7,9,11,13 map onto our roundIndex 0-6 in order). Undirected, 11 edges. */
+const ADJACENCY_GRAPH = {
+  0: [1, 4], 1: [0, 2, 4, 5], 2: [1, 3, 5, 6], 3: [2, 6],
+  4: [0, 1, 5], 5: [1, 2, 4, 6], 6: [2, 3, 5]
+}
+
+const ADJACENCY_MODES = new Set(['linear', 'graph'])
 
 const BASE_SELECTORS = ['self', 'ownActiveCard', 'opponentActiveCard', 'allOwnRevealed', 'allOpponentRevealed', 'cardByCharacter']
 const NEW_SELECTORS = ['neighborOwn', 'allMatching']
@@ -167,6 +207,7 @@ export function isValidEffect(e) {
       const filters = Array.isArray(t.filter?.filters) ? t.filter.filters : [t.filter]
       if (!areFiltersValid(filters)) return false
     }
+    if (t.adjacencyMode != null && !ADJACENCY_MODES.has(t.adjacencyMode)) return false
   }
   if (sel === 'allMatching') {
     if (t.scope && !['own', 'opponent', 'both'].includes(t.scope)) return false
@@ -185,6 +226,7 @@ export function isValidEffect(e) {
     if (c.type === 'valueInPlay' && typeof c.value !== 'number') return false
     if (c.type === 'targetLacksType' && !CARD_TYPES.has(c.cardType)) return false
     if (c.adjacentOnly != null && typeof c.adjacentOnly !== 'boolean') return false
+    if (c.adjacencyMode != null && !ADJACENCY_MODES.has(c.adjacencyMode)) return false
   }
   const a = e.action
   if (!a || typeof a !== 'object') return false
@@ -196,6 +238,7 @@ export function isValidEffect(e) {
       if (!pm.scope || !['own', 'opponent', 'both', 'neighborOwn'].includes(pm.scope)) return false
       const filters = Array.isArray(pm.filters) ? pm.filters : (pm.by ? [{ by: pm.by, value: pm.value }] : null)
       if (!areFiltersValid(filters)) return false
+      if (pm.adjacencyMode != null && !ADJACENCY_MODES.has(pm.adjacencyMode)) return false
     }
   } else if (a.type === 'setColor') {
     if (typeof a.color !== 'string') return false
@@ -442,9 +485,14 @@ function revealedOf(sides, side) {
   return sides[side]
 }
 
-function neighborsOf(sides, side, roundIndex, positions) {
-  const pos = positions && positions.length ? positions : ['prev', 'next']
+function neighborsOf(sides, side, roundIndex, positions, mode) {
   const list = revealedOf(sides, side)
+  if (mode === 'graph') {
+    return (ADJACENCY_GRAPH[roundIndex] || [])
+      .map(i => list.find(c => c.roundIndex === i))
+      .filter(Boolean)
+  }
+  const pos = positions && positions.length ? positions : ['prev', 'next']
   const out = []
   if (pos.includes('prev')) {
     const c = list.find(c => c.roundIndex === roundIndex - 1)
@@ -471,9 +519,10 @@ function conditionMet(inst, sides, targetCard) {
     return !cardTypes(targetCard).includes(cond.cardType)
   }
 
-  // "next to X" — the source card's own adjacent (prev/next round-index) cards on its own side.
+  // "next to X" — the source card's own adjacent (prev/next round-index, or graph-adjacent —
+  // see ADJACENCY_GRAPH — if cond.adjacencyMode is 'graph') cards on its own side.
   if (cond.adjacentOnly) {
-    const neighbors = neighborsOf(sides, inst.ownerSide, inst.sourceCard.roundIndex, cond.positions)
+    const neighbors = neighborsOf(sides, inst.ownerSide, inst.sourceCard.roundIndex, cond.positions, cond.adjacencyMode)
     if (cond.type === 'characterInPlay') return neighbors.some(c => (c.characters || []).includes(cond.character))
     if (cond.type === 'typeInPlay') return neighbors.some(c => cardTypes(c).includes(cond.cardType))
     if (cond.type === 'groupInPlay') return neighbors.some(c => c.group === cond.group)
@@ -531,7 +580,7 @@ function resolveTargets(inst, sides) {
       return targets
     }
     case 'neighborOwn': {
-      const neighbors = neighborsOf(sides, ownerSide, inst.sourceCard.roundIndex, inst.effect.target.positions)
+      const neighbors = neighborsOf(sides, ownerSide, inst.sourceCard.roundIndex, inst.effect.target.positions, inst.effect.target.adjacencyMode)
       const filters = normalizeFilterClauses(inst.effect.target.filter)
       return neighbors.filter(c => cardMatchesFilters(c, filters)).map(wrap)
     }
@@ -560,9 +609,47 @@ function countPerMatch(inst, sides, pm) {
   let pool
   if (pm.scope === 'own') pool = revealedOf(sides, ownerSide)
   else if (pm.scope === 'opponent') pool = revealedOf(sides, opponentSide)
-  else if (pm.scope === 'neighborOwn') pool = neighborsOf(sides, ownerSide, inst.sourceCard.roundIndex, null)
+  else if (pm.scope === 'neighborOwn') pool = neighborsOf(sides, ownerSide, inst.sourceCard.roundIndex, null, pm.adjacencyMode)
   else pool = [...revealedOf(sides, 'player1'), ...revealedOf(sides, 'player2')]
   return pool.filter(c => cardMatchesFilters(c, filters)).length
+}
+
+function charactersOverlap(a, b) {
+  if (!a || !b || !a.length || !b.length) return false
+  const set = new Set(a)
+  return b.some(name => set.has(name))
+}
+
+/**
+ * Phase 0 — duplicate-character cancellation (feature 5). Cross-side only: a single deck can't
+ * contain two cards sharing a character (enforced at deck-save time, see decks.post.js), so same-
+ * side pairs can never occur. For every cross-side pair sharing a character, compares PRINTED
+ * (baseValue) scores — the lower one is cancelled; an exact tie cancels both. Mirrors the
+ * reference game's resolveCancels: each pairwise comparison is independent (not chained), so a
+ * card already cancelled by one match still participates in — and can cause — other matches.
+ * Mutates `.cancelled` on the losing card(s) in place. Returns the list of cancellation events
+ * (`{ card, other }`) for the caller to fold into `effectsResolved`.
+ */
+function markCancelledPairs(p1Cards, p2Cards) {
+  const events = []
+  for (const a of p1Cards) {
+    for (const b of p2Cards) {
+      if (!charactersOverlap(a.characters, b.characters)) continue
+      if (a.baseValue < b.baseValue) {
+        a.cancelled = true
+        events.push({ card: a, other: b })
+      } else if (b.baseValue < a.baseValue) {
+        b.cancelled = true
+        events.push({ card: b, other: a })
+      } else {
+        a.cancelled = true
+        b.cancelled = true
+        events.push({ card: a, other: b })
+        events.push({ card: b, other: a })
+      }
+    }
+  }
+  return events
 }
 
 /**
@@ -581,10 +668,33 @@ function countPerMatch(inst, sides, pm) {
  *             player2: {...}, effectsResolved: object[] }}
  */
 export function resolveFinalBoard({ player1, player2 }) {
-  const sides = {
+  // roundIndex is assigned here, against the ORIGINAL (unfiltered) array position, and never
+  // recomputed after cancellation below — so a cancelled card's slot is simply "empty" rather
+  // than compacting and creating false new adjacencies between the cards on either side of it.
+  const allCards = {
     player1: (player1.revealed || []).map((c, i) => makeBoardCard(c, 'player1', i)),
     player2: (player2.revealed || []).map((c, i) => makeBoardCard(c, 'player2', i))
   }
+
+  const effectsResolved = []
+
+  // Phase 0: duplicate-character cancellation — see markCancelledPairs and the module header.
+  const cancelEvents = markCancelledPairs(allCards.player1, allCards.player2)
+  for (const ev of cancelEvents) {
+    effectsResolved.push({
+      source: ev.card.side, sourceCtoonId: ev.card.ctoonId, sourceRound: ev.card.round,
+      action: 'cancel', targetPlayer: ev.other.side, targetCtoonId: ev.other.ctoonId, targetRound: ev.other.round
+    })
+  }
+
+  // Every phase below operates on the FILTERED (non-cancelled) lists — cancelled cards' own
+  // effects never enter `instances`, and they're invisible to every other card's scope/
+  // condition/target scan. `allCards` (unfiltered) is kept aside for the final output.
+  const sides = {
+    player1: allCards.player1.filter(c => !c.cancelled),
+    player2: allCards.player2.filter(c => !c.cancelled)
+  }
+
   const goalAuras = []
   if (player1.goalCard) goalAuras.push({ card: makeBoardCard(player1.goalCard, 'player1', -1), side: 'player1' })
   if (player2.goalCard) goalAuras.push({ card: makeBoardCard(player2.goalCard, 'player2', -1), side: 'player2' })
@@ -603,7 +713,6 @@ export function resolveFinalBoard({ player1, player2 }) {
     }
   }
 
-  const effectsResolved = []
   const suppressed = new Set()
   const isSuppressed = (card) => suppressed.has(`${card.side}:${card.roundIndex}`)
 
@@ -621,22 +730,32 @@ export function resolveFinalBoard({ player1, player2 }) {
     }
   }
 
-  // 2) Color changes — player1 before player2
-  for (const side of ['player1', 'player2']) {
-    for (const inst of instances) {
-      if (inst.ownerSide !== side) continue
-      if (inst.effect.action.type !== 'setColor') continue
-      if (isSuppressed(inst.sourceCard)) continue
-      for (const t of resolveTargets(inst, sides)) {
-        if (!conditionMet(inst, sides, t.card)) continue
-        t.card.color = inst.effect.action.color
-        effectsResolved.push({
-          source: inst.ownerSide, sourceCtoonId: inst.sourceCard.ctoonId, sourceRound: inst.sourceCard.round,
-          action: 'setColor', color: inst.effect.action.color,
-          targetPlayer: t.side, targetCtoonId: t.card.ctoonId, targetRound: t.card.round
-        })
+  // 2) Color changes — bounded cascade (feature 6). Every pass re-checks every setColor
+  // instance's condition against CURRENT colors and applies only actual changes, player1 before
+  // player2 within a pass; stops at a fixed point (a pass with zero changes) or MAX_COLOR_PASSES,
+  // whichever comes first. See module header for why this is scoped to setColor only.
+  const MAX_COLOR_PASSES = 10
+  for (let pass = 0; pass < MAX_COLOR_PASSES; pass++) {
+    let changed = false
+    for (const side of ['player1', 'player2']) {
+      for (const inst of instances) {
+        if (inst.ownerSide !== side) continue
+        if (inst.effect.action.type !== 'setColor') continue
+        if (isSuppressed(inst.sourceCard)) continue
+        for (const t of resolveTargets(inst, sides)) {
+          if (!conditionMet(inst, sides, t.card)) continue
+          if (t.card.color === inst.effect.action.color) continue
+          t.card.color = inst.effect.action.color
+          changed = true
+          effectsResolved.push({
+            source: inst.ownerSide, sourceCtoonId: inst.sourceCard.ctoonId, sourceRound: inst.sourceCard.round,
+            action: 'setColor', color: inst.effect.action.color,
+            targetPlayer: t.side, targetCtoonId: t.card.ctoonId, targetRound: t.card.round
+          })
+        }
       }
     }
+    if (!changed) break
   }
 
   // 3) Value mods — set, then multiply, then add; player1 before player2 within each
@@ -674,15 +793,20 @@ export function resolveFinalBoard({ player1, player2 }) {
     }
   }
 
-  const toEntry = (c) => ({ ctoonId: c.ctoonId, round: c.round, baseValue: c.baseValue, finalValue: c.value, color: c.color })
+  // Final output uses allCards (unfiltered) so cancelled cards still appear in the log, at
+  // finalValue 0, rather than disappearing.
+  const toEntry = (c) => ({
+    ctoonId: c.ctoonId, round: c.round, baseValue: c.baseValue,
+    finalValue: c.cancelled ? 0 : c.value, color: c.color, cancelled: !!c.cancelled
+  })
   return {
     player1: {
-      revealed: sides.player1.map(toEntry),
-      totalValue: sides.player1.reduce((s, c) => s + c.value, 0)
+      revealed: allCards.player1.map(toEntry),
+      totalValue: allCards.player1.reduce((s, c) => s + (c.cancelled ? 0 : c.value), 0)
     },
     player2: {
-      revealed: sides.player2.map(toEntry),
-      totalValue: sides.player2.reduce((s, c) => s + c.value, 0)
+      revealed: allCards.player2.map(toEntry),
+      totalValue: allCards.player2.reduce((s, c) => s + (c.cancelled ? 0 : c.value), 0)
     },
     effectsResolved
   }

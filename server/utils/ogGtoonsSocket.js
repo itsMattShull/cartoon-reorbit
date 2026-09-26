@@ -14,16 +14,21 @@
 // ── Security ────────────────────────────────────────────────────────────────────────────────
 // Every handler resolves the acting user via `resolveSocketUser(socket)` (the same helper
 // socket-server.js's own Clash handlers use) — never a client-supplied userId/side/opponent id.
-// A committed-but-unrevealed card is NEVER sent to the opponent before both sides have
-// committed for the round: which card each side will reveal is entirely server-determined by
-// deck order (see below), so the client never even chooses a card, only whether to swap or
-// commit. Swap/queue/challenge actions validate purely against server-held state (the match,
-// queue entry, or challenge record) — a client never gets to assert its own stake, deck, or
-// opponent. Deck ownership + isOgGtoon + exactly-12-unique-positions is re-verified against the
-// database at match start, not trusted from the deck's last save. A user already in an active
-// match cannot join the queue or accept/send a challenge. Effect resolution is wrapped in
-// try/catch per round so one malformed admin-authored gtoonEffect cannot crash the shared
-// socket process out from under every other game on it.
+// Cards reveal in three batches (4, then 2, then 1 — see BATCH_QUOTAS in ogGtoonEngine.js), not
+// one at a time: a player commits which of their OWN remaining cards to play, one pick at a
+// time, up to the current batch's quota, but nothing about that pick is ever sent to the
+// opponent (only a pending-count) until BOTH sides have filled their quota and the whole batch
+// reveals at once — the commit-then-reveal pattern this game has always used, just now carrying
+// a real card choice instead of an empty payload. The goal card (deck position 11) can never be
+// voluntarily picked during the three normal batches — see `canCommitCard`'s `allowGoalCard`
+// param — only entering play automatically once every other card is spent (sudden death).
+// Queue/challenge actions validate purely against server-held state (the match, queue entry, or
+// challenge record) — a client never gets to assert its own stake, deck, or opponent. Deck
+// ownership + isOgGtoon + exactly-12-unique-positions is re-verified against the database at
+// match start, not trusted from the deck's last save. A user already in an active match cannot
+// join the queue or accept/send a challenge. Effect resolution is wrapped in try/catch per batch
+// so one malformed admin-authored gtoonEffect cannot crash the shared socket process out from
+// under every other game on it.
 //
 // ── Performance ─────────────────────────────────────────────────────────────────────────────
 // player{1,2}DeckSnapshot is built ONCE at match start (one DB read) and embeds every field a
@@ -41,18 +46,28 @@ import { randomUUID } from 'crypto'
 import { prisma as db } from '../prisma.js'
 import { resolveFinalBoard } from './ogGtoonEffects.js'
 import {
-  deriveGoalColor, canSwap, applySwap, SWAP_COST,
+  deriveGoalColor, canCommitCard, applyBatchCommit, isBatchFull, BATCH_QUOTAS,
   determineWinner, hasSuddenDeathCardsRemaining
 } from './ogGtoonEngine.js'
 import * as ogRedis from './ogGtoonsRedisState.js'
 import { getOgGtoonsConfig } from './ogGtoonsConfig.js'
 
 const TOTAL_ROUNDS = 7
+const TOTAL_BATCHES = BATCH_QUOTAS.length
 const RECONNECT_GRACE_MS = 20_000
 const MATCH_MAX_AGE_MS = 30 * 60 * 1000
 const QUEUE_STALE_MS = 5 * 60 * 1000
 const CHALLENGE_STALE_MS = 5 * 60 * 1000
 const POINTS_METHOD = 'Game - gToons'
+
+/** BATCH_QUOTAS[currentBatch-1] for batches 1-3; sudden death (past all three) is always 1. */
+function currentQuota(match) {
+  return match.currentBatch <= TOTAL_BATCHES ? BATCH_QUOTAS[match.currentBatch - 1] : 1
+}
+/** The goal card (position 11) is only pickable once every other card is spent. */
+function allowGoalCardNow(match) {
+  return match.currentBatch > TOTAL_BATCHES
+}
 
 const EV = (name) => `oggtoons:${name}`
 const userRoom = (userId) => `oggtoons:user:${userId}`
@@ -129,37 +144,55 @@ async function loadVerifiedDeckSnapshot(userId, deckId) {
   return ordered
 }
 
+/** The player's own still-unrevealed, not-yet-committed-this-batch cards — safe to send in full
+ *  (it's their own hand); the goal card is omitted unless sudden death has made it pickable. */
+function handFor(match, idx) {
+  const showGoal = allowGoalCardNow(match)
+  return match.remainingIdx[idx]
+    .filter(p => p !== 11 || showGoal)
+    .map(p => {
+      const c = match.deckOrder[idx][p]
+      return {
+        ctoonId: c.ctoonId, name: c.name, assetPath: c.assetPath, color: c.color, value: c.value,
+        type1: c.type1, type2: c.type2, type3: c.type3, group: c.group, isSlam: c.isSlam
+      }
+    })
+}
+
 function publicMatchView(match, uid) {
   const meIdx = match.players.indexOf(uid)
   const oppIdx = meIdx === 0 ? 1 : 0
-  const meKey = meIdx === 0 ? 'player1' : 'player2'
-  const oppKey = meIdx === 0 ? 'player2' : 'player1'
+  const quota = currentQuota(match)
   return {
     matchId: match.id,
-    round: match.currentRound,
+    round: match.revealed[meIdx].length,
     totalRounds: TOTAL_ROUNDS,
-    suddenDeath: match.currentRound > TOTAL_ROUNDS,
+    currentBatch: match.currentBatch,
+    totalBatches: TOTAL_BATCHES,
+    batchQuota: quota,
+    suddenDeath: match.currentBatch > TOTAL_BATCHES,
     you: {
       userId: uid,
       username: match.usernames[meIdx],
       goalColor: match.goalColor[meIdx],
       goalCard: { name: match.deckOrder[meIdx][11].name, assetPath: match.deckOrder[meIdx][11].assetPath, color: match.deckOrder[meIdx][11].color },
-      swapUsed: match.swapUsed[meIdx],
       stake: match.stake[meIdx],
       revealed: match.revealed[meIdx],
       cardsRemaining: match.remainingIdx[meIdx].length,
-      ready: match.ready[meIdx],
-      // The up-next card's identity is NEVER sent to the opponent, and is only sent to its own
-      // owner once committed — see the reveal payload. Before that it is just "count remaining".
+      hand: handFor(match, meIdx),
+      pendingCount: match.pending[meIdx].length,
+      ready: isBatchFull(match.pending[meIdx], quota)
     },
     opponent: {
       username: match.usernames[oppIdx],
       goalColor: match.goalColor[oppIdx],
       goalCard: { name: match.deckOrder[oppIdx][11].name, assetPath: match.deckOrder[oppIdx][11].assetPath, color: match.deckOrder[oppIdx][11].color },
-      swapUsed: match.swapUsed[oppIdx],
+      // Opponent's hand identity is NEVER sent — only counts. Their pending picks stay invisible
+      // until the whole batch reveals (see resolveBatch).
       revealed: match.revealed[oppIdx],
       cardsRemaining: match.remainingIdx[oppIdx].length,
-      ready: match.ready[oppIdx]
+      pendingCount: match.pending[oppIdx].length,
+      ready: isBatchFull(match.pending[oppIdx], quota)
     }
   }
 }
@@ -221,12 +254,11 @@ async function startMatch(io, a, b, { isChallenge }) {
     sockets: [new Set([a.socket.id]), new Set([b.socket.id])],
     deckOrder: [deckA, deckB],
     remainingIdx: [[0,1,2,3,4,5,6,7,8,9,10,11], [0,1,2,3,4,5,6,7,8,9,10,11]],
+    pending: [[], []], // positions committed (picked) but not yet revealed for the CURRENT batch
     goalColor: [deriveGoalColor(deckA), deriveGoalColor(deckB)],
-    swapUsed: [false, false],
-    ready: [false, false],
     revealed: [[], []], // roundLog itself is built once, at match completion — see buildRoundLog
     stake: [stake, stake],
-    currentRound: 1,
+    currentBatch: 1,
     isChallenge: !!isChallenge,
     ending: false,
     graceTimers: {},
@@ -319,8 +351,8 @@ function runFinalBoardResolution(match) {
     // fall back to plain base values with no effects applied.
     console.error(`[ogGtoons] final board resolution failed for match ${match.id}:`, err)
     final = {
-      player1: { revealed: match.revealed[0].map(r => ({ ctoonId: r.ctoonId, round: r.round, baseValue: r.baseValue, finalValue: r.baseValue, color: r.color })), totalValue: 0 },
-      player2: { revealed: match.revealed[1].map(r => ({ ctoonId: r.ctoonId, round: r.round, baseValue: r.baseValue, finalValue: r.baseValue, color: r.color })), totalValue: 0 },
+      player1: { revealed: match.revealed[0].map(r => ({ ctoonId: r.ctoonId, round: r.round, baseValue: r.baseValue, finalValue: r.baseValue, color: r.color, cancelled: false })), totalValue: 0 },
+      player2: { revealed: match.revealed[1].map(r => ({ ctoonId: r.ctoonId, round: r.round, baseValue: r.baseValue, finalValue: r.baseValue, color: r.color, cancelled: false })), totalValue: 0 },
       effectsResolved: []
     }
   }
@@ -330,6 +362,7 @@ function runFinalBoardResolution(match) {
       if (!match.revealed[idx][i]) return
       match.revealed[idx][i].finalValue = r.finalValue
       match.revealed[idx][i].color = r.color
+      match.revealed[idx][i].cancelled = !!r.cancelled
     })
   }
   const outcome = determineWinner({
@@ -341,51 +374,52 @@ function runFinalBoardResolution(match) {
   return { outcome, final }
 }
 
-async function resolveRound(io, match) {
+/**
+ * Reveals a whole batch at once, once BOTH sides have filled their current quota (checked by the
+ * caller before invoking this). Cards reveal in commit order (the order each side picked them).
+ * A quota of 1 (sudden death, past all three normal batches) makes this behave exactly like the
+ * old single-card-per-round resolve, just still driven by the player's own choice.
+ */
+async function resolveBatch(io, match) {
   if (match.ending) return
-  if (!match.ready[0] || !match.ready[1]) return
+  const quota = currentQuota(match)
+  if (!isBatchFull(match.pending[0], quota) || !isBatchFull(match.pending[1], quota)) return
 
-  const idx0 = match.remainingIdx[0][0]
-  const idx1 = match.remainingIdx[1][0]
-  const card1 = match.deckOrder[0][idx0]
-  const card2 = match.deckOrder[1][idx1]
-
-  match.remainingIdx[0] = match.remainingIdx[0].slice(1)
-  match.remainingIdx[1] = match.remainingIdx[1].slice(1)
-
-  // finalValue === baseValue at reveal time: effects have not been applied yet (see header).
-  const entry1 = {
-    ctoonId: card1.ctoonId, name: card1.name, assetPath: card1.assetPath, characters: card1.characters,
-    color: card1.color, baseValue: card1.value, finalValue: card1.value,
-    type1: card1.type1, type2: card1.type2, type3: card1.type3, group: card1.group,
-    isSlam: card1.isSlam, effect: card1.effect, round: match.currentRound
+  const revealedBatch = [[], []]
+  for (const idx of [0, 1]) {
+    for (const position of match.pending[idx]) {
+      const card = match.deckOrder[idx][position]
+      // finalValue === baseValue at reveal time: effects have not been applied yet (see header).
+      // round is THIS SIDE's Nth-ever reveal, not a global counter — batches always reveal the
+      // same count per side simultaneously, so the two sides' round numbers stay symmetric.
+      const entry = {
+        ctoonId: card.ctoonId, name: card.name, assetPath: card.assetPath, characters: card.characters,
+        color: card.color, baseValue: card.value, finalValue: card.value,
+        type1: card.type1, type2: card.type2, type3: card.type3, group: card.group,
+        isSlam: card.isSlam, effect: card.effect, round: match.revealed[idx].length + 1
+      }
+      match.revealed[idx].push(entry)
+      revealedBatch[idx].push(entry)
+    }
+    match.pending[idx] = []
   }
-  const entry2 = {
-    ctoonId: card2.ctoonId, name: card2.name, assetPath: card2.assetPath, characters: card2.characters,
-    color: card2.color, baseValue: card2.value, finalValue: card2.value,
-    type1: card2.type1, type2: card2.type2, type3: card2.type3, group: card2.group,
-    isSlam: card2.isSlam, effect: card2.effect, round: match.currentRound
-  }
-  match.revealed[0].push(entry1)
-  match.revealed[1].push(entry2)
 
-  match.ready = [false, false]
   match.lastActivity = Date.now()
 
-  emitToPlayers(io, match, EV('reveal'), (uid, i) => ({
+  emitToPlayers(io, match, EV('revealBatch'), (uid, i) => ({
     ...publicMatchView(match, uid),
-    reveal: {
-      round: match.currentRound,
-      you: i === 0 ? entry1 : entry2,
-      opponent: i === 0 ? entry2 : entry1
+    revealBatch: {
+      batch: match.currentBatch,
+      you: i === 0 ? revealedBatch[0] : revealedBatch[1],
+      opponent: i === 0 ? revealedBatch[1] : revealedBatch[0]
     }
   }))
 
-  // Decide whether the match is over: after round 7, and every sudden-death round after that,
-  // run the ONE full-board effects pass to see whether the tie actually breaks (a Slam gToon
-  // effect can turn an apparent base-value tie into a real result) — only a genuine tie with
-  // cards remaining on both sides continues into another sudden-death round.
-  if (match.currentRound >= TOTAL_ROUNDS) {
+  // Decide whether the match is over: after the 3rd normal batch (all 7 cards revealed), and
+  // every sudden-death single-card batch after that, run the ONE full-board effects pass to see
+  // whether the tie actually breaks (a Slam gToon effect can turn an apparent base-value tie
+  // into a real result) — only a genuine tie with cards remaining on both sides continues.
+  if (match.currentBatch >= TOTAL_BATCHES) {
     const { outcome, final } = runFinalBoardResolution(match)
     const bothHaveCards = hasSuddenDeathCardsRemaining(match.remainingIdx[0]) &&
       hasSuddenDeathCardsRemaining(match.remainingIdx[1])
@@ -402,7 +436,7 @@ async function resolveRound(io, match) {
     }
   }
 
-  match.currentRound += 1
+  match.currentBatch += 1
   fireSync(match.id, match)
 }
 
@@ -449,8 +483,8 @@ async function persistAndSettle(match, { outcome, winnerUserId, player1Score, pl
         player2DeckSnapshot: match.deckOrder[1],
         player1GoalColor: match.goalColor[0],
         player2GoalColor: match.goalColor[1],
-        player1SwapUsed: match.swapUsed[0],
-        player2SwapUsed: match.swapUsed[1],
+        // player1SwapUsed/player2SwapUsed intentionally left at their schema default (false) —
+        // the swap mechanic is gone (live hand selection replaces it; see ogGtoonEngine.js).
         player1Score: player1Score ?? 0,
         player2Score: player2Score ?? 0,
         roundLog: buildRoundLog(match, effectsResolved),
@@ -601,11 +635,26 @@ export function startOgGtoonsSweep(io) {
   sweepTimer.unref?.()
 }
 
+/** Best-effort currentBatch for a match restored from a pre-batching Redis snapshot (deploy-time
+ *  compatibility only — see restoreOgGtoonsMatches). Cumulative quotas are 4, 6, 7. */
+function batchForRevealedCount(n) {
+  if (n < 4) return 1
+  if (n < 6) return 2
+  if (n < 7) return 3
+  return TOTAL_BATCHES + 1 // sudden death
+}
+
 /**
  * Restores in-memory match state from Redis on boot (crash/restart survival — mirrors the
  * pattern in server/utils/redisState.js). Live matches are restored so players can reconnect
  * into them; the queue and challenges are intentionally NOT restored (they are short-lived and
  * a stale queue/challenge entry surviving a restart is far more confusing than losing it).
+ *
+ * A match already in-flight (serialized to Redis) at the moment of a deploy that introduces this
+ * batching shape won't have `pending`/`currentBatch` in its snapshot — backfill sane defaults
+ * rather than letting the next commit throw on `match.pending[idx]` being undefined. Any picks a
+ * player had queued but not yet revealed at that instant are lost (same category of loss the
+ * original code already accepted for a crash between a commit and its round resolving).
  */
 export async function restoreOgGtoonsMatches() {
   const restored = await ogRedis.scanOgGtoonMatches()
@@ -613,6 +662,11 @@ export async function restoreOgGtoonsMatches() {
     match.sockets = [new Set(), new Set()]
     match.graceTimers = {}
     match.ending = false
+    if (!Array.isArray(match.pending)) match.pending = [[], []]
+    if (typeof match.currentBatch !== 'number') {
+      const revealedCount = Math.max(match.revealed?.[0]?.length || 0, match.revealed?.[1]?.length || 0)
+      match.currentBatch = batchForRevealedCount(revealedCount)
+    }
     matches.set(matchId, match)
     matchByUser.set(match.players[0], matchId)
     matchByUser.set(match.players[1], matchId)
@@ -800,66 +854,46 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     io.local.to(userRoom(challenge.toUserId)).emit(EV('challengeCancelled'), { id: challengeId })
   })
 
-  socket.on(EV('swap'), async ({ matchId, swapWithIndex } = {}) => {
+  socket.on(EV('commit'), async ({ matchId, ctoonId } = {}) => {
     const user = await auth()
     if (!user) return
     const match = matches.get(matchId)
     if (!match || match.ending) return
     const idx = match.players.indexOf(user.id)
     if (idx === -1) return
-    // "Before revealing a round" — reject once this round's reveal has already broadcast, i.e.
-    // once this side has already committed (ready) for the round that is about to resolve.
-    const check = canSwap({
-      swapUsed: match.swapUsed[idx],
-      pointBalance: Infinity, // balance is checked against the live UserPoints row below
-      roundRevealed: match.ready[idx]
+
+    const card = match.deckOrder[idx].find(c => c.ctoonId === ctoonId)
+    const quota = currentQuota(match)
+    const check = canCommitCard({
+      remainingIdx: match.remainingIdx[idx],
+      pending: match.pending[idx],
+      position: card ? card.position : null,
+      quota,
+      allowGoalCard: allowGoalCardNow(match)
     })
     if (!check.ok) {
-      return socket.emit(EV('error'), { code: check.reason, message: 'You cannot swap right now.' })
+      return socket.emit(EV('error'), { code: check.reason, message: 'You cannot play that card right now.' })
     }
-    if (!Number.isInteger(swapWithIndex) || swapWithIndex <= 0 || swapWithIndex >= match.remainingIdx[idx].length) {
-      return socket.emit(EV('error'), { code: 'badSwapTarget', message: 'Invalid swap target.' })
-    }
-    try {
-      await db.$transaction(async tx => {
-        const pts = await tx.userPoints.findUnique({ where: { userId: user.id } })
-        if ((pts?.points ?? 0) < SWAP_COST) throw new Error('INSUFFICIENT_SWAP_BALANCE')
-        const after = await tx.userPoints.update({ where: { userId: user.id }, data: { points: { decrement: SWAP_COST } } })
-        await tx.pointsLog.create({ data: { userId: user.id, points: SWAP_COST, total: after.points, method: POINTS_METHOD, direction: 'decrease' } })
-      })
-    } catch (err) {
-      if (String(err?.message) === 'INSUFFICIENT_SWAP_BALANCE') {
-        return socket.emit(EV('error'), { code: 'insufficient_points', message: `You need ${SWAP_COST} points to swap.` })
-      }
-      console.error('[ogGtoons] swap debit failed:', err)
-      return socket.emit(EV('error'), { code: 'swapFailed', message: 'Could not process the swap.' })
-    }
-    match.remainingIdx[idx] = applySwap(match.remainingIdx[idx], swapWithIndex)
-    match.swapUsed[idx] = true
-    match.lastActivity = Date.now()
-    fireSync(match.id, match)
-    socket.emit(EV('swapApplied'), { matchId: match.id })
-  })
 
-  socket.on(EV('commit'), async ({ matchId, round } = {}) => {
-    const user = await auth()
-    if (!user) return
-    const match = matches.get(matchId)
-    if (!match || match.ending) return
-    const idx = match.players.indexOf(user.id)
-    if (idx === -1) return
-    if (Number(round) !== match.currentRound) return
-    if (match.ready[idx]) return
-    if (match.remainingIdx[idx].length === 0) return
-
-    match.ready[idx] = true
+    const applied = applyBatchCommit(match.remainingIdx[idx], match.pending[idx], card.position)
+    match.remainingIdx[idx] = applied.remainingIdx
+    match.pending[idx] = applied.pending
     match.sockets[idx].add(socket.id)
     match.lastActivity = Date.now()
-    socket.emit(EV('committed'), { round: match.currentRound })
-    const oppIdx = idx === 0 ? 1 : 0
-    for (const sid of match.sockets[oppIdx]) io.local.to(sid).emit(EV('opponentCommitted'), { round: match.currentRound })
+    fireSync(match.id, match) // persist every individual pick, not just once the batch reveals
 
-    await resolveRound(io, match)
+    // Full view, not just a counter: the committer's hand/pendingCount/ready must update
+    // immediately (their just-played card has to disappear from their own hand grid before the
+    // batch reveals), and the opponent's pendingCount must tick up too — otherwise the UI is
+    // stuck showing the pre-commit state until the whole batch finally reveals.
+    socket.emit(EV('committed'), { ...publicMatchView(match, user.id), ctoonId })
+    const oppIdx = idx === 0 ? 1 : 0
+    const oppUid = match.players[oppIdx]
+    for (const sid of match.sockets[oppIdx]) io.local.to(sid).emit(EV('opponentCommitted'), publicMatchView(match, oppUid))
+
+    if (isBatchFull(match.pending[0], quota) && isBatchFull(match.pending[1], quota)) {
+      await resolveBatch(io, match)
+    }
   })
 
   socket.on(EV('leave'), async () => {

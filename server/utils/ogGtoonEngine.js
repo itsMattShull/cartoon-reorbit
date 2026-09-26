@@ -1,11 +1,27 @@
 // server/utils/ogGtoonEngine.js
 //
-// Pure match-state logic for original gToons (2002): deck order -> goal color, round
-// advancement, swap validation/application, and scoring (all 3 goal-color cases + sudden
-// death). No socket/db imports — everything takes and returns plain data so it is unit-testable
-// on its own and reusable from server/utils/ogGtoonsSocket.js without pulling in Prisma or
-// Socket.IO. Effect resolution itself lives in server/utils/ogGtoonEffects.js; this module only
-// decides deck order, swaps and the win condition.
+// Pure match-state logic for original gToons (2002): goal color, live per-round hand-pick
+// validation, batch progression, and scoring (all 3 goal-color cases + sudden death). No
+// socket/db imports — everything takes and returns plain data so it is unit-testable on its own
+// and reusable from server/utils/ogGtoonsSocket.js without pulling in Prisma or Socket.IO.
+// Effect resolution itself lives in server/utils/ogGtoonEffects.js; this module only decides
+// goal color, which picks are legal, batch progression and the win condition.
+//
+// ── Live hand selection + batched reveals (feature 1 + 3) ──────────────────────────────────
+// A deck's 12 cards are no longer revealed in their saved `position` order. Positions 0-10 are
+// an unordered pool the player picks from live, during the match; position 11 stays the goal
+// card (its color is the match's goal color from the moment the match starts, per
+// `deriveGoalColor`) and cannot be voluntarily picked during the three normal batches — see
+// `canCommitCard`'s `allowGoalCard` param. Cards reveal in three batches of BATCH_QUOTAS
+// (4, then 2, then 1 — 7 total, matching the original TOTAL_ROUNDS) rather than one at a time;
+// each side fills their own batch quota with individual picks (still validated one at a time,
+// via `canCommitCard`/`applyBatchCommit`), and a batch only reveals once BOTH sides have filled
+// theirs. Sudden death (past all three batches, still tied) reverts to single-card rounds
+// (quota 1), now with `allowGoalCard: true` since every other card is already spent.
+//
+// The once-per-match "swap the up-next card" mechanic this replaced is gone entirely: it only
+// ever made sense when the reveal order was forced. If you can always just choose to play a
+// different card, there's nothing left to swap.
 
 export const NEUTRAL_COLORS = new Set(['BLACK', 'SILVER'])
 
@@ -31,40 +47,41 @@ export function validateDeckPositions(cards) {
   return seen.size === 12
 }
 
+/** Batch sizes for the three normal reveal batches — 4 + 2 + 1 = TOTAL_ROUNDS (7). */
+export const BATCH_QUOTAS = [4, 2, 1]
+
 /**
- * Whether a swap request may be applied right now.
- * @param {object} state - { swapUsed, pointBalance, roundRevealed }
- *   roundRevealed: true once the current round's reveal has already broadcast — a swap after
- *   that point is a no-op the client cannot benefit from and must be rejected server-side, not
- *   merely hidden in the UI.
+ * Whether `position` (a deck slot 0-11, resolved by the caller from the committed `ctoonId`) may
+ * be added to this side's in-progress batch pick right now.
+ * @param {object} state
+ *   remainingIdx: still-unplayed deck positions for this side
+ *   pending: positions already picked (committed, not yet revealed) for the CURRENT batch
+ *   position: the deck position being committed
+ *   quota: how many picks this batch needs (BATCH_QUOTAS[currentBatch-1], or 1 in sudden death)
+ *   allowGoalCard: true once every other card is spent (sudden death) — the goal card (position
+ *     11) can never be voluntarily picked during the three normal batches.
  */
-export function canSwap({ swapUsed, pointBalance, roundRevealed }) {
-  if (swapUsed) return { ok: false, reason: 'swap_used' }
-  if (roundRevealed) return { ok: false, reason: 'already_revealed' }
-  if ((pointBalance || 0) < 10) return { ok: false, reason: 'insufficient_points' }
+export function canCommitCard({ remainingIdx, pending, position, quota, allowGoalCard }) {
+  if (position == null || !Array.isArray(remainingIdx) || !remainingIdx.includes(position)) {
+    return { ok: false, reason: 'not_available' }
+  }
+  if (Array.isArray(pending) && pending.includes(position)) return { ok: false, reason: 'already_pending' }
+  if (position === 11 && !allowGoalCard) return { ok: false, reason: 'goal_card_reserved' }
+  if ((pending?.length || 0) >= quota) return { ok: false, reason: 'batch_full' }
   return { ok: true }
 }
 
-export const SWAP_COST = 10
+/** Moves `position` from `remainingIdx` to `pending`. Returns NEW arrays; never mutates input. */
+export function applyBatchCommit(remainingIdx, pending, position) {
+  return {
+    remainingIdx: remainingIdx.filter(p => p !== position),
+    pending: [...pending, position]
+  }
+}
 
-/**
- * Swaps the up-next card (index 0 of the remaining unplayed deck) with another still-unplayed
- * card from the SAME deck. `remainingDeck` is the ordered list of cards this player has not yet
- * revealed; `swapWithIndex` is an index into that same array (1..length-1).
- * Returns a NEW array; does not mutate the input.
- */
-export function applySwap(remainingDeck, swapWithIndex) {
-  if (!Array.isArray(remainingDeck) || remainingDeck.length < 2) {
-    throw new Error('Nothing to swap with')
-  }
-  if (!Number.isInteger(swapWithIndex) || swapWithIndex <= 0 || swapWithIndex >= remainingDeck.length) {
-    throw new Error('Invalid swap target')
-  }
-  const next = remainingDeck.slice()
-  const tmp = next[0]
-  next[0] = next[swapWithIndex]
-  next[swapWithIndex] = tmp
-  return next
+/** Whether this side has filled its quota for the current batch and is ready to reveal. */
+export function isBatchFull(pending, quota) {
+  return (pending?.length || 0) >= quota
 }
 
 function sum(nums) {

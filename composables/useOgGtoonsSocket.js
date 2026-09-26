@@ -33,13 +33,14 @@ export function useOgGtoonsSocket() {
       matchEnded.value = null
       currentMatchId.value = state.matchId
     })
-    socket.on('oggtoons:reveal', state => {
+    socket.on('oggtoons:revealBatch', state => {
       matchState.value = state
-      lastReveal.value = state.reveal
+      lastReveal.value = state.revealBatch
     })
-    socket.on('oggtoons:committed', () => {})
-    socket.on('oggtoons:opponentCommitted', () => {})
-    socket.on('oggtoons:swapApplied', () => {})
+    // Both carry a full match view (hand/pendingCount/ready) so the board updates immediately
+    // after each individual pick, not just once the whole batch reveals.
+    socket.on('oggtoons:committed', state => { matchState.value = state })
+    socket.on('oggtoons:opponentCommitted', state => { matchState.value = state })
     socket.on('oggtoons:opponentDropped', payload => {
       matchState.value = matchState.value ? { ...matchState.value, opponentDropped: payload } : matchState.value
     })
@@ -53,11 +54,8 @@ export function useOgGtoonsSocket() {
     socket.on('oggtoons:error', err => { lastError.value = err })
   }
 
-  function commit(round) {
-    if (currentMatchId.value) socket.emit('oggtoons:commit', { matchId: currentMatchId.value, round })
-  }
-  function swap(swapWithIndex) {
-    if (currentMatchId.value) socket.emit('oggtoons:swap', { matchId: currentMatchId.value, swapWithIndex })
+  function commit(ctoonId) {
+    if (currentMatchId.value) socket.emit('oggtoons:commit', { matchId: currentMatchId.value, ctoonId })
   }
   function leaveMatch() {
     socket.emit('oggtoons:leave')
@@ -68,6 +66,6 @@ export function useOgGtoonsSocket() {
 
   return {
     socket, matchState, lastReveal, matchEnded, isConnected, currentMatchId, lastError,
-    commit, swap, leaveMatch
+    commit, leaveMatch
   }
 }
