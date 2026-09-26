@@ -5,8 +5,6 @@
         v-if="entry.heroImagePath"
         :src="entry.heroImagePath"
         alt=""
-        width="1600"
-        height="400"
         loading="eager"
         fetchpriority="high"
         class="encyclopedia-hero"
@@ -101,14 +99,19 @@ html.newsite-encyclopedia body {
   color: #fff;
 }
 
+/* Free-form, not a banner: any image, any aspect ratio, shown whole — no forced aspect-ratio box
+   and no object-fit crop (the server no longer forces one either, see the image upload
+   endpoint's own comment). max-width/height just keeps an oversized upload from overwhelming the
+   page; width/height:auto means it never gets stretched past (or squashed to fit) its own
+   natural proportions. */
 .encyclopedia-hero {
   display: block;
-  width: 100%;
+  width: auto;
   height: auto;
-  aspect-ratio: 4 / 1;
-  object-fit: cover;
+  max-width: 100%;
+  max-height: 480px;
   border-radius: 8px;
-  margin: 0 0 16px;
+  margin: 0 auto 16px;
 }
 
 .encyclopedia-back {
