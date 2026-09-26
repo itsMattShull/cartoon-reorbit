@@ -23,17 +23,17 @@
       <div
         v-if="open"
         ref="panelRef"
-        class="economy-dropdown-panel"
+        class="nav-economy-dropdown-panel"
         role="menu"
         :style="panelStyle"
       >
-        <NuxtLink to="/newsite/trade" class="economy-dropdown-item" data-nav-sound="trades" role="menuitem" @click="close">
+        <NuxtLink to="/newsite/trade" class="nav-economy-dropdown-item" data-nav-sound="trades" role="menuitem" @click="close">
           Trades
         </NuxtLink>
-        <NuxtLink to="/newsite/AuctionHouse" class="economy-dropdown-item" data-nav-sound="auctions" role="menuitem" @click="close">
+        <NuxtLink to="/newsite/AuctionHouse" class="nav-economy-dropdown-item" data-nav-sound="auctions" role="menuitem" @click="close">
           Auctions
         </NuxtLink>
-        <NuxtLink to="/newsite/economy" class="economy-dropdown-item" data-nav-sound="toononomics" role="menuitem" @click="close">
+        <NuxtLink to="/newsite/economy" class="nav-economy-dropdown-item" data-nav-sound="toononomics" role="menuitem" @click="close">
           Toononomics
         </NuxtLink>
       </div>
@@ -61,15 +61,18 @@ function positionPanel() {
   const rect = trigger.getBoundingClientRect()
   const PANEL_WIDTH = 160
   const GAP = 4
+  const VIEWPORT_MARGIN = 8
   // Right-align to the trigger's right edge if left-aligning would run the panel past the
   // viewport's right edge (the button sits near the right end of the top bar) — otherwise
   // left-align, so it doesn't jut out past the left edge on a narrow mobile viewport either.
-  const overflowsRight = rect.left + PANEL_WIDTH > window.innerWidth - 8
+  // Both branches are clamped to VIEWPORT_MARGIN so neither can push the panel's near edge
+  // off-screen even in a hypothetical viewport narrower than PANEL_WIDTH itself.
+  const overflowsRight = rect.left + PANEL_WIDTH > window.innerWidth - VIEWPORT_MARGIN
   panelStyle.value = {
     position: 'fixed',
     top: `${rect.bottom + GAP}px`,
-    left: overflowsRight ? 'auto' : `${rect.left}px`,
-    right: overflowsRight ? `${Math.max(8, window.innerWidth - rect.right)}px` : 'auto',
+    left: overflowsRight ? 'auto' : `${Math.max(VIEWPORT_MARGIN, rect.left)}px`,
+    right: overflowsRight ? `${Math.max(VIEWPORT_MARGIN, window.innerWidth - rect.right)}px` : 'auto',
     width: `${PANEL_WIDTH}px`,
   }
 }
@@ -97,12 +100,18 @@ function close() {
   open.value = false
 }
 
+let isMounted = true
+
 watch(open, (isOpen) => {
   if (typeof document === 'undefined') return
   if (isOpen) {
     // Deferred a tick so the click that opened the dropdown doesn't also immediately close it
-    // via this same listener (it hasn't finished bubbling yet when `open` first flips true).
+    // via this same listener (it hasn't finished bubbling yet when `open` first flips true). The
+    // guard below covers the narrow window where `open` flips back to false again (e.g. a
+    // same-tick route change closing it) or the component unmounts before this callback runs —
+    // without it, listeners could get added with nothing left to ever remove them.
     nextTick(() => {
+      if (!isMounted || !open.value) return
       document.addEventListener('click', onDocumentPointerDown)
       document.addEventListener('keydown', onKeydown)
       window.addEventListener('resize', positionPanel)
@@ -121,6 +130,7 @@ watch(open, (isOpen) => {
 watch(() => route.fullPath, close)
 
 onBeforeUnmount(() => {
+  isMounted = false
   document.removeEventListener('click', onDocumentPointerDown)
   document.removeEventListener('keydown', onKeydown)
   window.removeEventListener('resize', positionPanel)
@@ -161,7 +171,7 @@ onBeforeUnmount(() => {
 /* Unscoped: this panel is teleported to <body>, outside this component's own scoped-style
    subtree, so a `scoped` block (which relies on a data-v-* attribute Vue only adds within the
    component's own rendered tree) would never match it. */
-.economy-dropdown-panel {
+.nav-economy-dropdown-panel {
   z-index: 1100;
   background: #062a4a;
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -172,7 +182,7 @@ onBeforeUnmount(() => {
   box-sizing: border-box;
 }
 
-.economy-dropdown-item {
+.nav-economy-dropdown-item {
   display: block;
   padding: 8px 10px;
   font-size: 0.85rem;
@@ -183,8 +193,8 @@ onBeforeUnmount(() => {
   white-space: nowrap;
 }
 
-.economy-dropdown-item:hover,
-.economy-dropdown-item:focus {
+.nav-economy-dropdown-item:hover,
+.nav-economy-dropdown-item:focus {
   background: rgba(255, 255, 255, 0.12);
 }
 </style>
