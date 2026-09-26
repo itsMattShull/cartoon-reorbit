@@ -1,7 +1,7 @@
 <template>
   <div class="economy">
     <div class="economy-header">
-      <h1 class="economy-title">Economy</h1>
+      <h1 class="economy-title">Toononomics</h1>
       <div class="window-toggle" role="group" aria-label="Time window">
         <button
           v-for="opt in windowOptions"

@@ -6,15 +6,7 @@
     <NuxtLink to="/newsite/cmart" class="nav-link" data-nav-sound="cmart">
       <BlueButton :style="{ height: buttonHeight }">cMart</BlueButton>
     </NuxtLink>
-    <NuxtLink to="/newsite/AuctionHouse" class="nav-link" data-nav-sound="auctions">
-      <BlueButton :style="{ height: buttonHeight }">Auctions</BlueButton>
-    </NuxtLink>
-    <NuxtLink to="/newsite/trade" class="nav-link" data-nav-sound="trades">
-      <BlueButton :style="{ height: buttonHeight }">Trades</BlueButton>
-    </NuxtLink>
-    <NuxtLink to="/newsite/economy" class="nav-link" data-nav-sound="economy">
-      <BlueButton :style="{ height: buttonHeight }">Economy</BlueButton>
-    </NuxtLink>
+    <NavEconomyDropdown :button-height="buttonHeight" />
     <NuxtLink to="/newsite/Games" class="nav-link" data-nav-sound="games">
       <BlueButton :style="{ height: buttonHeight }">Games</BlueButton>
     </NuxtLink>
