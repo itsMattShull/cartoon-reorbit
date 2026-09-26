@@ -1,6 +1,6 @@
 <template>
   <div class="encyclopedia">
-    <h1 class="encyclopedia-title">Encyclopedia</h1>
+    <h1 class="encyclopedia-title">Lore</h1>
     <p class="encyclopedia-subtitle">A reference guide to everything Cartoon ReOrbit.</p>
 
     <div class="encyclopedia-search">
@@ -8,7 +8,7 @@
         v-model="query"
         type="text"
         class="encyclopedia-search-input"
-        placeholder="Search the encyclopedia…"
+        placeholder="Search the lore…"
         autocomplete="off"
         role="combobox"
         :aria-expanded="suggestions.length > 0"
@@ -45,7 +45,7 @@ definePageMeta({
   middleware: 'newsite',
   showAdbar: true,
   showNav: true,
-  title: 'Encyclopedia',
+  title: 'Lore',
   description: 'A searchable reference guide to Cartoon ReOrbit — cMoons, games, features, and more.',
   // Same reasoning as pages/newsite/tutorial.vue: a search box plus a growing entry grid can
   // exceed the fixed-chrome .main-content box's default height.
@@ -69,7 +69,7 @@ const suggestions = computed(() => {
 
 const { data, error } = await useFetch('/api/encyclopedia/entries')
 if (error.value) {
-  loadError.value = 'Could not load the encyclopedia right now.'
+  loadError.value = 'Could not load the lore right now.'
 } else {
   entries.value = data.value?.entries || []
 }

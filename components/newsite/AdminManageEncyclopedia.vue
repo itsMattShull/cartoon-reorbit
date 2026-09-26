@@ -8,7 +8,7 @@
         </NuxtLink>
       </div>
       <p class="text-gray-500">
-        Wiki-style reference entries, reachable from the Encyclopedia nav link and its search bar.
+        Wiki-style reference entries, shown as "Lore" in the Encyclopedia nav dropdown and reachable via its search bar.
         An entry's body can link to another entry — pick one from the "Link to entry" list below
         the editor toolbar while writing.
       </p>
@@ -76,7 +76,7 @@
             </div>
             <div class="space-y-2 flex-1 min-w-[200px]">
               <input type="file" accept="image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif" class="block w-full" @change="onFile" />
-              <p class="text-[10px] text-gray-500">Cropped to fill a 1600x400 (4:1) banner, matching the Tutorial page's hero. Max 5MB.</p>
+              <p class="text-[10px] text-gray-500">Shown on the entry page at its own size and shape — never cropped or stretched. Downscaled only if larger than 1600×1600. Max 5MB.</p>
               <p v-if="imageError" class="text-red-600">{{ imageError }}</p>
               <button
                 v-if="form.id" type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"

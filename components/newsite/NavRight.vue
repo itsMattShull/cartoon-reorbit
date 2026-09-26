@@ -12,15 +12,10 @@
     <NuxtLink to="/newsite/trade" class="nav-link" data-nav-sound="trades">
       <BlueButton :style="{ height: buttonHeight }">Trades</BlueButton>
     </NuxtLink>
-    <NuxtLink to="/newsite/economy" class="nav-link" data-nav-sound="economy">
-      <BlueButton :style="{ height: buttonHeight }">Economy</BlueButton>
-    </NuxtLink>
     <NuxtLink to="/newsite/Games" class="nav-link" data-nav-sound="games">
       <BlueButton :style="{ height: buttonHeight }">Games</BlueButton>
     </NuxtLink>
-    <NuxtLink to="/newsite/encyclopedia" class="nav-link" data-nav-sound="encyclopedia">
-      <BlueButton :style="{ height: buttonHeight }">Encyclopedia</BlueButton>
-    </NuxtLink>
+    <NavEncyclopediaDropdown :button-height="buttonHeight" />
     <NuxtLink v-if="!isMobile" to="/newsite/redeem" class="nav-link" data-nav-sound="redeem">
       <BlueButton :style="{ height: buttonHeight }">Redeem</BlueButton>
     </NuxtLink>
