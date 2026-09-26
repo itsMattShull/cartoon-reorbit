@@ -3,8 +3,9 @@
 // The fixed set of per-nav-button "haptic sound" assignment slots (see
 // composables/useClickSoundEffects.js and the Sounds tab in Admin > Manage Homepage). Each key
 // here must have a matching `data-nav-sound="<key>"` attribute on the corresponding link in
-// components/newsite/NavLeft.vue / NavRight.vue — that data attribute is how a click gets
-// mapped back to a slot; keep the two in sync by hand when either changes.
+// components/newsite/NavLeft.vue / NavRight.vue (or, for the three slots inside the combined
+// Economy nav button, components/newsite/NavEconomyDropdown.vue) — that data attribute is how a
+// click gets mapped back to a slot; keep the two in sync by hand when either changes.
 //
 // 'default' is not a real nav button — it's the site-wide fallback sound (GlobalGameConfig.
 // uiClickSoundPath) used for every button that isn't one of these named nav items. It's
@@ -15,9 +16,10 @@ export const NAV_SOUND_SLOTS = [
   { key: 'home', label: 'ReOrbit Home' },
   { key: 'my-cworld', label: 'My cWorld' },
   { key: 'cmart', label: 'cMart' },
-  { key: 'auctions', label: 'Auctions' },
-  { key: 'trades', label: 'Trades' },
-  { key: 'economy', label: 'Economy' },
+  { key: 'auctions', label: 'Auctions (in the Economy dropdown)' },
+  { key: 'trades', label: 'Trades (in the Economy dropdown)' },
+  { key: 'economy', label: 'Economy (dropdown button)' },
+  { key: 'toononomics', label: 'Toononomics (in the Economy dropdown)' },
   { key: 'games', label: 'Games' },
   { key: 'encyclopedia', label: 'Encyclopedia' },
   { key: 'redeem', label: 'Redeem' },
