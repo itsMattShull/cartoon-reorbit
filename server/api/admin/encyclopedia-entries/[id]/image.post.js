@@ -1,8 +1,8 @@
 // server/api/admin/encyclopedia-entries/[id]/image.post.js
 // Uploads (or replaces) an entry's hero image. Unlike the Tutorial page's hero (server/api/admin/
 // tutorial/image.post.js, a fixed 1600x400 banner), an entry's hero is deliberately free-form —
-// any image, any aspect ratio, shown in full on the entry page (see the `object-fit: contain`
-// comment in pages/newsite/encyclopedia/[slug].vue) rather than cropped/warped into a fixed
+// any image, any aspect ratio, shown in full on the entry page (see the `.encyclopedia-hero`
+// CSS comment in pages/newsite/encyclopedia/[slug].vue) rather than cropped/warped into a fixed
 // shape. `fit: 'inside'` + `withoutEnlargement` below only ever scales an oversized image DOWN to
 // fit within the cap, preserving its original aspect ratio exactly — it never crops, never
 // stretches, and never upscales a small image past its native size. This one also accepts an
