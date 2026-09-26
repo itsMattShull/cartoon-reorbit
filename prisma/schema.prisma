@@ -1751,6 +1751,11 @@ model GlobalGameConfig {
   // Same chance-roll + per-user cooldown shape as the Scavenger Hunt settings above, but rolled
   // on ordinary page navigation (see layouts/newsite-template.vue) rather than a specific
   // in-page action, since a wandering-monster encounter has no natural action to hang off of.
+  // Master switch for the whole feature, off by default (same "off by default, easy to disable
+  // without losing data" stance as cMoonEnabled above) — checked BEFORE the chance roll in
+  // consider.post.js and again in start.post.js as a backstop, so disabling it can never be
+  // bypassed by a client that already has a stale "battle available" prompt on screen.
+  cMoonEnemyBattlesEnabled           Boolean   @default(false)
   cMoonBattlePopupChancePercent      Int       @default(3) // 0-100; rolled on each route navigation; 0 disables
   cMoonBattlePopupCooldownMinutes    Int       @default(20) // minimum time between popups shown to the same user
   createdAt                          DateTime  @default(now())

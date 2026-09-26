@@ -32,6 +32,7 @@ export default defineEventHandler(async (event) => {
       where: { id: 'singleton' },
       select: {
         cMoonEnabled: true, cMoonEnabledAt: true, cMoonOptOutCooldownDays: true,
+        cMoonEnemyBattlesEnabled: true,
         cMoonBattlePopupChancePercent: true, cMoonBattlePopupCooldownMinutes: true,
       },
     }),
@@ -41,6 +42,7 @@ export default defineEventHandler(async (event) => {
     cMoonEnabled: !!config?.cMoonEnabled,
     cMoonEnabledAt: config?.cMoonEnabledAt || null,
     cMoonOptOutCooldownDays: config?.cMoonOptOutCooldownDays ?? 14,
+    cMoonEnemyBattlesEnabled: !!config?.cMoonEnemyBattlesEnabled,
     cMoonBattlePopupChancePercent: config?.cMoonBattlePopupChancePercent ?? 3,
     cMoonBattlePopupCooldownMinutes: config?.cMoonBattlePopupCooldownMinutes ?? 20,
     cmoons: cmoons.map(c => ({

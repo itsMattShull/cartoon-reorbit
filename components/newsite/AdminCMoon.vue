@@ -82,7 +82,17 @@
         </div>
 
         <div class="border-t pt-3 mt-3">
-          <label class="block text-xs font-medium mb-1">Enemy battle popup appearance rate (%)</label>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" v-model="enemyBattlesEnabled" :disabled="enemyBattlesFlagSaving" @change="toggleEnemyBattlesFlag" />
+            <span class="font-medium">cMoon Enemy Battles enabled</span>
+          </label>
+          <p class="text-[11px] text-gray-600 mt-1">
+            Off by default. When off, the "random encounter" popup below never appears and starting
+            a new battle is blocked outright — a battle already in progress when this is turned off
+            is unaffected and can still be finished.
+          </p>
+
+          <label class="block text-xs font-medium mb-1 mt-3">Enemy battle popup appearance rate (%)</label>
           <div class="flex items-center gap-2">
             <input
               v-model.number="battlePopupChancePercent" type="number" min="0" max="100" inputmode="numeric"
@@ -100,8 +110,8 @@
           </div>
           <p class="text-[11px] text-gray-600 mt-1">
             Chance the cMoon Enemy Battles popup rolls on any page navigation (0 = never), and how
-            long after an offer (fought or declined) before a player can be offered another.
-            Manage the enemies themselves on the
+            long after an offer (fought or declined) before a player can be offered another. Has no
+            effect while Enemy Battles is disabled above. Manage the enemies themselves on the
             <NuxtLink to="/newsite/admin/cMoonEnemies" class="text-indigo-600 hover:underline">Manage cMoon Enemies</NuxtLink> page.
           </p>
           <p v-if="battlePopupError" class="text-[11px] text-red-600 mt-1">{{ battlePopupError }}</p>
@@ -1249,6 +1259,8 @@ const cMoonEnabledAt = ref(null)
 const optOutCooldownDays = ref(14)
 const cooldownSaving = ref(false)
 const cooldownError = ref('')
+const enemyBattlesEnabled = ref(false)
+const enemyBattlesFlagSaving = ref(false)
 const battlePopupChancePercent = ref(3)
 const battlePopupCooldownMinutes = ref(20)
 const battlePopupSaving = ref(false)
@@ -2280,6 +2292,7 @@ async function load() {
     flagEnabled.value = !!data.cMoonEnabled
     cMoonEnabledAt.value = data.cMoonEnabledAt
     optOutCooldownDays.value = Number.isInteger(data.cMoonOptOutCooldownDays) ? data.cMoonOptOutCooldownDays : 14
+    enemyBattlesEnabled.value = !!data.cMoonEnemyBattlesEnabled
     battlePopupChancePercent.value = Number.isInteger(data.cMoonBattlePopupChancePercent) ? data.cMoonBattlePopupChancePercent : 3
     battlePopupCooldownMinutes.value = Number.isInteger(data.cMoonBattlePopupCooldownMinutes) ? data.cMoonBattlePopupCooldownMinutes : 20
     admins.value = adminsData || []
@@ -2496,13 +2509,28 @@ async function toggleFlag() {
   }
 }
 
+async function toggleEnemyBattlesFlag() {
+  enemyBattlesFlagSaving.value = true
+  try {
+    await $fetch('/api/admin/cmoon-settings', {
+      method: 'POST',
+      body: { cMoonEnemyBattlesEnabled: enemyBattlesEnabled.value },
+    })
+  } catch (e) {
+    enemyBattlesEnabled.value = !enemyBattlesEnabled.value
+    alert(e?.data?.statusMessage || 'Failed to update flag')
+  } finally {
+    enemyBattlesFlagSaving.value = false
+  }
+}
+
 async function saveCooldown() {
   cooldownSaving.value = true
   cooldownError.value = ''
   try {
     const res = await $fetch('/api/admin/cmoon-settings', {
       method: 'POST',
-      body: { cMoonEnabled: flagEnabled.value, cMoonOptOutCooldownDays: optOutCooldownDays.value },
+      body: { cMoonOptOutCooldownDays: optOutCooldownDays.value },
     })
     optOutCooldownDays.value = res.cMoonOptOutCooldownDays
   } catch (e) {
@@ -2519,7 +2547,6 @@ async function saveBattlePopupSettings() {
     const res = await $fetch('/api/admin/cmoon-settings', {
       method: 'POST',
       body: {
-        cMoonEnabled: flagEnabled.value,
         cMoonBattlePopupChancePercent: battlePopupChancePercent.value,
         cMoonBattlePopupCooldownMinutes: battlePopupCooldownMinutes.value,
       },

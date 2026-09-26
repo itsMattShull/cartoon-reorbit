@@ -33,6 +33,12 @@ export default defineEventHandler(async (event) => {
   }
 
   const config = await getGlobalConfig()
+  // Master switch, off by default — checked before the chance roll (and before even querying
+  // enemy candidates below) so a disabled feature is fully inert, not just "never rolls." A
+  // battle already IN_PROGRESS when this is flipped off still resumes above rather than being
+  // stranded — this only gates offering NEW encounters.
+  if (!config?.cMoonEnemyBattlesEnabled) return { offered: false }
+
   const chancePercent = config?.cMoonBattlePopupChancePercent ?? 0
   if (chancePercent <= 0) return { offered: false }
 

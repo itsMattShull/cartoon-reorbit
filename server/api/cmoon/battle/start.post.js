@@ -4,6 +4,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { assertSameOrigin } from '@/server/utils/requireAdmin'
+import { getGlobalConfig } from '@/server/utils/cmoon'
 import { PLAYER_MAX_HP, ABANDON_AFTER_MINUTES } from '@/server/utils/cmoonEnemyBattle'
 import { serializeBattleForClient } from '@/server/utils/cmoonEnemyBattle'
 
@@ -40,6 +41,15 @@ export default defineEventHandler(async (event) => {
       where: { id: existing.id },
       data: { status: 'RESOLVED', outcome: 'ABANDONED', endedAt: new Date(), activeUserId: null },
     })
+  }
+
+  // Backstop for consider.post.js's own gate: that endpoint never offers a NEW encounter while
+  // the feature is off, but this endpoint is reachable directly, so a stale "Fight!" prompt still
+  // on screen from before an admin disabled it must not be able to start one. Resuming an
+  // already-IN_PROGRESS battle above is unaffected — only starting a fresh one is blocked.
+  const config = await getGlobalConfig()
+  if (!config?.cMoonEnemyBattlesEnabled) {
+    throw createError({ statusCode: 403, statusMessage: 'cMoon Enemy Battles is currently disabled' })
   }
 
   const enemyMember = await db.cMoonEnemyMember.findUnique({

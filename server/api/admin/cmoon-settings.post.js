@@ -19,18 +19,28 @@ export default defineEventHandler(async (event) => {
   if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Forbidden — Admins only' })
 
   const body = await readBody(event)
-  const enabled = !!body?.cMoonEnabled
 
   const existing = await db.globalGameConfig.findUnique({ where: { id: 'singleton' } })
   const wasEnabled = !!existing?.cMoonEnabled
 
-  const data = { cMoonEnabled: enabled }
-  // Rising edge only: starting the feature (re)sets the launch timestamp, purely informational
-  // (shown in the admin panel as "Launched X"). Flipping it off never touches this — turning it
-  // back on later doesn't reset it unexpectedly. There is no selection deadline to set: players
-  // pick a cMoon or explicitly opt out, with no auto-assignment either way.
-  if (enabled && !wasEnabled) {
-    data.cMoonEnabledAt = new Date()
+  const data = {}
+  // Gated like every other field below (not always-on): this endpoint now has THREE separate
+  // save buttons in AdminCMoon.vue (the flag itself, the enemy-battles flag, the popup settings),
+  // and each one previously had to echo back its own client-cached copy of cMoonEnabled just to
+  // avoid clobbering it on every save — a stale copy in one browser tab (e.g. after another admin
+  // flips it elsewhere) would then silently un-toggle it as a side effect of an unrelated save.
+  // Omitted entirely, it now just preserves whatever's already in the DB.
+  let enabled = wasEnabled
+  if (body?.cMoonEnabled !== undefined) {
+    enabled = !!body.cMoonEnabled
+    data.cMoonEnabled = enabled
+    // Rising edge only: starting the feature (re)sets the launch timestamp, purely informational
+    // (shown in the admin panel as "Launched X"). Flipping it off never touches this — turning it
+    // back on later doesn't reset it unexpectedly. There is no selection deadline to set: players
+    // pick a cMoon or explicitly opt out, with no auto-assignment either way.
+    if (enabled && !wasEnabled) {
+      data.cMoonEnabledAt = new Date()
+    }
   }
 
   // Optional: how long an opted-out player must wait before rejoining (see
@@ -42,6 +52,14 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, statusMessage: 'Cooldown must be a whole number of days between 0 and 365' })
     }
     data.cMoonOptOutCooldownDays = days
+  }
+
+  // Master on/off switch for the whole cMoon Enemy Battles feature — see
+  // GlobalGameConfig.cMoonEnemyBattlesEnabled's schema comment. Checked before anything else in
+  // server/api/cmoon/battle/consider.post.js and start.post.js, independent of the appearance-rate
+  // knobs below (those only matter once this is on).
+  if (body?.cMoonEnemyBattlesEnabled !== undefined) {
+    data.cMoonEnemyBattlesEnabled = !!body.cMoonEnemyBattlesEnabled
   }
 
   // How often the cMoon Enemy Battles popup rolls on page navigation, and how long a player must
@@ -76,6 +94,7 @@ export default defineEventHandler(async (event) => {
     prevValue: {
       cMoonEnabled: wasEnabled,
       cMoonOptOutCooldownDays: existing?.cMoonOptOutCooldownDays,
+      cMoonEnemyBattlesEnabled: existing?.cMoonEnemyBattlesEnabled,
       cMoonBattlePopupChancePercent: existing?.cMoonBattlePopupChancePercent,
       cMoonBattlePopupCooldownMinutes: existing?.cMoonBattlePopupCooldownMinutes,
     },
@@ -83,6 +102,7 @@ export default defineEventHandler(async (event) => {
       cMoonEnabled: enabled,
       cMoonEnabledAt: updated.cMoonEnabledAt,
       cMoonOptOutCooldownDays: updated.cMoonOptOutCooldownDays,
+      cMoonEnemyBattlesEnabled: updated.cMoonEnemyBattlesEnabled,
       cMoonBattlePopupChancePercent: updated.cMoonBattlePopupChancePercent,
       cMoonBattlePopupCooldownMinutes: updated.cMoonBattlePopupCooldownMinutes,
     },
@@ -92,6 +112,7 @@ export default defineEventHandler(async (event) => {
     cMoonEnabled: updated.cMoonEnabled,
     cMoonEnabledAt: updated.cMoonEnabledAt,
     cMoonOptOutCooldownDays: updated.cMoonOptOutCooldownDays,
+    cMoonEnemyBattlesEnabled: updated.cMoonEnemyBattlesEnabled,
     cMoonBattlePopupChancePercent: updated.cMoonBattlePopupChancePercent,
     cMoonBattlePopupCooldownMinutes: updated.cMoonBattlePopupCooldownMinutes,
   }
