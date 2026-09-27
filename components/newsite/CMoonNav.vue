@@ -56,10 +56,43 @@
         <span class="cmn-caption-text">Click on the cMoon you want to visit!</span>
       </div>
     </div>
+
+    <!-- Seasonal updates: admin-customizable via Manage Navigation. Section renders even with no
+         trackers configured yet (just header + leaderboard + blurb) so there's never a broken
+         half-empty state while an admin is still setting it up. -->
+    <div v-if="seasonLoaded" class="cmn-season">
+      <h2 class="cmn-season-header">{{ season.header }}</h2>
+
+      <div v-if="leaderboard.length" class="cmn-season-panel">
+        <h3 class="cmn-season-subheading">Team Leaderboard</h3>
+        <div v-for="row in leaderboard" :key="row.id" class="cmn-season-lb-row">
+          <span class="cmn-season-lb-rank">{{ row.rank }}</span>
+          <span class="cmn-season-lb-swatch" :style="{ background: safeColor(row.color) }"></span>
+          <span class="cmn-season-lb-name">{{ row.name }}</span>
+          <span class="cmn-season-lb-value">{{ Math.round(row.avgScore).toLocaleString() }} <small>wtd avg</small></span>
+        </div>
+      </div>
+
+      <div v-for="t in season.trackers" :key="t.id" class="cmn-season-panel">
+        <h3 class="cmn-season-subheading">{{ t.label }}</h3>
+        <div v-for="p in t.progress" :key="p.cMoonId" class="cmn-season-progress-row">
+          <span class="cmn-season-progress-name" :style="{ color: safeColor(p.color) }">{{ p.name }}</span>
+          <div class="cmn-season-progress-bar">
+            <div class="cmn-season-progress-fill" :style="{ width: progressPercent(p.value, t.targetValue) + '%', background: safeColor(p.color) }"></div>
+          </div>
+          <span class="cmn-season-progress-value">{{ formatMetricValue(p.value, t.metricType) }} / {{ formatMetricValue(t.targetValue, t.metricType) }}</span>
+        </div>
+        <p v-if="!t.progress.length" class="cmn-season-empty">No cMoons to track yet.</p>
+      </div>
+
+      <div v-if="season.blurb" class="cmn-season-blurb" v-html="season.blurb"></div>
+    </div>
   </div>
 </template>
 
 <script setup>
+import { isSafeCMoonColor } from '~/utils/cmoonColor'
+
 // Recreates the original Cartoon Orbit "click on the world you want to visit" console screen for
 // cMoons: a metallic bezel around a screen with a hypnotic swirl background, clickable circles on
 // top, and a caption bar below (see the reference screenshots this was built from). Number of
@@ -83,10 +116,48 @@ function goBack() {
   router.push('/newsite/MycWorld')
 }
 
+// ── Seasonal updates (bottom half, admin-customizable via Manage Navigation) ─────────────────
+const seasonLoaded = ref(false)
+const season = ref({ header: '', trackers: [], blurb: '' })
+const leaderboard = ref([])
+
+function safeColor(color) {
+  return isSafeCMoonColor(color) ? color : '#3a4a63'
+}
+
+function progressPercent(value, target) {
+  if (!target || target <= 0) return 0
+  return Math.max(0, Math.min(100, Math.round((value / target) * 100)))
+}
+
+// AVG_POINTS is a plain float (see server/utils/cmoonSeason.js) — shown to one decimal so a
+// fractional average doesn't look like a typo; every other metric here is always a whole number.
+function formatMetricValue(value, metricType) {
+  const n = Number(value) || 0
+  return metricType === 'AVG_POINTS' ? n.toFixed(1) : Math.round(n).toLocaleString()
+}
+
+async function loadSeason() {
+  const [seasonResult, leaderboardResult] = await Promise.allSettled([
+    $fetch('/api/cmoon-season'),
+    $fetch('/api/leaderboard/cmoons'),
+  ])
+  if (seasonResult.status === 'fulfilled') {
+    season.value = seasonResult.value || { header: '', trackers: [], blurb: '' }
+  }
+  if (leaderboardResult.status === 'fulfilled') {
+    leaderboard.value = leaderboardResult.value || []
+  }
+  // Rendered even if one of the two fetches failed — a season section missing just the
+  // leaderboard (or vice versa) is still more useful than hiding the whole thing.
+  seasonLoaded.value = true
+}
+
 onMounted(async () => {
   const [listResult] = await Promise.allSettled([
     $fetch('/api/cmoons', { params: { view: 'nav' } }),
     refreshJoinEligibility(),
+    loadSeason(),
   ])
   if (listResult.status === 'fulfilled') {
     cmoons.value = listResult.value?.cmoons || []
@@ -128,13 +199,18 @@ const spiralStrokeWidth = (spiral.pitch * 0.52).toFixed(2)
 </script>
 
 <style scoped>
+/* No independent height/overflow here — the page opts into mainContentScrollY (see
+   pages/newsite/cmoon-nav.vue's own comment), which makes the ancestor .main-content the real
+   scroll container. This used to be `height: 100%; overflow-y: auto`, its own SECOND scroll box
+   nested inside that one — harmless while the console was short enough to never need to scroll,
+   but the season section below made the page tall enough that content was getting clipped inside
+   this shorter inner box instead of reaching the outer scrollbar. Same fix pages/newsite/
+   tutorial.vue's own .tutorial rule documents for the identical nested-scroll trap. */
 .cmn-page {
   --cmn-accent: #7ec8ff;
   width: 100%;
-  height: 100%;
   box-sizing: border-box;
   padding: 16px;
-  overflow-y: auto;
   color: #fff;
   font-family: 'Nunito', sans-serif;
 }
@@ -384,6 +460,157 @@ const spiralStrokeWidth = (spiral.pitch * 0.52).toFixed(2)
   font-weight: 800;
   font-size: 0.9rem;
   line-height: 1.15;
+}
+
+/* ── Seasonal updates (admin-customizable via Manage Navigation) ──────────────────────────── */
+.cmn-season {
+  margin-top: 28px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.cmn-season-header {
+  margin: 0 0 14px;
+  font-size: 1.2rem;
+  font-weight: 800;
+  text-align: center;
+}
+
+.cmn-season-panel {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.cmn-season-subheading {
+  margin: 0 0 8px;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: var(--cmn-accent);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.cmn-season-empty {
+  margin: 0;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.cmn-season-lb-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+  font-size: 0.82rem;
+}
+.cmn-season-lb-row + .cmn-season-lb-row { border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.cmn-season-lb-rank {
+  width: 18px;
+  flex-shrink: 0;
+  text-align: center;
+  font-weight: 800;
+  color: rgba(255, 255, 255, 0.55);
+}
+.cmn-season-lb-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+.cmn-season-lb-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.cmn-season-lb-value {
+  flex-shrink: 0;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+.cmn-season-lb-value small {
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.7rem;
+}
+
+.cmn-season-progress-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 0;
+}
+.cmn-season-progress-name {
+  width: 90px;
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.cmn-season-progress-bar {
+  flex: 1;
+  min-width: 0;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+.cmn-season-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+.cmn-season-progress-value {
+  flex-shrink: 0;
+  width: 88px;
+  text-align: right;
+  font-size: 0.72rem;
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+/* Same hand-written prose rhythm as .tutorial-prose (pages/newsite/tutorial.vue) — this blurb is
+   explicitly meant to share that page's aesthetic. No @tailwindcss/typography plugin in this app. */
+.cmn-season-blurb {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.85);
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.cmn-season-blurb :deep(p) { margin: 0 0 0.75em; }
+.cmn-season-blurb :deep(p:last-child) { margin-bottom: 0; }
+.cmn-season-blurb :deep(h2),
+.cmn-season-blurb :deep(h3),
+.cmn-season-blurb :deep(h4) {
+  font-weight: 700;
+  color: #fff;
+  margin: 1em 0 0.4em;
+}
+.cmn-season-blurb :deep(h2:first-child),
+.cmn-season-blurb :deep(h3:first-child),
+.cmn-season-blurb :deep(h4:first-child) { margin-top: 0; }
+.cmn-season-blurb :deep(ul),
+.cmn-season-blurb :deep(ol) {
+  margin: 0 0 0.75em;
+  padding-left: 1.25em;
+}
+.cmn-season-blurb :deep(li) { margin: 0.25em 0; }
+.cmn-season-blurb :deep(a) {
+  color: var(--OrbitLightBlue, #3399CC);
+  text-decoration: underline;
+}
+.cmn-season-blurb :deep(blockquote) {
+  border-left: 3px solid rgba(255, 255, 255, 0.25);
+  margin: 0 0 0.75em;
+  padding-left: 0.75em;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 /* Short viewports (landscape phones): trim the chrome so the console itself keeps most of the

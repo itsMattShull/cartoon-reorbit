@@ -28,13 +28,23 @@ export default defineEventHandler(async (event) => {
         _count: { select: { displayedCtoons: true } },
       },
     }),
-    db.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { cMoonEnabled: true, cMoonEnabledAt: true, cMoonOptOutCooldownDays: true } }),
+    db.globalGameConfig.findUnique({
+      where: { id: 'singleton' },
+      select: {
+        cMoonEnabled: true, cMoonEnabledAt: true, cMoonOptOutCooldownDays: true,
+        cMoonEnemyBattlesEnabled: true,
+        cMoonBattlePopupChancePercent: true, cMoonBattlePopupCooldownMinutes: true,
+      },
+    }),
   ])
 
   return {
     cMoonEnabled: !!config?.cMoonEnabled,
     cMoonEnabledAt: config?.cMoonEnabledAt || null,
     cMoonOptOutCooldownDays: config?.cMoonOptOutCooldownDays ?? 14,
+    cMoonEnemyBattlesEnabled: !!config?.cMoonEnemyBattlesEnabled,
+    cMoonBattlePopupChancePercent: config?.cMoonBattlePopupChancePercent ?? 3,
+    cMoonBattlePopupCooldownMinutes: config?.cMoonBattlePopupCooldownMinutes ?? 20,
     cmoons: cmoons.map(c => ({
       id: c.id,
       name: c.name,

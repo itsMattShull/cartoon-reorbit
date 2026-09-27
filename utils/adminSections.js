@@ -71,6 +71,7 @@ export const ADMIN_SECTIONS = [
   S('ads', 'Manage Ads', 'content', legacy('AdminLegacyAds')),
   S('tutorial', 'Manage Tutorial', 'content', nu('AdminManageTutorial')),
   S('certificate', 'Manage Certificate', 'content', nu('AdminManageCertificate')),
+  S('encyclopedia', 'Manage Encyclopedia', 'content', nu('AdminManageEncyclopedia')),
 
   // ── Economy ─────────────────────────────────────────────────
   S('manageSales', 'Manage Sales', 'economy', nu('AdminManageSales')),
@@ -87,6 +88,8 @@ export const ADMIN_SECTIONS = [
   S('cMoonJoinEffects', 'cMoon Join Effects', 'games', nu('AdminCMoonJoinEffects')),
   S('czoneEffects', 'cZone Effects', 'games', nu('AdminCZoneEffects')),
   S('cmoonChangeRequests', 'cMoon Change Requests', 'games', nu('AdminCMoonChangeRequests')),
+  S('manageNavigation', 'Manage Navigation', 'games', nu('AdminManageNavigation')),
+  S('cMoonEnemies', 'Manage cMoon Enemies', 'games', nu('AdminCMoonEnemies')),
   S('lotto', 'Manage Lotto', 'games', legacy('AdminLegacyLotto')),
   S('clashTournaments', 'Clash Tournaments', 'games', legacy('AdminLegacyClashTournaments')),
   S('monsters', 'Manage Monsters', 'games', legacy('AdminLegacyMonsters'), { dense: true }),
@@ -106,6 +109,7 @@ export const ADMIN_SECTIONS = [
   S('czoneSearchLogs', 'cZone Search Logs', 'logs', nu('AdminCzoneSearchLogs')),
   S('pointLogs', 'Point Logs', 'logs', nu('AdminPointLogs')),
   S('cmoonPointLogs', 'cMoon Points Log', 'logs', nu('AdminCMoonPointLogs')),
+  S('cMoonBattleLogs', 'cMoon Battle Logs', 'logs', nu('AdminCMoonBattleLogs')),
   S('achievementLogs', 'Achievement Logs', 'logs', nu('AdminAchievementLogs')),
   S('gtoonsClashLogs', 'gToons Clash Logs', 'logs', nu('AdminGtoonsClashLogs')),
   S('edRpsLogs', 'Ed Edd n Eddy RPS Logs', 'logs', nu('AdminEdRpsLogs')),

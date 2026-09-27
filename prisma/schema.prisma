@@ -349,6 +349,7 @@ model Ctoon {
   redeemedAsResult           HolidayRedemption[]         @relation("HolidayResultDefinition")
   rewardPoolRows             RewardCtoonPool[]           @relation("RewardPoolToCtoon")
   winballGrandPrizeSchedules WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCtoon")
+  cMoonEnemyRewards          CMoonEnemyReward[]
   imageHash                  CtoonImageHash?
   userSuggestions            CtoonUserSuggestion[]
 
@@ -523,6 +524,13 @@ model User {
   cMoon                  CMoon?          @relation(fields: [cMoonId], references: [id], onDelete: SetNull)
   cMoonSelectedAt        DateTime?
   cMoonAutoAssigned      Boolean         @default(false)
+  // cMoon Enemy Battles: when the site-wide battle popup was last SHOWN to this user (a chance
+  // roll that hit — see server/api/cmoon/battle/consider.post.js), regardless of whether they
+  // went on to fight or just dismissed it. Distinct from CMoonEnemyBattle.startedAt, which is
+  // only set once a battle is actually started — without this separate field, a user who
+  // repeatedly dismisses the popup without ever fighting would have no record to cool down
+  // against, and the chance would re-roll (and could re-hit) on every single page navigation.
+  lastCMoonBattlePopupAt DateTime?
   // Set when a player explicitly declines to pick a cMoon from the initial join modal (there is no
   // more time-based auto-assignment — see server/utils/cmoon.js). Only meaningful while cMoonId is
   // null; cleared back to false on a successful selectCMoonForUser. Lets the modal stop popping up
@@ -750,6 +758,9 @@ model User {
   closedDispersalOffers    CMoonDispersalOffer[]     @relation("CMoonDispersalOfferClosedBy")
   dispersalClaims          CMoonDispersalClaim[]
   cMoonChangeRequests      CMoonChangeRequest[]
+
+  // cMoon Enemy Battles
+  cMoonEnemyBattles CMoonEnemyBattle[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
   @@index([cMoonId])
@@ -1735,6 +1746,18 @@ model GlobalGameConfig {
   // 1-member team is almost entirely pulled toward siteAvg, a team with memberCount >> k is
   // barely shrunk at all. 0 disables shrinkage (falls back to the plain average).
   cMoonAvgShrinkageK                 Int       @default(10)
+  // cMoon Enemy Battles: site-wide "random encounter" popup settings (see CMoonEnemyFaction/
+  // CMoonEnemyMember near the end of this file, and server/api/cmoon/battle/consider.post.js).
+  // Same chance-roll + per-user cooldown shape as the Scavenger Hunt settings above, but rolled
+  // on ordinary page navigation (see layouts/newsite-template.vue) rather than a specific
+  // in-page action, since a wandering-monster encounter has no natural action to hang off of.
+  // Master switch for the whole feature, off by default (same "off by default, easy to disable
+  // without losing data" stance as cMoonEnabled above) — checked BEFORE the chance roll in
+  // consider.post.js and again in start.post.js as a backstop, so disabling it can never be
+  // bypassed by a client that already has a stale "battle available" prompt on screen.
+  cMoonEnemyBattlesEnabled           Boolean   @default(false)
+  cMoonBattlePopupChancePercent      Int       @default(3) // 0-100; rolled on each route navigation; 0 disables
+  cMoonBattlePopupCooldownMinutes    Int       @default(20) // minimum time between popups shown to the same user
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }
@@ -2628,6 +2651,7 @@ model Background {
   owners                       UserBackground[]              @relation("Background_UserBackgrounds")
   achievementRewardBackgrounds AchievementRewardBackground[]
   affinityLevelRewards         CMoonAffinityLevel[]
+  cMoonEnemyRewards            CMoonEnemyReward[]
 
   @@index([createdAt])
 }
@@ -3501,6 +3525,17 @@ model CMoon {
   glowOwners       UserCMoonGlow[]      @relation("CMoon_GlowOwners")
   glowEquippedBy   User[]               @relation("CMoon_GlowEquippedBy")
 
+  // cMoon Enemy Battles: running per-cMoon win/loss counts, incremented directly (not recomputed
+  // from a log table like teamScore above) at battle-resolution time — see
+  // server/utils/cmoonEnemyBattle.js#resolveBattleRound. Safe as a direct increment because each
+  // CMoonEnemyBattle row's own cMoonId is fixed at battle-start time (the player's cMoon then),
+  // so unlike teamScore (which must exclude points from members who've since left) there's no
+  // membership-retroactivity concern to guard against by recomputing from CMoonEnemyBattle later.
+  // Shown on the cMoons leaderboard tab — see server/api/leaderboard/cmoons.get.js.
+  battleWins       Int                  @default(0)
+  battleLosses     Int                  @default(0)
+  enemyBattles     CMoonEnemyBattle[]
+
   @@index([memberCount])
   @@index([teamScore])
 }
@@ -3793,9 +3828,10 @@ model Avatar {
   createdAt   DateTime @default(now())
   createdById String?
 
-  createdBy    User?                            @relation("AvatarCreatedBy", fields: [createdById], references: [id])
-  owners       UserAvatar[]
-  levelRewards CMoonAffinityLevelRewardAvatar[]
+  createdBy         User?                            @relation("AvatarCreatedBy", fields: [createdById], references: [id])
+  owners            UserAvatar[]
+  levelRewards      CMoonAffinityLevelRewardAvatar[]
+  cMoonEnemyRewards CMoonEnemyReward[]
 
   @@index([createdAt])
 }
@@ -4993,4 +5029,277 @@ model BlackjackSession {
   @@index([userId, createdAt])
   // Serves the stale-session sweeper, which filters on status alone.
   @@index([status, windowStart])
+}
+
+
+// ── Encyclopedia feature ────────────────────────────────────────────────
+// Admin-authored wiki-style reference pages, reachable from the top nav (Encyclopedia) and
+// searchable by title. Body content is sanitized HTML — see server/utils/sanitizeEncyclopediaHtml.js
+// for the allowlist, which additionally permits an <a> whose href is a relative link to another
+// entry's own page (/newsite/encyclopedia/{slug}), on top of the same http/https/mailto scheme
+// allowance server/utils/sanitizeTutorialHtml.js uses for the Tutorial page this is styled after.
+// A dead cross-entry link (the target entry was later deleted or deactivated) is a normal,
+// accepted outcome of storing links as plain hrefs in prose rather than a real FK — the entry
+// detail page shows a friendly "not found" state for an unresolved slug, same as any wiki.
+model EncyclopediaEntry {
+  id            String   @id @default(uuid())
+  title         String
+  // URL segment, kebab-cased from the title at creation and independently editable after (so a
+  // later title edit never breaks existing inbound links/bookmarks unless the admin explicitly
+  // changes the slug too).
+  slug          String   @unique
+  heroImagePath String?
+  // Sanitized HTML — see this model's own comment above. Defaults to '' (not null) so every
+  // consumer can render it directly with no null-guard.
+  body          String   @default("")
+  // Inactive entries are hidden from the public index, search, and direct-slug lookup (a 404,
+  // not a partial/broken page) but stay editable in the admin list — same "deactivate rather
+  // than force a delete-or-orphan-links choice" stance as the cMoon Enemy Battles admin pages.
+  active        Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([active, sortOrder])
+}
+
+
+// ── cMoon Enemy Battles feature ─────────────────────────────────────────
+// Site-wide PvE mini-game: admin-authored NPC "enemy" factions appear as a random popup while
+// browsing (see GlobalGameConfig.cMoonBattlePopupChancePercent/CooldownMinutes and
+// server/api/cmoon/battle/consider.post.js). A player fights ONE CMoonEnemyMember at a time via
+// a simple 4-choice exchange each round (see CMoonEnemyBattleAction below and
+// server/utils/cmoonEnemyBattle.js#resolveBattleRound, the pure, server-only resolution function
+// — the client only ever submits which of the 4 buttons it pressed, never a result). Wins feed
+// User.cMoonPoints (via the existing grantRewardInTx path, same mechanism every other cMoon
+// point source uses) plus a probabilistic cToon/avatar/background prize roll (CMoonEnemyReward),
+// and increment the winning player's cMoon's CMoon.battleWins — losses increment
+// CMoon.battleLosses, with no other penalty (a battle requires the player to already be in a
+// cMoon — see CMoonEnemyBattle.cMoonId).
+
+enum CMoonEnemyBattleMode {
+  // Every player who fights this member starts a fresh, independent encounter at its own full
+  // maxHp — many players can each "defeat" the same member on their own.
+  PER_PLAYER
+  // All players share ONE running HP total (CMoonEnemyMember.currentHp) — everyone's damage
+  // comes out of the same pool, and whoever's hit brings it to 0 gets the kill. Requires players
+  // to "work together" in the literal sense.
+  SHARED_POOL
+}
+
+enum CMoonEnemyBattleAction {
+  ATTACK_HIGH
+  ATTACK_LOW
+  BLOCK_HIGH
+  BLOCK_LOW
+}
+
+enum CMoonEnemyBattleStatus {
+  IN_PROGRESS
+  RESOLVED
+}
+
+enum CMoonEnemyBattleOutcome {
+  WIN
+  LOSS
+  // The player never came back to finish a round (popup closed, tab abandoned, ...) — reclaimed
+  // by a later /start request once lastActionAt is older than the idle timeout (see
+  // server/utils/cmoonEnemyBattle.js#ABANDON_AFTER_MINUTES). Deliberately NOT counted toward
+  // CMoon.battleLosses: the player never actually took 5 hits, so crediting a real loss would
+  // misrepresent what happened.
+  ABANDONED
+}
+
+enum CMoonEnemyRewardType {
+  CTOON
+  AVATAR
+  BACKGROUND
+}
+
+// The themed group an admin creates in "Manage cMoon Enemies" — mostly organizational (name,
+// banner art, an on/off switch for the whole group at once); the actual things a player fights
+// are its members below.
+model CMoonEnemyFaction {
+  id              String   @id @default(uuid())
+  name            String   @unique
+  description     String?
+  // Faction banner — shown in the admin list and, if set, behind the member's own portrait in
+  // the battle popup. Optional: a faction can rely purely on its members' own images.
+  bannerImagePath String?
+  // Master on/off switch for every member below at once — an inactive faction (or an inactive
+  // member, see below) is never offered by the popup-consider roll, but any already in-progress
+  // CMoonEnemyBattle rows against it are left to finish normally rather than being force-ended.
+  active          Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  members CMoonEnemyMember[]
+
+  @@index([active, sortOrder])
+}
+
+// One NPC a player can actually fight. Belongs to a faction purely for grouping/theming — HP,
+// battle mode, rewards, and points are all configured per-member, not per-faction, since one
+// faction can have members of very different difficulty.
+model CMoonEnemyMember {
+  id                String               @id @default(uuid())
+  factionId         String
+  name              String
+  imagePath         String?
+  maxHp             Int                  @default(5)
+  battleMode        CMoonEnemyBattleMode @default(PER_PLAYER)
+  // Only meaningful (and only ever written to) when battleMode = SHARED_POOL — the live running
+  // total every fighting player's damage comes out of together. Decremented via an atomic
+  // conditional UPDATE (see resolveBattleRound) so two players landing a hit at the same instant
+  // can never together drive it below 0 or both claim the killing blow. Reset to maxHp whenever
+  // an admin flips battleMode to SHARED_POOL or edits maxHp on a SHARED_POOL member (see that
+  // endpoint's own comment) — ignored entirely for PER_PLAYER members, whose HP lives per-battle
+  // on CMoonEnemyBattle.enemyHpRemaining instead.
+  currentHp         Int                  @default(5)
+  // Awarded to User.cMoonPoints on a WIN via the existing grantRewardInTx path.
+  cMoonPointsReward Int                  @default(10)
+  active            Boolean              @default(true)
+  // Set the moment a SHARED_POOL member's currentHp reaches 0 — once set, the popup-consider
+  // roll skips this member (it stays visible/browsable in the admin page and battle logs, just
+  // no longer offered as an encounter) until an admin resets it. Always null for PER_PLAYER
+  // members, which never run out in a way that affects other players.
+  defeatedAt        DateTime?
+  sortOrder         Int                  @default(0)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  faction CMoonEnemyFaction  @relation(fields: [factionId], references: [id], onDelete: Cascade)
+  rewards CMoonEnemyReward[]
+  battles CMoonEnemyBattle[]
+
+  @@index([active, defeatedAt, sortOrder])
+}
+
+// One admin-configured possible prize for defeating a CMoonEnemyMember. Each row's chance is
+// rolled INDEPENDENTLY (not a normalized weighted pool like LottoPoolCtoon/HolidayEventPool) —
+// zero, one, or several rows can hit on the same win, matching "potential prizes" (never
+// guaranteed) from the feature request. Exactly one of ctoonId/avatarId/backgroundId is set,
+// matching rewardType — enforced at the API layer (Prisma can't express a type-conditional FK).
+model CMoonEnemyReward {
+  id                String               @id @default(uuid())
+  enemyMemberId     String
+  rewardType        CMoonEnemyRewardType
+  ctoonId           String?
+  avatarId          String?
+  backgroundId      String?
+  dropChancePercent Float                @default(10) // 0-100, rolled independently per row
+  quantity          Int                  @default(1) // cToons only; ignored for avatar/background
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  enemyMember CMoonEnemyMember @relation(fields: [enemyMemberId], references: [id], onDelete: Cascade)
+  ctoon       Ctoon?           @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  avatar      Avatar?          @relation(fields: [avatarId], references: [id], onDelete: Restrict)
+  background  Background?      @relation(fields: [backgroundId], references: [id], onDelete: Restrict)
+
+  @@index([enemyMemberId])
+}
+
+// One player's attempt against one CMoonEnemyMember — this single row IS the live battle state
+// while status = IN_PROGRESS (updated after every round; there's no separate in-memory server
+// state to keep in sync, unlike the Socket.IO-based MonsterBattle system, since this is a
+// stateless solo-vs-NPC turn exchange with no live opponent to coordinate with) and becomes the
+// permanent log entry once it resolves. Requires the player to already be in a cMoon to start
+// (enforced at the API layer, not here) — cMoonId is captured from the player's OWN cMoon at
+// battle-start and never re-derived later, so CMoon.battleWins/battleLosses (and this table
+// itself, for the admin battle-logs page) stay correct even if the player later changes/leaves
+// their cMoon.
+model CMoonEnemyBattle {
+  id                String                   @id @default(uuid())
+  userId            String
+  enemyMemberId     String
+  cMoonId           String
+  status            CMoonEnemyBattleStatus   @default(IN_PROGRESS)
+  outcome           CMoonEnemyBattleOutcome?
+  roundNumber       Int                      @default(1) // the round currently awaiting the player's action
+  playerHpRemaining Int
+  // Snapshot of the enemy's HP for THIS battle — for a PER_PLAYER member this is the sole source
+  // of truth (starts at maxHp, decremented directly); for a SHARED_POOL member this mirrors
+  // CMoonEnemyMember.currentHp as of the last round resolved here (that column is the real
+  // source of truth, this is a per-battle display copy) so the log/UI never needs a live join to
+  // show what the fight looked like at the time.
+  enemyHpRemaining  Int
+  // [{ round, playerAction, enemyAction, playerHit, enemyHit }, ...] — audit trail for the admin
+  // battle-logs page and for debugging a disputed result; never read back to resolve anything.
+  roundLog          Json                     @default("[]")
+  pointsAwarded     Int                      @default(0)
+  rewardsGranted    Json? // [{ type, name, quantity }] — display-only summary for the log
+  startedAt         DateTime                 @default(now())
+  // Bumped on every round resolved (and at creation) — the idle-timeout clock for reclaiming an
+  // ABANDONED battle. NOT bumped by merely viewing/polling the battle, only by actually
+  // submitting a round, so a player who just leaves the popup open without acting still times
+  // out on schedule.
+  lastActionAt      DateTime                 @default(now())
+  endedAt           DateTime?
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Restrict, NOT Cascade: this table is the permanent battle-log audit trail (see the admin
+  // cMoon Battle Logs page) — a Cascade here would silently destroy history the moment an admin
+  // deleted the enemy member it was fought against. The admin delete endpoint for
+  // CMoonEnemyMember pre-checks for this (friendlier message) and this FK is the real backstop;
+  // an admin who wants a member gone should deactivate it (active: false) instead, which is
+  // enough to stop it from being offered by the popup without touching any history.
+  enemyMember CMoonEnemyMember @relation(fields: [enemyMemberId], references: [id], onDelete: Restrict)
+  cMoon       CMoon            @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+
+  // "At most one in-progress battle per user" as a real DB constraint, not just an API-layer
+  // check — mirrors BlackjackSession.activeKey's sentinel-column pattern (Prisma can't express a
+  // partial unique index): holds this row's own userId while status = IN_PROGRESS, and is
+  // cleared to NULL the moment it resolves, so two concurrent "start a battle" requests for the
+  // same user can't both succeed regardless of any race in the API layer's own pre-check.
+  activeUserId String? @unique
+
+  @@index([enemyMemberId, status])
+  @@index([cMoonId, outcome])
+}
+
+// ── cMoon Season Nav feature ─────────────────────────────────────────────
+// Powers the customizable "seasonal updates" section on the bottom half of the cMoon navigation
+// page (components/newsite/CMoonNav.vue): an editable header/blurb plus a small set of
+// admin-defined progress trackers (e.g. "100 NPC battle wins", "500 average points") shown as one
+// progress bar per cMoon team. Deliberately season-scoped, not all-time: every tracker's current
+// value is computed fresh from CMoonEnemyBattle/CMoonScoreLog rows dated on/after `startedAt`
+// (see server/utils/cmoonSeason.js), never from the lifetime running totals on CMoon itself
+// (battleWins/battleLosses/teamScore) — those never reset, so a goal meant to describe "this
+// season" would otherwise silently keep counting a previous season's progress forever. Starting a
+// new season (server/api/admin/cmoon-season.post.js) only ever moves `startedAt` forward; it never
+// deletes CMoonEnemyBattle/CMoonScoreLog history, so a later admin change is non-destructive and a
+// past season's raw data is still there if ever needed, just no longer in any tracker's window.
+model CMoonSeasonConfig {
+  id        String   @id // always 'singleton', same convention as GlobalGameConfig
+  header    String   @default("cMoons Season 1")
+  startedAt DateTime @default(now())
+  // Sanitized HTML — see server/utils/sanitizeEncyclopediaHtml.js (reused as-is; this blurb has
+  // the exact same "short admin-authored prose, styled like the Tutorial page" shape as an
+  // Encyclopedia entry's body, so a second sanitizer would just be the same allowlist twice).
+  blurb     String   @default("")
+  updatedAt DateTime @updatedAt
+}
+
+enum CMoonSeasonTrackerMetric {
+  BATTLE_WINS // count of CMoonEnemyBattle rows with outcome=WIN, endedAt >= startedAt
+  BATTLE_LOSSES // same, outcome=LOSS
+  TEAM_SCORE // SUM(CMoonScoreLog.points) where createdAt >= startedAt — season-scoped teamScore
+  AVG_POINTS // the same sum divided by the cMoon's current memberCount (plain average, no
+  // small-team shrinkage — shrinkage exists to keep the competitive leaderboard's RANKING fair to
+  // small teams, which doesn't apply to a single team's own progress toward its own goal)
+}
+
+model CMoonSeasonTracker {
+  id          String                   @id @default(uuid())
+  label       String
+  metricType  CMoonSeasonTrackerMetric
+  targetValue Float
+  active      Boolean                  @default(true)
+  sortOrder   Int                      @default(0)
+  createdAt   DateTime                 @default(now())
+  updatedAt   DateTime                 @updatedAt
+
+  @@index([active, sortOrder])
 }

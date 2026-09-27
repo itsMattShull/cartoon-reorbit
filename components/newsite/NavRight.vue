@@ -12,12 +12,10 @@
     <NuxtLink to="/newsite/trade" class="nav-link" data-nav-sound="trades">
       <BlueButton :style="{ height: buttonHeight }">Trades</BlueButton>
     </NuxtLink>
-    <NuxtLink to="/newsite/economy" class="nav-link" data-nav-sound="economy">
-      <BlueButton :style="{ height: buttonHeight }">Economy</BlueButton>
-    </NuxtLink>
     <NuxtLink to="/newsite/Games" class="nav-link" data-nav-sound="games">
       <BlueButton :style="{ height: buttonHeight }">Games</BlueButton>
     </NuxtLink>
+    <NavEncyclopediaDropdown :button-height="buttonHeight" />
     <NuxtLink v-if="!isMobile" to="/newsite/redeem" class="nav-link" data-nav-sound="redeem">
       <BlueButton :style="{ height: buttonHeight }">Redeem</BlueButton>
     </NuxtLink>
@@ -57,11 +55,38 @@ const props = defineProps({
   box-sizing: border-box;
 }
 
+/* .topbar-nav-right is `overflow: hidden` (layouts/newsite-template.vue), so any row content
+   wider than its allotted space is silently clipped rather than wrapped or shrunk — `white-space:
+   nowrap` on .blue-button plus flexbox's `min-width: auto` default means these 8 buttons can
+   never compress below their own text width no matter how tight the row gets. Reported as
+   "Settings" getting cut off on desktop: --font-family loads Nunito from Google Fonts with
+   `display: swap` (see the @import above), so any request that's slow, blocked, or briefly
+   between the fallback-font paint and the swap renders this row in a bolder/wider fallback
+   sans-serif — exactly the kind of few-extra-pixels-per-button variance a fixed-width row with no
+   slack can't absorb. Trimmed here (not in BlueButton.vue) so only this specific row gets the
+   extra breathing room. */
+.nav-right :deep(.blue-button) {
+  padding: 4px 10px;
+}
+
 @media (max-width: 768px) {
   .nav-right {
     flex-wrap: wrap;
     height: auto;
     padding: 4px 6px;
+  }
+
+  /* On mobile this row always renders exactly 6 buttons (My cWorld/cMart/Auctions/Trades/Games/
+     the Encyclopedia dropdown trigger — Redeem/Settings move to NavLeft.vue instead), one more
+     than BlueButton's own shared mobile size leaves room for: at BlueButton's default mobile
+     size the 6th button had nowhere to go but its own wrapped row, landing centered and alone
+     beneath the other five. Sized here (not in BlueButton.vue itself) so the shrink is scoped to
+     this specific row instead of every blue button on the site. :deep() reaches into BlueButton's
+     own scoped style, and into NavEncyclopediaDropdown's trigger button, since both render as
+     genuine DOM descendants of .nav-right despite being separate components. */
+  .nav-right :deep(.blue-button) {
+    font-size: 0.64rem;
+    padding: 3px 5px;
   }
 }
 </style>

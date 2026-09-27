@@ -307,7 +307,9 @@ export async function grantRewardInTx(tx, userId, reward, method) {
 
 // Enqueues the mint jobs returned by grantRewardInTx, once the caller's transaction has
 // safely committed. Returns the same `{ name, quantity }[]` shape the old inline logic did.
-async function enqueueCtoonJobs(userId, ctoonJobs, method) {
+// Exported so any other caller of grantRewardInTx (e.g. cMoon enemy battle wins) can reuse this
+// exact post-commit step instead of re-implementing the mintQueue loop.
+export async function enqueueCtoonJobs(userId, ctoonJobs, method) {
   const granted = []
   for (const job of ctoonJobs) {
     for (let i = 0; i < job.quantity; i++) {

@@ -27,7 +27,10 @@
             <span class="lb-cmoon-swatch" :style="{ background: safeCMoonColor(row.color) }"></span>
             <div class="lb-user-col">
               <NuxtLink :to="`/newsite/cmoon/${row.id}`" class="lb-username">{{ row.name }}</NuxtLink>
-              <span class="lb-cmoon-members">{{ row.memberCount }} member{{ row.memberCount === 1 ? '' : 's' }}</span>
+              <span class="lb-cmoon-members">
+                {{ row.memberCount }} member{{ row.memberCount === 1 ? '' : 's' }}
+                <span class="lb-cmoon-battles">· {{ row.battleWins || 0 }}-{{ row.battleLosses || 0 }} vs enemies</span>
+              </span>
             </div>
             <span class="lb-value">{{ Math.round(row.avgScore).toLocaleString() }}<span class="lb-cmoon-avg-unit"> wtd avg</span></span>
           </li>
@@ -401,6 +404,10 @@ const contributorsByCMoonId = computed(() => cMoonContributorsData.value?.contri
 .lb-cmoon-members {
   font-size: 0.65rem;
   color: rgba(255, 255, 255, 0.5);
+}
+
+.lb-cmoon-battles {
+  color: rgba(255, 255, 255, 0.35);
 }
 
 .lb-list {

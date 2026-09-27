@@ -8,7 +8,7 @@ definePageMeta({
   middleware: 'newsite',
   showAdbar: true,
   showNav: true,
-  title: 'Economy',
+  title: 'Toononomics',
   description: 'Live cToon economy stats — trending cToons, top values by auction and trade, and anonymous price history.'
 })
 
