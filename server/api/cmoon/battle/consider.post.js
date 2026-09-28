@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
   // rolling for a new one — the activeUserId sentinel/unique constraint guarantees at most one.
   const inProgress = await db.cMoonEnemyBattle.findFirst({
     where: { userId, status: 'IN_PROGRESS' },
-    include: { enemyMember: { include: { faction: true } } },
+    include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } } },
   })
   if (inProgress) {
     return { offered: true, resumed: true, battle: serializeBattleForClient(inProgress) }
@@ -55,7 +55,7 @@ export default defineEventHandler(async (event) => {
   // since every player's encounter with it starts fresh regardless of anyone else's history.
   const candidates = await db.cMoonEnemyMember.findMany({
     where: { active: true, defeatedAt: null, faction: { active: true } },
-    include: { faction: true },
+    include: { faction: { include: { appearEffect: true } } },
   })
   if (!candidates.length) return { offered: false }
 

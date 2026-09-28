@@ -19,11 +19,22 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: parsed.message })
   }
 
+  if (parsed.data.appearEffectId) {
+    const effect = await db.cMoonJoinEffect.count({ where: { id: parsed.data.appearEffectId } })
+    if (!effect) throw createError({ statusCode: 404, statusMessage: 'Join effect not found' })
+  }
+
   try {
     await db.cMoonEnemyFaction.update({ where: { id }, data: parsed.data })
   } catch (err) {
     if (err?.code === 'P2002') {
       throw createError({ statusCode: 409, statusMessage: 'An enemy faction with that name already exists' })
+    }
+    // The effect existed at the count() check above but was deleted by another admin request
+    // before this write landed — same race the join-effect delete endpoint's own P2003 catch
+    // guards against, just from the other side of the FK.
+    if (err?.code === 'P2003') {
+      throw createError({ statusCode: 404, statusMessage: 'Join effect was deleted by another request — pick again' })
     }
     throw err
   }
@@ -32,8 +43,8 @@ export default defineEventHandler(async (event) => {
     userId: me.id,
     area: 'CMoonEnemyFaction',
     key: `update:${id}`,
-    prevValue: { name: faction.name, active: faction.active, sortOrder: faction.sortOrder },
-    newValue: { name: parsed.data.name, active: parsed.data.active, sortOrder: parsed.data.sortOrder },
+    prevValue: { name: faction.name, active: faction.active, sortOrder: faction.sortOrder, appearEffectId: faction.appearEffectId },
+    newValue: { name: parsed.data.name, active: parsed.data.active, sortOrder: parsed.data.sortOrder, appearEffectId: parsed.data.appearEffectId },
   })
 
   return { ok: true }

@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
   // while) instead of leaving the player permanently soft-locked out of ever fighting again.
   const existing = await db.cMoonEnemyBattle.findFirst({
     where: { userId, status: 'IN_PROGRESS' },
-    include: { enemyMember: { include: { faction: true } } },
+    include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } } },
   })
   if (existing) {
     const idleMs = Date.now() - existing.lastActionAt.getTime()
@@ -54,7 +54,7 @@ export default defineEventHandler(async (event) => {
 
   const enemyMember = await db.cMoonEnemyMember.findUnique({
     where: { id: enemyMemberId },
-    include: { faction: true },
+    include: { faction: { include: { appearEffect: true } } },
   })
   if (!enemyMember || !enemyMember.active || !enemyMember.faction.active) {
     throw createError({ statusCode: 404, statusMessage: 'That enemy is no longer available' })
@@ -76,7 +76,7 @@ export default defineEventHandler(async (event) => {
         enemyHpRemaining,
         activeUserId: userId,
       },
-      include: { enemyMember: { include: { faction: true } } },
+      include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } } },
     })
   } catch (err) {
     // Lost a race against another concurrent /start call for this same user (activeUserId is
@@ -84,7 +84,7 @@ export default defineEventHandler(async (event) => {
     if (err?.code === 'P2002') {
       const winner = await db.cMoonEnemyBattle.findFirst({
         where: { userId, status: 'IN_PROGRESS' },
-        include: { enemyMember: { include: { faction: true } } },
+        include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } } },
       })
       if (winner) return { battle: serializeBattleForClient(winner) }
     }
