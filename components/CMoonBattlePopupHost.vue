@@ -231,6 +231,18 @@ watch(() => route.path, maybeCheck)
   text-align: center;
 }
 .cbp-portrait-wrap {
+  /* .cbp-banner is `position: relative` (so its own .cbp-close button can anchor to it), which —
+     regardless of DOM order — makes it paint ABOVE any plain in-flow (position: static) sibling
+     content per the CSS stacking rules: positioned elements always paint after static ones within
+     the same stacking context. This wrap's negative top margin is deliberately designed to overlap
+     the banner (a profile-picture-over-a-cover-photo layout), so without its own position + z-index
+     the banner was painting on top of exactly that overlapping region — silently hiding the top of
+     whatever portrait art was tall enough to reach up that far (e.g. a character's head), even
+     though the box/mask/sizing themselves were never clipping it at all. z-index 1 is enough since
+     .cbp-banner never sets one of its own (auto, which paints like z-index 0 here).
+  */
+  position: relative;
+  z-index: 1;
   width: 96px;
   height: 96px;
   margin: -50px auto 6px;
