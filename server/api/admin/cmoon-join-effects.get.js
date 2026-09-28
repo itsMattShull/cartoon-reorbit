@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => {
 
   const effects = await db.cMoonJoinEffect.findMany({
     orderBy: { name: 'asc' },
-    include: { _count: { select: { cmoons: true } } },
+    include: { _count: { select: { cmoons: true, enemyFactions: true } } },
   })
 
   return {
@@ -22,6 +22,7 @@ export default defineEventHandler(async (event) => {
       textColor: e.textColor,
       textPosition: e.textPosition,
       usageCount: e._count?.cmoons ?? 0,
+      enemyFactionUsageCount: e._count?.enemyFactions ?? 0,
     })),
   }
 })

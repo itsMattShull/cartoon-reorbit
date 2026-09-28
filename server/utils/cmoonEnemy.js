@@ -44,6 +44,18 @@ export const REWARD_QUANTITY_DEFAULT = 1
 export const BATTLE_MODES = ['PER_PLAYER', 'SHARED_POOL']
 export const REWARD_TYPES = ['CTOON', 'AVATAR', 'BACKGROUND']
 
+// The only CMoonEnemyMember columns a battle-sound upload may target — shared between
+// cmoon-enemy-members/[id]/sound.post.js (which validates the client-sent `slot` field against
+// this set before ever touching Prisma's `data`) and the admin UI, so the two can't drift.
+export const MEMBER_SOUND_SLOTS = [
+  'appearSoundPath',
+  'damageTakenSoundPath',
+  'damageAvoidedSoundPath',
+  'attackingSoundPath',
+  'victorySoundPath',
+  'defeatSoundPath',
+]
+
 // Which id field a reward row of each type must carry — the XOR Prisma can't express (see the
 // CMoonEnemyReward model's own comment).
 const REWARD_ID_FIELD = { CTOON: 'ctoonId', AVATAR: 'avatarId', BACKGROUND: 'backgroundId' }
@@ -134,6 +146,11 @@ export function parseFactionBody(body, existing) {
   const sortOrder = body?.sortOrder === undefined
     ? (existing ? existing.sortOrder : 0)
     : toNumber(body.sortOrder)
+  // Whether the referenced CMoonJoinEffect actually exists is the caller's DB check (this module
+  // deliberately has no Prisma access — see the file header) — this only validates shape.
+  const appearEffectId = body?.appearEffectId === undefined
+    ? (existing ? existing.appearEffectId : null)
+    : toOptionalId(body.appearEffectId)
 
   if (!isValidFactionName(name)) {
     return { ok: false, message: `Name is required (max ${FACTION_NAME_MAX_LENGTH} characters)` }
@@ -147,8 +164,11 @@ export function parseFactionBody(body, existing) {
   if (!isValidSortOrder(sortOrder)) {
     return { ok: false, message: `Sort order must be a whole number between ${SORT_ORDER_MIN} and ${SORT_ORDER_MAX}` }
   }
+  if (appearEffectId === undefined) {
+    return { ok: false, message: 'appearEffectId must be a string id' }
+  }
 
-  return { ok: true, data: { name, description, active, sortOrder } }
+  return { ok: true, data: { name, description, active, sortOrder, appearEffectId } }
 }
 
 // Shared by the member create/update endpoints, same `existing` convention as parseFactionBody.

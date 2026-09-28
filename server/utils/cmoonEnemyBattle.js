@@ -76,8 +76,14 @@ export function rollEnemyRewards(rewardRows) {
 // Shape sent to the client for an enemy the popup is offering a fight against (before any battle
 // row exists) — never includes admin-only fields (reward tables, exact drop chances) since this
 // reaches every logged-in player, not just admins.
+//
+// `member.faction.appearEffect` (when the caller's query included it) is trimmed to exactly the
+// fields useFullscreenEffect().play()'s CUSTOM config expects — the same shape
+// utils/cmoonJoinEffectDescriptor.js builds from a CMoon's own customJoinEffect — never the raw
+// Prisma row (no id/createdAt/etc leaking to every logged-in player).
 export function serializeEnemyForClient(member) {
   const hp = member.battleMode === 'SHARED_POOL' ? member.currentHp : member.maxHp
+  const fx = member.faction?.appearEffect
   return {
     id: member.id,
     name: member.name,
@@ -85,8 +91,29 @@ export function serializeEnemyForClient(member) {
     battleMode: member.battleMode,
     maxHp: member.maxHp,
     hp,
+    // Named from the enemy's own perspective — see the schema comment on these columns.
+    appearSoundPath: member.appearSoundPath || null,
+    damageTakenSoundPath: member.damageTakenSoundPath || null,
+    damageAvoidedSoundPath: member.damageAvoidedSoundPath || null,
+    attackingSoundPath: member.attackingSoundPath || null,
+    victorySoundPath: member.victorySoundPath || null,
+    defeatSoundPath: member.defeatSoundPath || null,
     faction: member.faction
-      ? { id: member.faction.id, name: member.faction.name, bannerImagePath: member.faction.bannerImagePath || null }
+      ? {
+          id: member.faction.id,
+          name: member.faction.name,
+          bannerImagePath: member.faction.bannerImagePath || null,
+          appearEffect: fx
+            ? {
+                backgroundColor: fx.backgroundColor,
+                vignette: fx.vignette,
+                imagePath: fx.imagePath,
+                text: fx.text,
+                textColor: fx.textColor,
+                textPosition: fx.textPosition,
+              }
+            : null,
+        }
       : null,
   }
 }

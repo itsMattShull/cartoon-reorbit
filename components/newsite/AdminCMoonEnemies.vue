@@ -25,7 +25,10 @@
             <div class="min-w-0 flex-1">
               <div class="font-semibold break-words">{{ f.name }}<span v-if="!f.active" class="ml-2 text-[10px] font-normal text-gray-500">(inactive)</span></div>
               <div v-if="f.description" class="text-[11px] text-gray-600 break-words">{{ f.description }}</div>
-              <div class="text-[11px] text-gray-600">{{ f.memberCount }} member{{ f.memberCount === 1 ? '' : 's' }}</div>
+              <div class="text-[11px] text-gray-600">
+                {{ f.memberCount }} member{{ f.memberCount === 1 ? '' : 's' }}
+                <span v-if="f.appearEffect"> · Appear effect: {{ f.appearEffect.name }}</span>
+              </div>
             </div>
             <div class="flex items-center gap-3 flex-shrink-0">
               <button type="button" class="text-indigo-600 hover:underline" @click="startEditFaction(f)">Edit</button>
@@ -63,6 +66,18 @@
                 <span class="text-xs font-medium">Active</span>
               </label>
             </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium mb-1">Appear effect (optional)</label>
+            <select v-model="factionForm.appearEffectId" class="w-full border rounded px-2 py-1">
+              <option value="">No effect — popup shows immediately</option>
+              <option v-for="fx in joinEffects" :key="fx.id" :value="fx.id">{{ fx.name }}</option>
+            </select>
+            <p class="text-[10px] text-gray-500 mt-1">
+              Full-screen effect played the moment the battle popup first offers a member of this faction. Built in
+              <NuxtLink to="/newsite/admin/cMoonJoinEffects" class="text-indigo-600 hover:underline">Manage cMoon Join Effects</NuxtLink>.
+            </p>
           </div>
 
           <div>
@@ -214,6 +229,32 @@
             </div>
           </div>
 
+          <div>
+            <label class="block text-xs font-medium mb-1">Battle sounds (optional, MP3/OGG/WAV, max 3MB each)</label>
+            <div class="space-y-2">
+              <div v-for="slot in SOUND_SLOTS" :key="slot.key" class="border rounded p-2 flex items-center gap-3 flex-wrap">
+                <div class="w-40 flex-shrink-0">
+                  <div class="font-medium">{{ slot.label }}</div>
+                  <div class="text-[10px] text-gray-500">{{ slot.help }}</div>
+                </div>
+                <audio v-if="memberSoundState[slot.key].savedPath" :src="memberSoundState[slot.key].savedPath" controls class="h-8 flex-shrink-0" style="max-width: 220px;" />
+                <span v-else class="text-[10px] text-gray-400 flex-shrink-0">No sound</span>
+                <div class="space-y-1 flex-1 min-w-[180px]">
+                  <input
+                    type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav" class="block w-full text-[11px]"
+                    @change="onSoundFile(slot.key, $event)"
+                  />
+                  <p v-if="memberSoundState[slot.key].error" class="text-red-600">{{ memberSoundState[slot.key].error }}</p>
+                  <button
+                    v-if="memberForm.id" type="button" class="px-2 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                    :disabled="!memberSoundState[slot.key].pendingFile || memberSoundState[slot.key].uploading" @click="uploadSound(slot.key)"
+                  >{{ memberSoundState[slot.key].uploading ? 'Uploading…' : 'Upload' }}</button>
+                  <p v-else-if="memberSoundState[slot.key].pendingFile" class="text-[11px] text-gray-500">Uploads together with "Create member" below.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="flex items-center gap-3 flex-wrap pt-1">
             <button
               type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
@@ -305,6 +346,7 @@ const members = ref([])
 const backgrounds = ref([])
 const avatarsCatalog = ref([])
 const ctoonsCatalog = ref([])
+const joinEffects = ref([])
 const loading = ref(false)
 const loadError = ref('')
 
@@ -318,18 +360,20 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [factionsData, membersData, backgroundsData, avatarsData, ctoonsData] = await Promise.all([
+    const [factionsData, membersData, backgroundsData, avatarsData, ctoonsData, joinEffectsData] = await Promise.all([
       $fetch('/api/admin/cmoon-enemy-factions'),
       $fetch('/api/admin/cmoon-enemy-members'),
       $fetch('/api/admin/backgrounds'),
       $fetch('/api/admin/avatars'),
       $fetch('/api/admin/list-ctoons'),
+      $fetch('/api/admin/cmoon-join-effects'),
     ])
     factions.value = factionsData?.factions || []
     members.value = membersData?.members || []
     backgrounds.value = backgroundsData || []
     avatarsCatalog.value = avatarsData || []
     ctoonsCatalog.value = ctoonsData || []
+    joinEffects.value = joinEffectsData?.effects || []
   } catch (e) {
     loadError.value = e?.data?.statusMessage || 'Failed to load cMoon enemies'
   } finally {
@@ -347,7 +391,7 @@ const factionUploadingImage = ref(false)
 const factionImageError = ref('')
 const factionSavedImagePath = ref('')
 
-const emptyFactionForm = () => ({ id: '', name: '', description: '', active: true, sortOrder: 0 })
+const emptyFactionForm = () => ({ id: '', name: '', description: '', active: true, sortOrder: 0, appearEffectId: '' })
 const factionForm = reactive(emptyFactionForm())
 const factionPreviewImageSrc = computed(() => factionPendingFilePreviewUrl.value || factionSavedImagePath.value || '')
 
@@ -372,6 +416,7 @@ function startEditFaction(f) {
   factionForm.description = f.description || ''
   factionForm.active = !!f.active
   factionForm.sortOrder = f.sortOrder
+  factionForm.appearEffectId = f.appearEffectId || ''
   factionSavedImagePath.value = f.bannerImagePath || ''
 }
 
@@ -427,6 +472,7 @@ async function saveFaction() {
       description: factionForm.description.trim() || null,
       active: factionForm.active,
       sortOrder: Math.trunc(Number(factionForm.sortOrder)) || 0,
+      appearEffectId: factionForm.appearEffectId || null,
     }
     if (factionForm.id) {
       await $fetch(`/api/admin/cmoon-enemy-factions/${factionForm.id}`, { method: 'PUT', body })
@@ -472,6 +518,69 @@ const memberUploadingImage = ref(false)
 const memberImageError = ref('')
 const memberSavedImagePath = ref('')
 
+// ── Battle sounds (six independent slots, uploaded via cmoon-enemy-members/[id]/sound —
+// server/utils/cmoonEnemy.js#MEMBER_SOUND_SLOTS is the source of truth for the field names; kept
+// in sync here by hand since that file is server-only) ──────────────
+const SOUND_SLOTS = [
+  { key: 'appear', field: 'appearSoundPath', label: 'Appearance', help: 'Plays when this enemy first appears in the popup.' },
+  { key: 'damageTaken', field: 'damageTakenSoundPath', label: 'Damage taken', help: "Plays when the player's attack lands on this enemy." },
+  { key: 'damageAvoided', field: 'damageAvoidedSoundPath', label: 'Damage avoided', help: "Plays when this enemy blocks the player's attack." },
+  { key: 'attacking', field: 'attackingSoundPath', label: 'Attacking', help: "Plays when this enemy's attack lands on the player." },
+  { key: 'victory', field: 'victorySoundPath', label: 'Victory (enemy defeated)', help: 'Plays when the player defeats this enemy.' },
+  { key: 'defeat', field: 'defeatSoundPath', label: 'Defeat (enemy wins)', help: 'Plays when this enemy defeats the player.' },
+]
+const emptySoundState = () => ({ pendingFile: null, uploading: false, error: '', savedPath: '' })
+const memberSoundState = reactive(Object.fromEntries(SOUND_SLOTS.map(s => [s.key, emptySoundState()])))
+
+function resetMemberSoundState() {
+  for (const s of SOUND_SLOTS) Object.assign(memberSoundState[s.key], emptySoundState())
+}
+
+function onSoundFile(slotKey, ev) {
+  const state = memberSoundState[slotKey]
+  state.error = ''
+  const f = ev.target.files?.[0] || null
+  if (f && !['audio/mpeg', 'audio/ogg', 'audio/wav'].includes(f.type)) {
+    // A fast client-side hint only — browsers are inconsistent about the MIME type they report
+    // for audio, so the real check is server-side magic-byte sniffing (audioUploadValidation.js).
+    state.error = 'MP3, OGG, or WAV only.'
+    ev.target.value = ''
+    return
+  }
+  if (f && f.size > 3 * 1024 * 1024) {
+    state.error = 'Audio must be 3MB or smaller.'
+    ev.target.value = ''
+    return
+  }
+  state.pendingFile = f
+}
+
+async function uploadSoundFor(slotKey, id) {
+  const slot = SOUND_SLOTS.find(s => s.key === slotKey)
+  const state = memberSoundState[slotKey]
+  if (!state.pendingFile || !id) return
+  state.uploading = true
+  state.error = ''
+  try {
+    const fd = new FormData()
+    fd.append('audio', state.pendingFile)
+    fd.append('slot', slot.field)
+    const res = await $fetch(`/api/admin/cmoon-enemy-members/${id}/sound`, { method: 'POST', body: fd })
+    state.savedPath = res.soundPath || state.savedPath
+    state.pendingFile = null
+  } catch (e) {
+    state.error = e?.data?.statusMessage || 'Upload failed.'
+  } finally {
+    state.uploading = false
+  }
+}
+
+async function uploadSound(slotKey) {
+  if (!memberForm.id) return
+  await uploadSoundFor(slotKey, memberForm.id)
+  await load()
+}
+
 const emptyMemberForm = () => ({
   id: '', factionId: '', name: '', maxHp: 5, battleMode: 'PER_PLAYER',
   cMoonPointsReward: 10, active: true, sortOrder: 0,
@@ -490,6 +599,7 @@ function resetMemberForm() {
   memberImageError.value = ''
   clearMemberPendingFile()
   memberSavedImagePath.value = ''
+  resetMemberSoundState()
   editingMemberHasBattles.value = false
   editingMemberRewards.value = []
   resetRewardForm()
@@ -504,6 +614,7 @@ function startEditMember(m) {
     cMoonPointsReward: m.cMoonPointsReward, active: !!m.active, sortOrder: m.sortOrder,
   })
   memberSavedImagePath.value = m.imagePath || ''
+  for (const s of SOUND_SLOTS) memberSoundState[s.key].savedPath = m[s.field] || ''
   editingMemberHasBattles.value = !!m.hasBattles
   editingMemberRewards.value = m.rewards || []
 }
@@ -581,6 +692,9 @@ async function saveMember() {
       memberForm.id = id
     }
     if (memberPendingFile.value) await uploadMemberImageFor(id)
+    for (const s of SOUND_SLOTS) {
+      if (memberSoundState[s.key].pendingFile) await uploadSoundFor(s.key, id)
+    }
     await load()
     // Re-select the freshly saved member from the reloaded list so its rewards/hasBattles reflect
     // the DB, rather than trusting this form's own local state.

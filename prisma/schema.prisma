@@ -3573,7 +3573,8 @@ model CMoonJoinEffect {
   createdAt       DateTime                    @default(now())
   updatedAt       DateTime                    @updatedAt
 
-  cmoons CMoon[]
+  cmoons        CMoon[]
+  enemyFactions CMoonEnemyFaction[]
 }
 
 enum CMoonJoinEffectTextPosition {
@@ -5131,6 +5132,14 @@ model CMoonEnemyFaction {
   // CMoonEnemyBattle rows against it are left to finish normally rather than being force-ended.
   active          Boolean  @default(true)
   sortOrder       Int      @default(0)
+  // Optional full-screen effect played the moment the popup first offers a member of this
+  // faction (never on a resumed in-progress battle) — reuses the same admin-authored
+  // CMoonJoinEffect content type a cMoon's own join effect uses (see CMoon.customJoinEffect),
+  // rather than a second bespoke effect-authoring system. onDelete: Restrict matches that same
+  // field: an admin must reassign every faction using an effect before it can be deleted (see
+  // that pre-check in cmoon-join-effects/[id].delete.js).
+  appearEffectId  String?
+  appearEffect    CMoonJoinEffect? @relation(fields: [appearEffectId], references: [id], onDelete: Restrict)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -5168,6 +5177,19 @@ model CMoonEnemyMember {
   sortOrder         Int                  @default(0)
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
+
+  // Six optional battle sound effects (MP3/OGG/WAV, uploaded via cmoon-enemy-members/[id]/
+  // sound.post.js — sniffed by magic bytes, never trusted from the client, same discipline as
+  // imagePath above). Each plays client-side (components/CMoonBattlePopupHost.vue via
+  // composables/useCMoonBattlePopup.js) at exactly one moment; null means silent for that
+  // moment, not an error. Named from the ENEMY's perspective throughout — e.g. attackingSoundPath
+  // is the enemy's own attack landing on the PLAYER, not the reverse.
+  appearSoundPath        String? // the popup showing this enemy for the first time (never on a resumed battle)
+  damageTakenSoundPath   String? // the player's attack lands on this enemy (round.enemyHit)
+  damageAvoidedSoundPath String? // this enemy blocks the player's attack (player attacked, round.enemyHit is false)
+  attackingSoundPath     String? // this enemy's attack lands on the player (round.playerHit)
+  victorySoundPath       String? // this enemy is defeated (the player's battle outcome is WIN)
+  defeatSoundPath        String? // this enemy wins (the player's battle outcome is LOSS)
 
   faction CMoonEnemyFaction  @relation(fields: [factionId], references: [id], onDelete: Cascade)
   rewards CMoonEnemyReward[]

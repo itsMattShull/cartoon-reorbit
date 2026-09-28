@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
 
   const battle = await db.cMoonEnemyBattle.findUnique({
     where: { id: battleId },
-    include: { enemyMember: { include: { faction: true } } },
+    include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } } },
   })
   if (!battle || battle.userId !== userId) throw createError({ statusCode: 404, statusMessage: 'Battle not found' })
   if (battle.status !== 'IN_PROGRESS') throw createError({ statusCode: 409, statusMessage: 'This battle has already ended' })
@@ -110,7 +110,7 @@ export default defineEventHandler(async (event) => {
   const updated = await db.cMoonEnemyBattle.update({
     where: { id: battleId },
     data: { roundNumber: submittedRound + 1, playerHpRemaining: newPlayerHp, enemyHpRemaining: newEnemyHp, roundLog },
-    include: { enemyMember: { include: { faction: true } } },
+    include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } } },
   })
   return { round: roundEntry, battle: serializeBattleForClient(updated) }
 })
@@ -156,7 +156,7 @@ async function resolveWin(battle, roundLog, submittedRound) {
         playerHpRemaining: battle.playerHpRemaining, enemyHpRemaining: 0,
         roundLog, pointsAwarded, rewardsGranted, endedAt: new Date(), activeUserId: null,
       },
-      include: { enemyMember: { include: { faction: true } } },
+      include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } } },
     })
 
     return { updated, ctoonJobs: summary.ctoonJobs }
@@ -178,7 +178,7 @@ async function resolveLoss(battle, roundLog, submittedRound) {
         playerHpRemaining: 0, enemyHpRemaining: battle.enemyHpRemaining,
         roundLog, endedAt: new Date(), activeUserId: null,
       },
-      include: { enemyMember: { include: { faction: true } } },
+      include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } } },
     })
   })
 }
@@ -194,6 +194,6 @@ async function resolveAbandoned(battle, roundLog, submittedRound, playerHpRemain
       playerHpRemaining, enemyHpRemaining,
       roundLog, endedAt: new Date(), activeUserId: null,
     },
-    include: { enemyMember: { include: { faction: true } } },
+    include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } } },
   })
 }
