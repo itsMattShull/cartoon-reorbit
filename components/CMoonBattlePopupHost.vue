@@ -234,7 +234,17 @@ watch(() => route.path, maybeCheck)
   width: 96px;
   height: 96px;
   margin: -50px auto 6px;
-  border-radius: 50%;
+  /* NOT a circle (border-radius: 50%, as this used to be): the upload endpoint
+     (server/api/admin/cmoon-enemy-members/[id]/image.post.js) deliberately letterboxes every
+     portrait into a full 600x600 *square* with `fit: 'contain'` specifically so a character is
+     never cropped — "must never lose a head or a tail to cropping". A square that large can't be
+     inscribed in a circle this size (a square's corner-to-corner diagonal is ~1.41x its side, well
+     past a circle's diameter at any square wide enough to look properly framed), so the circular
+     mask was cropping exactly the corners the upload step went out of its way to preserve — e.g.
+     clipping a character's shoulders or outstretched arms. A rounded square has no such geometry
+     problem: the full contained image is always visible regardless of the art's own aspect ratio.
+  */
+  border-radius: 18px;
   background: #fff;
   border: 3px solid #fff;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
@@ -243,7 +253,7 @@ watch(() => route.path, maybeCheck)
   justify-content: center;
   overflow: hidden;
 }
-.cbp-portrait { max-width: 90%; max-height: 90%; object-fit: contain; }
+.cbp-portrait { max-width: 92%; max-height: 92%; object-fit: contain; }
 .cbp-title { font-size: 18px; font-weight: 700; margin: 4px 0 2px; }
 .cbp-title-win { color: #15803d; }
 .cbp-title-loss { color: #b91c1c; }
