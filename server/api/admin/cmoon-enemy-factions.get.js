@@ -17,6 +17,7 @@ export default defineEventHandler(async (event) => {
       name: f.name,
       description: f.description,
       bannerImagePath: f.bannerImagePath,
+      battleMusicPath: f.battleMusicPath,
       active: f.active,
       sortOrder: f.sortOrder,
       appearEffectId: f.appearEffectId,

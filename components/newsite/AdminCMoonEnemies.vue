@@ -100,6 +100,24 @@
             </div>
           </div>
 
+          <div>
+            <label class="block text-xs font-medium mb-1">Battle music (optional, MP3/OGG/WAV, max 3MB)</label>
+            <div class="flex items-center gap-4 flex-wrap">
+              <audio v-if="factionSavedMusicPath" :src="factionSavedMusicPath" controls class="h-8" style="max-width: 240px;" />
+              <span v-else class="text-[10px] text-gray-400">No music</span>
+              <div class="space-y-2 flex-1 min-w-[200px]">
+                <input type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav" class="block w-full" @change="onFactionMusicFile" />
+                <p class="text-[10px] text-gray-500">Loops for as long as a player is fighting any member of this faction.</p>
+                <p v-if="factionMusicError" class="text-red-600">{{ factionMusicError }}</p>
+                <button
+                  v-if="factionForm.id" type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                  :disabled="!factionPendingMusicFile || factionUploadingMusic" @click="uploadFactionMusic"
+                >{{ factionUploadingMusic ? 'Uploading…' : 'Upload music' }}</button>
+                <p v-else-if="factionPendingMusicFile" class="text-[11px] text-gray-500">Uploads together with "Create faction" below.</p>
+              </div>
+            </div>
+          </div>
+
           <div class="flex items-center gap-3 flex-wrap pt-1">
             <button
               type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
@@ -197,6 +215,19 @@
           </div>
 
           <div class="flex gap-2">
+            <div class="flex-1 min-w-0">
+              <label class="block text-xs font-medium mb-1">Crit chance against (0-100%)</label>
+              <input v-model.number="memberForm.critChanceAgainstPercent" type="number" min="0" max="100" class="w-full border rounded px-2 py-1" />
+              <p class="text-[10px] text-gray-500 mt-1">Chance the player's attack lands as a critical (2x damage) against this enemy.</p>
+            </div>
+            <div class="flex-1 min-w-0">
+              <label class="block text-xs font-medium mb-1">Crit chance from (0-100%)</label>
+              <input v-model.number="memberForm.critChanceFromPercent" type="number" min="0" max="100" class="w-full border rounded px-2 py-1" />
+              <p class="text-[10px] text-gray-500 mt-1">Chance this enemy's attack lands as a critical (2x damage) against the player.</p>
+            </div>
+          </div>
+
+          <div class="flex gap-2">
             <div class="w-24 flex-shrink-0">
               <label class="block text-xs font-medium mb-1">Order</label>
               <input v-model.number="memberForm.sortOrder" type="number" class="w-full border rounded px-2 py-1" />
@@ -286,6 +317,7 @@
                   <option value="CTOON">cToon</option>
                   <option value="AVATAR">Avatar</option>
                   <option value="BACKGROUND">Background</option>
+                  <option value="POINTS">Points</option>
                 </select>
               </div>
               <div class="w-24 flex-shrink-0">
@@ -296,7 +328,15 @@
                 <label class="block text-[11px] font-medium mb-1">Qty (1-20)</label>
                 <input v-model.number="rewardForm.quantity" type="number" min="1" max="20" class="w-full border rounded px-2 py-1" />
               </div>
+              <div v-if="rewardForm.rewardType === 'POINTS'" class="w-28 flex-shrink-0">
+                <label class="block text-[11px] font-medium mb-1">Points (1-5000)</label>
+                <input v-model.number="rewardForm.pointsAmount" type="number" min="1" max="5000" class="w-full border rounded px-2 py-1" />
+              </div>
             </div>
+
+            <p v-if="rewardForm.rewardType === 'POINTS'" class="text-[11px] text-gray-500">
+              Plain site points, separate from the cMoon points on win above — not tied to any cMoon team.
+            </p>
 
             <div v-if="rewardForm.rewardType === 'CTOON'">
               <label class="block text-[11px] font-medium mb-1">cToon</label>
@@ -321,13 +361,14 @@
                 <option v-for="av in avatarsCatalog" :key="av.id" :value="av.id">{{ av.label || av.filename }}</option>
               </select>
             </div>
-            <div v-else>
+            <div v-else-if="rewardForm.rewardType === 'BACKGROUND'">
               <label class="block text-[11px] font-medium mb-1">Background</label>
               <select v-model="rewardForm.backgroundId" class="w-full border rounded px-2 py-1">
                 <option value="">Select a background…</option>
                 <option v-for="bg in backgrounds" :key="bg.id" :value="bg.id">{{ bg.label || bg.filename }}</option>
               </select>
             </div>
+            <!-- POINTS needs no catalog picker — its amount is the "Points (1-5000)" input above. -->
 
             <button
               type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
@@ -390,6 +431,10 @@ const factionPendingFilePreviewUrl = ref(null)
 const factionUploadingImage = ref(false)
 const factionImageError = ref('')
 const factionSavedImagePath = ref('')
+const factionPendingMusicFile = ref(null)
+const factionUploadingMusic = ref(false)
+const factionMusicError = ref('')
+const factionSavedMusicPath = ref('')
 
 const emptyFactionForm = () => ({ id: '', name: '', description: '', active: true, sortOrder: 0, appearEffectId: '' })
 const factionForm = reactive(emptyFactionForm())
@@ -406,6 +451,9 @@ function resetFactionForm() {
   factionImageError.value = ''
   clearFactionPendingFile()
   factionSavedImagePath.value = ''
+  factionPendingMusicFile.value = null
+  factionMusicError.value = ''
+  factionSavedMusicPath.value = ''
   Object.assign(factionForm, emptyFactionForm())
 }
 
@@ -418,6 +466,48 @@ function startEditFaction(f) {
   factionForm.sortOrder = f.sortOrder
   factionForm.appearEffectId = f.appearEffectId || ''
   factionSavedImagePath.value = f.bannerImagePath || ''
+  factionSavedMusicPath.value = f.battleMusicPath || ''
+}
+
+function onFactionMusicFile(ev) {
+  factionMusicError.value = ''
+  const f = ev.target.files?.[0] || null
+  if (f && !['audio/mpeg', 'audio/ogg', 'audio/wav'].includes(f.type)) {
+    // A fast client-side hint only — the real check is server-side magic-byte sniffing
+    // (audioUploadValidation.js), since browsers are inconsistent about audio MIME types.
+    factionMusicError.value = 'MP3, OGG, or WAV only.'
+    ev.target.value = ''
+    return
+  }
+  if (f && f.size > 3 * 1024 * 1024) {
+    factionMusicError.value = 'Audio must be 3MB or smaller.'
+    ev.target.value = ''
+    return
+  }
+  factionPendingMusicFile.value = f
+}
+
+async function uploadFactionMusicFor(id) {
+  if (!factionPendingMusicFile.value || !id) return
+  factionUploadingMusic.value = true
+  factionMusicError.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('audio', factionPendingMusicFile.value)
+    const res = await $fetch(`/api/admin/cmoon-enemy-factions/${id}/music`, { method: 'POST', body: fd })
+    factionSavedMusicPath.value = res.battleMusicPath || factionSavedMusicPath.value
+    factionPendingMusicFile.value = null
+  } catch (e) {
+    factionMusicError.value = e?.data?.statusMessage || 'Upload failed.'
+  } finally {
+    factionUploadingMusic.value = false
+  }
+}
+
+async function uploadFactionMusic() {
+  if (!factionPendingMusicFile.value || !factionForm.id) return
+  await uploadFactionMusicFor(factionForm.id)
+  await load()
 }
 
 function onFactionFile(ev) {
@@ -481,6 +571,7 @@ async function saveFaction() {
       factionForm.id = res.id
     }
     if (factionPendingFile.value) await uploadFactionImageFor(factionForm.id)
+    if (factionPendingMusicFile.value) await uploadFactionMusicFor(factionForm.id)
     resetFactionForm()
     await load()
   } catch (e) {
@@ -583,7 +674,7 @@ async function uploadSound(slotKey) {
 
 const emptyMemberForm = () => ({
   id: '', factionId: '', name: '', maxHp: 5, battleMode: 'PER_PLAYER',
-  cMoonPointsReward: 10, active: true, sortOrder: 0,
+  cMoonPointsReward: 10, critChanceAgainstPercent: 0, critChanceFromPercent: 0, active: true, sortOrder: 0,
 })
 const memberForm = reactive(emptyMemberForm())
 const memberPreviewImageSrc = computed(() => memberPendingFilePreviewUrl.value || memberSavedImagePath.value || '')
@@ -611,7 +702,8 @@ function startEditMember(m) {
   resetMemberForm()
   Object.assign(memberForm, {
     id: m.id, factionId: m.factionId, name: m.name, maxHp: m.maxHp, battleMode: m.battleMode,
-    cMoonPointsReward: m.cMoonPointsReward, active: !!m.active, sortOrder: m.sortOrder,
+    cMoonPointsReward: m.cMoonPointsReward, critChanceAgainstPercent: m.critChanceAgainstPercent ?? 0,
+    critChanceFromPercent: m.critChanceFromPercent ?? 0, active: !!m.active, sortOrder: m.sortOrder,
   })
   memberSavedImagePath.value = m.imagePath || ''
   for (const s of SOUND_SLOTS) memberSoundState[s.key].savedPath = m[s.field] || ''
@@ -671,6 +763,16 @@ async function saveMember() {
     memberFormError.value = 'cMoon points reward must be between 0 and 5000.'
     return
   }
+  const critChanceAgainstPercent = Math.trunc(Number(memberForm.critChanceAgainstPercent))
+  if (!Number.isInteger(critChanceAgainstPercent) || critChanceAgainstPercent < 0 || critChanceAgainstPercent > 100) {
+    memberFormError.value = 'Crit chance against this enemy must be between 0 and 100.'
+    return
+  }
+  const critChanceFromPercent = Math.trunc(Number(memberForm.critChanceFromPercent))
+  if (!Number.isInteger(critChanceFromPercent) || critChanceFromPercent < 0 || critChanceFromPercent > 100) {
+    memberFormError.value = 'Crit chance from this enemy must be between 0 and 100.'
+    return
+  }
 
   memberSaving.value = true
   try {
@@ -680,6 +782,8 @@ async function saveMember() {
       maxHp,
       battleMode: memberForm.battleMode,
       cMoonPointsReward,
+      critChanceAgainstPercent,
+      critChanceFromPercent,
       active: memberForm.active,
       sortOrder: Math.trunc(Number(memberForm.sortOrder)) || 0,
     }
@@ -744,7 +848,7 @@ const rewardFormError = ref('')
 const deletingRewardId = ref('')
 const rewardCtoonSearch = ref('')
 
-const emptyRewardForm = () => ({ rewardType: 'CTOON', ctoonId: '', avatarId: '', backgroundId: '', dropChancePercent: 10, quantity: 1 })
+const emptyRewardForm = () => ({ rewardType: 'CTOON', ctoonId: '', avatarId: '', backgroundId: '', dropChancePercent: 10, quantity: 1, pointsAmount: 100 })
 const rewardForm = reactive(emptyRewardForm())
 
 function resetRewardForm() {
@@ -774,6 +878,7 @@ function selectRewardCtoon(c) {
 function rewardLabel(r) {
   if (r.rewardType === 'CTOON') return r.ctoon?.name || 'Unknown cToon'
   if (r.rewardType === 'AVATAR') return r.avatar?.label || 'Unknown avatar'
+  if (r.rewardType === 'POINTS') return `${r.quantity} points`
   return r.background?.label || 'Unknown background'
 }
 
@@ -795,9 +900,17 @@ async function addReward() {
   } else if (rewardForm.rewardType === 'AVATAR') {
     if (!rewardForm.avatarId) { rewardFormError.value = 'Pick an avatar.'; return }
     body.avatarId = rewardForm.avatarId
-  } else {
+  } else if (rewardForm.rewardType === 'BACKGROUND') {
     if (!rewardForm.backgroundId) { rewardFormError.value = 'Pick a background.'; return }
     body.backgroundId = rewardForm.backgroundId
+  } else {
+    // POINTS
+    const pointsAmount = Math.trunc(Number(rewardForm.pointsAmount))
+    if (!Number.isInteger(pointsAmount) || pointsAmount < 1 || pointsAmount > 5000) {
+      rewardFormError.value = 'Points amount must be between 1 and 5000.'
+      return
+    }
+    body.quantity = pointsAmount
   }
 
   rewardSaving.value = true

@@ -13,6 +13,10 @@ export const PLAYER_MAX_HP = 5
 export const MAX_ROUNDS_SAFETY = 100 // a battle can't loop forever even under a pathological RNG streak
 export const ABANDON_AFTER_MINUTES = 10 // reclaim an IN_PROGRESS battle with no action in this long
 
+export const NORMAL_HIT_DAMAGE = 1
+export const CRITICAL_HIT_DAMAGE = 2
+export const HEAL_ON_SUCCESSFUL_BLOCK = 1 // both sides use the same amount — see resolveBattleRound's playerBlocked/enemyBlocked
+
 export const BATTLE_ACTIONS = ['ATTACK_HIGH', 'ATTACK_LOW', 'BLOCK_HIGH', 'BLOCK_LOW']
 
 export function isValidBattleAction(action) {
@@ -39,13 +43,35 @@ function attackLands(attackerAction, defenderAction) {
 // call this AFTER both actions are known, never before (there's no hidden-information handling
 // here; the caller is responsible for not revealing the enemy's action to the client before the
 // player has locked in their own, if that matters to the UI).
+//
+// playerBlocked/enemyBlocked identify a genuinely SUCCESSFUL block — the other side actually
+// attacked and this side's block stopped it (not merely "wasn't hit because nobody attacked
+// either way", which mutual-block already covers via both being false). This is the trigger for
+// the heal-on-successful-block mechanic (see action.post.js) — a side only heals for stopping a
+// real attack, never for a round where neither side threw one.
 export function resolveBattleRound(playerAction, enemyAction) {
   if (!isValidBattleAction(playerAction)) throw new Error(`Invalid player action: ${playerAction}`)
   if (!isValidBattleAction(enemyAction)) throw new Error(`Invalid enemy action: ${enemyAction}`)
+  const playerHit = attackLands(enemyAction, playerAction)
+  const enemyHit = attackLands(playerAction, enemyAction)
   return {
-    playerHit: attackLands(enemyAction, playerAction),
-    enemyHit: attackLands(playerAction, enemyAction),
+    playerHit,
+    enemyHit,
+    playerBlocked: isAttack(enemyAction) && !playerHit,
+    enemyBlocked: isAttack(playerAction) && !enemyHit,
   }
+}
+
+// Rolls whether a landed hit is critical (2x damage) against the given member-configured chance
+// (0-100, see CMoonEnemyMember.critChanceAgainstPercent/critChanceFromPercent) and returns the
+// actual damage to apply. `hit` must already be known true — this never rolls a hit itself, only
+// how hard an already-landed one strikes. Kept as a pure function (Math.random() aside) so the
+// crit roll and the hit roll stay two clearly separate steps, each independently testable.
+export function rollHitDamage(hit, critChancePercent) {
+  if (!hit) return { damage: 0, isCrit: false }
+  const chance = Number(critChancePercent) || 0
+  const isCrit = chance > 0 && Math.random() * 100 < chance
+  return { damage: isCrit ? CRITICAL_HIT_DAMAGE : NORMAL_HIT_DAMAGE, isCrit }
 }
 
 // The NPC's move for this round — uniform random among all 4 actions. No difficulty/bias knob
@@ -103,6 +129,7 @@ export function serializeEnemyForClient(member) {
           id: member.faction.id,
           name: member.faction.name,
           bannerImagePath: member.faction.bannerImagePath || null,
+          battleMusicPath: member.faction.battleMusicPath || null,
           appearEffect: fx
             ? {
                 backgroundColor: fx.backgroundColor,
@@ -138,6 +165,7 @@ export function buildGrantableReward(hitRewardRows) {
   const backgrounds = []
   const avatars = []
   const ctoons = []
+  let points = 0
   for (const row of hitRewardRows) {
     if (row.rewardType === 'BACKGROUND' && row.backgroundId) backgrounds.push({ backgroundId: row.backgroundId })
     else if (row.rewardType === 'AVATAR' && row.avatarId) avatars.push({ avatarId: row.avatarId })
@@ -147,7 +175,13 @@ export function buildGrantableReward(hitRewardRows) {
         quantity: Math.max(1, Number(row.quantity) || 1),
         ctoon: row.ctoon ? { quantity: row.ctoon.quantity, name: row.ctoon.name } : undefined,
       })
+    // Plain site points (User.points via grantRewardInTx, which already reads a bare `points`
+    // number off this same bundle) — summed across every hit POINTS row into the one total
+    // grantRewardInTx expects, same as several independent CTOON rows each contribute their own
+    // entry to the `ctoons` list above.
+    } else if (row.rewardType === 'POINTS') {
+      points += Math.max(0, Number(row.quantity) || 0)
     }
   }
-  return { backgrounds, avatars, ctoons }
+  return { backgrounds, avatars, ctoons, points }
 }

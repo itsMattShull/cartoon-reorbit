@@ -39,6 +39,8 @@ export default defineEventHandler(async (event) => {
       battleMode: m.battleMode,
       currentHp: m.currentHp,
       cMoonPointsReward: m.cMoonPointsReward,
+      critChanceAgainstPercent: m.critChanceAgainstPercent,
+      critChanceFromPercent: m.critChanceFromPercent,
       appearSoundPath: m.appearSoundPath,
       damageTakenSoundPath: m.damageTakenSoundPath,
       damageAvoidedSoundPath: m.damageAvoidedSoundPath,

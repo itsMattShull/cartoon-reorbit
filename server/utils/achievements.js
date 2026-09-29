@@ -110,6 +110,15 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
     if (wins < ach.tkoWinsGte) return false
   }
 
+  // cMoon Enemy Battles wins (lifetime, across every cMoon this user has ever belonged to —
+  // CMoonEnemyBattle.userId is never cleared on a cMoon change, unlike the per-cMoon rank ladder)
+  if (ach.cmoonMonstersDefeatedGte != null) {
+    const wins = await db.cMoonEnemyBattle.count({
+      where: { userId, outcome: 'WIN' }
+    })
+    if (wins < ach.cmoonMonstersDefeatedGte) return false
+  }
+
   // Wordle crown wins (total lifetime)
   if (ach.wordleWinsGte != null) {
     const wins = await getWordleWinCount(db, userId)
