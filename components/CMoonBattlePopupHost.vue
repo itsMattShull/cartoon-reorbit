@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div v-if="visible" class="cbp-overlay">
-      <div class="cbp-modal" role="dialog" aria-modal="true" aria-labelledby="cbp-title">
+      <div class="cbp-modal" :class="{ 'cbp-shake': shaking, 'cbp-shake-crit': shaking && shakeCrit }" role="dialog" aria-modal="true" aria-labelledby="cbp-title">
         <div
           class="cbp-banner"
           :style="bannerStyle"
@@ -28,10 +28,10 @@
           </p>
           <p v-if="error" class="cbp-error">{{ error }}</p>
           <div class="cbp-actions">
-            <button type="button" class="cbp-btn cbp-btn-primary" :disabled="busy" @click="onFight">
+            <GreenButton type="button" class="cbp-btn-wide" :disabled="busy" @click="onFight">
               {{ busy ? 'Starting…' : 'Fight!' }}
-            </button>
-            <button type="button" class="cbp-btn cbp-btn-secondary" :disabled="busy" @click="onClose">Not now</button>
+            </GreenButton>
+            <button type="button" class="cbp-btn-secondary" :disabled="busy" @click="onClose">Not now</button>
           </div>
         </div>
 
@@ -42,36 +42,41 @@
           </div>
           <h2 id="cbp-title" class="cbp-title">{{ battle?.enemy?.name }}</h2>
 
-          <div class="cbp-hp-row">
-            <span class="cbp-hp-label">Enemy</span>
-            <div class="cbp-hp-bar"><div class="cbp-hp-fill cbp-hp-fill-enemy" :style="{ width: enemyHpPercent + '%' }"></div></div>
-            <span class="cbp-hp-count">{{ battle?.enemyHpRemaining }}/{{ battle?.enemy?.maxHp }}</span>
-          </div>
-          <div class="cbp-hp-row">
-            <span class="cbp-hp-label">You</span>
-            <div class="cbp-hearts">
-              <span v-for="i in PLAYER_MAX_HP" :key="i" class="cbp-heart" :class="{ 'cbp-heart-lost': i > (battle?.playerHpRemaining ?? PLAYER_MAX_HP) }">♥</span>
+          <div class="cbp-hp-tile">
+            <div class="cbp-hp-row">
+              <span class="cbp-hp-label">Enemy</span>
+              <div class="cbp-hp-bar"><div class="cbp-hp-fill cbp-hp-fill-enemy" :style="{ width: enemyHpPercent + '%' }"></div></div>
+              <span class="cbp-hp-count">{{ battle?.enemyHpRemaining }}/{{ battle?.enemy?.maxHp }}</span>
+            </div>
+            <div class="cbp-hp-row">
+              <span class="cbp-hp-label">You</span>
+              <div class="cbp-hearts">
+                <span v-for="i in PLAYER_MAX_HP" :key="i" class="cbp-heart" :class="{ 'cbp-heart-lost': i > (battle?.playerHpRemaining ?? PLAYER_MAX_HP) }">♥</span>
+              </div>
             </div>
           </div>
 
-          <p v-if="lastRound" class="cbp-round-summary">
-            You {{ actionLabel(lastRound.playerAction) }}, they {{ actionLabel(lastRound.enemyAction) }} —
-            <span :class="lastRoundClass">{{ lastRoundLabel }}</span>
+          <p v-if="lastRound" class="cbp-round-summary" :class="lastRoundClass">
+            {{ lastRoundLabel }}
+            <span v-if="lastRound.playerCrit || lastRound.enemyCrit" class="cbp-crit-badge">CRITICAL!</span>
           </p>
           <p v-if="error" class="cbp-error">{{ error }}</p>
 
           <div class="cbp-move-grid">
             <button type="button" class="cbp-move cbp-move-attack" :disabled="busy" @click="act('ATTACK_HIGH')">Attack High</button>
             <button type="button" class="cbp-move cbp-move-attack" :disabled="busy" @click="act('ATTACK_LOW')">Attack Low</button>
-            <button type="button" class="cbp-move cbp-move-block" :disabled="busy" @click="act('BLOCK_HIGH')">Block High</button>
-            <button type="button" class="cbp-move cbp-move-block" :disabled="busy" @click="act('BLOCK_LOW')">Block Low</button>
+            <BlueButton type="button" class="cbp-move" :disabled="busy" @click="act('BLOCK_HIGH')">Block High</BlueButton>
+            <BlueButton type="button" class="cbp-move" :disabled="busy" @click="act('BLOCK_LOW')">Block Low</BlueButton>
           </div>
-          <p class="cbp-hint">Blocking the same side as their attack cancels it — anything else lands a hit.</p>
+          <p class="cbp-hint">Blocking the same side as their attack cancels it (and heals 1 HP) — anything else lands a hit.</p>
         </div>
 
         <!-- ── Result: just resolved ───────────────────────────────────── -->
         <div v-else class="cbp-body">
-          <h2 id="cbp-title" class="cbp-title" :class="resultTitleClass">{{ resultTitle }}</h2>
+          <h2 id="cbp-title" class="cbp-title" :class="resultTitleClass">
+            {{ resultTitle }}
+            <span v-if="lastRound?.playerCrit || lastRound?.enemyCrit" class="cbp-crit-badge">CRITICAL!</span>
+          </h2>
           <p class="cbp-sub">{{ battle?.enemy?.name }}</p>
 
           <template v-if="battle?.outcome === 'WIN'">
@@ -87,7 +92,7 @@
           <p v-else class="cbp-flavor">No penalty beyond the loss itself — take another shot anytime.</p>
 
           <div class="cbp-actions">
-            <button type="button" class="cbp-btn cbp-btn-primary" @click="onClose">Close</button>
+            <button type="button" class="cbp-btn-secondary cbp-btn-secondary-solid" @click="onClose">Close</button>
           </div>
         </div>
       </div>
@@ -120,19 +125,29 @@ const enemyHpPercent = computed(() => {
 const ACTION_LABELS = { ATTACK_HIGH: 'attacked high', ATTACK_LOW: 'attacked low', BLOCK_HIGH: 'blocked high', BLOCK_LOW: 'blocked low' }
 function actionLabel(a) { return ACTION_LABELS[a] || a }
 
+// Covers every shape a round can take: a landed hit (either or both sides), a genuinely
+// successful block (which now heals 1 HP — see action.post.js's playerBlocked/enemyBlocked), or
+// neither (mutual block, nothing thrown to stop). playerBlocked and enemyBlocked can never both
+// be true in the same round (each requires the OTHER side to have thrown an actual attack, and a
+// single action can't be both an attack and a block), so these branches are mutually exclusive
+// by construction, not just in practice.
 const lastRoundLabel = computed(() => {
   if (!lastRound.value) return ''
-  const { playerHit, enemyHit } = lastRound.value
-  if (playerHit && enemyHit) return 'you both landed a hit!'
-  if (playerHit) return 'you took a hit!'
-  if (enemyHit) return 'you landed a hit!'
-  return 'no hits landed.'
+  const { playerAction, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked } = lastRound.value
+  const actions = `You ${actionLabel(playerAction)}, they ${actionLabel(enemyAction)} — `
+  if (playerHit && enemyHit) return `${actions}you both landed a hit!`
+  if (playerHit) return `${actions}you took a hit!`
+  if (enemyHit) return `${actions}you landed a hit!`
+  if (playerBlocked) return `${actions}you blocked it and healed 1 HP!`
+  if (enemyBlocked) return `${actions}they blocked it and healed 1 HP!`
+  return `${actions}no hits landed.`
 })
 const lastRoundClass = computed(() => {
   if (!lastRound.value) return ''
-  const { playerHit, enemyHit } = lastRound.value
+  const { playerHit, enemyHit, playerBlocked } = lastRound.value
   if (enemyHit && !playerHit) return 'cbp-round-good'
   if (playerHit && !enemyHit) return 'cbp-round-bad'
+  if (playerBlocked) return 'cbp-round-good'
   return 'cbp-round-neutral'
 })
 
@@ -151,8 +166,63 @@ const rewardsList = computed(() => {
   return rewards.map(r => {
     if (r.type === 'CTOON') return `${r.name || 'cToon'}${r.quantity > 1 ? ` x${r.quantity}` : ''}`
     if (r.type === 'AVATAR') return `Avatar${r.quantity > 1 ? ` x${r.quantity}` : ''}`
+    if (r.type === 'POINTS') return `${r.quantity} points`
     return `Background${r.quantity > 1 ? ` x${r.quantity}` : ''}`
   })
+})
+
+// ── Impact feedback: a brief shake on any round with a landed hit, a bigger one on a critical —
+// see rollHitDamage's own comment server-side for what counts as a crit. Respects
+// prefers-reduced-motion via the .cbp-shake/.cbp-shake-crit rules' own media query, same
+// discipline pages/newsite/asteroid.vue's canvas shake already follows for its impact feedback.
+const shaking = ref(false)
+const shakeCrit = ref(false)
+let shakeTimer = null
+function triggerShake(isCrit) {
+  if (shakeTimer) clearTimeout(shakeTimer)
+  shaking.value = false
+  shakeCrit.value = false
+  // Re-triggering the CSS animation needs a fresh frame between removing and re-adding the class
+  // (setting `shaking` true again on an already-true value is a no-op to Vue/the DOM either way).
+  requestAnimationFrame(() => {
+    shakeCrit.value = !!isCrit
+    shaking.value = true
+    shakeTimer = setTimeout(() => { shaking.value = false }, 450)
+  })
+}
+watch(lastRound, (round) => {
+  if (!round) return
+  if (round.playerHit || round.enemyHit) triggerShake(round.playerCrit || round.enemyCrit)
+})
+
+// ── Battle music: one faction-wide looping track, playing for as long as the FIGHT phase is
+// showing (never during OFFER/RESULT) — see CMoonEnemyFaction.battleMusicPath's own schema
+// comment. A plain HTMLAudioElement rather than the Web Audio API buffers useClickSoundEffects.js
+// uses: this is one long-running loop, not many short overlapping one-shots, so there's nothing
+// to gain from pre-decoding into a reusable AudioBuffer.
+let battleMusicEl = null
+function stopBattleMusic() {
+  if (!battleMusicEl) return
+  try { battleMusicEl.pause() } catch {}
+  battleMusicEl = null
+}
+function startBattleMusic(path) {
+  stopBattleMusic()
+  if (!path || typeof window === 'undefined') return
+  try {
+    battleMusicEl = new Audio(path)
+    battleMusicEl.loop = true
+    battleMusicEl.volume = 0.5
+    battleMusicEl.play().catch(() => {})
+  } catch {}
+}
+watch(phase, (p) => {
+  if (p === 'FIGHT') startBattleMusic(battle.value?.enemy?.faction?.battleMusicPath)
+  else stopBattleMusic()
+})
+onBeforeUnmount(() => {
+  stopBattleMusic()
+  if (shakeTimer) clearTimeout(shakeTimer)
 })
 
 async function onFight() {
@@ -192,25 +262,30 @@ watch(() => route.path, maybeCheck)
   align-items: center;
   justify-content: center;
   padding: 12px;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(0, 20, 50, 0.75);
 }
+/* Dark-navy-card-with-OrbitDarkBlue-border is this site's own "on-brand" dialog language (see
+   components/newsite/CtoonInfoCard.vue, the cToon info dialog) — reused here instead of this
+   popup's old plain-white/indigo palette so it reads as the same product rather than a bolted-on
+   mini-game. */
 .cbp-modal {
   width: 100%;
   max-width: 380px;
   max-height: 92vh;
   overflow-y: auto;
-  background: #fff;
-  color: #111;
-  border-radius: 14px;
+  background: #0d2a4d;
+  color: #fff;
+  border: 2px solid var(--OrbitDarkBlue);
+  border-radius: 8px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
 }
 .cbp-banner {
   position: relative;
   height: 64px;
-  background: linear-gradient(135deg, #3a1d5c, #1c0f33);
+  background: linear-gradient(135deg, #1a4a7a, #0a1f3a);
   background-size: cover;
   background-position: center;
-  border-radius: 14px 14px 0 0;
+  border-radius: 6px 6px 0 0;
 }
 .cbp-close {
   position: absolute;
@@ -266,57 +341,121 @@ watch(() => route.path, maybeCheck)
   overflow: hidden;
 }
 .cbp-portrait { max-width: 92%; max-height: 92%; object-fit: contain; }
-.cbp-title { font-size: 18px; font-weight: 700; margin: 4px 0 2px; }
-.cbp-title-win { color: #15803d; }
-.cbp-title-loss { color: #b91c1c; }
-.cbp-sub { font-size: 12px; color: #6b7280; margin-bottom: 8px; }
-.cbp-flavor { font-size: 12px; color: #374151; margin-bottom: 12px; line-height: 1.4; }
-.cbp-error { font-size: 12px; color: #b91c1c; margin-bottom: 8px; }
+.cbp-title { font-size: 1.1rem; font-weight: 600; margin: 4px 0 2px; color: #fff; }
+.cbp-title-win { color: #4ade80; }
+.cbp-title-loss { color: #f87171; }
+.cbp-sub { font-size: 0.78rem; color: rgba(255, 255, 255, 0.6); margin-bottom: 8px; }
+.cbp-flavor { font-size: 12px; color: rgba(255, 255, 255, 0.75); margin-bottom: 12px; line-height: 1.4; }
+.cbp-error { font-size: 12px; color: #f87171; margin-bottom: 8px; }
 
-.cbp-actions { display: flex; flex-direction: column; gap: 8px; }
-.cbp-btn {
+.cbp-actions { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.cbp-btn-wide { width: 100%; padding-top: 9px; padding-bottom: 9px; font-size: 0.95rem; }
+/* Red "dismiss/close" action, matching CtoonInfoCard.vue's own .ctic-close-action — this site's
+   existing convention for a secondary/destructive dialog action, since there's no shared
+   RedButton component to import (only BlueButton/GreenButton exist). */
+.cbp-btn-secondary {
   padding: 9px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
+  border-radius: 6px;
+  border: 2px solid #7a1515;
+  background: #b91c1c;
+  color: #fff;
+  font-weight: bold;
+  font-size: 0.85rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
   cursor: pointer;
-  border: none;
 }
-.cbp-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-.cbp-btn-primary { background: #4f46e5; color: #fff; }
-.cbp-btn-secondary { background: #f3f4f6; color: #374151; }
+.cbp-btn-secondary:hover { background: #991b1b; }
+.cbp-btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
+.cbp-btn-secondary-solid { width: 100%; }
 
-.cbp-hp-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
-.cbp-hp-label { font-size: 11px; font-weight: 600; color: #6b7280; width: 42px; text-align: left; flex-shrink: 0; }
-.cbp-hp-bar { flex: 1; height: 10px; border-radius: 999px; background: #e5e7eb; overflow: hidden; }
+.cbp-hp-tile {
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 8px 0;
+}
+.cbp-hp-row { display: flex; align-items: center; gap: 8px; }
+.cbp-hp-row + .cbp-hp-row { margin-top: 6px; }
+.cbp-hp-label { font-size: 11px; font-weight: 600; color: rgba(255, 255, 255, 0.6); width: 42px; text-align: left; flex-shrink: 0; }
+.cbp-hp-bar { flex: 1; height: 10px; border-radius: 999px; background: rgba(0, 0, 0, 0.35); overflow: hidden; }
 .cbp-hp-fill-enemy { height: 100%; background: #dc2626; transition: width 0.25s ease; }
-.cbp-hp-count { font-size: 11px; color: #6b7280; width: 44px; text-align: right; flex-shrink: 0; }
+.cbp-hp-count { font-size: 11px; color: rgba(255, 255, 255, 0.6); width: 44px; text-align: right; flex-shrink: 0; }
 .cbp-hearts { flex: 1; display: flex; gap: 3px; }
-.cbp-heart { color: #dc2626; font-size: 15px; }
-.cbp-heart-lost { color: #e5e7eb; }
+.cbp-heart { color: #f87171; font-size: 15px; }
+.cbp-heart-lost { color: rgba(255, 255, 255, 0.2); }
 
-.cbp-round-summary { font-size: 12px; color: #374151; margin: 8px 0; }
-.cbp-round-good { color: #15803d; font-weight: 600; }
-.cbp-round-bad { color: #b91c1c; font-weight: 600; }
-.cbp-round-neutral { color: #6b7280; font-weight: 600; }
+.cbp-round-summary { font-size: 12px; color: rgba(255, 255, 255, 0.75); margin: 8px 0; }
+.cbp-round-good { color: #4ade80; font-weight: 600; }
+.cbp-round-bad { color: #f87171; font-weight: 600; }
+.cbp-round-neutral { color: rgba(255, 255, 255, 0.6); font-weight: 600; }
+.cbp-crit-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #f59e0b;
+  color: #1a1200;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  animation: cbp-crit-pop 0.35s ease-out;
+}
+@keyframes cbp-crit-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
 
 .cbp-move-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
+/* Block moves use the real BlueButton component (see the template); Attack moves keep a locally
+   red-styled button matching BlueButton's own padding/radius/border/font-weight/text-shadow
+   treatment, since attack/block's own red-vs-blue color split predates this restyle and there's
+   no reusable red move-button component to swap in. */
 .cbp-move {
   padding: 12px 6px;
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 12.5px;
-  font-weight: 700;
+  font-weight: bold;
   color: #fff;
-  border: none;
   cursor: pointer;
+  width: 100%;
 }
-.cbp-move:disabled { opacity: 0.6; cursor: not-allowed; }
-.cbp-move-attack { background: #dc2626; }
-.cbp-move-block { background: #2563eb; }
-.cbp-hint { font-size: 10.5px; color: #9ca3af; margin-top: 8px; }
+.cbp-move:disabled { opacity: 0.45; cursor: not-allowed; }
+.cbp-move-attack {
+  border: 2px solid #7a1515;
+  background: #dc2626;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    inset -1px 0 0 rgba(255, 255, 255, 0.25),
+    -1px 1px 1px rgba(0, 0, 0, 0.3);
+}
+.cbp-move-attack:active { box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.3); }
+.cbp-hint { font-size: 10.5px; color: rgba(255, 255, 255, 0.5); margin-top: 8px; }
 
-.cbp-points { font-size: 15px; font-weight: 700; color: #15803d; margin-bottom: 8px; }
-.cbp-rewards { text-align: left; background: #f9fafb; border-radius: 8px; padding: 8px 10px; margin-bottom: 12px; }
-.cbp-rewards-title { font-size: 11px; font-weight: 700; color: #6b7280; margin-bottom: 4px; }
+.cbp-points { font-size: 15px; font-weight: 700; color: #4ade80; margin-bottom: 8px; }
+.cbp-rewards { text-align: left; background: rgba(255, 255, 255, 0.07); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; }
+.cbp-rewards-title { font-size: 11px; font-weight: 700; color: rgba(255, 255, 255, 0.6); margin-bottom: 4px; }
 .cbp-rewards ul { margin: 0; padding-left: 16px; font-size: 12px; }
+
+/* Impact feedback on a landed hit — a quick horizontal shake, bigger for a critical. Disabled
+   under prefers-reduced-motion, same accessibility stance pages/newsite/asteroid.vue's own
+   (JS-driven) screen shake takes. */
+@keyframes cbp-shake-kf {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+@keyframes cbp-shake-crit-kf {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-8px); }
+  40%, 60% { transform: translateX(8px); }
+}
+.cbp-shake { animation: cbp-shake-kf 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+.cbp-shake-crit { animation: cbp-shake-crit-kf 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+@media (prefers-reduced-motion: reduce) {
+  .cbp-shake, .cbp-shake-crit { animation: none; }
+}
 </style>

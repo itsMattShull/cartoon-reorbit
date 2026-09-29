@@ -18,18 +18,16 @@ function playSound(path) {
   } catch {}
 }
 
-function isAttackAction(action) {
-  return action === 'ATTACK_HIGH' || action === 'ATTACK_LOW'
-}
-
 // One round can hit both sides at once (both attacked, neither blocked correctly) — both sounds
 // then play together rather than one being chosen over the other, matching how the round summary
 // text (CMoonBattlePopupHost.vue's lastRoundLabel) already reports "you both landed a hit!" as a
-// real simultaneous outcome, not an either/or.
+// real simultaneous outcome, not an either/or. enemyBlocked comes straight from
+// resolveBattleRound server-side (a genuinely successful block, not just "wasn't hit because
+// nobody attacked either way" — see that function's own comment).
 function playRoundSounds(round, enemy) {
   if (!round || !enemy) return
   if (round.enemyHit) playSound(enemy.damageTakenSoundPath)
-  else if (isAttackAction(round.playerAction)) playSound(enemy.damageAvoidedSoundPath)
+  else if (round.enemyBlocked) playSound(enemy.damageAvoidedSoundPath)
   if (round.playerHit) playSound(enemy.attackingSoundPath)
 }
 
@@ -42,8 +40,9 @@ export function useCMoonBattlePopup() {
   const battle = useState('cmoon-battle-battle', () => null)
   const busy = useState('cmoon-battle-busy', () => false)
   const error = useState('cmoon-battle-error', () => '')
-  // The just-resolved round's { round, playerAction, enemyAction, playerHit, enemyHit } — display
-  // detail only (never read back to resolve anything), cleared whenever a fresh battle starts.
+  // The just-resolved round's { round, playerAction, enemyAction, playerHit, enemyHit,
+  // playerBlocked, enemyBlocked, playerCrit, enemyCrit } — display detail only (never read back to
+  // resolve anything), cleared whenever a fresh battle starts.
   const lastRound = useState('cmoon-battle-last-round', () => null)
 
   // Plain module-level flag, not useState: this only ever needs to prevent two concurrent

@@ -66,8 +66,14 @@ export default defineEventHandler(async (event) => {
     userId: me.id,
     area: 'CMoonEnemyMember',
     key: `update:${id}`,
-    prevValue: { factionId: member.factionId, name: member.name, maxHp: member.maxHp, battleMode: member.battleMode, cMoonPointsReward: member.cMoonPointsReward, active: member.active, currentHp: member.currentHp },
-    newValue: { factionId: data.factionId, name: data.name, maxHp: data.maxHp, battleMode: data.battleMode, cMoonPointsReward: data.cMoonPointsReward, active: data.active, currentHp: data.currentHp ?? member.currentHp },
+    prevValue: {
+      factionId: member.factionId, name: member.name, maxHp: member.maxHp, battleMode: member.battleMode, cMoonPointsReward: member.cMoonPointsReward,
+      critChanceAgainstPercent: member.critChanceAgainstPercent, critChanceFromPercent: member.critChanceFromPercent, active: member.active, currentHp: member.currentHp,
+    },
+    newValue: {
+      factionId: data.factionId, name: data.name, maxHp: data.maxHp, battleMode: data.battleMode, cMoonPointsReward: data.cMoonPointsReward,
+      critChanceAgainstPercent: data.critChanceAgainstPercent, critChanceFromPercent: data.critChanceFromPercent, active: data.active, currentHp: data.currentHp ?? member.currentHp,
+    },
   })
 
   return { ok: true }

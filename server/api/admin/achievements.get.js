@@ -52,6 +52,7 @@ export default defineEventHandler(async (event) => {
       ctoonSuggestionsAcceptedGte: a.ctoonSuggestionsAcceptedGte,
       cumulativeActiveDaysGte: a.cumulativeActiveDaysGte,
       tkoWinsGte: a.tkoWinsGte,
+      cmoonMonstersDefeatedGte: a.cmoonMonstersDefeatedGte,
       wordleWinsGte: a.wordleWinsGte,
       wordleCurrentStreakGte: a.wordleCurrentStreakGte,
       flappyBestScoreGte: a.flappyBestScoreGte,

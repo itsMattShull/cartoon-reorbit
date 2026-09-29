@@ -3221,6 +3221,9 @@ model Achievement {
   ctoonSuggestionsAcceptedGte Int?
   cumulativeActiveDaysGte     Int?
   tkoWinsGte                  Int?
+  // Lifetime count of CMoonEnemyBattle rows this user WON — see evaluateUserAgainstAchievement,
+  // same `db.<table>.count({ where: { userId, ... } })` shape as tkoWinsGte above.
+  cmoonMonstersDefeatedGte     Int?
   wordleWinsGte               Int? // total lifetime crown wins in Wordle
   wordleCurrentStreakGte      Int? // current consecutive-day crown streak
   flappyBestScoreGte          Int? // best Flappy Powerpuff score on a ranked run
@@ -5115,6 +5118,11 @@ enum CMoonEnemyRewardType {
   CTOON
   AVATAR
   BACKGROUND
+  // Plain site points (User -> UserPoints via grantRewardInTx), NOT cMoonPoints — the member's
+  // own cMoonPointsReward already covers cMoon points on every win; this is an additional,
+  // independently-rolled prize row like any other CMoonEnemyReward. Amount is stored in this
+  // row's `quantity` column (see that field's own comment) rather than a dedicated column.
+  POINTS
 }
 
 // The themed group an admin creates in "Manage cMoon Enemies" — mostly organizational (name,
@@ -5140,6 +5148,12 @@ model CMoonEnemyFaction {
   // that pre-check in cmoon-join-effects/[id].delete.js).
   appearEffectId  String?
   appearEffect    CMoonJoinEffect? @relation(fields: [appearEffectId], references: [id], onDelete: Restrict)
+  // Optional looping battle music (MP3/OGG/WAV, uploaded via cmoon-enemy-factions/[id]/
+  // music.post.js — same magic-byte sniffing discipline as every other audio upload in this
+  // codebase). Starts client-side the moment a battle actually begins (Fight! pressed, entering
+  // the FIGHT phase — not on the OFFER popup) and loops for as long as that faction's member is
+  // being fought; stops on battle end/close. Null means silent, not an error.
+  battleMusicPath String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -5168,6 +5182,13 @@ model CMoonEnemyMember {
   currentHp         Int                  @default(5)
   // Awarded to User.cMoonPoints on a WIN via the existing grantRewardInTx path.
   cMoonPointsReward Int                  @default(10)
+  // 0-100. A landed hit rolls against the RELEVANT side's own chance below and, on a hit, deals
+  // 2 damage instead of 1 — see server/api/cmoon/battle/[id]/action.post.js. Named from the
+  // enemy's own perspective, matching the sound-path columns above: "Against" is the player's
+  // own attacks landing critically against this enemy; "From" is this enemy's attacks landing
+  // critically against the player.
+  critChanceAgainstPercent Int @default(0)
+  critChanceFromPercent    Int @default(0)
   active            Boolean              @default(true)
   // Set the moment a SHARED_POOL member's currentHp reaches 0 — once set, the popup-consider
   // roll skips this member (it stays visible/browsable in the admin page and battle logs, just
@@ -5211,7 +5232,7 @@ model CMoonEnemyReward {
   avatarId          String?
   backgroundId      String?
   dropChancePercent Float                @default(10) // 0-100, rolled independently per row
-  quantity          Int                  @default(1) // cToons only; ignored for avatar/background
+  quantity          Int                  @default(1) // cToon copy count OR points amount (POINTS); ignored for avatar/background
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 

@@ -7,11 +7,11 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { assertSameOrigin } from '@/server/utils/requireAdmin'
-import { grantRewardInTx, enqueueCtoonJobs } from '@/server/utils/achievements'
+import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from '@/server/utils/achievements'
 import { recomputeCMoonPointsForUsers } from '@/server/cron/cmoon-points-aggregate'
 import {
   isValidBattleAction, resolveBattleRound, rollEnemyAction, rollEnemyRewards, buildGrantableReward,
-  serializeBattleForClient, MAX_ROUNDS_SAFETY,
+  rollHitDamage, serializeBattleForClient, MAX_ROUNDS_SAFETY, PLAYER_MAX_HP, HEAL_ON_SUCCESSFUL_BLOCK,
 } from '@/server/utils/cmoonEnemyBattle'
 
 export default defineEventHandler(async (event) => {
@@ -47,10 +47,23 @@ export default defineEventHandler(async (event) => {
   if (claim.count === 0) throw createError({ statusCode: 409, statusMessage: 'Stale round — reload this battle' })
 
   const enemyAction = rollEnemyAction()
-  const { playerHit, enemyHit } = resolveBattleRound(playerAction, enemyAction)
+  const { playerHit, enemyHit, playerBlocked, enemyBlocked } = resolveBattleRound(playerAction, enemyAction)
   const isSharedPool = battle.enemyMember.battleMode === 'SHARED_POOL'
 
-  const newPlayerHp = Math.max(0, battle.playerHpRemaining - (playerHit ? 1 : 0))
+  // Damage: a landed hit rolls against the RELEVANT side's own crit chance for 1 or 2 damage (see
+  // rollHitDamage's own comment). critChanceFromPercent is this enemy's own attacks landing
+  // critically against the player; critChanceAgainstPercent is the player's attacks landing
+  // critically against this enemy.
+  const { damage: playerDamage, isCrit: playerCrit } = rollHitDamage(playerHit, battle.enemyMember.critChanceFromPercent)
+  const { damage: enemyDamage, isCrit: enemyCrit } = rollHitDamage(enemyHit, battle.enemyMember.critChanceAgainstPercent)
+
+  // A successful block heals 1 HP (never on a round with no attack to block — see
+  // resolveBattleRound's own comment on playerBlocked/enemyBlocked) — mutually exclusive with
+  // taking damage, since a block that actually stops the attack is exactly what "not hit" means.
+  let newPlayerHp = battle.playerHpRemaining
+  if (playerHit) newPlayerHp = Math.max(0, newPlayerHp - playerDamage)
+  else if (playerBlocked) newPlayerHp = Math.min(PLAYER_MAX_HP, newPlayerHp + HEAL_ON_SUCCESSFUL_BLOCK)
+
   let newEnemyHp
 
   if (isSharedPool) {
@@ -58,16 +71,17 @@ export default defineEventHandler(async (event) => {
     // between this player's previous round and now. If so, this player still gets credit for
     // having chipped away at it (their battle resolves as a WIN here) rather than being left
     // "fighting" an enemy that's already dead with no way to know it.
-    const live = await db.cMoonEnemyMember.findUnique({ where: { id: battle.enemyMemberId }, select: { currentHp: true } })
+    const live = await db.cMoonEnemyMember.findUnique({ where: { id: battle.enemyMemberId }, select: { currentHp: true, maxHp: true } })
     if (live.currentHp <= 0) {
       newEnemyHp = 0
     } else if (enemyHit) {
-      // Atomic conditional decrement — WHERE currentHp > 0 means at most ONE concurrent hit can
-      // ever be the one that brings it to exactly 0 (Postgres serializes concurrent UPDATEs on
-      // the same row), so two players landing a killing blow at the same instant can never both
-      // "win the race" or drive it negative.
+      // Atomic conditional decrement, clamped at 0 in the same statement (GREATEST) so a crit's
+      // 2 damage against a pool with only 1 HP left can't write a negative value — WHERE
+      // currentHp > 0 still means at most ONE concurrent hit can ever be the one that brings it
+      // to exactly 0 (Postgres serializes concurrent UPDATEs on the same row), so two players
+      // landing a killing blow at the same instant can never both "win the race".
       const rows = await db.$queryRaw`
-        UPDATE "CMoonEnemyMember" SET "currentHp" = "currentHp" - 1
+        UPDATE "CMoonEnemyMember" SET "currentHp" = GREATEST("currentHp" - ${enemyDamage}, 0)
         WHERE id = ${battle.enemyMemberId} AND "currentHp" > 0
         RETURNING "currentHp"
       `
@@ -79,14 +93,30 @@ export default defineEventHandler(async (event) => {
       } else {
         newEnemyHp = 0 // someone else's hit landed in the instant between our live-check and this UPDATE
       }
+    } else if (enemyBlocked) {
+      // Symmetric heal-on-block for a shared pool: whichever player's successful block triggers
+      // it, the one running total goes up for everyone still fighting it — the same "cMoons work
+      // together" shape SHARED_POOL already has for damage. WHERE currentHp > 0 avoids reviving a
+      // pool another player's concurrent hit just brought to 0 in the same instant.
+      const rows = await db.$queryRaw`
+        UPDATE "CMoonEnemyMember" SET "currentHp" = LEAST("currentHp" + ${HEAL_ON_SUCCESSFUL_BLOCK}, "maxHp")
+        WHERE id = ${battle.enemyMemberId} AND "currentHp" > 0
+        RETURNING "currentHp"
+      `
+      newEnemyHp = rows.length ? rows[0].currentHp : 0
     } else {
       newEnemyHp = live.currentHp
     }
   } else {
-    newEnemyHp = Math.max(0, battle.enemyHpRemaining - (enemyHit ? 1 : 0))
+    newEnemyHp = battle.enemyHpRemaining
+    if (enemyHit) newEnemyHp = Math.max(0, newEnemyHp - enemyDamage)
+    else if (enemyBlocked) newEnemyHp = Math.min(battle.enemyMember.maxHp, newEnemyHp + HEAL_ON_SUCCESSFUL_BLOCK)
   }
 
-  const roundEntry = { round: submittedRound, playerAction, enemyAction, playerHit, enemyHit }
+  const roundEntry = {
+    round: submittedRound, playerAction, enemyAction, playerHit, enemyHit,
+    playerBlocked, enemyBlocked, playerCrit, enemyCrit,
+  }
   const roundLog = [...(Array.isArray(battle.roundLog) ? battle.roundLog : []), roundEntry]
 
   // WIN takes priority over a same-round mutual KO (both sides would have hit 0 hp this round)
@@ -144,6 +174,7 @@ async function resolveWin(battle, roundLog, submittedRound) {
     await tx.cMoon.update({ where: { id: battle.cMoonId }, data: { battleWins: { increment: 1 } } })
 
     const rewardsGranted = [
+      ...(summary.points ? [{ type: 'POINTS', quantity: summary.points }] : []),
       ...(summary.backgrounds ? [{ type: 'BACKGROUND', quantity: summary.backgrounds }] : []),
       ...(summary.avatars ? [{ type: 'AVATAR', quantity: summary.avatars }] : []),
       ...summary.ctoonJobs.map(j => ({ type: 'CTOON', name: j.name, quantity: j.quantity })),
@@ -164,6 +195,11 @@ async function resolveWin(battle, roundLog, submittedRound) {
 
   if (txResult.ctoonJobs.length) await enqueueCtoonJobs(battle.userId, txResult.ctoonJobs, 'CMOON_ENEMY_BATTLE_WIN')
   if (pointsAwarded > 0) await recomputeCMoonPointsForUsers([battle.userId])
+  // Fire-and-forget, same pattern server/api/tko/event.post.js uses right after its own win is
+  // persisted — checks every active achievement (e.g. "defeat N cMoon enemies") against this
+  // player's now-updated stats and awards any newly met. Never awaited: a slow/failed check must
+  // not hold up or fail the battle response the player is waiting on.
+  processAchievementsForUser(battle.userId).catch(() => {})
 
   return txResult.updated
 }

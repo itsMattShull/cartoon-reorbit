@@ -93,6 +93,11 @@
                 <p class="text-[10px] text-gray-500 mt-1">Counted round wins in the TKO game.</p>
               </div>
               <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">cMoon Enemies Defeated ≥</label>
+                <input v-model.number="form.criteria.cmoonMonstersDefeatedGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
+                <p class="text-[10px] text-gray-500 mt-1">Lifetime cMoon Enemy Battle wins, across any cMoon.</p>
+              </div>
+              <div class="flex flex-col gap-1">
                 <label class="text-xs font-medium">Wordle Crown Wins ≥</label>
                 <input v-model.number="form.criteria.wordleWinsGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
                 <p class="text-[10px] text-gray-500 mt-1">Total times the user earned the 👑 (best score of the day).</p>
@@ -327,6 +332,7 @@ const emptyForm = () => ({
     ctoonSuggestionsAcceptedGte: null,
     cumulativeActiveDaysGte: null,
     tkoWinsGte: null,
+    cmoonMonstersDefeatedGte: null,
     wordleWinsGte: null,
     wordleCurrentStreakGte: null,
     flappyBestScoreGte: null,
@@ -460,6 +466,7 @@ function startEdit(a) {
       ctoonSuggestionsAcceptedGte: a.ctoonSuggestionsAcceptedGte ?? null,
       cumulativeActiveDaysGte: a.cumulativeActiveDaysGte ?? null,
       tkoWinsGte: a.tkoWinsGte ?? null,
+      cmoonMonstersDefeatedGte: a.cmoonMonstersDefeatedGte ?? null,
       wordleWinsGte: a.wordleWinsGte ?? null,
       wordleCurrentStreakGte: a.wordleCurrentStreakGte ?? null,
       flappyBestScoreGte: a.flappyBestScoreGte ?? null,

@@ -40,7 +40,10 @@ export default defineEventHandler(async (event) => {
     area: 'CMoonEnemyMember',
     key: `create:${created.id}`,
     prevValue: null,
-    newValue: { id: created.id, factionId: created.factionId, name: created.name, maxHp: created.maxHp, battleMode: created.battleMode, cMoonPointsReward: created.cMoonPointsReward },
+    newValue: {
+      id: created.id, factionId: created.factionId, name: created.name, maxHp: created.maxHp, battleMode: created.battleMode,
+      cMoonPointsReward: created.cMoonPointsReward, critChanceAgainstPercent: created.critChanceAgainstPercent, critChanceFromPercent: created.critChanceFromPercent,
+    },
   })
 
   return { id: created.id }
