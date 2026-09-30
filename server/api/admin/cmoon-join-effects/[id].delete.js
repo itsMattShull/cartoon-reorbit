@@ -11,16 +11,22 @@ export default defineEventHandler(async (event) => {
   assertSameOrigin(event)
 
   const id = event.context.params?.id
-  const effect = await db.cMoonJoinEffect.findUnique({ where: { id }, include: { _count: { select: { cmoons: true } } } })
+  const effect = await db.cMoonJoinEffect.findUnique({
+    where: { id },
+    include: { _count: { select: { cmoons: true, enemyFactions: true } } },
+  })
   if (!effect) throw createError({ statusCode: 404, statusMessage: 'Join effect not found' })
 
-  // Friendly pre-check message; the FK's ON DELETE RESTRICT (see CMoon.customJoinEffect in
-  // prisma/schema.prisma) is the real race-proof backstop below, same pattern as
-  // server/api/admin/cmoons/[id].delete.js's own P2003 catch.
-  if (effect._count?.cmoons > 0) {
+  // Friendly pre-check message; the FKs' ON DELETE RESTRICT (see CMoon.customJoinEffect and
+  // CMoonEnemyFaction.appearEffect in prisma/schema.prisma) are the real race-proof backstop
+  // below, same pattern as server/api/admin/cmoons/[id].delete.js's own P2003 catch.
+  if (effect._count?.cmoons > 0 || effect._count?.enemyFactions > 0) {
+    const parts = []
+    if (effect._count.cmoons > 0) parts.push(`${effect._count.cmoons} cMoon(s)`)
+    if (effect._count.enemyFactions > 0) parts.push(`${effect._count.enemyFactions} enemy faction(s)`)
     throw createError({
       statusCode: 409,
-      statusMessage: `Cannot delete — this effect is assigned to ${effect._count.cmoons} cMoon(s). Reassign them first.`,
+      statusMessage: `Cannot delete — this effect is assigned to ${parts.join(' and ')}. Reassign them first.`,
     })
   }
 
@@ -28,7 +34,7 @@ export default defineEventHandler(async (event) => {
     await db.cMoonJoinEffect.delete({ where: { id } })
   } catch (err) {
     if (err?.code === 'P2003') {
-      throw createError({ statusCode: 409, statusMessage: 'Cannot delete — this effect is still assigned to a cMoon. Reassign it first.' })
+      throw createError({ statusCode: 409, statusMessage: 'Cannot delete — this effect is still assigned to a cMoon or enemy faction. Reassign it first.' })
     }
     throw err
   }

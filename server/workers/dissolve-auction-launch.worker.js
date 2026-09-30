@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq'
 import { prisma } from '../prisma.js'
-import { scheduleAuctionClose } from '../utils/queues.js'
+import { scheduleAuctionClose, scheduleDissolveAuctionLaunch } from '../utils/queues.js'
+import { isStaleDissolveLaunchJob } from '../utils/dissolveAuctionLaunchStaleness.js'
 import { rarityFloor } from '../utils/auctionPriceSuggestion.js'
 import { isAutoAuctionEligibleRarity } from '../utils/autoAuctionEligibility.js'
 import { logDissolveAuctionError } from '../utils/dissolveAuctionErrorLog.js'
@@ -15,7 +16,7 @@ const connection = {
 }
 
 const worker = new Worker(QUEUE_NAME, async (job) => {
-  const { queueEntryId } = job.data
+  const { queueEntryId, scheduledForMs } = job.data
   let entry = null
 
   try {
@@ -38,6 +39,23 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
       }
     })
     if (!entry) return  // already processed or deleted
+
+    // This job's delay was already elapsing (BullMQ marked it `active`) at
+    // the moment an admin rescheduled this entry, so scheduleDissolveAuctionLaunch
+    // couldn't cancel/replace it (see its own comment) and this stale job is
+    // still running against the OLD target time. Acting on it now would clear
+    // or launch based on data the admin just changed. If the entry's current
+    // scheduledFor no longer matches what this job was queued for, defer to
+    // the new schedule instead: queue a fresh job for it (scheduleDissolveAuctionLaunch
+    // no-ops only while a job is active, and this one is about to finish) and
+    // do nothing else this run. scheduledForMs is undefined for jobs enqueued
+    // before this check existed — those fall through to the old behavior.
+    if (isStaleDissolveLaunchJob(scheduledForMs, entry.scheduledFor)) {
+      if (entry.scheduledFor) {
+        await scheduleDissolveAuctionLaunch(entry.id, entry.scheduledFor)
+      }
+      return
+    }
 
     // Not auto-listable (Auction/Prize/Code Only, Crazy Rare, or an
     // unrecognized rarity with no explicit floor). Clear scheduledFor instead

@@ -131,6 +131,7 @@ export default defineEventHandler(async (event) => {
         ctoonSuggestionsAcceptedGte: criteria?.ctoonSuggestionsAcceptedGte ?? null,
         cumulativeActiveDaysGte: criteria?.cumulativeActiveDaysGte ?? null,
         tkoWinsGte: criteria?.tkoWinsGte ?? null,
+        cmoonMonstersDefeatedGte: criteria?.cmoonMonstersDefeatedGte ?? null,
         wordleWinsGte: criteria?.wordleWinsGte ?? null,
         wordleCurrentStreakGte: criteria?.wordleCurrentStreakGte ?? null,
         flappyBestScoreGte: criteria?.flappyBestScoreGte ?? null,

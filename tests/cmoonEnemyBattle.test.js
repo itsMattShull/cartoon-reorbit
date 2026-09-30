@@ -1,38 +1,39 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  resolveBattleRound, rollEnemyAction, rollEnemyRewards, buildGrantableReward,
-  isValidBattleAction, BATTLE_ACTIONS, PLAYER_MAX_HP,
+  resolveBattleRound, rollEnemyAction, rollEnemyRewards, buildGrantableReward, rollHitDamage,
+  isValidBattleAction, BATTLE_ACTIONS, PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE,
+  HEAL_ON_SUCCESSFUL_BLOCK,
 } from '../server/utils/cmoonEnemyBattle.js'
 
-test('resolveBattleRound: matching block cancels the matching-lane attack', () => {
-  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'BLOCK_HIGH'), { playerHit: false, enemyHit: false })
-  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'BLOCK_LOW'), { playerHit: false, enemyHit: false })
-  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'ATTACK_HIGH'), { playerHit: false, enemyHit: false })
-  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'ATTACK_LOW'), { playerHit: false, enemyHit: false })
+test('resolveBattleRound: matching block cancels the matching-lane attack, and counts as a successful block', () => {
+  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'BLOCK_HIGH'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: true })
+  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'BLOCK_LOW'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: true })
+  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'ATTACK_HIGH'), { playerHit: false, enemyHit: false, playerBlocked: true, enemyBlocked: false })
+  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'ATTACK_LOW'), { playerHit: false, enemyHit: false, playerBlocked: true, enemyBlocked: false })
 })
 
-test('resolveBattleRound: wrong-lane block does not cancel the attack', () => {
-  // player attacks high, enemy blocks low -> enemy still gets hit
-  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'BLOCK_LOW'), { playerHit: false, enemyHit: true })
-  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'BLOCK_HIGH'), { playerHit: false, enemyHit: true })
-  // player blocks low, enemy attacks high -> player still gets hit
-  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'ATTACK_HIGH'), { playerHit: true, enemyHit: false })
-  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'ATTACK_LOW'), { playerHit: true, enemyHit: false })
+test('resolveBattleRound: wrong-lane block does not cancel the attack, and is not a successful block', () => {
+  // player attacks high, enemy blocks low -> enemy still gets hit, enemy's block failed
+  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'BLOCK_LOW'), { playerHit: false, enemyHit: true, playerBlocked: false, enemyBlocked: false })
+  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'BLOCK_HIGH'), { playerHit: false, enemyHit: true, playerBlocked: false, enemyBlocked: false })
+  // player blocks low, enemy attacks high -> player still gets hit, player's block failed
+  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'ATTACK_HIGH'), { playerHit: true, enemyHit: false, playerBlocked: false, enemyBlocked: false })
+  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'ATTACK_LOW'), { playerHit: true, enemyHit: false, playerBlocked: false, enemyBlocked: false })
 })
 
-test('resolveBattleRound: mutual attack lands on both sides regardless of lane', () => {
-  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'ATTACK_HIGH'), { playerHit: true, enemyHit: true })
-  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'ATTACK_LOW'), { playerHit: true, enemyHit: true })
-  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'ATTACK_HIGH'), { playerHit: true, enemyHit: true })
-  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'ATTACK_LOW'), { playerHit: true, enemyHit: true })
+test('resolveBattleRound: mutual attack lands on both sides and neither counts as a block', () => {
+  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'ATTACK_HIGH'), { playerHit: true, enemyHit: true, playerBlocked: false, enemyBlocked: false })
+  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'ATTACK_LOW'), { playerHit: true, enemyHit: true, playerBlocked: false, enemyBlocked: false })
+  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'ATTACK_HIGH'), { playerHit: true, enemyHit: true, playerBlocked: false, enemyBlocked: false })
+  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'ATTACK_LOW'), { playerHit: true, enemyHit: true, playerBlocked: false, enemyBlocked: false })
 })
 
-test('resolveBattleRound: mutual block is a no-op regardless of lane', () => {
-  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'BLOCK_HIGH'), { playerHit: false, enemyHit: false })
-  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'BLOCK_LOW'), { playerHit: false, enemyHit: false })
-  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'BLOCK_HIGH'), { playerHit: false, enemyHit: false })
-  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'BLOCK_LOW'), { playerHit: false, enemyHit: false })
+test('resolveBattleRound: mutual block is a no-op AND not a "successful" block for either side (nothing was thrown to stop)', () => {
+  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'BLOCK_HIGH'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false })
+  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'BLOCK_LOW'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false })
+  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'BLOCK_HIGH'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false })
+  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'BLOCK_LOW'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false })
 })
 
 test('resolveBattleRound: exhaustively covers every 4x4 combination with no exceptions', () => {
@@ -41,6 +42,11 @@ test('resolveBattleRound: exhaustively covers every 4x4 combination with no exce
       const result = resolveBattleRound(a, b)
       assert.equal(typeof result.playerHit, 'boolean')
       assert.equal(typeof result.enemyHit, 'boolean')
+      assert.equal(typeof result.playerBlocked, 'boolean')
+      assert.equal(typeof result.enemyBlocked, 'boolean')
+      // A side can never be simultaneously hit and credited with a successful block.
+      assert.ok(!(result.playerHit && result.playerBlocked))
+      assert.ok(!(result.enemyHit && result.enemyBlocked))
     }
   }
 })
@@ -73,6 +79,29 @@ test('rollEnemyAction is not always the same action across many rolls', () => {
   // With 200 uniform-random draws from 4 options, seeing only 1 distinct value has probability
   // 4 * (1/4)^200 — astronomically unlikely unless the RNG is broken/hardcoded.
   assert.ok(seen.size > 1, `expected more than one distinct action across 200 rolls, got: ${[...seen]}`)
+})
+
+test('rollHitDamage: a miss (hit=false) never deals damage or crits, regardless of chance', () => {
+  assert.deepEqual(rollHitDamage(false, 100), { damage: 0, isCrit: false })
+  assert.deepEqual(rollHitDamage(false, 0), { damage: 0, isCrit: false })
+})
+
+test('rollHitDamage: a 0% (or falsy) crit chance always deals normal damage', () => {
+  for (let i = 0; i < 50; i++) {
+    assert.deepEqual(rollHitDamage(true, 0), { damage: NORMAL_HIT_DAMAGE, isCrit: false })
+    assert.deepEqual(rollHitDamage(true, null), { damage: NORMAL_HIT_DAMAGE, isCrit: false })
+    assert.deepEqual(rollHitDamage(true, undefined), { damage: NORMAL_HIT_DAMAGE, isCrit: false })
+  }
+})
+
+test('rollHitDamage: a 100% crit chance always deals critical (2x) damage', () => {
+  for (let i = 0; i < 50; i++) {
+    assert.deepEqual(rollHitDamage(true, 100), { damage: CRITICAL_HIT_DAMAGE, isCrit: true })
+  }
+})
+
+test('rollHitDamage: CRITICAL_HIT_DAMAGE is exactly double NORMAL_HIT_DAMAGE', () => {
+  assert.equal(CRITICAL_HIT_DAMAGE, NORMAL_HIT_DAMAGE * 2)
 })
 
 test('rollEnemyRewards: a 100% chance row always hits, a 0% row never does', () => {
@@ -119,11 +148,13 @@ test('buildGrantableReward maps hit rows into grantRewardInTx\'s expected shape'
     { rewardType: 'BACKGROUND', backgroundId: 'bg1' },
     { rewardType: 'AVATAR', avatarId: 'av1' },
     { rewardType: 'CTOON', ctoonId: 'c1', quantity: 3, ctoon: { quantity: 100, name: 'Test cToon' } },
+    { rewardType: 'POINTS', quantity: 250 },
   ]
   const reward = buildGrantableReward(hits)
   assert.deepEqual(reward.backgrounds, [{ backgroundId: 'bg1' }])
   assert.deepEqual(reward.avatars, [{ avatarId: 'av1' }])
   assert.deepEqual(reward.ctoons, [{ ctoonId: 'c1', quantity: 3, ctoon: { quantity: 100, name: 'Test cToon' } }])
+  assert.equal(reward.points, 250)
 })
 
 test('buildGrantableReward defaults a missing/invalid cToon quantity to 1', () => {
@@ -137,9 +168,25 @@ test('buildGrantableReward ignores a row whose id field is missing for its decla
   // e.g. a CTOON-type row with no ctoonId (shouldn't happen given API validation, but the
   // mapping itself must not silently grant a malformed entry either)
   const hits = [{ rewardType: 'CTOON', ctoonId: null, quantity: 1 }]
-  assert.deepEqual(buildGrantableReward(hits), { backgrounds: [], avatars: [], ctoons: [] })
+  assert.deepEqual(buildGrantableReward(hits), { backgrounds: [], avatars: [], ctoons: [], points: 0 })
+})
+
+test('buildGrantableReward sums multiple independently-rolled POINTS rows into one total', () => {
+  const hits = [
+    { rewardType: 'POINTS', quantity: 100 },
+    { rewardType: 'POINTS', quantity: 50 },
+  ]
+  assert.equal(buildGrantableReward(hits).points, 150)
+})
+
+test('buildGrantableReward defaults with no hits at all', () => {
+  assert.deepEqual(buildGrantableReward([]), { backgrounds: [], avatars: [], ctoons: [], points: 0 })
 })
 
 test('PLAYER_MAX_HP is the 5 hits specified by the feature', () => {
   assert.equal(PLAYER_MAX_HP, 5)
+})
+
+test('HEAL_ON_SUCCESSFUL_BLOCK is a single positive HP amount', () => {
+  assert.equal(HEAL_ON_SUCCESSFUL_BLOCK, 1)
 })

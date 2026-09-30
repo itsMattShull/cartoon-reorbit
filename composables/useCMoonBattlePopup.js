@@ -3,6 +3,34 @@
 // every route change (see that component's route watcher) and hits
 // server/api/cmoon/battle/consider.post.js, which owns the actual chance-roll/cooldown — this
 // composable just holds whatever that endpoint hands back and drives the fight once started.
+
+// Best-effort SFX playback — a plain HTMLAudioElement per play rather than the AudioContext/
+// decodeAudioData pool composables/useClickSoundEffects.js uses, since these clips play at most a
+// few times per battle (not on every click site-wide), so pre-decoding/caching buys nothing here.
+// Never awaited and never throws: a missing/blocked/still-loading sound must not hold up the
+// battle flow it's just decorating.
+function playSound(path) {
+  if (!path || typeof window === 'undefined') return
+  try {
+    const el = new Audio(path)
+    el.volume = 0.7
+    el.play().catch(() => {})
+  } catch {}
+}
+
+// One round can hit both sides at once (both attacked, neither blocked correctly) — both sounds
+// then play together rather than one being chosen over the other, matching how the round summary
+// text (CMoonBattlePopupHost.vue's lastRoundLabel) already reports "you both landed a hit!" as a
+// real simultaneous outcome, not an either/or. enemyBlocked comes straight from
+// resolveBattleRound server-side (a genuinely successful block, not just "wasn't hit because
+// nobody attacked either way" — see that function's own comment).
+function playRoundSounds(round, enemy) {
+  if (!round || !enemy) return
+  if (round.enemyHit) playSound(enemy.damageTakenSoundPath)
+  else if (round.enemyBlocked) playSound(enemy.damageAvoidedSoundPath)
+  if (round.playerHit) playSound(enemy.attackingSoundPath)
+}
+
 export function useCMoonBattlePopup() {
   const visible = useState('cmoon-battle-visible', () => false)
   // 'OFFER' (an enemy to size up, not yet fought) | 'FIGHT' (an in-progress battle) |
@@ -12,12 +40,16 @@ export function useCMoonBattlePopup() {
   const battle = useState('cmoon-battle-battle', () => null)
   const busy = useState('cmoon-battle-busy', () => false)
   const error = useState('cmoon-battle-error', () => '')
-  // The just-resolved round's { round, playerAction, enemyAction, playerHit, enemyHit } — display
-  // detail only (never read back to resolve anything), cleared whenever a fresh battle starts.
+  // The just-resolved round's { round, playerAction, enemyAction, playerHit, enemyHit,
+  // playerBlocked, enemyBlocked, playerCrit, enemyCrit } — display detail only (never read back to
+  // resolve anything), cleared whenever a fresh battle starts.
   const lastRound = useState('cmoon-battle-last-round', () => null)
 
   // Plain module-level flag, not useState: this only ever needs to prevent two concurrent
   // in-flight /consider calls from the same client tick, never anything serialized across SSR.
+  // Held true across an optional full-screen appear effect too (see checkOnNavigate below), not
+  // just the fetch itself — visible.value stays false for that whole window, so without this a
+  // second route change mid-effect could roll and stack a second offer/effect on top of the first.
   let checking = false
 
   async function checkOnNavigate() {
@@ -26,20 +58,44 @@ export function useCMoonBattlePopup() {
     checking = true
     try {
       const res = await $fetch('/api/cmoon/battle/consider', { method: 'POST' })
-      if (!res?.offered) return
+      if (!res?.offered) { checking = false; return }
       if (res.resumed) {
         battle.value = res.battle
         phase.value = battle.value?.status === 'RESOLVED' ? 'RESULT' : 'FIGHT'
-      } else {
-        enemy.value = res.enemy
-        battle.value = null
-        phase.value = 'OFFER'
+        visible.value = true
+        checking = false
+        return
       }
-      visible.value = true
+
+      enemy.value = res.enemy
+      battle.value = null
+      phase.value = 'OFFER'
+
+      const reveal = () => {
+        visible.value = true
+        playSound(res.enemy?.appearSoundPath)
+        checking = false
+      }
+
+      // An admin-authored full-screen effect assigned to this enemy's faction (see
+      // CMoonEnemyFaction.appearEffect in prisma/schema.prisma) — reuses the exact config shape a
+      // cMoon's own join effect plays (utils/cmoonJoinEffectDescriptor.js), just built directly
+      // here rather than through that helper since a faction never has a built-in effectType, only
+      // ever this one CUSTOM shape.
+      const fx = res.enemy?.faction?.appearEffect
+      const { active: fxActive, play } = useFullscreenEffect()
+      // useFullscreenEffect().play() is single-flight and silently no-ops (never calling
+      // onComplete) if another effect is already playing — skip straight to reveal() rather than
+      // risk `checking` getting stuck true for the rest of the session behind an onComplete that
+      // will never fire.
+      if (fx && !fxActive.value) {
+        play({ type: 'CUSTOM', config: fx }, { onComplete: reveal })
+      } else {
+        reveal()
+      }
     } catch {
       // Not logged in, no cMoon, feature off, or a transient error — silently skip, same
       // stance components/CMoonSelectModal.vue's own checkStatus() takes.
-    } finally {
       checking = false
     }
   }
@@ -71,8 +127,11 @@ export function useCMoonBattlePopup() {
       })
       battle.value = res.battle
       lastRound.value = res.round || null
+      playRoundSounds(res.round, battle.value?.enemy)
       if (battle.value.status === 'RESOLVED') {
         phase.value = 'RESULT'
+        if (battle.value.outcome === 'WIN') playSound(battle.value.enemy?.victorySoundPath)
+        else if (battle.value.outcome === 'LOSS') playSound(battle.value.enemy?.defeatSoundPath)
         // A win awards cMoon points server-side — refresh auth so the nav's own point/rank
         // display doesn't sit stale until the next unrelated refetch.
         if (battle.value.outcome === 'WIN') {

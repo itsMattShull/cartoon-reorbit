@@ -8,7 +8,7 @@ export default defineEventHandler(async (event) => {
 
   const factions = await db.cMoonEnemyFaction.findMany({
     orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-    include: { _count: { select: { members: true } } },
+    include: { _count: { select: { members: true } }, appearEffect: { select: { id: true, name: true } } },
   })
 
   return {
@@ -17,8 +17,11 @@ export default defineEventHandler(async (event) => {
       name: f.name,
       description: f.description,
       bannerImagePath: f.bannerImagePath,
+      battleMusicPath: f.battleMusicPath,
       active: f.active,
       sortOrder: f.sortOrder,
+      appearEffectId: f.appearEffectId,
+      appearEffect: f.appearEffect,
       // DELETE /cmoon-enemy-factions/:id blocks on any member at all, so the admin list can
       // disable its delete button off this same number rather than waiting for the 409.
       memberCount: f._count?.members ?? 0,

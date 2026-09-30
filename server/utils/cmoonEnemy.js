@@ -30,6 +30,15 @@ export const DROP_CHANCE_MAX = 100
 export const REWARD_QUANTITY_MIN = 1
 export const REWARD_QUANTITY_MAX = 20
 
+export const CRIT_CHANCE_MIN = 0
+export const CRIT_CHANCE_MAX = 100
+export const CRIT_CHANCE_DEFAULT = 0
+
+// A POINTS reward row's `quantity` is a points amount, not a copy count — same 0-5000 scale as
+// CMoonEnemyMember.cMoonPointsReward, since both are "how many points does a win/prize add".
+export const POINTS_REWARD_MIN = 1
+export const POINTS_REWARD_MAX = 5000
+
 // Admin-list ordering only (see the GET endpoints' orderBy) — a generous but finite band so a
 // malformed client value can't land something absurd in an Int column.
 export const SORT_ORDER_MIN = -9999
@@ -42,10 +51,23 @@ export const CMOON_POINTS_REWARD_DEFAULT = 10
 export const REWARD_QUANTITY_DEFAULT = 1
 
 export const BATTLE_MODES = ['PER_PLAYER', 'SHARED_POOL']
-export const REWARD_TYPES = ['CTOON', 'AVATAR', 'BACKGROUND']
+export const REWARD_TYPES = ['CTOON', 'AVATAR', 'BACKGROUND', 'POINTS']
+
+// The only CMoonEnemyMember columns a battle-sound upload may target — shared between
+// cmoon-enemy-members/[id]/sound.post.js (which validates the client-sent `slot` field against
+// this set before ever touching Prisma's `data`) and the admin UI, so the two can't drift.
+export const MEMBER_SOUND_SLOTS = [
+  'appearSoundPath',
+  'damageTakenSoundPath',
+  'damageAvoidedSoundPath',
+  'attackingSoundPath',
+  'victorySoundPath',
+  'defeatSoundPath',
+]
 
 // Which id field a reward row of each type must carry — the XOR Prisma can't express (see the
-// CMoonEnemyReward model's own comment).
+// CMoonEnemyReward model's own comment). No entry for POINTS: it has no id column at all, its
+// amount lives in `quantity` instead (see parseRewardBody's own handling of that case).
 const REWARD_ID_FIELD = { CTOON: 'ctoonId', AVATAR: 'avatarId', BACKGROUND: 'backgroundId' }
 const REWARD_ID_FIELDS = Object.values(REWARD_ID_FIELD)
 
@@ -79,6 +101,14 @@ export function isValidDropChance(value) {
 
 export function isValidRewardQuantity(value) {
   return Number.isInteger(value) && value >= REWARD_QUANTITY_MIN && value <= REWARD_QUANTITY_MAX
+}
+
+export function isValidCritChance(value) {
+  return Number.isInteger(value) && value >= CRIT_CHANCE_MIN && value <= CRIT_CHANCE_MAX
+}
+
+export function isValidPointsAmount(value) {
+  return Number.isInteger(value) && value >= POINTS_REWARD_MIN && value <= POINTS_REWARD_MAX
 }
 
 export function isValidSortOrder(value) {
@@ -134,6 +164,11 @@ export function parseFactionBody(body, existing) {
   const sortOrder = body?.sortOrder === undefined
     ? (existing ? existing.sortOrder : 0)
     : toNumber(body.sortOrder)
+  // Whether the referenced CMoonJoinEffect actually exists is the caller's DB check (this module
+  // deliberately has no Prisma access — see the file header) — this only validates shape.
+  const appearEffectId = body?.appearEffectId === undefined
+    ? (existing ? existing.appearEffectId : null)
+    : toOptionalId(body.appearEffectId)
 
   if (!isValidFactionName(name)) {
     return { ok: false, message: `Name is required (max ${FACTION_NAME_MAX_LENGTH} characters)` }
@@ -147,8 +182,11 @@ export function parseFactionBody(body, existing) {
   if (!isValidSortOrder(sortOrder)) {
     return { ok: false, message: `Sort order must be a whole number between ${SORT_ORDER_MIN} and ${SORT_ORDER_MAX}` }
   }
+  if (appearEffectId === undefined) {
+    return { ok: false, message: 'appearEffectId must be a string id' }
+  }
 
-  return { ok: true, data: { name, description, active, sortOrder } }
+  return { ok: true, data: { name, description, active, sortOrder, appearEffectId } }
 }
 
 // Shared by the member create/update endpoints, same `existing` convention as parseFactionBody.
@@ -180,6 +218,12 @@ export function parseMemberBody(body, existing) {
   const cMoonPointsReward = body?.cMoonPointsReward === undefined
     ? (existing ? existing.cMoonPointsReward : CMOON_POINTS_REWARD_DEFAULT)
     : toNumber(body.cMoonPointsReward)
+  const critChanceAgainstPercent = body?.critChanceAgainstPercent === undefined
+    ? (existing ? existing.critChanceAgainstPercent : CRIT_CHANCE_DEFAULT)
+    : toNumber(body.critChanceAgainstPercent)
+  const critChanceFromPercent = body?.critChanceFromPercent === undefined
+    ? (existing ? existing.critChanceFromPercent : CRIT_CHANCE_DEFAULT)
+    : toNumber(body.critChanceFromPercent)
   const active = toBoolean(body?.active, existing ? existing.active : true)
   const sortOrder = body?.sortOrder === undefined
     ? (existing ? existing.sortOrder : 0)
@@ -208,6 +252,12 @@ export function parseMemberBody(body, existing) {
   if (!isValidCMoonPointsReward(cMoonPointsReward)) {
     return { ok: false, message: `cMoon points reward must be a whole number between ${CMOON_POINTS_REWARD_MIN} and ${CMOON_POINTS_REWARD_MAX}` }
   }
+  if (!isValidCritChance(critChanceAgainstPercent)) {
+    return { ok: false, message: `Critical hit chance against this enemy must be a whole number between ${CRIT_CHANCE_MIN} and ${CRIT_CHANCE_MAX}` }
+  }
+  if (!isValidCritChance(critChanceFromPercent)) {
+    return { ok: false, message: `Critical hit chance from this enemy must be a whole number between ${CRIT_CHANCE_MIN} and ${CRIT_CHANCE_MAX}` }
+  }
   if (active === null) {
     return { ok: false, message: 'Active must be true or false' }
   }
@@ -215,7 +265,13 @@ export function parseMemberBody(body, existing) {
     return { ok: false, message: `Sort order must be a whole number between ${SORT_ORDER_MIN} and ${SORT_ORDER_MAX}` }
   }
 
-  return { ok: true, data: { factionId, name, maxHp, battleMode, cMoonPointsReward, active, sortOrder } }
+  return {
+    ok: true,
+    data: {
+      factionId, name, maxHp, battleMode, cMoonPointsReward,
+      critChanceAgainstPercent, critChanceFromPercent, active, sortOrder,
+    },
+  }
 }
 
 // Create-only (reward rows are added/removed whole, never partially patched — see
@@ -226,7 +282,7 @@ export function parseMemberBody(body, existing) {
 export function parseRewardBody(body) {
   const rewardType = typeof body?.rewardType === 'string' ? body.rewardType.trim() : ''
   if (!isValidRewardType(rewardType)) {
-    return { ok: false, message: 'Reward type must be CTOON, AVATAR, or BACKGROUND' }
+    return { ok: false, message: 'Reward type must be CTOON, AVATAR, BACKGROUND, or POINTS' }
   }
 
   const ids = {}
@@ -235,13 +291,22 @@ export function parseRewardBody(body) {
     if (parsed === undefined) return { ok: false, message: `${field} must be a string id` }
     ids[field] = parsed
   }
+  // POINTS has no id column at all (see REWARD_ID_FIELD's own comment) — wantField is undefined
+  // for it, so it's required to carry NONE of the three id fields rather than exactly one.
   const wantField = REWARD_ID_FIELD[rewardType]
-  if (!ids[wantField]) {
-    return { ok: false, message: `${wantField} is required when the reward type is ${rewardType}` }
-  }
-  const extra = REWARD_ID_FIELDS.filter(f => f !== wantField && ids[f])
-  if (extra.length) {
-    return { ok: false, message: `Reward type ${rewardType} must set only ${wantField} (got ${extra.join(', ')} too)` }
+  if (wantField) {
+    if (!ids[wantField]) {
+      return { ok: false, message: `${wantField} is required when the reward type is ${rewardType}` }
+    }
+    const extra = REWARD_ID_FIELDS.filter(f => f !== wantField && ids[f])
+    if (extra.length) {
+      return { ok: false, message: `Reward type ${rewardType} must set only ${wantField} (got ${extra.join(', ')} too)` }
+    }
+  } else {
+    const extra = REWARD_ID_FIELDS.filter(f => ids[f])
+    if (extra.length) {
+      return { ok: false, message: `Reward type ${rewardType} must not set ${extra.join(', ')}` }
+    }
   }
 
   // Required, no silent default: this is the one number that decides how often a prize drops,
@@ -251,14 +316,22 @@ export function parseRewardBody(body) {
     return { ok: false, message: `Drop chance must be a number between ${DROP_CHANCE_MIN} and ${DROP_CHANCE_MAX}` }
   }
 
-  // quantity only means anything for cToons (see the schema comment + buildGrantableReward);
-  // for avatars/backgrounds it's stored as 1 regardless of the body, so a stray value from the
-  // client can't leave a misleading number in the admin list.
+  // quantity means a copy count for cToons, a points amount for POINTS (see the schema comment +
+  // buildGrantableReward), and is otherwise stored as 1 regardless of the body (avatars/
+  // backgrounds), so a stray value from the client can't leave a misleading number in the admin
+  // list.
   let quantity = REWARD_QUANTITY_DEFAULT
   if (rewardType === 'CTOON' && body?.quantity !== undefined) {
     quantity = toNumber(body.quantity)
     if (!isValidRewardQuantity(quantity)) {
       return { ok: false, message: `Quantity must be a whole number between ${REWARD_QUANTITY_MIN} and ${REWARD_QUANTITY_MAX}` }
+    }
+  } else if (rewardType === 'POINTS') {
+    // Required, no silent default — same reasoning as dropChancePercent above: an admin adding a
+    // points prize with no amount is far more likely a mistake than a deliberate "0 points".
+    quantity = toNumber(body?.quantity)
+    if (!isValidPointsAmount(quantity)) {
+      return { ok: false, message: `Points amount must be a whole number between ${POINTS_REWARD_MIN} and ${POINTS_REWARD_MAX}` }
     }
   }
 
