@@ -5271,6 +5271,29 @@ model CMoonEnemyMember {
   // built-in default (see DEFAULT_RAID_ANNOUNCEMENT_TEXT) rather than every admin having to type
   // the same boilerplate — only set this to override the wording for a specific boss.
   raidAnnouncementText String?
+  // Once true, a WIN against this raid boss (raidDefeatedAt gets set — see that column) blocks it
+  // from ever being offered/started again until an admin manually revives it (reset.post.js),
+  // same "stays dead until an admin says otherwise" shape as a SHARED_POOL solo member's own
+  // defeatedAt. Ignored (raidDefeatedAt still gets set on a win, for display/history, but never
+  // blocks anything) while false — see raidCooldownMinutes below for the alternative, timed
+  // respawn. Meaningless unless isRaidBoss is also true, but not force-cleared when isRaidBoss is
+  // toggled off, matching raidAnnouncementText's own "settings persist independent of the on/off
+  // switch" stance.
+  raidOneTime          Boolean  @default(false)
+  // Minutes after a raid WIN before this boss can be raided again — checked in cmoonraid:start
+  // (server/utils/cmoonRaidSocket.js) against raidDefeatedAt, and in consider.post.js's candidate
+  // filter so the popup doesn't even offer it mid-cooldown. 0 (the default) means no cooldown —
+  // immediately raidable again, the original behavior before this column existed. Ignored while
+  // raidOneTime is true (that's a permanent block, not a timed one); the two are mutually
+  // exclusive admin choices, not combined.
+  raidCooldownMinutes  Int      @default(0)
+  // Set the instant a raid against this member resolves as a WIN (never on a LOSS/ABANDONED) —
+  // the one column both raidOneTime and raidCooldownMinutes above key off of. Independent of the
+  // SHARED_POOL-only `defeatedAt` column above: a member can in principle be both a SHARED_POOL
+  // solo enemy AND a raid boss, and the two battle modes must never share one "is it dead" flag.
+  // Cleared by the same admin revive action defeatedAt uses (reset.post.js), which now clears
+  // whichever of the two actually applies to this member.
+  raidDefeatedAt       DateTime?
 
   faction CMoonEnemyFaction  @relation(fields: [factionId], references: [id], onDelete: Cascade)
   rewards CMoonEnemyReward[]

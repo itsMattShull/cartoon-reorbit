@@ -78,6 +78,7 @@ import { buildGrantableReward } from './cmoonEnemyBattle.js'
 import {
   resolveRaidRound, rollEnemyAction, rollEnemyRewards, isValidBattleAction, PLAYER_MAX_HP,
   JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE, MAX_ROUNDS_SAFETY,
+  checkRaidBossAvailability,
 } from './cmoonEnemyRaid.js'
 import * as raidRedis from './cmoonRaidRedisState.js'
 
@@ -391,8 +392,14 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
         }
       }
 
-      if (outcome === 'WIN') await tx.cMoon.update({ where: { id: raid.cMoonId }, data: { battleWins: { increment: 1 } } })
-      else if (outcome === 'LOSS') await tx.cMoon.update({ where: { id: raid.cMoonId }, data: { battleLosses: { increment: 1 } } })
+      if (outcome === 'WIN') {
+        await tx.cMoon.update({ where: { id: raid.cMoonId }, data: { battleWins: { increment: 1 } } })
+        // Drives checkRaidBossAvailability's raidOneTime/raidCooldownMinutes gate for the NEXT
+        // encounter — never set on a LOSS/ABANDONED, since the boss wasn't actually defeated.
+        await tx.cMoonEnemyMember.update({ where: { id: raid.enemyMemberId }, data: { raidDefeatedAt: new Date() } })
+      } else if (outcome === 'LOSS') {
+        await tx.cMoon.update({ where: { id: raid.cMoonId }, data: { battleLosses: { increment: 1 } } })
+      }
 
       return raidRow
     })
@@ -464,6 +471,8 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       if (!enemyMember.isRaidBoss) {
         return socket.emit(EV('error'), { message: 'This enemy is not a raid boss' })
       }
+      const availability = checkRaidBossAvailability(enemyMember)
+      if (!availability.available) return socket.emit(EV('error'), { message: availability.message })
       const elig = await loadEligibility({ userId: me.id, enemyMember })
       if (!elig.ok) return socket.emit(EV('error'), { message: elig.message })
 

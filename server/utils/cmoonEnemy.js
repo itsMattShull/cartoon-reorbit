@@ -72,6 +72,15 @@ export const MIN_PRIOR_DEFEATS_DEFAULT = 0
 // Same cap as FACTION_DESCRIPTION_MAX_LENGTH — one runaway paste shouldn't bloat the admin list.
 export const RAID_ANNOUNCEMENT_MAX_LENGTH = 500
 
+// How long a raid boss stays unavailable after a WIN before it can be raided again — see
+// CMoonEnemyMember.raidCooldownMinutes' own schema comment. 0 (the default) means no cooldown.
+// Capped at 30 days rather than something tighter (unlike the battle-popup cooldown's 1-day cap)
+// since a raid boss is a deliberately rarer, more organized event an admin might want to gate to
+// once a week or less.
+export const RAID_COOLDOWN_MINUTES_MIN = 0
+export const RAID_COOLDOWN_MINUTES_MAX = 43200
+export const RAID_COOLDOWN_MINUTES_DEFAULT = 0
+
 // The only CMoonEnemyMember columns a battle-sound upload may target — shared between
 // cmoon-enemy-members/[id]/sound.post.js (which validates the client-sent `slot` field against
 // this set before ever touching Prisma's `data`) and the admin UI, so the two can't drift.
@@ -266,6 +275,10 @@ export function parseMemberBody(body, existing) {
     ? (existing ? existing.raidAnnouncementText : null)
     : (typeof body.raidAnnouncementText === 'string' ? body.raidAnnouncementText.trim() : '')
   const raidAnnouncementText = raidAnnouncementTextRaw ? raidAnnouncementTextRaw : null
+  const raidOneTime = toBoolean(body?.raidOneTime, existing ? existing.raidOneTime : false)
+  const raidCooldownMinutes = body?.raidCooldownMinutes === undefined
+    ? (existing ? existing.raidCooldownMinutes : RAID_COOLDOWN_MINUTES_DEFAULT)
+    : toNumber(body.raidCooldownMinutes)
 
   if (!factionId) {
     return { ok: false, message: 'Faction is required' }
@@ -326,13 +339,19 @@ export function parseMemberBody(body, existing) {
   if (raidAnnouncementText && raidAnnouncementText.length > RAID_ANNOUNCEMENT_MAX_LENGTH) {
     return { ok: false, message: `Raid announcement must be ${RAID_ANNOUNCEMENT_MAX_LENGTH} characters or fewer` }
   }
+  if (raidOneTime === null) {
+    return { ok: false, message: 'One-time raid boss must be true or false' }
+  }
+  if (!Number.isInteger(raidCooldownMinutes) || raidCooldownMinutes < RAID_COOLDOWN_MINUTES_MIN || raidCooldownMinutes > RAID_COOLDOWN_MINUTES_MAX) {
+    return { ok: false, message: `Raid cooldown must be a whole number of minutes between ${RAID_COOLDOWN_MINUTES_MIN} and ${RAID_COOLDOWN_MINUTES_MAX}` }
+  }
 
   return {
     ok: true,
     data: {
       factionId, name, maxHp, battleMode, rank, minPriorDefeats, cMoonPointsReward,
       critChanceAgainstPercent, critChanceFromPercent, active, sortOrder,
-      isRaidBoss, raidAnnouncementText,
+      isRaidBoss, raidAnnouncementText, raidOneTime, raidCooldownMinutes,
     },
   }
 }

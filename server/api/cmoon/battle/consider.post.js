@@ -11,6 +11,7 @@ import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { getGlobalConfig } from '@/server/utils/cmoon'
 import { serializeEnemyForClient, serializeBattleForClient } from '@/server/utils/cmoonEnemyBattle'
+import { checkRaidBossAvailability } from '@/server/utils/cmoonEnemyRaid'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -66,7 +67,7 @@ export default defineEventHandler(async (event) => {
   // Excludes SHARED_POOL members already at 0 HP (defeatedAt set) — a PER_PLAYER member's own
   // currentHp is irrelevant here, since every player's encounter with it starts fresh regardless
   // of anyone else's history.
-  const candidates = await db.cMoonEnemyMember.findMany({
+  const rawCandidates = await db.cMoonEnemyMember.findMany({
     where: {
       active: true, defeatedAt: null, faction: { active: true }, minPriorDefeats: { lte: personalWinCount },
       // A raid boss can only ever be fought through the raid flow (server/utils/cmoonRaidSocket.js),
@@ -76,6 +77,11 @@ export default defineEventHandler(async (event) => {
     },
     include: { faction: { include: { appearEffect: true } } },
   })
+  // raidOneTime/raidCooldownMinutes can't be expressed as a single Prisma `where` filter (the
+  // cooldown cutoff is a per-row computation against each member's own raidCooldownMinutes) — see
+  // checkRaidBossAvailability's own comment for why this is shared with cmoonraid:start's
+  // authoritative check rather than reimplemented here.
+  const candidates = rawCandidates.filter(m => !m.isRaidBoss || checkRaidBossAvailability(m).available)
   if (!candidates.length) return { offered: false }
 
   const chosen = candidates[Math.floor(Math.random() * candidates.length)]

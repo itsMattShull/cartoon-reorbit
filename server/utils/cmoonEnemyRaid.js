@@ -25,6 +25,29 @@ export const ROUND_TIMEOUT_SECONDS = 20 // an alive participant who hasn't acted
 export const MAX_PARTY_SIZE = 4 // initiator + up to 3 joiners
 export const MAX_ROUNDS_SAFETY = 100 // same runaway-RNG safety valve as a solo battle
 
+// Whether a raid boss can be started right now, given its own admin-configured
+// raidOneTime/raidCooldownMinutes and the raidDefeatedAt timestamp its last WIN set (see those
+// columns' own schema comments) — shared by cmoonRaidSocket.js's cmoonraid:start handler (the
+// authoritative check) and consider.post.js's popup candidate filter (so it isn't even offered),
+// so the two can never drift apart on what "raidable right now" means. `now` is injectable for
+// tests; every real caller just uses the default.
+//
+// raidDefeatedAt is only ever meaningful when raidOneTime is true OR raidCooldownMinutes > 0 —
+// if an admin turns both off after a member was once defeated, a leftover raidDefeatedAt must not
+// keep blocking it forever (see raidOneTime's own schema comment: "ignored while raidOneTime is
+// false" — cooldown=0 is the equivalent no-op state for the cooldown side).
+export function checkRaidBossAvailability({ raidOneTime, raidCooldownMinutes, raidDefeatedAt }, now = Date.now()) {
+  if (!raidDefeatedAt) return { available: true }
+  if (raidOneTime) {
+    return { available: false, message: 'This raid boss has already been defeated and must be revived by an admin' }
+  }
+  const cooldownMs = Math.max(0, Number(raidCooldownMinutes) || 0) * 60 * 1000
+  if (cooldownMs <= 0) return { available: true }
+  const availableAt = new Date(new Date(raidDefeatedAt).getTime() + cooldownMs)
+  if (now >= availableAt.getTime()) return { available: true }
+  return { available: false, message: 'This raid boss is on cooldown', availableAt }
+}
+
 // One round, already collected. `participants` is the list of participants who were ALIVE when
 // this round opened, each `{ userId, action, hpRemaining }` — a knocked-out participant is never
 // passed in at all (they stopped acting the moment they hit 0 HP, see cmoonRaidSocket.js).

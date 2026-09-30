@@ -6,7 +6,10 @@ import {
   MIN_PRIOR_DEFEATS_MIN, MIN_PRIOR_DEFEATS_MAX, MIN_PRIOR_DEFEATS_DEFAULT,
 } from '../server/utils/cmoonEnemy.js'
 
-const baseMemberBody = { factionId: 'f1', name: 'Test Enemy', battleMode: 'PER_PLAYER', maxHp: 5, cMoonPointsReward: 10, minPriorDefeats: 0 }
+const baseMemberBody = {
+  factionId: 'f1', name: 'Test Enemy', battleMode: 'PER_PLAYER', maxHp: 5, cMoonPointsReward: 10, minPriorDefeats: 0,
+  isRaidBoss: false, raidAnnouncementText: null, raidOneTime: false, raidCooldownMinutes: 0,
+}
 
 test('isValidRank accepts every declared rank and rejects anything else', () => {
   for (const r of ENEMY_RANKS) assert.equal(isValidRank(r), true)
@@ -130,6 +133,46 @@ test('parseMemberBody: an update with no crit chance fields in the body keeps th
   assert.equal(result.ok, true)
   assert.equal(result.data.critChanceAgainstPercent, 40)
   assert.equal(result.data.critChanceFromPercent, 15)
+})
+
+test('parseMemberBody: raidOneTime and raidCooldownMinutes default to false/0 on create when omitted', () => {
+  const result = parseMemberBody({ ...baseMemberBody, rank: 'FINAL_BOSS', isRaidBoss: true }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.raidOneTime, false)
+  assert.equal(result.data.raidCooldownMinutes, 0)
+})
+
+test('parseMemberBody: accepts an explicit raidOneTime and raidCooldownMinutes', () => {
+  const result = parseMemberBody(
+    { ...baseMemberBody, rank: 'FINAL_BOSS', isRaidBoss: true, raidOneTime: true, raidCooldownMinutes: 1440 },
+    undefined,
+  )
+  assert.equal(result.ok, true)
+  assert.equal(result.data.raidOneTime, true)
+  assert.equal(result.data.raidCooldownMinutes, 1440)
+})
+
+test('parseMemberBody: rejects an out-of-range raidCooldownMinutes', () => {
+  assert.equal(parseMemberBody({ ...baseMemberBody, rank: 'FINAL_BOSS', isRaidBoss: true, raidCooldownMinutes: -1 }, undefined).ok, false)
+  assert.equal(parseMemberBody({ ...baseMemberBody, rank: 'FINAL_BOSS', isRaidBoss: true, raidCooldownMinutes: 43201 }, undefined).ok, false)
+  assert.equal(parseMemberBody({ ...baseMemberBody, rank: 'FINAL_BOSS', isRaidBoss: true, raidCooldownMinutes: 1.5 }, undefined).ok, false)
+})
+
+test('parseMemberBody: rejects a non-boolean raidOneTime', () => {
+  const result = parseMemberBody({ ...baseMemberBody, rank: 'FINAL_BOSS', isRaidBoss: true, raidOneTime: 'yes' }, undefined)
+  assert.equal(result.ok, false)
+})
+
+test('parseMemberBody: an update with no raid fields in the body keeps the existing raidOneTime/raidCooldownMinutes', () => {
+  const existing = {
+    ...baseMemberBody, rank: 'FINAL_BOSS', isRaidBoss: true, active: true, sortOrder: 0,
+    critChanceAgainstPercent: 0, critChanceFromPercent: 0, hasBattles: false,
+    raidOneTime: true, raidCooldownMinutes: 720,
+  }
+  const result = parseMemberBody({}, existing)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.raidOneTime, true)
+  assert.equal(result.data.raidCooldownMinutes, 720)
 })
 
 test('isValidPointsAmount accepts the full range and rejects outside it', () => {

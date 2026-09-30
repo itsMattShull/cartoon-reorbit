@@ -150,6 +150,7 @@
                   {{ m.name }}
                   <span v-if="!m.active" class="ml-1 text-[10px] font-normal text-gray-500">(inactive)</span>
                   <span v-if="m.defeatedAt" class="ml-1 text-[10px] font-normal text-red-600">(defeated)</span>
+                  <span v-if="raidBossStatus(m)" class="ml-1 text-[10px] font-normal text-red-600">({{ raidBossStatus(m) }})</span>
                 </div>
                 <div class="text-[11px] text-gray-600 break-words">
                   <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="RANK_BADGE_CLASS[m.rank]">{{ RANK_LABELS[m.rank] }}</span>
@@ -159,11 +160,13 @@
                   {{ m.cMoonPointsReward }} cMoon pts · {{ m.rewardCount }} prize row{{ m.rewardCount === 1 ? '' : 's' }} ·
                   {{ m.battleCount }} battle{{ m.battleCount === 1 ? '' : 's' }} fought
                   <span v-if="m.minPriorDefeats > 0"> · requires {{ m.minPriorDefeats }} prior win{{ m.minPriorDefeats === 1 ? '' : 's' }}</span>
+                  <span v-if="m.isRaidBoss && m.raidOneTime"> · one-time raid boss</span>
+                  <span v-else-if="m.isRaidBoss && m.raidCooldownMinutes > 0"> · {{ formatCooldown(m.raidCooldownMinutes) }} raid cooldown</span>
                 </div>
               </div>
               <div class="flex items-center gap-3 flex-shrink-0">
                 <button
-                  v-if="m.battleMode === 'SHARED_POOL' && m.defeatedAt"
+                  v-if="(m.battleMode === 'SHARED_POOL' && m.defeatedAt) || !!raidBossStatus(m)"
                   type="button" class="text-indigo-600 hover:underline disabled:opacity-40"
                   :disabled="resettingId === m.id" @click="resetMember(m)"
                 >{{ resettingId === m.id ? 'Reviving…' : 'Revive' }}</button>
@@ -234,6 +237,21 @@
                 placeholder="🚨 A raid boss ({enemy}) is being fought in {cmoon}! Up to 4 members can join the fight."
               ></textarea>
               <p class="text-[10px] text-gray-500 mt-1">Posted the moment a raid starts. {cmoon} and {enemy} are replaced automatically. Leave blank to use the default wording above.</p>
+            </div>
+            <div v-if="memberForm.isRaidBoss" class="pt-1">
+              <label class="flex items-center gap-2">
+                <input type="checkbox" v-model="memberForm.raidOneTime" />
+                <span class="text-[11px] font-medium">One-time raid boss</span>
+              </label>
+              <p class="text-[10px] text-gray-500 mt-1">
+                Once defeated, this boss can never be raided again until an admin hits "Revive" below — overrides the
+                cooldown, if one is also set.
+              </p>
+            </div>
+            <div v-if="memberForm.isRaidBoss && !memberForm.raidOneTime">
+              <label class="block text-[11px] font-medium mb-1">Raid cooldown after a win, in minutes (0-43200)</label>
+              <input v-model.number="memberForm.raidCooldownMinutes" type="number" min="0" max="43200" class="w-full border rounded px-2 py-1 text-xs" />
+              <p class="text-[10px] text-gray-500 mt-1">0 means it can be raided again immediately. Automatically becomes raidable again once the cooldown passes — no admin action needed.</p>
             </div>
           </div>
           <p v-else-if="memberForm.isRaidBoss" class="text-[11px] text-amber-600">This member is marked as a raid boss but is no longer Final Boss rank — switch it back to Final Boss to keep raid mode, or it will be turned off on save.</p>
@@ -731,7 +749,7 @@ async function uploadSound(slotKey) {
 const emptyMemberForm = () => ({
   id: '', factionId: '', name: '', maxHp: 5, battleMode: 'PER_PLAYER', rank: 'GOON', minPriorDefeats: 0,
   cMoonPointsReward: 10, critChanceAgainstPercent: 0, critChanceFromPercent: 0, active: true, sortOrder: 0,
-  isRaidBoss: false, raidAnnouncementText: '',
+  isRaidBoss: false, raidAnnouncementText: '', raidOneTime: false, raidCooldownMinutes: 0,
 })
 const memberForm = reactive(emptyMemberForm())
 const memberPreviewImageSrc = computed(() => memberPendingFilePreviewUrl.value || memberSavedImagePath.value || '')
@@ -755,6 +773,31 @@ function resetMemberForm() {
   if (memberFactionFilter.value) memberForm.factionId = memberFactionFilter.value
 }
 
+// Ticked every 30s purely to force raidBossStatus()/the Revive button's re-evaluation as a
+// cooldown actually elapses — without this, an admin watching the page would keep seeing a stale
+// "on cooldown" label (and a hidden Revive button) for a boss that's already raidable again,
+// until some unrelated reactive update or a page reload happened to refresh it.
+const nowTick = ref(Date.now())
+let nowTickTimer = null
+
+// Mirrors checkRaidBossAvailability (server/utils/cmoonEnemyRaid.js) purely for display — the
+// server is always the authority on whether a raid can actually start, this just tells an admin
+// at a glance why one might currently be blocked.
+function raidBossStatus(m) {
+  if (!m.isRaidBoss || !m.raidDefeatedAt) return null
+  if (m.raidOneTime) return 'raid defeated — awaiting revive'
+  if (m.raidCooldownMinutes > 0) {
+    const availableAt = new Date(m.raidDefeatedAt).getTime() + m.raidCooldownMinutes * 60000
+    if (availableAt > nowTick.value) return `raid cooldown until ${new Date(availableAt).toLocaleString()}`
+  }
+  return null
+}
+function formatCooldown(minutes) {
+  if (minutes < 60) return `${minutes}m`
+  if (minutes < 1440) return `${Math.round(minutes / 60)}h`
+  return `${Math.round(minutes / 1440)}d`
+}
+
 function startEditMember(m) {
   resetMemberForm()
   Object.assign(memberForm, {
@@ -763,6 +806,7 @@ function startEditMember(m) {
     cMoonPointsReward: m.cMoonPointsReward, critChanceAgainstPercent: m.critChanceAgainstPercent ?? 0,
     critChanceFromPercent: m.critChanceFromPercent ?? 0, active: !!m.active, sortOrder: m.sortOrder,
     isRaidBoss: !!m.isRaidBoss, raidAnnouncementText: m.raidAnnouncementText || '',
+    raidOneTime: !!m.raidOneTime, raidCooldownMinutes: m.raidCooldownMinutes ?? 0,
   })
   memberSavedImagePath.value = m.imagePath || ''
   for (const s of SOUND_SLOTS) memberSoundState[s.key].savedPath = m[s.field] || ''
@@ -845,6 +889,11 @@ async function saveMember() {
   // Mirrors the server's own rule (isRaidBoss requires rank FINAL_BOSS) rather than letting a
   // stale checkbox from before a rank change get silently rejected by the API.
   const isRaidBoss = memberForm.rank === 'FINAL_BOSS' && memberForm.isRaidBoss
+  const raidCooldownMinutes = Math.trunc(Number(memberForm.raidCooldownMinutes)) || 0
+  if (!Number.isInteger(raidCooldownMinutes) || raidCooldownMinutes < 0 || raidCooldownMinutes > 43200) {
+    memberFormError.value = 'Raid cooldown must be between 0 and 43200 minutes.'
+    return
+  }
 
   memberSaving.value = true
   try {
@@ -862,6 +911,12 @@ async function saveMember() {
       sortOrder: Math.trunc(Number(memberForm.sortOrder)) || 0,
       isRaidBoss,
       raidAnnouncementText: raidAnnouncementText || null,
+      // NOT gated by isRaidBoss, unlike the checkbox's own value above — raidOneTime persists
+      // independent of the on/off switch, same stance raidAnnouncementText/raidCooldownMinutes
+      // already take (see raidOneTime's own schema comment), so toggling raid mode off and back
+      // on later doesn't silently reset it.
+      raidOneTime: memberForm.raidOneTime,
+      raidCooldownMinutes,
     }
     let id = memberForm.id
     if (id) {
@@ -1018,6 +1073,13 @@ async function removeReward(r) {
   }
 }
 
-onMounted(load)
-onBeforeUnmount(() => { clearFactionPendingFile(); clearMemberPendingFile() })
+onMounted(() => {
+  load()
+  nowTickTimer = setInterval(() => { nowTick.value = Date.now() }, 30000)
+})
+onBeforeUnmount(() => {
+  clearFactionPendingFile()
+  clearMemberPendingFile()
+  if (nowTickTimer) clearInterval(nowTickTimer)
+})
 </script>
