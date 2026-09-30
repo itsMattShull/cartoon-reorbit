@@ -26,6 +26,10 @@ enum NotificationType {
   AUCTION_WON
   TRADE_OFFER_RECEIVED
   TRADE_OFFER_ACCEPTED
+  // A cMoon Enemy Battles raid boss was started against a member of the recipient's own cMoon —
+  // see server/utils/cmoonRaidSocket.js and notifyCMoonRaidBossStarted in
+  // server/utils/notifications.js. contextId is the CMoonEnemyRaid id.
+  CMOON_RAID_BOSS_STARTED
 }
 
 /// Current state of a lock
@@ -761,6 +765,7 @@ model User {
 
   // cMoon Enemy Battles
   cMoonEnemyBattles CMoonEnemyBattle[]
+  cMoonEnemyRaidParticipations CMoonEnemyRaidParticipant[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
   @@index([cMoonId])
@@ -1758,6 +1763,10 @@ model GlobalGameConfig {
   cMoonEnemyBattlesEnabled           Boolean   @default(false)
   cMoonBattlePopupChancePercent      Int       @default(3) // 0-100; rolled on each route navigation; 0 disables
   cMoonBattlePopupCooldownMinutes    Int       @default(20) // minimum time between popups shown to the same user
+  // Discord channel a raid-boss announcement posts to (see announceCMoonRaidBoss in
+  // server/utils/discord.js) — same admin-configurable-with-env-fallback shape as
+  // achievementDiscordChannelId/czoneContestDiscordChannelId above.
+  cMoonRaidBossDiscordChannelId      String?
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }
@@ -3545,6 +3554,7 @@ model CMoon {
   battleWins       Int                  @default(0)
   battleLosses     Int                  @default(0)
   enemyBattles     CMoonEnemyBattle[]
+  enemyRaids       CMoonEnemyRaid[]
 
   @@index([memberCount])
   @@index([teamScore])
@@ -5244,9 +5254,28 @@ model CMoonEnemyMember {
   victorySoundPath       String? // this enemy is defeated (the player's battle outcome is WIN)
   defeatSoundPath        String? // this enemy wins (the player's battle outcome is LOSS)
 
+  // Opt-in co-op mode (see CMoonEnemyRaid) — when true, the FIRST eligible player to encounter
+  // this member via the ordinary popup roll (consider.post.js) can start a RAID instead of a
+  // solo fight: up to 3 more eligible members of that same player's cMoon get a 60-second window
+  // to join before it auto-starts (server/utils/cmoonRaidSocket.js owns that whole lifecycle;
+  // this column only controls whether the option is offered at all). Admin-facing UI restricts
+  // this to rank = FINAL_BOSS (a raid boss is meant to be a headline fight), but nothing in the
+  // battle math itself reads rank, so this is enforced at the API layer, not the database.
+  // Deliberately NOT locked once fought (unlike rank/battleMode) — flipping it only changes
+  // whether FUTURE encounters offer the raid option, it never reinterprets a raid already logged.
+  isRaidBoss        Boolean              @default(false)
+  // Admin-authored Discord announcement template, posted (via announceCMoonRaidBoss in
+  // server/utils/discord.js) the moment a raid is started. Supports two placeholders, substituted
+  // literally (no HTML/markdown escaping beyond what Discord itself does): {cmoon} → the
+  // initiating player's cMoon name, {enemy} → this member's own name. Null uses a generic
+  // built-in default (see DEFAULT_RAID_ANNOUNCEMENT_TEXT) rather than every admin having to type
+  // the same boilerplate — only set this to override the wording for a specific boss.
+  raidAnnouncementText String?
+
   faction CMoonEnemyFaction  @relation(fields: [factionId], references: [id], onDelete: Cascade)
   rewards CMoonEnemyReward[]
   battles CMoonEnemyBattle[]
+  raids   CMoonEnemyRaid[]
 
   @@index([active, defeatedAt, sortOrder])
 }
@@ -5331,8 +5360,121 @@ model CMoonEnemyBattle {
   // same user can't both succeed regardless of any race in the API layer's own pre-check.
   activeUserId String? @unique
 
+  // Set only on a SYNTHETIC row created at CMoonEnemyRaid resolution (one per participant, win or
+  // loss) — never on a real solo fight. Exists purely so every OTHER system that already counts
+  // "this player's wins against this member" straight off this table (minPriorDefeats' gate query
+  // in start.post.js/consider.post.js, the rank-scoped achievement criteria) automatically counts
+  // a raid win too, with zero changes to those queries. roundLog is always `[]` and pointsAwarded
+  // is always 0 on a raid-synthetic row: the real round-by-round log lives on CMoonEnemyRaid
+  // itself (one shared fight, not N independent ones), and cMoon points for a raid are credited
+  // ONCE for the whole party (see resolveCMoonRaidOutcome) rather than once per participant, which
+  // multiplying by re-adding it here would double-count.
+  raidId String?
+  raid   CMoonEnemyRaid? @relation(fields: [raidId], references: [id], onDelete: Restrict)
+
   @@index([enemyMemberId, status])
   @@index([cMoonId, outcome])
+  @@index([raidId])
+}
+
+enum CMoonEnemyRaidStatus {
+  // Join window open — up to 60 seconds (see JOIN_WINDOW_SECONDS in
+  // server/utils/cmoonEnemyRaid.js) from CMoonEnemyRaid.startedAt for up to 3 more eligible
+  // members of the same cMoon to join the initiator, after which it auto-starts with whoever has
+  // joined (even if that's only the initiator — a raid boss never simply fails to happen).
+  FORMING
+  // Combat rounds running. Every currently-alive participant sees the same rolled enemy action
+  // each round (see cMoonEnemyRaidSocket.js's header comment on why) and the party's landed hits
+  // all come out of the one shared enemyHpRemaining below.
+  IN_PROGRESS
+  // Terminal — see `outcome`. Live state for a resolved raid is evicted from the socket process's
+  // in-memory Map/Redis mirror; this row plus its participants' synthetic CMoonEnemyBattle rows
+  // are the permanent record from here on, same as CMoonEnemyBattle itself.
+  RESOLVED
+}
+
+enum CMoonEnemyRaidOutcome {
+  WIN
+  LOSS
+  // MAX_ROUNDS_SAFETY reached with the boss still standing and at least one participant still
+  // up — same no-penalty escape hatch CMoonEnemyBattleOutcome.ABANDONED is for a solo fight
+  // (see that value's own comment): a pathological RNG streak, never a real defeat.
+  ABANDONED
+}
+
+// One co-op "raid" attempt against a CMoonEnemyMember with isRaidBoss = true — up to 4 members of
+// ONE cMoon (see CMoonEnemyRaidParticipant) fighting the same boss together in real time, all
+// facing the identical rolled enemy action each round (server/utils/cmoonEnemyRaid.js's
+// resolveRaidRound), with their landed hits summing against the one shared enemyHpRemaining
+// below. Owned end-to-end by server/utils/cmoonRaidSocket.js (registered into
+// server/socket-server.js exactly like registerOgGtoons/registerPokemonBattle) — there is no REST
+// endpoint for starting, joining, or acting in a raid, only for the admin-facing isRaidBoss/
+// raidAnnouncementText fields on CMoonEnemyMember above. Round-by-round state lives in that
+// process's memory (mirrored to Redis for restart survival, see cmoonRaidRedisState.js) rather
+// than being written to Postgres every round — this row is created once at FORMING and updated
+// once more at RESOLVED, the same "write the permanent log, not a live journal" tradeoff
+// server/utils/ogGtoonsSocket.js already makes for its own live matches.
+model CMoonEnemyRaid {
+  id               String                  @id @default(uuid())
+  enemyMemberId    String
+  // The cMoon whose roster this raid is scoped to — every eligible-to-join player is a member of
+  // THIS cMoon (the initiator's own cMoon at raid-start), never any other. Required (unlike
+  // CMoonEnemyBattle.cMoonId, which is nullable for a non-cMoon solo player) because a raid with
+  // no cMoon to draw teammates from, announce for, or credit points to isn't a raid.
+  cMoonId          String
+  status           CMoonEnemyRaidStatus    @default(FORMING)
+  outcome          CMoonEnemyRaidOutcome?
+  // The party's shared boss HP — starts at enemyMember.maxHp, decremented by the SUM of every
+  // alive participant's landed hit each round (see resolveRaidRound), floored at 0.
+  enemyHpRemaining Int
+  roundNumber      Int                     @default(1)
+  joinDeadlineAt   DateTime
+  combatStartedAt  DateTime?
+  // [{ round, enemyAction, participants: [{ userId, action, hit, blocked, crit, damageTaken }],
+  //   enemyDamageDealt, enemyHpRemaining }, ...] — written once, at resolution, from the in-memory
+  // log accumulated over the fight (see this model's own header comment on why not per-round).
+  roundLog         Json                    @default("[]")
+  startedAt        DateTime                @default(now())
+  endedAt          DateTime?
+
+  enemyMember  CMoonEnemyMember            @relation(fields: [enemyMemberId], references: [id], onDelete: Restrict)
+  cMoon        CMoon                       @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  participants CMoonEnemyRaidParticipant[]
+  battles      CMoonEnemyBattle[] // the synthetic per-participant rows created at resolution
+
+  @@index([enemyMemberId])
+  @@index([cMoonId, status])
+}
+
+// One player's membership in one CMoonEnemyRaid. A row here is created the moment they join
+// (initiator included, at raid creation) and is never deleted — even a player knocked out
+// mid-fight (hpRemaining reaches 0) keeps their row and, on a party WIN, still receives
+// rewardsGranted (see this session's own knockout-still-shares-the-win decision): the whole point
+// of a shared party roll is that nobody who showed up loses out to bad personal luck.
+model CMoonEnemyRaidParticipant {
+  id             String    @id @default(uuid())
+  raidId         String
+  userId         String
+  hpRemaining    Int
+  knockedOutAt   DateTime?
+  isInitiator    Boolean   @default(false)
+  joinedAt       DateTime  @default(now())
+  // Same shape as CMoonEnemyBattle.rewardsGranted — set once, at raid resolution, on every
+  // participant on a WIN (identical bundle for all of them, per the single shared roll), left
+  // null on a LOSS and null here until resolution either way.
+  rewardsGranted Json?
+
+  raid CMoonEnemyRaid @relation(fields: [raidId], references: [id], onDelete: Cascade)
+  user User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // "At most one active raid per user" as a real DB constraint — same sentinel pattern as
+  // CMoonEnemyBattle.activeUserId above: holds this row's own userId while the PARENT raid is
+  // FORMING/IN_PROGRESS, cleared to NULL the moment it resolves. Guards against a double
+  // raid:join / raid:start race the socket layer's own in-memory pre-check might miss.
+  activeUserId String? @unique
+
+  @@unique([raidId, userId])
+  @@index([userId])
 }
 
 // ── cMoon Season Nav feature ─────────────────────────────────────────────

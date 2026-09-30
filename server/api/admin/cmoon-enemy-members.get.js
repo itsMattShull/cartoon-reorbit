@@ -50,6 +50,8 @@ export default defineEventHandler(async (event) => {
       victorySoundPath: m.victorySoundPath,
       defeatSoundPath: m.defeatSoundPath,
       active: m.active,
+      isRaidBoss: m.isRaidBoss,
+      raidAnnouncementText: m.raidAnnouncementText,
       defeatedAt: m.defeatedAt,
       sortOrder: m.sortOrder,
       rewardCount: m._count?.rewards ?? 0,

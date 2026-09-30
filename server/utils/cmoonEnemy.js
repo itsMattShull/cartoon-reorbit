@@ -67,6 +67,11 @@ export const MIN_PRIOR_DEFEATS_MIN = 0
 export const MIN_PRIOR_DEFEATS_MAX = 100000
 export const MIN_PRIOR_DEFEATS_DEFAULT = 0
 
+// Admin-authored Discord template for a raid boss announcement — see
+// CMoonEnemyMember.raidAnnouncementText's own schema comment for the {cmoon}/{enemy} placeholders.
+// Same cap as FACTION_DESCRIPTION_MAX_LENGTH — one runaway paste shouldn't bloat the admin list.
+export const RAID_ANNOUNCEMENT_MAX_LENGTH = 500
+
 // The only CMoonEnemyMember columns a battle-sound upload may target — shared between
 // cmoon-enemy-members/[id]/sound.post.js (which validates the client-sent `slot` field against
 // this set before ever touching Prisma's `data`) and the admin UI, so the two can't drift.
@@ -256,6 +261,11 @@ export function parseMemberBody(body, existing) {
   const sortOrder = body?.sortOrder === undefined
     ? (existing ? existing.sortOrder : 0)
     : toNumber(body.sortOrder)
+  const isRaidBoss = toBoolean(body?.isRaidBoss, existing ? existing.isRaidBoss : false)
+  const raidAnnouncementTextRaw = body?.raidAnnouncementText === undefined
+    ? (existing ? existing.raidAnnouncementText : null)
+    : (typeof body.raidAnnouncementText === 'string' ? body.raidAnnouncementText.trim() : '')
+  const raidAnnouncementText = raidAnnouncementTextRaw ? raidAnnouncementTextRaw : null
 
   if (!factionId) {
     return { ok: false, message: 'Faction is required' }
@@ -305,12 +315,24 @@ export function parseMemberBody(body, existing) {
   if (!isValidSortOrder(sortOrder)) {
     return { ok: false, message: `Sort order must be a whole number between ${SORT_ORDER_MIN} and ${SORT_ORDER_MAX}` }
   }
+  if (isRaidBoss === null) {
+    return { ok: false, message: 'Raid boss must be true or false' }
+  }
+  // A raid boss is meant to be a headline fight — see isRaidBoss's own schema comment. Enforced
+  // here rather than the database so an admin gets an immediate, specific message.
+  if (isRaidBoss && rank !== 'FINAL_BOSS') {
+    return { ok: false, message: 'Only a Final Boss can be made a raid boss' }
+  }
+  if (raidAnnouncementText && raidAnnouncementText.length > RAID_ANNOUNCEMENT_MAX_LENGTH) {
+    return { ok: false, message: `Raid announcement must be ${RAID_ANNOUNCEMENT_MAX_LENGTH} characters or fewer` }
+  }
 
   return {
     ok: true,
     data: {
       factionId, name, maxHp, battleMode, rank, minPriorDefeats, cMoonPointsReward,
       critChanceAgainstPercent, critChanceFromPercent, active, sortOrder,
+      isRaidBoss, raidAnnouncementText,
     },
   }
 }

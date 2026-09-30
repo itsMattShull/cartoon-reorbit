@@ -69,10 +69,12 @@ export default defineEventHandler(async (event) => {
     prevValue: {
       factionId: member.factionId, name: member.name, maxHp: member.maxHp, battleMode: member.battleMode, rank: member.rank, minPriorDefeats: member.minPriorDefeats, cMoonPointsReward: member.cMoonPointsReward,
       critChanceAgainstPercent: member.critChanceAgainstPercent, critChanceFromPercent: member.critChanceFromPercent, active: member.active, currentHp: member.currentHp,
+      isRaidBoss: member.isRaidBoss, raidAnnouncementText: member.raidAnnouncementText,
     },
     newValue: {
       factionId: data.factionId, name: data.name, maxHp: data.maxHp, battleMode: data.battleMode, rank: data.rank, minPriorDefeats: data.minPriorDefeats, cMoonPointsReward: data.cMoonPointsReward,
       critChanceAgainstPercent: data.critChanceAgainstPercent, critChanceFromPercent: data.critChanceFromPercent, active: data.active, currentHp: data.currentHp ?? member.currentHp,
+      isRaidBoss: data.isRaidBoss, raidAnnouncementText: data.raidAnnouncementText,
     },
   })
 

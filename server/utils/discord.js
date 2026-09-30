@@ -505,6 +505,37 @@ export async function announceCZoneContestWinner(prisma, {
   }
 }
 
+// Admin-authored fallback when a CMoonEnemyMember has no raidAnnouncementText of its own — see
+// that column's schema comment. Kept here (not duplicated at the call site) so every raid uses
+// the same default wording regardless of which admin set up the boss.
+const DEFAULT_RAID_ANNOUNCEMENT_TEXT = '🚨 A raid boss ({enemy}) is being fought in {cmoon}! Up to 4 members can join the fight.'
+
+// Announce a cMoon Enemy Battles raid boss starting. `announcementTemplate` is the admin-authored
+// CMoonEnemyMember.raidAnnouncementText (or null to use the default above) — substitutes
+// {cmoon}/{enemy} literally, same shape as every other admin-authored template in this codebase.
+// Never throws — the raid itself has already started by the time this is called and must not be
+// reported as failed just because the announcement didn't go out.
+export async function announceCMoonRaidBoss(prisma, { cMoonName, enemyName, announcementTemplate }) {
+  try {
+    const config = await prisma.globalGameConfig.findUnique({
+      where: { id: 'singleton' },
+      select: { cMoonRaidBossDiscordChannelId: true }
+    })
+    const channelId = (config?.cMoonRaidBossDiscordChannelId || '').trim() || process.env.DISCORD_ANNOUNCEMENTS_CHANNEL
+    const botToken = getAnnouncementsBotToken()
+    if (!channelId || !botToken) return
+    const template = (typeof announcementTemplate === 'string' && announcementTemplate.trim())
+      ? announcementTemplate.trim()
+      : DEFAULT_RAID_ANNOUNCEMENT_TEXT
+    const msg = template
+      .replaceAll('{cmoon}', cMoonName || 'a cMoon')
+      .replaceAll('{enemy}', enemyName || 'a raid boss')
+    await sendGuildChannelMessageById(channelId, msg, botToken)
+  } catch (e) {
+    console.error('announceCMoonRaidBoss failed:', e?.message || e)
+  }
+}
+
 // Truncates a string to `max` characters without splitting a UTF-16 surrogate
 // pair (which would otherwise corrupt the last character and can make Discord
 // reject the payload with a 400).

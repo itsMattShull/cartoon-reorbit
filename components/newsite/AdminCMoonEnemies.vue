@@ -152,7 +152,8 @@
                   <span v-if="m.defeatedAt" class="ml-1 text-[10px] font-normal text-red-600">(defeated)</span>
                 </div>
                 <div class="text-[11px] text-gray-600 break-words">
-                  <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="RANK_BADGE_CLASS[m.rank]">{{ RANK_LABELS[m.rank] }}</span> ·
+                  <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="RANK_BADGE_CLASS[m.rank]">{{ RANK_LABELS[m.rank] }}</span>
+                  <span v-if="m.isRaidBoss" class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold bg-red-600 text-white ml-1">🐲 Raid Boss</span> ·
                   {{ m.faction?.name }} · {{ m.battleMode === 'SHARED_POOL' ? 'Shared pool' : 'Per player' }} ·
                   HP {{ m.battleMode === 'SHARED_POOL' ? `${m.currentHp}/${m.maxHp}` : m.maxHp }} ·
                   {{ m.cMoonPointsReward }} cMoon pts · {{ m.rewardCount }} prize row{{ m.rewardCount === 1 ? '' : 's' }} ·
@@ -214,6 +215,28 @@
             <p class="text-[11px] text-gray-500 mt-1">Cosmetic tier badge shown to admins and players — doesn't affect HP, crit chance, or rewards, but achievements can require wins by rank.</p>
             <p v-if="editingMemberHasBattles" class="text-[11px] text-gray-500 mt-1">Can't change once this enemy has been fought — rank-scoped achievements count wins against the member's current rank.</p>
           </div>
+
+          <div v-if="memberForm.rank === 'FINAL_BOSS'" class="border rounded p-2 space-y-2 bg-red-50/50">
+            <label class="flex items-center gap-2">
+              <input type="checkbox" v-model="memberForm.isRaidBoss" />
+              <span class="text-xs font-medium">Group raid boss</span>
+            </label>
+            <p class="text-[11px] text-gray-500">
+              The first eligible player to encounter this boss can start a raid instead of fighting solo: up to 3 more
+              eligible members of their own cMoon get a 60-second window to join before it auto-starts, everyone sees
+              each other's moves live, and a party win grants the same shared prize to everyone who joined.
+            </p>
+            <div v-if="memberForm.isRaidBoss">
+              <label class="block text-[11px] font-medium mb-1">Discord announcement (optional)</label>
+              <textarea
+                v-model="memberForm.raidAnnouncementText" rows="2" maxlength="500"
+                class="w-full border rounded px-2 py-1 text-xs"
+                placeholder="🚨 A raid boss ({enemy}) is being fought in {cmoon}! Up to 4 members can join the fight."
+              ></textarea>
+              <p class="text-[10px] text-gray-500 mt-1">Posted the moment a raid starts. {cmoon} and {enemy} are replaced automatically. Leave blank to use the default wording above.</p>
+            </div>
+          </div>
+          <p v-else-if="memberForm.isRaidBoss" class="text-[11px] text-amber-600">This member is marked as a raid boss but is no longer Final Boss rank — switch it back to Final Boss to keep raid mode, or it will be turned off on save.</p>
 
           <div>
             <label class="block text-xs font-medium mb-1">Min. personal wins to unlock (0-100000)</label>
@@ -708,6 +731,7 @@ async function uploadSound(slotKey) {
 const emptyMemberForm = () => ({
   id: '', factionId: '', name: '', maxHp: 5, battleMode: 'PER_PLAYER', rank: 'GOON', minPriorDefeats: 0,
   cMoonPointsReward: 10, critChanceAgainstPercent: 0, critChanceFromPercent: 0, active: true, sortOrder: 0,
+  isRaidBoss: false, raidAnnouncementText: '',
 })
 const memberForm = reactive(emptyMemberForm())
 const memberPreviewImageSrc = computed(() => memberPendingFilePreviewUrl.value || memberSavedImagePath.value || '')
@@ -738,6 +762,7 @@ function startEditMember(m) {
     minPriorDefeats: m.minPriorDefeats ?? 0,
     cMoonPointsReward: m.cMoonPointsReward, critChanceAgainstPercent: m.critChanceAgainstPercent ?? 0,
     critChanceFromPercent: m.critChanceFromPercent ?? 0, active: !!m.active, sortOrder: m.sortOrder,
+    isRaidBoss: !!m.isRaidBoss, raidAnnouncementText: m.raidAnnouncementText || '',
   })
   memberSavedImagePath.value = m.imagePath || ''
   for (const s of SOUND_SLOTS) memberSoundState[s.key].savedPath = m[s.field] || ''
@@ -812,6 +837,14 @@ async function saveMember() {
     memberFormError.value = 'Minimum personal wins to unlock must be between 0 and 100000.'
     return
   }
+  const raidAnnouncementText = memberForm.raidAnnouncementText?.trim() || ''
+  if (raidAnnouncementText.length > 500) {
+    memberFormError.value = 'Raid announcement must be 500 characters or fewer.'
+    return
+  }
+  // Mirrors the server's own rule (isRaidBoss requires rank FINAL_BOSS) rather than letting a
+  // stale checkbox from before a rank change get silently rejected by the API.
+  const isRaidBoss = memberForm.rank === 'FINAL_BOSS' && memberForm.isRaidBoss
 
   memberSaving.value = true
   try {
@@ -827,6 +860,8 @@ async function saveMember() {
       critChanceFromPercent,
       active: memberForm.active,
       sortOrder: Math.trunc(Number(memberForm.sortOrder)) || 0,
+      isRaidBoss,
+      raidAnnouncementText: raidAnnouncementText || null,
     }
     let id = memberForm.id
     if (id) {

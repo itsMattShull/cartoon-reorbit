@@ -32,6 +32,7 @@ import { registerPokemonBattle, startPokemonBattleSweep } from './utils/pokemonB
 // in-memory state, separate socket.data namespace via socket.data.ogGtoonsMatchId). See the
 // header of server/utils/ogGtoonsSocket.js for the full rationale.
 import { registerOgGtoons, startOgGtoonsSweep, restoreOgGtoonsMatches } from './utils/ogGtoonsSocket.js'
+import { registerCMoonRaid, startCMoonRaidSweep, restoreCMoonRaids } from './utils/cmoonRaidSocket.js'
 
 startDiagnostics().catch((err) => {
   console.error('[Diagnostics] failed to start (socket server):', err)
@@ -1896,6 +1897,9 @@ io.on('connection', socket => {
   // registered the same way as the games above, not folded into the Clash code further down.
   registerOgGtoons(io, socket, resolveSocketUser)
 
+  // cMoon Enemy Battles raid boss co-op mode — see server/utils/cmoonRaidSocket.js.
+  registerCMoonRaid(io, socket, resolveSocketUser)
+
   socket.on('battle:create', async ({ player1MonsterId, opponent }) => {
     try {
       // Same rule as the Clash handlers: the battle belongs to whoever the cookie says is
@@ -3036,6 +3040,8 @@ startEdRpsAiSweep()
 startPokemonBattleSweep(io)
 startOgGtoonsSweep(io)
 restoreOgGtoonsMatches()
+startCMoonRaidSweep(io)
+restoreCMoonRaids()
   .then(n => { if (n) console.log(`[ogGtoons] restored ${n} in-progress match(es) from Redis`) })
   .catch(err => console.error('[ogGtoons] failed to restore matches from Redis:', err))
 

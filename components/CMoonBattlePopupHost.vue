@@ -31,9 +31,13 @@
             <template v-else>A win earns a chance at prizes — join a cMoon to also earn points for a team.</template>
           </p>
           <p v-if="error" class="cbp-error">{{ error }}</p>
+          <p v-if="enemy?.isRaidBoss" class="cbp-flavor">
+            This is a raid boss — up to 3 other eligible members of your cMoon can join for 60 seconds before it
+            auto-starts, and a party win grants everyone who joined the same prize.
+          </p>
           <div class="cbp-actions">
             <GreenButton type="button" class="cbp-btn-wide" :disabled="busy" @click="onFight">
-              {{ busy ? 'Starting…' : 'Fight!' }}
+              {{ busy ? 'Starting…' : (enemy?.isRaidBoss ? 'Start Raid!' : 'Fight!') }}
             </GreenButton>
             <button type="button" class="cbp-btn-secondary" :disabled="busy" @click="onClose">Not now</button>
           </div>
@@ -237,6 +241,27 @@ onBeforeUnmount(() => {
 })
 
 async function onFight() {
+  if (enemy.value?.isRaidBoss) {
+    const raidSocket = useCMoonRaidSocket()
+    raidSocket.lastError.value = ''
+    raidSocket.raidState.value = null // clear any stale raid from a previous visit before watching
+    raidSocket.startRaid(enemy.value.id)
+    decline() // the raid page takes over from here
+    const router = useRouter()
+    const stopWatching = watch([raidSocket.raidState, raidSocket.lastError], ([state, err]) => {
+      if (state?.id) {
+        stopWatching()
+        router.push(`/newsite/cmoon-raid/${state.id}`)
+      } else if (err) {
+        stopWatching()
+        // The popup is already closed at this point — a raid-start failure (feature disabled,
+        // not eligible, enemy no longer available) surfaces as a plain alert rather than
+        // resurrecting a dismissed modal just to show one error line.
+        window.alert(err)
+      }
+    })
+    return
+  }
   await startBattle()
 }
 

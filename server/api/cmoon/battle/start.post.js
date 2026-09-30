@@ -61,8 +61,24 @@ export default defineEventHandler(async (event) => {
   if (!enemyMember || !enemyMember.active || !enemyMember.faction.active) {
     throw createError({ statusCode: 404, statusMessage: 'That enemy is no longer available' })
   }
+  // Raid bosses are only ever fought through the socket-driven co-op flow (see
+  // server/utils/cmoonRaidSocket.js) — this solo/stateless endpoint must never create a
+  // CMoonEnemyBattle row for one, even if a client fabricates the request directly.
+  if (enemyMember.isRaidBoss) {
+    throw createError({ statusCode: 409, statusMessage: 'This enemy must be fought as a raid — use the raid button' })
+  }
   if (enemyMember.battleMode === 'SHARED_POOL' && (enemyMember.defeatedAt || enemyMember.currentHp <= 0)) {
     throw createError({ statusCode: 409, statusMessage: 'This enemy has already been defeated' })
+  }
+  // A player mid-raid must resolve it before starting an unrelated solo fight — the raid's own
+  // CMoonEnemyRaidParticipant.activeUserId sentinel is the real backstop; this is a friendlier
+  // upfront message for the common case.
+  const activeRaid = await db.cMoonEnemyRaidParticipant.findFirst({
+    where: { userId, activeUserId: userId },
+    select: { id: true },
+  })
+  if (activeRaid) {
+    throw createError({ statusCode: 409, statusMessage: 'Finish your current raid before starting a solo battle' })
   }
 
   // Backstop for consider.post.js's own candidate filter, same reasoning as the feature-toggle

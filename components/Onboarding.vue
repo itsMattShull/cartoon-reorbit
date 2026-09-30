@@ -386,6 +386,10 @@ const notificationRoute = (n) => {
   if (n.type === 'TRADE_OFFER_RECEIVED' || n.type === 'TRADE_OFFER_ACCEPTED') {
     return '/newsite/trade'
   }
+  if (n.type === 'CMOON_RAID_BOSS_STARTED') {
+    if (!n.contextId) return null
+    return `/newsite/cmoon-raid/${encodeURIComponent(n.contextId)}`
+  }
   if (!n.contextId) return null
   return `/newsite/AuctionHouse/${encodeURIComponent(n.contextId)}`
 }
