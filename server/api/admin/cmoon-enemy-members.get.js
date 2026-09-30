@@ -38,6 +38,7 @@ export default defineEventHandler(async (event) => {
       maxHp: m.maxHp,
       battleMode: m.battleMode,
       rank: m.rank,
+      minPriorDefeats: m.minPriorDefeats,
       currentHp: m.currentHp,
       cMoonPointsReward: m.cMoonPointsReward,
       critChanceAgainstPercent: m.critChanceAgainstPercent,

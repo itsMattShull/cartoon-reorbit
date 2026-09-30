@@ -10,8 +10,8 @@ import { assertSameOrigin } from '@/server/utils/requireAdmin'
 import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from '@/server/utils/achievements'
 import { recomputeCMoonPointsForUsers } from '@/server/cron/cmoon-points-aggregate'
 import {
-  isValidBattleAction, resolveBattleRound, rollEnemyAction, rollEnemyRewards, buildGrantableReward,
-  rollHitDamage, serializeBattleForClient, MAX_ROUNDS_SAFETY, PLAYER_MAX_HP, HEAL_ON_SUCCESSFUL_BLOCK,
+  isValidBattleAction, resolveRound, rollEnemyRewards, buildGrantableReward,
+  serializeBattleForClient, MAX_ROUNDS_SAFETY, HEAL_ON_SUCCESSFUL_BLOCK,
 } from '@/server/utils/cmoonEnemyBattle'
 
 export default defineEventHandler(async (event) => {
@@ -46,23 +46,11 @@ export default defineEventHandler(async (event) => {
   })
   if (claim.count === 0) throw createError({ statusCode: 409, statusMessage: 'Stale round — reload this battle' })
 
-  const enemyAction = rollEnemyAction()
-  const { playerHit, enemyHit, playerBlocked, enemyBlocked } = resolveBattleRound(playerAction, enemyAction)
+  const { roundEntry: roundCore, newPlayerHp, enemyDamage, enemyHit, enemyBlocked } = resolveRound({
+    playerAction, enemyMember: battle.enemyMember, playerHpRemaining: battle.playerHpRemaining,
+  })
+  const { enemyAction, playerHit, playerBlocked, playerCrit, enemyCrit } = roundCore
   const isSharedPool = battle.enemyMember.battleMode === 'SHARED_POOL'
-
-  // Damage: a landed hit rolls against the RELEVANT side's own crit chance for 1 or 2 damage (see
-  // rollHitDamage's own comment). critChanceFromPercent is this enemy's own attacks landing
-  // critically against the player; critChanceAgainstPercent is the player's attacks landing
-  // critically against this enemy.
-  const { damage: playerDamage, isCrit: playerCrit } = rollHitDamage(playerHit, battle.enemyMember.critChanceFromPercent)
-  const { damage: enemyDamage, isCrit: enemyCrit } = rollHitDamage(enemyHit, battle.enemyMember.critChanceAgainstPercent)
-
-  // A successful block heals 1 HP (never on a round with no attack to block — see
-  // resolveBattleRound's own comment on playerBlocked/enemyBlocked) — mutually exclusive with
-  // taking damage, since a block that actually stops the attack is exactly what "not hit" means.
-  let newPlayerHp = battle.playerHpRemaining
-  if (playerHit) newPlayerHp = Math.max(0, newPlayerHp - playerDamage)
-  else if (playerBlocked) newPlayerHp = Math.min(PLAYER_MAX_HP, newPlayerHp + HEAL_ON_SUCCESSFUL_BLOCK)
 
   let newEnemyHp
 

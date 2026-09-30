@@ -50,11 +50,18 @@ export default defineEventHandler(async (event) => {
 
   if (Math.random() * 100 >= chancePercent) return { offered: false }
 
-  // Pick one random active, undefeated enemy member (any faction). Excludes SHARED_POOL members
-  // already at 0 HP (defeatedAt set) — a PER_PLAYER member's own currentHp is irrelevant here,
-  // since every player's encounter with it starts fresh regardless of anyone else's history.
+  // This player's own lifetime win count — gates minPriorDefeats below (see that column's own
+  // schema comment). Only queried once the chance roll above already passed, since that roll
+  // fails far more often than not (default 3%) and this query would otherwise run on every
+  // navigation for nothing.
+  const personalWinCount = await db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN' } })
+
+  // Pick one random active, undefeated, unlocked-for-this-player enemy member (any faction).
+  // Excludes SHARED_POOL members already at 0 HP (defeatedAt set) — a PER_PLAYER member's own
+  // currentHp is irrelevant here, since every player's encounter with it starts fresh regardless
+  // of anyone else's history.
   const candidates = await db.cMoonEnemyMember.findMany({
-    where: { active: true, defeatedAt: null, faction: { active: true } },
+    where: { active: true, defeatedAt: null, faction: { active: true }, minPriorDefeats: { lte: personalWinCount } },
     include: { faction: { include: { appearEffect: true } } },
   })
   if (!candidates.length) return { offered: false }

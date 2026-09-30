@@ -59,6 +59,14 @@ export const ENEMY_RANKS = ['GOON', 'ENFORCER', 'UNDERBOSS', 'FINAL_BOSS']
 export const RANK_LABELS = { GOON: 'Goon', ENFORCER: 'Enforcer', UNDERBOSS: 'Underboss', FINAL_BOSS: 'Final Boss' }
 export const RANK_DEFAULT = 'GOON'
 
+// A player's own lifetime cMoon Enemy Battle win count must be at least this before a member can
+// be offered to them at all — see CMoonEnemyMember.minPriorDefeats' own schema comment. 0 (the
+// default) means no requirement. The upper bound is generous rather than tight: an admin building
+// a long unlock chain across many factions could reasonably want a high threshold.
+export const MIN_PRIOR_DEFEATS_MIN = 0
+export const MIN_PRIOR_DEFEATS_MAX = 100000
+export const MIN_PRIOR_DEFEATS_DEFAULT = 0
+
 // The only CMoonEnemyMember columns a battle-sound upload may target — shared between
 // cmoon-enemy-members/[id]/sound.post.js (which validates the client-sent `slot` field against
 // this set before ever touching Prisma's `data`) and the admin UI, so the two can't drift.
@@ -91,6 +99,10 @@ export function isValidBattleMode(value) {
 
 export function isValidRank(value) {
   return ENEMY_RANKS.includes(value)
+}
+
+export function isValidMinPriorDefeats(value) {
+  return Number.isInteger(value) && value >= MIN_PRIOR_DEFEATS_MIN && value <= MIN_PRIOR_DEFEATS_MAX
 }
 
 export function isValidMaxHp(value) {
@@ -228,6 +240,9 @@ export function parseMemberBody(body, existing) {
   const rank = body?.rank === undefined
     ? (existing ? existing.rank : RANK_DEFAULT)
     : (typeof body.rank === 'string' ? body.rank.trim() : '')
+  const minPriorDefeats = body?.minPriorDefeats === undefined
+    ? (existing ? existing.minPriorDefeats : MIN_PRIOR_DEFEATS_DEFAULT)
+    : toNumber(body.minPriorDefeats)
   const cMoonPointsReward = body?.cMoonPointsReward === undefined
     ? (existing ? existing.cMoonPointsReward : CMOON_POINTS_REWARD_DEFAULT)
     : toNumber(body.cMoonPointsReward)
@@ -262,6 +277,16 @@ export function parseMemberBody(body, existing) {
     // mode (not raw body.battleMode) so an omitted field is never mistaken for a change.
     return { ok: false, message: 'Battle mode cannot change once this enemy has been fought' }
   }
+  if (existing && existing.hasBattles && rank !== existing.rank) {
+    // Same reasoning as the battleMode lock just above: the rank-scoped achievement criteria
+    // (cmoonGoonsDefeatedGte etc., see evaluateUserAgainstAchievement) count wins by joining
+    // live against this member's CURRENT rank, not a per-battle snapshot — re-ranking a member
+    // after it's been fought would silently reclassify every past win under the new rank.
+    return { ok: false, message: 'Rank cannot change once this enemy has been fought' }
+  }
+  if (!isValidMinPriorDefeats(minPriorDefeats)) {
+    return { ok: false, message: `Minimum prior defeats must be a whole number between ${MIN_PRIOR_DEFEATS_MIN} and ${MIN_PRIOR_DEFEATS_MAX}` }
+  }
   if (!isValidMaxHp(maxHp)) {
     return { ok: false, message: `Max HP must be a whole number between ${MAX_HP_MIN} and ${MAX_HP_MAX}` }
   }
@@ -284,7 +309,7 @@ export function parseMemberBody(body, existing) {
   return {
     ok: true,
     data: {
-      factionId, name, maxHp, battleMode, rank, cMoonPointsReward,
+      factionId, name, maxHp, battleMode, rank, minPriorDefeats, cMoonPointsReward,
       critChanceAgainstPercent, critChanceFromPercent, active, sortOrder,
     },
   }

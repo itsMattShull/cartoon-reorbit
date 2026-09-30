@@ -65,6 +65,17 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 409, statusMessage: 'This enemy has already been defeated' })
   }
 
+  // Backstop for consider.post.js's own candidate filter, same reasoning as the feature-toggle
+  // check above: this endpoint takes an explicit enemyMemberId and is reachable directly, so a
+  // player who never actually saw this enemy offered (or fabricated the id) must still be turned
+  // away if they haven't personally cleared the required number of prior wins.
+  if (enemyMember.minPriorDefeats > 0) {
+    const personalWinCount = await db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN' } })
+    if (personalWinCount < enemyMember.minPriorDefeats) {
+      throw createError({ statusCode: 403, statusMessage: 'You have not defeated enough enemies to face this one yet' })
+    }
+  }
+
   const enemyHpRemaining = enemyMember.battleMode === 'SHARED_POOL' ? enemyMember.currentHp : enemyMember.maxHp
 
   let battle

@@ -74,6 +74,36 @@ export function rollHitDamage(hit, critChancePercent) {
   return { damage: isCrit ? CRITICAL_HIT_DAMAGE : NORMAL_HIT_DAMAGE, isCrit }
 }
 
+// Composes resolveBattleRound + rollHitDamage (x2) + the player's own HP transition into one
+// step — everything a round needs EXCEPT the enemy's new HP, which is left to the caller since
+// that differs by battle mode: a PER_PLAYER battle (or a preview, which is always solo) applies
+// enemyDamage directly against its own enemyHpRemaining, while a SHARED_POOL battle instead runs
+// an atomic conditional UPDATE against the live CMoonEnemyMember.currentHp (see action.post.js) —
+// that DB-specific branch can't live in this DB-free file. Used by both the real battle endpoint
+// and the admin preview endpoint (server/api/admin/cmoon-enemy-members/[id]/preview-action.post.js)
+// so the two can never drift out of sync on the actual combat math.
+export function resolveRound({ playerAction, enemyMember, playerHpRemaining }) {
+  const enemyAction = rollEnemyAction()
+  const { playerHit, enemyHit, playerBlocked, enemyBlocked } = resolveBattleRound(playerAction, enemyAction)
+  // critChanceFromPercent is this enemy's own attacks landing critically against the player;
+  // critChanceAgainstPercent is the player's attacks landing critically against this enemy — see
+  // those columns' own schema comments.
+  const { damage: playerDamage, isCrit: playerCrit } = rollHitDamage(playerHit, enemyMember.critChanceFromPercent)
+  const { damage: enemyDamage, isCrit: enemyCrit } = rollHitDamage(enemyHit, enemyMember.critChanceAgainstPercent)
+
+  let newPlayerHp = playerHpRemaining
+  if (playerHit) newPlayerHp = Math.max(0, newPlayerHp - playerDamage)
+  else if (playerBlocked) newPlayerHp = Math.min(PLAYER_MAX_HP, newPlayerHp + HEAL_ON_SUCCESSFUL_BLOCK)
+
+  return {
+    roundEntry: { playerAction, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit },
+    newPlayerHp,
+    enemyDamage,
+    enemyHit,
+    enemyBlocked,
+  }
+}
+
 // The NPC's move for this round — uniform random among all 4 actions. No difficulty/bias knob
 // today; every enemy member plays identically regardless of its configured HP. (An admin-tunable
 // "aggression" weighting would be a natural, low-risk future extension of just this function.)

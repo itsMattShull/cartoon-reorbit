@@ -1,11 +1,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  parseMemberBody, parseRewardBody, isValidCritChance, isValidPointsAmount, isValidRank,
+  parseMemberBody, parseRewardBody, isValidCritChance, isValidPointsAmount, isValidRank, isValidMinPriorDefeats,
   CRIT_CHANCE_MIN, CRIT_CHANCE_MAX, POINTS_REWARD_MIN, POINTS_REWARD_MAX, ENEMY_RANKS, RANK_DEFAULT,
+  MIN_PRIOR_DEFEATS_MIN, MIN_PRIOR_DEFEATS_MAX, MIN_PRIOR_DEFEATS_DEFAULT,
 } from '../server/utils/cmoonEnemy.js'
 
-const baseMemberBody = { factionId: 'f1', name: 'Test Enemy', battleMode: 'PER_PLAYER', maxHp: 5, cMoonPointsReward: 10 }
+const baseMemberBody = { factionId: 'f1', name: 'Test Enemy', battleMode: 'PER_PLAYER', maxHp: 5, cMoonPointsReward: 10, minPriorDefeats: 0 }
 
 test('isValidRank accepts every declared rank and rejects anything else', () => {
   for (const r of ENEMY_RANKS) assert.equal(isValidRank(r), true)
@@ -36,6 +37,61 @@ test('parseMemberBody: an update with no rank field in the body keeps the existi
   const result = parseMemberBody({ name: 'Renamed' }, existing)
   assert.equal(result.ok, true)
   assert.equal(result.data.rank, 'FINAL_BOSS')
+})
+
+test('parseMemberBody: rejects a rank change once the member has battle history', () => {
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, hasBattles: true }
+  const result = parseMemberBody({ rank: 'FINAL_BOSS' }, existing)
+  assert.equal(result.ok, false)
+  assert.match(result.message, /rank cannot change/i)
+})
+
+test('parseMemberBody: allows a rank change on a member with no battle history yet', () => {
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, hasBattles: false }
+  const result = parseMemberBody({ rank: 'FINAL_BOSS' }, existing)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.rank, 'FINAL_BOSS')
+})
+
+test('parseMemberBody: re-saving the SAME rank is allowed even with battle history', () => {
+  const existing = { ...baseMemberBody, rank: 'UNDERBOSS', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, hasBattles: true }
+  const result = parseMemberBody({ rank: 'UNDERBOSS', name: 'Renamed' }, existing)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.rank, 'UNDERBOSS')
+})
+
+test('isValidMinPriorDefeats accepts the full range and rejects outside it', () => {
+  assert.equal(isValidMinPriorDefeats(MIN_PRIOR_DEFEATS_MIN), true)
+  assert.equal(isValidMinPriorDefeats(MIN_PRIOR_DEFEATS_MAX), true)
+  assert.equal(isValidMinPriorDefeats(5), true)
+  assert.equal(isValidMinPriorDefeats(-1), false)
+  assert.equal(isValidMinPriorDefeats(MIN_PRIOR_DEFEATS_MAX + 1), false)
+  assert.equal(isValidMinPriorDefeats(2.5), false)
+  assert.equal(isValidMinPriorDefeats(NaN), false)
+})
+
+test('parseMemberBody: minPriorDefeats defaults to 0 on create when omitted', () => {
+  const result = parseMemberBody(baseMemberBody, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.minPriorDefeats, MIN_PRIOR_DEFEATS_DEFAULT)
+})
+
+test('parseMemberBody: accepts an explicit minPriorDefeats', () => {
+  const result = parseMemberBody({ ...baseMemberBody, minPriorDefeats: 25 }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.minPriorDefeats, 25)
+})
+
+test('parseMemberBody: rejects an out-of-range minPriorDefeats', () => {
+  assert.equal(parseMemberBody({ ...baseMemberBody, minPriorDefeats: -1 }, undefined).ok, false)
+  assert.equal(parseMemberBody({ ...baseMemberBody, minPriorDefeats: 100001 }, undefined).ok, false)
+})
+
+test('parseMemberBody: minPriorDefeats can change freely even with battle history (no lock, unlike rank/battleMode)', () => {
+  const existing = { ...baseMemberBody, rank: 'GOON', minPriorDefeats: 3, active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, hasBattles: true }
+  const result = parseMemberBody({ minPriorDefeats: 50 }, existing)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.minPriorDefeats, 50)
 })
 
 test('isValidCritChance accepts the full 0-100 range and rejects outside it', () => {

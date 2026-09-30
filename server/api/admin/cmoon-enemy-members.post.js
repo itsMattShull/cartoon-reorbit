@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
     key: `create:${created.id}`,
     prevValue: null,
     newValue: {
-      id: created.id, factionId: created.factionId, name: created.name, maxHp: created.maxHp, battleMode: created.battleMode, rank: created.rank,
+      id: created.id, factionId: created.factionId, name: created.name, maxHp: created.maxHp, battleMode: created.battleMode, rank: created.rank, minPriorDefeats: created.minPriorDefeats,
       cMoonPointsReward: created.cMoonPointsReward, critChanceAgainstPercent: created.critChanceAgainstPercent, critChanceFromPercent: created.critChanceFromPercent,
     },
   })

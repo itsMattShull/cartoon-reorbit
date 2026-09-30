@@ -5195,6 +5195,15 @@ model CMoonEnemyMember {
   // Cosmetic tier badge — see the enum's own comment. Independent of maxHp/battleMode/rewards, so
   // an admin is free to make a low-HP "Final Boss" or a tanky "Goon" if that fits a faction's story.
   rank              CMoonEnemyRank       @default(GOON)
+  // Gates whether this member can be OFFERED to a given player at all (checked in
+  // consider.post.js's candidate query and re-checked in start.post.js against a direct call) —
+  // 0 (the default) means no requirement. Scoped to that ONE player's own lifetime cMoon Enemy
+  // Battle win count (db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN' } }), the same
+  // query cmoonMonstersDefeatedGte's achievement check uses), never a team or global total — two
+  // players can be at completely different points in the same faction's roster. Free to change at
+  // any time (raising or lowering it only affects future offers, never rewrites history), unlike
+  // rank/battleMode above.
+  minPriorDefeats   Int                  @default(0)
   // Only meaningful (and only ever written to) when battleMode = SHARED_POOL — the live running
   // total every fighting player's damage comes out of together. Decremented via an atomic
   // conditional UPDATE (see resolveBattleRound) so two players landing a hit at the same instant

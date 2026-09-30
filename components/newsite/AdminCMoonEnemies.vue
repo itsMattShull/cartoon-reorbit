@@ -157,6 +157,7 @@
                   HP {{ m.battleMode === 'SHARED_POOL' ? `${m.currentHp}/${m.maxHp}` : m.maxHp }} ·
                   {{ m.cMoonPointsReward }} cMoon pts · {{ m.rewardCount }} prize row{{ m.rewardCount === 1 ? '' : 's' }} ·
                   {{ m.battleCount }} battle{{ m.battleCount === 1 ? '' : 's' }} fought
+                  <span v-if="m.minPriorDefeats > 0"> · requires {{ m.minPriorDefeats }} prior win{{ m.minPriorDefeats === 1 ? '' : 's' }}</span>
                 </div>
               </div>
               <div class="flex items-center gap-3 flex-shrink-0">
@@ -165,6 +166,7 @@
                   type="button" class="text-indigo-600 hover:underline disabled:opacity-40"
                   :disabled="resettingId === m.id" @click="resetMember(m)"
                 >{{ resettingId === m.id ? 'Reviving…' : 'Revive' }}</button>
+                <button type="button" class="text-purple-600 hover:underline" @click="previewMemberId = m.id">Preview</button>
                 <button type="button" class="text-indigo-600 hover:underline" @click="startEditMember(m)">Edit</button>
                 <button
                   type="button" class="text-red-600 hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
@@ -206,10 +208,17 @@
 
           <div>
             <label class="block text-xs font-medium mb-1">Rank</label>
-            <select v-model="memberForm.rank" class="w-full border rounded px-2 py-1">
+            <select v-model="memberForm.rank" class="w-full border rounded px-2 py-1" :disabled="editingMemberHasBattles">
               <option v-for="r in RANKS" :key="r" :value="r">{{ RANK_LABELS[r] }}</option>
             </select>
             <p class="text-[11px] text-gray-500 mt-1">Cosmetic tier badge shown to admins and players — doesn't affect HP, crit chance, or rewards, but achievements can require wins by rank.</p>
+            <p v-if="editingMemberHasBattles" class="text-[11px] text-gray-500 mt-1">Can't change once this enemy has been fought — rank-scoped achievements count wins against the member's current rank.</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium mb-1">Min. personal wins to unlock (0-100000)</label>
+            <input v-model.number="memberForm.minPriorDefeats" type="number" min="0" max="100000" class="w-full border rounded px-2 py-1" />
+            <p class="text-[11px] text-gray-500 mt-1">This player's OWN lifetime cMoon Enemy Battle win count, not the team's or the server's — 0 means anyone can encounter this enemy. Safe to change anytime.</p>
           </div>
 
           <div class="flex gap-2">
@@ -387,6 +396,8 @@
         </div>
       </section>
     </div>
+
+    <CMoonEnemyPreviewModal v-if="previewMemberId" :member-id="previewMemberId" @close="previewMemberId = null" />
   </div>
 </template>
 
@@ -610,6 +621,7 @@ const memberSaving = ref(false)
 const memberFormError = ref('')
 const deletingMemberId = ref('')
 const resettingId = ref('')
+const previewMemberId = ref(null)
 const editingMemberHasBattles = ref(false)
 const editingMemberRewards = ref([])
 const memberPendingFile = ref(null)
@@ -621,7 +633,8 @@ const memberSavedImagePath = ref('')
 // ── Battle sounds (six independent slots, uploaded via cmoon-enemy-members/[id]/sound —
 // server/utils/cmoonEnemy.js#MEMBER_SOUND_SLOTS is the source of truth for the field names; kept
 // in sync here by hand since that file is server-only) ──────────────
-// Mirrors server/utils/cmoonEnemy.js's RANKS/RANK_LABELS — duplicated client-side rather than
+// Mirrors server/utils/cmoonEnemy.js's ENEMY_RANKS/RANK_LABELS (named RANKS here since this
+// file has no blackjackEngine.js-style collision to avoid) — duplicated client-side rather than
 // imported, same convention this page already follows for PLAYER_MAX_HP-style server constants.
 const RANKS = ['GOON', 'ENFORCER', 'UNDERBOSS', 'FINAL_BOSS']
 const RANK_LABELS = { GOON: 'Goon', ENFORCER: 'Enforcer', UNDERBOSS: 'Underboss', FINAL_BOSS: 'Final Boss' }
@@ -693,7 +706,7 @@ async function uploadSound(slotKey) {
 }
 
 const emptyMemberForm = () => ({
-  id: '', factionId: '', name: '', maxHp: 5, battleMode: 'PER_PLAYER', rank: 'GOON',
+  id: '', factionId: '', name: '', maxHp: 5, battleMode: 'PER_PLAYER', rank: 'GOON', minPriorDefeats: 0,
   cMoonPointsReward: 10, critChanceAgainstPercent: 0, critChanceFromPercent: 0, active: true, sortOrder: 0,
 })
 const memberForm = reactive(emptyMemberForm())
@@ -722,6 +735,7 @@ function startEditMember(m) {
   resetMemberForm()
   Object.assign(memberForm, {
     id: m.id, factionId: m.factionId, name: m.name, maxHp: m.maxHp, battleMode: m.battleMode, rank: m.rank || 'GOON',
+    minPriorDefeats: m.minPriorDefeats ?? 0,
     cMoonPointsReward: m.cMoonPointsReward, critChanceAgainstPercent: m.critChanceAgainstPercent ?? 0,
     critChanceFromPercent: m.critChanceFromPercent ?? 0, active: !!m.active, sortOrder: m.sortOrder,
   })
@@ -793,6 +807,11 @@ async function saveMember() {
     memberFormError.value = 'Crit chance from this enemy must be between 0 and 100.'
     return
   }
+  const minPriorDefeats = Math.trunc(Number(memberForm.minPriorDefeats))
+  if (!Number.isInteger(minPriorDefeats) || minPriorDefeats < 0 || minPriorDefeats > 100000) {
+    memberFormError.value = 'Minimum personal wins to unlock must be between 0 and 100000.'
+    return
+  }
 
   memberSaving.value = true
   try {
@@ -802,6 +821,7 @@ async function saveMember() {
       maxHp,
       battleMode: memberForm.battleMode,
       rank: memberForm.rank,
+      minPriorDefeats,
       cMoonPointsReward,
       critChanceAgainstPercent,
       critChanceFromPercent,
