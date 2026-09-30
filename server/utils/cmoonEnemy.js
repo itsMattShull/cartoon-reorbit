@@ -53,6 +53,12 @@ export const REWARD_QUANTITY_DEFAULT = 1
 export const BATTLE_MODES = ['PER_PLAYER', 'SHARED_POOL']
 export const REWARD_TYPES = ['CTOON', 'AVATAR', 'BACKGROUND', 'POINTS']
 
+// Cosmetic difficulty/importance tier — see CMoonEnemyRank's own schema comment. Declared
+// low-to-high, matching the admin dropdown and the enum's own declaration order.
+export const ENEMY_RANKS = ['GOON', 'ENFORCER', 'UNDERBOSS', 'FINAL_BOSS']
+export const RANK_LABELS = { GOON: 'Goon', ENFORCER: 'Enforcer', UNDERBOSS: 'Underboss', FINAL_BOSS: 'Final Boss' }
+export const RANK_DEFAULT = 'GOON'
+
 // The only CMoonEnemyMember columns a battle-sound upload may target — shared between
 // cmoon-enemy-members/[id]/sound.post.js (which validates the client-sent `slot` field against
 // this set before ever touching Prisma's `data`) and the admin UI, so the two can't drift.
@@ -81,6 +87,10 @@ export function isValidMemberName(value) {
 
 export function isValidBattleMode(value) {
   return BATTLE_MODES.includes(value)
+}
+
+export function isValidRank(value) {
+  return ENEMY_RANKS.includes(value)
 }
 
 export function isValidMaxHp(value) {
@@ -215,6 +225,9 @@ export function parseMemberBody(body, existing) {
   const battleMode = body?.battleMode === undefined
     ? (existing ? existing.battleMode : 'PER_PLAYER')
     : (typeof body.battleMode === 'string' ? body.battleMode.trim() : '')
+  const rank = body?.rank === undefined
+    ? (existing ? existing.rank : RANK_DEFAULT)
+    : (typeof body.rank === 'string' ? body.rank.trim() : '')
   const cMoonPointsReward = body?.cMoonPointsReward === undefined
     ? (existing ? existing.cMoonPointsReward : CMOON_POINTS_REWARD_DEFAULT)
     : toNumber(body.cMoonPointsReward)
@@ -237,6 +250,9 @@ export function parseMemberBody(body, existing) {
   }
   if (!isValidBattleMode(battleMode)) {
     return { ok: false, message: 'Battle mode must be PER_PLAYER or SHARED_POOL' }
+  }
+  if (!isValidRank(rank)) {
+    return { ok: false, message: `Rank must be one of ${ENEMY_RANKS.join(', ')}` }
   }
   if (existing && existing.hasBattles && battleMode !== existing.battleMode) {
     // Same idea as czoneEffect.js's "kind cannot change after creation": flipping PER_PLAYER <->
@@ -268,7 +284,7 @@ export function parseMemberBody(body, existing) {
   return {
     ok: true,
     data: {
-      factionId, name, maxHp, battleMode, cMoonPointsReward,
+      factionId, name, maxHp, battleMode, rank, cMoonPointsReward,
       critChanceAgainstPercent, critChanceFromPercent, active, sortOrder,
     },
   }

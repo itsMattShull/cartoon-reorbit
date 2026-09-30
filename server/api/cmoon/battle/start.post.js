@@ -22,7 +22,9 @@ export default defineEventHandler(async (event) => {
     select: { cMoonId: true, banned: true, active: true },
   })
   if (!user || user.banned || !user.active) throw createError({ statusCode: 403, statusMessage: 'Not eligible to battle' })
-  if (!user.cMoonId) throw createError({ statusCode: 400, statusMessage: 'Join a cMoon before battling' })
+  // No cMoon membership required to fight — a player with no cMoon just can't earn cMoon points
+  // (battle.cMoonId stays null; see resolveWin in action.post.js), every other reward and
+  // achievement progress still applies normally.
 
   // Reclaim a genuinely-abandoned battle (popup closed mid-fight, no round submitted in a
   // while) instead of leaving the player permanently soft-locked out of ever fighting again.

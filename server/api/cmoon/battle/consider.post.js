@@ -3,9 +3,10 @@
 // Enemy Battles popup — same chance-roll + cooldown shape as server/api/scavenger/consider.post.js,
 // but with no natural "trigger action" to hang off of, so this fires on navigation instead.
 // Never creates a CMoonEnemyBattle row itself — that only happens once the player actually
-// chooses to fight (see start.post.js). A user with no cMoon is never offered an encounter: the
-// whole feature is built around cMoons "working together," and a non-member's win would have
-// nowhere to be credited.
+// chooses to fight (see start.post.js). Offered to every eligible user regardless of cMoon
+// membership — a non-member can still win cToon/avatar/background/points prizes and progress
+// achievements, just never earns cMoon points (see resolveWin in action.post.js). `inCMoon` tells
+// the client whether to show the "earns cMoon points" line at all.
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { getGlobalConfig } from '@/server/utils/cmoon'
@@ -20,7 +21,6 @@ export default defineEventHandler(async (event) => {
     select: { cMoonId: true, banned: true, active: true, lastCMoonBattlePopupAt: true },
   })
   if (!user || user.banned || !user.active) return { offered: false }
-  if (!user.cMoonId) return { offered: false }
 
   // Resume an already-in-progress battle (e.g. the player navigated away mid-fight) rather than
   // rolling for a new one — the activeUserId sentinel/unique constraint guarantees at most one.
@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
     include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } } },
   })
   if (inProgress) {
-    return { offered: true, resumed: true, battle: serializeBattleForClient(inProgress) }
+    return { offered: true, resumed: true, battle: serializeBattleForClient(inProgress), inCMoon: !!user.cMoonId }
   }
 
   const config = await getGlobalConfig()
@@ -63,5 +63,5 @@ export default defineEventHandler(async (event) => {
 
   await db.user.update({ where: { id: userId }, data: { lastCMoonBattlePopupAt: new Date() } })
 
-  return { offered: true, resumed: false, enemy: serializeEnemyForClient(chosen) }
+  return { offered: true, resumed: false, enemy: serializeEnemyForClient(chosen), inCMoon: !!user.cMoonId }
 })

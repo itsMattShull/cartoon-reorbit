@@ -3224,6 +3224,13 @@ model Achievement {
   // Lifetime count of CMoonEnemyBattle rows this user WON — see evaluateUserAgainstAchievement,
   // same `db.<table>.count({ where: { userId, ... } })` shape as tkoWinsGte above.
   cmoonMonstersDefeatedGte     Int?
+  // Same lifetime WIN-count shape as cmoonMonstersDefeatedGte, each additionally scoped to wins
+  // against a CMoonEnemyMember of that one CMoonEnemyRank tier — lets an admin build e.g. "defeat
+  // 10 Underbosses" separately from the any-rank total above.
+  cmoonGoonsDefeatedGte        Int?
+  cmoonEnforcersDefeatedGte    Int?
+  cmoonUnderbossesDefeatedGte  Int?
+  cmoonFinalBossesDefeatedGte  Int?
   wordleWinsGte               Int? // total lifetime crown wins in Wordle
   wordleCurrentStreakGte      Int? // current consecutive-day crown streak
   flappyBestScoreGte          Int? // best Flappy Powerpuff score on a ranked run
@@ -5091,6 +5098,19 @@ enum CMoonEnemyBattleMode {
   SHARED_POOL
 }
 
+// A cosmetic difficulty/importance tier an admin assigns per member — purely organizational
+// (nothing in the battle math reads this; HP/crit chance/rewards are still set independently per
+// member), but achievements can require N wins against a specific tier (see Achievement's
+// cmoon*DefeatedGte columns) and the popup/admin list surface it as a badge so players and admins
+// can see at a glance how a given NPC ranks. Declared low-to-high to match the natural admin
+// dropdown order.
+enum CMoonEnemyRank {
+  GOON
+  ENFORCER
+  UNDERBOSS
+  FINAL_BOSS
+}
+
 enum CMoonEnemyBattleAction {
   ATTACK_HIGH
   ATTACK_LOW
@@ -5172,6 +5192,9 @@ model CMoonEnemyMember {
   imagePath         String?
   maxHp             Int                  @default(5)
   battleMode        CMoonEnemyBattleMode @default(PER_PLAYER)
+  // Cosmetic tier badge — see the enum's own comment. Independent of maxHp/battleMode/rewards, so
+  // an admin is free to make a low-HP "Final Boss" or a tanky "Goon" if that fits a faction's story.
+  rank              CMoonEnemyRank       @default(GOON)
   // Only meaningful (and only ever written to) when battleMode = SHARED_POOL — the live running
   // total every fighting player's damage comes out of together. Decremented via an atomic
   // conditional UPDATE (see resolveBattleRound) so two players landing a hit at the same instant
@@ -5248,16 +5271,17 @@ model CMoonEnemyReward {
 // while status = IN_PROGRESS (updated after every round; there's no separate in-memory server
 // state to keep in sync, unlike the Socket.IO-based MonsterBattle system, since this is a
 // stateless solo-vs-NPC turn exchange with no live opponent to coordinate with) and becomes the
-// permanent log entry once it resolves. Requires the player to already be in a cMoon to start
-// (enforced at the API layer, not here) — cMoonId is captured from the player's OWN cMoon at
-// battle-start and never re-derived later, so CMoon.battleWins/battleLosses (and this table
-// itself, for the admin battle-logs page) stay correct even if the player later changes/leaves
-// their cMoon.
+// permanent log entry once it resolves. Anyone can fight — cMoonId is a nullable snapshot of the
+// player's OWN cMoon at battle-start (never re-derived later, so CMoon.battleWins/battleLosses and
+// this table itself stay correct even if the player later changes/leaves their cMoon), null for a
+// player with no cMoon at all. pointsAwarded is always 0 for a null-cMoonId battle (see
+// action.post.js's resolveWin) — there's no team to credit, and every other reward type
+// (cToon/avatar/background/plain points/achievements) still applies normally.
 model CMoonEnemyBattle {
   id                String                   @id @default(uuid())
   userId            String
   enemyMemberId     String
-  cMoonId           String
+  cMoonId           String?
   status            CMoonEnemyBattleStatus   @default(IN_PROGRESS)
   outcome           CMoonEnemyBattleOutcome?
   roundNumber       Int                      @default(1) // the round currently awaiting the player's action
@@ -5289,7 +5313,7 @@ model CMoonEnemyBattle {
   // an admin who wants a member gone should deactivate it (active: false) instead, which is
   // enough to stop it from being offered by the popup without touching any history.
   enemyMember CMoonEnemyMember @relation(fields: [enemyMemberId], references: [id], onDelete: Restrict)
-  cMoon       CMoon            @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  cMoon       CMoon?           @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
 
   // "At most one in-progress battle per user" as a real DB constraint, not just an API-layer
   // check — mirrors BlackjackSession.activeKey's sentinel-column pattern (Prisma can't express a

@@ -152,6 +152,7 @@
                   <span v-if="m.defeatedAt" class="ml-1 text-[10px] font-normal text-red-600">(defeated)</span>
                 </div>
                 <div class="text-[11px] text-gray-600 break-words">
+                  <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="RANK_BADGE_CLASS[m.rank]">{{ RANK_LABELS[m.rank] }}</span> ·
                   {{ m.faction?.name }} · {{ m.battleMode === 'SHARED_POOL' ? 'Shared pool' : 'Per player' }} ·
                   HP {{ m.battleMode === 'SHARED_POOL' ? `${m.currentHp}/${m.maxHp}` : m.maxHp }} ·
                   {{ m.cMoonPointsReward }} cMoon pts · {{ m.rewardCount }} prize row{{ m.rewardCount === 1 ? '' : 's' }} ·
@@ -201,6 +202,14 @@
               <option value="SHARED_POOL">Shared pool — all players chip away at one HP total</option>
             </select>
             <p v-if="editingMemberHasBattles" class="text-[11px] text-gray-500 mt-1">Can't change once this enemy has been fought.</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium mb-1">Rank</label>
+            <select v-model="memberForm.rank" class="w-full border rounded px-2 py-1">
+              <option v-for="r in RANKS" :key="r" :value="r">{{ RANK_LABELS[r] }}</option>
+            </select>
+            <p class="text-[11px] text-gray-500 mt-1">Cosmetic tier badge shown to admins and players — doesn't affect HP, crit chance, or rewards, but achievements can require wins by rank.</p>
           </div>
 
           <div class="flex gap-2">
@@ -612,6 +621,17 @@ const memberSavedImagePath = ref('')
 // ── Battle sounds (six independent slots, uploaded via cmoon-enemy-members/[id]/sound —
 // server/utils/cmoonEnemy.js#MEMBER_SOUND_SLOTS is the source of truth for the field names; kept
 // in sync here by hand since that file is server-only) ──────────────
+// Mirrors server/utils/cmoonEnemy.js's RANKS/RANK_LABELS — duplicated client-side rather than
+// imported, same convention this page already follows for PLAYER_MAX_HP-style server constants.
+const RANKS = ['GOON', 'ENFORCER', 'UNDERBOSS', 'FINAL_BOSS']
+const RANK_LABELS = { GOON: 'Goon', ENFORCER: 'Enforcer', UNDERBOSS: 'Underboss', FINAL_BOSS: 'Final Boss' }
+const RANK_BADGE_CLASS = {
+  GOON: 'bg-gray-200 text-gray-700',
+  ENFORCER: 'bg-blue-100 text-blue-700',
+  UNDERBOSS: 'bg-purple-100 text-purple-700',
+  FINAL_BOSS: 'bg-red-100 text-red-700',
+}
+
 const SOUND_SLOTS = [
   { key: 'appear', field: 'appearSoundPath', label: 'Appearance', help: 'Plays when this enemy first appears in the popup.' },
   { key: 'damageTaken', field: 'damageTakenSoundPath', label: 'Damage taken', help: "Plays when the player's attack lands on this enemy." },
@@ -673,7 +693,7 @@ async function uploadSound(slotKey) {
 }
 
 const emptyMemberForm = () => ({
-  id: '', factionId: '', name: '', maxHp: 5, battleMode: 'PER_PLAYER',
+  id: '', factionId: '', name: '', maxHp: 5, battleMode: 'PER_PLAYER', rank: 'GOON',
   cMoonPointsReward: 10, critChanceAgainstPercent: 0, critChanceFromPercent: 0, active: true, sortOrder: 0,
 })
 const memberForm = reactive(emptyMemberForm())
@@ -701,7 +721,7 @@ function resetMemberForm() {
 function startEditMember(m) {
   resetMemberForm()
   Object.assign(memberForm, {
-    id: m.id, factionId: m.factionId, name: m.name, maxHp: m.maxHp, battleMode: m.battleMode,
+    id: m.id, factionId: m.factionId, name: m.name, maxHp: m.maxHp, battleMode: m.battleMode, rank: m.rank || 'GOON',
     cMoonPointsReward: m.cMoonPointsReward, critChanceAgainstPercent: m.critChanceAgainstPercent ?? 0,
     critChanceFromPercent: m.critChanceFromPercent ?? 0, active: !!m.active, sortOrder: m.sortOrder,
   })
@@ -781,6 +801,7 @@ async function saveMember() {
       name: memberForm.name.trim(),
       maxHp,
       battleMode: memberForm.battleMode,
+      rank: memberForm.rank,
       cMoonPointsReward,
       critChanceAgainstPercent,
       critChanceFromPercent,

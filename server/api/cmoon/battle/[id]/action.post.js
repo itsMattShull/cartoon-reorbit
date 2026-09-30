@@ -152,7 +152,10 @@ async function resolveWin(battle, roundLog, submittedRound) {
   })
   const hitRewards = rollEnemyRewards(rewardRows)
   const grantable = buildGrantableReward(hitRewards)
-  const pointsAwarded = Math.max(0, Number(battle.enemyMember.cMoonPointsReward) || 0)
+  // A player with no cMoon (battle.cMoonId is null — see that column's own schema comment) never
+  // earns cMoon points: there's no team to credit, and crediting one anyway would misattribute a
+  // non-member's win. Every other reward type and achievement progress below still applies.
+  const pointsAwarded = battle.cMoonId ? Math.max(0, Number(battle.enemyMember.cMoonPointsReward) || 0) : 0
 
   const txResult = await db.$transaction(async (tx) => {
     const summary = await grantRewardInTx(tx, battle.userId, grantable, 'CMOON_ENEMY_BATTLE_WIN')
@@ -171,7 +174,10 @@ async function resolveWin(battle, roundLog, submittedRound) {
       })
     }
 
-    await tx.cMoon.update({ where: { id: battle.cMoonId }, data: { battleWins: { increment: 1 } } })
+    // No cMoon to credit a win to for a null-cMoonId battle — see pointsAwarded's own comment.
+    if (battle.cMoonId) {
+      await tx.cMoon.update({ where: { id: battle.cMoonId }, data: { battleWins: { increment: 1 } } })
+    }
 
     const rewardsGranted = [
       ...(summary.points ? [{ type: 'POINTS', quantity: summary.points }] : []),
@@ -206,7 +212,10 @@ async function resolveWin(battle, roundLog, submittedRound) {
 
 async function resolveLoss(battle, roundLog, submittedRound) {
   return db.$transaction(async (tx) => {
-    await tx.cMoon.update({ where: { id: battle.cMoonId }, data: { battleLosses: { increment: 1 } } })
+    // No cMoon to credit a loss to for a null-cMoonId battle — see resolveWin's pointsAwarded comment.
+    if (battle.cMoonId) {
+      await tx.cMoon.update({ where: { id: battle.cMoonId }, data: { battleLosses: { increment: 1 } } })
+    }
     return tx.cMoonEnemyBattle.update({
       where: { id: battle.id },
       data: {

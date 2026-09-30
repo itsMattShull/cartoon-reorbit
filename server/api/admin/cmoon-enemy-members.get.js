@@ -37,6 +37,7 @@ export default defineEventHandler(async (event) => {
       imagePath: m.imagePath,
       maxHp: m.maxHp,
       battleMode: m.battleMode,
+      rank: m.rank,
       currentHp: m.currentHp,
       cMoonPointsReward: m.cMoonPointsReward,
       critChanceAgainstPercent: m.critChanceAgainstPercent,

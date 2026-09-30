@@ -115,6 +115,7 @@ export function serializeEnemyForClient(member) {
     name: member.name,
     imagePath: member.imagePath || null,
     battleMode: member.battleMode,
+    rank: member.rank,
     maxHp: member.maxHp,
     hp,
     // Named from the enemy's own perspective — see the schema comment on these columns.

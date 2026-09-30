@@ -1,11 +1,42 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  parseMemberBody, parseRewardBody, isValidCritChance, isValidPointsAmount,
-  CRIT_CHANCE_MIN, CRIT_CHANCE_MAX, POINTS_REWARD_MIN, POINTS_REWARD_MAX,
+  parseMemberBody, parseRewardBody, isValidCritChance, isValidPointsAmount, isValidRank,
+  CRIT_CHANCE_MIN, CRIT_CHANCE_MAX, POINTS_REWARD_MIN, POINTS_REWARD_MAX, ENEMY_RANKS, RANK_DEFAULT,
 } from '../server/utils/cmoonEnemy.js'
 
 const baseMemberBody = { factionId: 'f1', name: 'Test Enemy', battleMode: 'PER_PLAYER', maxHp: 5, cMoonPointsReward: 10 }
+
+test('isValidRank accepts every declared rank and rejects anything else', () => {
+  for (const r of ENEMY_RANKS) assert.equal(isValidRank(r), true)
+  assert.equal(isValidRank('BOSS'), false)
+  assert.equal(isValidRank(''), false)
+  assert.equal(isValidRank(undefined), false)
+  assert.equal(isValidRank('goon'), false) // case-sensitive, matches the enum's own casing
+})
+
+test('parseMemberBody: rank defaults to GOON on create when omitted', () => {
+  const result = parseMemberBody(baseMemberBody, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.rank, RANK_DEFAULT)
+})
+
+test('parseMemberBody: accepts an explicit rank', () => {
+  const result = parseMemberBody({ ...baseMemberBody, rank: 'UNDERBOSS' }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.rank, 'UNDERBOSS')
+})
+
+test('parseMemberBody: rejects an invalid rank', () => {
+  assert.equal(parseMemberBody({ ...baseMemberBody, rank: 'BOSS' }, undefined).ok, false)
+})
+
+test('parseMemberBody: an update with no rank field in the body keeps the existing rank', () => {
+  const existing = { ...baseMemberBody, rank: 'FINAL_BOSS', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0 }
+  const result = parseMemberBody({ name: 'Renamed' }, existing)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.rank, 'FINAL_BOSS')
+})
 
 test('isValidCritChance accepts the full 0-100 range and rejects outside it', () => {
   assert.equal(isValidCritChance(CRIT_CHANCE_MIN), true)
@@ -38,7 +69,7 @@ test('parseMemberBody: rejects an out-of-range crit chance', () => {
 })
 
 test('parseMemberBody: an update with no crit chance fields in the body keeps the existing values', () => {
-  const existing = { ...baseMemberBody, active: true, sortOrder: 0, critChanceAgainstPercent: 40, critChanceFromPercent: 15, hasBattles: false }
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 40, critChanceFromPercent: 15, hasBattles: false }
   const result = parseMemberBody({}, existing)
   assert.equal(result.ok, true)
   assert.equal(result.data.critChanceAgainstPercent, 40)
