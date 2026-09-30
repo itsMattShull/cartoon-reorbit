@@ -30,6 +30,11 @@ enum NotificationType {
   // see server/utils/cmoonRaidSocket.js and notifyCMoonRaidBossStarted in
   // server/utils/notifications.js. contextId is the CMoonEnemyRaid id.
   CMOON_RAID_BOSS_STARTED
+  // An admin started a consequence-free raid boss preview (server/utils/cmoonRaidPreviewSocket.js)
+  // and every OTHER admin can join it exactly like a real raid, to see the live co-op flow without
+  // touching real players, rewards, or the boss's own one-time/cooldown state. contextId is the
+  // in-memory preview raid id — never a CMoonEnemyRaid row, since a preview is never persisted.
+  CMOON_RAID_PREVIEW_STARTED
 }
 
 /// Current state of a lock

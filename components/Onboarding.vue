@@ -390,6 +390,10 @@ const notificationRoute = (n) => {
     if (!n.contextId) return null
     return `/newsite/cmoon-raid/${encodeURIComponent(n.contextId)}`
   }
+  if (n.type === 'CMOON_RAID_PREVIEW_STARTED') {
+    if (!n.contextId) return null
+    return `/newsite/cmoon-raid-preview/${encodeURIComponent(n.contextId)}`
+  }
   if (!n.contextId) return null
   return `/newsite/AuctionHouse/${encodeURIComponent(n.contextId)}`
 }

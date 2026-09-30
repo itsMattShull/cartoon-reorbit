@@ -171,6 +171,11 @@
                   :disabled="resettingId === m.id" @click="resetMember(m)"
                 >{{ resettingId === m.id ? 'Reviving…' : 'Revive' }}</button>
                 <button type="button" class="text-purple-600 hover:underline" @click="previewMemberId = m.id">Preview</button>
+                <button
+                  v-if="m.isRaidBoss" type="button" class="text-purple-600 hover:underline disabled:opacity-40"
+                  :disabled="startingRaidPreviewId === m.id" @click="startRaidPreview(m)"
+                  title="Live-test the co-op raid flow — other admins get notified and can join, nothing is real"
+                >{{ startingRaidPreviewId === m.id ? 'Starting…' : 'Preview Raid' }}</button>
                 <button type="button" class="text-indigo-600 hover:underline" @click="startEditMember(m)">Edit</button>
                 <button
                   type="button" class="text-red-600 hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
@@ -663,6 +668,7 @@ const memberFormError = ref('')
 const deletingMemberId = ref('')
 const resettingId = ref('')
 const previewMemberId = ref(null)
+const startingRaidPreviewId = ref('')
 const editingMemberHasBattles = ref(false)
 const editingMemberRewards = ref([])
 const memberPendingFile = ref(null)
@@ -971,6 +977,31 @@ async function resetMember(m) {
   } finally {
     resettingId.value = ''
   }
+}
+
+// Same "start over the socket, watch for the created/error pair, then navigate" pattern
+// CMoonBattlePopupHost.vue's onFight() uses for a real raid — see
+// server/utils/cmoonRaidPreviewSocket.js for why this is a fully separate, consequence-free
+// engine rather than a flag on the real one. Other admins are notified server-side and can join
+// from their own notifications drawer; this admin is taken straight to the live preview.
+function startRaidPreview(m) {
+  startingRaidPreviewId.value = m.id
+  const previewSocket = useCMoonRaidPreviewSocket()
+  previewSocket.lastError.value = ''
+  previewSocket.raidState.value = null
+  previewSocket.startRaid(m.id)
+  const router = useRouter()
+  const stopWatching = watch([previewSocket.raidState, previewSocket.lastError], ([state, err]) => {
+    if (state?.id) {
+      stopWatching()
+      startingRaidPreviewId.value = ''
+      router.push(`/newsite/cmoon-raid-preview/${state.id}`)
+    } else if (err) {
+      stopWatching()
+      startingRaidPreviewId.value = ''
+      loadError.value = err
+    }
+  })
 }
 
 // ── Rewards (per-member, add/remove one row at a time) ──────────────

@@ -9,7 +9,8 @@ import {
   notifyAuctionWon,
   notifyTradeOfferReceived,
   notifyTradeOfferAccepted,
-  notifyCMoonRaidBossStarted
+  notifyCMoonRaidBossStarted,
+  notifyCMoonRaidPreviewStarted
 } from '../server/utils/notifications.js'
 
 // A stand-in for the Prisma client that records what it was asked to do. The
@@ -41,7 +42,8 @@ function fakeDb ({ user = { username: 'alice', banned: false }, throwOnWrite = f
 
 test('every helper is exported and callable', () => {
   for (const fn of [createNotification, notifyOutbid, notifyAuctionBid,
-    notifyAuctionWon, notifyTradeOfferReceived, notifyTradeOfferAccepted, notifyCMoonRaidBossStarted]) {
+    notifyAuctionWon, notifyTradeOfferReceived, notifyTradeOfferAccepted, notifyCMoonRaidBossStarted,
+    notifyCMoonRaidPreviewStarted]) {
     assert.equal(typeof fn, 'function')
   }
 })
@@ -53,6 +55,7 @@ test('the type set is closed and frozen', () => {
     'AUCTION_OUTBID',
     'AUCTION_WON',
     'CMOON_RAID_BOSS_STARTED',
+    'CMOON_RAID_PREVIEW_STARTED',
     'TRADE_OFFER_ACCEPTED',
     'TRADE_OFFER_RECEIVED'
   ])
@@ -209,4 +212,16 @@ test('raid boss notifications carry the raid id as contextId and no contextType'
   assert.ok(values.includes('CMOON_RAID_BOSS_STARTED'))
   assert.match(values.join(' | '), /Grim Sentinel/)
   assert.match(values.join(' | '), /Solar Flares/)
+})
+
+test('raid preview notifications carry the preview raid id as contextId and no contextType', async () => {
+  const db = fakeDb()
+  await notifyCMoonRaidPreviewStarted(db, {
+    userId: 'u1', raidId: 'preview-9', enemyName: 'Grim Sentinel', startedByUsername: 'admin_bob',
+  })
+  const { values } = db.calls.writes[0]
+  assert.ok(values.includes('preview-9'))
+  assert.ok(values.includes('CMOON_RAID_PREVIEW_STARTED'))
+  assert.match(values.join(' | '), /Grim Sentinel/)
+  assert.match(values.join(' | '), /admin_bob/)
 })
