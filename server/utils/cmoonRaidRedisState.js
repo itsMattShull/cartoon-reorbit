@@ -30,14 +30,21 @@ async function scanKeys(pattern) {
 
 // Sockets and timer handles cannot be serialized and are always reconstructed on restore (the
 // caller re-derives them from roundDeadlineAt/joinDeadlineAt). `participants` is stored as a
-// plain array (Map isn't JSON-serializable) — the caller rebuilds the Map keyed by userId.
+// plain array (Map isn't JSON-serializable) — the caller rebuilds the Map keyed by userId. Must
+// mirror the FULL runtime raid shape documented at the top of cmoonRaidSocket.js — a field
+// missing here (enemyStats in particular, previously stored under the wrong key `enemyMaxHp`,
+// which doesn't exist on the raid object at all) silently reconstructs a broken raid that only
+// fails once something actually reads it, e.g. resolveRaidRound crashing on
+// `enemyMember.critChanceFromPercent` the next time a restored raid's round closes.
 function serializeRaid(raid) {
   return {
     id: raid.id,
     enemyMemberId: raid.enemyMemberId,
     cMoonId: raid.cMoonId,
     status: raid.status,
-    enemyMaxHp: raid.enemyMaxHp,
+    enemyName: raid.enemyName,
+    enemyImagePath: raid.enemyImagePath,
+    enemyStats: raid.enemyStats,
     enemyHpRemaining: raid.enemyHpRemaining,
     roundNumber: raid.roundNumber,
     currentEnemyAction: raid.currentEnemyAction,
@@ -47,6 +54,8 @@ function serializeRaid(raid) {
     roundLog: raid.roundLog,
     startedAt: raid.startedAt,
     combatStartedAt: raid.combatStartedAt,
+    endedAt: raid.endedAt,
+    outcome: raid.outcome,
   }
 }
 
