@@ -153,14 +153,20 @@ function broadcast(io, raid, event, extra) {
 
 /* ── Eligibility (re-checked fresh on every start/join — never trusted from a client) ───────── */
 
-async function loadEligibility({ userId, enemyMember }) {
+// `reservedForRaidId`: the join handler reserves this user's slot in `raid.participants`/
+// `raidByUser` SYNCHRONOUSLY, before this function's own awaits, to close a join-race window
+// (see cmoonraid:join's own comment) — so by the time this runs, raidByUser.has(userId) is
+// always true for their OWN reservation. Passing the raid id being joined lets this only reject
+// a genuinely different active raid, not the one currently being confirmed.
+async function loadEligibility({ userId, enemyMember, reservedForRaidId = null }) {
   const user = await db.user.findUnique({
     where: { id: userId },
     select: { id: true, username: true, cMoonId: true, active: true, banned: true },
   })
   if (!user || !user.active || user.banned) return { ok: false, message: 'Not eligible to battle' }
   if (!user.cMoonId) return { ok: false, message: 'You must be in a cMoon to join a raid' }
-  if (raidByUser.has(userId)) return { ok: false, message: 'You are already in a raid' }
+  const activeRaidId = raidByUser.get(userId)
+  if (activeRaidId && activeRaidId !== reservedForRaidId) return { ok: false, message: 'You are already in a raid' }
   const activeSolo = await db.cMoonEnemyBattle.findFirst({ where: { userId, status: 'IN_PROGRESS' }, select: { id: true } })
   if (activeSolo) return { ok: false, message: 'Finish your current battle before joining a raid' }
   if (enemyMember.minPriorDefeats > 0) {
@@ -305,6 +311,22 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
     grantable = buildGrantableReward(hitRewards)
   }
   const pointsAwarded = outcome === 'WIN' ? Math.max(0, Number(raid.enemyStats.cMoonPointsReward) || 0) : 0
+  // Split evenly across the party rather than crediting each participant the full amount — every
+  // OTHER CMoonScoreLog writer in this codebase (solo battles, HIGH_SCORE, DAILY_TASK, TOP10)
+  // attributes to one real user, and CMoon.teamScore is simply the SUM of every row for that
+  // cMoon (see recomputeCMoonTeamScores) with no per-user dedup — crediting each participant the
+  // full reward would silently multiply the team's total by party size for a single boss kill.
+  // A null-userId row would dodge that multiplication but breaks something else: personal
+  // cMoonPoints (recomputeCMoonPointsForUsers) and the per-user TOP10 leaderboard both join
+  // CMoonScoreLog ON userId, so a null-userId row is invisible to a participant's own progress.
+  // Splitting keeps the team total equal to one normal win's worth AND correctly credits each
+  // participant's own rank/leaderboard/achievement progress. The remainder (if it doesn't divide
+  // evenly) goes to the first few participants in join order so the split always sums back to
+  // exactly pointsAwarded.
+  const baseShare = Math.floor(pointsAwarded / (participantIds.length || 1))
+  const remainder = pointsAwarded - baseShare * participantIds.length
+  const pointsShareByUser = new Map(participantIds.map((userId, i) =>
+    [userId, baseShare + (i < remainder ? 1 : 0)]))
 
   const ctoonJobsByUser = new Map()
   try {
@@ -314,6 +336,7 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
         data: {
           status: 'RESOLVED', outcome, enemyHpRemaining: raid.enemyHpRemaining,
           roundNumber: raid.roundNumber, roundLog: raid.roundLog, endedAt: new Date(raid.endedAt),
+          combatStartedAt: raid.combatStartedAt ? new Date(raid.combatStartedAt) : null,
         },
       })
 
@@ -345,6 +368,8 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
         // Synthetic per-participant CMoonEnemyBattle row — see CMoonEnemyBattle.raidId's own
         // schema comment for why: this is what makes minPriorDefeats and the rank-scoped
         // achievement criteria count a raid win/loss with zero changes to either system.
+        // pointsAwarded is 0 here too — this row's own points are logged via CMoonScoreLog below,
+        // same as every other CMoonEnemyBattle-adjacent write in this file.
         await tx.cMoonEnemyBattle.create({
           data: {
             userId, enemyMemberId: raid.enemyMemberId, cMoonId: raid.cMoonId,
@@ -354,18 +379,18 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
             startedAt: new Date(raid.startedAt), endedAt: new Date(raid.endedAt), raidId: raid.id,
           },
         })
+
+        const share = pointsShareByUser.get(userId) || 0
+        if (share > 0) {
+          await tx.cMoonScoreLog.create({
+            data: {
+              cMoonId: raid.cMoonId, userId, category: 'ENEMY_RAID_WIN',
+              detail: raid.id, points: share, weekStart: new Date(),
+            },
+          })
+        }
       }
 
-      if (pointsAwarded > 0) {
-        // Credited ONCE for the whole party against the shared cMoon — see raidId's schema
-        // comment on why this is not also added per participant above.
-        await tx.cMoonScoreLog.create({
-          data: {
-            cMoonId: raid.cMoonId, userId: null, category: 'ENEMY_RAID_WIN',
-            detail: raid.id, points: pointsAwarded, weekStart: new Date(),
-          },
-        })
-      }
       if (outcome === 'WIN') await tx.cMoon.update({ where: { id: raid.cMoonId }, data: { battleWins: { increment: 1 } } })
       else if (outcome === 'LOSS') await tx.cMoon.update({ where: { id: raid.cMoonId }, data: { battleLosses: { increment: 1 } } })
 
@@ -464,15 +489,28 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       addParticipant(raid, { userId: me.id, username: me.username, isInitiator: true })
       raids.set(raidId, raid)
 
-      await db.cMoonEnemyRaid.create({
-        data: {
-          id: raidId, enemyMemberId, cMoonId: cMoon.id, status: 'FORMING',
-          enemyHpRemaining: enemyMember.maxHp, joinDeadlineAt: new Date(raid.joinDeadlineAt),
-        },
-      })
-      await db.cMoonEnemyRaidParticipant.create({
-        data: { raidId, userId: me.id, hpRemaining: PLAYER_MAX_HP, isInitiator: true, activeUserId: me.id },
-      })
+      try {
+        // One transaction, not two independent creates: if the participant row failed after the
+        // raid row alone succeeded, the raid would persist in Postgres as a permanent zero-
+        // participant FORMING row with no way to ever resolve it.
+        await db.$transaction([
+          db.cMoonEnemyRaid.create({
+            data: {
+              id: raidId, enemyMemberId, cMoonId: cMoon.id, status: 'FORMING',
+              enemyHpRemaining: enemyMember.maxHp, joinDeadlineAt: new Date(raid.joinDeadlineAt),
+            },
+          }),
+          db.cMoonEnemyRaidParticipant.create({
+            data: { raidId, userId: me.id, hpRemaining: PLAYER_MAX_HP, isInitiator: true, activeUserId: me.id },
+          }),
+        ])
+      } catch (err) {
+        // Roll back the in-memory registration too — otherwise this raid lives on with no
+        // matching database rows, gets swept into combat once joinDeadlineAt passes, and can
+        // never resolve cleanly (resolveCMoonRaidOutcome's own participant update would fail).
+        destroyRaid(raidId)
+        throw err
+      }
 
       socket.join(raidRoom(raidId))
       fireSync(raidId, raid)
@@ -496,31 +534,40 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
     const raid = raids.get(raidId)
     if (!raid || raid.status !== 'FORMING') return socket.emit(EV('error'), { message: 'This raid is no longer accepting joins' })
-    if (raid.participants.size >= MAX_PARTY_SIZE) return socket.emit(EV('error'), { message: 'This raid is full' })
     if (raid.participants.has(me.id)) {
       socket.join(raidRoom(raidId))
       return socket.emit(EV('created'), publicRaidView(raid))
     }
+    // Reserve a slot SYNCHRONOUSLY, before any await, so a second concurrent join for the last
+    // open slot sees this one already counted rather than both passing the size check and both
+    // proceeding (which could over-fill the party past MAX_PARTY_SIZE and double-fire
+    // startCombat). Everything from here to this call runs in one uninterrupted tick. Rolled
+    // back in the catch block below if anything after this fails.
+    if (raid.participants.size >= MAX_PARTY_SIZE) return socket.emit(EV('error'), { message: 'This raid is full' })
+    addParticipant(raid, { userId: me.id, username: me.username, isInitiator: false })
     try {
       const enemyMember = await db.cMoonEnemyMember.findUnique({
         where: { id: raid.enemyMemberId }, include: { faction: true },
       })
       if (!enemyMember || !enemyMember.active || !enemyMember.faction.active) {
-        return socket.emit(EV('error'), { message: 'That enemy is no longer available' })
+        throw { userMessage: 'That enemy is no longer available' }
       }
-      const elig = await loadEligibility({ userId: me.id, enemyMember })
-      if (!elig.ok) return socket.emit(EV('error'), { message: elig.message })
-      if (elig.user.cMoonId !== raid.cMoonId) return socket.emit(EV('error'), { message: 'This raid is for a different cMoon' })
+      const elig = await loadEligibility({ userId: me.id, enemyMember, reservedForRaidId: raidId })
+      if (!elig.ok) throw { userMessage: elig.message }
+      if (elig.user.cMoonId !== raid.cMoonId) throw { userMessage: 'This raid is for a different cMoon' }
 
       await db.cMoonEnemyRaidParticipant.create({
         data: { raidId, userId: me.id, hpRemaining: PLAYER_MAX_HP, isInitiator: false, activeUserId: me.id },
       })
-      addParticipant(raid, { userId: me.id, username: elig.user.username, isInitiator: false })
+      raid.participants.get(me.id).username = elig.user.username
       socket.join(raidRoom(raidId))
       fireSync(raidId, raid)
       broadcast(io, raid, EV('participantJoined'))
-      if (raid.participants.size >= MAX_PARTY_SIZE) startCombat(io, raid)
+      if (raid.participants.size >= MAX_PARTY_SIZE && raid.status === 'FORMING') startCombat(io, raid)
     } catch (err) {
+      raid.participants.delete(me.id)
+      raidByUser.delete(me.id)
+      if (err?.userMessage) return socket.emit(EV('error'), { message: err.userMessage })
       if (err?.code === 'P2002') return socket.emit(EV('error'), { message: 'You are already in a raid' })
       console.error('[cmoonraid:join] failed:', err)
       socket.emit(EV('error'), { message: 'Could not join this raid' })

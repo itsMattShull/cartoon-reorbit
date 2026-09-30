@@ -31,6 +31,12 @@ export default defineEventHandler(async (event) => {
   if (inProgress) {
     return { offered: true, resumed: true, battle: serializeBattleForClient(inProgress), inCMoon: !!user.cMoonId }
   }
+  // A raid boss (server/utils/cmoonRaidSocket.js) is socket-driven, not tracked here — if the
+  // player already has an active raid participation, they'd get its own notification/created
+  // event to return to, so this popup should stay quiet rather than rolling a second, unrelated
+  // encounter on top of it.
+  const activeRaid = await db.cMoonEnemyRaidParticipant.findFirst({ where: { userId, activeUserId: userId }, select: { id: true } })
+  if (activeRaid) return { offered: false }
 
   const config = await getGlobalConfig()
   // Master switch, off by default — checked before the chance roll (and before even querying
@@ -61,7 +67,13 @@ export default defineEventHandler(async (event) => {
   // currentHp is irrelevant here, since every player's encounter with it starts fresh regardless
   // of anyone else's history.
   const candidates = await db.cMoonEnemyMember.findMany({
-    where: { active: true, defeatedAt: null, faction: { active: true }, minPriorDefeats: { lte: personalWinCount } },
+    where: {
+      active: true, defeatedAt: null, faction: { active: true }, minPriorDefeats: { lte: personalWinCount },
+      // A raid boss can only ever be fought through the raid flow (server/utils/cmoonRaidSocket.js),
+      // which requires a cMoon (to draw teammates from, announce for, and credit points to) — a
+      // player with no cMoon has no way to engage one at all, so it must never be offered to them.
+      ...(user.cMoonId ? {} : { isRaidBoss: false }),
+    },
     include: { faction: { include: { appearEffect: true } } },
   })
   if (!candidates.length) return { offered: false }

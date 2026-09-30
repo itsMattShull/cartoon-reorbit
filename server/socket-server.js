@@ -3040,10 +3040,12 @@ startEdRpsAiSweep()
 startPokemonBattleSweep(io)
 startOgGtoonsSweep(io)
 restoreOgGtoonsMatches()
-startCMoonRaidSweep(io)
-restoreCMoonRaids()
   .then(n => { if (n) console.log(`[ogGtoons] restored ${n} in-progress match(es) from Redis`) })
   .catch(err => console.error('[ogGtoons] failed to restore matches from Redis:', err))
+startCMoonRaidSweep(io)
+restoreCMoonRaids()
+  .then(n => { if (n) console.log(`[cmoonRaid] restored ${n} in-progress raid(s) from Redis`) })
+  .catch(err => console.error('[cmoonRaid] failed to restore raids from Redis:', err))
 
 // Extracted close logic — called by the BullMQ worker for each auction job.
 async function performAuctionClose(auctionId) {
