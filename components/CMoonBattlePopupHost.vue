@@ -17,19 +17,27 @@
           <div class="cbp-portrait-wrap">
             <img v-if="enemy?.imagePath" :src="enemy.imagePath" alt="" class="cbp-portrait" />
           </div>
-          <h2 id="cbp-title" class="cbp-title">{{ enemy?.name || 'An enemy appears!' }}</h2>
+          <h2 id="cbp-title" class="cbp-title">
+            {{ enemy?.name || 'An enemy appears!' }}
+            <span v-if="enemy?.rank" class="cbp-rank-badge" :class="'cbp-rank-' + enemy.rank">{{ RANK_LABELS[enemy.rank] }}</span>
+          </h2>
           <p class="cbp-sub">
             {{ enemy?.faction?.name ? `${enemy.faction.name} · ` : '' }}
             {{ enemy?.battleMode === 'SHARED_POOL' ? 'Shared HP' : 'Solo fight' }} · {{ enemy?.hp }} HP
           </p>
           <p class="cbp-flavor">
             Pick the right move each round to land hits — you have {{ PLAYER_MAX_HP }} HP of your own.
-            A win earns cMoon points for your team and a chance at prizes.
+            <template v-if="inCMoon">A win earns cMoon points for your team and a chance at prizes.</template>
+            <template v-else>A win earns a chance at prizes — join a cMoon to also earn points for a team.</template>
           </p>
           <p v-if="error" class="cbp-error">{{ error }}</p>
+          <p v-if="enemy?.isRaidBoss" class="cbp-flavor">
+            This is a raid boss — up to 3 other eligible members of your cMoon can join for 60 seconds before it
+            auto-starts, and a party win grants everyone who joined the same prize.
+          </p>
           <div class="cbp-actions">
             <GreenButton type="button" class="cbp-btn-wide" :disabled="busy" @click="onFight">
-              {{ busy ? 'Starting…' : 'Fight!' }}
+              {{ busy ? 'Starting…' : (enemy?.isRaidBoss ? 'Start Raid!' : 'Fight!') }}
             </GreenButton>
             <button type="button" class="cbp-btn-secondary" :disabled="busy" @click="onClose">Not now</button>
           </div>
@@ -40,7 +48,10 @@
           <div class="cbp-portrait-wrap">
             <img v-if="battle?.enemy?.imagePath" :src="battle.enemy.imagePath" alt="" class="cbp-portrait" />
           </div>
-          <h2 id="cbp-title" class="cbp-title">{{ battle?.enemy?.name }}</h2>
+          <h2 id="cbp-title" class="cbp-title">
+            {{ battle?.enemy?.name }}
+            <span v-if="battle?.enemy?.rank" class="cbp-rank-badge" :class="'cbp-rank-' + battle.enemy.rank">{{ RANK_LABELS[battle.enemy.rank] }}</span>
+          </h2>
 
           <div class="cbp-hp-tile">
             <div class="cbp-hp-row">
@@ -106,10 +117,14 @@
 // HP/points bounds mirroring server/utils/cmoonEnemy.js.
 const PLAYER_MAX_HP = 5
 
+// Mirrors server/utils/cmoonEnemy.js's RANK_LABELS — same client-duplication reasoning as
+// PLAYER_MAX_HP above.
+const RANK_LABELS = { GOON: 'Goon', ENFORCER: 'Enforcer', UNDERBOSS: 'Underboss', FINAL_BOSS: 'Final Boss' }
+
 const route = useRoute()
 const isAdminRoute = computed(() => route.path.startsWith('/newsite/admin'))
 
-const { visible, phase, enemy, battle, busy, error, lastRound, checkOnNavigate, startBattle, submitAction, decline, close } = useCMoonBattlePopup()
+const { visible, phase, enemy, battle, inCMoon, busy, error, lastRound, checkOnNavigate, startBattle, submitAction, decline, close } = useCMoonBattlePopup()
 
 const bannerStyle = computed(() => {
   const path = phase.value === 'OFFER' ? enemy.value?.faction?.bannerImagePath : battle.value?.enemy?.faction?.bannerImagePath
@@ -226,6 +241,27 @@ onBeforeUnmount(() => {
 })
 
 async function onFight() {
+  if (enemy.value?.isRaidBoss) {
+    const raidSocket = useCMoonRaidSocket()
+    raidSocket.lastError.value = ''
+    raidSocket.raidState.value = null // clear any stale raid from a previous visit before watching
+    raidSocket.startRaid(enemy.value.id)
+    decline() // the raid page takes over from here
+    const router = useRouter()
+    const stopWatching = watch([raidSocket.raidState, raidSocket.lastError], ([state, err]) => {
+      if (state?.id) {
+        stopWatching()
+        router.push(`/newsite/cmoon-raid/${state.id}`)
+      } else if (err) {
+        stopWatching()
+        // The popup is already closed at this point — a raid-start failure (feature disabled,
+        // not eligible, enemy no longer available) surfaces as a plain alert rather than
+        // resurrecting a dismissed modal just to show one error line.
+        window.alert(err)
+      }
+    })
+    return
+  }
   await startBattle()
 }
 
@@ -405,6 +441,23 @@ watch(() => route.path, maybeCheck)
   60% { transform: scale(1.15); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
 }
+
+/* Cosmetic difficulty tier badge — see CMoonEnemyRank's own schema comment. Colors escalate
+   low-to-high, matching the admin page's own RANK_BADGE_CLASS palette. */
+.cbp-rank-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  vertical-align: middle;
+}
+.cbp-rank-GOON { background: rgba(255, 255, 255, 0.15); color: rgba(255, 255, 255, 0.85); }
+.cbp-rank-ENFORCER { background: #1d4ed8; color: #dbeafe; }
+.cbp-rank-UNDERBOSS { background: #7e22ce; color: #f3e8ff; }
+.cbp-rank-FINAL_BOSS { background: #b91c1c; color: #fee2e2; }
 
 .cbp-move-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
 /* Block moves use the real BlueButton component (see the template); Attack moves keep a locally

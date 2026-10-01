@@ -38,6 +38,10 @@ export function useCMoonBattlePopup() {
   const phase = useState('cmoon-battle-phase', () => 'OFFER')
   const enemy = useState('cmoon-battle-enemy', () => null)
   const battle = useState('cmoon-battle-battle', () => null)
+  // Whether the player has a cMoon right now, as of the /consider call that offered this
+  // encounter — drives the OFFER copy in CMoonBattlePopupHost.vue (a non-member can still fight
+  // and win everything except cMoon points; see that endpoint's own comment).
+  const inCMoon = useState('cmoon-battle-in-cmoon', () => true)
   const busy = useState('cmoon-battle-busy', () => false)
   const error = useState('cmoon-battle-error', () => '')
   // The just-resolved round's { round, playerAction, enemyAction, playerHit, enemyHit,
@@ -59,6 +63,7 @@ export function useCMoonBattlePopup() {
     try {
       const res = await $fetch('/api/cmoon/battle/consider', { method: 'POST' })
       if (!res?.offered) { checking = false; return }
+      inCMoon.value = !!res.inCMoon
       if (res.resumed) {
         battle.value = res.battle
         phase.value = battle.value?.status === 'RESOLVED' ? 'RESULT' : 'FIGHT'
@@ -181,5 +186,5 @@ export function useCMoonBattlePopup() {
     lastRound.value = null
   }
 
-  return { visible, phase, enemy, battle, busy, error, lastRound, checkOnNavigate, startBattle, submitAction, decline, close }
+  return { visible, phase, enemy, battle, inCMoon, busy, error, lastRound, checkOnNavigate, startBattle, submitAction, decline, close }
 }

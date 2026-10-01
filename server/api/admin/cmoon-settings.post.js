@@ -80,6 +80,15 @@ export default defineEventHandler(async (event) => {
     data.cMoonBattlePopupCooldownMinutes = minutes
   }
 
+  // Discord channel a raid boss announcement posts to — see announceCMoonRaidBoss in
+  // server/utils/discord.js. Same admin-configurable-with-env-fallback shape as
+  // achievementDiscordChannelId; empty string clears it back to null (falls back to
+  // DISCORD_ANNOUNCEMENTS_CHANNEL).
+  if (body?.cMoonRaidBossDiscordChannelId !== undefined) {
+    const raw = typeof body.cMoonRaidBossDiscordChannelId === 'string' ? body.cMoonRaidBossDiscordChannelId.trim() : ''
+    data.cMoonRaidBossDiscordChannelId = raw || null
+  }
+
   const updated = await db.globalGameConfig.upsert({
     where: { id: 'singleton' },
     create: { id: 'singleton', dailyPointLimit: 100, ...data },
@@ -97,6 +106,7 @@ export default defineEventHandler(async (event) => {
       cMoonEnemyBattlesEnabled: existing?.cMoonEnemyBattlesEnabled,
       cMoonBattlePopupChancePercent: existing?.cMoonBattlePopupChancePercent,
       cMoonBattlePopupCooldownMinutes: existing?.cMoonBattlePopupCooldownMinutes,
+      cMoonRaidBossDiscordChannelId: existing?.cMoonRaidBossDiscordChannelId,
     },
     newValue: {
       cMoonEnabled: enabled,
@@ -105,6 +115,7 @@ export default defineEventHandler(async (event) => {
       cMoonEnemyBattlesEnabled: updated.cMoonEnemyBattlesEnabled,
       cMoonBattlePopupChancePercent: updated.cMoonBattlePopupChancePercent,
       cMoonBattlePopupCooldownMinutes: updated.cMoonBattlePopupCooldownMinutes,
+      cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
     },
   })
 
@@ -115,5 +126,6 @@ export default defineEventHandler(async (event) => {
     cMoonEnemyBattlesEnabled: updated.cMoonEnemyBattlesEnabled,
     cMoonBattlePopupChancePercent: updated.cMoonBattlePopupChancePercent,
     cMoonBattlePopupCooldownMinutes: updated.cMoonBattlePopupCooldownMinutes,
+    cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
   }
 })

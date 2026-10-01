@@ -8,7 +8,9 @@ import {
   notifyAuctionBid,
   notifyAuctionWon,
   notifyTradeOfferReceived,
-  notifyTradeOfferAccepted
+  notifyTradeOfferAccepted,
+  notifyCMoonRaidBossStarted,
+  notifyCMoonRaidPreviewStarted
 } from '../server/utils/notifications.js'
 
 // A stand-in for the Prisma client that records what it was asked to do. The
@@ -40,7 +42,8 @@ function fakeDb ({ user = { username: 'alice', banned: false }, throwOnWrite = f
 
 test('every helper is exported and callable', () => {
   for (const fn of [createNotification, notifyOutbid, notifyAuctionBid,
-    notifyAuctionWon, notifyTradeOfferReceived, notifyTradeOfferAccepted]) {
+    notifyAuctionWon, notifyTradeOfferReceived, notifyTradeOfferAccepted, notifyCMoonRaidBossStarted,
+    notifyCMoonRaidPreviewStarted]) {
     assert.equal(typeof fn, 'function')
   }
 })
@@ -51,6 +54,8 @@ test('the type set is closed and frozen', () => {
     'AUCTION_NEW_BID',
     'AUCTION_OUTBID',
     'AUCTION_WON',
+    'CMOON_RAID_BOSS_STARTED',
+    'CMOON_RAID_PREVIEW_STARTED',
     'TRADE_OFFER_ACCEPTED',
     'TRADE_OFFER_RECEIVED'
   ])
@@ -193,4 +198,30 @@ test('missing names degrade to neutral copy rather than "undefined"', async () =
   for (const w of db.calls.writes) {
     assert.doesNotMatch(w.values.join(' | '), /undefined|null/)
   }
+})
+
+test('raid boss notifications carry the raid id as contextId and no contextType', async () => {
+  // No contextType: LockedContextType is AUCTION/TRADE-specific (see notifications.js's own
+  // comment) — routing for this type is driven entirely by `type` in notificationRoute().
+  const db = fakeDb()
+  await notifyCMoonRaidBossStarted(db, {
+    userId: 'u1', raidId: 'raid-9', enemyName: 'Grim Sentinel', cMoonName: 'Solar Flares',
+  })
+  const { values } = db.calls.writes[0]
+  assert.ok(values.includes('raid-9'))
+  assert.ok(values.includes('CMOON_RAID_BOSS_STARTED'))
+  assert.match(values.join(' | '), /Grim Sentinel/)
+  assert.match(values.join(' | '), /Solar Flares/)
+})
+
+test('raid preview notifications carry the preview raid id as contextId and no contextType', async () => {
+  const db = fakeDb()
+  await notifyCMoonRaidPreviewStarted(db, {
+    userId: 'u1', raidId: 'preview-9', enemyName: 'Grim Sentinel', startedByUsername: 'admin_bob',
+  })
+  const { values } = db.calls.writes[0]
+  assert.ok(values.includes('preview-9'))
+  assert.ok(values.includes('CMOON_RAID_PREVIEW_STARTED'))
+  assert.match(values.join(' | '), /Grim Sentinel/)
+  assert.match(values.join(' | '), /admin_bob/)
 })

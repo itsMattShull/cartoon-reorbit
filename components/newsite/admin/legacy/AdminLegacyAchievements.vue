@@ -95,7 +95,27 @@
               <div class="flex flex-col gap-1">
                 <label class="text-xs font-medium">cMoon Enemies Defeated ≥</label>
                 <input v-model.number="form.criteria.cmoonMonstersDefeatedGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
-                <p class="text-[10px] text-gray-500 mt-1">Lifetime cMoon Enemy Battle wins, across any cMoon.</p>
+                <p class="text-[10px] text-gray-500 mt-1">Lifetime cMoon Enemy Battle wins, any rank, across any cMoon.</p>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Goons Defeated ≥</label>
+                <input v-model.number="form.criteria.cmoonGoonsDefeatedGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
+                <p class="text-[10px] text-gray-500 mt-1">Lifetime cMoon Enemy Battle wins against a Goon-rank enemy.</p>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Enforcers Defeated ≥</label>
+                <input v-model.number="form.criteria.cmoonEnforcersDefeatedGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
+                <p class="text-[10px] text-gray-500 mt-1">Lifetime cMoon Enemy Battle wins against an Enforcer-rank enemy.</p>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Underbosses Defeated ≥</label>
+                <input v-model.number="form.criteria.cmoonUnderbossesDefeatedGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
+                <p class="text-[10px] text-gray-500 mt-1">Lifetime cMoon Enemy Battle wins against an Underboss-rank enemy.</p>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">Final Bosses Defeated ≥</label>
+                <input v-model.number="form.criteria.cmoonFinalBossesDefeatedGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
+                <p class="text-[10px] text-gray-500 mt-1">Lifetime cMoon Enemy Battle wins against a Final-Boss-rank enemy.</p>
               </div>
               <div class="flex flex-col gap-1">
                 <label class="text-xs font-medium">Wordle Crown Wins ≥</label>
@@ -333,6 +353,10 @@ const emptyForm = () => ({
     cumulativeActiveDaysGte: null,
     tkoWinsGte: null,
     cmoonMonstersDefeatedGte: null,
+    cmoonGoonsDefeatedGte: null,
+    cmoonEnforcersDefeatedGte: null,
+    cmoonUnderbossesDefeatedGte: null,
+    cmoonFinalBossesDefeatedGte: null,
     wordleWinsGte: null,
     wordleCurrentStreakGte: null,
     flappyBestScoreGte: null,
@@ -467,6 +491,10 @@ function startEdit(a) {
       cumulativeActiveDaysGte: a.cumulativeActiveDaysGte ?? null,
       tkoWinsGte: a.tkoWinsGte ?? null,
       cmoonMonstersDefeatedGte: a.cmoonMonstersDefeatedGte ?? null,
+      cmoonGoonsDefeatedGte: a.cmoonGoonsDefeatedGte ?? null,
+      cmoonEnforcersDefeatedGte: a.cmoonEnforcersDefeatedGte ?? null,
+      cmoonUnderbossesDefeatedGte: a.cmoonUnderbossesDefeatedGte ?? null,
+      cmoonFinalBossesDefeatedGte: a.cmoonFinalBossesDefeatedGte ?? null,
       wordleWinsGte: a.wordleWinsGte ?? null,
       wordleCurrentStreakGte: a.wordleCurrentStreakGte ?? null,
       flappyBestScoreGte: a.flappyBestScoreGte ?? null,

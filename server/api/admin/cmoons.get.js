@@ -34,6 +34,7 @@ export default defineEventHandler(async (event) => {
         cMoonEnabled: true, cMoonEnabledAt: true, cMoonOptOutCooldownDays: true,
         cMoonEnemyBattlesEnabled: true,
         cMoonBattlePopupChancePercent: true, cMoonBattlePopupCooldownMinutes: true,
+        cMoonRaidBossDiscordChannelId: true,
       },
     }),
   ])
@@ -45,6 +46,7 @@ export default defineEventHandler(async (event) => {
     cMoonEnemyBattlesEnabled: !!config?.cMoonEnemyBattlesEnabled,
     cMoonBattlePopupChancePercent: config?.cMoonBattlePopupChancePercent ?? 3,
     cMoonBattlePopupCooldownMinutes: config?.cMoonBattlePopupCooldownMinutes ?? 20,
+    cMoonRaidBossDiscordChannelId: config?.cMoonRaidBossDiscordChannelId || '',
     cmoons: cmoons.map(c => ({
       id: c.id,
       name: c.name,
