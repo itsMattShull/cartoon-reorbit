@@ -4049,7 +4049,9 @@ enum CMoonDispersalOfferStatus {
 }
 
 // Admin-created "pick one of these cToons" offer — distinct from CMoonPrizeCtoon (auto-granted
-// on join, no choice involved). Stays OPEN (visible/claimable on every linked cMoon's page) until
+// on join, no choice involved). A one-option offer is the degenerate case of the same shape (one
+// cToon, nothing to pick between) rather than a separate kind of row — see MIN_OPTIONS in
+// server/api/admin/cmoon-dispersal-offers.post.js. Stays OPEN (visible/claimable on every linked cMoon's page) until
 // an admin explicitly closes it; there's no snapshot of eligible members or a total-job count up
 // front, since membership can change over the offer's open-ended lifetime — eligibility is
 // re-checked live against the claimant's current cMoonId at claim time (see
@@ -4089,7 +4091,10 @@ model CMoonDispersalOfferCMoon {
   @@index([cMoonId])
 }
 
-// One of the (2+) cToon choices a member can pick for a given offer.
+// One of the (1+) cToon choices a member can pick for a given offer — a 1-option offer has
+// nothing to actually choose between, so the player-facing claim flow skips the "pick one"
+// framing for it (see CMoonPage.vue), but it's still represented as a normal single-row options
+// list rather than a separate "no choice" shape.
 model CMoonDispersalOption {
   id        String @id @default(uuid())
   offerId   String

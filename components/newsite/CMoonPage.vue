@@ -341,7 +341,8 @@
               <span v-if="o.myClaim">You claimed this offer.</span>
               <span v-else-if="o.status !== 'OPEN'">This offer has closed.</span>
               <span v-else-if="!eligible">Join this cMoon to claim a reward here.</span>
-              <span v-else>Pick one — you'll get {{ o.quantityPerMember }} cop{{ o.quantityPerMember === 1 ? 'y' : 'ies' }}.</span>
+              <span v-else-if="o.options.length > 1">Pick one — you'll get {{ o.quantityPerMember }} cop{{ o.quantityPerMember === 1 ? 'y' : 'ies' }}.</span>
+              <span v-else>You'll get {{ o.quantityPerMember }} cop{{ o.quantityPerMember === 1 ? 'y' : 'ies' }}.</span>
             </p>
             <div class="cmp-grid">
               <button
@@ -598,6 +599,12 @@ async function loadOffers(id) {
     const res = await $fetch(`/api/cmoon/${encodeURIComponent(id)}/dispersal-offers`)
     offers.value = res.offers || []
     eligible.value = !!res.eligible
+    // A single-option offer has nothing to actually pick between, so it's pre-selected for the
+    // member — the card/Claim flow stays identical to a multi-option offer, this just removes
+    // the pointless "tap the only card before Claim lights up" step.
+    for (const o of offers.value) {
+      if (!o.myClaim && o.options?.length === 1) offerSelections[o.id] = o.options[0].id
+    }
   } catch {
     offers.value = []
     eligible.value = false
@@ -629,7 +636,7 @@ async function claimOffer(offer) {
     openRewardModal({
       kind: 'offer',
       eyebrow: 'cToon Offer Claimed!',
-      title: 'Nice pick!',
+      title: offer.options.length > 1 ? 'Nice pick!' : 'Claimed!',
       items: [{ id: res.optionId, imagePath: opt?.assetPath || null, label: opt?.name || 'cToon', qty: res.quantity, variant: 'ctoon' }],
     })
   } catch (err) {
