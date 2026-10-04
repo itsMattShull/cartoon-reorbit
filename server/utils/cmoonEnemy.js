@@ -14,10 +14,12 @@ export const MEMBER_NAME_MAX_LENGTH = 60
 // response that includes it.
 export const FACTION_DESCRIPTION_MAX_LENGTH = 500
 
-// Every player starts a fight at PLAYER_MAX_HP (5, see cmoonEnemyBattle.js) and each round deals
-// at most one hit either way, so a PER_PLAYER enemy much above ~5 HP is effectively unwinnable
-// solo — the high end of this range exists for SHARED_POOL raid-style enemies, whose HP is
-// chipped away by many players together.
+// Every player starts a fight at their own max HP — GlobalGameConfig.cMoonEnemyBattleDefaultHp
+// (5 by default, admin-editable in Manage cMoons) plus any bonus from their current cMoon rank
+// tier (see getPlayerCombatMaxHp() in server/utils/cmoon.js) — and each round deals at most one
+// hit either way, so a PER_PLAYER enemy much above that is effectively unwinnable solo — the
+// high end of this range exists for SHARED_POOL raid-style enemies, whose HP is chipped away by
+// many players together.
 export const MAX_HP_MIN = 1
 export const MAX_HP_MAX = 200
 

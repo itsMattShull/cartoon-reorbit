@@ -7,7 +7,8 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
-import { PLAYER_MAX_HP, serializeEnemyForClient } from '@/server/utils/cmoonEnemyBattle'
+import { serializeEnemyForClient } from '@/server/utils/cmoonEnemyBattle'
+import { getPlayerCombatMaxHp } from '@/server/utils/cmoon'
 
 export default defineEventHandler(async (event) => {
   await requireAdmin(event)
@@ -20,8 +21,13 @@ export default defineEventHandler(async (event) => {
   })
   if (!member) throw createError({ statusCode: 404, statusMessage: 'Enemy member not found' })
 
+  // No userId — this preview is deliberately NOT personalized by the admin's own cMoon rank (see
+  // this file's own header comment on why nothing here ever touches a real account's state); it
+  // always reflects the plain admin-configured default, same experience for every admin.
+  const playerMaxHp = await getPlayerCombatMaxHp(null)
+
   return {
     enemy: serializeEnemyForClient(member),
-    state: { playerHpRemaining: PLAYER_MAX_HP, enemyHpRemaining: member.maxHp, roundNumber: 1 },
+    state: { playerHpRemaining: playerMaxHp, playerMaxHp, enemyHpRemaining: member.maxHp, roundNumber: 1 },
   }
 })

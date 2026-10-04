@@ -16,9 +16,9 @@ test('constants: sane defaults for the join window, round timeout, and party siz
 
 test('resolveRaidRound: every participant resolves against the SAME enemyAction', () => {
   const participants = [
-    { userId: 'a', action: 'ATTACK_HIGH', hpRemaining: PLAYER_MAX_HP },
-    { userId: 'b', action: 'BLOCK_HIGH', hpRemaining: PLAYER_MAX_HP },
-    { userId: 'c', action: 'ATTACK_LOW', hpRemaining: PLAYER_MAX_HP },
+    { userId: 'a', action: 'ATTACK_HIGH', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
+    { userId: 'b', action: 'BLOCK_HIGH', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
+    { userId: 'c', action: 'ATTACK_LOW', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
   ]
   const result = resolveRaidRound({ enemyAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember, participants })
   assert.equal(result.perParticipant.length, 3)
@@ -38,10 +38,10 @@ test('resolveRaidRound: enemyDamageDealt is the SUM of every participant landing
   // block), so attackLands(playerAction=ATTACK_HIGH, enemyAction=ATTACK_LOW) is always true
   // regardless of lane, since the enemy never blocks anything this round.
   const participants = [
-    { userId: 'a', action: 'ATTACK_HIGH', hpRemaining: PLAYER_MAX_HP },
-    { userId: 'b', action: 'ATTACK_LOW', hpRemaining: PLAYER_MAX_HP },
-    { userId: 'c', action: 'ATTACK_HIGH', hpRemaining: PLAYER_MAX_HP },
-    { userId: 'd', action: 'ATTACK_LOW', hpRemaining: PLAYER_MAX_HP },
+    { userId: 'a', action: 'ATTACK_HIGH', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
+    { userId: 'b', action: 'ATTACK_LOW', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
+    { userId: 'c', action: 'ATTACK_HIGH', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
+    { userId: 'd', action: 'ATTACK_LOW', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
   ]
   const result = resolveRaidRound({ enemyAction: 'ATTACK_LOW', enemyMember: baseEnemyMember, participants })
   assert.equal(result.perParticipant.every(p => p.enemyHit), true)
@@ -51,8 +51,8 @@ test('resolveRaidRound: enemyDamageDealt is the SUM of every participant landing
 test('resolveRaidRound: a 100% crit-against enemy makes every landed player hit deal CRITICAL_HIT_DAMAGE', () => {
   const critEnemy = { ...baseEnemyMember, critChanceAgainstPercent: 100 }
   const participants = [
-    { userId: 'a', action: 'ATTACK_HIGH', hpRemaining: PLAYER_MAX_HP },
-    { userId: 'b', action: 'ATTACK_LOW', hpRemaining: PLAYER_MAX_HP },
+    { userId: 'a', action: 'ATTACK_HIGH', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
+    { userId: 'b', action: 'ATTACK_LOW', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
   ]
   const result = resolveRaidRound({ enemyAction: 'ATTACK_LOW', enemyMember: critEnemy, participants })
   assert.equal(result.enemyDamageDealt, 2 * CRITICAL_HIT_DAMAGE)
@@ -62,8 +62,8 @@ test('resolveRaidRound: a 100% crit-against enemy makes every landed player hit 
 test('resolveRaidRound: a 100% crit-from enemy deals CRITICAL_HIT_DAMAGE to every hit participant independently', () => {
   const critEnemy = { ...baseEnemyMember, critChanceFromPercent: 100 }
   const participants = [
-    { userId: 'a', action: 'BLOCK_HIGH', hpRemaining: PLAYER_MAX_HP },
-    { userId: 'b', action: 'BLOCK_HIGH', hpRemaining: PLAYER_MAX_HP },
+    { userId: 'a', action: 'BLOCK_HIGH', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
+    { userId: 'b', action: 'BLOCK_HIGH', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
   ]
   // The enemy attacks LOW, so BLOCK_HIGH does not cancel it — both participants take the hit.
   const result = resolveRaidRound({ enemyAction: 'ATTACK_LOW', enemyMember: critEnemy, participants })
@@ -75,7 +75,7 @@ test('resolveRaidRound: a 100% crit-from enemy deals CRITICAL_HIT_DAMAGE to ever
 
 test('resolveRaidRound: a knocked-out participant this round is flagged and floored at 0 HP', () => {
   const critEnemy = { ...baseEnemyMember, critChanceFromPercent: 100 }
-  const participants = [{ userId: 'a', action: 'BLOCK_HIGH', hpRemaining: 1 }]
+  const participants = [{ userId: 'a', action: 'BLOCK_HIGH', hpRemaining: 1, maxHp: PLAYER_MAX_HP }]
   const result = resolveRaidRound({ enemyAction: 'ATTACK_LOW', enemyMember: critEnemy, participants })
   const [p] = result.perParticipant
   assert.equal(p.hpRemaining, 0)
@@ -83,12 +83,28 @@ test('resolveRaidRound: a knocked-out participant this round is flagged and floo
 })
 
 test('resolveRaidRound: a successful block heals 1 HP capped at PLAYER_MAX_HP, independent per participant', () => {
-  const participants = [{ userId: 'a', action: 'BLOCK_HIGH', hpRemaining: PLAYER_MAX_HP - 1 }]
+  const participants = [{ userId: 'a', action: 'BLOCK_HIGH', hpRemaining: PLAYER_MAX_HP - 1, maxHp: PLAYER_MAX_HP }]
   const result = resolveRaidRound({ enemyAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember, participants })
   const [p] = result.perParticipant
   assert.equal(p.playerBlocked, true)
   assert.equal(p.hpRemaining, PLAYER_MAX_HP)
   assert.equal(p.hpRemaining - (PLAYER_MAX_HP - 1), HEAL_ON_SUCCESSFUL_BLOCK)
+})
+
+test('resolveRaidRound: the heal-on-block cap follows each participant\'s OWN maxHp, not a shared constant', () => {
+  // A raid party can genuinely have different max HPs per member (different cMoon ranks — see
+  // getPlayerCombatMaxHp() in server/utils/cmoon.js), so this must never fall back to a single
+  // shared PLAYER_MAX_HP for everyone.
+  const boostedMaxHp = PLAYER_MAX_HP + 4
+  const participants = [
+    { userId: 'a', action: 'BLOCK_HIGH', hpRemaining: PLAYER_MAX_HP - 1, maxHp: PLAYER_MAX_HP },
+    { userId: 'b', action: 'BLOCK_HIGH', hpRemaining: boostedMaxHp - 1, maxHp: boostedMaxHp },
+  ]
+  const result = resolveRaidRound({ enemyAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember, participants })
+  const a = result.perParticipant.find(p => p.userId === 'a')
+  const b = result.perParticipant.find(p => p.userId === 'b')
+  assert.equal(a.hpRemaining, PLAYER_MAX_HP)
+  assert.equal(b.hpRemaining, boostedMaxHp)
 })
 
 test('resolveRaidRound: rejects an invalid enemy action', () => {
@@ -98,7 +114,7 @@ test('resolveRaidRound: rejects an invalid enemy action', () => {
 test('resolveRaidRound: rejects an invalid participant action', () => {
   assert.throws(() => resolveRaidRound({
     enemyAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember,
-    participants: [{ userId: 'a', action: 'NOT_REAL', hpRemaining: PLAYER_MAX_HP }],
+    participants: [{ userId: 'a', action: 'NOT_REAL', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP }],
   }))
 })
 

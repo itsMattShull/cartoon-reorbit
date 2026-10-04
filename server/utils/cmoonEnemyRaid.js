@@ -49,11 +49,14 @@ export function checkRaidBossAvailability({ raidOneTime, raidCooldownMinutes, ra
 }
 
 // One round, already collected. `participants` is the list of participants who were ALIVE when
-// this round opened, each `{ userId, action, hpRemaining }` — a knocked-out participant is never
-// passed in at all (they stopped acting the moment they hit 0 HP, see cmoonRaidSocket.js).
-// `enemyAction` was rolled ONCE, server-side, when the round opened — passed in here rather than
-// rolled inside this function so the caller can broadcast "round opened" before resolution
-// without this function's own Math.random() call making that a second, different roll.
+// this round opened, each `{ userId, action, hpRemaining, maxHp }` — a knocked-out participant is
+// never passed in at all (they stopped acting the moment they hit 0 HP, see cmoonRaidSocket.js).
+// `maxHp` is each participant's OWN max HP (see getPlayerCombatMaxHp() in server/utils/cmoon.js)
+// — a raid party can genuinely have different max HPs per member if their cMoon ranks differ, so
+// this is never a single shared constant the way the enemy's stats are. `enemyAction` was rolled
+// ONCE, server-side, when the round opened — passed in here rather than rolled inside this
+// function so the caller can broadcast "round opened" before resolution without this function's
+// own Math.random() call making that a second, different roll.
 //
 // Returns each participant's own hit/block/crit/new-HP plus the enemy's TOTAL damage taken this
 // round (the sum of every participant's landed hit) — the caller applies that against the shared
@@ -63,7 +66,7 @@ export function resolveRaidRound({ enemyAction, enemyMember, participants }) {
   if (!isValidBattleAction(enemyAction)) throw new Error(`Invalid enemy action: ${enemyAction}`)
 
   let enemyDamageDealt = 0
-  const perParticipant = participants.map(({ userId, action, hpRemaining }) => {
+  const perParticipant = participants.map(({ userId, action, hpRemaining, maxHp }) => {
     if (!isValidBattleAction(action)) throw new Error(`Invalid action for ${userId}: ${action}`)
     const { playerHit, enemyHit, playerBlocked, enemyBlocked } = resolveBattleRound(action, enemyAction)
     // critChanceFromPercent is the enemy's own attack landing critically against A player;
@@ -74,7 +77,10 @@ export function resolveRaidRound({ enemyAction, enemyMember, participants }) {
 
     let newHp = hpRemaining
     if (playerHit) newHp = Math.max(0, newHp - playerDamage)
-    else if (playerBlocked) newHp = Math.min(PLAYER_MAX_HP, newHp + HEAL_ON_SUCCESSFUL_BLOCK)
+    // `maxHp || PLAYER_MAX_HP`: a defensive fallback only, never expected to trigger in normal
+    // operation — a raid restored from Redis across a deploy boundary that predates this
+    // participant field existing would otherwise clamp against `undefined` here and produce NaN.
+    else if (playerBlocked) newHp = Math.min(maxHp || PLAYER_MAX_HP, newHp + HEAL_ON_SUCCESSFUL_BLOCK)
 
     if (enemyHit) enemyDamageDealt += enemyDamage
 

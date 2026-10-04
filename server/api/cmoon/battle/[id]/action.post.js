@@ -48,6 +48,7 @@ export default defineEventHandler(async (event) => {
 
   const { roundEntry: roundCore, newPlayerHp, enemyDamage, enemyHit, enemyBlocked } = resolveRound({
     playerAction, enemyMember: battle.enemyMember, playerHpRemaining: battle.playerHpRemaining,
+    playerMaxHp: battle.playerMaxHp,
   })
   const { enemyAction, playerHit, playerBlocked, playerCrit, enemyCrit } = roundCore
   const isSharedPool = battle.enemyMember.battleMode === 'SHARED_POOL'

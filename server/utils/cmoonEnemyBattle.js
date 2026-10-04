@@ -23,6 +23,18 @@ export function isValidBattleAction(action) {
   return BATTLE_ACTIONS.includes(action)
 }
 
+// Combines the admin-configured site-wide default (GlobalGameConfig.cMoonEnemyBattleDefaultHp)
+// with a player's own cMoon-rank bonus (CMoonRankTier.cMoonEnemyBattleHpBonus) into their actual
+// max HP for a cMoon Enemy Battle — pure arithmetic, kept here (rather than inline in
+// getPlayerCombatMaxHp() in server/utils/cmoon.js, which does the actual DB lookups for both
+// inputs) so the one piece of this genuinely worth unit-testing can be, without dragging in that
+// file's BullMQ/Prisma side effects (see tests/cmoonBalanceNoPrizeGrant.test.js's own comment on
+// why cmoon.js can't just be imported in a test). Floored at 1 so a misconfigured negative bonus
+// can never leave a player unable to take a single hit.
+export function combinePlayerMaxHp(defaultHp, bonus) {
+  return Math.max(1, (Number(defaultHp) || 0) + (Number(bonus) || 0))
+}
+
 function isAttack(action) { return action === 'ATTACK_HIGH' || action === 'ATTACK_LOW' }
 function isBlock(action) { return action === 'BLOCK_HIGH' || action === 'BLOCK_LOW' }
 function lane(action) { return action.endsWith('_HIGH') ? 'HIGH' : 'LOW' }
@@ -82,7 +94,7 @@ export function rollHitDamage(hit, critChancePercent) {
 // that DB-specific branch can't live in this DB-free file. Used by both the real battle endpoint
 // and the admin preview endpoint (server/api/admin/cmoon-enemy-members/[id]/preview-action.post.js)
 // so the two can never drift out of sync on the actual combat math.
-export function resolveRound({ playerAction, enemyMember, playerHpRemaining }) {
+export function resolveRound({ playerAction, enemyMember, playerHpRemaining, playerMaxHp }) {
   const enemyAction = rollEnemyAction()
   const { playerHit, enemyHit, playerBlocked, enemyBlocked } = resolveBattleRound(playerAction, enemyAction)
   // critChanceFromPercent is this enemy's own attacks landing critically against the player;
@@ -93,7 +105,11 @@ export function resolveRound({ playerAction, enemyMember, playerHpRemaining }) {
 
   let newPlayerHp = playerHpRemaining
   if (playerHit) newPlayerHp = Math.max(0, newPlayerHp - playerDamage)
-  else if (playerBlocked) newPlayerHp = Math.min(PLAYER_MAX_HP, newPlayerHp + HEAL_ON_SUCCESSFUL_BLOCK)
+  // Capped at THIS player's own max HP, not the bare PLAYER_MAX_HP constant — see
+  // GlobalGameConfig.cMoonEnemyBattleDefaultHp/CMoonRankTier.cMoonEnemyBattleHpBonus and
+  // getPlayerCombatMaxHp() in server/utils/cmoon.js, which is what every real caller now computes
+  // this from. Required, no default, so a caller can never silently fall back to the wrong cap.
+  else if (playerBlocked) newPlayerHp = Math.min(playerMaxHp, newPlayerHp + HEAL_ON_SUCCESSFUL_BLOCK)
 
   return {
     roundEntry: { playerAction, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit },
@@ -186,6 +202,7 @@ export function serializeBattleForClient(battle) {
     outcome: battle.outcome || null,
     roundNumber: battle.roundNumber,
     playerHpRemaining: battle.playerHpRemaining,
+    playerMaxHp: battle.playerMaxHp,
     enemyHpRemaining: battle.enemyHpRemaining,
     pointsAwarded: battle.pointsAwarded || 0,
     rewardsGranted: battle.rewardsGranted || null,
