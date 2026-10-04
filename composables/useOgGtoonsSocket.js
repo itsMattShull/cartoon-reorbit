@@ -39,8 +39,17 @@ export function useOgGtoonsSocket() {
       matchState.value = state
       lastReveal.value = state.reveal
     })
-    socket.on('oggtoons:committed', () => {})
-    socket.on('oggtoons:opponentCommitted', () => {})
+    // Ready flags only travel in full-state payloads (matchStart/reveal), which are sent when a
+    // round resolves — so flip them locally on these events or the board shows a stale
+    // "Thinking..." / re-enabled Reveal button until the next reveal.
+    socket.on('oggtoons:committed', () => {
+      const s = matchState.value
+      if (s) matchState.value = { ...s, you: { ...s.you, ready: true } }
+    })
+    socket.on('oggtoons:opponentCommitted', () => {
+      const s = matchState.value
+      if (s) matchState.value = { ...s, opponent: { ...s.opponent, ready: true } }
+    })
     socket.on('oggtoons:swapApplied', () => {})
     socket.on('oggtoons:opponentDropped', payload => {
       matchState.value = matchState.value ? { ...matchState.value, opponentDropped: payload } : matchState.value
