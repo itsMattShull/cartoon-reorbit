@@ -102,12 +102,17 @@ async function resolveRound(io, match, deps) {
 
   const { entry1, entry2 } = revealNextCards(match)
   match.lastActivity = Date.now()
-  emitToHuman(io, match, OUT('reveal'), {
-    ...publicMatchView(match, match.humanId),
-    reveal: { round: match.currentRound, you: entry1, opponent: entry2 }
-  })
+  const revealedRound = match.currentRound
 
   const end = checkMatchEnd(match)
+  // Advance before emitting so the state the client receives carries the NEXT round number;
+  // otherwise its next commit sends the stale round and the server silently drops it.
+  if (!end) match.currentRound += 1
+  emitToHuman(io, match, OUT('reveal'), {
+    ...publicMatchView(match, match.humanId),
+    reveal: { round: revealedRound, you: entry1, opponent: entry2 }
+  })
+
   if (end) {
     endMatch(io, match, {
       outcome: end.outcome,
@@ -119,7 +124,6 @@ async function resolveRound(io, match, deps) {
     })
     return
   }
-  match.currentRound += 1
   scheduleBot(io, match, deps)
 }
 
