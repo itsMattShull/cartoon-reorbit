@@ -13,6 +13,25 @@
 
       <p v-if="loadError" class="text-red-600">{{ loadError }}</p>
 
+      <!-- ── Global spawn behavior ────────────────────────────────── -->
+      <section class="bg-white border rounded p-3 space-y-2">
+        <h2 class="font-semibold text-sm">Encounter spawning</h2>
+        <label class="flex items-start gap-2">
+          <input type="checkbox" v-model="higherTierFirst" class="mt-0.5" @change="saveHigherTierFirst" :disabled="savingHigherTierFirst" />
+          <span>
+            <span class="font-medium">Higher tiered enemies first</span>
+            <p class="text-[11px] text-gray-500 mt-0.5">
+              When on, the popup roll only considers the HIGHEST rank currently available to a given
+              player (not gatekept by "min. personal wins to unlock") — a Final Boss beats an
+              Underboss beats an Enforcer beats a Goon, whenever one is actually offerable. When off
+              (default), every eligible rank is offered together, weighted by each enemy's own
+              occurrence weight below.
+            </p>
+          </span>
+        </label>
+        <p v-if="higherTierFirstError" class="text-red-600">{{ higherTierFirstError }}</p>
+      </section>
+
       <!-- ── Factions ─────────────────────────────────────────────── -->
       <section class="space-y-2">
         <h2 class="font-semibold text-sm">Factions</h2>
@@ -114,6 +133,36 @@
                   :disabled="!factionPendingMusicFile || factionUploadingMusic" @click="uploadFactionMusic"
                 >{{ factionUploadingMusic ? 'Uploading…' : 'Upload music' }}</button>
                 <p v-else-if="factionPendingMusicFile" class="text-[11px] text-gray-500">Uploads together with "Create faction" below.</p>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium mb-1">Default battle sounds (optional, MP3/OGG/WAV, max 3MB each)</label>
+            <p class="text-[10px] text-gray-500 mb-2">
+              Used by any member of this faction that hasn't uploaded its own sound for that moment — a member's
+              own upload always overrides this.
+            </p>
+            <div class="space-y-2">
+              <div v-for="slot in FACTION_SOUND_SLOTS" :key="slot.key" class="border rounded p-2 flex items-center gap-3 flex-wrap">
+                <div class="w-40 flex-shrink-0">
+                  <div class="font-medium">{{ slot.label }}</div>
+                  <div class="text-[10px] text-gray-500">{{ slot.help }}</div>
+                </div>
+                <audio v-if="factionSoundState[slot.key].savedPath" :src="factionSoundState[slot.key].savedPath" controls class="h-8 flex-shrink-0" style="max-width: 220px;" />
+                <span v-else class="text-[10px] text-gray-400 flex-shrink-0">No default sound</span>
+                <div class="space-y-1 flex-1 min-w-[180px]">
+                  <input
+                    type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav" class="block w-full text-[11px]"
+                    @change="onFactionSoundFile(slot.key, $event)"
+                  />
+                  <p v-if="factionSoundState[slot.key].error" class="text-red-600">{{ factionSoundState[slot.key].error }}</p>
+                  <button
+                    v-if="factionForm.id" type="button" class="px-2 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                    :disabled="!factionSoundState[slot.key].pendingFile || factionSoundState[slot.key].uploading" @click="uploadFactionSound(slot.key)"
+                  >{{ factionSoundState[slot.key].uploading ? 'Uploading…' : 'Upload' }}</button>
+                  <p v-else-if="factionSoundState[slot.key].pendingFile" class="text-[11px] text-gray-500">Uploads together with "Create faction" below.</p>
+                </div>
               </div>
             </div>
           </div>
@@ -265,6 +314,17 @@
             <label class="block text-xs font-medium mb-1">Min. personal wins to unlock (0-100000)</label>
             <input v-model.number="memberForm.minPriorDefeats" type="number" min="0" max="100000" class="w-full border rounded px-2 py-1" />
             <p class="text-[11px] text-gray-500 mt-1">This player's OWN lifetime cMoon Enemy Battle win count, not the team's or the server's — 0 means anyone can encounter this enemy. Safe to change anytime.</p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium mb-1">Occurrence weight (1-100)</label>
+            <input v-model.number="memberForm.occurrencePercent" type="number" min="1" max="100" class="w-full border rounded px-2 py-1" />
+            <p class="text-[11px] text-gray-500 mt-1">
+              A RELATIVE weight against whichever other eligible enemies are offered alongside this one in the
+              same roll — not a probability out of 100, and it doesn't need to sum to 100 across your roster. An
+              enemy at 90 is offered roughly 9x as often as one at 10 in the same roll. Every enemy defaults to
+              50, so leaving this alone keeps the roll exactly as even as it's always been.
+            </p>
           </div>
 
           <div class="flex gap-2">
@@ -463,17 +523,40 @@ const filteredMembers = computed(() => {
   return members.value.filter(m => m.factionId === memberFactionFilter.value)
 })
 
+// ── Global spawn behavior ─────────────────────────────────────────
+// GlobalGameConfig.cMoonEnemyHigherTierFirst — lives on the same row as every other cMoon Enemy
+// Battles toggle (cMoonEnemyBattlesEnabled, popup chance/cooldown, default HP), surfaced here
+// instead of the Manage cMoons page since it's specifically about THIS page's roster.
+const higherTierFirst = ref(false)
+const savingHigherTierFirst = ref(false)
+const higherTierFirstError = ref('')
+
+async function saveHigherTierFirst() {
+  higherTierFirstError.value = ''
+  const next = higherTierFirst.value
+  savingHigherTierFirst.value = true
+  try {
+    await $fetch('/api/admin/cmoon-settings', { method: 'POST', body: { cMoonEnemyHigherTierFirst: next } })
+  } catch (e) {
+    higherTierFirst.value = !next // revert the optimistic checkbox toggle on failure
+    higherTierFirstError.value = e?.data?.statusMessage || 'Failed to save'
+  } finally {
+    savingHigherTierFirst.value = false
+  }
+}
+
 async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [factionsData, membersData, backgroundsData, avatarsData, ctoonsData, joinEffectsData] = await Promise.all([
+    const [factionsData, membersData, backgroundsData, avatarsData, ctoonsData, joinEffectsData, cmoonsData] = await Promise.all([
       $fetch('/api/admin/cmoon-enemy-factions'),
       $fetch('/api/admin/cmoon-enemy-members'),
       $fetch('/api/admin/backgrounds'),
       $fetch('/api/admin/avatars'),
       $fetch('/api/admin/list-ctoons'),
       $fetch('/api/admin/cmoon-join-effects'),
+      $fetch('/api/admin/cmoons'),
     ])
     factions.value = factionsData?.factions || []
     members.value = membersData?.members || []
@@ -481,6 +564,7 @@ async function load() {
     avatarsCatalog.value = avatarsData || []
     ctoonsCatalog.value = ctoonsData || []
     joinEffects.value = joinEffectsData?.effects || []
+    higherTierFirst.value = !!cmoonsData?.cMoonEnemyHigherTierFirst
   } catch (e) {
     loadError.value = e?.data?.statusMessage || 'Failed to load cMoon enemies'
   } finally {
@@ -502,6 +586,67 @@ const factionUploadingMusic = ref(false)
 const factionMusicError = ref('')
 const factionSavedMusicPath = ref('')
 
+// ── Faction default battle sounds (six slots, uploaded via cmoon-enemy-factions/[id]/sound —
+// FACTION_DEFAULT_SOUND_SLOTS in server/utils/cmoonEnemy.js is the source of truth for the field
+// names; kept in sync here by hand, same as SOUND_SLOTS/MEMBER_SOUND_SLOTS below) ──────────────
+const FACTION_SOUND_SLOTS = [
+  { key: 'appear', field: 'defaultAppearSoundPath', label: 'Appearance', help: 'Default for a member with no appearance sound of its own.' },
+  { key: 'damageTaken', field: 'defaultDamageTakenSoundPath', label: 'Damage taken', help: "Default for a member with no damage-taken sound of its own." },
+  { key: 'damageAvoided', field: 'defaultDamageAvoidedSoundPath', label: 'Damage avoided', help: 'Default for a member with no damage-avoided sound of its own.' },
+  { key: 'attacking', field: 'defaultAttackingSoundPath', label: 'Attacking', help: "Default for a member with no attacking sound of its own." },
+  { key: 'victory', field: 'defaultVictorySoundPath', label: 'Victory (enemy defeated)', help: 'Default for a member with no victory sound of its own.' },
+  { key: 'defeat', field: 'defaultDefeatSoundPath', label: 'Defeat (enemy wins)', help: 'Default for a member with no defeat sound of its own.' },
+]
+const emptyFactionSoundState = () => ({ pendingFile: null, uploading: false, error: '', savedPath: '' })
+const factionSoundState = reactive(Object.fromEntries(FACTION_SOUND_SLOTS.map(s => [s.key, emptyFactionSoundState()])))
+
+function resetFactionSoundState() {
+  for (const s of FACTION_SOUND_SLOTS) Object.assign(factionSoundState[s.key], emptyFactionSoundState())
+}
+
+function onFactionSoundFile(slotKey, ev) {
+  const state = factionSoundState[slotKey]
+  state.error = ''
+  const f = ev.target.files?.[0] || null
+  if (f && !['audio/mpeg', 'audio/ogg', 'audio/wav'].includes(f.type)) {
+    state.error = 'MP3, OGG, or WAV only.'
+    ev.target.value = ''
+    return
+  }
+  if (f && f.size > 3 * 1024 * 1024) {
+    state.error = 'Audio must be 3MB or smaller.'
+    ev.target.value = ''
+    return
+  }
+  state.pendingFile = f
+}
+
+async function uploadFactionSoundFor(slotKey, id) {
+  const slot = FACTION_SOUND_SLOTS.find(s => s.key === slotKey)
+  const state = factionSoundState[slotKey]
+  if (!state.pendingFile || !id) return
+  state.uploading = true
+  state.error = ''
+  try {
+    const fd = new FormData()
+    fd.append('audio', state.pendingFile)
+    fd.append('slot', slot.field)
+    const res = await $fetch(`/api/admin/cmoon-enemy-factions/${id}/sound`, { method: 'POST', body: fd })
+    state.savedPath = res.soundPath || state.savedPath
+    state.pendingFile = null
+  } catch (e) {
+    state.error = e?.data?.statusMessage || 'Upload failed.'
+  } finally {
+    state.uploading = false
+  }
+}
+
+async function uploadFactionSound(slotKey) {
+  if (!factionForm.id) return
+  await uploadFactionSoundFor(slotKey, factionForm.id)
+  await load()
+}
+
 const emptyFactionForm = () => ({ id: '', name: '', description: '', active: true, sortOrder: 0, appearEffectId: '' })
 const factionForm = reactive(emptyFactionForm())
 const factionPreviewImageSrc = computed(() => factionPendingFilePreviewUrl.value || factionSavedImagePath.value || '')
@@ -520,6 +665,7 @@ function resetFactionForm() {
   factionPendingMusicFile.value = null
   factionMusicError.value = ''
   factionSavedMusicPath.value = ''
+  resetFactionSoundState()
   Object.assign(factionForm, emptyFactionForm())
 }
 
@@ -533,6 +679,7 @@ function startEditFaction(f) {
   factionForm.appearEffectId = f.appearEffectId || ''
   factionSavedImagePath.value = f.bannerImagePath || ''
   factionSavedMusicPath.value = f.battleMusicPath || ''
+  for (const s of FACTION_SOUND_SLOTS) factionSoundState[s.key].savedPath = f[s.field] || ''
 }
 
 function onFactionMusicFile(ev) {
@@ -638,6 +785,9 @@ async function saveFaction() {
     }
     if (factionPendingFile.value) await uploadFactionImageFor(factionForm.id)
     if (factionPendingMusicFile.value) await uploadFactionMusicFor(factionForm.id)
+    for (const s of FACTION_SOUND_SLOTS) {
+      if (factionSoundState[s.key].pendingFile) await uploadFactionSoundFor(s.key, factionForm.id)
+    }
     resetFactionForm()
     await load()
   } catch (e) {
@@ -754,6 +904,7 @@ async function uploadSound(slotKey) {
 
 const emptyMemberForm = () => ({
   id: '', factionId: '', name: '', maxHp: 5, battleMode: 'PER_PLAYER', rank: 'GOON', minPriorDefeats: 0,
+  occurrencePercent: 50,
   cMoonPointsReward: 10, critChanceAgainstPercent: 0, critChanceFromPercent: 0, active: true, sortOrder: 0,
   isRaidBoss: false, raidAnnouncementText: '', raidOneTime: false, raidCooldownMinutes: 0,
 })
@@ -808,7 +959,7 @@ function startEditMember(m) {
   resetMemberForm()
   Object.assign(memberForm, {
     id: m.id, factionId: m.factionId, name: m.name, maxHp: m.maxHp, battleMode: m.battleMode, rank: m.rank || 'GOON',
-    minPriorDefeats: m.minPriorDefeats ?? 0,
+    minPriorDefeats: m.minPriorDefeats ?? 0, occurrencePercent: m.occurrencePercent ?? 50,
     cMoonPointsReward: m.cMoonPointsReward, critChanceAgainstPercent: m.critChanceAgainstPercent ?? 0,
     critChanceFromPercent: m.critChanceFromPercent ?? 0, active: !!m.active, sortOrder: m.sortOrder,
     isRaidBoss: !!m.isRaidBoss, raidAnnouncementText: m.raidAnnouncementText || '',
@@ -887,6 +1038,11 @@ async function saveMember() {
     memberFormError.value = 'Minimum personal wins to unlock must be between 0 and 100000.'
     return
   }
+  const occurrencePercent = Math.trunc(Number(memberForm.occurrencePercent))
+  if (!Number.isInteger(occurrencePercent) || occurrencePercent < 1 || occurrencePercent > 100) {
+    memberFormError.value = 'Occurrence weight must be between 1 and 100.'
+    return
+  }
   const raidAnnouncementText = memberForm.raidAnnouncementText?.trim() || ''
   if (raidAnnouncementText.length > 500) {
     memberFormError.value = 'Raid announcement must be 500 characters or fewer.'
@@ -910,6 +1066,7 @@ async function saveMember() {
       battleMode: memberForm.battleMode,
       rank: memberForm.rank,
       minPriorDefeats,
+      occurrencePercent,
       cMoonPointsReward,
       critChanceAgainstPercent,
       critChanceFromPercent,

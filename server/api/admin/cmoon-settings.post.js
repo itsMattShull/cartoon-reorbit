@@ -102,6 +102,12 @@ export default defineEventHandler(async (event) => {
     data.cMoonEnemyBattleDefaultHp = hp
   }
 
+  // "Higher tiered enemies first" — see GlobalGameConfig.cMoonEnemyHigherTierFirst's own schema
+  // comment. Read by consider.post.js's candidate roll, nowhere else.
+  if (body?.cMoonEnemyHigherTierFirst !== undefined) {
+    data.cMoonEnemyHigherTierFirst = !!body.cMoonEnemyHigherTierFirst
+  }
+
   const updated = await db.globalGameConfig.upsert({
     where: { id: 'singleton' },
     create: { id: 'singleton', dailyPointLimit: 100, ...data },
@@ -121,6 +127,7 @@ export default defineEventHandler(async (event) => {
       cMoonBattlePopupCooldownMinutes: existing?.cMoonBattlePopupCooldownMinutes,
       cMoonRaidBossDiscordChannelId: existing?.cMoonRaidBossDiscordChannelId,
       cMoonEnemyBattleDefaultHp: existing?.cMoonEnemyBattleDefaultHp,
+      cMoonEnemyHigherTierFirst: existing?.cMoonEnemyHigherTierFirst,
     },
     newValue: {
       cMoonEnabled: enabled,
@@ -131,6 +138,7 @@ export default defineEventHandler(async (event) => {
       cMoonBattlePopupCooldownMinutes: updated.cMoonBattlePopupCooldownMinutes,
       cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
       cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
+      cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,
     },
   })
 
@@ -143,5 +151,6 @@ export default defineEventHandler(async (event) => {
     cMoonBattlePopupCooldownMinutes: updated.cMoonBattlePopupCooldownMinutes,
     cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
     cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
+    cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,
   }
 })

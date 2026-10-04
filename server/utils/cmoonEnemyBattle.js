@@ -9,6 +9,8 @@
 // pressed. The enemy's action is always rolled here, server-side, via Math.random(), matching
 // this codebase's other server-authoritative combat (see server/utils/monsterBattleEngine.js).
 
+import { resolveMemberSoundPaths } from './cmoonEnemy.js'
+
 export const PLAYER_MAX_HP = 5
 export const MAX_ROUNDS_SAFETY = 100 // a battle can't loop forever even under a pathological RNG streak
 export const ABANDON_AFTER_MINUTES = 10 // reclaim an IN_PROGRESS battle with no action in this long
@@ -156,6 +158,9 @@ export function rollEnemyRewards(rewardRows) {
 export function serializeEnemyForClient(member) {
   const hp = member.battleMode === 'SHARED_POOL' ? member.currentHp : member.maxHp
   const fx = member.faction?.appearEffect
+  // A member's own null sound slot falls back to its faction's matching default — see
+  // CMoonEnemyFaction's default*SoundPath columns and resolveMemberSoundPaths' own comment.
+  const sounds = resolveMemberSoundPaths(member, member.faction)
   return {
     id: member.id,
     name: member.name,
@@ -166,12 +171,12 @@ export function serializeEnemyForClient(member) {
     maxHp: member.maxHp,
     hp,
     // Named from the enemy's own perspective — see the schema comment on these columns.
-    appearSoundPath: member.appearSoundPath || null,
-    damageTakenSoundPath: member.damageTakenSoundPath || null,
-    damageAvoidedSoundPath: member.damageAvoidedSoundPath || null,
-    attackingSoundPath: member.attackingSoundPath || null,
-    victorySoundPath: member.victorySoundPath || null,
-    defeatSoundPath: member.defeatSoundPath || null,
+    appearSoundPath: sounds.appearSoundPath,
+    damageTakenSoundPath: sounds.damageTakenSoundPath,
+    damageAvoidedSoundPath: sounds.damageAvoidedSoundPath,
+    attackingSoundPath: sounds.attackingSoundPath,
+    victorySoundPath: sounds.victorySoundPath,
+    defeatSoundPath: sounds.defeatSoundPath,
     faction: member.faction
       ? {
           id: member.faction.id,

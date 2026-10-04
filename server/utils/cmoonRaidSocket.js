@@ -74,7 +74,9 @@ import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from '.
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 import { announceCMoonRaidBoss } from './discord.js'
 import { notifyCMoonRaidBossStarted } from './notifications.js'
+import { pushUserNotification } from './realtimeNotify.js'
 import { buildGrantableReward } from './cmoonEnemyBattle.js'
+import { resolveMemberSoundPaths } from './cmoonEnemy.js'
 import {
   resolveRaidRound, rollEnemyAction, rollEnemyRewards, isValidBattleAction, PLAYER_MAX_HP,
   JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE, MAX_ROUNDS_SAFETY,
@@ -91,6 +93,9 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  * raid: {
  *   id, enemyMemberId, cMoonId, status: 'FORMING'|'IN_PROGRESS'|'RESOLVED',
  *   enemyName, enemyImagePath,               // display snapshot, taken once at creation
+ *   enemySounds: { appearSoundPath, damageTakenSoundPath, damageAvoidedSoundPath,
+ *                  attackingSoundPath, victorySoundPath, defeatSoundPath },  // ditto
+ *   battleMusicPath,                         // ditto — the faction's own looping battle music
  *   enemyStats: { maxHp, critChanceAgainstPercent, critChanceFromPercent, cMoonPointsReward },
  *   enemyHpRemaining, roundNumber, currentEnemyAction, roundDeadlineAt, joinDeadlineAt,
  *   participants: Map<userId, { userId, username, hpRemaining, knockedOutAt, isInitiator,
@@ -131,6 +136,14 @@ function publicRaidView(raid) {
     status: raid.status,
     enemyName: raid.enemyName,
     enemyImagePath: raid.enemyImagePath,
+    // Snapshotted once at creation (see the `raid` object's own shape comment below) — six
+    // optional battle sounds (already resolved against the faction's own defaults, see
+    // resolveMemberSoundPaths) plus the faction's looping battle music, so the raid page can give
+    // this fight the same shake/sound/music "juice" components/CMoonBattlePopupHost.vue already
+    // gives a solo battle. Null fields mean silent, not an error — same convention as the solo
+    // battle's own enemy serialization.
+    enemySounds: raid.enemySounds,
+    battleMusicPath: raid.battleMusicPath,
     enemyMaxHp: raid.enemyStats.maxHp,
     enemyHpRemaining: raid.enemyHpRemaining,
     roundNumber: raid.roundNumber,
@@ -188,7 +201,7 @@ async function loadEligibility({ userId, enemyMember, reservedForRaidId = null }
  * must never fail or roll back the raid itself, same stance server/utils/discord.js's own
  * announce* functions already take (they never throw).
  */
-async function notifyEligibleCMoonMembers({ cMoonId, initiatorUserId, enemyMember, raidId, cMoonName }) {
+async function notifyEligibleCMoonMembers(io, { cMoonId, initiatorUserId, enemyMember, raidId, cMoonName }) {
   try {
     const candidates = await db.user.findMany({
       where: { cMoonId, id: { not: initiatorUserId }, active: true, banned: false },
@@ -203,9 +216,15 @@ async function notifyEligibleCMoonMembers({ cMoonId, initiatorUserId, enemyMembe
       const winsById = new Map(winCounts.map(w => [w.userId, w._count._all]))
       eligibleIds = eligibleIds.filter(id => (winsById.get(id) || 0) >= enemyMember.minPriorDefeats)
     }
-    await Promise.all(eligibleIds.map(userId => notifyCMoonRaidBossStarted(db, {
-      userId, raidId, enemyName: enemyMember.name, cMoonName,
-    })))
+    await Promise.all(eligibleIds.map(async userId => {
+      const wrote = await notifyCMoonRaidBossStarted(db, { userId, raidId, enemyName: enemyMember.name, cMoonName })
+      // Live push on top of the DB write, not instead of it — see pushUserNotification's own
+      // comment on why this is a bare "go refetch" ping. Only pushed when the write actually
+      // happened (skipped for a banned/opted-out recipient, same gate notifyCMoonRaidBossStarted
+      // itself already applies via isNotifiable), and only matters for whoever has a tab open
+      // right now; everyone else still gets it from their next ordinary poll.
+      if (wrote) pushUserNotification(io, userId)
+    }))
   } catch (err) {
     console.error('[cmoonRaidSocket] notifyEligibleCMoonMembers failed:', err?.message || err)
   }
@@ -488,6 +507,8 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       const raid = {
         id: raidId, enemyMemberId, cMoonId: cMoon.id,
         enemyName: enemyMember.name, enemyImagePath: enemyMember.imagePath || null,
+        enemySounds: resolveMemberSoundPaths(enemyMember, enemyMember.faction),
+        battleMusicPath: enemyMember.faction?.battleMusicPath || null,
         enemyStats: {
           maxHp: enemyMember.maxHp,
           critChanceAgainstPercent: enemyMember.critChanceAgainstPercent,
@@ -534,7 +555,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         cMoonName: cMoon.name, enemyName: enemyMember.name,
         announcementTemplate: enemyMember.raidAnnouncementText,
       }).catch(() => {})
-      notifyEligibleCMoonMembers({
+      notifyEligibleCMoonMembers(io, {
         cMoonId: cMoon.id, initiatorUserId: me.id, enemyMember, raidId, cMoonName: cMoon.name,
       }).catch(() => {})
     } catch (err) {
@@ -621,12 +642,17 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     // view of the permanent record so a late notification click still shows something.
     const row = await db.cMoonEnemyRaid.findUnique({
       where: { id: raidId },
-      include: { enemyMember: true, participants: { include: { user: { select: { username: true } } } } },
+      include: {
+        enemyMember: { include: { faction: true } },
+        participants: { include: { user: { select: { username: true } } } },
+      },
     })
     if (!row) return socket.emit(EV('error'), { message: 'Raid not found' })
     socket.emit(EV('state'), {
       id: row.id, enemyMemberId: row.enemyMemberId, cMoonId: row.cMoonId, status: row.status,
       enemyName: row.enemyMember.name, enemyImagePath: row.enemyMember.imagePath || null,
+      enemySounds: resolveMemberSoundPaths(row.enemyMember, row.enemyMember.faction),
+      battleMusicPath: row.enemyMember.faction?.battleMusicPath || null,
       enemyMaxHp: row.enemyMember.maxHp, enemyHpRemaining: row.enemyHpRemaining,
       roundNumber: row.roundNumber, joinDeadlineAt: row.joinDeadlineAt?.getTime() || null,
       roundDeadlineAt: null, outcome: row.outcome || null,

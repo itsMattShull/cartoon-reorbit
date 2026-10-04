@@ -6,7 +6,7 @@
       </div>
 
       <template v-else>
-        <div class="bg-white rounded border p-4 space-y-3">
+        <div class="cr-card bg-white rounded border p-4 space-y-3" :class="{ 'cr-shake': shaking, 'cr-shake-crit': shaking && shakeCrit }">
           <div class="flex items-center gap-3">
             <div class="w-16 h-16 rounded border flex-shrink-0 overflow-hidden bg-gray-100 flex items-center justify-center">
               <img v-if="raid.enemyImagePath" :src="raid.enemyImagePath" alt="" class="max-w-full max-h-full object-contain" />
@@ -66,15 +66,32 @@
               </li>
             </ul>
 
-            <div v-if="lastRoundSummary" class="border rounded p-2 bg-gray-50 text-xs space-y-1">
-              <p class="font-medium">Round {{ lastRoundSummary.roundNumber }} — the boss used {{ ACTION_LABELS[lastRoundSummary.enemyAction] }}</p>
-              <p v-for="r in lastRoundSummary.participants" :key="r.userId">
-                {{ usernameFor(r.userId) }} {{ ACTION_LABELS[r.action] }} —
-                <template v-if="r.playerHit">took a hit{{ r.playerCrit ? ' (CRIT!)' : '' }}</template>
-                <template v-else-if="r.playerBlocked">blocked and healed 1 HP</template>
-                <template v-else>no hit landed</template>
-              </p>
-            </div>
+            <!-- ── Round reveal: what just happened, per party member ─────── -->
+            <Transition name="cr-reveal">
+              <div v-if="lastRoundSummary" :key="lastRoundSummary.roundNumber" class="cr-reveal-panel" :class="{ 'cr-reveal-crit': lastRoundSummaryHadCrit }">
+                <p class="cr-reveal-headline">
+                  Round {{ lastRoundSummary.roundNumber }} — the boss used <strong>{{ ACTION_LABELS[lastRoundSummary.enemyAction] }}</strong>
+                  <span v-if="lastRoundSummaryHadCrit" class="cr-crit-badge">CRITICAL!</span>
+                </p>
+                <ul class="cr-reveal-list">
+                  <li v-for="r in lastRoundSummary.participants" :key="r.userId" class="cr-reveal-row" :class="revealRowClass(r)">
+                    <span class="cr-reveal-name">{{ usernameFor(r.userId) }}</span>
+                    <span class="cr-reveal-action">{{ ACTION_LABELS[r.action] }}</span>
+                    <span class="cr-reveal-outcome">
+                      <template v-if="r.playerHit && r.enemyHit">traded hits!<span v-if="r.playerCrit || r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
+                      <template v-else-if="r.enemyHit">landed a hit!<span v-if="r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
+                      <template v-else-if="r.playerHit">took a hit<span v-if="r.playerCrit" class="cr-crit-badge">CRIT!</span></template>
+                      <template v-else-if="r.playerBlocked">blocked it — healed 1 HP</template>
+                      <template v-else-if="r.enemyBlocked">boss blocked it</template>
+                      <template v-else>no hit landed</template>
+                    </span>
+                  </li>
+                </ul>
+                <p v-if="lastRoundSummary.enemyDamageDealt > 0" class="cr-reveal-dealt">The party dealt {{ lastRoundSummary.enemyDamageDealt }} damage this round.</p>
+              </div>
+            </Transition>
+
+            <p v-if="raidSocket.lastError.value" class="text-sm text-red-600">{{ raidSocket.lastError.value }}</p>
 
             <template v-if="myself && !myself.knockedOut">
               <p v-if="myself.hasActed" class="text-sm text-gray-500">Locked in — waiting on the rest of the party…</p>
@@ -115,6 +132,8 @@ const raid = computed(() => raidSocket.raidState.value?.id === raidId.value ? ra
 const hasJoined = computed(() => !!raid.value?.participants.some(p => p.userId === user.value?.id))
 const myself = computed(() => raid.value?.participants.find(p => p.userId === user.value?.id) || null)
 const lastRoundSummary = computed(() => raidSocket.lastRound.value ? { ...raidSocket.lastRound.value } : null)
+const lastRoundSummaryHadCrit = computed(() =>
+  !!lastRoundSummary.value?.participants?.some(r => r.playerCrit || r.enemyCrit))
 
 const enemyHpPercent = computed(() => {
   if (!raid.value) return 0
@@ -129,6 +148,13 @@ const outcomeLabel = computed(() => {
 
 function usernameFor(userId) {
   return raid.value?.participants.find(p => p.userId === userId)?.username || 'Someone'
+}
+
+function revealRowClass(r) {
+  if (r.enemyHit && !r.playerHit) return 'cr-row-good'
+  if (r.playerHit && !r.enemyHit) return 'cr-row-bad'
+  if (r.playerBlocked) return 'cr-row-good'
+  return 'cr-row-neutral'
 }
 
 function act(action) {
@@ -146,11 +172,165 @@ function tickCountdown() {
   joinCountdown.value = Math.max(0, Math.ceil((raid.value.joinDeadlineAt - Date.now()) / 1000))
 }
 
+// ── Impact feedback + sound/music — same "juice" components/CMoonBattlePopupHost.vue gives a
+// solo battle (see that component's own comments for the full rationale), adapted to a raid's
+// shared screen: a shake/crit badge triggers off the WHOLE PARTY's round (anyone landing or
+// taking a hit), since everyone here is watching the same fight together, while the per-round
+// SOUND effects below play only off MY OWN participant row — four simultaneous players' sounds
+// all firing at once would be noise, not epic.
+const shaking = ref(false)
+const shakeCrit = ref(false)
+let shakeTimer = null
+function triggerShake(isCrit) {
+  if (shakeTimer) clearTimeout(shakeTimer)
+  shaking.value = false
+  shakeCrit.value = false
+  requestAnimationFrame(() => {
+    shakeCrit.value = !!isCrit
+    shaking.value = true
+    shakeTimer = setTimeout(() => { shaking.value = false }, 450)
+  })
+}
+
+function playSound(path) {
+  if (!path || typeof window === 'undefined') return
+  try {
+    const el = new Audio(path)
+    el.volume = 0.7
+    el.play().catch(() => {})
+  } catch {}
+}
+
+// Mirrors useCMoonBattlePopup.js's playRoundSounds exactly, just against MY OWN perParticipant
+// row rather than a single solo battle's one implicit "player".
+function playMyRoundSounds(myRow, sounds) {
+  if (!myRow || !sounds) return
+  if (myRow.enemyHit) playSound(sounds.damageTakenSoundPath)
+  else if (myRow.enemyBlocked) playSound(sounds.damageAvoidedSoundPath)
+  if (myRow.playerHit) playSound(sounds.attackingSoundPath)
+}
+
+watch(() => raidSocket.lastRound.value, (round) => {
+  if (!round?.participants?.length) return
+  const anyHit = round.participants.some(r => r.playerHit || r.enemyHit)
+  if (anyHit) {
+    const anyCrit = round.participants.some(r => r.playerCrit || r.enemyCrit)
+    triggerShake(anyCrit)
+  }
+  const myRow = round.participants.find(r => r.userId === user.value?.id)
+  playMyRoundSounds(myRow, raid.value?.enemySounds)
+})
+
+// ── Battle music — loops for as long as combat is actually running, same FIGHT-phase-only
+// scoping the solo popup uses (never during FORMING/RESOLVED).
+let battleMusicEl = null
+function stopBattleMusic() {
+  if (!battleMusicEl) return
+  try { battleMusicEl.pause() } catch {}
+  battleMusicEl = null
+}
+function startBattleMusic(path) {
+  stopBattleMusic()
+  if (!path || typeof window === 'undefined') return
+  try {
+    battleMusicEl = new Audio(path)
+    battleMusicEl.loop = true
+    battleMusicEl.volume = 0.5
+    battleMusicEl.play().catch(() => {})
+  } catch {}
+}
+watch(() => raid.value?.status, (status) => {
+  if (status === 'IN_PROGRESS') startBattleMusic(raid.value?.battleMusicPath)
+  else stopBattleMusic()
+})
+
+// Appear sound — once, the first time this page actually has raid data to show (covers both
+// "just started/joined a FORMING raid" and "opened a link to one already in progress"); never
+// re-fires on every subsequent state push for the same raid.
+let announcedRaidId = null
+watch(raid, (r) => {
+  if (!r || announcedRaidId === r.id) return
+  announcedRaidId = r.id
+  playSound(r.enemySounds?.appearSoundPath)
+})
+
+// Victory/defeat sound — once, the instant the raid actually resolves (never on ABANDONED, same
+// as the solo battle only playing one of these two on a real WIN/LOSS).
+watch(() => raid.value?.outcome, (outcome) => {
+  if (outcome === 'WIN') playSound(raid.value?.enemySounds?.victorySoundPath)
+  else if (outcome === 'LOSS') playSound(raid.value?.enemySounds?.defeatSoundPath)
+})
+
 onMounted(() => {
   raidSocket.getState(raidId.value)
   countdownTimer = setInterval(tickCountdown, 250)
 })
 onUnmounted(() => {
   if (countdownTimer) clearInterval(countdownTimer)
+  if (shakeTimer) clearTimeout(shakeTimer)
+  stopBattleMusic()
 })
 </script>
+
+<style scoped>
+/* Same impact-feedback shake components/CMoonBattlePopupHost.vue uses for a solo battle — see
+   that component's own comment on the prefers-reduced-motion stance this mirrors. */
+@keyframes cr-shake-kf {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+@keyframes cr-shake-crit-kf {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-8px); }
+  40%, 60% { transform: translateX(8px); }
+}
+.cr-shake { animation: cr-shake-kf 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+.cr-shake-crit { animation: cr-shake-crit-kf 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+@media (prefers-reduced-motion: reduce) {
+  .cr-shake, .cr-shake-crit { animation: none; }
+}
+
+.cr-reveal-panel {
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #0d2a4d;
+  color: #fff;
+  font-size: 12px;
+}
+.cr-reveal-panel.cr-reveal-crit {
+  box-shadow: 0 0 0 2px #f59e0b inset;
+}
+.cr-reveal-headline { font-weight: 600; margin-bottom: 6px; }
+.cr-reveal-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+.cr-reveal-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cr-reveal-name { font-weight: 600; flex-shrink: 0; }
+.cr-reveal-action { color: rgba(255, 255, 255, 0.55); flex-shrink: 0; }
+.cr-reveal-outcome { color: rgba(255, 255, 255, 0.85); }
+.cr-row-good .cr-reveal-outcome { color: #4ade80; font-weight: 600; }
+.cr-row-bad .cr-reveal-outcome { color: #f87171; font-weight: 600; }
+.cr-reveal-dealt { margin-top: 6px; color: rgba(255, 255, 255, 0.6); }
+
+.cr-crit-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #f59e0b;
+  color: #1a1200;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  animation: cr-crit-pop 0.35s ease-out;
+}
+@keyframes cr-crit-pop {
+  0% { transform: scale(0.4); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.cr-reveal-enter-active, .cr-reveal-leave-active { transition: opacity 0.2s ease; }
+.cr-reveal-enter-from, .cr-reveal-leave-to { opacity: 0; }
+</style>

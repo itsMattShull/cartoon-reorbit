@@ -12,6 +12,7 @@ import { prisma as db } from '@/server/prisma'
 import { getGlobalConfig } from '@/server/utils/cmoon'
 import { serializeEnemyForClient, serializeBattleForClient } from '@/server/utils/cmoonEnemyBattle'
 import { checkRaidBossAvailability } from '@/server/utils/cmoonEnemyRaid'
+import { filterToHighestRank, pickWeightedEnemy } from '@/server/utils/cmoonEnemy'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -84,7 +85,14 @@ export default defineEventHandler(async (event) => {
   const candidates = rawCandidates.filter(m => !m.isRaidBoss || checkRaidBossAvailability(m).available)
   if (!candidates.length) return { offered: false }
 
-  const chosen = candidates[Math.floor(Math.random() * candidates.length)]
+  // "Higher tiered enemies first" (admin toggle) narrows the pool to only the highest
+  // CMoonEnemyRank actually present among this player's eligible candidates BEFORE weighting —
+  // full precedence, not merely extra weight. Off by default, which leaves every eligible rank in
+  // one pool together, the original behavior before either of these existed. Either way, the
+  // final pick is a weighted roll by each candidate's own occurrencePercent (see that column's own
+  // schema comment) rather than the old plain uniform pick.
+  const tierFiltered = filterToHighestRank(candidates, !!config?.cMoonEnemyHigherTierFirst)
+  const chosen = pickWeightedEnemy(tierFiltered)
 
   await db.user.update({ where: { id: userId }, data: { lastCMoonBattlePopupAt: new Date() } })
 
