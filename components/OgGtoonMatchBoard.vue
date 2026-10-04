@@ -64,6 +64,10 @@
               class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1.5 rounded text-xs"
             >{{ isPractice ? 'Swap (free)' : 'Swap (10 pts)' }}</button>
           </div>
+          <p class="text-[11px] text-gray-400 text-center max-w-xs">
+            Cards play in your deck's order (set in the deck builder) — you don't place them in slots.
+            Each round, reveal your next card; use your one {{ isPractice ? 'free ' : '' }}Swap to trade it with a later card.
+          </p>
         </div>
 
         <!-- Opponent side -->
