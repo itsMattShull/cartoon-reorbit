@@ -50,7 +50,10 @@
               <span class="tr-col-pts">{{ Number(offer.pointsOffered).toLocaleString() }}</span>
               <span class="tr-col-ct tr-col-off">{{ countByRole(offer, 'OFFERED') }}</span>
               <span class="tr-col-ct tr-col-req">{{ countByRole(offer, 'REQUESTED') }}</span>
-              <span class="tr-col-stat"><span class="tr-badge" :class="statusBadgeClass(offer.status)">{{ offer.status.toLowerCase() }}</span></span>
+              <span class="tr-col-stat">
+                <span class="tr-badge" :class="statusBadgeClass(offer.status)">{{ offer.status.toLowerCase() }}</span>
+                <span v-if="offer.counteredOfferId" class="tr-badge badge-countered" title="This offer is a counter to an earlier offer">counter</span>
+              </span>
               <span class="tr-col-date">{{ formatDate(offer.createdAt) }}</span>
               <span class="tr-col-act"><button class="tr-view-btn" @click="viewOffer(offer)">View</button></span>
             </div>
@@ -84,7 +87,10 @@
               <span class="tr-col-pts">{{ Number(offer.pointsOffered).toLocaleString() }}</span>
               <span class="tr-col-ct tr-col-off">{{ countByRole(offer, 'OFFERED') }}</span>
               <span class="tr-col-ct tr-col-req">{{ countByRole(offer, 'REQUESTED') }}</span>
-              <span class="tr-col-stat"><span class="tr-badge" :class="statusBadgeClass(offer.status)">{{ offer.status.toLowerCase() }}</span></span>
+              <span class="tr-col-stat">
+                <span class="tr-badge" :class="statusBadgeClass(offer.status)">{{ offer.status.toLowerCase() }}</span>
+                <span v-if="offer.counteredOfferId" class="tr-badge badge-countered" title="This offer is a counter to an earlier offer">counter</span>
+              </span>
               <span class="tr-col-date">{{ formatDate(offer.createdAt) }}</span>
               <span class="tr-col-act"><button class="tr-view-btn" @click="viewOffer(offer)">View</button></span>
             </div>
@@ -107,6 +113,10 @@
             <span v-if="tradeCounterSummary?.theirPointsOffered" class="tr-counter-warn">
               They offered {{ tradeCounterSummary.theirPointsOffered.toLocaleString() }} pts —
               ask for them (or any amount) in the "Points to request" field on the next steps.
+            </span>
+            <span v-if="tradeCounterSummary?.theirPointsRequested" class="tr-counter-warn">
+              They asked you for {{ tradeCounterSummary.theirPointsRequested.toLocaleString() }} pts —
+              it is pre-filled in "Points to offer"; change it if you like.
             </span>
             <span v-if="counterTrimmedCount" class="tr-counter-warn">
               {{ counterTrimmedCount }} cToon{{ counterTrimmedCount === 1 ? '' : 's' }} from the
@@ -703,13 +713,13 @@
               class="tm-btn tm-btn-reject"
               :disabled="isProcessing"
               @click="rejectOffer"
-            >Reject</button>
+            >{{ currentOffer.counteredOfferId ? 'Reject Counter' : 'Reject' }}</button>
             <button
               v-if="isInitiator && currentOffer.status === 'PENDING'"
               class="tm-btn tm-btn-reject"
               :disabled="isProcessing"
               @click="rejectOffer"
-            >Withdraw</button>
+            >{{ currentOffer.counteredOfferId ? 'Withdraw Counter' : 'Withdraw' }}</button>
           </div>
 
           <div v-if="modalToast.show" class="tm-toast" :class="modalToast.type">{{ modalToast.message }}</div>
@@ -1151,11 +1161,15 @@ async function acceptOffer() {
 
 async function rejectOffer() {
   const wasInitiator = isInitiator.value
+  const currentOfferCounterFlag = !!currentOffer.value?.counteredOfferId
   isProcessing.value = true
   try {
     await $fetch(`/api/trade/offers/${currentOffer.value.id}/reject`, { method: 'POST' })
     closeModal(); await loadOffers()
-    showPageToast(wasInitiator ? 'Offer withdrawn.' : 'Offer rejected.', 'success')
+    const wasCounter = currentOfferCounterFlag
+    showPageToast(wasInitiator
+      ? (wasCounter ? 'Counter offer withdrawn.' : 'Offer withdrawn.')
+      : (wasCounter ? 'Counter offer rejected.' : 'Offer rejected.'), 'success')
   } catch (err) {
     showModalToast(err.data?.statusMessage || err.statusMessage || 'Failed to reject', 'error')
   } finally { isProcessing.value = false }
@@ -1798,9 +1812,13 @@ async function startCounter(offer) {
     // only (initiator → recipient), so points they offered cannot be mirrored
     // into a request. Saying so beats silently dropping the value.
     theirPointsOffered: Number(offer.pointsOffered) || 0,
+    // Set when the offer being countered is itself a counter that asked us for
+    // points; mirrored into our "points to offer" below.
+    theirPointsRequested: Number(offer.pointsRequested) || 0,
   }
   // Prefill with what they offered us (or 0); editable, counter-only.
   pointsToRequest.value = Number(offer.pointsOffered) || 0
+  pointsToOffer.value = Number(offer.pointsRequested) || 0
   preselectTargetKeys.value = theirs.map(toonKey)
   preselectSelfKeys.value = mine.map(toonKey)
 
