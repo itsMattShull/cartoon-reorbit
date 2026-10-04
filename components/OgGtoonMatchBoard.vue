@@ -6,6 +6,12 @@
     </div>
 
     <template v-else>
+      <!-- Practice banner: makes it unmistakable nothing here earns or costs points -->
+      <div v-if="isPractice" class="flex items-center justify-between gap-2 px-3 py-1 bg-amber-500/90 text-black text-xs font-semibold flex-shrink-0">
+        <span>PRACTICE MODE · No points won or lost · Bot: {{ difficultyLabel }}</span>
+        <button v-if="!matchEnded" @click="$emit('exit')" class="px-2 py-0.5 rounded bg-black/20 hover:bg-black/30">Exit Practice</button>
+      </div>
+
       <!-- Top bar: round + goal colors + scores -->
       <div class="flex items-center justify-between px-3 py-2 bg-black/30 flex-shrink-0 text-sm">
         <div class="flex items-center gap-1.5">
@@ -56,7 +62,7 @@
               v-if="!matchState.you.swapUsed && canCommit"
               @click="openSwapSheet"
               class="bg-indigo-500 hover:bg-indigo-600 text-white px-3 py-1.5 rounded text-xs"
-            >Swap (10 pts)</button>
+            >{{ isPractice ? 'Swap (free)' : 'Swap (10 pts)' }}</button>
           </div>
         </div>
 
@@ -120,7 +126,7 @@
       <transition name="slide-up">
         <div v-if="swapSheetOpen" class="fixed inset-x-0 bottom-0 bg-gray-900 border-t border-white/20 rounded-t-xl z-50 p-4 max-h-[70vh] overflow-y-auto">
           <h3 class="font-bold mb-3">Swap your up-next card</h3>
-          <p class="text-xs text-gray-400 mb-3">Costs 10 points. You can only do this once per match, and only before you commit for the round.</p>
+          <p class="text-xs text-gray-400 mb-3">{{ isPractice ? 'Free in practice.' : 'Costs 10 points.' }} You can only do this once per match, and only before you commit for the round.</p>
           <div class="grid grid-cols-4 gap-2 mb-4">
             <div
               v-for="(c, idx) in swapOptions"
@@ -140,7 +146,7 @@
               :disabled="swapPick === null"
               @click="confirmSwap"
               class="px-4 py-2 bg-indigo-500 disabled:opacity-50 rounded text-sm"
-            >Swap for 10 pts</button>
+            >{{ isPractice ? 'Swap' : 'Swap for 10 pts' }}</button>
           </div>
         </div>
       </transition>
@@ -154,6 +160,7 @@
             </h2>
             <p class="text-sm text-gray-300 mb-1">Final Score: {{ matchEnded.player1Score }} - {{ matchEnded.player2Score }}</p>
             <p class="text-xs text-gray-400 mb-2">{{ endReasonLabel }}</p>
+            <p v-if="isPractice" class="text-xs text-amber-300 mb-2">Practice match — no points were awarded or spent.</p>
             <div v-if="groupedEffectsLog.length" class="text-left max-h-32 overflow-y-auto bg-black/30 rounded p-2 mb-3 space-y-1">
               <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Powers that fired</p>
               <div v-for="(g, gi) in groupedEffectsLog" :key="gi" class="text-[11px] text-gray-300">
@@ -163,7 +170,7 @@
                 </span>
               </div>
             </div>
-            <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">Back to Lobby</button>
+            <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">{{ isPractice ? 'Back to Practice' : 'Back to Lobby' }}</button>
           </div>
         </div>
       </transition>
@@ -200,6 +207,12 @@ function cardBadges(card) {
   if (card.group) out.push(GROUP_LABELS[card.group] || card.group)
   return out
 }
+
+const isPractice = computed(() => !!matchState.value?.practice)
+const difficultyLabel = computed(() => {
+  const d = matchState.value?.difficulty
+  return d ? d.charAt(0).toUpperCase() + d.slice(1) : 'Normal'
+})
 
 const youRevealed = computed(() => matchState.value?.you?.revealed || [])
 const oppRevealed = computed(() => matchState.value?.opponent?.revealed || [])

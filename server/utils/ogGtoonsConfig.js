@@ -21,6 +21,7 @@ async function load() {
         ogGtoonsGameEnabled: true,
         ogGtoonsDeckBuildingEnabled: true,
         ogGtoonsLeaderboardEnabled: true,
+        ogGtoonsPracticeEnabled: true,
         ogGtoonsGamesPageVisible: true
       }
     })
@@ -32,6 +33,7 @@ async function load() {
       gameEnabled: row?.ogGtoonsGameEnabled === true,
       deckBuildingEnabled: row?.ogGtoonsDeckBuildingEnabled === true,
       leaderboardEnabled: row?.ogGtoonsLeaderboardEnabled === true,
+      practiceEnabled: row?.ogGtoonsPracticeEnabled === true,
       // Independent of the four above, and opposite polarity on purpose — see this column's
       // schema comment. It isn't part of the rollout-safety gate those four exist for, so a
       // missing row (or a read failure) leaves it visible by default; only an explicit `false`
@@ -40,11 +42,11 @@ async function load() {
     }
   } catch (err) {
     console.error('[ogGtoons] config read failed:', err)
-    return { matchmakingEnabled: false, gameEnabled: false, deckBuildingEnabled: false, leaderboardEnabled: false, gamesPageVisible: true }
+    return { matchmakingEnabled: false, gameEnabled: false, deckBuildingEnabled: false, leaderboardEnabled: false, practiceEnabled: false, gamesPageVisible: true }
   }
 }
 
-/** { matchmakingEnabled, gameEnabled, deckBuildingEnabled, leaderboardEnabled, gamesPageVisible } */
+/** { matchmakingEnabled, gameEnabled, deckBuildingEnabled, leaderboardEnabled, practiceEnabled, gamesPageVisible } */
 export async function getOgGtoonsConfig() {
   const now = Date.now()
   if (cache && now - cachedAt < TTL_MS) return cache

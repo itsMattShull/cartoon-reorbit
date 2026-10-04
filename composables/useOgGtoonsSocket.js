@@ -25,6 +25,8 @@ export function useOgGtoonsSocket() {
     socket.on('connect', () => {
       isConnected.value = true
       socket.emit('oggtoons:subscribe')
+      // Reattach to a live practice match after a refresh/reconnect (no-op if there isn't one).
+      socket.emit('oggtoons:practice:resume')
     })
     socket.on('disconnect', () => { isConnected.value = false })
 
@@ -53,14 +55,27 @@ export function useOgGtoonsSocket() {
     socket.on('oggtoons:error', err => { lastError.value = err })
   }
 
+  // Practice matches (server flags the view with `practice: true`) use their own event names so
+  // they can never reach PvP's stake/swap-debit handlers.
+  const isPractice = () => !!matchState.value?.practice
+
   function commit(round) {
-    if (currentMatchId.value) socket.emit('oggtoons:commit', { matchId: currentMatchId.value, round })
+    if (!currentMatchId.value) return
+    if (isPractice()) socket.emit('oggtoons:practice:commit', { round })
+    else socket.emit('oggtoons:commit', { matchId: currentMatchId.value, round })
   }
   function swap(swapWithIndex) {
-    if (currentMatchId.value) socket.emit('oggtoons:swap', { matchId: currentMatchId.value, swapWithIndex })
+    if (!currentMatchId.value) return
+    if (isPractice()) socket.emit('oggtoons:practice:swap', { swapWithIndex })
+    else socket.emit('oggtoons:swap', { matchId: currentMatchId.value, swapWithIndex })
+  }
+  function startPractice(deckId, difficulty) {
+    lastError.value = null
+    socket.emit('oggtoons:practice:start', { deckId, difficulty })
   }
   function leaveMatch() {
-    socket.emit('oggtoons:leave')
+    if (isPractice()) socket.emit('oggtoons:practice:leave')
+    else socket.emit('oggtoons:leave')
     matchState.value = null
     matchEnded.value = null
     currentMatchId.value = null
@@ -68,6 +83,6 @@ export function useOgGtoonsSocket() {
 
   return {
     socket, matchState, lastReveal, matchEnded, isConnected, currentMatchId, lastError,
-    commit, swap, leaveMatch
+    commit, swap, leaveMatch, startPractice
   }
 }

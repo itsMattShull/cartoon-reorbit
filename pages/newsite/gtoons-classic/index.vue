@@ -18,6 +18,7 @@
       </p>
       <OgGtoonDecks v-else-if="activeTab === 'decks'" />
       <OgGtoonMatchmaking v-else-if="activeTab === 'matchmaking'" />
+      <OgGtoonPractice v-else-if="activeTab === 'practice'" />
       <OgGtoonLeaderboard v-else-if="activeTab === 'leaderboard'" />
     </div>
   </div>
@@ -25,9 +26,11 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useRoute } from '#imports'
 import OgGtoonDecks from '@/components/oggtoons/OgGtoonDecks.vue'
 import OgGtoonMatchmaking from '@/components/oggtoons/OgGtoonMatchmaking.vue'
 import OgGtoonLeaderboard from '@/components/oggtoons/OgGtoonLeaderboard.vue'
+import OgGtoonPractice from '@/components/oggtoons/OgGtoonPractice.vue'
 
 definePageMeta({
   layout: 'newsite-template',
@@ -44,14 +47,20 @@ clearSidebarMiddle()
 const TABS = [
   { id: 'decks',       label: 'Manage Deck',  flag: 'deckBuildingEnabled' },
   { id: 'matchmaking', label: 'Matchmaking',  flag: 'matchmakingEnabled' },
+  // Practice needs live matches on as well as its own switch (the server enforces both).
+  { id: 'practice',    label: 'Practice',     flag: 'practiceEnabled', requires: 'gameEnabled' },
   { id: 'leaderboard', label: 'Leaderboard',  flag: 'leaderboardEnabled' }
 ]
 // Defaults to everything on so the tabs don't flash hidden-then-shown while the config fetch
 // is in flight — an admin closing a section is a rare, deliberate action, not something that
 // needs to race the page's first paint.
-const config = ref({ matchmakingEnabled: true, gameEnabled: true, deckBuildingEnabled: true, leaderboardEnabled: true })
-const visibleTabs = computed(() => TABS.filter(t => config.value[t.flag] !== false))
-const activeTab = ref('decks')
+const config = ref({ matchmakingEnabled: true, gameEnabled: true, deckBuildingEnabled: true, leaderboardEnabled: true, practiceEnabled: true })
+const visibleTabs = computed(() => TABS.filter(t =>
+  config.value[t.flag] !== false && (!t.requires || config.value[t.requires] !== false)
+))
+const route = useRoute()
+// ?tab=practice lets the match screen send people straight back to Practice.
+const activeTab = ref(TABS.some(t => t.id === route.query.tab) ? route.query.tab : 'decks')
 
 watch(visibleTabs, (tabs) => {
   if (tabs.length && !tabs.some(t => t.id === activeTab.value)) activeTab.value = tabs[0].id

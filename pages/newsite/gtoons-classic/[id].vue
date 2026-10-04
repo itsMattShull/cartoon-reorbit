@@ -26,11 +26,13 @@ clearSidebarMiddle()
 // ogGtoonsSocket.js's reattach()); the client never asserts anything about the match by way of
 // this route param, so it is not otherwise read here.
 const router = useRouter()
-const { leaveMatch } = useOgGtoonsSocket()
+const { leaveMatch, matchState } = useOgGtoonsSocket()
 
 function onExit() {
+  // Read before leaveMatch() clears the state: practice sends people back to the Practice tab.
+  const wasPractice = !!matchState.value?.practice
   leaveMatch()
-  router.push('/newsite/gtoons-classic')
+  router.push(wasPractice ? '/newsite/gtoons-classic?tab=practice' : '/newsite/gtoons-classic')
 }
 </script>
 
