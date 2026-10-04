@@ -34,6 +34,27 @@
         </div>
       </div>
 
+      <!-- Practice vs. the computer (no stake, no points, not on the leaderboard) -->
+      <div v-if="practiceAvailable" class="p-3 bg-white/5 rounded border border-white/10">
+        <h3 class="font-bold mb-1">Practice Match</h3>
+        <p class="text-xs text-gray-300 mb-2">
+          Play the computer with your selected deck. No points are staked and it doesn't count toward the leaderboard.
+        </p>
+        <div class="flex items-center gap-2 flex-wrap">
+          <label class="text-sm">Difficulty:</label>
+          <select v-model="practiceDifficulty" class="border rounded px-2 py-1 text-gray-800 text-sm">
+            <option value="easy">Easy</option>
+            <option value="normal">Normal</option>
+            <option value="hard">Hard</option>
+          </select>
+          <button
+            :disabled="!selectedDeckId || startingPractice || lobbyState?.inQueue"
+            @click="startPracticeClick"
+            class="bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white px-4 py-1.5 rounded text-sm"
+          >{{ startingPractice ? 'Starting…' : 'Start Practice' }}</button>
+        </div>
+      </div>
+
       <!-- Direct challenge -->
       <div class="p-3 bg-white/5 rounded border border-white/10">
         <h3 class="font-bold mb-2">Challenge a Player</h3>
@@ -93,7 +114,7 @@ const router = useRouter()
 const {
   lobbyState, joinQueue, leaveQueue, sendChallenge, acceptChallenge, declineChallenge, cancelChallenge
 } = useOgGtoonsRoomSocket()
-const { currentMatchId } = useOgGtoonsSocket()
+const { currentMatchId, lastError, startPractice } = useOgGtoonsSocket()
 
 const toast = ref({ visible: false, message: '', type: 'success', timeout: null })
 function showToast(message, type = 'success') {
@@ -108,6 +129,9 @@ const selectedDeckId = ref('')
 const queueStake = ref(0)
 const challengeTarget = ref('')
 const challengeStake = ref(0)
+const practiceDifficulty = ref('normal')
+const startingPractice = ref(false)
+const practiceAvailable = ref(true)
 
 const validDecks = computed(() => decks.value.filter(d => d.valid))
 const activeIncoming = computed(() => lobbyState.value?.incomingChallenges?.[0] || null)
@@ -116,6 +140,20 @@ function sendChallengeClick() {
   sendChallenge(challengeTarget.value.trim(), selectedDeckId.value, challengeStake.value)
   challengeTarget.value = ''
 }
+
+function startPracticeClick() {
+  if (!selectedDeckId.value || startingPractice.value) return
+  startingPractice.value = true
+  startPractice(selectedDeckId.value, practiceDifficulty.value)
+  // Server answers with matchStart (navigates below) or an error (re-enables the button).
+  setTimeout(() => { startingPractice.value = false }, 4000)
+}
+
+watch(lastError, (err) => {
+  if (!err) return
+  startingPractice.value = false
+  showToast(err.message || 'Could not start practice.', 'error')
+})
 
 watch(currentMatchId, (id) => {
   if (id) router.push(`/newsite/gtoons-classic/${id}`)
@@ -130,6 +168,12 @@ onMounted(async () => {
     showToast('Failed to load decks.', 'error')
   }
   loadingDecks.value = false
+  try {
+    const cfg = await $fetch('/api/game/oggtoons/config')
+    practiceAvailable.value = cfg.practiceEnabled !== false && cfg.gameEnabled !== false
+  } catch {
+    // Leave it available; the server gates the action either way.
+  }
 })
 </script>
 
