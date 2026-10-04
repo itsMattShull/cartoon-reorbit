@@ -1845,6 +1845,10 @@ model TradeOffer {
   initiatorId   String // who is making the offer
   recipientId   String // who will receive the offer
   pointsOffered Int      @default(0)
+  /// Points the initiator asks of the recipient. Only ever non-zero on a counter
+  /// offer (counter.post.js is the sole writer); transferred recipient → initiator
+  /// on accept. Not locked at creation — availability is checked on accept.
+  pointsRequested Int    @default(0)
   status        String   @default("PENDING") // e.g. PENDING, ACCEPTED, REJECTED, WITHDRAWN, COUNTERED
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt

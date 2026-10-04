@@ -97,6 +97,28 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // 5a) Verify recipient can cover any points the (counter) offer asks of them.
+  // Available, not total: points locked in an auction bid or another trade are
+  // spoken for.
+  if (offer.pointsRequested > 0) {
+    const [recipientPts, recipientLocks] = await Promise.all([
+      prisma.userPoints.findUnique({ where: { userId: offer.recipientId } }),
+      prisma.lockedPoints.findMany({
+        where: { userId: offer.recipientId, status: 'ACTIVE' },
+        select: { amount: true }
+      })
+    ])
+    const lockedSum = recipientLocks.reduce((acc, r) => acc + (r.amount || 0), 0)
+    if ((recipientPts?.points || 0) - lockedSum < offer.pointsRequested) {
+      // Not rejected: unlike a missing cToon this is a state the accepter can
+      // fix (earn or free up points) and then try again.
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'You do not have enough available points to accept this offer.'
+      })
+    }
+  }
+
   // 6) Transfer cToons, move points, log, accept
   const { ip: acceptedByIp, userAgent: acceptedByUserAgent } = captureRequestMeta(event)
   await prisma.$transaction(async (tx) => {
@@ -127,50 +149,61 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    if (offer.pointsOffered > 0) {
+    if (offer.pointsOffered > 0 || offer.pointsRequested > 0) {
       // Both UserPoints rows are taken in userId order, not initiator-then-
       // recipient. Two accepts between the same pair of users in opposite roles
       // would otherwise grab the same two rows in opposite orders and deadlock —
       // a narrow window at 50 cToons a side, seconds wide at 250.
       const [firstId, secondId] = [offer.initiatorId, offer.recipientId].sort()
-      const deltaFor = (userId) => userId === offer.initiatorId
-        ? { points: { decrement: offer.pointsOffered } }
-        : { points: { increment: offer.pointsOffered } }
+      // Points can move both ways on a counter (offered: initiator → recipient,
+      // requested: recipient → initiator), so apply the net change per user.
+      const net = offer.pointsOffered - offer.pointsRequested // initiator's loss
+      const deltaFor = (userId) => ({
+        points: userId === offer.initiatorId
+          ? { decrement: net }
+          : { increment: net }
+      })
 
       const firstRow = await tx.userPoints.update({ where: { userId: firstId }, data: deltaFor(firstId) })
       const secondRow = await tx.userPoints.update({ where: { userId: secondId }, data: deltaFor(secondId) })
+      // The checks above ran outside this transaction; this catches a balance
+      // spent in between and rolls the whole accept back.
+      if (firstRow.points < 0 || secondRow.points < 0) {
+        throw createError({
+          statusCode: 409,
+          statusMessage: 'A player no longer has enough points for this trade.'
+        })
+      }
 
       const totalFor = (userId) => (userId === firstId ? firstRow : secondRow).points
 
-      await tx.pointsLog.createMany({
-        data: [
-          {
-            userId:    offer.initiatorId,
-            points:    offer.pointsOffered,
-            total:     totalFor(offer.initiatorId),
-            method:    'Requested Trade',
-            direction: 'decrease'
-          },
-          {
-            userId:    offer.recipientId,
-            points:    offer.pointsOffered,
-            total:     totalFor(offer.recipientId),
-            method:    'Accepted Trade',
-            direction: 'increase'
-          }
-        ]
-      })
+      const logs = []
+      if (offer.pointsOffered > 0) {
+        logs.push(
+          { userId: offer.initiatorId, points: offer.pointsOffered, total: totalFor(offer.initiatorId), method: 'Requested Trade', direction: 'decrease' },
+          { userId: offer.recipientId, points: offer.pointsOffered, total: totalFor(offer.recipientId), method: 'Accepted Trade', direction: 'increase' }
+        )
+      }
+      if (offer.pointsRequested > 0) {
+        logs.push(
+          { userId: offer.recipientId, points: offer.pointsRequested, total: totalFor(offer.recipientId), method: 'Accepted Trade', direction: 'decrease' },
+          { userId: offer.initiatorId, points: offer.pointsRequested, total: totalFor(offer.initiatorId), method: 'Requested Trade', direction: 'increase' }
+        )
+      }
+      await tx.pointsLog.createMany({ data: logs })
 
-      // Mark the corresponding trade lock as consumed
-      await tx.lockedPoints.updateMany({
-        where: {
-          userId: offer.initiatorId,
-          status: 'ACTIVE',
-          contextType: 'TRADE',
-          contextId: offerId
-        },
-        data: { status: 'CONSUMED' }
-      })
+      if (offer.pointsOffered > 0) {
+        // Mark the corresponding trade lock as consumed
+        await tx.lockedPoints.updateMany({
+          where: {
+            userId: offer.initiatorId,
+            status: 'ACTIVE',
+            contextType: 'TRADE',
+            contextId: offerId
+          },
+          data: { status: 'CONSUMED' }
+        })
+      }
     }
 
     // Transfer both sides as two set-based updates rather than one update per

@@ -59,12 +59,19 @@ export function normalizeCtoonIdList (list, label) {
 }
 
 /** An offer has to actually offer something, or it is just a notification. */
-export function assertOfferHasContent ({ resolvedOffered, resolvedRequested, pointsOffered }) {
-  if (!resolvedOffered.length && !resolvedRequested.length && !pointsOffered) {
+export function assertOfferHasContent ({ resolvedOffered, resolvedRequested, pointsOffered, pointsRequested = 0 }) {
+  if (!resolvedOffered.length && !resolvedRequested.length && !pointsOffered && !pointsRequested) {
     throw createError({
       statusCode: 400,
       statusMessage: 'A trade offer must include at least one cToon or some points.'
     })
+  }
+}
+
+/** Points asked of the other party must be a non-negative integer. */
+export function assertValidPointsRequested (pointsRequested) {
+  if (typeof pointsRequested !== 'number' || !Number.isInteger(pointsRequested) || pointsRequested < 0) {
+    throw createError({ statusCode: 400, statusMessage: 'pointsRequested must be a non-negative integer' })
   }
 }
 
