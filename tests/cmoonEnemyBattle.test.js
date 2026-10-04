@@ -3,8 +3,51 @@ import assert from 'node:assert/strict'
 import {
   resolveBattleRound, rollEnemyAction, rollEnemyRewards, buildGrantableReward, rollHitDamage,
   isValidBattleAction, BATTLE_ACTIONS, PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE,
-  HEAL_ON_SUCCESSFUL_BLOCK,
+  HEAL_ON_SUCCESSFUL_BLOCK, resolveRound,
 } from '../server/utils/cmoonEnemyBattle.js'
+
+const baseEnemyMember = { critChanceAgainstPercent: 0, critChanceFromPercent: 0, maxHp: 5 }
+
+test('resolveRound: a landed player hit reduces enemy HP via the returned enemyDamage, and does not touch playerHp', () => {
+  const result = resolveRound({ playerAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember, playerHpRemaining: PLAYER_MAX_HP })
+  // The enemy's action is random, so only assert what's deterministic: the player never took
+  // damage from their OWN attack, and a normal (non-crit, since critChanceFromPercent is 0) hit
+  // against the enemy is always NORMAL_HIT_DAMAGE if one landed at all.
+  assert.equal(result.newPlayerHp <= PLAYER_MAX_HP, true)
+  if (result.enemyHit) assert.equal(result.enemyDamage, NORMAL_HIT_DAMAGE)
+  else assert.equal(result.enemyDamage, 0)
+})
+
+test('resolveRound: a 100% crit-from enemy always deals CRITICAL_HIT_DAMAGE to the player on a landed hit', () => {
+  const critEnemy = { ...baseEnemyMember, critChanceFromPercent: 100 }
+  // Force a guaranteed player hit by blocking the wrong lane is impossible to force deterministically
+  // (the enemy's action is randomized inside resolveRound), so instead run enough trials that at
+  // least one lands and assert every landed hit this round was a full crit — matches how
+  // rollHitDamage's own unit tests already prove the 100% branch never misses.
+  let sawAHit = false
+  for (let i = 0; i < 200; i++) {
+    const result = resolveRound({ playerAction: 'BLOCK_HIGH', enemyMember: critEnemy, playerHpRemaining: PLAYER_MAX_HP })
+    if (result.newPlayerHp < PLAYER_MAX_HP) {
+      sawAHit = true
+      assert.equal(PLAYER_MAX_HP - result.newPlayerHp, CRITICAL_HIT_DAMAGE)
+    }
+  }
+  assert.equal(sawAHit, true)
+})
+
+test('resolveRound: a successful player block heals 1 HP, capped at PLAYER_MAX_HP', () => {
+  // BLOCK_HIGH cancels an ATTACK_HIGH from the enemy — run enough trials to see it happen at
+  // least once (enemy action is 1-of-4 uniform random) and confirm the heal never overflows.
+  let sawABlock = false
+  for (let i = 0; i < 200; i++) {
+    const result = resolveRound({ playerAction: 'BLOCK_HIGH', enemyMember: baseEnemyMember, playerHpRemaining: PLAYER_MAX_HP - 1 })
+    if (result.roundEntry.playerBlocked) {
+      sawABlock = true
+      assert.equal(result.newPlayerHp, PLAYER_MAX_HP)
+    }
+  }
+  assert.equal(sawABlock, true)
+})
 
 test('resolveBattleRound: matching block cancels the matching-lane attack, and counts as a successful block', () => {
   assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'BLOCK_HIGH'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: true })

@@ -115,6 +115,24 @@
             <NuxtLink to="/newsite/admin/cMoonEnemies" class="text-indigo-600 hover:underline">Manage cMoon Enemies</NuxtLink> page.
           </p>
           <p v-if="battlePopupError" class="text-[11px] text-red-600 mt-1">{{ battlePopupError }}</p>
+
+          <label class="block text-xs font-medium mb-1 mt-3">Raid boss Discord announcement channel</label>
+          <div class="flex items-center gap-2">
+            <input
+              v-model.trim="raidBossDiscordChannelId" type="text" inputmode="numeric" placeholder="Channel ID (blank = default announcements channel)"
+              class="cm-field flex-1 min-w-0 border rounded px-2 py-1" style="font-size:16px"
+            />
+            <button
+              class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              :disabled="raidBossChannelSaving" @click="saveRaidBossDiscordChannel"
+            >{{ raidBossChannelSaving ? 'Saving…' : 'Save' }}</button>
+          </div>
+          <p class="text-[11px] text-gray-600 mt-1">
+            Where a "raid boss started" announcement posts (see the raid boss checkbox on a Final
+            Boss member in Manage cMoon Enemies). Blank falls back to the site's default
+            announcements channel.
+          </p>
+          <p v-if="raidBossChannelError" class="text-[11px] text-red-600 mt-1">{{ raidBossChannelError }}</p>
         </div>
       </div>
 
@@ -1265,6 +1283,9 @@ const battlePopupChancePercent = ref(3)
 const battlePopupCooldownMinutes = ref(20)
 const battlePopupSaving = ref(false)
 const battlePopupError = ref('')
+const raidBossDiscordChannelId = ref('')
+const raidBossChannelSaving = ref(false)
+const raidBossChannelError = ref('')
 const previewModalOpen = ref(false)
 const balanceModalOpen = ref(false)
 const recalcModalOpen = ref(false)
@@ -2295,6 +2316,7 @@ async function load() {
     enemyBattlesEnabled.value = !!data.cMoonEnemyBattlesEnabled
     battlePopupChancePercent.value = Number.isInteger(data.cMoonBattlePopupChancePercent) ? data.cMoonBattlePopupChancePercent : 3
     battlePopupCooldownMinutes.value = Number.isInteger(data.cMoonBattlePopupCooldownMinutes) ? data.cMoonBattlePopupCooldownMinutes : 20
+    raidBossDiscordChannelId.value = data.cMoonRaidBossDiscordChannelId || ''
     admins.value = adminsData || []
     ctoons.value = ctoonsData || []
     backgrounds.value = backgroundsData || []
@@ -2557,6 +2579,22 @@ async function saveBattlePopupSettings() {
     battlePopupError.value = e?.data?.statusMessage || 'Failed to save battle popup settings'
   } finally {
     battlePopupSaving.value = false
+  }
+}
+
+async function saveRaidBossDiscordChannel() {
+  raidBossChannelSaving.value = true
+  raidBossChannelError.value = ''
+  try {
+    const res = await $fetch('/api/admin/cmoon-settings', {
+      method: 'POST',
+      body: { cMoonRaidBossDiscordChannelId: raidBossDiscordChannelId.value },
+    })
+    raidBossDiscordChannelId.value = res.cMoonRaidBossDiscordChannelId || ''
+  } catch (e) {
+    raidBossChannelError.value = e?.data?.statusMessage || 'Failed to save raid boss Discord channel'
+  } finally {
+    raidBossChannelSaving.value = false
   }
 }
 

@@ -111,12 +111,41 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
   }
 
   // cMoon Enemy Battles wins (lifetime, across every cMoon this user has ever belonged to —
-  // CMoonEnemyBattle.userId is never cleared on a cMoon change, unlike the per-cMoon rank ladder)
+  // CMoonEnemyBattle.userId is never cleared on a cMoon change, unlike the per-cMoon rank ladder).
+  // Counted regardless of cMoon membership — even a battle with no cMoonId (see that column's own
+  // schema comment) still counts as a real defeated enemy for this criterion.
   if (ach.cmoonMonstersDefeatedGte != null) {
     const wins = await db.cMoonEnemyBattle.count({
       where: { userId, outcome: 'WIN' }
     })
     if (wins < ach.cmoonMonstersDefeatedGte) return false
+  }
+
+  // Same lifetime WIN-count shape as cmoonMonstersDefeatedGte, each scoped to one CMoonEnemyRank
+  // tier via the enemyMember relation — lets an admin require e.g. "10 Underbosses" specifically.
+  if (ach.cmoonGoonsDefeatedGte != null) {
+    const wins = await db.cMoonEnemyBattle.count({
+      where: { userId, outcome: 'WIN', enemyMember: { rank: 'GOON' } }
+    })
+    if (wins < ach.cmoonGoonsDefeatedGte) return false
+  }
+  if (ach.cmoonEnforcersDefeatedGte != null) {
+    const wins = await db.cMoonEnemyBattle.count({
+      where: { userId, outcome: 'WIN', enemyMember: { rank: 'ENFORCER' } }
+    })
+    if (wins < ach.cmoonEnforcersDefeatedGte) return false
+  }
+  if (ach.cmoonUnderbossesDefeatedGte != null) {
+    const wins = await db.cMoonEnemyBattle.count({
+      where: { userId, outcome: 'WIN', enemyMember: { rank: 'UNDERBOSS' } }
+    })
+    if (wins < ach.cmoonUnderbossesDefeatedGte) return false
+  }
+  if (ach.cmoonFinalBossesDefeatedGte != null) {
+    const wins = await db.cMoonEnemyBattle.count({
+      where: { userId, outcome: 'WIN', enemyMember: { rank: 'FINAL_BOSS' } }
+    })
+    if (wins < ach.cmoonFinalBossesDefeatedGte) return false
   }
 
   // Wordle crown wins (total lifetime)

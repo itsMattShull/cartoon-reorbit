@@ -22,7 +22,9 @@ export default defineEventHandler(async (event) => {
     select: { cMoonId: true, banned: true, active: true },
   })
   if (!user || user.banned || !user.active) throw createError({ statusCode: 403, statusMessage: 'Not eligible to battle' })
-  if (!user.cMoonId) throw createError({ statusCode: 400, statusMessage: 'Join a cMoon before battling' })
+  // No cMoon membership required to fight — a player with no cMoon just can't earn cMoon points
+  // (battle.cMoonId stays null; see resolveWin in action.post.js), every other reward and
+  // achievement progress still applies normally.
 
   // Reclaim a genuinely-abandoned battle (popup closed mid-fight, no round submitted in a
   // while) instead of leaving the player permanently soft-locked out of ever fighting again.
@@ -59,8 +61,35 @@ export default defineEventHandler(async (event) => {
   if (!enemyMember || !enemyMember.active || !enemyMember.faction.active) {
     throw createError({ statusCode: 404, statusMessage: 'That enemy is no longer available' })
   }
+  // Raid bosses are only ever fought through the socket-driven co-op flow (see
+  // server/utils/cmoonRaidSocket.js) — this solo/stateless endpoint must never create a
+  // CMoonEnemyBattle row for one, even if a client fabricates the request directly.
+  if (enemyMember.isRaidBoss) {
+    throw createError({ statusCode: 409, statusMessage: 'This enemy must be fought as a raid — use the raid button' })
+  }
   if (enemyMember.battleMode === 'SHARED_POOL' && (enemyMember.defeatedAt || enemyMember.currentHp <= 0)) {
     throw createError({ statusCode: 409, statusMessage: 'This enemy has already been defeated' })
+  }
+  // A player mid-raid must resolve it before starting an unrelated solo fight — the raid's own
+  // CMoonEnemyRaidParticipant.activeUserId sentinel is the real backstop; this is a friendlier
+  // upfront message for the common case.
+  const activeRaid = await db.cMoonEnemyRaidParticipant.findFirst({
+    where: { userId, activeUserId: userId },
+    select: { id: true },
+  })
+  if (activeRaid) {
+    throw createError({ statusCode: 409, statusMessage: 'Finish your current raid before starting a solo battle' })
+  }
+
+  // Backstop for consider.post.js's own candidate filter, same reasoning as the feature-toggle
+  // check above: this endpoint takes an explicit enemyMemberId and is reachable directly, so a
+  // player who never actually saw this enemy offered (or fabricated the id) must still be turned
+  // away if they haven't personally cleared the required number of prior wins.
+  if (enemyMember.minPriorDefeats > 0) {
+    const personalWinCount = await db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN' } })
+    if (personalWinCount < enemyMember.minPriorDefeats) {
+      throw createError({ statusCode: 403, statusMessage: 'You have not defeated enough enemies to face this one yet' })
+    }
   }
 
   const enemyHpRemaining = enemyMember.battleMode === 'SHARED_POOL' ? enemyMember.currentHp : enemyMember.maxHp

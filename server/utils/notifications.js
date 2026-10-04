@@ -38,7 +38,9 @@ export const NOTIFICATION_TYPES = Object.freeze({
   AUCTION_NEW_BID: 'AUCTION_NEW_BID',
   AUCTION_WON: 'AUCTION_WON',
   TRADE_OFFER_RECEIVED: 'TRADE_OFFER_RECEIVED',
-  TRADE_OFFER_ACCEPTED: 'TRADE_OFFER_ACCEPTED'
+  TRADE_OFFER_ACCEPTED: 'TRADE_OFFER_ACCEPTED',
+  CMOON_RAID_BOSS_STARTED: 'CMOON_RAID_BOSS_STARTED',
+  CMOON_RAID_PREVIEW_STARTED: 'CMOON_RAID_PREVIEW_STARTED'
 })
 
 // Mirrors the guard in server/utils/discord.js — the official account is a
@@ -204,5 +206,39 @@ export async function notifyTradeOfferAccepted (db, { userId, offerId, byUsernam
     body: 'The cToons and points have been transferred.',
     contextType: 'TRADE',
     contextId: offerId
+  })
+}
+
+/**
+ * A raid boss was started against a member of your own cMoon and you're eligible to join.
+ * `contextId` is the CMoonEnemyRaid id — notificationRoute() (components/Onboarding.vue) opens
+ * /newsite/cmoon-raid/{contextId}. No `contextType` — that enum is AUCTION/TRADE-specific (see
+ * LockedContextType) and routing here is driven entirely by `type`, same as the TRADE branch.
+ */
+export async function notifyCMoonRaidBossStarted (db, { userId, raidId, enemyName, cMoonName }) {
+  if (!(await isNotifiable(db, userId))) return false
+  return createNotification(db, {
+    userId,
+    type: NOTIFICATION_TYPES.CMOON_RAID_BOSS_STARTED,
+    title: `Raid boss started: ${enemyName || 'a cMoon enemy'}`,
+    body: `Join up to 3 other ${cMoonName || 'cMoon'} members before the 60-second window closes.`,
+    contextId: raidId
+  })
+}
+
+/**
+ * Another admin started a consequence-free raid boss preview (server/utils/cmoonRaidPreviewSocket.js)
+ * and this recipient (every OTHER admin) can join it. `contextId` is the in-memory preview raid id
+ * — notificationRoute() (components/Onboarding.vue) opens /newsite/cmoon-raid-preview/{contextId}.
+ * No `contextType`, same reasoning as notifyCMoonRaidBossStarted above.
+ */
+export async function notifyCMoonRaidPreviewStarted (db, { userId, raidId, enemyName, startedByUsername }) {
+  if (!(await isNotifiable(db, userId))) return false
+  return createNotification(db, {
+    userId,
+    type: NOTIFICATION_TYPES.CMOON_RAID_PREVIEW_STARTED,
+    title: `Raid preview started: ${enemyName || 'a cMoon enemy'}`,
+    body: `${startedByUsername || 'An admin'} is testing this raid boss — join in, no rewards or real records are involved.`,
+    contextId: raidId
   })
 }

@@ -53,6 +53,34 @@ export const REWARD_QUANTITY_DEFAULT = 1
 export const BATTLE_MODES = ['PER_PLAYER', 'SHARED_POOL']
 export const REWARD_TYPES = ['CTOON', 'AVATAR', 'BACKGROUND', 'POINTS']
 
+// Cosmetic difficulty/importance tier — see CMoonEnemyRank's own schema comment. Declared
+// low-to-high, matching the admin dropdown and the enum's own declaration order.
+export const ENEMY_RANKS = ['GOON', 'ENFORCER', 'UNDERBOSS', 'FINAL_BOSS']
+export const RANK_LABELS = { GOON: 'Goon', ENFORCER: 'Enforcer', UNDERBOSS: 'Underboss', FINAL_BOSS: 'Final Boss' }
+export const RANK_DEFAULT = 'GOON'
+
+// A player's own lifetime cMoon Enemy Battle win count must be at least this before a member can
+// be offered to them at all — see CMoonEnemyMember.minPriorDefeats' own schema comment. 0 (the
+// default) means no requirement. The upper bound is generous rather than tight: an admin building
+// a long unlock chain across many factions could reasonably want a high threshold.
+export const MIN_PRIOR_DEFEATS_MIN = 0
+export const MIN_PRIOR_DEFEATS_MAX = 100000
+export const MIN_PRIOR_DEFEATS_DEFAULT = 0
+
+// Admin-authored Discord template for a raid boss announcement — see
+// CMoonEnemyMember.raidAnnouncementText's own schema comment for the {cmoon}/{enemy} placeholders.
+// Same cap as FACTION_DESCRIPTION_MAX_LENGTH — one runaway paste shouldn't bloat the admin list.
+export const RAID_ANNOUNCEMENT_MAX_LENGTH = 500
+
+// How long a raid boss stays unavailable after a WIN before it can be raided again — see
+// CMoonEnemyMember.raidCooldownMinutes' own schema comment. 0 (the default) means no cooldown.
+// Capped at 30 days rather than something tighter (unlike the battle-popup cooldown's 1-day cap)
+// since a raid boss is a deliberately rarer, more organized event an admin might want to gate to
+// once a week or less.
+export const RAID_COOLDOWN_MINUTES_MIN = 0
+export const RAID_COOLDOWN_MINUTES_MAX = 43200
+export const RAID_COOLDOWN_MINUTES_DEFAULT = 0
+
 // The only CMoonEnemyMember columns a battle-sound upload may target — shared between
 // cmoon-enemy-members/[id]/sound.post.js (which validates the client-sent `slot` field against
 // this set before ever touching Prisma's `data`) and the admin UI, so the two can't drift.
@@ -81,6 +109,14 @@ export function isValidMemberName(value) {
 
 export function isValidBattleMode(value) {
   return BATTLE_MODES.includes(value)
+}
+
+export function isValidRank(value) {
+  return ENEMY_RANKS.includes(value)
+}
+
+export function isValidMinPriorDefeats(value) {
+  return Number.isInteger(value) && value >= MIN_PRIOR_DEFEATS_MIN && value <= MIN_PRIOR_DEFEATS_MAX
 }
 
 export function isValidMaxHp(value) {
@@ -215,6 +251,12 @@ export function parseMemberBody(body, existing) {
   const battleMode = body?.battleMode === undefined
     ? (existing ? existing.battleMode : 'PER_PLAYER')
     : (typeof body.battleMode === 'string' ? body.battleMode.trim() : '')
+  const rank = body?.rank === undefined
+    ? (existing ? existing.rank : RANK_DEFAULT)
+    : (typeof body.rank === 'string' ? body.rank.trim() : '')
+  const minPriorDefeats = body?.minPriorDefeats === undefined
+    ? (existing ? existing.minPriorDefeats : MIN_PRIOR_DEFEATS_DEFAULT)
+    : toNumber(body.minPriorDefeats)
   const cMoonPointsReward = body?.cMoonPointsReward === undefined
     ? (existing ? existing.cMoonPointsReward : CMOON_POINTS_REWARD_DEFAULT)
     : toNumber(body.cMoonPointsReward)
@@ -228,6 +270,15 @@ export function parseMemberBody(body, existing) {
   const sortOrder = body?.sortOrder === undefined
     ? (existing ? existing.sortOrder : 0)
     : toNumber(body.sortOrder)
+  const isRaidBoss = toBoolean(body?.isRaidBoss, existing ? existing.isRaidBoss : false)
+  const raidAnnouncementTextRaw = body?.raidAnnouncementText === undefined
+    ? (existing ? existing.raidAnnouncementText : null)
+    : (typeof body.raidAnnouncementText === 'string' ? body.raidAnnouncementText.trim() : '')
+  const raidAnnouncementText = raidAnnouncementTextRaw ? raidAnnouncementTextRaw : null
+  const raidOneTime = toBoolean(body?.raidOneTime, existing ? existing.raidOneTime : false)
+  const raidCooldownMinutes = body?.raidCooldownMinutes === undefined
+    ? (existing ? existing.raidCooldownMinutes : RAID_COOLDOWN_MINUTES_DEFAULT)
+    : toNumber(body.raidCooldownMinutes)
 
   if (!factionId) {
     return { ok: false, message: 'Faction is required' }
@@ -238,6 +289,9 @@ export function parseMemberBody(body, existing) {
   if (!isValidBattleMode(battleMode)) {
     return { ok: false, message: 'Battle mode must be PER_PLAYER or SHARED_POOL' }
   }
+  if (!isValidRank(rank)) {
+    return { ok: false, message: `Rank must be one of ${ENEMY_RANKS.join(', ')}` }
+  }
   if (existing && existing.hasBattles && battleMode !== existing.battleMode) {
     // Same idea as czoneEffect.js's "kind cannot change after creation": flipping PER_PLAYER <->
     // SHARED_POOL under an enemy that already has battle history would make its logged fights
@@ -245,6 +299,16 @@ export function parseMemberBody(body, existing) {
     // an in-progress battle mid-fight under the other mode's rules. Compared against the RESOLVED
     // mode (not raw body.battleMode) so an omitted field is never mistaken for a change.
     return { ok: false, message: 'Battle mode cannot change once this enemy has been fought' }
+  }
+  if (existing && existing.hasBattles && rank !== existing.rank) {
+    // Same reasoning as the battleMode lock just above: the rank-scoped achievement criteria
+    // (cmoonGoonsDefeatedGte etc., see evaluateUserAgainstAchievement) count wins by joining
+    // live against this member's CURRENT rank, not a per-battle snapshot — re-ranking a member
+    // after it's been fought would silently reclassify every past win under the new rank.
+    return { ok: false, message: 'Rank cannot change once this enemy has been fought' }
+  }
+  if (!isValidMinPriorDefeats(minPriorDefeats)) {
+    return { ok: false, message: `Minimum prior defeats must be a whole number between ${MIN_PRIOR_DEFEATS_MIN} and ${MIN_PRIOR_DEFEATS_MAX}` }
   }
   if (!isValidMaxHp(maxHp)) {
     return { ok: false, message: `Max HP must be a whole number between ${MAX_HP_MIN} and ${MAX_HP_MAX}` }
@@ -264,12 +328,30 @@ export function parseMemberBody(body, existing) {
   if (!isValidSortOrder(sortOrder)) {
     return { ok: false, message: `Sort order must be a whole number between ${SORT_ORDER_MIN} and ${SORT_ORDER_MAX}` }
   }
+  if (isRaidBoss === null) {
+    return { ok: false, message: 'Raid boss must be true or false' }
+  }
+  // A raid boss is meant to be a headline fight — see isRaidBoss's own schema comment. Enforced
+  // here rather than the database so an admin gets an immediate, specific message.
+  if (isRaidBoss && rank !== 'FINAL_BOSS') {
+    return { ok: false, message: 'Only a Final Boss can be made a raid boss' }
+  }
+  if (raidAnnouncementText && raidAnnouncementText.length > RAID_ANNOUNCEMENT_MAX_LENGTH) {
+    return { ok: false, message: `Raid announcement must be ${RAID_ANNOUNCEMENT_MAX_LENGTH} characters or fewer` }
+  }
+  if (raidOneTime === null) {
+    return { ok: false, message: 'One-time raid boss must be true or false' }
+  }
+  if (!Number.isInteger(raidCooldownMinutes) || raidCooldownMinutes < RAID_COOLDOWN_MINUTES_MIN || raidCooldownMinutes > RAID_COOLDOWN_MINUTES_MAX) {
+    return { ok: false, message: `Raid cooldown must be a whole number of minutes between ${RAID_COOLDOWN_MINUTES_MIN} and ${RAID_COOLDOWN_MINUTES_MAX}` }
+  }
 
   return {
     ok: true,
     data: {
-      factionId, name, maxHp, battleMode, cMoonPointsReward,
+      factionId, name, maxHp, battleMode, rank, minPriorDefeats, cMoonPointsReward,
       critChanceAgainstPercent, critChanceFromPercent, active, sortOrder,
+      isRaidBoss, raidAnnouncementText, raidOneTime, raidCooldownMinutes,
     },
   }
 }
