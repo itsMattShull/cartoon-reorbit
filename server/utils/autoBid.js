@@ -148,7 +148,10 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
     const list = auto.map(a => ({
       userId: a.userId,
       createdAt: a.createdAt,
-      cap: Math.min(a.maxAmount, availableOf[a.userId] ?? 0),
+      // Bid amounts are absolute, but availableOf already has this auction's
+      // own lock subtracted. Add it back so only the incremental points
+      // needed beyond what's already locked here are checked.
+      cap: Math.min(a.maxAmount, (availableOf[a.userId] ?? 0) + (auctionLockOf[a.userId] || 0)),
       hasAuto: true
     }))
     const inList = list.some(x => x.userId === currentLeader)
