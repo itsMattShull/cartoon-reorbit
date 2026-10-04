@@ -1,7 +1,7 @@
 // server/utils/ogGtoonsPractice.js
 //
 // Practice mode for original gToons (2002): a server-authoritative single-player match against a
-// bot that plays a shuffled copy of the player's own deck. Registered per-connection from
+// bot that plays a copy of the player's own deck. Registered per-connection from
 // socket-server.js right after registerOgGtoons.
 //
 // ── Why this is NOT a branch inside ogGtoonsSocket.js ───────────────────────────────────────
@@ -29,10 +29,14 @@
 import { randomUUID } from 'crypto'
 import { getOgGtoonsConfig } from './ogGtoonsConfig.js'
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
-import { deriveGoalColor, applySwap } from './ogGtoonEngine.js'
-import { publicMatchView, revealNextCards, checkMatchEnd } from './ogGtoonMatchCore.js'
+import { deriveGoalColor, slotsForRound } from './ogGtoonEngine.js'
 import {
-  BOT_ID, BOT_USERNAME, buildBotDeck, chooseBotSwap, botCommitDelayMs, normalizeDifficulty
+  publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd,
+  placeCard, unplaceSlot, checkCommit, applyHandSwap, submitDiscard, resolveDiscardPhase
+} from './ogGtoonMatchCore.js'
+import {
+  BOT_ID, BOT_USERNAME, buildBotDeck, chooseBotPlacements, chooseBotDiscards, chooseBotSwap,
+  botCommitDelayMs, normalizeDifficulty
 } from './ogGtoonBot.js'
 import { markPracticing, clearPracticing, isInPvp } from './ogGtoonPresence.js'
 
@@ -63,9 +67,13 @@ function destroyMatch(match) {
   clearPracticing(match.humanId)
 }
 
-/** The bot's own unrevealed cards, up-next first — its swap input (never the human's order). */
-function botRemaining(match) {
-  return match.remainingIdx[1].map(i => match.deckOrder[1][i])
+/** Full-card objects (with their deck index as `idx`) for some of the bot's own deck indexes. */
+function botCards(match, idxs) {
+  return idxs.map(i => ({ idx: i, ...match.deckOrder[1][i] }))
+}
+
+function emitState(io, match) {
+  emitToHuman(io, match, OUT('state'), publicMatchView(match, match.humanId))
 }
 
 function scheduleBot(io, match, deps) {
@@ -77,37 +85,77 @@ function scheduleBot(io, match, deps) {
   match.botTimer.unref?.()
 }
 
+/** The bot's turn: discards during the discard phase, otherwise swaps/places/commits. */
 async function botAct(io, match, deps) {
-  if (match.ending || match.ready[1]) return
-  const swapWith = chooseBotSwap({
+  if (match.ending) return
+  if (match.phase === 'discard') return botDiscard(io, match, deps)
+  if (match.ready[1]) return
+
+  const slots = slotsForRound(match.currentRound)
+  const goalColor = match.goalColor[1]
+  const swapCard = chooseBotSwap({
     difficulty: match.difficulty,
     swapUsed: match.swapUsed[1],
     round: match.currentRound,
-    remaining: botRemaining(match),
-    goalColor: match.goalColor[1]
+    slotCount: Math.min(slots.length, match.hand[1].length),
+    hand: botCards(match, match.hand[1]),
+    undealt: botCards(match, match.undealt[1]),
+    goalColor
   })
-  if (swapWith !== null) {
-    match.remainingIdx[1] = applySwap(match.remainingIdx[1], swapWith)
-    match.swapUsed[1] = true
-  }
+  if (swapCard !== null) applyHandSwap(match, 1, { cardIdx: swapCard }, deps.rng)
+
+  const picks = chooseBotPlacements({
+    difficulty: match.difficulty, slots, hand: botCards(match, match.hand[1]), goalColor, rng: deps.rng
+  })
+  match.placements[1] = []
+  for (const pick of picks) placeCard(match, 1, pick)
+
   match.ready[1] = true
   match.lastActivity = Date.now()
   emitToHuman(io, match, OUT('opponentCommitted'), { round: match.currentRound })
   await resolveRound(io, match, deps)
 }
 
+async function botDiscard(io, match, deps) {
+  if (match.discardReady[1]) return
+  submitDiscard(match, 1, {
+    cardIdxs: chooseBotDiscards({
+      difficulty: match.difficulty,
+      hand: botCards(match, match.hand[1]),
+      undealt: botCards(match, match.undealt[1]),
+      goalColor: match.goalColor[1]
+    })
+  })
+  match.lastActivity = Date.now()
+  emitState(io, match)
+  settleDiscardPhase(io, match, deps)
+}
+
+/** Once both sides have chosen their discards: deal, re-open placing and let the bot move. */
+function settleDiscardPhase(io, match, deps) {
+  if (!resolveDiscardPhase(match)) return
+  match.lastActivity = Date.now()
+  emitState(io, match)
+  scheduleBot(io, match, deps)
+}
+
 async function resolveRound(io, match, deps) {
   if (match.ending) return
   if (!match.ready[0] || !match.ready[1]) return
 
-  const { entry1, entry2 } = revealNextCards(match)
+  const revealedRound = match.currentRound
+  const { entries, order } = revealPlacedCards(match)
   match.lastActivity = Date.now()
-  emitToHuman(io, match, OUT('reveal'), {
-    ...publicMatchView(match, match.humanId),
-    reveal: { round: match.currentRound, you: entry1, opponent: entry2 }
-  })
 
   const end = checkMatchEnd(match)
+  // Advance before emitting so the state the client receives already carries the NEXT round and
+  // phase; otherwise its next action would send a stale round and be silently dropped.
+  if (!end) advanceRound(match)
+  emitToHuman(io, match, OUT('reveal'), {
+    ...publicMatchView(match, match.humanId),
+    reveal: { round: revealedRound, order, you: entries[0], opponent: entries[1] }
+  })
+
   if (end) {
     endMatch(io, match, {
       outcome: end.outcome,
@@ -119,7 +167,6 @@ async function resolveRound(io, match, deps) {
     })
     return
   }
-  match.currentRound += 1
   scheduleBot(io, match, deps)
 }
 
@@ -223,18 +270,14 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
       usernames: [user.username, BOT_USERNAME],
       sockets: new Set([socket.id]),
       deckOrder: [userDeck, botDeck],
-      remainingIdx: [[0,1,2,3,4,5,6,7,8,9,10,11], [0,1,2,3,4,5,6,7,8,9,10,11]],
       goalColor: [deriveGoalColor(userDeck), deriveGoalColor(botDeck)],
-      swapUsed: [false, false],
-      ready: [false, false],
-      revealed: [[], []],
       stake: [0, 0],
-      currentRound: 1,
       ending: false,
       botTimer: null,
       startedAt: Date.now(),
       lastActivity: Date.now()
     }
+    initHands(match, d.rng)
     matches.set(user.id, match)
     markPracticing(user.id)
     socket.data.ogGtoonsPracticeUserId = user.id
@@ -255,39 +298,63 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
     socket.emit(OUT('matchStart'), publicMatchView(match, user.id))
   })
 
-  socket.on(EV('commit'), async ({ round } = {}) => {
+  // The caller's live practice match, or null. Also re-attaches this socket to it.
+  const liveMatch = async () => {
     const user = await auth()
-    if (!user) return
+    if (!user) return null
     const match = matches.get(user.id)
-    if (!match || match.ending) return
-    if (Number(round) !== match.currentRound) return
-    if (match.ready[0]) return
-    if (match.remainingIdx[0].length === 0) return
-
-    match.ready[0] = true
+    if (!match || match.ending) return null
     match.sockets.add(socket.id)
+    return match
+  }
+  // Reports a failed shared-core action; on success pushes the new state to the human.
+  const settle = (res, match) => {
+    if (!res.ok) { fail(res.code, res.message); return false }
+    match.lastActivity = Date.now()
+    emitState(io, match)
+    return true
+  }
+
+  socket.on(EV('place'), async ({ cardIdx, slot } = {}) => {
+    const match = await liveMatch()
+    if (match) settle(placeCard(match, 0, { cardIdx, slot }), match)
+  })
+
+  socket.on(EV('unplace'), async ({ slot } = {}) => {
+    const match = await liveMatch()
+    if (match) settle(unplaceSlot(match, 0, { slot }), match)
+  })
+
+  socket.on(EV('commit'), async ({ round } = {}) => {
+    const match = await liveMatch()
+    if (!match) return
+    const check = checkCommit(match, 0, round)
+    if (!check.ok) {
+      if (check.code !== 'staleRound' && check.code !== 'already_committed') fail(check.code, check.message)
+      return
+    }
+    match.ready[0] = true
     match.lastActivity = Date.now()
     socket.emit(OUT('committed'), { round: match.currentRound })
     await resolveRound(io, match, d)
   })
 
-  // Free in practice. Same rules as PvP (once per match, before committing, valid target) but
-  // there is no balance check and no debit — the PvP debit path is not reachable from here.
-  socket.on(EV('swap'), async ({ swapWithIndex } = {}) => {
-    const user = await auth()
-    if (!user) return
-    const match = matches.get(user.id)
-    if (!match || match.ending) return
-    if (match.swapUsed[0] || match.ready[0]) {
-      return fail(match.swapUsed[0] ? 'swap_used' : 'already_revealed', 'You cannot swap right now.')
+  // Free in practice. Same rules as PvP (once per match, before committing, a hand card for a
+  // random undealt one) but there is no balance check and no debit — the PvP debit path is not
+  // reachable from here.
+  socket.on(EV('swap'), async ({ cardIdx } = {}) => {
+    const match = await liveMatch()
+    if (!match) return
+    if (settle(applyHandSwap(match, 0, { cardIdx }, d.rng), match)) {
+      socket.emit(OUT('swapApplied'), { matchId: match.id })
     }
-    if (!Number.isInteger(swapWithIndex) || swapWithIndex <= 0 || swapWithIndex >= match.remainingIdx[0].length) {
-      return fail('badSwapTarget', 'Invalid swap target.')
-    }
-    match.remainingIdx[0] = applySwap(match.remainingIdx[0], swapWithIndex)
-    match.swapUsed[0] = true
-    match.lastActivity = Date.now()
-    socket.emit(OUT('swapApplied'), { matchId: match.id })
+  })
+
+  // Discard phase (after round 1): drop any hand cards, then both hands refill together.
+  socket.on(EV('discard'), async ({ cardIdxs } = {}) => {
+    const match = await liveMatch()
+    if (!match) return
+    if (settle(submitDiscard(match, 0, { cardIdxs }), match)) settleDiscardPhase(io, match, d)
   })
 
   socket.on(EV('leave'), async () => {

@@ -33,8 +33,12 @@ export function useOgGtoonsSocket() {
     socket.on('oggtoons:matchStart', state => {
       matchState.value = state
       matchEnded.value = null
+      lastReveal.value = null
       currentMatchId.value = state.matchId
     })
+    // Full per-player view pushed after any private action (place/unplace/swap/discard) and when
+    // the opponent commits or finishes discarding.
+    socket.on('oggtoons:state', state => { matchState.value = state })
     socket.on('oggtoons:reveal', state => {
       matchState.value = state
       lastReveal.value = state.reveal
@@ -73,11 +77,18 @@ export function useOgGtoonsSocket() {
     if (isPractice()) socket.emit('oggtoons:practice:commit', { round })
     else socket.emit('oggtoons:commit', { matchId: currentMatchId.value, round })
   }
-  function swap(swapWithIndex) {
+  // Both modes use the same payloads; practice just has its own event names.
+  const send = (name, payload) => {
     if (!currentMatchId.value) return
-    if (isPractice()) socket.emit('oggtoons:practice:swap', { swapWithIndex })
-    else socket.emit('oggtoons:swap', { matchId: currentMatchId.value, swapWithIndex })
+    socket.emit(isPractice() ? `oggtoons:practice:${name}` : `oggtoons:${name}`, payload)
   }
+  /** Put hand card `cardIdx` (deck index) into board slot `slot`; moves it if already placed. */
+  function place(cardIdx, slot) { send('place', { cardIdx, slot }) }
+  function unplace(slot) { send('unplace', { slot }) }
+  /** Trade hand card `cardIdx` for a random undealt card (once per match). */
+  function swap(cardIdx) { send('swap', { cardIdx }) }
+  /** Discard phase: drop these hand cards (possibly none) and finish discarding. */
+  function discard(cardIdxs) { send('discard', { cardIdxs }) }
   function startPractice(deckId, difficulty) {
     lastError.value = null
     socket.emit('oggtoons:practice:start', { deckId, difficulty })
@@ -92,6 +103,6 @@ export function useOgGtoonsSocket() {
 
   return {
     socket, matchState, lastReveal, matchEnded, isConnected, currentMatchId, lastError,
-    commit, swap, leaveMatch, startPractice
+    commit, place, unplace, swap, discard, leaveMatch, startPractice
   }
 }

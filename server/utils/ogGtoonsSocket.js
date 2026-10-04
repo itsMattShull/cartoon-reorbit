@@ -1,7 +1,7 @@
 // server/utils/ogGtoonsSocket.js
 //
 // Real-time runtime for original gToons (2002): random matchmaking queue, direct challenges,
-// and the live 7-round (+ sudden death) match itself. Registered per-connection from
+// and the live 7-slot / 3-round (+ sudden death) match itself. Registered per-connection from
 // socket-server.js exactly like registerEdRps/registerPokemonBattle:
 //
 //   import { registerOgGtoons } from './utils/ogGtoonsSocket.js'
@@ -14,10 +14,12 @@
 // ── Security ────────────────────────────────────────────────────────────────────────────────
 // Every handler resolves the acting user via `resolveSocketUser(socket)` (the same helper
 // socket-server.js's own Clash handlers use) — never a client-supplied userId/side/opponent id.
-// A committed-but-unrevealed card is NEVER sent to the opponent before both sides have
-// committed for the round: which card each side will reveal is entirely server-determined by
-// deck order (see below), so the client never even chooses a card, only whether to swap or
-// commit. Swap/queue/challenge actions validate purely against server-held state (the match,
+// A player's hand, undealt cards and placed-but-unrevealed cards are NEVER sent to the opponent:
+// the opponent only learns WHICH slots a player has committed (rendered face down), and only once
+// they commit; the card identities are revealed together, in slot order, when both have committed.
+// Card choice is client-driven (place/unplace/discard/swap) but every action is validated against
+// server-held state (the hand, this round's open slots, the phase) — a client can never place a
+// card it does not hold, in a slot that is not open, or after committing. Swap/queue/challenge actions validate purely against server-held state (the match,
 // queue entry, or challenge record) — a client never gets to assert its own stake, deck, or
 // opponent. Deck ownership + isOgGtoon + exactly-12-unique-positions is re-verified against the
 // database at match start, not trusted from the deck's last save. A user already in an active
@@ -37,10 +39,13 @@
 // Emits therefore use `io.local` — a plain io.to() would round-trip every payload through the
 // Redis adapter for nothing, since nothing here is sharded across processes.
 
-import { randomUUID } from 'crypto'
+import { randomUUID, randomInt } from 'crypto'
 import { prisma as db } from '../prisma.js'
-import { deriveGoalColor, canSwap, applySwap, SWAP_COST } from './ogGtoonEngine.js'
-import { publicMatchView, revealNextCards, checkMatchEnd, buildRoundLog } from './ogGtoonMatchCore.js'
+import { deriveGoalColor, SWAP_COST } from './ogGtoonEngine.js'
+import {
+  publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd, buildRoundLog,
+  placeCard, unplaceSlot, checkCommit, checkSwap, applyHandSwap, submitDiscard, resolveDiscardPhase
+} from './ogGtoonMatchCore.js'
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
 import { isPracticing, registerPvpProbe } from './ogGtoonPresence.js'
 import * as ogRedis from './ogGtoonsRedisState.js'
@@ -53,6 +58,8 @@ const CHALLENGE_STALE_MS = 5 * 60 * 1000
 const POINTS_METHOD = 'Game - gToons'
 
 const EV = (name) => `oggtoons:${name}`
+// Shuffles/deals must not be guessable from Math.random's state.
+const secureRng = () => randomInt(0, 0x100000000) / 0x100000000
 const userRoom = (userId) => `oggtoons:user:${userId}`
 
 /* ── In-memory state (single-process — see header) ──────────────────────────────────────── */
@@ -79,6 +86,12 @@ function emitToPlayers(io, match, event, buildPayload) {
     const payload = buildPayload ? buildPayload(uid, i) : publicMatchView(match, uid)
     for (const sid of match.sockets[i]) io.local.to(sid).emit(event, payload)
   }
+}
+
+/** Pushes one player's own full view (hand, placements, ...) to all of their sockets. */
+function emitStateTo(io, match, idx) {
+  const payload = publicMatchView(match, match.players[idx])
+  for (const sid of match.sockets[idx]) io.local.to(sid).emit(EV('state'), payload)
 }
 
 function destroyMatch(matchId) {
@@ -130,19 +143,16 @@ async function startMatch(io, a, b, { isChallenge }) {
     usernames: [a.username, b.username],
     sockets: [new Set([a.socket.id]), new Set([b.socket.id])],
     deckOrder: [deckA, deckB],
-    remainingIdx: [[0,1,2,3,4,5,6,7,8,9,10,11], [0,1,2,3,4,5,6,7,8,9,10,11]],
     goalColor: [deriveGoalColor(deckA), deriveGoalColor(deckB)],
-    swapUsed: [false, false],
-    ready: [false, false],
-    revealed: [[], []], // roundLog itself is built once, at match completion — see buildRoundLog
     stake: [stake, stake],
-    currentRound: 1,
     isChallenge: !!isChallenge,
     ending: false,
     graceTimers: {},
     startedAt: Date.now(),
     lastActivity: Date.now()
   }
+  // Shuffle both decks and deal the opening hands (also sets ready/revealed/swapUsed/round 1).
+  initHands(match, secureRng)
 
   // Debit stakes now (match really starts here) — mirrors Clash's startPvpMatch exactly:
   // verify balances and debit both inside one transaction, refusing to start if either is short.
@@ -202,19 +212,25 @@ async function resolveRound(io, match) {
   if (match.ending) return
   if (!match.ready[0] || !match.ready[1]) return
 
-  const { entry1, entry2 } = revealNextCards(match)
+  const revealedRound = match.currentRound
+  const { entries, order } = revealPlacedCards(match)
   match.lastActivity = Date.now()
+
+  const end = checkMatchEnd(match)
+  // Advance before emitting so the state each client receives already carries the NEXT round
+  // and phase (round 2 opens with the discard phase) — an action sent for a stale round is dropped.
+  if (!end) advanceRound(match)
 
   emitToPlayers(io, match, EV('reveal'), (uid, i) => ({
     ...publicMatchView(match, uid),
     reveal: {
-      round: match.currentRound,
-      you: i === 0 ? entry1 : entry2,
-      opponent: i === 0 ? entry2 : entry1
+      round: revealedRound,
+      order,
+      you: entries[i],
+      opponent: entries[i === 0 ? 1 : 0]
     }
   }))
 
-  const end = checkMatchEnd(match)
   if (end) {
     await endMatch(io, match, {
       outcome: end.outcome,
@@ -227,7 +243,6 @@ async function resolveRound(io, match) {
     return
   }
 
-  match.currentRound += 1
   fireSync(match.id, match)
 }
 
@@ -415,6 +430,9 @@ export async function restoreOgGtoonsMatches() {
     match.sockets = [new Set(), new Set()]
     match.graceTimers = {}
     match.ending = false
+    // A match saved before hands/slots existed (fixed deck order) can't be resumed under the new
+    // rules; restart it from a fresh deal so players keep their stake instead of losing the match.
+    if (!Array.isArray(match.hand)) initHands(match, secureRng)
     matches.set(matchId, match)
     matchByUser.set(match.players[0], matchId)
     matchByUser.set(match.players[1], matchId)
@@ -602,26 +620,49 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     io.local.to(userRoom(challenge.toUserId)).emit(EV('challengeCancelled'), { id: challengeId })
   })
 
-  socket.on(EV('swap'), async ({ matchId, swapWithIndex } = {}) => {
+  // Resolves the acting player's live match + side, or null (and nothing is sent).
+  const liveSide = async () => {
     const user = await auth()
-    if (!user) return
-    const match = matches.get(matchId)
-    if (!match || match.ending) return
+    if (!user) return null
+    const matchId = matchByUser.get(user.id)
+    const match = matchId && matches.get(matchId)
+    if (!match || match.ending) return null
     const idx = match.players.indexOf(user.id)
-    if (idx === -1) return
-    // "Before revealing a round" — reject once this round's reveal has already broadcast, i.e.
-    // once this side has already committed (ready) for the round that is about to resolve.
-    const check = canSwap({
-      swapUsed: match.swapUsed[idx],
-      pointBalance: Infinity, // balance is checked against the live UserPoints row below
-      roundRevealed: match.ready[idx]
-    })
-    if (!check.ok) {
-      return socket.emit(EV('error'), { code: check.reason, message: 'You cannot swap right now.' })
-    }
-    if (!Number.isInteger(swapWithIndex) || swapWithIndex <= 0 || swapWithIndex >= match.remainingIdx[idx].length) {
-      return socket.emit(EV('error'), { code: 'badSwapTarget', message: 'Invalid swap target.' })
-    }
+    if (idx === -1) return null
+    match.sockets[idx].add(socket.id)
+    return { user, match, idx }
+  }
+  const reject = (res) => socket.emit(EV('error'), { code: res.code, message: res.message })
+
+  // Placing/unplacing only changes this player's private view; nothing is sent to the opponent
+  // until they commit.
+  socket.on(EV('place'), async ({ cardIdx, slot } = {}) => {
+    const side = await liveSide()
+    if (!side) return
+    const res = placeCard(side.match, side.idx, { cardIdx, slot })
+    if (!res.ok) return reject(res)
+    side.match.lastActivity = Date.now()
+    fireSync(side.match.id, side.match)
+    emitStateTo(io, side.match, side.idx)
+  })
+
+  socket.on(EV('unplace'), async ({ slot } = {}) => {
+    const side = await liveSide()
+    if (!side) return
+    const res = unplaceSlot(side.match, side.idx, { slot })
+    if (!res.ok) return reject(res)
+    side.match.lastActivity = Date.now()
+    fireSync(side.match.id, side.match)
+    emitStateTo(io, side.match, side.idx)
+  })
+
+  // Swap a hand card for a random undealt one (once per match, before committing, 10 points).
+  socket.on(EV('swap'), async ({ cardIdx } = {}) => {
+    const side = await liveSide()
+    if (!side) return
+    const { user, match, idx } = side
+    const check = checkSwap(match, idx, { cardIdx })
+    if (!check.ok) return reject(check)
     try {
       await db.$transaction(async tx => {
         const pts = await tx.userPoints.findUnique({ where: { userId: user.id } })
@@ -636,32 +677,60 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
       console.error('[ogGtoons] swap debit failed:', err)
       return socket.emit(EV('error'), { code: 'swapFailed', message: 'Could not process the swap.' })
     }
-    match.remainingIdx[idx] = applySwap(match.remainingIdx[idx], swapWithIndex)
-    match.swapUsed[idx] = true
+    // The debit above awaited, so the match may have moved on (e.g. a commit from another tab);
+    // applyHandSwap re-validates, and a swap that no longer applies is refunded.
+    const res = applyHandSwap(match, idx, { cardIdx }, secureRng)
+    if (!res.ok) {
+      try {
+        await db.$transaction(async tx => {
+          const back = await tx.userPoints.update({ where: { userId: user.id }, data: { points: { increment: SWAP_COST } } })
+          await tx.pointsLog.create({ data: { userId: user.id, points: SWAP_COST, total: back.points, method: POINTS_METHOD, direction: 'increase' } })
+        })
+      } catch (err) {
+        console.error('[ogGtoons] swap refund failed:', err)
+      }
+      return reject(res)
+    }
     match.lastActivity = Date.now()
     fireSync(match.id, match)
     socket.emit(EV('swapApplied'), { matchId: match.id })
+    emitStateTo(io, match, idx)
   })
 
   socket.on(EV('commit'), async ({ matchId, round } = {}) => {
-    const user = await auth()
-    if (!user) return
-    const match = matches.get(matchId)
-    if (!match || match.ending) return
-    const idx = match.players.indexOf(user.id)
-    if (idx === -1) return
-    if (Number(round) !== match.currentRound) return
-    if (match.ready[idx]) return
-    if (match.remainingIdx[idx].length === 0) return
+    const side = await liveSide()
+    if (!side) return
+    const { match, idx } = side
+    if (matchId && matchId !== match.id) return
+    const check = checkCommit(match, idx, round)
+    if (!check.ok) {
+      if (check.code !== 'staleRound' && check.code !== 'already_committed') reject(check)
+      return
+    }
 
     match.ready[idx] = true
-    match.sockets[idx].add(socket.id)
     match.lastActivity = Date.now()
     socket.emit(EV('committed'), { round: match.currentRound })
     const oppIdx = idx === 0 ? 1 : 0
     for (const sid of match.sockets[oppIdx]) io.local.to(sid).emit(EV('opponentCommitted'), { round: match.currentRound })
+    // The opponent also learns which slots are now face down (never which cards).
+    emitStateTo(io, match, oppIdx)
+    emitStateTo(io, match, idx)
 
     await resolveRound(io, match)
+  })
+
+  // Discard phase (after round 1): drop any hand cards, then both hands refill together.
+  socket.on(EV('discard'), async ({ cardIdxs } = {}) => {
+    const side = await liveSide()
+    if (!side) return
+    const { match, idx } = side
+    const res = submitDiscard(match, idx, { cardIdxs })
+    if (!res.ok) return reject(res)
+    match.lastActivity = Date.now()
+    resolveDiscardPhase(match)
+    fireSync(match.id, match)
+    emitToPlayers(io, match, EV('state'))
   })
 
   socket.on(EV('leave'), async () => {

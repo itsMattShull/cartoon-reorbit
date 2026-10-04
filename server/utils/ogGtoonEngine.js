@@ -5,7 +5,19 @@
 // death). No socket/db imports — everything takes and returns plain data so it is unit-testable
 // on its own and reusable from server/utils/ogGtoonsSocket.js without pulling in Prisma or
 // Socket.IO. Effect resolution itself lives in server/utils/ogGtoonEffects.js; this module only
-// decides deck order, swaps and the win condition.
+// decides the hand/slot rules, swaps and the win condition.
+//
+// ── Hand & slot rules (every OG gToons match, PvP and practice) ─────────────────────────────
+//   • 12-card deck, shuffled at match start. 6 are dealt to the hand; the other 6 stay undealt.
+//   • 7 board slots, filled over 3 regulation rounds: round 1 = slots 1-4, round 2 = slots 5-6,
+//     round 3 = slot 7. Each round a player may place UP TO that many cards, choosing both the
+//     card (from the hand) and the slot. A slot left empty stays empty.
+//   • Right after round 1 there is a discard phase: discard any number of cards still in hand,
+//     then the hand is refilled back up to 6 from the undealt cards (4 + n when 4 were played
+//     and n discarded). Discarded cards are out of the match.
+//   • Once per match a player may swap a hand card for a random undealt card, before committing.
+//   • A tie after slot 7 goes to sudden death: one extra slot (8, 9, ...) per round, each player
+//     placing exactly one card from whatever hand/undealt cards they have left.
 
 export const NEUTRAL_COLORS = new Set(['BLACK', 'SILVER'])
 
@@ -13,7 +25,74 @@ export function isNeutralColor(color) {
   return NEUTRAL_COLORS.has(color)
 }
 
-/** The goal color is always the color of the card at position 11 (bottom of the deck). */
+export const HAND_SIZE = 6
+/** Regulation board: which slots each round fills. */
+export const ROUND_SLOTS = [[1, 2, 3, 4], [5, 6], [7]]
+export const REGULATION_ROUNDS = ROUND_SLOTS.length
+export const REGULATION_SLOTS = 7
+/** The discard phase happens after this round resolves. */
+export const DISCARD_AFTER_ROUND = 1
+
+/** Slots a round may fill. Sudden-death round r (> regulation) is a single extra slot. */
+export function slotsForRound(round) {
+  if (round >= 1 && round <= REGULATION_ROUNDS) return ROUND_SLOTS[round - 1]
+  return [REGULATION_SLOTS + (round - REGULATION_ROUNDS)]
+}
+
+export function isSuddenDeathRound(round) {
+  return round > REGULATION_ROUNDS
+}
+
+/** Fisher-Yates on a copy. `rng` returns [0,1). */
+export function shuffled(arr, rng = Math.random) {
+  const a = arr.slice()
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1))
+    ;[a[i], a[j]] = [a[j], a[i]]
+  }
+  return a
+}
+
+/** Shuffles deck indexes 0-11 and deals the opening hand; the rest stay undealt (in order). */
+export function dealOpeningHand(rng = Math.random, deckSize = 12) {
+  const order = shuffled([...Array(deckSize).keys()], rng)
+  return { hand: order.slice(0, HAND_SIZE), undealt: order.slice(HAND_SIZE) }
+}
+
+/**
+ * Discards `discardIdxs` (deck indexes, all of which must be in `hand`, no repeats) and refills
+ * the hand up to HAND_SIZE from the front of `undealt`. Returns new arrays; throws on bad input.
+ */
+export function discardAndDeal(hand, undealt, discardIdxs) {
+  const drop = new Set(discardIdxs)
+  if (drop.size !== discardIdxs.length) throw new Error('Duplicate discard')
+  for (const i of drop) if (!hand.includes(i)) throw new Error('Card not in hand')
+  const kept = hand.filter(i => !drop.has(i))
+  const need = Math.max(0, HAND_SIZE - kept.length)
+  const drawn = undealt.slice(0, need)
+  return {
+    hand: [...kept, ...drawn],
+    undealt: undealt.slice(drawn.length),
+    discarded: [...drop],
+    drawn
+  }
+}
+
+/**
+ * Swaps `cardIdx` (in hand) for a random undealt card; the swapped-out card goes back into the
+ * undealt pile. Returns new arrays plus the card drawn. Throws if the swap is not possible.
+ */
+export function swapForRandomUndealt(hand, undealt, cardIdx, rng = Math.random) {
+  if (!hand.includes(cardIdx)) throw new Error('Card not in hand')
+  if (undealt.length === 0) throw new Error('Nothing to swap with')
+  const pick = Math.floor(rng() * undealt.length)
+  const drawn = undealt[pick]
+  const nextUndealt = undealt.slice()
+  nextUndealt[pick] = cardIdx
+  return { hand: hand.map(i => (i === cardIdx ? drawn : i)), undealt: nextUndealt, drawn }
+}
+
+/** The goal color is always the color of the card at position 11 (bottom of the builder deck). */
 export function deriveGoalColor(orderedDeck) {
   return orderedDeck?.[11]?.color ?? null
 }
@@ -48,6 +127,7 @@ export function canSwap({ swapUsed, pointBalance, roundRevealed }) {
 export const SWAP_COST = 10
 
 /**
+ * LEGACY fixed-order swap (kept for its unit tests; matches no longer use deck order).
  * Swaps the up-next card (index 0 of the remaining unplayed deck) with another still-unplayed
  * card from the SAME deck. `remainingDeck` is the ordered list of cards this player has not yet
  * revealed; `swapWithIndex` is an index into that same array (1..length-1).
@@ -130,11 +210,10 @@ export function determineWinner({ player1GoalColor, player2GoalColor, player1Rev
 }
 
 /**
- * Sudden death: on a tie after 7 rounds, each player reveals one more card, continuing down
- * their OWN deck order from position 7 onward (positions 7-11, i.e. up to 5 extra rounds — see
- * gtoons-plan.md's resolved open question). If a player's deck is fully exhausted before the tie
- * breaks, no further sudden-death round can be played for them and the match ends in a real tie.
+ * Sudden death: on a tie after slot 7, each player places one more card per round from whatever
+ * is left in hand/undealt. If either player runs out before the tie breaks, no further
+ * sudden-death round can be played and the match ends in a real tie.
  */
-export function hasSuddenDeathCardsRemaining(remainingDeck) {
-  return Array.isArray(remainingDeck) && remainingDeck.length > 0
+export function hasSuddenDeathCardsRemaining(cards) {
+  return Array.isArray(cards) && cards.length > 0
 }
