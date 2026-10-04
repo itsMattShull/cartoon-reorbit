@@ -1567,6 +1567,9 @@ model GameConfig {
   ogGtoonsGameEnabled         Boolean? @default(false)
   ogGtoonsDeckBuildingEnabled Boolean? @default(false)
   ogGtoonsLeaderboardEnabled  Boolean? @default(false)
+  // Practice vs. a bot that plays a shuffled copy of the player's own deck. Awards, spends and
+  // records no points (see server/utils/ogGtoonsPractice.js). Also requires ogGtoonsGameEnabled.
+  ogGtoonsPracticeEnabled     Boolean? @default(false)
 
   // Separate from the four switches above: those gate the actual feature (server-side, even
   // when hit directly by URL), while this ONLY controls whether the Games page advertises a

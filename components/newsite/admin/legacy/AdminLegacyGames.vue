@@ -832,6 +832,13 @@
                 <span class="block text-[11px] text-gray-500">Off hides the Leaderboard tab and rejects the leaderboard fetch.</span>
               </span>
             </label>
+            <label class="flex items-start gap-2 p-2 border rounded bg-white">
+              <input type="checkbox" v-model="ogGtoonsPracticeEnabled" class="mt-0.5" />
+              <span>
+                <span class="text-xs font-semibold text-gray-800">Practice Mode</span>
+                <span class="block text-[11px] text-gray-500">Single-player practice against a bot that plays a shuffled copy of the player's own deck. Awards, spends and records no points and never appears on the leaderboard. Also requires Live Matches. Off hides the Practice tab and rejects new practice matches; in-progress ones finish normally.</span>
+              </span>
+            </label>
           </div>
 
           <hr class="my-4 border-gray-200" />
@@ -2103,6 +2110,7 @@ const ogGtoonsMatchmakingEnabled  = ref(false)
 const ogGtoonsGameEnabled         = ref(false)
 const ogGtoonsDeckBuildingEnabled = ref(false)
 const ogGtoonsLeaderboardEnabled  = ref(false)
+const ogGtoonsPracticeEnabled     = ref(false)
 const ogGtoonsGamesPageVisible    = ref(true)
 const loadingOgGtoons             = ref(false)
 const ogGtoonsConfigError         = ref('')
@@ -2514,6 +2522,7 @@ async function loadSettings() {
     ogGtoonsGameEnabled.value         = og.ogGtoonsGameEnabled         === true
     ogGtoonsDeckBuildingEnabled.value = og.ogGtoonsDeckBuildingEnabled === true
     ogGtoonsLeaderboardEnabled.value  = og.ogGtoonsLeaderboardEnabled  === true
+    ogGtoonsPracticeEnabled.value     = og.ogGtoonsPracticeEnabled     === true
     ogGtoonsGamesPageVisible.value    = og.ogGtoonsGamesPageVisible    !== false
     ogGtoonsConfigError.value = ''
   } catch (e) {
@@ -2979,6 +2988,7 @@ async function saveOgGtoonsConfig() {
         ogGtoonsGameEnabled:         ogGtoonsGameEnabled.value,
         ogGtoonsDeckBuildingEnabled: ogGtoonsDeckBuildingEnabled.value,
         ogGtoonsLeaderboardEnabled:  ogGtoonsLeaderboardEnabled.value,
+        ogGtoonsPracticeEnabled:     ogGtoonsPracticeEnabled.value,
         ogGtoonsGamesPageVisible:    ogGtoonsGamesPageVisible.value
       }
     })
