@@ -34,8 +34,9 @@
 import { randomUUID } from 'crypto'
 import { prisma as db } from '../prisma.js'
 import { notifyCMoonRaidPreviewStarted } from './notifications.js'
+import { getPlayerCombatMaxHp } from './cmoon.js'
 import {
-  resolveRaidRound, rollEnemyAction, rollEnemyRewards, isValidBattleAction, PLAYER_MAX_HP,
+  resolveRaidRound, rollEnemyAction, rollEnemyRewards, isValidBattleAction,
   JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE, MAX_ROUNDS_SAFETY,
 } from './cmoonEnemyRaid.js'
 
@@ -86,6 +87,7 @@ function publicRaidView(raid) {
       userId: p.userId,
       username: p.username,
       hpRemaining: p.hpRemaining,
+      maxHp: p.maxHp,
       knockedOut: !!p.knockedOutAt,
       isInitiator: p.isInitiator,
       hasActed: raid.status === 'IN_PROGRESS' && !p.knockedOutAt ? !!p.pendingAction : false,
@@ -109,9 +111,13 @@ async function requireAdminUser(userId) {
   return me
 }
 
-function addParticipant(raid, { userId, username, isInitiator }) {
+// `maxHp` is always the SAME value for every participant here (raid.defaultMaxHp, fetched once
+// in the start handler — see its own comment) since this preview is deliberately not personalized
+// by anyone's real cMoon rank — unlike the real raid's addParticipant, there is no per-user
+// lookup to race against, so `join` can keep calling this fully synchronously.
+function addParticipant(raid, { userId, username, isInitiator, maxHp }) {
   raid.participants.set(userId, {
-    userId, username, hpRemaining: PLAYER_MAX_HP, knockedOutAt: null,
+    userId, username, hpRemaining: maxHp, maxHp, knockedOutAt: null,
     isInitiator: !!isInitiator, pendingAction: null, joinedAt: Date.now(),
   })
   raidByUser.set(userId, raid.id)
@@ -151,7 +157,7 @@ async function closeRound(io, raid) {
     const { enemyAction, perParticipant, enemyDamageDealt } = resolveRaidRound({
       enemyAction: raid.currentEnemyAction,
       enemyMember: raid.enemyStats,
-      participants: alive.map(p => ({ userId: p.userId, action: p.pendingAction, hpRemaining: p.hpRemaining })),
+      participants: alive.map(p => ({ userId: p.userId, action: p.pendingAction, hpRemaining: p.hpRemaining, maxHp: p.maxHp })),
     })
 
     for (const result of perParticipant) {
@@ -258,6 +264,9 @@ export function registerCMoonRaidPreview(io, socket, resolveSocketUser) {
       if (!enemyMember.isRaidBoss) return socket.emit(EV('error'), { message: 'This enemy is not a raid boss' })
       if (raidByUser.has(me.id)) return socket.emit(EV('error'), { message: 'You are already in a raid preview' })
 
+      // Fetched once, shared by every participant for this preview's whole lifetime — see
+      // addParticipant's own comment on why this is never personalized per-admin.
+      const defaultMaxHp = await getPlayerCombatMaxHp(null)
       const raidId = randomUUID()
       const raid = {
         id: raidId, enemyMemberId,
@@ -268,6 +277,7 @@ export function registerCMoonRaidPreview(io, socket, resolveSocketUser) {
           critChanceFromPercent: enemyMember.critChanceFromPercent,
           cMoonPointsReward: enemyMember.cMoonPointsReward,
         },
+        defaultMaxHp,
         status: 'FORMING', enemyHpRemaining: enemyMember.maxHp, roundNumber: 1,
         currentEnemyAction: null, roundDeadlineAt: null,
         joinDeadlineAt: Date.now() + JOIN_WINDOW_SECONDS * 1000,
@@ -275,7 +285,7 @@ export function registerCMoonRaidPreview(io, socket, resolveSocketUser) {
         startedAt: Date.now(), combatStartedAt: null, endedAt: null, outcome: null,
         resolving: false, wouldGrant: null,
       }
-      addParticipant(raid, { userId: me.id, username: me.username, isInitiator: true })
+      addParticipant(raid, { userId: me.id, username: me.username, isInitiator: true, maxHp: defaultMaxHp })
       raids.set(raidId, raid)
 
       socket.join(raidRoom(raidId))
@@ -302,7 +312,7 @@ export function registerCMoonRaidPreview(io, socket, resolveSocketUser) {
     }
     if (raidByUser.has(me.id)) return socket.emit(EV('error'), { message: 'You are already in a raid preview' })
     if (raid.participants.size >= MAX_PARTY_SIZE) return socket.emit(EV('error'), { message: 'This raid preview is full' })
-    addParticipant(raid, { userId: me.id, username: me.username, isInitiator: false })
+    addParticipant(raid, { userId: me.id, username: me.username, isInitiator: false, maxHp: raid.defaultMaxHp })
     socket.join(raidRoom(raidId))
     broadcast(io, raid, EV('participantJoined'))
     if (raid.participants.size >= MAX_PARTY_SIZE && raid.status === 'FORMING') startCombat(io, raid)

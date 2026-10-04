@@ -67,9 +67,9 @@
                 <li v-for="p in raid.participants" :key="p.userId" class="flex items-center gap-2 text-xs">
                   <span class="w-24 flex-shrink-0 truncate" :class="p.knockedOut ? 'text-gray-400 line-through' : ''">{{ p.username }}</span>
                   <div class="flex-1 h-2 bg-gray-200 rounded overflow-hidden">
-                    <div class="h-full bg-green-500 transition-all" :style="{ width: (p.hpRemaining / PLAYER_MAX_HP * 100) + '%' }"></div>
+                    <div class="h-full bg-green-500 transition-all" :style="{ width: (p.hpRemaining / (p.maxHp || 1) * 100) + '%' }"></div>
                   </div>
-                  <span class="w-10 flex-shrink-0 text-right tabular-nums">{{ p.hpRemaining }}/{{ PLAYER_MAX_HP }}</span>
+                  <span class="w-10 flex-shrink-0 text-right tabular-nums">{{ p.hpRemaining }}/{{ p.maxHp }}</span>
                   <span v-if="p.knockedOut" class="text-[10px] text-red-500 flex-shrink-0">KO</span>
                   <span v-else-if="p.hasActed" class="text-[10px] text-green-600 flex-shrink-0">Ready</span>
                   <span v-else class="text-[10px] text-gray-400 flex-shrink-0">Deciding…</span>
@@ -125,7 +125,6 @@
 </template>
 
 <script setup>
-const PLAYER_MAX_HP = 5
 const ACTION_LABELS = { ATTACK_HIGH: 'attacked high', ATTACK_LOW: 'attacked low', BLOCK_HIGH: 'blocked high', BLOCK_LOW: 'blocked low' }
 
 const route = useRoute()

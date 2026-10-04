@@ -11,6 +11,13 @@ import {
 } from '@/server/utils/cmoonRankTiers'
 
 const MAX_THRESHOLD = 5_000_000
+// Admins only ever GIVE a rank MORE HP (see the schema comment on CMoonRankTier's own
+// cMoonEnemyBattleHpBonus) — negative values aren't offered, keeping "rank up" from ever reading
+// as a penalty. 50 mirrors the ceiling GlobalGameConfig.cMoonEnemyBattleDefaultHp itself is
+// capped at (see cmoon-settings.post.js): each round deals at most one hit, so stacking much
+// higher makes a PER_PLAYER enemy effectively unwinnable for the admin's own side of the fight.
+const MIN_HP_BONUS = 0
+const MAX_HP_BONUS = 50
 
 export default defineEventHandler(async (event) => {
   const me = await requireAdmin(event)
@@ -23,6 +30,9 @@ export default defineEventHandler(async (event) => {
   const maxRewardChoices = body?.maxRewardChoices === undefined
     ? DEFAULT_TIER_REWARD_CHOICES
     : Math.trunc(Number(body.maxRewardChoices))
+  const cMoonEnemyBattleHpBonus = body?.cMoonEnemyBattleHpBonus === undefined
+    ? 0
+    : Math.trunc(Number(body.cMoonEnemyBattleHpBonus))
   const rewardCtoonIds = [...new Set(
     Array.isArray(body?.rewardCtoonIds) ? body.rewardCtoonIds.filter(x => typeof x === 'string') : []
   )].slice(0, maxRewardChoices)
@@ -33,6 +43,9 @@ export default defineEventHandler(async (event) => {
   }
   if (!isValidMaxRewardChoices(maxRewardChoices)) {
     throw createError({ statusCode: 400, statusMessage: `Reward choices must be between ${MIN_TIER_REWARD_CHOICES} and ${MAX_TIER_REWARD_CTOONS}` })
+  }
+  if (!Number.isInteger(cMoonEnemyBattleHpBonus) || cMoonEnemyBattleHpBonus < MIN_HP_BONUS || cMoonEnemyBattleHpBonus > MAX_HP_BONUS) {
+    throw createError({ statusCode: 400, statusMessage: `cMoon Enemy Battles HP bonus must be between ${MIN_HP_BONUS} and ${MAX_HP_BONUS}` })
   }
   if (rewardCtoonIds.length) {
     const validCount = await db.ctoon.count({ where: { id: { in: rewardCtoonIds } } })
@@ -49,6 +62,7 @@ export default defineEventHandler(async (event) => {
         sortOrder,
         pointThreshold,
         maxRewardChoices,
+        cMoonEnemyBattleHpBonus,
         rewardCtoons: { create: rewardCtoonIds.map((ctoonId, i) => ({ ctoonId, sortOrder: i })) },
       },
     })
@@ -68,7 +82,7 @@ export default defineEventHandler(async (event) => {
     await db.cMoonRankTier.delete({ where: { id: created.id } }).catch(() => {})
     throw createError({ statusCode: 409, statusMessage: err?.message || 'Failed to provision this rank across cMoons' })
   }
-  await logAdminChange(db, { userId: me.id, area: 'CMoonRankTier', key: `create:${created.id}`, prevValue: null, newValue: { name, sortOrder, pointThreshold } })
+  await logAdminChange(db, { userId: me.id, area: 'CMoonRankTier', key: `create:${created.id}`, prevValue: null, newValue: { name, sortOrder, pointThreshold, cMoonEnemyBattleHpBonus } })
 
   return { id: created.id }
 })

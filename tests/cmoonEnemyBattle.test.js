@@ -3,13 +3,13 @@ import assert from 'node:assert/strict'
 import {
   resolveBattleRound, rollEnemyAction, rollEnemyRewards, buildGrantableReward, rollHitDamage,
   isValidBattleAction, BATTLE_ACTIONS, PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE,
-  HEAL_ON_SUCCESSFUL_BLOCK, resolveRound,
+  HEAL_ON_SUCCESSFUL_BLOCK, resolveRound, combinePlayerMaxHp,
 } from '../server/utils/cmoonEnemyBattle.js'
 
 const baseEnemyMember = { critChanceAgainstPercent: 0, critChanceFromPercent: 0, maxHp: 5 }
 
 test('resolveRound: a landed player hit reduces enemy HP via the returned enemyDamage, and does not touch playerHp', () => {
-  const result = resolveRound({ playerAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember, playerHpRemaining: PLAYER_MAX_HP })
+  const result = resolveRound({ playerAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember, playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP })
   // The enemy's action is random, so only assert what's deterministic: the player never took
   // damage from their OWN attack, and a normal (non-crit, since critChanceFromPercent is 0) hit
   // against the enemy is always NORMAL_HIT_DAMAGE if one landed at all.
@@ -26,7 +26,7 @@ test('resolveRound: a 100% crit-from enemy always deals CRITICAL_HIT_DAMAGE to t
   // rollHitDamage's own unit tests already prove the 100% branch never misses.
   let sawAHit = false
   for (let i = 0; i < 200; i++) {
-    const result = resolveRound({ playerAction: 'BLOCK_HIGH', enemyMember: critEnemy, playerHpRemaining: PLAYER_MAX_HP })
+    const result = resolveRound({ playerAction: 'BLOCK_HIGH', enemyMember: critEnemy, playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP })
     if (result.newPlayerHp < PLAYER_MAX_HP) {
       sawAHit = true
       assert.equal(PLAYER_MAX_HP - result.newPlayerHp, CRITICAL_HIT_DAMAGE)
@@ -40,10 +40,29 @@ test('resolveRound: a successful player block heals 1 HP, capped at PLAYER_MAX_H
   // least once (enemy action is 1-of-4 uniform random) and confirm the heal never overflows.
   let sawABlock = false
   for (let i = 0; i < 200; i++) {
-    const result = resolveRound({ playerAction: 'BLOCK_HIGH', enemyMember: baseEnemyMember, playerHpRemaining: PLAYER_MAX_HP - 1 })
+    const result = resolveRound({ playerAction: 'BLOCK_HIGH', enemyMember: baseEnemyMember, playerHpRemaining: PLAYER_MAX_HP - 1, playerMaxHp: PLAYER_MAX_HP })
     if (result.roundEntry.playerBlocked) {
       sawABlock = true
       assert.equal(result.newPlayerHp, PLAYER_MAX_HP)
+    }
+  }
+  assert.equal(sawABlock, true)
+})
+
+test('resolveRound: the heal-on-block cap follows the passed-in playerMaxHp, not the bare PLAYER_MAX_HP constant', () => {
+  // A rank-boosted player's own max HP (e.g. 8, well above the constant) must never get clamped
+  // back down to PLAYER_MAX_HP (5) by a leftover hardcoded cap — this is exactly the bug
+  // getPlayerCombatMaxHp()/CMoonRankTier.cMoonEnemyBattleHpBonus exists to make possible.
+  const boostedMaxHp = PLAYER_MAX_HP + 3
+  let sawABlock = false
+  for (let i = 0; i < 200; i++) {
+    const result = resolveRound({
+      playerAction: 'BLOCK_HIGH', enemyMember: baseEnemyMember,
+      playerHpRemaining: boostedMaxHp - 1, playerMaxHp: boostedMaxHp,
+    })
+    if (result.roundEntry.playerBlocked) {
+      sawABlock = true
+      assert.equal(result.newPlayerHp, boostedMaxHp)
     }
   }
   assert.equal(sawABlock, true)
@@ -228,6 +247,27 @@ test('buildGrantableReward defaults with no hits at all', () => {
 
 test('PLAYER_MAX_HP is the 5 hits specified by the feature', () => {
   assert.equal(PLAYER_MAX_HP, 5)
+})
+
+// combinePlayerMaxHp is the pure arithmetic getPlayerCombatMaxHp() in server/utils/cmoon.js
+// delegates to, once it has read GlobalGameConfig.cMoonEnemyBattleDefaultHp and (optionally) the
+// player's CMoonRankTier.cMoonEnemyBattleHpBonus — see that function's own comment for why the
+// DB-touching parts aren't unit-tested directly (cmoon.js can't be imported in a plain node:test
+// run, per tests/cmoonBalanceNoPrizeGrant.test.js's own comment).
+test('combinePlayerMaxHp: adds the default and the bonus', () => {
+  assert.equal(combinePlayerMaxHp(5, 0), 5)
+  assert.equal(combinePlayerMaxHp(5, 3), 8)
+  assert.equal(combinePlayerMaxHp(10, 40), 50)
+})
+
+test('combinePlayerMaxHp: floors at 1 so a misconfigured negative bonus can never zero out a player', () => {
+  assert.equal(combinePlayerMaxHp(5, -10), 1)
+  assert.equal(combinePlayerMaxHp(1, -1), 1)
+})
+
+test('combinePlayerMaxHp: treats a missing/non-numeric bonus as 0, not NaN', () => {
+  assert.equal(combinePlayerMaxHp(5, undefined), 5)
+  assert.equal(combinePlayerMaxHp(5, null), 5)
 })
 
 test('HEAL_ON_SUCCESSFUL_BLOCK is a single positive HP amount', () => {

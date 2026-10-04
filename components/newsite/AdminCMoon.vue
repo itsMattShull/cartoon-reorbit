@@ -116,6 +116,25 @@
           </p>
           <p v-if="battlePopupError" class="text-[11px] text-red-600 mt-1">{{ battlePopupError }}</p>
 
+          <label class="block text-xs font-medium mb-1 mt-3">Default HP (1-50)</label>
+          <div class="flex items-center gap-2">
+            <input
+              v-model.number="enemyBattleDefaultHp" type="number" min="1" max="50" inputmode="numeric"
+              class="cm-field w-24 border rounded px-2 py-1" style="font-size:16px"
+            />
+            <button
+              class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              :disabled="defaultHpSaving" @click="saveDefaultHp"
+            >{{ defaultHpSaving ? 'Saving…' : 'Save' }}</button>
+          </div>
+          <p class="text-[11px] text-gray-600 mt-1">
+            Every player's starting/max HP for a cMoon Enemy Battle (solo or raid), before any
+            per-rank bonus set on the Rank Ladder below. Each round deals at most one hit either
+            way, so keep this in line with enemy HP on the
+            <NuxtLink to="/newsite/admin/cMoonEnemies" class="text-indigo-600 hover:underline">Manage cMoon Enemies</NuxtLink> page.
+          </p>
+          <p v-if="defaultHpError" class="text-[11px] text-red-600 mt-1">{{ defaultHpError }}</p>
+
           <label class="block text-xs font-medium mb-1 mt-3">Raid boss Discord announcement channel</label>
           <div class="flex items-center gap-2">
             <input
@@ -370,6 +389,7 @@
             <span class="flex-1 min-w-0 break-words">{{ t.name }}</span>
             <span class="text-gray-500 flex-shrink-0">{{ t.pointThreshold.toLocaleString() }} pts</span>
             <span class="text-gray-500 flex-shrink-0">{{ t.rewardCtoons.length }}/{{ t.maxRewardChoices }} rewards</span>
+            <span v-if="t.cMoonEnemyBattleHpBonus > 0" class="text-gray-500 flex-shrink-0">+{{ t.cMoonEnemyBattleHpBonus }} HP</span>
             <button type="button" class="cm-tap text-indigo-600" @click="startEditTier(t)">Edit</button>
             <button type="button" class="cm-tap text-red-600" @click="removeTier(t)">Delete</button>
           </div>
@@ -1083,6 +1103,18 @@
             />
           </div>
 
+          <div>
+            <label class="block text-xs font-medium mb-1">cMoon Enemy Battles HP bonus (0-50)</label>
+            <input
+              v-model.number="tierForm.cMoonEnemyBattleHpBonus" type="number" min="0" max="50" inputmode="numeric"
+              class="cm-field w-24 border rounded px-2 py-1" style="font-size:16px"
+            />
+            <p class="text-[11px] text-gray-500 mt-1">
+              Added on top of the site-wide Default HP (Manage cMoons) once a member reaches this
+              rank. 0 = no change — most ranks don't need this.
+            </p>
+          </div>
+
           <div class="pt-2 border-t">
             <label class="block text-xs font-medium mb-1">Reward cToons ({{ tierForm.rewardCtoons.length }}/{{ tierForm.maxRewardChoices }} — member picks 1)</label>
             <div v-if="tierForm.rewardCtoons.length" class="space-y-1 mb-2">
@@ -1286,6 +1318,9 @@ const battlePopupError = ref('')
 const raidBossDiscordChannelId = ref('')
 const raidBossChannelSaving = ref(false)
 const raidBossChannelError = ref('')
+const enemyBattleDefaultHp = ref(5)
+const defaultHpSaving = ref(false)
+const defaultHpError = ref('')
 const previewModalOpen = ref(false)
 const balanceModalOpen = ref(false)
 const recalcModalOpen = ref(false)
@@ -2068,7 +2103,7 @@ async function loadRankTiers() {
 // Reward-choice count defaults to 5, admin-adjustable 1-6 per rank tier (see
 // MIN_TIER_REWARD_CHOICES/MAX_TIER_REWARD_CTOONS/DEFAULT_TIER_REWARD_CHOICES in
 // server/utils/cmoonRankTiers.js — kept in sync with those literal bounds here).
-const emptyTierForm = () => ({ id: '', name: '', sortOrder: 0, pointThreshold: 0, maxRewardChoices: 5, rewardCtoons: [] })
+const emptyTierForm = () => ({ id: '', name: '', sortOrder: 0, pointThreshold: 0, maxRewardChoices: 5, cMoonEnemyBattleHpBonus: 0, rewardCtoons: [] })
 const tierForm = reactive(emptyTierForm())
 const tierModalOpen = ref(false)
 const tierFormError = ref('')
@@ -2109,7 +2144,7 @@ function startEditTier(t) {
   resetTierForm()
   Object.assign(tierForm, {
     id: t.id, name: t.name, sortOrder: t.sortOrder, pointThreshold: t.pointThreshold,
-    maxRewardChoices: t.maxRewardChoices,
+    maxRewardChoices: t.maxRewardChoices, cMoonEnemyBattleHpBonus: t.cMoonEnemyBattleHpBonus ?? 0,
     rewardCtoons: t.rewardCtoons.map(r => ({ ctoonId: r.ctoonId, name: r.name })),
   })
   tierModalOpen.value = true
@@ -2137,6 +2172,11 @@ async function saveTier() {
     tierFormError.value = 'Reward choices must be between 1 and 6'
     return
   }
+  const cMoonEnemyBattleHpBonus = Math.trunc(Number(tierForm.cMoonEnemyBattleHpBonus))
+  if (!Number.isInteger(cMoonEnemyBattleHpBonus) || cMoonEnemyBattleHpBonus < 0 || cMoonEnemyBattleHpBonus > 50) {
+    tierFormError.value = 'cMoon Enemy Battles HP bonus must be between 0 and 50'
+    return
+  }
   tierFormError.value = ''
   tierSaving.value = true
   try {
@@ -2145,6 +2185,7 @@ async function saveTier() {
       sortOrder: tierForm.sortOrder,
       pointThreshold: threshold,
       maxRewardChoices,
+      cMoonEnemyBattleHpBonus,
       rewardCtoonIds: tierForm.rewardCtoons.map(r => r.ctoonId),
     }
     if (!tierForm.id) {
@@ -2317,6 +2358,7 @@ async function load() {
     battlePopupChancePercent.value = Number.isInteger(data.cMoonBattlePopupChancePercent) ? data.cMoonBattlePopupChancePercent : 3
     battlePopupCooldownMinutes.value = Number.isInteger(data.cMoonBattlePopupCooldownMinutes) ? data.cMoonBattlePopupCooldownMinutes : 20
     raidBossDiscordChannelId.value = data.cMoonRaidBossDiscordChannelId || ''
+    enemyBattleDefaultHp.value = Number.isInteger(data.cMoonEnemyBattleDefaultHp) ? data.cMoonEnemyBattleDefaultHp : 5
     admins.value = adminsData || []
     ctoons.value = ctoonsData || []
     backgrounds.value = backgroundsData || []
@@ -2595,6 +2637,27 @@ async function saveRaidBossDiscordChannel() {
     raidBossChannelError.value = e?.data?.statusMessage || 'Failed to save raid boss Discord channel'
   } finally {
     raidBossChannelSaving.value = false
+  }
+}
+
+async function saveDefaultHp() {
+  const hp = Math.trunc(Number(enemyBattleDefaultHp.value))
+  if (!Number.isInteger(hp) || hp < 1 || hp > 50) {
+    defaultHpError.value = 'Default HP must be a whole number between 1 and 50'
+    return
+  }
+  defaultHpSaving.value = true
+  defaultHpError.value = ''
+  try {
+    const res = await $fetch('/api/admin/cmoon-settings', {
+      method: 'POST',
+      body: { cMoonEnemyBattleDefaultHp: hp },
+    })
+    enemyBattleDefaultHp.value = res.cMoonEnemyBattleDefaultHp
+  } catch (e) {
+    defaultHpError.value = e?.data?.statusMessage || 'Failed to save Default HP'
+  } finally {
+    defaultHpSaving.value = false
   }
 }
 

@@ -4,8 +4,8 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { assertSameOrigin } from '@/server/utils/requireAdmin'
-import { getGlobalConfig } from '@/server/utils/cmoon'
-import { PLAYER_MAX_HP, ABANDON_AFTER_MINUTES } from '@/server/utils/cmoonEnemyBattle'
+import { getGlobalConfig, getPlayerCombatMaxHp } from '@/server/utils/cmoon'
+import { ABANDON_AFTER_MINUTES } from '@/server/utils/cmoonEnemyBattle'
 import { serializeBattleForClient } from '@/server/utils/cmoonEnemyBattle'
 
 export default defineEventHandler(async (event) => {
@@ -93,6 +93,9 @@ export default defineEventHandler(async (event) => {
   }
 
   const enemyHpRemaining = enemyMember.battleMode === 'SHARED_POOL' ? enemyMember.currentHp : enemyMember.maxHp
+  // Snapshotted once at battle-start — see CMoonEnemyBattle.playerMaxHp's own schema comment on
+  // why this is never re-read live mid-fight.
+  const playerMaxHp = await getPlayerCombatMaxHp(userId, config)
 
   let battle
   try {
@@ -101,7 +104,8 @@ export default defineEventHandler(async (event) => {
         userId,
         enemyMemberId: enemyMember.id,
         cMoonId: user.cMoonId,
-        playerHpRemaining: PLAYER_MAX_HP,
+        playerHpRemaining: playerMaxHp,
+        playerMaxHp,
         enemyHpRemaining,
         activeUserId: userId,
       },

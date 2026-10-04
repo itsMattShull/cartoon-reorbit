@@ -11,6 +11,7 @@ import { EXCLUDED_SYSTEM_USER_ID } from './economyValuation.js'
 import { grantGuildRole, revokeGuildRole } from './discord.js'
 import { CMOON_EFFECT_TYPES } from '../../utils/cmoonEffectTypes.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
+import { PLAYER_MAX_HP, combinePlayerMaxHp } from './cmoonEnemyBattle.js'
 
 // ── Daily cMoon team leaderboard scoring ──────────────────────────────────────
 //
@@ -839,6 +840,36 @@ export async function getGlobalConfig({ fresh = false } = {}) {
 export function invalidateGlobalConfigCache() {
   cachedConfig = null
   cachedConfigAt = 0
+}
+
+// A player's max HP for a cMoon Enemy Battle (solo or raid): the admin-configured
+// GlobalGameConfig.cMoonEnemyBattleDefaultHp, plus — once they've actually reached that rank
+// (User.currentCMoonRankId), that rank's own CMoonRankTier.cMoonEnemyBattleHpBonus. `userId` is
+// optional: callers with no specific player in mind (the admin solo preview, the admin raid
+// preview — see their own files' comments on why those are deliberately NOT personalized) pass
+// none and get just the plain default, same experience for every admin regardless of their own
+// rank or cMoon membership. `config` lets a caller that already has a fresh GlobalGameConfig
+// (e.g. cmoonRaidSocket.js's cmoonraid:start, which already calls getGlobalConfig() for the
+// feature-enabled check) skip a second cache read.
+//
+// Only a CMoonRank with a `tier` set contributes a bonus — a hand-authored custom per-cMoon rank
+// (tierId null) has no universal tier to read cMoonEnemyBattleHpBonus from, so it never grants
+// one, matching that field's own "global ranks only" schema comment. The actual default+bonus
+// arithmetic (and its floor-at-1 safety) lives in combinePlayerMaxHp() in cmoonEnemyBattle.js —
+// see its own comment for why.
+export async function getPlayerCombatMaxHp(userId, config = null) {
+  const cfg = config || await getGlobalConfig()
+  const defaultHp = Number.isInteger(cfg?.cMoonEnemyBattleDefaultHp) && cfg.cMoonEnemyBattleDefaultHp > 0
+    ? cfg.cMoonEnemyBattleDefaultHp
+    : PLAYER_MAX_HP
+  if (!userId) return defaultHp
+
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { currentCMoonRank: { select: { tier: { select: { cMoonEnemyBattleHpBonus: true } } } } },
+  })
+  const bonus = Number(user?.currentCMoonRank?.tier?.cMoonEnemyBattleHpBonus) || 0
+  return combinePlayerMaxHp(defaultHp, bonus)
 }
 
 export const CMOON_SELECT_ERRORS = {

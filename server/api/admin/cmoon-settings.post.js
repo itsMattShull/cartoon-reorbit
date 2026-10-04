@@ -89,6 +89,19 @@ export default defineEventHandler(async (event) => {
     data.cMoonRaidBossDiscordChannelId = raw || null
   }
 
+  // Every player's starting/max HP for a cMoon Enemy Battle (solo or raid) — see
+  // getPlayerCombatMaxHp() in server/utils/cmoon.js, the only reader. Bounded the same way
+  // CMoonEnemyMember's own maxHp is (server/utils/cmoonEnemy.js's MAX_HP_MIN/MAX_HP_MAX): each
+  // round deals at most one hit, so a value far above this range would make every PER_PLAYER
+  // enemy effectively unwinnable on the admin's side of the fight, not just the player's.
+  if (body?.cMoonEnemyBattleDefaultHp !== undefined) {
+    const hp = Number(body.cMoonEnemyBattleDefaultHp)
+    if (!Number.isInteger(hp) || hp < 1 || hp > 50) {
+      throw createError({ statusCode: 400, statusMessage: 'Default HP must be a whole number between 1 and 50' })
+    }
+    data.cMoonEnemyBattleDefaultHp = hp
+  }
+
   const updated = await db.globalGameConfig.upsert({
     where: { id: 'singleton' },
     create: { id: 'singleton', dailyPointLimit: 100, ...data },
@@ -107,6 +120,7 @@ export default defineEventHandler(async (event) => {
       cMoonBattlePopupChancePercent: existing?.cMoonBattlePopupChancePercent,
       cMoonBattlePopupCooldownMinutes: existing?.cMoonBattlePopupCooldownMinutes,
       cMoonRaidBossDiscordChannelId: existing?.cMoonRaidBossDiscordChannelId,
+      cMoonEnemyBattleDefaultHp: existing?.cMoonEnemyBattleDefaultHp,
     },
     newValue: {
       cMoonEnabled: enabled,
@@ -116,6 +130,7 @@ export default defineEventHandler(async (event) => {
       cMoonBattlePopupChancePercent: updated.cMoonBattlePopupChancePercent,
       cMoonBattlePopupCooldownMinutes: updated.cMoonBattlePopupCooldownMinutes,
       cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
+      cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
     },
   })
 
@@ -127,5 +142,6 @@ export default defineEventHandler(async (event) => {
     cMoonBattlePopupChancePercent: updated.cMoonBattlePopupChancePercent,
     cMoonBattlePopupCooldownMinutes: updated.cMoonBattlePopupCooldownMinutes,
     cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
+    cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
   }
 })

@@ -26,7 +26,7 @@
             {{ enemy?.battleMode === 'SHARED_POOL' ? 'Shared HP' : 'Solo fight' }} · {{ enemy?.hp }} HP
           </p>
           <p class="cbp-flavor">
-            Pick the right move each round to land hits — you have {{ PLAYER_MAX_HP }} HP of your own.
+            Pick the right move each round to land hits.
             <template v-if="inCMoon">A win earns cMoon points for your team and a chance at prizes.</template>
             <template v-else>A win earns a chance at prizes — join a cMoon to also earn points for a team.</template>
           </p>
@@ -62,7 +62,7 @@
             <div class="cbp-hp-row">
               <span class="cbp-hp-label">You</span>
               <div class="cbp-hearts">
-                <span v-for="i in PLAYER_MAX_HP" :key="i" class="cbp-heart" :class="{ 'cbp-heart-lost': i > (battle?.playerHpRemaining ?? PLAYER_MAX_HP) }">♥</span>
+                <span v-for="i in (battle?.playerMaxHp || 1)" :key="i" class="cbp-heart" :class="{ 'cbp-heart-lost': i > (battle?.playerHpRemaining ?? 0) }">♥</span>
               </div>
             </div>
           </div>
@@ -112,13 +112,10 @@
 </template>
 
 <script setup>
-// Kept in sync with server/utils/cmoonEnemyBattle.js's own PLAYER_MAX_HP — that file is
-// server-only and can't be imported client-side, same reasoning as the admin page's hardcoded
-// HP/points bounds mirroring server/utils/cmoonEnemy.js.
-const PLAYER_MAX_HP = 5
-
-// Mirrors server/utils/cmoonEnemy.js's RANK_LABELS — same client-duplication reasoning as
-// PLAYER_MAX_HP above.
+// Mirrors server/utils/cmoonEnemy.js's RANK_LABELS — same client-duplication reasoning the old
+// hardcoded PLAYER_MAX_HP here used to follow, before a player's max HP became admin/rank-
+// dependent (see battle.playerMaxHp, sent fresh by the server on every battle response) rather
+// than a single constant safe to mirror client-side.
 const RANK_LABELS = { GOON: 'Goon', ENFORCER: 'Enforcer', UNDERBOSS: 'Underboss', FINAL_BOSS: 'Final Boss' }
 
 const route = useRoute()
