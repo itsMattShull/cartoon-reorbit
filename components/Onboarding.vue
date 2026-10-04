@@ -597,6 +597,13 @@ const handleVisibility = () => {
   }
 }
 
+// Live push on top of the ~2-minute poll above (see server/utils/realtimeNotify.js) — only
+// connected for a logged-in user (onMounted below gates this), so an anonymous visitor on a
+// public page never opens a socket just for this. `pingCount` carries no payload: a push just
+// means "go refetch", so this always re-fetches the SAME things the ordinary poll/tab-open
+// already do, never anything bespoke that could drift from them.
+let stopNotificationPingWatch = null
+
 onMounted(() => {
   // pointerdown, not click: on iOS Safari a `click` on a non-interactive element
   // does not reach `document`, so tap-outside-to-dismiss silently did nothing on
@@ -609,6 +616,14 @@ onMounted(() => {
   if (user.value) {
     unreadCount.value = Number(user.value.unreadNotifications || 0)
     startPolling()
+
+    const { pingCount } = useNotificationSocket()
+    stopNotificationPingWatch = watch(pingCount, () => {
+      fetchUnreadCount()
+      // Only refresh the visible list too if the player is actually looking at it — otherwise
+      // this would silently clear the "stray tap" protection fetchAlerts' own comment describes.
+      if (isOpen.value && activeTab.value === 'alerts') fetchAlerts()
+    })
   }
 })
 
@@ -629,6 +644,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', handleOutsideClick)
   document.removeEventListener('visibilitychange', handleVisibility)
   stopPolling()
+  if (stopNotificationPingWatch) stopNotificationPingWatch()
 })
 </script>
 

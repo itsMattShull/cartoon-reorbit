@@ -1878,6 +1878,18 @@ io.on('connection', socket => {
     SOCKET_BRIDGE_SECRET && socket.handshake?.auth?.bridgeSecret === SOCKET_BRIDGE_SECRET
   )
 
+  // Join this connection's own `user:{id}` room the moment its identity is known, so any server
+  // code holding just a userId (no socket reference) can push a live event to every tab this
+  // player has open — see server/utils/realtimeNotify.js's pushUserNotification, used so far only
+  // to tell Onboarding.vue's notification badge to refresh instantly instead of waiting for its
+  // own ~2-minute poll (a raid boss's 60-second join window would otherwise often close before
+  // that poll ever ran). Fire-and-forget: a connection that never authenticates (resolveSocketUser
+  // returns null) simply never joins a room, same as every per-game handler below already treats
+  // an unauthenticated caller.
+  resolveSocketUser(socket).then(user => {
+    if (user?.id) socket.join(`user:${user.id}`)
+  }).catch(() => {})
+
   // Ed, Edd n Eddy RPS lives in its own module and resolves identity from the session cookie
   // on every event rather than trusting a payload userId. It keeps its own socket.data keys
   // (edRpsUserId / edRpsRoomId) so it never collides with the Clash cleanup below, which

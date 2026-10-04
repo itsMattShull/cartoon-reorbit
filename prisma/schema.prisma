@@ -1781,6 +1781,13 @@ model GlobalGameConfig {
   // as the hardcoded fallback getPlayerCombatMaxHp() uses if this row is ever unexpectedly missing.
   // See CMoonRankTier.cMoonEnemyBattleHpBonus below for the per-rank addition on top of this.
   cMoonEnemyBattleDefaultHp          Int       @default(5)
+  // When true, consider.post.js's candidate roll restricts itself to only the highest
+  // CMoonEnemyRank tier actually present among this player's eligible candidates (active,
+  // not-defeated, minPriorDefeats already met, raid-availability already checked) before applying
+  // occurrencePercent weighting among just that tier — see ENEMY_RANKS in
+  // server/utils/cmoonEnemy.js for the tier ordering. False (the default) leaves every eligible
+  // rank in the same weighted pool together, the original behavior before this toggle existed.
+  cMoonEnemyHigherTierFirst          Boolean   @default(false)
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }
@@ -5213,6 +5220,20 @@ model CMoonEnemyFaction {
   // the FIGHT phase — not on the OFFER popup) and loops for as long as that faction's member is
   // being fought; stops on battle end/close. Null means silent, not an error.
   battleMusicPath String?
+  // Six optional default battle sounds (MP3/OGG/WAV, uploaded via cmoon-enemy-factions/[id]/
+  // sound.post.js — same slot-selected, magic-byte-sniffed endpoint shape as the per-member
+  // version) — same six moments as CMoonEnemyMember's own sound columns below, named identically
+  // with a "default" prefix. Resolved as a fallback in serializeEnemyForClient
+  // (server/utils/cmoonEnemyBattle.js) and the raid socket's enemy snapshot
+  // (server/utils/cmoonRaidSocket.js): a member whose own slot is null plays its faction's default
+  // instead of staying silent, but a member with its own sound uploaded always wins — this column
+  // is never consulted once a member has its own value for that slot.
+  defaultAppearSoundPath        String?
+  defaultDamageTakenSoundPath   String?
+  defaultDamageAvoidedSoundPath String?
+  defaultAttackingSoundPath     String?
+  defaultVictorySoundPath       String?
+  defaultDefeatSoundPath        String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -5243,6 +5264,17 @@ model CMoonEnemyMember {
   // any time (raising or lowering it only affects future offers, never rewrites history), unlike
   // rank/battleMode above.
   minPriorDefeats   Int                  @default(0)
+  // Relative weight in the popup-consider roll's weighted random pick (server/utils/cmoonEnemy.js's
+  // pickWeightedEnemy, used by consider.post.js) among whichever OTHER already-eligible candidates
+  // are offered alongside this one — NOT a probability out of 100 and never required to sum to 100
+  // across a faction or the whole roster: an enemy at 90 is offered roughly 9x as often as one at
+  // 10 in the same roll, exactly as if there were 2 candidates total, or 1/19th as often if the
+  // other candidate pool that roll happens to contain is much larger. Every existing member
+  // defaults to the same value, so shipping this column changes nothing for an admin who never
+  // touches it — the roll stays exactly as uniform as it was before this field existed. Ignored
+  // entirely for whichever candidates GlobalGameConfig.cMoonEnemyHigherTierFirst's rank pre-filter
+  // (when enabled) has already excluded before weighting even runs.
+  occurrencePercent Int                  @default(50)
   // Only meaningful (and only ever written to) when battleMode = SHARED_POOL — the live running
   // total every fighting player's damage comes out of together. Decremented via an atomic
   // conditional UPDATE (see resolveBattleRound) so two players landing a hit at the same instant

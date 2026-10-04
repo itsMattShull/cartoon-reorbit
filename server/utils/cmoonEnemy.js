@@ -95,6 +95,26 @@ export const MEMBER_SOUND_SLOTS = [
   'defeatSoundPath',
 ]
 
+// Same six moments, on CMoonEnemyFaction's "default" columns — shared the same way between
+// cmoon-enemy-factions/[id]/sound.post.js and the admin UI. Index-aligned with MEMBER_SOUND_SLOTS
+// (same position = same moment) so resolveMemberSoundPaths below can zip the two lists together
+// instead of hand-maintaining a separate mapping that could drift out of sync.
+export const FACTION_DEFAULT_SOUND_SLOTS = [
+  'defaultAppearSoundPath',
+  'defaultDamageTakenSoundPath',
+  'defaultDamageAvoidedSoundPath',
+  'defaultAttackingSoundPath',
+  'defaultVictorySoundPath',
+  'defaultDefeatSoundPath',
+]
+
+// Relative weight in the popup-consider roll's weighted pick — see
+// CMoonEnemyMember.occurrencePercent's own schema comment for why this is a weight, not a
+// probability out of 100.
+export const OCCURRENCE_PERCENT_MIN = 1
+export const OCCURRENCE_PERCENT_MAX = 100
+export const OCCURRENCE_PERCENT_DEFAULT = 50
+
 // Which id field a reward row of each type must carry — the XOR Prisma can't express (see the
 // CMoonEnemyReward model's own comment). No entry for POINTS: it has no id column at all, its
 // amount lives in `quantity` instead (see parseRewardBody's own handling of that case).
@@ -119,6 +139,10 @@ export function isValidRank(value) {
 
 export function isValidMinPriorDefeats(value) {
   return Number.isInteger(value) && value >= MIN_PRIOR_DEFEATS_MIN && value <= MIN_PRIOR_DEFEATS_MAX
+}
+
+export function isValidOccurrencePercent(value) {
+  return Number.isInteger(value) && value >= OCCURRENCE_PERCENT_MIN && value <= OCCURRENCE_PERCENT_MAX
 }
 
 export function isValidMaxHp(value) {
@@ -259,6 +283,9 @@ export function parseMemberBody(body, existing) {
   const minPriorDefeats = body?.minPriorDefeats === undefined
     ? (existing ? existing.minPriorDefeats : MIN_PRIOR_DEFEATS_DEFAULT)
     : toNumber(body.minPriorDefeats)
+  const occurrencePercent = body?.occurrencePercent === undefined
+    ? (existing ? existing.occurrencePercent : OCCURRENCE_PERCENT_DEFAULT)
+    : toNumber(body.occurrencePercent)
   const cMoonPointsReward = body?.cMoonPointsReward === undefined
     ? (existing ? existing.cMoonPointsReward : CMOON_POINTS_REWARD_DEFAULT)
     : toNumber(body.cMoonPointsReward)
@@ -312,6 +339,9 @@ export function parseMemberBody(body, existing) {
   if (!isValidMinPriorDefeats(minPriorDefeats)) {
     return { ok: false, message: `Minimum prior defeats must be a whole number between ${MIN_PRIOR_DEFEATS_MIN} and ${MIN_PRIOR_DEFEATS_MAX}` }
   }
+  if (!isValidOccurrencePercent(occurrencePercent)) {
+    return { ok: false, message: `Occurrence weight must be a whole number between ${OCCURRENCE_PERCENT_MIN} and ${OCCURRENCE_PERCENT_MAX}` }
+  }
   if (!isValidMaxHp(maxHp)) {
     return { ok: false, message: `Max HP must be a whole number between ${MAX_HP_MIN} and ${MAX_HP_MAX}` }
   }
@@ -351,7 +381,7 @@ export function parseMemberBody(body, existing) {
   return {
     ok: true,
     data: {
-      factionId, name, maxHp, battleMode, rank, minPriorDefeats, cMoonPointsReward,
+      factionId, name, maxHp, battleMode, rank, minPriorDefeats, occurrencePercent, cMoonPointsReward,
       critChanceAgainstPercent, critChanceFromPercent, active, sortOrder,
       isRaidBoss, raidAnnouncementText, raidOneTime, raidCooldownMinutes,
     },
@@ -430,4 +460,64 @@ export function parseRewardBody(body) {
       quantity,
     },
   }
+}
+
+// Narrows an already-eligible candidate list (consider.post.js has already applied active/
+// defeated/minPriorDefeats/raid-availability filtering before calling this) down to just the
+// highest CMoonEnemyRank tier actually present, when GlobalGameConfig.cMoonEnemyHigherTierFirst
+// is on — "the highest enemy available to the player takes precedence," i.e. a full pre-filter,
+// not merely extra weight. `candidates` need only have a `rank` field. Returns the input
+// unchanged when the toggle is off or the list is empty (nothing to narrow).
+export function filterToHighestRank(candidates, higherTierFirst) {
+  if (!higherTierFirst || !candidates.length) return candidates
+  let topIndex = -1
+  for (const c of candidates) {
+    const idx = ENEMY_RANKS.indexOf(c.rank)
+    if (idx > topIndex) topIndex = idx
+  }
+  if (topIndex < 0) return candidates
+  const topRank = ENEMY_RANKS[topIndex]
+  return candidates.filter(c => c.rank === topRank)
+}
+
+// Weighted "roulette wheel" pick by occurrencePercent (see that column's own schema comment — a
+// relative weight, not a probability out of 100). `candidates` need only have an `occurrencePercent`
+// field; a missing/invalid weight is clamped to OCCURRENCE_PERCENT_MIN rather than treated as 0, so
+// one malformed row can never zero out its own chance entirely or, worse, make every weight in the
+// pool 0 (which would make a plain uniform fallback silently kick in and defeat the whole feature).
+// Returns null for an empty list — same "caller decides what 'nothing offered' means" contract
+// consider.post.js already has for its own empty-candidates check.
+export function pickWeightedEnemy(candidates) {
+  if (!candidates.length) return null
+  const weights = candidates.map(c => {
+    const w = Number(c.occurrencePercent)
+    return Number.isFinite(w) && w >= OCCURRENCE_PERCENT_MIN ? w : OCCURRENCE_PERCENT_MIN
+  })
+  const total = weights.reduce((sum, w) => sum + w, 0)
+  let roll = Math.random() * total
+  for (let i = 0; i < candidates.length; i++) {
+    roll -= weights[i]
+    if (roll <= 0) return candidates[i]
+  }
+  // Floating-point rounding can in principle leave `roll` fractionally positive after the last
+  // subtraction — the last candidate is the correct pick either way (its slice is what was left).
+  return candidates[candidates.length - 1]
+}
+
+// Resolves a member's six battle sound paths, falling back to its faction's own default for
+// whichever slot the member left null — see CMoonEnemyFaction's default*SoundPath columns and
+// MEMBER_SOUND_SLOTS/FACTION_DEFAULT_SOUND_SLOTS's shared, index-aligned ordering above. `member`
+// and `faction` are plain objects with those columns (faction may be null/undefined, same as an
+// unfetched relation); never mutates either input. Used by serializeEnemyForClient
+// (server/utils/cmoonEnemyBattle.js) and the raid socket's enemy snapshot
+// (server/utils/cmoonRaidSocket.js) so solo battles, raids, and both admin previews all resolve
+// the fallback identically.
+export function resolveMemberSoundPaths(member, faction) {
+  const resolved = {}
+  for (let i = 0; i < MEMBER_SOUND_SLOTS.length; i++) {
+    const memberSlot = MEMBER_SOUND_SLOTS[i]
+    const factionSlot = FACTION_DEFAULT_SOUND_SLOTS[i]
+    resolved[memberSlot] = member?.[memberSlot] || faction?.[factionSlot] || null
+  }
+  return resolved
 }
