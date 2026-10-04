@@ -44,6 +44,8 @@ function serializeRaid(raid) {
     status: raid.status,
     enemyName: raid.enemyName,
     enemyImagePath: raid.enemyImagePath,
+    enemySounds: raid.enemySounds,
+    battleMusicPath: raid.battleMusicPath,
     enemyStats: raid.enemyStats,
     enemyHpRemaining: raid.enemyHpRemaining,
     roundNumber: raid.roundNumber,

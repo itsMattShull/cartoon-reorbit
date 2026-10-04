@@ -13,7 +13,11 @@ import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 
 const MAX_QUANTITY_PER_MEMBER = 10
-const MIN_OPTIONS = 2
+// 1 allows a plain "everyone gets this one cToon" offer, same create/claim flow as a multi-option
+// offer with no branch for it — a single-option offer is just an offer whose only
+// CMoonDispersalOption happens to be the only one, so the player-facing card/Claim flow in
+// CMoonPage.vue only needs to skip the "pick one" framing, not a different code path.
+const MIN_OPTIONS = 1
 const MAX_OPTIONS = 10
 const MAX_CMOONS = 50
 
@@ -28,7 +32,7 @@ export default defineEventHandler(async (event) => {
 
   if (!cMoonIds.length) throw createError({ statusCode: 400, statusMessage: 'Select at least one cMoon' })
   if (cMoonIds.length > MAX_CMOONS) throw createError({ statusCode: 400, statusMessage: `At most ${MAX_CMOONS} cMoons per offer` })
-  if (ctoonIds.length < MIN_OPTIONS) throw createError({ statusCode: 400, statusMessage: `Add at least ${MIN_OPTIONS} cToon options for members to choose between` })
+  if (ctoonIds.length < MIN_OPTIONS) throw createError({ statusCode: 400, statusMessage: 'Add at least one cToon to offer' })
   if (ctoonIds.length > MAX_OPTIONS) throw createError({ statusCode: 400, statusMessage: `At most ${MAX_OPTIONS} cToon options per offer` })
   if (!Number.isFinite(quantityPerMember) || quantityPerMember < 1 || quantityPerMember > MAX_QUANTITY_PER_MEMBER) {
     throw createError({ statusCode: 400, statusMessage: `Quantity per member must be between 1 and ${MAX_QUANTITY_PER_MEMBER}` })

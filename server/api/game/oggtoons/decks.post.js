@@ -40,7 +40,8 @@ export default defineEventHandler(async (event) => {
   const ctoonIds = cards.map(c => c.ctoonId)
   if (new Set(ctoonIds).size !== 12) {
     // Original gToons decks are 12 DISTINCT cards (unlike Clash, which allows duplicates) —
-    // the deck's order matters and a duplicate card at two positions is nonsensical.
+    // a duplicate card at two positions is nonsensical. Only position 11 (the goal card) is
+    // meaningful; matches shuffle and deal the deck.
     throw createError({ statusCode: 400, statusMessage: 'A deck cannot contain the same cToon twice' })
   }
 

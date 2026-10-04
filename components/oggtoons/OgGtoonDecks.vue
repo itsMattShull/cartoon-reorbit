@@ -65,6 +65,7 @@
           <p class="mb-1 text-sm">
             Tap a gToon below to add it to the next open slot. Tap a filled slot to remove it.
             <span class="font-semibold">Slot 12 is your Goal Card</span> — its color sets your goal color for the match.
+            The order of the other slots doesn't matter: your 12 cards are shuffled and 6 are dealt to your hand at the start of a match.
           </p>
 
           <!-- The 12 ordered slots -->

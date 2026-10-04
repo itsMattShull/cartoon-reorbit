@@ -105,8 +105,8 @@
               Sending this will decline their original offer.
             </span>
             <span v-if="tradeCounterSummary?.theirPointsOffered" class="tr-counter-warn">
-              Their {{ tradeCounterSummary.theirPointsOffered.toLocaleString() }} pts can't be
-              requested back — points only travel from the sender of an offer.
+              They offered {{ tradeCounterSummary.theirPointsOffered.toLocaleString() }} pts —
+              ask for them (or any amount) in the "Points to request" field on the next steps.
             </span>
             <span v-if="counterTrimmedCount" class="tr-counter-warn">
               {{ counterTrimmedCount }} cToon{{ counterTrimmedCount === 1 ? '' : 's' }} from the
@@ -333,6 +333,18 @@
                   placeholder="0"
                 />
               </div>
+              <!-- Counter offers only: ask the other party for points -->
+              <div v-if="isCounterMode" class="tr-points-row">
+                <label class="tr-suggest-dim">Points to request:</label>
+                <input
+                  type="number"
+                  v-model.number="pointsToRequest"
+                  min="0"
+                  @input="pointsToRequest = Math.max(0, Math.floor(Number(pointsToRequest) || 0))"
+                  class="tr-points-input"
+                  placeholder="0"
+                />
+              </div>
             </div>
             <!-- Value comparison: what you're requesting vs what you're offering -->
             <div class="tr-step2-compare">
@@ -353,7 +365,7 @@
             </div>
             <div class="tr-step-btns">
               <button class="tr-btn-secondary" @click="tradeCurrentStep = 1">← Back</button>
-              <button class="tr-btn-primary" :disabled="(selectedInitiatorCtoons.length === 0 && pointsToOffer === 0) || makingOffer" @click="tradeCurrentStep = 3">
+              <button class="tr-btn-primary" :disabled="(selectedInitiatorCtoons.length === 0 && pointsToOffer === 0 && !(isCounterMode && pointsToRequest > 0)) || makingOffer" @click="tradeCurrentStep = 3">
                 Confirm →
               </button>
             </div>
@@ -502,6 +514,7 @@
             </div>
             <div class="tr-confirm-col">
               <div class="tr-confirm-label">You're offering</div>
+              <div v-if="isCounterMode && pointsToRequest > 0" class="tr-confirm-points">Points requested from them: {{ Number(pointsToRequest).toLocaleString() }}</div>
               <div class="tr-confirm-points">Points: {{ Number(pointsToOffer).toLocaleString() }}</div>
               <div v-if="!selectedInitiatorCtoons.length" class="tr-suggest-dim tr-confirm-empty">No cToons offered.</div>
               <div v-else class="tr-confirm-cards">
@@ -537,6 +550,7 @@
               </div>
               <div class="tm-head-meta">
                 <span>Points: {{ Number(currentOffer.pointsOffered).toLocaleString() }}</span>
+                <span v-if="currentOffer.pointsRequested > 0">Points requested: {{ Number(currentOffer.pointsRequested).toLocaleString() }}</span>
                 <span class="tr-badge" :class="statusBadgeClass(currentOffer.status)">{{ currentOffer.status.toLowerCase() }}</span>
                 <span class="tm-dim">{{ formatDateTime(currentOffer.createdAt) }}</span>
               </div>
@@ -626,6 +640,10 @@
               <!-- Requested cToons -->
               <div class="tm-col">
                 <div class="tm-col-title">Requested cToons</div>
+                <div v-if="currentOffer.pointsRequested > 0" class="tm-points-row">
+                  <span class="tm-points-label">Points Requested</span>
+                  <span class="tm-points-value">{{ Number(currentOffer.pointsRequested).toLocaleString() }}</span>
+                </div>
                 <div class="tm-cards">
                   <div
                     v-for="tc in currentOffer.ctoons.filter(c => c.role === 'REQUESTED')"
@@ -1291,6 +1309,7 @@ async function selectTargetUser(u, options = {}) {
       tradeCounterSummary.value = null
       counterMissingCount.value = 0
       counterTrimmedCount.value = 0
+      pointsToRequest.value = 0
       selectedTargetCtoons.value = []
       selectedInitiatorCtoons.value = []
     }
@@ -1318,7 +1337,7 @@ async function clearTarget(focusInput = false) {
   preselectTargetKeys.value = []; preselectSelfKeys.value = []; counterMissingCount.value = 0; counterTrimmedCount.value = 0
   pinnedTargetIds.value = new Set(); pinnedInitiatorIds.value = new Set()
   limitNotified.target = false; limitNotified.initiator = false
-  selectedTargetCtoons.value = []; selectedInitiatorCtoons.value = []; pointsToOffer.value = 0
+  selectedTargetCtoons.value = []; selectedInitiatorCtoons.value = []; pointsToOffer.value = 0; pointsToRequest.value = 0
   otherCtoons.value = []; selfCtoons.value = []; otherTradeList.value = []; selfTradeList.value = []
   pageOther.value = 1; pageSelf.value = 1
   tradeFiltersOther.value = { nameQuery: '', set: 'All', series: 'All', cMoon: 'All', rarity: 'All', duplicates: 'all', owned: 'all' }
@@ -1688,6 +1707,8 @@ function buildNameSuggestions(q, list) {
 
 // ── Offer creation ────────────────────────────────────────────────
 const pointsToOffer = ref(0)
+// Counter offers only; always 0 (and never sent) outside counter mode.
+const pointsToRequest = ref(0)
 const makingOffer = ref(false)
 
 /**
@@ -1704,7 +1725,8 @@ const offeredLockedSummary = computed(() =>
     .join(', ')
 )
 const sendBlocked = computed(() =>
-  (selectedInitiatorCtoons.value.length === 0 && pointsToOffer.value === 0) ||
+  (selectedInitiatorCtoons.value.length === 0 && pointsToOffer.value === 0 &&
+    !(isCounterMode.value && pointsToRequest.value > 0)) ||
   makingOffer.value ||
   (offeredLocked.value.length > 0 && !lockAck.value)
 )
@@ -1737,6 +1759,7 @@ async function sendOffer() {
       // The counter endpoint always addresses the original's initiator, so it
       // takes no recipient — one less thing that can be pointed elsewhere.
       const { recipientUsername, ...counterBody } = payload
+      counterBody.pointsRequested = Math.max(0, Math.floor(Number(pointsToRequest.value) || 0))
       await $fetch(`/api/trade/offers/${counterId}/counter`, { method: 'POST', body: counterBody })
       showPageToast('Counter offer sent!', 'success')
     } else {
@@ -1776,6 +1799,8 @@ async function startCounter(offer) {
     // into a request. Saying so beats silently dropping the value.
     theirPointsOffered: Number(offer.pointsOffered) || 0,
   }
+  // Prefill with what they offered us (or 0); editable, counter-only.
+  pointsToRequest.value = Number(offer.pointsOffered) || 0
   preselectTargetKeys.value = theirs.map(toonKey)
   preselectSelfKeys.value = mine.map(toonKey)
 
@@ -1798,6 +1823,7 @@ function cancelCounter() {
   tradeCounterSummary.value = null
   counterMissingCount.value = 0
   counterTrimmedCount.value = 0
+  pointsToRequest.value = 0
   showPageToast('Counter cancelled — this will send as a new offer.', 'success')
 }
 

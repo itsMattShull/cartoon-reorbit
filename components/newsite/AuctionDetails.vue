@@ -82,7 +82,7 @@
             </button>
             <div v-if="isTopBidder" class="adet-hint">You are the highest bidder.</div>
             <div v-else-if="blockedByFeaturedLead" class="adet-hint warn">You're already leading another active featured auction for this cToon — you can only lead one at a time.</div>
-            <div v-else-if="!canBid" class="adet-hint warn">Need {{ Math.max(0, nextBidAmount - userPoints) }} more pts (have {{ userPoints }}).</div>
+            <div v-else-if="!canBid" class="adet-hint warn">Need {{ Math.max(0, nextBidAmount - spendable) }} more pts (have {{ spendable }}).</div>
           </div>
 
           <!-- ── Auto-bid ── -->
@@ -164,6 +164,9 @@ const currentTopBidder = ref(null)
 const toast = reactive({ message: '', type: 'success' })
 const now   = ref(new Date())
 const blockedByFeaturedLead = ref(false)
+// Points the user already has locked on this auction; the server doesn't count
+// these against them when bidding/auto-bidding here.
+const myLockedHere = ref(0)
 let timer, featuredLeadTimer, socket
 
 // ── Computed ─────────────────────────────────────────────────────
@@ -190,13 +193,14 @@ const displayWinner = computed(() =>
 const isTopBidder = computed(() =>
   user.value?.username && currentTopBidder.value === user.value.username
 )
+const spendable = computed(() => userPoints.value + myLockedHere.value)
 const canBid = computed(() =>
-  !ended.value && !isTopBidder.value && !blockedByFeaturedLead.value && userPoints.value >= nextBidAmount.value
+  !ended.value && !isTopBidder.value && !blockedByFeaturedLead.value && spendable.value >= nextBidAmount.value
 )
 const canSaveAutoBid = computed(() => {
   if (ended.value || blockedByFeaturedLead.value) return false
   const v = Number(autoBidInput.value)
-  return Number.isFinite(v) && v > displayedBid.value && v <= userPoints.value
+  return Number.isFinite(v) && v > displayedBid.value && v <= spendable.value
 })
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -236,6 +240,7 @@ async function loadAuction() {
   // afford bids that were then refused. `?? pts.points` keeps this working if
   // the endpoint is ever rolled back.
   userPoints.value = pts.available ?? pts.points
+  myLockedHere.value = data.myLockedHere || 0
   blockedByFeaturedLead.value = !!data.blockedByFeaturedLead
   currentTopBidder.value = topBidderFromHistory.value ?? data.highestBidderUsername ?? null
   recentSales.value = await $fetch(`/api/auction/${props.auctionId}/getRecentAuctions`)

@@ -74,10 +74,20 @@ export default defineEventHandler(async (event) => {
     canRelist = !blocking
   }
 
+  // Points this caller already has locked on THIS auction. The bid/autobid
+  // endpoints exclude this auction's own locks from the locked sum, so the
+  // client needs it to compute the same spendable ceiling (available + this).
+  const hereAgg = await prisma.lockedPoints.aggregate({
+    _sum: { amount: true },
+    where: { userId, status: 'ACTIVE', contextType: 'AUCTION', contextId: auction.id }
+  })
+  const myLockedHere = hereAgg._sum.amount || 0
+
   return {
     id: auction.id,
     isFeatured: auction.isFeatured,
     blockedByFeaturedLead,
+    myLockedHere,
     ctoon: {
       id:         auction.userCtoon.ctoonId,
       userCtoonId: encodeUserCtoonId(auction.userCtoon.userId, auction.userCtoon.ctoonId, auction.userCtoon.mintNumber),

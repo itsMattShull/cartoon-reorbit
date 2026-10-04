@@ -5,6 +5,7 @@ import {
   isUuid,
   normalizeCtoonIdList,
   assertOfferHasContent,
+  assertValidPointsRequested,
   assertNoCrossSideOverlap,
   pendingTradeGuardWhere,
   counterAuthorizationError,
@@ -225,4 +226,18 @@ test('counter chains are bounded', () => {
   assert.equal(exceedsCounterChainDepth(MAX_COUNTER_CHAIN_DEPTH - 1), false)
   assert.equal(exceedsCounterChainDepth(MAX_COUNTER_CHAIN_DEPTH), true)
   assert.equal(exceedsCounterChainDepth(MAX_COUNTER_CHAIN_DEPTH + 1), true)
+})
+
+test('points requested alone count as content', () => {
+  assert.equal(
+    statusOf(() => assertOfferHasContent({ resolvedOffered: [], resolvedRequested: [], pointsOffered: 0, pointsRequested: 5 })),
+    null
+  )
+})
+
+test('pointsRequested must be a non-negative integer', () => {
+  for (const ok of [0, 1, 500]) assert.equal(statusOf(() => assertValidPointsRequested(ok)), null)
+  for (const bad of [-1, 1.5, '5', null, undefined, NaN]) {
+    assert.equal(statusOf(() => assertValidPointsRequested(bad)), 400, `expected ${String(bad)} to be rejected`)
+  }
 })

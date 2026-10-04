@@ -67,8 +67,8 @@
           </div>
 
           <div>
-            <label class="block text-xs font-medium mb-1">cToon options (members pick one)</label>
-            <p class="text-[11px] text-gray-500 mb-1">Only unlimited-quantity cToons can be offered here.</p>
+            <label class="block text-xs font-medium mb-1">cToon{{ selectedOptions.length === 1 ? '' : 's' }} offered{{ selectedOptions.length > 1 ? ' (members pick one)' : '' }}</label>
+            <p class="text-[11px] text-gray-500 mb-1">Only unlimited-quantity cToons can be offered here. Add just one for a plain "everyone gets this" offer, or several to let members pick.</p>
             <input
               v-model="ctoonSearch"
               class="cmd-field w-full border rounded px-2 py-1"
@@ -95,7 +95,7 @@
                 <button type="button" class="cmd-tap ml-auto flex-shrink-0 text-red-600" @click="selectedOptions.splice(i, 1)">Remove</button>
               </div>
             </div>
-            <p class="text-[11px] text-gray-500 mt-1">At least {{ MIN_OPTIONS }} options, up to {{ MAX_OPTIONS }}.</p>
+            <p class="text-[11px] text-gray-500 mt-1">At least one, up to {{ MAX_OPTIONS }}.</p>
           </div>
 
           <div>
@@ -204,7 +204,9 @@ const props = defineProps({
 const emit = defineEmits(['close'])
 
 const MAX_QUANTITY_PER_MEMBER = 10
-const MIN_OPTIONS = 2
+// 1 allows a plain "everyone gets this one cToon" offer — same create/claim flow as a
+// multi-option offer, see MIN_OPTIONS's own comment in cmoon-dispersal-offers.post.js.
+const MIN_OPTIONS = 1
 const MAX_OPTIONS = 10
 
 const view = ref('list') // 'list' | 'create' | 'detail'
