@@ -566,6 +566,15 @@ function countPerMatch(inst, sides, pm) {
 }
 
 /**
+ * Board position of a revealed card. Matches place cards into numbered slots (1-based), so
+ * neighbor/opposite adjacency follows the slot — an empty slot breaks a chain. Snapshots without a
+ * `slot` (older callers/tests) fall back to their index in the revealed array.
+ */
+function boardIndexOf(card, arrayIndex) {
+  return Number.isInteger(card.slot) ? card.slot - 1 : arrayIndex
+}
+
+/**
  * Resolves the FINAL board for a completed match (round 7, or the deciding sudden-death round).
  * This is the single authoritative effects pass — see module header for resolution order and
  * the design notes on every new mechanic.
@@ -582,8 +591,8 @@ function countPerMatch(inst, sides, pm) {
  */
 export function resolveFinalBoard({ player1, player2 }) {
   const sides = {
-    player1: (player1.revealed || []).map((c, i) => makeBoardCard(c, 'player1', i)),
-    player2: (player2.revealed || []).map((c, i) => makeBoardCard(c, 'player2', i))
+    player1: (player1.revealed || []).map((c, i) => makeBoardCard(c, 'player1', boardIndexOf(c, i))),
+    player2: (player2.revealed || []).map((c, i) => makeBoardCard(c, 'player2', boardIndexOf(c, i)))
   }
   const goalAuras = []
   if (player1.goalCard) goalAuras.push({ card: makeBoardCard(player1.goalCard, 'player1', -1), side: 'player1' })

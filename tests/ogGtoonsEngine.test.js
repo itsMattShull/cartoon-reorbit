@@ -1,7 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  deriveGoalColor, validateDeckPositions, canSwap, applySwap, SWAP_COST, determineWinner
+  deriveGoalColor, validateDeckPositions, canSwap, applySwap, SWAP_COST, determineWinner,
+  slotsForRound, isSuddenDeathRound, dealOpeningHand, discardAndDeal, swapForRandomUndealt,
+  shuffled, HAND_SIZE, REGULATION_SLOTS
 } from '../server/utils/ogGtoonEngine.js'
 import {
   resolveRoundEffects, resolveFinalBoard, isValidEffect, validateEffectSchema
@@ -338,4 +340,94 @@ test('ogGtoonPowerCatalog: every one of the 198 historical powers has a valid, s
   assert.deepEqual(lookupPower('No Power'), { description: 'No Power', effect: [], note: null })
   assert.deepEqual(lookupPower('No power'), { description: 'No power', effect: [], note: null })
   assert.equal(lookupPower('not a real power'), null)
+})
+
+
+/* ── Hand & slot rules ────────────────────────────────────────────────────────────────────── */
+
+function seededRng(seed = 1) {
+  let x = seed
+  return () => { x = (x * 16807) % 2147483647; return (x - 1) / 2147483646 }
+}
+
+test('slotsForRound: 4 / 2 / 1 over slots 1-7, then one extra slot per sudden-death round', () => {
+  assert.deepEqual(slotsForRound(1), [1, 2, 3, 4])
+  assert.deepEqual(slotsForRound(2), [5, 6])
+  assert.deepEqual(slotsForRound(3), [7])
+  assert.deepEqual(slotsForRound(4), [8])
+  assert.deepEqual(slotsForRound(6), [10])
+  assert.equal(REGULATION_SLOTS, 7)
+  assert.equal(isSuddenDeathRound(3), false)
+  assert.equal(isSuddenDeathRound(4), true)
+})
+
+test('shuffled returns a permutation without mutating the input', () => {
+  const input = [...Array(12).keys()]
+  const out = shuffled(input, seededRng(3))
+  assert.deepEqual(input, [...Array(12).keys()])
+  assert.deepEqual([...out].sort((a, b) => a - b), input)
+  assert.notDeepEqual(out, input)
+})
+
+test('dealOpeningHand deals 6 and leaves 6 undealt, different seeds deal differently', () => {
+  const a = dealOpeningHand(seededRng(1))
+  const b = dealOpeningHand(seededRng(2))
+  assert.equal(a.hand.length, HAND_SIZE)
+  assert.equal(a.undealt.length, 12 - HAND_SIZE)
+  assert.deepEqual([...a.hand, ...a.undealt].sort((x, y) => x - y), [...Array(12).keys()])
+  assert.notDeepEqual(a.hand, b.hand)
+})
+
+test('discardAndDeal: refills to 6 — 4 + n drawn after playing 4 and discarding n', () => {
+  for (const n of [0, 1, 2]) {
+    const hand = [10, 11]
+    const undealt = [0, 1, 2, 3, 4, 5]
+    const res = discardAndDeal(hand, undealt, hand.slice(0, n))
+    assert.equal(res.hand.length, 6)
+    assert.equal(res.drawn.length, 4 + n)
+    assert.equal(res.undealt.length, 2 - n)
+    assert.equal(res.discarded.length, n)
+  }
+})
+
+test('discardAndDeal: stops at the undealt count, and rejects cards not in hand or repeats', () => {
+  const res = discardAndDeal([10, 11], [0], [])
+  assert.equal(res.hand.length, 3)
+  assert.throws(() => discardAndDeal([10, 11], [0], [5]))
+  assert.throws(() => discardAndDeal([10, 11], [0], [10, 10]))
+})
+
+test('swapForRandomUndealt: the swapped card returns to the undealt pile, the drawn one enters the hand', () => {
+  const hand = [1, 2, 3]
+  const undealt = [7, 8, 9]
+  const res = swapForRandomUndealt(hand, undealt, 2, seededRng(5))
+  assert.equal(res.hand.includes(2), false)
+  assert.equal(undealt.includes(res.drawn), true)
+  assert.equal(res.hand.includes(res.drawn), true)
+  assert.equal(res.undealt.includes(2), true)
+  assert.deepEqual([...res.hand, ...res.undealt].sort((a, b) => a - b), [1, 2, 3, 7, 8, 9])
+  assert.deepEqual(hand, [1, 2, 3])
+  assert.throws(() => swapForRandomUndealt(hand, undealt, 99))
+  assert.throws(() => swapForRandomUndealt(hand, [], 2))
+})
+
+test('resolveFinalBoard: neighbor adjacency follows the slot, so an empty slot breaks the chain', () => {
+  const buff = [{ trigger: 'onReveal', target: { selector: 'neighborOwn' }, action: { type: 'modifyValue', operation: 'add', amount: 3 } }]
+  const at = (card, slot) => ({ ...card, slot })
+  // Source in slot 2: slot 3 is its neighbor; slot 5 is not (slot 4 is empty), even though it is
+  // the next card in the revealed array.
+  const out = resolveFinalBoard({
+    player1: {
+      revealed: [
+        at(revealedCard('src', 'Source', { value: 2, effect: buff }), 2),
+        at(revealedCard('near', 'Near', { value: 2 }), 3),
+        at(revealedCard('far', 'Far', { value: 2 }), 5)
+      ],
+      goalCard: null
+    },
+    player2: { revealed: [], goalCard: null }
+  })
+  const value = (id) => out.player1.revealed.find(r => r.ctoonId === id).finalValue
+  assert.equal(value('near'), 5)
+  assert.equal(value('far'), 2)
 })

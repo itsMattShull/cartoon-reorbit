@@ -60,9 +60,9 @@ const router = useRouter()
 const { currentMatchId, lastError, startPractice } = useOgGtoonsSocket()
 
 const DIFFICULTY_OPTIONS = [
-  { id: 'easy',   label: 'Easy',   help: 'Plays its cards in a random order (even its goal card) and never swaps.' },
-  { id: 'normal', label: 'Normal', help: 'Keeps your goal color, shuffles the rest, and swaps once if it gets a weak card.' },
-  { id: 'hard',   label: 'Hard',   help: 'Leads with its best cards, favors its goal color, and swaps smartly.' }
+  { id: 'easy',   label: 'Easy',   help: 'Places random cards, has a random goal color, and never swaps or discards.' },
+  { id: 'normal', label: 'Normal', help: 'Keeps your goal color, places its best cards, discards weak ones, and swaps once if its hand is weak.' },
+  { id: 'hard',   label: 'Hard',   help: 'Places its best cards, favors its goal color, and discards and swaps smartly.' }
 ]
 
 const toast = ref({ visible: false, message: '', type: 'success', timeout: null })
