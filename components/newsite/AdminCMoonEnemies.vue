@@ -682,7 +682,7 @@ const memberSavedImagePath = ref('')
 // in sync here by hand since that file is server-only) ──────────────
 // Mirrors server/utils/cmoonEnemy.js's ENEMY_RANKS/RANK_LABELS (named RANKS here since this
 // file has no blackjackEngine.js-style collision to avoid) — duplicated client-side rather than
-// imported, same convention this page already follows for PLAYER_MAX_HP-style server constants.
+// imported, since that file is server-only and can't be imported client-side.
 const RANKS = ['GOON', 'ENFORCER', 'UNDERBOSS', 'FINAL_BOSS']
 const RANK_LABELS = { GOON: 'Goon', ENFORCER: 'Enforcer', UNDERBOSS: 'Underboss', FINAL_BOSS: 'Final Boss' }
 const RANK_BADGE_CLASS = {

@@ -9,6 +9,9 @@ import {
 } from '@/server/utils/cmoonRankTiers'
 
 const MAX_THRESHOLD = 5_000_000
+// See cmoon-rank-tiers.post.js's own comment on these two bounds.
+const MIN_HP_BONUS = 0
+const MAX_HP_BONUS = 50
 
 export default defineEventHandler(async (event) => {
   const me = await requireAdmin(event)
@@ -23,6 +26,9 @@ export default defineEventHandler(async (event) => {
   const sortOrder = body?.sortOrder === undefined ? tier.sortOrder : Math.trunc(Number(body.sortOrder))
   const pointThreshold = body?.pointThreshold === undefined ? tier.pointThreshold : Math.trunc(Number(body.pointThreshold))
   const maxRewardChoices = body?.maxRewardChoices === undefined ? tier.maxRewardChoices : Math.trunc(Number(body.maxRewardChoices))
+  const cMoonEnemyBattleHpBonus = body?.cMoonEnemyBattleHpBonus === undefined
+    ? tier.cMoonEnemyBattleHpBonus
+    : Math.trunc(Number(body.cMoonEnemyBattleHpBonus))
   const rewardCtoonIds = body?.rewardCtoonIds === undefined
     ? null
     : [...new Set(Array.isArray(body.rewardCtoonIds) ? body.rewardCtoonIds.filter(x => typeof x === 'string') : [])].slice(0, maxRewardChoices)
@@ -34,6 +40,9 @@ export default defineEventHandler(async (event) => {
   if (!isValidMaxRewardChoices(maxRewardChoices)) {
     throw createError({ statusCode: 400, statusMessage: `Reward choices must be between ${MIN_TIER_REWARD_CHOICES} and ${MAX_TIER_REWARD_CTOONS}` })
   }
+  if (!Number.isInteger(cMoonEnemyBattleHpBonus) || cMoonEnemyBattleHpBonus < MIN_HP_BONUS || cMoonEnemyBattleHpBonus > MAX_HP_BONUS) {
+    throw createError({ statusCode: 400, statusMessage: `cMoon Enemy Battles HP bonus must be between ${MIN_HP_BONUS} and ${MAX_HP_BONUS}` })
+  }
   if (rewardCtoonIds && rewardCtoonIds.length) {
     const validCount = await db.ctoon.count({ where: { id: { in: rewardCtoonIds } } })
     if (validCount !== rewardCtoonIds.length) {
@@ -43,7 +52,7 @@ export default defineEventHandler(async (event) => {
 
   try {
     await db.$transaction(async (tx) => {
-      await tx.cMoonRankTier.update({ where: { id }, data: { name, sortOrder, pointThreshold, maxRewardChoices } })
+      await tx.cMoonRankTier.update({ where: { id }, data: { name, sortOrder, pointThreshold, maxRewardChoices, cMoonEnemyBattleHpBonus } })
       if (rewardCtoonIds !== null) {
         await tx.cMoonRankTierRewardCtoon.deleteMany({ where: { tierId: id } })
         if (rewardCtoonIds.length) {
@@ -70,8 +79,11 @@ export default defineEventHandler(async (event) => {
   }
   await logAdminChange(db, {
     userId: me.id, area: 'CMoonRankTier', key: `update:${id}`,
-    prevValue: { name: tier.name, sortOrder: tier.sortOrder, pointThreshold: tier.pointThreshold, maxRewardChoices: tier.maxRewardChoices },
-    newValue: { name, sortOrder, pointThreshold, maxRewardChoices },
+    prevValue: {
+      name: tier.name, sortOrder: tier.sortOrder, pointThreshold: tier.pointThreshold,
+      maxRewardChoices: tier.maxRewardChoices, cMoonEnemyBattleHpBonus: tier.cMoonEnemyBattleHpBonus,
+    },
+    newValue: { name, sortOrder, pointThreshold, maxRewardChoices, cMoonEnemyBattleHpBonus },
   })
 
   return { ok: true }

@@ -44,7 +44,7 @@
               <div class="flex-1 h-2 bg-gray-200 rounded overflow-hidden">
                 <div class="h-full bg-green-500" :style="{ width: playerHpPercent + '%' }"></div>
               </div>
-              <span class="w-14 flex-shrink-0 text-right tabular-nums">{{ state.playerHpRemaining }}/{{ PLAYER_MAX_HP }}</span>
+              <span class="w-14 flex-shrink-0 text-right tabular-nums">{{ state.playerHpRemaining }}/{{ state.playerMaxHp }}</span>
             </div>
           </div>
 
@@ -87,7 +87,6 @@
 const props = defineProps({ memberId: { type: String, required: true } })
 const emit = defineEmits(['close'])
 
-const PLAYER_MAX_HP = 5
 const RANK_LABELS = { GOON: 'Goon', ENFORCER: 'Enforcer', UNDERBOSS: 'Underboss', FINAL_BOSS: 'Final Boss' }
 const RANK_BADGE_CLASS = {
   GOON: 'bg-gray-200 text-gray-700',
@@ -100,7 +99,11 @@ const loading = ref(true)
 const error = ref('')
 const busy = ref(false)
 const enemy = ref(null)
-const state = reactive({ playerHpRemaining: PLAYER_MAX_HP, enemyHpRemaining: 0, roundNumber: 1 })
+// playerMaxHp comes from the server (GlobalGameConfig.cMoonEnemyBattleDefaultHp — see
+// preview.post.js) rather than a hardcoded client constant, since an admin can change that
+// default at any time; this preview is deliberately NOT personalized by the admin's own cMoon
+// rank (see preview.post.js's own comment), so it's always just that plain default.
+const state = reactive({ playerHpRemaining: 0, playerMaxHp: 0, enemyHpRemaining: 0, roundNumber: 1 })
 const lastRound = ref(null)
 const outcome = ref(null)
 const wouldGrant = ref(null)
@@ -109,7 +112,7 @@ const enemyHpPercent = computed(() => {
   const max = enemy.value?.maxHp || 1
   return Math.max(0, Math.min(100, Math.round((state.enemyHpRemaining / max) * 100)))
 })
-const playerHpPercent = computed(() => Math.max(0, Math.min(100, Math.round((state.playerHpRemaining / PLAYER_MAX_HP) * 100))))
+const playerHpPercent = computed(() => Math.max(0, Math.min(100, Math.round((state.playerHpRemaining / (state.playerMaxHp || 1)) * 100))))
 
 const ACTION_LABELS = { ATTACK_HIGH: 'attacked high', ATTACK_LOW: 'attacked low', BLOCK_HIGH: 'blocked high', BLOCK_LOW: 'blocked low' }
 const lastRoundLabel = computed(() => {
@@ -160,7 +163,10 @@ async function act(action) {
   try {
     const res = await $fetch(`/api/admin/cmoon-enemy-members/${props.memberId}/preview-action`, {
       method: 'POST',
-      body: { action, playerHpRemaining: state.playerHpRemaining, enemyHpRemaining: state.enemyHpRemaining, roundNumber: state.roundNumber },
+      body: {
+        action, playerHpRemaining: state.playerHpRemaining, playerMaxHp: state.playerMaxHp,
+        enemyHpRemaining: state.enemyHpRemaining, roundNumber: state.roundNumber,
+      },
     })
     lastRound.value = res.round
     Object.assign(state, res.state)

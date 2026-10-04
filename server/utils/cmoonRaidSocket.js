@@ -69,7 +69,7 @@
 
 import { randomUUID } from 'crypto'
 import { prisma as db } from '../prisma.js'
-import { getGlobalConfig } from './cmoon.js'
+import { getGlobalConfig, getPlayerCombatMaxHp } from './cmoon.js'
 import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from './achievements.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 import { announceCMoonRaidBoss } from './discord.js'
@@ -141,6 +141,10 @@ function publicRaidView(raid) {
       userId: p.userId,
       username: p.username,
       hpRemaining: p.hpRemaining,
+      // Per-participant, not a single shared value — a party can genuinely have different max
+      // HPs if members' cMoon ranks differ (see getPlayerCombatMaxHp() in server/utils/cmoon.js).
+      // The client's own PLAYER_MAX_HP constant is gone; this is the only source of truth now.
+      maxHp: p.maxHp,
       knockedOut: !!p.knockedOutAt,
       isInitiator: p.isInitiator,
       hasActed: raid.status === 'IN_PROGRESS' && !p.knockedOutAt ? !!p.pendingAction : false,
@@ -209,9 +213,9 @@ async function notifyEligibleCMoonMembers({ cMoonId, initiatorUserId, enemyMembe
 
 /* ── Lifecycle ────────────────────────────────────────────────────────────────────────────── */
 
-function addParticipant(raid, { userId, username, isInitiator }) {
+function addParticipant(raid, { userId, username, isInitiator, maxHp }) {
   raid.participants.set(userId, {
-    userId, username, hpRemaining: PLAYER_MAX_HP, knockedOutAt: null,
+    userId, username, hpRemaining: maxHp, maxHp, knockedOutAt: null,
     isInitiator: !!isInitiator, pendingAction: null, joinedAt: Date.now(),
   })
   raidByUser.set(userId, raid.id)
@@ -254,7 +258,7 @@ async function closeRound(io, raid) {
     const { enemyAction, perParticipant, enemyDamageDealt } = resolveRaidRound({
       enemyAction: raid.currentEnemyAction,
       enemyMember: raid.enemyStats,
-      participants: alive.map(p => ({ userId: p.userId, action: p.pendingAction, hpRemaining: p.hpRemaining })),
+      participants: alive.map(p => ({ userId: p.userId, action: p.pendingAction, hpRemaining: p.hpRemaining, maxHp: p.maxHp })),
     })
 
     for (const result of perParticipant) {
@@ -479,6 +483,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       const cMoon = await db.cMoon.findUnique({ where: { id: elig.user.cMoonId }, select: { id: true, name: true } })
       if (!cMoon) return socket.emit(EV('error'), { message: 'Your cMoon could not be found' })
 
+      const initiatorMaxHp = await getPlayerCombatMaxHp(me.id, config)
       const raidId = randomUUID()
       const raid = {
         id: raidId, enemyMemberId, cMoonId: cMoon.id,
@@ -495,7 +500,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         participants: new Map(), roundLog: [],
         startedAt: Date.now(), combatStartedAt: null, endedAt: null, outcome: null, resolving: false,
       }
-      addParticipant(raid, { userId: me.id, username: me.username, isInitiator: true })
+      addParticipant(raid, { userId: me.id, username: me.username, isInitiator: true, maxHp: initiatorMaxHp })
       raids.set(raidId, raid)
 
       try {
@@ -510,7 +515,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
             },
           }),
           db.cMoonEnemyRaidParticipant.create({
-            data: { raidId, userId: me.id, hpRemaining: PLAYER_MAX_HP, isInitiator: true, activeUserId: me.id },
+            data: { raidId, userId: me.id, hpRemaining: initiatorMaxHp, isInitiator: true, activeUserId: me.id },
           }),
         ])
       } catch (err) {
@@ -553,7 +558,10 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     // startCombat). Everything from here to this call runs in one uninterrupted tick. Rolled
     // back in the catch block below if anything after this fails.
     if (raid.participants.size >= MAX_PARTY_SIZE) return socket.emit(EV('error'), { message: 'This raid is full' })
-    addParticipant(raid, { userId: me.id, username: me.username, isInitiator: false })
+    // Placeholder maxHp here — this reservation must stay fully synchronous (see the comment
+    // above), so the real value (which needs a DB lookup) is filled in below once the
+    // post-reservation checks pass, same as `username` already is.
+    addParticipant(raid, { userId: me.id, username: me.username, isInitiator: false, maxHp: PLAYER_MAX_HP })
     try {
       const enemyMember = await db.cMoonEnemyMember.findUnique({
         where: { id: raid.enemyMemberId }, include: { faction: true },
@@ -565,10 +573,14 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       if (!elig.ok) throw { userMessage: elig.message }
       if (elig.user.cMoonId !== raid.cMoonId) throw { userMessage: 'This raid is for a different cMoon' }
 
+      const joinerMaxHp = await getPlayerCombatMaxHp(me.id)
       await db.cMoonEnemyRaidParticipant.create({
-        data: { raidId, userId: me.id, hpRemaining: PLAYER_MAX_HP, isInitiator: false, activeUserId: me.id },
+        data: { raidId, userId: me.id, hpRemaining: joinerMaxHp, isInitiator: false, activeUserId: me.id },
       })
-      raid.participants.get(me.id).username = elig.user.username
+      const p = raid.participants.get(me.id)
+      p.username = elig.user.username
+      p.maxHp = joinerMaxHp
+      p.hpRemaining = joinerMaxHp
       socket.join(raidRoom(raidId))
       fireSync(raidId, raid)
       broadcast(io, raid, EV('participantJoined'))

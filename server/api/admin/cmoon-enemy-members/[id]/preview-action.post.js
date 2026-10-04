@@ -30,9 +30,14 @@ export default defineEventHandler(async (event) => {
   const playerHpRemaining = Number(body?.playerHpRemaining)
   const enemyHpRemaining = Number(body?.enemyHpRemaining)
   const roundNumber = Number(body?.roundNumber)
+  // Echoed back every round same as the other state fields — snapshotted once at preview.post.js's
+  // start call rather than re-read fresh here, matching how a real battle snapshots
+  // CMoonEnemyBattle.playerMaxHp once instead of letting the heal-cap shift mid-fight.
+  const playerMaxHp = Number(body?.playerMaxHp)
   if (
     !Number.isInteger(playerHpRemaining) || !Number.isInteger(enemyHpRemaining) ||
-    !Number.isInteger(roundNumber) || roundNumber < 1
+    !Number.isInteger(roundNumber) || roundNumber < 1 ||
+    !Number.isInteger(playerMaxHp) || playerMaxHp < 1
   ) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid preview state' })
   }
@@ -44,7 +49,7 @@ export default defineEventHandler(async (event) => {
   if (!member) throw createError({ statusCode: 404, statusMessage: 'Enemy member not found' })
 
   const { roundEntry, newPlayerHp, enemyDamage, enemyHit, enemyBlocked } = resolveRound({
-    playerAction, enemyMember: member, playerHpRemaining,
+    playerAction, enemyMember: member, playerHpRemaining, playerMaxHp,
   })
   let newEnemyHp = enemyHpRemaining
   if (enemyHit) newEnemyHp = Math.max(0, newEnemyHp - enemyDamage)
@@ -85,7 +90,7 @@ export default defineEventHandler(async (event) => {
 
   return {
     round: roundEntry,
-    state: { playerHpRemaining: newPlayerHp, enemyHpRemaining: newEnemyHp, roundNumber: nextRoundNumber },
+    state: { playerHpRemaining: newPlayerHp, playerMaxHp, enemyHpRemaining: newEnemyHp, roundNumber: nextRoundNumber },
     outcome,
     wouldGrant,
   }

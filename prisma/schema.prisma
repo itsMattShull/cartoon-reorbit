@@ -1772,6 +1772,12 @@ model GlobalGameConfig {
   // server/utils/discord.js) — same admin-configurable-with-env-fallback shape as
   // achievementDiscordChannelId/czoneContestDiscordChannelId above.
   cMoonRaidBossDiscordChannelId      String?
+  // Every player's starting/max HP for a cMoon Enemy Battle (solo or raid), before any per-rank
+  // bonus below — admin-editable here (Manage cMoons) instead of the server/utils/cmoonEnemyBattle.js
+  // PLAYER_MAX_HP constant it replaces as the live source of truth; that constant now only serves
+  // as the hardcoded fallback getPlayerCombatMaxHp() uses if this row is ever unexpectedly missing.
+  // See CMoonRankTier.cMoonEnemyBattleHpBonus below for the per-rank addition on top of this.
+  cMoonEnemyBattleDefaultHp          Int       @default(5)
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }
@@ -3918,17 +3924,28 @@ model CMoonRank {
 // (see the admin endpoint) once any player has actually earned one of its per-cMoon achievements,
 // the same "never silently orphan a grant" caution CMoonPrizeCtoon's Restrict FK documents.
 model CMoonRankTier {
-  id               String   @id @default(uuid())
-  name             String   @unique
-  sortOrder        Int      @unique
-  pointThreshold   Int // cumulative User.cMoonPoints required to reach this rank
+  id                      String   @id @default(uuid())
+  name                    String   @unique
+  sortOrder               Int      @unique
+  pointThreshold          Int // cumulative User.cMoonPoints required to reach this rank
   // How many reward-cToon choices this tier offers (the player picks exactly one) — admin-
   // configurable per tier rather than a single fixed cap, clamped to [1, 6] at the API layer
   // (see MIN_TIER_REWARD_CHOICES/MAX_TIER_REWARD_CTOONS in server/utils/cmoonRankTiers.js).
   // Defaults to 5 for newly created tiers.
-  maxRewardChoices Int      @default(5)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  maxRewardChoices        Int      @default(5)
+  // Optional extra max HP for cMoon Enemy Battles (solo + raid), ON TOP OF
+  // GlobalGameConfig.cMoonEnemyBattleDefaultHp, granted to a player once they've reached THIS
+  // rank (see User.currentCMoonRankId — "reached", not "passed through": a player below this
+  // tier gets no part of it, matching how a reward-cToon choice isn't partially granted either).
+  // 0 (the default) means this rank confers no HP change at all — admins opt a tier into this
+  // per rank, it isn't automatic just because a ladder exists. Read at battle-start via
+  // getPlayerCombatMaxHp() in server/utils/cmoon.js, which walks
+  // User.currentCMoonRank.tier.cMoonEnemyBattleHpBonus — a hand-authored per-cMoon custom rank
+  // (CMoonRank.tierId null) has no tier to read this from, so it never grants a bonus either,
+  // matching this field's "global ranks only" scope.
+  cMoonEnemyBattleHpBonus Int      @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
 
   ranks        CMoonRank[]
   achievements Achievement[]
@@ -5352,6 +5369,14 @@ model CMoonEnemyBattle {
   outcome           CMoonEnemyBattleOutcome?
   roundNumber       Int                      @default(1) // the round currently awaiting the player's action
   playerHpRemaining Int
+  // This player's max HP for THIS battle — computed once at start.post.js via getPlayerCombatMaxHp()
+  // (GlobalGameConfig.cMoonEnemyBattleDefaultHp + this player's CURRENT cMoon rank tier's own
+  // cMoonEnemyBattleHpBonus, see CMoonRankTier) and snapshotted here rather than re-read every
+  // round — the admin-configured default or this player's rank can both change mid-fight, and a
+  // snapshot is what keeps an in-progress battle's own heal-cap (action.post.js's resolveRound
+  // call) stable instead of shifting under a player's feet mid-combat. Defaults to the pre-feature
+  // hardcoded PLAYER_MAX_HP (5) so every already-resolved historical row reads correctly.
+  playerMaxHp       Int                      @default(5)
   // Snapshot of the enemy's HP for THIS battle — for a PER_PLAYER member this is the sole source
   // of truth (starts at maxHp, decremented directly); for a SHARED_POOL member this mirrors
   // CMoonEnemyMember.currentHp as of the last round resolved here (that column is the real
