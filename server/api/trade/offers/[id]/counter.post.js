@@ -19,6 +19,7 @@ import {
   validateTradeOfferInputs,
   createTradeOfferTx,
   assertOfferHasContent,
+  assertValidPointsRequested,
   counterAuthorizationError,
   counterChainDepth,
   exceedsCounterChainDepth,
@@ -56,8 +57,12 @@ export default defineEventHandler(async (event) => {
   const {
     ctoonIdsRequested = [],
     ctoonIdsOffered = [],
-    pointsOffered = 0
+    pointsOffered = 0,
+    // Only this route accepts it: asking the other party for points is a
+    // counter-only feature, so offers.post.js deliberately has no such field.
+    pointsRequested = 0
   } = await readBody(event)
+  assertValidPointsRequested(pointsRequested)
 
   // 3) Load the offer being countered
   const original = await prisma.tradeOffer.findUnique({
@@ -95,7 +100,7 @@ export default defineEventHandler(async (event) => {
     ctoonIdsOffered,
     ctoonIdsRequested
   })
-  assertOfferHasContent({ resolvedOffered, resolvedRequested, pointsOffered })
+  assertOfferHasContent({ resolvedOffered, resolvedRequested, pointsOffered, pointsRequested })
 
   // 4) Ownership, availability and funding.
   //
@@ -109,6 +114,7 @@ export default defineEventHandler(async (event) => {
     resolvedOffered,
     resolvedRequested,
     pointsOffered,
+    pointsRequested,
     excludeOfferIds: [original.id]
   })
 
@@ -147,6 +153,7 @@ export default defineEventHandler(async (event) => {
       initiatorId: callerId,
       recipientId: recipient.id,
       pointsOffered,
+      pointsRequested,
       resolvedOffered,
       resolvedRequested,
       counteredOfferId: original.id,
@@ -162,6 +169,7 @@ export default defineEventHandler(async (event) => {
     recipientDiscordId: recipient.discordId,
     fromUsername: me.username,
     pointsOffered,
+    pointsRequested,
     offeredCount: resolvedOffered.length,
     requestedCount: resolvedRequested.length,
     isCounter: true

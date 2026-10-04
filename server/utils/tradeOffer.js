@@ -11,6 +11,7 @@ import { resolveUserCtoonIds } from '@/server/utils/userCtoonId'
 import {
   normalizeCtoonIdList,
   assertNoCrossSideOverlap,
+  assertValidPointsRequested,
   pendingTradeGuardWhere,
   fmtPoints
 } from '@/server/utils/tradeOfferRules'
@@ -109,8 +110,10 @@ export async function validateTradeOfferInputs ({
   resolvedOffered,
   resolvedRequested,
   pointsOffered,
+  pointsRequested = 0,
   excludeOfferIds = []
 }) {
+  assertValidPointsRequested(pointsRequested)
   if (typeof pointsOffered !== 'number' || !Number.isInteger(pointsOffered) || pointsOffered < 0) {
     throw createError({ statusCode: 400, statusMessage: 'pointsOffered must be a non-negative integer' })
   }
@@ -213,6 +216,26 @@ export async function validateTradeOfferInputs ({
     }
   }
 
+  // Not locked (unlike offered points) — the recipient is not a party to this
+  // request yet — but a request they plainly could not pay is refused up front
+  // rather than left to fail on accept. Accept re-checks.
+  if (pointsRequested > 0) {
+    const [pts, locks] = await Promise.all([
+      prisma.userPoints.findUnique({ where: { userId: recipient.id }, select: { points: true } }),
+      prisma.lockedPoints.findMany({
+        where: { userId: recipient.id, status: 'ACTIVE' },
+        select: { amount: true }
+      })
+    ])
+    const lockedSum = locks.reduce((acc, r) => acc + (r.amount || 0), 0)
+    if (pointsRequested > (pts?.points ?? 0) - lockedSum) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'The other player does not have enough available points to be asked for that many.'
+      })
+    }
+  }
+
   if (pointsOffered > 0) {
     const [pts, locks] = await Promise.all([
       prisma.userPoints.findUnique({ where: { userId: initiatorId }, select: { points: true } }),
@@ -241,6 +264,7 @@ export async function createTradeOfferTx (tx, {
   initiatorId,
   recipientId,
   pointsOffered,
+  pointsRequested = 0,
   resolvedOffered,
   resolvedRequested,
   counteredOfferId = null,
@@ -276,6 +300,7 @@ export async function createTradeOfferTx (tx, {
       initiatorId,
       recipientId,
       pointsOffered,
+      pointsRequested,
       counteredOfferId,
       initiatorIp,
       initiatorUserAgent,
@@ -341,6 +366,7 @@ export async function sendTradeOfferDM ({
   recipientDiscordId,
   fromUsername,
   pointsOffered,
+  pointsRequested = 0,
   offeredCount,
   requestedCount,
   isCounter = false
@@ -362,6 +388,7 @@ export async function sendTradeOfferDM ({
       ? `🔄 **${fromUsername}** has countered your trade offer!`
       : `👋 **${fromUsername}** has sent you a trade offer!`,
     `• Points offered: **${pointsOffered}**`,
+    ...(pointsRequested > 0 ? [`• Points requested: **${pointsRequested}**`] : []),
     `• cToons offered: **${offeredCount}**`,
     `• cToons requested: **${requestedCount}**`,
     ``,
