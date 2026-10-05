@@ -289,6 +289,24 @@ function formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant }) {
   return [header, hpLine, ...lines].join('\n')
 }
 
+const RAID_RECAP_HEADLINES = {
+  WIN: raid => `🏆 **Victory!** ${raid.cMoonName} defeated ${raid.enemyName} in ${raid.roundNumber} round${raid.roundNumber === 1 ? '' : 's'}!`,
+  LOSS: raid => `💀 **Defeat.** ${raid.enemyName} was too much for ${raid.cMoonName} (${raid.enemyHpRemaining}/${raid.enemyStats.maxHp} HP left).`,
+  ABANDONED: raid => `⌛ The raid against ${raid.enemyName} ran out of rounds and was abandoned.`,
+}
+
+// Posted once, right as the raid resolves — the "post-raid recap card" from the brainstorm,
+// kept as plain text rather than an embed since every other Discord post in this feature is too.
+function formatRaidRecapMessage(raid, { pointsAwarded }) {
+  const headline = (RAID_RECAP_HEADLINES[raid.outcome] || (r => `The raid against ${r.enemyName} has ended.`))(raid)
+  const lines = [headline]
+  if (pointsAwarded > 0) lines.push(`+${pointsAwarded} cMoon points earned`)
+  lines.push(Array.from(raid.participants.values())
+    .map(p => `${p.username}: ${p.knockedOutAt ? 'knocked out' : `survived (${p.hpRemaining}/${p.maxHp} HP)`}`)
+    .join(' • '))
+  return lines.join('\n')
+}
+
 async function closeRound(io, raid) {
   if (raid.status !== 'IN_PROGRESS' || raid.resolving) return
   raid.resolving = true
@@ -460,6 +478,7 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
   }
   if (pointsAwarded > 0) recomputeCMoonPointsForUsers(participantIds).catch(() => {})
   for (const userId of participantIds) processAchievementsForUser(userId).catch(() => {})
+  sendCMoonRaidUpdate(raid.discordChannelId, formatRaidRecapMessage(raid, { pointsAwarded }))
 
   broadcast(io, raid, EV('ended'))
   destroyRaid(raid.id)
