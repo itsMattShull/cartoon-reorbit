@@ -1793,6 +1793,19 @@ model GlobalGameConfig {
   // this many points under category 'RIDDLE_SOLVE'. One shared value for both riddle kinds rather
   // than a separate column each, since nothing about the reward differs between them.
   cMoonRiddlePoints                  Int       @default(50)
+  // Weekly riddle auto-posting (server/cron/cmoon-riddle-rotation.js), same enabled+day/hour/
+  // minute shape as cZoneContestAutomationConfig — checked every minute; when the admin-chosen
+  // day/hour/minute (America/Chicago) hits, posts the oldest unposted active WEEKLY CMoonRiddle
+  // to every cMoon's own Discord channel (deduped so cMoons sharing the fallback channel only
+  // get one copy) and deactivates whichever WEEKLY riddle was open before it, solved or not.
+  cMoonRiddleRotationEnabled         Boolean   @default(false)
+  cMoonRiddleRotationDayOfWeek       Int       @default(1) // 0=Sunday..6=Saturday; default Monday
+  cMoonRiddleRotationHour            Int       @default(9) // 0-23, America/Chicago
+  cMoonRiddleRotationMinute          Int       @default(0) // 0-59
+  // Idempotency key (YYYY-MM-DD, America/Chicago) — same role as
+  // CZoneContestAutomationConfig.lastCreatedFor: guards against posting twice if this process
+  // restarts within the same triggering minute.
+  cMoonRiddleLastPostedFor           String?
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }

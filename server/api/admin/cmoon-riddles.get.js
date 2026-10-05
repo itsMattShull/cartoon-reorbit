@@ -10,12 +10,20 @@ import { requireAdmin } from '@/server/utils/requireAdmin'
 export default defineEventHandler(async (event) => {
   await requireAdmin(event)
 
-  const [riddles, enemyMembers, entries] = await Promise.all([
+  const [riddles, enemyMembers, entries, config] = await Promise.all([
     db.cMoonRiddle.findMany({ orderBy: [{ kind: 'asc' }, { createdAt: 'desc' }] }),
     // Only raid bosses can be BOSS_LORE-gated (see CMoonEnemyMember.isRaidBoss) — a non-raid-boss
     // member is never offered in the picker.
     db.cMoonEnemyMember.findMany({ where: { isRaidBoss: true }, select: { id: true, name: true }, orderBy: { name: 'asc' } }),
     db.encyclopediaEntry.findMany({ select: { id: true, title: true }, orderBy: { title: 'asc' } }),
+    db.globalGameConfig.findUnique({
+      where: { id: 'singleton' },
+      select: {
+        cMoonRiddlePoints: true, cMoonRiddleRotationEnabled: true,
+        cMoonRiddleRotationDayOfWeek: true, cMoonRiddleRotationHour: true, cMoonRiddleRotationMinute: true,
+        cMoonRiddleLastPostedFor: true,
+      },
+    }),
   ])
 
   const userIds = [...new Set(riddles.map(r => r.solvedByUserId).filter(Boolean))]
@@ -46,5 +54,11 @@ export default defineEventHandler(async (event) => {
     })),
     enemyMembers: enemyMembers.map(m => ({ id: m.id, name: m.name })),
     encyclopediaEntries: entries.map(e => ({ id: e.id, title: e.title })),
+    cMoonRiddlePoints: config?.cMoonRiddlePoints ?? 50,
+    cMoonRiddleRotationEnabled: !!config?.cMoonRiddleRotationEnabled,
+    cMoonRiddleRotationDayOfWeek: config?.cMoonRiddleRotationDayOfWeek ?? 1,
+    cMoonRiddleRotationHour: config?.cMoonRiddleRotationHour ?? 9,
+    cMoonRiddleRotationMinute: config?.cMoonRiddleRotationMinute ?? 0,
+    cMoonRiddleLastPostedFor: config?.cMoonRiddleLastPostedFor || null,
   }
 })

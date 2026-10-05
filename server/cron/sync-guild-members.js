@@ -10,6 +10,7 @@ import { achievementsQueue, scheduleAuctionClose } from '../../server/utils/queu
 import { runTournamentScheduler } from '../../server/utils/gtoonTournament.js'
 import { syncWordleResults } from '../../server/utils/wordle.js'
 import { checkAndCreateWeeklyCZoneContest } from './create-weekly-czone-contest.js'
+import { checkAndPostWeeklyRiddle } from './cmoon-riddle-rotation.js'
 import { runEconomyAggregate } from './economy-aggregate.js'
 import { runCzoneDisplayCountAggregate } from './czone-display-count.js'
 import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
@@ -1103,6 +1104,9 @@ cron.schedule('*/15 * * * *', () => runJob('runTournamentCron', runTournamentCro
 
 // Weekly cZone contest auto-creation — runs every minute and checks if it's time
 cron.schedule('* * * * *', () => runJob('checkAndCreateWeeklyCZoneContest', checkAndCreateWeeklyCZoneContest), { timezone: 'America/Chicago' })
+
+// Weekly cMoon riddle auto-posting — same "runs every minute and checks if it's time" shape
+cron.schedule('* * * * *', () => runJob('checkAndPostWeeklyRiddle', checkAndPostWeeklyRiddle), { timezone: 'America/Chicago' })
 
 // Economy page daily price/volume aggregation — offset from the 3am achievements
 // run to avoid overlapping load on Auction/UserCtoon tables. Also kicked off once
