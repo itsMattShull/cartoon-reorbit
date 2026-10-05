@@ -338,6 +338,10 @@ export async function sendGuildChannelMessageByName(channelName, content) {
 // Everything else (content text, @everyone/@here, roles, other users) is blocked at the
 // API level via allowed_mentions, so message content built from user-controlled strings
 // (usernames, contest/item names, etc.) can never trigger an unintended mass-ping.
+// Returns the sent message's id (string) on success, or false on failure — still truthy/
+// falsy-safe for every existing caller that only does `if (result)`/`if (!result)`, while
+// letting callers that need to act on the message afterward (e.g. starting a thread off of
+// it) get there without a second API round trip.
 export async function sendGuildChannelMessageById(channelId, content, tokenOverride = null, mentionUserIds = [], embeds = []) {
   const rawToken = tokenOverride || process.env.BOT_TOKEN
   if (!rawToken || !channelId) return false
@@ -368,7 +372,8 @@ export async function sendGuildChannelMessageById(channelId, content, tokenOverr
         console.error('sendGuildChannelMessageById failed:', res.status, await res.text().catch(() => ''))
         return false
       }
-      return true
+      const message = await res.json().catch(() => null)
+      return message?.id || true
     } catch (e) {
       console.error('sendGuildChannelMessageById failed:', e?.message || e)
       return false
@@ -513,26 +518,35 @@ const DEFAULT_RAID_ANNOUNCEMENT_TEXT = '🚨 A raid boss ({enemy}) is being foug
 // Announce a cMoon Enemy Battles raid boss starting. `announcementTemplate` is the admin-authored
 // CMoonEnemyMember.raidAnnouncementText (or null to use the default above) — substitutes
 // {cmoon}/{enemy} literally, same shape as every other admin-authored template in this codebase.
-// Never throws — the raid itself has already started by the time this is called and must not be
-// reported as failed just because the announcement didn't go out.
-export async function announceCMoonRaidBoss(prisma, { cMoonName, enemyName, announcementTemplate }) {
+// `cMoonDiscordChannelId` is that team's own CMoon.discordChannelId, if the caller has it loaded —
+// takes priority over the shared GlobalGameConfig.cMoonRaidBossDiscordChannelId fallback, so a
+// cMoon with its own channel configured gets its raids announced there instead of the shared one
+// every OTHER cMoon's raids also post to. Never throws — the raid itself has already started by
+// the time this is called and must not be reported as failed just because the announcement didn't
+// go out. Returns the sent message's id (for starting a coordination thread off of it) or null if
+// nothing was sent.
+export async function announceCMoonRaidBoss(prisma, { cMoonName, enemyName, announcementTemplate, cMoonDiscordChannelId }) {
   try {
     const config = await prisma.globalGameConfig.findUnique({
       where: { id: 'singleton' },
       select: { cMoonRaidBossDiscordChannelId: true }
     })
-    const channelId = (config?.cMoonRaidBossDiscordChannelId || '').trim() || process.env.DISCORD_ANNOUNCEMENTS_CHANNEL
+    const channelId = (cMoonDiscordChannelId || '').trim()
+      || (config?.cMoonRaidBossDiscordChannelId || '').trim()
+      || process.env.DISCORD_ANNOUNCEMENTS_CHANNEL
     const botToken = getAnnouncementsBotToken()
-    if (!channelId || !botToken) return
+    if (!channelId || !botToken) return null
     const template = (typeof announcementTemplate === 'string' && announcementTemplate.trim())
       ? announcementTemplate.trim()
       : DEFAULT_RAID_ANNOUNCEMENT_TEXT
     const msg = template
       .replaceAll('{cmoon}', cMoonName || 'a cMoon')
       .replaceAll('{enemy}', enemyName || 'a raid boss')
-    await sendGuildChannelMessageById(channelId, msg, botToken)
+    const result = await sendGuildChannelMessageById(channelId, msg, botToken)
+    return typeof result === 'string' ? result : null
   } catch (e) {
     console.error('announceCMoonRaidBoss failed:', e?.message || e)
+    return null
   }
 }
 

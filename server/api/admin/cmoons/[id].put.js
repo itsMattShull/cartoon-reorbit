@@ -24,6 +24,9 @@ export default defineEventHandler(async (event) => {
   const textColor = body?.textColor === undefined ? cmoon.textColor : (typeof body.textColor === 'string' ? body.textColor.trim() || null : null)
   const cardBgColor = body?.cardBgColor === undefined ? cmoon.cardBgColor : (typeof body.cardBgColor === 'string' ? body.cardBgColor.trim() || null : null)
   const discordRoleId = body?.discordRoleId === undefined ? cmoon.discordRoleId : (typeof body.discordRoleId === 'string' ? body.discordRoleId.trim() : '')
+  // Empty string clears it back to the global raid-boss channel fallback — same shape as
+  // discordRoleId above, and as GlobalGameConfig.cMoonRaidBossDiscordChannelId itself.
+  const discordChannelId = body?.discordChannelId === undefined ? cmoon.discordChannelId : (typeof body.discordChannelId === 'string' ? body.discordChannelId.trim() : '')
   const captainIds = Array.isArray(body?.captainIds) ? [...new Set(body.captainIds.filter(x => typeof x === 'string'))] : null
   const prizeCtoons = Array.isArray(body?.prizeCtoons) ? body.prizeCtoons : null
   const pageDescription = body?.pageDescription === undefined
@@ -47,6 +50,9 @@ export default defineEventHandler(async (event) => {
   }
   if (discordRoleId && !isValidDiscordSnowflake(discordRoleId)) {
     throw createError({ statusCode: 400, statusMessage: 'Discord Role ID must be a numeric snowflake' })
+  }
+  if (discordChannelId && !isValidDiscordSnowflake(discordChannelId)) {
+    throw createError({ statusCode: 400, statusMessage: 'Discord Channel ID must be a numeric snowflake' })
   }
   if (!isValidCMoonEffectType(effectType)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid effect type' })
@@ -91,7 +97,7 @@ export default defineEventHandler(async (event) => {
   await db.$transaction(async (tx) => {
     await tx.cMoon.update({
       where: { id },
-      data: { name, color, pageBgColor, accentColor, textColor, cardBgColor, discordRoleId: discordRoleId || null, pageDescription, effectType, customJoinEffectId, joinLocked, showOnNav, showButtonOnPages, allowOptOutJoin },
+      data: { name, color, pageBgColor, accentColor, textColor, cardBgColor, discordRoleId: discordRoleId || null, discordChannelId: discordChannelId || null, pageDescription, effectType, customJoinEffectId, joinLocked, showOnNav, showButtonOnPages, allowOptOutJoin },
     })
     if (captainIds) {
       await tx.cMoonCaptain.deleteMany({ where: { cMoonId: id } })

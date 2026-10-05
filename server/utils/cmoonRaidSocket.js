@@ -499,7 +499,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       const elig = await loadEligibility({ userId: me.id, enemyMember })
       if (!elig.ok) return socket.emit(EV('error'), { message: elig.message })
 
-      const cMoon = await db.cMoon.findUnique({ where: { id: elig.user.cMoonId }, select: { id: true, name: true } })
+      const cMoon = await db.cMoon.findUnique({ where: { id: elig.user.cMoonId }, select: { id: true, name: true, discordChannelId: true } })
       if (!cMoon) return socket.emit(EV('error'), { message: 'Your cMoon could not be found' })
 
       const initiatorMaxHp = await getPlayerCombatMaxHp(me.id, config)
@@ -554,6 +554,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       announceCMoonRaidBoss(db, {
         cMoonName: cMoon.name, enemyName: enemyMember.name,
         announcementTemplate: enemyMember.raidAnnouncementText,
+        cMoonDiscordChannelId: cMoon.discordChannelId,
       }).catch(() => {})
       notifyEligibleCMoonMembers(io, {
         cMoonId: cMoon.id, initiatorUserId: me.id, enemyMember, raidId, cMoonName: cMoon.name,

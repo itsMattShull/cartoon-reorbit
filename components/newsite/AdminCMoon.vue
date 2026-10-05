@@ -448,6 +448,7 @@
               Prize cToons: {{ c.prizeCtoons.map(p => `${p.name} ×${p.quantity}`).join(', ') || 'none' }}
             </div>
             <div class="text-[11px] text-gray-600 break-words">Discord role ID: {{ c.discordRoleId || 'none' }}</div>
+            <div class="text-[11px] text-gray-600 break-words">Discord channel ID: {{ c.discordChannelId || 'none (uses shared channel)' }}</div>
             <div class="text-[11px] text-gray-600 break-words">
               Effect: {{ c.effectType ? effectLabel(c.effectType) : (c.customJoinEffect ? `${c.customJoinEffect.name} (custom)` : 'none') }}
             </div>
@@ -670,6 +671,11 @@
             <div>
               <label class="block text-xs font-medium mb-1">Discord Role ID (optional)</label>
               <input v-model="form.discordRoleId" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" inputmode="numeric" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="123456789012345678" />
+            </div>
+            <div>
+              <label class="block text-xs font-medium mb-1">Discord Channel ID (optional)</label>
+              <input v-model="form.discordChannelId" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" inputmode="numeric" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="123456789012345678" />
+              <p class="text-[11px] text-gray-500 mt-1">This team's own Discord channel — raid-boss announcements and live updates post here instead of the shared channel set in Global Settings.</p>
             </div>
             <div>
               <label class="block text-xs font-medium mb-1">Effect (plays on cMoon select &amp; achievement claim)</label>
@@ -1491,7 +1497,7 @@ function effectLabel(type) {
 
 const editId = ref('')
 const formOpen = ref(false)
-const emptyForm = () => ({ name: '', color: '', pageBgColor: '', accentColor: '', textColor: '', cardBgColor: '', discordRoleId: '', pageDescription: '', effectType: '', customJoinEffectId: '', joinLocked: false, showOnNav: true, showButtonOnPages: false, allowOptOutJoin: true, captainIds: [], prizeCtoons: [] })
+const emptyForm = () => ({ name: '', color: '', pageBgColor: '', accentColor: '', textColor: '', cardBgColor: '', discordRoleId: '', discordChannelId: '', pageDescription: '', effectType: '', customJoinEffectId: '', joinLocked: false, showOnNav: true, showButtonOnPages: false, allowOptOutJoin: true, captainIds: [], prizeCtoons: [] })
 const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
@@ -1935,6 +1941,7 @@ function startEdit(c) {
     textColor: c.textColor || '',
     cardBgColor: c.cardBgColor || '',
     discordRoleId: c.discordRoleId || '',
+    discordChannelId: c.discordChannelId || '',
     pageDescription: c.pageDescription || '',
     effectType: c.effectType || '',
     customJoinEffectId: c.customJoinEffectId || '',
@@ -2686,6 +2693,7 @@ async function save() {
       textColor: (form.textColor || '').trim() || null,
       cardBgColor: (form.cardBgColor || '').trim() || null,
       discordRoleId: form.discordRoleId.trim(),
+      discordChannelId: form.discordChannelId.trim(),
       pageDescription: form.pageDescription,
       effectType: form.effectType || null,
       customJoinEffectId: form.customJoinEffectId || null,

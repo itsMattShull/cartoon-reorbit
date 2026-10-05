@@ -3458,6 +3458,14 @@ model CMoon {
   textColor          String? // overrides primary text (auto: text)
   cardBgColor        String? // overrides tile/card backgrounds, incl. featured cToon cards (auto: tileBg)
   discordRoleId      String? // Discord role snowflake granted to members (add-only sync)
+  // Discord channel snowflake this team's own content posts to: raid-boss announcements/live
+  // round-by-round updates/recap (server/utils/cmoonRaidSocket.js), and anything else that's
+  // genuinely this ONE team's activity rather than a site-wide broadcast. Distinct from
+  // GlobalGameConfig.cMoonRaidBossDiscordChannelId, which remains the fallback for a cMoon that
+  // hasn't set this — so turning this on is opt-in per team, not a breaking change for any cMoon
+  // an admin hasn't gotten to yet. Same admin-configurable-with-fallback shape as every other
+  // Discord channel setting in this codebase (see cmoon-settings.post.js's own fields).
+  discordChannelId   String?
   // Optional full-screen animation played on cMoon-select and achievement-claim (see enum above).
   // Null = no effect, proceed immediately. Mutually exclusive with customJoinEffectId below.
   effectType         CMoonEffectType?
