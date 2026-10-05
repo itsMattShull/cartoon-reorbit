@@ -7,6 +7,7 @@
 
 import { recomputeCMoonTeamScores } from './cmoon.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
+import { resolveCMoonRaidDiscordChannelId, sendCMoonTeamUpdate } from './discord.js'
 
 export { normalizeRiddleAnswer, isCorrectRiddleAnswer } from './cmoonRiddleAnswer.js'
 
@@ -42,7 +43,23 @@ export async function claimCMoonRiddleSolve(prisma, { riddleId, userId, cMoonId 
     await recomputeCMoonTeamScores()
     await recomputeCMoonPointsForUsers([userId])
   }
+
+  // Fire-and-forget: the winning team's own channel gets a congratulatory ping, but a failed
+  // Discord post must never make an otherwise-successful claim look like it failed to the caller.
+  announceRiddleSolveToTeam(prisma, { userId, cMoonId, pointsAwarded }).catch(() => {})
+
   return { claimed: true, pointsAwarded }
+}
+
+async function announceRiddleSolveToTeam(prisma, { userId, cMoonId, pointsAwarded }) {
+  const [user, cMoon] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { username: true } }),
+    prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { name: true, discordChannelId: true } }),
+  ])
+  if (!cMoon) return
+  const channelId = await resolveCMoonRaidDiscordChannelId(prisma, cMoon.discordChannelId)
+  const pointsLine = pointsAwarded > 0 ? ` and earns ${pointsAwarded} points` : ''
+  await sendCMoonTeamUpdate(channelId, `🧩 **Riddle solved!** ${user?.username || 'A player'} was first — ${cMoon.name}${pointsLine}!`)
 }
 
 // The currently-open WEEKLY riddle, if any — active, already posted (postedAt set), and not yet

@@ -561,18 +561,19 @@ export async function announceCMoonRaidBoss(channelId, { cMoonName, enemyName, a
   }
 }
 
-// Posts a short spectator update for an in-progress cMoon raid (one round's outcome, or the
-// final recap) to the raid's already-resolved Discord channel — see resolveCMoonRaidDiscordChannelId.
-// A fresh message per call, not an edit (Discord message editing isn't wired up elsewhere in this
-// codebase), which also gives spectators a fresh activity ping per round. Fire-and-forget: never
-// throws, a missed update must not interrupt combat.
-export async function sendCMoonRaidUpdate(channelId, text) {
+// Posts a short plain-text update to a cMoon team's own Discord channel (or raid thread) — used
+// by the raid spectator feed/recap (cmoonRaidSocket.js, see resolveCMoonRaidDiscordChannelId for
+// how that channelId is resolved) and by the riddle system's "your team just solved it" ping
+// (cmoonRiddle.js). A fresh message per call, never an edit (Discord message editing isn't wired
+// up elsewhere in this codebase). Fire-and-forget: never throws — a missed update must not
+// interrupt whatever triggered it.
+export async function sendCMoonTeamUpdate(channelId, text) {
   try {
     const botToken = getAnnouncementsBotToken()
     if (!channelId || !botToken) return
     await sendGuildChannelMessageById(channelId, text, botToken)
   } catch (e) {
-    console.error('sendCMoonRaidUpdate failed:', e?.message || e)
+    console.error('sendCMoonTeamUpdate failed:', e?.message || e)
   }
 }
 

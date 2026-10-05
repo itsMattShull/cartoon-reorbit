@@ -42,6 +42,19 @@ export default defineEventHandler(async (event) => {
         }
       ],
       dm_permission: true
+    },
+    {
+      name: 'riddle',
+      description: 'Submit an answer to this week\'s cMoon riddle',
+      options: [
+        {
+          type: 3,            // STRING
+          name: 'answer',
+          description: 'Your answer',
+          required: true
+        }
+      ],
+      dm_permission: true
     }
   ]
 

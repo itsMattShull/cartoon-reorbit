@@ -1,6 +1,9 @@
 // server/api/discord/interactions.post.js
 import { defineEventHandler, getRequestHeader, createError, readRawBody } from 'h3'
 import nacl from 'tweetnacl'
+import { prisma as db } from '@/server/prisma'
+import { isCorrectRiddleAnswer } from '@/server/utils/cmoonRiddleAnswer'
+import { claimCMoonRiddleSolve, getOpenWeeklyRiddle } from '@/server/utils/cmoonRiddle'
 
 const hex2bin = (hex) => Uint8Array.from(Buffer.from(hex, 'hex'))
 
@@ -64,6 +67,42 @@ export default defineEventHandler(async (event) => {
           : `https://www.cartoonreorbit.com/newsite/trade?username=${encodeURIComponent(display)}`
 
       return { type: 4, data: { content: link, flags: 64 } }
+    }
+
+    if (cmd === 'riddle') {
+      // Guild context puts the caller under interaction.member.user; a DM puts it directly under
+      // interaction.user (no `member` at all) — same two shapes czone/trade would see, just
+      // neither of them needed the id itself before now.
+      const discordId = interaction.member?.user?.id || interaction.user?.id || null
+      const answer = interaction.data.options?.find(o => o.name === 'answer')?.value ?? ''
+
+      if (!discordId) {
+        return { type: 4, data: { content: 'Could not identify your Discord account.', flags: 64 } }
+      }
+
+      const user = await db.user.findUnique({ where: { discordId }, select: { id: true, cMoonId: true } })
+      if (!user) {
+        return { type: 4, data: { content: "You need a Cartoon ReOrbit account linked to this Discord account first.", flags: 64 } }
+      }
+      if (!user.cMoonId) {
+        return { type: 4, data: { content: 'Join a cMoon team on the site before answering riddles.', flags: 64 } }
+      }
+
+      const riddle = await getOpenWeeklyRiddle(db)
+      if (!riddle) {
+        return { type: 4, data: { content: "There's no riddle open right now — check back later!", flags: 64 } }
+      }
+
+      if (!isCorrectRiddleAnswer(riddle, answer)) {
+        return { type: 4, data: { content: 'Not quite — try again!', flags: 64 } }
+      }
+
+      const result = await claimCMoonRiddleSolve(db, { riddleId: riddle.id, userId: user.id, cMoonId: user.cMoonId })
+      if (!result.claimed) {
+        return { type: 4, data: { content: "Correct, but someone already solved this one first — better luck next week!", flags: 64 } }
+      }
+      const pointsLine = result.pointsAwarded > 0 ? ` Your cMoon earns ${result.pointsAwarded} points.` : ''
+      return { type: 4, data: { content: `🎉 Correct — you solved it first!${pointsLine}`, flags: 64 } }
     }
   }
 
