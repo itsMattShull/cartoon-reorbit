@@ -45,9 +45,18 @@ export async function postCMoonHunt(prisma, huntId) {
     const pairs = assignCluesRoundRobin(teamMembers.map(m => m.id), clueIds)
     for (const { userId, clueId } of pairs) assignmentRows.push({ huntId: hunt.id, clueId, cMoonId, userId })
   }
-  if (assignmentRows.length) {
-    await prisma.cMoonHuntAssignment.createMany({ data: assignmentRows })
-  }
+
+  // The assignment rows and the postedAt flag commit together, in one transaction, BEFORE any
+  // Discord side effect — a crash between two separate writes here would otherwise leave the
+  // hunt stuck forever: postedAt still null (so a retry re-enters this function), but
+  // CMoonHuntAssignment's @@unique([huntId, userId]) rejecting the same rows a second time,
+  // with no code path that ever sets postedAt after that. Once this transaction commits, a
+  // retry's own `if (hunt.postedAt) return already_posted` guard above makes it a safe no-op;
+  // the DMs/announcement below are inherently best-effort and never were transactional anyway.
+  await prisma.$transaction([
+    ...(assignmentRows.length ? [prisma.cMoonHuntAssignment.createMany({ data: assignmentRows })] : []),
+    prisma.cMoonHunt.update({ where: { id: hunt.id }, data: { postedAt: new Date() } }),
+  ])
 
   // DMs go out fire-and-forget (sendDiscordDMByDiscordId never throws) — an admin posting a hunt
   // to potentially dozens of members across every cMoon must not wait on that many sequential
@@ -69,7 +78,6 @@ export async function postCMoonHunt(prisma, huntId) {
     `🧭 **A new Team Scavenger Hunt has begun: "${hunt.title}"!**\nCheck your DMs for your own personal clue, share it with your team, then submit the combined answer with \`/hunt\`.`,
   ).catch(() => {})
 
-  await prisma.cMoonHunt.update({ where: { id: hunt.id }, data: { postedAt: new Date() } })
   return { posted: true, assignedCount: assignmentRows.length }
 }
 
