@@ -41,6 +41,8 @@ function serializeRaid(raid) {
     id: raid.id,
     enemyMemberId: raid.enemyMemberId,
     cMoonId: raid.cMoonId,
+    cMoonName: raid.cMoonName,
+    discordChannelId: raid.discordChannelId,
     status: raid.status,
     enemyName: raid.enemyName,
     enemyImagePath: raid.enemyImagePath,

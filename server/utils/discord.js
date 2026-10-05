@@ -515,25 +515,36 @@ export async function announceCZoneContestWinner(prisma, {
 // the same default wording regardless of which admin set up the boss.
 const DEFAULT_RAID_ANNOUNCEMENT_TEXT = '🚨 A raid boss ({enemy}) is being fought in {cmoon}! Up to 4 members can join the fight.'
 
-// Announce a cMoon Enemy Battles raid boss starting. `announcementTemplate` is the admin-authored
-// CMoonEnemyMember.raidAnnouncementText (or null to use the default above) — substitutes
-// {cmoon}/{enemy} literally, same shape as every other admin-authored template in this codebase.
-// `cMoonDiscordChannelId` is that team's own CMoon.discordChannelId, if the caller has it loaded —
-// takes priority over the shared GlobalGameConfig.cMoonRaidBossDiscordChannelId fallback, so a
-// cMoon with its own channel configured gets its raids announced there instead of the shared one
-// every OTHER cMoon's raids also post to. Never throws — the raid itself has already started by
-// the time this is called and must not be reported as failed just because the announcement didn't
-// go out. Returns the sent message's id (for starting a coordination thread off of it) or null if
-// nothing was sent.
-export async function announceCMoonRaidBoss(prisma, { cMoonName, enemyName, announcementTemplate, cMoonDiscordChannelId }) {
+// Resolves which Discord channel a cMoon's raid activity (boss announcement, per-round spectator
+// updates, recap) posts to: that team's own CMoon.discordChannelId if set, else the shared
+// GlobalGameConfig.cMoonRaidBossDiscordChannelId every cMoon falls back to, else the env default.
+// Called once per raid (at raid start) rather than per-message — the result can't change mid-raid,
+// so every later post reuses the id the caller stored on the raid object instead of re-querying.
+export async function resolveCMoonRaidDiscordChannelId(prisma, cMoonDiscordChannelId) {
   try {
     const config = await prisma.globalGameConfig.findUnique({
       where: { id: 'singleton' },
       select: { cMoonRaidBossDiscordChannelId: true }
     })
-    const channelId = (cMoonDiscordChannelId || '').trim()
+    return (cMoonDiscordChannelId || '').trim()
       || (config?.cMoonRaidBossDiscordChannelId || '').trim()
       || process.env.DISCORD_ANNOUNCEMENTS_CHANNEL
+      || null
+  } catch (e) {
+    console.error('resolveCMoonRaidDiscordChannelId failed:', e?.message || e)
+    return null
+  }
+}
+
+// Announce a cMoon Enemy Battles raid boss starting. `announcementTemplate` is the admin-authored
+// CMoonEnemyMember.raidAnnouncementText (or null to use the default above) — substitutes
+// {cmoon}/{enemy} literally, same shape as every other admin-authored template in this codebase.
+// `channelId` is the already-resolved id from resolveCMoonRaidDiscordChannelId above. Never
+// throws — the raid itself has already started by the time this is called and must not be
+// reported as failed just because the announcement didn't go out. Returns the sent message's id
+// (for starting a coordination thread off of it) or null if nothing was sent.
+export async function announceCMoonRaidBoss(channelId, { cMoonName, enemyName, announcementTemplate }) {
+  try {
     const botToken = getAnnouncementsBotToken()
     if (!channelId || !botToken) return null
     const template = (typeof announcementTemplate === 'string' && announcementTemplate.trim())
@@ -547,6 +558,21 @@ export async function announceCMoonRaidBoss(prisma, { cMoonName, enemyName, anno
   } catch (e) {
     console.error('announceCMoonRaidBoss failed:', e?.message || e)
     return null
+  }
+}
+
+// Posts a short spectator update for an in-progress cMoon raid (one round's outcome, or the
+// final recap) to the raid's already-resolved Discord channel — see resolveCMoonRaidDiscordChannelId.
+// A fresh message per call, not an edit (Discord message editing isn't wired up elsewhere in this
+// codebase), which also gives spectators a fresh activity ping per round. Fire-and-forget: never
+// throws, a missed update must not interrupt combat.
+export async function sendCMoonRaidUpdate(channelId, text) {
+  try {
+    const botToken = getAnnouncementsBotToken()
+    if (!channelId || !botToken) return
+    await sendGuildChannelMessageById(channelId, text, botToken)
+  } catch (e) {
+    console.error('sendCMoonRaidUpdate failed:', e?.message || e)
   }
 }
 

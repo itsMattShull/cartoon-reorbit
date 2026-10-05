@@ -72,7 +72,7 @@ import { prisma as db } from '../prisma.js'
 import { getGlobalConfig, getPlayerCombatMaxHp } from './cmoon.js'
 import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from './achievements.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
-import { announceCMoonRaidBoss } from './discord.js'
+import { announceCMoonRaidBoss, resolveCMoonRaidDiscordChannelId, sendCMoonRaidUpdate } from './discord.js'
 import { notifyCMoonRaidBossStarted } from './notifications.js'
 import { pushUserNotification } from './realtimeNotify.js'
 import { buildGrantableReward } from './cmoonEnemyBattle.js'
@@ -91,7 +91,8 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
 
 /* ── In-memory state (single-process — see header) ──────────────────────────────────────────
  * raid: {
- *   id, enemyMemberId, cMoonId, status: 'FORMING'|'IN_PROGRESS'|'RESOLVED',
+ *   id, enemyMemberId, cMoonId, cMoonName, status: 'FORMING'|'IN_PROGRESS'|'RESOLVED',
+ *   discordChannelId,                        // resolved once at creation, see resolveCMoonRaidDiscordChannelId
  *   enemyName, enemyImagePath,               // display snapshot, taken once at creation
  *   enemySounds: { appearSoundPath, damageTakenSoundPath, damageAvoidedSoundPath,
  *                  attackingSoundPath, victorySoundPath, defeatSoundPath },  // ditto
@@ -265,6 +266,29 @@ function allActed(raid) {
   return alive.length > 0 && alive.every(p => p.pendingAction)
 }
 
+// `enemyHit`/`playerHit` here are named from resolveBattleRound's perspective (see that
+// function's own comment): enemyHit = this participant's attack landed ON the enemy,
+// playerHit = the enemy's attack landed ON this participant. Checked in priority order so a
+// knockout always wins the headline even if it also carries a hit/crit flag.
+function describeRaidParticipantResult(raid, result) {
+  const name = raid.participants.get(result.userId)?.username || 'A player'
+  if (result.knockedOut) return `💥 ${name} was knocked out!`
+  if (result.enemyHit) return `⚔️ ${name} landed a hit${result.enemyCrit ? ' (CRIT!)' : ''}`
+  if (result.enemyBlocked) return `🚫 ${name}'s attack was blocked`
+  if (result.playerHit) return `🩸 ${name} got hit${result.playerCrit ? ' (CRIT!)' : ''}`
+  if (result.playerBlocked) return `🛡️ ${name} blocked and healed`
+  return `${name} held steady`
+}
+
+// One short Discord message per round for team spectators — see this session's "separate
+// message per round" decision (no message-editing support exists to update one in place).
+function formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant }) {
+  const header = `⚔️ **Round ${raid.roundNumber}** — ${raid.cMoonName} vs ${raid.enemyName}`
+  const hpLine = `${raid.enemyName} HP: ${raid.enemyHpRemaining}/${raid.enemyStats.maxHp} (-${enemyDamageDealt})`
+  const lines = perParticipant.map(r => describeRaidParticipantResult(raid, r))
+  return [header, hpLine, ...lines].join('\n')
+}
+
 async function closeRound(io, raid) {
   if (raid.status !== 'IN_PROGRESS' || raid.resolving) return
   raid.resolving = true
@@ -300,6 +324,7 @@ async function closeRound(io, raid) {
     broadcast(io, raid, EV('roundResolved'), {
       round: { roundNumber: raid.roundNumber, enemyAction, enemyDamageDealt, participants: perParticipant },
     })
+    sendCMoonRaidUpdate(raid.discordChannelId, formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant }))
 
     if (raid.enemyHpRemaining <= 0) {
       await resolveCMoonRaidOutcome(io, raid, 'WIN')
@@ -503,9 +528,10 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       if (!cMoon) return socket.emit(EV('error'), { message: 'Your cMoon could not be found' })
 
       const initiatorMaxHp = await getPlayerCombatMaxHp(me.id, config)
+      const discordChannelId = await resolveCMoonRaidDiscordChannelId(db, cMoon.discordChannelId)
       const raidId = randomUUID()
       const raid = {
-        id: raidId, enemyMemberId, cMoonId: cMoon.id,
+        id: raidId, enemyMemberId, cMoonId: cMoon.id, cMoonName: cMoon.name, discordChannelId,
         enemyName: enemyMember.name, enemyImagePath: enemyMember.imagePath || null,
         enemySounds: resolveMemberSoundPaths(enemyMember, enemyMember.faction),
         battleMusicPath: enemyMember.faction?.battleMusicPath || null,
@@ -551,10 +577,9 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       fireSync(raidId, raid)
       socket.emit(EV('created'), publicRaidView(raid))
 
-      announceCMoonRaidBoss(db, {
+      announceCMoonRaidBoss(discordChannelId, {
         cMoonName: cMoon.name, enemyName: enemyMember.name,
         announcementTemplate: enemyMember.raidAnnouncementText,
-        cMoonDiscordChannelId: cMoon.discordChannelId,
       }).catch(() => {})
       notifyEligibleCMoonMembers(io, {
         cMoonId: cMoon.id, initiatorUserId: me.id, enemyMember, raidId, cMoonName: cMoon.name,
