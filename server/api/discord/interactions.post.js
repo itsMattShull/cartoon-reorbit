@@ -3,7 +3,7 @@ import { defineEventHandler, getRequestHeader, createError, readRawBody } from '
 import nacl from 'tweetnacl'
 import { prisma as db } from '@/server/prisma'
 import { isCorrectRiddleAnswer } from '@/server/utils/cmoonRiddleAnswer'
-import { claimCMoonRiddleSolve, getOpenWeeklyRiddle } from '@/server/utils/cmoonRiddle'
+import { claimCMoonRiddleSolve, getOpenWeeklyRiddle, getOpenBossLoreRiddles } from '@/server/utils/cmoonRiddle'
 
 const hex2bin = (hex) => Uint8Array.from(Buffer.from(hex, 'hex'))
 
@@ -88,21 +88,30 @@ export default defineEventHandler(async (event) => {
         return { type: 4, data: { content: 'Join a cMoon team on the site before answering riddles.', flags: 64 } }
       }
 
-      const riddle = await getOpenWeeklyRiddle(db)
-      if (!riddle) {
+      // A player typing an answer has no way to say WHICH riddle they mean, so every currently
+      // open one — the weekly broadcast plus any boss-lore gate(s) — is checked against the
+      // submitted text; whichever one it matches (if any) is the one claimed.
+      const [weeklyRiddle, bossLoreRiddles] = await Promise.all([
+        getOpenWeeklyRiddle(db),
+        getOpenBossLoreRiddles(db),
+      ])
+      const openRiddles = [weeklyRiddle, ...bossLoreRiddles].filter(Boolean)
+      if (!openRiddles.length) {
         return { type: 4, data: { content: "There's no riddle open right now — check back later!", flags: 64 } }
       }
 
-      if (!isCorrectRiddleAnswer(riddle, answer)) {
+      const matched = openRiddles.find(r => isCorrectRiddleAnswer(r, answer))
+      if (!matched) {
         return { type: 4, data: { content: 'Not quite — try again!', flags: 64 } }
       }
 
-      const result = await claimCMoonRiddleSolve(db, { riddleId: riddle.id, userId: user.id, cMoonId: user.cMoonId })
+      const result = await claimCMoonRiddleSolve(db, { riddleId: matched.id, userId: user.id, cMoonId: user.cMoonId })
       if (!result.claimed) {
-        return { type: 4, data: { content: "Correct, but someone already solved this one first — better luck next week!", flags: 64 } }
+        return { type: 4, data: { content: "Correct, but someone already solved this one first!", flags: 64 } }
       }
       const pointsLine = result.pointsAwarded > 0 ? ` Your cMoon earns ${result.pointsAwarded} points.` : ''
-      return { type: 4, data: { content: `🎉 Correct — you solved it first!${pointsLine}`, flags: 64 } }
+      const unlockLine = matched.kind === 'BOSS_LORE' ? ' The raid boss is now unlocked!' : ''
+      return { type: 4, data: { content: `🎉 Correct — you solved it first!${pointsLine}${unlockLine}`, flags: 64 } }
     }
   }
 

@@ -73,6 +73,7 @@ import { getGlobalConfig, getPlayerCombatMaxHp } from './cmoon.js'
 import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from './achievements.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 import { announceCMoonRaidBoss, resolveCMoonRaidDiscordChannelId, sendCMoonTeamUpdate, startThreadFromMessage } from './discord.js'
+import { getActiveBossLoreRiddle } from './cmoonRiddle.js'
 import { notifyCMoonRaidBossStarted } from './notifications.js'
 import { pushUserNotification } from './realtimeNotify.js'
 import { buildGrantableReward } from './cmoonEnemyBattle.js'
@@ -549,7 +550,8 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       if (!enemyMember.isRaidBoss) {
         return socket.emit(EV('error'), { message: 'This enemy is not a raid boss' })
       }
-      const availability = checkRaidBossAvailability(enemyMember)
+      const bossLoreRiddle = await getActiveBossLoreRiddle(db, enemyMember.id)
+      const availability = checkRaidBossAvailability({ ...enemyMember, riddleGateSolved: !bossLoreRiddle || !!bossLoreRiddle.solvedAt })
       if (!availability.available) return socket.emit(EV('error'), { message: availability.message })
       const elig = await loadEligibility({ userId: me.id, enemyMember })
       if (!elig.ok) return socket.emit(EV('error'), { message: elig.message })

@@ -3,6 +3,7 @@ import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
+import { broadcastToAllCMoonChannels } from '@/server/utils/cmoonRiddle'
 
 export default defineEventHandler(async (event) => {
   const me = await requireAdmin(event)
@@ -31,6 +32,16 @@ export default defineEventHandler(async (event) => {
   }
 
   await db.cMoonRiddle.update({ where: { id }, data: { question, answer, encyclopediaEntryId, active } })
+
+  // A BOSS_LORE riddle re-activated (e.g. an admin staged it inactive, then flips it on) gets the
+  // same teaser broadcast a fresh creation would — the rising edge, not every save, so editing an
+  // already-active or already-inactive riddle's wording doesn't re-announce it. Fire-and-forget:
+  // a failed Discord post must never fail an otherwise-successful save.
+  if (riddle.kind === 'BOSS_LORE' && active && !riddle.active) {
+    db.cMoonEnemyMember.findUnique({ where: { id: riddle.enemyMemberId }, select: { name: true } }).then(member => {
+      broadcastToAllCMoonChannels(db, `🔒 **${member?.name || 'A raid boss'}** is locked behind a riddle!\n${question}\n\nAnswer with \`/riddle\` to unlock this raid boss.`)
+    }).catch(() => {})
+  }
 
   await logAdminChange(db, { userId: me.id, area: 'CMoonRiddle', key: `update:${id}`, prevValue: { question: riddle.question, active: riddle.active }, newValue: { question, active } })
 

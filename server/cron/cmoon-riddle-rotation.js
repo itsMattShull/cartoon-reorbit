@@ -5,7 +5,7 @@
 // helper below is duplicated, not imported) so this feature and the already-shipped weekly
 // contest stay fully decoupled from each other.
 import { prisma } from '../prisma.js'
-import { resolveCMoonRaidDiscordChannelId, sendCMoonTeamUpdate } from '../utils/discord.js'
+import { broadcastToAllCMoonChannels } from '../utils/cmoonRiddle.js'
 
 function getChicagoDateParts(date) {
   const parts = Object.fromEntries(
@@ -47,16 +47,8 @@ export async function postNextWeeklyRiddle() {
     data: { active: false },
   })
 
-  const cmoons = await prisma.cMoon.findMany({ select: { discordChannelId: true } })
-  const channelIds = new Set()
-  for (const c of cmoons) {
-    const channelId = await resolveCMoonRaidDiscordChannelId(prisma, c.discordChannelId)
-    if (channelId) channelIds.add(channelId)
-  }
   const message = `🧩 **This week's cMoon riddle!**\n${next.question}\n\nAnswer with \`/riddle\` — first team to solve it earns points!`
-  for (const channelId of channelIds) {
-    await sendCMoonTeamUpdate(channelId, message)
-  }
+  await broadcastToAllCMoonChannels(prisma, message)
 
   await prisma.cMoonRiddle.update({ where: { id: next.id }, data: { postedAt: new Date() } })
   return { posted: true, riddleId: next.id }

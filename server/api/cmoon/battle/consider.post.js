@@ -81,8 +81,19 @@ export default defineEventHandler(async (event) => {
   // raidOneTime/raidCooldownMinutes can't be expressed as a single Prisma `where` filter (the
   // cooldown cutoff is a per-row computation against each member's own raidCooldownMinutes) — see
   // checkRaidBossAvailability's own comment for why this is shared with cmoonraid:start's
-  // authoritative check rather than reimplemented here.
-  const candidates = rawCandidates.filter(m => !m.isRaidBoss || checkRaidBossAvailability(m).available)
+  // authoritative check rather than reimplemented here. Likewise for an unsolved BOSS_LORE
+  // CMoonRiddle gate — one batched query for every raid-boss candidate's riddle (if any), rather
+  // than a query per candidate inside the filter below.
+  const raidBossIds = rawCandidates.filter(m => m.isRaidBoss).map(m => m.id)
+  const bossLoreRiddles = raidBossIds.length
+    ? await db.cMoonRiddle.findMany({
+        where: { kind: 'BOSS_LORE', active: true, enemyMemberId: { in: raidBossIds } },
+        select: { enemyMemberId: true, solvedAt: true },
+      })
+    : []
+  const riddleSolvedByEnemyId = new Map(bossLoreRiddles.map(r => [r.enemyMemberId, !!r.solvedAt]))
+  const candidates = rawCandidates.filter(m => !m.isRaidBoss
+    || checkRaidBossAvailability({ ...m, riddleGateSolved: riddleSolvedByEnemyId.get(m.id) ?? true }).available)
   if (!candidates.length) return { offered: false }
 
   // "Higher tiered enemies first" (admin toggle) narrows the pool to only the highest

@@ -82,3 +82,28 @@ export async function getActiveBossLoreRiddle(prisma, enemyMemberId) {
     where: { kind: 'BOSS_LORE', active: true, enemyMemberId },
   })
 }
+
+// Every currently-unsolved, active BOSS_LORE riddle across every boss — used by the /riddle
+// command (interactions.post.js), which has no way to know WHICH boss a player means when they
+// type an answer, so it checks the submitted text against all open gates at once alongside the
+// open weekly riddle.
+export async function getOpenBossLoreRiddles(prisma) {
+  return prisma.cMoonRiddle.findMany({ where: { kind: 'BOSS_LORE', active: true, solvedAt: null } })
+}
+
+// Posts `text` to every cMoon's own resolved Discord channel — deduped by channel id, so cMoons
+// that share the GlobalGameConfig fallback (no discordChannelId of their own set) only see one
+// copy, not one per cMoon falling back to it. Shared by the weekly rotation job
+// (server/cron/cmoon-riddle-rotation.js) and the boss-lore "this boss is now locked behind a
+// riddle" teaser (server/api/admin/cmoon-riddles*.js).
+export async function broadcastToAllCMoonChannels(prisma, text) {
+  const cmoons = await prisma.cMoon.findMany({ select: { discordChannelId: true } })
+  const channelIds = new Set()
+  for (const c of cmoons) {
+    const channelId = await resolveCMoonRaidDiscordChannelId(prisma, c.discordChannelId)
+    if (channelId) channelIds.add(channelId)
+  }
+  for (const channelId of channelIds) {
+    await sendCMoonTeamUpdate(channelId, text)
+  }
+}
