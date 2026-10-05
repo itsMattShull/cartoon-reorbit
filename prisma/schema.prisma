@@ -1788,6 +1788,11 @@ model GlobalGameConfig {
   // server/utils/cmoonEnemy.js for the tier ordering. False (the default) leaves every eligible
   // rank in the same weighted pool together, the original behavior before this toggle existed.
   cMoonEnemyHigherTierFirst          Boolean   @default(false)
+  // cMoon points awarded to the first solver's team for ANY CMoonRiddle (weekly or boss-lore) —
+  // see claimCMoonRiddleSolve in server/utils/cmoonRiddle.js, which writes a CMoonScoreLog row of
+  // this many points under category 'RIDDLE_SOLVE'. One shared value for both riddle kinds rather
+  // than a separate column each, since nothing about the reward differs between them.
+  cMoonRiddlePoints                  Int       @default(50)
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }
@@ -5130,6 +5135,8 @@ model EncyclopediaEntry {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  riddles CMoonRiddle[]
+
   @@index([active, sortOrder])
 }
 
@@ -5373,6 +5380,7 @@ model CMoonEnemyMember {
   rewards CMoonEnemyReward[]
   battles CMoonEnemyBattle[]
   raids   CMoonEnemyRaid[]
+  riddles CMoonRiddle[]
 
   @@index([active, defeatedAt, sortOrder])
 }
@@ -5580,6 +5588,62 @@ model CMoonEnemyRaidParticipant {
 
   @@unique([raidId, userId])
   @@index([userId])
+}
+
+// ── cMoon Discord Engagement: Riddles feature ────────────────────────────
+// Team-engagement riddles posted to cMoon Discord channels, solved via the bot's /riddle slash
+// command (server/api/discord/interactions.post.js) with a private reply so the answer is never
+// spoiled in the channel for anyone else. One shared model covers both kinds this feature needs:
+// a WEEKLY riddle (one global riddle per week — see server/utils/cmoonRiddleRotation.js — the
+// first correct solver ANYWHERE credits their own cMoon) and a BOSS_LORE riddle (tied to one
+// CMoonEnemyMember, gating whether that raid boss can be challenged at all until solved). The two
+// are structurally identical (question + answer + "who solved it first") and differ only in
+// trigger/payoff, so this is one table with a `kind` discriminator rather than two nearly
+// duplicate ones.
+enum CMoonRiddleKind {
+  WEEKLY
+  BOSS_LORE
+}
+
+model CMoonRiddle {
+  id       String          @id @default(uuid())
+  kind     CMoonRiddleKind
+  question String
+  // Compared case/whitespace-insensitively (see normalizeRiddleAnswer in
+  // server/utils/cmoonRiddle.js) — admins type a natural answer, not a regex.
+  answer   String
+  // BOSS_LORE only: which raid boss this riddle gates (null for WEEKLY). Solving it is checked
+  // alongside raidOneTime/raidCooldownMinutes in checkRaidBossAvailability (see that function's
+  // own comment in server/utils/cmoonEnemyRaid.js) — unsolved blocks the raid the same way an
+  // undefeated cooldown does. Cascades: a riddle has no purpose once its boss is gone.
+  enemyMemberId       String?
+  // Optional flavor link to an Encyclopedia entry shown alongside a BOSS_LORE riddle — purely
+  // cosmetic, never read by the gate check itself.
+  encyclopediaEntryId String?
+  // Admin on/off switch, same convention as CMoonEnemyMember.active — an inactive riddle is never
+  // posted/offered and never gates anything, but stays visible/editable in the admin list.
+  active   Boolean  @default(true)
+  // WEEKLY only: when this week's riddle was broadcast to every cMoon's Discord channel. Null
+  // until the rotation job actually posts it, so an admin can author next week's riddle well
+  // ahead of time without it going out early. Always null for BOSS_LORE (posted as part of the
+  // boss's own gate copy instead, not broadcast on a schedule).
+  postedAt DateTime?
+  // Set ONCE, via a single atomic conditional UPDATE ... WHERE solvedAt IS NULL (see
+  // claimCMoonRiddleSolve in server/utils/cmoonRiddle.js) — the "first solver wins" guarantee two
+  // concurrent /riddle submissions can never both win. Null means still open.
+  solvedAt       DateTime?
+  solvedByUserId String?
+  // Snapshot of the solver's cMoon AT solve time, not a live lookup — crediting stays correct
+  // even if the solver later switches teams.
+  solvedByCMoonId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  enemyMember       CMoonEnemyMember?  @relation(fields: [enemyMemberId], references: [id], onDelete: Cascade)
+  encyclopediaEntry EncyclopediaEntry? @relation(fields: [encyclopediaEntryId], references: [id], onDelete: SetNull)
+
+  @@index([kind, active])
+  @@index([enemyMemberId])
 }
 
 // ── cMoon Season Nav feature ─────────────────────────────────────────────
