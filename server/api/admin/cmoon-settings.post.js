@@ -145,6 +145,16 @@ export default defineEventHandler(async (event) => {
     data.cMoonRiddleRotationMinute = minute
   }
 
+  // cMoon points awarded to EACH cMoon that completes a split-clue scavenger hunt — see
+  // claimCMoonHuntCompletion in server/utils/cmoonHunt.js, the only reader.
+  if (body?.cMoonHuntPoints !== undefined) {
+    const pts = Number(body.cMoonHuntPoints)
+    if (!Number.isInteger(pts) || pts < 0 || pts > 10000) {
+      throw createError({ statusCode: 400, statusMessage: 'Hunt points must be a whole number between 0 and 10000' })
+    }
+    data.cMoonHuntPoints = pts
+  }
+
   const updated = await db.globalGameConfig.upsert({
     where: { id: 'singleton' },
     create: { id: 'singleton', dailyPointLimit: 100, ...data },
@@ -170,6 +180,7 @@ export default defineEventHandler(async (event) => {
       cMoonRiddleRotationDayOfWeek: existing?.cMoonRiddleRotationDayOfWeek,
       cMoonRiddleRotationHour: existing?.cMoonRiddleRotationHour,
       cMoonRiddleRotationMinute: existing?.cMoonRiddleRotationMinute,
+      cMoonHuntPoints: existing?.cMoonHuntPoints,
     },
     newValue: {
       cMoonEnabled: enabled,
@@ -186,6 +197,7 @@ export default defineEventHandler(async (event) => {
       cMoonRiddleRotationDayOfWeek: updated.cMoonRiddleRotationDayOfWeek,
       cMoonRiddleRotationHour: updated.cMoonRiddleRotationHour,
       cMoonRiddleRotationMinute: updated.cMoonRiddleRotationMinute,
+      cMoonHuntPoints: updated.cMoonHuntPoints,
     },
   })
 
@@ -204,5 +216,6 @@ export default defineEventHandler(async (event) => {
     cMoonRiddleRotationDayOfWeek: updated.cMoonRiddleRotationDayOfWeek,
     cMoonRiddleRotationHour: updated.cMoonRiddleRotationHour,
     cMoonRiddleRotationMinute: updated.cMoonRiddleRotationMinute,
+    cMoonHuntPoints: updated.cMoonHuntPoints,
   }
 })

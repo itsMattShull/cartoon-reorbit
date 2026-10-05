@@ -771,6 +771,7 @@ model User {
   // cMoon Enemy Battles
   cMoonEnemyBattles CMoonEnemyBattle[]
   cMoonEnemyRaidParticipations CMoonEnemyRaidParticipant[]
+  cMoonHuntAssignments CMoonHuntAssignment[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
   @@index([cMoonId])
@@ -1806,6 +1807,12 @@ model GlobalGameConfig {
   // CZoneContestAutomationConfig.lastCreatedFor: guards against posting twice if this process
   // restarts within the same triggering minute.
   cMoonRiddleLastPostedFor           String?
+  // cMoon points awarded to EACH cMoon that completes a CMoonHunt (see claimCMoonHuntCompletion
+  // in server/utils/cmoonHunt.js) — every team that solves the same hunt earns this, not just the
+  // first, unlike cMoonRiddlePoints above. Separate column (not the riddle one reused) since the
+  // two features are independent and may warrant different values — a cooperative multi-person
+  // hunt is intentionally worth more by default.
+  cMoonHuntPoints                    Int       @default(75)
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }
@@ -5657,6 +5664,95 @@ model CMoonRiddle {
 
   @@index([kind, active])
   @@index([enemyMemberId])
+}
+
+// ── cMoon Discord Engagement: Split-Clue Scavenger Hunt ──────────────────
+// Team-cooperative puzzle, distinct from the existing (solo/personal) Scavenger Hunt feature —
+// shares no models with it. An admin authors a hunt as N clues plus one final answer; the moment
+// it's posted (see postCMoonHunt in server/utils/cmoonHunt.js), every current member of EVERY
+// cMoon is privately DMed exactly one clue (round-robin across that team's own member list if
+// there are more members than clues or vice versa) — nobody on a team sees anyone else's clue.
+// The team has to share what they each learned in their own Discord channel to piece together
+// the final answer, then anyone on the team submits it via /hunt. Ad-hoc/event-driven (an admin
+// posts it whenever they want), not a schedule like the WEEKLY CMoonRiddle rotation. Unlike
+// CMoonRiddle (one global winner), every cMoon can complete the SAME hunt once, independently —
+// see CMoonHuntCompletion's own comment for why.
+model CMoonHunt {
+  id          String    @id @default(uuid())
+  title       String // admin-facing label only, never shown to players
+  // Compared case/whitespace-insensitively, same convention as CMoonRiddle.answer (see
+  // normalizeRiddleAnswer in server/utils/cmoonRiddleAnswer.js, reused here unchanged).
+  finalAnswer String
+  // Admin on/off switch. An inactive hunt can never be posted and is excluded from every open-hunt
+  // lookup, but a hunt already posted before being flipped off just stops accepting NEW
+  // completions — teams that already solved it keep their CMoonHuntCompletion row.
+  active      Boolean   @default(true)
+  // Set the moment clues are actually DMed out (see postCMoonHunt) — null means authored but not
+  // yet sent. An admin can stage a hunt (author it inactive, or active but not yet posted) ahead
+  // of when they want it to go out, same "author now, post later" shape as a WEEKLY CMoonRiddle.
+  postedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  clues       CMoonHuntClue[]
+  assignments CMoonHuntAssignment[]
+  completions CMoonHuntCompletion[]
+}
+
+// One admin-authored clue, never shown to a player on its own — see CMoonHuntAssignment for how
+// one clue reaches exactly one (or more, if a team has fewer members than clues) member.
+model CMoonHuntClue {
+  id        String   @id @default(uuid())
+  huntId    String
+  // Authoring order; also the order clues are handed out in the round-robin assignment
+  // (server/utils/cmoonHunt.js), though which TEAM MEMBER gets which clue is still randomized.
+  sortOrder Int      @default(0)
+  text      String
+  createdAt DateTime @default(now())
+
+  hunt        CMoonHunt             @relation(fields: [huntId], references: [id], onDelete: Cascade)
+  assignments CMoonHuntAssignment[]
+
+  @@index([huntId, sortOrder])
+}
+
+// Snapshot of which clue each cMoon member received once a hunt posted — a point-in-time DM
+// record, not a live membership join (a player who leaves their cMoon after this keeps their
+// row). cMoonId is a plain scalar column with no Prisma relation, same "loose FK" convention as
+// CMoonScoreLog/CMoonRiddle's own solvedBy* columns.
+model CMoonHuntAssignment {
+  id         String   @id @default(uuid())
+  huntId     String
+  clueId     String
+  cMoonId    String
+  userId     String
+  assignedAt DateTime @default(now())
+
+  hunt CMoonHunt     @relation(fields: [huntId], references: [id], onDelete: Cascade)
+  clue CMoonHuntClue @relation(fields: [clueId], references: [id], onDelete: Cascade)
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([huntId, userId])
+  @@index([huntId, cMoonId])
+}
+
+// First successful /hunt submission of a hunt's finalAnswer, per cMoon — every cMoon runs the
+// SAME hunt independently (each with its own random clue assignment, see CMoonHuntAssignment) and
+// each can complete it exactly once, unlike CMoonRiddle's single global winner: a hunt rewards
+// every team's own cooperation rather than only whichever team happens to be fastest. Inserted
+// atomically by claimCMoonHuntCompletion in server/utils/cmoonHunt.js — the @@unique below IS the
+// "first completion for this team" guard (a second insert attempt fails with P2002), the same
+// role an atomic UPDATE...WHERE plays for CMoonRiddle's solvedAt.
+model CMoonHuntCompletion {
+  id          String   @id @default(uuid())
+  huntId      String
+  cMoonId     String
+  userId      String // whoever actually submitted the winning /hunt answer
+  completedAt DateTime @default(now())
+
+  hunt CMoonHunt @relation(fields: [huntId], references: [id], onDelete: Cascade)
+
+  @@unique([huntId, cMoonId])
 }
 
 // ── cMoon Season Nav feature ─────────────────────────────────────────────

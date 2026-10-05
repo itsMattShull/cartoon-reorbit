@@ -55,6 +55,19 @@ export default defineEventHandler(async (event) => {
         }
       ],
       dm_permission: true
+    },
+    {
+      name: 'hunt',
+      description: 'Submit your team\'s combined answer to a cMoon scavenger hunt',
+      options: [
+        {
+          type: 3,            // STRING
+          name: 'answer',
+          description: 'Your team\'s combined answer',
+          required: true
+        }
+      ],
+      dm_permission: true
     }
   ]
 

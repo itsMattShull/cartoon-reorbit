@@ -92,9 +92,10 @@ export const WIN_GAME_OPTIONS = WIN_GAMES.map(({ name, label }) => ({ key: name,
 // server/workers/cmoon-daily-task-backfill.worker.js's one-time "Backfill cMoon Points" tool,
 // ENEMY_BATTLE_WIN from server/utils/cmoonEnemyBattle.js (the cMoon Enemy Battles mini-game),
 // ENEMY_RAID_WIN from server/utils/cmoonRaidSocket.js (the raid-boss co-op mode), and
-// RIDDLE_SOLVE from server/utils/cmoonRiddle.js (the Discord riddle system). Exported so the
-// admin points-log endpoint has a fixed filter list without a DISTINCT query.
-export const CMOON_SCORE_LOG_CATEGORIES = ['HIGH_SCORE', 'TOP10', 'DAILY_TASK', 'ADMIN_BACKFILL', 'ENEMY_BATTLE_WIN', 'ENEMY_RAID_WIN', 'RIDDLE_SOLVE']
+// RIDDLE_SOLVE from server/utils/cmoonRiddle.js (the Discord riddle system), and HUNT_COMPLETE
+// from server/utils/cmoonHunt.js (the split-clue scavenger hunt). Exported so the admin
+// points-log endpoint has a fixed filter list without a DISTINCT query.
+export const CMOON_SCORE_LOG_CATEGORIES = ['HIGH_SCORE', 'TOP10', 'DAILY_TASK', 'ADMIN_BACKFILL', 'ENEMY_BATTLE_WIN', 'ENEMY_RAID_WIN', 'RIDDLE_SOLVE', 'HUNT_COMPLETE']
 
 const GAME_LABEL_BY_KEY = new Map([...SCORE_GAMES, ...WIN_GAMES].map(g => [g.name, g.label]))
 
@@ -124,6 +125,8 @@ export function describeCMoonScoreLogSource(category, detail) {
       return 'Raid Boss victory'
     case 'RIDDLE_SOLVE':
       return 'Riddle solved first'
+    case 'HUNT_COMPLETE':
+      return 'Scavenger hunt completed'
     default:
       return category || 'Unknown'
   }

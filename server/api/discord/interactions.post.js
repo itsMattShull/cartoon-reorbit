@@ -4,6 +4,7 @@ import nacl from 'tweetnacl'
 import { prisma as db } from '@/server/prisma'
 import { isCorrectRiddleAnswer } from '@/server/utils/cmoonRiddleAnswer'
 import { claimCMoonRiddleSolve, getOpenWeeklyRiddle, getOpenBossLoreRiddles } from '@/server/utils/cmoonRiddle'
+import { isCorrectHuntAnswer, getOpenCMoonHuntsForCMoon, claimCMoonHuntCompletion } from '@/server/utils/cmoonHunt'
 
 const hex2bin = (hex) => Uint8Array.from(Buffer.from(hex, 'hex'))
 
@@ -112,6 +113,42 @@ export default defineEventHandler(async (event) => {
       const pointsLine = result.pointsAwarded > 0 ? ` Your cMoon earns ${result.pointsAwarded} points.` : ''
       const unlockLine = matched.kind === 'BOSS_LORE' ? ' The raid boss is now unlocked!' : ''
       return { type: 4, data: { content: `🎉 Correct — you solved it first!${pointsLine}${unlockLine}`, flags: 64 } }
+    }
+
+    if (cmd === 'hunt') {
+      const discordId = interaction.member?.user?.id || interaction.user?.id || null
+      const answer = interaction.data.options?.find(o => o.name === 'answer')?.value ?? ''
+
+      if (!discordId) {
+        return { type: 4, data: { content: 'Could not identify your Discord account.', flags: 64 } }
+      }
+
+      const user = await db.user.findUnique({ where: { discordId }, select: { id: true, cMoonId: true } })
+      if (!user) {
+        return { type: 4, data: { content: "You need a Cartoon ReOrbit account linked to this Discord account first.", flags: 64 } }
+      }
+      if (!user.cMoonId) {
+        return { type: 4, data: { content: 'Join a cMoon team on the site before submitting a scavenger hunt answer.', flags: 64 } }
+      }
+
+      // Scoped to THIS player's own cMoon — unlike /riddle, a hunt isn't a single global race:
+      // every cMoon runs the same hunt independently and completes it on its own.
+      const openHunts = await getOpenCMoonHuntsForCMoon(db, user.cMoonId)
+      if (!openHunts.length) {
+        return { type: 4, data: { content: "There's no scavenger hunt open for your team right now.", flags: 64 } }
+      }
+
+      const matched = openHunts.find(h => isCorrectHuntAnswer(h, answer))
+      if (!matched) {
+        return { type: 4, data: { content: 'Not quite — try again!', flags: 64 } }
+      }
+
+      const result = await claimCMoonHuntCompletion(db, { huntId: matched.id, userId: user.id, cMoonId: user.cMoonId })
+      if (!result.claimed) {
+        return { type: 4, data: { content: 'Your team already completed this hunt!', flags: 64 } }
+      }
+      const pointsLine = result.pointsAwarded > 0 ? ` Your cMoon earns ${result.pointsAwarded} points.` : ''
+      return { type: 4, data: { content: `🎉 Correct — your team solved the scavenger hunt!${pointsLine}`, flags: 64 } }
     }
   }
 
