@@ -576,6 +576,34 @@ export async function sendCMoonRaidUpdate(channelId, text) {
   }
 }
 
+// Starts a public thread off an already-sent message — the raid "call to arms" thread, so
+// players can coordinate joining/strategy without cluttering the team channel. The caller
+// (cmoonRaidSocket.js) then posts every later raid update (per-round feed, recap) into this
+// thread's own id instead of the parent channel, falling back to the parent channel if thread
+// creation fails. Never throws; returns the new thread's channel id, or null on any failure.
+export async function startThreadFromMessage(channelId, messageId, name) {
+  try {
+    const botToken = getAnnouncementsBotToken()
+    if (!channelId || !messageId || !botToken) return null
+    const authHeader = botToken.startsWith('Bot ') ? botToken : `Bot ${botToken}`
+    const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages/${messageId}/threads`, {
+      method: 'POST',
+      headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: truncateSafely(name, 100), auto_archive_duration: 60 }),
+      signal: AbortSignal.timeout(8000)
+    })
+    if (!res.ok) {
+      console.error('startThreadFromMessage failed:', res.status, await res.text().catch(() => ''))
+      return null
+    }
+    const thread = await res.json().catch(() => null)
+    return thread?.id || null
+  } catch (e) {
+    console.error('startThreadFromMessage failed:', e?.message || e)
+    return null
+  }
+}
+
 // Truncates a string to `max` characters without splitting a UTF-16 surrogate
 // pair (which would otherwise corrupt the last character and can make Discord
 // reject the payload with a 400).
