@@ -41,6 +41,8 @@ export default defineEventHandler(async (event) => {
       roles: true,
       banned: true,
       active: true,
+      suspendedUntil: true,
+      suspendedReason: true,
       isAdmin: true,
       inGuild: true,
       points: true,
@@ -58,6 +60,14 @@ export default defineEventHandler(async (event) => {
 
   if (user.banned) {
     throw createError({ statusCode: 403, statusMessage: 'Banned' })
+  }
+
+  // Temporary suspension — see User.suspendedUntil's schema comment. The ISO timestamp is
+  // embedded in the message itself (not a separate `data` field) so composables/useAuth.js's
+  // existing string-matching catch block can redirect with it in one place, the same way it
+  // already does for the Banned case above.
+  if (user.suspendedUntil && user.suspendedUntil > new Date()) {
+    throw createError({ statusCode: 403, statusMessage: `Suspended until ${user.suspendedUntil.toISOString()}` })
   }
 
   // Ensure fresh tokens and up-to-date roles

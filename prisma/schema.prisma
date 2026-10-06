@@ -514,6 +514,15 @@ model User {
   inGuild                           Boolean   @default(true)
   active                            Boolean   @default(true)
   banned                            Boolean   @default(false)
+  // Temporary suspension — distinct from `banned`: it blocks login/play for a set window
+  // (see server/api/admin/users/[id]/suspend.post.js) but deliberately never touches Discord
+  // membership or the `banned`/`active` flags that the permanent-ban tool owns. A set value in
+  // the future means suspended; past or null means not suspended — no separate boolean or cron
+  // sweep needed, every check site just compares against now(). suspendedReason is admin-facing
+  // only (shown on the login-blocked page and in Account History), not a moderation audit trail
+  // by itself — that's UserBanNote, which also gets a SUSPEND/UNSUSPEND row per action.
+  suspendedUntil                    DateTime?
+  suspendedReason                   String?
   createdAt                         DateTime  @default(now())
   lastLogin                         DateTime?
   lastActivity                      DateTime?
@@ -840,6 +849,8 @@ enum BanAction {
   UNBAN
   DISSOLVE
   TRANSFER
+  SUSPEND
+  UNSUSPEND
 }
 
 model UserBanNote {
