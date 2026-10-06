@@ -21,6 +21,7 @@ export default defineEventHandler(async (event) => {
   const textColor = typeof body?.textColor === 'string' ? body.textColor.trim() : ''
   const cardBgColor = typeof body?.cardBgColor === 'string' ? body.cardBgColor.trim() : ''
   const discordRoleId = typeof body?.discordRoleId === 'string' ? body.discordRoleId.trim() : ''
+  const discordChannelId = typeof body?.discordChannelId === 'string' ? body.discordChannelId.trim() : ''
   const pageDescription = typeof body?.pageDescription === 'string' ? body.pageDescription.trim().slice(0, 2000) || null : null
   const captainIds = Array.isArray(body?.captainIds) ? [...new Set(body.captainIds.filter(x => typeof x === 'string'))] : []
   const prizeCtoons = Array.isArray(body?.prizeCtoons) ? body.prizeCtoons : []
@@ -38,6 +39,9 @@ export default defineEventHandler(async (event) => {
   }
   if (discordRoleId && !isValidDiscordSnowflake(discordRoleId)) {
     throw createError({ statusCode: 400, statusMessage: 'Discord Role ID must be a numeric snowflake' })
+  }
+  if (discordChannelId && !isValidDiscordSnowflake(discordChannelId)) {
+    throw createError({ statusCode: 400, statusMessage: 'Discord Channel ID must be a numeric snowflake' })
   }
   if (!isValidCMoonEffectType(effectType)) {
     throw createError({ statusCode: 400, statusMessage: 'Invalid effect type' })
@@ -77,6 +81,7 @@ export default defineEventHandler(async (event) => {
       textColor: textColor || null,
       cardBgColor: cardBgColor || null,
       discordRoleId: discordRoleId || null,
+      discordChannelId: discordChannelId || null,
       pageDescription,
       effectType,
       customJoinEffectId,

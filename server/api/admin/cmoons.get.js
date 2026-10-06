@@ -61,6 +61,7 @@ export default defineEventHandler(async (event) => {
       imagePath: c.imagePath,
       avatarPath: c.avatarPath,
       discordRoleId: c.discordRoleId,
+      discordChannelId: c.discordChannelId,
       effectType: c.effectType,
       customJoinEffectId: c.customJoinEffectId,
       customJoinEffect: c.customJoinEffect,

@@ -72,7 +72,8 @@ import { prisma as db } from '../prisma.js'
 import { getGlobalConfig, getPlayerCombatMaxHp } from './cmoon.js'
 import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from './achievements.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
-import { announceCMoonRaidBoss } from './discord.js'
+import { announceCMoonRaidBoss, resolveCMoonRaidDiscordChannelId, sendCMoonTeamUpdate, startThreadFromMessage } from './discord.js'
+import { getActiveBossLoreRiddle } from './cmoonRiddle.js'
 import { notifyCMoonRaidBossStarted } from './notifications.js'
 import { pushUserNotification } from './realtimeNotify.js'
 import { buildGrantableReward } from './cmoonEnemyBattle.js'
@@ -91,7 +92,12 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
 
 /* ── In-memory state (single-process — see header) ──────────────────────────────────────────
  * raid: {
- *   id, enemyMemberId, cMoonId, status: 'FORMING'|'IN_PROGRESS'|'RESOLVED',
+ *   id, enemyMemberId, cMoonId, cMoonName, status: 'FORMING'|'IN_PROGRESS'|'RESOLVED',
+ *   discordChannelId,                        // resolved once at creation, see resolveCMoonRaidDiscordChannelId
+ *   discordThreadId,                         // set once the "call to arms" thread is created (may lag
+ *                                             // the raid's own creation by a round trip) — null until
+ *                                             // then, and forever if thread creation failed; see
+ *                                             // raidDiscordPostTarget below for the fallback this implies
  *   enemyName, enemyImagePath,               // display snapshot, taken once at creation
  *   enemySounds: { appearSoundPath, damageTakenSoundPath, damageAvoidedSoundPath,
  *                  attackingSoundPath, victorySoundPath, defeatSoundPath },  // ditto
@@ -265,6 +271,54 @@ function allActed(raid) {
   return alive.length > 0 && alive.every(p => p.pendingAction)
 }
 
+// The call-to-arms thread (once created) is where every later raid post goes — keeps the
+// per-round feed and recap out of the team's main channel. Falls back to the plain channel if
+// the thread was never created (announcement failed, or the thread POST itself failed).
+function raidDiscordPostTarget(raid) {
+  return raid.discordThreadId || raid.discordChannelId
+}
+
+// `enemyHit`/`playerHit` here are named from resolveBattleRound's perspective (see that
+// function's own comment): enemyHit = this participant's attack landed ON the enemy,
+// playerHit = the enemy's attack landed ON this participant. Checked in priority order so a
+// knockout always wins the headline even if it also carries a hit/crit flag.
+function describeRaidParticipantResult(raid, result) {
+  const name = raid.participants.get(result.userId)?.username || 'A player'
+  if (result.knockedOut) return `💥 ${name} was knocked out!`
+  if (result.enemyHit) return `⚔️ ${name} landed a hit${result.enemyCrit ? ' (CRIT!)' : ''}`
+  if (result.enemyBlocked) return `🚫 ${name}'s attack was blocked`
+  if (result.playerHit) return `🩸 ${name} got hit${result.playerCrit ? ' (CRIT!)' : ''}`
+  if (result.playerBlocked) return `🛡️ ${name} blocked and healed`
+  return `${name} held steady`
+}
+
+// One short Discord message per round for team spectators — see this session's "separate
+// message per round" decision (no message-editing support exists to update one in place).
+function formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant }) {
+  const header = `⚔️ **Round ${raid.roundNumber}** — ${raid.cMoonName} vs ${raid.enemyName}`
+  const hpLine = `${raid.enemyName} HP: ${raid.enemyHpRemaining}/${raid.enemyStats.maxHp} (-${enemyDamageDealt})`
+  const lines = perParticipant.map(r => describeRaidParticipantResult(raid, r))
+  return [header, hpLine, ...lines].join('\n')
+}
+
+const RAID_RECAP_HEADLINES = {
+  WIN: raid => `🏆 **Victory!** ${raid.cMoonName} defeated ${raid.enemyName} in ${raid.roundNumber} round${raid.roundNumber === 1 ? '' : 's'}!`,
+  LOSS: raid => `💀 **Defeat.** ${raid.enemyName} was too much for ${raid.cMoonName} (${raid.enemyHpRemaining}/${raid.enemyStats.maxHp} HP left).`,
+  ABANDONED: raid => `⌛ The raid against ${raid.enemyName} ran out of rounds and was abandoned.`,
+}
+
+// Posted once, right as the raid resolves — the "post-raid recap card" from the brainstorm,
+// kept as plain text rather than an embed since every other Discord post in this feature is too.
+function formatRaidRecapMessage(raid, { pointsAwarded }) {
+  const headline = (RAID_RECAP_HEADLINES[raid.outcome] || (r => `The raid against ${r.enemyName} has ended.`))(raid)
+  const lines = [headline]
+  if (pointsAwarded > 0) lines.push(`+${pointsAwarded} cMoon points earned`)
+  lines.push(Array.from(raid.participants.values())
+    .map(p => `${p.username}: ${p.knockedOutAt ? 'knocked out' : `survived (${p.hpRemaining}/${p.maxHp} HP)`}`)
+    .join(' • '))
+  return lines.join('\n')
+}
+
 async function closeRound(io, raid) {
   if (raid.status !== 'IN_PROGRESS' || raid.resolving) return
   raid.resolving = true
@@ -300,6 +354,7 @@ async function closeRound(io, raid) {
     broadcast(io, raid, EV('roundResolved'), {
       round: { roundNumber: raid.roundNumber, enemyAction, enemyDamageDealt, participants: perParticipant },
     })
+    sendCMoonTeamUpdate(raidDiscordPostTarget(raid), formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant }))
 
     if (raid.enemyHpRemaining <= 0) {
       await resolveCMoonRaidOutcome(io, raid, 'WIN')
@@ -435,6 +490,7 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
   }
   if (pointsAwarded > 0) recomputeCMoonPointsForUsers(participantIds).catch(() => {})
   for (const userId of participantIds) processAchievementsForUser(userId).catch(() => {})
+  sendCMoonTeamUpdate(raidDiscordPostTarget(raid), formatRaidRecapMessage(raid, { pointsAwarded }))
 
   broadcast(io, raid, EV('ended'))
   destroyRaid(raid.id)
@@ -494,18 +550,20 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       if (!enemyMember.isRaidBoss) {
         return socket.emit(EV('error'), { message: 'This enemy is not a raid boss' })
       }
-      const availability = checkRaidBossAvailability(enemyMember)
+      const bossLoreRiddle = await getActiveBossLoreRiddle(db, enemyMember.id)
+      const availability = checkRaidBossAvailability({ ...enemyMember, riddleGateSolved: !bossLoreRiddle || !!bossLoreRiddle.solvedAt })
       if (!availability.available) return socket.emit(EV('error'), { message: availability.message })
       const elig = await loadEligibility({ userId: me.id, enemyMember })
       if (!elig.ok) return socket.emit(EV('error'), { message: elig.message })
 
-      const cMoon = await db.cMoon.findUnique({ where: { id: elig.user.cMoonId }, select: { id: true, name: true } })
+      const cMoon = await db.cMoon.findUnique({ where: { id: elig.user.cMoonId }, select: { id: true, name: true, discordChannelId: true } })
       if (!cMoon) return socket.emit(EV('error'), { message: 'Your cMoon could not be found' })
 
       const initiatorMaxHp = await getPlayerCombatMaxHp(me.id, config)
+      const discordChannelId = await resolveCMoonRaidDiscordChannelId(db, cMoon.discordChannelId)
       const raidId = randomUUID()
       const raid = {
-        id: raidId, enemyMemberId, cMoonId: cMoon.id,
+        id: raidId, enemyMemberId, cMoonId: cMoon.id, cMoonName: cMoon.name, discordChannelId, discordThreadId: null,
         enemyName: enemyMember.name, enemyImagePath: enemyMember.imagePath || null,
         enemySounds: resolveMemberSoundPaths(enemyMember, enemyMember.faction),
         battleMusicPath: enemyMember.faction?.battleMusicPath || null,
@@ -551,9 +609,19 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       fireSync(raidId, raid)
       socket.emit(EV('created'), publicRaidView(raid))
 
-      announceCMoonRaidBoss(db, {
+      announceCMoonRaidBoss(discordChannelId, {
         cMoonName: cMoon.name, enemyName: enemyMember.name,
         announcementTemplate: enemyMember.raidAnnouncementText,
+      }).then(async messageId => {
+        if (!messageId) return
+        const threadId = await startThreadFromMessage(discordChannelId, messageId, `⚔️ ${enemyMember.name} raid`)
+        // The raid may have already resolved and been destroyed by the time this round trip
+        // finishes (two round-trip Discord calls, vs. a raid that can close in ~20s) — only
+        // mutate/persist it if it's still the live instance for this id, never a stale one.
+        if (threadId && raids.get(raidId) === raid) {
+          raid.discordThreadId = threadId
+          fireSync(raidId, raid)
+        }
       }).catch(() => {})
       notifyEligibleCMoonMembers(io, {
         cMoonId: cMoon.id, initiatorUserId: me.id, enemyMember, raidId, cMoonName: cMoon.name,

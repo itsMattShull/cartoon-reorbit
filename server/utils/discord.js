@@ -338,6 +338,10 @@ export async function sendGuildChannelMessageByName(channelName, content) {
 // Everything else (content text, @everyone/@here, roles, other users) is blocked at the
 // API level via allowed_mentions, so message content built from user-controlled strings
 // (usernames, contest/item names, etc.) can never trigger an unintended mass-ping.
+// Returns the sent message's id (string) on success, or false on failure — still truthy/
+// falsy-safe for every existing caller that only does `if (result)`/`if (!result)`, while
+// letting callers that need to act on the message afterward (e.g. starting a thread off of
+// it) get there without a second API round trip.
 export async function sendGuildChannelMessageById(channelId, content, tokenOverride = null, mentionUserIds = [], embeds = []) {
   const rawToken = tokenOverride || process.env.BOT_TOKEN
   if (!rawToken || !channelId) return false
@@ -368,7 +372,8 @@ export async function sendGuildChannelMessageById(channelId, content, tokenOverr
         console.error('sendGuildChannelMessageById failed:', res.status, await res.text().catch(() => ''))
         return false
       }
-      return true
+      const message = await res.json().catch(() => null)
+      return message?.id || true
     } catch (e) {
       console.error('sendGuildChannelMessageById failed:', e?.message || e)
       return false
@@ -510,29 +515,93 @@ export async function announceCZoneContestWinner(prisma, {
 // the same default wording regardless of which admin set up the boss.
 const DEFAULT_RAID_ANNOUNCEMENT_TEXT = '🚨 A raid boss ({enemy}) is being fought in {cmoon}! Up to 4 members can join the fight.'
 
-// Announce a cMoon Enemy Battles raid boss starting. `announcementTemplate` is the admin-authored
-// CMoonEnemyMember.raidAnnouncementText (or null to use the default above) — substitutes
-// {cmoon}/{enemy} literally, same shape as every other admin-authored template in this codebase.
-// Never throws — the raid itself has already started by the time this is called and must not be
-// reported as failed just because the announcement didn't go out.
-export async function announceCMoonRaidBoss(prisma, { cMoonName, enemyName, announcementTemplate }) {
+// Resolves which Discord channel a cMoon's raid activity (boss announcement, per-round spectator
+// updates, recap) posts to: that team's own CMoon.discordChannelId if set, else the shared
+// GlobalGameConfig.cMoonRaidBossDiscordChannelId every cMoon falls back to, else the env default.
+// Called once per raid (at raid start) rather than per-message — the result can't change mid-raid,
+// so every later post reuses the id the caller stored on the raid object instead of re-querying.
+export async function resolveCMoonRaidDiscordChannelId(prisma, cMoonDiscordChannelId) {
   try {
     const config = await prisma.globalGameConfig.findUnique({
       where: { id: 'singleton' },
       select: { cMoonRaidBossDiscordChannelId: true }
     })
-    const channelId = (config?.cMoonRaidBossDiscordChannelId || '').trim() || process.env.DISCORD_ANNOUNCEMENTS_CHANNEL
+    return (cMoonDiscordChannelId || '').trim()
+      || (config?.cMoonRaidBossDiscordChannelId || '').trim()
+      || process.env.DISCORD_ANNOUNCEMENTS_CHANNEL
+      || null
+  } catch (e) {
+    console.error('resolveCMoonRaidDiscordChannelId failed:', e?.message || e)
+    return null
+  }
+}
+
+// Announce a cMoon Enemy Battles raid boss starting. `announcementTemplate` is the admin-authored
+// CMoonEnemyMember.raidAnnouncementText (or null to use the default above) — substitutes
+// {cmoon}/{enemy} literally, same shape as every other admin-authored template in this codebase.
+// `channelId` is the already-resolved id from resolveCMoonRaidDiscordChannelId above. Never
+// throws — the raid itself has already started by the time this is called and must not be
+// reported as failed just because the announcement didn't go out. Returns the sent message's id
+// (for starting a coordination thread off of it) or null if nothing was sent.
+export async function announceCMoonRaidBoss(channelId, { cMoonName, enemyName, announcementTemplate }) {
+  try {
     const botToken = getAnnouncementsBotToken()
-    if (!channelId || !botToken) return
+    if (!channelId || !botToken) return null
     const template = (typeof announcementTemplate === 'string' && announcementTemplate.trim())
       ? announcementTemplate.trim()
       : DEFAULT_RAID_ANNOUNCEMENT_TEXT
     const msg = template
       .replaceAll('{cmoon}', cMoonName || 'a cMoon')
       .replaceAll('{enemy}', enemyName || 'a raid boss')
-    await sendGuildChannelMessageById(channelId, msg, botToken)
+    const result = await sendGuildChannelMessageById(channelId, msg, botToken)
+    return typeof result === 'string' ? result : null
   } catch (e) {
     console.error('announceCMoonRaidBoss failed:', e?.message || e)
+    return null
+  }
+}
+
+// Posts a short plain-text update to a cMoon team's own Discord channel (or raid thread) — used
+// by the raid spectator feed/recap (cmoonRaidSocket.js, see resolveCMoonRaidDiscordChannelId for
+// how that channelId is resolved) and by the riddle system's "your team just solved it" ping
+// (cmoonRiddle.js). A fresh message per call, never an edit (Discord message editing isn't wired
+// up elsewhere in this codebase). Fire-and-forget: never throws — a missed update must not
+// interrupt whatever triggered it.
+export async function sendCMoonTeamUpdate(channelId, text) {
+  try {
+    const botToken = getAnnouncementsBotToken()
+    if (!channelId || !botToken) return
+    await sendGuildChannelMessageById(channelId, text, botToken)
+  } catch (e) {
+    console.error('sendCMoonTeamUpdate failed:', e?.message || e)
+  }
+}
+
+// Starts a public thread off an already-sent message — the raid "call to arms" thread, so
+// players can coordinate joining/strategy without cluttering the team channel. The caller
+// (cmoonRaidSocket.js) then posts every later raid update (per-round feed, recap) into this
+// thread's own id instead of the parent channel, falling back to the parent channel if thread
+// creation fails. Never throws; returns the new thread's channel id, or null on any failure.
+export async function startThreadFromMessage(channelId, messageId, name) {
+  try {
+    const botToken = getAnnouncementsBotToken()
+    if (!channelId || !messageId || !botToken) return null
+    const authHeader = botToken.startsWith('Bot ') ? botToken : `Bot ${botToken}`
+    const res = await fetch(`https://discord.com/api/v10/channels/${channelId}/messages/${messageId}/threads`, {
+      method: 'POST',
+      headers: { 'Authorization': authHeader, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: truncateSafely(name, 100), auto_archive_duration: 60 }),
+      signal: AbortSignal.timeout(8000)
+    })
+    if (!res.ok) {
+      console.error('startThreadFromMessage failed:', res.status, await res.text().catch(() => ''))
+      return null
+    }
+    const thread = await res.json().catch(() => null)
+    return thread?.id || null
+  } catch (e) {
+    console.error('startThreadFromMessage failed:', e?.message || e)
+    return null
   }
 }
 

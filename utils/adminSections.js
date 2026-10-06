@@ -91,6 +91,8 @@ export const ADMIN_SECTIONS = [
   S('cmoonChangeRequests', 'cMoon Change Requests', 'games', nu('AdminCMoonChangeRequests')),
   S('manageNavigation', 'Manage Navigation', 'games', nu('AdminManageNavigation')),
   S('cMoonEnemies', 'Manage cMoon Enemies', 'games', nu('AdminCMoonEnemies')),
+  S('cMoonRiddles', 'cMoon Riddles', 'games', nu('AdminCMoonRiddles')),
+  S('cMoonHunts', 'cMoon Scavenger Hunts', 'games', nu('AdminCMoonHunts')),
   S('lotto', 'Manage Lotto', 'games', legacy('AdminLegacyLotto')),
   S('clashTournaments', 'Clash Tournaments', 'games', legacy('AdminLegacyClashTournaments')),
   S('monsters', 'Manage Monsters', 'games', legacy('AdminLegacyMonsters'), { dense: true }),

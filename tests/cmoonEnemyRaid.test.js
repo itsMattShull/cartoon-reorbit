@@ -167,3 +167,20 @@ test('checkRaidBossAvailability: raidOneTime takes precedence over a configured 
   assert.equal(result.available, false)
   assert.match(result.message, /revived by an admin/i)
 })
+
+test('checkRaidBossAvailability: riddleGateSolved omitted (no gate) behaves exactly as before', () => {
+  const result = checkRaidBossAvailability({ raidOneTime: false, raidCooldownMinutes: 0, raidDefeatedAt: null })
+  assert.equal(result.available, true)
+})
+
+test('checkRaidBossAvailability: an unsolved riddle gate blocks even a never-defeated boss', () => {
+  const result = checkRaidBossAvailability({ raidOneTime: false, raidCooldownMinutes: 0, raidDefeatedAt: null, riddleGateSolved: false })
+  assert.equal(result.available, false)
+  assert.match(result.message, /riddle/i)
+})
+
+test('checkRaidBossAvailability: a solved riddle gate falls through to the normal one-time/cooldown checks', () => {
+  const result = checkRaidBossAvailability({ raidOneTime: true, raidCooldownMinutes: 0, raidDefeatedAt: new Date(), riddleGateSolved: true })
+  assert.equal(result.available, false)
+  assert.match(result.message, /revived by an admin/i)
+})

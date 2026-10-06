@@ -36,7 +36,17 @@ export const MAX_ROUNDS_SAFETY = 100 // same runaway-RNG safety valve as a solo 
 // if an admin turns both off after a member was once defeated, a leftover raidDefeatedAt must not
 // keep blocking it forever (see raidOneTime's own schema comment: "ignored while raidOneTime is
 // false" — cooldown=0 is the equivalent no-op state for the cooldown side).
-export function checkRaidBossAvailability({ raidOneTime, raidCooldownMinutes, raidDefeatedAt }, now = Date.now()) {
+//
+// `riddleGateSolved` defaults to true (no gate at all) so every existing caller/test that never
+// passes it keeps its original behavior unchanged. A caller with a BOSS_LORE CMoonRiddle tied to
+// this member (see getActiveBossLoreRiddle in server/utils/cmoonRiddle.js) passes
+// `!!riddle.solvedAt` instead — checked FIRST and independent of raidOneTime/raidCooldownMinutes/
+// raidDefeatedAt, since an unsolved lore riddle blocks the very first encounter, before this boss
+// has ever had a raidDefeatedAt at all.
+export function checkRaidBossAvailability({ raidOneTime, raidCooldownMinutes, raidDefeatedAt, riddleGateSolved = true }, now = Date.now()) {
+  if (!riddleGateSolved) {
+    return { available: false, message: 'This raid boss is locked behind a riddle — solve it in Discord with /riddle to unlock' }
+  }
   if (!raidDefeatedAt) return { available: true }
   if (raidOneTime) {
     return { available: false, message: 'This raid boss has already been defeated and must be revived by an admin' }
