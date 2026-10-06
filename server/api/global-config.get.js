@@ -22,6 +22,7 @@ export default defineEventHandler(async (event) => {
     czoneVisitPoints:   cfg?.czoneVisitPoints   ?? 20,
     czoneVisitMaxPerDay: cfg?.czoneVisitMaxPerDay ?? 10,
     czoneCount: cfg?.czoneCount ?? 3,
+    logoPath: cfg?.logoPath ?? null,
     secondEditionOverlayPath:   cfg?.secondEditionOverlayPath   ?? null,
     secondEditionOverlayWidth:  cfg?.secondEditionOverlayWidth  ?? null,
     secondEditionOverlayHeight: cfg?.secondEditionOverlayHeight ?? null,
