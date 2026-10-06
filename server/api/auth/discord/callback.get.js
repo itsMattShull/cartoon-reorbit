@@ -64,6 +64,17 @@ export default defineEventHandler(async (event) => {
     return sendRedirect(event, '/join-discord?banned=1')
   }
 
+  // 🚫 Temporary suspension — checked against the ACTIVE row only (not any inactive/dissolved
+  // one), since that's the account identity actually being logged into. See User.suspendedUntil's
+  // schema comment for why this is kept separate from `banned`.
+  const activeRowForSuspension = await prisma.user.findFirst({
+    where: { discordId: discordUser.id, active: true },
+    select: { suspendedUntil: true }
+  })
+  if (activeRowForSuspension?.suspendedUntil && activeRowForSuspension.suspendedUntil > new Date()) {
+    return sendRedirect(event, `/join-discord?suspended=1&until=${encodeURIComponent(activeRowForSuspension.suspendedUntil.toISOString())}`)
+  }
+
   // 3) Best-effort auto-join to guild
   try {
     await $fetch(`https://discord.com/api/guilds/${guildId}/members/${discordUser.id}`, {

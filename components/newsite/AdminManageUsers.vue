@@ -63,6 +63,11 @@
             <div class="flex items-center gap-1 shrink-0">
               <span :class="badgeClass(!!u.inGuild)">{{ u.inGuild ? 'Guild' : 'No guild' }}</span>
               <span :class="badgeClass(!!u.active)">{{ u.active ? 'Active' : 'Disabled' }}</span>
+              <span
+                v-if="isSuspended(u)"
+                class="px-1.5 py-0 rounded text-[10px] font-medium bg-orange-100 text-orange-800"
+                :title="`Suspended until ${formatDate(u.suspendedUntil)}`"
+              >Suspended</span>
               <div class="relative">
                 <button
                   class="ml-0.5 h-6 w-6 grid place-items-center text-gray-500 hover:text-gray-700 rounded hover:bg-gray-100"
@@ -96,6 +101,16 @@
                     class="w-full text-left px-2 py-1 text-[11px] text-emerald-700 hover:bg-emerald-50"
                     @click="activateUser(u); closeMenu()"
                   >Activate User</button>
+                  <button
+                    v-if="!u.isAdmin && !u.banned && !isSuspended(u)"
+                    class="w-full text-left px-2 py-1 text-[11px] text-orange-700 hover:bg-orange-50"
+                    @click="openSuspendModal(u); closeMenu()"
+                  >Suspend user</button>
+                  <button
+                    v-if="!u.isAdmin && !u.banned && isSuspended(u)"
+                    class="w-full text-left px-2 py-1 text-[11px] text-emerald-700 hover:bg-emerald-50"
+                    @click="openActionModal(u, 'UNSUSPEND'); closeMenu()"
+                  >Remove suspension</button>
                   <button
                     v-if="!u.isAdmin && u.active"
                     class="w-full text-left px-2 py-1 text-[11px] text-rose-700 hover:bg-rose-50"
@@ -292,18 +307,18 @@
     <!-- Kebab menu outside-click catcher -->
     <div v-if="menuOpenId" class="fixed inset-0 z-30" @click="closeMenu()"></div>
 
-    <!-- Ban/Unban modal -->
+    <!-- Ban/Unban/Remove-suspension modal (reason only — Suspend itself has its own modal below, since it also needs a duration) -->
     <div v-if="showActionModal" class="fixed inset-0 z-50 flex items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click="closeBanModal()"></div>
       <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
-        <h3 class="text-lg font-semibold">{{ actionType==='BAN' ? 'Ban' : 'Unban' }} {{ actionTarget?.username || actionTarget?.discordTag || 'user' }}</h3>
-        <p class="mt-2 text-sm text-gray-600">Please provide a reason (min 10 characters). This will be stored and shown in Ban Notes.</p>
+        <h3 class="text-lg font-semibold">{{ ACTION_LABELS[actionType].title }} {{ actionTarget?.username || actionTarget?.discordTag || 'user' }}</h3>
+        <p class="mt-2 text-sm text-gray-600">Please provide a reason (min 10 characters). This will be stored and shown in Account History.</p>
 
         <textarea
           v-model="actionReason"
           rows="4"
           class="mt-3 w-full border rounded-md px-3 py-2 text-sm"
-          placeholder="Reason for ban..."
+          :placeholder="`Reason for ${ACTION_LABELS[actionType].title.toLowerCase()}...`"
         ></textarea>
 
         <div class="mt-3 text-xs text-gray-500">{{ reasonChars }}/10 characters</div>
@@ -314,11 +329,67 @@
           <button class="px-3 py-1 text-sm border rounded-md" @click="closeBanModal" :disabled="working">Cancel</button>
           <button
             class="px-3 py-1 text-sm rounded-md text-white"
-            :class="canConfirm ? 'bg-red-600 hover:bg-red-700' : 'bg-red-300 cursor-not-allowed'"
+            :class="canConfirm ? ACTION_LABELS[actionType].confirmClass : 'bg-gray-300 cursor-not-allowed'"
             :disabled="!canConfirm || working"
             @click="confirmAction"
           >
-            {{ working ? (actionType==='BAN' ? 'Banning…' : 'Unbanning…') : 'Confirm' }}
+            {{ working ? ACTION_LABELS[actionType].working : 'Confirm' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Suspend modal (duration + reason) -->
+    <div v-if="showSuspendModal" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/50" @click="closeSuspendModal()"></div>
+      <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
+        <h3 class="text-lg font-semibold">Suspend {{ suspendTarget?.username || suspendTarget?.discordTag || 'user' }}</h3>
+        <p class="mt-2 text-sm text-gray-600">
+          Blocks login and play for the chosen duration. This does <strong>not</strong> remove them from Discord —
+          use "Ban user" for that.
+        </p>
+
+        <div class="mt-3">
+          <label class="block text-xs font-medium mb-1">Duration</label>
+          <div class="flex flex-wrap gap-1.5">
+            <button
+              v-for="preset in SUSPEND_PRESETS" :key="preset.hours"
+              type="button"
+              class="px-2 py-1 text-[11px] rounded-md border"
+              :class="suspendDurationHours === preset.hours ? 'bg-orange-600 text-white border-orange-600' : 'hover:bg-gray-50'"
+              @click="suspendDurationHours = preset.hours"
+            >{{ preset.label }}</button>
+          </div>
+          <div class="mt-2 flex items-center gap-2">
+            <label class="text-xs text-gray-600">Custom (hours):</label>
+            <input
+              v-model.number="suspendDurationHours" type="number" min="1" max="8760" step="1"
+              class="w-24 border rounded-md px-2 py-1 text-sm"
+            />
+          </div>
+          <p class="mt-1 text-[11px] text-gray-500">Until: {{ suspendUntilPreview }}</p>
+        </div>
+
+        <textarea
+          v-model="suspendReason"
+          rows="3"
+          class="mt-3 w-full border rounded-md px-3 py-2 text-sm"
+          placeholder="Reason for suspension..."
+        ></textarea>
+
+        <div class="mt-2 text-xs text-gray-500">{{ suspendReasonChars }}/10 characters</div>
+
+        <div v-if="suspendError" class="mt-2 text-sm text-red-600">{{ suspendError }}</div>
+
+        <div class="mt-4 flex items-center justify-end gap-2">
+          <button class="px-3 py-1 text-sm border rounded-md" @click="closeSuspendModal" :disabled="suspending">Cancel</button>
+          <button
+            class="px-3 py-1 text-sm rounded-md text-white"
+            :class="canConfirmSuspend ? 'bg-orange-600 hover:bg-orange-700' : 'bg-orange-300 cursor-not-allowed'"
+            :disabled="!canConfirmSuspend || suspending"
+            @click="confirmSuspend"
+          >
+            {{ suspending ? 'Suspending…' : 'Confirm' }}
           </button>
         </div>
       </div>
@@ -804,10 +875,23 @@ const noteTone = (action) => {
   if (action === 'BAN') return 'text-red-700'
   if (action === 'UNBAN') return 'text-emerald-700'
   if (action === 'DISSOLVE') return 'text-rose-700'
+  if (action === 'SUSPEND') return 'text-orange-700'
+  if (action === 'UNSUSPEND') return 'text-emerald-700'
   return 'text-gray-700'
 }
 
-// Ban/Unban modal state + actions
+function isSuspended(u) {
+  return !!u.suspendedUntil && new Date(u.suspendedUntil) > new Date()
+}
+
+// Ban/Unban/Unsuspend modal state + actions — all three are just "pick a target, give a reason,
+// POST it". Suspend itself also needs a duration, so it gets its own modal+state below instead.
+const ACTION_LABELS = {
+  BAN:       { title: 'Ban',               path: 'ban',       working: 'Banning…',     confirmClass: 'bg-red-600 hover:bg-red-700' },
+  UNBAN:     { title: 'Unban',             path: 'unban',     working: 'Unbanning…',   confirmClass: 'bg-emerald-600 hover:bg-emerald-700' },
+  UNSUSPEND: { title: 'Remove suspension for', path: 'unsuspend', working: 'Removing…', confirmClass: 'bg-emerald-600 hover:bg-emerald-700' },
+}
+
 const showActionModal = ref(false)
 const actionTarget = ref(null)
 const actionType   = ref('BAN')
@@ -837,23 +921,87 @@ async function confirmAction() {
   working.value = true
   actionError.value = ''
   try {
-    const path = actionType.value === 'BAN' ? 'ban' : 'unban'
+    const { path } = ACTION_LABELS[actionType.value]
     await $fetch(`/api/admin/users/${actionTarget.value.id}/${path}`, {
       method: 'POST',
       body: { reason: actionReason.value }
     })
     const idx = users.value.findIndex(x => x.id === actionTarget.value.id)
     if (idx !== -1) {
-      const next = actionType.value === 'BAN'
-        ? { active: false, banned: true }
-        : { active: true, banned: false }
+      const next =
+        actionType.value === 'BAN'       ? { active: false, banned: true } :
+        actionType.value === 'UNBAN'     ? { active: true, banned: false } :
+        /* UNSUSPEND */                    { suspendedUntil: null, suspendedReason: null }
       users.value[idx] = { ...users.value[idx], ...next }
     }
     closeBanModal()
   } catch (e) {
-    actionError.value = e?.data?.statusMessage || e?.message || `Failed to ${actionType.value.toLowerCase()} user.`
+    actionError.value = e?.data?.statusMessage || e?.message || `Failed to ${ACTION_LABELS[actionType.value].title.toLowerCase()} user.`
   } finally {
     working.value = false
+  }
+}
+
+// Suspend modal state + actions
+const SUSPEND_PRESETS = [
+  { label: '1 day',  hours: 24 },
+  { label: '3 days', hours: 24 * 3 },
+  { label: '7 days', hours: 24 * 7 },
+  { label: '14 days', hours: 24 * 14 },
+  { label: '30 days', hours: 24 * 30 },
+]
+
+const showSuspendModal     = ref(false)
+const suspendTarget        = ref(null)
+const suspendReason        = ref('')
+const suspendDurationHours = ref(24 * 7)
+const suspendError         = ref('')
+const suspending           = ref(false)
+
+const suspendReasonChars = computed(() => suspendReason.value.trim().length)
+const canConfirmSuspend  = computed(() => {
+  const hours = Number(suspendDurationHours.value)
+  return suspendReasonChars.value >= 10 && !!suspendTarget.value &&
+    Number.isFinite(hours) && hours >= 1 && hours <= 8760
+})
+const suspendUntilPreview = computed(() => {
+  const hours = Number(suspendDurationHours.value)
+  if (!Number.isFinite(hours) || hours <= 0) return '—'
+  return formatDate(new Date(Date.now() + hours * 60 * 60 * 1000))
+})
+
+function openSuspendModal(u) {
+  suspendTarget.value = u
+  suspendReason.value = ''
+  suspendDurationHours.value = 24 * 7
+  suspendError.value = ''
+  showSuspendModal.value = true
+}
+function closeSuspendModal() {
+  showSuspendModal.value = false
+  suspendTarget.value = null
+  suspendReason.value = ''
+  suspendError.value = ''
+  suspending.value = false
+}
+async function confirmSuspend() {
+  if (!canConfirmSuspend.value || !suspendTarget.value) return
+  suspending.value = true
+  suspendError.value = ''
+  try {
+    const res = await $fetch(`/api/admin/users/${suspendTarget.value.id}/suspend`, {
+      method: 'POST',
+      body: { reason: suspendReason.value, durationHours: Number(suspendDurationHours.value) }
+    })
+    const idx = users.value.findIndex(x => x.id === suspendTarget.value.id)
+    if (idx !== -1) {
+      users.value[idx] = { ...users.value[idx], suspendedUntil: res.suspendedUntil, suspendedReason: suspendReason.value }
+    }
+    closeSuspendModal()
+  } catch (e) {
+    suspendError.value = e?.data?.statusMessage || e?.message || 'Failed to suspend user.'
+  } finally {
+    suspending.value = false
   }
 }
 

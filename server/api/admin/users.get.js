@@ -32,6 +32,8 @@ export default defineEventHandler(async (event) => {
       isAdmin: true,
       active: true,
       banned: true,
+      suspendedUntil: true,
+      suspendedReason: true,
       warning180: true,
       warning210: true,
       warning240: true,
@@ -86,6 +88,8 @@ export default defineEventHandler(async (event) => {
     isAdmin:       u.isAdmin,
     active:        u.active,
     banned:        u.banned,
+    suspendedUntil:  u.suspendedUntil,
+    suspendedReason: u.suspendedReason,
     additionalCzones: u.additionalCzones ?? 0,
 
     // keep flat flags for convenience

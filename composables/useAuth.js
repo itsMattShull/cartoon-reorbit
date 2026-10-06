@@ -2,6 +2,17 @@ export const useAuth = () => {
     const user = useState('user', () => null)
     const fetchSelfInFlight = useState('auth:fetch-self-in-flight', () => null)
     const fetchSelfLastFetchedAt = useState('auth:fetch-self-last-fetched-at', () => 0)
+    // Where a banned/suspended account's 403 says it should be sent instead of the generic '/'.
+    // Route middleware (middleware/newsite.js, middleware/auth.js) reads this when `!user.value`
+    // and calls `navigateTo(blockedRedirect.value || '/')`. This has to be `navigateTo`, not a
+    // client-only `window.location.replace` fired from inside fetchSelf: the FIRST time a banned/
+    // suspended account loads a page, the request is server-rendered, `fetchSelf` runs during
+    // SSR where `window` doesn't exist, and the middleware's own `navigateTo('/')` becomes a real
+    // 302 sent before any client JS exists to redirect further — the user lands on the bare
+    // homepage with no explanation. Routing the redirect through the state the middleware already
+    // calls `navigateTo` with fixes both the SSR case and the client SPA-navigation case the same
+    // way, with no race between two different navigation mechanisms.
+    const blockedRedirect = useState('auth:blocked-redirect', () => null)
   
     const login = () => {
       window.location.href = '/api/auth/discord'
@@ -17,6 +28,7 @@ export const useAuth = () => {
         // Ignore network / server errors: we'll still clear local state.
       } finally {
         user.value = null
+        blockedRedirect.value = null
         // Pro‑actively clear the cookie client‑side as well.
         const session = useCookie('session')
         session.value = null
@@ -51,6 +63,7 @@ export const useAuth = () => {
           })
           user.value = me
           fetchSelfLastFetchedAt.value = Date.now()
+          blockedRedirect.value = null
           return me
         }
         const me = await $fetch('/api/auth/me', {
@@ -59,14 +72,27 @@ export const useAuth = () => {
         })
         user.value = me
         fetchSelfLastFetchedAt.value = Date.now()
+        blockedRedirect.value = null
         return me
       } catch (err) {
         user.value = null
-        // If banned, kick to /join-discord with notice
+        // If banned or temporarily suspended, record where the calling route middleware should
+        // redirect instead of '/' — see blockedRedirect's own comment above.
         const status = err?.data?.statusCode || err?.statusCode
         const msg = err?.data?.statusMessage || err?.message || ''
-        if (status === 403 && /banned/i.test(msg || '')) {
-          if (process.client) window.location.replace('/join-discord?banned=1')
+        const suspendedMatch = msg.match(/^Suspended until (.+)$/i)
+        if (status === 403 && suspendedMatch) {
+          blockedRedirect.value = `/join-discord?suspended=1&until=${encodeURIComponent(suspendedMatch[1])}`
+        } else if (status === 403 && /banned/i.test(msg || '')) {
+          blockedRedirect.value = '/join-discord?banned=1'
+        } else {
+          blockedRedirect.value = null
+        }
+        // Belt-and-suspenders for an account that gets banned/suspended mid-session, in an
+        // already-open client-side tab, discovered by a component polling fetchSelf outside of
+        // any route middleware (so nothing else would otherwise act on blockedRedirect).
+        if (process.client && blockedRedirect.value) {
+          window.location.replace(blockedRedirect.value)
         }
         return null
       }
@@ -90,5 +116,5 @@ export const useAuth = () => {
   
     const isAdmin = computed(() => Boolean(user.value?.isAdmin))
 
-    return { user, isAdmin, login, logout, fetchSelf, setUser, setPoints }
+    return { user, isAdmin, login, logout, fetchSelf, setUser, setPoints, blockedRedirect }
   }
