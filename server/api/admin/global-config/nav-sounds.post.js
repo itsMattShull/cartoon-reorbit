@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
 
   const before = await db.globalGameConfig.findUnique({
     where: { id: 'singleton' },
-    select: { uiClickSoundPath: true, uiNavButtonSounds: true }
+    select: { uiClickSoundPath: true, uiNavButtonSounds: true, activeUiSoundPresetId: true }
   })
 
   let updated
@@ -70,6 +70,18 @@ export default defineEventHandler(async (event) => {
       newValue: path
     })
   } catch {}
+
+  // Keep the active preset's own saved snapshot in sync with this edit — otherwise switching to
+  // another preset and back would silently revert the slot just changed, which is exactly the
+  // "swapping presets loses nothing" guarantee this feature exists to provide.
+  if (before?.activeUiSoundPresetId) {
+    try {
+      await db.uiSoundPreset.update({
+        where: { id: before.activeUiSoundPresetId },
+        data: { uiClickSoundPath: updated.uiClickSoundPath, uiNavButtonSounds: updated.uiNavButtonSounds },
+      })
+    } catch {}
+  }
 
   return {
     uiClickSoundPath: updated.uiClickSoundPath,
