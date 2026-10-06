@@ -72,6 +72,7 @@ export const ADMIN_SECTIONS = [
   S('tutorial', 'Manage Tutorial', 'content', nu('AdminManageTutorial')),
   S('certificate', 'Manage Certificate', 'content', nu('AdminManageCertificate')),
   S('encyclopedia', 'Manage Encyclopedia', 'content', nu('AdminManageEncyclopedia')),
+  S('siteTheme', 'Manage Site Theme', 'content', nu('AdminSiteTheme')),
 
   // ── Economy ─────────────────────────────────────────────────
   S('manageSales', 'Manage Sales', 'economy', nu('AdminManageSales')),

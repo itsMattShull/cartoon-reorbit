@@ -405,6 +405,48 @@
           assign one to the site-wide default and/or any individual main-nav button.
         </p>
 
+        <!-- Presets -->
+        <div class="border rounded-md p-3 space-y-2">
+          <h2 class="text-xs font-semibold">Presets</h2>
+          <p class="text-[10px] text-gray-500">
+            Save the whole set of button-sound assignments below as a named preset (e.g. "Default",
+            "Halloween"), then switch between them any time — nothing is lost when you swap.
+          </p>
+
+          <div v-if="soundPresets.length" class="space-y-1.5">
+            <div v-for="p in soundPresets" :key="p.id" class="flex items-center gap-2 border rounded p-1.5">
+              <span class="text-xs flex-1 min-w-0 truncate font-medium">
+                {{ p.name }}
+                <span v-if="p.id === activeSoundPresetId" class="ml-1 text-[10px] font-semibold text-white bg-indigo-600 rounded px-1.5 py-0.5">ACTIVE</span>
+              </span>
+              <button type="button" class="px-2 py-1 text-[11px] rounded-md border hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      :disabled="p.id === activeSoundPresetId || presetBusy" @click="activatePreset(p)">
+                {{ presetActivatingId === p.id ? 'Switching…' : 'Switch to this' }}
+              </button>
+              <button type="button" class="px-2 py-1 text-[11px] rounded-md border hover:bg-gray-50"
+                      :disabled="presetBusy" @click="renamePreset(p)">Rename</button>
+              <button type="button" class="px-2 py-1 text-[11px] rounded-md border hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                      :disabled="p.id === activeSoundPresetId || presetBusy"
+                      :title="p.id === activeSoundPresetId ? 'Switch to another preset first' : ''"
+                      @click="deletePreset(p)">Delete</button>
+            </div>
+          </div>
+          <p v-else class="text-[10px] text-gray-400">No presets yet.</p>
+
+          <div class="flex flex-col sm:flex-row gap-2 pt-2 border-t items-start sm:items-center">
+            <input v-model="newPresetName" type="text" placeholder="New preset name (e.g. Halloween)" maxlength="60"
+              class="border rounded p-1.5 text-xs flex-1 min-w-0" />
+            <label class="flex items-center gap-1 text-[11px] text-gray-600 shrink-0">
+              <input v-model="newPresetCloneCurrent" type="checkbox" />
+              Start from current sounds
+            </label>
+            <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 shrink-0"
+                    :disabled="!newPresetName.trim() || presetBusy" @click="createPreset">
+              {{ presetBusy ? 'Saving…' : 'Create Preset' }}
+            </button>
+          </div>
+        </div>
+
         <!-- Sound Library -->
         <div class="border rounded-md p-3 space-y-2">
           <h2 class="text-xs font-semibold">Sound Library</h2>
@@ -581,6 +623,82 @@ const librarySaving = ref(false)
 const assignments = ref({})        // { [slotKey]: soundId }
 const assignSaving = reactive({})  // { [slotKey]: boolean }
 
+// Sound presets state
+const soundPresets = ref([])        // [{ id, name, uiClickSoundPath, uiNavButtonSounds }]
+const activeSoundPresetId = ref(null)
+const newPresetName = ref('')
+const newPresetCloneCurrent = ref(true)
+const presetBusy = ref(false)
+const presetActivatingId = ref('')
+
+async function loadPresets() {
+  try {
+    const res = await $fetch('/api/admin/sound-presets')
+    soundPresets.value = res?.presets || []
+    activeSoundPresetId.value = res?.activeUiSoundPresetId || null
+  } catch {}
+}
+
+async function createPreset() {
+  const name = newPresetName.value.trim()
+  if (!name) return
+  presetBusy.value = true; toast.value = null
+  try {
+    await $fetch('/api/admin/sound-presets', { method: 'POST', body: { name, cloneFromCurrent: newPresetCloneCurrent.value } })
+    newPresetName.value = ''
+    await loadPresets()
+    toast.value = { type: 'ok', msg: `Preset "${name}" created.` }
+  } catch (e) {
+    toast.value = { type: 'error', msg: e?.data?.statusMessage || 'Failed to create preset' }
+  } finally {
+    presetBusy.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+async function renamePreset(p) {
+  const name = (prompt('Rename preset', p.name) || '').trim()
+  if (!name || name === p.name) return
+  presetBusy.value = true; toast.value = null
+  try {
+    await $fetch(`/api/admin/sound-presets/${p.id}`, { method: 'PUT', body: { name } })
+    await loadPresets()
+  } catch (e) {
+    toast.value = { type: 'error', msg: e?.data?.statusMessage || 'Failed to rename preset' }
+  } finally {
+    presetBusy.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+async function activatePreset(p) {
+  if (p.id === activeSoundPresetId.value) return
+  presetActivatingId.value = p.id; presetBusy.value = true; toast.value = null
+  try {
+    await $fetch(`/api/admin/sound-presets/${p.id}/activate`, { method: 'POST' })
+    activeSoundPresetId.value = p.id
+    await loadAssignments()
+    toast.value = { type: 'ok', msg: `Switched to "${p.name}".` }
+  } catch (e) {
+    toast.value = { type: 'error', msg: e?.data?.statusMessage || 'Failed to switch preset' }
+  } finally {
+    presetActivatingId.value = ''; presetBusy.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+async function deletePreset(p) {
+  if (p.id === activeSoundPresetId.value) return
+  if (!confirm(`Delete preset "${p.name}"? This can't be undone.`)) return
+  presetBusy.value = true; toast.value = null
+  try {
+    await $fetch(`/api/admin/sound-presets/${p.id}`, { method: 'DELETE' })
+    await loadPresets()
+    toast.value = { type: 'ok', msg: 'Preset deleted.' }
+  } catch (e) {
+    toast.value = { type: 'error', msg: e?.data?.statusMessage || 'Failed to delete preset' }
+  } finally {
+    presetBusy.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
 function onNewSoundFile(e) {
   newSoundFile.value = e.target.files?.[0] || null
 }
@@ -657,6 +775,7 @@ async function assignSlot(slot, soundId) {
 onMounted(async () => {
   await loadLibrary()
   await loadAssignments()
+  await loadPresets()
 })
 
 // Favicon tab state

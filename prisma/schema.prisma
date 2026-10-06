@@ -1675,6 +1675,22 @@ model GlobalGameConfig {
   // keys (one per main-nav button) and server/api/admin/global-config/nav-sounds.post.js for how
   // entries are written. A key with no entry (or an invalid one) falls back to uiClickSoundPath.
   uiNavButtonSounds                  Json?
+  // Which UiSoundPreset (below) is currently "loaded" into the two live fields above — purely
+  // informational/bookkeeping for the admin UI (Manage Homepage > Sounds), which still reads and
+  // writes uiClickSoundPath/uiNavButtonSounds exactly as before; activating a preset just copies
+  // its saved values into those two fields, and editing a slot while a preset is active syncs the
+  // edit back into that same preset row so switching away and back never loses it. Loose scalar,
+  // no FK — a preset can be deleted (except the currently-active one, guarded at the API layer)
+  // without needing to touch this column's own constraint.
+  activeUiSoundPresetId               String?
+  // Site-wide color theme — see SiteTheme's own comment below. True (the default) means the
+  // hardcoded brand colors (--OrbitDarkBlue/--OrbitLightBlue/--OrbitGreen/bg/text in
+  // layouts/newsite-template.vue) are always used, regardless of any saved SiteTheme rows —
+  // flipping it off is what lets activeSiteThemeId's colors actually apply.
+  useDefaultSiteTheme                 Boolean  @default(true)
+  // Which SiteTheme applies when useDefaultSiteTheme is false. Loose scalar, no FK — same
+  // reasoning as activeUiSoundPresetId above (delete-guarded at the API layer instead).
+  activeSiteThemeId                   String?
   // cMoon (faction) feature — off by default, easy to disable without losing data.
   // When flipped false -> true, cMoonEnabledAt is set to now (purely informational, shown in the
   // admin panel as "Launched X"). cMoonSelectionDeadlineAt predates the opt-out flow and is no
@@ -1803,6 +1819,41 @@ model UiSound {
   label     String
   path      String
   createdAt DateTime @default(now())
+}
+
+// A named, swappable snapshot of the site-wide button-sound assignment (see GlobalGameConfig.
+// uiClickSoundPath/uiNavButtonSounds's own comment for what these two fields mean) — lets an
+// admin build e.g. a "Halloween" set of spooky button sounds without losing whatever was live
+// before, then flip back to it later with nothing re-uploaded or reassigned. Activating a preset
+// (server/api/admin/ui-sound-presets/[id]/activate.post.js) copies these two fields onto
+// GlobalGameConfig's own live columns; editing a slot afterward (the existing nav-sounds.post.js
+// endpoint) writes through to whichever preset GlobalGameConfig.activeUiSoundPresetId names, so
+// the two never drift apart while that preset is the active one.
+model UiSoundPreset {
+  id                String   @id @default(uuid())
+  name              String   @unique
+  uiClickSoundPath  String?
+  uiNavButtonSounds Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// A named, swappable site-wide color scheme — see GlobalGameConfig.useDefaultSiteTheme/
+// activeSiteThemeId's own comment for the on/off toggle. Each field is a hex color mapped
+// straight onto one of the CSS custom properties layouts/newsite-template.vue's :root block
+// already defines (so applying a theme never changes layout/structure, only color) — see
+// server/api/global-config.get.js for how these get resolved into the effective values every
+// page actually renders with. Field names intentionally mirror the CSS var names they override.
+model SiteTheme {
+  id             String   @id @default(uuid())
+  name           String   @unique
+  orbitDarkBlue  String // --OrbitDarkBlue: topbar/sidebar-top/sidebar-bottom background, BlueButton border
+  orbitLightBlue String // --OrbitLightBlue: topbar-nav-left/sidebar background, BlueButton fill
+  orbitGreen     String // --OrbitGreen: GreenButton and other accent/success uses
+  bgColor        String // --bg-color: page background behind the fixed-size site chrome
+  textColor      String // --text-color: base body text color
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model WishlistItem {
