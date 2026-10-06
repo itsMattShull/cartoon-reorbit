@@ -40,6 +40,37 @@
 
       <!-- Homepage tab -->
       <section v-if="activeTab==='Homepage'" class="space-y-3">
+        <!-- Site Logo — the topbar logo shown on every page, not just the homepage; kept as its
+             own self-contained upload (like the Favicon tab) rather than bundled into the big
+             Save below, since it's site-wide chrome, not homepage content. -->
+        <div class="border rounded-md p-3 space-y-2">
+          <h2 class="text-xs font-semibold">Site Logo</h2>
+          <p class="text-[10px] text-gray-500">
+            The logo shown in the top-left of every page. PNG, JPEG, GIF, or WEBP — upload an
+            animated GIF for a themed event (e.g. Halloween). 3MB max.
+          </p>
+          <div class="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+            <div class="w-40 h-12 bg-gray-50 border rounded flex items-center justify-center overflow-hidden shrink-0">
+              <img :src="logoPreviewUrl || logoDisplayPath" alt="Site logo preview" class="max-h-full max-w-full object-contain" />
+            </div>
+            <div class="space-y-1.5 flex-1 min-w-0">
+              <input type="file" accept="image/png,image/jpeg,.jpg,.jpeg,.png,image/gif,.gif,image/webp,.webp"
+                @change="onLogoFile($event)" class="block w-full text-xs" />
+              <div v-if="logoFile" class="text-[10px] text-gray-600 truncate">Selected: {{ logoFile.name }}</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 pt-1">
+            <button class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                    :disabled="!logoFile || logoSaving" @click="saveLogo">
+              <span v-if="!logoSaving">Save Logo</span><span v-else>Uploading…</span>
+            </button>
+            <button v-if="logoIsCustom" type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50 disabled:opacity-50"
+                    :disabled="logoSaving" @click="resetLogo">
+              Reset to Default
+            </button>
+          </div>
+        </div>
+
         <p class="text-xs text-gray-600">
           Upload SVG/PNG/JPEG/GIF/MP4. Files are stored on the server and paths saved in the database.
         </p>
@@ -778,6 +809,62 @@ onMounted(async () => {
   await loadPresets()
 })
 
+// Site Logo state (Homepage tab) — self-contained upload, separate from the big Save below,
+// mirroring the Favicon tab's own independent save flow just below this block.
+const logoFile = ref(null)
+const logoPreviewUrl = ref(null)
+const logoCurrentPath = ref('')
+const logoSaving = ref(false)
+const logoIsCustom = computed(() => !!logoCurrentPath.value)
+const logoDisplayPath = computed(() => logoCurrentPath.value || '/images/newlogo.gif')
+
+function onLogoFile(e) {
+  const f = e.target.files?.[0] || null
+  try { if (logoPreviewUrl.value) { URL.revokeObjectURL(logoPreviewUrl.value); logoPreviewUrl.value = null } } catch (e) {}
+  logoFile.value = f
+  if (f) logoPreviewUrl.value = URL.createObjectURL(f)
+}
+
+async function loadLogoConfig() {
+  try {
+    const cfg = await $fetch('/api/global-config')
+    logoCurrentPath.value = cfg.logoPath || ''
+  } catch {}
+}
+
+async function saveLogo() {
+  if (!logoFile.value) return
+  logoSaving.value = true; toast.value = null
+  try {
+    const fd = new FormData()
+    fd.append('image', logoFile.value)
+    const res = await $fetch('/api/admin/global-config/logo', { method: 'POST', body: fd })
+    logoCurrentPath.value = res.logoPath || ''
+    try { if (logoPreviewUrl.value) URL.revokeObjectURL(logoPreviewUrl.value) } catch (e) {}
+    logoPreviewUrl.value = null
+    logoFile.value = null
+    toast.value = { type: 'ok', msg: 'Logo updated.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.data?.statusMessage || e?.statusMessage || 'Save failed' }
+  } finally {
+    logoSaving.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+async function resetLogo() {
+  if (!confirm('Reset the logo to the default?')) return
+  logoSaving.value = true; toast.value = null
+  try {
+    await $fetch('/api/admin/global-config/logo', { method: 'DELETE' })
+    logoCurrentPath.value = ''
+    toast.value = { type: 'ok', msg: 'Logo reset to default.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.data?.statusMessage || e?.statusMessage || 'Reset failed' }
+  } finally {
+    logoSaving.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
 // Favicon tab state
 const faviconFile = ref(null)
 const faviconPreviewUrl = ref(null)
@@ -977,6 +1064,7 @@ onBeforeUnmount(() => {
     if (u) { try { URL.revokeObjectURL(u) } catch (e) {} }
   }
   if (faviconPreviewUrl.value) { try { URL.revokeObjectURL(faviconPreviewUrl.value) } catch (e) {} }
+  if (logoPreviewUrl.value) { try { URL.revokeObjectURL(logoPreviewUrl.value) } catch (e) {} }
 })
 
 async function loadConfig() {
@@ -1139,6 +1227,7 @@ async function saveOther() {
 
 onMounted(loadConfig)
 onMounted(loadFaviconConfig)
+onMounted(loadLogoConfig)
 
 onMounted(async () => {
   try {

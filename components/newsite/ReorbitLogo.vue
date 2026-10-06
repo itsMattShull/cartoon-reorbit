@@ -1,8 +1,14 @@
 <template>
   <NuxtLink to="/newsite/home" class="reorbit-logo">
-    <img src="/images/newlogo.gif" alt="Reorbit Logo" />
+    <img :src="logoPath" alt="Reorbit Logo" />
   </NuxtLink>
 </template>
+
+<script setup>
+import { useSiteLogo } from '@/composables/useSiteLogo'
+
+const { logoPath } = useSiteLogo()
+</script>
 
 <style scoped>
 .reorbit-logo {

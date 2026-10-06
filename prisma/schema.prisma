@@ -1632,6 +1632,12 @@ model GlobalGameConfig {
   secondEditionOverlayPath       String?
   secondEditionOverlayWidth      Int? // natural pixel width of the uploaded overlay image
   secondEditionOverlayHeight     Int? // natural pixel height of the uploaded overlay image
+  // Site-wide topbar logo (components/newsite/ReorbitLogo.vue). Null = the bundled default
+  // (/images/newlogo.gif). Stored and served as-is, same as secondEditionOverlayPath above —
+  // never resized/re-encoded, so an admin-uploaded animated GIF stays animated. The logo renders
+  // into a fixed-size box with `object-fit: fill`, so no natural-dimensions bookkeeping is needed
+  // here the way the overlay above needs its own width/height.
+  logoPath                       String?
   // Game tile images shown on the Games page
   gameTileWinballImagePath       String?
   gameTileLottoImagePath         String?
