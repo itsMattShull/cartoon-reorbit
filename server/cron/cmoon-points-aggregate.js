@@ -49,7 +49,7 @@ const LOCK_KEY = USER_TABLE_BULK_WRITE_LOCK_KEY
 // statement over every cMoon member. A single UPDATE holds row locks on every User row it has
 // changed until it commits, so any single-row write to User in that window (login's lastLogin
 // update, a cMoon opt-out, ...) blocks behind it. Short batches release their locks quickly.
-const BATCH_SIZE = 500
+const BATCH_SIZE = 100
 
 async function enqueueAchievementChecks(changedUserIds) {
   // A points-total change is the only thing that can newly satisfy a cMoonPointsGte

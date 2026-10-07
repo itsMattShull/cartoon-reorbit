@@ -1196,6 +1196,7 @@ model GamePointLog {
   user User @relation(fields: [userId], references: [id])
 
   @@index([userId, gameName, createdAt])
+  @@index([userId, createdAt])
   @@index([createdAt])
 }
 
@@ -1212,6 +1213,7 @@ model PointsLog {
 
   @@index([createdAt])
   @@index([userId, direction, createdAt])
+  @@index([userId, createdAt])
 }
 
 model GameConfig {

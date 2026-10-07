@@ -265,7 +265,7 @@ async function recomputeLastActivity() {
     // No inner try/catch: let a failure here propagate to the runJob() wrapper at the call
     // site so it lands in CronErrorLog instead of vanishing silently, as it did for a long
     // time when this only had a bare `catch {}`.
-    const BATCH_SIZE = 500
+    const BATCH_SIZE = 100
     let lastId = ''
     for (;;) {
       const ids = await prisma.$queryRaw`SELECT id FROM "User" WHERE id > ${lastId} ORDER BY id LIMIT ${BATCH_SIZE}`
