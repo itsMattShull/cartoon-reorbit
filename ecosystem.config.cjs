@@ -61,8 +61,12 @@ module.exports = {
       wait_ready:         true,
       listen_timeout:     15000,   // ms to wait for 'ready' signal
       kill_timeout:       5000,    // ms to allow in-flight requests to finish
-      node_args:          '--max-old-space-size=2048',
-      max_memory_restart: '2G',
+      // Heap cap sits below max_memory_restart so a leaking worker is recycled
+      // by PM2 before V8 starts GC-thrashing (100% CPU, multi-second event-loop
+      // stalls) at the heap limit. Two instances run; keep this small enough
+      // that both fit in RAM alongside socket-server and the workers.
+      node_args:          '--max-old-space-size=1024',
+      max_memory_restart: '1200M',
       // PM2 does NOT inherit the shell's full environment for ecosystem-file
       // apps — only what's listed below. Spread ...process.env first (loaded
       // from .env above) so DATABASE_URL, REDIS_*, queue keys, JWT_SECRET,
@@ -99,8 +103,8 @@ module.exports = {
       wait_ready:         true,
       listen_timeout:     15000,
       kill_timeout:       8000,    // extra time to drain active game connections
-      node_args:          '--max-old-space-size=2048',
-      max_memory_restart: '2G',
+      node_args:          '--max-old-space-size=1024',
+      max_memory_restart: '1200M',
       env: {
         ...process.env,
         NODE_ENV:         'production',

@@ -52,13 +52,18 @@ export default defineEventHandler(async (event) => {
     })
 
     if (!existingUserIp) {
-      // New combo — record it and queue a VPN check
+      // New combo — record it and queue a VPN check. createMany + skipDuplicates
+      // (ON CONFLICT DO NOTHING) avoids a logged unique-constraint error when
+      // concurrent requests race; only the request that inserted the row enqueues.
       try {
-        await prisma.userIP.create({ data: { userId, ip: encryptedIp } })
-      } catch {
-        // Ignore unique constraint violations (race condition)
+        const { count } = await prisma.userIP.createMany({
+          data: [{ userId, ip: encryptedIp }],
+          skipDuplicates: true,
+        })
+        if (count > 0) enqueueVpnCheck(userId, encryptedIp)
+      } catch (err) {
+        console.error('[login-log] failed to record userIP:', err?.message || err)
       }
-      enqueueVpnCheck(userId, encryptedIp)
     }
   }
 })
