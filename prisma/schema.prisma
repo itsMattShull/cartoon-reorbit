@@ -514,6 +514,15 @@ model User {
   inGuild                           Boolean   @default(true)
   active                            Boolean   @default(true)
   banned                            Boolean   @default(false)
+  // Temporary suspension — distinct from `banned`: it blocks login/play for a set window
+  // (see server/api/admin/users/[id]/suspend.post.js) but deliberately never touches Discord
+  // membership or the `banned`/`active` flags that the permanent-ban tool owns. A set value in
+  // the future means suspended; past or null means not suspended — no separate boolean or cron
+  // sweep needed, every check site just compares against now(). suspendedReason is admin-facing
+  // only (shown on the login-blocked page and in Account History), not a moderation audit trail
+  // by itself — that's UserBanNote, which also gets a SUSPEND/UNSUSPEND row per action.
+  suspendedUntil                    DateTime?
+  suspendedReason                   String?
   createdAt                         DateTime  @default(now())
   lastLogin                         DateTime?
   lastActivity                      DateTime?
@@ -771,6 +780,7 @@ model User {
   // cMoon Enemy Battles
   cMoonEnemyBattles CMoonEnemyBattle[]
   cMoonEnemyRaidParticipations CMoonEnemyRaidParticipant[]
+  cMoonHuntAssignments CMoonHuntAssignment[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
   @@index([cMoonId])
@@ -839,6 +849,8 @@ enum BanAction {
   UNBAN
   DISSOLVE
   TRANSFER
+  SUSPEND
+  UNSUSPEND
 }
 
 model UserBanNote {
@@ -1620,6 +1632,12 @@ model GlobalGameConfig {
   secondEditionOverlayPath       String?
   secondEditionOverlayWidth      Int? // natural pixel width of the uploaded overlay image
   secondEditionOverlayHeight     Int? // natural pixel height of the uploaded overlay image
+  // Site-wide topbar logo (components/newsite/ReorbitLogo.vue). Null = the bundled default
+  // (/images/newlogo.gif). Stored and served as-is, same as secondEditionOverlayPath above —
+  // never resized/re-encoded, so an admin-uploaded animated GIF stays animated. The logo renders
+  // into a fixed-size box with `object-fit: fill`, so no natural-dimensions bookkeeping is needed
+  // here the way the overlay above needs its own width/height.
+  logoPath                       String?
   // Game tile images shown on the Games page
   gameTileWinballImagePath       String?
   gameTileLottoImagePath         String?
@@ -1675,6 +1693,22 @@ model GlobalGameConfig {
   // keys (one per main-nav button) and server/api/admin/global-config/nav-sounds.post.js for how
   // entries are written. A key with no entry (or an invalid one) falls back to uiClickSoundPath.
   uiNavButtonSounds                  Json?
+  // Which UiSoundPreset (below) is currently "loaded" into the two live fields above — purely
+  // informational/bookkeeping for the admin UI (Manage Homepage > Sounds), which still reads and
+  // writes uiClickSoundPath/uiNavButtonSounds exactly as before; activating a preset just copies
+  // its saved values into those two fields, and editing a slot while a preset is active syncs the
+  // edit back into that same preset row so switching away and back never loses it. Loose scalar,
+  // no FK — a preset can be deleted (except the currently-active one, guarded at the API layer)
+  // without needing to touch this column's own constraint.
+  activeUiSoundPresetId               String?
+  // Site-wide color theme — see SiteTheme's own comment below. True (the default) means the
+  // hardcoded brand colors (--OrbitDarkBlue/--OrbitLightBlue/--OrbitGreen/bg/text in
+  // layouts/newsite-template.vue) are always used, regardless of any saved SiteTheme rows —
+  // flipping it off is what lets activeSiteThemeId's colors actually apply.
+  useDefaultSiteTheme                 Boolean  @default(true)
+  // Which SiteTheme applies when useDefaultSiteTheme is false. Loose scalar, no FK — same
+  // reasoning as activeUiSoundPresetId above (delete-guarded at the API layer instead).
+  activeSiteThemeId                   String?
   // cMoon (faction) feature — off by default, easy to disable without losing data.
   // When flipped false -> true, cMoonEnabledAt is set to now (purely informational, shown in the
   // admin panel as "Launched X"). cMoonSelectionDeadlineAt predates the opt-out flow and is no
@@ -1788,6 +1822,30 @@ model GlobalGameConfig {
   // server/utils/cmoonEnemy.js for the tier ordering. False (the default) leaves every eligible
   // rank in the same weighted pool together, the original behavior before this toggle existed.
   cMoonEnemyHigherTierFirst          Boolean   @default(false)
+  // cMoon points awarded to the first solver's team for ANY CMoonRiddle (weekly or boss-lore) —
+  // see claimCMoonRiddleSolve in server/utils/cmoonRiddle.js, which writes a CMoonScoreLog row of
+  // this many points under category 'RIDDLE_SOLVE'. One shared value for both riddle kinds rather
+  // than a separate column each, since nothing about the reward differs between them.
+  cMoonRiddlePoints                  Int       @default(50)
+  // Weekly riddle auto-posting (server/cron/cmoon-riddle-rotation.js), same enabled+day/hour/
+  // minute shape as cZoneContestAutomationConfig — checked every minute; when the admin-chosen
+  // day/hour/minute (America/Chicago) hits, posts the oldest unposted active WEEKLY CMoonRiddle
+  // to every cMoon's own Discord channel (deduped so cMoons sharing the fallback channel only
+  // get one copy) and deactivates whichever WEEKLY riddle was open before it, solved or not.
+  cMoonRiddleRotationEnabled         Boolean   @default(false)
+  cMoonRiddleRotationDayOfWeek       Int       @default(1) // 0=Sunday..6=Saturday; default Monday
+  cMoonRiddleRotationHour            Int       @default(9) // 0-23, America/Chicago
+  cMoonRiddleRotationMinute          Int       @default(0) // 0-59
+  // Idempotency key (YYYY-MM-DD, America/Chicago) — same role as
+  // CZoneContestAutomationConfig.lastCreatedFor: guards against posting twice if this process
+  // restarts within the same triggering minute.
+  cMoonRiddleLastPostedFor           String?
+  // cMoon points awarded to EACH cMoon that completes a CMoonHunt (see claimCMoonHuntCompletion
+  // in server/utils/cmoonHunt.js) — every team that solves the same hunt earns this, not just the
+  // first, unlike cMoonRiddlePoints above. Separate column (not the riddle one reused) since the
+  // two features are independent and may warrant different values — a cooperative multi-person
+  // hunt is intentionally worth more by default.
+  cMoonHuntPoints                    Int       @default(75)
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }
@@ -1803,6 +1861,41 @@ model UiSound {
   label     String
   path      String
   createdAt DateTime @default(now())
+}
+
+// A named, swappable snapshot of the site-wide button-sound assignment (see GlobalGameConfig.
+// uiClickSoundPath/uiNavButtonSounds's own comment for what these two fields mean) — lets an
+// admin build e.g. a "Halloween" set of spooky button sounds without losing whatever was live
+// before, then flip back to it later with nothing re-uploaded or reassigned. Activating a preset
+// (server/api/admin/ui-sound-presets/[id]/activate.post.js) copies these two fields onto
+// GlobalGameConfig's own live columns; editing a slot afterward (the existing nav-sounds.post.js
+// endpoint) writes through to whichever preset GlobalGameConfig.activeUiSoundPresetId names, so
+// the two never drift apart while that preset is the active one.
+model UiSoundPreset {
+  id                String   @id @default(uuid())
+  name              String   @unique
+  uiClickSoundPath  String?
+  uiNavButtonSounds Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+// A named, swappable site-wide color scheme — see GlobalGameConfig.useDefaultSiteTheme/
+// activeSiteThemeId's own comment for the on/off toggle. Each field is a hex color mapped
+// straight onto one of the CSS custom properties layouts/newsite-template.vue's :root block
+// already defines (so applying a theme never changes layout/structure, only color) — see
+// server/api/global-config.get.js for how these get resolved into the effective values every
+// page actually renders with. Field names intentionally mirror the CSS var names they override.
+model SiteTheme {
+  id             String   @id @default(uuid())
+  name           String   @unique
+  orbitDarkBlue  String // --OrbitDarkBlue: topbar/sidebar-top/sidebar-bottom background, BlueButton border
+  orbitLightBlue String // --OrbitLightBlue: topbar-nav-left/sidebar background, BlueButton fill
+  orbitGreen     String // --OrbitGreen: GreenButton and other accent/success uses
+  bgColor        String // --bg-color: page background behind the fixed-size site chrome
+  textColor      String // --text-color: base body text color
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model WishlistItem {
@@ -3458,6 +3551,14 @@ model CMoon {
   textColor          String? // overrides primary text (auto: text)
   cardBgColor        String? // overrides tile/card backgrounds, incl. featured cToon cards (auto: tileBg)
   discordRoleId      String? // Discord role snowflake granted to members (add-only sync)
+  // Discord channel snowflake this team's own content posts to: raid-boss announcements/live
+  // round-by-round updates/recap (server/utils/cmoonRaidSocket.js), and anything else that's
+  // genuinely this ONE team's activity rather than a site-wide broadcast. Distinct from
+  // GlobalGameConfig.cMoonRaidBossDiscordChannelId, which remains the fallback for a cMoon that
+  // hasn't set this — so turning this on is opt-in per team, not a breaking change for any cMoon
+  // an admin hasn't gotten to yet. Same admin-configurable-with-fallback shape as every other
+  // Discord channel setting in this codebase (see cmoon-settings.post.js's own fields).
+  discordChannelId   String?
   // Optional full-screen animation played on cMoon-select and achievement-claim (see enum above).
   // Null = no effect, proceed immediately. Mutually exclusive with customJoinEffectId below.
   effectType         CMoonEffectType?
@@ -5122,6 +5223,8 @@ model EncyclopediaEntry {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
+  riddles CMoonRiddle[]
+
   @@index([active, sortOrder])
 }
 
@@ -5365,6 +5468,7 @@ model CMoonEnemyMember {
   rewards CMoonEnemyReward[]
   battles CMoonEnemyBattle[]
   raids   CMoonEnemyRaid[]
+  riddles CMoonRiddle[]
 
   @@index([active, defeatedAt, sortOrder])
 }
@@ -5572,6 +5676,151 @@ model CMoonEnemyRaidParticipant {
 
   @@unique([raidId, userId])
   @@index([userId])
+}
+
+// ── cMoon Discord Engagement: Riddles feature ────────────────────────────
+// Team-engagement riddles posted to cMoon Discord channels, solved via the bot's /riddle slash
+// command (server/api/discord/interactions.post.js) with a private reply so the answer is never
+// spoiled in the channel for anyone else. One shared model covers both kinds this feature needs:
+// a WEEKLY riddle (one global riddle per week — see server/utils/cmoonRiddleRotation.js — the
+// first correct solver ANYWHERE credits their own cMoon) and a BOSS_LORE riddle (tied to one
+// CMoonEnemyMember, gating whether that raid boss can be challenged at all until solved). The two
+// are structurally identical (question + answer + "who solved it first") and differ only in
+// trigger/payoff, so this is one table with a `kind` discriminator rather than two nearly
+// duplicate ones.
+enum CMoonRiddleKind {
+  WEEKLY
+  BOSS_LORE
+}
+
+model CMoonRiddle {
+  id       String          @id @default(uuid())
+  kind     CMoonRiddleKind
+  question String
+  // Compared case/whitespace-insensitively (see normalizeRiddleAnswer in
+  // server/utils/cmoonRiddle.js) — admins type a natural answer, not a regex.
+  answer   String
+  // BOSS_LORE only: which raid boss this riddle gates (null for WEEKLY). Solving it is checked
+  // alongside raidOneTime/raidCooldownMinutes in checkRaidBossAvailability (see that function's
+  // own comment in server/utils/cmoonEnemyRaid.js) — unsolved blocks the raid the same way an
+  // undefeated cooldown does. Cascades: a riddle has no purpose once its boss is gone.
+  enemyMemberId       String?
+  // Optional flavor link to an Encyclopedia entry shown alongside a BOSS_LORE riddle — purely
+  // cosmetic, never read by the gate check itself.
+  encyclopediaEntryId String?
+  // Admin on/off switch, same convention as CMoonEnemyMember.active — an inactive riddle is never
+  // posted/offered and never gates anything, but stays visible/editable in the admin list.
+  active   Boolean  @default(true)
+  // WEEKLY only: when this week's riddle was broadcast to every cMoon's Discord channel. Null
+  // until the rotation job actually posts it, so an admin can author next week's riddle well
+  // ahead of time without it going out early. Always null for BOSS_LORE (posted as part of the
+  // boss's own gate copy instead, not broadcast on a schedule).
+  postedAt DateTime?
+  // Set ONCE, via a single atomic conditional UPDATE ... WHERE solvedAt IS NULL (see
+  // claimCMoonRiddleSolve in server/utils/cmoonRiddle.js) — the "first solver wins" guarantee two
+  // concurrent /riddle submissions can never both win. Null means still open.
+  solvedAt       DateTime?
+  solvedByUserId String?
+  // Snapshot of the solver's cMoon AT solve time, not a live lookup — crediting stays correct
+  // even if the solver later switches teams.
+  solvedByCMoonId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  enemyMember       CMoonEnemyMember?  @relation(fields: [enemyMemberId], references: [id], onDelete: Cascade)
+  encyclopediaEntry EncyclopediaEntry? @relation(fields: [encyclopediaEntryId], references: [id], onDelete: SetNull)
+
+  @@index([kind, active])
+  @@index([enemyMemberId])
+}
+
+// ── cMoon Discord Engagement: Split-Clue Scavenger Hunt ──────────────────
+// Team-cooperative puzzle, distinct from the existing (solo/personal) Scavenger Hunt feature —
+// shares no models with it. An admin authors a hunt as N clues plus one final answer; the moment
+// it's posted (see postCMoonHunt in server/utils/cmoonHunt.js), every current member of EVERY
+// cMoon is privately DMed exactly one clue (round-robin across that team's own member list if
+// there are more members than clues or vice versa) — nobody on a team sees anyone else's clue.
+// The team has to share what they each learned in their own Discord channel to piece together
+// the final answer, then anyone on the team submits it via /hunt. Ad-hoc/event-driven (an admin
+// posts it whenever they want), not a schedule like the WEEKLY CMoonRiddle rotation. Unlike
+// CMoonRiddle (one global winner), every cMoon can complete the SAME hunt once, independently —
+// see CMoonHuntCompletion's own comment for why.
+model CMoonHunt {
+  id          String    @id @default(uuid())
+  title       String // admin-facing label only, never shown to players
+  // Compared case/whitespace-insensitively, same convention as CMoonRiddle.answer (see
+  // normalizeRiddleAnswer in server/utils/cmoonRiddleAnswer.js, reused here unchanged).
+  finalAnswer String
+  // Admin on/off switch. An inactive hunt can never be posted and is excluded from every open-hunt
+  // lookup, but a hunt already posted before being flipped off just stops accepting NEW
+  // completions — teams that already solved it keep their CMoonHuntCompletion row.
+  active      Boolean   @default(true)
+  // Set the moment clues are actually DMed out (see postCMoonHunt) — null means authored but not
+  // yet sent. An admin can stage a hunt (author it inactive, or active but not yet posted) ahead
+  // of when they want it to go out, same "author now, post later" shape as a WEEKLY CMoonRiddle.
+  postedAt    DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  clues       CMoonHuntClue[]
+  assignments CMoonHuntAssignment[]
+  completions CMoonHuntCompletion[]
+}
+
+// One admin-authored clue, never shown to a player on its own — see CMoonHuntAssignment for how
+// one clue reaches exactly one (or more, if a team has fewer members than clues) member.
+model CMoonHuntClue {
+  id        String   @id @default(uuid())
+  huntId    String
+  // Authoring order; also the order clues are handed out in the round-robin assignment
+  // (server/utils/cmoonHunt.js), though which TEAM MEMBER gets which clue is still randomized.
+  sortOrder Int      @default(0)
+  text      String
+  createdAt DateTime @default(now())
+
+  hunt        CMoonHunt             @relation(fields: [huntId], references: [id], onDelete: Cascade)
+  assignments CMoonHuntAssignment[]
+
+  @@index([huntId, sortOrder])
+}
+
+// Snapshot of which clue each cMoon member received once a hunt posted — a point-in-time DM
+// record, not a live membership join (a player who leaves their cMoon after this keeps their
+// row). cMoonId is a plain scalar column with no Prisma relation, same "loose FK" convention as
+// CMoonScoreLog/CMoonRiddle's own solvedBy* columns.
+model CMoonHuntAssignment {
+  id         String   @id @default(uuid())
+  huntId     String
+  clueId     String
+  cMoonId    String
+  userId     String
+  assignedAt DateTime @default(now())
+
+  hunt CMoonHunt     @relation(fields: [huntId], references: [id], onDelete: Cascade)
+  clue CMoonHuntClue @relation(fields: [clueId], references: [id], onDelete: Cascade)
+  user User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([huntId, userId])
+  @@index([huntId, cMoonId])
+}
+
+// First successful /hunt submission of a hunt's finalAnswer, per cMoon — every cMoon runs the
+// SAME hunt independently (each with its own random clue assignment, see CMoonHuntAssignment) and
+// each can complete it exactly once, unlike CMoonRiddle's single global winner: a hunt rewards
+// every team's own cooperation rather than only whichever team happens to be fastest. Inserted
+// atomically by claimCMoonHuntCompletion in server/utils/cmoonHunt.js — the @@unique below IS the
+// "first completion for this team" guard (a second insert attempt fails with P2002), the same
+// role an atomic UPDATE...WHERE plays for CMoonRiddle's solvedAt.
+model CMoonHuntCompletion {
+  id          String   @id @default(uuid())
+  huntId      String
+  cMoonId     String
+  userId      String // whoever actually submitted the winning /hunt answer
+  completedAt DateTime @default(now())
+
+  hunt CMoonHunt @relation(fields: [huntId], references: [id], onDelete: Cascade)
+
+  @@unique([huntId, cMoonId])
 }
 
 // ── cMoon Season Nav feature ─────────────────────────────────────────────

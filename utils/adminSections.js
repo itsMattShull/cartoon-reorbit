@@ -72,6 +72,7 @@ export const ADMIN_SECTIONS = [
   S('tutorial', 'Manage Tutorial', 'content', nu('AdminManageTutorial')),
   S('certificate', 'Manage Certificate', 'content', nu('AdminManageCertificate')),
   S('encyclopedia', 'Manage Encyclopedia', 'content', nu('AdminManageEncyclopedia')),
+  S('siteTheme', 'Manage Site Theme', 'content', nu('AdminSiteTheme')),
 
   // ── Economy ─────────────────────────────────────────────────
   S('manageSales', 'Manage Sales', 'economy', nu('AdminManageSales')),
@@ -90,6 +91,8 @@ export const ADMIN_SECTIONS = [
   S('cmoonChangeRequests', 'cMoon Change Requests', 'games', nu('AdminCMoonChangeRequests')),
   S('manageNavigation', 'Manage Navigation', 'games', nu('AdminManageNavigation')),
   S('cMoonEnemies', 'Manage cMoon Enemies', 'games', nu('AdminCMoonEnemies')),
+  S('cMoonRiddles', 'cMoon Riddles', 'games', nu('AdminCMoonRiddles')),
+  S('cMoonHunts', 'cMoon Scavenger Hunts', 'games', nu('AdminCMoonHunts')),
   S('lotto', 'Manage Lotto', 'games', legacy('AdminLegacyLotto')),
   S('clashTournaments', 'Clash Tournaments', 'games', legacy('AdminLegacyClashTournaments')),
   S('monsters', 'Manage Monsters', 'games', legacy('AdminLegacyMonsters'), { dense: true }),

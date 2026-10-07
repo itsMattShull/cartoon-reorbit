@@ -108,6 +108,53 @@ export default defineEventHandler(async (event) => {
     data.cMoonEnemyHigherTierFirst = !!body.cMoonEnemyHigherTierFirst
   }
 
+  // cMoon points awarded for solving a riddle (either kind) — see claimCMoonRiddleSolve in
+  // server/utils/cmoonRiddle.js, the only reader.
+  if (body?.cMoonRiddlePoints !== undefined) {
+    const pts = Number(body.cMoonRiddlePoints)
+    if (!Number.isInteger(pts) || pts < 0 || pts > 10000) {
+      throw createError({ statusCode: 400, statusMessage: 'Riddle points must be a whole number between 0 and 10000' })
+    }
+    data.cMoonRiddlePoints = pts
+  }
+
+  // Weekly riddle auto-posting schedule — see server/cron/cmoon-riddle-rotation.js, the only
+  // reader of all four fields together.
+  if (body?.cMoonRiddleRotationEnabled !== undefined) {
+    data.cMoonRiddleRotationEnabled = !!body.cMoonRiddleRotationEnabled
+  }
+  if (body?.cMoonRiddleRotationDayOfWeek !== undefined) {
+    const dow = Number(body.cMoonRiddleRotationDayOfWeek)
+    if (!Number.isInteger(dow) || dow < 0 || dow > 6) {
+      throw createError({ statusCode: 400, statusMessage: 'Rotation day of week must be 0 (Sunday) through 6 (Saturday)' })
+    }
+    data.cMoonRiddleRotationDayOfWeek = dow
+  }
+  if (body?.cMoonRiddleRotationHour !== undefined) {
+    const hour = Number(body.cMoonRiddleRotationHour)
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+      throw createError({ statusCode: 400, statusMessage: 'Rotation hour must be a whole number between 0 and 23' })
+    }
+    data.cMoonRiddleRotationHour = hour
+  }
+  if (body?.cMoonRiddleRotationMinute !== undefined) {
+    const minute = Number(body.cMoonRiddleRotationMinute)
+    if (!Number.isInteger(minute) || minute < 0 || minute > 59) {
+      throw createError({ statusCode: 400, statusMessage: 'Rotation minute must be a whole number between 0 and 59' })
+    }
+    data.cMoonRiddleRotationMinute = minute
+  }
+
+  // cMoon points awarded to EACH cMoon that completes a split-clue scavenger hunt — see
+  // claimCMoonHuntCompletion in server/utils/cmoonHunt.js, the only reader.
+  if (body?.cMoonHuntPoints !== undefined) {
+    const pts = Number(body.cMoonHuntPoints)
+    if (!Number.isInteger(pts) || pts < 0 || pts > 10000) {
+      throw createError({ statusCode: 400, statusMessage: 'Hunt points must be a whole number between 0 and 10000' })
+    }
+    data.cMoonHuntPoints = pts
+  }
+
   const updated = await db.globalGameConfig.upsert({
     where: { id: 'singleton' },
     create: { id: 'singleton', dailyPointLimit: 100, ...data },
@@ -128,6 +175,12 @@ export default defineEventHandler(async (event) => {
       cMoonRaidBossDiscordChannelId: existing?.cMoonRaidBossDiscordChannelId,
       cMoonEnemyBattleDefaultHp: existing?.cMoonEnemyBattleDefaultHp,
       cMoonEnemyHigherTierFirst: existing?.cMoonEnemyHigherTierFirst,
+      cMoonRiddlePoints: existing?.cMoonRiddlePoints,
+      cMoonRiddleRotationEnabled: existing?.cMoonRiddleRotationEnabled,
+      cMoonRiddleRotationDayOfWeek: existing?.cMoonRiddleRotationDayOfWeek,
+      cMoonRiddleRotationHour: existing?.cMoonRiddleRotationHour,
+      cMoonRiddleRotationMinute: existing?.cMoonRiddleRotationMinute,
+      cMoonHuntPoints: existing?.cMoonHuntPoints,
     },
     newValue: {
       cMoonEnabled: enabled,
@@ -139,6 +192,12 @@ export default defineEventHandler(async (event) => {
       cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
       cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
       cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,
+      cMoonRiddlePoints: updated.cMoonRiddlePoints,
+      cMoonRiddleRotationEnabled: updated.cMoonRiddleRotationEnabled,
+      cMoonRiddleRotationDayOfWeek: updated.cMoonRiddleRotationDayOfWeek,
+      cMoonRiddleRotationHour: updated.cMoonRiddleRotationHour,
+      cMoonRiddleRotationMinute: updated.cMoonRiddleRotationMinute,
+      cMoonHuntPoints: updated.cMoonHuntPoints,
     },
   })
 
@@ -152,5 +211,11 @@ export default defineEventHandler(async (event) => {
     cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
     cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
     cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,
+    cMoonRiddlePoints: updated.cMoonRiddlePoints,
+    cMoonRiddleRotationEnabled: updated.cMoonRiddleRotationEnabled,
+    cMoonRiddleRotationDayOfWeek: updated.cMoonRiddleRotationDayOfWeek,
+    cMoonRiddleRotationHour: updated.cMoonRiddleRotationHour,
+    cMoonRiddleRotationMinute: updated.cMoonRiddleRotationMinute,
+    cMoonHuntPoints: updated.cMoonHuntPoints,
   }
 })

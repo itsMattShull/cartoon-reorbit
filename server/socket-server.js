@@ -1822,9 +1822,9 @@ async function resolveSocketUser(socket) {
   try {
     const user = await db.user.findUnique({
       where: { id: userId },
-      select: { id: true, username: true, banned: true }
+      select: { id: true, username: true, banned: true, suspendedUntil: true }
     })
-    if (!user || user.banned || !user.username) {
+    if (!user || user.banned || !user.username || (user.suspendedUntil && user.suspendedUntil > new Date())) {
       socket.data.authUser = null
       return null
     }

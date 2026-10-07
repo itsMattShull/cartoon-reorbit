@@ -346,6 +346,7 @@ html.newsite-active [role="button"]:not([aria-disabled="true"]) {
 <script setup>
 import { computeSiteScale, scaleMarginBottom, MOBILE_QUERY } from '~/utils/siteScale'
 import { useClickSoundEffects } from '@/composables/useClickSoundEffects'
+import { useSiteTheme } from '@/composables/useSiteTheme'
 
 const route = useRoute()
 // Mirrors layouts/default.vue's own admin exclusion (`!route.path.startsWith('/admin')`) — the
@@ -374,6 +375,13 @@ const resolveMeta = value =>
 const pageTitle = computed(() => resolveMeta(route.meta.title))
 const fullTitle = computed(() => (pageTitle.value ? `${pageTitle.value} | ${siteName}` : siteName))
 const pageDescription = computed(() => resolveMeta(route.meta.description) || defaultDescription)
+
+// Admin-managed color theme (Manage Site Theme) — SSR-rendered so there's no flash of the
+// hardcoded default chrome before a custom theme snaps in. Overrides the :root vars set in
+// this file's own <style> block above by relying on CSS source order: this <style> tag is
+// injected into <head> after the one unhead already emitted for this SFC's static block.
+const { styleText: siteThemeStyle } = useSiteTheme()
+useHead({ style: [{ key: 'site-theme-vars', children: siteThemeStyle }] })
 
 useHead({ title: fullTitle })
 useSeoMeta({

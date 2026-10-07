@@ -3,6 +3,7 @@ import { defineEventHandler, setResponseHeader } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { isValidUiClickSoundPath, sanitizeUiNavButtonSounds } from '@/server/utils/uiClickSoundPath'
 import { NAV_SOUND_SLOT_KEYS } from '@/utils/navSoundSlots'
+import { resolveEffectiveSiteTheme } from '@/server/utils/siteTheme'
 
 export default defineEventHandler(async (event) => {
   // Called on every page load by every visitor (unlike the admin-only config endpoints), so
@@ -12,13 +13,16 @@ export default defineEventHandler(async (event) => {
 
   // Fetch singleton; if missing, synthesize defaults (no writes in public endpoint)
   const cfg = await db.globalGameConfig.findUnique({ where: { id: 'singleton' } })
+  const siteTheme = await resolveEffectiveSiteTheme(db, cfg)
   return {
+    siteTheme,
     dailyPointLimit:    cfg?.dailyPointLimit    ?? 250,
     dailyLoginPoints:   cfg?.dailyLoginPoints   ?? 500,
     dailyNewUserPoints: cfg?.dailyNewUserPoints ?? 1000,
     czoneVisitPoints:   cfg?.czoneVisitPoints   ?? 20,
     czoneVisitMaxPerDay: cfg?.czoneVisitMaxPerDay ?? 10,
     czoneCount: cfg?.czoneCount ?? 3,
+    logoPath: cfg?.logoPath ?? null,
     secondEditionOverlayPath:   cfg?.secondEditionOverlayPath   ?? null,
     secondEditionOverlayWidth:  cfg?.secondEditionOverlayWidth  ?? null,
     secondEditionOverlayHeight: cfg?.secondEditionOverlayHeight ?? null,
