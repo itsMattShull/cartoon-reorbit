@@ -33,6 +33,7 @@ function normalizeZones(layoutData, background, targetCount) {
 
 export default defineEventHandler(async (event) => {
   const { username } = event.context.params
+  if (!username) throw createError({ statusCode: 400, statusMessage: 'Username is required' })
 
   // 1) Fetch user by username, including their cZones
   const user = await prisma.user.findUnique({
