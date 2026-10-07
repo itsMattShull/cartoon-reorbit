@@ -582,7 +582,7 @@ const schedule = computed(() => {
   if (!hasQty || !hasDate) return { initialQty: null, finalQty: null, finalAt: null, finalAtDisplay: '' }
   const init = Math.max(1, Math.floor((qty * Number(releasePercent.value)) / 100))
   const fin = Math.max(0, qty - init)
-  const base = new Date(releaseDate.value)
+  const base = zonedTimeToUtc(releaseDate.value, 'America/Chicago')
   const finAt = new Date(base.getTime() + Number(delayHours.value) * 60 * 60 * 1000)
   const finDisplay = finAt.toLocaleString('en-US', { timeZone: 'America/Chicago', hour12: false })
   return { initialQty: init, finalQty: fin, finalAt: finAt, finalAtDisplay: finDisplay }
