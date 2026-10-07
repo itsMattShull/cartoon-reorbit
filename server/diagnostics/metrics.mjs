@@ -26,6 +26,8 @@ function normalizeRoute(url) {
   const path = queryIndex === -1 ? url : url.slice(0, queryIndex)
   const parts = path.split('/').filter(Boolean)
   if (!parts.length) return '/'
+  // /api is one huge bucket otherwise — keep the first area under it (e.g. /api/czone)
+  if (parts[0] === 'api' && parts.length > 1) return `/api/${parts[1]}`
   return `/${parts[0]}`
 }
 
