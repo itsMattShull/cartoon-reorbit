@@ -257,22 +257,34 @@ async function recomputeLastActivity() {
     return
   }
   try {
-    // Note: PostgreSQL quoted identifiers must match your table/column names.
-    const sql = `
-    UPDATE "User" u SET "lastActivity" = GREATEST(
-      COALESCE(u."lastLogin", TIMESTAMP 'epoch'),
-      COALESCE( (SELECT MAX(l."createdAt") FROM "LoginLog" l WHERE l."userId" = u."id"),   TIMESTAMP 'epoch'),
-      COALESCE( (SELECT MAX(p."createdAt") FROM "PointsLog" p WHERE p."userId" = u."id"),  TIMESTAMP 'epoch'),
-      COALESCE( (SELECT MAX(g."createdAt") FROM "GamePointLog" g WHERE g."userId" = u."id"), TIMESTAMP 'epoch'),
-      COALESCE( (SELECT MAX(v."createdAt") FROM "Visit" v WHERE v."userId" = u."id"),      TIMESTAMP 'epoch'),
-      COALESCE( (SELECT MAX(w."createdAt") FROM "WheelSpinLog" w WHERE w."userId" = u."id"), TIMESTAMP 'epoch'),
-      COALESCE(u."createdAt", TIMESTAMP 'epoch')
-    )
-    WHERE TRUE;`
+    // Done in id-ordered batches, each its own short statement/transaction, instead of one
+    // full-table UPDATE. A single UPDATE holds row locks on every User row it has touched
+    // until it finishes (minutes on a big table), so any single-row write to User in that
+    // window — most visibly the login callback's `lastLogin` update — blocks behind it.
+    // Short batches release their locks after a fraction of a second.
     // No inner try/catch: let a failure here propagate to the runJob() wrapper at the call
     // site so it lands in CronErrorLog instead of vanishing silently, as it did for a long
     // time when this only had a bare `catch {}`.
-    await prisma.$executeRawUnsafe(sql)
+    const BATCH_SIZE = 500
+    let lastId = ''
+    for (;;) {
+      const ids = await prisma.$queryRaw`SELECT id FROM "User" WHERE id > ${lastId} ORDER BY id LIMIT ${BATCH_SIZE}`
+      if (!ids.length) break
+      const batchEnd = ids[ids.length - 1].id
+      // Note: PostgreSQL quoted identifiers must match your table/column names.
+      await prisma.$executeRaw`
+        UPDATE "User" u SET "lastActivity" = GREATEST(
+          COALESCE(u."lastLogin", TIMESTAMP 'epoch'),
+          COALESCE( (SELECT MAX(l."createdAt") FROM "LoginLog" l WHERE l."userId" = u."id"),   TIMESTAMP 'epoch'),
+          COALESCE( (SELECT MAX(p."createdAt") FROM "PointsLog" p WHERE p."userId" = u."id"),  TIMESTAMP 'epoch'),
+          COALESCE( (SELECT MAX(g."createdAt") FROM "GamePointLog" g WHERE g."userId" = u."id"), TIMESTAMP 'epoch'),
+          COALESCE( (SELECT MAX(v."createdAt") FROM "Visit" v WHERE v."userId" = u."id"),      TIMESTAMP 'epoch'),
+          COALESCE( (SELECT MAX(w."createdAt") FROM "WheelSpinLog" w WHERE w."userId" = u."id"), TIMESTAMP 'epoch'),
+          COALESCE(u."createdAt", TIMESTAMP 'epoch')
+        )
+        WHERE u.id > ${lastId} AND u.id <= ${batchEnd}`
+      lastId = batchEnd
+    }
   } finally {
     await prisma.$queryRaw`SELECT pg_advisory_unlock(${USER_TABLE_BULK_WRITE_LOCK_KEY}::bigint)`
   }
