@@ -45,24 +45,11 @@ import { USER_TABLE_BULK_WRITE_LOCK_KEY } from '../utils/dbLocks.js'
 // and used to be able to land in the same tick and deadlock each other.
 const LOCK_KEY = USER_TABLE_BULK_WRITE_LOCK_KEY
 
-const RECOMPUTE_SQL = `
-  WITH totals AS (
-    SELECT u.id AS user_id, COALESCE(SUM(csl.points), 0) AS total
-    FROM "User" u
-    LEFT JOIN "CMoonScoreLog" csl
-      ON csl."userId" = u.id
-     AND csl."cMoonId" = u."cMoonId"
-     AND csl."createdAt" >= u."cMoonSelectedAt"
-    WHERE u."cMoonId" IS NOT NULL
-    GROUP BY u.id
-  )
-  UPDATE "User" u
-  SET "cMoonPoints" = totals.total
-  FROM totals
-  WHERE u.id = totals.user_id
-    AND u."cMoonPoints" IS DISTINCT FROM totals.total
-  RETURNING u.id
-`
+// The full recompute runs in id-ordered batches (see runCMoonPointsAggregate) rather than as one
+// statement over every cMoon member. A single UPDATE holds row locks on every User row it has
+// changed until it commits, so any single-row write to User in that window (login's lastLogin
+// update, a cMoon opt-out, ...) blocks behind it. Short batches release their locks quickly.
+const BATCH_SIZE = 500
 
 async function enqueueAchievementChecks(changedUserIds) {
   // A points-total change is the only thing that can newly satisfy a cMoonPointsGte
@@ -85,8 +72,34 @@ export async function runCMoonPointsAggregate() {
   }
 
   try {
-    const changedRows = await prisma.$queryRawUnsafe(RECOMPUTE_SQL)
-    const changedUserIds = changedRows.map(r => r.id)
+    const changedUserIds = []
+    let lastId = ''
+    for (;;) {
+      const batch = await prisma.$queryRaw`
+        SELECT id FROM "User" WHERE "cMoonId" IS NOT NULL AND id > ${lastId} ORDER BY id LIMIT ${BATCH_SIZE}`
+      if (!batch.length) break
+      const batchEnd = batch[batch.length - 1].id
+      const changedRows = await prisma.$queryRaw`
+        WITH totals AS (
+          SELECT u.id AS user_id, COALESCE(SUM(csl.points), 0) AS total
+          FROM "User" u
+          LEFT JOIN "CMoonScoreLog" csl
+            ON csl."userId" = u.id
+           AND csl."cMoonId" = u."cMoonId"
+           AND csl."createdAt" >= u."cMoonSelectedAt"
+          WHERE u."cMoonId" IS NOT NULL AND u.id > ${lastId} AND u.id <= ${batchEnd}
+          GROUP BY u.id
+        )
+        UPDATE "User" u
+        SET "cMoonPoints" = totals.total
+        FROM totals
+        WHERE u.id = totals.user_id
+          AND u."cMoonPoints" IS DISTINCT FROM totals.total
+        RETURNING u.id
+      `
+      for (const r of changedRows) changedUserIds.push(r.id)
+      lastId = batchEnd
+    }
     await enqueueAchievementChecks(changedUserIds)
     console.log(`[cmoon-points-aggregate] recomputed cMoonPoints, ${changedUserIds.length} user(s) changed`)
     return { changed: changedUserIds.length }
