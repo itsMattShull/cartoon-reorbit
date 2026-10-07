@@ -25,6 +25,21 @@ async function getRoleIdByName(guildId, roleName, botToken) {
   return role ? role.id : null
 }
 
+// Logs a step only when it is slow, so a stalled login (locked user row, rate-limited
+// Discord call, exhausted pool) shows exactly where the time went.
+const SLOW_STEP_MS = 2000
+async function timed(label, fn, discordId) {
+  const start = Date.now()
+  try {
+    return await fn()
+  } finally {
+    const ms = Date.now() - start
+    if (ms >= SLOW_STEP_MS) {
+      console.warn(`[discord-callback] slow step "${label}" took ${ms}ms${discordId ? ` (discordId=${discordId})` : ''}`)
+    }
+  }
+}
+
 export default defineEventHandler(async (event) => {
   const { code, error, error_description } = getQuery(event)
   if (error) throw createError({ statusCode: 400, statusMessage: error_description || error })
@@ -37,7 +52,7 @@ export default defineEventHandler(async (event) => {
   // 1) Token exchange
   let tokenRes
   try {
-    tokenRes = await $fetch('https://discord.com/api/oauth2/token', {
+    tokenRes = await timed('token exchange', () => $fetch('https://discord.com/api/oauth2/token', {
       method: 'POST',
       body: new URLSearchParams({
         client_id: clientId,
@@ -47,7 +62,7 @@ export default defineEventHandler(async (event) => {
         redirect_uri: redirectUri
       }),
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-    })
+    }))
   } catch (err) {
     // A code is single-use and short-lived: a reload/retry of the callback URL (or a
     // callback that stalled and was retried) comes back as invalid_grant. Send the user
@@ -63,14 +78,14 @@ export default defineEventHandler(async (event) => {
   const authHeader = { Authorization: `Bearer ${access_token}` }
 
   // 2) Discord user
-  const discordUser = await $fetch('https://discord.com/api/users/@me', { headers: authHeader })
+  const discordUser = await timed('discord @me', () => $fetch('https://discord.com/api/users/@me', { headers: authHeader }))
   const discordCreatedAt = parseDiscordSnowflake(discordUser.id)
 
   // 🚫 If any row for this discordId is banned, refuse login/creation
-  const bannedRow = await prisma.user.findFirst({
+  const bannedRow = await timed('ban check', () => prisma.user.findFirst({
     where: { discordId: discordUser.id, banned: true },
     select: { id: true }
-  })
+  }), discordUser.id)
   if (bannedRow) {
     // no session cookie, just bounce with a banner
     return sendRedirect(event, '/join-discord?banned=1')
@@ -79,16 +94,17 @@ export default defineEventHandler(async (event) => {
   // 🚫 Temporary suspension — checked against the ACTIVE row only (not any inactive/dissolved
   // one), since that's the account identity actually being logged into. See User.suspendedUntil's
   // schema comment for why this is kept separate from `banned`.
-  const activeRowForSuspension = await prisma.user.findFirst({
+  const activeRowForSuspension = await timed('suspension check', () => prisma.user.findFirst({
     where: { discordId: discordUser.id, active: true },
     select: { suspendedUntil: true }
-  })
+  }), discordUser.id)
   if (activeRowForSuspension?.suspendedUntil && activeRowForSuspension.suspendedUntil > new Date()) {
     return sendRedirect(event, `/join-discord?suspended=1&until=${encodeURIComponent(activeRowForSuspension.suspendedUntil.toISOString())}`)
   }
 
   // 3) Best-effort auto-join to guild
   try {
+    await timed('guild auto-join', async () => {
     await $fetch(`https://discord.com/api/guilds/${guildId}/members/${discordUser.id}`, {
       method: 'PUT',
       headers: { Authorization: botToken, 'Content-Type': 'application/json' },
@@ -101,6 +117,7 @@ export default defineEventHandler(async (event) => {
         { method: 'PUT', headers: { Authorization: botToken, 'Content-Type': 'application/json' } }
       )
     }
+    }, discordUser.id)
   } catch { /* non-fatal */ }
 
   // 4) Persist: allow one ACTIVE user per discordId. If existing is inactive, create a new user.
@@ -110,16 +127,16 @@ export default defineEventHandler(async (event) => {
 
   let result
   try {
-    const existingActive = await prisma.user.findFirst({
+    const existingActive = await timed('find active user', () => prisma.user.findFirst({
       where: { discordId: discordUser.id, active: true },
-    })
+    }), discordUser.id)
 
     if (existingActive) {
       // Existing user: a plain update, not an interactive transaction. An interactive
       // transaction has a 5s window, so if this row is locked by another transaction
       // (e.g. a worker holding the official account's row) the update would only run
       // after the window expired and fail with P2028 after minutes of waiting.
-      const updated = await prisma.user.update({
+      const updated = await timed('update user (row lock?)', () => prisma.user.update({
         where: { id: existingActive.id },
         data: {
           discordUsername: discordUser.username || null,
@@ -133,7 +150,7 @@ export default defineEventHandler(async (event) => {
           tokenExpiresAt,
           lastLogin: now
         }
-      })
+      }), discordUser.id)
       result = { user: updated, isNew: false }
     } else {
       // New user: if inactive users with this discordId exist, we may need to free their
@@ -176,11 +193,11 @@ export default defineEventHandler(async (event) => {
   // 4.1 Save IP
   const ip = getRequestIP(event)
   if (ip) {
-    await prisma.userIP.upsert({
+    await timed('save ip', () => prisma.userIP.upsert({
       where: { userId_ip: { userId: result.user.id, ip } },
       update: {},
       create: { userId: result.user.id, ip }
-    })
+    }), discordUser.id)
   }
 
   // 5) Session cookie
