@@ -34,7 +34,10 @@ const OFFICIAL_USERNAME_PROD = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitO
 const OFFICIAL_USERNAME_DEV  = process.env.OFFICIAL_USERNAME || 'UmbraRobotTycoon'
 
 const DIAG_ENV = {
-  DIAG_ENABLED:           '0',
+  // Off by default. To turn on per-minute telemetry (heap/handles/request counts by route) and
+  // heap snapshots via `kill -USR2 <pid>`, set DIAG_ENABLED=1 in .env and
+  // `pm2 reload ecosystem.config.cjs --update-env` — no need to edit this file.
+  DIAG_ENABLED:           process.env.DIAG_ENABLED || '0',
   DIAG_DIR:               '/var/www/log/cartoon-reorbit/diagnostics',
   DIAG_INTERVAL_SEC:      '60',
   DIAG_LOG_MAX_MB:        '200',
