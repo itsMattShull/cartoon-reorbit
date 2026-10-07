@@ -35,17 +35,29 @@ export default defineEventHandler(async (event) => {
   const botToken = config.botToken
 
   // 1) Token exchange
-  const tokenRes = await $fetch('https://discord.com/api/oauth2/token', {
-    method: 'POST',
-    body: new URLSearchParams({
-      client_id: clientId,
-      client_secret: clientSecret,
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: redirectUri
-    }),
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
-  })
+  let tokenRes
+  try {
+    tokenRes = await $fetch('https://discord.com/api/oauth2/token', {
+      method: 'POST',
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'authorization_code',
+        code,
+        redirect_uri: redirectUri
+      }),
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    })
+  } catch (err) {
+    // A code is single-use and short-lived: a reload/retry of the callback URL (or a
+    // callback that stalled and was retried) comes back as invalid_grant. Send the user
+    // back to start a fresh login instead of surfacing an unhandled 500.
+    if (err?.data?.error === 'invalid_grant') {
+      console.warn('[discord-callback] invalid_grant (code already used or expired)')
+      return sendRedirect(event, '/?loginError=expired')
+    }
+    throw err
+  }
   const { access_token, refresh_token, expires_in } = tokenRes || {}
   if (!access_token) throw createError({ statusCode: 401, statusMessage: 'Token exchange failed' })
   const authHeader = { Authorization: `Bearer ${access_token}` }
@@ -85,65 +97,70 @@ export default defineEventHandler(async (event) => {
   const tokenExpiresAt = new Date(Date.now() + expires_in * 1000)
   const displayName = discordUser.global_name || discordUser.username || 'Unknown'
 
-  const result = await prisma.$transaction(async (tx) => {
-    // find active user with this discordId
-    const activeUser = await tx.user.findFirst({
+  let result
+  try {
+    const existingActive = await prisma.user.findFirst({
       where: { discordId: discordUser.id, active: true },
     })
 
-    // if inactive users exist with this discordId, we might need to free their email
-    const inactiveUsers = await tx.user.findMany({
-      where: { discordId: discordUser.id, active: false },
-      select: { id: true, email: true }
-    })
-
-    // If we are going to CREATE a new active user, clear email on any inactive row that would collide
-    const emailInUseByInactive = inactiveUsers.find(u => u.email && u.email === discordUser.email)
-
-    if (!activeUser) {
-      if (emailInUseByInactive) {
-        await tx.user.update({
-          where: { id: emailInUseByInactive.id },
-          data: { email: null }
-        })
-      }
-      // create fresh active user
-      const created = await tx.user.create({
+    if (existingActive) {
+      // Existing user: a plain update, not an interactive transaction. An interactive
+      // transaction has a 5s window, so if this row is locked by another transaction
+      // (e.g. a worker holding the official account's row) the update would only run
+      // after the window expired and fail with P2028 after minutes of waiting.
+      const updated = await prisma.user.update({
+        where: { id: existingActive.id },
         data: {
-          discordId: discordUser.id,
           discordUsername: discordUser.username || null,
           discordTag: displayName,
           discordAvatar: discordUser.avatar,
-          email: emailInUseByInactive ? null : discordUser.email,
+          // keep email unique; only update if email is free or belongs to this user
+          email: discordUser.email ?? existingActive.email,
           accessToken: access_token,
           refreshToken: refresh_token,
           discordCreatedAt,
           tokenExpiresAt,
-          lastLogin: now,
-          active: true
+          lastLogin: now
         }
       })
-      return { user: created, isNew: true }
+      result = { user: updated, isNew: false }
+    } else {
+      // New user: if inactive users with this discordId exist, we may need to free their
+      // email first so the create doesn't collide — keep both writes atomic.
+      result = await prisma.$transaction(async (tx) => {
+        const inactiveUsers = await tx.user.findMany({
+          where: { discordId: discordUser.id, active: false },
+          select: { id: true, email: true }
+        })
+        const emailInUseByInactive = inactiveUsers.find(u => u.email && u.email === discordUser.email)
+        if (emailInUseByInactive) {
+          await tx.user.update({
+            where: { id: emailInUseByInactive.id },
+            data: { email: null }
+          })
+        }
+        const created = await tx.user.create({
+          data: {
+            discordId: discordUser.id,
+            discordUsername: discordUser.username || null,
+            discordTag: displayName,
+            discordAvatar: discordUser.avatar,
+            email: emailInUseByInactive ? null : discordUser.email,
+            accessToken: access_token,
+            refreshToken: refresh_token,
+            discordCreatedAt,
+            tokenExpiresAt,
+            lastLogin: now,
+            active: true
+          }
+        })
+        return { user: created, isNew: true }
+      })
     }
-
-    // else: update active user in place
-    const updated = await tx.user.update({
-      where: { id: activeUser.id },
-      data: {
-        discordUsername: discordUser.username || null,
-        discordTag: displayName,
-        discordAvatar: discordUser.avatar,
-        // keep email unique; only update if email is free or belongs to this user
-        email: discordUser.email ?? activeUser.email,
-        accessToken: access_token,
-        refreshToken: refresh_token,
-        discordCreatedAt,
-        tokenExpiresAt,
-        lastLogin: now
-      }
-    })
-    return { user: updated, isNew: false }
-  })
+  } catch (err) {
+    console.error(`[discord-callback] failed to persist login for discordId=${discordUser.id}:`, err?.message || err)
+    throw err
+  }
 
   // 4.1 Save IP
   const ip = getRequestIP(event)
