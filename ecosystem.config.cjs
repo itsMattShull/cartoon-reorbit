@@ -48,6 +48,14 @@ const DIAG_ENV = {
   DIAG_WS_METRICS:        '1',
 }
 
+// glibc malloc creates up to 8 arenas per core and Prisma's multi-threaded in-process query
+// engine fragments them: RSS climbs by hundreds of MB while the V8 heap stays small, and the
+// memory isn't returned to the OS (seen in telemetry: rss ~900 MB with heapUsed ~100 MB, which
+// then trips max_memory_restart). Capping the arenas keeps RSS closer to what's really in use.
+const NATIVE_MEM_ENV = {
+  MALLOC_ARENA_MAX: '2',
+}
+
 module.exports = {
   apps: [
     // ── Nuxt HTTP server ───────────────────────────────────────────────────
@@ -82,6 +90,7 @@ module.exports = {
         NITRO_PORT:          NUXT_PORT,
         NUXT_PORT:           NUXT_PORT,
         OFFICIAL_USERNAME:   OFFICIAL_USERNAME_PROD,
+        ...NATIVE_MEM_ENV,
         ...DIAG_ENV,
       },
       env_development: {
@@ -91,6 +100,7 @@ module.exports = {
         NITRO_PORT:          NUXT_PORT,
         NUXT_PORT:           NUXT_PORT,
         OFFICIAL_USERNAME:   OFFICIAL_USERNAME_DEV,
+        ...NATIVE_MEM_ENV,
         ...DIAG_ENV,
       },
     },
@@ -113,6 +123,7 @@ module.exports = {
         NODE_ENV:         'production',
         SOCKET_PORT:      SOCKET_PORT,
         OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD,
+        ...NATIVE_MEM_ENV,
         ...DIAG_ENV,
       },
       env_development: {
@@ -120,6 +131,7 @@ module.exports = {
         NODE_ENV:         'production',
         SOCKET_PORT:      SOCKET_PORT,
         OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV,
+        ...NATIVE_MEM_ENV,
         ...DIAG_ENV,
       },
     },
