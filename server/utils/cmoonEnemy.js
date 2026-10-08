@@ -504,6 +504,16 @@ export function pickWeightedEnemy(candidates) {
   return candidates[candidates.length - 1]
 }
 
+// Narrows the candidate pool to raid bosses only once a player has hit GlobalGameConfig's
+// cMoonEnemySpawnCapCount within the last cMoonEnemySpawnCapWindowHours — see that field's own
+// schema comment for why raid bosses are exempt. `capCount <= 0` means "no cap," a no-op; so does
+// `recentNonRaidCount < capCount` (still under the limit). consider.post.js is the only caller —
+// it already bails out with "nothing offered" if this empties the pool.
+export function filterCappedNonRaidCandidates(candidates, recentNonRaidCount, capCount) {
+  if (!capCount || capCount <= 0 || recentNonRaidCount < capCount) return candidates
+  return candidates.filter(c => c.isRaidBoss)
+}
+
 // Resolves a member's six battle sound paths, falling back to its faction's own default for
 // whichever slot the member left null — see CMoonEnemyFaction's default*SoundPath columns and
 // MEMBER_SOUND_SLOTS/FACTION_DEFAULT_SOUND_SLOTS's shared, index-aligned ordering above. `member`

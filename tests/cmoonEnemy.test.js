@@ -5,7 +5,7 @@ import {
   CRIT_CHANCE_MIN, CRIT_CHANCE_MAX, POINTS_REWARD_MIN, POINTS_REWARD_MAX, ENEMY_RANKS, RANK_DEFAULT,
   MIN_PRIOR_DEFEATS_MIN, MIN_PRIOR_DEFEATS_MAX, MIN_PRIOR_DEFEATS_DEFAULT,
   isValidOccurrencePercent, OCCURRENCE_PERCENT_MIN, OCCURRENCE_PERCENT_MAX, OCCURRENCE_PERCENT_DEFAULT,
-  filterToHighestRank, pickWeightedEnemy, resolveMemberSoundPaths,
+  filterToHighestRank, pickWeightedEnemy, filterCappedNonRaidCandidates, resolveMemberSoundPaths,
   MEMBER_SOUND_SLOTS, FACTION_DEFAULT_SOUND_SLOTS,
 } from '../server/utils/cmoonEnemy.js'
 
@@ -330,6 +330,35 @@ test('pickWeightedEnemy: heavily favors a much higher weight over many rolls (st
   // Expected ~99%; a wide tolerance band keeps this non-flaky while still catching a broken roll
   // (e.g. a regression back to uniform random, which would land this near 50%).
   assert.ok(highCount > trials * 0.9, `expected 'high' to win the vast majority of rolls, got ${highCount}/${trials}`)
+})
+
+// ── filterCappedNonRaidCandidates ─────────────────────────────────────────
+
+test('filterCappedNonRaidCandidates: cap of 0 (disabled) returns the list unchanged regardless of recent count', () => {
+  const candidates = [{ id: 'a', isRaidBoss: false }, { id: 'b', isRaidBoss: true }]
+  assert.deepEqual(filterCappedNonRaidCandidates(candidates, 999, 0), candidates)
+})
+
+test('filterCappedNonRaidCandidates: a negative cap is treated the same as 0 (disabled)', () => {
+  const candidates = [{ id: 'a', isRaidBoss: false }]
+  assert.deepEqual(filterCappedNonRaidCandidates(candidates, 999, -1), candidates)
+})
+
+test('filterCappedNonRaidCandidates: under the cap returns the list unchanged', () => {
+  const candidates = [{ id: 'a', isRaidBoss: false }, { id: 'b', isRaidBoss: true }]
+  assert.deepEqual(filterCappedNonRaidCandidates(candidates, 3, 4), candidates)
+})
+
+test('filterCappedNonRaidCandidates: at or above the cap narrows to raid bosses only', () => {
+  const nonRaid = { id: 'a', isRaidBoss: false }
+  const raid = { id: 'b', isRaidBoss: true }
+  assert.deepEqual(filterCappedNonRaidCandidates([nonRaid, raid], 4, 4), [raid])
+  assert.deepEqual(filterCappedNonRaidCandidates([nonRaid, raid], 5, 4), [raid])
+})
+
+test('filterCappedNonRaidCandidates: capped out with no raid boss candidates empties the list', () => {
+  const nonRaid = { id: 'a', isRaidBoss: false }
+  assert.deepEqual(filterCappedNonRaidCandidates([nonRaid], 4, 4), [])
 })
 
 // ── resolveMemberSoundPaths ──────────────────────────────────────────────
