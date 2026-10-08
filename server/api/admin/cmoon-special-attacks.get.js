@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
       effectType: a.effectType,
       amount: a.amount,
       soundPath: a.soundPath,
+      healsAllies: a.healsAllies,
       cmoonUsageCount: a._count?.cmoons ?? 0,
       enemyFactionUsageCount: a._count?.enemyFactions ?? 0,
     })),

@@ -562,6 +562,11 @@ export function parseSpecialAttackBody(body, existing) {
   const amount = body?.amount === undefined
     ? (existing ? existing.amount : undefined)
     : toNumber(body.amount)
+  // Only meaningful for HEAL_SELF (see that column's own schema comment) — a truthy value sent
+  // alongside any other effectType is silently normalized to false below rather than stored, so a
+  // stale client payload (or a leftover value from switching the dropdown away from HEAL_SELF and
+  // back) can never leave a meaningless flag set on a DAMAGE_OPPONENT/PARALYZE_OPPONENT/etc row.
+  const healsAlliesRaw = toBoolean(body?.healsAllies, existing ? !!existing.healsAllies : false)
 
   if (!isValidSpecialAttackName(name)) {
     return { ok: false, message: `Name is required (max ${SPECIAL_ATTACK_NAME_MAX_LENGTH} characters)` }
@@ -575,8 +580,12 @@ export function parseSpecialAttackBody(body, existing) {
   if (!isValidSpecialAttackAmount(amount)) {
     return { ok: false, message: `Amount must be a whole number between ${SPECIAL_ATTACK_AMOUNT_MIN} and ${SPECIAL_ATTACK_AMOUNT_MAX}` }
   }
+  if (healsAlliesRaw === null) {
+    return { ok: false, message: 'healsAllies must be true or false' }
+  }
+  const healsAllies = effectType === 'HEAL_SELF' ? healsAlliesRaw : false
 
-  return { ok: true, data: { name, description, effectType, amount } }
+  return { ok: true, data: { name, description, effectType, amount, healsAllies } }
 }
 
 // Resolves a member's six battle sound paths, falling back to its faction's own default for

@@ -403,7 +403,7 @@ test('isValidSpecialAttackAmount: whole numbers within [MIN, MAX], rejects out-o
 test('parseSpecialAttackBody: a valid create body parses with trimmed name and the given fields', () => {
   const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, name: '  Toxic Bite  ' })
   assert.equal(result.ok, true)
-  assert.deepEqual(result.data, { name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10 })
+  assert.deepEqual(result.data, { name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10, healsAllies: false })
 })
 
 test('parseSpecialAttackBody: rejects a missing/blank name', () => {
@@ -424,8 +424,26 @@ test('parseSpecialAttackBody: a blank/null description normalizes to null, a rea
 })
 
 test('parseSpecialAttackBody: on update, an omitted field falls back to the existing row, not a bare default', () => {
-  const existing = { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7 }
+  const existing = { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7, healsAllies: true }
   const result = parseSpecialAttackBody({ amount: 20 }, existing)
   assert.equal(result.ok, true)
-  assert.deepEqual(result.data, { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 20 })
+  assert.deepEqual(result.data, { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 20, healsAllies: true })
+})
+
+test('parseSpecialAttackBody: healsAllies is only ever stored true when effectType is HEAL_SELF', () => {
+  // A truthy healsAllies sent alongside any other effectType is silently normalized to false —
+  // see that field's own schema comment on why this is never trusted to the client/admin UI alone.
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', healsAllies: true })
+  assert.equal(result.ok, true)
+  assert.equal(result.data.healsAllies, false)
+
+  const healResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'HEAL_SELF', healsAllies: true })
+  assert.equal(healResult.ok, true)
+  assert.equal(healResult.data.healsAllies, true)
+})
+
+test('parseSpecialAttackBody: an omitted healsAllies defaults to false on create', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'HEAL_SELF' })
+  assert.equal(result.ok, true)
+  assert.equal(result.data.healsAllies, false)
 })

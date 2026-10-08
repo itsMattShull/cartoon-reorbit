@@ -5354,6 +5354,14 @@ model CMoonSpecialAttack {
   // magic-byte-sniffed discipline as every other audio upload in this codebase), played the
   // moment this attack actually fires, by whichever side cast it.
   soundPath   String?
+  // Only meaningful when effectType = HEAL_SELF (false/ignored otherwise — enforced in
+  // parseSpecialAttackBody, never just left to the client). In a SOLO battle this changes
+  // nothing — there are no allies to heal either way, so the caster is always the only one
+  // healed. In a co-op RAID, false keeps the heal personal (just the caster); true extends the
+  // exact same amount to every other alive participant too (the caster included, not instead of
+  // them) — an admin-authored choice per attack, not an automatic raid-vs-solo behavior switch,
+  // per this feature's own "self and/or allies" request.
+  healsAllies Boolean                      @default(false)
   createdAt   DateTime                     @default(now())
   updatedAt   DateTime                     @updatedAt
 

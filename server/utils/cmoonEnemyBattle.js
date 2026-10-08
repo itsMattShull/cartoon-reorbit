@@ -50,7 +50,10 @@ export function isValidPlayerSubmittedAction(action) {
   return isValidBattleAction(action) || action === SPECIAL_ACTION
 }
 
-function isKnownAction(action) {
+// Exported for server/utils/cmoonEnemyRaid.js's own resolveRaidRound, which needs the identical
+// "4 lane moves, or one of the two server-only sentinels" shape check — never for client-facing
+// input validation (that's isValidPlayerSubmittedAction above).
+export function isKnownAction(action) {
   return isValidBattleAction(action) || action === SPECIAL_ACTION || action === PARALYZED_ACTION
 }
 

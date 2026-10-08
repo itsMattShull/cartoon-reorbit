@@ -61,6 +61,16 @@ function serializeRaid(raid) {
     combatStartedAt: raid.combatStartedAt,
     endedAt: raid.endedAt,
     outcome: raid.outcome,
+    // Special attacks — see the raid object's own shape comment in cmoonRaidSocket.js. A field
+    // missing here silently drops it on restart, same trap that comment already warns about for
+    // enemyStats — so these are listed explicitly rather than trusted to a future caller's memory.
+    cMoonSpecialAttack: raid.cMoonSpecialAttack,
+    enemySpecialAttack: raid.enemySpecialAttack,
+    enemyHitStreak: raid.enemyHitStreak,
+    partyAtkBonus: raid.partyAtkBonus,
+    enemyAtkBonus: raid.enemyAtkBonus,
+    enemyParalyzedTurns: raid.enemyParalyzedTurns,
+    partyParalyzedTurns: raid.partyParalyzedTurns,
   }
 }
 

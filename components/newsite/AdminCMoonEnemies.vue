@@ -47,6 +47,7 @@
               <div v-if="a.description" class="text-[11px] text-gray-600 break-words">{{ a.description }}</div>
               <div class="text-[11px] text-gray-600">
                 {{ SPECIAL_ATTACK_EFFECT_LABELS[a.effectType] }} ({{ a.amount }})
+                <span v-if="a.effectType === 'HEAL_SELF' && a.healsAllies"> · heals the whole party in raids</span>
                 <span v-if="a.cmoonUsageCount || a.enemyFactionUsageCount">
                   · used by {{ a.cmoonUsageCount }} cMoon(s), {{ a.enemyFactionUsageCount }} faction(s)
                 </span>
@@ -90,6 +91,17 @@
             </div>
           </div>
           <p class="text-[11px] text-gray-500">{{ SPECIAL_ATTACK_EFFECT_HELP[specialAttackForm.effectType] }}</p>
+
+          <label v-if="specialAttackForm.effectType === 'HEAL_SELF'" class="flex items-start gap-2">
+            <input type="checkbox" v-model="specialAttackForm.healsAllies" class="mt-0.5" />
+            <span>
+              <span class="text-xs font-medium">Also heals allies in co-op raids</span>
+              <p class="text-[10px] text-gray-500 mt-0.5">
+                In a solo fight this changes nothing — the caster is always the only one healed either way. In a raid,
+                off means only the caster is healed; on extends the same amount to every other alive party member too.
+              </p>
+            </span>
+          </label>
 
           <div>
             <label class="block text-xs font-medium mb-1">Sound (optional, MP3/OGG/WAV, max 3MB)</label>
@@ -701,7 +713,7 @@ const specialAttackUploadingSound = ref(false)
 const specialAttackSoundError = ref('')
 const specialAttackSavedSoundPath = ref('')
 
-const emptySpecialAttackForm = () => ({ id: '', name: '', description: '', effectType: 'DAMAGE_OPPONENT', amount: 10 })
+const emptySpecialAttackForm = () => ({ id: '', name: '', description: '', effectType: 'DAMAGE_OPPONENT', amount: 10, healsAllies: false })
 const specialAttackForm = reactive(emptySpecialAttackForm())
 
 function resetSpecialAttackForm() {
@@ -720,6 +732,7 @@ function startEditSpecialAttack(a) {
   specialAttackForm.description = a.description || ''
   specialAttackForm.effectType = a.effectType
   specialAttackForm.amount = a.amount
+  specialAttackForm.healsAllies = !!a.healsAllies
   specialAttackSavedSoundPath.value = a.soundPath || ''
 }
 
@@ -778,6 +791,7 @@ async function saveSpecialAttack() {
       description: specialAttackForm.description.trim() || null,
       effectType: specialAttackForm.effectType,
       amount,
+      healsAllies: specialAttackForm.effectType === 'HEAL_SELF' ? specialAttackForm.healsAllies : false,
     }
     if (specialAttackForm.id) {
       await $fetch(`/api/admin/cmoon-special-attacks/${specialAttackForm.id}`, { method: 'PUT', body })
