@@ -19,6 +19,10 @@ export default defineEventHandler(async (event) => {
     const effect = await db.cMoonJoinEffect.count({ where: { id: parsed.data.appearEffectId } })
     if (!effect) throw createError({ statusCode: 404, statusMessage: 'Join effect not found' })
   }
+  if (parsed.data.specialAttackId) {
+    const attack = await db.cMoonSpecialAttack.count({ where: { id: parsed.data.specialAttackId } })
+    if (!attack) throw createError({ statusCode: 404, statusMessage: 'Special attack not found' })
+  }
 
   let created
   try {

@@ -3683,6 +3683,13 @@ model CMoon {
   battleLosses     Int                  @default(0)
   enemyBattles     CMoonEnemyBattle[]
   enemyRaids       CMoonEnemyRaid[]
+  // This team's own special attack in cMoon Enemy Battles — any of ITS members fighting solo can
+  // charge and fire it after landing 3 consecutive hits on an enemy (see
+  // CMoonEnemyBattle.playerHitStreak/playerSpecialCharged and CMoonSpecialAttack's own header
+  // comment). Optional: a cMoon with none assigned simply never offers the special-attack button
+  // at all. onDelete: Restrict, same reassign-before-delete shape as customJoinEffectId above.
+  specialAttackId  String?
+  specialAttack    CMoonSpecialAttack?  @relation(fields: [specialAttackId], references: [id], onDelete: Restrict)
 
   @@index([memberCount])
   @@index([teamScore])
@@ -5301,6 +5308,59 @@ enum CMoonEnemyRewardType {
   POINTS
 }
 
+// ── cMoon Enemy Battles: Special Attacks ─────────────────────────────────────────────────
+// A reusable library of admin-authored "special attacks" (named/edited in "Manage Special
+// Attacks" on the cMoon Enemy admin page), each assignable to any number of cMoons AND/OR enemy
+// factions — same reusable-library-assigned-by-FK shape as CMoonJoinEffect (one effect, many
+// cMoons/factions can point at it). A cMoon's assigned attack is what its OWN players can charge
+// up and fire (see CMoonEnemyBattle.playerSpecialCharged below); a faction's assigned attack is
+// what every member of that faction's own NPCs can fire back once THEY land 3 consecutive hits
+// (see CMoonEnemyBattle.enemyHitStreak) — the two are charged and triggered completely
+// independently, by whichever side is actually landing the hits.
+//
+// Exactly one effectType per attack (never a combo) — kept intentionally simple, matching the
+// feature request's own "x amount of Y" shape for each kind:
+//   DAMAGE_OPPONENT       — `amount` flat damage to the opposing side, bypassing block entirely
+//                           (a guaranteed hit, since using a special spends the whole turn).
+//   HEAL_SELF             — `amount` HP to the caster's own side (in a solo fight, just the
+//                           caster; see this feature's own PR notes on why co-op raid healing is
+//                           intentionally out of scope for this first pass).
+//   PARALYZE_OPPONENT     — the opposing side cannot land a hit or block for `amount` upcoming
+//                           rounds (their action is forced to whiff regardless of what's
+//                           submitted/rolled) — see PARALYZED_ACTION in cmoonEnemyBattle.js.
+//   LOWER_OPPONENT_ATTACK — the opposing side's own landed-hit damage is reduced by `amount` for
+//                           the REST of the battle (floored so it can never go negative).
+//   RAISE_ALLY_ATTACK     — the caster's own side's landed-hit damage is increased by `amount`
+//                           for the rest of the battle.
+// All five are cumulative/stacking if the same attack (or several different ones) fire more than
+// once in one battle — there's no cap beyond what a battle's own HP/round limits naturally impose.
+enum CMoonSpecialAttackEffectType {
+  DAMAGE_OPPONENT
+  HEAL_SELF
+  PARALYZE_OPPONENT
+  LOWER_OPPONENT_ATTACK
+  RAISE_ALLY_ATTACK
+}
+
+model CMoonSpecialAttack {
+  id          String                       @id @default(uuid())
+  name        String                       @unique
+  description String? // shown in the player-facing "?" tooltip alongside the effect/charge copy below
+  effectType  CMoonSpecialAttackEffectType
+  // Meaning depends on effectType — damage points / heal points / paralyze-turns / attack-stat
+  // delta. Always a positive whole number; which one it is is just effectType's own label.
+  amount      Int
+  // Optional sound (MP3/OGG/WAV, uploaded via cmoon-special-attacks/[id]/sound.post.js — same
+  // magic-byte-sniffed discipline as every other audio upload in this codebase), played the
+  // moment this attack actually fires, by whichever side cast it.
+  soundPath   String?
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
+
+  cmoons        CMoon[]
+  enemyFactions CMoonEnemyFaction[]
+}
+
 // The themed group an admin creates in "Manage cMoon Enemies" — mostly organizational (name,
 // banner art, an on/off switch for the whole group at once); the actual things a player fights
 // are its members below.
@@ -5344,6 +5404,14 @@ model CMoonEnemyFaction {
   defaultAttackingSoundPath     String?
   defaultVictorySoundPath       String?
   defaultDefeatSoundPath        String?
+  // Every member of this faction charges and fires THIS one attack together once its own
+  // consecutive-hit streak against a given player reaches the threshold (see
+  // CMoonEnemyBattle.enemyHitStreak) — see CMoonSpecialAttack's own header comment. Optional:
+  // a faction with none assigned simply never fires one, same as today. onDelete: Restrict,
+  // same reasoning/UX as appearEffectId above — reassign every faction using an attack before an
+  // admin can delete it (enforced in cmoon-special-attacks/[id].delete.js's own pre-check).
+  specialAttackId String?
+  specialAttack   CMoonSpecialAttack? @relation(fields: [specialAttackId], references: [id], onDelete: Restrict)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -5533,8 +5601,35 @@ model CMoonEnemyBattle {
   // source of truth, this is a per-battle display copy) so the log/UI never needs a live join to
   // show what the fight looked like at the time.
   enemyHpRemaining  Int
-  // [{ round, playerAction, enemyAction, playerHit, enemyHit }, ...] — audit trail for the admin
-  // battle-logs page and for debugging a disputed result; never read back to resolve anything.
+  // ── Special attacks (see CMoonSpecialAttack's own header comment) ──────────────────────────
+  // Consecutive landed hits, tracked independently per side, reset to 0 the instant that side
+  // fails to land one (a miss, a blocked attack, a round spent blocking/using-the-special/
+  // paralyzed — see server/utils/cmoonEnemyBattle.js's resolveRound). playerSpecialCharged
+  // latches true the moment playerHitStreak first reaches the 3-hit threshold and STAYS true
+  // (even as playerHitStreak itself keeps resetting on a later miss) until the player actually
+  // spends it — so a player who charges up has a real window to choose when to fire, rather than
+  // losing the charge the instant their next hit doesn't land. The enemy side has no equivalent
+  // "charged" flag: an NPC has no choice to make, so the moment enemyHitStreak itself reaches the
+  // threshold its faction's special (if any) fires immediately as a bonus on that same round —
+  // see action.post.js.
+  playerHitStreak       Int     @default(0)
+  playerSpecialCharged  Boolean @default(false)
+  enemyHitStreak        Int     @default(0)
+  // Net landed-hit damage modifier for each side, for the REST of the battle — increased by that
+  // side's own RAISE_ALLY_ATTACK special, decreased by the opposing side's LOWER_OPPONENT_ATTACK
+  // special (never reset mid-battle; final damage is still floored at 0, never negative).
+  playerAtkBonus        Int     @default(0)
+  enemyAtkBonus         Int     @default(0)
+  // Rounds remaining where that side's action is forced to whiff (can't land a hit, can't
+  // block), set by the OPPOSING side's PARALYZE_OPPONENT special — decremented by 1 every round
+  // it's > 0 (see resolveRound's own newPlayerParalyzedTurns/newEnemyParalyzedTurns).
+  playerParalyzedTurns  Int     @default(0)
+  enemyParalyzedTurns   Int     @default(0)
+  // [{ round, playerAction, enemyAction, playerHit, enemyHit, specials? }, ...] — audit trail for
+  // the admin battle-logs page and for debugging a disputed result; never read back to resolve
+  // anything. `specials`, when present, is [{ side, name, effectType, amount }] for whichever
+  // special attack(s) fired that round (player's own choice and/or the enemy's automatic one can
+  // both fire in the same round).
   roundLog          Json                     @default("[]")
   pointsAwarded     Int                      @default(0)
   rewardsGranted    Json? // [{ type, name, quantity }] — display-only summary for the log

@@ -7,6 +7,8 @@ import {
   isValidOccurrencePercent, OCCURRENCE_PERCENT_MIN, OCCURRENCE_PERCENT_MAX, OCCURRENCE_PERCENT_DEFAULT,
   filterToHighestRank, pickWeightedEnemy, resolveMemberSoundPaths,
   MEMBER_SOUND_SLOTS, FACTION_DEFAULT_SOUND_SLOTS,
+  parseSpecialAttackBody, isValidSpecialAttackName, isValidSpecialAttackEffectType, isValidSpecialAttackAmount,
+  SPECIAL_ATTACK_EFFECT_TYPES, SPECIAL_ATTACK_NAME_MAX_LENGTH, SPECIAL_ATTACK_AMOUNT_MIN, SPECIAL_ATTACK_AMOUNT_MAX,
 } from '../server/utils/cmoonEnemy.js'
 
 const baseMemberBody = {
@@ -366,4 +368,64 @@ test('resolveMemberSoundPaths: resolves all six slots independently', () => {
   assert.equal(resolved.attackingSoundPath, null)
   assert.equal(resolved.victorySoundPath, 'f-victory')
   assert.equal(resolved.defeatSoundPath, null)
+})
+
+// ── Special attacks (CMoonSpecialAttack) ────────────────────────────────────────────────────
+const baseSpecialAttackBody = { name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10 }
+
+test('isValidSpecialAttackName: non-empty up to the max length, rejects blank/too-long/non-string', () => {
+  assert.equal(isValidSpecialAttackName('Toxic Bite'), true)
+  assert.equal(isValidSpecialAttackName('x'.repeat(SPECIAL_ATTACK_NAME_MAX_LENGTH)), true)
+  assert.equal(isValidSpecialAttackName('x'.repeat(SPECIAL_ATTACK_NAME_MAX_LENGTH + 1)), false)
+  assert.equal(isValidSpecialAttackName(''), false)
+  assert.equal(isValidSpecialAttackName('   '), false)
+  assert.equal(isValidSpecialAttackName(null), false)
+  assert.equal(isValidSpecialAttackName(123), false)
+})
+
+test('isValidSpecialAttackEffectType accepts every declared type and rejects anything else', () => {
+  for (const t of SPECIAL_ATTACK_EFFECT_TYPES) assert.equal(isValidSpecialAttackEffectType(t), true)
+  assert.equal(isValidSpecialAttackEffectType('DAMAGE_SELF'), false)
+  assert.equal(isValidSpecialAttackEffectType(''), false)
+  assert.equal(isValidSpecialAttackEffectType(null), false)
+})
+
+test('isValidSpecialAttackAmount: whole numbers within [MIN, MAX], rejects out-of-range/fractional/non-numeric', () => {
+  assert.equal(isValidSpecialAttackAmount(SPECIAL_ATTACK_AMOUNT_MIN), true)
+  assert.equal(isValidSpecialAttackAmount(SPECIAL_ATTACK_AMOUNT_MAX), true)
+  assert.equal(isValidSpecialAttackAmount(SPECIAL_ATTACK_AMOUNT_MIN - 1), false)
+  assert.equal(isValidSpecialAttackAmount(SPECIAL_ATTACK_AMOUNT_MAX + 1), false)
+  assert.equal(isValidSpecialAttackAmount(5.5), false)
+  assert.equal(isValidSpecialAttackAmount(NaN), false)
+  assert.equal(isValidSpecialAttackAmount(undefined), false)
+})
+
+test('parseSpecialAttackBody: a valid create body parses with trimmed name and the given fields', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, name: '  Toxic Bite  ' })
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.data, { name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10 })
+})
+
+test('parseSpecialAttackBody: rejects a missing/blank name', () => {
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, name: '' }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, name: undefined }).ok, false)
+})
+
+test('parseSpecialAttackBody: rejects an invalid effectType or amount', () => {
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'NOT_REAL' }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, amount: 0 }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, amount: 1000 }).ok, false)
+})
+
+test('parseSpecialAttackBody: a blank/null description normalizes to null, a real one is trimmed', () => {
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, description: '' }).data.description, null)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, description: null }).data.description, null)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, description: '  A nasty bite.  ' }).data.description, 'A nasty bite.')
+})
+
+test('parseSpecialAttackBody: on update, an omitted field falls back to the existing row, not a bare default', () => {
+  const existing = { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7 }
+  const result = parseSpecialAttackBody({ amount: 20 }, existing)
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.data, { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 20 })
 })

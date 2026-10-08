@@ -231,6 +231,12 @@ export function parseFactionBody(body, existing) {
   const appearEffectId = body?.appearEffectId === undefined
     ? (existing ? existing.appearEffectId : null)
     : toOptionalId(body.appearEffectId)
+  // What every member of this faction fires back once ITS OWN hit streak against a player caps
+  // out — see CMoonSpecialAttack's own schema comment. Same nullable-id shape/convention as
+  // appearEffectId above; existence of the referenced row is the caller's DB check.
+  const specialAttackId = body?.specialAttackId === undefined
+    ? (existing ? existing.specialAttackId : null)
+    : toOptionalId(body.specialAttackId)
 
   if (!isValidFactionName(name)) {
     return { ok: false, message: `Name is required (max ${FACTION_NAME_MAX_LENGTH} characters)` }
@@ -247,8 +253,11 @@ export function parseFactionBody(body, existing) {
   if (appearEffectId === undefined) {
     return { ok: false, message: 'appearEffectId must be a string id' }
   }
+  if (specialAttackId === undefined) {
+    return { ok: false, message: 'specialAttackId must be a string id' }
+  }
 
-  return { ok: true, data: { name, description, active, sortOrder, appearEffectId } }
+  return { ok: true, data: { name, description, active, sortOrder, appearEffectId, specialAttackId } }
 }
 
 // Shared by the member create/update endpoints, same `existing` convention as parseFactionBody.
@@ -502,6 +511,72 @@ export function pickWeightedEnemy(candidates) {
   // Floating-point rounding can in principle leave `roll` fractionally positive after the last
   // subtraction — the last candidate is the correct pick either way (its slice is what was left).
   return candidates[candidates.length - 1]
+}
+
+// ── Special attacks (CMoonSpecialAttack) — see that model's own schema comment ──────────────
+export const SPECIAL_ATTACK_NAME_MAX_LENGTH = 60
+export const SPECIAL_ATTACK_DESCRIPTION_MAX_LENGTH = 300
+export const SPECIAL_ATTACK_EFFECT_TYPES = [
+  'DAMAGE_OPPONENT', 'HEAL_SELF', 'PARALYZE_OPPONENT', 'LOWER_OPPONENT_ATTACK', 'RAISE_ALLY_ATTACK',
+]
+// Same bound for every effect type, even though they mean different units (damage/heal points,
+// paralyze turns, attack-stat delta) — simplest shared cap that comfortably covers each one;
+// paralyze in particular is additionally soft-capped by MAX_ROUNDS_SAFETY just by being a count
+// of rounds in a battle that can't run forever anyway.
+export const SPECIAL_ATTACK_AMOUNT_MIN = 1
+export const SPECIAL_ATTACK_AMOUNT_MAX = 999
+
+export function isValidSpecialAttackName(value) {
+  return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= SPECIAL_ATTACK_NAME_MAX_LENGTH
+}
+
+export function isValidSpecialAttackEffectType(value) {
+  return SPECIAL_ATTACK_EFFECT_TYPES.includes(value)
+}
+
+export function isValidSpecialAttackAmount(value) {
+  return Number.isInteger(value) && value >= SPECIAL_ATTACK_AMOUNT_MIN && value <= SPECIAL_ATTACK_AMOUNT_MAX
+}
+
+// Shared by the special-attack create/update endpoints — same `existing`-means-"leave unchanged
+// on omit" convention as parseFactionBody above.
+export function parseSpecialAttackBody(body, existing) {
+  const name = body?.name === undefined
+    ? (existing ? existing.name : '')
+    : (typeof body.name === 'string' ? body.name.trim() : '')
+
+  let description
+  if (body?.description === undefined) {
+    description = existing ? existing.description : null
+  } else if (body.description === null) {
+    description = null
+  } else if (typeof body.description === 'string') {
+    description = body.description.trim() || null
+  } else {
+    return { ok: false, message: 'Description must be text' }
+  }
+
+  const effectType = body?.effectType === undefined
+    ? (existing ? existing.effectType : '')
+    : (typeof body.effectType === 'string' ? body.effectType.trim() : '')
+  const amount = body?.amount === undefined
+    ? (existing ? existing.amount : undefined)
+    : toNumber(body.amount)
+
+  if (!isValidSpecialAttackName(name)) {
+    return { ok: false, message: `Name is required (max ${SPECIAL_ATTACK_NAME_MAX_LENGTH} characters)` }
+  }
+  if (description !== null && description.length > SPECIAL_ATTACK_DESCRIPTION_MAX_LENGTH) {
+    return { ok: false, message: `Description must be ${SPECIAL_ATTACK_DESCRIPTION_MAX_LENGTH} characters or fewer` }
+  }
+  if (!isValidSpecialAttackEffectType(effectType)) {
+    return { ok: false, message: `Effect must be one of ${SPECIAL_ATTACK_EFFECT_TYPES.join(', ')}` }
+  }
+  if (!isValidSpecialAttackAmount(amount)) {
+    return { ok: false, message: `Amount must be a whole number between ${SPECIAL_ATTACK_AMOUNT_MIN} and ${SPECIAL_ATTACK_AMOUNT_MAX}` }
+  }
+
+  return { ok: true, data: { name, description, effectType, amount } }
 }
 
 // Resolves a member's six battle sound paths, falling back to its faction's own default for

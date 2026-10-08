@@ -12,6 +12,15 @@
 // server/utils/cmoonRaidSocket.js — this mirrors the existing split between
 // monsterBattleEngine.js (pure state transitions) and socket-server.js (the stateful process
 // that owns a Map of them) already used for 1v1 Monster Battles.
+//
+// Deliberately NOT wired up here: CMoonSpecialAttack (cMoon Enemy Battles special attacks, see
+// that model's own schema comment) — the solo 1v1 battle (cmoonEnemyBattle.js's own
+// resolveRound/action.post.js) got the full charge/fire/paralyze/attack-stat-modifier treatment,
+// but extending that to a live multi-participant co-op fight (per-participant charge state, a
+// shared heal-the-party effect, how the enemy's own retaliation special should pick a target
+// among several alive players) is a meaningfully larger, separate-session piece of work, scoped
+// out of that feature's first pass. A raid boss's assigned faction special, if any, and every
+// raid participant's own cMoon special are simply never offered or triggered in a raid today.
 
 import {
   resolveBattleRound, rollHitDamage, rollEnemyAction, rollEnemyRewards,

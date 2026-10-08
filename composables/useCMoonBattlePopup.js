@@ -29,6 +29,10 @@ function playRoundSounds(round, enemy) {
   if (round.enemyHit) playSound(enemy.damageTakenSoundPath)
   else if (round.enemyBlocked) playSound(enemy.damageAvoidedSoundPath)
   if (round.playerHit) playSound(enemy.attackingSoundPath)
+  // Special attacks (see CMoonSpecialAttack's own schema comment) each carry their own one sound,
+  // independent of the enemy's six battle-moment sounds above — both a player's own cast and the
+  // enemy's automatic one can appear in the same round's `specials` list.
+  for (const special of round.specials || []) playSound(special.soundPath)
 }
 
 export function useCMoonBattlePopup() {
