@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   resolveRaidRound, checkRaidBossAvailability,
   JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE,
+  SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD,
 } from '../server/utils/cmoonEnemyRaid.js'
 import { PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE, HEAL_ON_SUCCESSFUL_BLOCK } from '../server/utils/cmoonEnemyBattle.js'
 
@@ -183,4 +184,72 @@ test('checkRaidBossAvailability: a solved riddle gate falls through to the norma
   const result = checkRaidBossAvailability({ raidOneTime: true, raidCooldownMinutes: 0, raidDefeatedAt: new Date(), riddleGateSolved: true })
   assert.equal(result.available, false)
   assert.match(result.message, /revived by an admin/i)
+})
+
+// ── Special attacks in a raid (see cmoonEnemyRaid.js's own header comment) ─────────────────────
+test('re-exports the solo battle\'s special-attack constants unchanged', () => {
+  assert.equal(SPECIAL_ACTION, 'SPECIAL_ATTACK')
+  assert.equal(PARALYZED_ACTION, 'PARALYZED')
+  assert.equal(HIT_STREAK_THRESHOLD, 3)
+})
+
+test('resolveRaidRound: partyAtkBonus increases every participant\'s own landed-hit damage on the enemy', () => {
+  let sawAHit = false
+  for (let i = 0; i < 200; i++) {
+    const participants = [{ userId: 'a', action: 'ATTACK_HIGH', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP }]
+    const result = resolveRaidRound({ enemyAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember, participants, partyAtkBonus: 6 })
+    const [p] = result.perParticipant
+    if (p.enemyHit) { sawAHit = true; assert.equal(result.enemyDamageDealt, NORMAL_HIT_DAMAGE + 6) }
+  }
+  assert.equal(sawAHit, true)
+})
+
+test('resolveRaidRound: enemyAtkBonus increases the damage the boss deals to every participant it hits, floored at 0', () => {
+  // enemyAction is a fixed parameter here (never rolled internally, unlike the solo battle's own
+  // resolveRound) — ATTACK_LOW against a BLOCK_HIGH (wrong-lane) participant always lands, no
+  // trial loop needed to eventually see a hit. hpRemaining/maxHp are deliberately well above the
+  // damage dealt so the floor-at-0 clamp in resolveRaidRound itself never masks the real number.
+  const bigHp = PLAYER_MAX_HP + 100
+  const participants = [{ userId: 'a', action: 'BLOCK_HIGH', hpRemaining: bigHp, maxHp: bigHp }]
+  const result = resolveRaidRound({ enemyAction: 'ATTACK_LOW', enemyMember: baseEnemyMember, participants, enemyAtkBonus: 5 })
+  const [p] = result.perParticipant
+  assert.equal(p.playerHit, true)
+  assert.equal(bigHp - p.hpRemaining, NORMAL_HIT_DAMAGE + 5)
+
+  // A heavy enough penalty floors the boss's dealt damage at 0 for every participant.
+  const flooredResult = resolveRaidRound({ enemyAction: 'ATTACK_LOW', enemyMember: baseEnemyMember, participants, enemyAtkBonus: -999 })
+  assert.equal(flooredResult.perParticipant[0].hpRemaining, bigHp)
+})
+
+test('resolveRaidRound: PARALYZED_ACTION as the enemyAction means the boss lands on nobody this round', () => {
+  const participants = [
+    { userId: 'a', action: 'ATTACK_HIGH', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
+    { userId: 'b', action: 'BLOCK_LOW', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
+  ]
+  const result = resolveRaidRound({ enemyAction: PARALYZED_ACTION, enemyMember: baseEnemyMember, participants })
+  for (const p of result.perParticipant) assert.equal(p.playerHit, false)
+})
+
+test('resolveRaidRound: PARALYZED_ACTION as a participant\'s own action means they can never land a hit', () => {
+  const participants = [{ userId: 'a', action: PARALYZED_ACTION, hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP }]
+  for (let i = 0; i < 100; i++) {
+    const result = resolveRaidRound({ enemyAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember, participants })
+    assert.equal(result.perParticipant[0].enemyHit, false)
+  }
+})
+
+test('resolveRaidRound: SPECIAL_ACTION as a participant\'s own action never lands a lane hit on the enemy', () => {
+  const participants = [{ userId: 'a', action: SPECIAL_ACTION, hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP }]
+  for (let i = 0; i < 100; i++) {
+    const result = resolveRaidRound({ enemyAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember, participants })
+    assert.equal(result.perParticipant[0].enemyHit, false)
+    assert.equal(result.enemyDamageDealt, 0)
+  }
+})
+
+test('resolveRaidRound: rejects an invalid participant action even with the new sentinels allowed', () => {
+  assert.throws(() => resolveRaidRound({
+    enemyAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember,
+    participants: [{ userId: 'a', action: 'NOT_REAL', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP }],
+  }))
 })

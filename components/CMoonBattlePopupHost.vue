@@ -67,9 +67,15 @@
             </div>
           </div>
 
+          <p v-if="battle?.playerParalyzedTurns > 0" class="cbp-paralyzed-badge">
+            ⚡ Paralyzed — can't act for {{ battle.playerParalyzedTurns }} more round{{ battle.playerParalyzedTurns === 1 ? '' : 's' }}
+          </p>
           <p v-if="lastRound" class="cbp-round-summary" :class="lastRoundClass">
             {{ lastRoundLabel }}
             <span v-if="lastRound.playerCrit || lastRound.enemyCrit" class="cbp-crit-badge">CRITICAL!</span>
+          </p>
+          <p v-for="(s, i) in (lastRound?.specials || [])" :key="i" class="cbp-special-flash" :class="s.side === 'PLAYER' ? 'cbp-special-flash-player' : 'cbp-special-flash-enemy'">
+            {{ s.side === 'PLAYER' ? 'You' : battle?.enemy?.name || 'The enemy' }} unleashed <strong>{{ s.name }}</strong>!
           </p>
           <p v-if="error" class="cbp-error">{{ error }}</p>
 
@@ -80,6 +86,34 @@
             <BlueButton type="button" class="cbp-move" :disabled="busy" @click="act('BLOCK_LOW')">Block Low</BlueButton>
           </div>
           <p class="cbp-hint">Blocking the same side as their attack cancels it (and heals 1 HP) — anything else lands a hit.</p>
+
+          <!-- ── Special attack: dormant until the player's own cMoon has one assigned, then
+               fills up with each consecutive hit landed — see useCMoonBattlePopup.js/
+               action.post.js for the charge/fire mechanics. ────────────────────────────────── -->
+          <div v-if="battle?.playerSpecialAttack" class="cbp-special-wrap">
+            <button
+              type="button" class="cbp-special-btn" :class="{ 'cbp-special-charged': battle.playerSpecialCharged && !battle.playerParalyzedTurns }"
+              :disabled="busy || !battle.playerSpecialCharged || battle.playerParalyzedTurns > 0" :style="specialFillStyle"
+              @click="act('SPECIAL_ATTACK')"
+            >
+              <span class="cbp-special-glow" aria-hidden="true"></span>
+              <span class="cbp-special-label">
+                <span class="cbp-special-icon">★</span>
+                {{ battle.playerSpecialAttack.name }}
+              </span>
+              <span class="cbp-special-meter">{{ Math.min(battle.playerHitStreak, 3) }}/3</span>
+            </button>
+            <button
+              type="button" class="cbp-special-help" aria-label="What does this special attack do?"
+              @click="showSpecialInfo = !showSpecialInfo" @mouseenter="showSpecialInfo = true" @mouseleave="showSpecialInfo = false"
+            >?</button>
+            <div v-if="showSpecialInfo" class="cbp-special-tooltip" role="tooltip">
+              <p class="cbp-special-tooltip-title">{{ battle.playerSpecialAttack.name }}</p>
+              <p v-if="battle.playerSpecialAttack.description">{{ battle.playerSpecialAttack.description }}</p>
+              <p>{{ specialEffectDescription(battle.playerSpecialAttack) }}</p>
+              <p class="cbp-special-tooltip-charge">Land 3 hits in a row to charge it up — it stays ready until you use it.</p>
+            </div>
+          </div>
         </div>
 
         <!-- ── Result: just resolved ───────────────────────────────────── -->
@@ -134,8 +168,38 @@ const enemyHpPercent = computed(() => {
   return Math.max(0, Math.min(100, Math.round((cur / max) * 100)))
 })
 
-const ACTION_LABELS = { ATTACK_HIGH: 'attacked high', ATTACK_LOW: 'attacked low', BLOCK_HIGH: 'blocked high', BLOCK_LOW: 'blocked low' }
+// SPECIAL_ATTACK/PARALYZED mirror the server's own sentinel actions (see SPECIAL_ACTION/
+// PARALYZED_ACTION in server/utils/cmoonEnemyBattle.js) — a round's playerAction/enemyAction can
+// be either of these instead of one of the 4 lane moves, and must read as plain English here
+// rather than leaking the raw constant into the round summary.
+const ACTION_LABELS = {
+  ATTACK_HIGH: 'attacked high', ATTACK_LOW: 'attacked low', BLOCK_HIGH: 'blocked high', BLOCK_LOW: 'blocked low',
+  SPECIAL_ATTACK: 'used a special attack', PARALYZED: 'were paralyzed',
+}
 function actionLabel(a) { return ACTION_LABELS[a] || a }
+
+// ── Special attack button (see CMoonSpecialAttack's own schema comment, server-side) ──────────
+// Mirrors that model's effectType enum purely for the player-facing "?" tooltip copy — this file
+// has no server import, so it's duplicated client-side the same way RANK_LABELS above already is.
+function specialEffectDescription(attack) {
+  const n = attack?.amount
+  switch (attack?.effectType) {
+    case 'DAMAGE_OPPONENT': return `Deals ${n} guaranteed damage to the enemy, bypassing block.`
+    case 'HEAL_SELF': return `Heals you for ${n} HP.`
+    case 'PARALYZE_OPPONENT': return `Stuns the enemy for ${n} round${n === 1 ? '' : 's'} — they can't attack or block.`
+    case 'LOWER_OPPONENT_ATTACK': return `Lowers the enemy's attack damage by ${n} for the rest of the fight.`
+    case 'RAISE_ALLY_ATTACK': return `Raises your own attack damage by ${n} for the rest of the fight.`
+    default: return ''
+  }
+}
+const showSpecialInfo = ref(false)
+// 0/1/2/3 hits -> 0/33/66/100% fill, read by .cbp-special-fill below via this CSS variable —
+// stays at 100% once charged even if playerHitStreak itself later resets (see that column's own
+// schema comment on why the charge latches rather than mirroring the streak 1:1).
+const specialFillStyle = computed(() => {
+  const pct = battle.value?.playerSpecialCharged ? 100 : Math.min(100, Math.round(((battle.value?.playerHitStreak || 0) / 3) * 100))
+  return { '--cbp-special-fill': pct + '%' }
+})
 
 // Covers every shape a round can take: a landed hit (either or both sides), a genuinely
 // successful block (which now heals 1 HP — see action.post.js's playerBlocked/enemyBlocked), or
@@ -230,7 +294,7 @@ function startBattleMusic(path) {
 }
 watch(phase, (p) => {
   if (p === 'FIGHT') startBattleMusic(battle.value?.enemy?.faction?.battleMusicPath)
-  else stopBattleMusic()
+  else { stopBattleMusic(); showSpecialInfo.value = false }
 })
 onBeforeUnmount(() => {
   stopBattleMusic()
@@ -417,6 +481,16 @@ watch(() => route.path, maybeCheck)
 .cbp-heart { color: #f87171; font-size: 15px; }
 .cbp-heart-lost { color: rgba(255, 255, 255, 0.2); }
 
+.cbp-paralyzed-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  border-radius: 6px;
+  padding: 5px 8px;
+  margin: 8px 0 0;
+}
 .cbp-round-summary { font-size: 12px; color: rgba(255, 255, 255, 0.75); margin: 8px 0; }
 .cbp-round-good { color: #4ade80; font-weight: 600; }
 .cbp-round-bad { color: #f87171; font-weight: 600; }
@@ -482,6 +556,113 @@ watch(() => route.path, maybeCheck)
 }
 .cbp-move-attack:active { box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.3); }
 .cbp-hint { font-size: 10.5px; color: rgba(255, 255, 255, 0.5); margin-top: 8px; }
+
+/* ── Special attack button ────────────────────────────────────────────────────────────────
+   Dormant (flat, muted) until charged, then lights up gold/epic. --cbp-special-fill (set inline
+   via specialFillStyle) drives a bottom-up gradient fill so the meter visibly climbs with each
+   consecutive hit, independent of the charged-glow treatment below. */
+.cbp-special-wrap { position: relative; display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.cbp-special-btn {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 2px solid #4b4620;
+  background:
+    linear-gradient(to top, rgba(250, 204, 21, 0.55) 0%, rgba(250, 204, 21, 0.55) var(--cbp-special-fill, 0%), transparent var(--cbp-special-fill, 0%)),
+    #241f0f;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: bold;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: not-allowed;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.cbp-special-btn:disabled { opacity: 0.85; }
+.cbp-special-label { position: relative; z-index: 1; display: flex; align-items: center; gap: 5px; }
+.cbp-special-icon { font-size: 13px; filter: grayscale(1); transition: filter 0.2s ease; }
+.cbp-special-meter {
+  position: relative; z-index: 1;
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
+}
+.cbp-special-glow { position: absolute; inset: 0; z-index: 0; opacity: 0; transition: opacity 0.3s ease; }
+
+/* Charged: gold border, bright icon, pulsing glow sweep — unmistakably "ready to use". */
+.cbp-special-charged {
+  border-color: #facc15;
+  color: #fef3c7;
+  cursor: pointer;
+  box-shadow: 0 0 14px rgba(250, 204, 21, 0.55), inset 0 0 10px rgba(250, 204, 21, 0.25);
+  animation: cbp-special-pulse 1.4s ease-in-out infinite;
+}
+.cbp-special-charged .cbp-special-icon { filter: none; text-shadow: 0 0 6px #facc15; }
+.cbp-special-charged .cbp-special-meter { color: #fef3c7; }
+.cbp-special-charged .cbp-special-glow {
+  opacity: 1;
+  background: radial-gradient(circle at 30% 50%, rgba(255, 237, 160, 0.35), transparent 70%);
+}
+.cbp-special-charged:active { transform: translateY(1px); }
+@keyframes cbp-special-pulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(250, 204, 21, 0.45), inset 0 0 8px rgba(250, 204, 21, 0.2); }
+  50% { box-shadow: 0 0 20px rgba(250, 204, 21, 0.85), inset 0 0 14px rgba(250, 204, 21, 0.4); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cbp-special-charged { animation: none; }
+}
+
+.cbp-special-help {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cbp-special-help:hover { background: rgba(255, 255, 255, 0.18); }
+.cbp-special-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  width: 220px;
+  z-index: 10;
+  text-align: left;
+  background: #0a1f3a;
+  border: 1px solid var(--OrbitDarkBlue);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.cbp-special-tooltip-title { font-weight: 800; color: #facc15; margin-bottom: 3px; }
+.cbp-special-tooltip-charge { color: rgba(255, 255, 255, 0.55); margin-top: 4px; }
+
+.cbp-special-flash {
+  font-size: 12px;
+  font-weight: 700;
+  margin: 4px 0;
+  animation: cbp-special-flash-pop 0.4s ease-out;
+}
+.cbp-special-flash-player { color: #facc15; }
+.cbp-special-flash-enemy { color: #fb7185; }
+@keyframes cbp-special-flash-pop {
+  0% { transform: scale(0.85); opacity: 0; }
+  60% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cbp-special-flash { animation: none; }
+}
 
 .cbp-points { font-size: 15px; font-weight: 700; color: #4ade80; margin-bottom: 8px; }
 .cbp-rewards { text-align: left; background: rgba(255, 255, 255, 0.07); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; }
