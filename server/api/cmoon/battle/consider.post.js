@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
   // rolling for a new one — the activeUserId sentinel/unique constraint guarantees at most one.
   const inProgress = await db.cMoonEnemyBattle.findFirst({
     where: { userId, status: 'IN_PROGRESS' },
-    include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } } },
+    include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } }, cMoon: { include: { specialAttack: true } } },
   })
   if (inProgress) {
     return { offered: true, resumed: true, battle: serializeBattleForClient(inProgress), inCMoon: !!user.cMoonId }

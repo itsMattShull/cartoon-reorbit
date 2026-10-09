@@ -11,6 +11,7 @@ export default defineEventHandler(async (event) => {
       orderBy: { createdAt: 'asc' },
       include: {
         customJoinEffect: true,
+        specialAttack: true,
         captains: { include: { user: { select: { id: true, username: true } } } },
         prizeCtoons: { include: { ctoon: { select: { id: true, name: true, assetPath: true } } } },
         ranks: { orderBy: { sortOrder: 'asc' } },
@@ -65,6 +66,8 @@ export default defineEventHandler(async (event) => {
       effectType: c.effectType,
       customJoinEffectId: c.customJoinEffectId,
       customJoinEffect: c.customJoinEffect,
+      specialAttackId: c.specialAttackId,
+      specialAttack: c.specialAttack,
       joinLocked: c.joinLocked,
       showOnNav: c.showOnNav,
       allowOptOutJoin: c.allowOptOutJoin,

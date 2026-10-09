@@ -678,6 +678,18 @@
               <p class="text-[11px] text-gray-500 mt-1">This team's own Discord channel — raid-boss announcements and live updates post here instead of the shared channel set in Global Settings.</p>
             </div>
             <div>
+              <label class="block text-xs font-medium mb-1">Special attack (cMoon Enemy Battles, optional)</label>
+              <select v-model="form.specialAttackId" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px">
+                <option value="">None — this team's players never see the special-attack button</option>
+                <option v-for="a in specialAttacks" :key="a.id" :value="a.id">{{ a.name }}</option>
+              </select>
+              <p class="text-[11px] text-gray-500 mt-1">
+                This team's own players can charge and fire this attack after landing 3 consecutive hits in a
+                cMoon Enemy Battle. Built in
+                <NuxtLink to="/newsite/admin/cMoonEnemies" class="text-indigo-600 hover:underline">Manage cMoon Enemies</NuxtLink>.
+              </p>
+            </div>
+            <div>
               <label class="block text-xs font-medium mb-1">Effect (plays on cMoon select &amp; achievement claim)</label>
               <select
                 v-model="form.effectType" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px"
@@ -1335,6 +1347,7 @@ const prizeRevokeModalOpen = ref(false)
 // Populated from /api/admin/cmoon-join-effects — admin-authored alternative to the built-in
 // effectType dropdown below (see Manage cMoon Join Effects for creating/editing these).
 const customJoinEffects = ref([])
+const specialAttacks = ref([])
 
 function previewEffect(c) {
   const descriptor = cmoonJoinEffectDescriptor(c)
@@ -1497,7 +1510,7 @@ function effectLabel(type) {
 
 const editId = ref('')
 const formOpen = ref(false)
-const emptyForm = () => ({ name: '', color: '', pageBgColor: '', accentColor: '', textColor: '', cardBgColor: '', discordRoleId: '', discordChannelId: '', pageDescription: '', effectType: '', customJoinEffectId: '', joinLocked: false, showOnNav: true, showButtonOnPages: false, allowOptOutJoin: true, captainIds: [], prizeCtoons: [] })
+const emptyForm = () => ({ name: '', color: '', pageBgColor: '', accentColor: '', textColor: '', cardBgColor: '', discordRoleId: '', discordChannelId: '', pageDescription: '', effectType: '', customJoinEffectId: '', specialAttackId: '', joinLocked: false, showOnNav: true, showButtonOnPages: false, allowOptOutJoin: true, captainIds: [], prizeCtoons: [] })
 const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
@@ -1945,6 +1958,7 @@ function startEdit(c) {
     pageDescription: c.pageDescription || '',
     effectType: c.effectType || '',
     customJoinEffectId: c.customJoinEffectId || '',
+    specialAttackId: c.specialAttackId || '',
     joinLocked: !!c.joinLocked,
     showOnNav: c.showOnNav !== false,
     showButtonOnPages: !!c.showButtonOnPages,
@@ -2348,7 +2362,7 @@ async function uploadAvatar() {
 async function load() {
   loading.value = true
   try {
-    const [data, adminsData, ctoonsData, backgroundsData, avatarsData, joinEffectsData, czoneEffectsData] = await Promise.all([
+    const [data, adminsData, ctoonsData, backgroundsData, avatarsData, joinEffectsData, czoneEffectsData, specialAttacksData] = await Promise.all([
       $fetch('/api/admin/cmoons'),
       $fetch('/api/admin/cmoon-admins'),
       $fetch('/api/admin/list-ctoons'),
@@ -2356,7 +2370,9 @@ async function load() {
       $fetch('/api/admin/avatars'),
       $fetch('/api/admin/cmoon-join-effects'),
       $fetch('/api/admin/czone-effects'),
+      $fetch('/api/admin/cmoon-special-attacks'),
     ])
+    specialAttacks.value = specialAttacksData?.attacks || []
     cmoons.value = data.cmoons || []
     flagEnabled.value = !!data.cMoonEnabled
     cMoonEnabledAt.value = data.cMoonEnabledAt
@@ -2697,6 +2713,7 @@ async function save() {
       pageDescription: form.pageDescription,
       effectType: form.effectType || null,
       customJoinEffectId: form.customJoinEffectId || null,
+      specialAttackId: form.specialAttackId || null,
       joinLocked: form.joinLocked,
       showOnNav: form.showOnNav,
       showButtonOnPages: form.showButtonOnPages,

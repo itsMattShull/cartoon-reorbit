@@ -32,6 +32,105 @@
         <p v-if="higherTierFirstError" class="text-red-600">{{ higherTierFirstError }}</p>
       </section>
 
+      <!-- ── Special attacks ──────────────────────────────────────── -->
+      <section class="space-y-2">
+        <h2 class="font-semibold text-sm">Manage Special Attacks</h2>
+        <p class="text-gray-600">
+          A reusable library — build attacks here, then assign one to any cMoon below (its own players can
+          charge and fire it after 3 consecutive hits) and/or any enemy faction (its NPCs fire it back the
+          same way). The same attack can be assigned to several cMoons/factions at once.
+        </p>
+        <div class="space-y-2">
+          <div v-for="a in specialAttacks" :key="a.id" class="bg-white rounded border p-3 flex items-center gap-3 flex-wrap">
+            <div class="min-w-0 flex-1">
+              <div class="font-semibold break-words">{{ a.name }}</div>
+              <div v-if="a.description" class="text-[11px] text-gray-600 break-words">{{ a.description }}</div>
+              <div class="text-[11px] text-gray-600">
+                {{ SPECIAL_ATTACK_EFFECT_LABELS[a.effectType] }} ({{ a.amount }})
+                <span v-if="a.effectType === 'HEAL_SELF' && a.healsAllies"> · heals the whole party in raids</span>
+                <span v-if="a.cmoonUsageCount || a.enemyFactionUsageCount">
+                  · used by {{ a.cmoonUsageCount }} cMoon(s), {{ a.enemyFactionUsageCount }} faction(s)
+                </span>
+              </div>
+            </div>
+            <div class="flex items-center gap-3 flex-shrink-0">
+              <button type="button" class="text-indigo-600 hover:underline" @click="startEditSpecialAttack(a)">Edit</button>
+              <button
+                type="button" class="text-red-600 hover:underline disabled:opacity-40 disabled:cursor-not-allowed"
+                :disabled="(a.cmoonUsageCount > 0 || a.enemyFactionUsageCount > 0) || deletingSpecialAttackId === a.id"
+                :title="(a.cmoonUsageCount > 0 || a.enemyFactionUsageCount > 0) ? 'Reassign every cMoon/faction using it first' : ''"
+                @click="removeSpecialAttack(a)"
+              >{{ deletingSpecialAttackId === a.id ? 'Deleting…' : 'Delete' }}</button>
+            </div>
+          </div>
+          <p v-if="!loading && !specialAttacks.length" class="text-gray-500">No special attacks yet.</p>
+        </div>
+
+        <div class="bg-white border rounded p-3 space-y-3">
+          <h3 class="font-semibold text-sm">{{ specialAttackForm.id ? 'Edit special attack' : 'New special attack' }}</h3>
+          <p v-if="specialAttackFormError" class="text-red-600">{{ specialAttackFormError }}</p>
+
+          <div>
+            <label class="block text-xs font-medium mb-1">Name</label>
+            <input v-model="specialAttackForm.name" maxlength="60" class="w-full border rounded px-2 py-1" placeholder="e.g. Toxic Bite" />
+          </div>
+          <div>
+            <label class="block text-xs font-medium mb-1">Description (optional, shown in the player's "?" tooltip, {{ specialAttackForm.description.length }}/300)</label>
+            <textarea v-model="specialAttackForm.description" maxlength="300" rows="2" class="w-full border rounded px-2 py-1"></textarea>
+          </div>
+          <div class="flex gap-2">
+            <div class="flex-1 min-w-0">
+              <label class="block text-xs font-medium mb-1">Effect</label>
+              <select v-model="specialAttackForm.effectType" class="w-full border rounded px-2 py-1">
+                <option v-for="t in SPECIAL_ATTACK_EFFECT_TYPES" :key="t" :value="t">{{ SPECIAL_ATTACK_EFFECT_LABELS[t] }}</option>
+              </select>
+            </div>
+            <div class="w-28 flex-shrink-0">
+              <label class="block text-xs font-medium mb-1">Amount (1-999)</label>
+              <input v-model.number="specialAttackForm.amount" type="number" min="1" max="999" class="w-full border rounded px-2 py-1" />
+            </div>
+          </div>
+          <p class="text-[11px] text-gray-500">{{ SPECIAL_ATTACK_EFFECT_HELP[specialAttackForm.effectType] }}</p>
+
+          <label v-if="specialAttackForm.effectType === 'HEAL_SELF'" class="flex items-start gap-2">
+            <input type="checkbox" v-model="specialAttackForm.healsAllies" class="mt-0.5" />
+            <span>
+              <span class="text-xs font-medium">Also heals allies in co-op raids</span>
+              <p class="text-[10px] text-gray-500 mt-0.5">
+                In a solo fight this changes nothing — the caster is always the only one healed either way. In a raid,
+                off means only the caster is healed; on extends the same amount to every other alive party member too.
+              </p>
+            </span>
+          </label>
+
+          <div>
+            <label class="block text-xs font-medium mb-1">Sound (optional, MP3/OGG/WAV, max 3MB)</label>
+            <div class="flex items-center gap-4 flex-wrap">
+              <audio v-if="specialAttackSavedSoundPath" :src="specialAttackSavedSoundPath" controls class="h-8" style="max-width: 220px;" />
+              <span v-else class="text-[10px] text-gray-400">No sound</span>
+              <div class="space-y-2 flex-1 min-w-[200px]">
+                <input type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav" class="block w-full" @change="onSpecialAttackSoundFile" />
+                <p class="text-[10px] text-gray-500">Plays the instant this attack fires, for whichever side cast it.</p>
+                <p v-if="specialAttackSoundError" class="text-red-600">{{ specialAttackSoundError }}</p>
+                <button
+                  v-if="specialAttackForm.id" type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                  :disabled="!specialAttackPendingSoundFile || specialAttackUploadingSound" @click="uploadSpecialAttackSound"
+                >{{ specialAttackUploadingSound ? 'Uploading…' : 'Upload sound' }}</button>
+                <p v-else-if="specialAttackPendingSoundFile" class="text-[11px] text-gray-500">Uploads together with "Create attack" below.</p>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3 flex-wrap pt-1">
+            <button
+              type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              :disabled="specialAttackSaving" @click="saveSpecialAttack"
+            >{{ specialAttackSaving ? 'Saving…' : (specialAttackForm.id ? 'Save changes' : 'Create attack') }}</button>
+            <button type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50" @click="resetSpecialAttackForm">Cancel</button>
+          </div>
+        </div>
+      </section>
+
       <!-- ── Factions ─────────────────────────────────────────────── -->
       <section class="space-y-2">
         <h2 class="font-semibold text-sm">Factions</h2>
@@ -96,6 +195,18 @@
             <p class="text-[10px] text-gray-500 mt-1">
               Full-screen effect played the moment the battle popup first offers a member of this faction. Built in
               <NuxtLink to="/newsite/admin/cMoonJoinEffects" class="text-indigo-600 hover:underline">Manage cMoon Join Effects</NuxtLink>.
+            </p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium mb-1">Special attack (optional)</label>
+            <select v-model="factionForm.specialAttackId" class="w-full border rounded px-2 py-1">
+              <option value="">None — this faction's NPCs never fire one</option>
+              <option v-for="a in specialAttacks" :key="a.id" :value="a.id">{{ a.name }}</option>
+            </select>
+            <p class="text-[10px] text-gray-500 mt-1">
+              Every member of this faction charges and fires this one attack after landing 3 consecutive hits on a
+              player. Built above in "Manage Special Attacks".
             </p>
           </div>
 
@@ -514,8 +625,27 @@ const backgrounds = ref([])
 const avatarsCatalog = ref([])
 const ctoonsCatalog = ref([])
 const joinEffects = ref([])
+const specialAttacks = ref([])
 const loading = ref(false)
 const loadError = ref('')
+
+// Mirrors server/utils/cmoonEnemy.js's SPECIAL_ATTACK_EFFECT_TYPES — duplicated client-side
+// since that file is server-only, same as RANKS/RANK_LABELS below.
+const SPECIAL_ATTACK_EFFECT_TYPES = ['DAMAGE_OPPONENT', 'HEAL_SELF', 'PARALYZE_OPPONENT', 'LOWER_OPPONENT_ATTACK', 'RAISE_ALLY_ATTACK']
+const SPECIAL_ATTACK_EFFECT_LABELS = {
+  DAMAGE_OPPONENT: 'Damage opponent',
+  HEAL_SELF: 'Heal self',
+  PARALYZE_OPPONENT: 'Paralyze opponent',
+  LOWER_OPPONENT_ATTACK: "Lower opponent's attack",
+  RAISE_ALLY_ATTACK: 'Raise own attack',
+}
+const SPECIAL_ATTACK_EFFECT_HELP = {
+  DAMAGE_OPPONENT: 'Deals Amount flat damage to the enemy, bypassing block entirely.',
+  HEAL_SELF: 'Heals the caster for Amount HP.',
+  PARALYZE_OPPONENT: 'The enemy cannot attack or block for Amount upcoming rounds.',
+  LOWER_OPPONENT_ATTACK: "Reduces the enemy's own landed-hit damage by Amount for the rest of the fight.",
+  RAISE_ALLY_ATTACK: "Increases the caster's own landed-hit damage by Amount for the rest of the fight.",
+}
 
 const memberFactionFilter = ref('')
 const filteredMembers = computed(() => {
@@ -549,7 +679,7 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [factionsData, membersData, backgroundsData, avatarsData, ctoonsData, joinEffectsData, cmoonsData] = await Promise.all([
+    const [factionsData, membersData, backgroundsData, avatarsData, ctoonsData, joinEffectsData, cmoonsData, specialAttacksData] = await Promise.all([
       $fetch('/api/admin/cmoon-enemy-factions'),
       $fetch('/api/admin/cmoon-enemy-members'),
       $fetch('/api/admin/backgrounds'),
@@ -557,6 +687,7 @@ async function load() {
       $fetch('/api/admin/list-ctoons'),
       $fetch('/api/admin/cmoon-join-effects'),
       $fetch('/api/admin/cmoons'),
+      $fetch('/api/admin/cmoon-special-attacks'),
     ])
     factions.value = factionsData?.factions || []
     members.value = membersData?.members || []
@@ -565,10 +696,131 @@ async function load() {
     ctoonsCatalog.value = ctoonsData || []
     joinEffects.value = joinEffectsData?.effects || []
     higherTierFirst.value = !!cmoonsData?.cMoonEnemyHigherTierFirst
+    specialAttacks.value = specialAttacksData?.attacks || []
   } catch (e) {
     loadError.value = e?.data?.statusMessage || 'Failed to load cMoon enemies'
   } finally {
     loading.value = false
+  }
+}
+
+// ── Special attacks (library CRUD, assigned by id on the faction/cMoon forms) ──────────────
+const specialAttackSaving = ref(false)
+const specialAttackFormError = ref('')
+const deletingSpecialAttackId = ref('')
+const specialAttackPendingSoundFile = ref(null)
+const specialAttackUploadingSound = ref(false)
+const specialAttackSoundError = ref('')
+const specialAttackSavedSoundPath = ref('')
+
+const emptySpecialAttackForm = () => ({ id: '', name: '', description: '', effectType: 'DAMAGE_OPPONENT', amount: 10, healsAllies: false })
+const specialAttackForm = reactive(emptySpecialAttackForm())
+
+function resetSpecialAttackForm() {
+  specialAttackFormError.value = ''
+  specialAttackPendingSoundFile.value = null
+  specialAttackUploadingSound.value = false
+  specialAttackSoundError.value = ''
+  specialAttackSavedSoundPath.value = ''
+  Object.assign(specialAttackForm, emptySpecialAttackForm())
+}
+
+function startEditSpecialAttack(a) {
+  resetSpecialAttackForm()
+  specialAttackForm.id = a.id
+  specialAttackForm.name = a.name
+  specialAttackForm.description = a.description || ''
+  specialAttackForm.effectType = a.effectType
+  specialAttackForm.amount = a.amount
+  specialAttackForm.healsAllies = !!a.healsAllies
+  specialAttackSavedSoundPath.value = a.soundPath || ''
+}
+
+function onSpecialAttackSoundFile(ev) {
+  specialAttackSoundError.value = ''
+  const f = ev.target.files?.[0] || null
+  if (f && !['audio/mpeg', 'audio/ogg', 'audio/wav'].includes(f.type)) {
+    specialAttackSoundError.value = 'MP3, OGG, or WAV only.'
+    ev.target.value = ''
+    return
+  }
+  if (f && f.size > 3 * 1024 * 1024) {
+    specialAttackSoundError.value = 'Audio must be 3MB or smaller.'
+    ev.target.value = ''
+    return
+  }
+  specialAttackPendingSoundFile.value = f
+}
+
+async function uploadSpecialAttackSoundFor(id) {
+  if (!specialAttackPendingSoundFile.value || !id) return
+  specialAttackUploadingSound.value = true
+  specialAttackSoundError.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('audio', specialAttackPendingSoundFile.value)
+    const res = await $fetch(`/api/admin/cmoon-special-attacks/${id}/sound`, { method: 'POST', body: fd })
+    specialAttackSavedSoundPath.value = res.soundPath || specialAttackSavedSoundPath.value
+    specialAttackPendingSoundFile.value = null
+  } catch (e) {
+    specialAttackSoundError.value = e?.data?.statusMessage || 'Upload failed.'
+  } finally {
+    specialAttackUploadingSound.value = false
+  }
+}
+
+async function uploadSpecialAttackSound() {
+  if (!specialAttackForm.id) return
+  await uploadSpecialAttackSoundFor(specialAttackForm.id)
+  await load()
+}
+
+async function saveSpecialAttack() {
+  specialAttackFormError.value = ''
+  if (!specialAttackForm.name.trim()) { specialAttackFormError.value = 'Name is required.'; return }
+  const amount = Math.trunc(Number(specialAttackForm.amount))
+  if (!Number.isInteger(amount) || amount < 1 || amount > 999) {
+    specialAttackFormError.value = 'Amount must be between 1 and 999.'
+    return
+  }
+
+  specialAttackSaving.value = true
+  try {
+    const body = {
+      name: specialAttackForm.name.trim(),
+      description: specialAttackForm.description.trim() || null,
+      effectType: specialAttackForm.effectType,
+      amount,
+      healsAllies: specialAttackForm.effectType === 'HEAL_SELF' ? specialAttackForm.healsAllies : false,
+    }
+    if (specialAttackForm.id) {
+      await $fetch(`/api/admin/cmoon-special-attacks/${specialAttackForm.id}`, { method: 'PUT', body })
+    } else {
+      const res = await $fetch('/api/admin/cmoon-special-attacks', { method: 'POST', body })
+      specialAttackForm.id = res.id
+    }
+    if (specialAttackPendingSoundFile.value) await uploadSpecialAttackSoundFor(specialAttackForm.id)
+    resetSpecialAttackForm()
+    await load()
+  } catch (e) {
+    specialAttackFormError.value = e?.data?.statusMessage || 'Failed to save special attack'
+  } finally {
+    specialAttackSaving.value = false
+  }
+}
+
+async function removeSpecialAttack(a) {
+  if (a.cmoonUsageCount > 0 || a.enemyFactionUsageCount > 0) return
+  if (!confirm(`Delete special attack "${a.name}"? This can't be undone.`)) return
+  deletingSpecialAttackId.value = a.id
+  try {
+    await $fetch(`/api/admin/cmoon-special-attacks/${a.id}`, { method: 'DELETE' })
+    if (specialAttackForm.id === a.id) resetSpecialAttackForm()
+    await load()
+  } catch (e) {
+    loadError.value = e?.data?.statusMessage || 'Failed to delete special attack'
+  } finally {
+    deletingSpecialAttackId.value = ''
   }
 }
 
@@ -647,7 +899,7 @@ async function uploadFactionSound(slotKey) {
   await load()
 }
 
-const emptyFactionForm = () => ({ id: '', name: '', description: '', active: true, sortOrder: 0, appearEffectId: '' })
+const emptyFactionForm = () => ({ id: '', name: '', description: '', active: true, sortOrder: 0, appearEffectId: '', specialAttackId: '' })
 const factionForm = reactive(emptyFactionForm())
 const factionPreviewImageSrc = computed(() => factionPendingFilePreviewUrl.value || factionSavedImagePath.value || '')
 
@@ -677,6 +929,7 @@ function startEditFaction(f) {
   factionForm.active = !!f.active
   factionForm.sortOrder = f.sortOrder
   factionForm.appearEffectId = f.appearEffectId || ''
+  factionForm.specialAttackId = f.specialAttackId || ''
   factionSavedImagePath.value = f.bannerImagePath || ''
   factionSavedMusicPath.value = f.battleMusicPath || ''
   for (const s of FACTION_SOUND_SLOTS) factionSoundState[s.key].savedPath = f[s.field] || ''
@@ -776,6 +1029,7 @@ async function saveFaction() {
       active: factionForm.active,
       sortOrder: Math.trunc(Number(factionForm.sortOrder)) || 0,
       appearEffectId: factionForm.appearEffectId || null,
+      specialAttackId: factionForm.specialAttackId || null,
     }
     if (factionForm.id) {
       await $fetch(`/api/admin/cmoon-enemy-factions/${factionForm.id}`, { method: 'PUT', body })
