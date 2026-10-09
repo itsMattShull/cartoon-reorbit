@@ -1348,6 +1348,8 @@ model GameConfig {
   winWheelImagePath    String?
   winWheelSoundPath    String?
   winWheelSoundMode    String?
+  winWheelNothingGifPath String?
+  winWheelNothingText    String?
   tripleNothingCtoonId String?
   tripleNothingCtoon   Ctoon?           @relation("TripleNothingPrize", fields: [tripleNothingCtoonId], references: [id])
 
