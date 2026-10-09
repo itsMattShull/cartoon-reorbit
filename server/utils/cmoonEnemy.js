@@ -513,6 +513,16 @@ export function pickWeightedEnemy(candidates) {
   return candidates[candidates.length - 1]
 }
 
+// Narrows the candidate pool to raid bosses only once a player has hit GlobalGameConfig's
+// cMoonEnemySpawnCapCount within the last cMoonEnemySpawnCapWindowHours — see that field's own
+// schema comment for why raid bosses are exempt. `capCount <= 0` means "no cap," a no-op; so does
+// `recentNonRaidCount < capCount` (still under the limit). consider.post.js is the only caller —
+// it already bails out with "nothing offered" if this empties the pool.
+export function filterCappedNonRaidCandidates(candidates, recentNonRaidCount, capCount) {
+  if (!capCount || capCount <= 0 || recentNonRaidCount < capCount) return candidates
+  return candidates.filter(c => c.isRaidBoss)
+}
+
 // ── Special attacks (CMoonSpecialAttack) — see that model's own schema comment ──────────────
 export const SPECIAL_ATTACK_NAME_MAX_LENGTH = 60
 export const SPECIAL_ATTACK_DESCRIPTION_MAX_LENGTH = 300

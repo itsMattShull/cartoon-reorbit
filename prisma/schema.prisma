@@ -549,6 +549,13 @@ model User {
   // repeatedly dismisses the popup without ever fighting would have no record to cool down
   // against, and the chance would re-roll (and could re-hit) on every single page navigation.
   lastCMoonBattlePopupAt DateTime?
+  // Full opt-out of the cMoon Enemy Battles popup — same "allow*" positive-boolean convention as
+  // allowAuctionNotifications below (default true, so existing players keep today's behavior).
+  // Checked in consider.post.js right alongside the master GlobalGameConfig.cMoonEnemyBattlesEnabled
+  // switch: unlike CMoonEnemySpawnCapCount (which only ever narrows the pool to raid bosses), this
+  // blocks the popup entirely — solo AND raid offers both — since a player asking to stop being
+  // shown it at all shouldn't still get raid-boss interruptions.
+  allowCMoonEnemyPopups  Boolean         @default(true)
   // Set when a player explicitly declines to pick a cMoon from the initial join modal (there is no
   // more time-based auto-assignment — see server/utils/cmoon.js). Only meaningful while cMoonId is
   // null; cleared back to false on a successful selectCMoonForUser. Lets the modal stop popping up
@@ -780,6 +787,7 @@ model User {
   // cMoon Enemy Battles
   cMoonEnemyBattles CMoonEnemyBattle[]
   cMoonEnemyRaidParticipations CMoonEnemyRaidParticipant[]
+  cMoonEnemyPopupLogs CMoonEnemyPopupLog[]
   cMoonHuntAssignments CMoonHuntAssignment[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
@@ -1807,6 +1815,17 @@ model GlobalGameConfig {
   cMoonEnemyBattlesEnabled           Boolean   @default(false)
   cMoonBattlePopupChancePercent      Int       @default(3) // 0-100; rolled on each route navigation; 0 disables
   cMoonBattlePopupCooldownMinutes    Int       @default(20) // minimum time between popups shown to the same user
+  // Caps how many NON-raid-boss enemies can be offered to a single player within a rolling window
+  // of cMoonEnemySpawnCapWindowHours — e.g. "4 per 4 hours". A raid boss is NEVER subject to this
+  // cap (it already has its own per-member raidOneTime/raidCooldownMinutes gate); once a player's
+  // count of recent non-raid offers (CMoonEnemyPopupLog rows, see that model's own comment) hits
+  // this many, consider.post.js narrows its candidate pool to raid bosses only for the rest of the
+  // window rather than refusing to offer anything at all. 0 disables the cap (unlimited), same
+  // "0 disables" convention as cMoonBattlePopupChancePercent above. See
+  // filterCappedNonRaidCandidates in server/utils/cmoonEnemy.js, the only reader besides the admin
+  // settings endpoint.
+  cMoonEnemySpawnCapCount            Int       @default(0)
+  cMoonEnemySpawnCapWindowHours      Int       @default(4) // only meaningful while the cap above is > 0
   // Discord channel a raid-boss announcement posts to (see announceCMoonRaidBoss in
   // server/utils/discord.js) — same admin-configurable-with-env-fallback shape as
   // achievementDiscordChannelId/czoneContestDiscordChannelId above.
@@ -5574,6 +5593,25 @@ model CMoonEnemyReward {
   background  Background?      @relation(fields: [backgroundId], references: [id], onDelete: Restrict)
 
   @@index([enemyMemberId])
+}
+
+// One row per NON-raid-boss enemy actually OFFERED to a player (the chance roll in
+// consider.post.js hit AND the chosen candidate wasn't a raid boss) — purely a rolling-window
+// counter for GlobalGameConfig.cMoonEnemySpawnCapCount/-WindowHours (see that field's own
+// comment), never written for a raid-boss offer since those are exempt from the cap. Distinct
+// from User.lastCMoonBattlePopupAt (a single most-recent timestamp, useless for "how many in the
+// last N hours") and from CMoonEnemyBattle (which only exists once a player actually clicks
+// "Fight!" — a dismissed popup still counts toward this cap, matching how the cap is meant to
+// pace how often the popup INTERRUPTS a player, not how often they choose to engage). No admin UI
+// reads this table directly; it exists solely to be counted and aged out by its own window.
+model CMoonEnemyPopupLog {
+  id      String   @id @default(uuid())
+  userId  String
+  shownAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, shownAt])
 }
 
 // One player's attempt against one CMoonEnemyMember — this single row IS the live battle state

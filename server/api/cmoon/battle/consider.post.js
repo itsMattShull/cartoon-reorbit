@@ -12,7 +12,7 @@ import { prisma as db } from '@/server/prisma'
 import { getGlobalConfig } from '@/server/utils/cmoon'
 import { serializeEnemyForClient, serializeBattleForClient } from '@/server/utils/cmoonEnemyBattle'
 import { checkRaidBossAvailability } from '@/server/utils/cmoonEnemyRaid'
-import { filterToHighestRank, pickWeightedEnemy } from '@/server/utils/cmoonEnemy'
+import { filterToHighestRank, pickWeightedEnemy, filterCappedNonRaidCandidates } from '@/server/utils/cmoonEnemy'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -20,7 +20,7 @@ export default defineEventHandler(async (event) => {
 
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { cMoonId: true, banned: true, active: true, lastCMoonBattlePopupAt: true },
+    select: { cMoonId: true, banned: true, active: true, lastCMoonBattlePopupAt: true, allowCMoonEnemyPopups: true },
   })
   if (!user || user.banned || !user.active) return { offered: false }
 
@@ -39,6 +39,11 @@ export default defineEventHandler(async (event) => {
   // encounter on top of it.
   const activeRaid = await db.cMoonEnemyRaidParticipant.findFirst({ where: { userId, activeUserId: userId }, select: { id: true } })
   if (activeRaid) return { offered: false }
+
+  // Full per-player opt-out (Settings page) — unlike the spawn cap below (which only narrows the
+  // pool to raid bosses), this blocks the popup outright, solo and raid offers alike: a player who
+  // asked to stop being shown it shouldn't still get raid-boss interruptions.
+  if (!user.allowCMoonEnemyPopups) return { offered: false }
 
   const config = await getGlobalConfig()
   // Master switch, off by default — checked before the chance roll (and before even querying
@@ -92,9 +97,22 @@ export default defineEventHandler(async (event) => {
       })
     : []
   const riddleSolvedByEnemyId = new Map(bossLoreRiddles.map(r => [r.enemyMemberId, !!r.solvedAt]))
-  const candidates = rawCandidates.filter(m => !m.isRaidBoss
+  let candidates = rawCandidates.filter(m => !m.isRaidBoss
     || checkRaidBossAvailability({ ...m, riddleGateSolved: riddleSolvedByEnemyId.get(m.id) ?? true }).available)
   if (!candidates.length) return { offered: false }
+
+  // Non-raid-boss spawn cap (admin-configurable, 0 = disabled) — see
+  // GlobalGameConfig.cMoonEnemySpawnCapCount's own schema comment. Only queried once there's
+  // actually a candidate pool to narrow, same "don't query for nothing" stance as personalWinCount
+  // above. Raid bosses stay offerable either way (filterCappedNonRaidCandidates never removes them).
+  const spawnCapCount = config?.cMoonEnemySpawnCapCount ?? 0
+  if (spawnCapCount > 0) {
+    const windowHours = config?.cMoonEnemySpawnCapWindowHours ?? 4
+    const windowStart = new Date(Date.now() - windowHours * 60 * 60 * 1000)
+    const recentNonRaidCount = await db.cMoonEnemyPopupLog.count({ where: { userId, shownAt: { gte: windowStart } } })
+    candidates = filterCappedNonRaidCandidates(candidates, recentNonRaidCount, spawnCapCount)
+    if (!candidates.length) return { offered: false }
+  }
 
   // "Higher tiered enemies first" (admin toggle) narrows the pool to only the highest
   // CMoonEnemyRank actually present among this player's eligible candidates BEFORE weighting —
@@ -105,7 +123,12 @@ export default defineEventHandler(async (event) => {
   const tierFiltered = filterToHighestRank(candidates, !!config?.cMoonEnemyHigherTierFirst)
   const chosen = pickWeightedEnemy(tierFiltered)
 
-  await db.user.update({ where: { id: userId }, data: { lastCMoonBattlePopupAt: new Date() } })
+  // CMoonEnemyPopupLog only ever records a NON-raid-boss offer — see that model's own comment —
+  // since raid bosses never count against the cap this log exists to enforce.
+  await Promise.all([
+    db.user.update({ where: { id: userId }, data: { lastCMoonBattlePopupAt: new Date() } }),
+    chosen.isRaidBoss ? null : db.cMoonEnemyPopupLog.create({ data: { userId } }),
+  ])
 
   return { offered: true, resumed: false, enemy: serializeEnemyForClient(chosen), inCMoon: !!user.cMoonId }
 })
