@@ -1,11 +1,17 @@
 // server/api/discord/register-commands.post.js
-import { defineEventHandler, createError, getRequestHeader } from 'h3'
+//
+// A bulk PUT overwrites every guild command at once, so this is a state-changing admin mutation
+// like any other — brought up to the same requireAdmin/assertSameOrigin convention the rest of
+// server/api/admin/* uses (see server/utils/requireAdmin.js) now that it's reachable from a real
+// UI button (Global Settings > Discord) rather than only a hand-crafted request. requireAdmin also
+// drops the old self-loopback `/api/auth/me` HTTP call in favor of a direct DB read, and rejects a
+// banned/deactivated admin rather than just checking `isAdmin`.
+import { defineEventHandler, createError } from 'h3'
+import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 
 export default defineEventHandler(async (event) => {
-  const cookie = getRequestHeader(event, 'cookie') || ''
-  const me = await $fetch('/api/auth/me', { headers: { cookie } }).catch(() => null)
-  if (!me?.isAdmin) throw createError({ statusCode: 403, statusMessage: 'Admins only' })
-
+  await requireAdmin(event)
+  assertSameOrigin(event)
 
   const APP_ID    = process.env.DISCORD_APP_ID
   const GUILD_ID  = process.env.DISCORD_GUILD_ID   // test guild
