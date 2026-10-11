@@ -7,11 +7,12 @@ import { defineEventHandler } from 'h3'
 import { computeSeasonProgress } from '@/server/utils/cmoonSeason'
 
 export default defineEventHandler(async () => {
-  const { config, trackers } = await computeSeasonProgress()
+  const { config, trackers, enemiesGoal } = await computeSeasonProgress()
   return {
     header: config.header,
     startedAt: config.startedAt,
     blurb: config.blurb,
     trackers,
+    enemiesGoal,
   }
 })

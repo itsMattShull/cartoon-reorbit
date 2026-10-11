@@ -1724,14 +1724,26 @@
                   class="block w-full text-xs mb-1"
                   @change="onFlappyImageFile(s.slot, $event)"
                 />
-                <button
-                  class="px-2 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                  :disabled="!flappyImageFiles[s.slot] || uploadingFlappyImage[s.slot]"
-                  @click="uploadFlappyImage(s.slot)"
-                >
-                  <span v-if="!uploadingFlappyImage[s.slot]">Upload</span>
-                  <span v-else>Uploading…</span>
-                </button>
+                <div class="flex gap-1">
+                  <button
+                    class="px-2 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                    :disabled="!flappyImageFiles[s.slot] || uploadingFlappyImage[s.slot]"
+                    @click="uploadFlappyImage(s.slot)"
+                  >
+                    <span v-if="!uploadingFlappyImage[s.slot]">Upload</span>
+                    <span v-else>Uploading…</span>
+                  </button>
+                  <button
+                    v-if="flappyImages[s.slot]"
+                    type="button"
+                    class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50 disabled:opacity-50"
+                    :disabled="clearingFlappyImage[s.slot]"
+                    @click="clearFlappyImage(s.slot)"
+                  >
+                    <span v-if="!clearingFlappyImage[s.slot]">Clear</span>
+                    <span v-else>Clearing…</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -3549,6 +3561,7 @@ const flappyImageSlots = [
 const flappyImages      = ref({ blossom: '', bubbles: '', buttercup: '', city: '' })
 const flappyImageFiles  = ref({ blossom: null, bubbles: null, buttercup: null, city: null })
 const uploadingFlappyImage = ref({ blossom: false, bubbles: false, buttercup: false, city: false })
+const clearingFlappyImage = ref({ blossom: false, bubbles: false, buttercup: false, city: false })
 
 function onFlappyImageFile(slot, e) {
   flappyImageFiles.value[slot] = e.target.files?.[0] || null
@@ -3572,6 +3585,21 @@ async function uploadFlappyImage(slot) {
     toastMessage.value = e?.data?.statusMessage || 'Error uploading image'; toastType.value = 'error'
   } finally {
     uploadingFlappyImage.value[slot] = false
+  }
+}
+
+async function clearFlappyImage(slot) {
+  clearingFlappyImage.value[slot] = true
+  toastMessage.value = ''
+  try {
+    await $fetch('/api/admin/flappy-image', { method: 'DELETE', body: { slot } })
+    flappyImages.value[slot] = ''
+    toastMessage.value = 'Reverted to the default image.'; toastType.value = 'success'
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = e?.data?.statusMessage || 'Error clearing image'; toastType.value = 'error'
+  } finally {
+    clearingFlappyImage.value[slot] = false
   }
 }
 
