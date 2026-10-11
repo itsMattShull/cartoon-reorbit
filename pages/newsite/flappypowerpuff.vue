@@ -213,16 +213,18 @@ const GAME_OVER_LOCK_MS = 600
 // Flat CN palette, declared once. Building these as template strings per frame would mean
 // dozens of string allocations and CSS colour parses every frame.
 const C_SKY = '#81c3dd'
+// Parsed once so the fallback (no city image loaded, or a same-origin-canvas read failure) is
+// numerically identical to C_SKY above — keep the two in sync if C_SKY ever changes.
+const DEFAULT_SKY_RGB = { r: 0x81, g: 0xc3, b: 0xdd }
 // Obstacles must never be mistakable for the backdrop, or the player cannot tell what kills
 // them from what is scenery. They get the saturated end of the palette plus the heavy black
-// outline that is the early-2000s CN hallmark; the backdrop is veiled in sky (see BACKDROP_VEIL)
-// so it recedes behind them.
+// outline that is the early-2000s CN hallmark; the backdrop is veiled in a sky-tinted overlay
+// (see citySkyRGB/renderFrame) so it recedes behind them regardless of its own colors.
 const C_TOWER_FACE = '#e8a33a'
 const C_TOWER_LIGHT = '#ffd98a'
 const C_TOWER_DARK = '#b96a1c'
 const C_TOWER_WINDOW = '#8a4a12'
 const C_TOWER_OUTLINE = '#231404'
-const BACKDROP_VEIL = 'rgba(129, 195, 221, 0.55)'
 const C_STREET = '#5d6169'
 const C_STREET_TOP = '#231404' // heavy dark kerb line, matching the towers' outline
 const C_SCORE = '#ffffff'
@@ -295,6 +297,9 @@ let cityStrip = null      // pre-rendered offscreen backdrop
 let cityStripW = 0
 let spriteImg = null
 let cityImg = null
+// Sampled from cityImg's own top edge — see sampleTopEdgeColor's own comment. Starts as the
+// default sky so the very first frame (before any image has loaded) isn't drawn black.
+let citySkyRGB = { ...DEFAULT_SKY_RGB }
 let reducedMotion = false
 let audioCtx = null
 let masterGain = null
@@ -479,6 +484,32 @@ function resizeCanvas() {
   buildCityStrip()
 }
 
+// The city band is anchored to the GROUND (see buildCityStrip's bandY), so its drawn top edge
+// is the source image's own top row — exactly the pixels that butt up against the flat sky
+// fill above it. Sampling that row and using it AS the sky fill (instead of the hardcoded
+// C_SKY) means any uploaded skyline blends into the sky seamlessly regardless of what colors
+// it uses, with no admin color-matching required. The default city.png was hand-colored to
+// match C_SKY for exactly this reason — sampling it just reproduces that color back out.
+function sampleTopEdgeColor(img) {
+  if (!img?.complete || !img.naturalWidth || !img.naturalHeight) return null
+  try {
+    const probe = document.createElement('canvas')
+    probe.width = Math.max(1, Math.min(img.naturalWidth, 64))
+    probe.height = 1
+    const pctx = probe.getContext('2d', { willReadFrequently: true })
+    pctx.drawImage(img, 0, 0, probe.width, 1, 0, 0, probe.width, 1)
+    const { data } = pctx.getImageData(0, 0, probe.width, 1)
+    let r = 0, g = 0, b = 0, n = 0
+    for (let i = 0; i < data.length; i += 4) { r += data[i]; g += data[i + 1]; b += data[i + 2]; n++ }
+    if (!n) return null
+    return { r: Math.round(r / n), g: Math.round(g / n), b: Math.round(b / n) }
+  } catch {
+    // getImageData throws on a tainted canvas (a cross-origin image with no CORS headers).
+    // Uploads are always same-origin, so this is a belt-and-braces fallback, not an expected path.
+    return null
+  }
+}
+
 // Pre-render the backdrop once per resize into a 2x-wide offscreen strip, so each frame is a
 // single unscaled blit instead of a filtered rescale drawn twice for the wrap seam. The second
 // copy is mirrored, which makes the tiling seamless on art that isn't.
@@ -568,7 +599,9 @@ function renderFrame(t) {
 
   // Sky and backdrop draw FULL-BLEED across the whole canvas, ignoring the letterbox, so the
   // bars read as scenery rather than as broken layout. Only gameplay is clipped to the world.
-  ctx.fillStyle = C_SKY
+  // citySkyRGB (sampled from the active city image's own top edge) rather than the fixed C_SKY,
+  // so a custom-uploaded skyline never shows a hard color seam against the flat sky above it.
+  ctx.fillStyle = `rgb(${citySkyRGB.r}, ${citySkyRGB.g}, ${citySkyRGB.b})`
   ctx.fillRect(0, 0, cssW, wy(GROUND_Y))
 
   if (cityStrip) {
@@ -583,8 +616,9 @@ function renderFrame(t) {
     }
     // Atmospheric veil: pushes the skyline back so the obstacle towers read as the only solid
     // things on screen. Without it the two are the same tan and the obstacles vanish into the
-    // scenery, which is exactly as unfair as it sounds.
-    ctx.fillStyle = BACKDROP_VEIL
+    // scenery, which is exactly as unfair as it sounds. Tinted with the same sampled sky color
+    // (not a fixed one) so it still reads as "distance haze" against whatever was uploaded.
+    ctx.fillStyle = `rgba(${citySkyRGB.r}, ${citySkyRGB.g}, ${citySkyRGB.b}, 0.55)`
     ctx.fillRect(0, bandY, cssW, cityStrip.height)
   }
 
@@ -679,6 +713,15 @@ function loop() {
     if (score.value - announcedAt >= 5) {
       announcedAt = score.value
       liveMessage.value = `${score.value} buildings passed`
+    }
+    // /end's authoritative replay never scores past cfg.maxScore (see flappyPowerpuffEngine.js) —
+    // ending the run here the moment it's reached means the number the player watched climb and
+    // the number they're told afterward are always the same, instead of the server silently
+    // clamping a higher on-screen score down with no explanation.
+    if (cfg.maxScore && score.value >= cfg.maxScore) {
+      score.value = cfg.maxScore
+      endGame()
+      return
     }
     if (collidedAt(t)) {
       endGame()
@@ -870,6 +913,7 @@ async function startGame() {
     ])
     spriteImg = sprite
     cityImg = city
+    citySkyRGB = sampleTopEdgeColor(cityImg) || { ...DEFAULT_SKY_RGB }
     try { await spriteImg?.decode?.() } catch {}
 
     uiState.value = 'ready'
