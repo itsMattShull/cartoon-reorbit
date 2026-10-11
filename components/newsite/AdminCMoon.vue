@@ -33,6 +33,12 @@
             @click="backfillModalOpen = true"
           >Backfill cMoon Points</button>
           <button
+            class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50"
+            :disabled="!cmoons.length"
+            title="Gives (or deducts) a one-off amount of cMoon points to a single player or a single team — never a blanket grant to everyone"
+            @click="awardModalOpen = true"
+          >Award cMoon Points</button>
+          <button
             class="cm-tap px-3 text-xs font-semibold rounded-md border border-red-300 bg-white text-red-700 hover:bg-red-50"
             title="Claws back any rank prize a member only received because of the old cMoonPoints bug, and resets that achievement so they can legitimately re-earn it. Run Recalculate cMoon Points first."
             @click="prizeRevokeModalOpen = true"
@@ -1321,6 +1327,14 @@
       @done="load"
     />
 
+    <!-- ── Award cMoon Points modal ─────────────────────────────────────── -->
+    <CMoonAwardPointsModal
+      v-if="awardModalOpen"
+      :allCMoons="cmoons"
+      @close="awardModalOpen = false"
+      @done="load"
+    />
+
     <!-- ── Revoke Invalid cMoon Rank Prizes modal ─────────────────────── -->
     <CMoonPrizeRevokeModal
       v-if="prizeRevokeModalOpen"
@@ -1371,6 +1385,7 @@ const previewModalOpen = ref(false)
 const balanceModalOpen = ref(false)
 const recalcModalOpen = ref(false)
 const backfillModalOpen = ref(false)
+const awardModalOpen = ref(false)
 const prizeRevokeModalOpen = ref(false)
 // Populated from /api/admin/cmoon-join-effects — admin-authored alternative to the built-in
 // effectType dropdown below (see Manage cMoon Join Effects for creating/editing these).

@@ -95,7 +95,7 @@ export const WIN_GAME_OPTIONS = WIN_GAMES.map(({ name, label }) => ({ key: name,
 // RIDDLE_SOLVE from server/utils/cmoonRiddle.js (the Discord riddle system), and HUNT_COMPLETE
 // from server/utils/cmoonHunt.js (the split-clue scavenger hunt). Exported so the admin
 // points-log endpoint has a fixed filter list without a DISTINCT query.
-export const CMOON_SCORE_LOG_CATEGORIES = ['HIGH_SCORE', 'TOP10', 'DAILY_TASK', 'ADMIN_BACKFILL', 'ENEMY_BATTLE_WIN', 'ENEMY_RAID_WIN', 'RIDDLE_SOLVE', 'HUNT_COMPLETE']
+export const CMOON_SCORE_LOG_CATEGORIES = ['HIGH_SCORE', 'TOP10', 'DAILY_TASK', 'ADMIN_BACKFILL', 'ADMIN_GRANT', 'ENEMY_BATTLE_WIN', 'ENEMY_RAID_WIN', 'RIDDLE_SOLVE', 'HUNT_COMPLETE']
 
 const GAME_LABEL_BY_KEY = new Map([...SCORE_GAMES, ...WIN_GAMES].map(g => [g.name, g.label]))
 
@@ -119,6 +119,11 @@ export function describeCMoonScoreLogSource(category, detail) {
       return 'Daily Task completion'
     case 'ADMIN_BACKFILL':
       return 'Admin backfill (Backfill cMoon Points tool)'
+    case 'ADMIN_GRANT':
+      // userId is null for a team-only grant (see award-points.post.js) — this function only
+      // sees (category, detail), so that distinction shows up in the points-log row itself
+      // (blank username) rather than in this label.
+      return detail ? `Admin grant — ${detail}` : 'Admin grant'
     case 'ENEMY_BATTLE_WIN':
       return 'Enemy Battle victory'
     case 'ENEMY_RAID_WIN':
