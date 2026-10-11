@@ -63,6 +63,21 @@
     <div v-if="seasonLoaded" class="cmn-season">
       <h2 class="cmn-season-header">{{ season.header }}</h2>
 
+      <div v-if="season.enemiesGoal?.enabled" class="cmn-season-panel">
+        <h3 class="cmn-season-subheading">{{ season.enemiesGoal.label }}</h3>
+        <div class="cmn-season-progress-row">
+          <div class="cmn-season-progress-bar">
+            <div
+              class="cmn-season-progress-fill"
+              :style="{ width: progressPercent(season.enemiesGoal.current, season.enemiesGoal.target) + '%', background: 'var(--cmn-accent)' }"
+            ></div>
+          </div>
+          <span class="cmn-season-progress-value">
+            {{ Math.round(season.enemiesGoal.current).toLocaleString() }} / {{ Math.round(season.enemiesGoal.target).toLocaleString() }}
+          </span>
+        </div>
+      </div>
+
       <div v-if="leaderboard.length" class="cmn-season-panel">
         <h3 class="cmn-season-subheading">Team Leaderboard</h3>
         <div v-for="row in leaderboard" :key="row.id" class="cmn-season-lb-row">
@@ -118,7 +133,7 @@ function goBack() {
 
 // ── Seasonal updates (bottom half, admin-customizable via Manage Navigation) ─────────────────
 const seasonLoaded = ref(false)
-const season = ref({ header: '', trackers: [], blurb: '' })
+const season = ref({ header: '', trackers: [], blurb: '', enemiesGoal: null })
 const leaderboard = ref([])
 
 function safeColor(color) {

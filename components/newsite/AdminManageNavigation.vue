@@ -38,6 +38,28 @@
             never deleted — just no longer counted toward the current season.
           </p>
         </div>
+
+        <div class="border-t pt-3 space-y-2">
+          <label class="flex items-center gap-2">
+            <input type="checkbox" v-model="enemiesGoalEnabled" />
+            <span class="text-xs font-medium">Show a combined "enemies defeated" progress bar</span>
+          </label>
+          <p class="text-[11px] text-gray-500">
+            One shared bar for the whole playerbase — every enemy defeated since the season
+            started, regular enemies and raid bosses alike. Saved together with the rest of this
+            card via "Save Season Settings."
+          </p>
+          <div v-if="enemiesGoalEnabled" class="flex gap-2 flex-wrap">
+            <div class="flex-1 min-w-[160px]">
+              <label class="block text-xs font-medium mb-1">Bar label ({{ enemiesGoalLabel.length }}/60)</label>
+              <input v-model="enemiesGoalLabel" maxlength="60" class="w-full border rounded px-2 py-1" placeholder="e.g. Enemies Defeated" />
+            </div>
+            <div class="w-32 flex-shrink-0">
+              <label class="block text-xs font-medium mb-1">Target</label>
+              <input v-model.number="enemiesGoalTarget" type="number" min="1" step="1" class="w-full border rounded px-2 py-1" />
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Trackers -->
@@ -155,6 +177,10 @@ const header = ref('')
 const startedAt = ref(null)
 const startingNew = ref(false)
 
+const enemiesGoalEnabled = ref(false)
+const enemiesGoalLabel = ref('Enemies Defeated')
+const enemiesGoalTarget = ref(1000)
+
 const trackers = ref([])
 const deletingId = ref('')
 const trackerSaving = ref(false)
@@ -196,6 +222,9 @@ async function load() {
     header.value = res.header || ''
     startedAt.value = res.startedAt
     trackers.value = res.trackers || []
+    enemiesGoalEnabled.value = !!res.enemiesDefeatedGoalEnabled
+    enemiesGoalLabel.value = res.enemiesDefeatedGoalLabel || 'Enemies Defeated'
+    enemiesGoalTarget.value = res.enemiesDefeatedGoalTarget || 1000
     blurbEditor.value?.commands.setContent(res.blurb || '', false)
   } catch (e) {
     loadError.value = e?.data?.statusMessage || 'Failed to load navigation settings'
@@ -276,9 +305,18 @@ async function saveBlurb() {
   try {
     const res = await $fetch('/api/admin/cmoon-season', {
       method: 'POST',
-      body: { header: header.value.trim(), blurb: blurbEditor.value?.getHTML() || '' },
+      body: {
+        header: header.value.trim(),
+        blurb: blurbEditor.value?.getHTML() || '',
+        enemiesDefeatedGoalEnabled: enemiesGoalEnabled.value,
+        enemiesDefeatedGoalLabel: enemiesGoalLabel.value.trim(),
+        enemiesDefeatedGoalTarget: Math.trunc(Number(enemiesGoalTarget.value)) || 0,
+      },
     })
     blurbEditor.value?.commands.setContent(res.blurb || '', false)
+    enemiesGoalEnabled.value = !!res.enemiesDefeatedGoalEnabled
+    enemiesGoalLabel.value = res.enemiesDefeatedGoalLabel || enemiesGoalLabel.value
+    enemiesGoalTarget.value = res.enemiesDefeatedGoalTarget || enemiesGoalTarget.value
   } catch (e) {
     blurbError.value = e?.data?.statusMessage || 'Failed to save blurb'
   } finally {

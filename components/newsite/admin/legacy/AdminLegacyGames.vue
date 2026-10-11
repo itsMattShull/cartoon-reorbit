@@ -963,6 +963,52 @@
             </div>
           </div>
 
+          <!-- "Nothing" result gif + text for Win Wheel -->
+          <div class="space-y-3 mb-6">
+            <label class="block text-xs font-medium text-gray-700">
+              "Nothing" Result Text
+            </label>
+            <input
+              type="text"
+              v-model="winWheelNothingText"
+              placeholder="You got nothing 😢"
+              class="border rounded-md px-2 py-1.5 text-sm w-full"
+            />
+
+            <label class="block text-xs font-medium text-gray-700">
+              "Nothing" Result Image (GIF/PNG/JPEG)
+            </label>
+            <input
+              type="file"
+              accept=".gif,image/gif,.png,image/png,.jpg,.jpeg,image/jpeg"
+              @change="onWinWheelNothingGifChange"
+              class="block w-full text-xs"
+            />
+            <div class="flex items-center gap-3">
+              <button
+                class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                @click="uploadWinWheelNothingGif"
+                :disabled="!winWheelNothingGifFile || uploadingNothingGif"
+              >
+                <span v-if="!uploadingNothingGif">Upload Image</span>
+                <span v-else>Uploading…</span>
+              </button>
+              <button
+                v-if="winWheelNothingGifPath"
+                type="button"
+                class="px-2 py-1 text-xs border rounded-md hover:bg-gray-50"
+                @click="removeWinWheelNothingGif"
+              >Remove Image</button>
+            </div>
+
+            <div class="mt-2">
+              <p v-if="winWheelNothingGifPath" class="text-xs text-gray-600 break-all">Saved path: {{ winWheelNothingGifPath }}</p>
+              <div class="mt-2 border rounded-md p-2 bg-gray-50">
+                <img :src="nothingGifPreviewSrc" alt="Nothing result preview" class="max-h-40 mx-auto" />
+              </div>
+            </div>
+          </div>
+
           <div class="mb-6 relative">
             <label class="block text-xs font-medium text-gray-700 mb-1">Exclusive cToon Pool</label>
             <input
@@ -1678,14 +1724,26 @@
                   class="block w-full text-xs mb-1"
                   @change="onFlappyImageFile(s.slot, $event)"
                 />
-                <button
-                  class="px-2 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                  :disabled="!flappyImageFiles[s.slot] || uploadingFlappyImage[s.slot]"
-                  @click="uploadFlappyImage(s.slot)"
-                >
-                  <span v-if="!uploadingFlappyImage[s.slot]">Upload</span>
-                  <span v-else>Uploading…</span>
-                </button>
+                <div class="flex gap-1">
+                  <button
+                    class="px-2 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                    :disabled="!flappyImageFiles[s.slot] || uploadingFlappyImage[s.slot]"
+                    @click="uploadFlappyImage(s.slot)"
+                  >
+                    <span v-if="!uploadingFlappyImage[s.slot]">Upload</span>
+                    <span v-else>Uploading…</span>
+                  </button>
+                  <button
+                    v-if="flappyImages[s.slot]"
+                    type="button"
+                    class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50 disabled:opacity-50"
+                    :disabled="clearingFlappyImage[s.slot]"
+                    @click="clearFlappyImage(s.slot)"
+                  >
+                    <span v-if="!clearingFlappyImage[s.slot]">Clear</span>
+                    <span v-else>Clearing…</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -2631,9 +2689,15 @@ const winWheelSoundFile  = ref(null)
 const uploadingSound     = ref(false)
 const winWheelSoundPath  = ref('')
 const winWheelSoundMode  = ref('repeat')
+// "nothing" result gif + text upload state
+const winWheelNothingGifFile = ref(null)
+const uploadingNothingGif    = ref(false)
+const winWheelNothingGifPath = ref('')
+const winWheelNothingText    = ref('')
 
 // preview fallback
 const previewSrc = computed(() => winWheelImagePath.value || '/images/wheel.svg')
+const nothingGifPreviewSrc = computed(() => winWheelNothingGifPath.value || '/images/nothing1225.gif')
 
 const filteredMatchesWW = computed(() => {
   const t = searchTermWW.value.trim().toLowerCase()
@@ -2687,6 +2751,8 @@ async function loadWinWheelConfig() {
   winWheelImagePath.value = ww.winWheelImagePath || ''
   winWheelSoundPath.value = ww.winWheelSoundPath || ''
   winWheelSoundMode.value = ww.winWheelSoundMode || 'repeat'
+  winWheelNothingGifPath.value = ww.winWheelNothingGifPath || ''
+  winWheelNothingText.value    = ww.winWheelNothingText || ''
   poolCtoons.value        = (ww.exclusiveCtoons || []).map(o => o.ctoon)
   tripleNothingCtoon.value = ww.tripleNothingCtoon || null
   searchTermTN.value       = ww.tripleNothingCtoon?.name || ''
@@ -2758,6 +2824,39 @@ async function uploadWinWheelSound() {
 }
 function removeWinWheelSound() {
   winWheelSoundPath.value = ''
+}
+
+// ── "Nothing" result gif upload handlers ─────
+function onWinWheelNothingGifChange(e) {
+  const f = e.target.files?.[0]
+  winWheelNothingGifFile.value = f || null
+}
+async function uploadWinWheelNothingGif() {
+  if (!winWheelNothingGifFile.value) return
+  uploadingNothingGif.value = true
+  toastMessage.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('image', winWheelNothingGifFile.value)
+
+    const res = await $fetch('/api/admin/winwheel-nothing-image', {
+      method: 'POST',
+      body: fd
+    })
+    winWheelNothingGifPath.value = res.assetPath
+    toastMessage.value = 'Image uploaded.'
+    toastType.value = 'success'
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = 'Image upload failed'
+    toastType.value = 'error'
+  } finally {
+    uploadingNothingGif.value = false
+    winWheelNothingGifFile.value = null
+  }
+}
+function removeWinWheelNothingGif() {
+  winWheelNothingGifPath.value = ''
 }
 
 // ── Winball backboard image upload handlers ──
@@ -2844,6 +2943,8 @@ async function saveWinWheelConfig() {
         winWheelImagePath: winWheelImagePath.value || null,
         winWheelSoundPath: winWheelSoundPath.value || null,
         winWheelSoundMode: winWheelSoundMode.value || 'repeat',
+        winWheelNothingGifPath: winWheelNothingGifPath.value || null,
+        winWheelNothingText: winWheelNothingText.value || null,
         tripleNothingCtoonId: tripleNothingCtoon.value?.id || null
       }
     })
@@ -3460,6 +3561,7 @@ const flappyImageSlots = [
 const flappyImages      = ref({ blossom: '', bubbles: '', buttercup: '', city: '' })
 const flappyImageFiles  = ref({ blossom: null, bubbles: null, buttercup: null, city: null })
 const uploadingFlappyImage = ref({ blossom: false, bubbles: false, buttercup: false, city: false })
+const clearingFlappyImage = ref({ blossom: false, bubbles: false, buttercup: false, city: false })
 
 function onFlappyImageFile(slot, e) {
   flappyImageFiles.value[slot] = e.target.files?.[0] || null
@@ -3483,6 +3585,21 @@ async function uploadFlappyImage(slot) {
     toastMessage.value = e?.data?.statusMessage || 'Error uploading image'; toastType.value = 'error'
   } finally {
     uploadingFlappyImage.value[slot] = false
+  }
+}
+
+async function clearFlappyImage(slot) {
+  clearingFlappyImage.value[slot] = true
+  toastMessage.value = ''
+  try {
+    await $fetch('/api/admin/flappy-image', { method: 'DELETE', body: { slot } })
+    flappyImages.value[slot] = ''
+    toastMessage.value = 'Reverted to the default image.'; toastType.value = 'success'
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = e?.data?.statusMessage || 'Error clearing image'; toastType.value = 'error'
+  } finally {
+    clearingFlappyImage.value[slot] = false
   }
 }
 

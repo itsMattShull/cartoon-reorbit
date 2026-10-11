@@ -38,6 +38,43 @@
         </ul>
       </div>
 
+      <div class="lb-card lb-cmoons-card">
+        <div class="lb-card-header lb-card-header--cmoons">cMoon Enemies Defeated</div>
+        <div v-if="cmoonEnemiesPending" class="lb-loading">Loading…</div>
+        <ul v-else class="lb-list">
+          <li v-for="row in cmoonEnemiesData.cmoons" :key="row.id" class="lb-row">
+            <span class="lb-rank">{{ row.rank }}</span>
+            <span class="lb-cmoon-swatch" :style="{ background: safeCMoonColor(row.color) }"></span>
+            <div class="lb-user-col">
+              <NuxtLink :to="`/newsite/cmoon/${row.id}`" class="lb-username">{{ row.name }}</NuxtLink>
+              <span class="lb-cmoon-members">{{ row.enemiesDefeated }} enemies · {{ row.raidBossesDefeated }} raid bosses</span>
+            </div>
+            <span class="lb-value">{{ row.total.toLocaleString() }}</span>
+          </li>
+          <li v-if="!cmoonEnemiesData.cmoons?.length" class="lb-empty">No cMoons yet</li>
+        </ul>
+      </div>
+
+      <div class="lb-card lb-cmoons-card">
+        <div class="lb-card-header lb-card-header--cmoons">Top Enemy Slayers</div>
+        <div v-if="cmoonEnemiesPending" class="lb-loading">Loading…</div>
+        <ul v-else class="lb-list">
+          <li v-for="row in cmoonEnemiesData.players" :key="row.userId" class="lb-row">
+            <span class="lb-rank">{{ row.rank }}</span>
+            <img class="lb-avatar" :src="`/avatars/${row.avatar || 'default.png'}`" alt="" />
+            <div class="lb-user-col">
+              <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
+              <span class="lb-cmoon-members">
+                {{ row.enemiesDefeated }} enemies · {{ row.raidBossesDefeated }} raid bosses
+                <span v-if="cMoonForRow(row)" class="lb-cmoon" :style="cMoonPillStyle(cMoonForRow(row).color)">{{ cMoonForRow(row).name }}</span>
+              </span>
+            </div>
+            <span class="lb-value">{{ row.total.toLocaleString() }}</span>
+          </li>
+          <li v-if="!cmoonEnemiesData.players?.length" class="lb-empty">No enemies defeated yet</li>
+        </ul>
+      </div>
+
       <div v-if="cmoonsData?.length" class="cmoon-contributors">
         <div v-for="team in cmoonsData" :key="'contrib-' + team.id" class="lb-card cmoon-team-card">
           <div class="lb-card-header cmoon-team-header" :style="cMoonPillStyle(team.color)">
@@ -147,6 +184,12 @@ onMounted(async () => {
 function safeCMoonColor(color) {
   return isSafeCMoonColor(color) ? color : '#3a4a63'
 }
+
+// cMoon enemies-defeated boards (top player slayers + per-cMoon totals), each split into
+// regular-enemies vs raid-bosses tallies — see leaderboard/cmoon-enemies.get.js.
+const { data: cmoonEnemiesData, pending: cmoonEnemiesPending } = useFetch('/api/leaderboard/cmoon-enemies', {
+  default: () => ({ players: [], cmoons: [] }), headers,
+})
 
 const { data: pointsData, pending: pointsPending } = useFetch('/api/points-leaderboard', { default: () => [], headers })
 const { data: earnersData, pending: earnersPending } = useFetch('/api/leaderboard/trending-earners', { default: () => [], headers })
@@ -269,8 +312,9 @@ async function loadCMoonBadges(usernames) {
   } catch {}
 }
 
-watch([usersBoards, gamesBoards], ([users, games]) => {
+watch([usersBoards, gamesBoards, cmoonEnemiesData], ([users, games, enemies]) => {
   const names = [...users, ...games].flatMap(b => (b.rows || []).map(r => r.username))
+  names.push(...(enemies?.players || []).map(r => r.username))
   if (names.length) loadCMoonBadges(names)
 }, { immediate: true })
 

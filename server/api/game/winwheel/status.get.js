@@ -20,6 +20,8 @@ export default defineEventHandler(async (event) => {
       winWheelImagePath: true,
       winWheelSoundPath: true,
       winWheelSoundMode: true,
+      winWheelNothingGifPath: true,
+      winWheelNothingText: true,
       exclusiveCtoons: {
         include: {
           ctoon: {
@@ -38,7 +40,9 @@ export default defineEventHandler(async (event) => {
     pointsWon,
     winWheelImagePath,
     winWheelSoundPath,
-    winWheelSoundMode
+    winWheelSoundMode,
+    winWheelNothingGifPath,
+    winWheelNothingText
   } = config
 
   // Build exclusive cToon pool
@@ -82,6 +86,8 @@ export default defineEventHandler(async (event) => {
     winWheelImagePath: winWheelImagePath || null,
     winWheelSoundPath: winWheelSoundPath || null,
     winWheelSoundMode: winWheelSoundMode || 'repeat',
+    winWheelNothingGifPath: winWheelNothingGifPath || null,
+    winWheelNothingText: winWheelNothingText || null,
     exclusivePool
   }
 })

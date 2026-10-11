@@ -114,9 +114,12 @@ export default defineEventHandler(async (event) => {
     await prisma.flappyPowerpuffPlay.create({ data: { userId, ranked } })
 
     return {
-      // Only what the client needs to RENDER. maxScore and maxSessionSeconds are deliberately
-      // withheld: they'd tell a bot exactly where to stop so no threshold fires, and exactly
-      // how long it may stall while solving.
+      // What the client needs to RENDER, plus maxScore so the client can end the run itself
+      // the moment it's reached — otherwise the player keeps flying (and watching the score
+      // climb) past the point where /end's authoritative replay will silently clamp it, and
+      // the number they watched never matches the number they're told. maxSessionSeconds stays
+      // withheld: unlike maxScore it bounds TIMING, and telling a bot exactly how long it may
+      // stall while solving is the one thing worth keeping secret here.
       config: {
         gravity: cfg.gravity,
         flapVelocity: cfg.flapVelocity,
@@ -124,7 +127,8 @@ export default defineEventHandler(async (event) => {
         pipeGap: cfg.pipeGap,
         pipeSpacing: cfg.pipeSpacing,
         speedGrowthPerPipe: cfg.speedGrowthPerPipe,
-        maxSpeedMultiplier: cfg.maxSpeedMultiplier
+        maxSpeedMultiplier: cfg.maxSpeedMultiplier,
+        maxScore: cfg.maxScore
       },
       pipeSeed,
       ranked,

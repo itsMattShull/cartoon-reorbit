@@ -264,6 +264,12 @@ function validatePayload(payload) {
     if (payload.tripleNothingCtoonId != null && typeof payload.tripleNothingCtoonId !== 'string') {
       throw createError({ statusCode: 400, statusMessage: '"tripleNothingCtoonId" must be a string or null' })
     }
+    if (payload.winWheelNothingGifPath != null && typeof payload.winWheelNothingGifPath !== 'string') {
+      throw createError({ statusCode: 400, statusMessage: '"winWheelNothingGifPath" must be a string or null' })
+    }
+    if (payload.winWheelNothingText != null && typeof payload.winWheelNothingText !== 'string') {
+      throw createError({ statusCode: 400, statusMessage: '"winWheelNothingText" must be a string or null' })
+    }
 
   } else if (payload.gameName === 'ReOrbitMatch') {
     if (payload.reorbitPlaysPerPeriod == null || typeof payload.reorbitPlaysPerPeriod !== 'number' || payload.reorbitPlaysPerPeriod < 1) {
@@ -645,7 +651,9 @@ export default defineEventHandler(async (event) => {
     tripleNothingCtoonId = null,
     winWheelImagePath = null,
     winWheelSoundPath = null,
-    winWheelSoundMode = null
+    winWheelSoundMode = null,
+    winWheelNothingGifPath = null,
+    winWheelNothingText = null
   } = body
 
   // 3) Upsert
@@ -870,6 +878,8 @@ export default defineEventHandler(async (event) => {
           winWheelImagePath: winWheelImagePath || null,
           winWheelSoundPath: winWheelSoundPath || null,
           winWheelSoundMode: winWheelSoundMode || 'repeat',
+          winWheelNothingGifPath: winWheelNothingGifPath || null,
+          winWheelNothingText: winWheelNothingText || null,
           tripleNothingCtoonId: tripleNothingCtoonId || null
         }
         updateData = {
@@ -880,6 +890,8 @@ export default defineEventHandler(async (event) => {
           winWheelImagePath: winWheelImagePath || null,
           winWheelSoundPath: winWheelSoundPath || null,
           winWheelSoundMode: winWheelSoundMode || 'repeat',
+          winWheelNothingGifPath: winWheelNothingGifPath || null,
+          winWheelNothingText: winWheelNothingText || null,
           tripleNothingCtoonId: tripleNothingCtoonId || null
         }
       }
@@ -1156,6 +1168,8 @@ export default defineEventHandler(async (event) => {
             ['winWheelImagePath', before?.winWheelImagePath || null, winWheelImagePath || null],
             ['winWheelSoundPath', before?.winWheelSoundPath || null, winWheelSoundPath || null],
             ['winWheelSoundMode', before?.winWheelSoundMode || 'repeat', winWheelSoundMode || 'repeat'],
+            ['winWheelNothingGifPath', before?.winWheelNothingGifPath || null, winWheelNothingGifPath || null],
+            ['winWheelNothingText', before?.winWheelNothingText || null, winWheelNothingText || null],
             ['tripleNothingCtoonId', before?.tripleNothingCtoonId || null, tripleNothingCtoonId || null]
           ]
           for (const [key, prev, next] of changes) {
