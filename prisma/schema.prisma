@@ -5988,6 +5988,19 @@ model CMoonSeasonConfig {
   // the exact same "short admin-authored prose, styled like the Tutorial page" shape as an
   // Encyclopedia entry's body, so a second sanitizer would just be the same allowlist twice).
   blurb     String   @default("")
+  // One shared, server-wide progress bar toward a total "cMoon enemies defeated" goal for the
+  // season — distinct from the per-cMoon CMoonSeasonTracker rows above, which render one bar
+  // PER TEAM so teams can be compared against each other; this is a single combined bar for the
+  // whole playerbase (every WIN, both regular enemies and raid bosses, counts toward it). Same
+  // season-scoped-not-lifetime convention as this model's own header comment: computed live from
+  // CMoonEnemyBattle rows dated on/after startedAt (see computeSeasonProgress in
+  // server/utils/cmoonSeason.js), never from a lifetime counter — so it resets cleanly whenever
+  // startedAt moves forward. Lives here rather than as a CMoonSeasonTracker row since that model's
+  // metricType enum is inherently per-cMoon-comparison shaped (BATTLE_WINS etc. are read per
+  // cMoon); a single combined counter has no "which cMoon" axis to render multiple bars from.
+  enemiesDefeatedGoalEnabled Boolean @default(false)
+  enemiesDefeatedGoalLabel   String  @default("Enemies Defeated")
+  enemiesDefeatedGoalTarget  Int     @default(1000)
   updatedAt DateTime @updatedAt
 }
 

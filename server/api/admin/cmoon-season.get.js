@@ -16,6 +16,9 @@ export default defineEventHandler(async (event) => {
     header: config.header,
     startedAt: config.startedAt,
     blurb: config.blurb,
+    enemiesDefeatedGoalEnabled: config.enemiesDefeatedGoalEnabled,
+    enemiesDefeatedGoalLabel: config.enemiesDefeatedGoalLabel,
+    enemiesDefeatedGoalTarget: config.enemiesDefeatedGoalTarget,
     trackers: trackers.map(t => ({
       id: t.id,
       label: t.label,
