@@ -24,7 +24,7 @@
           >Balance teams</button>
           <button
             class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50"
-            title="Recomputes cMoonPoints (and redoes ranks to match) for every current cMoon member, using the current points logic"
+            title="Recomputes cMoonPoints (and redoes ranks to match) for every current cMoon member, using the current points logic. Since cMoon Enemy Battle max HP is read live from each member's current rank, this is also the way to fix HP for members who ranked up before the per-rank HP bonus existed."
             @click="recalcModalOpen = true"
           >Recalculate cMoon Points</button>
           <button

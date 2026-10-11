@@ -8,6 +8,13 @@
      cmoon-rank-recalc.worker.js) that processes members one at a time, so this modal is purely a
      progress viewer polling that job's status — closing it does not stop the run, and reopening
      the button will resume showing progress on the same in-flight job.
+
+     Also the fix for stale cMoon Enemy Battle max HP: getPlayerCombatMaxHp() (server/utils/
+     cmoon.js) reads a member's HP bonus live off their CURRENT currentCMoonRankId every time a
+     battle starts — there's no separate HP value stored anywhere to go stale. So a member who
+     ranked up before CMoonRankTier.cMoonEnemyBattleHpBonus existed, or before this recalc tool
+     last corrected their rank, already gets the right HP the moment their rank pointer here is
+     right. There is deliberately no separate "backfill HP" tool — this is it.
 -->
 <template>
   <div class="fixed inset-0 z-[60] flex items-stretch sm:items-center justify-center sm:p-4">
@@ -32,6 +39,11 @@
             logic (weekly High Score / Top 10 / Daily Task awards only), then redoes each member's
             rank to match. Members are processed one at a time; this can lower a rank if the
             corrected total no longer qualifies. Already-claimed rank rewards are never revoked.
+          </p>
+          <p class="text-[11px] text-gray-600">
+            cMoon Enemy Battle max HP is read live from each member's current rank, not stored —
+            so this is also how to fix HP for anyone who ranked up before the per-rank HP bonus
+            existed. No separate HP backfill is needed.
           </p>
 
           <div v-if="error" class="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{{ error }}</div>
