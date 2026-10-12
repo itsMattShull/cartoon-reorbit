@@ -9,15 +9,19 @@
 //
 // ── Hand & slot rules (every OG gToons match, PvP and practice) ─────────────────────────────
 //   • 12-card deck, shuffled at match start. 6 are dealt to the hand; the other 6 stay undealt.
-//   • 7 board slots, filled over 3 regulation rounds: round 1 = slots 1-4, round 2 = slots 5-6,
-//     round 3 = slot 7. Each round a player may place UP TO that many cards, choosing both the
-//     card (from the hand) and the slot. A slot left empty stays empty.
+//   • 7 board slots, filled over 2 placing rounds: round 1 = slots 1-4, round 2 = slots 5-7. Each
+//     round a player MUST fill every open slot (the server rejects a short commit), choosing both
+//     the card (from the hand) and the slot.
 //   • Right after round 1 there is a discard phase: discard any number of cards still in hand,
 //     then the hand is refilled back up to 6 from the undealt cards (4 + n when 4 were played
 //     and n discarded). Discarded cards are out of the match.
-//   • Once per match a player may swap a hand card for a random undealt card, before committing.
-//   • A tie after slot 7 goes to sudden death: one extra slot (8, 9, ...) per round, each player
-//     placing exactly one card from whatever hand/undealt cards they have left.
+//   • Round 3 places nothing: after round 2 is revealed, each player may pay SWAP_COST to replace
+//     the card in slot 7 with a random undealt card (the old card returns to the undealt pile),
+//     or skip. Both choices resolve together, then the board is scored.
+//   • A tie after the board is scored goes to sudden death: one extra slot (8, 9, ...) per round,
+//     each player placing exactly one card from whatever hand/undealt cards they have left.
+//   • Every phase has a deadline (PLACE_MS / DISCARD_MS / SWAP_MS). When it passes the server acts
+//     for whoever has not: random cards fill their empty slots, no discards, no swap.
 
 export const NEUTRAL_COLORS = new Set(['BLACK', 'SILVER'])
 
@@ -26,12 +30,18 @@ export function isNeutralColor(color) {
 }
 
 export const HAND_SIZE = 6
-/** Regulation board: which slots each round fills. */
-export const ROUND_SLOTS = [[1, 2, 3, 4], [5, 6], [7]]
+/** Regulation board: which slots each round fills. Round 3 is the slot-7 swap step (no placing). */
+export const ROUND_SLOTS = [[1, 2, 3, 4], [5, 6, 7], []]
 export const REGULATION_ROUNDS = ROUND_SLOTS.length
 export const REGULATION_SLOTS = 7
 /** The discard phase happens after this round resolves. */
 export const DISCARD_AFTER_ROUND = 1
+/** The paid slot-7 swap phase opens after this round resolves. */
+export const SWAP_AFTER_ROUND = 2
+/** Per-phase time limits; on expiry the server plays the default for whoever is not done. */
+export const PLACE_MS = 60_000
+export const DISCARD_MS = 30_000
+export const SWAP_MS = 30_000
 
 /** Slots a round may fill. Sudden-death round r (> regulation) is a single extra slot. */
 export function slotsForRound(round) {
@@ -152,7 +162,8 @@ function sum(nums) {
 }
 
 function countColor(revealed, color) {
-  return revealed.filter(r => r.color === color).length
+  // Knocked-out (duplicate) cards count for nothing, including their printed color.
+  return revealed.filter(r => !r.cancelled && r.color === color).length
 }
 
 /**

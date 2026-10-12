@@ -350,10 +350,10 @@ function seededRng(seed = 1) {
   return () => { x = (x * 16807) % 2147483647; return (x - 1) / 2147483646 }
 }
 
-test('slotsForRound: 4 / 2 / 1 over slots 1-7, then one extra slot per sudden-death round', () => {
+test('slotsForRound: 4 then 3 over slots 1-7, round 3 places nothing, then one extra slot per sudden-death round', () => {
   assert.deepEqual(slotsForRound(1), [1, 2, 3, 4])
-  assert.deepEqual(slotsForRound(2), [5, 6])
-  assert.deepEqual(slotsForRound(3), [7])
+  assert.deepEqual(slotsForRound(2), [5, 6, 7])
+  assert.deepEqual(slotsForRound(3), [])
   assert.deepEqual(slotsForRound(4), [8])
   assert.deepEqual(slotsForRound(6), [10])
   assert.equal(REGULATION_SLOTS, 7)
@@ -430,4 +430,105 @@ test('resolveFinalBoard: neighbor adjacency follows the slot, so an empty slot b
   const value = (id) => out.player1.revealed.find(r => r.ctoonId === id).finalValue
   assert.equal(value('near'), 5)
   assert.equal(value('far'), 2)
+})
+
+
+/* ── Dependency-aware final-board resolution: duplicates, cancel chains, recomputed colors ─── */
+
+const at = (card, slot) => ({ ...card, slot })
+const effect = (target, action, condition) => ({ trigger: 'onReveal', target, action, ...(condition ? { condition } : {}) })
+const negate = (target) => effect(target, { type: 'negateEffect' })
+const plus = (n, target = { selector: 'self' }, condition) => effect(target, { type: 'modifyValue', operation: 'add', amount: n }, condition)
+const recolor = (color, target) => effect(target, { type: 'setColor', color })
+const findCard = (out, side, id) => out[side].revealed.find(r => r.ctoonId === id)
+
+test('resolveFinalBoard: the same gToon on both sides is knocked out on both sides (value 0, no powers)', () => {
+  const dupA = at(revealedCard('dup', 'Twin', { value: 8, color: 'RED', effect: [plus(5)] }), 1)
+  const dupB = at(revealedCard('dup', 'Twin', { value: 8, color: 'RED', effect: [plus(5)] }), 1)
+  const mine = at(revealedCard('mine', 'Mine', { value: 3 }), 2)
+  const theirs = at(revealedCard('theirs', 'Theirs', { value: 4 }), 2)
+  const out = resolveFinalBoard({
+    player1: { revealed: [dupA, mine], goalCard: null },
+    player2: { revealed: [dupB, theirs], goalCard: null }
+  })
+  assert.equal(findCard(out, 'player1', 'dup').finalValue, 0)
+  assert.equal(findCard(out, 'player2', 'dup').finalValue, 0)
+  assert.equal(findCard(out, 'player1', 'dup').cancelled, true)
+  assert.equal(findCard(out, 'player1', 'mine').finalValue, 3)
+  assert.equal(out.player1.totalValue, 3)
+  assert.equal(out.player2.totalValue, 4)
+  assert.equal(out.effectsResolved.filter(e => e.action === 'duplicateCancelled').length, 2)
+  assert.equal(out.effectsResolved.some(e => e.action === 'modifyValue'), false) // their +5s never fired
+})
+
+test('resolveFinalBoard: a knocked-out duplicate is invisible to counts, conditions and neighbors', () => {
+  const dupA = at(revealedCard('dup', 'Twin Prop', { value: 1, type1: 'PROP' }), 1)
+  const dupB = at(revealedCard('dup', 'Twin Prop', { value: 1, type1: 'PROP' }), 3)
+  const counter = at(revealedCard('cnt', 'Counter', {
+    value: 1,
+    effect: [effect({ selector: 'self' }, { type: 'modifyValue', operation: 'add', amount: 2, perMatch: { by: 'type', value: 'PROP', scope: 'both' } })]
+  }), 2)
+  const out = resolveFinalBoard({
+    player1: { revealed: [dupA, counter], goalCard: null },
+    player2: { revealed: [dupB], goalCard: null }
+  })
+  assert.equal(findCard(out, 'player1', 'cnt').finalValue, 1) // zero Props in play -> no bonus
+})
+
+test('resolveFinalBoard: a cancel chain settles — A cancels B, so B no longer cancels C', () => {
+  // Player1's cards are visited first, so B (player1) fires before A (player2) cancels it. A single
+  // ordered pass would leave C cancelled by a card that is itself cancelled.
+  const B = at(revealedCard('B', 'B', { value: 2, effect: [negate({ selector: 'cardByCharacter', character: 'Cee' })] }), 1)
+  const A = at(revealedCard('A', 'A', { value: 2, effect: [negate({ selector: 'opponentActiveCard' })] }), 1)
+  const C = at(revealedCard('C', 'Cee', { value: 4, characters: ['Cee'], effect: [plus(10)] }), 2)
+  const out = resolveFinalBoard({
+    player1: { revealed: [B], goalCard: null },
+    player2: { revealed: [A, C], goalCard: null }
+  })
+  assert.equal(findCard(out, 'player2', 'C').finalValue, 14)  // C's own +10 fires again
+  const negations = out.effectsResolved.filter(e => e.action === 'negateEffect')
+  assert.deepEqual(negations.map(n => n.sourceCtoonId), ['A'])  // only the live negation is logged
+})
+
+test('resolveFinalBoard: a recolor (and everything keyed on it) is undone when its source is cancelled', () => {
+  const caster = at(revealedCard('A', 'A', { value: 2, color: 'GREEN', effect: [recolor('RED', { selector: 'cardByCharacter', character: 'Bee' })] }), 1)
+  const bee = at(revealedCard('B', 'Bee', { value: 3, color: 'BLUE', characters: ['Bee'] }), 2)
+  const watcher = at(revealedCard('W', 'Watcher', {
+    value: 1, color: 'YELLOW',
+    effect: [plus(5, { selector: 'self' }, { type: 'colorInPlay', color: 'RED', side: 'either' })]
+  }), 1)
+  const open = resolveFinalBoard({
+    player1: { revealed: [caster, bee], goalCard: null },
+    player2: { revealed: [watcher], goalCard: null }
+  })
+  assert.equal(findCard(open, 'player1', 'B').color, 'RED')
+  assert.equal(findCard(open, 'player2', 'W').finalValue, 6)
+
+  const canceller = at(revealedCard('D', 'D', { value: 2, color: 'YELLOW', effect: [negate({ selector: 'opponentActiveCard' })] }), 1)
+  const out = resolveFinalBoard({
+    player1: { revealed: [caster, bee], goalCard: null },
+    player2: { revealed: [canceller, at(watcher, 2)], goalCard: null }
+  })
+  assert.equal(findCard(out, 'player1', 'B').color, 'BLUE')   // back to its printed color
+  assert.equal(findCard(out, 'player2', 'W').finalValue, 1)   // and nothing is RED anymore
+})
+
+test('resolveFinalBoard: two cards that cancel each other settle deterministically (player1, lower slot first)', () => {
+  const x = at(revealedCard('X', 'X', { value: 3, effect: [negate({ selector: 'opponentActiveCard' }), plus(3)] }), 1)
+  const y = at(revealedCard('Y', 'Y', { value: 3, effect: [negate({ selector: 'opponentActiveCard' }), plus(3)] }), 1)
+  const out = resolveFinalBoard({ player1: { revealed: [x], goalCard: null }, player2: { revealed: [y], goalCard: null } })
+  assert.equal(findCard(out, 'player1', 'X').finalValue, 6)  // X goes first and survives
+  assert.equal(findCard(out, 'player2', 'Y').finalValue, 3)  // Y is cancelled before it can fire
+  const again = resolveFinalBoard({ player1: { revealed: [x], goalCard: null }, player2: { revealed: [y], goalCard: null } })
+  assert.deepEqual(again.player2.revealed, out.player2.revealed)
+})
+
+test('determineWinner: knocked-out cards do not count toward a goal color', () => {
+  const out = determineWinner({
+    player1GoalColor: 'BLACK', player2GoalColor: 'RED',
+    player1Revealed: [{ finalValue: 5, color: 'BLUE' }],
+    player2Revealed: [{ finalValue: 0, color: 'RED', cancelled: true }]
+  })
+  assert.equal(out.bonus, null)       // no +15: the only RED card was cancelled
+  assert.equal(out.winner, 'player1')
 })

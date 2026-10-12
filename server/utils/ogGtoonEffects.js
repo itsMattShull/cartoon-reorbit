@@ -575,124 +575,220 @@ function boardIndexOf(card, arrayIndex) {
 }
 
 /**
- * Resolves the FINAL board for a completed match (round 7, or the deciding sudden-death round).
- * This is the single authoritative effects pass — see module header for resolution order and
- * the design notes on every new mechanic.
+ * Resolves the FINAL board for a completed match (round 3's swap step, or the deciding sudden-death
+ * round). This is the single authoritative effects pass — see module header for the effect schema.
+ *
+ * ── Dependency-aware resolution ─────────────────────────────────────────────────────────────
+ * Powers depend on each other: a recolor only exists while the card that cast it does, a
+ * negation only works while the negating card is itself live, and "in play" counts must not
+ * include cards that were knocked out. So the board is never patched incrementally. Instead:
+ *   1. Duplicate cancellation: a gToon (same ctoonId) on BOTH boards is knocked out on both sides —
+ *      value 0, no powers, and invisible to every condition, count and neighbor check.
+ *   2. Every evaluation starts from the PRINTED color/value of each remaining card and applies
+ *      only the effects of cards that are live (not knocked out, not negated): colors first
+ *      (player1 before player2), then values (set -> multiply -> add, player1 first).
+ *   3. The negated set is found by fixed-point iteration: evaluate, collect who gets negated by
+ *      the live negators, re-evaluate from scratch with that set, until it stops changing. A
+ *      chain (A negates B, B negates C) therefore settles with B negated and C restored, and
+ *      everything B had changed is recomputed as if B never fired.
+ *   4. If the negations never settle (two cards negating each other), fall back to resolving the
+ *      negators one at a time in a fixed order — player1 before player2, lower slot first — where
+ *      a negator that has already been negated no longer fires.
+ * `effectsResolved` is built from the final, stable evaluation only, so the log lists exactly the
+ * effects that count.
  *
  * @param {object} params
  * @param {object} params.player1 - { revealed: [cardSnapshot, ...], goalCard: cardSnapshot|null }
  * @param {object} params.player2 - same shape
+ * @param {boolean} [params.cancelDuplicates=true] - false turns duplicate cancellation off. Practice
+ *   uses that: the bot plays a copy of the player's own deck, so nearly every card would be a
+ *   "duplicate" and the board would cancel itself out.
  *   cardSnapshot: { ctoonId, name, characters, color, value, type1, type2, type3, group, isSlam,
- *                    effect, round } — `round` is only used for the returned log entries, NOT
- *                    for neighbor adjacency (which uses array order / roundIndex, so sudden-death
- *                    rounds still chain correctly onto round 7).
- * @returns {{ player1: { revealed: [{ctoonId,round,baseValue,finalValue,color}], totalValue },
+ *                    effect, round, slot } — `color`/`value` must be the PRINTED ones.
+ * @returns {{ player1: { revealed: [{ctoonId,round,baseValue,finalValue,color,cancelled}], totalValue },
  *             player2: {...}, effectsResolved: object[] }}
  */
-export function resolveFinalBoard({ player1, player2 }) {
-  const sides = {
-    player1: (player1.revealed || []).map((c, i) => makeBoardCard(c, 'player1', boardIndexOf(c, i))),
-    player2: (player2.revealed || []).map((c, i) => makeBoardCard(c, 'player2', boardIndexOf(c, i)))
+export function resolveFinalBoard({ player1, player2, cancelDuplicates = true }) {
+  const boards = {
+    player1: (player1.revealed || []).map((c, i) => ({ data: c, roundIndex: boardIndexOf(c, i) })),
+    player2: (player2.revealed || []).map((c, i) => ({ data: c, roundIndex: boardIndexOf(c, i) }))
   }
-  const goalAuras = []
-  if (player1.goalCard) goalAuras.push({ card: makeBoardCard(player1.goalCard, 'player1', -1), side: 'player1' })
-  if (player2.goalCard) goalAuras.push({ card: makeBoardCard(player2.goalCard, 'player2', -1), side: 'player2' })
+  const goalSnapshots = { player1: player1.goalCard || null, player2: player2.goalCard || null }
 
-  const instances = []
-  for (const side of ['player1', 'player2']) {
-    for (const card of sides[side]) {
-      for (const eff of card.effects) {
-        if (eff.trigger === 'onReveal') instances.push({ ownerSide: side, sourceCard: card, effect: eff })
+  // 1) Duplicate cancellation — fixed for the whole pass, decided from printed identities.
+  const idsOn = (side) => new Set(boards[side].map(b => b.data.ctoonId ?? b.data.id))
+  const p1Ids = idsOn('player1')
+  const p2Ids = idsOn('player2')
+  const isDuplicate = (b) => {
+    const id = b.data.ctoonId ?? b.data.id
+    return cancelDuplicates && id != null && p1Ids.has(id) && p2Ids.has(id)
+  }
+
+  /** A fresh board in printed state, minus knocked-out cards. */
+  function buildState() {
+    const sides = { player1: [], player2: [] }
+    for (const side of ['player1', 'player2']) {
+      for (const b of boards[side]) {
+        if (isDuplicate(b)) continue
+        const card = makeBoardCard(b.data, side, b.roundIndex)
+        card.origin = b
+        sides[side].push(card)
       }
     }
-  }
-  for (const aura of goalAuras) {
-    for (const eff of aura.card.effects) {
-      if (eff.trigger === 'static') instances.push({ ownerSide: aura.side, sourceCard: aura.card, effect: eff })
+    const instances = []
+    for (const side of ['player1', 'player2']) {
+      for (const card of sides[side]) {
+        for (const eff of card.effects) {
+          if (eff.trigger === 'onReveal') instances.push({ ownerSide: side, sourceCard: card, effect: eff })
+        }
+      }
     }
+    for (const side of ['player1', 'player2']) {
+      const g = goalSnapshots[side]
+      if (!g) continue
+      const aura = makeBoardCard(g, side, -1)
+      for (const eff of aura.effects) {
+        if (eff.trigger === 'static') instances.push({ ownerSide: side, sourceCard: aura, effect: eff })
+      }
+    }
+    return { sides, instances }
   }
 
-  const effectsResolved = []
-  const suppressed = new Set()
-  const isSuppressed = (card) => suppressed.has(`${card.side}:${card.roundIndex}`)
+  const keyOf = (card) => `${card.side}:${card.roundIndex}`
+  const logBase = (inst, t) => ({
+    source: inst.ownerSide, sourceCtoonId: inst.sourceCard.ctoonId, sourceRound: inst.sourceCard.round,
+    targetPlayer: t.side, targetCtoonId: t.card.ctoonId, targetRound: t.card.round
+  })
 
-  // 1) Negations
-  for (const inst of instances) {
-    if (inst.effect.action.type !== 'negateEffect') continue
-    if (isSuppressed(inst.sourceCard)) continue
-    for (const t of resolveTargets(inst, sides)) {
-      if (!conditionMet(inst, sides, t.card)) continue
-      suppressed.add(t.key)
+  /** Targets a negation instance hits right now (condition-checked), or []. */
+  function negationTargets(state, inst) {
+    return resolveTargets(inst, state.sides).filter(t => conditionMet(inst, state.sides, t.card))
+  }
+
+  /** One full evaluation from printed state with `negated` (set of card keys) fixed. */
+  function evaluate(negated) {
+    const state = buildState()
+    const live = (inst) => !negated.has(keyOf(inst.sourceCard))
+    const log = { negate: [], color: [], value: [] }
+
+    // Colors — player1 before player2.
+    for (const side of ['player1', 'player2']) {
+      for (const inst of state.instances) {
+        if (inst.ownerSide !== side || inst.effect.action.type !== 'setColor' || !live(inst)) continue
+        for (const t of resolveTargets(inst, state.sides)) {
+          if (!conditionMet(inst, state.sides, t.card)) continue
+          t.card.color = inst.effect.action.color
+          log.color.push({ ...logBase(inst, t), action: 'setColor', color: inst.effect.action.color })
+        }
+      }
+    }
+
+    // Who the live negators hit, judged on the board as recolored above.
+    const hits = new Map() // card key -> { inst, t }[]
+    for (const inst of state.instances) {
+      if (inst.effect.action.type !== 'negateEffect' || !live(inst)) continue
+      for (const t of negationTargets(state, inst)) {
+        if (!hits.has(t.key)) hits.set(t.key, [])
+        hits.get(t.key).push({ inst, t })
+        log.negate.push({ ...logBase(inst, t), action: 'negateEffect' })
+      }
+    }
+
+    // Values — set, then multiply, then add; player1 before player2 within each.
+    for (const op of ['set', 'multiply', 'add']) {
+      for (const side of ['player1', 'player2']) {
+        for (const inst of state.instances) {
+          if (inst.ownerSide !== side || inst.effect.action.type !== 'modifyValue') continue
+          if (inst.effect.action.operation !== op || !live(inst)) continue
+          const pm = inst.effect.action.perMatch
+          let matchCount = null
+          if (pm) {
+            matchCount = countPerMatch(inst, state.sides, pm)
+            if (matchCount === 0) continue // nothing to apply "once per"
+          }
+          for (const t of resolveTargets(inst, state.sides)) {
+            if (!conditionMet(inst, state.sides, t.card)) continue
+            const before = t.card.value
+            const effectiveAmount = pm ? inst.effect.action.amount * matchCount : inst.effect.action.amount
+            if (op === 'set') t.card.value = effectiveAmount
+            else if (op === 'multiply') t.card.value = t.card.value * effectiveAmount
+            else t.card.value = t.card.value + effectiveAmount
+            log.value.push({
+              ...logBase(inst, t),
+              action: 'modifyValue', operation: op, amount: effectiveAmount,
+              ...(pm ? { perMatchCount: matchCount, perMatchAmount: inst.effect.action.amount } : {}),
+              valueBefore: before, valueAfter: t.card.value
+            })
+          }
+        }
+      }
+    }
+    return { state, hits, log }
+  }
+
+  const sameSet = (a, b) => a.size === b.size && [...a].every(k => b.has(k))
+
+  // 2-3) Fixed point over the negated set.
+  let negated = new Set()
+  let result = null
+  const seen = []
+  for (let pass = 0; pass < 16; pass++) {
+    const r = evaluate(negated)
+    const next = new Set(r.hits.keys())
+    if (sameSet(next, negated)) { result = r; break }
+    seen.push(negated)
+    negated = next
+    if (seen.some(s => sameSet(s, negated))) break // oscillating — negators negate each other
+  }
+
+  // 4) Cycle fallback — negators resolve one at a time in a fixed order.
+  if (!result) {
+    negated = new Set()
+    const order = buildState().instances
+      .filter(i => i.effect.action.type === 'negateEffect')
+      .sort((a, b) => (a.ownerSide === b.ownerSide ? 0 : a.ownerSide === 'player1' ? -1 : 1) ||
+        (a.sourceCard.roundIndex - b.sourceCard.roundIndex))
+    for (const want of order) {
+      if (negated.has(keyOf(want.sourceCard))) continue
+      const state = evaluate(negated).state
+      const inst = state.instances.find(i => i.ownerSide === want.ownerSide &&
+        i.sourceCard.roundIndex === want.sourceCard.roundIndex && i.effect === want.effect)
+      if (!inst) continue
+      for (const t of negationTargets(state, inst)) negated.add(t.key)
+    }
+    result = evaluate(negated)
+    // Report only negations whose source was live in this final evaluation.
+  }
+
+  // Assemble output in the original reveal order, with knocked-out cards scoring 0.
+  const effectsResolved = []
+  for (const side of ['player1', 'player2']) {
+    for (const b of boards[side]) {
+      if (!isDuplicate(b)) continue
       effectsResolved.push({
-        source: inst.ownerSide, sourceCtoonId: inst.sourceCard.ctoonId, sourceRound: inst.sourceCard.round,
-        action: 'negateEffect', targetPlayer: t.side, targetCtoonId: t.card.ctoonId, targetRound: t.card.round
+        source: side, sourceCtoonId: b.data.ctoonId ?? b.data.id, sourceRound: b.data.round,
+        action: 'duplicateCancelled',
+        targetPlayer: side, targetCtoonId: b.data.ctoonId ?? b.data.id, targetRound: b.data.round
       })
     }
   }
+  effectsResolved.push(...result.log.negate, ...result.log.color, ...result.log.value)
 
-  // 2) Color changes — player1 before player2
+  const finalBySide = {}
   for (const side of ['player1', 'player2']) {
-    for (const inst of instances) {
-      if (inst.ownerSide !== side) continue
-      if (inst.effect.action.type !== 'setColor') continue
-      if (isSuppressed(inst.sourceCard)) continue
-      for (const t of resolveTargets(inst, sides)) {
-        if (!conditionMet(inst, sides, t.card)) continue
-        t.card.color = inst.effect.action.color
-        effectsResolved.push({
-          source: inst.ownerSide, sourceCtoonId: inst.sourceCard.ctoonId, sourceRound: inst.sourceCard.round,
-          action: 'setColor', color: inst.effect.action.color,
-          targetPlayer: t.side, targetCtoonId: t.card.ctoonId, targetRound: t.card.round
-        })
+    const byOrigin = new Map(result.state.sides[side].map(c => [c.origin, c]))
+    finalBySide[side] = boards[side].map((b) => {
+      const c = byOrigin.get(b)
+      if (!c) {
+        const base = makeBoardCard(b.data, side, b.roundIndex)
+        return { ctoonId: base.ctoonId, round: base.round, baseValue: base.baseValue, finalValue: 0, color: base.color, cancelled: true }
       }
-    }
+      return { ctoonId: c.ctoonId, round: c.round, baseValue: c.baseValue, finalValue: c.value, color: c.color, cancelled: false }
+    })
   }
-
-  // 3) Value mods — set, then multiply, then add; player1 before player2 within each
-  for (const op of ['set', 'multiply', 'add']) {
-    for (const side of ['player1', 'player2']) {
-      for (const inst of instances) {
-        if (inst.ownerSide !== side) continue
-        if (inst.effect.action.type !== 'modifyValue') continue
-        if (inst.effect.action.operation !== op) continue
-        if (isSuppressed(inst.sourceCard)) continue
-
-        const pm = inst.effect.action.perMatch
-        let matchCount = null
-        if (pm) {
-          matchCount = countPerMatch(inst, sides, pm)
-          if (matchCount === 0) continue // nothing to apply "once per" — see module header
-        }
-
-        for (const t of resolveTargets(inst, sides)) {
-          if (!conditionMet(inst, sides, t.card)) continue
-          const before = t.card.value
-          const effectiveAmount = pm ? inst.effect.action.amount * matchCount : inst.effect.action.amount
-          if (op === 'set') t.card.value = effectiveAmount
-          else if (op === 'multiply') t.card.value = t.card.value * effectiveAmount
-          else t.card.value = t.card.value + effectiveAmount
-          effectsResolved.push({
-            source: inst.ownerSide, sourceCtoonId: inst.sourceCard.ctoonId, sourceRound: inst.sourceCard.round,
-            action: 'modifyValue', operation: op, amount: effectiveAmount,
-            ...(pm ? { perMatchCount: matchCount, perMatchAmount: inst.effect.action.amount } : {}),
-            targetPlayer: t.side, targetCtoonId: t.card.ctoonId, targetRound: t.card.round,
-            valueBefore: before, valueAfter: t.card.value
-          })
-        }
-      }
-    }
-  }
-
-  const toEntry = (c) => ({ ctoonId: c.ctoonId, round: c.round, baseValue: c.baseValue, finalValue: c.value, color: c.color })
   return {
-    player1: {
-      revealed: sides.player1.map(toEntry),
-      totalValue: sides.player1.reduce((s, c) => s + c.value, 0)
-    },
-    player2: {
-      revealed: sides.player2.map(toEntry),
-      totalValue: sides.player2.reduce((s, c) => s + c.value, 0)
-    },
+    player1: { revealed: finalBySide.player1, totalValue: finalBySide.player1.reduce((n, c) => n + c.finalValue, 0) },
+    player2: { revealed: finalBySide.player2, totalValue: finalBySide.player2.reduce((n, c) => n + c.finalValue, 0) },
     effectsResolved
   }
 }

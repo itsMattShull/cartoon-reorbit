@@ -44,7 +44,8 @@ import { prisma as db } from '../prisma.js'
 import { deriveGoalColor, SWAP_COST } from './ogGtoonEngine.js'
 import {
   publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd, buildRoundLog,
-  placeCard, unplaceSlot, checkCommit, checkSwap, applyHandSwap, submitDiscard, resolveDiscardPhase
+  placeCard, unplaceSlot, checkCommit, checkSwap, recordSwapChoice, resolveSwapPhase, expirePhase,
+  submitDiscard, resolveDiscardPhase, startPhaseClock
 } from './ogGtoonMatchCore.js'
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
 import { isPracticing, registerPvpProbe } from './ogGtoonPresence.js'
@@ -98,6 +99,8 @@ function destroyMatch(matchId) {
   const match = matches.get(matchId)
   if (!match) return
   for (const t of Object.values(match.graceTimers)) if (t) clearTimeout(t)
+  if (match.phaseTimer) clearTimeout(match.phaseTimer)
+  match.phaseTimer = null
   for (const uid of match.players) if (matchByUser.get(uid) === matchId) matchByUser.delete(uid)
   matches.delete(matchId)
   fireDelete(matchId)
@@ -195,6 +198,7 @@ async function startMatch(io, a, b, { isChallenge }) {
   b.socket.data.ogGtoonsMatchId = matchId
 
   emitToPlayers(io, match, EV('matchStart'))
+  armPhaseTimer(io, match)
   return match
 }
 
@@ -214,6 +218,15 @@ async function resolveRound(io, match) {
 
   const revealedRound = match.currentRound
   const { entries, order } = revealPlacedCards(match)
+  await concludeStep(io, match, revealedRound, entries, order)
+}
+
+/**
+ * Shared tail of every step that puts cards on the board (a placing round, or the slot-7 swap):
+ * decide whether the match is over, otherwise advance into the next phase, tell both players, and
+ * start the next phase's clock.
+ */
+async function concludeStep(io, match, revealedRound, entries, order) {
   match.lastActivity = Date.now()
 
   const end = checkMatchEnd(match)
@@ -244,6 +257,58 @@ async function resolveRound(io, match) {
   }
 
   fireSync(match.id, match)
+  armPhaseTimer(io, match)
+  // Nobody can be offered a swap (no undealt cards): settle the swap phase straight away.
+  await settleSwap(io, match)
+}
+
+/** Applies the slot-7 swaps once both players have chosen, then scores the board. */
+async function settleSwap(io, match) {
+  if (match.ending) return
+  const res = resolveSwapPhase(match, secureRng)
+  if (!res) return
+  await concludeStep(io, match, match.currentRound, res.entries, res.order)
+}
+
+/* ── Phase clock ─────────────────────────────────────────────────────────────────────────────
+ * Every phase has a deadline (match.deadline, stamped by the match core). When it passes, the
+ * server plays the default for whoever has not acted: random cards fill their empty slots, no
+ * discards, no swap — then carries on exactly as if they had acted. */
+
+function armPhaseTimer(io, match) {
+  if (match.phaseTimer) clearTimeout(match.phaseTimer)
+  match.phaseTimer = null
+  if (match.ending || !match.deadline) return
+  const delay = Math.max(0, match.deadline - Date.now())
+  match.phaseTimer = setTimeout(() => {
+    match.phaseTimer = null
+    onPhaseExpired(io, match).catch(err => console.error('[ogGtoons] phase timeout failed:', err))
+  }, delay)
+  match.phaseTimer.unref?.()
+}
+
+async function onPhaseExpired(io, match) {
+  if (match.ending) return
+  const phase = match.phase
+  const acted = expirePhase(match, secureRng)
+  if (!acted.length) return
+  match.lastActivity = Date.now()
+
+  if (phase === 'play') {
+    for (const idx of acted) {
+      const oppIdx = idx === 0 ? 1 : 0
+      for (const sid of match.sockets[idx]) io.local.to(sid).emit(EV('committed'), { round: match.currentRound })
+      for (const sid of match.sockets[oppIdx]) io.local.to(sid).emit(EV('opponentCommitted'), { round: match.currentRound })
+    }
+    emitToPlayers(io, match, EV('state'))
+    await resolveRound(io, match)
+  } else if (phase === 'discard') {
+    if (resolveDiscardPhase(match)) armPhaseTimer(io, match)
+    fireSync(match.id, match)
+    emitToPlayers(io, match, EV('state'))
+  } else if (phase === 'swap') {
+    await settleSwap(io, match)
+  }
 }
 
 /* ── Ending a match + settling stakes ────────────────────────────────────────────────────── */
@@ -424,7 +489,7 @@ export function startOgGtoonsSweep(io) {
  * into them; the queue and challenges are intentionally NOT restored (they are short-lived and
  * a stale queue/challenge entry surviving a restart is far more confusing than losing it).
  */
-export async function restoreOgGtoonsMatches() {
+export async function restoreOgGtoonsMatches(io) {
   const restored = await ogRedis.scanOgGtoonMatches()
   for (const [matchId, match] of restored.entries()) {
     match.sockets = [new Set(), new Set()]
@@ -432,8 +497,13 @@ export async function restoreOgGtoonsMatches() {
     match.ending = false
     // A match saved before hands/slots existed (fixed deck order) can't be resumed under the new
     // rules; restart it from a fresh deal so players keep their stake instead of losing the match.
-    if (!Array.isArray(match.hand)) initHands(match, secureRng)
+    // Same for a match saved before the 4/3 layout and the swap phase (no swapReady): its rounds
+    // no longer line up with the board.
+    if (!Array.isArray(match.hand) || !Array.isArray(match.swapReady)) initHands(match, secureRng)
+    if (!match.deadline) startPhaseClock(match)
+    match.phaseTimer = null
     matches.set(matchId, match)
+    if (io) armPhaseTimer(io, match)
     matchByUser.set(match.players[0], matchId)
     matchByUser.set(match.players[1], matchId)
   }
@@ -656,12 +726,13 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     emitStateTo(io, side.match, side.idx)
   })
 
-  // Swap a hand card for a random undealt one (once per match, before committing, 10 points).
-  socket.on(EV('swap'), async ({ cardIdx } = {}) => {
+  // Round-3 swap: pay to replace the card in slot 7 with a random undealt one. The choice is held
+  // until both players have made theirs, so neither sees the other's result first.
+  socket.on(EV('swap'), async () => {
     const side = await liveSide()
     if (!side) return
     const { user, match, idx } = side
-    const check = checkSwap(match, idx, { cardIdx })
+    const check = checkSwap(match, idx)
     if (!check.ok) return reject(check)
     try {
       await db.$transaction(async tx => {
@@ -677,9 +748,9 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
       console.error('[ogGtoons] swap debit failed:', err)
       return socket.emit(EV('error'), { code: 'swapFailed', message: 'Could not process the swap.' })
     }
-    // The debit above awaited, so the match may have moved on (e.g. a commit from another tab);
-    // applyHandSwap re-validates, and a swap that no longer applies is refunded.
-    const res = applyHandSwap(match, idx, { cardIdx }, secureRng)
+    // The debit above awaited, so the phase may have timed out meanwhile; recordSwapChoice
+    // re-validates, and a swap that no longer applies is refunded.
+    const res = recordSwapChoice(match, idx, true)
     if (!res.ok) {
       try {
         await db.$transaction(async tx => {
@@ -694,7 +765,20 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     match.lastActivity = Date.now()
     fireSync(match.id, match)
     socket.emit(EV('swapApplied'), { matchId: match.id })
-    emitStateTo(io, match, idx)
+    emitToPlayers(io, match, EV('state'))
+    await settleSwap(io, match)
+  })
+
+  socket.on(EV('swapSkip'), async () => {
+    const side = await liveSide()
+    if (!side) return
+    const { match, idx } = side
+    const res = recordSwapChoice(match, idx, false)
+    if (!res.ok) return reject(res)
+    match.lastActivity = Date.now()
+    fireSync(match.id, match)
+    emitToPlayers(io, match, EV('state'))
+    await settleSwap(io, match)
   })
 
   socket.on(EV('commit'), async ({ matchId, round } = {}) => {
@@ -728,7 +812,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     const res = submitDiscard(match, idx, { cardIdxs })
     if (!res.ok) return reject(res)
     match.lastActivity = Date.now()
-    resolveDiscardPhase(match)
+    if (resolveDiscardPhase(match)) armPhaseTimer(io, match)
     fireSync(match.id, match)
     emitToPlayers(io, match, EV('state'))
   })

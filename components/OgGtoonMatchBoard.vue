@@ -19,8 +19,9 @@
           <span class="font-semibold">{{ matchState.you.username || 'You' }}</span>
           <span class="text-gray-300">({{ youScore }})</span>
         </div>
-        <div class="font-bold">
+        <div class="font-bold text-center">
           {{ roundLabel }}
+          <span v-if="secondsLeft !== null && !matchEnded" class="ml-2 font-mono text-xs px-1.5 py-0.5 rounded" :class="secondsLeft <= 10 ? 'bg-red-600' : 'bg-white/10'">{{ secondsLeft }}s</span>
         </div>
         <div class="flex items-center gap-1.5">
           <span class="text-gray-300">({{ oppScore }})</span>
@@ -79,20 +80,27 @@
               >{{ discardPick.size ? `Discard ${discardPick.size} & draw` : 'Keep my hand' }}</button>
               <span v-else class="text-xs text-amber-300">Waiting for opponent to finish discarding...</span>
             </template>
+            <template v-else-if="inSwapPhase">
+              <template v-if="matchState.you.maySwap">
+                <button
+                  @click="openSwapSheet"
+                  class="bg-indigo-500 hover:bg-indigo-600 text-white px-4 py-1.5 rounded text-sm"
+                >{{ isPractice ? 'Swap slot 7 (free)' : 'Swap slot 7 (10 pts)' }}</button>
+                <button
+                  @click="swapSkip"
+                  class="bg-gray-600 hover:bg-gray-500 text-white px-4 py-1.5 rounded text-sm"
+                >Keep slot 7</button>
+              </template>
+              <span v-else class="text-xs text-amber-300">Waiting for opponent...</span>
+            </template>
             <template v-else>
               <button
                 v-if="canCommit"
                 @click="commit(matchState.round)"
-                :disabled="matchState.suddenDeath && !placedCount"
+                :disabled="!slotsFilled"
                 class="bg-green-500 hover:bg-green-600 disabled:opacity-50 text-white px-4 py-1.5 rounded text-sm"
               >{{ commitLabel }}</button>
               <span v-else-if="matchState.you.ready" class="text-xs text-amber-300">Waiting for opponent...</span>
-              <button
-                v-if="canCommit && !matchState.you.swapUsed && matchState.you.undealtCount > 0"
-                :disabled="!selectedHandCard"
-                @click="openSwapSheet"
-                class="bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white px-3 py-1.5 rounded text-xs"
-              >{{ isPractice ? 'Swap (free)' : 'Swap (10 pts)' }}</button>
             </template>
           </div>
           <p class="text-[11px] text-gray-300 text-center max-w-xs">{{ helpText }}</p>
@@ -150,28 +158,24 @@
         </div>
       </div>
 
-      <!-- Swap bottom sheet: confirm trading the selected hand card for a random undealt card -->
+      <!-- Swap bottom sheet: confirm replacing slot 7 with a random undealt card -->
       <transition name="fade">
         <div v-if="swapSheetOpen" class="fixed inset-0 bg-black/50 z-40" @click="closeSwapSheet"></div>
       </transition>
       <transition name="slide-up">
         <div v-if="swapSheetOpen" class="fixed inset-x-0 bottom-0 bg-gray-900 border-t border-white/20 rounded-t-xl z-50 p-4 max-h-[70vh] overflow-y-auto">
-          <h3 class="font-bold mb-3">Swap a card</h3>
-          <div v-if="selectedHandCard" class="flex items-center gap-3 mb-3">
-            <OgGtoonCardTile :card="selectedHandCard" size="hand" tone="selected" />
+          <h3 class="font-bold mb-3">Swap your slot 7 card</h3>
+          <div v-if="slotSevenCard" class="flex items-center gap-3 mb-3">
+            <OgGtoonCardTile :card="slotSevenCard" size="hand" tone="selected" />
             <p class="text-xs text-gray-300">
-              <strong>{{ selectedHandCard.name }}</strong> goes back into your undealt cards, and you draw a
-              <strong>random</strong> undealt card in its place.
+              <strong>{{ slotSevenCard.name }}</strong> goes back into your undealt cards, and a
+              <strong>random</strong> undealt card takes slot 7.
             </p>
           </div>
-          <p class="text-xs text-gray-400 mb-3">{{ isPractice ? 'Free in practice.' : 'Costs 10 points.' }} You can only do this once per match, and only before you commit for the round.</p>
+          <p class="text-xs text-gray-400 mb-3">{{ isPractice ? 'Free in practice.' : 'Costs 10 points.' }} You can only do this once per match. Both players choose before the new cards are revealed.</p>
           <div class="flex justify-end gap-2">
             <button @click="closeSwapSheet" class="px-4 py-2 bg-gray-700 rounded text-sm">Cancel</button>
-            <button
-              :disabled="!selectedHandCard"
-              @click="confirmSwap"
-              class="px-4 py-2 bg-indigo-500 disabled:opacity-50 rounded text-sm"
-            >{{ isPractice ? 'Swap' : 'Swap for 10 pts' }}</button>
+            <button @click="confirmSwap" class="px-4 py-2 bg-indigo-500 rounded text-sm">{{ isPractice ? 'Swap' : 'Swap for 10 pts' }}</button>
           </div>
         </div>
       </transition>
@@ -204,13 +208,13 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onBeforeUnmount } from 'vue'
+import { computed, ref, watch, onBeforeUnmount, onMounted } from 'vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 import OgGtoonCardTile from '@/components/OgGtoonCardTile.vue'
 
 defineEmits(['exit'])
 
-const { matchState, lastReveal, matchEnded, lastError, commit, place, unplace, swap, discard } = useOgGtoonsSocket()
+const { matchState, lastReveal, matchEnded, lastError, commit, place, unplace, swap, swapSkip, discard } = useOgGtoonsSocket()
 
 const COLOR_HEX = {
   BLACK: '#cccccc', SILVER: '#c0c0c0', BLUE: '#60a5fa', RED: '#f87171',
@@ -225,11 +229,13 @@ const difficultyLabel = computed(() => {
 })
 
 const inDiscardPhase = computed(() => matchState.value?.phase === 'discard')
+const inSwapPhase = computed(() => matchState.value?.phase === 'swap')
 const roundLabel = computed(() => {
   const m = matchState.value
   if (!m) return ''
   if (m.suddenDeath) return 'Sudden Death'
   if (m.phase === 'discard') return 'Discard Phase'
+  if (m.phase === 'swap') return `Round ${m.round} / ${m.totalRounds} · Swap`
   return `Round ${m.round} / ${m.totalRounds}`
 })
 
@@ -259,6 +265,19 @@ watch(lastReveal, (rev) => {
 })
 onBeforeUnmount(() => clearTimeout(flipTimer))
 
+/* ── Phase countdown ─────────────────────────────────────────────────────────────────────────
+ * The server owns the deadline (`phaseEndsAt`) and acts for anyone who has not when it passes;
+ * this is only the display. Hidden once the player has finished their part of the phase. */
+const nowMs = ref(Date.now())
+let tickTimer = null
+onMounted(() => { tickTimer = setInterval(() => { nowMs.value = Date.now() }, 500) })
+onBeforeUnmount(() => clearInterval(tickTimer))
+const secondsLeft = computed(() => {
+  const m = matchState.value
+  if (!m?.phaseEndsAt) return null
+  return Math.max(0, Math.ceil((m.phaseEndsAt - nowMs.value) / 1000))
+})
+
 /** Whether a revealed entry is still waiting to flip. */
 function stillHidden(entry) {
   return !!entry && !!lastReveal.value && entry.round === lastReveal.value.round && pendingFlip.value.has(entry.slot)
@@ -284,6 +303,13 @@ const handTray = computed(() => (inDiscardPhase.value ? (matchState.value?.you?.
 
 const canEdit = computed(() => !!matchState.value && !matchEnded.value && matchState.value.phase === 'play' && !matchState.value.you.ready)
 const canCommit = computed(() => canEdit.value)
+// The server rejects a short commit; this just keeps the button honest.
+const slotsFilled = computed(() => {
+  const m = matchState.value
+  if (!m) return false
+  return placedCount.value >= Math.min((m.roundSlots || []).length, (m.you.hand || []).length)
+})
+const slotSevenCard = computed(() => youRevealed.value.find(r => r.slot === 7) || null)
 const roundSlots = computed(() => matchState.value?.roundSlots || [])
 const isOpenSlot = (slot) => canEdit.value && roundSlots.value.includes(slot)
 
@@ -321,7 +347,6 @@ const oppScore = computed(() => oppRevealed.value.filter(r => !stillHidden(r)).r
 const selectedCard = ref(null)   // deck index of the hand card chosen for placing/swapping
 const discardPick = ref(new Set())
 
-const selectedHandCard = computed(() => (selectedCard.value === null ? null : handById.value.get(selectedCard.value) || null))
 
 function handTone(idx) {
   if (inDiscardPhase.value) return discardPick.value.has(idx) ? 'discard' : 'idle'
@@ -367,22 +392,29 @@ watch(handById, (hand) => {
 })
 
 const commitLabel = computed(() => {
-  const n = placedCount.value
-  if (matchState.value?.suddenDeath) return 'Play card'
-  return n ? `Commit ${n} card${n === 1 ? '' : 's'}` : 'Commit with no cards'
+  const m = matchState.value
+  const need = Math.min((m?.roundSlots || []).length, (m?.you?.hand || []).length)
+  if (m?.suddenDeath) return 'Play card'
+  if (placedCount.value < need) return `Fill all slots (${placedCount.value}/${need})`
+  return `Commit ${need} card${need === 1 ? '' : 's'}`
 })
 
 const helpText = computed(() => {
   const m = matchState.value
   if (!m) return ''
   if (m.phase === 'discard') {
-    return 'Discard phase: tap any cards you want to throw away, then confirm. Your hand is refilled to 6 from your undealt cards.'
+    return 'Discard phase: tap any cards you want to throw away, then confirm. Your hand is refilled to 6 from your undealt cards. If time runs out you keep your hand.'
+  }
+  if (m.phase === 'swap') {
+    return m.you.maySwap
+      ? 'Last chance: swap the card in slot 7 for a random undealt card, or keep it. If time runs out you keep it.'
+      : (m.you.swapReady ? 'Waiting for your opponent to choose...' : 'You have no undealt cards left to swap with.')
   }
   if (m.you.ready) return 'Your cards are face down. They flip, in slot order, when your opponent commits.'
   const slots = m.roundSlots
   const range = slots.length === 1 ? `slot ${slots[0]}` : `slots ${slots[0]}-${slots[slots.length - 1]}`
   if (m.suddenDeath) return `Sudden death: place one card in slot ${slots[0]} and play it.`
-  return `Tap a card in your hand, then tap an open ${range} to place it (up to ${slots.length}). Tap a placed card to take it back.`
+  return `Tap a card in your hand, then tap an open ${range} to place it. Fill all ${slots.length} slot${slots.length === 1 ? '' : 's'} to commit. If time runs out, random cards fill the empty slots. Tap a placed card to take it back.`
 })
 
 const oppStatusReady = computed(() => {
@@ -391,6 +423,7 @@ const oppStatusReady = computed(() => {
 })
 const oppStatusLabel = computed(() => {
   if (inDiscardPhase.value) return oppStatusReady.value ? 'Done discarding' : 'Choosing discards...'
+  if (inSwapPhase.value) return matchState.value?.opponent?.swapReady ? 'Swap decided' : 'Deciding on a swap...'
   return oppStatusReady.value ? 'Committed' : 'Thinking...'
 })
 
@@ -434,6 +467,8 @@ const groupedEffectsLog = computed(() => {
     let line
     if (e.action === 'negateEffect') {
       line = `negated ${targetName}'s effect`
+    } else if (e.action === 'duplicateCancelled') {
+      line = 'knocked out (same gToon on both sides)'
     } else if (e.action === 'setColor') {
       line = `set ${targetName} to ${e.color}`
     } else if (e.operation === 'add') {
@@ -455,16 +490,16 @@ const endReasonLabel = computed(() => {
   return ''
 })
 
-/* ── Swap: pick a hand card, then confirm in the sheet ───────────────────────────────────── */
+/* ── Round-3 swap: confirm in the sheet ─────────────────────────────────────────────────── */
 const swapSheetOpen = ref(false)
-function openSwapSheet() { if (selectedHandCard.value) swapSheetOpen.value = true }
+function openSwapSheet() { swapSheetOpen.value = true }
 function closeSwapSheet() { swapSheetOpen.value = false }
 function confirmSwap() {
-  if (selectedCard.value === null) return
-  swap(selectedCard.value)
-  selectedCard.value = null
+  swap()
   closeSwapSheet()
 }
+// The sheet belongs to the swap phase; close it if the phase moves on (e.g. the clock ran out).
+watch(inSwapPhase, (on) => { if (!on) swapSheetOpen.value = false })
 </script>
 
 <style scoped>
