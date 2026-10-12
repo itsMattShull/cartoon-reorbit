@@ -20,6 +20,7 @@
 //     deadline     // epoch ms when the current phase times out }
 // See ogGtoonEngine.js's header for the hand/slot rules.
 
+import { sanitizeGtoonCardStyle } from '../../utils/gtoonCardStyle.js'
 import { resolveFinalBoard } from './ogGtoonEffects.js'
 import {
   determineWinner, hasSuddenDeathCardsRemaining, dealOpeningHand, discardAndDeal,
@@ -108,6 +109,7 @@ export function toSnapshotCard(ctoon, position) {
     assetPath: ctoon.assetPath,
     characters: Array.isArray(ctoon.characters) ? ctoon.characters : [],
     color: ctoon.gtoonColor,
+    cardStyle: sanitizeGtoonCardStyle(ctoon.gtoonCardStyle),
     value: ctoon.gtoonValue ?? 0,
     type1: ctoon.gtoonType1 ?? null,
     type2: ctoon.gtoonType2 ?? null,
@@ -181,7 +183,7 @@ export function startPhaseClock(match, now = Date.now()) {
 function handCardView(match, meIdx, deckIdx) {
   const c = match.deckOrder[meIdx][deckIdx]
   return {
-    idx: deckIdx, ctoonId: c.ctoonId, name: c.name, assetPath: c.assetPath, color: c.color,
+    idx: deckIdx, ctoonId: c.ctoonId, name: c.name, assetPath: c.assetPath, color: c.color, cardStyle: c.cardStyle,
     value: c.value, type1: c.type1, type2: c.type2, type3: c.type3, group: c.group
   }
 }
@@ -210,7 +212,7 @@ export function publicMatchView(match, uid, opts = {}) {
       userId: uid,
       username: match.usernames[meIdx],
       goalColor: match.goalColor[meIdx],
-      goalCard: { name: match.deckOrder[meIdx][11].name, assetPath: match.deckOrder[meIdx][11].assetPath, color: match.deckOrder[meIdx][11].color },
+      goalCard: { name: match.deckOrder[meIdx][11].name, assetPath: match.deckOrder[meIdx][11].assetPath, color: match.deckOrder[meIdx][11].color, cardStyle: match.deckOrder[meIdx][11].cardStyle, value: match.deckOrder[meIdx][11].value },
       swapUsed: match.swapUsed[meIdx],
       stake: match.stake[meIdx],
       revealed: match.revealed[meIdx],
@@ -227,7 +229,7 @@ export function publicMatchView(match, uid, opts = {}) {
     opponent: {
       username: match.usernames[oppIdx],
       goalColor: match.goalColor[oppIdx],
-      goalCard: { name: match.deckOrder[oppIdx][11].name, assetPath: match.deckOrder[oppIdx][11].assetPath, color: match.deckOrder[oppIdx][11].color },
+      goalCard: { name: match.deckOrder[oppIdx][11].name, assetPath: match.deckOrder[oppIdx][11].assetPath, color: match.deckOrder[oppIdx][11].color, cardStyle: match.deckOrder[oppIdx][11].cardStyle, value: match.deckOrder[oppIdx][11].value },
       swapUsed: match.swapUsed[oppIdx],
       revealed: match.revealed[oppIdx],
       handCount: (match.hand?.[oppIdx] || []).length,
@@ -531,6 +533,7 @@ function toRevealEntry(card, round, slot, deckIdx) {
     deckIdx,
     ctoonId: card.ctoonId, name: card.name, assetPath: card.assetPath, characters: card.characters,
     color: card.color, baseColor: card.color, baseValue: card.value, finalValue: card.value, cancelled: false,
+    cardStyle: card.cardStyle,
     type1: card.type1, type2: card.type2, type3: card.type3, group: card.group,
     isSlam: card.isSlam, effect: card.effect, round, slot
   }

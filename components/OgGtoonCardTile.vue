@@ -8,8 +8,20 @@
   >
     <!-- Keyed on face so a face-down -> face-up change replays the flip animation. -->
     <div v-if="card && !faceDown" :key="'face'" class="flip-in w-full h-full flex items-center justify-center bg-white/5" :class="{ 'opacity-40 grayscale': marker && marker.kind === 'knockedOut' }">
-      <img :src="card.assetPath" :alt="card.name" :title="`${card.name} (${shownValue})`" class="h-full w-full object-contain p-0.5" />
-      <span class="absolute top-0 left-0 text-[10px] font-bold leading-none px-1 py-0.5 rounded-br bg-black/70 text-white">{{ shownValue }}</span>
+      <!-- Round gToon card. Revealed board cards get the Noise→Signal reveal + saved one-shot FX and the
+           UFO Color Sweep when their color changes mid-match; hand / not-yet-revealed cards are static. -->
+      <div class="h-full aspect-square p-0.5" :title="`${card.name} (${shownValue})`">
+        <GtoonCard
+          :image-url="card.assetPath"
+          :value="shownValue"
+          :color="card.color || 'SILVER'"
+          :card-style="card.cardStyle"
+          :seed="String(card.ctoonId || card.name || '')"
+          :alt="card.name"
+          :effects="isRevealed && animate ? 'full' : 'static'"
+          :ambient="false"
+        />
+      </div>
       <span v-if="markerInfo" class="absolute top-0 right-0 text-[8px] font-bold leading-none px-1 py-0.5 rounded-bl text-white" :class="markerInfo.cls" :title="markerInfo.title">{{ markerInfo.text }}</span>
       <div v-if="badges.length" class="absolute bottom-0 inset-x-0 flex flex-wrap justify-center gap-0.5 px-0.5 pb-0.5">
         <span v-for="b in badges" :key="b" class="text-[7px] leading-none px-1 py-0.5 rounded bg-black/60 text-gray-100">{{ b }}</span>
@@ -24,6 +36,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import GtoonCard from '@/components/GtoonCard.vue'
 
 const props = defineProps({
   card: { type: Object, default: null },        // hand card ({ value }) or revealed entry ({ finalValue })
@@ -32,6 +45,7 @@ const props = defineProps({
   // 'idle' | 'selected' | 'open' (a slot you can place into) | 'filled' | 'discard'
   tone: { type: String, default: 'idle' },
   size: { type: String, default: 'slot' },      // 'slot' | 'hand'
+  animate: { type: Boolean, default: true },    // false → always the static card (e.g. inside a dialog)
   // What the game log says is happening to this card: { kind: 'knockedOut'|'cancelled'|'changed', from?, to? }
   marker: { type: Object, default: null }
 })
@@ -53,6 +67,8 @@ const GROUP_LABELS = {
 }
 const titleCase = (s) => (s ? s.charAt(0) + s.slice(1).toLowerCase() : s)
 
+// Revealed entries carry `round`/`slot`; cards still in a hand carry `idx` instead.
+const isRevealed = computed(() => props.card?.round != null && props.card?.slot != null)
 const shownValue = computed(() => props.card?.finalValue ?? props.card?.value ?? 0)
 const badges = computed(() => {
   const c = props.card

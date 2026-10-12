@@ -38,7 +38,9 @@
         <!-- Your side -->
         <div class="flex-1 flex flex-col items-center gap-2">
           <div class="flex items-center gap-2">
-            <img v-if="matchState.you.goalCard" :src="matchState.you.goalCard.assetPath" class="h-10 w-10 object-contain rounded border border-amber-400" :title="matchState.you.goalCard.name" />
+            <div v-if="matchState.you.goalCard" class="h-10 w-10 flex-shrink-0 rounded-full border border-amber-400" :title="matchState.you.goalCard.name">
+              <GtoonCard :image-url="matchState.you.goalCard.assetPath" :value="matchState.you.goalCard.value ?? 0" :color="matchState.you.goalCard.color || 'SILVER'" :card-style="matchState.you.goalCard.cardStyle" :alt="matchState.you.goalCard.name" effects="static" />
+            </div>
             <span class="text-xs text-gray-300">Goal: {{ matchState.you.goalColor }}</span>
           </div>
           <div class="grid grid-cols-4 gap-1.5 w-full max-w-sm">
@@ -111,7 +113,9 @@
         <!-- Opponent side -->
         <div class="flex-1 flex flex-col items-center gap-2">
           <div class="flex items-center gap-2">
-            <img v-if="matchState.opponent.goalCard" :src="matchState.opponent.goalCard.assetPath" class="h-10 w-10 object-contain rounded border border-amber-400" :title="matchState.opponent.goalCard.name" />
+            <div v-if="matchState.opponent.goalCard" class="h-10 w-10 flex-shrink-0 rounded-full border border-amber-400" :title="matchState.opponent.goalCard.name">
+              <GtoonCard :image-url="matchState.opponent.goalCard.assetPath" :value="matchState.opponent.goalCard.value ?? 0" :color="matchState.opponent.goalCard.color || 'SILVER'" :card-style="matchState.opponent.goalCard.cardStyle" :alt="matchState.opponent.goalCard.name" effects="static" />
+            </div>
             <span class="text-xs text-gray-300">Goal: {{ matchState.opponent.goalColor }}</span>
           </div>
           <div class="grid grid-cols-4 gap-1.5 w-full max-w-sm">
@@ -157,7 +161,7 @@
         <div v-if="swapSheetOpen" class="fixed inset-x-0 bottom-0 bg-gray-900 border-t border-white/20 rounded-t-xl z-50 p-4 max-h-[70vh] overflow-y-auto">
           <h3 class="font-bold mb-3">Swap your slot 7 card</h3>
           <div v-if="slotSevenCard" class="flex items-center gap-3 mb-3">
-            <OgGtoonCardTile :card="slotSevenCard" size="hand" tone="selected" />
+            <OgGtoonCardTile :card="slotSevenCard" size="hand" tone="selected" :animate="false" />
             <p class="text-xs text-gray-300">
               <strong>{{ slotSevenCard.name }}</strong> goes back into your undealt cards, and a
               <strong>random</strong> undealt card takes slot 7.
@@ -197,6 +201,7 @@
 import { computed, ref, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 import OgGtoonCardTile from '@/components/OgGtoonCardTile.vue'
+import GtoonCard from '@/components/GtoonCard.vue'
 import OgGtoonGameLog from '@/components/OgGtoonGameLog.vue'
 
 defineEmits(['exit'])
