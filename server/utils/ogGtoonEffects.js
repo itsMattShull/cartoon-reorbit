@@ -600,9 +600,8 @@ function boardIndexOf(card, arrayIndex) {
  * @param {object} params
  * @param {object} params.player1 - { revealed: [cardSnapshot, ...], goalCard: cardSnapshot|null }
  * @param {object} params.player2 - same shape
- * @param {boolean} [params.cancelDuplicates=true] - false turns duplicate cancellation off. Practice
- *   uses that: the bot plays a copy of the player's own deck, so nearly every card would be a
- *   "duplicate" and the board would cancel itself out.
+ * @param {boolean} [params.cancelDuplicates=true] - false turns duplicate cancellation off (unused by
+ *   live play: PvP and practice both cancel the same gToon on both boards).
  *   cardSnapshot: { ctoonId, name, characters, color, value, type1, type2, type3, group, isSlam,
  *                    effect, round, slot } — `color`/`value` must be the PRINTED ones.
  * @returns {{ player1: { revealed: [{ctoonId,round,baseValue,finalValue,color,cancelled}], totalValue },

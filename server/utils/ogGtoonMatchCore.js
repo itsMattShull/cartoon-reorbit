@@ -494,9 +494,7 @@ export function runFinalBoardResolution(match) {
   try {
     final = resolveFinalBoard({
       player1: finalBoardInputFor(match, 0),
-      player2: finalBoardInputFor(match, 1),
-      // Practice bots mirror the player's deck, so the same-gToon-on-both-sides rule is PvP only.
-      cancelDuplicates: !match.practice
+      player2: finalBoardInputFor(match, 1)
     })
   } catch (err) {
     // A malformed admin-authored gtoonEffect must never take the shared socket process down —
@@ -578,7 +576,7 @@ export function revealPlacedCards(match) {
 function logPreview(match) {
   try {
     const final = resolveFinalBoard({
-      player1: finalBoardInputFor(match, 0), player2: finalBoardInputFor(match, 1), cancelDuplicates: !match.practice
+      player1: finalBoardInputFor(match, 0), player2: finalBoardInputFor(match, 1)
     })
     const d = describeBoard(match, final)
     if (!d.sections.some(sec => sec.lines.length)) {

@@ -326,7 +326,7 @@ test('core: re-running the final board starts from printed colors, so repeats gi
   assert.equal(colors(), first)
 })
 
-test('core: the same gToon on both boards is cancelled in PvP but not in practice (bot mirrors your deck)', () => {
+test('core: the same gToon on both boards is cancelled in PvP and in practice alike', () => {
   const run = (practice) => {
     const m = freshMatch(makeDeck({ goal: 'BLACK' }), makeDeck({ goal: 'BLACK' }))
     if (practice) m.practice = true
@@ -335,7 +335,7 @@ test('core: the same gToon on both boards is cancelled in PvP but not in practic
     return [...m.revealed[0], ...m.revealed[1]].filter(r => r.cancelled).length
   }
   assert.ok(run(false) > 0)
-  assert.equal(run(true), 0)
+  assert.ok(run(true) > 0)
 })
 
 /* ── Game log ────────────────────────────────────────────────────────────────────────────── */
