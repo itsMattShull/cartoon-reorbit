@@ -3032,6 +3032,41 @@ model CronErrorLog {
   @@index([dismissed])
 }
 
+// One row per execution of a scheduled background job (cron-critical / cron-maintenance
+// schedulers, see server/cron/runLogger.js), shown on the admin "Cron Run Logs" page.
+// High-frequency "checker" jobs only write a row when they fail, skip, or run slowly — see
+// the `quiet` flag in server/cron/jobs.js — so this table stays small; a nightly job prunes it.
+model CronRunLog {
+  id         String   @id @default(uuid())
+  job        String
+  status     String // "SUCCESS" | "FAILED" | "SKIPPED"
+  startedAt  DateTime
+  finishedAt DateTime
+  durationMs Int
+  detail     String? // short JSON/text result summary, e.g. {"changed":12} or the skip reason
+  error      String? // full stack trace when status = FAILED
+  trigger    String   @default("schedule") // "schedule" | "catchup" | "delayed" | "manual"
+  createdAt  DateTime @default(now())
+
+  @@index([startedAt])
+  @@index([job, startedAt])
+  @@index([status, startedAt])
+}
+
+// Latest-run snapshot per scheduled job: one upserted row per job, written on EVERY run
+// (including the quiet ones CronRunLog skips), which is what lets the admin page flag a job
+// that has silently stopped running.
+model CronJobState {
+  job            String    @id
+  lastStartedAt  DateTime?
+  lastFinishedAt DateTime?
+  lastSuccessAt  DateTime?
+  lastStatus     String? // "SUCCESS" | "FAILED" | "SKIPPED" | "RUNNING"
+  lastDurationMs Int?
+  lastError      String?
+  updatedAt      DateTime  @updatedAt
+}
+
 model DissolveAuctionQueue {
   id             String    @id @default(uuid())
   userCtoonId    String    @unique

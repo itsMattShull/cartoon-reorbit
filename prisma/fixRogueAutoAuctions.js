@@ -3,7 +3,7 @@
 // Finds live auctions that pre-empted a scheduled AuctionOnly release, and
 // retires the ones that can be retired safely.
 //
-// createDailyFeaturedAuction (server/cron/sync-guild-members.js) used to shuffle
+// createDailyFeaturedAuction (server/cron/jobHandlers.js) used to shuffle
 // the official account's entire inventory and list whatever it drew at
 // rarityFloor(). It excluded only "Crazy Rare" and did not check whether a copy
 // was already committed to a pending AuctionOnly listing, so it could take a

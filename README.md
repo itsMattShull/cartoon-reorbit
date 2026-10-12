@@ -246,7 +246,7 @@ DISCORD_PUBLIC_KEY=<from/Discord/General-Information>
 - `Error: Invalid prisma.user.findFirst() invocation` is an indication that `npx prisma migrate dev` may not have run properly.
 - If Redis jobs don’t process, confirm Redis is running and `REDIS_HOST/PORT` are correct.
 - On Windows, run PowerShell as Administrator when installing `nvm-windows` and ensure you reopen the shell after install.
-- `server > cron > sync-guild-members.js` is what is used to do cron jobs on the server.  Like daily auctions from the main account other tasks
+- Recurring server jobs run in two BullMQ scheduler processes, `cron-critical` and `cron-maintenance` (`server/cron/scheduler.js`). `server/cron/jobs.js` lists every job and when it runs, `server/cron/jobHandlers.js` holds the job bodies, and every run is recorded on the admin **Cron Run Logs** page. Like daily auctions from the main account other tasks
 - Database schema is under `prisma/schema.prisma`
 - API is under `server/api`
 - Pages are under `pages/`

@@ -107,13 +107,22 @@ module.exports = {
       env: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME },
     },
 
-    // ── Cron: Discord guild member sync ───────────────────────────────────
+    // ── Cron schedulers (BullMQ job schedulers; see server/cron/scheduler.js) ──
     {
-      name:      'guild-checker',
-      script:    'server/cron/sync-guild-members.js',
+      name:      'cron-critical',
+      script:    'server/cron/scheduler.js',
+      args:      'critical',
       exec_mode: 'fork',
       instances: 1,
-      env: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME },
+      env: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME, PRISMA_POOL_SIZE: '8' },
+    },
+    {
+      name:      'cron-maintenance',
+      script:    'server/cron/scheduler.js',
+      args:      'maintenance',
+      exec_mode: 'fork',
+      instances: 1,
+      env: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME, PRISMA_POOL_SIZE: '5' },
     },
   ],
 }

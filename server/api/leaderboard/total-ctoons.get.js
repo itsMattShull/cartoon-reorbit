@@ -2,6 +2,9 @@
 import { defineEventHandler } from 'h3'
 import { prisma } from '@/server/prisma'
 import { mergeViewerRow } from '@/server/utils/leaderboardRank'
+import { cachedJson } from '@/server/utils/cache'
+
+const LEADERBOARD_TTL_SEC = 60
 
 const EXCLUDE_USER_ID = '4f0e8b3b-7d0b-466b-99e7-8996c91d7eb3'
 
@@ -43,10 +46,11 @@ function rankedViewer(userId) {
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId || null
 
-  const top11 = await rankedTop11()
+  // Cached (Redis, single-flight): the ranking is a full-table aggregate and every visitor asks for it.
+  const top11 = await cachedJson('lb:total-ctoons:top11', LEADERBOARD_TTL_SEC, rankedTop11)
   let viewerRow = null
   if (userId && !top11.some(r => r.userId === userId)) {
-    const res = await rankedViewer(userId)
+    const res = await cachedJson(`lb:total-ctoons:viewer:${userId}`, LEADERBOARD_TTL_SEC, () => rankedViewer(userId))
     viewerRow = res[0] || null
   }
 

@@ -1,7 +1,7 @@
 // server/api/admin/achievements/enqueue.post.js
 import { defineEventHandler, getRequestHeader, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
-import { achievementsQueue } from '@/server/utils/queues'
+import { enqueueAchievementChecks } from '@/server/utils/queues'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -22,11 +22,8 @@ export default defineEventHandler(async (event) => {
     targets = rows.map(r => r.id)
   }
 
-  let enq = 0
-  for (const id of targets) {
-    await achievementsQueue.add('processUserAchievements', { userId: id })
-    enq++
-  }
+  // Bulk + de-duplicated: a user who already has a check waiting isn't queued a second time.
+  const enq = await enqueueAchievementChecks(targets)
 
   return { enqueued: enq }
 })

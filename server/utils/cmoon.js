@@ -812,7 +812,7 @@ export function isValidCMoonEffectType(value) {
 // actually earned — a leadership title overriding the shown label only. Nothing about their
 // underlying progression changes: cMoonPoints keeps accruing, currentCMoonRankId keeps getting
 // granted/upgraded normally by the achievement engine, and the nightly Discord role sync
-// (server/cron/sync-guild-members.js) still grants the earned rank's own role — this is a
+// (server/cron/jobHandlers.js) still grants the earned rank's own role — this is a
 // read-side label swap in the handful of places a member's rank name is surfaced to other
 // players (cZone page, cMoon leaderboard, standings), not a change to the rank system itself.
 export const CAPTAIN_DISPLAY_RANK_NAME = 'Captain'
@@ -1075,7 +1075,7 @@ function withTimeout(promise, ms) {
 
 // Real-time (not nightly-cron) Discord role sync for a single user's cMoon change. Revoking a
 // role is new capability, not an existing pattern being reused: every other Discord sync in this
-// codebase (server/cron/sync-guild-members.js's addRoleToMember-backed jobs) is grant-only by
+// codebase (server/cron/jobHandlers.js's addRoleToMember-backed jobs) is grant-only by
 // deliberate design, so this is scoped tightly — called only from selectCMoonForUser above (grant
 // only, no prior role to revoke) and reassignUserCMoon below (one user, one admin-initiated change
 // at a time), never from a bulk or cron path. Returns true/false once both calls resolve within

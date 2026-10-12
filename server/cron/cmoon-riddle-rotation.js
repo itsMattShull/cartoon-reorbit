@@ -1,6 +1,6 @@
 // server/cron/cmoon-riddle-rotation.js
 // Weekly cMoon riddle auto-posting. Called every minute from the main cron runner (see
-// server/cron/sync-guild-members.js), same shape as checkAndCreateWeeklyCZoneContest in
+// server/cron/jobHandlers.js), same shape as checkAndCreateWeeklyCZoneContest in
 // create-weekly-czone-contest.js — intentionally not sharing code with that file (the date-parts
 // helper below is duplicated, not imported) so this feature and the already-shipped weekly
 // contest stay fully decoupled from each other.
