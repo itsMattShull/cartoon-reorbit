@@ -14,6 +14,7 @@ import { parseSecondEditionFields } from '@/server/utils/secondEdition'
 import { sanitizePathSegment, sanitizeFilename, assertInside, sniffImageType, MAX_IMAGE_BYTES } from '@/server/utils/imageUploadValidation'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 import { validateEffectSchema } from '@/server/utils/ogGtoonEffects'
+import { parseGtoonCardStyleInput } from '@/server/utils/ogGtoonDisplay'
 
 const OG_GTOON_COLORS = new Set(['BLACK', 'SILVER', 'BLUE', 'RED', 'YELLOW', 'GREEN', 'PURPLE', 'ORANGE', 'PINK'])
 const OG_GTOON_CARD_TYPES = new Set(['ANIMAL', 'FEMALE', 'HERO', 'MALE', 'MONSTER', 'PLACE', 'PROP', 'VEHICLE', 'VILLAIN'])
@@ -73,7 +74,7 @@ export default defineEventHandler(async (event) => {
     isGtoon, cost, power, abilityKey, abilityData, gtoonType,
 
     /* Original gToons (2002) fields */
-    isOgGtoon, gtoonColor, gtoonValue, isSlamGtoon, gtoonEffect,
+    isOgGtoon, gtoonColor, gtoonValue, isSlamGtoon, gtoonEffect, gtoonCardStyle,
     gtoonType1, gtoonType2, gtoonType3, gtoonGroup,
 
     /* Two-phase advisory fields (optional) */
@@ -286,6 +287,7 @@ export default defineEventHandler(async (event) => {
       gtoonValue:  isOgGtoonBool ? gtoonValueInt : null,
       isSlamGtoon: isSlamGtoonBool,
       gtoonEffect: isSlamGtoonBool ? gtoonEffectArr : null,
+      gtoonCardStyle: isOgGtoonBool ? parseGtoonCardStyleInput(gtoonCardStyle) : null,
       gtoonType1: isOgGtoonBool ? gtoonType1Val : null,
       gtoonType2: isOgGtoonBool ? gtoonType2Val : null,
       gtoonType3: isOgGtoonBool ? gtoonType3Val : null,
