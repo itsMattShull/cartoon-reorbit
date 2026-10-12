@@ -169,6 +169,12 @@ export function resolveRound({
     roundEntry: {
       playerAction: effectivePlayerAction, enemyAction: effectiveEnemyAction,
       playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit,
+      // Display-only — the floating damage-number UI in CMoonBattlePopupHost.vue reads these
+      // straight off the round rather than re-deriving "1, or 2 on a crit" client-side, so a
+      // future balance change here (e.g. a non-flat crit multiplier) stays correct for free.
+      // Always 0 when that side didn't land a hit, same convention playerDamage/enemyDamage
+      // themselves already follow below.
+      playerDamage, enemyDamage,
     },
     newPlayerHp,
     enemyDamage,
@@ -218,6 +224,16 @@ export function serializeEnemyForClient(member) {
   // A member's own null sound slot falls back to its faction's matching default — see
   // CMoonEnemyFaction's default*SoundPath columns and resolveMemberSoundPaths' own comment.
   const sounds = resolveMemberSoundPaths(member, member.faction)
+  // The full active taunt pool for each trigger moment (see CMoonEnemyTaunt's own schema
+  // comment) — the caller must have included `faction.taunts` filtered to active rows (every
+  // query that reaches here already does, see consider.post.js/start.post.js/action.post.js/
+  // [id].get.js/preview.post.js). Sent as a full small list rather than one pre-picked line: the
+  // client (CMoonBattlePopupHost.vue) does the random pick itself at the actual moment, so a
+  // resumed battle or a re-fetch doesn't lock in whichever line happened to be rolled first.
+  const taunts = {
+    appear: (member.faction?.taunts || []).filter(t => t.trigger === 'APPEAR').map(t => ({ text: t.text, soundPath: t.soundPath })),
+    crit: (member.faction?.taunts || []).filter(t => t.trigger === 'CRIT').map(t => ({ text: t.text, soundPath: t.soundPath })),
+  }
   return {
     id: member.id,
     name: member.name,
@@ -234,6 +250,7 @@ export function serializeEnemyForClient(member) {
     attackingSoundPath: sounds.attackingSoundPath,
     victorySoundPath: sounds.victorySoundPath,
     defeatSoundPath: sounds.defeatSoundPath,
+    taunts,
     faction: member.faction
       ? {
           id: member.faction.id,
@@ -277,6 +294,14 @@ export function serializeBattleForClient(battle) {
     // CMoonEnemyBattle.playerHitStreak/playerSpecialCharged's own schema comment.
     playerHitStreak: battle.playerHitStreak || 0,
     playerSpecialCharged: !!battle.playerSpecialCharged,
+    // The enemy's OWN consecutive-hit streak against the player (see
+    // CMoonEnemyBattle.enemyHitStreak's own schema comment) — surfaced so the UI can telegraph an
+    // incoming automatic special as it climbs toward HIT_STREAK_THRESHOLD, same spirit as
+    // playerParalyzedTurns above. enemyHasSpecialAttack is a bare boolean, never the attack's own
+    // name/effect/amount — those stay hidden until it actually fires (see action.post.js's
+    // `specials` round events), this is only enough for a "something's coming" warning pulse.
+    enemyHitStreak: battle.enemyHitStreak || 0,
+    enemyHasSpecialAttack: !!battle.enemyMember?.faction?.specialAttack,
     // Rounds left where the player can't act at all (set by the enemy's own PARALYZE_OPPONENT
     // special) — surfaced so the UI can explain why their moves (including an already-charged
     // special) are about to whiff, rather than that just appearing to happen with no warning.

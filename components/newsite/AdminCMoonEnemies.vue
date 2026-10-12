@@ -285,6 +285,76 @@
             >{{ factionSaving ? 'Saving…' : (factionForm.id ? 'Save changes' : 'Create faction') }}</button>
             <button type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50" @click="resetFactionForm">Cancel</button>
           </div>
+
+          <!-- Taunts can only attach to an already-created faction (needs its id) -->
+          <div v-if="factionForm.id" class="pt-2 border-t space-y-3">
+            <div v-for="group in TAUNT_TRIGGER_GROUPS" :key="group.key">
+              <h4 class="font-semibold text-xs">{{ group.label }}</h4>
+              <p class="text-[10px] text-gray-500 mb-1">{{ group.help }}</p>
+              <div v-if="factionTauntsByTrigger[group.key].length" class="space-y-1">
+                <div v-for="t in factionTauntsByTrigger[group.key]" :key="t.id" class="border rounded p-2 space-y-1">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <label class="flex items-center gap-1 flex-shrink-0">
+                      <input type="checkbox" :checked="t.active" @change="toggleTauntActive(t, $event.target.checked)" />
+                      <span class="text-[10px]">Active</span>
+                    </label>
+                    <template v-if="tauntRowState[t.id]?.editingText">
+                      <input
+                        v-model="tauntRowState[t.id].textDraft" maxlength="200"
+                        class="flex-1 min-w-[120px] border rounded px-1.5 py-0.5 text-[11px]"
+                      />
+                      <button
+                        type="button" class="text-indigo-600 hover:underline text-[11px] flex-shrink-0"
+                        :disabled="tauntRowState[t.id].savingEdit" @click="saveTauntText(t)"
+                      >{{ tauntRowState[t.id].savingEdit ? 'Saving…' : 'Save' }}</button>
+                      <button type="button" class="text-gray-500 hover:underline text-[11px] flex-shrink-0" @click="cancelTauntTextEdit(t)">Cancel</button>
+                    </template>
+                    <template v-else>
+                      <span class="flex-1 min-w-0 break-words text-[11px]">{{ t.text }}</span>
+                      <button type="button" class="text-indigo-600 hover:underline text-[11px] flex-shrink-0" @click="startTauntTextEdit(t)">Edit</button>
+                    </template>
+                    <button
+                      type="button" class="text-red-600 hover:underline text-[11px] flex-shrink-0"
+                      :disabled="tauntRowState[t.id]?.deleting" @click="removeTaunt(t)"
+                    >{{ tauntRowState[t.id]?.deleting ? 'Removing…' : 'Remove' }}</button>
+                  </div>
+                  <div class="flex items-center gap-2 flex-wrap pl-5">
+                    <audio v-if="t.soundPath" :src="t.soundPath" controls class="h-7 flex-shrink-0" style="max-width: 200px;" />
+                    <span v-else class="text-[10px] text-gray-400 flex-shrink-0">No sound</span>
+                    <input
+                      type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav"
+                      class="text-[10px] flex-1 min-w-[140px]" @change="onTauntSoundFile(t.id, $event)"
+                    />
+                    <button
+                      type="button" class="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                      :disabled="!tauntRowState[t.id]?.pendingSoundFile || tauntRowState[t.id]?.uploadingSound"
+                      @click="uploadTauntSound(t.id)"
+                    >{{ tauntRowState[t.id]?.uploadingSound ? 'Uploading…' : 'Upload' }}</button>
+                  </div>
+                  <p v-if="tauntRowState[t.id]?.error" class="text-red-600 text-[10px] pl-5">{{ tauntRowState[t.id].error }}</p>
+                </div>
+              </div>
+              <p v-else class="text-gray-500 text-[11px]">None yet.</p>
+            </div>
+
+            <div class="border rounded p-2 space-y-2 bg-gray-50">
+              <h5 class="font-semibold text-[11px]">New taunt</h5>
+              <p v-if="tauntFormError" class="text-red-600 text-[11px]">{{ tauntFormError }}</p>
+              <div class="flex gap-2">
+                <select v-model="tauntForm.trigger" class="border rounded px-2 py-1 text-[11px] w-28 flex-shrink-0">
+                  <option v-for="group in TAUNT_TRIGGER_GROUPS" :key="group.key" :value="group.key">{{ group.label }}</option>
+                </select>
+                <input
+                  v-model="tauntForm.text" maxlength="200" class="flex-1 border rounded px-2 py-1 text-[11px]"
+                  placeholder="e.g. You call that a punch?"
+                />
+              </div>
+              <button
+                type="button" class="px-2 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                :disabled="tauntSaving" @click="addTaunt"
+              >{{ tauntSaving ? 'Adding…' : 'Add taunt' }}</button>
+            </div>
+          </div>
         </div>
       </section>
 
@@ -1063,6 +1133,145 @@ async function removeFaction(f) {
     loadError.value = e?.data?.statusMessage || 'Failed to delete faction'
   } finally {
     deletingFactionId.value = ''
+  }
+}
+
+// ── Faction taunts (CMoonEnemyTaunt) — server/utils/cmoonEnemy.js#TAUNT_TRIGGERS is the source
+// of truth for the trigger values; kept in sync here by hand, same as every other enum list in
+// this file. Taunts can only attach to an already-created faction (same "needs its id" gate
+// rewards/sounds above use), so this whole section is hidden while factionForm.id is empty. ────
+const TAUNT_TRIGGER_GROUPS = [
+  { key: 'APPEAR', label: 'Appear taunts', help: "One is shown (and played, if it has a sound) at random whenever the battle popup first reveals a member of this faction." },
+  { key: 'CRIT', label: 'Crit taunts', help: 'One is shown (and played) at random whenever a member of this faction lands a critical hit on the player.' },
+]
+const factionTauntsByTrigger = computed(() => {
+  const all = factions.value.find(f => f.id === factionForm.id)?.taunts || []
+  return {
+    APPEAR: all.filter(t => t.trigger === 'APPEAR'),
+    CRIT: all.filter(t => t.trigger === 'CRIT'),
+  }
+})
+
+const emptyTauntForm = () => ({ trigger: 'APPEAR', text: '' })
+const tauntForm = reactive(emptyTauntForm())
+const tauntFormError = ref('')
+const tauntSaving = ref(false)
+// Per-row UI state, lazily created — keyed by taunt id rather than folded into the taunt object
+// itself, same "server data and local edit-draft state stay separate" discipline the sound-slot
+// states above follow.
+const tauntRowState = reactive({})
+function ensureTauntRowState(id) {
+  if (!tauntRowState[id]) {
+    tauntRowState[id] = {
+      editingText: false, textDraft: '', savingEdit: false,
+      pendingSoundFile: null, uploadingSound: false,
+      deleting: false, error: '',
+    }
+  }
+  return tauntRowState[id]
+}
+
+async function addTaunt() {
+  tauntFormError.value = ''
+  if (!factionForm.id) return
+  if (!tauntForm.text.trim()) { tauntFormError.value = 'Text is required.'; return }
+  tauntSaving.value = true
+  try {
+    await $fetch(`/api/admin/cmoon-enemy-factions/${factionForm.id}/taunts`, {
+      method: 'POST', body: { trigger: tauntForm.trigger, text: tauntForm.text.trim() },
+    })
+    Object.assign(tauntForm, emptyTauntForm())
+    await load()
+  } catch (e) {
+    tauntFormError.value = e?.data?.statusMessage || 'Failed to add taunt'
+  } finally {
+    tauntSaving.value = false
+  }
+}
+
+function startTauntTextEdit(t) {
+  const state = ensureTauntRowState(t.id)
+  state.textDraft = t.text
+  state.editingText = true
+  state.error = ''
+}
+function cancelTauntTextEdit(t) {
+  const state = ensureTauntRowState(t.id)
+  state.editingText = false
+}
+async function saveTauntText(t) {
+  const state = ensureTauntRowState(t.id)
+  if (!state.textDraft.trim()) { state.error = 'Text is required.'; return }
+  state.savingEdit = true
+  state.error = ''
+  try {
+    await $fetch(`/api/admin/cmoon-enemy-taunts/${t.id}`, { method: 'PUT', body: { text: state.textDraft.trim() } })
+    state.editingText = false
+    await load()
+  } catch (e) {
+    state.error = e?.data?.statusMessage || 'Failed to save'
+  } finally {
+    state.savingEdit = false
+  }
+}
+
+async function toggleTauntActive(t, active) {
+  const state = ensureTauntRowState(t.id)
+  state.error = ''
+  try {
+    await $fetch(`/api/admin/cmoon-enemy-taunts/${t.id}`, { method: 'PUT', body: { active } })
+    await load()
+  } catch (e) {
+    state.error = e?.data?.statusMessage || 'Failed to save'
+  }
+}
+
+function onTauntSoundFile(id, ev) {
+  const state = ensureTauntRowState(id)
+  state.error = ''
+  const f = ev.target.files?.[0] || null
+  if (f && !['audio/mpeg', 'audio/ogg', 'audio/wav'].includes(f.type)) {
+    state.error = 'MP3, OGG, or WAV only.'
+    ev.target.value = ''
+    return
+  }
+  if (f && f.size > 3 * 1024 * 1024) {
+    state.error = 'Audio must be 3MB or smaller.'
+    ev.target.value = ''
+    return
+  }
+  state.pendingSoundFile = f
+}
+
+async function uploadTauntSound(id) {
+  const state = ensureTauntRowState(id)
+  if (!state.pendingSoundFile) return
+  state.uploadingSound = true
+  state.error = ''
+  try {
+    const fd = new FormData()
+    fd.append('audio', state.pendingSoundFile)
+    await $fetch(`/api/admin/cmoon-enemy-taunts/${id}/sound`, { method: 'POST', body: fd })
+    state.pendingSoundFile = null
+    await load()
+  } catch (e) {
+    state.error = e?.data?.statusMessage || 'Upload failed.'
+  } finally {
+    state.uploadingSound = false
+  }
+}
+
+async function removeTaunt(t) {
+  if (!confirm('Remove this taunt?')) return
+  const state = ensureTauntRowState(t.id)
+  state.deleting = true
+  try {
+    await $fetch(`/api/admin/cmoon-enemy-taunts/${t.id}`, { method: 'DELETE' })
+    delete tauntRowState[t.id]
+    await load()
+  } catch (e) {
+    state.error = e?.data?.statusMessage || 'Failed to remove taunt'
+    state.deleting = false
   }
 }
 

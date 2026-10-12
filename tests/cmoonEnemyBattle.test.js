@@ -19,6 +19,24 @@ test('resolveRound: a landed player hit reduces enemy HP via the returned enemyD
   else assert.equal(result.enemyDamage, 0)
 })
 
+test('resolveRound: roundEntry.playerDamage/enemyDamage mirror the actual HP deltas, for the floating damage-number UI', () => {
+  // `playerHit`/`playerDamage` describe damage dealt TO THE PLAYER (reflected in newPlayerHp);
+  // `enemyHit`/`enemyDamage` describe damage dealt TO THE ENEMY (the function's own top-level
+  // `enemyDamage`, which the caller subtracts from enemy HP) — see CMoonBattlePopupHost.vue's own
+  // floating-damage-number watcher, which reads these two fields directly off the round rather
+  // than re-deriving "1, or 2 on a crit" client-side.
+  for (let i = 0; i < 50; i++) {
+    const result = resolveRound({ playerAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember, playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP })
+    const { roundEntry } = result
+    assert.equal(roundEntry.enemyDamage, result.enemyDamage)
+    assert.equal(roundEntry.playerDamage, PLAYER_MAX_HP - result.newPlayerHp)
+    // A side that didn't land a hit always reports 0 damage, never undefined/null — the UI's own
+    // `round.enemyDamage > 0` / `round.playerDamage > 0` guards depend on this.
+    if (!roundEntry.playerHit) assert.equal(roundEntry.playerDamage, 0)
+    if (!roundEntry.enemyHit) assert.equal(roundEntry.enemyDamage, 0)
+  }
+})
+
 test('resolveRound: a 100% crit-from enemy always deals CRITICAL_HIT_DAMAGE to the player on a landed hit', () => {
   const critEnemy = { ...baseEnemyMember, critChanceFromPercent: 100 }
   // Force a guaranteed player hit by blocking the wrong lane is impossible to force deterministically

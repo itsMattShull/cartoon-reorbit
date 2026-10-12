@@ -28,7 +28,10 @@ export default defineEventHandler(async (event) => {
   // rolling for a new one — the activeUserId sentinel/unique constraint guarantees at most one.
   const inProgress = await db.cMoonEnemyBattle.findFirst({
     where: { userId, status: 'IN_PROGRESS' },
-    include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } }, cMoon: { include: { specialAttack: true } } },
+    include: {
+      enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } },
+      cMoon: { include: { specialAttack: true } },
+    },
   })
   if (inProgress) {
     return { offered: true, resumed: true, battle: serializeBattleForClient(inProgress), inCMoon: !!user.cMoonId }
@@ -81,7 +84,7 @@ export default defineEventHandler(async (event) => {
       // player with no cMoon has no way to engage one at all, so it must never be offered to them.
       ...(user.cMoonId ? {} : { isRaidBoss: false }),
     },
-    include: { faction: { include: { appearEffect: true } } },
+    include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } },
   })
   // raidOneTime/raidCooldownMinutes can't be expressed as a single Prisma `where` filter (the
   // cooldown cutoff is a per-row computation against each member's own raidCooldownMinutes) — see

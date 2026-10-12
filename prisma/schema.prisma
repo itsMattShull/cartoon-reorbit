@@ -5480,6 +5480,7 @@ model CMoonEnemyFaction {
   updatedAt       DateTime @updatedAt
 
   members CMoonEnemyMember[]
+  taunts  CMoonEnemyTaunt[]
 
   @@index([active, sortOrder])
 }
@@ -5605,6 +5606,47 @@ model CMoonEnemyMember {
   riddles CMoonRiddle[]
 
   @@index([active, defeatedAt, sortOrder])
+}
+
+enum CMoonEnemyTauntTrigger {
+  APPEAR
+  CRIT
+}
+
+// A short line of flavor text (optionally with its own uploaded sound) an enemy of this faction
+// can "say" at one of two moments during a battle — multiple rows per trigger are fine; one is
+// picked at random each time that moment occurs (see serializeEnemyForClient in
+// server/utils/cmoonEnemyBattle.js, which sends every active row for both triggers to the client,
+// and CMoonBattlePopupHost.vue, which does the actual random pick client-side — unlike the
+// faction/member battle-sound columns, which are exactly one path per moment, this is a pool to
+// pick from, so it can't reuse that fixed-slot shape). Scoped to the FACTION, not a single member
+// — matches "allow them to be created in manage cMoon enemies" without needing a duplicate taunt
+// roster per member; every member of a faction shares the same taunt pool.
+model CMoonEnemyTaunt {
+  id        String                 @id @default(uuid())
+  factionId String
+  // APPEAR: a random active row is shown (text) and played (sound, if set) once per reveal, the
+  // instant the OFFER popup first shows a member of this faction (mirrors appearSoundPath's own
+  // "never on a resumed battle" timing). CRIT: a random active row fires whenever THIS enemy lands
+  // a critical hit on the player (round.playerCrit — that field means "a crit landed ON the
+  // player," same playerHit/enemyHit naming convention this whole battle system already uses, NOT
+  // "the player's own crit"; see useCMoonBattlePopup.js's own comment on this) — never on the
+  // player's own crit against the enemy (round.enemyCrit), which has no taunt slot of its own (the
+  // player doesn't need a line fed to them for their own hit).
+  trigger   CMoonEnemyTauntTrigger
+  text      String
+  // Optional MP3/OGG/WAV (uploaded via cmoon-enemy-taunts/[id]/sound.post.js — same magic-byte
+  // sniffing discipline as every other audio upload in this codebase). Null means the taunt shows
+  // as text only, no sound — never an error.
+  soundPath String?
+  active    Boolean                @default(true)
+  sortOrder Int                    @default(0)
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+
+  faction CMoonEnemyFaction @relation(fields: [factionId], references: [id], onDelete: Cascade)
+
+  @@index([factionId, trigger, active])
 }
 
 // One admin-configured possible prize for defeating a CMoonEnemyMember. Each row's chance is

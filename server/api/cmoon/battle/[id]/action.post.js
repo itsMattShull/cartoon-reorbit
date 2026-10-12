@@ -25,7 +25,17 @@ import {
 } from '@/server/utils/cmoonEnemyBattle'
 
 const BATTLE_INCLUDE = {
-  enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true } } } },
+  enemyMember: {
+    include: {
+      faction: {
+        include: {
+          appearEffect: true,
+          specialAttack: true,
+          taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+        },
+      },
+    },
+  },
   cMoon: { include: { specialAttack: true } },
 }
 
@@ -193,8 +203,8 @@ export default defineEventHandler(async (event) => {
   // WIN takes priority over a same-round mutual KO (both sides would have hit 0 hp this round)
   // — the player still gets credit for the kill rather than being denied a reward on a technicality.
   if (newEnemyHp <= 0) {
-    const result = await resolveWin(battle, roundLog, submittedRound, playerHp)
-    return { round: roundEntry, battle: serializeBattleForClient(result) }
+    const { battle: resultBattle, isFirstWinAgainstThisEnemy } = await resolveWin(battle, roundLog, submittedRound, playerHp)
+    return { round: roundEntry, battle: serializeBattleForClient(resultBattle), isFirstWinAgainstThisEnemy }
   }
   if (playerHp <= 0) {
     const result = await resolveLoss(battle, roundLog, submittedRound, newEnemyHp)
@@ -220,6 +230,16 @@ export default defineEventHandler(async (event) => {
 })
 
 async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining) {
+  // Whether this player has ever beaten THIS SPECIFIC enemy member before — read before the
+  // transaction below creates this win's own row, so it's naturally excluded from the count (no
+  // off-by-one guard needed). Display-only (a "First victory!" toast — see
+  // CMoonBattlePopupHost.vue), never gates anything; distinct from minPriorDefeats' own lifetime
+  // ANY-enemy win count used for the popup-consider unlock gate.
+  const priorWinsAgainstThisEnemy = await db.cMoonEnemyBattle.count({
+    where: { userId: battle.userId, enemyMemberId: battle.enemyMemberId, outcome: 'WIN' },
+  })
+  const isFirstWinAgainstThisEnemy = priorWinsAgainstThisEnemy === 0
+
   const rewardRows = await db.cMoonEnemyReward.findMany({
     where: { enemyMemberId: battle.enemyMemberId },
     include: { ctoon: { select: { quantity: true, name: true } } },
@@ -267,7 +287,7 @@ async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining) {
         playerHpRemaining, enemyHpRemaining: 0,
         roundLog, pointsAwarded, rewardsGranted, endedAt: new Date(), activeUserId: null,
       },
-      include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true } } } }, cMoon: { include: { specialAttack: true } } },
+      include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
     })
 
     return { updated, ctoonJobs: summary.ctoonJobs }
@@ -281,7 +301,7 @@ async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining) {
   // not hold up or fail the battle response the player is waiting on.
   processAchievementsForUser(battle.userId).catch(() => {})
 
-  return txResult.updated
+  return { battle: txResult.updated, isFirstWinAgainstThisEnemy }
 }
 
 async function resolveLoss(battle, roundLog, submittedRound, enemyHpRemaining) {
@@ -297,7 +317,7 @@ async function resolveLoss(battle, roundLog, submittedRound, enemyHpRemaining) {
         playerHpRemaining: 0, enemyHpRemaining,
         roundLog, endedAt: new Date(), activeUserId: null,
       },
-      include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true } } } }, cMoon: { include: { specialAttack: true } } },
+      include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
     })
   })
 }
@@ -313,6 +333,6 @@ async function resolveAbandoned(battle, roundLog, submittedRound, playerHpRemain
       playerHpRemaining, enemyHpRemaining,
       roundLog, endedAt: new Date(), activeUserId: null,
     },
-    include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true } } } }, cMoon: { include: { specialAttack: true } } },
+    include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
   })
 }

@@ -615,3 +615,48 @@ export function resolveMemberSoundPaths(member, faction) {
   }
   return resolved
 }
+
+// ── Enemy taunts (CMoonEnemyTaunt) — see that model's own schema comment ────────────────────
+export const TAUNT_TEXT_MAX_LENGTH = 200
+export const TAUNT_TRIGGERS = ['APPEAR', 'CRIT']
+
+export function isValidTauntText(value) {
+  return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= TAUNT_TEXT_MAX_LENGTH
+}
+
+export function isValidTauntTrigger(value) {
+  return TAUNT_TRIGGERS.includes(value)
+}
+
+// Shared by the taunt create/update endpoints, same `existing`-means-"leave unchanged on omit"
+// convention as parseFactionBody/parseSpecialAttackBody above. `trigger` is deliberately NOT
+// editable on update (only create) — same reasoning as parseMemberBody's battleMode lock: a taunt
+// already in the APPEAR pool moving to CRIT (or vice versa) would silently change which moment an
+// admin's already-reviewed line shows up at. An admin who wants that just deletes and re-adds it.
+export function parseTauntBody(body, existing) {
+  const trigger = existing
+    ? existing.trigger
+    : (typeof body?.trigger === 'string' ? body.trigger.trim() : '')
+  const text = body?.text === undefined
+    ? (existing ? existing.text : '')
+    : (typeof body.text === 'string' ? body.text.trim() : '')
+  const active = toBoolean(body?.active, existing ? existing.active : true)
+  const sortOrder = body?.sortOrder === undefined
+    ? (existing ? existing.sortOrder : 0)
+    : toNumber(body.sortOrder)
+
+  if (!isValidTauntTrigger(trigger)) {
+    return { ok: false, message: `Trigger must be one of ${TAUNT_TRIGGERS.join(', ')}` }
+  }
+  if (!isValidTauntText(text)) {
+    return { ok: false, message: `Text is required (max ${TAUNT_TEXT_MAX_LENGTH} characters)` }
+  }
+  if (active === null) {
+    return { ok: false, message: 'Active must be true or false' }
+  }
+  if (!isValidSortOrder(sortOrder)) {
+    return { ok: false, message: `Sort order must be a whole number between ${SORT_ORDER_MIN} and ${SORT_ORDER_MAX}` }
+  }
+
+  return { ok: true, data: existing ? { text, active, sortOrder } : { trigger, text, active, sortOrder } }
+}
