@@ -323,14 +323,21 @@
             </label>
 
             <div v-if="isOgGtoon" class="border rounded-md bg-amber-50 p-3 space-y-3">
-              <div class="flex flex-col gap-1">
-                <label class="text-xs font-medium">Color</label>
-                <select v-model="gtoonColor" required class="border rounded-md px-2 py-1.5 text-sm bg-white">
-                  <option disabled value="">Select a color</option>
-                  <option v-for="c in gtoonColorOptions" :key="c" :value="c">{{ c }}</option>
-                </select>
-                <p class="text-[11px] text-gray-500">Black/Silver are neutral goal colors; every other color is non-neutral for the color-bonus scoring rule.</p>
-              </div>
+              <OgGtoonLookEditor
+
+                v-model:color="gtoonColor"
+
+                v-model:card-style="gtoonCardStyle"
+
+                :image-url="imagePreview"
+
+                :value="gtoonValue"
+
+                :name="name"
+
+                :seed="name"
+
+              />
               <div class="flex flex-col gap-1">
                 <label class="text-xs font-medium">Value <span class="text-[11px] font-normal text-gray-500">(0 – 99)</span></label>
                 <input v-model.number="gtoonValue" type="number" min="0" max="99" required class="border rounded-md px-2 py-1.5 text-sm" />
@@ -668,6 +675,8 @@ import { zonedTimeToUtc } from 'date-fns-tz'
 import abilityMeta from '~/data/abilities.json'
 import { useRouter } from 'vue-router'
 import SecondEditionFields from '~/components/admin/SecondEditionFields.vue'
+import OgGtoonLookEditor from '~/components/newsite/admin/legacy/OgGtoonLookEditor.vue'
+import { defaultGtoonCardStyle, sanitizeGtoonCardStyle } from '~/utils/gtoonCardStyle'
 
 const router = useRouter()
 const name = ref('')
@@ -738,6 +747,7 @@ function titleCase(s) { return s ? s.charAt(0) + s.slice(1).toLowerCase() : s }
 
 const isOgGtoon   = ref(false)
 const gtoonColor  = ref('')
+const gtoonCardStyle = ref(defaultGtoonCardStyle())
 const gtoonValue  = ref(1)
 const gtoonType1  = ref('')
 const gtoonType2  = ref('')
@@ -1157,6 +1167,7 @@ async function submitForm() {
   formData.append('isOgGtoon', isOgGtoon.value)
   if (isOgGtoon.value) {
     formData.append('gtoonColor', gtoonColor.value)
+    formData.append('gtoonCardStyle', JSON.stringify(gtoonCardStyle.value))
     formData.append('gtoonValue', gtoonValue.value)
     formData.append('isSlamGtoon', isSlamGtoon.value)
     formData.append('gtoonEffect', isSlamGtoon.value ? JSON.stringify(buildGtoonEffectPayload()) : '')
