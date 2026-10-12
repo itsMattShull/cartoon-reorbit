@@ -12,6 +12,8 @@
     v-if="isOg"
     class="ctoon-image-og"
     :style="size ? { width: size } : null"
+    @mouseenter="onHover"
+    @click="onHover"
   >
     <GtoonCard
       ref="cardRef"
@@ -45,7 +47,9 @@ const props = defineProps({
   mode: { type: String, default: 'signal' },
   size: { type: String, default: '' },       // optional CSS width for the OG card, e.g. '6rem'
   playOnReveal: { type: Boolean, default: true },
-  ambient: { type: Boolean, default: true }
+  ambient: { type: Boolean, default: true },
+  // Play the gToon's saved one-shot effects on hover/click (deck builder). Throttled; lazy-loads card-fx.
+  hoverFx: { type: Boolean, default: false }
 })
 
 const cardRef = ref(null)
@@ -53,6 +57,15 @@ const src = computed(() => props.src || props.ctoon?.assetPath || '')
 const altText = computed(() => props.alt || props.ctoon?.name || '')
 const seed = computed(() => String(props.ctoon?.id || props.ctoon?.ctoonId || props.ctoon?.name || ''))
 const isOg = computed(() => !!props.ctoon?.isOgGtoon && !!src.value)
+
+let lastFx = 0
+function onHover() {
+  if (!props.hoverFx) return
+  const now = Date.now()
+  if (now - lastFx < 1800) return
+  lastFx = now
+  cardRef.value?.playSaved?.()
+}
 
 defineExpose({
   playSaved: () => cardRef.value?.playSaved?.(),
