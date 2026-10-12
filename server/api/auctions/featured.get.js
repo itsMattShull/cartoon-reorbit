@@ -11,6 +11,7 @@
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { incrementFor } from '@/server/utils/autoBid'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   // Auth pattern matches server/api/auctions/all.get.js and
@@ -42,7 +43,7 @@ export default defineEventHandler(async (event) => {
             select: {
               id: true,
               name: true,
-              assetPath: true,
+              assetPath: true, ...OG_GTOON_DISPLAY_SELECT,
               rarity: true,
               isSecondEdition: true
             }
@@ -65,6 +66,7 @@ export default defineEventHandler(async (event) => {
         ctoonId: a.userCtoon?.ctoon?.id ?? null,
         ctoonName: a.userCtoon?.ctoon?.name ?? null,
         assetPath: a.userCtoon?.ctoon?.assetPath ?? null,
+        ...ogGtoonDisplay(a.userCtoon?.ctoon),
         rarity: a.userCtoon?.ctoon?.rarity ?? null,
         isSecondEdition: a.userCtoon?.ctoon?.isSecondEdition ?? false,
         mintNumber: a.userCtoon?.mintNumber ?? null,

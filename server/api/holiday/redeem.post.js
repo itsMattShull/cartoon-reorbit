@@ -13,6 +13,7 @@ import { prisma } from '@/server/prisma'
 import { resolveUserCtoonId } from '../../utils/userCtoonId'
 import { holidayRedeemQueue } from '../../utils/queues'
 import { QueueEvents } from 'bullmq'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 const redisConnection = {
   host: process.env.REDIS_HOST,
@@ -40,7 +41,7 @@ async function getIdempotentRedemptionResponse(userId, sourceUserCtoonId) {
       ctoon: {
         select: {
           id: true, name: true, rarity: true, series: true, set: true,
-          assetPath: true, releaseDate: true, quantity: true
+          assetPath: true, ...OG_GTOON_DISPLAY_SELECT, releaseDate: true, quantity: true
         }
       }
     }
@@ -61,6 +62,7 @@ async function getIdempotentRedemptionResponse(userId, sourceUserCtoonId) {
           series: rewardUC.ctoon.series,
           set: rewardUC.ctoon.set,
           assetPath: rewardUC.ctoon.assetPath,
+          ...ogGtoonDisplay(rewardUC.ctoon),
           releaseDate: rewardUC.ctoon.releaseDate,
           quantity: rewardUC.ctoon.quantity,
           isFirstEdition: rewardUC.isFirstEdition,

@@ -4,6 +4,7 @@ import { mintQueue } from '@/server/utils/queues'
 import { QueueEvents } from 'bullmq'
 import { prisma as db } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 const redisConnection = {
   host: process.env.REDIS_HOST,
@@ -25,7 +26,7 @@ export default defineEventHandler(async (event) => {
     where: { id: appearanceId },
     include: {
       cZoneSearch: true,
-      ctoon: { select: { id: true, name: true, initialQuantity: true, assetPath: true, rarity: true, series: true, set: true } }
+      ctoon: { select: { id: true, name: true, initialQuantity: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT, rarity: true, series: true, set: true } }
     }
   })
   if (!appearance) {
@@ -149,6 +150,7 @@ export default defineEventHandler(async (event) => {
       id: appearance.ctoon.id,
       name: appearance.ctoon.name,
       assetPath: appearance.ctoon.assetPath,
+      ...ogGtoonDisplay(appearance.ctoon),
       rarity: appearance.ctoon.rarity,
       series: appearance.ctoon.series,
       set: appearance.ctoon.set,

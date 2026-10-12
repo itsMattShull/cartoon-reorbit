@@ -12,18 +12,19 @@ import { parseExclusions, exclusionCacheKey, buildExclusionSql, firstQueryValue 
 const CACHE_TTL = 300
 // v2: the key gained an exclusion segment, and the payload's meaning now depends
 // on it. A rolling deploy must not serve an unfiltered v1 payload as filtered.
-const cacheKey = (window, exKey) => `economy:trending:${window}:${exKey}:v2`
+const cacheKey = (window, exKey) => `economy:trending:${window}:${exKey}:v3`
 
 async function computeTrending(window, exclusions) {
   const cutoff = resolveWindowCutoffSql(window)
   return prisma.$queryRaw`
     SELECT
       c."id" AS "ctoonId", c."name", c."assetPath", c."rarity",
+      c."isOgGtoon", c."gtoonColor", c."gtoonValue", c."gtoonCardStyle",
       SUM(cpd."volume")::int AS "volume"
     FROM "CtoonPriceDaily" cpd
     JOIN "Ctoon" c ON c."id" = cpd."ctoonId"
     WHERE cpd."date" >= ${cutoff}${buildExclusionSql(exclusions)}
-    GROUP BY c."id", c."name", c."assetPath", c."rarity"
+    GROUP BY c."id", c."name", c."assetPath", c."rarity", c."isOgGtoon", c."gtoonColor", c."gtoonValue", c."gtoonCardStyle"
     HAVING SUM(cpd."volume") >= ${MIN_SAMPLE_SIZE}
     ORDER BY "volume" DESC, c."name" ASC, c."id" ASC
     LIMIT 10

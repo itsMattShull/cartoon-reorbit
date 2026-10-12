@@ -3,6 +3,7 @@ import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { mintQueue } from '../utils/queues'
 import { QueueEvents } from 'bullmq'
 import { prisma } from '@/server/prisma'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 const redisConnection = {
   host: process.env.REDIS_HOST,
@@ -55,8 +56,8 @@ export default defineEventHandler(async (event) => {
   const rewardDefs = await prisma.claimCodeReward.findMany({
     where: { codeId: claimCode.id },
     include: {
-      ctoons: { include: { ctoon: { select: { id: true, name: true, initialQuantity: true, assetPath: true, rarity: true, set: true } } } },
-      poolCtoons: { include: { ctoon: { select: { id: true, name: true, initialQuantity: true, assetPath: true, rarity: true, set: true } } } },
+      ctoons: { include: { ctoon: { select: { id: true, name: true, initialQuantity: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT, rarity: true, set: true } } } },
+      poolCtoons: { include: { ctoon: { select: { id: true, name: true, initialQuantity: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT, rarity: true, set: true } } } },
       backgrounds: { include: { background: { select: { id: true, label: true, imagePath: true, visibility: true } } } }
     }
   })
@@ -80,6 +81,7 @@ export default defineEventHandler(async (event) => {
         quantity: rc.quantity,
         initialQuantity: rc.ctoon.initialQuantity ?? 0,
         assetPath: rc.ctoon.assetPath,
+        ...ogGtoonDisplay(rc.ctoon),
         rarity: rc.ctoon.rarity,
         set: rc.ctoon.set
       }))
@@ -101,6 +103,7 @@ export default defineEventHandler(async (event) => {
           quantity:       1,
           initialQuantity:pool[i].ctoon.initialQuantity ?? 0,
           assetPath:      pool[i].ctoon.assetPath,
+          ...ogGtoonDisplay(pool[i].ctoon),
           rarity:         pool[i].ctoon.rarity,
           set:            pool[i].ctoon.set
         })
@@ -158,6 +161,7 @@ export default defineEventHandler(async (event) => {
           mintNumber: minted?.mintNumber ?? null,
           isFirstEdition: minted?.isFirstEdition ?? false,
           assetPath: award.assetPath,
+          ...ogGtoonDisplay(award),
           rarity: award.rarity,
           set: award.set
         })

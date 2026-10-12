@@ -3,6 +3,7 @@ import { defineEventHandler, createError, getQuery } from 'h3'
 import { DateTime } from 'luxon'
 import { prisma as db } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 // Cache active searches + prize pool for 30 minutes.  The prize pool for a
 // given search never changes mid-event, so all concurrent visitors share one
@@ -29,7 +30,7 @@ async function getActiveSearches() {
     include: {
       prizePool: {
         include: {
-          ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } }
+          ctoon: { select: { id: true, name: true, rarity: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT } }
         }
       }
     }
