@@ -45,7 +45,7 @@ import { deriveGoalColor, SWAP_COST } from './ogGtoonEngine.js'
 import {
   publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd, buildRoundLog,
   placeCard, unplaceSlot, checkCommit, checkSwap, recordSwapChoice, resolveSwapPhase, expirePhase,
-  submitDiscard, resolveDiscardPhase, startPhaseClock
+  submitDiscard, resolveDiscardPhase, startPhaseClock, markCommitted, logAbnormalEnd
 } from './ogGtoonMatchCore.js'
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
 import { isPracticing, registerPvpProbe } from './ogGtoonPresence.js'
@@ -90,8 +90,9 @@ function emitToPlayers(io, match, event, buildPayload) {
 }
 
 /** Pushes one player's own full view (hand, placements, ...) to all of their sockets. */
-function emitStateTo(io, match, idx) {
-  const payload = publicMatchView(match, match.players[idx])
+function emitStateTo(io, match, idx, withLog = false) {
+  // Placing/unplacing is frequent and never changes the game log, so it is left out by default.
+  const payload = publicMatchView(match, match.players[idx], withLog ? {} : { log: false })
   for (const sid of match.sockets[idx]) io.local.to(sid).emit(EV('state'), payload)
 }
 
@@ -365,6 +366,11 @@ async function persistAndSettle(match, { outcome, winnerUserId, player1Score, pl
 async function endMatch(io, match, params) {
   if (match.ending) return
   match.ending = true
+  if (params.endReason === 'forfeit') {
+    logAbnormalEnd(match, `${match.usernames[match.players.indexOf(params.whoLeftUserId)] ?? 'A player'} left the match — their opponent wins by forfeit.`)
+  } else if (params.endReason === 'sweep') {
+    logAbnormalEnd(match, 'The match timed out and ended in a tie.')
+  }
   try {
     await persistAndSettle(match, params)
   } catch (err) {
@@ -792,14 +798,14 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
       return
     }
 
-    match.ready[idx] = true
+    markCommitted(match, idx)
     match.lastActivity = Date.now()
     socket.emit(EV('committed'), { round: match.currentRound })
     const oppIdx = idx === 0 ? 1 : 0
     for (const sid of match.sockets[oppIdx]) io.local.to(sid).emit(EV('opponentCommitted'), { round: match.currentRound })
     // The opponent also learns which slots are now face down (never which cards).
-    emitStateTo(io, match, oppIdx)
-    emitStateTo(io, match, idx)
+    emitStateTo(io, match, oppIdx, true)
+    emitStateTo(io, match, idx, true)
 
     await resolveRound(io, match)
   })

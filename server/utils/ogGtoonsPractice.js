@@ -33,7 +33,7 @@ import { deriveGoalColor, slotsForRound } from './ogGtoonEngine.js'
 import {
   publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd,
   placeCard, unplaceSlot, checkCommit, checkSwap, recordSwapChoice, resolveSwapPhase, expirePhase,
-  submitDiscard, resolveDiscardPhase
+  submitDiscard, resolveDiscardPhase, markCommitted
 } from './ogGtoonMatchCore.js'
 import {
   BOT_ID, BOT_USERNAME, buildBotDeck, chooseBotPlacements, chooseBotDiscards, chooseBotSwap,
@@ -75,8 +75,8 @@ function botCards(match, idxs) {
   return idxs.map(i => ({ idx: i, ...match.deckOrder[1][i] }))
 }
 
-function emitState(io, match) {
-  emitToHuman(io, match, OUT('state'), publicMatchView(match, match.humanId))
+function emitState(io, match, opts) {
+  emitToHuman(io, match, OUT('state'), publicMatchView(match, match.humanId, opts))
 }
 
 function scheduleBot(io, match, deps) {
@@ -103,9 +103,10 @@ async function botAct(io, match, deps) {
   match.placements[1] = []
   for (const pick of picks) placeCard(match, 1, pick)
 
-  match.ready[1] = true
+  markCommitted(match, 1)
   match.lastActivity = Date.now()
   emitToHuman(io, match, OUT('opponentCommitted'), { round: match.currentRound })
+  emitState(io, match)
   await resolveRound(io, match, deps)
 }
 
@@ -367,21 +368,21 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
     return match
   }
   // Reports a failed shared-core action; on success pushes the new state to the human.
-  const settle = (res, match) => {
+  const settle = (res, match, opts) => {
     if (!res.ok) { fail(res.code, res.message); return false }
     match.lastActivity = Date.now()
-    emitState(io, match)
+    emitState(io, match, opts)
     return true
   }
 
   socket.on(EV('place'), async ({ cardIdx, slot } = {}) => {
     const match = await liveMatch()
-    if (match) settle(placeCard(match, 0, { cardIdx, slot }), match)
+    if (match) settle(placeCard(match, 0, { cardIdx, slot }), match, { log: false })
   })
 
   socket.on(EV('unplace'), async ({ slot } = {}) => {
     const match = await liveMatch()
-    if (match) settle(unplaceSlot(match, 0, { slot }), match)
+    if (match) settle(unplaceSlot(match, 0, { slot }), match, { log: false })
   })
 
   socket.on(EV('commit'), async ({ round } = {}) => {
@@ -392,9 +393,10 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
       if (check.code !== 'staleRound' && check.code !== 'already_committed') fail(check.code, check.message)
       return
     }
-    match.ready[0] = true
+    markCommitted(match, 0)
     match.lastActivity = Date.now()
     socket.emit(OUT('committed'), { round: match.currentRound })
+    emitState(io, match)
     await resolveRound(io, match, d)
   })
 

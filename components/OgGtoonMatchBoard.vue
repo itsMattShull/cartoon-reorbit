@@ -48,6 +48,7 @@
                 :face-down="yourSlotFaceDown(n)"
                 :label="n"
                 :tone="yourSlotTone(n)"
+                :marker="markerFor(youSide, n, yourSlotCard(n), yourSlotFaceDown(n))"
               />
             </div>
           </div>
@@ -119,6 +120,7 @@
                 :card="oppSlotCard(n)"
                 :face-down="oppSlotFaceDown(n)"
                 :label="n"
+                :marker="markerFor(oppSide, n, oppSlotCard(n), oppSlotFaceDown(n))"
               />
             </div>
           </div>
@@ -136,25 +138,14 @@
         </div>
       </transition>
 
-      <!-- Collapsible match log drawer -->
+      <!-- Game Log: everything that happens in the match, as it happens -->
       <div class="flex-shrink-0 border-t border-white/10">
-        <button @click="logOpen = !logOpen" class="w-full text-xs px-3 py-1.5 bg-black/30 text-left">
-          {{ logOpen ? '▼' : '▶' }} Match Log
+        <button @click="toggleLog" class="w-full text-xs px-3 py-1.5 bg-black/30 text-left flex items-center gap-2">
+          <span>{{ logOpen ? '▼' : '▶' }} Game Log ({{ gameLog.length }})</span>
+          <span v-if="!logOpen && unreadLog > 0" class="bg-amber-500 text-black rounded-full px-1.5 text-[10px] font-bold">{{ unreadLog }} new</span>
         </button>
-        <div v-if="logOpen" class="max-h-48 overflow-y-auto px-3 py-2 text-xs space-y-2 bg-black/20">
-          <div v-for="(r, i) in matchLog" :key="i">
-            Slot {{ r.slot }}: You {{ r.you }} vs Opp {{ r.opp }}
-          </div>
-          <p v-if="!matchLog.length" class="text-gray-400">No rounds revealed yet.</p>
-          <div v-if="groupedEffectsLog.length" class="pt-2 mt-2 border-t border-white/10 space-y-1">
-            <p class="text-gray-400 font-semibold">Effects (final scoring)</p>
-            <div v-for="(g, gi) in groupedEffectsLog" :key="gi" class="text-gray-300">
-              <span class="font-medium">{{ g.sourceName }}</span>:
-              <span v-for="(line, li) in g.lines" :key="li">
-                {{ line }}<span v-if="li < g.lines.length - 1">; </span>
-              </span>
-            </div>
-          </div>
+        <div v-if="logOpen" ref="logScroller" class="max-h-56 overflow-y-auto px-3 py-2 text-xs space-y-2 bg-black/20">
+          <OgGtoonGameLog :entries="gameLog" />
         </div>
       </div>
 
@@ -183,21 +174,16 @@
       <!-- End-of-match result screen -->
       <transition name="fade">
         <div v-if="matchEnded && !flipping" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div class="bg-gray-900 border border-white/20 rounded-xl p-6 w-80 text-center">
+          <div class="bg-gray-900 border border-white/20 rounded-xl p-6 w-[26rem] max-w-[95vw] text-center">
             <h2 class="text-2xl font-bold mb-2" :class="matchEnded.won ? 'text-green-400' : (matchEnded.outcome === 'TIE' ? 'text-amber-300' : 'text-red-400')">
               {{ matchEnded.outcome === 'TIE' ? "It's a Tie!" : (matchEnded.won ? 'You Win!' : 'You Lose') }}
             </h2>
             <p class="text-sm text-gray-300 mb-1">Final Score: {{ matchEnded.player1Score }} - {{ matchEnded.player2Score }}</p>
             <p class="text-xs text-gray-400 mb-2">{{ endReasonLabel }}</p>
             <p v-if="isPractice" class="text-xs text-amber-300 mb-2">Practice match — no points were awarded or spent.</p>
-            <div v-if="groupedEffectsLog.length" class="text-left max-h-32 overflow-y-auto bg-black/30 rounded p-2 mb-3 space-y-1">
-              <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide">Powers that fired</p>
-              <div v-for="(g, gi) in groupedEffectsLog" :key="gi" class="text-[11px] text-gray-300">
-                <span class="font-medium">{{ g.sourceName }}</span>:
-                <span v-for="(line, li) in g.lines" :key="li">
-                  {{ line }}<span v-if="li < g.lines.length - 1">; </span>
-                </span>
-              </div>
+            <div class="text-left max-h-56 overflow-y-auto bg-black/30 rounded p-2 mb-3 text-xs">
+              <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-1">Game Log</p>
+              <OgGtoonGameLog :entries="gameLog" />
             </div>
             <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">{{ isPractice ? 'Back to Practice' : 'Back to Lobby' }}</button>
           </div>
@@ -208,9 +194,10 @@
 </template>
 
 <script setup>
-import { computed, ref, watch, onBeforeUnmount, onMounted } from 'vue'
+import { computed, ref, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 import OgGtoonCardTile from '@/components/OgGtoonCardTile.vue'
+import OgGtoonGameLog from '@/components/OgGtoonGameLog.vue'
 
 defineEmits(['exit'])
 
@@ -440,48 +427,40 @@ const lastRevealRows = computed(() => {
   }))
 })
 
-const matchLog = computed(() => {
-  const slots = [...new Set([...youRevealed.value, ...oppRevealed.value].filter(r => !stillHidden(r)).map(r => r.slot))].sort((a, b) => a - b)
-  return slots.map(slot => ({
-    slot,
-    you: fmt(revealedAt(youRevealed.value, slot)),
-    opp: fmt(revealedAt(oppRevealed.value, slot))
-  }))
-})
-
 const logOpen = ref(false)
 
-/** Groups the final-board effectsResolved log (server/utils/ogGtoonEffects.js) by source card,
- *  turning each raw application into a short readable line instead of a JSON dump. */
-const groupedEffectsLog = computed(() => {
-  const log = matchEnded.value?.effectsResolved || []
-  if (!log.length) return []
-  const nameById = {}
-  for (const r of [...youRevealed.value, ...oppRevealed.value]) nameById[r.ctoonId] = r.name
-  const nameOf = (id) => nameById[id] || id
-  const bySource = new Map()
-  for (const e of log) {
-    const key = `${e.source}:${e.sourceCtoonId}:${e.sourceRound}`
-    if (!bySource.has(key)) bySource.set(key, { sourceName: nameOf(e.sourceCtoonId), lines: [] })
-    const targetName = nameOf(e.targetCtoonId)
-    let line
-    if (e.action === 'negateEffect') {
-      line = `negated ${targetName}'s effect`
-    } else if (e.action === 'duplicateCancelled') {
-      line = 'knocked out (same gToon on both sides)'
-    } else if (e.action === 'setColor') {
-      line = `set ${targetName} to ${e.color}`
-    } else if (e.operation === 'add') {
-      line = `${targetName} ${e.amount >= 0 ? '+' : ''}${e.amount}${e.perMatchCount != null ? ` (${e.perMatchAmount} x ${e.perMatchCount} matches)` : ''}`
-    } else if (e.operation === 'multiply') {
-      line = `${targetName} x${e.amount}`
-    } else {
-      line = `${targetName} set to ${e.amount}`
-    }
-    bySource.get(key).lines.push(line)
-  }
-  return [...bySource.values()]
+/* ── Game Log ────────────────────────────────────────────────────────────────────────────────
+ * The server keeps one ordered log of the whole match (reveals, commits, timeouts, discards, swaps,
+ * and what every power is doing / not doing). The drawer follows it live; the end screen shows it
+ * in full. Card markers come from the newest preview/scoring entry. */
+const gameLog = computed(() => matchState.value?.gameLog || [])
+const unreadLog = computed(() => Math.max(0, gameLog.value.length - seenLogCount.value))
+const seenLogCount = ref(0)
+const logScroller = ref(null)
+function scrollLogToEnd() {
+  nextTick(() => { if (logScroller.value) logScroller.value.scrollTop = logScroller.value.scrollHeight })
+}
+function toggleLog() {
+  logOpen.value = !logOpen.value
+  if (logOpen.value) { seenLogCount.value = gameLog.value.length; scrollLogToEnd() }
+}
+watch(() => gameLog.value.length, (n) => {
+  if (logOpen.value) { seenLogCount.value = n; scrollLogToEnd() }
 })
+
+const youSide = computed(() => matchState.value?.you?.sideIndex ?? 0)
+const oppSide = computed(() => (youSide.value === 0 ? 1 : 0))
+const markerMap = computed(() => {
+  const latest = [...gameLog.value].reverse().find(e => e.data?.markers)
+  const map = new Map()
+  for (const m of latest?.data?.markers || []) map.set(`${m.side}:${m.slot}`, m)
+  return map
+})
+/** The marker for a card at `slot` on `side`, only once that card is actually face up. */
+function markerFor(side, slot, card, faceDown) {
+  if (!card || faceDown) return null
+  return markerMap.value.get(`${side}:${slot}`) || null
+}
 
 const endReasonLabel = computed(() => {
   const r = matchEnded.value?.endReason

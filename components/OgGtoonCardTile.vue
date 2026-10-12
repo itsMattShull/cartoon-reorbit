@@ -7,9 +7,10 @@
     :class="[sizeClass, ringClass]"
   >
     <!-- Keyed on face so a face-down -> face-up change replays the flip animation. -->
-    <div v-if="card && !faceDown" :key="'face'" class="flip-in w-full h-full flex items-center justify-center bg-white/5">
+    <div v-if="card && !faceDown" :key="'face'" class="flip-in w-full h-full flex items-center justify-center bg-white/5" :class="{ 'opacity-40 grayscale': marker && marker.kind === 'knockedOut' }">
       <img :src="card.assetPath" :alt="card.name" :title="`${card.name} (${shownValue})`" class="h-full w-full object-contain p-0.5" />
       <span class="absolute top-0 left-0 text-[10px] font-bold leading-none px-1 py-0.5 rounded-br bg-black/70 text-white">{{ shownValue }}</span>
+      <span v-if="markerInfo" class="absolute top-0 right-0 text-[8px] font-bold leading-none px-1 py-0.5 rounded-bl text-white" :class="markerInfo.cls" :title="markerInfo.title">{{ markerInfo.text }}</span>
       <div v-if="badges.length" class="absolute bottom-0 inset-x-0 flex flex-wrap justify-center gap-0.5 px-0.5 pb-0.5">
         <span v-for="b in badges" :key="b" class="text-[7px] leading-none px-1 py-0.5 rounded bg-black/60 text-gray-100">{{ b }}</span>
       </div>
@@ -30,7 +31,17 @@ const props = defineProps({
   label: { type: [String, Number], default: '' },
   // 'idle' | 'selected' | 'open' (a slot you can place into) | 'filled' | 'discard'
   tone: { type: String, default: 'idle' },
-  size: { type: String, default: 'slot' }       // 'slot' | 'hand'
+  size: { type: String, default: 'slot' },      // 'slot' | 'hand'
+  // What the game log says is happening to this card: { kind: 'knockedOut'|'cancelled'|'changed', from?, to? }
+  marker: { type: Object, default: null }
+})
+
+const markerInfo = computed(() => {
+  const m = props.marker
+  if (!m) return null
+  if (m.kind === 'knockedOut') return { text: 'OUT', cls: 'bg-red-600', title: 'Knocked out: the same gToon is on both boards, so it scores 0 and its powers are off.' }
+  if (m.kind === 'cancelled') return { text: 'CANCELLED', cls: 'bg-amber-600', title: "This card's powers are cancelled." }
+  return { text: `${m.from}→${m.to}`, cls: 'bg-sky-600', title: `Value changed from ${m.from} to ${m.to} by powers (see the Game Log).` }
 })
 
 const GROUP_LABELS = {

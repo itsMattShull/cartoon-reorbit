@@ -624,12 +624,12 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
     return cancelDuplicates && id != null && p1Ids.has(id) && p2Ids.has(id)
   }
 
-  /** A fresh board in printed state, minus knocked-out cards. */
-  function buildState() {
+  /** A fresh board in printed state, minus knocked-out cards (unless `ignoreDuplicates`). */
+  function buildState(ignoreDuplicates = false) {
     const sides = { player1: [], player2: [] }
     for (const side of ['player1', 'player2']) {
       for (const b of boards[side]) {
-        if (isDuplicate(b)) continue
+        if (!ignoreDuplicates && isDuplicate(b)) continue
         const card = makeBoardCard(b.data, side, b.roundIndex)
         card.origin = b
         sides[side].push(card)
@@ -657,7 +657,8 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
   const keyOf = (card) => `${card.side}:${card.roundIndex}`
   const logBase = (inst, t) => ({
     source: inst.ownerSide, sourceCtoonId: inst.sourceCard.ctoonId, sourceRound: inst.sourceCard.round,
-    targetPlayer: t.side, targetCtoonId: t.card.ctoonId, targetRound: t.card.round
+    targetPlayer: t.side, targetCtoonId: t.card.ctoonId, targetRound: t.card.round,
+    sourceIndex: inst.sourceCard.roundIndex, targetIndex: t.card.roundIndex
   })
 
   /** Targets a negation instance hits right now (condition-checked), or []. */
@@ -666,8 +667,8 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
   }
 
   /** One full evaluation from printed state with `negated` (set of card keys) fixed. */
-  function evaluate(negated) {
-    const state = buildState()
+  function evaluate(negated, ignoreDuplicates = false) {
+    const state = buildState(ignoreDuplicates)
     const live = (inst) => !negated.has(keyOf(inst.sourceCard))
     const log = { negate: [], color: [], value: [] }
 
@@ -760,6 +761,74 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
     // Report only negations whose source was live in this final evaluation.
   }
 
+  // ── Analysis: what the cancellations changed, versus a board where nothing was cancelled ──
+  // The baseline keeps every card live (duplicates included) and ignores every negation. Whatever
+  // differs between it and the real result, and every application that never happened because its
+  // source was knocked out or negated, is reported so the players can see exactly what is (and
+  // is not) changing. Same engine, run a second time — nothing is undone, only compared.
+  const baseline = evaluate(new Set(), true)
+  const nameOf = (side, b) => b.data.name ?? makeBoardCard(b.data, side, b.roundIndex).name
+  const refOf = (side, b) => ({ side, ctoonId: b.data.ctoonId ?? b.data.id, name: nameOf(side, b), round: b.data.round ?? null, slot: Number.isInteger(b.data.slot) ? b.data.slot : null })
+  const boardByKey = new Map() // `${side}:${roundIndex}` -> board entry (goal auras are not on the board)
+  for (const side of ['player1', 'player2']) for (const b of boards[side]) boardByKey.set(`${side}:${b.roundIndex}`, b)
+
+  const knockedOut = []
+  for (const side of ['player1', 'player2']) for (const b of boards[side]) if (isDuplicate(b)) knockedOut.push(refOf(side, b))
+
+  // Why a card is dead: a duplicate, or negated by these live cards.
+  const causesOf = (side, roundIndex) => {
+    const b = boardByKey.get(`${side}:${roundIndex}`)
+    if (b && isDuplicate(b)) return [{ kind: 'duplicate' }]
+    const hit = result.hits.get(`${side}:${roundIndex}`)
+    if (!hit) return null
+    return hit.map(h => ({ kind: 'negated', by: { side: h.inst.ownerSide, ctoonId: h.inst.sourceCard.ctoonId, name: h.inst.sourceCard.name } }))
+  }
+  const negatedCards = []
+  for (const key of negated) {
+    const [side, ri] = [key.split(':')[0], Number(key.split(':')[1])]
+    const b = boardByKey.get(key)
+    if (!b || isDuplicate(b)) continue
+    negatedCards.push({ ...refOf(side, b), causes: causesOf(side, ri) || [] })
+  }
+
+  // Applications the baseline made whose source is dead in the real result.
+  const lostEffects = []
+  for (const e of [...baseline.log.color, ...baseline.log.value]) {
+    if (e.sourceIndex < 0) continue // goal-card aura: always live
+    const causes = causesOf(e.source, e.sourceIndex)
+    if (!causes) continue
+    lostEffects.push({ ...e, causes })
+  }
+
+  const byOrigin = (st) => { const m = new Map(); for (const side of ['player1', 'player2']) for (const c of st.sides[side]) m.set(c.origin, c); return m }
+  const baseCards = byOrigin(baseline.state)
+  const finalCards = byOrigin(result.state)
+  const changes = []
+  for (const side of ['player1', 'player2']) {
+    for (const b of boards[side]) {
+      const was = baseCards.get(b)
+      const now = finalCards.get(b)
+      const toValue = now ? now.value : 0
+      const toColor = now ? now.color : was.color
+      if (was.value === toValue && was.color === toColor) continue
+      const reasons = []
+      if (!now) reasons.push({ kind: 'duplicate' })
+      for (const l of lostEffects) {
+        if (l.targetPlayer === side && l.targetIndex === b.roundIndex) {
+          reasons.push({ kind: 'lostEffect', sourceName: l.sourceName ?? null, sourceCtoonId: l.sourceCtoonId, action: l.action, operation: l.operation, amount: l.amount, color: l.color, causes: l.causes })
+        }
+      }
+      changes.push({ ...refOf(side, b), fromValue: was.value, toValue, fromColor: was.color, toColor, cancelled: !now, reasons })
+    }
+  }
+  // Name the sources of lost effects (the baseline log only carries ids).
+  const nameByCtoon = new Map()
+  for (const side of ['player1', 'player2']) for (const b of boards[side]) nameByCtoon.set(b.data.ctoonId ?? b.data.id, nameOf(side, b))
+  for (const l of lostEffects) { l.sourceName = nameByCtoon.get(l.sourceCtoonId) ?? null; l.targetName = nameByCtoon.get(l.targetCtoonId) ?? null }
+  for (const c of changes) for (const r of c.reasons) if (r.kind === 'lostEffect') r.sourceName = nameByCtoon.get(r.sourceCtoonId) ?? null
+
+  const analysis = { knockedOut, negated: negatedCards, lostEffects, changes }
+
   // Assemble output in the original reveal order, with knocked-out cards scoring 0.
   const effectsResolved = []
   for (const side of ['player1', 'player2']) {
@@ -789,6 +858,7 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
   return {
     player1: { revealed: finalBySide.player1, totalValue: finalBySide.player1.reduce((n, c) => n + c.finalValue, 0) },
     player2: { revealed: finalBySide.player2, totalValue: finalBySide.player2.reduce((n, c) => n + c.finalValue, 0) },
-    effectsResolved
+    effectsResolved,
+    analysis
   }
 }

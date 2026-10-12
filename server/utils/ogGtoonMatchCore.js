@@ -29,6 +29,77 @@ import {
 
 export const TOTAL_ROUNDS = REGULATION_ROUNDS
 
+/* ── Game log ────────────────────────────────────────────────────────────────────────────────
+ * One ordered, append-only log per match, shown to both players while the game runs and again at
+ * the end (and saved with the match). It only ever contains what both players could see: names,
+ * revealed cards, who committed, timeouts, discard/draw COUNTS (never which cards), swap results
+ * and — after each reveal and at final scoring — exactly what every power is doing, what is NOT
+ * applying because its source was knocked out or cancelled, and what that changed.
+ * Entry: { seq, at, round, kind, title, sections: [{ label|null, lines: string[] }], data? } */
+
+export function logEvent(match, { kind, title, sections = [], data = null }) {
+  if (!Array.isArray(match.gameLog)) match.gameLog = []
+  match.gameLog.push({
+    seq: match.gameLog.length + 1, at: Date.now(), round: match.currentRound ?? null,
+    kind, title, sections: sections.filter(sec => sec.lines.length), ...(data ? { data } : {})
+  })
+}
+
+const nameOfSide = (match, idx) => match.usernames?.[idx] ?? `Player ${idx + 1}`
+const sideIdx = (side) => (side === 'player1' ? 0 : 1)
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
+const COLOR_WORD = (c) => (c ? c.charAt(0) + c.slice(1).toLowerCase() : '?')
+const signed = (n) => (n >= 0 ? `+${n}` : `${n}`)
+
+function describeApplication(e) {
+  if (e.action === 'setColor') return `recolors it ${COLOR_WORD(e.color)}`
+  if (e.operation === 'multiply') return `×${e.amount}`
+  if (e.operation === 'set') return `sets it to ${e.amount}`
+  return signed(e.amount)
+}
+
+/** Turns a resolveFinalBoard analysis into log sections + card markers. */
+function describeBoard(match, final, { includeApplied = true } = {}) {
+  const a = final.analysis
+  const who = (side, name) => `${name} (${nameOfSide(match, sideIdx(side))})`
+  const byCtoon = new Map()
+  for (const side of [0, 1]) for (const r of match.revealed[side]) byCtoon.set(r.ctoonId, r.name)
+  const nm = (id) => byCtoon.get(id) ?? id
+  const causeText = (causes) => (causes || []).map(c => (c.kind === 'duplicate'
+    ? 'the same gToon is on both boards' : `cancelled by ${who(c.by.side, c.by.name)}`)).join(' and ')
+
+  const knocked = a.knockedOut.map(k => `${who(k.side, k.name)} — same gToon on both boards: scores 0 and its powers are off.`)
+  const cancelled = a.negated.map(n => `${who(n.side, n.name)} — ${causeText(n.causes)}.`)
+  const lost = a.lostEffects.map(l => {
+    const self = l.source === l.targetPlayer && l.sourceIndex === l.targetIndex
+    return `${who(l.source, nm(l.sourceCtoonId))}'s ${describeApplication(l)} on ${self ? 'itself' : who(l.targetPlayer, nm(l.targetCtoonId))} — ${causeText(l.causes)}.`
+  })
+  const changed = a.changes.map(c => {
+    const parts = []
+    if (c.fromValue !== c.toValue) parts.push(`${c.fromValue} → ${c.toValue}`)
+    if (c.fromColor !== c.toColor) parts.push(`${COLOR_WORD(c.fromColor)} → ${COLOR_WORD(c.toColor)}`)
+    const why = [...new Set(c.reasons.map(r => (r.kind === 'duplicate'
+      ? 'knocked out' : `lost ${r.sourceCtoonId === c.ctoonId ? 'its own' : `${nm(r.sourceCtoonId)}'s`} ${describeApplication(r)}`)))]
+    return `${who(c.side, c.name)}: ${parts.join(', ')}${why.length ? ` (${why.join('; ')})` : ' (knock-on effect)'}`
+  })
+  const applied = includeApplied
+    ? final.effectsResolved.filter(e => e.action === 'modifyValue' || e.action === 'setColor')
+      .map(e => `${who(e.source, nm(e.sourceCtoonId))} → ${who(e.targetPlayer, nm(e.targetCtoonId))}: ${describeApplication(e)}`)
+    : []
+  const sections = [
+    { label: 'Knocked out', lines: knocked },
+    { label: 'Powers cancelled', lines: cancelled },
+    { label: 'No longer applying', lines: lost },
+    { label: 'What changed', lines: changed },
+    { label: 'Powers in effect', lines: applied }
+  ]
+  const markers = []
+  for (const k of a.knockedOut) markers.push({ side: sideIdx(k.side), slot: k.slot, kind: 'knockedOut' })
+  for (const n of a.negated) markers.push({ side: sideIdx(n.side), slot: n.slot, kind: 'cancelled' })
+  for (const c of a.changes) if (!c.cancelled) markers.push({ side: sideIdx(c.side), slot: c.slot, kind: 'changed', from: c.fromValue, to: c.toValue })
+  return { sections, markers, notable: knocked.length + cancelled.length + lost.length + changed.length > 0 }
+}
+
 /** Builds an immutable per-card snapshot embedding everything round/final-board resolution ever needs. */
 export function toSnapshotCard(ctoon, position) {
   return {
@@ -50,6 +121,7 @@ export function toSnapshotCard(ctoon, position) {
 
 /** Match setup shared by PvP and practice: shuffle each deck and deal the opening hands. */
 export function initHands(match, rng = Math.random) {
+  match.gameLog = []
   match.hand = [[], []]
   match.undealt = [[], []]
   match.discarded = [[], []]
@@ -67,6 +139,13 @@ export function initHands(match, rng = Math.random) {
   match.pendingSwap = [false, false]
   match.revealed = [[], []]
   match.currentRound = 1
+  logEvent(match, {
+    kind: 'start', title: 'Match started',
+    sections: [{ label: null, lines: [
+      `${nameOfSide(match, 0)} (goal ${COLOR_WORD(match.goalColor?.[0])}) vs ${nameOfSide(match, 1)} (goal ${COLOR_WORD(match.goalColor?.[1])})`,
+      'Each player was dealt 6 cards from their 12-card deck.'
+    ] }]
+  })
   startPhaseClock(match)
   return match
 }
@@ -82,6 +161,20 @@ export function phaseDurationMs(match) {
 /** Stamps the deadline for the phase the match just entered. */
 export function startPhaseClock(match, now = Date.now()) {
   match.deadline = now + phaseDurationMs(match)
+  const secs = Math.round(phaseDurationMs(match) / 1000)
+  if (match.phase === 'discard') {
+    logEvent(match, { kind: 'phase', title: 'Discard phase', sections: [{ label: null, lines: [`Throw away any cards you don't want; hands refill to 6. ${secs}s (no discards if time runs out).`] }] })
+  } else if (match.phase === 'swap') {
+    logEvent(match, { kind: 'phase', title: 'Round 3 — slot-7 swap', sections: [{ label: null, lines: [
+      `Optional: replace your slot-7 card with a random undealt card (${match.practice ? 'free in practice' : '10 points'}). ${secs}s (no swap if time runs out).`
+    ] }] })
+  } else {
+    const slots = slotsForRound(match.currentRound)
+    const range = slots.length === 1 ? `slot ${slots[0]}` : `slots ${slots[0]}–${slots[slots.length - 1]}`
+    logEvent(match, { kind: 'phase', title: isSuddenDeathRound(match.currentRound) ? 'Sudden death' : `Round ${match.currentRound}`, sections: [{ label: null, lines: [
+      `Fill ${range} with ${plural(slots.length, 'card')}. ${secs}s (random cards are placed if time runs out).`
+    ] }] })
+  }
 }
 
 /** A card as the OWNER sees it in their hand — never sent to the opponent. */
@@ -93,7 +186,8 @@ function handCardView(match, meIdx, deckIdx) {
   }
 }
 
-export function publicMatchView(match, uid) {
+/** `opts.log === false` leaves the (large, rarely changing) game log out of high-frequency updates. */
+export function publicMatchView(match, uid, opts = {}) {
   const meIdx = match.players.indexOf(uid)
   const oppIdx = meIdx === 0 ? 1 : 0
   const slots = slotsForRound(match.currentRound)
@@ -106,11 +200,13 @@ export function publicMatchView(match, uid) {
     suddenDeath: isSuddenDeathRound(match.currentRound),
     phase: match.phase || 'play',
     phaseEndsAt: match.deadline || null,
+    ...(opts.log === false ? {} : { gameLog: match.gameLog || [] }),
     // Slots the current round may fill, and how many cards may go in them.
     roundSlots: slots,
     // Only present on practice matches, so PvP payloads are unchanged.
     ...(match.practice ? { practice: true, difficulty: match.difficulty } : {}),
     you: {
+      sideIndex: meIdx,
       userId: uid,
       username: match.usernames[meIdx],
       goalColor: match.goalColor[meIdx],
@@ -178,6 +274,17 @@ export function unplaceSlot(match, idx, { slot } = {}) {
   if (blocked) return blocked
   match.placements[idx] = match.placements[idx].filter(p => p.slot !== slot)
   return OK
+}
+
+/** Marks `idx` as committed for the round (after `checkCommit` passed) and logs it. */
+export function markCommitted(match, idx) {
+  match.ready[idx] = true
+  logEvent(match, { kind: 'commit', title: 'Committed', sections: [{ label: null, lines: [`${nameOfSide(match, idx)} committed their cards.`] }] })
+}
+
+/** Logs a match that ended some way other than scoring (forfeit, timeout). */
+export function logAbnormalEnd(match, text) {
+  logEvent(match, { kind: 'end', title: 'Match ended', sections: [{ label: null, lines: [text] }] })
 }
 
 /** How many cards `idx` must place this round: every open slot (capped by what they hold). */
@@ -256,9 +363,11 @@ export function recordSwapChoice(match, idx, swap) {
 export function resolveSwapPhase(match, rng = Math.random) {
   if (match.phase !== 'swap' || !match.swapReady[0] || !match.swapReady[1]) return null
   const entries = [[], []]
+  const swapped = [null, null]
   for (const i of [0, 1]) {
     if (!match.pendingSwap[i]) continue
     const old = slotSevenEntry(match, i)
+    swapped[i] = old
     if (!old || !match.undealt[i].length) continue
     const pick = Math.floor(rng() * match.undealt[i].length)
     const drawnIdx = match.undealt[i][pick]
@@ -269,6 +378,16 @@ export function resolveSwapPhase(match, rng = Math.random) {
     entries[i].push(entry)
     match.swapUsed[i] = true
   }
+  const lines = []
+  for (const i of [0, 1]) {
+    if (entries[i].length) {
+      const was = swapped[i]
+      lines.push(`${nameOfSide(match, i)} swapped slot 7: ${was.name} → ${entries[i][0].name}`)
+    } else if (match.revealed[i].some(r => r.slot === 7)) {
+      lines.push(`${nameOfSide(match, i)} kept their slot-7 card.`)
+    }
+  }
+  logEvent(match, { kind: 'swap', title: 'Slot-7 swap', sections: [{ label: null, lines }] })
   match.pendingSwap = [false, false]
   match.swapReady = [false, false]
   match.phase = 'play' // the caller either ends the match or advances into sudden death
@@ -287,11 +406,18 @@ export function expirePhase(match, rng = Math.random) {
     if (match.phase === 'play' && !match.ready[i]) {
       autoFillPlacements(match, i, rng)
       match.ready[i] = true
+      logEvent(match, { kind: 'timeout', title: 'Out of time', sections: [{ label: null, lines: [`${nameOfSide(match, i)} ran out of time — random cards filled their empty slots and were committed.`] }] })
       acted.push(i)
     } else if (match.phase === 'discard' && !match.discardReady[i]) {
-      if (submitDiscard(match, i, { cardIdxs: [] }).ok) acted.push(i)
+      if (submitDiscard(match, i, { cardIdxs: [] }).ok) {
+        logEvent(match, { kind: 'timeout', title: 'Out of time', sections: [{ label: null, lines: [`${nameOfSide(match, i)} ran out of time — kept their hand.`] }] })
+        acted.push(i)
+      }
     } else if (match.phase === 'swap' && !match.swapReady[i]) {
-      if (recordSwapChoice(match, i, false).ok) acted.push(i)
+      if (recordSwapChoice(match, i, false).ok) {
+        logEvent(match, { kind: 'timeout', title: 'Out of time', sections: [{ label: null, lines: [`${nameOfSide(match, i)} ran out of time — no swap.`] }] })
+        acted.push(i)
+      }
     }
   }
   return acted
@@ -319,12 +445,17 @@ export function submitDiscard(match, idx, { cardIdxs } = {}) {
  */
 export function resolveDiscardPhase(match) {
   if (match.phase !== 'discard' || !match.discardReady[0] || !match.discardReady[1]) return false
+  const lines = []
   for (const i of [0, 1]) {
     const res = discardAndDeal(match.hand[i], match.undealt[i], match.pendingDiscard?.[i] || [])
     match.hand[i] = res.hand
     match.undealt[i] = res.undealt
     match.discarded[i] = [...match.discarded[i], ...res.discarded]
+    lines.push(res.discarded.length
+      ? `${nameOfSide(match, i)} discarded ${plural(res.discarded.length, 'card')} and drew ${plural(res.drawn.length, 'card')}.`
+      : `${nameOfSide(match, i)} kept their hand (drew ${plural(res.drawn.length, 'card')}).`)
   }
+  logEvent(match, { kind: 'discard', title: 'Discards resolved', sections: [{ label: null, lines }] })
   match.pendingDiscard = null
   match.phase = 'play'
   match.discardReady = [false, false]
@@ -374,7 +505,8 @@ export function runFinalBoardResolution(match) {
     final = {
       player1: { revealed: match.revealed[0].map(r => ({ ctoonId: r.ctoonId, round: r.round, baseValue: r.baseValue, finalValue: r.baseValue, color: r.color })), totalValue: 0 },
       player2: { revealed: match.revealed[1].map(r => ({ ctoonId: r.ctoonId, round: r.round, baseValue: r.baseValue, finalValue: r.baseValue, color: r.color })), totalValue: 0 },
-      effectsResolved: []
+      effectsResolved: [],
+      analysis: { knockedOut: [], negated: [], lostEffects: [], changes: [] }
     }
   }
   for (const idx of [0, 1]) {
@@ -429,7 +561,37 @@ export function revealPlacedCards(match) {
   }
   match.ready = [false, false]
   const order = [...new Set([...entries[0], ...entries[1]].map(e => e.slot))].sort((a, b) => a - b)
+  const show = (e) => (e ? `${e.name} (${e.baseValue}, ${COLOR_WORD(e.color)})` : '—')
+  logEvent(match, {
+    kind: 'reveal', title: `${isSuddenDeathRound(match.currentRound) ? 'Sudden death' : `Round ${match.currentRound}`} revealed`,
+    sections: [{ label: null, lines: order.map(slot =>
+      `Slot ${slot}: ${nameOfSide(match, 0)} ${show(entries[0].find(e => e.slot === slot))}  vs  ${nameOfSide(match, 1)} ${show(entries[1].find(e => e.slot === slot))}`) }]
+  })
+  if (match.currentRound <= SWAP_AFTER_ROUND) logPreview(match)
   return { entries, order }
+}
+
+/**
+ * Logs what the powers on the board so far would do, without touching the match. Early rounds
+ * only — the real scoring happens once, at the end, and can differ as more cards arrive.
+ */
+function logPreview(match) {
+  try {
+    const final = resolveFinalBoard({
+      player1: finalBoardInputFor(match, 0), player2: finalBoardInputFor(match, 1), cancelDuplicates: !match.practice
+    })
+    const d = describeBoard(match, final)
+    if (!d.sections.some(sec => sec.lines.length)) {
+      // Nothing is cancelled or changed any more: tell the board to drop markers from an earlier preview.
+      if (match.gameLog.some(e => e.kind === 'preview' && e.data?.markers?.length)) {
+        logEvent(match, { kind: 'preview', title: 'Powers on the board so far', sections: [{ label: null, lines: ['Nothing is cancelled or changed by powers right now.'] }], data: { markers: [] } })
+      }
+      return
+    }
+    logEvent(match, { kind: 'preview', title: 'Powers on the board so far (preview — can change as more cards are played)', sections: d.sections, data: { markers: d.markers } })
+  } catch (err) {
+    console.error(`[ogGtoons] power preview failed for match ${match.id}:`, err)
+  }
 }
 
 /**
@@ -474,6 +636,11 @@ export function checkMatchEnd(match) {
   const { outcome, final } = runFinalBoardResolution(match)
   const bothHaveCards = hasSuddenDeathCardsRemaining(playableCards(match, 0)) &&
     hasSuddenDeathCardsRemaining(playableCards(match, 1))
+  try {
+    logFinalScoring(match, outcome, final, outcome.winner === null && bothHaveCards)
+  } catch (err) {
+    console.error(`[ogGtoons] scoring log failed for match ${match.id}:`, err)
+  }
   if (outcome.winner === null && bothHaveCards) return null
   return {
     outcome: outcome.winner === null ? 'TIE' : (outcome.winner === 'player1' ? 'PLAYER1' : 'PLAYER2'),
@@ -482,6 +649,21 @@ export function checkMatchEnd(match) {
     player2Score: outcome.player2Score,
     effectsResolved: final.effectsResolved
   }
+}
+
+function logFinalScoring(match, outcome, final, continues) {
+  const d = describeBoard(match, final)
+  const [n0, n1] = [nameOfSide(match, 0), nameOfSide(match, 1)]
+  const totals = [`${n0}: ${outcome.player1Score}   ${n1}: ${outcome.player2Score}`]
+  if (outcome.bonus) totals.push(`${nameOfSide(match, outcome.bonus.player === 'player1' ? 0 : 1)} gets +15 for holding more ${COLOR_WORD(outcome.bonus.color)} cards.`)
+  const verdict = outcome.winner === null
+    ? (continues ? 'Tied — sudden death.' : 'Tied — no cards left to break it.')
+    : `${outcome.winner === 'player1' ? n0 : n1} wins ${outcome.reason === 'both_colors' ? 'by holding more of both goal colors' : 'on total value'}.`
+  if (!d.notable && !d.sections[4].lines.length) d.sections[0].lines.push('No powers fired — every card scores its printed value.')
+  logEvent(match, {
+    kind: 'scoring', title: isSuddenDeathRound(match.currentRound) ? 'Sudden-death scoring' : 'Final scoring',
+    sections: [...d.sections, { label: 'Result', lines: [...totals, verdict] }], data: { markers: d.markers }
+  })
 }
 
 /**
@@ -503,5 +685,5 @@ export function buildRoundLog(match, effectsResolved) {
       player2: r2 ? { ctoonId: r2.ctoonId, name: r2.name, baseValue: r2.baseValue, finalValue: r2.finalValue, color: r2.color } : null
     }
   })
-  return { rounds, effectsResolved: effectsResolved || [] }
+  return { rounds, effectsResolved: effectsResolved || [], gameLog: match.gameLog || [] }
 }

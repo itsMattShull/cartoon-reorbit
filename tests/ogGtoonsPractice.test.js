@@ -10,7 +10,7 @@ import { slotsForRound, PLACE_MS, DISCARD_MS, SWAP_MS } from '../server/utils/og
 import {
   publicMatchView, initHands, placeCard, unplaceSlot, checkCommit, checkSwap, recordSwapChoice,
   resolveSwapPhase, expirePhase, autoFillPlacements, runFinalBoardResolution, phaseDurationMs,
-  submitDiscard, resolveDiscardPhase, revealPlacedCards, advanceRound, checkMatchEnd, buildRoundLog, TOTAL_ROUNDS
+  submitDiscard, resolveDiscardPhase, markCommitted, revealPlacedCards, advanceRound, checkMatchEnd, buildRoundLog, TOTAL_ROUNDS
 } from '../server/utils/ogGtoonMatchCore.js'
 import { registerOgGtoonsPractice, hasLivePracticeMatch } from '../server/utils/ogGtoonsPractice.js'
 import { isPracticing } from '../server/utils/ogGtoonPresence.js'
@@ -336,6 +336,108 @@ test('core: the same gToon on both boards is cancelled in PvP but not in practic
   }
   assert.ok(run(false) > 0)
   assert.equal(run(true), 0)
+})
+
+/* ── Game log ────────────────────────────────────────────────────────────────────────────── */
+
+const logText = (m) => JSON.stringify(m.gameLog)
+const kinds = (m) => m.gameLog.map(e => e.kind)
+const entryOf = (m, kind) => m.gameLog.filter(e => e.kind === kind)
+const sectionLines = (entry, label) => entry.sections.find(sec => sec.label === label)?.lines || []
+
+test('game log: records the whole match as it goes, in order, with sequence numbers', () => {
+  const m = freshMatch(makeDeck({ goal: 'BLACK' }), makeDeck({ goal: 'BLACK' }))
+  assert.deepEqual(kinds(m), ['start', 'phase'])
+  const end = playRegulation(m)
+  assert.ok(end || true)
+  const k = kinds(m)
+  for (const expected of ['start', 'phase', 'reveal', 'discard', 'swap', 'scoring']) assert.ok(k.includes(expected), `missing ${expected}`)
+  assert.deepEqual(m.gameLog.map(e => e.seq), m.gameLog.map((_, i) => i + 1))
+  const scoring = entryOf(m, 'scoring')[0]
+  assert.ok(sectionLines(scoring, 'Result').length >= 2)
+  assert.equal(entryOf(m, 'reveal').length, 2)
+  assert.match(entryOf(m, 'reveal')[0].sections[0].lines[0], /^Slot 1: A /)
+})
+
+test('game log: never reveals cards that are still hidden', () => {
+  const m = freshMatch(makeDeck(), makeDeck())
+  placeCard(m, 0, { cardIdx: m.hand[0][0], slot: 1 })
+  markCommittedForTest(m)
+  // No card names ("Card N") appear before anything is revealed — only the goal colors.
+  assert.equal(/Card \d/.test(logText(m)), false)
+  assert.equal(entryOf(m, 'commit').length, 2)
+})
+
+function markCommittedForTest(m) {
+  autoFillPlacements(m, 0); autoFillPlacements(m, 1)
+  markCommitted(m, 0); markCommitted(m, 1)
+}
+
+test('game log: the view includes it, and high-frequency updates can leave it out', () => {
+  const m = freshMatch(makeDeck(), makeDeck())
+  assert.equal(publicMatchView(m, 'a').gameLog.length, m.gameLog.length)
+  assert.equal('gameLog' in publicMatchView(m, 'a', { log: false }), false)
+  assert.equal(publicMatchView(m, 'b').you.sideIndex, 1)
+})
+
+test('game log: timeouts and discard/swap results are logged without exposing which cards', () => {
+  const m = freshMatch(makeDeck(), makeDeck())
+  expirePhase(m, seeded(3))
+  assert.equal(entryOf(m, 'timeout').length, 2)
+  revealPlacedCards(m); advanceRound(m)
+  submitDiscard(m, 0, { cardIdxs: [m.hand[0][0]] }); submitDiscard(m, 1, { cardIdxs: [] })
+  resolveDiscardPhase(m)
+  const lines = entryOf(m, 'discard')[0].sections[0].lines
+  assert.match(lines[0], /^A discarded 1 card and drew 5 cards\.$/)
+  assert.match(lines[1], /^B kept their hand/)
+})
+
+function effectDeck(prefix, effect, goal = 'BLACK') {
+  return makeDeck({ goal }).map(c => ({ ...c, ctoonId: `${prefix}${c.ctoonId}`, effect }))
+}
+
+test('game log: final scoring explains cancelled powers, what no longer applies and what changed', () => {
+  const buff = [{ trigger: 'onReveal', target: { selector: 'self' }, action: { type: 'modifyValue', operation: 'add', amount: 5 } }]
+  const cancel = [{ trigger: 'onReveal', target: { selector: 'opponentActiveCard' }, action: { type: 'negateEffect' } }]
+  const m = freshMatch(effectDeck('a', buff), effectDeck('b', cancel))
+  playRegulation(m)
+  const scoring = entryOf(m, 'scoring')[0]
+  assert.equal(sectionLines(scoring, 'Powers cancelled').length, 7)          // every buffed card faces a canceller
+  assert.equal(sectionLines(scoring, 'No longer applying').length, 7)
+  assert.equal(sectionLines(scoring, 'What changed').length, 7)
+  assert.match(sectionLines(scoring, 'What changed')[0], /\d+ → \d+ \(lost .*\+5\)/)
+  assert.equal(sectionLines(scoring, 'Powers in effect').length, 0)
+  assert.equal(scoring.data.markers.filter(x => x.kind === 'cancelled').length, 7)
+  assert.equal(m.revealed[0].every(r => r.finalValue === r.baseValue), true)   // the +5s really are gone
+})
+
+test('game log: the powers that do apply are listed, and a power-free match says so', () => {
+  const buff = [{ trigger: 'onReveal', target: { selector: 'self' }, action: { type: 'modifyValue', operation: 'add', amount: 2 } }]
+  const m = freshMatch(effectDeck('a', buff), effectDeck('b', null))
+  playRegulation(m)
+  const lines = sectionLines(entryOf(m, 'scoring')[0], 'Powers in effect')
+  assert.equal(lines.length, 7)
+  assert.match(lines[0], /\+2$/)
+  const plain = freshMatch(effectDeck('a', null), effectDeck('b', null))
+  playRegulation(plain)
+  assert.match(sectionLines(entryOf(plain, 'scoring')[0], 'Knocked out')[0], /No powers fired/)
+})
+
+test('game log: a preview of the powers so far is logged after each early reveal, without changing the match', () => {
+  const buff = [{ trigger: 'onReveal', target: { selector: 'self' }, action: { type: 'modifyValue', operation: 'add', amount: 2 } }]
+  const m = freshMatch(effectDeck('a', buff), effectDeck('b', null))
+  autoPlay(m, 0); autoPlay(m, 1)
+  revealPlacedCards(m)
+  const preview = entryOf(m, 'preview')[0]
+  assert.ok(preview)
+  assert.equal(sectionLines(preview, 'Powers in effect').length, 4)
+  assert.equal(m.revealed[0].every(r => r.finalValue === r.baseValue), true)  // preview does not mutate
+})
+
+test('game log: it is saved with the round log', () => {
+  const m = freshMatch(makeDeck({ goal: 'BLACK' }), makeDeck({ goal: 'BLACK' }))
+  playRegulation(m)
+  assert.equal(buildRoundLog(m, []).gameLog.length, m.gameLog.length)
 })
 
 /* ── Timers: the server plays the default for whoever has not acted ──────────────────────── */
@@ -797,6 +899,21 @@ test('practice: when each phase times out the server plays the default and the m
   assert.deepEqual(rev.reveal.order, [])
   assert.equal(rev.you.swapUsed, false)
   assert.equal(rev.you.revealed.length >= 7, true)
+  await h.handlers['oggtoons:practice:leave']()
+})
+
+test('practice: the game log rides along on key updates, not on placing, and is complete at the end', async () => {
+  const h = harness({ userId: 'u11' })
+  await h.handlers['oggtoons:practice:start']({ deckId: 'd1' })
+  const start = await h.waitFor('oggtoons:matchStart')
+  assert.deepEqual(start.gameLog.map(e => e.kind), ['start', 'phase'])
+  await h.handlers['oggtoons:practice:place']({ cardIdx: start.you.hand[0].idx, slot: 1 })
+  assert.equal('gameLog' in h.events('oggtoons:state').at(-1), false)         // placing is log-free
+  const end = await playToEnd(harness({ userId: 'u12' }))
+  const kindsSeen = end.gameLog.map(e => e.kind)
+  for (const k of ['start', 'phase', 'commit', 'reveal', 'discard', 'swap', 'scoring']) assert.ok(kindsSeen.includes(k), `missing ${k}`)
+  assert.equal(end.gameLog.at(-1).kind, 'scoring')
+  assert.equal(end.you.sideIndex, 0)
   await h.handlers['oggtoons:practice:leave']()
 })
 

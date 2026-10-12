@@ -532,3 +532,46 @@ test('determineWinner: knocked-out cards do not count toward a goal color', () =
   assert.equal(out.bonus, null)       // no +15: the only RED card was cancelled
   assert.equal(out.winner, 'player1')
 })
+
+
+test('resolveFinalBoard analysis: reports cancelled cards, the effects that no longer apply, and what changed', () => {
+  const caster = at(revealedCard('A', 'Caster', { value: 2, color: 'GREEN', effect: [plus(5, { selector: 'cardByCharacter', character: 'Bee' }), recolor('RED', { selector: 'cardByCharacter', character: 'Bee' })] }), 1)
+  const bee = at(revealedCard('B', 'Bee', { value: 3, color: 'BLUE', characters: ['Bee'] }), 2)
+  const canceller = at(revealedCard('D', 'Canceller', { value: 2, effect: [negate({ selector: 'opponentActiveCard' })] }), 1)
+  const out = resolveFinalBoard({
+    player1: { revealed: [caster, bee], goalCard: null },
+    player2: { revealed: [canceller], goalCard: null }
+  })
+  const a = out.analysis
+  assert.deepEqual(a.knockedOut, [])
+  assert.deepEqual(a.negated.map(n => [n.name, n.causes[0].by.name]), [['Caster', 'Canceller']])
+  assert.equal(a.lostEffects.length, 2)
+  assert.deepEqual(a.lostEffects.map(l => l.action).sort(), ['modifyValue', 'setColor'])
+  assert.equal(a.lostEffects.every(l => l.targetName === 'Bee' && l.sourceName === 'Caster'), true)
+  assert.equal(a.changes.length, 1)
+  const c = a.changes[0]
+  assert.deepEqual([c.name, c.fromValue, c.toValue, c.fromColor, c.toColor], ['Bee', 8, 3, 'RED', 'BLUE'])
+  assert.equal(c.reasons.length, 2)
+  assert.equal(c.reasons[0].causes[0].by.name, 'Canceller')
+  assert.equal(c.slot, 2)
+})
+
+test('resolveFinalBoard analysis: a knocked-out duplicate lists the lost effects it would have had', () => {
+  const twinA = at(revealedCard('T', 'Twin', { value: 4, effect: [plus(3, { selector: 'allOwnRevealed' })] }), 1)
+  const twinB = at(revealedCard('T', 'Twin', { value: 4 }), 1)
+  const mine = at(revealedCard('M', 'Mine', { value: 2 }), 2)
+  const out = resolveFinalBoard({ player1: { revealed: [twinA, mine], goalCard: null }, player2: { revealed: [twinB], goalCard: null } })
+  const a = out.analysis
+  assert.equal(a.knockedOut.length, 2)
+  assert.equal(a.lostEffects.length > 0, true)
+  assert.equal(a.lostEffects.every(l => l.causes[0].kind === 'duplicate'), true)
+  const mineChange = a.changes.find(x => x.name === 'Mine')
+  assert.deepEqual([mineChange.fromValue, mineChange.toValue], [5, 2])
+  assert.equal(a.changes.filter(x => x.cancelled).length, 2)
+})
+
+test('resolveFinalBoard analysis: nothing cancelled means nothing is reported as lost or changed', () => {
+  const buffed = at(revealedCard('X', 'X', { value: 2, effect: [plus(3)] }), 1)
+  const out = resolveFinalBoard({ player1: { revealed: [buffed], goalCard: null }, player2: { revealed: [at(revealedCard('Y', 'Y', { value: 1 }), 1)], goalCard: null } })
+  assert.deepEqual(out.analysis, { knockedOut: [], negated: [], lostEffects: [], changes: [] })
+})
