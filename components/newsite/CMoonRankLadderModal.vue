@@ -29,8 +29,8 @@
               <p class="crlm-tier-note">Choose 1 of {{ tier.rewardChoices.length }}:</p>
               <div class="crlm-tier-rewards">
                 <div v-for="c in tier.rewardChoices" :key="c.id" class="crlm-reward-chip">
-                  <img
-                    v-if="c.imagePath" :src="c.imagePath" :alt="c.name"
+                  <CtoonImage
+                    v-if="c.imagePath" :ctoon="c" :src="c.imagePath" :alt="c.name"
                     class="crlm-reward-img" width="32" height="32" loading="lazy" decoding="async"
                   />
                   <span v-else class="crlm-reward-swatch" aria-hidden="true">★</span>
@@ -48,6 +48,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 // Lets a player preview the FULL rank ladder for this cMoon (and each rank's reward-cToon
 // choices) before they've earned it, opened from the "?" next to "Your Rank" (see CMoonPage.vue).
 // Purely a read-only view over data the page already fetched from

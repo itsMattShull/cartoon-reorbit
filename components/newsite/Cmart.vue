@@ -35,6 +35,8 @@
                     v-if="item.assetPath"
                     :ctoon="item"
                     :alt="item.name"
+                    effects="full"
+                    :ambient="false"
                     class="pack-reveal-img" />
                   <SecondEditionOverlay :ctoon="item" />
                 </div>

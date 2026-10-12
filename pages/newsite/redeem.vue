@@ -46,7 +46,7 @@
                 <span class="rd-qty">{{ item.quantity || 1 }}×</span>
                 <h2 class="rd-card-name">{{ item.name }}</h2>
                 <div class="rd-card-img-wrap">
-                  <CtoonImage :ctoon="item" class="rd-card-img" />
+                  <CtoonImage :ctoon="item" effects="full" :ambient="false" class="rd-card-img" />
                 </div>
                 <div class="rd-card-meta">
                   <p class="capitalize">
