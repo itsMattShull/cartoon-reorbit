@@ -213,7 +213,21 @@
             @contextmenu.prevent.stop="cz.buildMode && removeToon(toon)"
           >
 
+            <!-- Original gToons render as the round card, centered inside the same placement box so the
+                 saved size / position / rotation / layering all keep working. Static (no ambient loops). -->
+            <div v-if="toon.isOgGtoon" class="cz-item-og" :title="toon.name">
+              <GtoonCard
+                :image-url="toon.assetPath"
+                :value="toon.gtoonValue ?? 0"
+                :color="toon.gtoonColor || 'SILVER'"
+                :card-style="toon.gtoonCardStyle"
+                :seed="String(toon.ctoonId || toon.name || '')"
+                :alt="toon.name"
+                effects="static"
+              />
+            </div>
             <img
+              v-else
               :src="toon.assetPath" :alt="toon.name"
               class="cz-item-img"
               :title="toon.name"
@@ -539,6 +553,7 @@
 </template>
 
 <script setup>
+import GtoonCard from '@/components/GtoonCard.vue'
 import CtoonImage from '@/components/CtoonImage.vue'
 // ── Canvas size variables ─────────────────────────────────────
 const TOON_SIZE        = 80    // default toon size in px when dropped
@@ -2483,6 +2498,19 @@ defineExpose({ save, clearZone })
   100% { transform: scale(0.65); filter: brightness(1.5)  drop-shadow(0 0 10px rgba(255,80,80,1)); }
 }
 
+/* OG gToon round card: a square as large as fits the placement box, centered. */
+.cz-item-og {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  container-type: size;
+  pointer-events: none;
+}
+.cz-item-og > .gtoon-card-host {
+  width: min(100cqw, 100cqh);
+}
 .cz-item-img {
   width: 100%;
   height: 100%;
