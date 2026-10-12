@@ -4580,3 +4580,15 @@ function fxFlareMs() {
     const el = document.getElementById('fxDur');
     return el ? Number(el.value) : 900;
 }
+
+
+/* ===================== EXPORT SHIM (added for cartoon-reorbit) =====================
+   card-fx.js is loaded as a classic script; top-level `const`/`let` aren't reachable from app code,
+   so expose what lib/gtoonCardEngine.js needs. Everything above this block is the unmodified prototype. */
+window.GtoonFx = {
+    fxSignal, fxNoise, fxHeatshieldNeutral, fxHeatshieldRestore,
+    fxPrismaFlare, fxLensFlare, fxOpticalFlare, fxAnamorphicFlare, fxPulse, fxGas, fxLensLeak, fxBlackHole,
+    fxLightning, fxSolarFlare, fxHeatStrands, fxPlasma, fxPlasmaLite, fxFiery, fxStarry,
+    fxClear, fxEnsureStyles, fxEnsureAeroshell,
+    active: _fxActiveInstances
+};
