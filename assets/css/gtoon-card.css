@@ -1,0 +1,705 @@
+/* assets/css/gtoon-card.css
+   Round "UFO" card used for Original gToons. Ported from the drawcard prototype; every rule is scoped
+   under .gtoon-card-host so it cannot leak into the rest of the site. */
+@font-face { font-family: 'tox'; src: url('/gtoon-card/tox.otf') format('opentype'); font-display: swap; }
+.gtoon-card-host .flipper-container {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            border: 0px solid white;
+            border-radius: 50%;
+            overflow: hidden;
+            animation: opFlicker 0.25s infinite alternate;
+        }
+.gtoon-card-host .circle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 133%;
+            height: 100%;
+            box-sizing: border-box;
+            border-radius: 50%;
+            opacity: 1;
+            border: 16px solid white;
+
+
+            transform: translate(-50%, -50%);
+
+            animation: flipY 6s infinite, maskToggle 6s infinite steps(1), borderHold 6s infinite, borderFlicker 0.18s infinite alternate;
+        }
+@keyframes flipY {
+            0% {
+                height: 16%;
+                animation-timing-function: cubic-bezier(0.61, 1, 0.88, 1);
+            }
+
+            
+            50% {
+                height: 110%;
+                animation-timing-function: cubic-bezier(0.12, 0, 0.39, 0);
+            }
+
+            
+            100% {
+                height: 16%;
+            }
+        }
+@keyframes borderHold {
+
+            
+            0% {
+                border-width: 24px;
+                animation-timing-function: ease-out;
+            }
+
+            
+            45%,
+            55% {
+
+                border-width: 12px;
+                animation-timing-function: ease-in;
+            }
+
+            
+            100% {
+                border-width: 24px;
+            }
+        }
+@keyframes maskToggle {
+
+            0%,
+            49.99% {
+                -webkit-mask-image: linear-gradient(to bottom, black 50%, transparent 50%);
+                mask-image: linear-gradient(to bottom, black 50%, transparent 50%);
+            }
+
+            50%,
+            100% {
+                -webkit-mask-image: linear-gradient(to bottom, transparent 50%, black 50%);
+                mask-image: linear-gradient(to bottom, transparent 50%, black 50%);
+            }
+        }
+@keyframes borderFlicker {
+            0% {
+                border-color: rgba(255, 255, 255, 0.2);
+            }
+
+            22% {
+                border-color: rgba(255, 255, 255, 0.45);
+            }
+
+            45% {
+                border-color: rgba(255, 255, 255, 0.65);
+            }
+
+            68% {
+                border-color: rgba(255, 255, 255, 0.40);
+            }
+
+            85% {
+                border-color: rgba(255, 255, 255, 0.40);
+            }
+
+            100% {
+                border-color: rgba(255, 255, 255, 0.50);
+            }
+        }
+.gtoon-card-host .circle-flipper2 {
+            position: absolute;
+            width: 120%;
+            height: 100%;
+            border-radius: 50%;
+            background: transparent;
+            border-bottom: 8px solid #ffffff;
+            opacity: 0.33;
+            
+            will-change: transform, opacity;
+
+            animation: moveAndFlip 4s linear infinite;
+        }
+@keyframes moveAndFlip {
+            0% {
+                transform: translate(-12%, 0%) rotateX(0deg);
+            }
+
+            100% {
+                transform: translate(-12%, 0%) rotateX(160deg);
+            }
+        }
+@keyframes opFlicker {
+            0% {
+                opacity: 0.30;
+            }
+
+            22% {
+                opacity: 0.25;
+            }
+
+            45% {
+                opacity: 0.15;
+            }
+
+            68% {
+                opacity: 0.40;
+            }
+
+            85% {
+                opacity: 0.20;
+            }
+
+            100% {
+                opacity: 0.15;
+            }
+        }
+.gtoon-card-host .scanlines {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            overflow: hidden;
+            border-radius: inherit;
+            z-index: 1;
+            mix-blend-mode: screen;
+            opacity: 0.66;
+        }
+.gtoon-card-host .scanlines canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+.gtoon-card-host .card {
+            position: absolute;
+            left: 50%;
+            bottom: 50%;
+            width: 384px;
+            height: 384px;
+            transform: translate(-50%, 50%) scale(0.5);
+            border: 0px solid white;
+            border-radius: 50%;
+
+            z-index: 100;
+
+            will-change: transform;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+        }
+.gtoon-card-host .card * {
+            pointer-events: none;
+            user-select: none;
+            -webkit-user-drag: none;
+        }
+.gtoon-card-host .card .e1,
+.gtoon-card-host .card .e2,
+.gtoon-card-host .card .ufo .e3 {
+            position: absolute;
+            left: 50%;
+            bottom: 50%;
+            width: 100%;
+            height: 100%;
+            transform: translate(-50%, 50%);
+            background: rgb(149, 184, 199, 0.15);
+            border-radius: 50%;
+
+        }
+.gtoon-card-host .card .e2 {
+            width: 93%;
+            height: 93%;
+            overflow: hidden;
+        }
+.gtoon-card-host .card .e2 .barcode-mask {
+            position: absolute;
+            inset: 0;
+            border-radius: 50%;
+            overflow: hidden;
+
+            mask: radial-gradient(circle closest-side, transparent 0 var(--barcode-cut, 88%), black calc(var(--barcode-cut, 88%) + 0.5%) 100%);
+            -webkit-mask: radial-gradient(circle closest-side, transparent 0 var(--barcode-cut, 88%), black calc(var(--barcode-cut, 88%) + 0.5%) 100%);
+        }
+.gtoon-card-host .card .e2 .barcode {
+            position: absolute;
+        }
+.gtoon-card-host .card .e2 .barcode .bar {
+            position: absolute;
+            top: 0;
+            height: 100%;
+            opacity: 0.75;
+            background: linear-gradient(to bottom, rgba(180, 220, 230, 0.15), rgba(200, 235, 245, 0.55));
+            transform-origin: 50% 50%;
+            
+        }
+.gtoon-card-host .card .ufo .e3 {
+            width: 155%;
+            height: 155%;
+            bottom: 5%;
+            background: radial-gradient(circle at 50% 50%,
+                    rgba(255, 255, 255, 0.25) 0%,
+                    rgba(255, 255, 255, 0.06) 30%,
+                    rgba(255, 255, 255, 0) 60%);
+            z-index: 0;
+
+        }
+.gtoon-card-host .card .ufo {
+            position: absolute;
+            left: 50%;
+            bottom: 50%;
+
+            width: 100%;
+            height: 100%;
+
+            transform:
+                translate(-50%, 50%) rotateY(var(--ufo-rotation, 0deg));
+
+            transform-style: preserve-3d;
+
+            
+            --wv-grad-start: rgb(189, 106, 12);
+            --wv-grad-end: rgb(253, 158, 33);
+            --wv-border-color: #77989b;
+
+            --wvring-color: #e29a15;
+
+            --energy-grad-start: rgba(120, 120, 120, 0.5);
+            --energy-grad-end: rgba(34, 101, 111, 1);
+
+            --energy2-grad-start: rgba(0, 153, 153, 1);
+            --energy2-grad-end: rgba(0, 153, 153, 0);
+
+            --barrier-border-color: #009999;
+            --barrier-grad-start: rgba(115, 155, 165, 1);
+            --barrier-grad-end: rgba(115, 145, 155, 0);
+
+            --ptext-color: #fff;
+
+            --spec-edge-color: rgba(51, 255, 255, 0);
+            --spec-peak-color: rgba(255, 255, 255, 0.66);
+
+            --wvring-shader-start: rgba(0, 0, 0, 0.5);
+            --wvring-shader-end: rgba(0, 0, 0, 0);
+
+            --shadow-color: rgba(0, 0, 0, 0.5);
+            --shadow-inner: rgba(0, 0, 0, 0);
+
+            --ptext-shadow-color: rgba(0, 0, 0, 0.1);
+        }
+.gtoon-card-host .card .ufo_data {
+            display: none;
+        }
+.gtoon-card-host .card.stellar,
+.gtoon-card-host .card.cosmic {
+            position: absolute;
+            left: 50%;
+            bottom: 50%;
+        }
+.gtoon-card-host .card.stellar .ufo {
+            position: absolute;
+            left: 50%;
+            bottom: 50%;
+
+            width: 100%;
+            height: 100%;
+
+            transform:
+                translate(-50%, 50%) rotateY(var(--ufo-rotation, 0deg));
+
+            transform-style: preserve-3d;
+
+            --wv-grad-start: rgb(189, 106, 12);
+            --wv-grad-end: rgb(253, 158, 33);
+            --wv-border-color: #d8b86d;
+
+            --wvring-color: #e29a15;
+
+            --energy-grad-start: rgba(120, 120, 120, 0.5);
+            --energy-grad-end: rgb(136, 111, 84);
+
+            --energy2-grad-start: rgb(170, 165, 97);
+            --energy2-grad-end: rgba(0, 153, 153, 0);
+
+            --barrier-border-color: rgb(167, 146, 83);
+            --barrier-grad-start: rgba(155, 155, 155, 1);
+            --barrier-grad-end0: rgba(197, 193, 30, 0.3);
+            --barrier-grad-end: rgba(237, 153, 0, 0.3);
+
+            --ptext-color: #fcffd0;
+
+            --spec-edge-color: rgba(255, 235, 80, 0);
+            --spec-peak-color: rgba(255, 225, 80, 0.66);
+
+            --wvring-shader-start: rgba(0, 0, 0, 0.5);
+            --wvring-shader-end: rgba(0, 0, 0, 0);
+
+            --shadow-color: rgba(0, 0, 0, 0.5);
+            --shadow-inner: rgba(0, 0, 0, 0);
+
+            --ptext-shadow-color: rgba(0, 0, 0, 0.1);
+        }
+.gtoon-card-host .card .heatshield {
+            position: absolute;
+            left: 50%;
+            bottom: 50%;
+            transform: translate(-50%, 50%);
+            width: 86%;
+            height: 86%;
+        }
+.gtoon-card-host .card .heatshield .barrier,
+.gtoon-card-host .card .heatshield .inner,
+.gtoon-card-host .card .heatshield .inner2,
+.gtoon-card-host .card .heatshield .barrier0 {
+            position: absolute;
+            left: 50%;
+            bottom: 50%;
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            transform: translate(-50%, 50%);
+            border: 5px solid var(--barrier-border-color);
+
+        }
+.gtoon-card-host .card .heatshield .inner2 {
+            position: absolute;
+            left: 50%;
+            bottom: 50%;
+            width: 85%;
+            height: 85%;
+            border-radius: 50%;
+            transform: translate(-50%, 50%);
+            border: 5px solid var(--barrier-border-color);
+
+        }
+.gtoon-card-host .card .heatshield .barrier {
+            background: linear-gradient(135deg,
+                    var(--barrier-grad-start) 0%,
+                    var(--barrier-grad-end) 90%);
+
+            mask: radial-gradient(circle,
+                    transparent 0 59.5%,
+                    black 60% 100%);
+        }
+.gtoon-card-host .card.stellar .heatshield {
+            animation: heatshield-emit 2s ease-in-out infinite alternate;
+        }
+@keyframes heatshield-pulse {
+            0% {
+                filter: brightness(1.0) saturate(1) hue-rotate(-30deg);
+                
+                
+            }
+
+            100% {
+                filter: brightness(1.6) saturate(2) hue-rotate(30deg);
+                
+            }
+        }
+@keyframes heatshield-emit {
+            0% {
+                filter: drop-shadow(0 0 2px rgba(84, 84, 55, 0.0));
+                
+                
+            }
+
+            100% {
+                filter: drop-shadow(0 0 62px rgba(84, 84, 55, 0.8));
+                
+            }
+        }
+.gtoon-card-host .card.stellar .heatshield .barrier0 {
+            border: 0px;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg,
+                    var(--barrier-grad-start) 0%,
+                    var(--barrier-grad-end0) 90%);
+            mask: radial-gradient(circle,
+                    transparent 0 69%,
+                    black 60% 100%);
+        }
+.gtoon-card-host .card .heatshield .inner {
+            width: 95%;
+            height: 95%;
+
+            border-radius: 50%;
+            border: 0px solid white;
+            mask: radial-gradient(circle,
+                    transparent 0 62.5%,
+                    black 63% 100%);
+        }
+.gtoon-card-host .card .heatshield .inner>.spec,
+.gtoon-card-host .spec {
+            position: absolute;
+            left: 50%;
+            bottom: 0%;
+            width: 95%;
+            height: 75%;
+            background: linear-gradient(90deg,
+                    var(--spec-edge-color) 10%,
+                    var(--spec-peak-color) 50%,
+                    var(--spec-edge-color) 90%);
+            transform: translate(-50%, 50%);
+
+
+        }
+.gtoon-card-host .spec {
+            left: 0%;
+            transform: translate(-50%, 0%);
+            height: 100%;
+            width: 166%;
+        }
+.gtoon-card-host .card .energy {
+            position: absolute;
+            right: 8%;
+            bottom: 13%;
+            width: 40%;
+            height: 40%;
+
+            background: linear-gradient(130deg,
+                    var(--energy-grad-start) 40%,
+                    var(--energy-grad-end) 60%);
+            border-radius: 50%;
+            transform: scale(1);
+            overflow: hidden;
+        }
+@property --e2-start-pos {
+            syntax: '<percentage>';
+            inherits: false;
+            initial-value: 10%;
+        }
+.gtoon-card-host .card .energy2 {
+            position: absolute;
+            right: 7.5%;
+            bottom: 12.5%;
+            width: 41%;
+            height: 41%;
+
+            
+            background: linear-gradient(130deg,
+                    var(--energy2-grad-start) var(--e2-start-pos, 10%),
+                    var(--energy2-grad-end) 70%);
+
+            mask: radial-gradient(circle,
+                    transparent 0 64%,
+                    black 64.5% 100%);
+            border-radius: 50%;
+            transform: scale(1);
+            overflow: hidden;
+        }
+.gtoon-card-host .card .wv {
+            position: absolute;
+            left: 50%;
+            bottom: 50%;
+            width: 77%;
+            height: 77%;
+            border-radius: 50%;
+            background: linear-gradient(135deg,
+                    var(--wv-grad-start) 0%,
+                    var(--wv-grad-end) 60%);
+            filter: brightness(1);
+            transform: translate(-50%, 50%);
+            z-index: 1;
+        }
+.gtoon-card-host .card .wv-border {
+            position: absolute;
+            left: 50%;
+            bottom: 50%;
+            width: 77%;
+            height: 77%;
+            border-radius: 50%;
+            border: 3px solid var(--wv-border-color);
+            transform: translate(-50%, 50%);
+            pointer-events: none;
+            z-index: 2;
+            
+        }
+.gtoon-card-host .card .wvring {
+            position: absolute;
+            left: 50%;
+            bottom: 50%;
+            width: 71%;
+            height: 71%;
+            border-radius: 50%;
+            mask: radial-gradient(circle,
+                    transparent 0 67%,
+                    black 67.5% 100%);
+            background: var(--wvring-color);
+            transform: translate(-50%, 50%);
+        }
+.gtoon-card-host .wvring-sweep {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            transform: scaleX(-1);
+            visibility: hidden;
+            pointer-events: none;
+
+        }
+.gtoon-card-host .card .wvring .shader {
+            position: absolute;
+            left: 0%;
+            top: 0%;
+            width: 100%;
+            height: 100%;
+
+            background: linear-gradient(135deg,
+                    var(--wvring-shader-start) 0%,
+                    var(--wvring-shader-end) 80%);
+
+        }
+.gtoon-card-host .card .shadow {
+            position: absolute;
+            left: 50%;
+            bottom: 50%;
+            width: 70%;
+            height: 70%;
+            border-radius: 50%;
+            background: radial-gradient(circle at 50% 50%,
+                    var(--shadow-inner) 40%,
+                    var(--shadow-color) 100%);
+            transform: translate(-50%, 50%);
+        }
+.gtoon-card-host .card .reflection {
+            position: absolute;
+            left: 13%;
+            top: 13%;
+            width: 182px;
+            height: 239px;
+
+            background: linear-gradient(to bottom,
+                    rgb(255 255 255 / 90.196%),
+                    rgb(255 255 255 / 20%));
+
+            clip-path: path("M166.399,31.452 C103.362,65.010 81.040,106.112 81.040,106.112 C81.040,106.112 56.606,145.995 59.062,217.365 C61.517,288.735 -39.260,168.111 17.661,69.520 C74.582,-29.070 229.435,-2.106 166.399,31.452 Z");
+        }
+.gtoon-card-host .card .ufo_small {
+            position: absolute;
+            left: 50%;
+            bottom: 50%;
+            width: 270px;
+            height: 270px;
+
+            transform: translate(-50%, 50%);
+
+            overflow: hidden;
+            border-radius: 50%;
+        }
+.gtoon-card-host .card .ufo_small img {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: fill;
+            z-index: 10;
+        }
+.gtoon-card-host .card .ptext {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            text-align: center;
+            font-size: 3.3em;
+            font-family: tox;
+            color: var(--ptext-color);
+            transform: translate(-50%, -50%) skewX(-15deg) scaleX(0.9);
+            filter: drop-shadow(10px 10px 0 var(--ptext-shadow-color));
+        }
+.gtoon-card-host .card .aeroshell,
+.gtoon-card-host .card .aeroshell .rim {
+            position: absolute;
+            left: 50%;
+            bottom: 50%;
+            width: 71%;
+            height: 71%;
+            border-radius: 50%;
+            transform: translate(-50%, 50%);
+            --rim-grad-start: rgb(83, 111, 126, 1);
+            --rim-grad-end: rgba(181, 195, 206, 1);
+            --borders: rgba(255, 255, 255, 1);
+
+        }
+.gtoon-card-host .card .aeroshell .rim {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(-105deg,
+                    var(--rim-grad-start) 0%,
+                    var(--rim-grad-end) 80%);
+
+            mask: radial-gradient(circle,
+                    transparent 0 60%,
+                    black 60.5% 100%);
+            z-index: 2;
+        }
+.gtoon-card-host .card .aeroshell .ring1,
+.gtoon-card-host .card .aeroshell .ring2,
+.gtoon-card-host .card .aeroshell .ring3 {
+            position: absolute;
+            left: 50%;
+            bottom: 50%;
+            border-radius: 50%;
+            transform: translate(-50%, 50%);
+        }
+.gtoon-card-host .card .aeroshell .ring1 {
+            width: 89%;
+            height: 89%;
+            border: 5px solid #fff;
+            opacity: 0.2;
+            z-index: 2;
+        }
+.gtoon-card-host .card .aeroshell .ring2 {
+            width: 78%;
+            height: 78%;
+            border: 4px solid #a2f7fa;
+            opacity: 0.2;
+        }
+.gtoon-card-host .card .aeroshell .ring3 {
+            width: 68%;
+            height: 68%;
+            border: 4px solid #a2f7fa;
+            opacity: 0.33;
+        }
+.gtoon-card-host .card .aeroshell .badge {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            border-radius: 50%;
+
+            width: 1976px;
+            height: 1052px;
+
+            background: rgb(153, 255, 255, 0.75);
+
+            clip-path: path("M988.000,721.000 C421.198,721.000 0.000,543.1000 0.000,543.1000 C0.000,543.1000 229.998,512.786 367.882,460.033 C441.029,432.048 473.584,391.720 486.522,370.081 C552.932,156.252 752.327,0.969 988.000,0.969 C1223.670,0.969 1423.061,156.248 1489.473,370.073 C1502.408,391.710 1534.963,432.044 1608.118,460.033 C1746.002,512.786 1975.1000,543.1000 1975.1000,543.1000 C1975.1000,543.1000 1554.802,721.000 988.000,721.000 ZM988.000,150.971 C780.877,150.971 612.971,318.877 612.971,526.000 C612.971,533.147 613.180,540.245 613.575,547.293 C647.022,557.121 741.591,575.000 987.000,575.000 C987.336,575.000 987.664,574.997 988.000,574.997 C988.336,574.997 988.664,575.000 988.1000,575.000 C1234.409,575.000 1328.978,557.121 1362.425,547.293 C1362.819,540.245 1363.029,533.147 1363.029,526.000 C1363.029,318.877 1195.123,150.971 988.000,150.971 ZM988.000,901.029 C1087.581,901.029 1178.093,862.213 1245.242,798.891 C1318.914,791.963 1388.127,782.478 1452.198,771.525 C1364.080,937.778 1189.268,1051.031 988.000,1051.031 C786.655,1051.031 611.786,937.692 523.700,771.335 C587.758,782.313 656.966,791.827 730.646,798.786 C797.807,862.170 888.364,901.029 988.000,901.029 Z");
+            transform-origin: center center;
+            transform: translate(-50%, -50%) scale(0.085) rotate(-15deg);
+        }
+.gtoon-card-host .aeroshell .scanlines {
+            z-index: 1;
+        }
+.gtoon-card-host .card .energy,
+.gtoon-card-host .card .energy2 {
+            transform-origin: center center;
+            will-change: transform, opacity;
+        }
+.gtoon-card-host .card .wv {
+            transition: background 0.25s ease-out;
+        }
+.gtoon-card-host .card .ptext {
+            transition: opacity 0.2s ease-out, transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+            will-change: transform, opacity;
+        }
+.gtoon-card-host .card .ufo_state.is-noise .energy,
+.gtoon-card-host .card .ufo_state.is-noise .energy2 {
+            transform: scale(0);
+            opacity: 0;
+        }
+.gtoon-card-host .card .ufo_state.is-noise .wv {
+            background: #000000 !important;
+        }
+.gtoon-card-host .card .ufo_state.is-noise .ptext {
+            opacity: 0;
+            transform: translate(-50%, -50%) skewX(-15deg) scaleX(0.9) scale(0);
+        }
+.gtoon-card-host .card .ufo_small .scanlines {
+            z-index: 9999;
+        }
+/* ---- host box: the 384px card is scaled to fit whatever box the old <img> occupied ---- */
+.gtoon-card-host { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: visible; }
+.gtoon-card-host .card { transform: translate(-50%, 50%) scale(var(--gc-scale, 0.5)); transform-origin: center center; }
