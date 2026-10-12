@@ -85,6 +85,12 @@ export const CRON_JOBS = [
 
 export const CRON_JOBS_BY_NAME = Object.fromEntries(CRON_JOBS.map(j => [j.name, j]))
 
+// BullMQ queue a tier's schedulers and worker use (shared by server/cron/scheduler.js and the admin
+// Queue Monitor, which has to open the same queues).
+export function cronQueueName(tier) {
+  return process.env[`CRON_${String(tier).toUpperCase()}_QUEUE_KEY`] || `cron${tier[0].toUpperCase()}${tier.slice(1)}`
+}
+
 export function jobsForTier(tier) {
   return CRON_JOBS.filter(j => j.tier === tier)
 }

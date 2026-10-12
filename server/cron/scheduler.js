@@ -27,7 +27,7 @@ import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { logCronError } from '../utils/cronErrorLog.js'
 import { JOB_HANDLERS, SCHEDULED_EVENT_HANDLERS } from './jobHandlers.js'
 import { runLogged } from './runLogger.js'
-import { CRON_JOBS, TIER_CRITICAL, TIER_MAINTENANCE, jobsForTier } from './jobs.js'
+import { CRON_JOBS, TIER_CRITICAL, TIER_MAINTENANCE, jobsForTier, cronQueueName } from './jobs.js'
 
 const TIER = String(process.argv[2] || process.env.CRON_TIER || '').toLowerCase()
 if (![TIER_CRITICAL, TIER_MAINTENANCE].includes(TIER)) {
@@ -50,7 +50,7 @@ process.on('uncaughtException', (err) => {
   logCronError(`process:${TIER}`, err).catch(() => {})
 })
 
-const QUEUE_NAME = process.env[`CRON_${TIER.toUpperCase()}_QUEUE_KEY`] || `cron${TIER[0].toUpperCase()}${TIER.slice(1)}`
+const QUEUE_NAME = cronQueueName(TIER)
 
 // Critical jobs are short and independent, so a few can run side by side. Maintenance jobs are the
 // big DB writers / Discord crawlers: strictly one at a time.
