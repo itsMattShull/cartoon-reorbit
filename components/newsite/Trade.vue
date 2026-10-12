@@ -200,7 +200,7 @@
                       @mouseenter="highlightedCtoonIndex = idx"
                       @click="selectCtoonSummary(c)"
                     >
-                      <img :src="c.assetPath" class="tr-sug-ctoon-img" />
+                      <CtoonImage :ctoon="c" class="tr-sug-ctoon-img" />
                       <div>
                         <div class="tr-suggest-name-row">
                           <span>{{ c.name }}</span>
@@ -218,7 +218,7 @@
                       @mouseenter="highlightedCtoonIndex = idx"
                       @click="selectCtoonMint(c)"
                     >
-                      <img :src="c.assetPath" class="tr-sug-ctoon-img" />
+                      <CtoonImage :ctoon="c" class="tr-sug-ctoon-img" />
                       <div>
                         <div>Mint #{{ c.mintNumber ?? '—' }}</div>
                         <div class="tr-suggest-dim">{{ c.ownerUsername }}</div>
@@ -514,7 +514,7 @@
               <div v-else class="tr-confirm-cards">
                 <div v-for="c in selectedTargetCtoons" :key="c.id" class="tr-confirm-card">
                   <div class="tr-confirm-img-wrap">
-                    <img :src="c.assetPath" :alt="c.name" class="tr-confirm-img" loading="lazy" />
+                    <CtoonImage :ctoon="c" :alt="c.name" class="tr-confirm-img" loading="lazy" />
                     <SecondEditionOverlay :ctoon="c" />
                   </div>
                   <span class="tr-confirm-name">{{ c.name }}</span>
@@ -530,7 +530,7 @@
               <div v-else class="tr-confirm-cards">
                 <div v-for="c in selectedInitiatorCtoons" :key="c.id" class="tr-confirm-card">
                   <div class="tr-confirm-img-wrap">
-                    <img :src="c.assetPath" :alt="c.name" class="tr-confirm-img" loading="lazy" />
+                    <CtoonImage :ctoon="c" :alt="c.name" class="tr-confirm-img" loading="lazy" />
                     <SecondEditionOverlay :ctoon="c" />
                   </div>
                   <span class="tr-confirm-name">{{ c.name }}</span>
@@ -635,7 +635,7 @@
                       {{ selfOwnedIdsModal.has(tc.userCtoon.ctoonId) ? 'Owned' : 'Unowned' }}
                     </span>
                     <div class="tm-card-img-wrap">
-                      <img :src="tc.userCtoon.ctoon.assetPath" class="tm-card-img" loading="lazy" @click="openTradeCToon(tc)" />
+                      <CtoonImage :ctoon="tc.userCtoon.ctoon" class="tm-card-img" loading="lazy" @click="openTradeCToon(tc)" />
                       <SecondEditionOverlay :ctoon="tc.userCtoon.ctoon" />
                     </div>
                     <span class="tm-card-name">{{ tc.userCtoon.ctoon.name }}</span>
@@ -664,7 +664,7 @@
                       {{ selfOwnedIdsModal.has(tc.userCtoon.ctoonId) ? 'Owned' : 'Unowned' }}
                     </span>
                     <div class="tm-card-img-wrap">
-                      <img :src="tc.userCtoon.ctoon.assetPath" class="tm-card-img" loading="lazy" @click="openTradeCToon(tc)" />
+                      <CtoonImage :ctoon="tc.userCtoon.ctoon" class="tm-card-img" loading="lazy" @click="openTradeCToon(tc)" />
                       <SecondEditionOverlay :ctoon="tc.userCtoon.ctoon" />
                     </div>
                     <span class="tm-card-name">{{ tc.userCtoon.ctoon.name }}</span>
@@ -740,6 +740,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuth } from '@/composables/useAuth'

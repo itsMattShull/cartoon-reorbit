@@ -13,12 +13,11 @@
       <!-- Header -->
       <div class="ctic-head">
         <div class="ctic-thumb-wrap">
-          <img
+          <CtoonImage
             v-if="ctoon.assetPath"
-            :src="ctoon.assetPath"
+            :ctoon="ctoon"
             :alt="ctoon.name || 'cToon'"
-            class="ctic-thumb"
-          />
+            class="ctic-thumb" />
           <SecondEditionOverlay :ctoon="ctoon" />
         </div>
         <div class="ctic-head-info">
@@ -435,6 +434,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { computed, ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'
 import SecondEditionOverlay from '@/components/newsite/SecondEditionOverlay.vue'

@@ -12,7 +12,7 @@
         <!-- Body -->
         <div class="wm-body">
           <div class="wm-preview">
-            <img v-if="ctoon.assetPath" class="wm-preview-img" :src="ctoon.assetPath" :alt="ctoon.name" draggable="false" />
+            <CtoonImage v-if="ctoon.assetPath" class="wm-preview-img" :ctoon="ctoon" :alt="ctoon.name" draggable="false" />
             <div class="wm-preview-info">
               <div class="wm-preview-name">{{ ctoon.name }}</div>
               <div v-if="ctoon.rarity" class="wm-preview-meta">
@@ -55,6 +55,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 const props = defineProps({
   ctoon: { type: Object, required: true },
 })

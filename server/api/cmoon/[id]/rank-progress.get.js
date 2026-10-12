@@ -8,6 +8,7 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { isCMoonCaptain, displayRankName, getPendingScoringPreview } from '@/server/utils/cmoon'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -27,7 +28,7 @@ export default defineEventHandler(async (event) => {
         // resyncClaimOptions, which always grants { points: 0, quantity: 1 } for these).
         rewardCtoons: {
           orderBy: { sortOrder: 'asc' },
-          select: { ctoon: { select: { id: true, name: true, assetPath: true } } },
+          select: { ctoon: { select: { id: true, name: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT } } },
         },
       },
     }),
@@ -79,7 +80,7 @@ export default defineEventHandler(async (event) => {
               reward: {
                 select: {
                   points: true,
-                  ctoons: { select: { quantity: true, ctoon: { select: { name: true, assetPath: true } } } },
+                  ctoons: { select: { quantity: true, ctoon: { select: { name: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT } } } },
                   backgrounds: { select: { background: { select: { label: true, imagePath: true } } } },
                 },
               },
@@ -123,6 +124,7 @@ export default defineEventHandler(async (event) => {
         id: r.ctoon.id,
         name: r.ctoon.name,
         imagePath: r.ctoon.assetPath,
+        ...ogGtoonDisplay(r.ctoon),
       })),
     })),
     // Same claimOptions shape GET /api/achievements already returns, so the claim UI can be
@@ -139,6 +141,7 @@ export default defineEventHandler(async (event) => {
           name: rc.ctoon?.name || 'cToon',
           quantity: rc.quantity,
           imagePath: rc.ctoon?.assetPath || null,
+          ...ogGtoonDisplay(rc.ctoon),
         })),
         backgrounds: (o.reward?.backgrounds || []).map(rb => ({
           label: rb.background?.label || '',

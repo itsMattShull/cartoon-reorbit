@@ -16,7 +16,7 @@
 
           <!-- Pack image (during animation) -->
           <template v-if="openingStep === 'pack'">
-            <img :src="openingPack?.imagePath" class="pack-overlay-img" alt="Pack" />
+            <CtoonImage :ctoon="openingPack" :src="openingPack.imagePath" class="pack-overlay-img" alt="Pack" />
           </template>
 
           <!-- Reveal grid -->
@@ -31,12 +31,11 @@
                 <span v-if="!originalOwnedSet.has(item.id)" class="pack-new-badge">New!</span>
                 <span v-if="!item.inCmart" class="pack-exclusive-badge">Pack Exclusive</span>
                 <div class="pack-reveal-img-wrap">
-                  <img
+                  <CtoonImage
                     v-if="item.assetPath"
-                    :src="item.assetPath"
+                    :ctoon="item"
                     :alt="item.name"
-                    class="pack-reveal-img"
-                  />
+                    class="pack-reveal-img" />
                   <SecondEditionOverlay :ctoon="item" />
                 </div>
                 <p class="pack-reveal-name">{{ item.name }}</p>
@@ -78,7 +77,7 @@
                   :class="originalOwnedSet.has(item.ctoonId) ? 'owned-badge--owned' : 'owned-badge--unowned'"
                 >{{ originalOwnedSet.has(item.ctoonId) ? 'Owned' : 'Unowned' }}</span>
                 <span v-if="item.inCmart === false" class="pack-exclusive-badge pack-exclusive-badge--preview">Pack Exclusive</span>
-                <img v-if="item.assetPath" :src="item.assetPath" :alt="item.name" class="pack-preview-ctoon-img" />
+                <CtoonImage v-if="item.assetPath" :ctoon="item" :alt="item.name" class="pack-preview-ctoon-img" />
                 <SecondEditionOverlay :ctoon="item" />
                 <p class="pack-preview-ctoon-name">{{ item.name }}</p>
                 <p class="pack-preview-ctoon-weight">{{ item.weight }}% chance</p>
@@ -123,13 +122,12 @@
          whole panel (overlapping the header), positioned here (rather than
          inside .cmart-grid) so it isn't clipped by that scroll container ── -->
     <div v-if="cmartTab === 'ctoons' && !loading && activeSale" class="sale-banner">
-      <img
+      <CtoonImage
         v-if="activeSale.imagePath && !saleImageFailed"
-        :src="activeSale.imagePath"
+        :ctoon="activeSale" :src="activeSale.imagePath"
         :alt="activeSale.name"
         class="sale-banner-img"
-        @error="saleImageFailed = true"
-      />
+        @error="saleImageFailed = true" />
       <div v-else class="sale-banner-title sale-banner-title--fallback">🔥 {{ activeSale.name }}</div>
     </div>
 
@@ -148,12 +146,11 @@
             >
               <template #header>
                 <div class="card-header-wrap" @click.stop="openInfo(item.ctoon)">
-                  <img
+                  <CtoonImage
                     v-if="item.ctoon.assetPath"
-                    :src="item.ctoon.assetPath"
+                    :ctoon="item.ctoon"
                     :alt="item.ctoon.name"
-                    class="card-img"
-                  />
+                    class="card-img" />
                   <SecondEditionOverlay :ctoon="item.ctoon" />
                   <span
                     class="owned-badge"
@@ -218,12 +215,11 @@
         >
           <template #header>
             <div class="card-header-wrap" @click.stop="openInfo(c)">
-              <img
+              <CtoonImage
                 v-if="c.assetPath"
-                :src="c.assetPath"
+                :ctoon="c"
                 :alt="c.name"
-                class="card-img"
-              />
+                class="card-img" />
               <SecondEditionOverlay :ctoon="c" />
               <span
                 class="owned-badge"
@@ -295,7 +291,7 @@
           class="pack-card"
         >
           <p class="pack-name">{{ pack.name }}</p>
-          <img v-if="pack.imagePath" :src="pack.imagePath" class="pack-img pack-img--clickable" :alt="pack.name" @click="openPackPreview(pack)" />
+          <CtoonImage v-if="pack.imagePath" :ctoon="pack" :src="pack.imagePath" class="pack-img pack-img--clickable" :alt="pack.name" @click="openPackPreview(pack)" />
           <ul class="pack-rarity-list">
             <li v-for="r in pack.rarityConfigs" :key="r.rarity">
               <strong>{{ r.rarity }}:</strong> {{ r.probabilityPercent }}% — {{ r.count }} cToon(s)
@@ -359,12 +355,11 @@
         >
           <template #header>
             <div class="card-header-wrap" @click.stop="openInfo(c)">
-              <img
+              <CtoonImage
                 v-if="c.assetPath"
-                :src="c.assetPath"
+                :ctoon="c"
                 :alt="c.name"
-                class="card-img"
-              />
+                class="card-img" />
               <SecondEditionOverlay :ctoon="c" />
               <span
                 class="owned-badge"
@@ -404,6 +399,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 const RARITY_ORDER = {
   'common': 0, 'uncommon': 1, 'rare': 2, 'very rare': 3,
   'crazy rare': 4, 'prize only': 5, 'code only': 6, 'auction only': 7,
