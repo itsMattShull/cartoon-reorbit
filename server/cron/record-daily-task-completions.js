@@ -1,7 +1,7 @@
 // server/cron/record-daily-task-completions.js
 // Thin entrypoint: the actual logic lives in server/utils/cmoon.js so every cMoon-scoring
 // concern stays in one file (see that file's header comment on why). Scheduled every 30 minutes
-// from server/cron/sync-guild-members.js — see the scoring-logic comment there for why 30
+// from server/cron/jobHandlers.js — see the scoring-logic comment there for why 30
 // minutes rather than once daily.
 //
 // Overlap guard: a lease (GlobalGameConfig.cMoonDailyTaskCronClaimedAt), not a Postgres

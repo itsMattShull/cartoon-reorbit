@@ -3,6 +3,7 @@ import dotenv from 'dotenv'
 dotenv.config()
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { scheduleAuctionOnlyStart, bestEffort } from '@/server/utils/queues'
 import { logAuctionOnlyError } from '@/server/utils/auctionOnlyErrorLog'
 import { selectAuctionOnlyBatch } from '@/server/utils/auctionOnlySchedule'
 import { FEATURED_OWN_LIMIT_OPTIONS, DEFAULT_FEATURED_OWN_LIMIT } from '@/server/utils/featuredEligibility'
@@ -214,8 +215,19 @@ async function handleAuctionOnlyCreate(event) {
     })
 
     const created = await tx.auctionOnly.createMany({ data: rows })
-    return { count: created.count, minted, requested: count }
+    // createMany returns no ids; look the new rows up so each can get its own exact-start job.
+    const createdRows = await tx.auctionOnly.findMany({
+      where: { userCtoonId: { in: userCtoonIds }, isStarted: false },
+      select: { id: true, startsAt: true }
+    })
+    return { count: created.count, minted, requested: count, createdRows }
   }, { timeout: 30000, maxWait: 10000 })
 
-  return result
+  // Exact-time start for each new row (the 5-minute cron sweep is only the safety net).
+  const { createdRows = [], ...publicResult } = result
+  for (const r of createdRows) {
+    await bestEffort('auction-only schedule', () => scheduleAuctionOnlyStart(r.id, r.startsAt))
+  }
+
+  return publicResult
 }

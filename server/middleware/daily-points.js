@@ -3,6 +3,7 @@ import { DateTime } from 'luxon'
 import { prisma }   from '@/server/prisma'
 import { defineEventHandler } from 'h3'
 import { isHotPath } from '@/server/utils/hotPaths'
+import { hasFlag, setFlag } from '@/server/utils/cache'
 
 let cachedGlobalConfig     = null
 let cachedGlobalConfigTime = 0
@@ -34,6 +35,13 @@ export default defineEventHandler(async (event) => {
     boundaryLocal = boundaryLocal.minus({ days: 1 })
   }
   const boundaryUtc = boundaryLocal.toUTC().toJSDate()
+
+  // Once a user has been through this for the current 8 PM window there is nothing left to do until
+  // the next boundary, so remember that in Redis and skip the ~4 queries (upsert, user lookup,
+  // transaction, ...) that every subsequent API call from them used to pay. Fail-open: with Redis
+  // unavailable this just falls through to the original DB path.
+  const doneKey = `daily-points:${userId}:${boundaryUtc.getTime()}`
+  if (await hasFlag(doneKey)) return
 
   // 3. Ensure UserPoints exists
   await prisma.userPoints.upsert({
@@ -100,4 +108,7 @@ export default defineEventHandler(async (event) => {
       })
     }
   })
+
+  // Whether or not this call was the one that awarded it, the user is now settled for this window.
+  await setFlag(doneKey, 30 * 60 * 60)
 })

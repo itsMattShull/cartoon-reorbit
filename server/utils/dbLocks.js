@@ -7,7 +7,7 @@
 //
 // USER_TABLE_BULK_WRITE_LOCK_KEY: held by every job that does a set-based
 // UPDATE touching most/all of "User" in one statement — currently
-// recomputeLastActivity (server/cron/sync-guild-members.js) and
+// recomputeLastActivity (server/cron/jobHandlers.js) and
 // runCMoonPointsAggregate (server/cron/cmoon-points-aggregate.js). Both
 // update rows in whatever order their own query plan happens to touch them,
 // which doesn't agree between the two statements; if they land in the same

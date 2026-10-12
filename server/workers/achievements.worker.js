@@ -9,11 +9,17 @@ const connection = {
 
 const QUEUE_KEY = process.env.ACHIEVEMENTS_QUEUE_KEY || 'achievementsQueue'
 
+// Each job is one user's whole pass (see processAchievementsForUser). Running a few at once is what
+// lets the daily all-users batch finish in minutes instead of draining one user at a time; the
+// default of 1 was the bottleneck. Kept modest so it doesn't crowd the shared DB pool.
+// ACHIEVEMENTS_WORKER_CONCURRENCY overrides it without a code change.
+const CONCURRENCY = Math.max(1, Number(process.env.ACHIEVEMENTS_WORKER_CONCURRENCY || 4))
+
 const worker = new Worker(QUEUE_KEY, async job => {
   const { userId } = job.data || {}
   if (!userId) return
   await processAchievementsForUser(String(userId))
-}, { connection })
+}, { connection, concurrency: CONCURRENCY })
 
 worker.on('completed', job => {
   // console.log(`Achievements job ${job.id} done`)

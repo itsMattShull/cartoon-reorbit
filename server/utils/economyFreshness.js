@@ -1,6 +1,6 @@
 // server/utils/economyFreshness.js
 // Keeps the Economy page's CtoonPriceDaily aggregate fresh without depending
-// on a separately-deployed cron worker (server/cron/sync-guild-members.js).
+// on a separately-deployed cron worker (server/cron/jobHandlers.js).
 // Every Economy API route calls ensureEconomyDataFresh() before reading
 // CtoonPriceDaily; on a cache miss it runs the same incremental aggregation
 // the cron job runs, gated by a short Redis TTL so it doesn't re-run on
