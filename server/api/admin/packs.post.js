@@ -15,6 +15,7 @@ import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { prisma as db } from '@/server/prisma'
+import { schedulePackToggle, bestEffort } from '@/server/utils/queues'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
@@ -218,6 +219,9 @@ export default defineEventHandler(async (event) => {
 
     return pack
   })
+
+  // Exact-time go-live / go-off (the cron sweep is only the safety net).
+  await bestEffort('pack schedule', () => schedulePackToggle(result.id, scheduledAt, scheduledOffAt))
 
   return { id: result.id }
 })

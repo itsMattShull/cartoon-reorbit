@@ -3,7 +3,7 @@
 // have a given cToon placed anywhere in their layout — so the cToon info
 // modal (server/api/ctoon/modal.get.js) can read it directly instead of
 // scanning every CZone.layoutData JSON blob on every modal open. Scheduled
-// from sync-guild-members.js to run daily at 05:00 CST.
+// from jobHandlers.js to run daily at 05:00 CST.
 //
 // layoutData shape: { zones: [ { background, toons: [ { id: <UserCtoon.id>, ... } ] } ] }.
 // A placed toon's `id` is a UserCtoon id, not a Ctoon id, so resolving which
@@ -49,7 +49,7 @@ export async function runCzoneDisplayCountAggregate() {
   const [{ locked }] = await prisma.$queryRaw`SELECT pg_try_advisory_lock(${LOCK_KEY}::bigint) AS locked`
   if (!locked) {
     console.log('[czone-display-count] another run already holds the lock, skipping')
-    return
+    return { skipped: true, reason: 'advisory lock held by another run' }
   }
   try {
     await prisma.$transaction([

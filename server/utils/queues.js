@@ -31,6 +31,32 @@ export const achievementsQueue = new Queue(
   }
 )
 
+/**
+ * Queue achievement checks for a set of users in one bulk add (a single Redis round trip per
+ * chunk, not one awaited call per user).
+ *
+ * Each job is de-duplicated per user: while a check for that user is already waiting or running,
+ * another add for the same user is dropped instead of stacking. The dedup key clears the moment
+ * the job finishes, so a later add (e.g. after their cMoon points change again) queues normally.
+ * This is what stops the 45-minute cMoon aggregate, the daily enqueue and manual admin enqueues
+ * from piling duplicate work onto the same users.
+ * @param {string[]} userIds
+ */
+export async function enqueueAchievementChecks(userIds) {
+  const ids = [...new Set((userIds || []).filter(Boolean).map(String))]
+  const CHUNK = 500
+  for (let i = 0; i < ids.length; i += CHUNK) {
+    await achievementsQueue.addBulk(
+      ids.slice(i, i + CHUNK).map(userId => ({
+        name: 'processUserAchievements',
+        data: { userId },
+        opts: { deduplication: { id: `ach-${userId}` } },
+      }))
+    )
+  }
+  return ids.length
+}
+
 // Queue for dissolving user accounts (potentially large, runs outside a single transaction)
 export const dissolveQueue = new Queue(
   process.env.DISSOLVE_QUEUE_KEY || 'dissolveQueue',
@@ -270,3 +296,83 @@ export const cmoonDailyTaskBackfillQueue = new Queue(
     },
   }
 )
+
+// ─── Exact-time "scheduled events" ──────────────────────────────────────────────
+// Delayed jobs that fire a scheduled event at the exact minute it was set for — a pack going live
+// or off in cMart, an AuctionOnly row starting, an announcement posting — instead of waiting for
+// the next poll of a cron sweep. Same pattern as scheduleAuctionClose / scheduleMintEnd above:
+// the jobId is derived from the thing being scheduled so a re-save replaces rather than duplicates.
+// The jobs are handled by the critical scheduler (server/cron/scheduler.js); each handler is
+// idempotent and re-checks the DB, so the cron sweeps that still run every few minutes stay a pure
+// safety net — if a job here is lost (Redis flush) the sweep catches it a few minutes late.
+export const SCHEDULED_EVENTS_QUEUE_NAME = process.env.SCHEDULED_EVENTS_QUEUE_KEY || 'scheduledEvents'
+
+/** Runs a best-effort scheduling side effect: a Redis hiccup must never fail the admin's save. */
+export async function bestEffort(label, fn) {
+  try { await fn() } catch (err) { console.error(`[scheduled-events] ${label} failed:`, err?.message || err) }
+}
+
+export const scheduledEventsQueue = new Queue(SCHEDULED_EVENTS_QUEUE_NAME, {
+  connection,
+  defaultJobOptions: {
+    removeOnComplete: { count: 200 },
+    removeOnFail:     { count: 200 },
+  },
+})
+
+async function replaceDelayedJob(name, jobId, data, runAt) {
+  const delay = Math.max(0, new Date(runAt).getTime() - Date.now())
+  const existing = await scheduledEventsQueue.getJob(jobId)
+  if (existing) {
+    const state = await existing.getState()
+    if (state === 'active') return
+    try { await existing.remove() } catch {}
+  }
+  await scheduledEventsQueue.add(name, data, { jobId, delay })
+}
+
+async function removeDelayedJob(jobId) {
+  const existing = await scheduledEventsQueue.getJob(jobId)
+  if (!existing) return
+  try { await existing.remove() } catch {}
+}
+
+/**
+ * (Re)schedule a pack's go-live / go-off jobs. Pass null for a time that isn't set, or one that
+ * has already passed and should not fire again.
+ */
+export async function schedulePackToggle(packId, scheduledAt, scheduledOffAt) {
+  const id = String(packId)
+  if (scheduledAt) await replaceDelayedJob('packOn', `pack-on-${id}`, { packId: id }, scheduledAt)
+  else await removeDelayedJob(`pack-on-${id}`)
+  if (scheduledOffAt) await replaceDelayedJob('packOff', `pack-off-${id}`, { packId: id }, scheduledOffAt)
+  else await removeDelayedJob(`pack-off-${id}`)
+}
+
+export async function cancelPackToggle(packId) {
+  const id = String(packId)
+  await removeDelayedJob(`pack-on-${id}`)
+  await removeDelayedJob(`pack-off-${id}`)
+}
+
+/** (Re)schedule the job that activates an AuctionOnly row at its startsAt. */
+export async function scheduleAuctionOnlyStart(auctionOnlyId, startsAt) {
+  const id = String(auctionOnlyId)
+  if (!startsAt) return removeDelayedJob(`auction-only-${id}`)
+  await replaceDelayedJob('auctionOnlyStart', `auction-only-${id}`, { auctionOnlyId: id }, startsAt)
+}
+
+export async function cancelAuctionOnlyStart(auctionOnlyId) {
+  await removeDelayedJob(`auction-only-${String(auctionOnlyId)}`)
+}
+
+/** (Re)schedule the job that posts an announcement to Discord at its scheduledAt. */
+export async function scheduleAnnouncementSend(announcementId, scheduledAt) {
+  const id = String(announcementId)
+  if (!scheduledAt) return removeDelayedJob(`announcement-${id}`)
+  await replaceDelayedJob('announcementSend', `announcement-${id}`, { announcementId: id }, scheduledAt)
+}
+
+export async function cancelAnnouncementSend(announcementId) {
+  await removeDelayedJob(`announcement-${String(announcementId)}`)
+}

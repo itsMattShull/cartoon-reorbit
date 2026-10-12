@@ -1,7 +1,7 @@
 // server/utils/auctionOnlyActivate.js
 //
 // Shared "activate an AuctionOnly listing into a live Auction" logic, used by
-// both the hourly cron job (server/cron/sync-guild-members.js) and the manual
+// both the hourly cron job (server/cron/jobHandlers.js) and the manual
 // admin "Start Now" endpoint (server/api/admin/auction-only/[id]/start.post.js)
 // so the two paths can never drift apart.
 import fetch from 'node-fetch'
@@ -134,6 +134,11 @@ async function logActivationRefusalOnce(auctionOnlyId, reason) {
 //     Only page.
 export async function activateAuctionOnlyRow(row) {
   const result = await prisma.$transaction(async (tx) => {
+    // Serialize concurrent activations of the SAME listing (the exact-time delayed job, the
+    // 5-minute cron sweep and the admin "Start Now" button can all reach this at once). Without a
+    // row lock both would read isStarted = false below and each create an Auction; with it the
+    // second waits for the first to commit, then sees isStarted = true and returns null.
+    await tx.$queryRaw`SELECT id FROM "AuctionOnly" WHERE id = ${row.id} FOR UPDATE`
     const fresh = await tx.auctionOnly.findUnique({
       where: { id: row.id },
       select: {

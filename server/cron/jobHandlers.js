@@ -1,12 +1,19 @@
-// server/cron/sync-guild-members.js
+// server/cron/jobHandlers.js
+//
+// The bodies of every scheduled background job (Discord sync, AuctionOnly go-live, pack
+// scheduling, announcements, achievements enqueue, activity/economy aggregates, ...), exported as
+// JOB_HANDLERS at the bottom. This file deliberately has NO top-level side effects: nothing is
+// scheduled or kicked off at import time. Scheduling lives in server/cron/scheduler.js (two
+// processes: "critical" and "maintenance" — see server/cron/jobs.js for which job belongs to which
+// and when it fires), and every run is timed/recorded by server/cron/runLogger.js. A handler that
+// fails must THROW (never swallow) so the run is recorded as FAILED on the admin Cron Run Logs page.
 import 'dotenv/config'
 import fetch from 'node-fetch'
 import { readFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma } from '../prisma.js'
-import cron from 'node-cron'
-import { achievementsQueue, scheduleAuctionClose } from '../../server/utils/queues.js'
+import { enqueueAchievementChecks } from '../utils/queues.js'
 import { runTournamentScheduler } from '../../server/utils/gtoonTournament.js'
 import { syncWordleResults } from '../../server/utils/wordle.js'
 import { checkAndCreateWeeklyCZoneContest } from './create-weekly-czone-contest.js'
@@ -19,6 +26,7 @@ import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
 import { logCronError } from '../utils/cronErrorLog.js'
 import { USER_TABLE_BULK_WRITE_LOCK_KEY } from '../utils/dbLocks.js'
+import { pruneCronLogs } from './runLogger.js'
 import { runCMoonPointsAggregate } from './cmoon-points-aggregate.js'
 import { runRecordDailyTaskCompletions } from './record-daily-task-completions.js'
 import { checkAndRunCMoonDailyScoring } from './cmoon-daily-score.js'
@@ -37,43 +45,7 @@ const announcementsDir = (process.env.PUBLIC_BASE_URL || process.env.NODE_ENV ==
   ? join(baseDir, 'cartoon-reorbit-images', 'announcements')
   : join(baseDir, 'public', 'announcements')
 
-// This process runs many unrelated cron jobs (Discord sync, achievements,
-// AuctionOnly activation, tournament scheduling, ...) back to back at startup
-// and hourly. Without these handlers, an unhandled rejection thrown by any one
-// of them (e.g. a transient DB blip in a job unrelated to auctions) crashes the
-// whole process — silently killing AuctionOnly activation (startDueAuctions)
-// along with everything else, with nothing written to AuctionOnlyErrorLog
-// since the crash never touches that code path. Keep the process alive and
-// record it so it's visible in the admin Error Log instead.
-process.on('unhandledRejection', (reason) => {
-  const err = reason instanceof Error ? reason : new Error(String(reason))
-  console.error('[guild-checker] Unhandled rejection (process kept alive):', reason)
-  logAuctionOnlyError('process', err, null).catch(() => {})
-  logCronError('process', err).catch(() => {})
-})
-process.on('uncaughtException', (err) => {
-  console.error('[guild-checker] Uncaught exception (process kept alive):', err)
-  logAuctionOnlyError('process', err, null).catch(() => {})
-  logCronError('process', err).catch(() => {})
-})
-
 async function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
-
-// Every scheduled job in this file (there are ~20, running back to back at startup and on
-// their own cron schedules) gets routed through this wrapper so that:
-//   1. one job throwing can never take down the others sharing this process, and
-//   2. the failure is recorded to CronErrorLog instead of only living in a log line, so it's
-//      visible on the admin Error Logs page.
-// The process-level handlers above remain as a last-resort net for anything that still
-// manages to escape this (e.g. a rejection from a fire-and-forget promise inside a job).
-async function runJob(name, fn) {
-  try {
-    await fn()
-  } catch (err) {
-    console.error(`[${name}] failed:`, err)
-    await logCronError(name, err)
-  }
-}
 
 // node-fetch has no default timeout, so a stalled Discord API response would
 // otherwise hang the caller forever. This process runs many jobs sequentially
@@ -121,7 +93,8 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
         {
           method: 'POST',
           headers: { Authorization: authHeader },
-          body: fd
+          body: fd,
+          signal: AbortSignal.timeout(30000)
         }
       )
 
@@ -190,7 +163,8 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
           Authorization: authHeader,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(30000)
       }
     )
 
@@ -207,7 +181,7 @@ async function sendAnnouncementDiscordMessage(row, attempt = 0) {
   }
 }
 
-async function discordDm(discordUserId, content) {
+async function discordDm(discordUserId, content, attempt = 0) {
   if (!BOT_TOKEN) return false
   try {
     // 1) create or get DM channel
@@ -219,8 +193,9 @@ async function discordDm(discordUserId, content) {
     if (ch.status === 429) {
       let body = { retry_after: 5 }
       try { body = await ch.json() } catch {}
+      if (attempt >= 3) return false
       await sleep(Math.ceil((body.retry_after || 5) * 1000))
-      return discordDm(discordUserId, content)
+      return discordDm(discordUserId, content, attempt + 1)
     }
     if (!ch.ok) return false
     const { id: channelId } = await ch.json()
@@ -234,8 +209,9 @@ async function discordDm(discordUserId, content) {
     if (msg.status === 429) {
       let body = { retry_after: 5 }
       try { body = await msg.json() } catch {}
+      if (attempt >= 3) return false
       await sleep(Math.ceil((body.retry_after || 5) * 1000))
-      return discordDm(discordUserId, content)
+      return discordDm(discordUserId, content, attempt + 1)
     }
     return msg.ok
   } catch {
@@ -254,7 +230,7 @@ async function recomputeLastActivity() {
   const [{ locked }] = await prisma.$queryRaw`SELECT pg_try_advisory_lock(${USER_TABLE_BULK_WRITE_LOCK_KEY}::bigint) AS locked`
   if (!locked) {
     console.log('[recomputeLastActivity] another bulk User-table job holds the lock, skipping')
-    return
+    return { skipped: true, reason: 'advisory lock held by another bulk User-table job' }
   }
   try {
     // Done in id-ordered batches, each its own short statement/transaction, instead of one
@@ -723,8 +699,18 @@ async function enforceDormantAccounts() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Existing: guild sync
+// Upper bound on one run's wall-clock time. The nickname-fix loop below is serial (one Discord
+// PATCH per mismatched member, with 429 back-off), so at a few thousand members it can run for a
+// very long time; the maintenance scheduler runs one job at a time, so an unbounded run would hold
+// up everything queued behind it. Whatever is left is picked up on the next daily run — the
+// mismatch check is recomputed from scratch each time.
+const SYNC_GUILD_MAX_RUNTIME_MS = 30 * 60 * 1000
+
 async function syncGuildMembers() {
-  try {
+  const deadline = Date.now() + SYNC_GUILD_MAX_RUNTIME_MS
+  let truncated = false
+  let nicknamesFixed = 0
+  {
     let after = '0'
     const memberIds = []
     const memberList = []
@@ -768,6 +754,7 @@ async function syncGuildMembers() {
 
     const boosterMembers = memberList.filter(m => m.premium_since !== null)
     for (const m of boosterMembers) {
+      if (Date.now() > deadline) { truncated = true; break }
       await prisma.user.updateMany({
         where: { discordId: m.user.id },
         data: {
@@ -785,6 +772,7 @@ async function syncGuildMembers() {
 
     const updated = []
     for (const m of memberList) {
+      if (Date.now() > deadline) { truncated = true; break }
       const dbName = nameMap.get(m.user.id)
       if (!dbName || m.nick === dbName) continue
 
@@ -806,6 +794,7 @@ async function syncGuildMembers() {
         )
 
         if (patch.ok) {
+          nicknamesFixed++
           updated.push(`${m.user.id}→${dbName}`)
           done = true
         } else if (patch.status === 429) {
@@ -821,38 +810,47 @@ async function syncGuildMembers() {
         }
       }
     }
-  } catch (err) {
-    // console.error('[sync-guild] sync failed:', err)
   }
+  return { nicknamesFixed, truncated }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 async function startDueAuctions() {
+  let due
   try {
     const now = new Date()
 
-    const due = await prisma.auctionOnly.findMany({
+    due = await prisma.auctionOnly.findMany({
       where: { isStarted: false, startsAt: { lte: now } },
       orderBy: { startsAt: 'asc' },
       include: AUCTION_ONLY_ROW_INCLUDE
     })
-
-    for (const row of due) {
-      try {
-        await activateAuctionOnlyRow(row)
-      } catch (e2) {
-        console.error('[startDueAuctions] failed to activate AuctionOnly', row.id, e2)
-        await logAuctionOnlyError('activation', e2, row.id)
-      }
-    }
   } catch (e3) {
     console.error('[startDueAuctions] failed', e3)
     await logAuctionOnlyError('activation', e3, null)
+    throw e3
   }
+
+  let failed = 0
+  for (const row of due) {
+    try {
+      await activateAuctionOnlyRow(row)
+    } catch (e2) {
+      failed++
+      console.error('[startDueAuctions] failed to activate AuctionOnly', row.id, e2)
+      await logAuctionOnlyError('activation', e2, row.id)
+    }
+  }
+  // Per-row failures are already in AuctionOnlyErrorLog; surface the run as FAILED too so it
+  // shows on the Cron Run Logs page instead of looking like a clean run.
+  if (failed) throw new Error(`${failed} of ${due.length} AuctionOnly activation(s) failed — see AuctionOnly error log`)
+  return due.length ? { activated: due.length } : undefined
 }
 
 async function sendDueAnnouncements() {
+  let sent = 0
+  let failedSends = 0
   try {
     if (!ANNOUNCEMENTS_CHANNEL_ID) return
     const now = new Date()
@@ -905,6 +903,7 @@ async function sendDueAnnouncements() {
         if (latest?.sentAt) continue
         const ok = await sendAnnouncementDiscordMessage(latest || row)
         if (!ok) {
+          failedSends++
           await prisma.announcement.update({
             where: { id: row.id },
             data: {
@@ -914,6 +913,7 @@ async function sendDueAnnouncements() {
             }
           })
         } else {
+          sent++
           await prisma.announcement.update({
             where: { id: row.id },
             data: {
@@ -928,36 +928,55 @@ async function sendDueAnnouncements() {
     }
   } catch (e) {
     console.error('[sendDueAnnouncements] error:', e)
+    throw e
   }
+  if (failedSends) throw new Error(`${failedSends} announcement(s) failed to send to Discord (sent ${sent})`)
+  return sent ? { sent } : undefined
+}
+
+// Pack go-live / go-off. With no packId this is the safety-net sweep that runs every few minutes;
+// with a packId it is the exact-time delayed job (server/utils/queues.js schedulePackToggle,
+// handled by the scheduled-events worker in the critical scheduler). Both re-check the DB, so a
+// stale or duplicate delayed job is a harmless no-op.
+//
+// "On" = the go-live time has passed, it hasn't been put live yet (sentAt null) and it hasn't
+// already ended. NOTE: this used to require scheduledOffAt = null, so a pack with BOTH a start and
+// an end time was never put in cMart by the cron at all (the admin Packs page labelled it "Live"
+// while the shop never listed it).
+async function togglePacks(packId = null) {
+  const now = new Date()
+  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
+  const only = packId ? { id: packId } : {}
+  const on = await prisma.pack.updateMany({
+    where: {
+      ...only,
+      sentAt: null,
+      scheduledAt: { lte: now },
+      OR: [{ scheduledOffAt: null }, { scheduledOffAt: { gt: now } }]
+    },
+    data: { inCmart: true, sentAt: now }
+  })
+  const off = await prisma.pack.updateMany({
+    where: {
+      ...only,
+      inCmart: true,
+      // The sweep only looks back an hour so an admin who deliberately re-lists an ended pack
+      // isn't undone forever; the exact-time job (packId) has no look-back limit.
+      scheduledOffAt: packId ? { lte: now } : { gt: oneHourAgo, lte: now }
+    },
+    data: { inCmart: false }
+  })
+  return (on.count || off.count) ? { packsOn: on.count, packsOff: off.count } : undefined
 }
 
 async function markScheduledPacksInCmart() {
-  try {
-    const now = new Date()
-    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
-    await prisma.pack.updateMany({
-      where: {
-        sentAt: null,
-        scheduledAt: { lte: now },
-        scheduledOffAt: null
-      },
-      data: { inCmart: true, sentAt: now }
-    })
-    await prisma.pack.updateMany({
-      where: {
-        scheduledOffAt: { gt: oneHourAgo, lte: now }
-      },
-      data: { inCmart: false }
-    })
-  } catch {
-    // swallow in cron context
-  }
+  return togglePacks()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Winball: set current grand prize from schedule (runs hourly)
 async function updateWinballGrandPrizeFromSchedule() {
-  try {
+  {
     const now = new Date()
 
     // 1) Latest schedule row that is active as of "now"
@@ -998,149 +1017,66 @@ async function updateWinballGrandPrizeFromSchedule() {
         }
       })
     }
-  } catch (e) {
-    // swallow in cron context
   }
 }
 
 async function runTournamentCron() {
-  try {
-    await runTournamentScheduler(prisma)
-  } catch (e) {
-    // ignore in cron context
-  }
+  await runTournamentScheduler(prisma)
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Kickoffs
-//
-// AuctionOnly go-live (startDueAuctions) is registered and kicked off first,
-// and deliberately NOT top-level-awaited: every call below it in this file
-// hits Discord's API with no fetch timeout, so a slow/hanging response from
-// any one of them (e.g. syncGuildMembers, which paginates the full guild
-// member list) would otherwise block this script from ever reaching the
-// `cron.schedule('1 * * * *', startDueAuctions)` line — silently preventing
-// scheduled auctions from ever going live, even though nothing crashed.
-cron.schedule('1 * * * *', () => runJob('startDueAuctions', startDueAuctions))  // hourly at minute 1
-runJob('startDueAuctions', startDueAuctions)
-
-await runJob('syncGuildMembers', syncGuildMembers)
-cron.schedule('0 0 * * *', () => runJob('syncGuildMembers', syncGuildMembers))  // daily midnight
-
-await runJob('sendDueAnnouncements', sendDueAnnouncements)
-cron.schedule('*/5 * * * *', () => runJob('sendDueAnnouncements', sendDueAnnouncements))
-
-await runJob('markScheduledPacksInCmart', markScheduledPacksInCmart)
-cron.schedule('0 * * * *', () => runJob('markScheduledPacksInCmart', markScheduledPacksInCmart))
-
-await runJob('recordDailyActivity', recordDailyActivity)
-await runJob('syncVerifiedRoles', syncVerifiedRoles)
-cron.schedule('30 2 * * *', () => runJob('recordDailyActivity', recordDailyActivity), { timezone: 'America/Chicago' }) // 02:30 CST daily
-cron.schedule('35 2 * * *', () => runJob('syncVerifiedRoles', syncVerifiedRoles), { timezone: 'America/Chicago' }) // 02:35 CST daily
-
-// cMoon: grant Discord role flair to newly-selected members. There is no more time-based
-// auto-assignment — players either pick a cMoon or explicitly opt out (see
-// server/utils/cmoon.js selectCMoonForUser/optOutOfCMoonSelection) — so this job only ever
-// needs to sync roles for whoever has actually joined. Off by default via
-// GlobalGameConfig.cMoonEnabled — no-ops immediately when disabled.
-await runJob('syncCMoonDiscordRoles', syncCMoonDiscordRoles)
-cron.schedule('45 2 * * *', () => runJob('syncCMoonDiscordRoles', syncCMoonDiscordRoles), { timezone: 'America/Chicago' }) // 02:45 CST daily
-
-// cMoon team leaderboard: record which cMoon members completed at least one daily task
-// (awarding DAILY_TASK points live off each newly-detected completion — see
-// recordDailyTaskCompletions in server/utils/cmoon.js), plus a once-daily admin-adjustable pass
-// that rolls current game-leaderboard standings into each cMoon's team score. Both no-op
-// immediately when GlobalGameConfig.cMoonEnabled is off. The completion check runs every 30
-// minutes rather than once a day: with the underlying daily tasks resetting at two different
-// times (8pm Chicago for most, 8am for Winwheel/Lotto/monster scans; see
-// server/utils/dailyTaskWindows.js), a wide gap here used to just mean a delayed detection
-// window, but now that a completion is awarded live the moment it's detected, this interval is
-// how quickly a player's rank bar actually reflects it — 30 minutes rather than every minute to
-// keep the query load this adds on the shared connection pool low; the exact interval doesn't
-// affect correctness, only how promptly a completion shows up (see the DST-safe window-end
-// bounding in recordDailyTaskCompletions, which does not depend on how often this runs). Each
-// run's own query is cheap/indexed (scoped to "since the current day/morning boundary"), and it's
-// already lease-guarded against overlap (see runRecordDailyTaskCompletions) — re-checking an
-// already-recorded day is a no-op (UserDailyTaskCompletion is unique on userId+date).
-cron.schedule('*/30 * * * *', () => runJob('recordDailyTaskCompletions', runRecordDailyTaskCompletions), { timezone: 'America/Chicago' }) // every 30 minutes
-// Admin-adjustable run time (GlobalGameConfig.cMoonScoringRunHour/Minute, default 00:00 CST) —
-// checked every 5 minutes rather than cron-scheduled at a fixed time, since that time can change
-// at runtime without a server restart. See checkAndRunCMoonDailyScoring's own comment for the
-// early-exit/locking that keeps this cheap and race-free.
-cron.schedule('*/5 * * * *', () => runJob('cmoonDailyScoreCheck', checkAndRunCMoonDailyScoring), { timezone: 'America/Chicago' })
-
-await runJob('recomputeLastActivity', recomputeLastActivity)
-cron.schedule('0 4 * * *', () => runJob('recomputeLastActivity', recomputeLastActivity), { timezone: 'America/Chicago' })  // 04:00 CST daily
-
-await runJob('sendInactivityWarnings', sendInactivityWarnings)
-cron.schedule('0 3 * * *', () => runJob('sendInactivityWarnings', sendInactivityWarnings))    // 03:00 daily
-
-await runJob('updateWinballGrandPrizeFromSchedule', updateWinballGrandPrizeFromSchedule)
-cron.schedule('0 * * * *', () => runJob('updateWinballGrandPrizeFromSchedule', updateWinballGrandPrizeFromSchedule))  // hourly at minute 0
-
-await runJob('enforceDormantAccounts', enforceDormantAccounts)
-cron.schedule('0 4 * * *', () => runJob('enforceDormantAccounts', enforceDormantAccounts))    // 04:00 daily
 
 // Sync Wordle daily crown results from Discord
 async function syncWordleResultsDaily() {
-  try {
-    await syncWordleResults()
-  } catch (e) {
-    console.error('[wordle-cron] Error during Wordle sync:', e?.message)
-    await logCronError('syncWordleResultsDaily', e)
-  }
+  await syncWordleResults()
 }
 
-// Enqueue daily achievements processing at 03:00 CST
+// Enqueue daily achievements processing (03:00 America/Chicago). One bulk, de-duplicated add
+// (see enqueueAchievementChecks in server/utils/queues.js) instead of one awaited round trip per
+// user; a user who already has a check waiting from the cMoon aggregate isn't queued twice.
 async function enqueueAchievementsDaily() {
-  try {
-    const users = await prisma.user.findMany({ where: { active: true, banned: false }, select: { id: true } })
-    for (const u of users) {
-      await achievementsQueue.add('processUserAchievements', { userId: u.id })
-    }
-  } catch (e) {
-    await logCronError('enqueueAchievementsDaily', e)
-  }
+  const users = await prisma.user.findMany({ where: { active: true, banned: false }, select: { id: true } })
+  await enqueueAchievementChecks(users.map(u => u.id))
+  return { enqueued: users.length }
 }
 
-// await enqueueAchievementsDaily()
-cron.schedule('0 3 * * *', () => runJob('enqueueAchievementsDaily', enqueueAchievementsDaily), { timezone: 'America/Chicago' })
+// Deletes old CronRunLog rows (see server/cron/runLogger.js). Lives here so it runs through the
+// same maintenance scheduler as everything else.
+async function pruneCronRunLogs() {
+  return pruneCronLogs()
+}
 
-// Sync Wordle results at 10:00 CST daily (after the bot's morning post)
-await runJob('syncWordleResultsDaily', syncWordleResultsDaily)
-cron.schedule('0 10 * * *', () => runJob('syncWordleResultsDaily', syncWordleResultsDaily), { timezone: 'America/Chicago' })
+// job name -> handler. Names must match server/cron/jobs.js exactly (enforced by
+// tests/cronJobsRegistry.test.js).
+export const JOB_HANDLERS = {
+  startDueAuctions,
+  sendDueAnnouncements,
+  markScheduledPacksInCmart,
+  updateWinballGrandPrizeFromSchedule,
+  runTournamentCron,
+  recordDailyTaskCompletions: runRecordDailyTaskCompletions,
+  cmoonDailyScoreCheck: checkAndRunCMoonDailyScoring,
+  checkAndCreateWeeklyCZoneContest,
+  checkAndPostWeeklyRiddle,
+  reconcileHolidayRedemptions,
+  enqueueAchievementsDaily,
+  runCMoonPointsAggregate,
+  syncGuildMembers,
+  recordDailyActivity,
+  syncVerifiedRoles,
+  syncCMoonDiscordRoles,
+  sendInactivityWarnings,
+  recomputeLastActivity,
+  enforceDormantAccounts,
+  syncWordleResultsDaily,
+  runEconomyAggregate,
+  runCzoneDisplayCountAggregate,
+  pruneCronRunLogs,
+}
 
-
-await runJob('runTournamentCron', runTournamentCron)
-cron.schedule('*/15 * * * *', () => runJob('runTournamentCron', runTournamentCron))
-
-// Weekly cZone contest auto-creation — runs every minute and checks if it's time
-cron.schedule('* * * * *', () => runJob('checkAndCreateWeeklyCZoneContest', checkAndCreateWeeklyCZoneContest), { timezone: 'America/Chicago' })
-
-// Weekly cMoon riddle auto-posting — same "runs every minute and checks if it's time" shape
-cron.schedule('* * * * *', () => runJob('checkAndPostWeeklyRiddle', checkAndPostWeeklyRiddle), { timezone: 'America/Chicago' })
-
-// Economy page daily price/volume aggregation — offset from the 3am achievements
-// run to avoid overlapping load on Auction/UserCtoon tables. Also kicked off once
-// on startup (advisory-lock + cursor guarded) so a fresh deploy doesn't wait until
-// 4:10am for data. Deliberately not awaited: the first run backfills all history
-// and must not delay registering the schedules below.
-//
-// Belt-and-suspenders only: server/utils/economyFreshness.js already triggers
-// this same aggregation on demand (Redis-gated) from the Economy API routes
-// themselves, so the page stays fresh even if this worker process isn't
-// running. This schedule just keeps data warm proactively when it is.
-runJob('runEconomyAggregate', runEconomyAggregate)
-cron.schedule('10 4 * * *', () => runJob('runEconomyAggregate', runEconomyAggregate), { timezone: 'America/Chicago' })
-
-await runJob('runCzoneDisplayCountAggregate', runCzoneDisplayCountAggregate)
-cron.schedule('0 5 * * *', () => runJob('runCzoneDisplayCountAggregate', runCzoneDisplayCountAggregate), { timezone: 'America/Chicago' })  // 05:00 CST daily
-
-await runJob('runCMoonPointsAggregate', runCMoonPointsAggregate)
-// */45 fires at :00 and :45 past every hour (a step field can't land on genuinely even
-// 45-minute marks, since those drift across the hour boundary) — an uneven 45-then-15-minute
-// gap, not a flat 45-minute one, but the worst case is still capped at 45 minutes and this halves
-// the run count from the previous */15 schedule, which is all this change needs.
-cron.schedule('*/45 * * * *', () => runJob('runCMoonPointsAggregate', runCMoonPointsAggregate))
-
-cron.schedule('*/5 * * * *', () => runJob('reconcileHolidayRedemptions', reconcileHolidayRedemptions))  // every 5 minutes
+// Handlers for the exact-time delayed jobs (server/utils/queues.js scheduledEventsQueue). Each one
+// just re-runs the matching idempotent sweep, so a stale/duplicate job can't do harm.
+export const SCHEDULED_EVENT_HANDLERS = {
+  packOn: (data) => togglePacks(data?.packId ? String(data.packId) : null),
+  packOff: (data) => togglePacks(data?.packId ? String(data.packId) : null),
+  auctionOnlyStart: () => startDueAuctions(),
+  announcementSend: () => sendDueAnnouncements(),
+}

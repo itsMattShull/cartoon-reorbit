@@ -18,7 +18,8 @@
  *   worker-dissolve-auction-launch – BullMQ worker: dissolve auction launch
  *   worker-achieve                – BullMQ worker: daily achievements
  *   worker-content-analyzer       – BullMQ worker: survey content analysis
- *   guild-checker                 – Cron: Discord guild member sync
+ *   cron-critical                 – BullMQ job schedulers: time-critical cron jobs + exact-time delayed jobs
+ *   cron-maintenance              – BullMQ job schedulers: heavy/slow cron jobs, one at a time
  *
  * Workers run as single fork-mode instances to prevent double-processing of jobs.
  */
@@ -202,8 +203,8 @@ module.exports = {
       script:    'server/workers/achievements.worker.js',
       exec_mode: 'fork',
       instances: 1,
-      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
-      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD, PRISMA_POOL_SIZE: process.env.ACHIEVEMENTS_POOL_SIZE || '10' },
+      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV, PRISMA_POOL_SIZE: process.env.ACHIEVEMENTS_POOL_SIZE || '10' },
     },
 
     // ── BullMQ worker: survey content analysis ─────────────────────────────
@@ -246,14 +247,32 @@ module.exports = {
       env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
-    // ── Cron: Discord guild member sync ───────────────────────────────────
+    // ── Cron: time-critical scheduler ─────────────────────────────────────
+    // Packs going live, AuctionOnly go-live, announcements, tournaments, cMoon scoring, the daily
+    // achievements enqueue, plus the exact-time delayed-job worker (pack on/off, AuctionOnly start,
+    // announcements). Cheap jobs only — nothing here may block behind the maintenance work below.
+    // See server/cron/scheduler.js and server/cron/jobs.js.
     {
-      name:      'guild-checker',
-      script:    'server/cron/sync-guild-members.js',
+      name:      'cron-critical',
+      script:    'server/cron/scheduler.js',
+      args:      'critical',
       exec_mode: 'fork',
       instances: 1,
-      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
-      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD, PRISMA_POOL_SIZE: process.env.CRON_CRITICAL_POOL_SIZE || '8' },
+      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV,  PRISMA_POOL_SIZE: process.env.CRON_CRITICAL_POOL_SIZE || '8' },
+    },
+
+    // ── Cron: heavy maintenance scheduler ─────────────────────────────────
+    // Discord guild/role syncs, inactivity sweeps, full-table recomputes and aggregates. One job at
+    // a time on purpose, with a small DB pool so it can't crowd out the site.
+    {
+      name:      'cron-maintenance',
+      script:    'server/cron/scheduler.js',
+      args:      'maintenance',
+      exec_mode: 'fork',
+      instances: 1,
+      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD, PRISMA_POOL_SIZE: process.env.CRON_MAINTENANCE_POOL_SIZE || '5' },
+      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV,  PRISMA_POOL_SIZE: process.env.CRON_MAINTENANCE_POOL_SIZE || '5' },
     },
   ],
 }

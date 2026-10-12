@@ -104,6 +104,8 @@ export const ADMIN_SECTIONS = [
 
   // ── Logs ────────────────────────────────────────────────────
   S('errorLogs', 'Error Logs', 'logs', nu('AdminErrorLogs')),
+  S('cronRunLogs', 'Cron Run Logs', 'logs', nu('AdminCronRunLogs')),
+  S('queueMonitor', 'Queue Monitor', 'logs', nu('AdminQueueMonitor')),
   S('authLogs', 'Auth Logs', 'logs', nu('AdminAuthLogs')),
   S('tradeLogs', 'Trade Logs', 'logs', nu('AdminTradeLogs')),
   S('touchTrades', 'Track Touch Trades', 'logs', nu('AdminTouchTrades')),

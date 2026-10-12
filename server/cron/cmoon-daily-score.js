@@ -1,7 +1,7 @@
 // server/cron/cmoon-daily-score.js
 // Thin entrypoint: the actual scoring logic lives in server/utils/cmoon.js so every cMoon-scoring
 // concern stays in one file (see that file's header comment on why). Scheduled frequently
-// (server/cron/sync-guild-members.js runs checkAndRunCMoonDailyScoring every 5 minutes) rather
+// (server/cron/jobHandlers.js runs checkAndRunCMoonDailyScoring every 5 minutes) rather
 // than at a single fixed cron time, since the run time itself is now admin-adjustable
 // (GlobalGameConfig.cMoonScoringRunHour/Minute, Admin > cMoons > Scoring Rules) instead of a
 // hardcoded "Monday 02:50 CST" — this checker just fires the real job the first tick on-or-after
@@ -35,7 +35,7 @@ export async function checkAndRunCMoonDailyScoring() {
   const [{ locked }] = await prisma.$queryRaw`SELECT pg_try_advisory_lock(${LOCK_KEY}::bigint) AS locked`
   if (!locked) {
     console.log('[cmoon-daily-score] another run already holds the lock, skipping')
-    return
+    return { skipped: true, reason: 'advisory lock held by another run' }
   }
   try {
     // Re-read + re-check INSIDE the lock: the outside-lock check above is only an optimization
@@ -54,6 +54,7 @@ export async function checkAndRunCMoonDailyScoring() {
       data: { cMoonScoringLastRunDate: today },
     })
     invalidateGlobalConfigCache()
+    return { awarded }
   } finally {
     await prisma.$queryRaw`SELECT pg_advisory_unlock(${LOCK_KEY}::bigint)`
   }
