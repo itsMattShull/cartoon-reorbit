@@ -33,13 +33,14 @@ import { deriveGoalColor, slotsForRound } from './ogGtoonEngine.js'
 import {
   publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd,
   placeCard, unplaceSlot, checkCommit, checkSwap, recordSwapChoice, resolveSwapPhase, expirePhase,
-  submitDiscard, resolveDiscardPhase, markCommitted
+  submitDiscard, resolveDiscardPhase, markCommitted, extendDeadlineForReveal
 } from './ogGtoonMatchCore.js'
 import {
   BOT_ID, BOT_USERNAME, buildBotDeck, chooseBotPlacements, chooseBotDiscards, chooseBotSwap,
   botCommitDelayMs, normalizeDifficulty
 } from './ogGtoonBot.js'
 import { markPracticing, clearPracticing, isInPvp } from './ogGtoonPresence.js'
+
 
 const EV = (name) => `oggtoons:practice:${name}`
 // Outbound render events deliberately reuse PvP's names so the existing client handlers and
@@ -154,21 +155,25 @@ async function resolveRound(io, match, deps) {
   if (!match.ready[0] || !match.ready[1]) return
 
   const revealedRound = match.currentRound
-  const { entries, order } = revealPlacedCards(match)
-  concludeStep(io, match, deps, revealedRound, entries, order)
+  const { entries, order, steps, before } = revealPlacedCards(match)
+  concludeStep(io, match, deps, revealedRound, entries, order, { steps, before })
 }
 
 /** Shared tail of a step that puts cards on the board: end the match or advance a phase. */
-function concludeStep(io, match, deps, revealedRound, entries, order) {
+function concludeStep(io, match, deps, revealedRound, entries, order, { steps = [], before = null } = {}) {
   match.lastActivity = Date.now()
 
   const end = checkMatchEnd(match)
   // Advance before emitting so the state the client receives already carries the NEXT round and
   // phase; otherwise its next action would send a stale round and be silently dropped.
-  if (!end) advanceRound(match)
+  if (!end) {
+    advanceRound(match)
+    // The cards reveal one at a time on the client; keep that animation off the next phase's clock.
+    extendDeadlineForReveal(match, steps)
+  }
   emitToHuman(io, match, OUT('reveal'), {
     ...publicMatchView(match, match.humanId),
-    reveal: { round: revealedRound, order, you: entries[0], opponent: entries[1] }
+    reveal: { round: revealedRound, order, you: entries[0], opponent: entries[1], steps, before }
   })
 
   if (end) {
@@ -191,7 +196,7 @@ async function settleSwap(io, match, deps) {
   if (match.ending) return
   const res = resolveSwapPhase(match, deps.rng)
   if (!res) return
-  concludeStep(io, match, deps, match.currentRound, res.entries, res.order)
+  concludeStep(io, match, deps, match.currentRound, res.entries, res.order, { steps: res.steps, before: res.before })
 }
 
 /* ── Phase clock ─────────────────────────────────────────────────────────────────────────────

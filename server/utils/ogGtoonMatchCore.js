@@ -21,6 +21,7 @@
 // See ogGtoonEngine.js's header for the hand/slot rules.
 
 import { sanitizeGtoonCardStyle } from '../../utils/gtoonCardStyle.js'
+import { revealDurationMs } from '../../utils/ogGtoonReveal.js'
 import { resolveFinalBoard } from './ogGtoonEffects.js'
 import {
   determineWinner, hasSuddenDeathCardsRemaining, dealOpeningHand, discardAndDeal,
@@ -203,6 +204,9 @@ export function publicMatchView(match, uid, opts = {}) {
     phase: match.phase || 'play',
     phaseEndsAt: match.deadline || null,
     ...(opts.log === false ? {} : { gameLog: match.gameLog || [] }),
+    // The latest resolved board ({ cards:[{side,slot,finalValue,color,cancelled}], totals, markers }), so values
+    // stay correct between rounds / after a reconnect. null until the first card has been revealed.
+    board: match.liveBoard || null,
     // Slots the current round may fill, and how many cards may go in them.
     roundSlots: slots,
     // Only present on practice matches, so PvP payloads are unchanged.
@@ -394,7 +398,7 @@ export function resolveSwapPhase(match, rng = Math.random) {
   match.swapReady = [false, false]
   match.phase = 'play' // the caller either ends the match or advances into sudden death
   const order = [...new Set([...entries[0], ...entries[1]].map(e => e.slot))].sort((a, b) => a - b)
-  return { entries, order }
+  return { entries, order, ...buildRevealSteps(match, entries) }
 }
 
 /**
@@ -471,9 +475,9 @@ function playableCards(match, idx) {
 }
 
 /** Builds the { revealed, goalCard } shape resolveFinalBoard expects for one side of the match. */
-export function finalBoardInputFor(match, idx) {
+export function finalBoardInputFor(match, idx, entries = match.revealed[idx]) {
   return {
-    revealed: match.revealed[idx].map(r => ({
+    revealed: entries.map(r => ({
       // The PRINTED color: `color` is overwritten with the resolved one after each speculative
       // pass, and the next pass must start from the card as printed, not from its last result.
       ctoonId: r.ctoonId, name: r.name, characters: r.characters, color: r.baseColor ?? r.color, value: r.baseValue,
@@ -539,6 +543,91 @@ function toRevealEntry(card, round, slot, deckIdx) {
   }
 }
 
+/* ── One-card-at-a-time reveal ──────────────────────────────────────────────────────────────
+ * A round is still resolved in one server step, but the board is also resolved after EACH card lands —
+ * player 1's slot-n card, then player 2's slot-n card, then player 1's slot-(n+1) card, ... — with the
+ * very same full-board pass used for final scoring, run over only the cards revealed so far. The
+ * clients play those snapshots back so players watch totals, values, colors and knock-outs update card
+ * by card. The last snapshot always equals the real board, and final scoring is still decided by
+ * `runFinalBoardResolution`, so this is presentation of the same rules, never a different outcome. */
+
+/** The resolved board with every entry in `hidden` left off. */
+function snapshotBoard(match, hidden) {
+  const kept = [0, 1].map(i => match.revealed[i].filter(r => !hidden.has(r)))
+  let final = null
+  try {
+    final = resolveFinalBoard({
+      player1: finalBoardInputFor(match, 0, kept[0]),
+      player2: finalBoardInputFor(match, 1, kept[1])
+    })
+  } catch (err) {
+    console.error(`[ogGtoons] reveal-step resolution failed for match ${match.id}:`, err)
+  }
+  const cards = []
+  const totals = [0, 0]
+  for (const i of [0, 1]) {
+    const resolved = final ? final[i === 0 ? 'player1' : 'player2'].revealed : null
+    kept[i].forEach((e, k) => {
+      const r = resolved ? resolved[k] : null
+      const finalValue = r ? r.finalValue : e.baseValue
+      cards.push({ side: i, slot: e.slot, finalValue, color: r ? r.color : (e.baseColor ?? e.color), cancelled: !!(r && r.cancelled) })
+      totals[i] += finalValue || 0
+    })
+  }
+  let markers = []
+  if (final) {
+    try { markers = describeBoard(match, final).markers } catch { markers = [] }
+  }
+  return { cards, totals, markers }
+}
+
+/** Did landing `entry` (on `side`) change anything beyond the card simply appearing at its printed state? */
+function boardChanged(prev, next, side, entry) {
+  const key = (c) => `${c.side}:${c.slot}`
+  const was = new Map(prev.cards.map(c => [key(c), c]))
+  const landedKey = `${side}:${entry.slot}`
+  for (const c of next.cards) {
+    if (key(c) === landedKey) {
+      // The new card itself: it counts if powers already moved it off its printed value/color or knocked it out.
+      if (c.cancelled || c.finalValue !== entry.baseValue || c.color !== (entry.baseColor ?? entry.color)) return true
+      continue
+    }
+    const old = was.get(key(c))
+    if (old && (old.finalValue !== c.finalValue || old.color !== c.color || old.cancelled !== c.cancelled)) return true
+  }
+  return next.markers.length !== prev.markers.length
+}
+
+/**
+ * Builds the ordered reveal steps for a batch of just-placed entries (`entries` = [side0, side1]),
+ * and leaves the live board showing the final snapshot. Returns { steps, before }: `before` is the
+ * board as it stood with the whole batch still face down.
+ */
+export function buildRevealSteps(match, entries) {
+  const seq = [
+    ...entries[0].map(e => ({ side: 0, e })),
+    ...entries[1].map(e => ({ side: 1, e }))
+  ].sort((a, b) => a.e.slot - b.e.slot || a.side - b.side)
+  const hidden = new Set(seq.map(x => x.e))
+  const before = snapshotBoard(match, hidden)
+  let prev = before
+  const steps = []
+  for (const { side, e } of seq) {
+    hidden.delete(e)
+    const snap = snapshotBoard(match, hidden)
+    steps.push({
+      side, slot: e.slot, round: e.round, ctoonId: e.ctoonId, name: e.name,
+      baseValue: e.baseValue, baseColor: e.baseColor ?? e.color,
+      ...snap, changed: boardChanged(prev, snap, side, e)
+    })
+    prev = snap
+  }
+  // Remember the latest resolved board for the public view. Deliberately NOT written onto the revealed
+  // entries: their finalValue/color belong to the final scoring pass alone (previews never mutate them).
+  match.liveBoard = prev
+  return { steps, before }
+}
+
 /**
  * Reveals every placed card for the round, in slot order, appending to `match.revealed` (kept
  * sorted by slot), removing them from each hand and clearing both ready flags and placements.
@@ -568,8 +657,8 @@ export function revealPlacedCards(match) {
     sections: [{ label: null, lines: order.map(slot =>
       `Slot ${slot}: ${nameOfSide(match, 0)} ${show(entries[0].find(e => e.slot === slot))}  vs  ${nameOfSide(match, 1)} ${show(entries[1].find(e => e.slot === slot))}`) }]
   })
-  if (match.currentRound <= SWAP_AFTER_ROUND) logPreview(match)
-  return { entries, order }
+  if (match.currentRound < TOTAL_ROUNDS) logPreview(match)
+  return { entries, order, ...buildRevealSteps(match, entries) }
 }
 
 /**
@@ -623,6 +712,14 @@ export function advanceRound(match) {
     }
   }
   startPhaseClock(match)
+}
+
+/**
+ * The clients play a reveal back one card at a time. Call this right after advanceRound() so the next
+ * phase's clock starts once that animation is over instead of losing seconds to it.
+ */
+export function extendDeadlineForReveal(match, steps) {
+  if (match.deadline) match.deadline += revealDurationMs(steps)
 }
 
 /**

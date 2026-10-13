@@ -14,6 +14,7 @@ import {
 } from '../server/utils/ogGtoonMatchCore.js'
 import { registerOgGtoonsPractice, hasLivePracticeMatch } from '../server/utils/ogGtoonsPractice.js'
 import { isPracticing } from '../server/utils/ogGtoonPresence.js'
+import { revealDurationMs } from '../utils/ogGtoonReveal.js'
 
 const COLORS = ['RED', 'BLUE', 'GREEN', 'YELLOW', 'PURPLE', 'ORANGE', 'PINK', 'RED', 'BLUE', 'GREEN', 'BLACK', 'SILVER']
 function makeDeck({ goal = 'RED', values } = {}) {
@@ -873,10 +874,14 @@ test('practice: when each phase times out the server plays the default and the m
   assert.equal(rev.reveal.round, 1)
   assert.deepEqual(rev.reveal.you.map(e => e.slot), [1, 2, 3, 4])
   assert.equal(rev.phase, 'discard')
-  assert.equal(rev.phaseEndsAt - Date.now(), DISCARD_MS)
+  // The cards reveal one at a time on the client, so the next phase's clock starts after that animation.
+  assert.ok(rev.reveal.steps.length > 0)
+  const round1Reveal = revealDurationMs(rev.reveal.steps)
+  assert.ok(round1Reveal > 0)
+  assert.equal(rev.phaseEndsAt - Date.now(), DISCARD_MS + round1Reveal)
 
   // Discard phase: timing out keeps the hand and opens round 2 with a fresh placing clock.
-  t.mock.timers.tick(DISCARD_MS); await settle()
+  t.mock.timers.tick(DISCARD_MS + round1Reveal); await settle()
   let v = latestView(h)
   assert.equal(v.phase, 'play')
   assert.equal(v.round, 2)
@@ -890,10 +895,11 @@ test('practice: when each phase times out the server plays the default and the m
   assert.equal(rev.reveal.round, 2)
   assert.deepEqual(rev.reveal.you.map(e => e.slot), [5, 6, 7])
   assert.equal(rev.phase, 'swap')
-  assert.equal(rev.phaseEndsAt - Date.now(), SWAP_MS)
+  const round2Reveal = revealDurationMs(rev.reveal.steps)
+  assert.equal(rev.phaseEndsAt - Date.now(), SWAP_MS + round2Reveal)
 
   // Swap phase: timing out means no swap, and the board is scored.
-  t.mock.timers.tick(SWAP_MS); await settle()
+  t.mock.timers.tick(SWAP_MS + round2Reveal); await settle()
   rev = h.events('oggtoons:reveal').at(-1)
   assert.equal(rev.reveal.round, 3)
   assert.deepEqual(rev.reveal.order, [])

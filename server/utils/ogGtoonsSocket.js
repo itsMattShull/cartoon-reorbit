@@ -45,7 +45,7 @@ import { deriveGoalColor, SWAP_COST } from './ogGtoonEngine.js'
 import {
   publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd, buildRoundLog,
   placeCard, unplaceSlot, checkCommit, checkSwap, recordSwapChoice, resolveSwapPhase, expirePhase,
-  submitDiscard, resolveDiscardPhase, startPhaseClock, markCommitted, logAbnormalEnd
+  submitDiscard, resolveDiscardPhase, startPhaseClock, markCommitted, logAbnormalEnd, extendDeadlineForReveal
 } from './ogGtoonMatchCore.js'
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
 import { isPracticing, registerPvpProbe } from './ogGtoonPresence.js'
@@ -218,8 +218,8 @@ async function resolveRound(io, match) {
   if (!match.ready[0] || !match.ready[1]) return
 
   const revealedRound = match.currentRound
-  const { entries, order } = revealPlacedCards(match)
-  await concludeStep(io, match, revealedRound, entries, order)
+  const { entries, order, steps, before } = revealPlacedCards(match)
+  await concludeStep(io, match, revealedRound, entries, order, { steps, before })
 }
 
 /**
@@ -227,13 +227,17 @@ async function resolveRound(io, match) {
  * decide whether the match is over, otherwise advance into the next phase, tell both players, and
  * start the next phase's clock.
  */
-async function concludeStep(io, match, revealedRound, entries, order) {
+async function concludeStep(io, match, revealedRound, entries, order, { steps = [], before = null } = {}) {
   match.lastActivity = Date.now()
 
   const end = checkMatchEnd(match)
   // Advance before emitting so the state each client receives already carries the NEXT round
   // and phase (round 2 opens with the discard phase) — an action sent for a stale round is dropped.
-  if (!end) advanceRound(match)
+  if (!end) {
+    advanceRound(match)
+    // The cards reveal one at a time on the clients; don't let that animation eat into the next phase's clock.
+    extendDeadlineForReveal(match, steps)
+  }
 
   emitToPlayers(io, match, EV('reveal'), (uid, i) => ({
     ...publicMatchView(match, uid),
@@ -241,7 +245,10 @@ async function concludeStep(io, match, revealedRound, entries, order) {
       round: revealedRound,
       order,
       you: entries[i],
-      opponent: entries[i === 0 ? 1 : 0]
+      opponent: entries[i === 0 ? 1 : 0],
+      // One card at a time: player 1's slot 1, player 2's slot 1, player 1's slot 2, ... (see ogGtoonMatchCore.buildRevealSteps)
+      steps,
+      before
     }
   }))
 
@@ -268,7 +275,7 @@ async function settleSwap(io, match) {
   if (match.ending) return
   const res = resolveSwapPhase(match, secureRng)
   if (!res) return
-  await concludeStep(io, match, match.currentRound, res.entries, res.order)
+  await concludeStep(io, match, match.currentRound, res.entries, res.order, { steps: res.steps, before: res.before })
 }
 
 /* ── Phase clock ─────────────────────────────────────────────────────────────────────────────
