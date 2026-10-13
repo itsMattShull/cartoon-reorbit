@@ -118,12 +118,17 @@ onMounted(async () => {
   ro.observe(host.value)
   applyAppearance()
   await setCardColor(c, props.color, { animate: false })
+  // Start honouring prop changes now, not after the reveal: data that arrives while the card is powering on
+  // (e.g. the properties dialog fetching the printed values) must not be dropped.
+  mounted = true
+  // ...and pick up anything that changed while the awaits above were pending.
+  applyAppearance()
+  setCardColor(c, props.color, { animate: false })
   if (isFull.value) {
     await revealFlow()
   } else {
     renderCardStatic(c)
   }
-  mounted = true
 })
 
 onBeforeUnmount(() => {

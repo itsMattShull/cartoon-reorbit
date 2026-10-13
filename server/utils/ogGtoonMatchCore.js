@@ -216,7 +216,7 @@ export function publicMatchView(match, uid, opts = {}) {
       userId: uid,
       username: match.usernames[meIdx],
       goalColor: match.goalColor[meIdx],
-      goalCard: { name: match.deckOrder[meIdx][11].name, assetPath: match.deckOrder[meIdx][11].assetPath, color: match.deckOrder[meIdx][11].color, cardStyle: match.deckOrder[meIdx][11].cardStyle, value: match.deckOrder[meIdx][11].value },
+      goalCard: { ctoonId: match.deckOrder[meIdx][11].ctoonId, name: match.deckOrder[meIdx][11].name, assetPath: match.deckOrder[meIdx][11].assetPath, color: match.deckOrder[meIdx][11].color, cardStyle: match.deckOrder[meIdx][11].cardStyle, value: match.deckOrder[meIdx][11].value },
       swapUsed: match.swapUsed[meIdx],
       stake: match.stake[meIdx],
       revealed: match.revealed[meIdx],
@@ -233,7 +233,7 @@ export function publicMatchView(match, uid, opts = {}) {
     opponent: {
       username: match.usernames[oppIdx],
       goalColor: match.goalColor[oppIdx],
-      goalCard: { name: match.deckOrder[oppIdx][11].name, assetPath: match.deckOrder[oppIdx][11].assetPath, color: match.deckOrder[oppIdx][11].color, cardStyle: match.deckOrder[oppIdx][11].cardStyle, value: match.deckOrder[oppIdx][11].value },
+      goalCard: { ctoonId: match.deckOrder[oppIdx][11].ctoonId, name: match.deckOrder[oppIdx][11].name, assetPath: match.deckOrder[oppIdx][11].assetPath, color: match.deckOrder[oppIdx][11].color, cardStyle: match.deckOrder[oppIdx][11].cardStyle, value: match.deckOrder[oppIdx][11].value },
       swapUsed: match.swapUsed[oppIdx],
       revealed: match.revealed[oppIdx],
       handCount: (match.hand?.[oppIdx] || []).length,

@@ -38,7 +38,7 @@
         <!-- Your side -->
         <div class="flex-1 flex flex-col items-center gap-2">
           <div class="flex items-center gap-2">
-            <div v-if="matchState.you.goalCard" class="h-10 w-10 flex-shrink-0 rounded-full border border-amber-400" :title="matchState.you.goalCard.name">
+            <div v-if="matchState.you.goalCard" class="og-goal h-10 w-10 flex-shrink-0 rounded-full border border-amber-400" v-on="goalGesture('you').events" @click.capture="goalGesture('you').clickCapture">
               <GtoonCard :image-url="matchState.you.goalCard.assetPath" :value="matchState.you.goalCard.value ?? 0" :color="matchState.you.goalCard.color || 'SILVER'" :card-style="matchState.you.goalCard.cardStyle" :alt="matchState.you.goalCard.name" effects="static" />
             </div>
             <span class="text-xs text-gray-300">Goal: {{ matchState.you.goalColor }}</span>
@@ -113,7 +113,7 @@
         <!-- Opponent side -->
         <div class="flex-1 flex flex-col items-center gap-2">
           <div class="flex items-center gap-2">
-            <div v-if="matchState.opponent.goalCard" class="h-10 w-10 flex-shrink-0 rounded-full border border-amber-400" :title="matchState.opponent.goalCard.name">
+            <div v-if="matchState.opponent.goalCard" class="og-goal h-10 w-10 flex-shrink-0 rounded-full border border-amber-400" v-on="goalGesture('opponent').events" @click.capture="goalGesture('opponent').clickCapture">
               <GtoonCard :image-url="matchState.opponent.goalCard.assetPath" :value="matchState.opponent.goalCard.value ?? 0" :color="matchState.opponent.goalCard.color || 'SILVER'" :card-style="matchState.opponent.goalCard.cardStyle" :alt="matchState.opponent.goalCard.name" effects="static" />
             </div>
             <span class="text-xs text-gray-300">Goal: {{ matchState.opponent.goalColor }}</span>
@@ -194,6 +194,9 @@
         </div>
       </transition>
     </template>
+
+    <!-- Printed properties of a card (right-click / long-press) -->
+    <OgGtoonInfoModal />
   </div>
 </template>
 
@@ -202,10 +205,23 @@ import { computed, ref, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 import OgGtoonCardTile from '@/components/OgGtoonCardTile.vue'
 import GtoonCard from '@/components/GtoonCard.vue'
+import OgGtoonInfoModal from '@/components/oggtoons/OgGtoonInfoModal.vue'
+import { useOgGtoonInfo } from '@/composables/useOgGtoonInfo'
 import { normalizeRevealTiming } from '@/utils/ogGtoonReveal'
 import OgGtoonGameLog from '@/components/OgGtoonGameLog.vue'
 
 defineEmits(['exit'])
+
+// Right-click / long-press a goal card for its printed properties (board and hand tiles do the same themselves).
+const { inspectGesture } = useOgGtoonInfo()
+const goalGestures = {}
+function goalGesture(who) {
+  if (!goalGestures[who]) {
+    const { clickCapture, ...events } = inspectGesture(() => matchState.value?.[who]?.goalCard || null)
+    goalGestures[who] = { events, clickCapture }
+  }
+  return goalGestures[who]
+}
 
 const { matchState, lastReveal, matchEnded, lastError, commit, place, unplace, swap, swapSkip, discard } = useOgGtoonsSocket()
 
@@ -520,6 +536,7 @@ watch(inSwapPhase, (on) => { if (!on) swapSheetOpen.value = false })
 </script>
 
 <style scoped>
+.og-goal { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .fade-enter-active, .fade-leave-active { transition: opacity .2s ease }
 .fade-enter-from, .fade-leave-to { opacity: 0 }
 .slide-up-enter-active, .slide-up-leave-active { transition: transform .25s ease }

@@ -1,17 +1,21 @@
 <!-- components/OgGtoonCardTile.vue -->
-<!-- One gToon card position on the original gToons board or in the hand: face up (art + value +
-     type badges), face down (card back), or an empty numbered slot. Purely presentational. -->
+<!-- One gToon card position on the original gToons board or in the hand: face up (the round gToon card), face
+     down (the same card's Noise "back" — never anything identifying), or an empty numbered slot.
+     The card and its effects are allowed to extend past the tile; nothing in here clips them.
+     Right-click (desktop) or long-press (touch) a face-up card to see its printed properties. -->
 <template>
   <div
-    class="relative rounded border-2 flex items-center justify-center overflow-hidden select-none transition-colors"
+    class="og-tile relative rounded border-2 flex items-center justify-center select-none transition-colors"
     :class="[sizeClass, ringClass]"
     style="container-type: size"
+    v-on="gestureEvents"
+    @click.capture="clickCapture"
   >
     <!-- Keyed on face so a face-down -> face-up change replays the flip animation. -->
-    <div v-if="card && !faceDown" :key="'face'" class="flip-in w-full h-full flex items-center justify-center bg-white/5" :class="{ 'opacity-40 grayscale': marker && marker.kind === 'knockedOut' }">
+    <div v-if="card && !faceDown" :key="'face'" class="flip-in w-full h-full flex items-center justify-center" :class="{ 'opacity-40 grayscale': marker && marker.kind === 'knockedOut' }">
       <!-- Round gToon card. Revealed board cards get the Noise→Signal reveal + saved one-shot FX and the
            UFO Color Sweep when their color changes mid-match; hand / not-yet-revealed cards are static. -->
-      <div class="aspect-square p-0.5 rounded-full" :class="bump" :style="{ width: 'min(100cqw, 100cqh)' }" :title="`${card.name} (${shownValue})`">
+      <div class="aspect-square p-0.5 rounded-full" :class="bump" :style="{ width: 'min(100cqw, 100cqh)' }">
         <GtoonCard
           :image-url="card.assetPath"
           :value="shownValue"
@@ -23,13 +27,13 @@
           :ambient="false"
         />
       </div>
-      <span v-if="markerInfo" class="absolute top-0 right-0 text-[8px] font-bold leading-none px-1 py-0.5 rounded-bl text-white" :class="markerInfo.cls" :title="markerInfo.title">{{ markerInfo.text }}</span>
-      <div v-if="badges.length" class="absolute bottom-0 inset-x-0 flex flex-wrap justify-center gap-0.5 px-0.5 pb-0.5">
-        <span v-for="b in badges" :key="b" class="text-[7px] leading-none px-1 py-0.5 rounded bg-black/60 text-gray-100">{{ b }}</span>
-      </div>
     </div>
-    <div v-else-if="faceDown" :key="'back'" class="card-back w-full h-full flex items-center justify-center">
-      <span class="text-white/80 font-extrabold text-sm tracking-tight">gT</span>
+    <!-- Face-down: the card's own Noise back. Deliberately given no art, value, color or look, so nothing
+         about a hidden card can be read from the DOM. -->
+    <div v-else-if="faceDown" :key="'back'" class="w-full h-full flex items-center justify-center">
+      <div class="aspect-square p-0.5" :style="{ width: 'min(100cqw, 100cqh)' }">
+        <GtoonCard mode="noise" effects="full" color="SILVER" alt="Face-down gToon" />
+      </div>
     </div>
     <span v-else class="text-[10px] text-gray-400">{{ label }}</span>
   </div>
@@ -38,6 +42,7 @@
 <script setup>
 import { computed, ref, watch } from 'vue'
 import GtoonCard from '@/components/GtoonCard.vue'
+import { useOgGtoonInfo } from '@/composables/useOgGtoonInfo'
 
 const props = defineProps({
   card: { type: Object, default: null },        // hand card ({ value }) or revealed entry ({ finalValue })
@@ -47,26 +52,14 @@ const props = defineProps({
   tone: { type: String, default: 'idle' },
   size: { type: String, default: 'slot' },      // 'slot' | 'hand'
   animate: { type: Boolean, default: true },    // false → always the static card (e.g. inside a dialog)
-  // What the game log says is happening to this card: { kind: 'knockedOut'|'cancelled'|'changed', from?, to? }
+  // What the game log says is happening to this card: { kind: 'knockedOut'|'cancelled'|'changed', from?, to? }.
+  // Only a knock-out is shown (as a faded card); there are no badges on the tile.
   marker: { type: Object, default: null }
 })
 
-const markerInfo = computed(() => {
-  const m = props.marker
-  if (!m) return null
-  if (m.kind === 'knockedOut') return { text: 'OUT', cls: 'bg-red-600', title: 'Knocked out: the same gToon is on both boards, so it scores 0 and its powers are off.' }
-  if (m.kind === 'cancelled') return { text: 'CANCELLED', cls: 'bg-amber-600', title: "This card's powers are cancelled." }
-  return { text: `${m.from}→${m.to}`, cls: 'bg-sky-600', title: `Value changed from ${m.from} to ${m.to} by powers (see the Game Log).` }
-})
-
-const GROUP_LABELS = {
-  BEAN_SCOUTS: 'Bean Scouts', DAILY_PLANET: 'Daily Planet', GLOBAL: 'G.L.O.B.A.L.',
-  IMAGINARY_FRIEND: 'Imaginary Friend', INJUSTICE_GANG: 'Injustice Gang', JUSTICE_FRIENDS: 'Justice Friends',
-  JUSTICE_LEAGUE: 'Justice League', MUCHA_LUCHA: 'Mucha Lucha', MYSTERY_INC: 'Mystery, Inc.',
-  POWERPUFF_GIRLS: 'Powerpuff Girls', SQUIRREL_SCOUTS: 'Squirrel Scouts', TEEN_TITANS: 'Teen Titans',
-  TIME_SQUAD: 'Time Squad', WOOHP: 'WOOHP'
-}
-const titleCase = (s) => (s ? s.charAt(0) + s.slice(1).toLowerCase() : s)
+// Right-click / long-press -> printed properties. Only a face-up card can be inspected.
+const { inspectGesture } = useOgGtoonInfo()
+const { clickCapture, ...gestureEvents } = inspectGesture(() => (props.card && !props.faceDown ? props.card : null))
 
 // Revealed entries carry `round`/`slot`; cards still in a hand carry `idx` instead.
 const isRevealed = computed(() => props.card?.round != null && props.card?.slot != null)
@@ -84,13 +77,7 @@ watch(shownValue, (now, was) => {
     bumpTimer = setTimeout(() => { bump.value = '' }, 1000)
   })
 })
-const badges = computed(() => {
-  const c = props.card
-  if (!c) return []
-  const out = [c.type1, c.type2, c.type3].filter(Boolean).map(titleCase)
-  if (c.group) out.push(GROUP_LABELS[c.group] || c.group)
-  return out
-})
+
 const sizeClass = computed(() => (props.size === 'hand' ? 'h-24 w-[4.5rem]' : 'h-20'))
 const ringClass = computed(() => ({
   selected: 'border-amber-400 bg-amber-500/10',
@@ -102,9 +89,8 @@ const ringClass = computed(() => ({
 </script>
 
 <style scoped>
-.card-back {
-  background: repeating-linear-gradient(45deg, #1e3a8a, #1e3a8a 6px, #1d4ed8 6px, #1d4ed8 12px);
-}
+/* No text selection / iOS long-press callout on the card, so a long-press opens the properties instead. */
+.og-tile { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .flip-in { animation: flip-in .35s ease-out }
 .value-up { animation: value-up 1s ease-out }
 .value-down { animation: value-down 1s ease-out }

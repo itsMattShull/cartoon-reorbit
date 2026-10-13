@@ -247,3 +247,25 @@ export function lookupPower(description) {
   if (!description) return null
   return OG_GTOON_POWER_CATALOG_BY_DESCRIPTION.get(description) || null
 }
+
+/* Reverse lookup: which historical power does a card's saved effect array correspond to? Used by the
+ * in-game "gToon properties" dialog. Compared as canonical JSON (keys sorted) so key order never matters;
+ * a card whose effect was hand-tweaked in the admin's Advanced builder simply has no catalog match. */
+const canonical = (v) => JSON.stringify(v, (_k, val) => (
+  val && typeof val === 'object' && !Array.isArray(val)
+    ? Object.fromEntries(Object.keys(val).sort().map(k => [k, val[k]]))
+    : val
+))
+let byEffect = null
+
+/** The catalog description for `effect`, or null (no power, or a custom hand-built one). */
+export function powerDescriptionFor(effect) {
+  if (!Array.isArray(effect) || effect.length === 0) return null
+  if (!byEffect) {
+    byEffect = new Map()
+    for (const e of OG_GTOON_POWER_CATALOG) {
+      if (e.effect.length && !byEffect.has(canonical(e.effect))) byEffect.set(canonical(e.effect), e.description)
+    }
+  }
+  return byEffect.get(canonical(effect)) || null
+}
