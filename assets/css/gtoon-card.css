@@ -701,5 +701,7 @@
             z-index: 9999;
         }
 /* ---- host box: the 384px card is scaled to fit whatever box the old <img> occupied ---- */
-.gtoon-card-host { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: visible; }
+/* isolation: the prototype's .card uses z-index:100 (and fx layers go higher). Contain all of it inside the
+   host so a card never paints above modals, toasts or other site UI that sits between z-index 1 and 100. */
+.gtoon-card-host { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: visible; isolation: isolate; z-index: 0; }
 .gtoon-card-host .card { transform: translate(-50%, 50%) scale(var(--gc-scale, 0.5)); transform-origin: center center; }
