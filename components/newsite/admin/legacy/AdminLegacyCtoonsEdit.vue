@@ -843,7 +843,18 @@ function effectFromServerShape(e) {
   } else if (ui.action.type === 'setColor') {
     ui.action.color = a.color || 'BLACK'
   }
+  // Keep the exact server-side effect: the editable row only covers part of the schema (several
+  // filters, character lists, OR/AND conditions, slot/opposite checks...), so an untouched row is
+  // saved from this copy instead of being rebuilt from the row's fields.
+  ui._raw = JSON.parse(JSON.stringify(eff))
+  ui._sig = uiEffectSig(ui)
   return ui
+}
+
+/** Signature of a row's editable fields (everything except the preserved original). */
+function uiEffectSig(e) {
+  const { _raw, _sig, ...rest } = e
+  return JSON.stringify(rest)
 }
 
 function coerceFilterValue(by, v) { return by === 'value' ? Number(v) : v }
@@ -851,6 +862,7 @@ function coerceFilterValue(by, v) { return by === 'value' ? Number(v) : v }
 /** Strips UI-only fields and maps each effect row to the server's schema shape. */
 function buildGtoonEffectPayload() {
   return gtoonEffects.value.map(e => {
+    if (e._raw && uiEffectSig(e) === e._sig) return JSON.parse(JSON.stringify(e._raw))
     let target
     if (e.target.selector === 'cardByCharacter') {
       target = { selector: 'cardByCharacter', character: (e.target.character || '').trim() }

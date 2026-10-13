@@ -54,6 +54,19 @@
 //   }
 // }
 //
+// Later additions to the schema (all optional):
+//   - characters: `target.character`, `condition.character` and a `character` filter value may be
+//     a list of names (any match). `condition.mode: 'all'` requires EVERY listed name in play.
+//     Names compare ignoring case and a leading "the".
+//   - filter clause { by: 'anyOf', value: [clause, ...] } — an OR inside an allMatching filter list.
+//   - condition flags: `excludeSelf` (the source card does not count, "any OTHER Hero"),
+//     `oppositeOnly` (only the card facing the source in the same slot, "opposite card is Blue"),
+//     `adjacentOnly` (neighbors only). Condition types `targetHasType` (inverse of
+//     targetLacksType) and `slotIs` { slot } ("played as the last card" = slot 7).
+//   - perMatch.excludeSelf — "+2 for each OTHER Bean Scout".
+//   - action `negateAdjacency` — like negateEffect but only switches off the target's
+//     neighbor-dependent effects (adjacentOnly conditions, neighborOwn targets, neighborOwn counts).
+//
 // Design notes on the new pieces (read this before touching ogGtoonPowerCatalog.js):
 //   - "opponentActiveCard" / "ownActiveCard", in the final-board pass, mean "the card revealed by
 //     that side in the SAME ROUND POSITION as the source card" (i.e. same index in that side's
@@ -130,13 +143,32 @@ export function normalizeEffects(raw) {
 
 function isFilterClauseValid(f) {
   if (!f || typeof f !== 'object') return false
+  // { by: 'anyOf', value: [clause, ...] } — matches when ANY listed clause matches (an OR inside the AND'ed list).
+  if (f.by === 'anyOf') return Array.isArray(f.value) && f.value.length > 0 && f.value.every(isFilterClauseValid)
   if (!['type', 'color', 'group', 'value', 'character'].includes(f.by)) return false
   if (f.by === 'type' && !CARD_TYPES.has(f.value)) return false
   if (f.by === 'color' && !COLORS.has(f.value)) return false
   if (f.by === 'group' && !GROUPS.has(f.value)) return false
   if (f.by === 'value' && typeof f.value !== 'number') return false
-  if (f.by === 'character' && typeof f.value !== 'string') return false
+  if (f.by === 'character' && !isCharacterRef(f.value)) return false
   return true
+}
+
+/** A character reference is one name, or a non-empty list of names (matches any of them). */
+function isCharacterRef(v) {
+  if (typeof v === 'string') return true
+  return Array.isArray(v) && v.length > 0 && v.every(x => typeof x === 'string')
+}
+
+/** Character names compare ignoring case, spacing and a leading "the" ("The Flea" == "Flea"). */
+function normName(n) {
+  return String(n).trim().toLowerCase().replace(/\s+/g, ' ').replace(/^the /, '')
+}
+
+/** Does `card` have the character `ref` (a name, or any of a list of names)? */
+function hasCharacter(card, ref) {
+  const have = (card.characters || []).map(normName)
+  return (Array.isArray(ref) ? ref : [ref]).some(r => have.includes(normName(r)))
 }
 
 function areFiltersValid(filters) {
@@ -157,7 +189,7 @@ export function isValidEffect(e) {
   const t = e.target
   const sel = t.selector
   if (!ALL_SELECTORS.includes(sel)) return false
-  if (sel === 'cardByCharacter' && typeof t.character !== 'string') return false
+  if (sel === 'cardByCharacter' && !isCharacterRef(t.character)) return false
   if (sel === 'neighborOwn') {
     if (t.positions != null) {
       if (!Array.isArray(t.positions) || t.positions.length === 0) return false
@@ -175,15 +207,19 @@ export function isValidEffect(e) {
   }
   if (e.condition) {
     const c = e.condition
-    const validTypes = ['characterInPlay', 'typeInPlay', 'groupInPlay', 'colorInPlay', 'valueInPlay', 'targetLacksType']
+    const validTypes = ['characterInPlay', 'typeInPlay', 'groupInPlay', 'colorInPlay', 'valueInPlay', 'targetLacksType', 'targetHasType', 'slotIs']
     if (!validTypes.includes(c.type)) return false
     if (c.side && !['own', 'opponent', 'either'].includes(c.side)) return false
-    if (c.type === 'characterInPlay' && typeof c.character !== 'string') return false
+    if (c.type === 'characterInPlay' && !isCharacterRef(c.character)) return false
+    if (c.mode != null && c.mode !== 'any' && c.mode !== 'all') return false
+    if (c.excludeSelf != null && typeof c.excludeSelf !== 'boolean') return false
+    if (c.oppositeOnly != null && typeof c.oppositeOnly !== 'boolean') return false
+    if (c.type === 'slotIs' && !(Number.isInteger(c.slot) && c.slot >= 1)) return false
     if (c.type === 'typeInPlay' && !CARD_TYPES.has(c.cardType)) return false
     if (c.type === 'groupInPlay' && !GROUPS.has(c.group)) return false
     if (c.type === 'colorInPlay' && !COLORS.has(c.color)) return false
     if (c.type === 'valueInPlay' && typeof c.value !== 'number') return false
-    if (c.type === 'targetLacksType' && !CARD_TYPES.has(c.cardType)) return false
+    if ((c.type === 'targetLacksType' || c.type === 'targetHasType') && !CARD_TYPES.has(c.cardType)) return false
     if (c.adjacentOnly != null && typeof c.adjacentOnly !== 'boolean') return false
   }
   const a = e.action
@@ -196,10 +232,11 @@ export function isValidEffect(e) {
       if (!pm.scope || !['own', 'opponent', 'both', 'neighborOwn'].includes(pm.scope)) return false
       const filters = Array.isArray(pm.filters) ? pm.filters : (pm.by ? [{ by: pm.by, value: pm.value }] : null)
       if (!areFiltersValid(filters)) return false
+      if (pm.excludeSelf != null && typeof pm.excludeSelf !== 'boolean') return false
     }
   } else if (a.type === 'setColor') {
     if (typeof a.color !== 'string') return false
-  } else if (a.type === 'negateEffect') {
+  } else if (a.type === 'negateEffect' || a.type === 'negateAdjacency') {
     // no extra fields required
   } else {
     return false
@@ -409,6 +446,18 @@ function makeBoardCard(cardData, side, roundIndex) {
   }
 }
 
+const isNegation = (effect) => effect.action.type === 'negateEffect' || effect.action.type === 'negateAdjacency'
+
+/**
+ * "Adjacency effects" are the ones that depend on a card's neighbors: a `next to X` condition, a
+ * neighboring-card target, or a neighboring-card count. `negateAdjacency` switches off only these.
+ */
+function isAdjacencyEffect(effect) {
+  return !!(effect.condition?.adjacentOnly ||
+    effect.target?.selector === 'neighborOwn' ||
+    effect.action?.perMatch?.scope === 'neighborOwn')
+}
+
 function cardTypes(card) {
   return [card.type1, card.type2, card.type3].filter(Boolean)
 }
@@ -423,11 +472,12 @@ function normalizeFilterClauses(filterLike) {
 
 function cardMatchesClause(card, clause) {
   switch (clause.by) {
+    case 'anyOf': return clause.value.some(c => cardMatchesClause(card, c))
     case 'type': return cardTypes(card).includes(clause.value)
     case 'color': return card.color === clause.value
     case 'group': return card.group === clause.value
     case 'value': return card.baseValue === clause.value // always printed value, see header
-    case 'character': return (card.characters || []).includes(clause.value)
+    case 'character': return hasCharacter(card, clause.value)
     default: return false
   }
 }
@@ -462,6 +512,27 @@ function sameRoundOpponentCard(sides, ownerSide, roundIndex) {
   return revealedOf(sides, opponentSide).find(c => c.roundIndex === roundIndex) || null
 }
 
+function isSameCard(a, b) {
+  return a.side === b.side && a.roundIndex === b.roundIndex
+}
+
+/** Does `pool` satisfy the board-scan condition `cond`? (characterInPlay can list several names, any/all.) */
+function poolSatisfies(pool, cond) {
+  switch (cond.type) {
+    case 'characterInPlay': {
+      if (!Array.isArray(cond.character)) return pool.some(c => hasCharacter(c, cond.character))
+      return cond.mode === 'all'
+        ? cond.character.every(n => pool.some(c => hasCharacter(c, n)))
+        : pool.some(c => hasCharacter(c, cond.character))
+    }
+    case 'typeInPlay': return pool.some(c => cardTypes(c).includes(cond.cardType))
+    case 'groupInPlay': return pool.some(c => c.group === cond.group)
+    case 'colorInPlay': return pool.some(c => c.color === cond.color)
+    case 'valueInPlay': return pool.some(c => c.baseValue === cond.value)
+    default: return true
+  }
+}
+
 function conditionMet(inst, sides, targetCard) {
   const cond = inst.effect.condition
   if (!cond) return true
@@ -470,16 +541,21 @@ function conditionMet(inst, sides, targetCard) {
     if (!targetCard) return false
     return !cardTypes(targetCard).includes(cond.cardType)
   }
+  if (cond.type === 'targetHasType') {
+    if (!targetCard) return false
+    return cardTypes(targetCard).includes(cond.cardType)
+  }
+  // "played as the last card" — the source card sits in board slot N (roundIndex is slot - 1).
+  if (cond.type === 'slotIs') return inst.sourceCard.roundIndex === cond.slot - 1
 
   // "next to X" — the source card's own adjacent (prev/next round-index) cards on its own side.
   if (cond.adjacentOnly) {
-    const neighbors = neighborsOf(sides, inst.ownerSide, inst.sourceCard.roundIndex, cond.positions)
-    if (cond.type === 'characterInPlay') return neighbors.some(c => (c.characters || []).includes(cond.character))
-    if (cond.type === 'typeInPlay') return neighbors.some(c => cardTypes(c).includes(cond.cardType))
-    if (cond.type === 'groupInPlay') return neighbors.some(c => c.group === cond.group)
-    if (cond.type === 'colorInPlay') return neighbors.some(c => c.color === cond.color)
-    if (cond.type === 'valueInPlay') return neighbors.some(c => c.baseValue === cond.value)
-    return false
+    return poolSatisfies(neighborsOf(sides, inst.ownerSide, inst.sourceCard.roundIndex, cond.positions), cond)
+  }
+  // "opposite card is X" — only the card facing the source card in the same slot.
+  if (cond.oppositeOnly) {
+    const opp = sameRoundOpponentCard(sides, inst.ownerSide, inst.sourceCard.roundIndex)
+    return poolSatisfies(opp ? [opp] : [], cond)
   }
 
   const side = cond.side || 'either'
@@ -488,15 +564,9 @@ function conditionMet(inst, sides, targetCard) {
   if (side === 'own') pool = revealedOf(sides, inst.ownerSide)
   else if (side === 'opponent') pool = revealedOf(sides, opponentSide)
   else pool = [...revealedOf(sides, 'player1'), ...revealedOf(sides, 'player2')]
-
-  switch (cond.type) {
-    case 'characterInPlay': return pool.some(c => (c.characters || []).includes(cond.character))
-    case 'typeInPlay': return pool.some(c => cardTypes(c).includes(cond.cardType))
-    case 'groupInPlay': return pool.some(c => c.group === cond.group)
-    case 'colorInPlay': return pool.some(c => c.color === cond.color)
-    case 'valueInPlay': return pool.some(c => c.baseValue === cond.value)
-    default: return true
-  }
+  // "any OTHER Hero in play" — the source card does not count toward its own condition.
+  if (cond.excludeSelf) pool = pool.filter(c => !isSameCard(c, inst.sourceCard))
+  return poolSatisfies(pool, cond)
 }
 
 /** Resolves the target CARD list (not yet condition-filtered) for a single effect instance. */
@@ -525,7 +595,7 @@ function resolveTargets(inst, sides) {
       const targets = []
       for (const s of ['player1', 'player2']) {
         for (const c of revealedOf(sides, s)) {
-          if ((c.characters || []).includes(inst.effect.target.character)) targets.push(wrap(c))
+          if (hasCharacter(c, inst.effect.target.character)) targets.push(wrap(c))
         }
       }
       return targets
@@ -543,7 +613,7 @@ function resolveTargets(inst, sides) {
       const filters = inst.effect.target.filters || null
       let matched = pools.filter(c => cardMatchesFilters(c, filters))
       if (inst.effect.target.excludeSelf) {
-        matched = matched.filter(c => !(c.side === inst.sourceCard.side && c.roundIndex === inst.sourceCard.roundIndex))
+        matched = matched.filter(c => !isSameCard(c, inst.sourceCard))
       }
       return matched.map(wrap)
     }
@@ -562,6 +632,7 @@ function countPerMatch(inst, sides, pm) {
   else if (pm.scope === 'opponent') pool = revealedOf(sides, opponentSide)
   else if (pm.scope === 'neighborOwn') pool = neighborsOf(sides, ownerSide, inst.sourceCard.roundIndex, null)
   else pool = [...revealedOf(sides, 'player1'), ...revealedOf(sides, 'player2')]
+  if (pm.excludeSelf) pool = pool.filter(c => !isSameCard(c, inst.sourceCard))
   return pool.filter(c => cardMatchesFilters(c, filters)).length
 }
 
@@ -657,8 +728,11 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
   const logBase = (inst, t) => ({
     source: inst.ownerSide, sourceCtoonId: inst.sourceCard.ctoonId, sourceRound: inst.sourceCard.round,
     targetPlayer: t.side, targetCtoonId: t.card.ctoonId, targetRound: t.card.round,
-    sourceIndex: inst.sourceCard.roundIndex, targetIndex: t.card.roundIndex
+    sourceIndex: inst.sourceCard.roundIndex, targetIndex: t.card.roundIndex,
+    adjacency: isAdjacencyEffect(inst.effect)
   })
+  /** Token for a negation hit: the card key, plus '#adj' when only its adjacency effects are switched off. */
+  const tokenOf = (inst, t) => (inst.effect.action.type === 'negateAdjacency' ? `${t.key}#adj` : t.key)
 
   /** Targets a negation instance hits right now (condition-checked), or []. */
   function negationTargets(state, inst) {
@@ -668,7 +742,10 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
   /** One full evaluation from printed state with `negated` (set of card keys) fixed. */
   function evaluate(negated, ignoreDuplicates = false) {
     const state = buildState(ignoreDuplicates)
-    const live = (inst) => !negated.has(keyOf(inst.sourceCard))
+    const live = (inst) => {
+      const k = keyOf(inst.sourceCard)
+      return !negated.has(k) && !(isAdjacencyEffect(inst.effect) && negated.has(`${k}#adj`))
+    }
     const log = { negate: [], color: [], value: [] }
 
     // Colors — player1 before player2.
@@ -686,11 +763,12 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
     // Who the live negators hit, judged on the board as recolored above.
     const hits = new Map() // card key -> { inst, t }[]
     for (const inst of state.instances) {
-      if (inst.effect.action.type !== 'negateEffect' || !live(inst)) continue
+      if (!isNegation(inst.effect) || !live(inst)) continue
       for (const t of negationTargets(state, inst)) {
-        if (!hits.has(t.key)) hits.set(t.key, [])
-        hits.get(t.key).push({ inst, t })
-        log.negate.push({ ...logBase(inst, t), action: 'negateEffect' })
+        const token = tokenOf(inst, t)
+        if (!hits.has(token)) hits.set(token, [])
+        hits.get(token).push({ inst, t })
+        log.negate.push({ ...logBase(inst, t), action: inst.effect.action.type })
       }
     }
 
@@ -745,7 +823,7 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
   if (!result) {
     negated = new Set()
     const order = buildState().instances
-      .filter(i => i.effect.action.type === 'negateEffect')
+      .filter(i => isNegation(i.effect))
       .sort((a, b) => (a.ownerSide === b.ownerSide ? 0 : a.ownerSide === 'player1' ? -1 : 1) ||
         (a.sourceCard.roundIndex - b.sourceCard.roundIndex))
     for (const want of order) {
@@ -754,7 +832,7 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
       const inst = state.instances.find(i => i.ownerSide === want.ownerSide &&
         i.sourceCard.roundIndex === want.sourceCard.roundIndex && i.effect === want.effect)
       if (!inst) continue
-      for (const t of negationTargets(state, inst)) negated.add(t.key)
+      for (const t of negationTargets(state, inst)) negated.add(tokenOf(inst, t))
     }
     result = evaluate(negated)
     // Report only negations whose source was live in this final evaluation.
@@ -775,15 +853,16 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
   for (const side of ['player1', 'player2']) for (const b of boards[side]) if (isDuplicate(b)) knockedOut.push(refOf(side, b))
 
   // Why a card is dead: a duplicate, or negated by these live cards.
-  const causesOf = (side, roundIndex) => {
+  const causesOf = (side, roundIndex, adjacency = false) => {
     const b = boardByKey.get(`${side}:${roundIndex}`)
     if (b && isDuplicate(b)) return [{ kind: 'duplicate' }]
-    const hit = result.hits.get(`${side}:${roundIndex}`)
-    if (!hit) return null
+    const hit = [...(result.hits.get(`${side}:${roundIndex}`) || []), ...(adjacency ? (result.hits.get(`${side}:${roundIndex}#adj`) || []) : [])]
+    if (!hit.length) return null
     return hit.map(h => ({ kind: 'negated', by: { side: h.inst.ownerSide, ctoonId: h.inst.sourceCard.ctoonId, name: h.inst.sourceCard.name } }))
   }
   const negatedCards = []
   for (const key of negated) {
+    if (key.endsWith('#adj')) continue // partial: shows up under lostEffects/changes, not as a fully cancelled card
     const [side, ri] = [key.split(':')[0], Number(key.split(':')[1])]
     const b = boardByKey.get(key)
     if (!b || isDuplicate(b)) continue
@@ -794,7 +873,7 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
   const lostEffects = []
   for (const e of [...baseline.log.color, ...baseline.log.value]) {
     if (e.sourceIndex < 0) continue // goal-card aura: always live
-    const causes = causesOf(e.source, e.sourceIndex)
+    const causes = causesOf(e.source, e.sourceIndex, e.adjacency)
     if (!causes) continue
     lostEffects.push({ ...e, causes })
   }
