@@ -242,7 +242,25 @@ function allNames(catalog) {
 /** Reference result: final values per card (Map card -> value) and colors, for a board with one powered source. */
 function referenceBoard(board, srcRef, description) {
   const read = referenceEffects(description)
+  // Same-character rule: of cards sharing a character, only the lowest printed value counts.
+  const everyone = [...board.p1, ...board.p2].filter(Boolean)
+  const knocked = new Set()
+  for (const c of everyone) {
+    for (const nm of c.characters) {
+      const sharing = everyone.filter(o => o.characters.includes(nm))
+      if (sharing.some(o => o.value < c.value)) knocked.add(c)
+    }
+  }
+  const live = { p1: board.p1.map(c => (c && !knocked.has(c) ? c : null)), p2: board.p2.map(c => (c && !knocked.has(c) ? c : null)) }
+  const srcCard = board[srcRef.side][srcRef.slot - 1]
+  const result = referenceLive(live, srcRef, knocked.has(srcCard) ? null : read)
+  for (const c of knocked) result.set(c, { value: 0, color: c.color })
+  return result
+}
+
+function referenceLive(board, srcRef, read) {
   const all = [...board.p1, ...board.p2].filter(Boolean)
+  if (!read) return new Map(all.map(c => [c, { value: c.value, color: c.color }]))
   const mine = srcRef.side === 'p1' ? board.p1 : board.p2
   const theirs = srcRef.side === 'p1' ? board.p2 : board.p1
   const src = mine[srcRef.slot - 1]
@@ -469,4 +487,56 @@ test('power: a gToon on both boards cancels itself (and its power) on both sides
   const res = runBoard([same, C('a2', { color: 'BLUE' })], [same, C('b2', { color: 'BLUE' })])
   assert.equal(res.player1.revealed[0].finalValue, 0)
   assert.equal(res.player1.revealed[1].finalValue, 5, 'its +2 to Blue is gone too')
+})
+
+/* ── same-character / same-gToon cancellation (the printed game rule) ───────────────────── */
+
+test('rule: same character in play — only the lower point value counts (Bubbles Laughing 5 vs Bubbles Flying 8)', () => {
+  const p1 = [C('laugh', { characters: ['Bubbles'], value: 5 }), C('a2'), C('a3'), C('a4'), C('a5'), C('a6'), C('a7')]
+  const p2 = [C('fly', { characters: ['Bubbles'], value: 8 }), C('b2'), C('b3'), C('b4'), C('b5'), C('b6'), C('b7')]
+  const res = runBoard(p1, p2)
+  assert.equal(res.player1.revealed[0].finalValue, 5)
+  assert.equal(res.player2.revealed[0].finalValue, 0)
+  assert.equal(res.player2.revealed[0].cancelled, true)
+  assert.equal(res.player1.totalValue, 35)
+  assert.equal(res.player2.totalValue, 30)
+  assert.deepEqual(res.analysis.knockedOut.map(k => [k.side, k.cause.kind, k.cause.character]), [['player2', 'sameCharacter', 'Bubbles']])
+})
+
+test('rule: same character on the SAME side also counts once, and any shared character is enough', () => {
+  const p1 = [C('x1', { characters: ['Ed', 'Edd'], value: 9 }), C('x2', { characters: ['Edd'], value: 4 }), C('x3', { characters: ['Ed'], value: 6 }), C('a4'), C('a5'), C('a6'), C('a7')]
+  const res = runBoard(p1, [C('b1')])
+  assert.deepEqual(res.player1.revealed.slice(0, 3).map(r => r.finalValue), [0, 4, 6], 'Ed/Edd 9 loses on both names; Edd 4 and Ed 6 are each the lowest of theirs')
+})
+
+test('rule: a knocked-out card scores 0, loses its power, is not counted by powers and gives no color', () => {
+  const buff = C('buff', { characters: ['Bubbles'], value: 8, effect: power('+2 to all Blue cards'), color: 'BLUE' })
+  const low = C('low', { characters: ['Bubbles'], value: 3, color: 'BLUE' })
+  const res = runBoard([buff, C('a2', { color: 'BLUE' })], [low, C('b2', { color: 'BLUE' })])
+  assert.equal(res.player1.revealed[0].finalValue, 0)
+  assert.equal(res.player1.revealed[1].finalValue, 5, 'its +2 to Blue never happens')
+  assert.equal(res.player2.revealed[0].finalValue, 3)
+})
+
+test('rule: cards tied for the lowest value all stay; the exact same gToon cancels every copy', () => {
+  const tie = runBoard([C('t1', { characters: ['Bubbles'], value: 5 })], [C('t2', { characters: ['Bubbles'], value: 5 })])
+  assert.equal(tie.player1.revealed[0].finalValue, 5)
+  assert.equal(tie.player2.revealed[0].finalValue, 5)
+  const same = C('same', { characters: ['Bubbles'], value: 4 })
+  const both = runBoard([same, C('a2')], [same, C('b2')])
+  assert.equal(both.player1.revealed[0].finalValue, 0)
+  assert.equal(both.player2.revealed[0].finalValue, 0)
+  assert.equal(both.analysis.knockedOut[0].cause.kind, 'duplicate')
+})
+
+test('rule: a knocked-out card gives up its color for the goal-color count, in a real match', () => {
+  const board = { p1: [], p2: [] }
+  for (const s of ['p1', 'p2']) for (let i = 0; i < 7; i++) board[s].push({ id: `${s}${i}`, name: `${s}${i}`, characters: [], color: 'RED', value: 5, types: [], group: null, effect: null })
+  board.p1[0].characters = ['Bubbles']; board.p1[0].value = 9
+  board.p2[0].characters = ['Bubbles']; board.p2[0].value = 2
+  const m = playRealMatch(board)
+  assert.equal(m.revealed[0][0].cancelled, true)
+  assert.equal(m.revealed[0][0].finalValue, 0)
+  assert.equal(m.revealed[1][0].finalValue, 2)
+  assert.ok(m.gameLog.some(e => e.kind === 'scoring' && JSON.stringify(e.sections).includes('same character (Bubbles)')))
 })

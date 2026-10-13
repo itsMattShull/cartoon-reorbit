@@ -67,10 +67,13 @@ function describeBoard(match, final, { includeApplied = true } = {}) {
   const byCtoon = new Map()
   for (const side of [0, 1]) for (const r of match.revealed[side]) byCtoon.set(r.ctoonId, r.name)
   const nm = (id) => byCtoon.get(id) ?? id
-  const causeText = (causes) => (causes || []).map(c => (c.kind === 'duplicate'
-    ? 'the same gToon is on both boards' : `cancelled by ${who(c.by.side, c.by.name)}`)).join(' and ')
+  const knockText = (c) => (c.kind === 'sameCharacter'
+    ? `same character (${c.character}) — only the lower value counts, ${who(c.by.side, c.by.name ?? nm(c.by.ctoonId))} (${c.by.value}) is lower`
+    : 'the same gToon is in play more than once')
+  const causeText = (causes) => (causes || []).map(c => (c.kind === 'duplicate' || c.kind === 'sameCharacter'
+    ? knockText(c) : `cancelled by ${who(c.by.side, c.by.name)}`)).join(' and ')
 
-  const knocked = a.knockedOut.map(k => `${who(k.side, k.name)} — same gToon on both boards: scores 0 and its powers are off.`)
+  const knocked = a.knockedOut.map(k => `${who(k.side, k.name)} — ${knockText(k.cause || { kind: 'duplicate' })}: scores 0 and its powers are off.`)
   const cancelled = a.negated.map(n => `${who(n.side, n.name)} — ${causeText(n.causes)}.`)
   const lost = a.lostEffects.map(l => {
     const self = l.source === l.targetPlayer && l.sourceIndex === l.targetIndex
@@ -80,7 +83,7 @@ function describeBoard(match, final, { includeApplied = true } = {}) {
     const parts = []
     if (c.fromValue !== c.toValue) parts.push(`${c.fromValue} → ${c.toValue}`)
     if (c.fromColor !== c.toColor) parts.push(`${COLOR_WORD(c.fromColor)} → ${COLOR_WORD(c.toColor)}`)
-    const why = [...new Set(c.reasons.map(r => (r.kind === 'duplicate'
+    const why = [...new Set(c.reasons.map(r => (r.kind === 'duplicate' || r.kind === 'sameCharacter'
       ? 'knocked out' : `lost ${r.sourceCtoonId === c.ctoonId ? 'its own' : `${nm(r.sourceCtoonId)}'s`} ${describeApplication(r)}`)))]
     return `${who(c.side, c.name)}: ${parts.join(', ')}${why.length ? ` (${why.join('; ')})` : ' (knock-on effect)'}`
   })

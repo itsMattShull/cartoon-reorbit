@@ -685,14 +685,41 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
   }
   const goalSnapshots = { player1: player1.goalCard || null, player2: player2.goalCard || null }
 
-  // 1) Duplicate cancellation — fixed for the whole pass, decided from printed identities.
-  const idsOn = (side) => new Set(boards[side].map(b => b.data.ctoonId ?? b.data.id))
-  const p1Ids = idsOn('player1')
-  const p2Ids = idsOn('player2')
-  const isDuplicate = (b) => {
-    const id = b.data.ctoonId ?? b.data.id
-    return cancelDuplicates && id != null && p1Ids.has(id) && p2Ids.has(id)
+  // 1) Knockouts — fixed for the whole pass, decided from printed identities and printed values:
+  //    a) two or more of the exact same gToon (same ctoonId, anywhere in play) cancel each other out;
+  //    b) of the remaining cards sharing a character, only the lowest printed value counts — every
+  //       higher one is knocked out (cards tied for lowest all stay).
+  //    A knocked-out card scores 0, its powers are off, and it is invisible to every count/condition.
+  const knock = new Map() // board entry -> { kind: 'duplicate' } | { kind: 'sameCharacter', character, by: {side,ctoonId,name,value} }
+  if (cancelDuplicates) {
+    const all = ['player1', 'player2'].flatMap(side => boards[side].map(b => ({ side, b })))
+    const idOf = (b) => b.data.ctoonId ?? b.data.id
+    const idCount = new Map()
+    for (const { b } of all) if (idOf(b) != null) idCount.set(idOf(b), (idCount.get(idOf(b)) || 0) + 1)
+    for (const { b } of all) if (idOf(b) != null && idCount.get(idOf(b)) > 1) knock.set(b, { kind: 'duplicate' })
+    const printedValue = (b) => (b.data.value != null ? b.data.value : (b.data.gtoonValue ?? 0))
+    const byCharacter = new Map() // normalized name -> { name, cards: [{ side, b }] }
+    for (const e of all) {
+      if (knock.has(e.b)) continue
+      const chars = Array.isArray(e.b.data.characters) ? e.b.data.characters : []
+      for (const name of new Set(chars.map(normName))) {
+        if (!byCharacter.has(name)) byCharacter.set(name, { name: chars.find(c => normName(c) === name), cards: [] })
+        byCharacter.get(name).cards.push(e)
+      }
+    }
+    for (const { name, cards } of byCharacter.values()) {
+      if (cards.length < 2) continue
+      const lowest = cards.reduce((best, e) => (printedValue(e.b) < printedValue(best.b) ? e : best), cards[0])
+      for (const e of cards) {
+        if (printedValue(e.b) <= printedValue(lowest.b) || knock.has(e.b)) continue
+        knock.set(e.b, {
+          kind: 'sameCharacter', character: name,
+          by: { side: lowest.side, ctoonId: idOf(lowest.b), name: lowest.b.data.name ?? null, value: printedValue(lowest.b) }
+        })
+      }
+    }
   }
+  const isDuplicate = (b) => knock.has(b) // (kept name: "knocked out for any reason")
 
   /** A fresh board in printed state, minus knocked-out cards (unless `ignoreDuplicates`). */
   function buildState(ignoreDuplicates = false) {
@@ -850,12 +877,12 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
   for (const side of ['player1', 'player2']) for (const b of boards[side]) boardByKey.set(`${side}:${b.roundIndex}`, b)
 
   const knockedOut = []
-  for (const side of ['player1', 'player2']) for (const b of boards[side]) if (isDuplicate(b)) knockedOut.push(refOf(side, b))
+  for (const side of ['player1', 'player2']) for (const b of boards[side]) if (isDuplicate(b)) knockedOut.push({ ...refOf(side, b), cause: knock.get(b) })
 
   // Why a card is dead: a duplicate, or negated by these live cards.
   const causesOf = (side, roundIndex, adjacency = false) => {
     const b = boardByKey.get(`${side}:${roundIndex}`)
-    if (b && isDuplicate(b)) return [{ kind: 'duplicate' }]
+    if (b && isDuplicate(b)) return [knock.get(b)]
     const hit = [...(result.hits.get(`${side}:${roundIndex}`) || []), ...(adjacency ? (result.hits.get(`${side}:${roundIndex}#adj`) || []) : [])]
     if (!hit.length) return null
     return hit.map(h => ({ kind: 'negated', by: { side: h.inst.ownerSide, ctoonId: h.inst.sourceCard.ctoonId, name: h.inst.sourceCard.name } }))
@@ -890,7 +917,7 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
       const toColor = now ? now.color : was.color
       if (was.value === toValue && was.color === toColor) continue
       const reasons = []
-      if (!now) reasons.push({ kind: 'duplicate' })
+      if (!now) reasons.push(knock.get(b) || { kind: 'duplicate' })
       for (const l of lostEffects) {
         if (l.targetPlayer === side && l.targetIndex === b.roundIndex) {
           reasons.push({ kind: 'lostEffect', sourceName: l.sourceName ?? null, sourceCtoonId: l.sourceCtoonId, action: l.action, operation: l.operation, amount: l.amount, color: l.color, causes: l.causes })
@@ -914,7 +941,7 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
       if (!isDuplicate(b)) continue
       effectsResolved.push({
         source: side, sourceCtoonId: b.data.ctoonId ?? b.data.id, sourceRound: b.data.round,
-        action: 'duplicateCancelled',
+        action: knock.get(b).kind === 'sameCharacter' ? 'sameCharacterCancelled' : 'duplicateCancelled',
         targetPlayer: side, targetCtoonId: b.data.ctoonId ?? b.data.id, targetRound: b.data.round
       })
     }
