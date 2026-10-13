@@ -517,6 +517,15 @@ test('rule: same character in play — only the lower point value counts (Bubble
   assert.deepEqual(res.analysis.knockedOut.map(k => [k.side, k.cause.kind, k.cause.character]), [['player2', 'sameCharacter', 'Bubbles']])
 })
 
+test('rule: blank character entries never count as a shared character', () => {
+  const p1 = [C('a1', { characters: [''], value: 5 }), C('a2', { characters: ['  '], value: 8 }), C('a3'), C('a4'), C('a5'), C('a6'), C('a7')]
+  const p2 = [C('b1', { characters: [''], value: 9 }), C('b2'), C('b3'), C('b4'), C('b5'), C('b6'), C('b7')]
+  const res = runBoard(p1, p2)
+  assert.equal(res.player1.revealed[1].finalValue, 8)
+  assert.equal(res.player2.revealed[0].finalValue, 9)
+  assert.deepEqual(res.analysis.knockedOut, [])
+})
+
 test('rule: same character on the SAME side also counts once, and any shared character is enough', () => {
   const p1 = [C('x1', { characters: ['Ed', 'Edd'], value: 9 }), C('x2', { characters: ['Edd'], value: 4 }), C('x3', { characters: ['Ed'], value: 6 }), C('a4'), C('a5'), C('a6'), C('a7')]
   const res = runBoard(p1, [C('b1')])

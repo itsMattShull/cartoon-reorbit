@@ -709,6 +709,7 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
       if (knock.has(e.b)) continue
       const chars = Array.isArray(e.b.data.characters) ? e.b.data.characters : []
       for (const name of new Set(chars.map(normName))) {
+        if (!name) continue // blank character entries never count as a shared character
         if (!byCharacter.has(name)) byCharacter.set(name, { name: chars.find(c => normName(c) === name), cards: [] })
         byCharacter.get(name).cards.push(e)
       }
