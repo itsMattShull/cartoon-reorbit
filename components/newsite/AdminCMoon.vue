@@ -185,6 +185,115 @@
         </div>
       </div>
 
+      <!-- Team Discord Events: every cosmetic "post something to a cMoon's own Discord channel"
+           feature on top of the existing raid/riddle/hunt integrations — see
+           server/utils/cmoonDiscordEvents.js for the shared implementation. One combined save
+           button (not one per field) since every field here funnels through that same endpoint
+           and none of it is order-sensitive. -->
+      <div class="bg-white rounded border p-3 mb-4">
+        <h2 class="text-sm font-semibold mb-1">Team Discord Events</h2>
+        <p class="text-[11px] text-gray-600 mb-3">
+          Fun, low-cost celebration posts to each cMoon's own Discord channel (falls back to the
+          raid boss announcement channel above, then the site default). Every toggle below is
+          independently off by default.
+        </p>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="flex items-center gap-2 text-xs font-medium">
+              <input v-model="teamMilestoneEnabled" type="checkbox" class="cm-tap" />
+              Team milestone posts
+            </label>
+            <p class="text-[11px] text-gray-500 mt-1 mb-2">
+              Posts when a team's total enemies-defeated or team points crosses a round number.
+            </p>
+            <div class="flex items-center gap-2">
+              <label class="text-xs w-28">Every N enemies</label>
+              <input v-model.number="teamMilestoneEnemiesInterval" type="number" min="1" max="100000" inputmode="numeric" class="cm-field w-24 border rounded px-2 py-1" style="font-size:16px" />
+            </div>
+            <div class="flex items-center gap-2 mt-1">
+              <label class="text-xs w-28">Every N points</label>
+              <input v-model.number="teamMilestonePointsInterval" type="number" min="1" max="1000000" inputmode="numeric" class="cm-field w-24 border rounded px-2 py-1" style="font-size:16px" />
+            </div>
+          </div>
+
+          <div>
+            <label class="flex items-center gap-2 text-xs font-medium">
+              <input v-model="rankUpAnnounceEnabled" type="checkbox" class="cm-tap" />
+              Rank-up posts
+            </label>
+            <p class="text-[11px] text-gray-500 mt-1">
+              Posts to a member's own team channel when they rank up (gameplay or the admin
+              "Recalculate cMoon Points" tool's upgrades only — never a downgrade).
+            </p>
+          </div>
+
+          <div>
+            <label class="flex items-center gap-2 text-xs font-medium">
+              <input v-model="welcomePostEnabled" type="checkbox" class="cm-tap" />
+              New-member welcome posts
+            </label>
+            <p class="text-[11px] text-gray-500 mt-1">
+              Posts when a player genuinely joins a cMoon via self-selection — never on an admin
+              reassignment, captain-align, Balance Teams, or an accepted team-change request.
+            </p>
+          </div>
+
+          <div>
+            <label class="flex items-center gap-2 text-xs font-medium">
+              <input v-model="finalBossPingEnabled" type="checkbox" class="cm-tap" />
+              Solo Final Boss appearance ping
+            </label>
+            <p class="text-[11px] text-gray-500 mt-1 mb-2">
+              Pings a team's channel when a solo (non-raid) Final Boss-rank enemy appears for one
+              of its members. A raid boss already gets its own announcement.
+            </p>
+            <div class="flex items-center gap-2">
+              <label class="text-xs w-28">Cooldown (min)</label>
+              <input v-model.number="finalBossPingCooldownMinutes" type="number" min="0" max="1440" inputmode="numeric" class="cm-field w-24 border rounded px-2 py-1" style="font-size:16px" />
+            </div>
+          </div>
+
+          <div>
+            <label class="flex items-center gap-2 text-xs font-medium">
+              <input v-model="weeklyRecapEnabled" type="checkbox" class="cm-tap" />
+              Weekly top-slayer recap
+            </label>
+            <p class="text-[11px] text-gray-500 mt-1 mb-2">
+              Posts each team's own top enemy-slayer of the past 7 days, on a schedule
+              (America/Chicago).
+            </p>
+            <div class="flex items-center gap-2 flex-wrap">
+              <select v-model.number="weeklyRecapDayOfWeek" class="cm-field border rounded px-2 py-1 text-xs">
+                <option v-for="d in DAY_OF_WEEK_OPTIONS" :key="d.value" :value="d.value">{{ d.label }}</option>
+              </select>
+              <input v-model.number="weeklyRecapHour" type="number" min="0" max="23" inputmode="numeric" class="cm-field w-16 border rounded px-2 py-1" style="font-size:16px" placeholder="HH" />
+              <span class="text-xs">:</span>
+              <input v-model.number="weeklyRecapMinute" type="number" min="0" max="59" inputmode="numeric" class="cm-field w-16 border rounded px-2 py-1" style="font-size:16px" placeholder="MM" />
+            </div>
+          </div>
+
+          <div>
+            <label class="flex items-center gap-2 text-xs font-medium">
+              <input v-model="seasonMvpRecapEnabled" type="checkbox" class="cm-tap" />
+              End-of-season MVP recap
+            </label>
+            <p class="text-[11px] text-gray-500 mt-1">
+              Posts each team's own season MVP the moment an admin starts a new season (see
+              Seasonal Updates below) — not on a schedule.
+            </p>
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <button
+            class="cm-tap px-3 py-1.5 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            :disabled="discordEventsSaving" @click="saveDiscordEvents"
+          >{{ discordEventsSaving ? 'Saving…' : 'Save Discord Events Settings' }}</button>
+          <p v-if="discordEventsError" class="text-[11px] text-red-600 mt-1">{{ discordEventsError }}</p>
+        </div>
+      </div>
+
       <!-- Scoring rules: the daily team-leaderboard bonus job's admin-editable knobs
            (see server/utils/cmoon.js runDailyCMoonScoring). Kept as one panel with
            sub-sections rather than a separate admin page/tab — it's config for the
@@ -1381,6 +1490,25 @@ const raidBossChannelError = ref('')
 const enemyBattleDefaultHp = ref(5)
 const defaultHpSaving = ref(false)
 const defaultHpError = ref('')
+const teamMilestoneEnabled = ref(false)
+const teamMilestoneEnemiesInterval = ref(100)
+const teamMilestonePointsInterval = ref(1000)
+const rankUpAnnounceEnabled = ref(false)
+const finalBossPingEnabled = ref(false)
+const finalBossPingCooldownMinutes = ref(60)
+const welcomePostEnabled = ref(false)
+const weeklyRecapEnabled = ref(false)
+const weeklyRecapDayOfWeek = ref(0)
+const weeklyRecapHour = ref(9)
+const weeklyRecapMinute = ref(0)
+const seasonMvpRecapEnabled = ref(false)
+const discordEventsSaving = ref(false)
+const discordEventsError = ref('')
+const DAY_OF_WEEK_OPTIONS = [
+  { value: 0, label: 'Sunday' }, { value: 1, label: 'Monday' }, { value: 2, label: 'Tuesday' },
+  { value: 3, label: 'Wednesday' }, { value: 4, label: 'Thursday' }, { value: 5, label: 'Friday' },
+  { value: 6, label: 'Saturday' },
+]
 const previewModalOpen = ref(false)
 const balanceModalOpen = ref(false)
 const recalcModalOpen = ref(false)
@@ -2427,6 +2555,18 @@ async function load() {
     spawnCapWindowHours.value = Number.isInteger(data.cMoonEnemySpawnCapWindowHours) ? data.cMoonEnemySpawnCapWindowHours : 4
     raidBossDiscordChannelId.value = data.cMoonRaidBossDiscordChannelId || ''
     enemyBattleDefaultHp.value = Number.isInteger(data.cMoonEnemyBattleDefaultHp) ? data.cMoonEnemyBattleDefaultHp : 5
+    teamMilestoneEnabled.value = !!data.cMoonTeamMilestoneEnabled
+    teamMilestoneEnemiesInterval.value = Number.isInteger(data.cMoonTeamMilestoneEnemiesInterval) ? data.cMoonTeamMilestoneEnemiesInterval : 100
+    teamMilestonePointsInterval.value = Number.isInteger(data.cMoonTeamMilestonePointsInterval) ? data.cMoonTeamMilestonePointsInterval : 1000
+    rankUpAnnounceEnabled.value = !!data.cMoonRankUpAnnounceEnabled
+    finalBossPingEnabled.value = !!data.cMoonFinalBossPingEnabled
+    finalBossPingCooldownMinutes.value = Number.isInteger(data.cMoonFinalBossPingCooldownMinutes) ? data.cMoonFinalBossPingCooldownMinutes : 60
+    welcomePostEnabled.value = !!data.cMoonWelcomePostEnabled
+    weeklyRecapEnabled.value = !!data.cMoonWeeklyRecapEnabled
+    weeklyRecapDayOfWeek.value = Number.isInteger(data.cMoonWeeklyRecapDayOfWeek) ? data.cMoonWeeklyRecapDayOfWeek : 0
+    weeklyRecapHour.value = Number.isInteger(data.cMoonWeeklyRecapHour) ? data.cMoonWeeklyRecapHour : 9
+    weeklyRecapMinute.value = Number.isInteger(data.cMoonWeeklyRecapMinute) ? data.cMoonWeeklyRecapMinute : 0
+    seasonMvpRecapEnabled.value = !!data.cMoonSeasonMvpRecapEnabled
     admins.value = adminsData || []
     ctoons.value = ctoonsData || []
     backgrounds.value = backgroundsData || []
@@ -2725,6 +2865,46 @@ async function saveRaidBossDiscordChannel() {
     raidBossChannelError.value = e?.data?.statusMessage || 'Failed to save raid boss Discord channel'
   } finally {
     raidBossChannelSaving.value = false
+  }
+}
+
+async function saveDiscordEvents() {
+  discordEventsSaving.value = true
+  discordEventsError.value = ''
+  try {
+    const res = await $fetch('/api/admin/cmoon-settings', {
+      method: 'POST',
+      body: {
+        cMoonTeamMilestoneEnabled: teamMilestoneEnabled.value,
+        cMoonTeamMilestoneEnemiesInterval: teamMilestoneEnemiesInterval.value,
+        cMoonTeamMilestonePointsInterval: teamMilestonePointsInterval.value,
+        cMoonRankUpAnnounceEnabled: rankUpAnnounceEnabled.value,
+        cMoonFinalBossPingEnabled: finalBossPingEnabled.value,
+        cMoonFinalBossPingCooldownMinutes: finalBossPingCooldownMinutes.value,
+        cMoonWelcomePostEnabled: welcomePostEnabled.value,
+        cMoonWeeklyRecapEnabled: weeklyRecapEnabled.value,
+        cMoonWeeklyRecapDayOfWeek: weeklyRecapDayOfWeek.value,
+        cMoonWeeklyRecapHour: weeklyRecapHour.value,
+        cMoonWeeklyRecapMinute: weeklyRecapMinute.value,
+        cMoonSeasonMvpRecapEnabled: seasonMvpRecapEnabled.value,
+      },
+    })
+    teamMilestoneEnabled.value = res.cMoonTeamMilestoneEnabled
+    teamMilestoneEnemiesInterval.value = res.cMoonTeamMilestoneEnemiesInterval
+    teamMilestonePointsInterval.value = res.cMoonTeamMilestonePointsInterval
+    rankUpAnnounceEnabled.value = res.cMoonRankUpAnnounceEnabled
+    finalBossPingEnabled.value = res.cMoonFinalBossPingEnabled
+    finalBossPingCooldownMinutes.value = res.cMoonFinalBossPingCooldownMinutes
+    welcomePostEnabled.value = res.cMoonWelcomePostEnabled
+    weeklyRecapEnabled.value = res.cMoonWeeklyRecapEnabled
+    weeklyRecapDayOfWeek.value = res.cMoonWeeklyRecapDayOfWeek
+    weeklyRecapHour.value = res.cMoonWeeklyRecapHour
+    weeklyRecapMinute.value = res.cMoonWeeklyRecapMinute
+    seasonMvpRecapEnabled.value = res.cMoonSeasonMvpRecapEnabled
+  } catch (e) {
+    discordEventsError.value = e?.data?.statusMessage || 'Failed to save Discord team events settings'
+  } finally {
+    discordEventsSaving.value = false
   }
 }
 

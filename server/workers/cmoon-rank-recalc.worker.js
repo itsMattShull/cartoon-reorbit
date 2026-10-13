@@ -27,6 +27,7 @@
 import { Worker } from 'bullmq'
 import { prisma } from '../prisma.js'
 import { logAdminChange } from '../utils/adminChangeLog.js'
+import { announceCMoonRankUpFromRecalc } from '../utils/cmoonDiscordEvents.js'
 
 const QUEUE_KEY = process.env.CMOON_RANK_RECALC_QUEUE_KEY || 'cmoonRankRecalcQueue'
 
@@ -74,7 +75,7 @@ const worker = new Worker(QUEUE_KEY, async (job) => {
     select: {
       id: true, username: true, cMoonId: true, cMoonSelectedAt: true,
       cMoonPoints: true, currentCMoonRankId: true,
-      cMoon: { select: { name: true } },
+      cMoon: { select: { name: true, discordChannelId: true } },
       currentCMoonRank: { select: { name: true } },
     },
     orderBy: { id: 'asc' },
@@ -112,9 +113,17 @@ const worker = new Worker(QUEUE_KEY, async (job) => {
       })
       changed++
       if (rankChanged) {
-        if (!newRankId) cleared++
-        else if (!user.currentCMoonRankId || newPoints >= user.cMoonPoints) upgraded++
-        else downgraded++
+        if (!newRankId) {
+          cleared++
+        } else if (!user.currentCMoonRankId || newPoints >= user.cMoonPoints) {
+          upgraded++
+          // Never a downgrade/clear — filtered to this branch only, per this tool's own
+          // upgraded/downgraded/cleared classification above (see cmoonDiscordEvents.js's own
+          // comment on why this is a separate hook from grantCMoonRank's gameplay path).
+          announceCMoonRankUpFromRecalc(user.cMoon?.discordChannelId, user.cMoon?.name, user.username, newRank.name).catch(() => {})
+        } else {
+          downgraded++
+        }
       }
     }
 

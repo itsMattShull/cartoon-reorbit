@@ -4,6 +4,7 @@ import { mintQueue } from '../../server/utils/queues.js'
 import { announceAchievement, assignDiscordRoleByName } from '../../server/utils/discord.js'
 import { getWordleWinCount, getWordleCurrentStreak } from '../../server/utils/wordle.js'
 import { createMemoClient } from './memoClient.js'
+import { announceCMoonRankUp } from './cmoonDiscordEvents.js'
 
 let cachedAchievements     = null
 let cachedAchievementsTime = 0
@@ -441,6 +442,14 @@ export async function awardAchievementToUser(client, userId, achievement) {
     try {
       await announceAchievement(db, userId, achievement.title, awardSummary, assignedRoleName)
     } catch {}
+  }
+
+  // Separate from the achievement-channel announcement above (achievementDiscordChannelId) —
+  // this posts to the player's OWN cMoon team channel instead, gated on its own admin toggle
+  // (GlobalGameConfig.cMoonRankUpAnnounceEnabled), so a team can celebrate the promotion in its
+  // own channel regardless of whether this achievement also notifies the global one.
+  if (awardSummary.cMoonRank?.name) {
+    announceCMoonRankUp(userId, awardSummary.cMoonRank.name).catch(() => {})
   }
 }
 

@@ -12,6 +12,7 @@ import { grantGuildRole, revokeGuildRole } from './discord.js'
 import { CMOON_EFFECT_TYPES } from '../../utils/cmoonEffectTypes.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 import { PLAYER_MAX_HP, combinePlayerMaxHp } from './cmoonEnemyBattle.js'
+import { announceTeamPointsMilestones, announceCMoonWelcome } from './cmoonDiscordEvents.js'
 
 // ── Daily cMoon team leaderboard scoring ──────────────────────────────────────
 //
@@ -540,6 +541,17 @@ export async function recordDailyTaskCompletions({
 // the module-level comment above). Two-statement reset-then-recompute, both in one
 // transaction, mirrors server/cron/czone-display-count.js's runCzoneDisplayCountAggregate.
 export async function recomputeCMoonTeamScores() {
+  // Only worth a pre-recompute snapshot when the team-points-milestone feature is actually on —
+  // see announceTeamPointsMilestones's own comment for why a before/after diff (not a plain
+  // increment) is the only way to detect "just crossed a point milestone" against a value that's
+  // always fully recomputed from CMoonScoreLog.
+  const config = await prisma.globalGameConfig.findUnique({
+    where: { id: 'singleton' },
+    select: { cMoonTeamMilestoneEnabled: true, cMoonTeamMilestonePointsInterval: true, cMoonRaidBossDiscordChannelId: true },
+  })
+  const trackMilestones = !!config?.cMoonTeamMilestoneEnabled
+  const before = trackMilestones ? await prisma.cMoon.findMany({ select: { id: true, teamScore: true } }) : null
+
   await prisma.$transaction([
     prisma.$executeRaw`UPDATE "CMoon" SET "teamScore" = 0`,
     prisma.$executeRaw`
@@ -552,6 +564,12 @@ export async function recomputeCMoonTeamScores() {
       WHERE c.id = totals."cMoonId"
     `,
   ])
+
+  if (trackMilestones) {
+    const beforeById = new Map(before.map(c => [c.id, c.teamScore]))
+    const after = await prisma.cMoon.findMany({ select: { id: true, name: true, discordChannelId: true, teamScore: true } })
+    announceTeamPointsMilestones(beforeById, after, config).catch(() => {})
+  }
 }
 
 // Daily checker-cron entry point (server/cron/cmoon-daily-score.js). Gathers every qualifying
@@ -962,7 +980,7 @@ export async function selectCMoonForUser(userId, cMoonId) {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, cMoonId: true, cMoonOptedOut: true, cMoonOptedOutAt: true, discordId: true, inGuild: true },
+    select: { id: true, username: true, cMoonId: true, cMoonOptedOut: true, cMoonOptedOutAt: true, discordId: true, inGuild: true },
   })
   if (!user) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
   if (user.cMoonId) throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
@@ -974,7 +992,7 @@ export async function selectCMoonForUser(userId, cMoonId) {
     if (rejoinAt && new Date() < rejoinAt) throw new CMoonError(CMOON_SELECT_ERRORS.REJOIN_COOLDOWN)
   }
 
-  const cmoon = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true, joinLocked: true, allowOptOutJoin: true, discordRoleId: true } })
+  const cmoon = await prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { id: true, joinLocked: true, allowOptOutJoin: true, discordRoleId: true, discordChannelId: true } })
   if (!cmoon) throw new CMoonError(CMOON_SELECT_ERRORS.NOT_FOUND)
   // Locked cMoons are only reachable via admin direct-assign (POST
   // /api/admin/users/[id]/update-cmoon), never through this self-serve path — enforced here,
@@ -1032,6 +1050,11 @@ export async function selectCMoonForUser(userId, cMoonId) {
   } catch {
     discordRoleSynced = false
   }
+
+  // Genuine-join welcome post — ONLY reachable from this self-serve path, never from
+  // reassignUserCMoon below (admin reassignment, captain-align, Balance Teams, accepted
+  // team-change requests), matching GlobalGameConfig.cMoonWelcomePostEnabled's own scope comment.
+  announceCMoonWelcome(cmoon.discordChannelId, user.username).catch(() => {})
 
   return { cMoonId: assigned, prizes, discordRoleSynced }
 }

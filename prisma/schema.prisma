@@ -1869,6 +1869,43 @@ model GlobalGameConfig {
   // two features are independent and may warrant different values — a cooperative multi-person
   // hunt is intentionally worth more by default.
   cMoonHuntPoints                    Int       @default(75)
+  // Team milestone posts (see postCMoonTeamMilestones in server/utils/cmoonDiscordEvents.js) —
+  // fires a sendCMoonTeamUpdate() to a cMoon's own Discord channel whenever that team's
+  // CMoon.battleWins (enemies defeated) or recomputed CMoon.teamScore (points) crosses a round-
+  // number multiple of the interval below. Both share one enabled switch since they're the same
+  // feature (which stat to celebrate), just two different intervals.
+  cMoonTeamMilestoneEnabled          Boolean   @default(false)
+  cMoonTeamMilestoneEnemiesInterval  Int       @default(100)
+  cMoonTeamMilestonePointsInterval   Int       @default(1000)
+  // Posts a cMoon's own Discord channel a line whenever one of its members genuinely ranks up
+  // (see grantCMoonRank in server/utils/achievements.js, and the admin bulk-recalc's `upgraded`
+  // classification in cmoon-rank-recalc.worker.js) — never fires on a downgrade from either path.
+  cMoonRankUpAnnounceEnabled         Boolean   @default(false)
+  // Pings a cMoon's own Discord channel when a solo (non-raid) FINAL_BOSS-rank enemy appears for
+  // one of its members (see consider.post.js) — cooldown guards against spamming the channel if
+  // the same team's members keep rolling the boss in quick succession; see
+  // CMoonEnemyMember.lastFinalBossPingAt for the per-enemy atomic claim this uses.
+  cMoonFinalBossPingEnabled          Boolean   @default(false)
+  cMoonFinalBossPingCooldownMinutes  Int       @default(60)
+  // Posts a one-line welcome to a cMoon's own Discord channel when a player genuinely joins via
+  // the random-assignment flow (selectCMoonForUser in server/utils/cmoon.js) — never fires for an
+  // admin reassignment, captain-align, Balance Teams, or an accepted team-change request, since
+  // those all go through the separate reassignCMoonForUser path instead.
+  cMoonWelcomePostEnabled            Boolean   @default(false)
+  // Weekly top-slayer recap (server/cron/cmoon-weekly-recap.js) — same enabled+day/hour/minute
+  // shape as cMoonRiddleRotation above; when the admin-chosen day/hour/minute (America/Chicago)
+  // hits, posts each cMoon's own top enemies-defeated member over the past 7 days to that cMoon's
+  // Discord channel.
+  cMoonWeeklyRecapEnabled            Boolean   @default(false)
+  cMoonWeeklyRecapDayOfWeek          Int       @default(0) // 0=Sunday..6=Saturday; default Sunday
+  cMoonWeeklyRecapHour               Int       @default(9) // 0-23, America/Chicago
+  cMoonWeeklyRecapMinute             Int       @default(0) // 0-59
+  // Idempotency key (YYYY-MM-DD, America/Chicago), same role as cMoonRiddleLastPostedFor above.
+  cMoonWeeklyRecapLastPostedFor      String?
+  // End-of-season MVP recap — posted per-cMoon by server/api/admin/cmoon-season/start-new.post.js
+  // itself (computed over the just-ended season's [startedAt, now) range) at the moment an admin
+  // triggers the rollover, rather than on any cron.
+  cMoonSeasonMvpRecapEnabled         Boolean   @default(false)
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }
@@ -5598,6 +5635,12 @@ model CMoonEnemyMember {
   // Cleared by the same admin revive action defeatedAt uses (reset.post.js), which now clears
   // whichever of the two actually applies to this member.
   raidDefeatedAt       DateTime?
+  // Atomic-claim cooldown stamp for the solo FINAL_BOSS Discord ping (see
+  // GlobalGameConfig.cMoonFinalBossPingEnabled/cMoonFinalBossPingCooldownMinutes) — set via a
+  // conditional UPDATE ... WHERE lastFinalBossPingAt IS NULL OR < cutoff, so two players rolling
+  // this same enemy within the cooldown window can never both trigger a post. Independent of
+  // raidDefeatedAt/defeatedAt — this only ever gates a chat message, never battle eligibility.
+  lastFinalBossPingAt  DateTime?
 
   faction CMoonEnemyFaction  @relation(fields: [factionId], references: [id], onDelete: Cascade)
   rewards CMoonEnemyReward[]
@@ -6078,6 +6121,13 @@ model CMoonSeasonConfig {
   enemiesDefeatedGoalEnabled Boolean @default(false)
   enemiesDefeatedGoalLabel   String  @default("Enemies Defeated")
   enemiesDefeatedGoalTarget  Int     @default(1000)
+  // Atomic claim stamp for the server-wide "goal reached" Discord announcement — set via a
+  // conditional UPDATE ... WHERE enemiesDefeatedGoalAnnouncedAt IS NULL the moment a WIN (solo or
+  // raid) is recorded that pushes computeSeasonProgress()'s live total past enemiesDefeatedGoalTarget,
+  // so concurrent wins racing across the threshold can only ever post once. Reset to null by
+  // start-new.post.js on every season rollover (alongside startedAt moving forward) so the
+  // announcement can fire again for the new season's own goal.
+  enemiesDefeatedGoalAnnouncedAt DateTime?
   updatedAt DateTime @updatedAt
 }
 

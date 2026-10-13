@@ -18,6 +18,7 @@ import { prisma as db } from '@/server/prisma'
 import { assertSameOrigin } from '@/server/utils/requireAdmin'
 import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from '@/server/utils/achievements'
 import { recomputeCMoonPointsForUsers } from '@/server/cron/cmoon-points-aggregate'
+import { announceTeamEnemiesMilestone, checkAndAnnounceSeasonGoalReached } from '@/server/utils/cmoonDiscordEvents'
 import {
   isValidPlayerSubmittedAction, resolveRound, rollEnemyRewards, buildGrantableReward,
   serializeBattleForClient, MAX_ROUNDS_SAFETY, HEAL_ON_SUCCESSFUL_BLOCK,
@@ -269,8 +270,9 @@ async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining) {
     }
 
     // No cMoon to credit a win to for a null-cMoonId battle — see pointsAwarded's own comment.
+    let updatedCMoon = null
     if (battle.cMoonId) {
-      await tx.cMoon.update({ where: { id: battle.cMoonId }, data: { battleWins: { increment: 1 } } })
+      updatedCMoon = await tx.cMoon.update({ where: { id: battle.cMoonId }, data: { battleWins: { increment: 1 } } })
     }
 
     const rewardsGranted = [
@@ -290,11 +292,19 @@ async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining) {
       include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
     })
 
-    return { updated, ctoonJobs: summary.ctoonJobs }
+    return { updated, ctoonJobs: summary.ctoonJobs, updatedCMoon }
   })
 
   if (txResult.ctoonJobs.length) await enqueueCtoonJobs(battle.userId, txResult.ctoonJobs, 'CMOON_ENEMY_BATTLE_WIN')
   if (pointsAwarded > 0) await recomputeCMoonPointsForUsers([battle.userId])
+  // Team enemies-defeated milestone — compares the pre-increment value already loaded on `battle`
+  // (from this handler's own findUnique, before this win's transaction ran) against the just-
+  // committed post-increment value, so no extra read is needed. Also checks the server-wide
+  // season "enemies defeated" goal, which has nothing to do with any one team's own battleWins.
+  if (txResult.updatedCMoon) {
+    announceTeamEnemiesMilestone(battle.cMoonId, battle.cMoon?.battleWins, txResult.updatedCMoon.battleWins).catch(() => {})
+  }
+  checkAndAnnounceSeasonGoalReached().catch(() => {})
   // Fire-and-forget, same pattern server/api/tko/event.post.js uses right after its own win is
   // persisted — checks every active achievement (e.g. "defeat N cMoon enemies") against this
   // player's now-updated stats and awards any newly met. Never awaited: a slow/failed check must

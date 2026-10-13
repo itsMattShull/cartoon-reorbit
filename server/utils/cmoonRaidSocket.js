@@ -78,6 +78,7 @@ import { notifyCMoonRaidBossStarted } from './notifications.js'
 import { pushUserNotification } from './realtimeNotify.js'
 import { buildGrantableReward, isValidPlayerSubmittedAction } from './cmoonEnemyBattle.js'
 import { resolveMemberSoundPaths } from './cmoonEnemy.js'
+import { announceTeamEnemiesMilestone, checkAndAnnounceSeasonGoalReached } from './cmoonDiscordEvents.js'
 import {
   resolveRaidRound, rollEnemyAction, rollEnemyRewards, PLAYER_MAX_HP,
   JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE, MAX_ROUNDS_SAFETY,
@@ -559,6 +560,13 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
   const pointsShareByUser = new Map(participantIds.map((userId, i) =>
     [userId, baseShare + (i < remainder ? 1 : 0)]))
 
+  // Pre-increment value for the team enemies-defeated milestone diff below — only fetched on a
+  // WIN, same "don't query for nothing" stance the rest of this file takes.
+  const cMoonBeforeWin = outcome === 'WIN'
+    ? await db.cMoon.findUnique({ where: { id: raid.cMoonId }, select: { battleWins: true } })
+    : null
+  let cMoonAfterWin = null
+
   const ctoonJobsByUser = new Map()
   try {
     await db.$transaction(async tx => {
@@ -623,7 +631,7 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
       }
 
       if (outcome === 'WIN') {
-        await tx.cMoon.update({ where: { id: raid.cMoonId }, data: { battleWins: { increment: 1 } } })
+        cMoonAfterWin = await tx.cMoon.update({ where: { id: raid.cMoonId }, data: { battleWins: { increment: 1 } } })
         // Drives checkRaidBossAvailability's raidOneTime/raidCooldownMinutes gate for the NEXT
         // encounter — never set on a LOSS/ABANDONED, since the boss wasn't actually defeated.
         await tx.cMoonEnemyMember.update({ where: { id: raid.enemyMemberId }, data: { raidDefeatedAt: new Date() } })
@@ -643,6 +651,10 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
   if (pointsAwarded > 0) recomputeCMoonPointsForUsers(participantIds).catch(() => {})
   for (const userId of participantIds) processAchievementsForUser(userId).catch(() => {})
   sendCMoonTeamUpdate(raidDiscordPostTarget(raid), formatRaidRecapMessage(raid, { pointsAwarded }))
+  if (cMoonAfterWin) {
+    announceTeamEnemiesMilestone(raid.cMoonId, cMoonBeforeWin?.battleWins, cMoonAfterWin.battleWins).catch(() => {})
+    checkAndAnnounceSeasonGoalReached().catch(() => {})
+  }
 
   broadcast(io, raid, EV('ended'))
   destroyRaid(raid.id)

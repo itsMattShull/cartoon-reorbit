@@ -74,6 +74,18 @@ export default defineEventHandler(async (event) => {
         }
       ],
       dm_permission: true
+    },
+    {
+      name: 'cmoon',
+      description: 'cMoon team commands',
+      options: [
+        {
+          type: 1,            // SUBCOMMAND
+          name: 'stats',
+          description: 'Show your cMoon team and personal stats'
+        }
+      ],
+      dm_permission: true
     }
   ]
 

@@ -13,6 +13,7 @@ import { getGlobalConfig } from '@/server/utils/cmoon'
 import { serializeEnemyForClient, serializeBattleForClient } from '@/server/utils/cmoonEnemyBattle'
 import { checkRaidBossAvailability } from '@/server/utils/cmoonEnemyRaid'
 import { filterToHighestRank, pickWeightedEnemy, filterCappedNonRaidCandidates } from '@/server/utils/cmoonEnemy'
+import { pingFinalBossAppeared } from '@/server/utils/cmoonDiscordEvents'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -132,6 +133,13 @@ export default defineEventHandler(async (event) => {
     db.user.update({ where: { id: userId }, data: { lastCMoonBattlePopupAt: new Date() } }),
     chosen.isRaidBoss ? null : db.cMoonEnemyPopupLog.create({ data: { userId } }),
   ])
+
+  // A raid-boss FINAL_BOSS already gets its own announceCMoonRaidBoss ping once a raid actually
+  // starts — this only ever fires for a SOLO Final Boss encounter, which otherwise has no
+  // announcement at all.
+  if (!chosen.isRaidBoss && chosen.rank === 'FINAL_BOSS' && user.cMoonId) {
+    pingFinalBossAppeared(user.cMoonId, chosen.id, chosen.name).catch(() => {})
+  }
 
   return { offered: true, resumed: false, enemy: serializeEnemyForClient(chosen), inCMoon: !!user.cMoonId }
 })
