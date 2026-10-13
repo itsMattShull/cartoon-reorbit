@@ -43,8 +43,8 @@
             </div>
             <span class="text-xs text-gray-300">Goal: {{ matchState.you.goalColor }}</span>
           </div>
-          <div class="flex flex-wrap justify-around gap-y-1.5 w-full max-w-sm">
-            <div v-for="n in slotNumbers" :key="'you-'+n" class="w-[22%]" @click="onSlotClick(n)">
+          <div class="grid grid-cols-8 gap-y-1.5 w-full max-w-sm">
+            <div v-for="n in slotNumbers" :key="'you-'+n" class="col-span-2 w-[88%] justify-self-center" :class="slotOffsetClass(n)" @click="onSlotClick(n)">
               <OgGtoonCardTile
                 :card="yourSlotCard(n)"
                 :face-down="yourSlotFaceDown(n)"
@@ -118,8 +118,8 @@
             </div>
             <span class="text-xs text-gray-300">Goal: {{ matchState.opponent.goalColor }}</span>
           </div>
-          <div class="flex flex-wrap justify-around gap-y-1.5 w-full max-w-sm">
-            <div v-for="n in slotNumbers" :key="'opp-'+n" class="w-[22%]">
+          <div class="grid grid-cols-8 gap-y-1.5 w-full max-w-sm">
+            <div v-for="n in slotNumbers" :key="'opp-'+n" class="col-span-2 w-[88%] justify-self-center" :class="slotOffsetClass(n)">
               <OgGtoonCardTile
                 :card="oppSlotCard(n)"
                 :face-down="oppSlotFaceDown(n)"
@@ -326,6 +326,17 @@ const slotNumbers = computed(() => {
   const max = Math.max(7, ...(m?.roundSlots || []), ...youRevealed.value.map(r => r.slot), ...oppRevealed.value.map(r => r.slot))
   return Array.from({ length: max }, (_, i) => i + 1)
 })
+/* ── Slot layout ─────────────────────────────────────────────────────────────────────────────
+ * Four slots per row on an 8-column grid, each slot spanning two columns, so the slots are evenly spread (what
+ * space-around gives) and a shorter last row starts half a slot in: its slots sit in the gaps between the slots
+ * above. A row with fewer than four slots is centred the same way (3 -> col 2, 2 -> col 3, 1 -> col 4). */
+const SLOTS_PER_ROW = 4
+const PARTIAL_ROW_START = { 3: 'col-start-2', 2: 'col-start-3', 1: 'col-start-4' }
+function slotOffsetClass(n) {
+  const i = n - 1
+  if (i % SLOTS_PER_ROW !== 0) return ''
+  return PARTIAL_ROW_START[slotNumbers.value.length - i] || ''
+}
 const revealedAt = (list, slot) => list.find(r => r.slot === slot) || null
 
 const handById = computed(() => new Map((matchState.value?.you?.hand || []).map(c => [c.idx, c])))
