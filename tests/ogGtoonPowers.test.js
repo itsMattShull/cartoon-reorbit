@@ -87,8 +87,13 @@ function parseAmount(a) {
  * for one printed power. `cards` = everything in play. Throws if the sentence is not understood.
  */
 function referenceEffects(description) {
-  // Printed ambiguity, settled by the game's owner: "x2 if Granny is in play" multiplies Juniper Lee, not the power's card.
-  if (description === '+3 to Juniper Lee; x2 if Granny is in play') description = '+3 to Juniper Lee; x2 to Juniper Lee if Granny is in play'
+  // Settled by the game's owner: when a power names ONE character and then adds a conditional bonus, the bonus applies to that character, not the power's card.
+  const FOLLOW_ON = {
+    '+3 to Juniper Lee; x2 if Granny is in play': '+3 to Juniper Lee; x2 to Juniper Lee if Granny is in play',
+    '+5 to any Bubbles; +7 if next to any Him': '+5 to any Bubbles; +7 to any Bubbles if next to any Him',
+    '-4 to any George Jetson; -1 if any Stella Spacely is in play': '-4 to any George Jetson; -1 to any George Jetson if any Stella Spacely is in play'
+  }
+  description = FOLLOW_ON[description] ?? description
   const clauses = description.split(/;|,(?= *(?:x\d|[+-]\d))/).map(s => s.trim()).filter(Boolean)
   const fns = clauses.map(clauseFn)
   return (ctx) => fns.flatMap(fn => fn(ctx))
@@ -182,7 +187,7 @@ function clauseFn(clause) {
   // "+N to [any] X [if Y is in play]"
   if ((m = clause.match(/^(x\d+|[+-]\d+) to (?:any )?(.+?)(?: if (.+))?$/i))) {
     const a = parseAmount(m[1]); const other = /^other /i.test(m[2]); const noun = nounOf(m[2]); const cond = m[3] ? conditionFn(m[3]) : null
-    return (ctx) => (cond && !cond(ctx) ? [] : ctx.cards.filter(c => matchesNoun(c, noun) && !(other && c === ctx.src)).map(card => ({ card, ...a })))
+    return (ctx) => ctx.cards.filter(c => matchesNoun(c, noun) && !(other && c === ctx.src) && (!cond || cond({ ...ctx, src: c, neighbors: ctx.neighborsOf(c), opposite: ctx.oppositeOf(c) }))).map(card => ({ card, ...a }))
   }
   // "+N if <condition>" on the source card itself
   if ((m = clause.match(/^(x\d+|[+-]\d+) if (.+)$/i))) {
@@ -268,7 +273,10 @@ function referenceLive(board, srcRef, read) {
   const src = mine[srcRef.slot - 1]
   const at = (arr, i) => (i >= 0 && i < 7 ? arr[i] || null : null)
   const neighbors = [at(mine, srcRef.slot - 2), at(mine, srcRef.slot)].filter(Boolean)
-  const ctx = { cards: all, src, neighbors, opposite: at(theirs, srcRef.slot - 1), own: mine.filter(Boolean), opp: theirs.filter(Boolean) }
+  const place = (card) => { for (const sd of ['p1', 'p2']) { const i = board[sd].indexOf(card); if (i >= 0) return { sd, i } } return null }
+  const neighborsOf = (card) => { const { sd, i } = place(card); return [at(board[sd], i - 1), at(board[sd], i + 1)].filter(Boolean) }
+  const oppositeOf = (card) => { const { sd, i } = place(card); return at(board[sd === 'p1' ? 'p2' : 'p1'], i) }
+  const ctx = { cards: all, src, neighbors, opposite: at(theirs, srcRef.slot - 1), own: mine.filter(Boolean), opp: theirs.filter(Boolean), neighborsOf, oppositeOf }
   ctx.src.slot = srcRef.slot
   const out = read(ctx)
   const res = new Map(all.map(c => [c, { mul: 1, add: 0, color: c.color }]))

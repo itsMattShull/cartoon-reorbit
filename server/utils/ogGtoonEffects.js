@@ -59,6 +59,7 @@
 //     a list of names (any match). `condition.mode: 'all'` requires EVERY listed name in play.
 //     Names compare ignoring case and a leading "the".
 //   - filter clause { by: 'anyOf', value: [clause, ...] } — an OR inside an allMatching filter list.
+//   - `condition.relativeTo: 'target'` — adjacency is measured from the card being modified, not the source.
 //   - condition flags: `excludeSelf` (the source card does not count, "any OTHER Hero"),
 //     `oppositeOnly` (only the card facing the source in the same slot, "opposite card is Blue"),
 //     `adjacentOnly` (neighbors only). Condition types `targetHasType` (inverse of
@@ -212,6 +213,7 @@ export function isValidEffect(e) {
     if (c.side && !['own', 'opponent', 'either'].includes(c.side)) return false
     if (c.type === 'characterInPlay' && !isCharacterRef(c.character)) return false
     if (c.mode != null && c.mode !== 'any' && c.mode !== 'all') return false
+    if (c.relativeTo != null && c.relativeTo !== 'source' && c.relativeTo !== 'target') return false
     if (c.excludeSelf != null && typeof c.excludeSelf !== 'boolean') return false
     if (c.oppositeOnly != null && typeof c.oppositeOnly !== 'boolean') return false
     if (c.type === 'slotIs' && !(Number.isInteger(c.slot) && c.slot >= 1)) return false
@@ -549,8 +551,12 @@ function conditionMet(inst, sides, targetCard) {
   if (cond.type === 'slotIs') return inst.sourceCard.roundIndex === cond.slot - 1
 
   // "next to X" — the source card's own adjacent (prev/next round-index) cards on its own side.
+  // `relativeTo: 'target'` measures from the card being modified instead ("+7 to Bubbles if next to Him").
   if (cond.adjacentOnly) {
-    return poolSatisfies(neighborsOf(sides, inst.ownerSide, inst.sourceCard.roundIndex, cond.positions), cond)
+    const anchor = cond.relativeTo === 'target' && targetCard ? targetCard : null
+    return poolSatisfies(anchor
+      ? neighborsOf(sides, anchor.side, anchor.roundIndex, cond.positions)
+      : neighborsOf(sides, inst.ownerSide, inst.sourceCard.roundIndex, cond.positions), cond)
   }
   // "opposite card is X" — only the card facing the source card in the same slot.
   if (cond.oppositeOnly) {
