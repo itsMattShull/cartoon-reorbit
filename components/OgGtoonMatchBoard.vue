@@ -44,7 +44,8 @@
             <span class="text-xs text-gray-300">Goal: {{ matchState.you.goalColor }}</span>
           </div>
           <div class="grid grid-cols-8 gap-y-1.5 w-full max-w-sm">
-            <div v-for="n in slotNumbers" :key="'you-'+n" class="col-span-2 w-[88%] justify-self-center" :class="slotOffsetClass(n)" @click="onSlotClick(n)">
+            <div v-for="n in slotNumbers" :key="'you-'+n" class="relative col-span-2 w-[88%] justify-self-center" :class="slotOffsetClass(n)" @click="onSlotClick(n)">
+              <span v-if="deltaFor(youSide, n)" class="og-delta" :class="deltaFor(youSide, n) > 0 ? 'text-green-400' : 'text-red-500'">{{ deltaFor(youSide, n) > 0 ? '+' : '' }}{{ deltaFor(youSide, n) }}</span>
               <OgGtoonCardTile
                 :card="yourSlotCard(n)"
                 :face-down="yourSlotFaceDown(n)"
@@ -119,7 +120,8 @@
             <span class="text-xs text-gray-300">Goal: {{ matchState.opponent.goalColor }}</span>
           </div>
           <div class="grid grid-cols-8 gap-y-1.5 w-full max-w-sm">
-            <div v-for="n in slotNumbers" :key="'opp-'+n" class="col-span-2 w-[88%] justify-self-center" :class="slotOffsetClass(n)">
+            <div v-for="n in slotNumbers" :key="'opp-'+n" class="relative col-span-2 w-[88%] justify-self-center" :class="slotOffsetClass(n)">
+              <span v-if="deltaFor(oppSide, n)" class="og-delta" :class="deltaFor(oppSide, n) > 0 ? 'text-green-400' : 'text-red-500'">{{ deltaFor(oppSide, n) > 0 ? '+' : '' }}{{ deltaFor(oppSide, n) }}</span>
               <OgGtoonCardTile
                 :card="oppSlotCard(n)"
                 :face-down="oppSlotFaceDown(n)"
@@ -261,9 +263,27 @@ const cardKey = (side, slot) => `${side}:${slot}`
 const toShown = (board) => new Map((board?.cards || []).map(c => [cardKey(c.side, c.slot), { finalValue: c.finalValue, color: c.color, cancelled: c.cancelled }]))
 const toMarkers = (board) => new Map((board?.markers || []).map(m => [cardKey(m.side, m.slot), m]))
 
+/* Point changes (+N green / -N red) shown above the affected card for 1.5s after another card's reveal. */
+const DELTA_MS = 1500
+const deltas = ref(new Map())
+const deltaFor = (side, slot) => deltas.value.get(cardKey(side, slot)) || 0
+function showDeltas(prevShown, nextShown) {
+  const next = new Map()
+  for (const [key, cur] of nextShown) {
+    const prev = prevShown.get(key)
+    if (!prev) continue
+    const diff = (cur.finalValue || 0) - (prev.finalValue || 0)
+    if (diff) next.set(key, diff)
+  }
+  if (!next.size) return
+  deltas.value = next
+  setTimeout(() => { if (deltas.value === next) deltas.value = new Map() }, DELTA_MS)
+}
+
 watch(lastReveal, async (rev) => {
   const token = ++playToken
   playback.value = null
+  deltas.value = new Map()
   const steps = rev?.steps || []
   if (!steps.length) return
   const timing = normalizeRevealTiming(rev.timing) // admin-tunable (Manage Games > gToons (Original))
@@ -284,7 +304,9 @@ watch(lastReveal, async (rev) => {
     await sleep(timing.cardMs)
     if (token !== playToken) return
     // 2) its powers land: values, colors, knock-outs, markers and totals all update together.
-    playback.value = { hidden, shown: toShown(step), markers: toMarkers(step) }
+    const nextShown = toShown(step)
+    showDeltas(shown, nextShown)
+    playback.value = { hidden, shown: nextShown, markers: toMarkers(step) }
     await sleep(step.changed ? timing.effectsMs : timing.quietMs)
   }
   if (token === playToken) playback.value = null
@@ -548,6 +570,8 @@ watch(inSwapPhase, (on) => { if (!on) swapSheetOpen.value = false })
 
 <style scoped>
 .og-goal { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.og-delta { position: absolute; left: 0; right: 0; top: -0.9rem; z-index: 10; text-align: center; font-weight: 800; font-size: 1rem; line-height: 1; text-shadow: 0 1px 3px rgba(0,0,0,.9); pointer-events: none; animation: og-delta-rise 1.5s ease-out forwards; }
+@keyframes og-delta-rise { 0% { opacity: 0; transform: translateY(6px) } 15% { opacity: 1; transform: translateY(0) } 80% { opacity: 1 } 100% { opacity: 0; transform: translateY(-6px) } }
 .fade-enter-active, .fade-leave-active { transition: opacity .2s ease }
 .fade-enter-from, .fade-leave-to { opacity: 0 }
 .slide-up-enter-active, .slide-up-leave-active { transition: transform .25s ease }
