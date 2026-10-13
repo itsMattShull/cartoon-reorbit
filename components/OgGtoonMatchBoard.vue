@@ -43,8 +43,8 @@
             </div>
             <span class="text-xs text-gray-300">Goal: {{ matchState.you.goalColor }}</span>
           </div>
-          <div class="grid grid-cols-4 gap-1.5 w-full max-w-sm">
-            <div v-for="n in slotNumbers" :key="'you-'+n" @click="onSlotClick(n)">
+          <div class="flex flex-wrap justify-around gap-y-1.5 w-full max-w-sm">
+            <div v-for="n in slotNumbers" :key="'you-'+n" class="w-[22%]" @click="onSlotClick(n)">
               <OgGtoonCardTile
                 :card="yourSlotCard(n)"
                 :face-down="yourSlotFaceDown(n)"
@@ -118,8 +118,8 @@
             </div>
             <span class="text-xs text-gray-300">Goal: {{ matchState.opponent.goalColor }}</span>
           </div>
-          <div class="grid grid-cols-4 gap-1.5 w-full max-w-sm">
-            <div v-for="n in slotNumbers" :key="'opp-'+n">
+          <div class="flex flex-wrap justify-around gap-y-1.5 w-full max-w-sm">
+            <div v-for="n in slotNumbers" :key="'opp-'+n" class="w-[22%]">
               <OgGtoonCardTile
                 :card="oppSlotCard(n)"
                 :face-down="oppSlotFaceDown(n)"
