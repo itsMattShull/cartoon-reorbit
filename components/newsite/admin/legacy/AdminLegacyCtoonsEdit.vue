@@ -1232,7 +1232,7 @@ async function submitForm(){
     fd.append('gtoonGroup', isOgGtoon.value ? gtoonGroup.value : '')
 
     // advisory schedule fields
-    fd.append('initialReleaseAt', releaseDate.value ? new Date(releaseDate.value).toISOString() : '')
+    fd.append('initialReleaseAt', releaseDate.value ? zonedTimeToUtc(releaseDate.value, 'America/Chicago').toISOString() : '')
     fd.append('finalReleaseAt', schedule.value.finalAt ? schedule.value.finalAt.toISOString() : '')
     fd.append('initialReleaseQty', schedule.value.initialQty ?? '')
     fd.append('finalReleaseQty', schedule.value.finalQty ?? '')
@@ -1303,7 +1303,7 @@ async function submitForm(){
     gtoonGroup:  isOgGtoon.value ? (gtoonGroup.value || null) : null,
 
     // advisory schedule fields
-    initialReleaseAt: releaseDate.value ? new Date(releaseDate.value).toISOString() : null,
+    initialReleaseAt: releaseDate.value ? zonedTimeToUtc(releaseDate.value, 'America/Chicago').toISOString() : null,
     finalReleaseAt:   schedule.value.finalAt ? schedule.value.finalAt.toISOString() : null,
     initialReleaseQty: schedule.value.initialQty ?? null,
     finalReleaseQty:   schedule.value.finalQty ?? null,
