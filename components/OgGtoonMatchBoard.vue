@@ -267,17 +267,16 @@ const toMarkers = (board) => new Map((board?.markers || []).map(m => [cardKey(m.
 const DELTA_MS = 1500
 const deltas = ref(new Map())
 const deltaFor = (side, slot) => deltas.value.get(cardKey(side, slot)) || 0
-function showDeltas(prevShown, nextShown) {
-  const next = new Map()
+/** Cards whose points differ between two snapshots, in board order: [[key, diff], ...]. */
+function pointChanges(prevShown, nextShown) {
+  const out = []
   for (const [key, cur] of nextShown) {
     const prev = prevShown.get(key)
     if (!prev) continue
     const diff = (cur.finalValue || 0) - (prev.finalValue || 0)
-    if (diff) next.set(key, diff)
+    if (diff) out.push([key, diff])
   }
-  if (!next.size) return
-  deltas.value = next
-  setTimeout(() => { if (deltas.value === next) deltas.value = new Map() }, DELTA_MS)
+  return out
 }
 
 watch(lastReveal, async (rev) => {
@@ -305,8 +304,23 @@ watch(lastReveal, async (rev) => {
     if (token !== playToken) return
     // 2) its powers land: values, colors, knock-outs, markers and totals all update together.
     const nextShown = toShown(step)
-    showDeltas(shown, nextShown)
-    playback.value = { hidden, shown: nextShown, markers: toMarkers(step) }
+    const markers = toMarkers(step)
+    const changes = pointChanges(shown, nextShown)
+    if (changes.length) {
+      // Apply the point changes one card at a time; each shows its +N / -N for DELTA_MS before the next starts.
+      let cur = new Map(shown)
+      for (const [key, diff] of changes) {
+        cur = new Map(cur)
+        cur.set(key, nextShown.get(key))
+        playback.value = { hidden, shown: cur, markers }
+        deltas.value = new Map([[key, diff]])
+        await sleep(DELTA_MS)
+        deltas.value = new Map()
+        await nextTick()
+        if (token !== playToken) return
+      }
+    }
+    playback.value = { hidden, shown: nextShown, markers }
     await sleep(step.changed ? timing.effectsMs : timing.quietMs)
   }
   if (token === playToken) playback.value = null
