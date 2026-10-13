@@ -129,7 +129,7 @@
 
             <div class="space-y-1">
               <div v-for="opt in detail.options" :key="opt.id" class="flex items-center gap-2 text-[11px] border rounded px-2 py-1.5">
-                <img v-if="opt.assetPath" :src="opt.assetPath" :alt="opt.name" class="h-8 w-auto flex-shrink-0" />
+                <CtoonImage v-if="opt.assetPath" :ctoon="opt" :alt="opt.name" class="h-8 w-auto flex-shrink-0" />
                 <span class="break-words min-w-0 flex-1">{{ opt.name }}</span>
                 <span class="flex-shrink-0 text-gray-600">{{ opt.claimCount }} pick{{ opt.claimCount === 1 ? '' : 's' }}</span>
               </div>
@@ -195,6 +195,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { ref, computed, onMounted } from 'vue'
 
 const props = defineProps({

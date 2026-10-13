@@ -6,6 +6,7 @@ import { prisma, rawPrisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
 import { isSyntheticUserCtoonId } from '@/server/utils/userCtoonToken'
 import { NAV_CACHE_KEY } from './[username]/next.get.js'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   // 1. Auth check
@@ -117,7 +118,7 @@ export default defineEventHandler(async (event) => {
         select: {
           id: true,
           name: true,
-          assetPath: true,
+          assetPath: true, ...OG_GTOON_DISPLAY_SELECT,
           series: true,
           set: true,
           rarity: true,
@@ -141,6 +142,7 @@ export default defineEventHandler(async (event) => {
         mintNumber: uc.mintNumber,
         name: uc.ctoon.name,
         assetPath: uc.ctoon.assetPath,
+        ...ogGtoonDisplay(uc.ctoon),
         series: uc.ctoon.series,
         set: uc.ctoon.set,
         rarity: uc.ctoon.rarity,
@@ -197,6 +199,7 @@ export default defineEventHandler(async (event) => {
         mintNumber: rest.mintNumber,
         name: rest.name,
         assetPath: rest.assetPath,
+        ...ogGtoonDisplay(rest),
         series: rest.series,
         set: rest.set,
         rarity: rest.rarity,

@@ -213,7 +213,21 @@
             @contextmenu.prevent.stop="cz.buildMode && removeToon(toon)"
           >
 
+            <!-- Original gToons render as the round card, centered inside the same placement box so the
+                 saved size / position / rotation / layering all keep working. Static (no ambient loops). -->
+            <div v-if="toon.isOgGtoon" class="cz-item-og" :title="toon.name">
+              <GtoonCard
+                :image-url="toon.assetPath"
+                :value="toon.gtoonValue ?? 0"
+                :color="toon.gtoonColor || 'SILVER'"
+                :card-style="toon.gtoonCardStyle"
+                :seed="String(toon.ctoonId || toon.name || '')"
+                :alt="toon.name"
+                effects="static"
+              />
+            </div>
             <img
+              v-else
               :src="toon.assetPath" :alt="toon.name"
               class="cz-item-img"
               :title="toon.name"
@@ -261,7 +275,7 @@
               :style="{ position: 'absolute', top: item.y + 'px', left: item.x + 'px', width: item.size + 'px', height: item.size + 'px', zIndex: 60 }"
               @click="captureCzoneSearchItem(item)"
             >
-              <img :src="item.assetPath" :alt="item.name" class="czone-search-image" loading="lazy" />
+              <CtoonImage :ctoon="item" :alt="item.name" class="czone-search-image" loading="lazy" />
             </button>
           </template>
         </div>
@@ -325,12 +339,11 @@
             </div>
             <div class="p-4 overflow-y-auto flex-1">
               <div v-if="capturedCtoon" class="space-y-4">
-                <img
-                  :src="capturedCtoon.assetPath"
+                <CtoonImage
+                  :ctoon="capturedCtoon"
                   :alt="capturedCtoon.name || 'Captured cToon'"
                   class="w-full max-h-56 object-contain rounded"
-                  loading="lazy"
-                />
+                  loading="lazy" />
                 <div class="space-y-1">
                   <p class="font-semibold text-base">You've captured {{ capturedCtoon.captureCount.toLocaleString() }} {{ capturedCtoon.name }}s</p>
                   <p class="text-sm text-gray-600">You now own {{ capturedCtoon.ownedCount.toLocaleString() }} {{ capturedCtoon.name }}s</p>
@@ -362,11 +375,10 @@
               <div v-else-if="!wishlistItems.length" class="cz-modal-empty">No cToons on their wishlist.</div>
               <div v-else class="cz-wl-grid">
                 <div v-for="item in wishlistItems" :key="item.id" class="cz-wl-card">
-                  <img
-                    :src="item.ctoon.assetPath" :alt="item.ctoon.name"
+                  <CtoonImage
+                    :ctoon="item.ctoon" :alt="item.ctoon.name"
                     class="cz-wl-img cz-wl-img--clickable"
-                    @click="openCtoonModal({ ctoonId: item.ctoon.id, assetPath: item.ctoon.assetPath, name: item.ctoon.name, context: { source: 'czone', isOwner: isOwnZone, username: viewedUsername || '' } })"
-                  />
+                    @click="openCtoonModal({ ctoonId: item.ctoon.id, assetPath: item.ctoon.assetPath, name: item.ctoon.name, context: { source: 'czone', isOwner: isOwnZone, username: viewedUsername || '' } })" />
                   <p class="cz-wl-name">{{ item.ctoon.name }}</p>
                   <p class="cz-wl-pts">Offer: {{ item.offeredPoints.toLocaleString() }} pts</p>
                   <p class="cz-wl-owned">
@@ -416,7 +428,7 @@
                     class="cz-wl-card cz-wl-card--clickable"
                     @click="goToTradeWithCtoon(item)"
                   >
-                    <img :src="item.assetPath" :alt="item.name" class="cz-wl-img" />
+                    <CtoonImage :ctoon="item" :alt="item.name" class="cz-wl-img" />
                     <p class="cz-wl-name">{{ item.name }}</p>
                     <p class="cz-wl-pts">{{ item.rarity }}</p>
                     <p class="cz-wl-owned">Mint #{{ item.mintNumber ?? 'N/A' }}</p>
@@ -541,6 +553,8 @@
 </template>
 
 <script setup>
+import GtoonCard from '@/components/GtoonCard.vue'
+import CtoonImage from '@/components/CtoonImage.vue'
 // ── Canvas size variables ─────────────────────────────────────
 const TOON_SIZE        = 80    // default toon size in px when dropped
 const TOPBAR_H         = 34    // top bar's CSS min-height (bare-minimum, short-content baseline)
@@ -2484,6 +2498,19 @@ defineExpose({ save, clearZone })
   100% { transform: scale(0.65); filter: brightness(1.5)  drop-shadow(0 0 10px rgba(255,80,80,1)); }
 }
 
+/* OG gToon round card: a square as large as fits the placement box, centered. */
+.cz-item-og {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  container-type: size;
+  pointer-events: none;
+}
+.cz-item-og > .gtoon-card-host {
+  width: min(100cqw, 100cqh);
+}
 .cz-item-img {
   width: 100%;
   height: 100%;

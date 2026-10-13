@@ -2,6 +2,7 @@
 // Lists the caller's original gToons (2002) decks, cards ordered by position (0-11).
 import { defineEventHandler, createError, getRequestHeader } from 'h3'
 import { prisma } from '~/server/prisma'
+import { ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   // 1) Authenticate the user
@@ -54,6 +55,7 @@ export default defineEventHandler(async (event) => {
       isSlamGtoon: dc.ctoon.isSlamGtoon,
       gtoonEffect: dc.ctoon.gtoonEffect,
       position: dc.position,
+      ...ogGtoonDisplay(dc.ctoon),
       owned: ownedSet.has(dc.ctoonId) && dc.ctoon?.isOgGtoon === true,
       deckCardId: dc.id
     }))

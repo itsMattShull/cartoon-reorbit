@@ -5,17 +5,17 @@
 // outside the plain data it is handed.
 //
 // The bot plays by the same rules as a human: it is dealt a hand, chooses which cards go in which
-// slots each round, may discard after round 1, and may use its one swap. Its whole game is:
+// slots each round, may discard after round 1, and may pay for the round-3 slot-7 swap. Its whole game is:
 //   1. which deck it brings (see buildBotDeck),
 //   2. which hand cards it places each round (chooseBotPlacements),
 //   3. which cards it discards (chooseBotDiscards), and
-//   4. whether it swaps (chooseBotSwap).
+//   4. whether it swaps its slot-7 card (chooseBotSwap).
 //
 // Fairness: every chooser is given only what a human could see about the bot's own side — its
 // own hand and undealt cards, the round's open slots, and its own goal color. None of them is
 // ever handed the human's hand, placements or undealt cards.
 
-import { isNeutralColor, REGULATION_ROUNDS } from './ogGtoonEngine.js'
+import { isNeutralColor } from './ogGtoonEngine.js'
 
 export const BOT_USERNAME = 'Practice Bot'
 export const BOT_ID = 'practice-bot'
@@ -118,34 +118,24 @@ export function chooseBotDiscards({ difficulty, hand, undealt, goalColor }) {
 }
 
 /**
- * Decides whether the bot swaps a hand card for a random undealt card this round. It looks at the
- * weakest card it would otherwise play and swaps it out when the undealt cards average clearly
- * better.
+ * Decides whether the bot pays for the round-3 swap: replacing the card in its slot 7 with a random
+ * undealt card. Easy never swaps; Normal/Hard swap when the undealt cards average clearly better
+ * than the slot-7 card they would be replacing.
  *
  * @param {object} view
  * @param {string} view.difficulty
- * @param {boolean} view.swapUsed
- * @param {number} view.round               current round (1-based)
- * @param {number} view.slotCount           how many cards the bot will place this round
- * @param {Array}  view.hand                bot's hand
+ * @param {{value:number,color:string}|null} view.slotCard   the bot's revealed slot-7 card
  * @param {Array}  view.undealt             bot's own undealt cards
  * @param {string} view.goalColor
- * @returns {number|null} deck index of the hand card to swap out, or null
+ * @returns {boolean}
  */
-export function chooseBotSwap({ difficulty, swapUsed, round, slotCount, hand, undealt, goalColor }) {
+export function chooseBotSwap({ difficulty, slotCard, undealt, goalColor }) {
   const level = normalizeDifficulty(difficulty)
-  if (level === 'easy' || swapUsed) return null
-  if (!Array.isArray(hand) || !Array.isArray(undealt) || undealt.length === 0 || hand.length === 0) return null
-  // Past regulation the match is in sudden death; a swap is rarely worth burning there.
-  if (round > REGULATION_ROUNDS) return null
-
-  const ranked = hand
-    .map(c => ({ c, s: cardScore(c, goalColor, level) }))
-    .sort((a, b) => b.s - a.s)
-  const weakestPlayed = ranked[Math.min(Math.max(slotCount, 1), ranked.length) - 1]
+  if (level === 'easy' || !slotCard) return false
+  if (!Array.isArray(undealt) || undealt.length === 0) return false
   const avg = undealt.reduce((a, c) => a + cardScore(c, goalColor, level), 0) / undealt.length
   const threshold = level === 'hard' ? 2 : 3
-  return avg - weakestPlayed.s >= threshold ? weakestPlayed.c.idx : null
+  return avg - cardScore(slotCard, goalColor, level) >= threshold
 }
 
 /** Cosmetic think time before the bot commits a round (the choice itself is already made). */

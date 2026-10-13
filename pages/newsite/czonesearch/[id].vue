@@ -87,12 +87,11 @@
               >
                 <div class="flex flex-col gap-4 sm:flex-row sm:items-start">
                   <div class="czs-ctoon-thumb">
-                    <img
+                    <CtoonImage
                       v-if="entry.ctoon?.assetPath"
-                      :src="entry.ctoon.assetPath"
+                      :ctoon="entry.ctoon"
                       :alt="entry.ctoon?.name || 'cToon'"
-                      class="h-full w-full object-contain"
-                    />
+                      class="h-full w-full object-contain" />
                   </div>
                   <div class="flex-1">
                     <div class="flex flex-wrap items-center gap-2">
@@ -157,12 +156,11 @@
                           <p class="font-semibold text-white">cToon Must Be In cZone</p>
                           <div class="mt-2 flex items-center gap-3">
                             <div class="h-12 w-12 rounded-lg border border-white/10 bg-white/5 p-1">
-                              <img
+                              <CtoonImage
                                 v-if="entry.conditionCtoonInZone?.assetPath"
-                                :src="entry.conditionCtoonInZone.assetPath"
+                                :ctoon="entry.conditionCtoonInZone"
                                 :alt="entry.conditionCtoonInZone?.name || 'cToon'"
-                                class="h-full w-full object-contain"
-                              />
+                                class="h-full w-full object-contain" />
                             </div>
                             <div>
                               <p class="text-sm font-semibold text-white">
@@ -183,12 +181,11 @@
                               class="flex items-center gap-3 rounded-lg border border-white/10 bg-white/5 p-2"
                             >
                               <div class="h-10 w-10 rounded-md border border-white/10 bg-white/5 p-1">
-                                <img
+                                <CtoonImage
                                   v-if="row.ctoon?.assetPath"
-                                  :src="row.ctoon.assetPath"
+                                  :ctoon="row.ctoon"
                                   :alt="row.ctoon?.name || 'cToon'"
-                                  class="h-full w-full object-contain"
-                                />
+                                  class="h-full w-full object-contain" />
                               </div>
                               <div class="flex-1">
                                 <p class="text-sm font-semibold text-white">{{ row.ctoon?.name || row.ctoonId }}</p>
@@ -234,6 +231,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 definePageMeta({
   layout: 'newsite-template',
   middleware: 'newsite',

@@ -307,14 +307,21 @@
             </label>
 
             <div v-if="isOgGtoon" class="border rounded-md bg-amber-50 p-3 space-y-3">
-              <div class="flex flex-col gap-1">
-                <label class="text-xs font-medium">Color</label>
-                <select v-model="gtoonColor" class="border rounded-md px-2 py-1.5 text-sm bg-white">
-                  <option disabled value="">Select a color</option>
-                  <option v-for="c in gtoonColorOptions" :key="c" :value="c">{{ c }}</option>
-                </select>
-                <p class="text-[11px] text-gray-500">Black/Silver are neutral goal colors; every other color is non-neutral for the color-bonus scoring rule.</p>
-              </div>
+              <OgGtoonLookEditor
+
+                v-model:color="gtoonColor"
+
+                v-model:card-style="gtoonCardStyle"
+
+                :image-url="newImagePreview || assetPath"
+
+                :value="gtoonValue"
+
+                :name="name"
+
+                :seed="String(id || name)"
+
+              />
               <div class="flex flex-col gap-1">
                 <label class="text-xs font-medium">Value <span class="text-[11px] font-normal">(0–99)</span></label>
                 <input v-model.number="gtoonValue" type="number" min="0" max="99" class="border rounded-md px-2 py-1.5 text-sm" />
@@ -656,6 +663,8 @@ import { zonedTimeToUtc } from 'date-fns-tz'
 import Toast from '~/components/Toast.vue'
 import abilityMeta from '~/data/abilities.json'
 import SecondEditionFields from '~/components/admin/SecondEditionFields.vue'
+import OgGtoonLookEditor from '~/components/newsite/admin/legacy/OgGtoonLookEditor.vue'
+import { defaultGtoonCardStyle, sanitizeGtoonCardStyle } from '~/utils/gtoonCardStyle'
 
 const route = useRoute()
 const router = useRouter()
@@ -740,6 +749,7 @@ function titleCase(s) { return s ? s.charAt(0) + s.slice(1).toLowerCase() : s }
 
 const isOgGtoon   = ref(false)
 const gtoonColor  = ref('')
+const gtoonCardStyle = ref(defaultGtoonCardStyle())
 const gtoonValue  = ref(1)
 const gtoonType1  = ref('')
 const gtoonType2  = ref('')
@@ -833,7 +843,18 @@ function effectFromServerShape(e) {
   } else if (ui.action.type === 'setColor') {
     ui.action.color = a.color || 'BLACK'
   }
+  // Keep the exact server-side effect: the editable row only covers part of the schema (several
+  // filters, character lists, OR/AND conditions, slot/opposite checks...), so an untouched row is
+  // saved from this copy instead of being rebuilt from the row's fields.
+  ui._raw = JSON.parse(JSON.stringify(e))
+  ui._sig = uiEffectSig(ui)
   return ui
+}
+
+/** Signature of a row's editable fields (everything except the preserved original). */
+function uiEffectSig(e) {
+  const { _raw, _sig, ...rest } = e
+  return JSON.stringify(rest)
 }
 
 function coerceFilterValue(by, v) { return by === 'value' ? Number(v) : v }
@@ -841,6 +862,7 @@ function coerceFilterValue(by, v) { return by === 'value' ? Number(v) : v }
 /** Strips UI-only fields and maps each effect row to the server's schema shape. */
 function buildGtoonEffectPayload() {
   return gtoonEffects.value.map(e => {
+    if (e._raw && uiEffectSig(e) === e._sig) return JSON.parse(JSON.stringify(e._raw))
     let target
     if (e.target.selector === 'cardByCharacter') {
       target = { selector: 'cardByCharacter', character: (e.target.character || '').trim() }
@@ -1056,6 +1078,7 @@ onMounted(async ()=>{
 
     isOgGtoon.value   = !!ctoon.isOgGtoon
     gtoonColor.value  = ctoon.gtoonColor || ''
+    gtoonCardStyle.value = sanitizeGtoonCardStyle(ctoon.gtoonCardStyle)
     gtoonValue.value  = ctoon.gtoonValue ?? 1
     gtoonType1.value  = ctoon.gtoonType1 || ''
     gtoonType2.value  = ctoon.gtoonType2 || ''
@@ -1075,8 +1098,14 @@ onMounted(async ()=>{
           const res = await $fetch('/api/admin/oggtoons/power-catalog')
           powerCatalog.value = res.catalog || []
         }
-        const stored = JSON.stringify(ctoon.gtoonEffect)
-        const match = powerCatalog.value.find(p => JSON.stringify(p.effect) === stored)
+        // Compare with sorted keys: the DB's JSON column returns keys in a different order than the catalog.
+        const canon = v => JSON.stringify(v, (_k, val) => (
+          val && typeof val === 'object' && !Array.isArray(val)
+            ? Object.fromEntries(Object.keys(val).sort().map(k => [k, val[k]]))
+            : val
+        ))
+        const stored = canon(ctoon.gtoonEffect)
+        const match = powerCatalog.value.find(p => canon(p.effect) === stored)
         if (match) selectedPowerDescription.value = match.description
       } catch { /* non-fatal: combobox just stays on "No Power" */ }
     }
@@ -1199,6 +1228,7 @@ async function submitForm(){
     }
     fd.append('isOgGtoon', isOgGtoon.value)
     fd.append('gtoonColor', isOgGtoon.value ? gtoonColor.value : '')
+    fd.append('gtoonCardStyle', isOgGtoon.value ? JSON.stringify(gtoonCardStyle.value) : '')
     fd.append('gtoonValue', isOgGtoon.value ? gtoonValue.value : '')
     fd.append('isSlamGtoon', isOgGtoon.value ? isSlamGtoon.value : false)
     fd.append('gtoonEffect', isOgGtoon.value && isSlamGtoon.value ? JSON.stringify(buildGtoonEffectPayload()) : '')
@@ -1208,7 +1238,7 @@ async function submitForm(){
     fd.append('gtoonGroup', isOgGtoon.value ? gtoonGroup.value : '')
 
     // advisory schedule fields
-    fd.append('initialReleaseAt', releaseDate.value ? new Date(releaseDate.value).toISOString() : '')
+    fd.append('initialReleaseAt', releaseDate.value ? zonedTimeToUtc(releaseDate.value, 'America/Chicago').toISOString() : '')
     fd.append('finalReleaseAt', schedule.value.finalAt ? schedule.value.finalAt.toISOString() : '')
     fd.append('initialReleaseQty', schedule.value.initialQty ?? '')
     fd.append('finalReleaseQty', schedule.value.finalQty ?? '')
@@ -1269,6 +1299,7 @@ async function submitForm(){
 
     isOgGtoon:   isOgGtoon.value,
     gtoonColor:  isOgGtoon.value ? gtoonColor.value : null,
+    gtoonCardStyle: isOgGtoon.value ? gtoonCardStyle.value : null,
     gtoonValue:  isOgGtoon.value ? gtoonValue.value : null,
     isSlamGtoon: isOgGtoon.value ? isSlamGtoon.value : false,
     gtoonEffect: isOgGtoon.value && isSlamGtoon.value ? JSON.stringify(buildGtoonEffectPayload()) : null,
@@ -1278,7 +1309,7 @@ async function submitForm(){
     gtoonGroup:  isOgGtoon.value ? (gtoonGroup.value || null) : null,
 
     // advisory schedule fields
-    initialReleaseAt: releaseDate.value ? new Date(releaseDate.value).toISOString() : null,
+    initialReleaseAt: releaseDate.value ? zonedTimeToUtc(releaseDate.value, 'America/Chicago').toISOString() : null,
     finalReleaseAt:   schedule.value.finalAt ? schedule.value.finalAt.toISOString() : null,
     initialReleaseQty: schedule.value.initialQty ?? null,
     finalReleaseQty:   schedule.value.finalQty ?? null,

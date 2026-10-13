@@ -1,5 +1,6 @@
 import { defineEventHandler } from 'h3'
 import { prisma as db } from '@/server/prisma'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 // Fetch on demand; no in-memory cache
 
@@ -22,7 +23,7 @@ async function fetchCToonsFromDB() {
     select: {
       id: true,
       name: true,
-      assetPath: true,
+      assetPath: true, ...OG_GTOON_DISPLAY_SELECT,
       releaseDate: true
     },
     orderBy: {

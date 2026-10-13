@@ -66,7 +66,7 @@
         <ShortCard v-for="c in paginatedCtoons" :key="c.id">
           <template #header>
             <div class="card-img-wrap">
-              <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img card-img--clickable" @click="openInfo(c)" />
+              <CtoonImage v-if="c.assetPath" :ctoon="c" :alt="c.name" class="card-img card-img--clickable" @click="openInfo(c)" />
               <SecondEditionOverlay :ctoon="c" />
               <!-- Overlaid on the artwork rather than added to the footer: the
                    footer's two buttons are stacked at every width now, so a
@@ -122,6 +122,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { duplicateCtoonIds, groupByCtoonId } from '@/utils/duplicateCtoonIds'
 
 const { open: openCtoonModal } = useCtoonModal()

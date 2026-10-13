@@ -1,6 +1,7 @@
 // server/api/holiday/active.get.js
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   // 1) Auth
@@ -37,7 +38,7 @@ export default defineEventHandler(async (event) => {
       name: true,
       series: true,
       rarity: true,
-      assetPath: true,
+      assetPath: true, ...OG_GTOON_DISPLAY_SELECT,
       price: true,
       quantity: true,      // null = unlimited
       inCmart: true,
@@ -55,6 +56,7 @@ export default defineEventHandler(async (event) => {
     series: c.series,
     rarity: c.rarity,
     assetPath: c.assetPath,
+    ...ogGtoonDisplay(c),
     price: c.price,
     quantity: c.quantity,
     minted: c.totalMinted ?? 0,

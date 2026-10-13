@@ -14,6 +14,7 @@ import { defineEventHandler, createError, setHeader } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { EXCLUDED_SYSTEM_USER_ID } from '@/server/utils/economyValuation'
 import { getPollResults, displayRankName, getGlobalConfig } from '@/server/utils/cmoon'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 const FEATURED_CTOON_LIMIT = 12
 const LEADERBOARD_LIMIT = 15
@@ -60,11 +61,11 @@ export default defineEventHandler(async (event) => {
     ? db.cMoonFeaturedCtoon.findMany({
         where: { cMoonId: id },
         orderBy: { sortOrder: 'asc' },
-        select: { ctoon: { select: { id: true, name: true, assetPath: true } } },
+        select: { ctoon: { select: { id: true, name: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT } } },
       }).then(rows => rows.map(r => r.ctoon))
     : db.ctoon.findMany({
         where: { cMoonId: id },
-        select: { id: true, name: true, assetPath: true },
+        select: { id: true, name: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
         take: FEATURED_CTOON_LIMIT,
       })

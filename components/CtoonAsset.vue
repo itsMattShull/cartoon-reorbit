@@ -6,8 +6,15 @@
     @click="handleClick"
   >
     <div class="relative inline-flex items-center justify-center">
+      <CtoonImage
+        v-if="isOg"
+        :ctoon="ctoon"
+        :src="src"
+        :alt="alt"
+        :class="imageClass"
+      />
       <ProgressiveImage
-        v-if="progressive"
+        v-else-if="progressive"
         :src="src"
         :alt="alt"
         :image-class="imageClass"
@@ -26,6 +33,7 @@
 <script setup>
 import { computed } from 'vue'
 import ProgressiveImage from '@/components/ProgressiveImage.vue'
+import CtoonImage from '@/components/CtoonImage.vue'
 import GtoonOverlay from '@/components/GtoonOverlay.vue'
 import { useCtoonModal } from '@/composables/useCtoonModal'
 
@@ -42,12 +50,15 @@ const props = defineProps({
   stopPropagation: { type: Boolean, default: false },
   isGtoon: { type: Boolean, default: false },
   power: { type: [Number, String], default: null },
-  cost: { type: [Number, String], default: null }
+  cost: { type: [Number, String], default: null },
+  // Optional full record; when it is an Original gToon the round card is shown instead of the image.
+  ctoon: { type: Object, default: null }
 })
 
 const emit = defineEmits(['click'])
 const { open } = useCtoonModal()
 
+const isOg = computed(() => !!props.ctoon?.isOgGtoon)
 const ariaLabel = computed(() => props.alt || props.name || 'View cToon details')
 const canOpen = computed(() => !!(props.ctoonId || props.userCtoonId))
 const showGtoonOverlay = computed(() =>

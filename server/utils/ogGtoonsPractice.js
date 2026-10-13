@@ -14,7 +14,7 @@
 //
 // ── Practice never awards, spends or records points ─────────────────────────────────────────
 //   • No stake: the match is created with stake [0, 0]; there is no stake input at all.
-//   • Swap is free and handled purely in memory — PvP's debit path is not reachable from here.
+//   • The round-3 slot-7 swap is free and handled purely in memory — PvP's debit path is not reachable from here.
 //   • Nothing is persisted. In particular no OgGtoonMatch row is written, which is also what keeps
 //     practice out of the leaderboard (it is computed from that table).
 //   • This module deliberately does not import Prisma, gamePoints or any points/match-writing
@@ -27,18 +27,20 @@
 // orphan sweep bound what one user (or a script) can hold open.
 
 import { randomUUID } from 'crypto'
-import { getOgGtoonsConfig } from './ogGtoonsConfig.js'
+import { getOgGtoonsConfig, peekRevealTiming } from './ogGtoonsConfig.js'
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
 import { deriveGoalColor, slotsForRound } from './ogGtoonEngine.js'
 import {
   publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd,
-  placeCard, unplaceSlot, checkCommit, applyHandSwap, submitDiscard, resolveDiscardPhase
+  placeCard, unplaceSlot, checkCommit, checkSwap, recordSwapChoice, resolveSwapPhase, expirePhase,
+  submitDiscard, resolveDiscardPhase, markCommitted, extendDeadlineForReveal
 } from './ogGtoonMatchCore.js'
 import {
   BOT_ID, BOT_USERNAME, buildBotDeck, chooseBotPlacements, chooseBotDiscards, chooseBotSwap,
   botCommitDelayMs, normalizeDifficulty
 } from './ogGtoonBot.js'
 import { markPracticing, clearPracticing, isInPvp } from './ogGtoonPresence.js'
+
 
 const EV = (name) => `oggtoons:practice:${name}`
 // Outbound render events deliberately reuse PvP's names so the existing client handlers and
@@ -63,6 +65,8 @@ function emitToHuman(io, match, event, payload) {
 function destroyMatch(match) {
   if (match.botTimer) clearTimeout(match.botTimer)
   match.botTimer = null
+  if (match.phaseTimer) clearTimeout(match.phaseTimer)
+  match.phaseTimer = null
   if (matches.get(match.humanId) === match) matches.delete(match.humanId)
   clearPracticing(match.humanId)
 }
@@ -72,8 +76,8 @@ function botCards(match, idxs) {
   return idxs.map(i => ({ idx: i, ...match.deckOrder[1][i] }))
 }
 
-function emitState(io, match) {
-  emitToHuman(io, match, OUT('state'), publicMatchView(match, match.humanId))
+function emitState(io, match, opts) {
+  emitToHuman(io, match, OUT('state'), publicMatchView(match, match.humanId, opts))
 }
 
 function scheduleBot(io, match, deps) {
@@ -85,34 +89,25 @@ function scheduleBot(io, match, deps) {
   match.botTimer.unref?.()
 }
 
-/** The bot's turn: discards during the discard phase, otherwise swaps/places/commits. */
+/** The bot's turn: discards, the slot-7 swap, or placing and committing, depending on the phase. */
 async function botAct(io, match, deps) {
   if (match.ending) return
   if (match.phase === 'discard') return botDiscard(io, match, deps)
+  if (match.phase === 'swap') return botSwap(io, match, deps)
   if (match.ready[1]) return
 
   const slots = slotsForRound(match.currentRound)
-  const goalColor = match.goalColor[1]
-  const swapCard = chooseBotSwap({
-    difficulty: match.difficulty,
-    swapUsed: match.swapUsed[1],
-    round: match.currentRound,
-    slotCount: Math.min(slots.length, match.hand[1].length),
-    hand: botCards(match, match.hand[1]),
-    undealt: botCards(match, match.undealt[1]),
-    goalColor
-  })
-  if (swapCard !== null) applyHandSwap(match, 1, { cardIdx: swapCard }, deps.rng)
-
   const picks = chooseBotPlacements({
-    difficulty: match.difficulty, slots, hand: botCards(match, match.hand[1]), goalColor, rng: deps.rng
+    difficulty: match.difficulty, slots, hand: botCards(match, match.hand[1]),
+    goalColor: match.goalColor[1], rng: deps.rng
   })
   match.placements[1] = []
   for (const pick of picks) placeCard(match, 1, pick)
 
-  match.ready[1] = true
+  markCommitted(match, 1)
   match.lastActivity = Date.now()
   emitToHuman(io, match, OUT('opponentCommitted'), { round: match.currentRound })
+  emitState(io, match)
   await resolveRound(io, match, deps)
 }
 
@@ -131,11 +126,27 @@ async function botDiscard(io, match, deps) {
   settleDiscardPhase(io, match, deps)
 }
 
+async function botSwap(io, match, deps) {
+  if (match.swapReady[1]) return
+  const slotSeven = match.revealed[1].find(r => r.slot === 7)
+  const doSwap = chooseBotSwap({
+    difficulty: match.difficulty,
+    slotCard: slotSeven ? { value: slotSeven.baseValue, color: slotSeven.color } : null,
+    undealt: botCards(match, match.undealt[1]),
+    goalColor: match.goalColor[1]
+  })
+  recordSwapChoice(match, 1, doSwap)
+  match.lastActivity = Date.now()
+  emitState(io, match)
+  await settleSwap(io, match, deps)
+}
+
 /** Once both sides have chosen their discards: deal, re-open placing and let the bot move. */
 function settleDiscardPhase(io, match, deps) {
   if (!resolveDiscardPhase(match)) return
   match.lastActivity = Date.now()
   emitState(io, match)
+  armPhaseTimer(io, match, deps)
   scheduleBot(io, match, deps)
 }
 
@@ -144,16 +155,26 @@ async function resolveRound(io, match, deps) {
   if (!match.ready[0] || !match.ready[1]) return
 
   const revealedRound = match.currentRound
-  const { entries, order } = revealPlacedCards(match)
+  const { entries, order, steps, before } = revealPlacedCards(match)
+  concludeStep(io, match, deps, revealedRound, entries, order, { steps, before })
+}
+
+/** Shared tail of a step that puts cards on the board: end the match or advance a phase. */
+function concludeStep(io, match, deps, revealedRound, entries, order, { steps = [], before = null } = {}) {
   match.lastActivity = Date.now()
+  const timing = peekRevealTiming()
 
   const end = checkMatchEnd(match)
   // Advance before emitting so the state the client receives already carries the NEXT round and
   // phase; otherwise its next action would send a stale round and be silently dropped.
-  if (!end) advanceRound(match)
+  if (!end) {
+    advanceRound(match)
+    // The cards reveal one at a time on the client; keep that animation off the next phase's clock.
+    extendDeadlineForReveal(match, steps, timing)
+  }
   emitToHuman(io, match, OUT('reveal'), {
     ...publicMatchView(match, match.humanId),
-    reveal: { round: revealedRound, order, you: entries[0], opponent: entries[1] }
+    reveal: { round: revealedRound, order, you: entries[0], opponent: entries[1], steps, before, timing }
   })
 
   if (end) {
@@ -167,7 +188,50 @@ async function resolveRound(io, match, deps) {
     })
     return
   }
+  armPhaseTimer(io, match, deps)
   scheduleBot(io, match, deps)
+}
+
+/** Applies the slot-7 swaps once both sides have chosen, then scores the board. */
+async function settleSwap(io, match, deps) {
+  if (match.ending) return
+  const res = resolveSwapPhase(match, deps.rng)
+  if (!res) return
+  concludeStep(io, match, deps, match.currentRound, res.entries, res.order, { steps: res.steps, before: res.before })
+}
+
+/* ── Phase clock ─────────────────────────────────────────────────────────────────────────────
+ * Same defaults as PvP: when a phase's deadline passes, whoever has not acted gets random cards in
+ * their empty slots / no discards / no swap, and the match carries on. */
+
+function armPhaseTimer(io, match, deps) {
+  if (match.phaseTimer) clearTimeout(match.phaseTimer)
+  match.phaseTimer = null
+  if (match.ending || !match.deadline) return
+  match.phaseTimer = setTimeout(() => {
+    match.phaseTimer = null
+    onPhaseExpired(io, match, deps).catch(err => console.error('[ogGtoonsPractice] phase timeout failed:', err))
+  }, Math.max(0, match.deadline - Date.now()))
+  match.phaseTimer.unref?.()
+}
+
+async function onPhaseExpired(io, match, deps) {
+  if (match.ending) return
+  const phase = match.phase
+  const acted = expirePhase(match, deps.rng)
+  if (!acted.length) return
+  match.lastActivity = Date.now()
+  if (phase === 'play') {
+    emitToHuman(io, match, OUT('committed'), { round: match.currentRound })
+    emitState(io, match)
+    await resolveRound(io, match, deps)
+  } else if (phase === 'discard') {
+    emitState(io, match)
+    settleDiscardPhase(io, match, deps)
+  } else if (phase === 'swap') {
+    emitState(io, match)
+    await settleSwap(io, match, deps)
+  }
 }
 
 /** Nothing is persisted or paid here — see the header. */
@@ -274,6 +338,7 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
       stake: [0, 0],
       ending: false,
       botTimer: null,
+      phaseTimer: null,
       startedAt: Date.now(),
       lastActivity: Date.now()
     }
@@ -283,6 +348,7 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
     socket.data.ogGtoonsPracticeUserId = user.id
 
     emitToHuman(io, match, OUT('matchStart'), publicMatchView(match, user.id))
+    armPhaseTimer(io, match, d)
     scheduleBot(io, match, d)
   })
 
@@ -308,21 +374,21 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
     return match
   }
   // Reports a failed shared-core action; on success pushes the new state to the human.
-  const settle = (res, match) => {
+  const settle = (res, match, opts) => {
     if (!res.ok) { fail(res.code, res.message); return false }
     match.lastActivity = Date.now()
-    emitState(io, match)
+    emitState(io, match, opts)
     return true
   }
 
   socket.on(EV('place'), async ({ cardIdx, slot } = {}) => {
     const match = await liveMatch()
-    if (match) settle(placeCard(match, 0, { cardIdx, slot }), match)
+    if (match) settle(placeCard(match, 0, { cardIdx, slot }), match, { log: false })
   })
 
   socket.on(EV('unplace'), async ({ slot } = {}) => {
     const match = await liveMatch()
-    if (match) settle(unplaceSlot(match, 0, { slot }), match)
+    if (match) settle(unplaceSlot(match, 0, { slot }), match, { log: false })
   })
 
   socket.on(EV('commit'), async ({ round } = {}) => {
@@ -333,21 +399,29 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
       if (check.code !== 'staleRound' && check.code !== 'already_committed') fail(check.code, check.message)
       return
     }
-    match.ready[0] = true
+    markCommitted(match, 0)
     match.lastActivity = Date.now()
     socket.emit(OUT('committed'), { round: match.currentRound })
+    emitState(io, match)
     await resolveRound(io, match, d)
   })
 
-  // Free in practice. Same rules as PvP (once per match, before committing, a hand card for a
-  // random undealt one) but there is no balance check and no debit — the PvP debit path is not
-  // reachable from here.
-  socket.on(EV('swap'), async ({ cardIdx } = {}) => {
+  // Round-3 slot-7 swap. Free in practice: there is no balance check and no debit — the PvP debit
+  // path is not reachable from here. Held until the bot has chosen too, like PvP.
+  socket.on(EV('swap'), async () => {
     const match = await liveMatch()
     if (!match) return
-    if (settle(applyHandSwap(match, 0, { cardIdx }, d.rng), match)) {
+    const check = checkSwap(match, 0)
+    if (!check.ok) return fail(check.code, check.message)
+    if (settle(recordSwapChoice(match, 0, true), match)) {
       socket.emit(OUT('swapApplied'), { matchId: match.id })
+      await settleSwap(io, match, d)
     }
+  })
+
+  socket.on(EV('swapSkip'), async () => {
+    const match = await liveMatch()
+    if (match && settle(recordSwapChoice(match, 0, false), match)) await settleSwap(io, match, d)
   })
 
   // Discard phase (after round 1): drop any hand cards, then both hands refill together.

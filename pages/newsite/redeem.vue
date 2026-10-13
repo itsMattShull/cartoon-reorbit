@@ -46,7 +46,7 @@
                 <span class="rd-qty">{{ item.quantity || 1 }}×</span>
                 <h2 class="rd-card-name">{{ item.name }}</h2>
                 <div class="rd-card-img-wrap">
-                  <img :src="item.assetPath" class="rd-card-img" />
+                  <CtoonImage :ctoon="item" effects="full" :ambient="false" class="rd-card-img" />
                 </div>
                 <div class="rd-card-meta">
                   <p class="capitalize">
@@ -61,7 +61,7 @@
               <h3 class="rd-bgs-title">Backgrounds</h3>
               <div class="rd-grid">
                 <div v-for="bg in rewards.backgrounds" :key="bg.id" class="rd-bg-card">
-                  <img v-if="bg.imagePath" :src="bg.imagePath" class="rd-bg-img" />
+                  <CtoonImage v-if="bg.imagePath" :ctoon="bg" :src="bg.imagePath" class="rd-bg-img" />
                   <div class="rd-bg-info">
                     <div class="rd-bg-label">{{ bg.label || 'Untitled' }}</div>
                     <div class="rd-bg-sub">Unlocked</div>
@@ -87,6 +87,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 definePageMeta({
   layout: 'newsite-template',
   middleware: 'newsite',

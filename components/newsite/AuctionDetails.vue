@@ -21,7 +21,7 @@
 
         <!-- cToon image -->
         <div class="adet-img-wrap adet-img-clickable" @click="openInfoModal">
-          <img class="adet-img" :src="auction.ctoon.assetPath" :alt="auction.ctoon.name" draggable="false" />
+          <CtoonImage class="adet-img" :ctoon="auction.ctoon" :alt="auction.ctoon.name" draggable="false" />
           <SecondEditionOverlay :ctoon="auction.ctoon" />
           <div v-if="ended" class="adet-ended-badge">Ended</div>
         </div>
@@ -141,6 +141,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { formatRemainingShort } from '~/server/utils/auctionDuration'
 const props = defineProps({
   auctionId: { type: [String, Number], required: true },

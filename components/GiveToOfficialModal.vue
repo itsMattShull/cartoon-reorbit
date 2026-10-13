@@ -9,7 +9,7 @@
 
       <div class="p-6 space-y-4">
         <div class="flex items-center gap-3">
-          <img :src="ctoon.assetPath" :alt="ctoon.name" class="h-14 w-auto rounded flex-shrink-0" />
+          <CtoonImage :ctoon="ctoon" :alt="ctoon.name" class="h-14 w-auto rounded flex-shrink-0" />
           <div>
             <p class="font-medium">{{ ctoon.name }}</p>
             <p class="text-xs text-gray-500">Highest Mint: {{ ctoon.highestMint }} / Quantity: {{ formatQuantity(ctoon.quantity) }}</p>
@@ -55,6 +55,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { ref, onMounted } from 'vue'
 import { formatQuantity } from '~/utils/formatQuantity'
 

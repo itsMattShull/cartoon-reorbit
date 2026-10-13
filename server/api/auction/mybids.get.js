@@ -2,6 +2,7 @@
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 function normalizeListParam(value) {
   if (Array.isArray(value)) {
@@ -225,6 +226,7 @@ export default defineEventHandler(async (event) => {
       power: a.userCtoon?.ctoon?.power ?? null,
       characters: a.userCtoon?.ctoon?.characters || [],
       assetPath: a.userCtoon?.ctoon?.assetPath ?? '',
+      ...ogGtoonDisplay(a.userCtoon?.ctoon),
       mintNumber: a.userCtoon?.mintNumber ?? null,
       isSecondEdition: a.userCtoon?.ctoon?.isSecondEdition ?? false,
       secondEditionOverlayX: a.userCtoon?.ctoon?.secondEditionOverlayX ?? null,

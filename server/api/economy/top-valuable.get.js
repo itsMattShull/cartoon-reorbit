@@ -12,7 +12,7 @@ import { parseExclusions, exclusionCacheKey, buildExclusionSql, firstQueryValue 
 const CACHE_TTL = 300
 // v2: the key gained an exclusion segment and the payload's meaning depends on
 // it, so a rolling deploy must not serve an unfiltered v1 payload as filtered.
-const cacheKey = (source, window, exKey) => `economy:top-valuable:${source}:${window}:${exKey}:v2`
+const cacheKey = (source, window, exKey) => `economy:top-valuable:${source}:${window}:${exKey}:v3`
 
 async function computeTopValuable(source, window, exclusions) {
   const cutoff = resolveWindowCutoffSql(window)
@@ -22,6 +22,7 @@ async function computeTopValuable(source, window, exclusions) {
   return prisma.$queryRaw`
     SELECT
       c."id" AS "ctoonId", c."name", c."assetPath", c."rarity",
+      c."isOgGtoon", c."gtoonColor", c."gtoonValue", c."gtoonCardStyle",
       (SUM(cpd."avgPrice" * cpd."volume") FILTER (WHERE cpd."avgPrice" IS NOT NULL)
         / NULLIF(SUM(cpd."volume") FILTER (WHERE cpd."avgPrice" IS NOT NULL), 0))::float AS "avgPrice",
       SUM(cpd."volume")::int AS "volume"
@@ -29,7 +30,7 @@ async function computeTopValuable(source, window, exclusions) {
     JOIN "Ctoon" c ON c."id" = cpd."ctoonId"
     WHERE cpd."source" = ${source}::"EconomySource"
       AND cpd."date" >= ${cutoff}${buildExclusionSql(exclusions)}
-    GROUP BY c."id", c."name", c."assetPath", c."rarity"
+    GROUP BY c."id", c."name", c."assetPath", c."rarity", c."isOgGtoon", c."gtoonColor", c."gtoonValue", c."gtoonCardStyle"
     HAVING SUM(cpd."volume") FILTER (WHERE cpd."avgPrice" IS NOT NULL) >= ${MIN_SAMPLE_SIZE}
     ORDER BY "avgPrice" DESC, c."name" ASC, c."id" ASC
     LIMIT 10

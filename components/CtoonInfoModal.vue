@@ -8,12 +8,12 @@
         class="absolute -top-20 -right-8 w-32 h-32 object-contain rotate-[20deg] translate-x-3 pointer-events-none sm:-top-16 sm:-right-4 sm:w-48 sm:h-48 sm:translate-x-2"
       />
       <div class="flex items-start gap-4 pb-4 border-b border-white/10 shrink-0">
-        <img
+        <CtoonImage
           v-if="ctoon.assetPath"
-          :src="ctoon.assetPath"
+          :ctoon="ctoon"
           :alt="ctoon.name || 'cToon'"
-          class="w-20 h-20 object-contain rounded bg-gray-900/40 p-2"
-        />
+          effects="full"
+          class="w-20 h-20 object-contain rounded bg-gray-900/40 p-2" />
         <div class="flex-1">
           <h3 class="text-2xl font-semibold">{{ ctoon.name || 'cToon' }}</h3>
           <p class="text-sm text-gray-300">cToon details</p>
@@ -420,6 +420,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { computed, ref, watch, onBeforeUnmount, nextTick } from 'vue'
 import Modal from '@/components/Modal.vue'
 import AddToWishlist from '@/components/AddToWishlist.vue'

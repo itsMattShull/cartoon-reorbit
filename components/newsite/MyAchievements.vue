@@ -96,7 +96,7 @@
                 <div class="ma-reward-section-label">cToons</div>
                 <div class="ma-reward-ctoons">
                   <div v-for="(rc, i) in selected.rewards.ctoons" :key="i" class="ma-reward-ctoon">
-                    <img v-if="rc.imagePath" :src="rc.imagePath" class="ma-reward-ctoon-img" :alt="rc.name" />
+                    <CtoonImage v-if="rc.imagePath" :ctoon="rc" :src="rc.imagePath" class="ma-reward-ctoon-img" :alt="rc.name" />
                     <div class="ma-reward-ctoon-name">{{ rc.name }}</div>
                     <div class="ma-reward-ctoon-qty">× {{ rc.quantity }}</div>
                   </div>
@@ -141,10 +141,10 @@
                   <div class="ma-claim-option-body">
                     <div class="ma-claim-option-label">{{ opt.label }}</div>
                     <div v-if="opt.ctoons?.length || opt.backgrounds?.length" class="ma-claim-option-thumbs">
-                      <img
+                      <CtoonImage
                         v-for="(c, i) in opt.ctoons" v-if="c.imagePath" :key="'c' + i"
-                        :src="c.imagePath" class="ma-claim-option-thumb" :alt="c.name" :title="`${c.name} × ${c.quantity}`"
-                      />
+                        :ctoon="c" :src="c.imagePath" class="ma-claim-option-thumb" :alt="c.name" :title="`${c.name} × ${c.quantity}`"
+                       />
                       <img
                         v-for="(b, i) in opt.backgrounds" v-if="b.imagePath" :key="'b' + i"
                         :src="b.imagePath" class="ma-claim-option-thumb" :alt="b.label" :title="b.label"
@@ -185,6 +185,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { cMoonPillStyle } from '~/utils/cmoonColor'
 import { cmoonJoinEffectDescriptor } from '~/utils/cmoonJoinEffectDescriptor'
 
