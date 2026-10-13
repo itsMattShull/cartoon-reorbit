@@ -846,7 +846,7 @@ function effectFromServerShape(e) {
   // Keep the exact server-side effect: the editable row only covers part of the schema (several
   // filters, character lists, OR/AND conditions, slot/opposite checks...), so an untouched row is
   // saved from this copy instead of being rebuilt from the row's fields.
-  ui._raw = JSON.parse(JSON.stringify(eff))
+  ui._raw = JSON.parse(JSON.stringify(e))
   ui._sig = uiEffectSig(ui)
   return ui
 }
