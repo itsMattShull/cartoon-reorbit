@@ -718,8 +718,8 @@ export function advanceRound(match) {
  * The clients play a reveal back one card at a time. Call this right after advanceRound() so the next
  * phase's clock starts once that animation is over instead of losing seconds to it.
  */
-export function extendDeadlineForReveal(match, steps) {
-  if (match.deadline) match.deadline += revealDurationMs(steps)
+export function extendDeadlineForReveal(match, steps, timing) {
+  if (match.deadline) match.deadline += revealDurationMs(steps, timing)
 }
 
 /**

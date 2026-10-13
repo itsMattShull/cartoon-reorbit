@@ -50,7 +50,7 @@ import {
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
 import { isPracticing, registerPvpProbe } from './ogGtoonPresence.js'
 import * as ogRedis from './ogGtoonsRedisState.js'
-import { getOgGtoonsConfig } from './ogGtoonsConfig.js'
+import { getOgGtoonsConfig, peekRevealTiming } from './ogGtoonsConfig.js'
 
 const RECONNECT_GRACE_MS = 20_000
 const MATCH_MAX_AGE_MS = 30 * 60 * 1000
@@ -229,6 +229,8 @@ async function resolveRound(io, match) {
  */
 async function concludeStep(io, match, revealedRound, entries, order, { steps = [], before = null } = {}) {
   match.lastActivity = Date.now()
+  // Admin-tunable pace of the card-by-card reveal; sent with the payload so clients animate with the same numbers.
+  const timing = peekRevealTiming()
 
   const end = checkMatchEnd(match)
   // Advance before emitting so the state each client receives already carries the NEXT round
@@ -236,7 +238,7 @@ async function concludeStep(io, match, revealedRound, entries, order, { steps = 
   if (!end) {
     advanceRound(match)
     // The cards reveal one at a time on the clients; don't let that animation eat into the next phase's clock.
-    extendDeadlineForReveal(match, steps)
+    extendDeadlineForReveal(match, steps, timing)
   }
 
   emitToPlayers(io, match, EV('reveal'), (uid, i) => ({
@@ -248,7 +250,8 @@ async function concludeStep(io, match, revealedRound, entries, order, { steps = 
       opponent: entries[i === 0 ? 1 : 0],
       // One card at a time: player 1's slot 1, player 2's slot 1, player 1's slot 2, ... (see ogGtoonMatchCore.buildRevealSteps)
       steps,
-      before
+      before,
+      timing
     }
   }))
 

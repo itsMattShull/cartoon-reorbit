@@ -1605,6 +1605,13 @@ model GameConfig {
   // false like the four above): this flag isn't part of the rollout-safety gate those switches
   // exist for, it's just "don't bother showing a tile once the feature IS on."
   ogGtoonsGamesPageVisible Boolean? @default(true)
+
+  // Pace of the one-card-at-a-time reveal (see utils/ogGtoonReveal.js for what each phase is). Null means
+  // "use the built-in default"; values are clamped on read and validated on save.
+  ogGtoonsRevealFirstMs   Int?
+  ogGtoonsRevealCardMs    Int?
+  ogGtoonsRevealEffectsMs Int?
+  ogGtoonsRevealQuietMs   Int?
 }
 
 model GlobalGameConfig {

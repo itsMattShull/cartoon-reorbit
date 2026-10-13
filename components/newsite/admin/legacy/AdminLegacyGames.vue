@@ -860,6 +860,38 @@
             </label>
           </div>
 
+          <hr class="my-4 border-gray-200" />
+
+          <h3 class="text-xs font-semibold text-gray-800 mb-1">Card reveal pacing</h3>
+          <p class="text-[11px] text-gray-500 mb-2">
+            Cards are revealed one at a time — player 1's slot 1, player 2's slot 1, player 1's slot 2, and so
+            on. After each card the board updates: values, colors, knock-outs and both totals. These timings
+            (in milliseconds) set how fast that plays. The next phase's countdown starts only after the
+            animation finishes, so a slower pace never costs players discard/swap/placing time. Leave a
+            field blank to use its default.
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+            <label v-for="f in ogRevealFields" :key="f.key" class="flex flex-col gap-0.5 p-2 border rounded bg-white">
+              <span class="text-xs font-semibold text-gray-800">{{ f.label }}</span>
+              <span class="text-[11px] text-gray-500">{{ f.help }}</span>
+              <span class="flex items-center gap-1 mt-1">
+                <input
+                  type="number" inputmode="numeric" step="50" :min="f.min" :max="f.max" :placeholder="String(f.def)"
+                  v-model.number="ogRevealMs[f.key]"
+                  class="w-24 border rounded px-2 py-1 text-xs" />
+                <span class="text-[11px] text-gray-500">ms (default {{ f.def }}, {{ f.min }}–{{ f.max }})</span>
+              </span>
+              <span v-if="ogRevealErrors[f.key]" class="text-[11px] text-red-600">{{ ogRevealErrors[f.key] }}</span>
+            </label>
+          </div>
+          <p class="text-[11px] text-gray-600 mb-2">
+            A typical round of 4 cards per player (8 reveals) takes about
+            <strong>{{ ogRevealPreviewSeconds.min }}–{{ ogRevealPreviewSeconds.max }}s</strong>
+            ({{ ogRevealPreviewSeconds.min }}s if no card's power changes anything, {{ ogRevealPreviewSeconds.max }}s if every one does).
+          </p>
+          <button type="button" @click="resetOgReveal" class="mb-4 px-2 py-1 text-[11px] rounded border bg-white hover:bg-gray-50">Reset pacing to defaults</button>
+
+          <br />
           <button @click="saveOgGtoonsConfig" :disabled="loadingOgGtoons || !!ogGtoonsConfigError" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingOgGtoons">Save gToons Settings</span>
             <span v-else>Saving…</span>
@@ -2066,7 +2098,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { REVEAL_TIMING_DEFAULTS, REVEAL_TIMING_LIMITS, normalizeRevealTiming } from '~/utils/ogGtoonReveal'
 
 const tabs = [
   { key: 'Global',       label: 'Global Settings' },
@@ -2171,6 +2204,33 @@ const ogGtoonsLeaderboardEnabled  = ref(false)
 const ogGtoonsPracticeEnabled     = ref(false)
 const ogGtoonsGamesPageVisible    = ref(true)
 const loadingOgGtoons             = ref(false)
+// Card-reveal pacing (ms). null/blank = use the built-in default; see utils/ogGtoonReveal.js.
+const ogRevealFields = [
+  { key: 'ogGtoonsRevealFirstMs',   label: 'Pause before the first card', help: 'Beat after the round resolves, before anything flips.', ...REVEAL_TIMING_LIMITS.firstMs, def: REVEAL_TIMING_DEFAULTS.firstMs },
+  { key: 'ogGtoonsRevealCardMs',    label: 'Card face-up time', help: 'How long a new card shows its printed value before its powers land.', ...REVEAL_TIMING_LIMITS.cardMs, def: REVEAL_TIMING_DEFAULTS.cardMs },
+  { key: 'ogGtoonsRevealEffectsMs', label: 'Effects time', help: 'Values, colors, knock-outs and totals update; held this long when something changed.', ...REVEAL_TIMING_LIMITS.effectsMs, def: REVEAL_TIMING_DEFAULTS.effectsMs },
+  { key: 'ogGtoonsRevealQuietMs',   label: 'Quiet beat', help: 'Short pause used instead when a card changed nothing.', ...REVEAL_TIMING_LIMITS.quietMs, def: REVEAL_TIMING_DEFAULTS.quietMs }
+]
+const ogRevealMs = reactive({ ogGtoonsRevealFirstMs: null, ogGtoonsRevealCardMs: null, ogGtoonsRevealEffectsMs: null, ogGtoonsRevealQuietMs: null })
+const ogRevealErrors = computed(() => {
+  const errs = {}
+  for (const f of ogRevealFields) {
+    const v = ogRevealMs[f.key]
+    if (v === null || v === '' || v === undefined) continue
+    if (!Number.isInteger(v) || v < f.min || v > f.max) errs[f.key] = `Whole number between ${f.min} and ${f.max}.`
+  }
+  return errs
+})
+const ogRevealTiming = computed(() => normalizeRevealTiming({
+  firstMs: ogRevealMs.ogGtoonsRevealFirstMs, cardMs: ogRevealMs.ogGtoonsRevealCardMs,
+  effectsMs: ogRevealMs.ogGtoonsRevealEffectsMs, quietMs: ogRevealMs.ogGtoonsRevealQuietMs
+}))
+const ogRevealPreviewSeconds = computed(() => {
+  const t = ogRevealTiming.value
+  const round = (changed) => Math.round((t.firstMs + 8 * (t.cardMs + (changed ? t.effectsMs : t.quietMs))) / 100) / 10
+  return { min: round(false), max: round(true) }
+})
+function resetOgReveal() { for (const k of Object.keys(ogRevealMs)) ogRevealMs[k] = null }
 const ogGtoonsConfigError         = ref('')
 
 const winballBumperGeometry = ref([
@@ -2582,6 +2642,7 @@ async function loadSettings() {
     ogGtoonsLeaderboardEnabled.value  = og.ogGtoonsLeaderboardEnabled  === true
     ogGtoonsPracticeEnabled.value     = og.ogGtoonsPracticeEnabled     === true
     ogGtoonsGamesPageVisible.value    = og.ogGtoonsGamesPageVisible    !== false
+    for (const k of Object.keys(ogRevealMs)) ogRevealMs[k] = Number.isInteger(og[k]) ? og[k] : null
     ogGtoonsConfigError.value = ''
   } catch (e) {
     ogGtoonsConfigError.value = e?.data?.statusMessage || e?.message || 'Could not load these settings.'
@@ -3079,6 +3140,10 @@ async function savePkmnConfig() {
 }
 
 async function saveOgGtoonsConfig() {
+  if (Object.keys(ogRevealErrors.value).length) {
+    toastMessage.value = 'Fix the reveal pacing values first.'; toastType.value = 'error'
+    return
+  }
   loadingOgGtoons.value = true; toastMessage.value = ''
   try {
     await $fetch('/api/admin/game-config', {
@@ -3090,7 +3155,9 @@ async function saveOgGtoonsConfig() {
         ogGtoonsDeckBuildingEnabled: ogGtoonsDeckBuildingEnabled.value,
         ogGtoonsLeaderboardEnabled:  ogGtoonsLeaderboardEnabled.value,
         ogGtoonsPracticeEnabled:     ogGtoonsPracticeEnabled.value,
-        ogGtoonsGamesPageVisible:    ogGtoonsGamesPageVisible.value
+        ogGtoonsGamesPageVisible:    ogGtoonsGamesPageVisible.value,
+        // null/blank resets a field to its built-in default on the server
+        ...Object.fromEntries(Object.keys(ogRevealMs).map(k => [k, ogRevealMs[k] === '' ? null : ogRevealMs[k]]))
       }
     })
     toastMessage.value = 'gToons settings saved!'; toastType.value = 'success'

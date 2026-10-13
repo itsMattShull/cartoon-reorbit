@@ -202,7 +202,7 @@ import { computed, ref, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 import OgGtoonCardTile from '@/components/OgGtoonCardTile.vue'
 import GtoonCard from '@/components/GtoonCard.vue'
-import { REVEAL_FIRST_MS, REVEAL_CARD_MS, REVEAL_EFFECTS_MS, REVEAL_QUIET_MS } from '@/utils/ogGtoonReveal'
+import { normalizeRevealTiming } from '@/utils/ogGtoonReveal'
 import OgGtoonGameLog from '@/components/OgGtoonGameLog.vue'
 
 defineEmits(['exit'])
@@ -250,12 +250,13 @@ watch(lastReveal, async (rev) => {
   playback.value = null
   const steps = rev?.steps || []
   if (!steps.length) return
+  const timing = normalizeRevealTiming(rev.timing) // admin-tunable (Manage Games > gToons (Original))
   playback.value = {
     hidden: new Set(steps.map(st => cardKey(st.side, st.slot))),
     shown: toShown(rev.before),
     markers: toMarkers(rev.before)
   }
-  await sleep(REVEAL_FIRST_MS)
+  await sleep(timing.firstMs)
   for (const step of steps) {
     if (token !== playToken) return
     // 1) the card flips face-up showing its printed value; nothing else has changed yet.
@@ -264,11 +265,11 @@ watch(lastReveal, async (rev) => {
     const shown = new Map(playback.value.shown)
     shown.set(cardKey(step.side, step.slot), { finalValue: step.baseValue, color: step.baseColor, cancelled: false })
     playback.value = { ...playback.value, hidden, shown }
-    await sleep(REVEAL_CARD_MS)
+    await sleep(timing.cardMs)
     if (token !== playToken) return
     // 2) its powers land: values, colors, knock-outs, markers and totals all update together.
     playback.value = { hidden, shown: toShown(step), markers: toMarkers(step) }
-    await sleep(step.changed ? REVEAL_EFFECTS_MS : REVEAL_QUIET_MS)
+    await sleep(step.changed ? timing.effectsMs : timing.quietMs)
   }
   if (token === playToken) playback.value = null
 })

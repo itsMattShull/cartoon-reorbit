@@ -5,7 +5,10 @@ import {
   initHands, placeCard, revealPlacedCards, advanceRound, submitDiscard, resolveDiscardPhase, buildRevealSteps, runFinalBoardResolution,
   publicMatchView, extendDeadlineForReveal, recordSwapChoice, resolveSwapPhase, checkMatchEnd
 } from '../server/utils/ogGtoonMatchCore.js'
-import { revealDurationMs, revealStepMs, REVEAL_FIRST_MS, REVEAL_CARD_MS, REVEAL_EFFECTS_MS, REVEAL_QUIET_MS } from '../utils/ogGtoonReveal.js'
+import {
+  revealDurationMs, revealStepMs, normalizeRevealTiming, REVEAL_TIMING_DEFAULTS, REVEAL_TIMING_LIMITS,
+  REVEAL_FIRST_MS, REVEAL_CARD_MS, REVEAL_EFFECTS_MS, REVEAL_QUIET_MS
+} from '../utils/ogGtoonReveal.js'
 
 const COLORS = ['RED', 'BLUE', 'GREEN', 'YELLOW', 'PURPLE', 'ORANGE', 'PINK', 'RED', 'BLUE', 'GREEN', 'BLACK', 'SILVER']
 function makeDeck({ goal = 'BLACK', values, effect = null, prefix = '' } = {}) {
@@ -159,4 +162,34 @@ test('timing helpers: quiet steps are shorter, the next phase clock is pushed ou
   const none = { deadline: null }
   extendDeadlineForReveal(none, [busy])
   assert.equal(none.deadline, null)
+})
+
+test('timing: defaults fill gaps, junk is ignored, everything is clamped to the allowed range', () => {
+  assert.deepEqual(normalizeRevealTiming(null), REVEAL_TIMING_DEFAULTS)
+  assert.deepEqual(normalizeRevealTiming({}), REVEAL_TIMING_DEFAULTS)
+  assert.deepEqual(normalizeRevealTiming({ firstMs: null, cardMs: '', effectsMs: 'abc', quietMs: undefined }), REVEAL_TIMING_DEFAULTS)
+  const t = normalizeRevealTiming({ firstMs: -50, cardMs: 1, effectsMs: 99999, quietMs: 123.6 })
+  assert.equal(t.firstMs, REVEAL_TIMING_LIMITS.firstMs.min)
+  assert.equal(t.cardMs, REVEAL_TIMING_LIMITS.cardMs.min)
+  assert.equal(t.effectsMs, REVEAL_TIMING_LIMITS.effectsMs.max)
+  assert.equal(t.quietMs, 124)
+  assert.equal(normalizeRevealTiming({ firstMs: '1500' }).firstMs, 1500)
+})
+
+test('timing: custom values drive both the per-step length and the clock extension', () => {
+  const t = { firstMs: 100, cardMs: 400, effectsMs: 1000, quietMs: 0 }
+  assert.equal(revealStepMs({ changed: true }, t), 1400)
+  assert.equal(revealStepMs({ changed: false }, t), 400)
+  assert.equal(revealDurationMs([{ changed: true }, { changed: false }], t), 100 + 1400 + 400)
+  const m = { deadline: 5000 }
+  extendDeadlineForReveal(m, [{ changed: true }], t)
+  assert.equal(m.deadline, 5000 + 100 + 1400)
+})
+
+test('timing: a slower setting means a longer next-phase clock extension than the default', () => {
+  const m = freshMatch(makeDeck({ prefix: 'a' }), makeDeck({ prefix: 'b' }))
+  autoPlay(m, 0); autoPlay(m, 1)
+  const { steps } = revealPlacedCards(m)
+  assert.ok(revealDurationMs(steps, { cardMs: 2000 }) > revealDurationMs(steps))
+  assert.ok(revealDurationMs(steps, { cardMs: 200, effectsMs: 0, quietMs: 0, firstMs: 0 }) < revealDurationMs(steps))
 })

@@ -27,7 +27,7 @@
 // orphan sweep bound what one user (or a script) can hold open.
 
 import { randomUUID } from 'crypto'
-import { getOgGtoonsConfig } from './ogGtoonsConfig.js'
+import { getOgGtoonsConfig, peekRevealTiming } from './ogGtoonsConfig.js'
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
 import { deriveGoalColor, slotsForRound } from './ogGtoonEngine.js'
 import {
@@ -162,6 +162,7 @@ async function resolveRound(io, match, deps) {
 /** Shared tail of a step that puts cards on the board: end the match or advance a phase. */
 function concludeStep(io, match, deps, revealedRound, entries, order, { steps = [], before = null } = {}) {
   match.lastActivity = Date.now()
+  const timing = peekRevealTiming()
 
   const end = checkMatchEnd(match)
   // Advance before emitting so the state the client receives already carries the NEXT round and
@@ -169,11 +170,11 @@ function concludeStep(io, match, deps, revealedRound, entries, order, { steps = 
   if (!end) {
     advanceRound(match)
     // The cards reveal one at a time on the client; keep that animation off the next phase's clock.
-    extendDeadlineForReveal(match, steps)
+    extendDeadlineForReveal(match, steps, timing)
   }
   emitToHuman(io, match, OUT('reveal'), {
     ...publicMatchView(match, match.humanId),
-    reveal: { round: revealedRound, order, you: entries[0], opponent: entries[1], steps, before }
+    reveal: { round: revealedRound, order, you: entries[0], opponent: entries[1], steps, before, timing }
   })
 
   if (end) {

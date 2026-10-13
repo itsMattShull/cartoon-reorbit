@@ -14,7 +14,7 @@ import {
 } from '../server/utils/ogGtoonMatchCore.js'
 import { registerOgGtoonsPractice, hasLivePracticeMatch } from '../server/utils/ogGtoonsPractice.js'
 import { isPracticing } from '../server/utils/ogGtoonPresence.js'
-import { revealDurationMs } from '../utils/ogGtoonReveal.js'
+import { revealDurationMs, REVEAL_TIMING_DEFAULTS } from '../utils/ogGtoonReveal.js'
 
 const COLORS = ['RED', 'BLUE', 'GREEN', 'YELLOW', 'PURPLE', 'ORANGE', 'PINK', 'RED', 'BLUE', 'GREEN', 'BLACK', 'SILVER']
 function makeDeck({ goal = 'RED', values } = {}) {
@@ -876,7 +876,8 @@ test('practice: when each phase times out the server plays the default and the m
   assert.equal(rev.phase, 'discard')
   // The cards reveal one at a time on the client, so the next phase's clock starts after that animation.
   assert.ok(rev.reveal.steps.length > 0)
-  const round1Reveal = revealDurationMs(rev.reveal.steps)
+  assert.deepEqual(rev.reveal.timing, REVEAL_TIMING_DEFAULTS)   // the pacing in force travels with the reveal
+  const round1Reveal = revealDurationMs(rev.reveal.steps, rev.reveal.timing)
   assert.ok(round1Reveal > 0)
   assert.equal(rev.phaseEndsAt - Date.now(), DISCARD_MS + round1Reveal)
 
@@ -895,7 +896,7 @@ test('practice: when each phase times out the server plays the default and the m
   assert.equal(rev.reveal.round, 2)
   assert.deepEqual(rev.reveal.you.map(e => e.slot), [5, 6, 7])
   assert.equal(rev.phase, 'swap')
-  const round2Reveal = revealDurationMs(rev.reveal.steps)
+  const round2Reveal = revealDurationMs(rev.reveal.steps, rev.reveal.timing)
   assert.equal(rev.phaseEndsAt - Date.now(), SWAP_MS + round2Reveal)
 
   // Swap phase: timing out means no swap, and the board is scored.
