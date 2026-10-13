@@ -91,7 +91,10 @@ function referenceEffects(description) {
   const FOLLOW_ON = {
     '+3 to Juniper Lee; x2 if Granny is in play': '+3 to Juniper Lee; x2 to Juniper Lee if Granny is in play',
     '+5 to any Bubbles; +7 if next to any Him': '+5 to any Bubbles; +7 to any Bubbles if next to any Him',
-    '-4 to any George Jetson; -1 if any Stella Spacely is in play': '-4 to any George Jetson; -1 to any George Jetson if any Stella Spacely is in play'
+    '-4 to any George Jetson; -1 if any Stella Spacely is in play': '-4 to any George Jetson; -1 to any George Jetson if any Stella Spacely is in play',
+    // Group form: the conditional number REPLACES the base number for every card in the group.
+    '+3 to all Animals; +5 if any Yogi Bear is in play': '+3 to all Animals; +2 to all Animals if any Yogi Bear is in play',
+    '-5 to all Black 10s; +5 if next to Lumpus': '-5 to all Black 10s; +10 to all Black 10s if next to Lumpus'
   }
   description = FOLLOW_ON[description] ?? description
   const clauses = description.split(/;|,(?= *(?:x\d|[+-]\d))/).map(s => s.trim()).filter(Boolean)
@@ -170,9 +173,10 @@ function clauseFn(clause) {
     return (ctx) => ctx.neighbors.filter(c => matchesNoun(c, noun)).map(card => ({ card, ...a }))
   }
   // "+N to all [other] X"
-  if ((m = clause.match(/^(x\d+|[+-]\d+) to all (.+)$/i))) {
-    const a = parseAmount(m[1]); const other = /^other /i.test(m[2]); const noun = nounOf(m[2])
-    return (ctx) => ctx.cards.filter(c => matchesNoun(c, noun) && !(other && c === ctx.src)).map(card => ({ card, ...a }))
+  if ((m = clause.match(/^(x\d+|[+-]\d+) to all (.+?)(?: if (.+))?$/i))) {
+    const a = parseAmount(m[1]); const other = /^other /i.test(m[2]); const noun = nounOf(m[2]); const cond = m[3] ? conditionFn(m[3]) : null
+    return (ctx) => ctx.cards.filter(c => matchesNoun(c, noun) && !(other && c === ctx.src) &&
+      (!cond || cond({ ...ctx, neighbors: ctx.neighborsOf(c), opposite: ctx.oppositeOf(c) }))).map(card => ({ card, ...a }))
   }
   // "-5 to any opponent's Props"
   if ((m = clause.match(/^(x\d+|[+-]\d+) to any opponent's (.+)$/i))) {
