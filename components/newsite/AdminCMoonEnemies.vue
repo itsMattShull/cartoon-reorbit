@@ -533,6 +533,38 @@
           </div>
 
           <div class="flex gap-2">
+            <div class="flex-1 min-w-0">
+              <label class="block text-xs font-medium mb-1">Attack chance (0-100%)</label>
+              <input v-model.number="memberForm.attackChancePercent" type="number" min="0" max="100" class="w-full border rounded px-2 py-1" />
+              <p class="text-[10px] text-gray-500 mt-1">
+                How often this enemy's own rolled move is an attack rather than a block (split evenly
+                between high/low either way). 50 (the default) is the original even roll — raise it for
+                an aggressive enemy, lower it for a defensive one.
+              </p>
+            </div>
+          </div>
+
+          <div class="flex gap-2">
+            <div class="flex-1 min-w-0">
+              <label class="block text-xs font-medium mb-1">Reward pity threshold (0 = off)</label>
+              <input v-model.number="memberForm.pityThreshold" type="number" min="0" max="50" class="w-full border rounded px-2 py-1" />
+              <p class="text-[10px] text-gray-500 mt-1">
+                If set, a player who wins this many times in a row against this enemy with NO reward
+                rolling is guaranteed one reward on that Nth win (picked from the rows below, ignoring
+                their drop chance). Solo battles only.
+              </p>
+            </div>
+            <div class="flex-1 min-w-0">
+              <label class="block text-xs font-medium mb-1">First-win bonus points (0-5000)</label>
+              <input v-model.number="memberForm.firstWinBonusPoints" type="number" min="0" max="5000" class="w-full border rounded px-2 py-1" />
+              <p class="text-[10px] text-gray-500 mt-1">
+                Extra cMoon points (on top of the win reward above) awarded only the very first time a
+                player ever beats this specific enemy. Solo battles only.
+              </p>
+            </div>
+          </div>
+
+          <div class="flex gap-2">
             <div class="w-24 flex-shrink-0">
               <label class="block text-xs font-medium mb-1">Order</label>
               <input v-model.number="memberForm.sortOrder" type="number" class="w-full border rounded px-2 py-1" />
@@ -1368,7 +1400,9 @@ async function uploadSound(slotKey) {
 const emptyMemberForm = () => ({
   id: '', factionId: '', name: '', maxHp: 5, battleMode: 'PER_PLAYER', rank: 'GOON', minPriorDefeats: 0,
   occurrencePercent: 50,
-  cMoonPointsReward: 10, critChanceAgainstPercent: 0, critChanceFromPercent: 0, active: true, sortOrder: 0,
+  cMoonPointsReward: 10, critChanceAgainstPercent: 0, critChanceFromPercent: 0,
+  attackChancePercent: 50, pityThreshold: 0, firstWinBonusPoints: 0,
+  active: true, sortOrder: 0,
   isRaidBoss: false, raidAnnouncementText: '', raidOneTime: false, raidCooldownMinutes: 0,
 })
 const memberForm = reactive(emptyMemberForm())
@@ -1424,7 +1458,10 @@ function startEditMember(m) {
     id: m.id, factionId: m.factionId, name: m.name, maxHp: m.maxHp, battleMode: m.battleMode, rank: m.rank || 'GOON',
     minPriorDefeats: m.minPriorDefeats ?? 0, occurrencePercent: m.occurrencePercent ?? 50,
     cMoonPointsReward: m.cMoonPointsReward, critChanceAgainstPercent: m.critChanceAgainstPercent ?? 0,
-    critChanceFromPercent: m.critChanceFromPercent ?? 0, active: !!m.active, sortOrder: m.sortOrder,
+    critChanceFromPercent: m.critChanceFromPercent ?? 0,
+    attackChancePercent: m.attackChancePercent ?? 50, pityThreshold: m.pityThreshold ?? 0,
+    firstWinBonusPoints: m.firstWinBonusPoints ?? 0,
+    active: !!m.active, sortOrder: m.sortOrder,
     isRaidBoss: !!m.isRaidBoss, raidAnnouncementText: m.raidAnnouncementText || '',
     raidOneTime: !!m.raidOneTime, raidCooldownMinutes: m.raidCooldownMinutes ?? 0,
   })
@@ -1496,6 +1533,21 @@ async function saveMember() {
     memberFormError.value = 'Crit chance from this enemy must be between 0 and 100.'
     return
   }
+  const attackChancePercent = Math.trunc(Number(memberForm.attackChancePercent))
+  if (!Number.isInteger(attackChancePercent) || attackChancePercent < 0 || attackChancePercent > 100) {
+    memberFormError.value = 'Attack chance must be between 0 and 100.'
+    return
+  }
+  const pityThreshold = Math.trunc(Number(memberForm.pityThreshold))
+  if (!Number.isInteger(pityThreshold) || pityThreshold < 0 || pityThreshold > 50) {
+    memberFormError.value = 'Reward pity threshold must be between 0 and 50.'
+    return
+  }
+  const firstWinBonusPoints = Math.trunc(Number(memberForm.firstWinBonusPoints))
+  if (!Number.isInteger(firstWinBonusPoints) || firstWinBonusPoints < 0 || firstWinBonusPoints > 5000) {
+    memberFormError.value = 'First-win bonus points must be between 0 and 5000.'
+    return
+  }
   const minPriorDefeats = Math.trunc(Number(memberForm.minPriorDefeats))
   if (!Number.isInteger(minPriorDefeats) || minPriorDefeats < 0 || minPriorDefeats > 100000) {
     memberFormError.value = 'Minimum personal wins to unlock must be between 0 and 100000.'
@@ -1533,6 +1585,9 @@ async function saveMember() {
       cMoonPointsReward,
       critChanceAgainstPercent,
       critChanceFromPercent,
+      attackChancePercent,
+      pityThreshold,
+      firstWinBonusPoints,
       active: memberForm.active,
       sortOrder: Math.trunc(Number(memberForm.sortOrder)) || 0,
       isRaidBoss,

@@ -283,6 +283,17 @@
               Seasonal Updates below) — not on a schedule.
             </p>
           </div>
+
+          <div>
+            <label class="flex items-center gap-2 text-xs font-medium">
+              <input v-model="sharedBossDefeatAnnounceEnabled" type="checkbox" class="cm-tap" />
+              Server-wide community boss defeated
+            </label>
+            <p class="text-[11px] text-gray-500 mt-1">
+              Posts once, server-wide (not to any one team's channel), the moment a Shared Pool
+              enemy's community HP bar is actually brought to 0 by any player's hit.
+            </p>
+          </div>
         </div>
 
         <div class="mt-3">
@@ -1502,6 +1513,7 @@ const weeklyRecapDayOfWeek = ref(0)
 const weeklyRecapHour = ref(9)
 const weeklyRecapMinute = ref(0)
 const seasonMvpRecapEnabled = ref(false)
+const sharedBossDefeatAnnounceEnabled = ref(false)
 const discordEventsSaving = ref(false)
 const discordEventsError = ref('')
 const DAY_OF_WEEK_OPTIONS = [
@@ -2567,6 +2579,7 @@ async function load() {
     weeklyRecapHour.value = Number.isInteger(data.cMoonWeeklyRecapHour) ? data.cMoonWeeklyRecapHour : 9
     weeklyRecapMinute.value = Number.isInteger(data.cMoonWeeklyRecapMinute) ? data.cMoonWeeklyRecapMinute : 0
     seasonMvpRecapEnabled.value = !!data.cMoonSeasonMvpRecapEnabled
+    sharedBossDefeatAnnounceEnabled.value = !!data.cMoonSharedBossDefeatAnnounceEnabled
     admins.value = adminsData || []
     ctoons.value = ctoonsData || []
     backgrounds.value = backgroundsData || []
@@ -2887,6 +2900,7 @@ async function saveDiscordEvents() {
         cMoonWeeklyRecapHour: weeklyRecapHour.value,
         cMoonWeeklyRecapMinute: weeklyRecapMinute.value,
         cMoonSeasonMvpRecapEnabled: seasonMvpRecapEnabled.value,
+        cMoonSharedBossDefeatAnnounceEnabled: sharedBossDefeatAnnounceEnabled.value,
       },
     })
     teamMilestoneEnabled.value = res.cMoonTeamMilestoneEnabled
@@ -2901,6 +2915,7 @@ async function saveDiscordEvents() {
     weeklyRecapHour.value = res.cMoonWeeklyRecapHour
     weeklyRecapMinute.value = res.cMoonWeeklyRecapMinute
     seasonMvpRecapEnabled.value = res.cMoonSeasonMvpRecapEnabled
+    sharedBossDefeatAnnounceEnabled.value = res.cMoonSharedBossDefeatAnnounceEnabled
   } catch (e) {
     discordEventsError.value = e?.data?.statusMessage || 'Failed to save Discord team events settings'
   } finally {

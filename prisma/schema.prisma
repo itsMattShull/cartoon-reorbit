@@ -788,6 +788,7 @@ model User {
   // cMoon Enemy Battles
   cMoonEnemyBattles CMoonEnemyBattle[]
   cMoonEnemyRaidParticipations CMoonEnemyRaidParticipant[]
+  cMoonEnemyRewardPity CMoonEnemyRewardPity[]
   cMoonEnemyPopupLogs CMoonEnemyPopupLog[]
   cMoonHuntAssignments CMoonHuntAssignment[]
 
@@ -1907,6 +1908,15 @@ model GlobalGameConfig {
   // itself (computed over the just-ended season's [startedAt, now) range) at the moment an admin
   // triggers the rollover, rather than on any cron.
   cMoonSeasonMvpRecapEnabled         Boolean   @default(false)
+  // Server-wide (not per-cMoon) announcement the moment a SHARED_POOL enemy's community-shared HP
+  // pool is actually brought to 0 by SOME player's hit — see action.post.js's atomic
+  // currentHp-GREATEST-clamped UPDATE, which already distinguishes "my own hit caused this
+  // transition" from "someone else already finished it off a moment ago" (the only two cases that
+  // can observe currentHp <= 0), so this can never double-post for the same kill. Posted to the
+  // same shared fallback channel resolveCMoonChannelId(null, config) already uses for the
+  // server-wide season-goal announcement, since there's no single "team" to credit a community
+  // kill to.
+  cMoonSharedBossDefeatAnnounceEnabled Boolean @default(false)
   createdAt                          DateTime  @default(now())
   updatedAt                          DateTime  @updatedAt
 }
@@ -5582,6 +5592,33 @@ model CMoonEnemyMember {
   // entirely for whichever candidates GlobalGameConfig.cMoonEnemyHigherTierFirst's rank pre-filter
   // (when enabled) has already excluded before weighting even runs.
   occurrencePercent Int                  @default(50)
+  // 0-100: the chance this enemy's own rolled move is an attack rather than a block, each half
+  // then split evenly between the HIGH/LOW lane (see rollEnemyAction in cmoonEnemyBattle.js) —
+  // an admin-tunable "aggression" knob on top of the plain uniform roll every enemy used before
+  // this column existed. Default 50 reproduces that exact old behavior bit-for-bit (50% attack /
+  // 50% block, same as rolling uniformly among all four actions), so shipping this changes
+  // nothing for an admin who never touches it. Never applied to a straggling RAID PARTICIPANT's
+  // own auto-filled action (see cmoonRaidSocket.js's closeRound) — that reuse of
+  // rollEnemyAction() is deliberately left at its unbiased default; only an enemy's OWN move
+  // (solo or raid boss) ever reads this column.
+  attackChancePercent Int                @default(50)
+  // 0 disables (same "0 disables" convention as cMoonEnemySpawnCapCount) — otherwise, the Nth
+  // consecutive WIN against this member that rolled ZERO of its configured CMoonEnemyReward rows
+  // force-grants exactly one of them (picked uniformly, ignoring dropChancePercent) instead of
+  // leaving the player empty-handed again, and resets the streak to 0. A win that already rolled
+  // at least one reward on its own also resets the streak to 0, pity or not. Tracked per
+  // (user, member) in CMoonEnemyRewardPity — see that model's own comment — and SOLO BATTLES
+  // ONLY: a raid's reward is one roll shared by the whole party, which doesn't compose with a
+  // per-user streak the same way, so this column is simply never read there.
+  pityThreshold     Int                  @default(0)
+  // Extra cMoonPoints (on top of cMoonPointsReward, same cMoon-required gate) awarded ONLY the
+  // very first time a given player ever beats THIS specific member — see
+  // action.post.js's resolveWin, which already computes isFirstWinAgainstThisEnemy for the
+  // first-victory toast and now also reads it here. 0 (the default) changes nothing. SOLO ONLY,
+  // same reasoning as pityThreshold above: a raid's "first win" is ambiguous per-party-member and
+  // its points are already split as one shared pool, which a per-user bonus doesn't compose with
+  // cleanly — out of scope for this first pass.
+  firstWinBonusPoints Int                @default(0)
   // Only meaningful (and only ever written to) when battleMode = SHARED_POOL — the live running
   // total every fighting player's damage comes out of together. Decremented via an atomic
   // conditional UPDATE (see resolveBattleRound) so two players landing a hit at the same instant
@@ -5674,6 +5711,7 @@ model CMoonEnemyMember {
   battles CMoonEnemyBattle[]
   raids   CMoonEnemyRaid[]
   riddles CMoonRiddle[]
+  rewardPity CMoonEnemyRewardPity[]
 
   @@index([active, defeatedAt, sortOrder])
 }
@@ -5742,6 +5780,24 @@ model CMoonEnemyReward {
   background  Background?      @relation(fields: [backgroundId], references: [id], onDelete: Restrict)
 
   @@index([enemyMemberId])
+}
+
+// Tracks one (user, member) pair's current consecutive-empty-win streak toward
+// CMoonEnemyMember.pityThreshold — see that column's own comment for the full pity rule. Reset
+// to 0 (not deleted) the moment a win rolls a real reward on its own, pity or not, so the row
+// just sits at 0 between pity triggers rather than churning rows via delete+recreate. SOLO
+// BATTLES ONLY, same scope note as pityThreshold itself.
+model CMoonEnemyRewardPity {
+  id              String   @id @default(uuid())
+  userId          String
+  enemyMemberId   String
+  emptyWinStreak  Int      @default(0)
+  updatedAt       DateTime @updatedAt
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enemyMember CMoonEnemyMember @relation(fields: [enemyMemberId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, enemyMemberId])
 }
 
 // One row per NON-raid-boss enemy actually OFFERED to a player (the chance roll in

@@ -36,6 +36,24 @@ export const CRIT_CHANCE_MIN = 0
 export const CRIT_CHANCE_MAX = 100
 export const CRIT_CHANCE_DEFAULT = 0
 
+// 0-100 chance this enemy's own rolled move is an attack rather than a block — see
+// CMoonEnemyMember.attackChancePercent's own schema comment. 50 is the admin default AND the
+// value that reproduces the original plain-uniform roll exactly.
+export const ATTACK_CHANCE_MIN = 0
+export const ATTACK_CHANCE_MAX = 100
+export const ATTACK_CHANCE_DEFAULT = 50
+
+// 0 disables — see CMoonEnemyMember.pityThreshold's own schema comment.
+export const PITY_THRESHOLD_MIN = 0
+export const PITY_THRESHOLD_MAX = 50
+export const PITY_THRESHOLD_DEFAULT = 0
+
+// Same 0-5000 scale as CMOON_POINTS_REWARD_MIN/MAX — see CMoonEnemyMember.firstWinBonusPoints's
+// own schema comment.
+export const FIRST_WIN_BONUS_POINTS_MIN = 0
+export const FIRST_WIN_BONUS_POINTS_MAX = 5000
+export const FIRST_WIN_BONUS_POINTS_DEFAULT = 0
+
 // A POINTS reward row's `quantity` is a points amount, not a copy count — same 0-5000 scale as
 // CMoonEnemyMember.cMoonPointsReward, since both are "how many points does a win/prize add".
 export const POINTS_REWARD_MIN = 1
@@ -167,6 +185,18 @@ export function isValidRewardQuantity(value) {
 
 export function isValidCritChance(value) {
   return Number.isInteger(value) && value >= CRIT_CHANCE_MIN && value <= CRIT_CHANCE_MAX
+}
+
+export function isValidAttackChance(value) {
+  return Number.isInteger(value) && value >= ATTACK_CHANCE_MIN && value <= ATTACK_CHANCE_MAX
+}
+
+export function isValidPityThreshold(value) {
+  return Number.isInteger(value) && value >= PITY_THRESHOLD_MIN && value <= PITY_THRESHOLD_MAX
+}
+
+export function isValidFirstWinBonusPoints(value) {
+  return Number.isInteger(value) && value >= FIRST_WIN_BONUS_POINTS_MIN && value <= FIRST_WIN_BONUS_POINTS_MAX
 }
 
 export function isValidPointsAmount(value) {
@@ -304,6 +334,15 @@ export function parseMemberBody(body, existing) {
   const critChanceFromPercent = body?.critChanceFromPercent === undefined
     ? (existing ? existing.critChanceFromPercent : CRIT_CHANCE_DEFAULT)
     : toNumber(body.critChanceFromPercent)
+  const attackChancePercent = body?.attackChancePercent === undefined
+    ? (existing ? existing.attackChancePercent : ATTACK_CHANCE_DEFAULT)
+    : toNumber(body.attackChancePercent)
+  const pityThreshold = body?.pityThreshold === undefined
+    ? (existing ? existing.pityThreshold : PITY_THRESHOLD_DEFAULT)
+    : toNumber(body.pityThreshold)
+  const firstWinBonusPoints = body?.firstWinBonusPoints === undefined
+    ? (existing ? existing.firstWinBonusPoints : FIRST_WIN_BONUS_POINTS_DEFAULT)
+    : toNumber(body.firstWinBonusPoints)
   const active = toBoolean(body?.active, existing ? existing.active : true)
   const sortOrder = body?.sortOrder === undefined
     ? (existing ? existing.sortOrder : 0)
@@ -363,6 +402,15 @@ export function parseMemberBody(body, existing) {
   if (!isValidCritChance(critChanceFromPercent)) {
     return { ok: false, message: `Critical hit chance from this enemy must be a whole number between ${CRIT_CHANCE_MIN} and ${CRIT_CHANCE_MAX}` }
   }
+  if (!isValidAttackChance(attackChancePercent)) {
+    return { ok: false, message: `Attack chance must be a whole number between ${ATTACK_CHANCE_MIN} and ${ATTACK_CHANCE_MAX}` }
+  }
+  if (!isValidPityThreshold(pityThreshold)) {
+    return { ok: false, message: `Pity threshold must be a whole number between ${PITY_THRESHOLD_MIN} and ${PITY_THRESHOLD_MAX}` }
+  }
+  if (!isValidFirstWinBonusPoints(firstWinBonusPoints)) {
+    return { ok: false, message: `First-win bonus points must be a whole number between ${FIRST_WIN_BONUS_POINTS_MIN} and ${FIRST_WIN_BONUS_POINTS_MAX}` }
+  }
   if (active === null) {
     return { ok: false, message: 'Active must be true or false' }
   }
@@ -391,7 +439,8 @@ export function parseMemberBody(body, existing) {
     ok: true,
     data: {
       factionId, name, maxHp, battleMode, rank, minPriorDefeats, occurrencePercent, cMoonPointsReward,
-      critChanceAgainstPercent, critChanceFromPercent, active, sortOrder,
+      critChanceAgainstPercent, critChanceFromPercent, attackChancePercent, pityThreshold, firstWinBonusPoints,
+      active, sortOrder,
       isRaidBoss, raidAnnouncementText, raidOneTime, raidCooldownMinutes,
     },
   }

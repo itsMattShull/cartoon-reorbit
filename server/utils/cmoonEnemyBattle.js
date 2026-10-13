@@ -142,7 +142,7 @@ export function resolveRound({
   playerAction, enemyMember, playerHpRemaining, playerMaxHp,
   playerAtkBonus = 0, enemyAtkBonus = 0, playerParalyzedTurns = 0, enemyParalyzedTurns = 0,
 }) {
-  const rolledEnemyAction = rollEnemyAction()
+  const rolledEnemyAction = rollEnemyAction(enemyMember.attackChancePercent)
   const effectivePlayerAction = playerParalyzedTurns > 0 ? PARALYZED_ACTION : playerAction
   const effectiveEnemyAction = enemyParalyzedTurns > 0 ? PARALYZED_ACTION : rolledEnemyAction
   const { playerHit, enemyHit, playerBlocked, enemyBlocked } = resolveBattleRound(effectivePlayerAction, effectiveEnemyAction)
@@ -185,11 +185,19 @@ export function resolveRound({
   }
 }
 
-// The NPC's move for this round — uniform random among all 4 actions. No difficulty/bias knob
-// today; every enemy member plays identically regardless of its configured HP. (An admin-tunable
-// "aggression" weighting would be a natural, low-risk future extension of just this function.)
-export function rollEnemyAction() {
-  return BATTLE_ACTIONS[Math.floor(Math.random() * BATTLE_ACTIONS.length)]
+// The NPC's move for this round. `attackChancePercent` (CMoonEnemyMember.attackChancePercent,
+// 0-100) biases attack vs block; whichever side wins that roll is then split evenly between its
+// own HIGH/LOW lane, same as before this knob existed. The default (50, or no argument at all)
+// reproduces the original plain-uniform-among-4-actions roll bit-for-bit, so every existing
+// caller that doesn't pass a value — notably cmoonRaidSocket.js's straggler-participant
+// autofill, which reuses this same function for an unrelated purpose (see its own comment) and
+// must stay unbiased — is completely unaffected by this feature.
+export function rollEnemyAction(attackChancePercent = 50) {
+  const chance = Number(attackChancePercent)
+  const pct = Number.isFinite(chance) ? Math.min(100, Math.max(0, chance)) : 50
+  const isAttack = Math.random() * 100 < pct
+  const isHigh = Math.random() < 0.5
+  return isAttack ? (isHigh ? 'ATTACK_HIGH' : 'ATTACK_LOW') : (isHigh ? 'BLOCK_HIGH' : 'BLOCK_LOW')
 }
 
 // Rolls each reward row's dropChancePercent INDEPENDENTLY (not a normalized weighted pick) —
@@ -204,6 +212,25 @@ export function rollEnemyRewards(rewardRows) {
     if (!Number.isFinite(chance) || chance <= 0) return false
     return Math.random() * 100 < chance
   })
+}
+
+// ── Reward pity (see CMoonEnemyMember.pityThreshold's own schema comment — SOLO BATTLES ONLY) ──
+
+// Pure decision: has `emptyWinStreak` (the count AFTER this win, i.e. already incremented) hit
+// the point where this win must force a reward? `pityThreshold <= 0` means the feature is off for
+// this member and never forces anything, regardless of streak.
+export function shouldForcePityReward(emptyWinStreak, pityThreshold) {
+  const threshold = Number(pityThreshold) || 0
+  if (threshold <= 0) return false
+  return Number(emptyWinStreak) >= threshold
+}
+
+// Picks exactly one row uniformly at random from the member's configured reward table, ignoring
+// each row's own dropChancePercent — this is the "guaranteed" pick a pity trigger forces, not
+// another independent roll. Returns null for an empty table (nothing to force).
+export function forcePickOneReward(rewardRows) {
+  if (!rewardRows?.length) return null
+  return rewardRows[Math.floor(Math.random() * rewardRows.length)]
 }
 
 // Turns the rolled reward rows above into the `reward` bundle grantRewardInTx expects (plus a

@@ -80,6 +80,10 @@ export function buildSeasonGoalReachedMessage(label, target) {
   return `🎆 The server-wide **${label || 'Enemies Defeated'}** goal of **${Number(target).toLocaleString()}** has been reached! Great work, everyone.`
 }
 
+export function buildSharedPoolBossDefeatedMessage(enemyName) {
+  return `🎉 **${enemyName || 'A community boss'}** has been defeated by the combined efforts of every cMoon! Great work, everyone.`
+}
+
 export function buildWeeklyRecapMessage(cMoonName, topSlayer) {
   if (!topSlayer) return null
   return `📊 **Weekly Recap for ${cMoonName || 'your cMoon'}**: **${topSlayer.username}** led the team with **${topSlayer.wins}** enemy defeat${topSlayer.wins === 1 ? '' : 's'} this week!`
@@ -249,6 +253,31 @@ export async function checkAndAnnounceSeasonGoalReached() {
     await sendCMoonTeamUpdate(channelId, buildSeasonGoalReachedMessage(season.enemiesDefeatedGoalLabel, target))
   } catch (e) {
     console.error('checkAndAnnounceSeasonGoalReached failed:', e?.message || e)
+  }
+}
+
+/* ── Server-wide SHARED_POOL boss defeat ─────────────────────────────────────────────────────── */
+
+// Called by action.post.js's atomic currentHp-GREATEST-clamped UPDATE ONLY when that caller's own
+// request was the one whose decrement actually brought the pool from >0 to 0 (that UPDATE's own
+// WHERE "currentHp" > 0 means a second, simultaneous caller who merely observes an already-0 pool
+// never gets credited with the transition) — so this is never called twice for the same kill,
+// no additional atomic claim needed here. `enemyName` is already in hand on the caller's own
+// `battle.enemyMember`, so this never re-queries it. Posted to the same shared fallback channel
+// the server-wide season-goal announcement above uses, since a SHARED_POOL kill has no single
+// team to credit.
+export async function announceSharedPoolBossDefeated(enemyName) {
+  try {
+    const config = await prisma.globalGameConfig.findUnique({
+      where: { id: 'singleton' },
+      select: { cMoonSharedBossDefeatAnnounceEnabled: true, cMoonRaidBossDiscordChannelId: true },
+    })
+    if (!config?.cMoonSharedBossDefeatAnnounceEnabled) return
+    const channelId = resolveCMoonChannelId(null, config)
+    if (!channelId) return
+    await sendCMoonTeamUpdate(channelId, buildSharedPoolBossDefeatedMessage(enemyName))
+  } catch (e) {
+    console.error('announceSharedPoolBossDefeated failed:', e?.message || e)
   }
 }
 

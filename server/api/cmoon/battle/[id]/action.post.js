@@ -18,11 +18,11 @@ import { prisma as db } from '@/server/prisma'
 import { assertSameOrigin } from '@/server/utils/requireAdmin'
 import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from '@/server/utils/achievements'
 import { recomputeCMoonPointsForUsers } from '@/server/cron/cmoon-points-aggregate'
-import { announceTeamEnemiesMilestone, checkAndAnnounceSeasonGoalReached } from '@/server/utils/cmoonDiscordEvents'
+import { announceTeamEnemiesMilestone, checkAndAnnounceSeasonGoalReached, announceSharedPoolBossDefeated } from '@/server/utils/cmoonDiscordEvents'
 import {
   isValidPlayerSubmittedAction, resolveRound, rollEnemyRewards, buildGrantableReward,
   serializeBattleForClient, MAX_ROUNDS_SAFETY, HEAL_ON_SUCCESSFUL_BLOCK,
-  SPECIAL_ACTION, HIT_STREAK_THRESHOLD,
+  SPECIAL_ACTION, HIT_STREAK_THRESHOLD, shouldForcePityReward, forcePickOneReward,
 } from '@/server/utils/cmoonEnemyBattle'
 
 const BATTLE_INCLUDE = {
@@ -101,6 +101,11 @@ export default defineEventHandler(async (event) => {
   let playerSpecialCharged = battle.playerSpecialCharged
   let enemyHitStreak = battle.enemyHitStreak
   const specialEvents = []
+  // Set true only by THIS request's own decrement actually bringing the shared pool from >0 to
+  // 0 — see damageEnemy's own comment below for why a simultaneous other caller who merely
+  // observes an already-0 pool can never also set this, so the Discord announcement after the
+  // WIN branch below can never double-fire for the same kill.
+  let sharedPoolJustDefeated = false
 
   let enemyHp = isSharedPool
     ? (await db.cMoonEnemyMember.findUnique({ where: { id: battle.enemyMemberId }, select: { currentHp: true } })).currentHp
@@ -117,8 +122,17 @@ export default defineEventHandler(async (event) => {
       WHERE id = ${battle.enemyMemberId} AND "currentHp" > 0
       RETURNING "currentHp"
     `
+    // rows.length === 0 means the WHERE "currentHp" > 0 clause matched nothing — the pool was
+    // ALREADY at 0 from some other player's hit by the time this UPDATE ran, so this request
+    // never caused a transition. rows.length === 1 means THIS UPDATE is what moved it, and
+    // GREATEST floors it at 0, so rows[0].currentHp <= 0 here means this exact request just
+    // landed the killing blow — the only signal announceSharedPoolBossDefeated below is allowed
+    // to fire on, so two simultaneous finishing hits can never both announce the same kill.
     enemyHp = rows.length ? rows[0].currentHp : 0
-    if (enemyHp <= 0) await db.cMoonEnemyMember.update({ where: { id: battle.enemyMemberId }, data: { defeatedAt: new Date() } })
+    if (rows.length && enemyHp <= 0) {
+      sharedPoolJustDefeated = true
+      await db.cMoonEnemyMember.update({ where: { id: battle.enemyMemberId }, data: { defeatedAt: new Date() } })
+    }
   }
   async function healEnemy(amount) {
     if (amount <= 0 || enemyHp <= 0) return // never revives an already-defeated shared pool
@@ -204,6 +218,7 @@ export default defineEventHandler(async (event) => {
   // WIN takes priority over a same-round mutual KO (both sides would have hit 0 hp this round)
   // — the player still gets credit for the kill rather than being denied a reward on a technicality.
   if (newEnemyHp <= 0) {
+    if (sharedPoolJustDefeated) announceSharedPoolBossDefeated(battle.enemyMember.name).catch(() => {})
     const { battle: resultBattle, isFirstWinAgainstThisEnemy } = await resolveWin(battle, roundLog, submittedRound, playerHp)
     return { round: roundEntry, battle: serializeBattleForClient(resultBattle), isFirstWinAgainstThisEnemy }
   }
@@ -245,14 +260,41 @@ async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining) {
     where: { enemyMemberId: battle.enemyMemberId },
     include: { ctoon: { select: { quantity: true, name: true } } },
   })
-  const hitRewards = rollEnemyRewards(rewardRows)
-  const grantable = buildGrantableReward(hitRewards)
+  let hitRewards = rollEnemyRewards(rewardRows)
   // A player with no cMoon (battle.cMoonId is null — see that column's own schema comment) never
   // earns cMoon points: there's no team to credit, and crediting one anyway would misattribute a
-  // non-member's win. Every other reward type and achievement progress below still applies.
-  const pointsAwarded = battle.cMoonId ? Math.max(0, Number(battle.enemyMember.cMoonPointsReward) || 0) : 0
+  // non-member's win. Every other reward type and achievement progress below still applies. The
+  // first-win bonus follows the exact same cMoon-required gate as the base reward, since it's
+  // still cMoonPointsReward money, just conditional on isFirstWinAgainstThisEnemy.
+  const basePoints = Math.max(0, Number(battle.enemyMember.cMoonPointsReward) || 0)
+  const firstWinBonus = isFirstWinAgainstThisEnemy ? Math.max(0, Number(battle.enemyMember.firstWinBonusPoints) || 0) : 0
+  const pointsAwarded = battle.cMoonId ? (basePoints + firstWinBonus) : 0
 
   const txResult = await db.$transaction(async (tx) => {
+    // Reward pity (see CMoonEnemyMember.pityThreshold's own schema comment) — SOLO BATTLES ONLY.
+    // Only worth tracking at all when pity is actually enabled for this member AND it has at
+    // least one reward row configured to force; otherwise skip the extra read/write entirely.
+    if (hitRewards.length === 0 && battle.enemyMember.pityThreshold > 0 && rewardRows.length > 0) {
+      const pity = await tx.cMoonEnemyRewardPity.upsert({
+        where: { userId_enemyMemberId: { userId: battle.userId, enemyMemberId: battle.enemyMemberId } },
+        create: { userId: battle.userId, enemyMemberId: battle.enemyMemberId, emptyWinStreak: 1 },
+        update: { emptyWinStreak: { increment: 1 } },
+      })
+      if (shouldForcePityReward(pity.emptyWinStreak, battle.enemyMember.pityThreshold)) {
+        const forced = forcePickOneReward(rewardRows)
+        if (forced) hitRewards = [forced]
+        await tx.cMoonEnemyRewardPity.update({ where: { id: pity.id }, data: { emptyWinStreak: 0 } })
+      }
+    } else if (hitRewards.length > 0) {
+      // A real reward already rolled on its own — reset any existing streak back to 0 (no-op,
+      // not an upsert, if this user/member never had a pity row to begin with).
+      await tx.cMoonEnemyRewardPity.updateMany({
+        where: { userId: battle.userId, enemyMemberId: battle.enemyMemberId },
+        data: { emptyWinStreak: 0 },
+      })
+    }
+
+    const grantable = buildGrantableReward(hitRewards)
     const summary = await grantRewardInTx(tx, battle.userId, grantable, 'CMOON_ENEMY_BATTLE_WIN')
 
     if (pointsAwarded > 0) {

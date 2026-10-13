@@ -252,6 +252,12 @@ export default defineEventHandler(async (event) => {
     data.cMoonSeasonMvpRecapEnabled = !!body.cMoonSeasonMvpRecapEnabled
   }
 
+  // Server-wide SHARED_POOL boss-defeat announcement — see announceSharedPoolBossDefeated in
+  // server/utils/cmoonDiscordEvents.js, the only reader.
+  if (body?.cMoonSharedBossDefeatAnnounceEnabled !== undefined) {
+    data.cMoonSharedBossDefeatAnnounceEnabled = !!body.cMoonSharedBossDefeatAnnounceEnabled
+  }
+
   const updated = await db.globalGameConfig.upsert({
     where: { id: 'singleton' },
     create: { id: 'singleton', dailyPointLimit: 100, ...data },
@@ -292,6 +298,7 @@ export default defineEventHandler(async (event) => {
       cMoonWeeklyRecapHour: existing?.cMoonWeeklyRecapHour,
       cMoonWeeklyRecapMinute: existing?.cMoonWeeklyRecapMinute,
       cMoonSeasonMvpRecapEnabled: existing?.cMoonSeasonMvpRecapEnabled,
+      cMoonSharedBossDefeatAnnounceEnabled: existing?.cMoonSharedBossDefeatAnnounceEnabled,
     },
     newValue: {
       cMoonEnabled: enabled,
@@ -323,6 +330,7 @@ export default defineEventHandler(async (event) => {
       cMoonWeeklyRecapHour: updated.cMoonWeeklyRecapHour,
       cMoonWeeklyRecapMinute: updated.cMoonWeeklyRecapMinute,
       cMoonSeasonMvpRecapEnabled: updated.cMoonSeasonMvpRecapEnabled,
+      cMoonSharedBossDefeatAnnounceEnabled: updated.cMoonSharedBossDefeatAnnounceEnabled,
     },
   })
 
@@ -356,5 +364,6 @@ export default defineEventHandler(async (event) => {
     cMoonWeeklyRecapHour: updated.cMoonWeeklyRecapHour,
     cMoonWeeklyRecapMinute: updated.cMoonWeeklyRecapMinute,
     cMoonSeasonMvpRecapEnabled: updated.cMoonSeasonMvpRecapEnabled,
+    cMoonSharedBossDefeatAnnounceEnabled: updated.cMoonSharedBossDefeatAnnounceEnabled,
   }
 })
