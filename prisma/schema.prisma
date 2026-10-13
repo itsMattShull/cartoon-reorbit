@@ -778,6 +778,7 @@ model User {
   // cMoon (faction) relations
   cMoonCaptainOf           CMoonCaptain[]
   achievementClaims        AchievementClaim[]
+  achievementTierClaimDismissals AchievementTierClaimDismissal[]
   dailyTaskCompletions     UserDailyTaskCompletion[]
   initiatedDispersalOffers CMoonDispersalOffer[]     @relation("CMoonDispersalOfferInitiatedBy")
   closedDispersalOffers    CMoonDispersalOffer[]     @relation("CMoonDispersalOfferClosedBy")
@@ -3491,6 +3492,7 @@ model Achievement {
   requiredCtoons AchievementRequiredCtoon[]
   claimOptions   AchievementClaimOption[]
   claims         AchievementClaim[]
+  tierClaimDismissals AchievementTierClaimDismissal[]
 
   @@index([cMoonRankTierId])
 }
@@ -3542,6 +3544,31 @@ model AchievementUser {
 
   @@unique([achievementId, userId])
   @@index([userId, achievedAt])
+}
+
+// A player's own "stop showing this" action on a rank-up claim card that is genuinely
+// unclaimable — the same universal CMoonRankTier's reward was already claimed through a
+// DIFFERENT cMoon's copy of the achievement (see claimAchievementReward's cross-cMoon
+// tier-claim guard in server/utils/achievements.js, and annotateUnclaimableTierClaims in
+// server/utils/achievementTierDismissal.js), so every future attempt to claim THIS achievement
+// would always 409 TIER_ALREADY_CLAIMED. Scoped to (achievementId, userId) rather than the tier
+// itself since a player could hit this same dead end again in a THIRD cMoon later — each
+// dead-end card is dismissed independently. Purely a display-layer dismissal: it's read only by
+// rank-progress.get.js's unclaimedRankRewards query (so the card stops resurfacing on the
+// player's own cMoon page) and never touches AchievementUser/AchievementClaim or actual claim
+// eligibility, same "separate table, never overload the real row" reasoning as
+// TouchTradeConfirmation above.
+model AchievementTierClaimDismissal {
+  id            String   @id @default(uuid())
+  achievementId String
+  userId        String
+  dismissedAt   DateTime @default(now())
+
+  achievement Achievement @relation(fields: [achievementId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([achievementId, userId])
+  @@index([userId])
 }
 
 model UserDailyActivity {
