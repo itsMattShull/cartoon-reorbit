@@ -17,7 +17,7 @@ test('card css: the GPU-diet overrides stay in place (no forced layers, flat 3D 
   assert.match(tail, /\.gtoon-card-host \.card\.stellar \.ufo \{ transform-style: flat; \}/)
   assert.match(tail, /\.gtoon-card-host \.card \.ufo,/)
   assert.match(tail, /\.energy2,[\s\S]*\.ptext \{ will-change: auto; \}/)
-  assert.match(tail, /\.gtoon-card-host\.gtoon-calm \.card\.stellar \.heatshield \{ animation: none; \}/)
+  assert.match(tail, /\.gtoon-card-host\.gtoon-calm \.card\.stellar \.heatshield,\s*\.gtoon-card-host\.gtoon-paused \.card\.stellar \.heatshield \{ animation: none; \}/)
 })
 
 test('face-down board cards use the static Noise back, never the animated one', () => {
@@ -30,12 +30,35 @@ test('face-down board cards use the static Noise back, never the animated one', 
   assert.match(card, /renderCardNoiseStatic\(c\)/)
 })
 
-test('looping theme effects (heatshield pulse, particles) only run where ambient effects are wanted', () => {
-  assert.match(card, /themeFx: props\.ambient/)
+test('looping effects stay on, but under the frame-rate governor, off-screen pausing and a 30fps cap', () => {
+  // started once per card through the engine (so the governor can see every loop), never ad hoc per component
+  assert.match(card, /startCardLoops\(c, \{ theme: true, ambient: style\.value\.ambient, params: p \}\)/)
+  assert.match(engine, /export async function startCardLoops/)
+  assert.match(engine, /governor\.add\(card\)/)
+  assert.match(engine, /createLoopGovernor\(\{/)
+  assert.match(engine, /if \(!document\.hidden && dt < 3500\) governor\.tick/)
+  // cards scrolled out of view stop looping
+  assert.match(card, /new IntersectionObserver/)
+  assert.match(card, /pauseCardLoops\(cardEl\.value, 'offscreen'\)/)
+  // calm mode still removes the stellar glow where loops aren't wanted; pausing stills it too
   assert.match(card, /'gtoon-calm': !\(isFull && ambient\)/)
-  assert.match(engine, /if \(!themeFx\) \{/)
+  assert.match(css, /\.gtoon-card-host\.gtoon-paused \.card\.stellar \.heatshield/)
+  // the effects library caps its own frame rate and sizes canvases to the on-screen density
+  const fx = readFileSync(new URL('../public/gtoon-card/card-fx.js', import.meta.url), 'utf8')
+  assert.match(fx, /const FX_FRAME_MS = 1000 \/ 30/)
+  assert.match(fx, /function _fxCardDpr\(/)
+  assert.match(fx, /const dpr = _fxCardDpr\(cardEl, 2\)/)
 })
 
-test('board tiles never ask for ambient loops', () => {
-  assert.match(tile, /:ambient="false"/)
+test('only revealed slot cards loop; hand cards and face-down cards are always static', () => {
+  assert.match(tile, /:ambient="isRevealed && animate"/)
+  assert.match(tile, /:effects="isRevealed && animate \? 'full' : 'static'"/)
+  assert.match(tile, /<GtoonCard mode="noise" effects="static"/)
+})
+
+test('board slots lose their frame once a card is in them; empty slots and hand highlights keep theirs', () => {
+  assert.match(tile, /const occupiedSlot = computed\(\(\) => props\.size === 'slot' && !!\(props\.card \|\| props\.faceDown\)\)/)
+  assert.match(tile, /occupiedSlot\.value && \(props\.tone === 'idle' \|\| props\.tone === 'filled'\)\) return 'border-transparent'/)
+  assert.match(tile, /idle: props\.card \|\| props\.faceDown \? 'border-indigo-400 bg-white\/5' : 'border-dashed border-white\/20 bg-white\/5'/)
+  assert.match(tile, /selected: 'border-amber-400 bg-amber-500\/10'/)
 })

@@ -52,7 +52,8 @@ import { sanitizeGtoonCardStyle } from '@/utils/gtoonCardStyle'
 import {
   setCardImage, setCardValue, setCardTheme, setCardRotation, setCardColor, setCardBarcodeSeed,
   renderCardStatic, renderCardNoiseStatic, setCardMode, playOneShot as engPlayOneShot, startAmbient as engStartAmbient,
-  stopAmbient as engStopAmbient, clearCardFx, destroyCard
+  stopAmbient as engStopAmbient, clearCardFx, destroyCard,
+  startCardLoops, stopCardLoops, pauseCardLoops, resumeCardLoops
 } from '@/lib/gtoonCardEngine'
 
 const props = defineProps({
@@ -73,6 +74,7 @@ const emit = defineEmits(['revealed'])
 const host = ref(null)
 const cardEl = ref(null)
 let ro = null
+let io = null
 let mounted = false
 
 const style = computed(() => sanitizeGtoonCardStyle(props.cardStyle))
@@ -98,16 +100,17 @@ async function revealFlow() {
   const c = cardEl.value
   if (!c) return
   // Looping theme effects (heatshield pulse, fiery / starry particles) only where ambient effects are wanted.
-  await setCardMode(c, props.mode === 'noise' ? 0 : 1, { themeFx: props.ambient })
+  if (props.mode === 'noise') stopCardLoops(c)
+  await setCardMode(c, props.mode === 'noise' ? 0 : 1)
   if (props.mode === 'noise' || !cardEl.value) return
   emit('revealed')
   const p = style.value.params
   if (props.playOnReveal) {
     for (const key of style.value.oneShot) engPlayOneShot(c, key, p)
   }
-  if (props.ambient) {
-    for (const key of style.value.ambient) engStartAmbient(c, key, p)
-  }
+  // Looping effects (stellar / cosmic pulse + particles, admin-chosen ambient effects) stay on while the card is
+  // shown; the engine's governor drops the oldest cards' loops if the device can't keep up.
+  if (props.ambient) startCardLoops(c, { theme: true, ambient: style.value.ambient, params: p })
 }
 
 onMounted(async () => {
@@ -117,6 +120,17 @@ onMounted(async () => {
   fitScale()
   ro = new ResizeObserver(fitScale)
   ro.observe(host.value)
+  // Cards scrolled out of view stop looping (and start again when they come back).
+  if (typeof IntersectionObserver !== 'undefined') {
+    io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        if (!cardEl.value) return
+        if (e.isIntersecting) resumeCardLoops(cardEl.value, 'offscreen')
+        else pauseCardLoops(cardEl.value, 'offscreen')
+      }
+    }, { rootMargin: '120px' })
+    io.observe(host.value)
+  }
   applyAppearance()
   await setCardColor(c, props.color, { animate: false })
   // Start honouring prop changes now, not after the reveal: data that arrives while the card is powering on
@@ -136,6 +150,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   ro?.disconnect()
+  io?.disconnect()
   if (cardEl.value) destroyCard(cardEl.value)
 })
 
@@ -156,10 +171,10 @@ watch(() => props.mode, () => {
 })
 
 // Saved effect lists changed (admin preview): restart ambient loops to match.
-watch(() => [style.value.ambient.join(','), props.ambient], () => {
+watch(() => [style.value.ambient.join(','), props.ambient, style.value.theme], () => {
   if (!mounted || !isFull.value || props.mode === 'noise') return
-  engStopAmbient(cardEl.value)
-  if (props.ambient) for (const key of style.value.ambient) engStartAmbient(cardEl.value, key, style.value.params)
+  if (props.ambient) startCardLoops(cardEl.value, { theme: true, ambient: style.value.ambient, params: style.value.params })
+  else stopCardLoops(cardEl.value)
 })
 
 defineExpose({

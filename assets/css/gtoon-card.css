@@ -718,4 +718,5 @@
 .gtoon-card-host .card .energy2,
 .gtoon-card-host .card .ptext { will-change: auto; }
 /* Cards that aren't showing looping effects (lists, board tiles, cZones) don't run the stellar glow loop either. */
-.gtoon-card-host.gtoon-calm .card.stellar .heatshield { animation: none; }
+.gtoon-card-host.gtoon-calm .card.stellar .heatshield,
+.gtoon-card-host.gtoon-paused .card.stellar .heatshield { animation: none; }

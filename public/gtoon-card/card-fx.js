@@ -1,3 +1,32 @@
+(function () {
+/* cartoon-reorbit: the whole library now lives in this IIFE so it can shadow requestAnimationFrame with a frame-rate
+   cap. Looping effects don't need 60fps (and a board runs many at once), so callbacks are limited to ~30fps. The
+   wrapper keeps cancelAnimationFrame working by handing out its own ids. Callbacks created fresh every frame (no
+   stable identity) simply run on every frame, as before. Nothing else in the file changed. */
+const _fxNativeRaf = window.requestAnimationFrame.bind(window);
+const _fxNativeCaf = window.cancelAnimationFrame.bind(window);
+const FX_FRAME_MS = 1000 / 30;
+let _fxRafSeq = 0;
+const _fxRafPending = new Map();
+const _fxRafLast = new WeakMap();
+function requestAnimationFrame(cb) {
+    const id = ++_fxRafSeq;
+    const last = _fxRafLast.get(cb) || 0;
+    const tick = (t) => {
+        if (!_fxRafPending.has(id)) return;                              // cancelled
+        if (t - last < FX_FRAME_MS - 3) { _fxRafPending.set(id, _fxNativeRaf(tick)); return; }
+        _fxRafPending.delete(id);
+        _fxRafLast.set(cb, t);
+        cb(t);
+    };
+    _fxRafPending.set(id, _fxNativeRaf(tick));
+    return id;
+}
+function cancelAnimationFrame(id) {
+    const native = _fxRafPending.get(id);
+    if (native !== undefined) { _fxNativeCaf(native); _fxRafPending.delete(id); }
+}
+
 /* ===================== CARD FX: LENS FLARE + PULSE =====================
  * Everything is sized from card.offsetWidth (384 native) via u = width / 384,
  * so it scales if the card size ever changes. Layout (offsetWidth) ignores the
@@ -184,6 +213,22 @@ const FX_GAS_CSS = `
     pointer-events: none;
 }
 `;
+/* ---- cartoon-reorbit: render effect canvases at the density the card is actually shown at ----------------
+   The prototype shows one 384px card, so canvases were sized (card + padding) x devicePixelRatio. On a board the
+   same card is displayed at ~70px (scaled by CSS), and a ~750px canvas at 2x per card, redrawn every frame with
+   screen blending, is what made loops unaffordable. The canvas only needs (on-screen px per design px) x dpr. */
+function _fxCardDpr(cardEl, cap = 2) {
+    const raw = window.devicePixelRatio || 1;
+    try {
+        const card = cardEl && (cardEl.classList?.contains('card') ? cardEl : cardEl.closest?.('.card'));
+        if (card && card.offsetWidth) {
+            const visual = card.getBoundingClientRect().width / card.offsetWidth;   // includes the host's scale()
+            if (visual > 0) return Math.max(0.3, Math.min(cap, visual * raw));
+        }
+    } catch (e) { /* fall through */ }
+    return Math.min(raw, cap);
+}
+
 /* ===================== CSS INJECTION FOR FX CANVAS HOST ===================== */
 const FX_CANVAS_CSS = `
 .card .fx-host-canvas {
@@ -279,7 +324,7 @@ function _fxSignalScanlines(container, o = {}) {
 
     function resize() {
         const w = container.clientWidth, h = container.clientHeight;
-        const dpr = window.devicePixelRatio || 1;
+        const dpr = _fxCardDpr(container, 3);
         canvas.width = Math.max(1, Math.round(w * dpr));
         canvas.height = Math.max(1, Math.round(h * dpr));
         ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -2957,7 +3002,7 @@ function _fxGetOrCreateCanvas(cardEl, className, padding = 180, behind = false) 
         host.appendChild(canvas);
     }
 
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const dpr = _fxCardDpr(cardEl, 2);
     const w = cardEl.offsetWidth || 384;
     const h = cardEl.offsetHeight || 537;
 
@@ -3557,7 +3602,7 @@ function fxPlasma(cardEl, opts = {}) {
         const cy = height * config.originY;
         const tSec = now * 0.001 * config.speed;     // Emission clock (scaled by speed)
         const realSec = now * 0.001;                 // Light sweep clock (independent of speed)
-        const dpr = window.devicePixelRatio || 1;    // shadowBlur ignores the ctx transform
+        const dpr = ctx.getTransform().a;            // shadowBlur ignores the ctx transform (this is the canvas density)
 
         const N = 72;                                   // Samples along the arc
         const L = Math.max(2, Math.floor(config.bands)); // Nested contour layers
@@ -4592,3 +4637,4 @@ window.GtoonFx = {
     fxClear, fxEnsureStyles, fxEnsureAeroshell,
     active: _fxActiveInstances
 };
+})();

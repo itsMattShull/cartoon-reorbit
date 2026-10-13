@@ -24,7 +24,7 @@
           :seed="String(card.ctoonId || card.name || '')"
           :alt="card.name"
           :effects="isRevealed && animate ? 'full' : 'static'"
-          :ambient="false"
+          :ambient="isRevealed && animate"
         />
       </div>
     </div>
@@ -79,13 +79,20 @@ watch(shownValue, (now, was) => {
 })
 
 const sizeClass = computed(() => (props.size === 'hand' ? 'h-24 w-[4.5rem]' : 'h-20'))
-const ringClass = computed(() => ({
-  selected: 'border-amber-400 bg-amber-500/10',
-  open: 'border-dashed border-emerald-400/70 bg-emerald-500/5 cursor-pointer',
-  filled: 'border-indigo-400 bg-white/5',
-  discard: 'border-red-400 bg-red-500/10 opacity-70',
-  idle: props.card || props.faceDown ? 'border-indigo-400 bg-white/5' : 'border-dashed border-white/20 bg-white/5'
-}[props.tone] || 'border-white/20'))
+// Once a card sits in a board slot (face up or face down) the slot's frame disappears and the card stands on its
+// own. The border width stays (transparent) so nothing shifts. Empty slots keep their dashed outline, and hand
+// tiles keep their selected / discard highlights, which are interaction feedback rather than a slot frame.
+const occupiedSlot = computed(() => props.size === 'slot' && !!(props.card || props.faceDown))
+const ringClass = computed(() => {
+  if (occupiedSlot.value && (props.tone === 'idle' || props.tone === 'filled')) return 'border-transparent'
+  return ({
+    selected: 'border-amber-400 bg-amber-500/10',
+    open: 'border-dashed border-emerald-400/70 bg-emerald-500/5 cursor-pointer',
+    filled: 'border-indigo-400 bg-white/5',
+    discard: 'border-red-400 bg-red-500/10 opacity-70',
+    idle: props.card || props.faceDown ? 'border-indigo-400 bg-white/5' : 'border-dashed border-white/20 bg-white/5'
+  }[props.tone] || 'border-white/20')
+})
 </script>
 
 <style scoped>
