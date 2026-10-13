@@ -14,7 +14,7 @@
 //     own side, slot - 1 and slot + 1. "Opposite / opposing" = the other side's card in the SAME slot.
 //   - "all 8s" / "Green 7s" compare PRINTED values. "other" leaves the source card out.
 //   - Multiplies resolve before additions.
-//   - "+N to any <names>" buffs each matching card once; "+N for each <names>" counts named characters.
+//   - "+N to any <names>" buffs each matching card once; "+N for each <names>" counts each card once.
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
@@ -75,7 +75,7 @@ function nounOf(raw) {
 
 const hasName = (c, n) => c.characters.includes(n)
 const matchesNoun = (c, noun) => (noun.f ? noun.f(c) : noun.names.some(n => hasName(c, n)))
-const countNoun = (cards, noun) => (noun.f ? cards.filter(noun.f).length : noun.names.reduce((n, nm) => n + cards.filter(c => hasName(c, nm)).length, 0))
+const countNoun = (cards, noun) => cards.filter(c => matchesNoun(c, noun)).length // a card counts once however many listed names it has
 
 function parseAmount(a) {
   if (a.startsWith('x')) return { kind: 'mul', n: Number(a.slice(1)) }
@@ -87,6 +87,8 @@ function parseAmount(a) {
  * for one printed power. `cards` = everything in play. Throws if the sentence is not understood.
  */
 function referenceEffects(description) {
+  // Printed ambiguity, settled by the game's owner: "x2 if Granny is in play" multiplies Juniper Lee, not the power's card.
+  if (description === '+3 to Juniper Lee; x2 if Granny is in play') description = '+3 to Juniper Lee; x2 to Juniper Lee if Granny is in play'
   const clauses = description.split(/;|,(?= *(?:x\d|[+-]\d))/).map(s => s.trim()).filter(Boolean)
   const fns = clauses.map(clauseFn)
   return (ctx) => fns.flatMap(fn => fn(ctx))
