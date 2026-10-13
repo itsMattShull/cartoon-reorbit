@@ -5,7 +5,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  rollEnemyAction, shouldForcePityReward, forcePickOneReward, isValidBattleAction,
+  rollEnemyAction, shouldForcePityReward, forcePickOneReward, isValidBattleAction, grantSummaryIsEmpty,
 } from '../server/utils/cmoonEnemyBattle.js'
 import {
   isValidAttackChance, isValidPityThreshold, isValidFirstWinBonusPoints,
@@ -155,4 +155,32 @@ test('resolveRaidRound: playerDamage/enemyDamage are always non-negative and nev
     assert.ok(p.playerDamage >= 0)
     assert.ok(p.enemyDamage >= 0)
   }
+})
+
+// ── grantSummaryIsEmpty — the fix for reward pity silently resetting on an already-owned
+// avatar/background hit (see action.post.js's resolveWin, which now keys pity off this rather
+// than the raw hitRewards roll). ────────────────────────────────────────────────────────────────
+
+test('grantSummaryIsEmpty: true for a fully zeroed summary (nothing rolled, or everything rolled was a dead end)', () => {
+  assert.equal(grantSummaryIsEmpty({ points: 0, backgrounds: 0, avatars: 0, border: false, glow: false, ctoonJobs: [] }), true)
+})
+
+test('grantSummaryIsEmpty: false the moment any one field is non-empty', () => {
+  const base = { points: 0, backgrounds: 0, avatars: 0, border: false, glow: false, ctoonJobs: [] }
+  assert.equal(grantSummaryIsEmpty({ ...base, points: 50 }), false)
+  assert.equal(grantSummaryIsEmpty({ ...base, backgrounds: 1 }), false)
+  assert.equal(grantSummaryIsEmpty({ ...base, avatars: 1 }), false)
+  assert.equal(grantSummaryIsEmpty({ ...base, ctoonJobs: [{ ctoonId: 'c1', quantity: 1, name: 'Test' }] }), false)
+})
+
+test('grantSummaryIsEmpty: a hit that grantRewardInTx deduped away to 0 new avatars/backgrounds still reads as empty', () => {
+  // This is exactly grantRewardInTx's own ownership-dedup outcome for an already-owned
+  // avatar/background: the roll "hit", but newAvatarIds/newBgIds ended up empty, so the summary
+  // it returns is indistinguishable from rolling nothing at all — which is the whole point.
+  assert.equal(grantSummaryIsEmpty({ points: 0, backgrounds: 0, avatars: 0, border: false, glow: false, ctoonJobs: [] }), true)
+})
+
+test('grantSummaryIsEmpty: tolerates a missing/undefined summary without throwing', () => {
+  assert.equal(grantSummaryIsEmpty(undefined), true)
+  assert.equal(grantSummaryIsEmpty({}), true)
 })

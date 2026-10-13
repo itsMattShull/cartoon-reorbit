@@ -233,6 +233,18 @@ export function forcePickOneReward(rewardRows) {
   return rewardRows[Math.floor(Math.random() * rewardRows.length)]
 }
 
+// Whether a grantRewardInTx summary actually handed the player nothing tangible — the single
+// source of truth action.post.js's resolveWin uses to decide reward pity, rather than the raw
+// roll (rollEnemyRewards' own hitRewards). A roll CAN hit a row and still grant nothing: an
+// AVATAR/BACKGROUND the player already owns is deduped away inside grantRewardInTx itself (see
+// that function's own ownership check), so "something rolled" and "something was actually
+// granted" are different facts — only the latter should ever reset an empty-win pity streak.
+// border/glow aren't reachable from a cMoon enemy reward table (buildGrantableReward never sets
+// borderCMoonId/glowCMoonId for this caller), so they're deliberately not checked here.
+export function grantSummaryIsEmpty(summary) {
+  return !summary?.points && !summary?.backgrounds && !summary?.avatars && !summary?.ctoonJobs?.length
+}
+
 // Turns the rolled reward rows above into the `reward` bundle grantRewardInTx expects (plus a
 // `points` field the caller sets separately, since that comes from the enemy member's own
 // cMoonPointsReward, not a CMoonEnemyReward row). Kept as a pure mapping, separate from the

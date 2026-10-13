@@ -22,7 +22,7 @@ import { announceTeamEnemiesMilestone, checkAndAnnounceSeasonGoalReached, announ
 import {
   isValidPlayerSubmittedAction, resolveRound, rollEnemyRewards, buildGrantableReward,
   serializeBattleForClient, MAX_ROUNDS_SAFETY, HEAL_ON_SUCCESSFUL_BLOCK,
-  SPECIAL_ACTION, HIT_STREAK_THRESHOLD, shouldForcePityReward, forcePickOneReward,
+  SPECIAL_ACTION, HIT_STREAK_THRESHOLD, shouldForcePityReward, forcePickOneReward, grantSummaryIsEmpty,
 } from '@/server/utils/cmoonEnemyBattle'
 
 const BATTLE_INCLUDE = {
@@ -245,6 +245,37 @@ export default defineEventHandler(async (event) => {
   return { round: roundEntry, battle: serializeBattleForClient(updated) }
 })
 
+// Reward rows that could never actually grant anything to this user right now — an AVATAR/
+// BACKGROUND they already own (grantRewardInTx's own ownership dedup — see that function's own
+// comment) or a CTOON whose configured supply cap is already fully minted out (mirrors
+// grantRewardInTx's own canGive computation) — are excluded from pity's forced pick, so pity's
+// one "guaranteed" reward never lands on a row that would itself grant nothing. A POINTS row is
+// always grantable (no ownership/supply concept) and always passes through unfiltered. Read-only;
+// called inside the same transaction as the eventual grant so it sees a consistent snapshot.
+// Exported for a direct Prisma smoke test against real ownership/supply-cap rows.
+export async function filterForcePityCandidates(tx, userId, rewardRows) {
+  const avatarIds = [...new Set(rewardRows.filter(r => r.rewardType === 'AVATAR').map(r => r.avatarId))]
+  const backgroundIds = [...new Set(rewardRows.filter(r => r.rewardType === 'BACKGROUND').map(r => r.backgroundId))]
+  const [ownedAvatars, ownedBackgrounds] = await Promise.all([
+    avatarIds.length ? tx.userAvatar.findMany({ where: { userId, avatarId: { in: avatarIds } }, select: { avatarId: true } }) : [],
+    backgroundIds.length ? tx.userBackground.findMany({ where: { userId, backgroundId: { in: backgroundIds } }, select: { backgroundId: true } }) : [],
+  ])
+  const ownedAvatarSet = new Set(ownedAvatars.map(a => a.avatarId))
+  const ownedBackgroundSet = new Set(ownedBackgrounds.map(b => b.backgroundId))
+
+  const candidates = []
+  for (const row of rewardRows) {
+    if (row.rewardType === 'AVATAR' && ownedAvatarSet.has(row.avatarId)) continue
+    if (row.rewardType === 'BACKGROUND' && ownedBackgroundSet.has(row.backgroundId)) continue
+    if (row.rewardType === 'CTOON' && row.ctoon?.quantity != null) {
+      const minted = await tx.userCtoon.count({ where: { ctoonId: row.ctoonId } })
+      if (minted >= row.ctoon.quantity) continue
+    }
+    candidates.push(row)
+  }
+  return candidates
+}
+
 async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining) {
   // Whether this player has ever beaten THIS SPECIFIC enemy member before — read before the
   // transaction below creates this win's own row, so it's naturally excluded from the count (no
@@ -271,31 +302,50 @@ async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining) {
   const pointsAwarded = battle.cMoonId ? (basePoints + firstWinBonus) : 0
 
   const txResult = await db.$transaction(async (tx) => {
+    // Grant whatever actually rolled FIRST — an empty hitRewards array, or one whose only hit
+    // was an avatar/background the player already owns, resolves to a fully zeroed, side-
+    // effect-free summary (grantRewardInTx's own ownership dedup), so this is always safe to
+    // call unconditionally rather than branching on hitRewards.length up front.
+    let grantable = buildGrantableReward(hitRewards)
+    let summary = await grantRewardInTx(tx, battle.userId, grantable, 'CMOON_ENEMY_BATTLE_WIN')
+
     // Reward pity (see CMoonEnemyMember.pityThreshold's own schema comment) — SOLO BATTLES ONLY.
-    // Only worth tracking at all when pity is actually enabled for this member AND it has at
-    // least one reward row configured to force; otherwise skip the extra read/write entirely.
-    if (hitRewards.length === 0 && battle.enemyMember.pityThreshold > 0 && rewardRows.length > 0) {
+    // Keyed off whether the player actually walked away with something tangible (the GRANT's own
+    // outcome), never the raw roll — a hit that only landed on an already-owned avatar/background
+    // is just as empty-handed as rolling nothing at all, and must count as an empty win for pity
+    // purposes rather than silently resetting the streak for a reward the player never received.
+    const grantedNothing = grantSummaryIsEmpty(summary)
+
+    if (grantedNothing && battle.enemyMember.pityThreshold > 0 && rewardRows.length > 0) {
       const pity = await tx.cMoonEnemyRewardPity.upsert({
         where: { userId_enemyMemberId: { userId: battle.userId, enemyMemberId: battle.enemyMemberId } },
         create: { userId: battle.userId, enemyMemberId: battle.enemyMemberId, emptyWinStreak: 1 },
         update: { emptyWinStreak: { increment: 1 } },
       })
       if (shouldForcePityReward(pity.emptyWinStreak, battle.enemyMember.pityThreshold)) {
-        const forced = forcePickOneReward(rewardRows)
-        if (forced) hitRewards = [forced]
-        await tx.cMoonEnemyRewardPity.update({ where: { id: pity.id }, data: { emptyWinStreak: 0 } })
+        // Force-pick only from rows that can ACTUALLY grant something right now — forcing a dead
+        // row (an owned avatar/background, a sold-out cToon) would make pity's one "guaranteed"
+        // reward just as empty-handed as the streak it exists to end.
+        const candidates = await filterForcePityCandidates(tx, battle.userId, rewardRows)
+        const forced = forcePickOneReward(candidates)
+        if (forced) {
+          hitRewards = [forced]
+          grantable = buildGrantableReward(hitRewards)
+          summary = await grantRewardInTx(tx, battle.userId, grantable, 'CMOON_ENEMY_BATTLE_WIN')
+          await tx.cMoonEnemyRewardPity.update({ where: { id: pity.id }, data: { emptyWinStreak: 0 } })
+        }
+        // If every configured row is currently a dead end (e.g. the player already owns every
+        // avatar/background this member offers), there's nothing pity CAN force — the streak
+        // stays incremented and tries again on the next win, same as any other miss.
       }
-    } else if (hitRewards.length > 0) {
-      // A real reward already rolled on its own — reset any existing streak back to 0 (no-op,
-      // not an upsert, if this user/member never had a pity row to begin with).
+    } else if (!grantedNothing) {
+      // A real reward was actually granted — reset any existing streak back to 0 (no-op, not an
+      // upsert, if this user/member never had a pity row to begin with).
       await tx.cMoonEnemyRewardPity.updateMany({
         where: { userId: battle.userId, enemyMemberId: battle.enemyMemberId },
         data: { emptyWinStreak: 0 },
       })
     }
-
-    const grantable = buildGrantableReward(hitRewards)
-    const summary = await grantRewardInTx(tx, battle.userId, grantable, 'CMOON_ENEMY_BATTLE_WIN')
 
     if (pointsAwarded > 0) {
       // cMoonPoints is a fully-recomputed aggregate (see server/cron/cmoon-points-aggregate.js),
