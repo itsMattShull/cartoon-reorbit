@@ -202,6 +202,7 @@ import { computed, ref, watch, nextTick, onBeforeUnmount, onMounted } from 'vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 import OgGtoonCardTile from '@/components/OgGtoonCardTile.vue'
 import GtoonCard from '@/components/GtoonCard.vue'
+import { REVEAL_FIRST_MS, REVEAL_CARD_MS, REVEAL_EFFECTS_MS, REVEAL_QUIET_MS } from '@/utils/ogGtoonReveal'
 import OgGtoonGameLog from '@/components/OgGtoonGameLog.vue'
 
 defineEmits(['exit'])
@@ -231,31 +232,47 @@ const roundLabel = computed(() => {
   return `Round ${m.round} / ${m.totalRounds}`
 })
 
-/* ── Reveal animation ────────────────────────────────────────────────────────────────────────
- * The server reveals a whole round at once. The cards just placed stay face down and flip one
- * slot at a time (yours and your opponent's together), in slot order. */
-const FLIP_FIRST_MS = 600
-const FLIP_STEP_MS = 800
-const pendingFlip = ref(new Set()) // slots of the current reveal still face down
-const flipping = computed(() => pendingFlip.value.size > 0)
-let flipTimer = null
+/* ── Reveal playback ─────────────────────────────────────────────────────────────────────────
+ * The server resolves the board after EACH card lands — player 1's slot 1, player 2's slot 1, player 1's
+ * slot 2, ... — and sends those snapshots as `reveal.steps`. We replay them one at a time: the card flips
+ * face-up showing its printed value, then its powers land and every visible card's value / color / knock-out,
+ * the markers and both totals update before the next card flips. The last step equals the real board. */
+const playback = ref(null) // { hidden:Set, shown:Map, markers:Map } while a reveal is replaying
+const flipping = computed(() => !!playback.value)
+let playToken = 0
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+const cardKey = (side, slot) => `${side}:${slot}`
+const toShown = (board) => new Map((board?.cards || []).map(c => [cardKey(c.side, c.slot), { finalValue: c.finalValue, color: c.color, cancelled: c.cancelled }]))
+const toMarkers = (board) => new Map((board?.markers || []).map(m => [cardKey(m.side, m.slot), m]))
 
-watch(lastReveal, (rev) => {
-  clearTimeout(flipTimer)
-  const order = rev?.order || []
-  pendingFlip.value = new Set(order)
-  let i = 0
-  const step = () => {
-    if (i >= order.length) return
-    const next = new Set(pendingFlip.value)
-    next.delete(order[i])
-    pendingFlip.value = next
-    i += 1
-    if (i < order.length) flipTimer = setTimeout(step, FLIP_STEP_MS)
+watch(lastReveal, async (rev) => {
+  const token = ++playToken
+  playback.value = null
+  const steps = rev?.steps || []
+  if (!steps.length) return
+  playback.value = {
+    hidden: new Set(steps.map(st => cardKey(st.side, st.slot))),
+    shown: toShown(rev.before),
+    markers: toMarkers(rev.before)
   }
-  if (order.length) flipTimer = setTimeout(step, FLIP_FIRST_MS)
+  await sleep(REVEAL_FIRST_MS)
+  for (const step of steps) {
+    if (token !== playToken) return
+    // 1) the card flips face-up showing its printed value; nothing else has changed yet.
+    const hidden = new Set(playback.value.hidden)
+    hidden.delete(cardKey(step.side, step.slot))
+    const shown = new Map(playback.value.shown)
+    shown.set(cardKey(step.side, step.slot), { finalValue: step.baseValue, color: step.baseColor, cancelled: false })
+    playback.value = { ...playback.value, hidden, shown }
+    await sleep(REVEAL_CARD_MS)
+    if (token !== playToken) return
+    // 2) its powers land: values, colors, knock-outs, markers and totals all update together.
+    playback.value = { hidden, shown: toShown(step), markers: toMarkers(step) }
+    await sleep(step.changed ? REVEAL_EFFECTS_MS : REVEAL_QUIET_MS)
+  }
+  if (token === playToken) playback.value = null
 })
-onBeforeUnmount(() => clearTimeout(flipTimer))
+onBeforeUnmount(() => { playToken += 1 })
 
 /* ── Phase countdown ─────────────────────────────────────────────────────────────────────────
  * The server owns the deadline (`phaseEndsAt`) and acts for anyone who has not when it passes;
@@ -270,9 +287,18 @@ const secondsLeft = computed(() => {
   return Math.max(0, Math.ceil((m.phaseEndsAt - nowMs.value) / 1000))
 })
 
-/** Whether a revealed entry is still waiting to flip. */
-function stillHidden(entry) {
-  return !!entry && !!lastReveal.value && entry.round === lastReveal.value.round && pendingFlip.value.has(entry.slot)
+/** Whether a revealed entry is still face down, waiting for its turn in the reveal playback. */
+function stillHidden(entry, side) {
+  return !!entry && !!playback.value && playback.value.hidden.has(cardKey(side, entry.slot))
+}
+
+/** Latest resolved values from the server between reveals (and after a reconnect). */
+const boardValues = computed(() => toShown(matchState.value?.board))
+/** An entry with the value / color / cancelled state the board should be showing right now. */
+function displayed(entry, side) {
+  if (!entry) return null
+  const o = (playback.value ? playback.value.shown : boardValues.value).get(cardKey(side, entry.slot))
+  return o ? { ...entry, ...o } : entry
 }
 
 /* ── Slots ───────────────────────────────────────────────────────────────────────────────── */
@@ -307,13 +333,13 @@ const isOpenSlot = (slot) => canEdit.value && roundSlots.value.includes(slot)
 
 function yourSlotCard(slot) {
   const rev = revealedAt(youRevealed.value, slot)
-  if (rev) return rev
+  if (rev) return displayed(rev, youSide.value)
   const idx = placementsBySlot.value.get(slot)
   return idx === undefined ? null : handById.value.get(idx) || null
 }
 function yourSlotFaceDown(slot) {
   const rev = revealedAt(youRevealed.value, slot)
-  if (rev) return stillHidden(rev)
+  if (rev) return stillHidden(rev, youSide.value)
   // Committed (not yet revealed) cards show their back, even to their owner.
   return matchState.value?.you?.ready && placementsBySlot.value.has(slot)
 }
@@ -324,16 +350,17 @@ function yourSlotTone(slot) {
 }
 function oppSlotCard(slot) {
   const rev = revealedAt(oppRevealed.value, slot)
-  return rev && !stillHidden(rev) ? rev : null
+  return rev && !stillHidden(rev, oppSide.value) ? displayed(rev, oppSide.value) : null
 }
 function oppSlotFaceDown(slot) {
   const rev = revealedAt(oppRevealed.value, slot)
-  if (rev) return stillHidden(rev)
+  if (rev) return stillHidden(rev, oppSide.value)
   return (matchState.value?.opponent?.committedSlots || []).includes(slot)
 }
 
-const youScore = computed(() => youRevealed.value.filter(r => !stillHidden(r)).reduce((a, r) => a + (r.finalValue || 0), 0))
-const oppScore = computed(() => oppRevealed.value.filter(r => !stillHidden(r)).reduce((a, r) => a + (r.finalValue || 0), 0))
+const scoreOf = (list, side) => list.filter(r => !stillHidden(r, side)).reduce((a, r) => a + (displayed(r, side)?.finalValue || 0), 0)
+const youScore = computed(() => scoreOf(youRevealed.value, youSide.value))
+const oppScore = computed(() => scoreOf(oppRevealed.value, oppSide.value))
 
 /* ── Hand: selecting, placing, discarding ────────────────────────────────────────────────── */
 const selectedCard = ref(null)   // deck index of the hand card chosen for placing/swapping
@@ -456,6 +483,11 @@ watch(() => gameLog.value.length, (n) => {
 const youSide = computed(() => matchState.value?.you?.sideIndex ?? 0)
 const oppSide = computed(() => (youSide.value === 0 ? 1 : 0))
 const markerMap = computed(() => {
+  // While a reveal replays the markers follow the step being shown; otherwise the server's live board,
+  // falling back to the newest preview/scoring entry in the log for older payloads.
+  if (playback.value) return playback.value.markers
+  const board = matchState.value?.board
+  if (board?.markers) return toMarkers(board)
   const latest = [...gameLog.value].reverse().find(e => e.data?.markers)
   const map = new Map()
   for (const m of latest?.data?.markers || []) map.set(`${m.side}:${m.slot}`, m)

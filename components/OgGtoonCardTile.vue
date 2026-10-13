@@ -5,12 +5,13 @@
   <div
     class="relative rounded border-2 flex items-center justify-center overflow-hidden select-none transition-colors"
     :class="[sizeClass, ringClass]"
+    style="container-type: size"
   >
     <!-- Keyed on face so a face-down -> face-up change replays the flip animation. -->
     <div v-if="card && !faceDown" :key="'face'" class="flip-in w-full h-full flex items-center justify-center bg-white/5" :class="{ 'opacity-40 grayscale': marker && marker.kind === 'knockedOut' }">
       <!-- Round gToon card. Revealed board cards get the Noise→Signal reveal + saved one-shot FX and the
            UFO Color Sweep when their color changes mid-match; hand / not-yet-revealed cards are static. -->
-      <div class="h-full aspect-square p-0.5" :title="`${card.name} (${shownValue})`">
+      <div class="aspect-square p-0.5 rounded-full" :class="bump" :style="{ width: 'min(100cqw, 100cqh)' }" :title="`${card.name} (${shownValue})`">
         <GtoonCard
           :image-url="card.assetPath"
           :value="shownValue"
@@ -35,7 +36,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import GtoonCard from '@/components/GtoonCard.vue'
 
 const props = defineProps({
@@ -70,6 +71,19 @@ const titleCase = (s) => (s ? s.charAt(0) + s.slice(1).toLowerCase() : s)
 // Revealed entries carry `round`/`slot`; cards still in a hand carry `idx` instead.
 const isRevealed = computed(() => props.card?.round != null && props.card?.slot != null)
 const shownValue = computed(() => props.card?.finalValue ?? props.card?.value ?? 0)
+
+// Flash the card when powers change its value (green = up, red = down) so players can follow the reveal.
+const bump = ref('')
+let bumpTimer = null
+watch(shownValue, (now, was) => {
+  if (was === undefined || now === was || !props.card || props.faceDown) return
+  clearTimeout(bumpTimer)
+  bump.value = ''
+  requestAnimationFrame(() => {
+    bump.value = now > was ? 'value-up' : 'value-down'
+    bumpTimer = setTimeout(() => { bump.value = '' }, 1000)
+  })
+})
 const badges = computed(() => {
   const c = props.card
   if (!c) return []
@@ -92,6 +106,16 @@ const ringClass = computed(() => ({
   background: repeating-linear-gradient(45deg, #1e3a8a, #1e3a8a 6px, #1d4ed8 6px, #1d4ed8 12px);
 }
 .flip-in { animation: flip-in .35s ease-out }
+.value-up { animation: value-up 1s ease-out }
+.value-down { animation: value-down 1s ease-out }
+@keyframes value-up {
+  0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.9) }
+  100% { box-shadow: 0 0 0 14px rgba(74, 222, 128, 0) }
+}
+@keyframes value-down {
+  0% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0.9) }
+  100% { box-shadow: 0 0 0 14px rgba(248, 113, 113, 0) }
+}
 @keyframes flip-in {
   from { transform: rotateY(90deg) }
   to { transform: rotateY(0) }
