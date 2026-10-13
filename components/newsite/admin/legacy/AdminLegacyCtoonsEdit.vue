@@ -1098,8 +1098,14 @@ onMounted(async ()=>{
           const res = await $fetch('/api/admin/oggtoons/power-catalog')
           powerCatalog.value = res.catalog || []
         }
-        const stored = JSON.stringify(ctoon.gtoonEffect)
-        const match = powerCatalog.value.find(p => JSON.stringify(p.effect) === stored)
+        // Compare with sorted keys: the DB's JSON column returns keys in a different order than the catalog.
+        const canon = v => JSON.stringify(v, (_k, val) => (
+          val && typeof val === 'object' && !Array.isArray(val)
+            ? Object.fromEntries(Object.keys(val).sort().map(k => [k, val[k]]))
+            : val
+        ))
+        const stored = canon(ctoon.gtoonEffect)
+        const match = powerCatalog.value.find(p => canon(p.effect) === stored)
         if (match) selectedPowerDescription.value = match.description
       } catch { /* non-fatal: combobox just stays on "No Power" */ }
     }
