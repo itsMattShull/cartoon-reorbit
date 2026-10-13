@@ -9,7 +9,7 @@
      The card fills the width of its parent (1:1). The DOM inside .card is mutated imperatively by the
      engine, so this template deliberately has NO reactive bindings below the host element. -->
 <template>
-  <div ref="host" class="gtoon-card-host" :aria-label="altText" role="img">
+  <div ref="host" class="gtoon-card-host" :class="{ 'gtoon-calm': !(isFull && ambient) }" :aria-label="altText" role="img">
     <div ref="cardEl" class="card">
       <div class="e1"></div>
       <div class="e2"></div>
@@ -51,7 +51,7 @@ import '@/assets/css/gtoon-card.css'
 import { sanitizeGtoonCardStyle } from '@/utils/gtoonCardStyle'
 import {
   setCardImage, setCardValue, setCardTheme, setCardRotation, setCardColor, setCardBarcodeSeed,
-  renderCardStatic, setCardMode, playOneShot as engPlayOneShot, startAmbient as engStartAmbient,
+  renderCardStatic, renderCardNoiseStatic, setCardMode, playOneShot as engPlayOneShot, startAmbient as engStartAmbient,
   stopAmbient as engStopAmbient, clearCardFx, destroyCard
 } from '@/lib/gtoonCardEngine'
 
@@ -97,7 +97,8 @@ function applyAppearance() {
 async function revealFlow() {
   const c = cardEl.value
   if (!c) return
-  await setCardMode(c, props.mode === 'noise' ? 0 : 1, { themeFx: true })
+  // Looping theme effects (heatshield pulse, fiery / starry particles) only where ambient effects are wanted.
+  await setCardMode(c, props.mode === 'noise' ? 0 : 1, { themeFx: props.ambient })
   if (props.mode === 'noise' || !cardEl.value) return
   emit('revealed')
   const p = style.value.params
@@ -126,6 +127,8 @@ onMounted(async () => {
   setCardColor(c, props.color, { animate: false })
   if (isFull.value) {
     await revealFlow()
+  } else if (props.mode === 'noise') {
+    renderCardNoiseStatic(c)
   } else {
     renderCardStatic(c)
   }

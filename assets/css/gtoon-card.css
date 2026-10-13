@@ -705,3 +705,17 @@
    host so a card never paints above modals, toasts or other site UI that sits between z-index 1 and 100. */
 .gtoon-card-host { position: relative; width: 100%; aspect-ratio: 1 / 1; overflow: visible; isolation: isolate; z-index: 0; }
 .gtoon-card-host .card { transform: translate(-50%, 50%) scale(var(--gc-scale, 0.5)); transform-origin: center center; }
+
+/* ---- memory / GPU diet ----------------------------------------------------------------------------------
+   The prototype page shows ONE card, so it can afford will-change, preserve-3d and a 384px layer per element. A
+   board shows ~20, and iOS Safari kills the tab when that many full-size layers exist (they are rasterised at the
+   card's 384px layout size x devicePixelRatio^2, not at the small size they are displayed at). So: no forced
+   layers on the card or its parts; the 3D context is flattened (nothing here has depth, so it looks identical). */
+.gtoon-card-host .card { will-change: auto; backface-visibility: visible; -webkit-backface-visibility: visible; }
+.gtoon-card-host .card .ufo,
+.gtoon-card-host .card.stellar .ufo { transform-style: flat; }
+.gtoon-card-host .card .energy,
+.gtoon-card-host .card .energy2,
+.gtoon-card-host .card .ptext { will-change: auto; }
+/* Cards that aren't showing looping effects (lists, board tiles, cZones) don't run the stellar glow loop either. */
+.gtoon-card-host.gtoon-calm .card.stellar .heatshield { animation: none; }

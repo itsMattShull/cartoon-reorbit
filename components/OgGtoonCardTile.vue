@@ -32,7 +32,7 @@
          about a hidden card can be read from the DOM. -->
     <div v-else-if="faceDown" :key="'back'" class="w-full h-full flex items-center justify-center">
       <div class="aspect-square p-0.5" :style="{ width: 'min(100cqw, 100cqh)' }">
-        <GtoonCard mode="noise" effects="full" color="SILVER" alt="Face-down gToon" />
+        <GtoonCard mode="noise" effects="static" color="SILVER" alt="Face-down gToon" />
       </div>
     </div>
     <span v-else class="text-[10px] text-gray-400">{{ label }}</span>
