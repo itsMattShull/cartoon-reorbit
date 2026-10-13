@@ -1,7 +1,7 @@
 <!-- components/GtoonCard.vue -->
-<!-- The round "UFO" card used to show Original gToons everywhere a cToon image would normally appear.
-     Markup + CSS are ported from the drawcard prototype (assets/css/gtoon-card.css, scoped under
-     .gtoon-card-host); behavior lives in lib/gtoonCardEngine.js.
+<!-- The round "class card" used to show Original gToons everywhere a cToon image would normally appear.
+     Layout + CSS live in assets/css/gtoon-card.css (scoped under .gtoon-card-host); behavior in
+     lib/gtoonCardEngine.js. Face-up: art, color ring and the points circle. Face-down: the Re-Orbit back.
 
      effects="static"  → instant Signal-state card (value, color, art, barcode). No animation, no card-fx.js.
      effects="full"    → Noise/Signal transition + the admin-saved one-shot / ambient effects.
@@ -14,9 +14,16 @@
       <div class="e1"></div>
       <div class="e2"></div>
       <div class="ufo">
+        <div class="base_b"></div>
         <div class="ufo_small">
-          <div class="e3"></div>
           <div class="img_wrap"></div>
+        </div>
+        <div class="gtoon_back">
+          <div class="reorbit">
+            <div class="big_star"></div>
+            <div class="small_star"></div>
+            <div class="logotype"><div class="logo"></div></div>
+          </div>
         </div>
         <div class="shadow"></div>
         <div class="ufo_state0">
@@ -26,17 +33,14 @@
           </div>
         </div>
         <div class="heatshield">
-          <div class="barrier"></div>
-          <div class="barrier0"></div>
-          <div class="inner2"></div>
-          <div class="inner"><div class="spec"></div></div>
+          <div class="barrier"><div class="spec"></div></div>
           <div class="ufo_state">
             <div class="energy">
-              <div class="spec"></div>
-              <div class="wv"><div class="ptext">0</div></div>
-              <div class="wv-border"></div>
+              <div class="wv">
+                <div class="shader"></div>
+                <div class="ptext">0</div>
+              </div>
             </div>
-            <div class="energy2"></div>
           </div>
         </div>
         <div class="reflection"></div>
