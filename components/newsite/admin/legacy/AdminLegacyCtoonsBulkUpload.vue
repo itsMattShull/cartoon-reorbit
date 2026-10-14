@@ -19,7 +19,7 @@
           <label class="text-xs font-medium">Select Images</label>
           <input
             type="file"
-            accept="image/png,image/gif"
+            accept="image/png,image/gif,image/avif,.avif"
             multiple
             @change="handleFiles"
             class="text-xs"
