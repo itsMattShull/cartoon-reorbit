@@ -9,15 +9,23 @@ import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { getSeasonConfig, SEASON_CONFIG_ID } from '@/server/utils/cmoonSeason'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
+import { postSeasonMvpRecap } from '@/server/utils/cmoonDiscordEvents'
 
 export default defineEventHandler(async (event) => {
   const me = await requireAdmin(event)
   assertSameOrigin(event)
 
   const existing = await getSeasonConfig()
+  const rolloverAt = new Date()
+  // Posted for the just-ended season's own [startedAt, rolloverAt) range BEFORE startedAt moves
+  // forward — never awaited: a slow/failed Discord post must not hold up the rollover itself.
+  postSeasonMvpRecap(existing.startedAt, rolloverAt).catch(() => {})
+
   const updated = await db.cMoonSeasonConfig.update({
     where: { id: SEASON_CONFIG_ID },
-    data: { startedAt: new Date() },
+    // Reset alongside startedAt moving forward so the server-wide goal announcement (see that
+    // column's own schema comment) can fire again for the new season's own target.
+    data: { startedAt: rolloverAt, enemiesDefeatedGoalAnnouncedAt: null },
   })
 
   await logAdminChange(db, {

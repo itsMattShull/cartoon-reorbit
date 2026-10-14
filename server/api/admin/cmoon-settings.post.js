@@ -121,6 +121,24 @@ export default defineEventHandler(async (event) => {
     data.cMoonEnemyBattleDefaultHp = hp
   }
 
+  // Stamina mechanic (solo battles only) — see GlobalGameConfig.cMoonEnemyBattleStartingStamina's
+  // own schema comment. 0 disables it for every new battle; upper bound matches the HP field's
+  // own "keep this sane relative to a fight's own round count" reasoning above.
+  if (body?.cMoonEnemyBattleStartingStamina !== undefined) {
+    const stamina = Number(body.cMoonEnemyBattleStartingStamina)
+    if (!Number.isInteger(stamina) || stamina < 0 || stamina > 50) {
+      throw createError({ statusCode: 400, statusMessage: 'Starting stamina must be a whole number between 0 and 50' })
+    }
+    data.cMoonEnemyBattleStartingStamina = stamina
+  }
+  if (body?.cMoonEnemyBattleBlockCounterDamage !== undefined) {
+    const dmg = Number(body.cMoonEnemyBattleBlockCounterDamage)
+    if (!Number.isInteger(dmg) || dmg < 0 || dmg > 50) {
+      throw createError({ statusCode: 400, statusMessage: 'Block counter damage must be a whole number between 0 and 50' })
+    }
+    data.cMoonEnemyBattleBlockCounterDamage = dmg
+  }
+
   // "Higher tiered enemies first" — see GlobalGameConfig.cMoonEnemyHigherTierFirst's own schema
   // comment. Read by consider.post.js's candidate roll, nowhere else.
   if (body?.cMoonEnemyHigherTierFirst !== undefined) {
@@ -174,6 +192,97 @@ export default defineEventHandler(async (event) => {
     data.cMoonHuntPoints = pts
   }
 
+  // Team milestone posts (enemies defeated / team points) — see
+  // GlobalGameConfig.cMoonTeamMilestoneEnabled's own schema comment, the only reader besides this
+  // endpoint being announceTeamEnemiesMilestone/announceTeamPointsMilestones in
+  // server/utils/cmoonDiscordEvents.js.
+  if (body?.cMoonTeamMilestoneEnabled !== undefined) {
+    data.cMoonTeamMilestoneEnabled = !!body.cMoonTeamMilestoneEnabled
+  }
+  if (body?.cMoonTeamMilestoneEnemiesInterval !== undefined) {
+    const n = Number(body.cMoonTeamMilestoneEnemiesInterval)
+    if (!Number.isInteger(n) || n < 1 || n > 100000) {
+      throw createError({ statusCode: 400, statusMessage: 'Enemies-defeated milestone interval must be a whole number between 1 and 100000' })
+    }
+    data.cMoonTeamMilestoneEnemiesInterval = n
+  }
+  if (body?.cMoonTeamMilestonePointsInterval !== undefined) {
+    const n = Number(body.cMoonTeamMilestonePointsInterval)
+    if (!Number.isInteger(n) || n < 1 || n > 1000000) {
+      throw createError({ statusCode: 400, statusMessage: 'Points milestone interval must be a whole number between 1 and 1000000' })
+    }
+    data.cMoonTeamMilestonePointsInterval = n
+  }
+
+  // Rank-up team-channel announcement — see announceCMoonRankUp/announceCMoonRankUpFromRecalc in
+  // server/utils/cmoonDiscordEvents.js, the only readers.
+  if (body?.cMoonRankUpAnnounceEnabled !== undefined) {
+    data.cMoonRankUpAnnounceEnabled = !!body.cMoonRankUpAnnounceEnabled
+  }
+  if (body?.cMoonRankUpAnnounceMinSortOrder !== undefined) {
+    const minSortOrder = Number(body.cMoonRankUpAnnounceMinSortOrder)
+    if (!Number.isInteger(minSortOrder) || minSortOrder < 0 || minSortOrder > 1000) {
+      throw createError({ statusCode: 400, statusMessage: 'Rank-up announce floor must be a whole number between 0 and 1000' })
+    }
+    data.cMoonRankUpAnnounceMinSortOrder = minSortOrder
+  }
+
+  // Solo Final Boss appearance ping — see pingFinalBossAppeared in server/utils/cmoonDiscordEvents.js.
+  if (body?.cMoonFinalBossPingEnabled !== undefined) {
+    data.cMoonFinalBossPingEnabled = !!body.cMoonFinalBossPingEnabled
+  }
+  if (body?.cMoonFinalBossPingCooldownMinutes !== undefined) {
+    const minutes = Number(body.cMoonFinalBossPingCooldownMinutes)
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
+      throw createError({ statusCode: 400, statusMessage: 'Final Boss ping cooldown must be a whole number of minutes between 0 and 1440' })
+    }
+    data.cMoonFinalBossPingCooldownMinutes = minutes
+  }
+
+  // New-member welcome post — see announceCMoonWelcome in server/utils/cmoonDiscordEvents.js.
+  if (body?.cMoonWelcomePostEnabled !== undefined) {
+    data.cMoonWelcomePostEnabled = !!body.cMoonWelcomePostEnabled
+  }
+
+  // Weekly top-slayer recap schedule — see server/cron/cmoon-weekly-recap.js, the only reader of
+  // all four fields together (same shape as the riddle rotation schedule above).
+  if (body?.cMoonWeeklyRecapEnabled !== undefined) {
+    data.cMoonWeeklyRecapEnabled = !!body.cMoonWeeklyRecapEnabled
+  }
+  if (body?.cMoonWeeklyRecapDayOfWeek !== undefined) {
+    const dow = Number(body.cMoonWeeklyRecapDayOfWeek)
+    if (!Number.isInteger(dow) || dow < 0 || dow > 6) {
+      throw createError({ statusCode: 400, statusMessage: 'Recap day of week must be 0 (Sunday) through 6 (Saturday)' })
+    }
+    data.cMoonWeeklyRecapDayOfWeek = dow
+  }
+  if (body?.cMoonWeeklyRecapHour !== undefined) {
+    const hour = Number(body.cMoonWeeklyRecapHour)
+    if (!Number.isInteger(hour) || hour < 0 || hour > 23) {
+      throw createError({ statusCode: 400, statusMessage: 'Recap hour must be a whole number between 0 and 23' })
+    }
+    data.cMoonWeeklyRecapHour = hour
+  }
+  if (body?.cMoonWeeklyRecapMinute !== undefined) {
+    const minute = Number(body.cMoonWeeklyRecapMinute)
+    if (!Number.isInteger(minute) || minute < 0 || minute > 59) {
+      throw createError({ statusCode: 400, statusMessage: 'Recap minute must be a whole number between 0 and 59' })
+    }
+    data.cMoonWeeklyRecapMinute = minute
+  }
+
+  // End-of-season MVP recap — see postSeasonMvpRecap in server/utils/cmoonDiscordEvents.js,
+  // triggered from start-new.post.js on every season rollover, not a cron.
+  if (body?.cMoonSeasonMvpRecapEnabled !== undefined) {
+    data.cMoonSeasonMvpRecapEnabled = !!body.cMoonSeasonMvpRecapEnabled
+  }
+
+  // Server-wide SHARED_POOL boss-defeat announcement — see announceSharedPoolBossDefeated in
+  // server/utils/cmoonDiscordEvents.js, the only reader.
+  if (body?.cMoonSharedBossDefeatAnnounceEnabled !== undefined) {
+    data.cMoonSharedBossDefeatAnnounceEnabled = !!body.cMoonSharedBossDefeatAnnounceEnabled
+  }
+
   const updated = await db.globalGameConfig.upsert({
     where: { id: 'singleton' },
     create: { id: 'singleton', dailyPointLimit: 100, ...data },
@@ -195,6 +304,8 @@ export default defineEventHandler(async (event) => {
       cMoonEnemySpawnCapWindowHours: existing?.cMoonEnemySpawnCapWindowHours,
       cMoonRaidBossDiscordChannelId: existing?.cMoonRaidBossDiscordChannelId,
       cMoonEnemyBattleDefaultHp: existing?.cMoonEnemyBattleDefaultHp,
+      cMoonEnemyBattleStartingStamina: existing?.cMoonEnemyBattleStartingStamina,
+      cMoonEnemyBattleBlockCounterDamage: existing?.cMoonEnemyBattleBlockCounterDamage,
       cMoonEnemyHigherTierFirst: existing?.cMoonEnemyHigherTierFirst,
       cMoonRiddlePoints: existing?.cMoonRiddlePoints,
       cMoonRiddleRotationEnabled: existing?.cMoonRiddleRotationEnabled,
@@ -202,6 +313,20 @@ export default defineEventHandler(async (event) => {
       cMoonRiddleRotationHour: existing?.cMoonRiddleRotationHour,
       cMoonRiddleRotationMinute: existing?.cMoonRiddleRotationMinute,
       cMoonHuntPoints: existing?.cMoonHuntPoints,
+      cMoonTeamMilestoneEnabled: existing?.cMoonTeamMilestoneEnabled,
+      cMoonTeamMilestoneEnemiesInterval: existing?.cMoonTeamMilestoneEnemiesInterval,
+      cMoonTeamMilestonePointsInterval: existing?.cMoonTeamMilestonePointsInterval,
+      cMoonRankUpAnnounceEnabled: existing?.cMoonRankUpAnnounceEnabled,
+      cMoonRankUpAnnounceMinSortOrder: existing?.cMoonRankUpAnnounceMinSortOrder,
+      cMoonFinalBossPingEnabled: existing?.cMoonFinalBossPingEnabled,
+      cMoonFinalBossPingCooldownMinutes: existing?.cMoonFinalBossPingCooldownMinutes,
+      cMoonWelcomePostEnabled: existing?.cMoonWelcomePostEnabled,
+      cMoonWeeklyRecapEnabled: existing?.cMoonWeeklyRecapEnabled,
+      cMoonWeeklyRecapDayOfWeek: existing?.cMoonWeeklyRecapDayOfWeek,
+      cMoonWeeklyRecapHour: existing?.cMoonWeeklyRecapHour,
+      cMoonWeeklyRecapMinute: existing?.cMoonWeeklyRecapMinute,
+      cMoonSeasonMvpRecapEnabled: existing?.cMoonSeasonMvpRecapEnabled,
+      cMoonSharedBossDefeatAnnounceEnabled: existing?.cMoonSharedBossDefeatAnnounceEnabled,
     },
     newValue: {
       cMoonEnabled: enabled,
@@ -214,6 +339,8 @@ export default defineEventHandler(async (event) => {
       cMoonEnemySpawnCapWindowHours: updated.cMoonEnemySpawnCapWindowHours,
       cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
       cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
+      cMoonEnemyBattleStartingStamina: updated.cMoonEnemyBattleStartingStamina,
+      cMoonEnemyBattleBlockCounterDamage: updated.cMoonEnemyBattleBlockCounterDamage,
       cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,
       cMoonRiddlePoints: updated.cMoonRiddlePoints,
       cMoonRiddleRotationEnabled: updated.cMoonRiddleRotationEnabled,
@@ -221,6 +348,20 @@ export default defineEventHandler(async (event) => {
       cMoonRiddleRotationHour: updated.cMoonRiddleRotationHour,
       cMoonRiddleRotationMinute: updated.cMoonRiddleRotationMinute,
       cMoonHuntPoints: updated.cMoonHuntPoints,
+      cMoonTeamMilestoneEnabled: updated.cMoonTeamMilestoneEnabled,
+      cMoonTeamMilestoneEnemiesInterval: updated.cMoonTeamMilestoneEnemiesInterval,
+      cMoonTeamMilestonePointsInterval: updated.cMoonTeamMilestonePointsInterval,
+      cMoonRankUpAnnounceEnabled: updated.cMoonRankUpAnnounceEnabled,
+      cMoonRankUpAnnounceMinSortOrder: updated.cMoonRankUpAnnounceMinSortOrder,
+      cMoonFinalBossPingEnabled: updated.cMoonFinalBossPingEnabled,
+      cMoonFinalBossPingCooldownMinutes: updated.cMoonFinalBossPingCooldownMinutes,
+      cMoonWelcomePostEnabled: updated.cMoonWelcomePostEnabled,
+      cMoonWeeklyRecapEnabled: updated.cMoonWeeklyRecapEnabled,
+      cMoonWeeklyRecapDayOfWeek: updated.cMoonWeeklyRecapDayOfWeek,
+      cMoonWeeklyRecapHour: updated.cMoonWeeklyRecapHour,
+      cMoonWeeklyRecapMinute: updated.cMoonWeeklyRecapMinute,
+      cMoonSeasonMvpRecapEnabled: updated.cMoonSeasonMvpRecapEnabled,
+      cMoonSharedBossDefeatAnnounceEnabled: updated.cMoonSharedBossDefeatAnnounceEnabled,
     },
   })
 
@@ -235,6 +376,8 @@ export default defineEventHandler(async (event) => {
     cMoonEnemySpawnCapWindowHours: updated.cMoonEnemySpawnCapWindowHours,
     cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
     cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
+    cMoonEnemyBattleStartingStamina: updated.cMoonEnemyBattleStartingStamina,
+    cMoonEnemyBattleBlockCounterDamage: updated.cMoonEnemyBattleBlockCounterDamage,
     cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,
     cMoonRiddlePoints: updated.cMoonRiddlePoints,
     cMoonRiddleRotationEnabled: updated.cMoonRiddleRotationEnabled,
@@ -242,5 +385,19 @@ export default defineEventHandler(async (event) => {
     cMoonRiddleRotationHour: updated.cMoonRiddleRotationHour,
     cMoonRiddleRotationMinute: updated.cMoonRiddleRotationMinute,
     cMoonHuntPoints: updated.cMoonHuntPoints,
+    cMoonTeamMilestoneEnabled: updated.cMoonTeamMilestoneEnabled,
+    cMoonTeamMilestoneEnemiesInterval: updated.cMoonTeamMilestoneEnemiesInterval,
+    cMoonTeamMilestonePointsInterval: updated.cMoonTeamMilestonePointsInterval,
+    cMoonRankUpAnnounceEnabled: updated.cMoonRankUpAnnounceEnabled,
+    cMoonRankUpAnnounceMinSortOrder: updated.cMoonRankUpAnnounceMinSortOrder,
+    cMoonFinalBossPingEnabled: updated.cMoonFinalBossPingEnabled,
+    cMoonFinalBossPingCooldownMinutes: updated.cMoonFinalBossPingCooldownMinutes,
+    cMoonWelcomePostEnabled: updated.cMoonWelcomePostEnabled,
+    cMoonWeeklyRecapEnabled: updated.cMoonWeeklyRecapEnabled,
+    cMoonWeeklyRecapDayOfWeek: updated.cMoonWeeklyRecapDayOfWeek,
+    cMoonWeeklyRecapHour: updated.cMoonWeeklyRecapHour,
+    cMoonWeeklyRecapMinute: updated.cMoonWeeklyRecapMinute,
+    cMoonSeasonMvpRecapEnabled: updated.cMoonSeasonMvpRecapEnabled,
+    cMoonSharedBossDefeatAnnounceEnabled: updated.cMoonSharedBossDefeatAnnounceEnabled,
   }
 })

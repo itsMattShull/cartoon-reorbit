@@ -18,6 +18,7 @@ import { runTournamentScheduler } from '../../server/utils/gtoonTournament.js'
 import { syncWordleResults } from '../../server/utils/wordle.js'
 import { checkAndCreateWeeklyCZoneContest } from './create-weekly-czone-contest.js'
 import { checkAndPostWeeklyRiddle } from './cmoon-riddle-rotation.js'
+import { checkAndPostWeeklyCMoonRecap } from './cmoon-weekly-recap.js'
 import { runEconomyAggregate } from './economy-aggregate.js'
 import { runCzoneDisplayCountAggregate } from './czone-display-count.js'
 import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
@@ -1056,6 +1057,7 @@ export const JOB_HANDLERS = {
   cmoonDailyScoreCheck: checkAndRunCMoonDailyScoring,
   checkAndCreateWeeklyCZoneContest,
   checkAndPostWeeklyRiddle,
+  checkAndPostWeeklyCMoonRecap,
   reconcileHolidayRedemptions,
   enqueueAchievementsDaily,
   runCMoonPointsAggregate,

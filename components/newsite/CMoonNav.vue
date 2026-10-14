@@ -3,6 +3,7 @@
     <div class="cmn-header">
       <button type="button" class="cmn-back" @click="goBack">← Back</button>
       <h1 class="cmn-title">cMoons</h1>
+      <NuxtLink to="/newsite/cmoon-enemies" class="cmn-roster-link">Enemy Roster</NuxtLink>
       <button v-if="showJoinCta" type="button" class="cmn-join-btn" @click="requestOpen">
         Join a cMoon
       </button>
@@ -254,6 +255,28 @@ const spiralStrokeWidth = (spiral.pitch * 0.52).toFixed(2)
   color: #fff;
 }
 .cmn-back:focus-visible {
+  outline: 3px solid #ffd75e;
+  outline-offset: 2px;
+}
+
+.cmn-roster-link {
+  position: absolute;
+  right: 0;
+  top: 0;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.cmn-roster-link:hover,
+.cmn-roster-link:focus-visible {
+  color: #fff;
+}
+.cmn-roster-link:focus-visible {
   outline: 3px solid #ffd75e;
   outline-offset: 2px;
 }

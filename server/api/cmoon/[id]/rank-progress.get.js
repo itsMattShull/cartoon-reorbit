@@ -8,6 +8,7 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { isCMoonCaptain, displayRankName, getPendingScoringPreview } from '@/server/utils/cmoon'
+import { annotateUnclaimableTierClaims } from '@/server/utils/achievementTierDismissal'
 import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
@@ -71,6 +72,9 @@ export default defineEventHandler(async (event) => {
         select: {
           id: true,
           title: true,
+          // Needed only to detect/annotate the cross-cMoon dead-end case below (see
+          // annotateUnclaimableTierClaims) — never itself sent to the client.
+          cMoonRankTierId: true,
           cMoonRank: { select: { name: true } },
           claimOptions: {
             orderBy: { sortOrder: 'asc' },
@@ -89,6 +93,13 @@ export default defineEventHandler(async (event) => {
         },
       })
     : []
+
+  // Flags any entry whose rank tier was already claimed through a DIFFERENT cMoon's copy of the
+  // achievement (a player who switched teams and ranked back up to a tier they already claimed
+  // — see claimAchievementReward's cross-cMoon guard), and drops any the player has since
+  // dismissed from this page — see achievementTierDismissal.js's own header comment. A no-op
+  // (returns the input as-is) whenever unclaimedRankRewards is empty.
+  const annotatedUnclaimedRankRewards = await annotateUnclaimableTierClaims(userId, unclaimedRankRewards)
 
   // A captain always displays as "Captain" regardless of their actually-earned rank tier — see
   // displayRankName in server/utils/cmoon.js. sortOrder is left untouched (only the label
@@ -129,10 +140,13 @@ export default defineEventHandler(async (event) => {
     })),
     // Same claimOptions shape GET /api/achievements already returns, so the claim UI can be
     // reused as-is — each option posts to the existing POST /api/achievements/:id/claim.
-    unclaimedRankRewards: unclaimedRankRewards.map(a => ({
+    // `blockedElsewhere: true` means claiming would always 409 TIER_ALREADY_CLAIMED (see above)
+    // — CMoonPage.vue renders a dismiss-only card for those instead of the normal claim options.
+    unclaimedRankRewards: annotatedUnclaimedRankRewards.map(a => ({
       achievementId: a.id,
       title: a.title,
       rankName: a.cMoonRank?.name || null,
+      blockedElsewhere: !!a.blockedElsewhere,
       claimOptions: a.claimOptions.map(o => ({
         id: o.id,
         label: o.label,

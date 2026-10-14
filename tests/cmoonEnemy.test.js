@@ -9,12 +9,15 @@ import {
   MEMBER_SOUND_SLOTS, FACTION_DEFAULT_SOUND_SLOTS,
   parseSpecialAttackBody, isValidSpecialAttackName, isValidSpecialAttackEffectType, isValidSpecialAttackAmount,
   SPECIAL_ATTACK_EFFECT_TYPES, SPECIAL_ATTACK_NAME_MAX_LENGTH, SPECIAL_ATTACK_AMOUNT_MIN, SPECIAL_ATTACK_AMOUNT_MAX,
+  parseTauntBody, isValidTauntText, isValidTauntTrigger, TAUNT_TRIGGERS, TAUNT_TEXT_MAX_LENGTH,
+  ATTACK_CHANCE_DEFAULT, PITY_THRESHOLD_DEFAULT, FIRST_WIN_BONUS_POINTS_DEFAULT,
 } from '../server/utils/cmoonEnemy.js'
 
 const baseMemberBody = {
   factionId: 'f1', name: 'Test Enemy', battleMode: 'PER_PLAYER', maxHp: 5, cMoonPointsReward: 10, minPriorDefeats: 0,
   occurrencePercent: OCCURRENCE_PERCENT_DEFAULT,
   isRaidBoss: false, raidAnnouncementText: null, raidOneTime: false, raidCooldownMinutes: 0,
+  attackChancePercent: ATTACK_CHANCE_DEFAULT, pityThreshold: PITY_THRESHOLD_DEFAULT, firstWinBonusPoints: FIRST_WIN_BONUS_POINTS_DEFAULT,
 }
 
 test('isValidRank accepts every declared rank and rejects anything else', () => {
@@ -475,4 +478,57 @@ test('parseSpecialAttackBody: an omitted healsAllies defaults to false on create
   const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'HEAL_SELF' })
   assert.equal(result.ok, true)
   assert.equal(result.data.healsAllies, false)
+})
+
+// ── Enemy taunts (CMoonEnemyTaunt) ──────────────────────────────────────────────────────────
+test('isValidTauntText accepts non-blank text within the length cap, rejects blank/overlong/non-string', () => {
+  assert.equal(isValidTauntText('You call that a punch?'), true)
+  assert.equal(isValidTauntText(''), false)
+  assert.equal(isValidTauntText('   '), false)
+  assert.equal(isValidTauntText('x'.repeat(TAUNT_TEXT_MAX_LENGTH)), true)
+  assert.equal(isValidTauntText('x'.repeat(TAUNT_TEXT_MAX_LENGTH + 1)), false)
+  assert.equal(isValidTauntText(undefined), false)
+  assert.equal(isValidTauntText(42), false)
+})
+
+test('isValidTauntTrigger only accepts APPEAR/CRIT', () => {
+  assert.equal(isValidTauntTrigger('APPEAR'), true)
+  assert.equal(isValidTauntTrigger('CRIT'), true)
+  assert.equal(isValidTauntTrigger('WIN'), false)
+  assert.equal(isValidTauntTrigger(undefined), false)
+  assert.deepEqual(TAUNT_TRIGGERS, ['APPEAR', 'CRIT'])
+})
+
+test('parseTauntBody: a valid create body parses with trimmed text and the given trigger', () => {
+  const result = parseTauntBody({ trigger: 'APPEAR', text: '  Fresh meat!  ' }, undefined)
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.data, { trigger: 'APPEAR', text: 'Fresh meat!', active: true, sortOrder: 0 })
+})
+
+test('parseTauntBody: rejects a missing/blank text or an invalid trigger on create', () => {
+  assert.equal(parseTauntBody({ trigger: 'APPEAR', text: '' }, undefined).ok, false)
+  assert.equal(parseTauntBody({ trigger: 'APPEAR', text: undefined }, undefined).ok, false)
+  assert.equal(parseTauntBody({ trigger: 'NOT_REAL', text: 'Hi' }, undefined).ok, false)
+  assert.equal(parseTauntBody({ text: 'Hi' }, undefined).ok, false)
+})
+
+test('parseTauntBody: on update, trigger is locked to the existing row even if the body sends a different one', () => {
+  const existing = { trigger: 'APPEAR', text: 'Old line', active: true, sortOrder: 0 }
+  const result = parseTauntBody({ trigger: 'CRIT', text: 'New line' }, existing)
+  assert.equal(result.ok, true)
+  // trigger is NOT part of the returned data on update at all — see parseTauntBody's own comment
+  // on why only text/active/sortOrder are ever written back.
+  assert.deepEqual(result.data, { text: 'New line', active: true, sortOrder: 0 })
+})
+
+test('parseTauntBody: on update, an omitted field falls back to the existing row, not a bare default', () => {
+  const existing = { trigger: 'CRIT', text: 'Old line', active: false, sortOrder: 5 }
+  const result = parseTauntBody({}, existing)
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.data, { text: 'Old line', active: false, sortOrder: 5 })
+})
+
+test('parseTauntBody: rejects a non-boolean active and an out-of-range sortOrder', () => {
+  assert.equal(parseTauntBody({ trigger: 'APPEAR', text: 'Hi', active: 'yes' }, undefined).ok, false)
+  assert.equal(parseTauntBody({ trigger: 'APPEAR', text: 'Hi', sortOrder: 99999 }, undefined).ok, false)
 })

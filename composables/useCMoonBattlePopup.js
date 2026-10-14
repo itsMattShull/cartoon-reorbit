@@ -18,6 +18,12 @@ function playSound(path) {
   } catch {}
 }
 
+// Generic result stinger, reused from the Win Ball mini-game's own win/lose cues rather than
+// commissioning new audio — only a fallback for whichever enemies have no admin-uploaded
+// victory/defeatSoundPath of their own (see the RESOLVED branch below), so an admin's custom
+// sound is never layered under or replaced by this.
+const RESULT_STINGER = { WIN: '/winball/win.mp3', LOSS: '/winball/lose.mp3' }
+
 // One round can hit both sides at once (both attacked, neither blocked correctly) — both sounds
 // then play together rather than one being chosen over the other, matching how the round summary
 // text (CMoonBattlePopupHost.vue's lastRoundLabel) already reports "you both landed a hit!" as a
@@ -33,6 +39,15 @@ function playRoundSounds(round, enemy) {
   // independent of the enemy's six battle-moment sounds above — both a player's own cast and the
   // enemy's automatic one can appear in the same round's `specials` list.
   for (const special of round.specials || []) playSound(special.soundPath)
+}
+
+// One random pick from an enemy's admin-authored taunt pool for a given moment (see
+// CMoonEnemyTaunt's own schema comment) — the server sends every active row for both triggers
+// rather than pre-picking one itself, so a resumed battle or a plain re-fetch never "locks in"
+// whichever line happened to be rolled first; the random choice lives entirely here, client-side.
+function pickRandomTaunt(list) {
+  if (!Array.isArray(list) || !list.length) return null
+  return list[Math.floor(Math.random() * list.length)]
 }
 
 export function useCMoonBattlePopup() {
@@ -52,6 +67,17 @@ export function useCMoonBattlePopup() {
   // playerBlocked, enemyBlocked, playerCrit, enemyCrit } — display detail only (never read back to
   // resolve anything), cleared whenever a fresh battle starts.
   const lastRound = useState('cmoon-battle-last-round', () => null)
+  // The currently-showing enemy taunt line (see CMoonEnemyTaunt's own schema comment) — set on
+  // reveal (an APPEAR taunt, shown for the OFFER screen) and on a landed enemy crit (a CRIT
+  // taunt, shown alongside that round's summary); '' means nothing to show. Cleared whenever the
+  // moment it belongs to has passed (Fight pressed, a non-crit round, battle closed) rather than
+  // left stale on screen past its own moment.
+  const currentTaunt = useState('cmoon-battle-taunt', () => '')
+  // Whether the just-resolved WIN is this player's first-ever victory over this specific enemy
+  // member (see action.post.js's resolveWin, the only place this is computed) — display-only, a
+  // one-time toast on the RESULT screen, never read back to resolve anything. Always false for a
+  // LOSS/ABANDONED outcome, since the server only computes/sends it on a WIN.
+  const isFirstWinAgainstThisEnemy = useState('cmoon-battle-first-win', () => false)
 
   // Plain module-level flag, not useState: this only ever needs to prevent two concurrent
   // in-flight /consider calls from the same client tick, never anything serialized across SSR.
@@ -72,6 +98,8 @@ export function useCMoonBattlePopup() {
         battle.value = res.battle
         phase.value = battle.value?.status === 'RESOLVED' ? 'RESULT' : 'FIGHT'
         visible.value = true
+        currentTaunt.value = ''
+        isFirstWinAgainstThisEnemy.value = false
         checking = false
         return
       }
@@ -83,6 +111,13 @@ export function useCMoonBattlePopup() {
       const reveal = () => {
         visible.value = true
         playSound(res.enemy?.appearSoundPath)
+        const taunt = pickRandomTaunt(res.enemy?.taunts?.appear)
+        if (taunt) {
+          currentTaunt.value = taunt.text
+          playSound(taunt.soundPath)
+        } else {
+          currentTaunt.value = ''
+        }
         checking = false
       }
 
@@ -117,6 +152,10 @@ export function useCMoonBattlePopup() {
       const res = await $fetch('/api/cmoon/battle/start', { method: 'POST', body: { enemyMemberId: enemy.value.id } })
       battle.value = res.battle
       lastRound.value = null
+      // The OFFER-screen appear taunt (if any) belongs to that screen alone — clear it the moment
+      // the fight actually begins rather than leaving it stuck on screen through the whole battle.
+      currentTaunt.value = ''
+      isFirstWinAgainstThisEnemy.value = false
       phase.value = 'FIGHT'
     } catch (e) {
       error.value = e?.data?.statusMessage || 'Could not start that battle.'
@@ -137,10 +176,30 @@ export function useCMoonBattlePopup() {
       battle.value = res.battle
       lastRound.value = res.round || null
       playRoundSounds(res.round, battle.value?.enemy)
+      // A CRIT taunt only fires on the enemy's OWN landed crit — never the player's — matching
+      // CMoonEnemyTaunt.trigger's own schema comment on why there's no player-crit slot to pick
+      // from here. NOTE the field name: round.playerCrit means "a crit landed ON THE PLAYER"
+      // (dealt by the enemy, rolled against critChanceFromPercent — see resolveRound's own
+      // comment), exactly like playerHit already means "the player got hit," NOT "the player's
+      // own crit" — round.enemyCrit is the opposite, a crit the PLAYER landed on the enemy.
+      // Cleared on any other round so a previous round's line doesn't linger once it's no longer
+      // relevant.
+      if (res.round?.playerCrit) {
+        const taunt = pickRandomTaunt(battle.value?.enemy?.taunts?.crit)
+        if (taunt) {
+          currentTaunt.value = taunt.text
+          playSound(taunt.soundPath)
+        } else {
+          currentTaunt.value = ''
+        }
+      } else {
+        currentTaunt.value = ''
+      }
       if (battle.value.status === 'RESOLVED') {
         phase.value = 'RESULT'
-        if (battle.value.outcome === 'WIN') playSound(battle.value.enemy?.victorySoundPath)
-        else if (battle.value.outcome === 'LOSS') playSound(battle.value.enemy?.defeatSoundPath)
+        isFirstWinAgainstThisEnemy.value = !!res.isFirstWinAgainstThisEnemy
+        if (battle.value.outcome === 'WIN') playSound(battle.value.enemy?.victorySoundPath || RESULT_STINGER.WIN)
+        else if (battle.value.outcome === 'LOSS') playSound(battle.value.enemy?.defeatSoundPath || RESULT_STINGER.LOSS)
         // A win awards cMoon points server-side — refresh auth so the nav's own point/rank
         // display doesn't sit stale until the next unrelated refetch.
         if (battle.value.outcome === 'WIN') {
@@ -176,6 +235,8 @@ export function useCMoonBattlePopup() {
     visible.value = false
     enemy.value = null
     lastRound.value = null
+    currentTaunt.value = ''
+    isFirstWinAgainstThisEnemy.value = false
   }
 
   // Leaves an IN_PROGRESS battle exactly where it is (reclaimed later by start.post.js's idle
@@ -188,7 +249,12 @@ export function useCMoonBattlePopup() {
     phase.value = 'OFFER'
     error.value = ''
     lastRound.value = null
+    currentTaunt.value = ''
+    isFirstWinAgainstThisEnemy.value = false
   }
 
-  return { visible, phase, enemy, battle, inCMoon, busy, error, lastRound, checkOnNavigate, startBattle, submitAction, decline, close }
+  return {
+    visible, phase, enemy, battle, inCMoon, busy, error, lastRound, currentTaunt, isFirstWinAgainstThisEnemy,
+    checkOnNavigate, startBattle, submitAction, decline, close,
+  }
 }

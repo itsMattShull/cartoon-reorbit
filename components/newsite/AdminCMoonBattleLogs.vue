@@ -67,6 +67,7 @@
                   <th class="px-1.5 py-1 text-left">Enemy</th>
                   <th class="px-1.5 py-1 text-left">Result</th>
                   <th class="px-1.5 py-1 text-right">Rounds</th>
+                  <th class="px-1.5 py-1 text-right" title="Damage this player actually dealt — 0 on a WIN is the SHARED_POOL snipe pattern (see UNCREDITED)">Dmg</th>
                   <th class="px-1.5 py-1 text-right">Points</th>
                   <th class="px-1.5 py-1 text-left">Prizes</th>
                   <th class="px-1.5 py-1 text-left">Started (CDT)</th>
@@ -89,6 +90,7 @@
                     <span :class="resultClass(log)">{{ resultLabel(log) }}</span>
                   </td>
                   <td class="px-1.5 py-1 text-right tabular-nums">{{ log.roundNumber }}</td>
+                  <td class="px-1.5 py-1 text-right tabular-nums">{{ log.damageDealt ?? 0 }}</td>
                   <td class="px-1.5 py-1 text-right tabular-nums">{{ log.pointsAwarded ? `+${log.pointsAwarded}` : '—' }}</td>
                   <td class="px-1.5 py-1">{{ prizesSummary(log) }}</td>
                   <td class="px-1.5 py-1 whitespace-nowrap">{{ formatDate(log.startedAt) }}</td>
@@ -183,7 +185,7 @@ const showingRange = computed(() => {
   return `${start}-${end} of ${total.value}`
 })
 
-const OUTCOME_LABELS = { WIN: 'Win', LOSS: 'Loss', ABANDONED: 'Abandoned' }
+const OUTCOME_LABELS = { WIN: 'Win', LOSS: 'Loss', ABANDONED: 'Abandoned', UNCREDITED: 'Uncredited (sniped)' }
 function outcomeLabel(o) { return OUTCOME_LABELS[o] || o }
 
 function resultLabel(log) {

@@ -5,6 +5,7 @@ import {
   isValidBattleAction, BATTLE_ACTIONS, PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE,
   HEAL_ON_SUCCESSFUL_BLOCK, resolveRound, combinePlayerMaxHp,
   SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, isValidPlayerSubmittedAction,
+  isAttack, isBlock, STARTING_STAMINA,
 } from '../server/utils/cmoonEnemyBattle.js'
 
 const baseEnemyMember = { critChanceAgainstPercent: 0, critChanceFromPercent: 0, maxHp: 5 }
@@ -17,6 +18,24 @@ test('resolveRound: a landed player hit reduces enemy HP via the returned enemyD
   assert.equal(result.newPlayerHp <= PLAYER_MAX_HP, true)
   if (result.enemyHit) assert.equal(result.enemyDamage, NORMAL_HIT_DAMAGE)
   else assert.equal(result.enemyDamage, 0)
+})
+
+test('resolveRound: roundEntry.playerDamage/enemyDamage mirror the actual HP deltas, for the floating damage-number UI', () => {
+  // `playerHit`/`playerDamage` describe damage dealt TO THE PLAYER (reflected in newPlayerHp);
+  // `enemyHit`/`enemyDamage` describe damage dealt TO THE ENEMY (the function's own top-level
+  // `enemyDamage`, which the caller subtracts from enemy HP) — see CMoonBattlePopupHost.vue's own
+  // floating-damage-number watcher, which reads these two fields directly off the round rather
+  // than re-deriving "1, or 2 on a crit" client-side.
+  for (let i = 0; i < 50; i++) {
+    const result = resolveRound({ playerAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember, playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP })
+    const { roundEntry } = result
+    assert.equal(roundEntry.enemyDamage, result.enemyDamage)
+    assert.equal(roundEntry.playerDamage, PLAYER_MAX_HP - result.newPlayerHp)
+    // A side that didn't land a hit always reports 0 damage, never undefined/null — the UI's own
+    // `round.enemyDamage > 0` / `round.playerDamage > 0` guards depend on this.
+    if (!roundEntry.playerHit) assert.equal(roundEntry.playerDamage, 0)
+    if (!roundEntry.enemyHit) assert.equal(roundEntry.enemyDamage, 0)
+  }
 })
 
 test('resolveRound: a 100% crit-from enemy always deals CRITICAL_HIT_DAMAGE to the player on a landed hit', () => {
@@ -386,5 +405,144 @@ test('resolveRound: using SPECIAL_ACTION as the player action never lands a lane
     })
     assert.equal(result.enemyHit, false)
     assert.equal(result.enemyDamage, 0)
+  }
+})
+
+// ── Stamina mechanic (see GlobalGameConfig.cMoonEnemyBattleStartingStamina's own schema comment
+// for why this exists — the exact gap it closes: without it, attacking every round is strictly
+// better than ever blocking, since blocking never dealt damage and losing was always free). Cost/
+// regen is a pure function of the EFFECTIVE player action, independent of the enemy's own random
+// roll, so these are fully deterministic — no trial loop needed. ──────────────────────────────
+
+test('resolveRound: an ATTACK action costs 1 stamina when the mechanic is enabled, regardless of hit/miss', () => {
+  for (const action of ['ATTACK_HIGH', 'ATTACK_LOW']) {
+    const result = resolveRound({
+      playerAction: action, enemyMember: baseEnemyMember,
+      playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP,
+      playerStamina: STARTING_STAMINA, playerMaxStamina: STARTING_STAMINA,
+    })
+    assert.equal(result.newPlayerStamina, STARTING_STAMINA - 1)
+  }
+})
+
+test('resolveRound: an ATTACK action never drops stamina below 0', () => {
+  const result = resolveRound({
+    playerAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember,
+    playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP,
+    playerStamina: 0, playerMaxStamina: STARTING_STAMINA,
+  })
+  assert.equal(result.newPlayerStamina, 0)
+})
+
+test('resolveRound: a BLOCK action regenerates 1 stamina, capped at playerMaxStamina', () => {
+  for (const action of ['BLOCK_HIGH', 'BLOCK_LOW']) {
+    const result = resolveRound({
+      playerAction: action, enemyMember: baseEnemyMember,
+      playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP,
+      playerStamina: 1, playerMaxStamina: STARTING_STAMINA,
+    })
+    assert.equal(result.newPlayerStamina, 2)
+  }
+  // Already at the cap — blocking never pushes it past playerMaxStamina.
+  const atCap = resolveRound({
+    playerAction: 'BLOCK_HIGH', enemyMember: baseEnemyMember,
+    playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP,
+    playerStamina: STARTING_STAMINA, playerMaxStamina: STARTING_STAMINA,
+  })
+  assert.equal(atCap.newPlayerStamina, STARTING_STAMINA)
+})
+
+test('resolveRound: SPECIAL_ACTION never touches stamina (separate resource from the hit-streak charge)', () => {
+  const result = resolveRound({
+    playerAction: SPECIAL_ACTION, enemyMember: baseEnemyMember,
+    playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP,
+    playerStamina: 2, playerMaxStamina: STARTING_STAMINA,
+  })
+  assert.equal(result.newPlayerStamina, 2)
+})
+
+test('resolveRound: a paralyzed round never costs stamina even when the submitted action was an attack', () => {
+  const result = resolveRound({
+    playerAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember,
+    playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP,
+    playerStamina: 2, playerMaxStamina: STARTING_STAMINA, playerParalyzedTurns: 1,
+  })
+  assert.equal(result.roundEntry.playerAction, PARALYZED_ACTION)
+  assert.equal(result.newPlayerStamina, 2)
+})
+
+test('resolveRound: stamina cost/regen is a full no-op when playerMaxStamina <= 0 (mechanic disabled)', () => {
+  const attack = resolveRound({
+    playerAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember,
+    playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP,
+    playerStamina: 5, playerMaxStamina: 0,
+  })
+  assert.equal(attack.newPlayerStamina, 5)
+  const block = resolveRound({
+    playerAction: 'BLOCK_HIGH', enemyMember: baseEnemyMember,
+    playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP,
+    playerStamina: 5, playerMaxStamina: 0,
+  })
+  assert.equal(block.newPlayerStamina, 5)
+})
+
+// ── Block counter damage — folded into the same `enemyDamage` a landed attack would have
+// produced (see resolveRound's own comment on why this is safe: playerBlocked and enemyHit can
+// never both be true in the same round). attackChancePercent: 100 forces the enemy to always
+// attack, so BLOCK_HIGH/BLOCK_LOW deterministically either matches (a real, successful block) or
+// doesn't (the player gets hit instead) across enough trials to see both. ──────────────────────
+
+test('resolveRound: a successful player block deals blockCounterDamage to the enemy, folded into enemyDamage', () => {
+  const alwaysAttacks = { ...baseEnemyMember, attackChancePercent: 100 }
+  let sawSuccessfulBlock = false
+  let sawMismatchedBlock = false
+  for (let i = 0; i < 200; i++) {
+    const result = resolveRound({
+      playerAction: 'BLOCK_HIGH', enemyMember: alwaysAttacks,
+      playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP,
+      blockCounterDamage: 3,
+    })
+    if (result.roundEntry.playerBlocked) {
+      sawSuccessfulBlock = true
+      assert.equal(result.enemyDamage, 3)
+      assert.equal(result.roundEntry.counterHit, true)
+    } else {
+      // The enemy attacked but landed on the player instead (mismatched lane) — no counter.
+      sawMismatchedBlock = true
+      assert.equal(result.enemyDamage, 0)
+      assert.equal(result.roundEntry.counterHit, false)
+    }
+  }
+  assert.equal(sawSuccessfulBlock, true)
+  assert.equal(sawMismatchedBlock, true)
+})
+
+test('resolveRound: blockCounterDamage defaults to 0 (disabled) — a successful block deals no damage', () => {
+  const alwaysAttacks = { ...baseEnemyMember, attackChancePercent: 100 }
+  let sawSuccessfulBlock = false
+  for (let i = 0; i < 200; i++) {
+    const result = resolveRound({
+      playerAction: 'BLOCK_HIGH', enemyMember: alwaysAttacks,
+      playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP,
+    })
+    if (result.roundEntry.playerBlocked) {
+      sawSuccessfulBlock = true
+      assert.equal(result.enemyDamage, 0)
+      assert.equal(result.roundEntry.counterHit, false)
+    }
+  }
+  assert.equal(sawSuccessfulBlock, true)
+})
+
+test('isAttack/isBlock correctly classify the 4 lane moves and never misclassify the two sentinels', () => {
+  assert.equal(isAttack('ATTACK_HIGH'), true)
+  assert.equal(isAttack('ATTACK_LOW'), true)
+  assert.equal(isAttack('BLOCK_HIGH'), false)
+  assert.equal(isBlock('BLOCK_HIGH'), true)
+  assert.equal(isBlock('BLOCK_LOW'), true)
+  assert.equal(isBlock('ATTACK_HIGH'), false)
+  for (const sentinel of [SPECIAL_ACTION, PARALYZED_ACTION]) {
+    assert.equal(isAttack(sentinel), false)
+    assert.equal(isBlock(sentinel), false)
   }
 })
