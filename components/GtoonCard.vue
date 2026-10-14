@@ -71,7 +71,8 @@ const props = defineProps({
   alt: { type: String, default: '' },
   playOnReveal: { type: Boolean, default: true },     // full: play saved one-shot FX when it turns Signal
   ambient: { type: Boolean, default: true },          // full: run saved ambient loops while Signal
-  sweepOnColorChange: { type: Boolean, default: true } // run the UFO Color Sweep when `color` changes
+  sweepOnColorChange: { type: Boolean, default: true }, // run the UFO Color Sweep when `color` changes
+  signalTransition: { type: Boolean, default: true }  // full: play the Noise→Signal CRT power-on; false → card just appears
 })
 const emit = defineEmits(['revealed'])
 
@@ -105,7 +106,8 @@ async function revealFlow() {
   if (!c) return
   // Looping theme effects (heatshield pulse, fiery / starry particles) only where ambient effects are wanted.
   if (props.mode === 'noise') stopCardLoops(c)
-  await setCardMode(c, props.mode === 'noise' ? 0 : 1)
+  if (props.mode !== 'noise' && !props.signalTransition) renderCardStatic(c)
+  else await setCardMode(c, props.mode === 'noise' ? 0 : 1)
   if (props.mode === 'noise' || !cardEl.value) return
   emit('revealed')
   const p = style.value.params
