@@ -20,8 +20,8 @@
             </div>
 
             <div class="flex flex-col gap-1">
-              <label class="text-xs font-medium">Upload New Image (PNG or GIF)</label>
-              <input type="file" accept="image/png,image/gif" @change="handleNewFile" class="text-xs" />
+              <label class="text-xs font-medium">Upload New Image (PNG, GIF, or AVIF)</label>
+              <input type="file" accept="image/png,image/gif,image/avif,.avif" @change="handleNewFile" class="text-xs" />
               <p class="text-[11px] text-gray-500">Optional. If set, the image and type will update. A timestamped filename will bypass cache.</p>
               <p v-if="err.image" class="text-red-600 text-[11px] mt-1">{{ err.image }}</p>
               <div v-if="newImagePreview" class="mt-1">
@@ -1156,8 +1156,8 @@ function handleNewFile(e){
   err.image = ''
   const file = e.target.files?.[0]
   if (!file){ newImageFile.value = null; newImagePreview.value = ''; return }
-  if (!['image/png','image/gif'].includes(file.type)){
-    err.image = 'Only PNG or GIF files allowed.'
+  if (!['image/png','image/gif','image/avif'].includes(file.type)){
+    err.image = 'Only PNG, GIF, or AVIF files allowed.'
     return
   }
   newImageFile.value = file

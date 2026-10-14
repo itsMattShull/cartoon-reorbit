@@ -59,8 +59,8 @@ export default defineEventHandler(async (event) => {
 
   /* 3. Basic validations (unchanged) ------------------------- */
   if (!imagePart) throw createError({ statusCode: 400, statusMessage: 'Image required.' })
-  if (!['image/png', 'image/gif'].includes(imagePart.type)) {
-    throw createError({ statusCode: 400, statusMessage: 'PNG or GIF only.' })
+  if (!['image/png', 'image/gif', 'image/avif'].includes(imagePart.type)) {
+    throw createError({ statusCode: 400, statusMessage: 'PNG, GIF, or AVIF only.' })
   }
 
   const {

@@ -15,9 +15,9 @@
             </div>
 
             <div class="flex flex-col gap-1">
-              <label class="text-xs font-medium">Upload Image (PNG or GIF)</label>
-              <input type="file" accept="image/png,image/gif" @change="handleFile" required class="text-xs" />
-              <p class="text-[11px] text-gray-500">This image will represent the cToon visually. PNG or GIF only.</p>
+              <label class="text-xs font-medium">Upload Image (PNG, GIF, or AVIF)</label>
+              <input type="file" accept="image/png,image/gif,image/avif,.avif" @change="handleFile" required class="text-xs" />
+              <p class="text-[11px] text-gray-500">This image will represent the cToon visually. PNG, GIF, or AVIF only.</p>
               <p v-if="errors.image" class="text-red-600 text-[11px] mt-1">{{ errors.image }}</p>
               <div v-if="duplicateStatus !== 'idle'" class="mt-1">
                 <p v-if="duplicateStatus === 'checking'" class="text-[11px] text-gray-500">Checking for duplicates...</p>
@@ -1022,8 +1022,8 @@ function handleFile(e) {
     errors.image = 'Image is required.'
     return
   }
-  if (!['image/png', 'image/gif'].includes(file.type)) {
-    errors.image = 'Only PNG or GIF files allowed.'
+  if (!['image/png', 'image/gif', 'image/avif'].includes(file.type)) {
+    errors.image = 'Only PNG, GIF, or AVIF files allowed.'
     return
   }
   imageFile.value = file
