@@ -84,6 +84,24 @@
               >{{ discardPick.size ? `Discard ${discardPick.size} & draw` : 'Keep my hand' }}</button>
               <span v-else class="text-xs text-amber-300">Waiting for opponent to finish discarding...</span>
             </template>
+            <template v-else-if="inColorPhase">
+              <template v-if="matchState.you.mayChooseColor">
+                <span class="text-xs text-gray-200 w-full text-center">Your Silver cards count as:</span>
+                <button
+                  v-for="c in REAL_COLORS"
+                  :key="c"
+                  @click="chooseColor(c)"
+                  class="flex items-center gap-1.5 bg-gray-700 hover:bg-gray-600 text-white px-3 py-1.5 rounded text-sm border"
+                  :class="c === matchState.you.goalColor ? 'border-amber-400' : 'border-transparent'"
+                >
+                  <span class="w-3 h-3 rounded-full border border-white/40" :style="{ background: colorHex(c) }"></span>
+                  {{ c.charAt(0) + c.slice(1).toLowerCase() }}
+                </button>
+              </template>
+              <span v-else class="text-xs text-amber-300">
+                {{ matchState.you.pendingColor ? `Silver set to ${matchState.you.pendingColor.toLowerCase()} — waiting for opponent...` : 'Waiting for opponent...' }}
+              </span>
+            </template>
             <template v-else-if="inSwapPhase">
               <template v-if="matchState.you.maySwap">
                 <button
@@ -136,7 +154,7 @@
 
       <!-- Reveal flash -->
       <transition name="fade">
-        <div v-if="lastReveal && !flipping" class="px-3 py-2 bg-black/40 text-xs space-y-0.5 flex-shrink-0">
+        <div v-if="lastReveal && !flipping && lastRevealRows.length" class="px-3 py-2 bg-black/40 text-xs space-y-0.5 flex-shrink-0">
           <p class="text-center text-gray-400">Round {{ lastReveal.round }} revealed</p>
           <p v-for="row in lastRevealRows" :key="row.slot" class="text-center">
             Slot {{ row.slot }}: <strong>{{ row.you }}</strong> <span class="text-gray-400">vs</span> <strong>{{ row.opp }}</strong>
@@ -225,7 +243,7 @@ function goalGesture(who) {
   return goalGestures[who]
 }
 
-const { matchState, lastReveal, matchEnded, lastError, commit, place, unplace, swap, swapSkip, discard } = useOgGtoonsSocket()
+const { matchState, lastReveal, matchEnded, lastError, commit, place, unplace, swap, swapSkip, chooseColor, discard } = useOgGtoonsSocket()
 
 const COLOR_HEX = {
   BLACK: '#cccccc', SILVER: '#c0c0c0', BLUE: '#60a5fa', RED: '#f87171',
@@ -241,11 +259,14 @@ const difficultyLabel = computed(() => {
 
 const inDiscardPhase = computed(() => matchState.value?.phase === 'discard')
 const inSwapPhase = computed(() => matchState.value?.phase === 'swap')
+const inColorPhase = computed(() => matchState.value?.phase === 'color')
+const REAL_COLORS = ['BLUE', 'RED', 'YELLOW', 'GREEN', 'PURPLE', 'ORANGE', 'PINK']
 const roundLabel = computed(() => {
   const m = matchState.value
   if (!m) return ''
   if (m.suddenDeath) return 'Sudden Death'
   if (m.phase === 'discard') return 'Discard Phase'
+  if (m.phase === 'color') return 'Silver Colour'
   if (m.phase === 'swap') return `Round ${m.round} / ${m.totalRounds} · Swap`
   return `Round ${m.round} / ${m.totalRounds}`
 })
@@ -488,6 +509,11 @@ const helpText = computed(() => {
   if (m.phase === 'discard') {
     return 'Discard phase: tap any cards you want to throw away, then confirm. Your hand is refilled to 6 from your undealt cards. If time runs out you keep your hand.'
   }
+  if (m.phase === 'color') {
+    return m.you.mayChooseColor
+      ? 'Silver cards are colourless. Choose the colour your Silver cards count as for the goal-colour totals. Your opponent chooses at the same time and picks are revealed together. If time runs out, the best colour is picked for you.'
+      : (m.you.hasSilver ? 'Waiting for your opponent to choose...' : 'You have no Silver cards, so nothing to choose. Waiting for your opponent...')
+  }
   if (m.phase === 'swap') {
     return m.you.maySwap
       ? 'Last chance: swap the card in slot 7 for a random undealt card, or keep it. If time runs out you keep it.'
@@ -506,6 +532,7 @@ const oppStatusReady = computed(() => {
 })
 const oppStatusLabel = computed(() => {
   if (inDiscardPhase.value) return oppStatusReady.value ? 'Done discarding' : 'Choosing discards...'
+  if (inColorPhase.value) return matchState.value?.opponent?.colorReady ? 'Colour chosen' : 'Choosing a Silver colour...'
   if (inSwapPhase.value) return matchState.value?.opponent?.swapReady ? 'Swap decided' : 'Deciding on a swap...'
   return oppStatusReady.value ? 'Committed' : 'Thinking...'
 })

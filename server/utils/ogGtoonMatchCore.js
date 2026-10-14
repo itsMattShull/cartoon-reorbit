@@ -13,10 +13,14 @@
 //     undealt,     // [[deckIdx...], [deckIdx...]]  not yet dealt (private; the discard-phase draw)
 //     discarded,   // [[deckIdx...], [deckIdx...]]  out of the match
 //     placements,  // [[{slot, cardIdx}...], ...]   this round's placements, not yet revealed
-//     phase,       // 'play' | 'discard' | 'swap'
+//     phase,       // 'play' | 'discard' | 'swap' | 'color'
 //     discardReady // [bool, bool] during the discard phase
 //     swapReady,   // [bool, bool] during the round-3 slot-7 swap phase
 //     pendingSwap, // [bool, bool] who asked to swap (applied together once both are ready)
+//     colorReady,  // [bool, bool] during the end-of-game Silver colour phase
+//     pendingColor,// [string|null, ...] held picks, applied together once both are ready
+//     silverColor, // [string|null, ...] the colour each player's Silver cards count as (once picked)
+//     colorDone,   // true once the colour phase has run (it runs once, before first scoring)
 //     deadline     // epoch ms when the current phase times out }
 // See ogGtoonEngine.js's header for the hand/slot rules.
 
@@ -24,7 +28,7 @@ import { sanitizeGtoonCardStyle } from '../../utils/gtoonCardStyle.js'
 import { revealDurationMs } from '../../utils/ogGtoonReveal.js'
 import { resolveFinalBoard } from './ogGtoonEffects.js'
 import {
-  determineWinner, hasSuddenDeathCardsRemaining, dealOpeningHand, discardAndDeal,
+  determineWinner, recolorSilver, isRealColor, REAL_COLORS, COLOR_MS, hasSuddenDeathCardsRemaining, dealOpeningHand, discardAndDeal,
   goalCardFor, slotsForRound, isSuddenDeathRound, shuffled, REGULATION_ROUNDS, DISCARD_AFTER_ROUND,
   SWAP_AFTER_ROUND, PLACE_MS, DISCARD_MS, SWAP_MS
 } from './ogGtoonEngine.js'
@@ -143,6 +147,10 @@ export function initHands(match, rng = Math.random) {
   match.swapUsed = [false, false]
   match.swapReady = [false, false]
   match.pendingSwap = [false, false]
+  match.colorReady = [false, false]
+  match.pendingColor = [null, null]
+  match.silverColor = [null, null]
+  match.colorDone = false
   match.revealed = [[], []]
   match.currentRound = 1
   logEvent(match, {
@@ -158,6 +166,7 @@ export function initHands(match, rng = Math.random) {
 
 function goalCardView(match, idx) {
   const c = goalCardFor(match, idx)
+  if (!c) return null
   return { ctoonId: c.ctoonId, name: c.name, assetPath: c.assetPath, color: c.color, cardStyle: c.cardStyle, value: c.value }
 }
 
@@ -166,6 +175,7 @@ function goalCardView(match, idx) {
 export function phaseDurationMs(match) {
   if (match.phase === 'discard') return DISCARD_MS
   if (match.phase === 'swap') return SWAP_MS
+  if (match.phase === 'color') return COLOR_MS
   return PLACE_MS
 }
 
@@ -175,6 +185,10 @@ export function startPhaseClock(match, now = Date.now()) {
   const secs = Math.round(phaseDurationMs(match) / 1000)
   if (match.phase === 'discard') {
     logEvent(match, { kind: 'phase', title: 'Discard phase', sections: [{ label: null, lines: [`Throw away any cards you don't want; hands refill to 6. ${secs}s (no discards if time runs out).`] }] })
+  } else if (match.phase === 'color') {
+    logEvent(match, { kind: 'phase', title: 'Silver colour', sections: [{ label: null, lines: [
+      `Silver cards are colourless. Pick the colour your Silver cards count as. ${secs}s (the best colour is picked for you if time runs out).`
+    ] }] })
   } else if (match.phase === 'swap') {
     logEvent(match, { kind: 'phase', title: 'Round 3 — slot-7 swap', sections: [{ label: null, lines: [
       `Optional: replace your slot-7 card with a random undealt card (${match.practice ? 'free in practice' : '10 points'}). ${secs}s (no swap if time runs out).`
@@ -236,6 +250,12 @@ export function publicMatchView(match, uid, opts = {}) {
       ready: match.ready[meIdx],
       discardReady: !!match.discardReady?.[meIdx],
       swapReady: !!match.swapReady?.[meIdx],
+      colorReady: !!match.colorReady?.[meIdx],
+      mayChooseColor: match.phase === 'color' && !match.colorReady?.[meIdx],
+      hasSilver: hasSilver(match, meIdx),
+      // Private until the colour phase resolves; then both picks are public.
+      silverColor: match.silverColor?.[meIdx] ?? null,
+      pendingColor: match.pendingColor?.[meIdx] ?? null,
       maySwap: match.phase === 'swap' && !match.swapReady?.[meIdx] && (match.undealt?.[meIdx] || []).length > 0
     },
     opponent: {
@@ -250,7 +270,9 @@ export function publicMatchView(match, uid, opts = {}) {
       committedSlots: match.ready[oppIdx] ? oppPlacements.map(p => p.slot) : [],
       ready: match.ready[oppIdx],
       discardReady: !!match.discardReady?.[oppIdx],
-      swapReady: !!match.swapReady?.[oppIdx]
+      swapReady: !!match.swapReady?.[oppIdx],
+      colorReady: !!match.colorReady?.[oppIdx],
+      silverColor: match.silverColor?.[oppIdx] ?? null
     }
   }
 }
@@ -432,9 +454,111 @@ export function expirePhase(match, rng = Math.random) {
         logEvent(match, { kind: 'timeout', title: 'Out of time', sections: [{ label: null, lines: [`${nameOfSide(match, i)} ran out of time — no swap.`] }] })
         acted.push(i)
       }
+    } else if (match.phase === 'color' && !match.colorReady[i]) {
+      const color = autoSilverColor(match, i)
+      if (submitColor(match, i, { color }).ok) {
+        logEvent(match, { kind: 'timeout', title: 'Out of time', sections: [{ label: null, lines: [`${nameOfSide(match, i)} ran out of time — their best colour was picked for their Silver cards.`] }] })
+        acted.push(i)
+      }
     }
   }
   return acted
+}
+
+/* ── End-of-game Silver colour phase ────────────────────────────────────────────────────────
+ * Silver cards are colourless. Once the regulation board is complete (after the slot-7 swap) every
+ * player holding a Silver card picks a real colour; their Silver cards then count as that colour
+ * for the goal-colour counts. Picks are held until both sides are done so neither sees the other's
+ * first. A player with no Silver card is marked done up front. The phase runs once; a Silver card
+ * that only arrives in sudden death counts as the owner's best colour at that point. */
+
+export function hasSilver(match, idx) {
+  return (match.revealed?.[idx] || []).some(r => (r.baseColor ?? r.color) === 'SILVER')
+}
+
+function resolveBoardSafe(match) {
+  try {
+    return resolveFinalBoard({ player1: finalBoardInputFor(match, 0), player2: finalBoardInputFor(match, 1) })
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The colour that gives `idx` the best result with the board as it stands, assuming the opponent's
+ * Silver cards count as their own goal colour (unless they have already picked). Only the two goal
+ * colours can change a count, so only those are tried; ties favour the player's own goal colour.
+ */
+export function autoSilverColor(match, idx) {
+  const opp = idx === 0 ? 1 : 0
+  const own = isRealColor(match.goalColor?.[idx]) ? match.goalColor[idx] : null
+  const theirs = isRealColor(match.goalColor?.[opp]) ? match.goalColor[opp] : null
+  const candidates = [...new Set([own, theirs].filter(Boolean))]
+  if (!candidates.length) return REAL_COLORS[0]
+  const final = candidates.length > 1 ? resolveBoardSafe(match) : null
+  if (!final) return candidates[0]
+  const oppSilver = match.silverColor?.[opp] ?? match.pendingColor?.[opp] ?? (theirs || own)
+  let best = null
+  for (const color of candidates) {
+    const silvers = idx === 0 ? [color, oppSilver] : [oppSilver, color]
+    const o = determineWinner({
+      player1GoalColor: match.goalColor[0], player2GoalColor: match.goalColor[1],
+      player1Revealed: final.player1.revealed, player2Revealed: final.player2.revealed,
+      player1SilverColor: silvers[0], player2SilverColor: silvers[1]
+    })
+    const mine = idx === 0 ? o.player1Score : o.player2Score
+    const other = idx === 0 ? o.player2Score : o.player1Score
+    const result = o.winner === null ? 1 : ((o.winner === 'player1') === (idx === 0) ? 2 : 0)
+    const rank = result * 10000 + (mine - other)
+    if (best === null || rank > best.rank) best = { color, rank }
+  }
+  return best.color
+}
+
+/**
+ * Opens the colour phase if the board is complete, someone has a Silver card and it has not run
+ * yet. Returns true if the match is now in the colour phase (the caller must not score yet).
+ */
+export function enterColorPhase(match) {
+  if (match.ending || match.colorDone || match.currentRound < TOTAL_ROUNDS) return false
+  match.colorDone = true
+  const need = [hasSilver(match, 0), hasSilver(match, 1)]
+  if (!need[0] && !need[1]) return false
+  match.phase = 'color'
+  match.colorReady = [!need[0], !need[1]]
+  match.pendingColor = [null, null]
+  startPhaseClock(match)
+  return true
+}
+
+/** Records a player's Silver colour pick for the colour phase. */
+export function submitColor(match, idx, { color } = {}) {
+  if (match.ending) return bad('over', 'The match is over.')
+  if (match.phase !== 'color') return bad('wrongPhase', 'Not the colour phase.')
+  if (match.colorReady[idx]) return bad('already_chosen', 'You already chose a colour.')
+  if (!isRealColor(color)) return bad('badColor', 'Pick a real colour (not Black or Silver).')
+  match.pendingColor[idx] = color
+  match.colorReady[idx] = true
+  return OK
+}
+
+/**
+ * Once both sides are done: applies the picks together and returns true. The caller then scores
+ * the board (and advances into sudden death on a tie) exactly as after a swap.
+ */
+export function resolveColorPhase(match) {
+  if (match.phase !== 'color' || !match.colorReady[0] || !match.colorReady[1]) return false
+  const lines = []
+  for (const i of [0, 1]) {
+    const picked = match.pendingColor?.[i] ?? null
+    match.silverColor[i] = picked
+    if (picked) lines.push(`${nameOfSide(match, i)}'s Silver cards count as ${COLOR_WORD(picked)}.`)
+  }
+  logEvent(match, { kind: 'color', title: 'Silver colours revealed', sections: [{ label: null, lines }] })
+  match.pendingColor = [null, null]
+  match.colorReady = [false, false]
+  match.phase = 'play' // the caller either ends the match or advances into sudden death
+  return true
 }
 
 /** Records a player's discards (possibly none) for the discard phase. */
@@ -530,11 +654,27 @@ export function runFinalBoardResolution(match) {
       match.revealed[idx][i].cancelled = !!r.cancelled
     })
   }
+  // A still-Silver card counts as its owner's pick; a side that picked nothing (Silver only arrived
+  // in sudden death) gets its best colour for the board as it stands.
+  const silvers = [0, 1].map(i => {
+    const key = i === 0 ? 'player1' : 'player2'
+    if (!final[key].revealed.some(r => r.color === 'SILVER')) return null
+    return match.silverColor?.[i] ?? autoSilverColor(match, i)
+  })
+  // Show the picked colour on the cards themselves (a fallback colour is only used for scoring).
+  for (const idx of [0, 1]) {
+    if (!match.silverColor?.[idx]) continue
+    const key = idx === 0 ? 'player1' : 'player2'
+    const recolored = recolorSilver(final[key].revealed, silvers[idx])
+    recolored.forEach((r, i) => { if (match.revealed[idx][i]) match.revealed[idx][i].color = r.color })
+  }
   const outcome = determineWinner({
     player1GoalColor: match.goalColor[0],
     player2GoalColor: match.goalColor[1],
     player1Revealed: final.player1.revealed,
-    player2Revealed: final.player2.revealed
+    player2Revealed: final.player2.revealed,
+    player1SilverColor: silvers[0],
+    player2SilverColor: silvers[1]
   })
   return { outcome, final }
 }

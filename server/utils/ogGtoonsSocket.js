@@ -45,7 +45,7 @@ import { assignRandomGoals, SWAP_COST } from './ogGtoonEngine.js'
 import {
   publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd, buildRoundLog,
   placeCard, unplaceSlot, checkCommit, checkSwap, recordSwapChoice, resolveSwapPhase, expirePhase,
-  submitDiscard, resolveDiscardPhase, startPhaseClock, markCommitted, logAbnormalEnd, extendDeadlineForReveal
+  submitDiscard, resolveDiscardPhase, enterColorPhase, submitColor, resolveColorPhase, startPhaseClock, markCommitted, logAbnormalEnd, extendDeadlineForReveal
 } from './ogGtoonMatchCore.js'
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
 import { isPracticing, registerPvpProbe } from './ogGtoonPresence.js'
@@ -233,11 +233,13 @@ async function concludeStep(io, match, revealedRound, entries, order, { steps = 
   // Admin-tunable pace of the card-by-card reveal; sent with the payload so clients animate with the same numbers.
   const timing = peekRevealTiming()
 
-  const end = checkMatchEnd(match)
+  // Once the board is complete, players with a Silver card pick its colour before anything is scored.
+  const colorPhase = enterColorPhase(match)
+  const end = colorPhase ? null : checkMatchEnd(match)
   // Advance before emitting so the state each client receives already carries the NEXT round
   // and phase (round 2 opens with the discard phase) — an action sent for a stale round is dropped.
   if (!end) {
-    advanceRound(match)
+    if (!colorPhase) advanceRound(match)
     // The cards reveal one at a time on the clients; don't let that animation eat into the next phase's clock.
     extendDeadlineForReveal(match, steps, timing)
   }
@@ -282,6 +284,13 @@ async function settleSwap(io, match) {
   await concludeStep(io, match, match.currentRound, res.entries, res.order, { steps: res.steps, before: res.before })
 }
 
+/** Applies the Silver colour picks once both players are done, then scores the board. */
+async function settleColor(io, match) {
+  if (match.ending) return
+  if (!resolveColorPhase(match)) return
+  await concludeStep(io, match, match.currentRound, [[], []], [])
+}
+
 /* ── Phase clock ─────────────────────────────────────────────────────────────────────────────
  * Every phase has a deadline (match.deadline, stamped by the match core). When it passes, the
  * server plays the default for whoever has not acted: random cards fill their empty slots, no
@@ -320,6 +329,9 @@ async function onPhaseExpired(io, match) {
     emitToPlayers(io, match, EV('state'))
   } else if (phase === 'swap') {
     await settleSwap(io, match)
+  } else if (phase === 'color') {
+    emitToPlayers(io, match, EV('state'))
+    await settleColor(io, match)
   }
 }
 
@@ -517,6 +529,12 @@ export async function restoreOgGtoonsMatches(io) {
     // Same for a match saved before the 4/3 layout and the swap phase (no swapReady): its rounds
     // no longer line up with the board.
     if (!Array.isArray(match.hand) || !Array.isArray(match.swapReady)) initHands(match, secureRng)
+    if (!Array.isArray(match.colorReady)) {
+      match.colorReady = [false, false]
+      match.pendingColor = [null, null]
+      match.silverColor = [null, null]
+      match.colorDone = match.currentRound > 3
+    }
     if (!match.deadline) startPhaseClock(match)
     match.phaseTimer = null
     matches.set(matchId, match)
@@ -796,6 +814,20 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     fireSync(match.id, match)
     emitToPlayers(io, match, EV('state'))
     await settleSwap(io, match)
+  })
+
+  // End-of-game Silver colour: secretly pick the colour your Silver cards count as. Held until
+  // both players have picked, then revealed together and the board is scored.
+  socket.on(EV('chooseColor'), async ({ color } = {}) => {
+    const side = await liveSide()
+    if (!side) return
+    const { match, idx } = side
+    const res = submitColor(match, idx, { color })
+    if (!res.ok) return reject(res)
+    match.lastActivity = Date.now()
+    fireSync(match.id, match)
+    emitToPlayers(io, match, EV('state'))
+    await settleColor(io, match)
   })
 
   socket.on(EV('commit'), async ({ matchId, round } = {}) => {

@@ -20,13 +20,23 @@
 //     or skip. Both choices resolve together, then the board is scored.
 //   • A tie after the board is scored goes to sudden death: one extra slot (8, 9, ...) per round,
 //     each player placing exactly one card from whatever hand/undealt cards they have left.
-//   • Every phase has a deadline (PLACE_MS / DISCARD_MS / SWAP_MS). When it passes the server acts
+//   • Silver cards are colourless. After the swap and before scoring, each player who has a Silver
+//     card on the board secretly picks a real colour; their Silver cards count as that colour for
+//     the goal-colour count (their printed value and powers are unaffected). See COLOR_MS.
+//   • Every phase has a deadline (PLACE_MS / DISCARD_MS / SWAP_MS / COLOR_MS). When it passes the server acts
 //     for whoever has not: random cards fill their empty slots, no discards, no swap.
 
 export const NEUTRAL_COLORS = new Set(['BLACK', 'SILVER'])
 
 export function isNeutralColor(color) {
   return NEUTRAL_COLORS.has(color)
+}
+
+/** Colours a goal can be and a Silver card can be turned into at the end of the game. */
+export const REAL_COLORS = ['BLUE', 'RED', 'YELLOW', 'GREEN', 'PURPLE', 'ORANGE', 'PINK']
+
+export function isRealColor(color) {
+  return REAL_COLORS.includes(color)
 }
 
 export const HAND_SIZE = 6
@@ -42,6 +52,7 @@ export const SWAP_AFTER_ROUND = 2
 export const PLACE_MS = 60_000
 export const DISCARD_MS = 30_000
 export const SWAP_MS = 30_000
+export const COLOR_MS = 30_000
 
 /** Slots a round may fill. Sudden-death round r (> regulation) is a single extra slot. */
 export function slotsForRound(round) {
@@ -107,21 +118,33 @@ export function deriveGoalColor(orderedDeck) {
   return orderedDeck?.[11]?.color ?? null
 }
 
-/** Index of the goal card for a match: one random card from the player's chosen deck. */
+/**
+ * Index of the goal card for a match: one random card from the player's chosen deck, never a
+ * Black or Silver one. Returns null when the deck has no eligible card.
+ */
 export function pickGoalCardIdx(orderedDeck, rng = Math.random) {
-  const n = orderedDeck?.length || 0
-  return n ? Math.min(n - 1, Math.floor(rng() * n)) : 0
+  const eligible = []
+  ;(orderedDeck || []).forEach((c, i) => { if (isRealColor(c?.color)) eligible.push(i) })
+  if (!eligible.length) return null
+  return eligible[Math.min(eligible.length - 1, Math.floor(rng() * eligible.length))]
 }
 
-/** The goal card for one side of a match (matches saved before random goals fall back to slot 11). */
+/** The goal card for one side of a match, or null when that side's goal is a random colour with no card. */
 export function goalCardFor(match, idx) {
-  return match.deckOrder[idx][match.goalCardIdx?.[idx] ?? 11]
+  const gi = match.goalCardIdx?.[idx]
+  if (gi === null) return null // saved before random goals fall back to slot 11 (undefined), not null
+  return match.deckOrder[idx][gi ?? 11] ?? null
 }
 
-/** Sets match.goalCardIdx / match.goalColor from one random card out of each player's deck. */
+/**
+ * Sets match.goalCardIdx / match.goalColor from one random non-Black, non-Silver card out of each
+ * player's deck. A deck with none gets a random real colour and no goal card.
+ */
 export function assignRandomGoals(match, rng = Math.random) {
   match.goalCardIdx = match.deckOrder.map(d => pickGoalCardIdx(d, rng))
-  match.goalColor = match.deckOrder.map((d, i) => d[match.goalCardIdx[i]]?.color ?? null)
+  match.goalColor = match.deckOrder.map((d, i) => (match.goalCardIdx[i] === null
+    ? REAL_COLORS[Math.min(REAL_COLORS.length - 1, Math.floor(rng() * REAL_COLORS.length))]
+    : d[match.goalCardIdx[i]].color))
   return match
 }
 
@@ -179,6 +202,12 @@ function sum(nums) {
   return nums.reduce((a, b) => a + b, 0)
 }
 
+/** Revealed cards with every still-Silver card turned into `color` (if it is a real colour). */
+export function recolorSilver(revealed, color) {
+  if (!isRealColor(color)) return revealed
+  return revealed.map(r => (r.color === 'SILVER' ? { ...r, color } : r))
+}
+
 function countColor(revealed, color) {
   // Knocked-out (duplicate) cards count for nothing, including their printed color.
   return revealed.filter(r => !r.cancelled && r.color === color).length
@@ -192,12 +221,21 @@ function countColor(revealed, color) {
  * @param {string} params.player2GoalColor
  * @param {Array<{finalValue:number,color:string}>} params.player1Revealed
  * @param {Array<{finalValue:number,color:string}>} params.player2Revealed
+ * @param {string} [params.player1SilverColor] real colour player 1's (still Silver) cards count as
+ * @param {string} [params.player2SilverColor]
  * @returns {{ winner: 'player1'|'player2'|null, reason: string, player1Score: number,
  *             player2Score: number, bonus: object|null }}
  *   winner === null means a genuine tie (sudden death should continue, or if both decks are
  *   exhausted, the match ends in an actual tie).
  */
-export function determineWinner({ player1GoalColor, player2GoalColor, player1Revealed, player2Revealed }) {
+export function determineWinner({
+  player1GoalColor, player2GoalColor, player1Revealed: p1Raw, player2Revealed: p2Raw,
+  player1SilverColor = null, player2SilverColor = null
+}) {
+  // Silver is colourless until its owner picks a colour: it then counts as that colour for the
+  // goal-colour counts below (values are untouched).
+  const player1Revealed = recolorSilver(p1Raw, player1SilverColor)
+  const player2Revealed = recolorSilver(p2Raw, player2SilverColor)
   const p1Total = sum(player1Revealed.map(r => r.finalValue))
   const p2Total = sum(player2Revealed.map(r => r.finalValue))
   const p1Neutral = isNeutralColor(player1GoalColor)
