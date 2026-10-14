@@ -79,23 +79,26 @@
             </div>
             <div class="cbp-hp-row">
               <span class="cbp-hp-label">You</span>
-              <div class="cbp-hearts">
-                <span v-for="i in (battle?.playerMaxHp || 1)" :key="i" class="cbp-heart" :class="{ 'cbp-heart-lost': i > (battle?.playerHpRemaining ?? 0) }">♥</span>
-              </div>
+              <!-- A single heart + "current/max" number, not one heart glyph per HP point — a
+                   per-rank HP bonus (see CMoonRankTier.cMoonEnemyBattleHpBonus) can push a
+                   player's own max well past the old flat 5, and a row of 20+ heart glyphs
+                   wrapped onto multiple lines and broke the layout. Mirrors the enemy row's own
+                   X/Y count styling just above, so the two numbers read as the same family. -->
+              <div class="cbp-heart-wrap"><span class="cbp-heart">♥</span></div>
+              <span class="cbp-hp-count">{{ battle?.playerHpRemaining ?? 0 }}/{{ battle?.playerMaxHp || 1 }}</span>
               <span
                 v-for="d in playerFloatingDamage" :key="d.id" class="cbp-dmg-float" :class="{ 'cbp-dmg-float-crit': d.crit }"
               >-{{ d.amount }}</span>
             </div>
             <!-- Stamina row — only present when the mechanic is on for this battle (see
-                 isOutOfStamina's own comment); each attack costs one pip, each block refills one. -->
+                 isOutOfStamina's own comment); each attack costs 1, each block refills 1. Same
+                 single-icon + "current/max" styling as the You row above, for the same reason —
+                 the admin-configurable starting pool (0-50) could otherwise render as a long row
+                 of pips that wraps and breaks the tile's layout. -->
             <div v-if="battle?.playerMaxStamina > 0" class="cbp-hp-row">
               <span class="cbp-hp-label">Stamina</span>
-              <div class="cbp-stamina-pips">
-                <span
-                  v-for="i in battle.playerMaxStamina" :key="i" class="cbp-stamina-pip"
-                  :class="{ 'cbp-stamina-pip-empty': i > battle.playerStamina }"
-                >⚡</span>
-              </div>
+              <div class="cbp-heart-wrap"><span class="cbp-stamina-icon">⚡</span></div>
+              <span class="cbp-hp-count">{{ battle.playerStamina }}/{{ battle.playerMaxStamina }}</span>
             </div>
           </div>
 
@@ -888,15 +891,14 @@ watch(() => route.path, maybeCheck)
   .cbp-hp-fill-critical { animation: none; }
 }
 .cbp-hp-count { font-size: 11px; color: rgba(255, 255, 255, 0.6); width: 44px; text-align: right; flex-shrink: 0; }
-.cbp-hearts { flex: 1; display: flex; gap: 3px; }
+/* Single heart icon, flex:1 like the enemy row's own .cbp-hp-bar above it — keeps the "You" row's
+   .cbp-hp-count lined up at the same right-hand edge as the enemy row's. */
+.cbp-heart-wrap { flex: 1; display: flex; align-items: center; }
 .cbp-heart { color: #f87171; font-size: 15px; }
-.cbp-heart-lost { color: rgba(255, 255, 255, 0.2); }
 
 /* Stamina pips — same row layout as the hearts above, gold instead of red so the two resources
    never read as the same thing at a glance (see isOutOfStamina/the stamina row above). */
-.cbp-stamina-pips { flex: 1; display: flex; gap: 3px; }
-.cbp-stamina-pip { color: #facc15; font-size: 14px; }
-.cbp-stamina-pip-empty { color: rgba(255, 255, 255, 0.2); }
+.cbp-stamina-icon { color: #facc15; font-size: 14px; }
 
 /* Floating damage numbers — anchored to their own .cbp-hp-row (position: relative above), so one
    pops over the enemy bar and the other over the player's hearts independently. Pure CSS
