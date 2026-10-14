@@ -59,6 +59,7 @@
               <span v-if="m.rank" class="enroster-rank-badge" :class="'enroster-rank-' + m.rank">{{ RANK_LABELS[m.rank] }}</span>
               <p class="enroster-stats">{{ m.maxHp }} HP · +{{ m.cMoonPointsReward }} pts</p>
               <p v-if="m.timesDefeated > 0" class="enroster-tally">Defeated {{ m.timesDefeated }}x</p>
+              <p v-if="isNearlyDefeated(m)" class="enroster-enrage-tag">⚡ Nearly defeated!</p>
             </template>
           </div>
         </div>
@@ -102,6 +103,17 @@ if (error.value) {
   recentCommunityKills.value = data.value?.recentCommunityKills || []
 }
 loading.value = false
+
+// A SHARED_POOL community boss reads as "nearly defeated" below 25% of its own currentHp/maxHp —
+// same threshold the battle popup's own bossEnrageText uses (see CMoonBattlePopupHost.vue), just
+// read off currentHp (added to this endpoint's response for exactly this) instead of that OFFER
+// screen's own enemy.hp. Never true once `defeated` is already set (nothing left to be "nearly"
+// about), and never true for a PER_PLAYER member (currentHp is always null for those — see
+// server/api/cmoon/enemies.get.js's own comment on why).
+function isNearlyDefeated(m) {
+  if (m.defeated || m.currentHp == null || m.currentHp <= 0) return false
+  return (m.currentHp / m.maxHp) <= 0.25
+}
 </script>
 
 <style scoped>
@@ -247,4 +259,7 @@ loading.value = false
 }
 .enroster-tally { color: #4ade80; font-weight: 600; }
 .enroster-unlock-req { color: rgba(255, 255, 255, 0.4); font-style: italic; }
+/* Shared-pool "nearly defeated" tag — see isNearlyDefeated above. Same urgent-red family as the
+   battle popup's own .cbp-boss-enrage banner, just sized to fit this page's smaller card. */
+.enroster-enrage-tag { color: #fca5a5; font-weight: 700; }
 </style>

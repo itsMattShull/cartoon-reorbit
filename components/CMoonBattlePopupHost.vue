@@ -2,7 +2,17 @@
   <Teleport to="body">
     <div v-if="visible" class="cbp-overlay">
       <div v-if="resultFlash" class="cbp-result-flash" :class="'cbp-result-flash-' + resultFlash" aria-hidden="true"></div>
-      <div class="cbp-modal" :class="{ 'cbp-shake': shaking, 'cbp-shake-crit': shaking && shakeCrit }" role="dialog" aria-modal="true" aria-labelledby="cbp-title">
+      <div v-if="bossIntro" class="cbp-boss-intro-flash" aria-hidden="true"></div>
+      <div
+        class="cbp-modal"
+        :class="{ 'cbp-shake': shaking, 'cbp-shake-crit': shaking && shakeCrit, 'cbp-boss-modal-pop': bossIntro }"
+        role="dialog" aria-modal="true" aria-labelledby="cbp-title"
+      >
+        <!-- A standing "the enemy is about to unleash a special" glow around the whole card — see
+             enemySpecialWarning's own comment; this just extends that same telegraph (already a
+             ring on the portrait itself) to the full card so it reads during a glance, not just
+             on close inspection. -->
+        <div v-if="phase === 'FIGHT' && enemySpecialWarning" class="cbp-enrage-vignette" aria-hidden="true"></div>
         <div
           class="cbp-banner"
           :style="bannerStyle"
@@ -26,6 +36,7 @@
             {{ enemy?.faction?.name ? `${enemy.faction.name} · ` : '' }}
             {{ enemy?.battleMode === 'SHARED_POOL' ? 'Shared HP' : 'Solo fight' }} · {{ enemy?.hp }} HP
           </p>
+          <p v-if="bossEnrageText" class="cbp-boss-enrage">⚡ {{ bossEnrageText }}</p>
           <p class="cbp-flavor">
             Pick the right move each round to land hits.
             <template v-if="inCMoon">A win earns cMoon points for your team and a chance at prizes.</template>
@@ -130,6 +141,12 @@
 
         <!-- ── Result: just resolved ───────────────────────────────────── -->
         <div v-else class="cbp-body">
+          <div v-if="confettiPieces.length" class="cbp-confetti" aria-hidden="true">
+            <span
+              v-for="p in confettiPieces" :key="p.id" class="cbp-confetti-piece"
+              :style="{ left: p.left + '%', animationDelay: p.delay + 'ms', background: p.color }"
+            ></span>
+          </div>
           <h2 id="cbp-title" class="cbp-title" :class="resultTitleClass">
             {{ resultTitle }}
             <span v-if="lastRound?.playerCrit || lastRound?.enemyCrit" class="cbp-crit-badge">CRITICAL!</span>
@@ -137,6 +154,7 @@
           <p class="cbp-sub">{{ battle?.enemy?.name }}</p>
           <p v-if="isFirstWinAgainstThisEnemy" class="cbp-first-win">🏆 First victory over {{ battle?.enemy?.name || 'this enemy' }}!</p>
           <p v-if="nearMissFlavor" class="cbp-near-miss">{{ nearMissFlavor }}</p>
+          <p v-if="overkillFlavor && battle?.outcome === 'WIN'" class="cbp-overkill">{{ overkillFlavor }}</p>
 
           <template v-if="battle?.outcome === 'WIN'">
             <p v-if="battle?.pointsAwarded" class="cbp-points">+{{ battle.pointsAwarded }} cMoon points</p>
@@ -191,6 +209,22 @@ const pityProgressText = computed(() => {
   const remaining = Math.max(0, p.threshold - p.emptyWinStreak)
   if (remaining === 0) return 'Your next win against this enemy is guaranteed to drop something!'
   return `${remaining} more empty win${remaining === 1 ? '' : 's'} against this enemy until a guaranteed drop (${p.emptyWinStreak}/${p.threshold}).`
+})
+
+// ── Boss-enrage banner (OFFER screen only) — purely derived from fields the OFFER payload
+// already sends (enemy.hp/maxHp/battleMode — see serializeEnemyForClient), nothing new fetched.
+// Only meaningful for a SHARED_POOL community boss, since a PER_PLAYER enemy's HP always starts
+// fresh for every player and never carries any "someone else already hurt it" signal worth
+// surfacing here. ───────────────────────────────────────────────────────────────────────────
+const bossEnrageText = computed(() => {
+  if (enemy.value?.battleMode !== 'SHARED_POOL') return ''
+  const max = enemy.value?.maxHp || 1
+  const cur = enemy.value?.hp
+  if (cur == null || cur <= 0) return ''
+  const pct = cur / max
+  if (pct <= 0.1) return 'This community boss is nearly down — one more good push could finish it!'
+  if (pct <= 0.25) return 'This community boss is already faltering — team up to finish it off!'
+  return ''
 })
 
 const enemyHpPercent = computed(() => {
@@ -308,6 +342,28 @@ const nearMissFlavor = computed(() => {
   return ''
 })
 
+// ── Overkill flavor — a one-shot "that hit did way more than was needed" line, set the instant a
+// round brings enemyHpRemaining from a nonzero value down to exactly 0 for MORE than was actually
+// left. Derived entirely from this battle's own enemyHpRemaining transition (watch's own before/
+// after snapshot) and the round that just landed — nothing new sent by the server. In the narrow
+// SHARED_POOL race where a DIFFERENT player's own hit is what really finished the pool off in the
+// same instant this round's local snapshot still read it above 0, this can occasionally credit a
+// bigger "overkill" number than this player's own hit actually contributed — a purely cosmetic
+// mislabel (it never changes any reward/credit decision, those are decided server-side off the
+// real atomic UPDATE, not this) — same class of edge case as a stale 409 reload pairing this
+// transition with an unrelated earlier round's own lastRound data (see the resultFlash comment
+// below, which already accepts exactly that risk for its own win/loss read). Reset to 0 at the
+// start of every fresh battle, see the FIGHT branch of the phase watcher further down. ─────────
+const overkillAmount = ref(0)
+watch(() => battle.value?.enemyHpRemaining, (newHp, oldHp) => {
+  if (newHp === 0 && oldHp > 0 && lastRound.value?.enemyHit && lastRound.value.enemyDamage > oldHp) {
+    overkillAmount.value = lastRound.value.enemyDamage - oldHp
+  }
+})
+const overkillFlavor = computed(() => {
+  return overkillAmount.value > 0 ? `OVERKILL! That hit dealt ${overkillAmount.value} more damage than needed.` : ''
+})
+
 // ── Result-screen flash: a brief full-bleed tint the instant the battle resolves — green for a
 // win, red for a loss, nothing for an abandoned fight (no real outcome to react to). One-shot per
 // resolution, driven off the phase transition itself rather than a lastRound watch, since the
@@ -399,6 +455,49 @@ const enemySpecialWarning = computed(() => {
   return !!battle.value?.enemyHasSpecialAttack && (battle.value?.enemyHitStreak || 0) >= HIT_STREAK_THRESHOLD - 1
 })
 
+// ── FINAL_BOSS entrance punch — a one-shot full-bleed flash + a bigger modal "pop" exactly when a
+// Final-Boss-rank enemy is first revealed on the OFFER screen (never on a resumed battle, since
+// that skips OFFER entirely — see useCMoonBattlePopup.js's checkOnNavigate). Keyed off the
+// combined (phase === 'OFFER' && visible) id rather than a bare enemy watch, so this can never
+// re-fire while the SAME offer is still on screen (e.g. an unrelated reactive re-render). ──────
+const bossIntro = ref(false)
+let bossIntroTimer = null
+function triggerBossIntro() {
+  if (bossIntroTimer) clearTimeout(bossIntroTimer)
+  bossIntro.value = true
+  bossIntroTimer = setTimeout(() => { bossIntro.value = false }, 900)
+}
+watch(() => (phase.value === 'OFFER' && visible.value) ? enemy.value?.id : null, (id) => {
+  if (id && enemy.value?.rank === 'FINAL_BOSS') triggerBossIntro()
+})
+
+// ── Victory confetti — a fixed, tiny burst of CSS-animated pieces the instant a WIN reaches the
+// RESULT screen (never for UNCREDITED/ABANDONED/LOSS). A plain transient array, same convention
+// floatingDamage above already follows: populated once, then cleared by its own timeout rather
+// than left in the DOM past its animation. ───────────────────────────────────────────────────
+const confettiPieces = ref([])
+let confettiTimer = null
+let confettiSeq = 0
+const CONFETTI_COLORS = ['#facc15', '#4ade80', '#60a5fa', '#f87171', '#c084fc']
+const CONFETTI_LIFETIME_MS = 1400
+function spawnConfetti() {
+  const pieces = []
+  for (let i = 0; i < 14; i++) {
+    pieces.push({
+      id: ++confettiSeq,
+      left: Math.round(Math.random() * 100),
+      delay: Math.round(Math.random() * 250),
+      color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+    })
+  }
+  confettiPieces.value = pieces
+  if (confettiTimer) clearTimeout(confettiTimer)
+  confettiTimer = setTimeout(() => { confettiPieces.value = [] }, CONFETTI_LIFETIME_MS + 300)
+}
+watch(phase, (p) => {
+  if (p === 'RESULT' && battle.value?.outcome === 'WIN') spawnConfetti()
+})
+
 // ── Battle music: one faction-wide looping track, playing for as long as the FIGHT phase is
 // showing (never during OFFER/RESULT) — see CMoonEnemyFaction.battleMusicPath's own schema
 // comment. A plain HTMLAudioElement rather than the Web Audio API buffers useClickSoundEffects.js
@@ -421,7 +520,7 @@ function startBattleMusic(path) {
   } catch {}
 }
 watch(phase, (p) => {
-  if (p === 'FIGHT') startBattleMusic(battle.value?.enemy?.faction?.battleMusicPath)
+  if (p === 'FIGHT') { startBattleMusic(battle.value?.enemy?.faction?.battleMusicPath); overkillAmount.value = 0 }
   else { stopBattleMusic(); showSpecialInfo.value = false }
 })
 onBeforeUnmount(() => {
@@ -429,6 +528,8 @@ onBeforeUnmount(() => {
   if (shakeTimer) clearTimeout(shakeTimer)
   if (comboTimer) clearTimeout(comboTimer)
   if (resultFlashTimer) clearTimeout(resultFlashTimer)
+  if (bossIntroTimer) clearTimeout(bossIntroTimer)
+  if (confettiTimer) clearTimeout(confettiTimer)
 })
 
 async function onFight() {
@@ -515,6 +616,7 @@ watch(() => route.path, maybeCheck)
    popup's old plain-white/indigo palette so it reads as the same product rather than a bolted-on
    mini-game. */
 .cbp-modal {
+  position: relative;
   width: 100%;
   max-width: 380px;
   max-height: 92vh;
@@ -524,6 +626,78 @@ watch(() => route.path, maybeCheck)
   border: 2px solid var(--OrbitDarkBlue);
   border-radius: 8px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+/* FINAL_BOSS entrance punch — a bigger, redder full-bleed flash than the ordinary win/loss one
+   above (same layering: painted before the modal in DOM order, so it sits behind it), plus a
+   quick zoom-in "pop" on the modal itself (see bossIntro/cbp-boss-modal-pop above). */
+.cbp-boss-intro-flash {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(circle, rgba(220, 38, 38, 0.5), rgba(0, 0, 0, 0.6) 75%);
+  animation: cbp-boss-intro-fade 0.9s ease-out forwards;
+}
+@keyframes cbp-boss-intro-fade {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cbp-boss-intro-flash { animation: none; display: none; }
+}
+.cbp-boss-modal-pop { animation: cbp-boss-modal-pop-kf 0.5s cubic-bezier(0.18, 0.89, 0.32, 1.28) both; }
+@keyframes cbp-boss-modal-pop-kf {
+  0% { transform: scale(0.85); }
+  60% { transform: scale(1.04); }
+  100% { transform: scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cbp-boss-modal-pop { animation: none; }
+}
+
+/* Standing "enemy special is about to fire" vignette — extends the existing portrait-only warning
+   ring (.cbp-portrait-warning further down) to the whole card, confined to the modal's own box
+   (position: relative set above) rather than the full viewport. */
+.cbp-enrage-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  box-shadow: inset 0 0 50px 14px rgba(220, 38, 38, 0.4);
+  animation: cbp-enrage-pulse 1s ease-in-out infinite;
+}
+@keyframes cbp-enrage-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cbp-enrage-vignette { animation: none; opacity: 0.7; }
+}
+
+/* Victory confetti — a fixed burst of small falling rectangles, confined to the modal's own box
+   (see confettiPieces above). Auto-removed from the DOM by its own JS timer once the fall/fade
+   animation below has had time to finish. */
+.cbp-confetti {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 2;
+}
+.cbp-confetti-piece {
+  position: absolute;
+  top: -10px;
+  width: 6px;
+  height: 12px;
+  opacity: 0.9;
+  animation: cbp-confetti-fall 1.4s ease-in forwards;
+}
+@keyframes cbp-confetti-fall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(240px) rotate(540deg); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cbp-confetti { display: none; }
 }
 .cbp-banner {
   position: relative;
@@ -586,7 +760,16 @@ watch(() => route.path, maybeCheck)
   justify-content: center;
   overflow: hidden;
 }
-.cbp-portrait { max-width: 92%; max-height: 92%; object-fit: contain; }
+/* Idle "breathing" loop — a near-imperceptible scale pulse so a static portrait never reads as a
+   flat, dead image even between rounds. Pure CSS, applies on both the OFFER and FIGHT screens. */
+.cbp-portrait { max-width: 92%; max-height: 92%; object-fit: contain; animation: cbp-portrait-breathe 3.2s ease-in-out infinite; }
+@keyframes cbp-portrait-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.035); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cbp-portrait { animation: none; }
+}
 .cbp-title { font-size: 1.1rem; font-weight: 600; margin: 4px 0 2px; color: #fff; }
 .cbp-title-win { color: #4ade80; }
 .cbp-title-loss { color: #f87171; }
@@ -599,6 +782,15 @@ watch(() => route.path, maybeCheck)
   font-size: 11.5px;
   font-style: italic;
   color: #fde68a;
+  margin: 0 0 10px;
+}
+/* Shared-pool "boss enrage" banner — OFFER screen only, see bossEnrageText above. More urgent
+   than the pity-progress aside above it (red, not gold), since it's time-sensitive community
+   info, not a personal hint. */
+.cbp-boss-enrage {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #fca5a5;
   margin: 0 0 10px;
 }
 /* Admin-authored enemy taunt line (see CMoonEnemyTaunt's own schema comment) — styled as a quoted
@@ -755,7 +947,7 @@ watch(() => route.path, maybeCheck)
   100% { transform: scale(1); opacity: 1; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cbp-combo-callout { animation: none; }
+  .cbp-combo-callout, .cbp-overkill { animation: none; }
 }
 
 .cbp-round-summary { font-size: 12px; color: rgba(255, 255, 255, 0.75); margin: 8px 0; }
@@ -958,6 +1150,16 @@ watch(() => route.path, maybeCheck)
   animation: cbp-combo-pop 0.4s ease-out;
 }
 .cbp-near-miss { font-size: 12px; font-style: italic; color: rgba(255, 255, 255, 0.65); margin: 0 0 10px; }
+/* Overkill flavor — reuses the combo-callout's own pop-in keyframe (see overkillAmount above),
+   just in the result-screen's gold-on-dark palette instead of that one's plain text color. */
+.cbp-overkill {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #fbbf24;
+  text-shadow: 0 0 6px rgba(251, 191, 36, 0.5);
+  margin: 0 0 10px;
+  animation: cbp-combo-pop 0.4s ease-out;
+}
 
 /* Impact feedback on a landed hit — a quick horizontal shake, bigger for a critical. Disabled
    under prefers-reduced-motion, same accessibility stance pages/newsite/asteroid.vue's own

@@ -105,6 +105,11 @@ export default defineEventHandler(async (event) => {
           cMoonPointsReward: m.cMoonPointsReward,
           timesDefeated: winsByMember.get(m.id) || 0,
           defeated,
+          // Only meaningful for a SHARED_POOL member (a PER_PLAYER one has no server-wide "current"
+          // HP to speak of — every player's own fight starts fresh). Already in hand from the same
+          // faction/members query above (no `select` on it, so every column rides along) — nothing
+          // extra queried for this. Drives the roster page's own "nearly defeated" enrage tag.
+          currentHp: m.battleMode === 'SHARED_POOL' ? m.currentHp : null,
         }
       }),
     })),
