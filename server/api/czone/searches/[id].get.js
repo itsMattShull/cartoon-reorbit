@@ -1,6 +1,7 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 // Search structure (prize pool, conditions, background/ctoon metadata) never
 // changes mid-event, so all visitors share one DB round-trip per 10 minutes.
@@ -54,7 +55,7 @@ export default defineEventHandler(async (event) => {
           orderBy: { chancePercent: 'desc' },
           include: {
             ctoon: {
-              select: { id: true, name: true, rarity: true, assetPath: true }
+              select: { id: true, name: true, rarity: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT }
             }
           }
         }
@@ -94,7 +95,7 @@ export default defineEventHandler(async (event) => {
       extraCtoonIds.size
         ? db.ctoon.findMany({
             where: { id: { in: Array.from(extraCtoonIds) } },
-            select: { id: true, name: true, rarity: true, assetPath: true }
+            select: { id: true, name: true, rarity: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT }
           })
         : [],
     ])

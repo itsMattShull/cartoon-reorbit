@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url'
 import sharp from 'sharp'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 import { MAX_IMAGE_BYTES, sniffImageType } from '@/server/utils/imageUploadValidation'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -30,18 +31,8 @@ const SLOT_COLUMNS = {
 const SLOT_MAX_WIDTH = { blossom: 320, bubbles: 320, buttercup: 320, city: 1024 }
 
 export default defineEventHandler(async (event) => {
-  // event.context.userId is set by the auth middleware; reading the flags straight from the DB
-  // avoids an internal HTTP round-trip and, unlike an isAdmin-only check, refuses a suspended
-  // or deactivated admin.
-  const userId = event.context.userId
-  if (!userId) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
-  const me = await db.user.findUnique({
-    where: { id: userId },
-    select: { id: true, isAdmin: true, banned: true, active: true }
-  })
-  if (!me?.isAdmin || me.banned || me.active === false) {
-    throw createError({ statusCode: 403, statusMessage: 'Admins only' })
-  }
+  const me = await requireAdmin(event)
+  assertSameOrigin(event)
 
   const parts = await readMultipartFormData(event)
   if (!parts?.length) throw createError({ statusCode: 400, statusMessage: 'No form data' })

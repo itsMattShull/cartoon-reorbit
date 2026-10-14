@@ -60,11 +60,25 @@
                   <div class="h-full bg-green-500 transition-all" :style="{ width: (p.hpRemaining / (p.maxHp || 1) * 100) + '%' }"></div>
                 </div>
                 <span class="w-10 flex-shrink-0 text-right tabular-nums">{{ p.hpRemaining }}/{{ p.maxHp }}</span>
+                <!-- Teammate charge meter — shown for everyone, not just myself (see the raid
+                     page's own cMoonSpecialAttack v-if below for why this is co-op-visible). -->
+                <span
+                  v-if="raid.cMoonSpecialAttack && !p.knockedOut" class="text-[10px] flex-shrink-0"
+                  :class="p.specialCharged ? 'cr-charge-ready' : 'text-gray-400'"
+                >★{{ p.specialCharged ? '' : Math.min(p.hitStreak, 3) + '/3' }}</span>
                 <span v-if="p.knockedOut" class="text-[10px] text-red-500 flex-shrink-0">KO</span>
                 <span v-else-if="p.hasActed" class="text-[10px] text-green-600 flex-shrink-0">Ready</span>
                 <span v-else class="text-[10px] text-gray-400 flex-shrink-0">Deciding…</span>
               </li>
             </ul>
+
+            <!-- ── Shared status: paralysis either direction, boss charge tension ──── -->
+            <p v-if="raid.enemyParalyzedTurns > 0" class="cr-status-badge cr-status-good">
+              ⚡ {{ raid.enemyName }} is paralyzed — {{ raid.enemyParalyzedTurns }} more round{{ raid.enemyParalyzedTurns === 1 ? '' : 's' }}
+            </p>
+            <p v-if="raid.partyParalyzedTurns > 0" class="cr-status-badge cr-status-bad">
+              ⚡ The party is paralyzed — can't act for {{ raid.partyParalyzedTurns }} more round{{ raid.partyParalyzedTurns === 1 ? '' : 's' }}
+            </p>
 
             <!-- ── Round reveal: what just happened, per party member ─────── -->
             <Transition name="cr-reveal">
@@ -88,6 +102,9 @@
                   </li>
                 </ul>
                 <p v-if="lastRoundSummary.enemyDamageDealt > 0" class="cr-reveal-dealt">The party dealt {{ lastRoundSummary.enemyDamageDealt }} damage this round.</p>
+                <p v-for="(s, i) in (lastRoundSummary.specials || [])" :key="i" class="cr-special-flash" :class="s.side === 'PLAYER' ? 'cr-special-flash-player' : 'cr-special-flash-enemy'">
+                  ✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} unleashed <strong>{{ s.name }}</strong>!
+                </p>
               </div>
             </Transition>
 
@@ -100,6 +117,32 @@
                 <button type="button" class="px-2 py-2 text-xs font-semibold rounded-md bg-red-600 text-white hover:bg-red-700" @click="act('ATTACK_LOW')">Attack Low</button>
                 <button type="button" class="px-2 py-2 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700" @click="act('BLOCK_HIGH')">Block High</button>
                 <button type="button" class="px-2 py-2 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700" @click="act('BLOCK_LOW')">Block Low</button>
+              </div>
+
+              <!-- ── My own special attack: dormant until charged, same button-stays-in-the-
+                   grid-but-separate-row shape as components/CMoonBattlePopupHost.vue's solo
+                   version — see that component for the fuller comment on the charge/fire/
+                   tooltip mechanics this mirrors. ─────────────────────────────────────────── -->
+              <div v-if="raid.cMoonSpecialAttack && !myself.hasActed" class="cr-special-wrap">
+                <button
+                  type="button" class="cr-special-btn" :class="{ 'cr-special-charged': myself.specialCharged && raid.partyParalyzedTurns === 0 }"
+                  :disabled="!myself.specialCharged || raid.partyParalyzedTurns > 0" :style="specialFillStyle"
+                  @click="act('SPECIAL_ATTACK')"
+                >
+                  <span class="cr-special-glow" aria-hidden="true"></span>
+                  <span class="cr-special-label"><span class="cr-special-icon">★</span> {{ raid.cMoonSpecialAttack.name }}</span>
+                  <span class="cr-special-meter">{{ Math.min(myself.hitStreak, 3) }}/3</span>
+                </button>
+                <button
+                  type="button" class="cr-special-help" aria-label="What does this special attack do?"
+                  @click="showSpecialInfo = !showSpecialInfo" @mouseenter="showSpecialInfo = true" @mouseleave="showSpecialInfo = false"
+                >?</button>
+                <div v-if="showSpecialInfo" class="cr-special-tooltip" role="tooltip">
+                  <p class="cr-special-tooltip-title">{{ raid.cMoonSpecialAttack.name }}</p>
+                  <p v-if="raid.cMoonSpecialAttack.description">{{ raid.cMoonSpecialAttack.description }}</p>
+                  <p>{{ specialEffectDescription(raid.cMoonSpecialAttack) }}</p>
+                  <p class="cr-special-tooltip-charge">Land 3 hits in a row to charge it up — it stays ready until you use it.</p>
+                </div>
               </div>
             </template>
             <p v-else-if="myself" class="text-sm text-gray-500">You've been knocked out — watching the rest of the party finish the fight.</p>
@@ -162,6 +205,29 @@ function act(action) {
   raidSocket.submitAction(raidId.value, action, raid.value.roundNumber)
 }
 
+// ── Special attack button — mirrors components/CMoonBattlePopupHost.vue's solo version; see
+// that component's own comment for why this is duplicated client-side rather than imported
+// (no shared import path between this page and that component). The only raid-specific wording
+// is HEAL_SELF/RAISE_ALLY_ATTACK, which call out the whole party since raids share those pools.
+function specialEffectDescription(attack) {
+  const n = attack?.amount
+  switch (attack?.effectType) {
+    case 'DAMAGE_OPPONENT': return `Deals ${n} guaranteed damage to the boss, bypassing block.`
+    case 'HEAL_SELF': return attack?.healsAllies ? `Heals you and the whole party for ${n} HP.` : `Heals you for ${n} HP.`
+    case 'PARALYZE_OPPONENT': return `Stuns the boss for ${n} round${n === 1 ? '' : 's'} — it can't act.`
+    case 'LOWER_OPPONENT_ATTACK': return `Lowers the boss's attack damage by ${n} for the rest of the fight.`
+    case 'RAISE_ALLY_ATTACK': return `Raises the whole party's attack damage by ${n} for the rest of the fight.`
+    default: return ''
+  }
+}
+const showSpecialInfo = ref(false)
+// 0/1/2/3 hits -> 0/33/66/100% fill, read by .cr-special-btn below via this CSS variable — stays
+// at 100% once charged even if hitStreak itself later resets (charge latches, same as solo's).
+const specialFillStyle = computed(() => {
+  const pct = myself.value?.specialCharged ? 100 : Math.min(100, Math.round(((myself.value?.hitStreak || 0) / 3) * 100))
+  return { '--cr-special-fill': pct + '%' }
+})
+
 // FORMING's join-window countdown — a plain client-side ticker against joinDeadlineAt, not a
 // second source of truth: the server's sweep (see cmoonRaidSocket.js) is what actually closes
 // the window and transitions to IN_PROGRESS, this just gives the player something to watch.
@@ -219,6 +285,9 @@ watch(() => raidSocket.lastRound.value, (round) => {
   }
   const myRow = round.participants.find(r => r.userId === user.value?.id)
   playMyRoundSounds(myRow, raid.value?.enemySounds)
+  // Special-attack sounds play for the whole room, not just "my own" — a special firing is a
+  // shared moment (same as appear/victory/defeat), unlike the routine per-hit sounds above.
+  for (const s of (round.specials || [])) playSound(s.soundPath)
 })
 
 // ── Battle music — loops for as long as combat is actually running, same FIGHT-phase-only
@@ -333,4 +402,130 @@ onUnmounted(() => {
 
 .cr-reveal-enter-active, .cr-reveal-leave-active { transition: opacity 0.2s ease; }
 .cr-reveal-enter-from, .cr-reveal-leave-to { opacity: 0; }
+
+/* ── Shared status badges (party-wide paralysis either direction) ───────────────────────── */
+.cr-status-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 8px;
+  border-radius: 6px;
+  margin: 0;
+}
+.cr-status-good { background: #dcfce7; color: #166534; }
+.cr-status-bad { background: #fee2e2; color: #991b1b; }
+
+/* ── Teammate charge indicator in the participant list ──────────────────────────────────── */
+.cr-charge-ready {
+  color: #ca8a04;
+  font-weight: 800;
+  text-shadow: 0 0 4px rgba(250, 204, 21, 0.6);
+}
+
+/* ── Special attack button — same dormant/charged "epic" treatment as
+   components/CMoonBattlePopupHost.vue's solo cbp-special-* block (see that component's own
+   comment for the fill/charge-latch rationale), re-colored for this page's light card UI rather
+   than the solo popup's dark modal. --cr-special-fill (set inline via specialFillStyle) drives a
+   bottom-up gradient fill so the meter visibly climbs with each consecutive hit. */
+.cr-special-wrap { position: relative; display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.cr-special-btn {
+  position: relative;
+  flex: 1;
+  overflow: hidden;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 2px solid #d4cfa0;
+  background:
+    linear-gradient(to top, rgba(250, 204, 21, 0.45) 0%, rgba(250, 204, 21, 0.45) var(--cr-special-fill, 0%), transparent var(--cr-special-fill, 0%)),
+    #f5f1e0;
+  color: rgba(60, 50, 10, 0.55);
+  font-weight: bold;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: not-allowed;
+  transition: color 0.2s ease, border-color 0.2s ease;
+}
+.cr-special-btn:disabled { opacity: 0.85; }
+.cr-special-label { position: relative; z-index: 1; display: flex; align-items: center; gap: 5px; }
+.cr-special-icon { font-size: 13px; filter: grayscale(1); transition: filter 0.2s ease; }
+.cr-special-meter {
+  position: relative; z-index: 1;
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(60, 50, 10, 0.5);
+  margin-top: 2px;
+}
+.cr-special-glow { position: absolute; inset: 0; z-index: 0; opacity: 0; transition: opacity 0.3s ease; }
+
+/* Charged: gold border, bright icon, pulsing glow sweep — unmistakably "ready to use". */
+.cr-special-charged {
+  border-color: #ca8a04;
+  color: #78350f;
+  cursor: pointer;
+  box-shadow: 0 0 14px rgba(202, 138, 4, 0.4), inset 0 0 10px rgba(250, 204, 21, 0.3);
+  animation: cr-special-pulse 1.4s ease-in-out infinite;
+}
+.cr-special-charged .cr-special-icon { filter: none; text-shadow: 0 0 6px #facc15; }
+.cr-special-charged .cr-special-meter { color: #78350f; }
+.cr-special-charged .cr-special-glow {
+  opacity: 1;
+  background: radial-gradient(circle at 30% 50%, rgba(255, 237, 160, 0.5), transparent 70%);
+}
+.cr-special-charged:active { transform: translateY(1px); }
+@keyframes cr-special-pulse {
+  0%, 100% { box-shadow: 0 0 10px rgba(202, 138, 4, 0.3), inset 0 0 8px rgba(250, 204, 21, 0.25); }
+  50% { box-shadow: 0 0 20px rgba(202, 138, 4, 0.6), inset 0 0 14px rgba(250, 204, 21, 0.45); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cr-special-charged { animation: none; }
+}
+
+.cr-special-help {
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.04);
+  color: rgba(0, 0, 0, 0.6);
+  font-weight: 800;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cr-special-help:hover { background: rgba(0, 0, 0, 0.1); }
+.cr-special-tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  width: 220px;
+  z-index: 10;
+  text-align: left;
+  background: #0a1f3a;
+  border: 1px solid #1e3a5f;
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.cr-special-tooltip-title { font-weight: 800; color: #facc15; margin-bottom: 3px; }
+.cr-special-tooltip-charge { color: rgba(255, 255, 255, 0.55); margin-top: 4px; }
+
+.cr-special-flash {
+  font-size: 12px;
+  font-weight: 700;
+  margin: 4px 0 0;
+  animation: cr-special-flash-pop 0.4s ease-out;
+}
+.cr-special-flash-player { color: #ca8a04; }
+.cr-special-flash-enemy { color: #dc2626; }
+@keyframes cr-special-flash-pop {
+  0% { transform: scale(0.85); opacity: 0; }
+  60% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cr-special-flash { animation: none; }
+}
 </style>

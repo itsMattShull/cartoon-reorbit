@@ -38,6 +38,11 @@ export default defineEventHandler(async (event) => {
   const customJoinEffectId = body?.customJoinEffectId === undefined
     ? cmoon.customJoinEffectId
     : (body.customJoinEffectId === '' ? null : body.customJoinEffectId)
+  // This team's own cMoon Enemy Battles special attack (see CMoonSpecialAttack's own schema
+  // comment) — same nullable-id, "empty string clears it" convention as customJoinEffectId above.
+  const specialAttackId = body?.specialAttackId === undefined
+    ? cmoon.specialAttackId
+    : (body.specialAttackId === '' ? null : body.specialAttackId)
   const joinLocked = body?.joinLocked === undefined ? cmoon.joinLocked : !!body.joinLocked
   const showOnNav = body?.showOnNav === undefined ? cmoon.showOnNav : !!body.showOnNav
   const showButtonOnPages = body?.showButtonOnPages === undefined ? cmoon.showButtonOnPages : !!body.showButtonOnPages
@@ -63,6 +68,10 @@ export default defineEventHandler(async (event) => {
   if (customJoinEffectId) {
     const validEffect = await db.cMoonJoinEffect.findUnique({ where: { id: customJoinEffectId }, select: { id: true } })
     if (!validEffect) throw createError({ statusCode: 400, statusMessage: 'Invalid custom join effect' })
+  }
+  if (specialAttackId) {
+    const validAttack = await db.cMoonSpecialAttack.findUnique({ where: { id: specialAttackId }, select: { id: true } })
+    if (!validAttack) throw createError({ statusCode: 400, statusMessage: 'Invalid special attack' })
   }
 
   if (captainIds && captainIds.length) {
@@ -97,7 +106,7 @@ export default defineEventHandler(async (event) => {
   await db.$transaction(async (tx) => {
     await tx.cMoon.update({
       where: { id },
-      data: { name, color, pageBgColor, accentColor, textColor, cardBgColor, discordRoleId: discordRoleId || null, discordChannelId: discordChannelId || null, pageDescription, effectType, customJoinEffectId, joinLocked, showOnNav, showButtonOnPages, allowOptOutJoin },
+      data: { name, color, pageBgColor, accentColor, textColor, cardBgColor, discordRoleId: discordRoleId || null, discordChannelId: discordChannelId || null, pageDescription, effectType, customJoinEffectId, specialAttackId, joinLocked, showOnNav, showButtonOnPages, allowOptOutJoin },
     })
     if (captainIds) {
       await tx.cMoonCaptain.deleteMany({ where: { cMoonId: id } })

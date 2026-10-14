@@ -12,12 +12,20 @@ export default defineEventHandler(async (event) => {
   if (!me?.id) throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
 
   const body = await readBody(event)
-  const next = Boolean(body?.allowAuctionNotifications)
+  // Each field only updates when actually present in the body — Settings.vue saves these two
+  // toggles independently (one $fetch per toggle), so an unconditional coercion here would
+  // silently flip whichever field wasn't included in THIS request back to false.
+  const data = {}
+  if (body?.allowAuctionNotifications !== undefined) data.allowAuctionNotifications = Boolean(body.allowAuctionNotifications)
+  if (body?.allowCMoonEnemyPopups !== undefined) data.allowCMoonEnemyPopups = Boolean(body.allowCMoonEnemyPopups)
 
   const updated = await db.user.update({
     where: { id: me.id },
-    data: { allowAuctionNotifications: next },
-    select: { allowAuctionNotifications: true }
+    data,
+    select: { allowAuctionNotifications: true, allowCMoonEnemyPopups: true }
   })
-  return { allowAuctionNotifications: updated.allowAuctionNotifications }
+  return {
+    allowAuctionNotifications: updated.allowAuctionNotifications,
+    allowCMoonEnemyPopups: updated.allowCMoonEnemyPopups,
+  }
 })

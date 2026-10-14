@@ -29,6 +29,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma as db } from '@/server/prisma'
+import { schedulePackToggle, bestEffort } from '@/server/utils/queues'
 
 /* ───────────── paths ───────────── */
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -242,6 +243,10 @@ export default defineEventHandler(async (event) => {
 
     return { id: packId }
   })
+
+  // Exact-time go-live / go-off (the cron sweep is only the safety net). Re-scheduling replaces
+  // the pack's earlier delayed jobs, so an edited time can't fire at the old one.
+  await bestEffort('pack schedule', () => schedulePackToggle(result.id, scheduledAt, scheduledOffAt))
 
   return { id: result.id, imagePath }
 })

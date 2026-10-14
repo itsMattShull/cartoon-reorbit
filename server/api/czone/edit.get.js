@@ -5,6 +5,7 @@ import path from 'path'
 import { defineEventHandler, createError } from 'h3'
 
 import { prisma } from '@/server/prisma'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   const user = event.context.user
@@ -30,6 +31,7 @@ export default defineEventHandler(async (event) => {
     isFirstEdition: uc.isFirstEdition,
     releaseDate: uc.ctoon.releaseDate,
     assetPath: uc.ctoon.assetPath,
+    ...ogGtoonDisplay(uc.ctoon),
     isGtoon: uc.ctoon.isGtoon,
     cost: uc.ctoon.cost,
     power: uc.ctoon.power,

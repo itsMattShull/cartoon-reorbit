@@ -1,6 +1,7 @@
 // server/api/user/ctoons.get.js
 import { defineEventHandler, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { ogGtoonDisplay } from '@/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   /* 1. Auth check ------------------------------------------------ */
@@ -63,7 +64,8 @@ export default defineEventHandler(async (event) => {
           gtoonColor:  true,
           gtoonValue:  true,
           isSlamGtoon: true,
-          gtoonEffect: true
+          gtoonEffect: true,
+          gtoonCardStyle: true
         }
       }
     }
@@ -92,5 +94,6 @@ export default defineEventHandler(async (event) => {
     gtoonValue:    uc.ctoon.gtoonValue,
     isSlamGtoon:   uc.ctoon.isSlamGtoon,
     gtoonEffect:   uc.ctoon.gtoonEffect,
+    ...ogGtoonDisplay(uc.ctoon),
   }))
 })

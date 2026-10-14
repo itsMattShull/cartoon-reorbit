@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
   const battleId = event.context.params?.id
   const battle = await db.cMoonEnemyBattle.findUnique({
     where: { id: battleId },
-    include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } } },
+    include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } }, cMoon: { include: { specialAttack: true } } },
   })
   if (!battle || battle.userId !== userId) throw createError({ statusCode: 404, statusMessage: 'Battle not found' })
 

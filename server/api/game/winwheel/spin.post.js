@@ -5,6 +5,7 @@ import { mintQueue } from '../../../utils/queues'
 import { QueueEvents } from 'bullmq'
 import { redis } from '@/server/utils/redis'
 import { getChicagoMorningWindowStart } from '@/server/utils/dailyTaskWindows'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 const redisConnection = {
   host: process.env.REDIS_HOST,
@@ -283,7 +284,7 @@ export default defineEventHandler(async (event) => {
               })
               const bonusCtoon = await prisma.ctoon.findUnique({
                 where: { id: tripleNothingCtoonId },
-                select: { id: true, name: true, assetPath: true }
+                select: { id: true, name: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT }
               })
               tripleNothingBonus = { ctoon: bonusCtoon }
             } catch (bonusMintErr) {
@@ -307,7 +308,7 @@ export default defineEventHandler(async (event) => {
     if (ctoonIdToMint) {
       wonCtoon = await prisma.ctoon.findUnique({
         where: { id: ctoonIdToMint },
-        select: { id: true, name: true, assetPath: true }
+        select: { id: true, name: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT }
       })
     }
 

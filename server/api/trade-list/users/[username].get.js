@@ -2,6 +2,7 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   const username = event.context.params?.username
@@ -34,6 +35,7 @@ export default defineEventHandler(async (event) => {
     userCtoonId: encodeUserCtoonId(item.userCtoon.userId, item.userCtoon.ctoonId, item.userCtoon.mintNumber),
     ctoonId: item.userCtoon.ctoonId,
     assetPath: item.userCtoon.ctoon.assetPath,
+    ...ogGtoonDisplay(item.userCtoon.ctoon),
     name: item.userCtoon.ctoon.name,
     series: item.userCtoon.ctoon.series?.trim() || null,
     set: item.userCtoon.ctoon.set?.trim() || null,

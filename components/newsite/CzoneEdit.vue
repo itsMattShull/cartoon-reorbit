@@ -40,7 +40,7 @@
             @touchstart="onToonTouchStart(c, $event)"
             @touchend="onToonTouchEnd(c, $event)"
           >
-            <img :src="c.assetPath" :alt="c.name" :title="c.name" draggable="false" class="czew-toon" />
+            <CtoonImage :ctoon="c" :alt="c.name" :title="c.name" draggable="false" class="czew-toon" />
             <SecondEditionOverlay :ctoon="c" />
           </div>
           <div v-if="!filteredCollection.length" class="czew-empty" style="grid-column:1/-1">No cToons found.</div>
@@ -94,14 +94,13 @@
       <div class="czew-bg-grid">
         <div v-if="cz.loadingBackgrounds" class="czew-empty" style="grid-column:1/-1">Loading…</div>
         <template v-else>
-          <img
+          <CtoonImage
             v-for="bg in cz.backgrounds" :key="bg.id"
-            :src="bg.imagePath"
+            :ctoon="bg" :src="bg.imagePath"
             :alt="bg.label || bg.filename"
             class="czew-bg-item"
             :class="{ 'czew-bg-active': (currentZoneBg || '').split('/').pop() === bg.filename }"
-            @click="selectBg(bg)"
-          />
+            @click="selectBg(bg)" />
           <div v-if="!cz.backgrounds.length" class="czew-empty" style="grid-column:1/-1">No backgrounds available.</div>
         </template>
       </div>
@@ -119,6 +118,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 defineEmits(['save', 'clear'])
 
 const cz = useNewSiteCzoneState()

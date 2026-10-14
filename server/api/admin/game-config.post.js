@@ -9,6 +9,7 @@ import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { invalidateAssets } from '@/server/utils/pokemonBattleAssets'
 import { invalidateOgGtoonsConfigCache } from '@/server/utils/ogGtoonsConfig'
+import { REVEAL_TIMING_LIMITS } from '~/utils/ogGtoonReveal'
 
 // ── Operation A.S.T.E.R.O.I.D. field tables ──────────────────────────────────────────────
 // Kept as data rather than 26 hand-written if-blocks so the validation, the Prisma write and
@@ -264,6 +265,12 @@ function validatePayload(payload) {
     if (payload.tripleNothingCtoonId != null && typeof payload.tripleNothingCtoonId !== 'string') {
       throw createError({ statusCode: 400, statusMessage: '"tripleNothingCtoonId" must be a string or null' })
     }
+    if (payload.winWheelNothingGifPath != null && typeof payload.winWheelNothingGifPath !== 'string') {
+      throw createError({ statusCode: 400, statusMessage: '"winWheelNothingGifPath" must be a string or null' })
+    }
+    if (payload.winWheelNothingText != null && typeof payload.winWheelNothingText !== 'string') {
+      throw createError({ statusCode: 400, statusMessage: '"winWheelNothingText" must be a string or null' })
+    }
 
   } else if (payload.gameName === 'ReOrbitMatch') {
     if (payload.reorbitPlaysPerPeriod == null || typeof payload.reorbitPlaysPerPeriod !== 'number' || payload.reorbitPlaysPerPeriod < 1) {
@@ -500,10 +507,25 @@ function validatePayload(payload) {
       throw createError({ statusCode: 400, statusMessage: '"pointsPerWin" must be a whole number of 0 or more' })
     }
   } else if (payload.gameName === 'OgGtoons') {
-    // Four independent visibility switches, no numeric tuning — nothing to range-check.
+    // Visibility switches need no range-check; the reveal pacing values do.
+    for (const [key, limit] of Object.entries(OG_REVEAL_FIELDS)) {
+      const v = payload[key]
+      if (v == null || v === '') continue
+      if (!Number.isInteger(v) || v < limit.min || v > limit.max) {
+        throw createError({ statusCode: 400, statusMessage: `"${key}" must be a whole number of milliseconds between ${limit.min} and ${limit.max}` })
+      }
+    }
   } else {
     throw createError({ statusCode: 400, statusMessage: `Unknown gameName "${payload.gameName}"` })
   }
+}
+
+// Admin-tunable pace of the one-card-at-a-time reveal; limits come from utils/ogGtoonReveal.js.
+const OG_REVEAL_FIELDS = {
+  ogGtoonsRevealFirstMs: REVEAL_TIMING_LIMITS.firstMs,
+  ogGtoonsRevealCardMs: REVEAL_TIMING_LIMITS.cardMs,
+  ogGtoonsRevealEffectsMs: REVEAL_TIMING_LIMITS.effectsMs,
+  ogGtoonsRevealQuietMs: REVEAL_TIMING_LIMITS.quietMs
 }
 
 export default defineEventHandler(async (event) => {
@@ -645,7 +667,9 @@ export default defineEventHandler(async (event) => {
     tripleNothingCtoonId = null,
     winWheelImagePath = null,
     winWheelSoundPath = null,
-    winWheelSoundMode = null
+    winWheelSoundMode = null,
+    winWheelNothingGifPath = null,
+    winWheelNothingText = null
   } = body
 
   // 3) Upsert
@@ -855,6 +879,10 @@ export default defineEventHandler(async (event) => {
         for (const key of ['ogGtoonsMatchmakingEnabled', 'ogGtoonsGameEnabled', 'ogGtoonsDeckBuildingEnabled', 'ogGtoonsLeaderboardEnabled', 'ogGtoonsPracticeEnabled', 'ogGtoonsGamesPageVisible']) {
           if (body[key] != null) ogGtoonsData[key] = Boolean(body[key])
         }
+        // Reveal pacing (ms). Blank/null resets a field to the built-in default.
+        for (const key of Object.keys(OG_REVEAL_FIELDS)) {
+          if (key in body) ogGtoonsData[key] = body[key] == null || body[key] === '' ? null : Number(body[key])
+        }
         createData = { ...createData, ...ogGtoonsData }
         updateData = { ...updateData, ...ogGtoonsData }
       } else if (gameName === 'Clash' || gameName === 'TKO') {
@@ -870,6 +898,8 @@ export default defineEventHandler(async (event) => {
           winWheelImagePath: winWheelImagePath || null,
           winWheelSoundPath: winWheelSoundPath || null,
           winWheelSoundMode: winWheelSoundMode || 'repeat',
+          winWheelNothingGifPath: winWheelNothingGifPath || null,
+          winWheelNothingText: winWheelNothingText || null,
           tripleNothingCtoonId: tripleNothingCtoonId || null
         }
         updateData = {
@@ -880,6 +910,8 @@ export default defineEventHandler(async (event) => {
           winWheelImagePath: winWheelImagePath || null,
           winWheelSoundPath: winWheelSoundPath || null,
           winWheelSoundMode: winWheelSoundMode || 'repeat',
+          winWheelNothingGifPath: winWheelNothingGifPath || null,
+          winWheelNothingText: winWheelNothingText || null,
           tripleNothingCtoonId: tripleNothingCtoonId || null
         }
       }
@@ -1156,6 +1188,8 @@ export default defineEventHandler(async (event) => {
             ['winWheelImagePath', before?.winWheelImagePath || null, winWheelImagePath || null],
             ['winWheelSoundPath', before?.winWheelSoundPath || null, winWheelSoundPath || null],
             ['winWheelSoundMode', before?.winWheelSoundMode || 'repeat', winWheelSoundMode || 'repeat'],
+            ['winWheelNothingGifPath', before?.winWheelNothingGifPath || null, winWheelNothingGifPath || null],
+            ['winWheelNothingText', before?.winWheelNothingText || null, winWheelNothingText || null],
             ['tripleNothingCtoonId', before?.tripleNothingCtoonId || null, tripleNothingCtoonId || null]
           ]
           for (const [key, prev, next] of changes) {

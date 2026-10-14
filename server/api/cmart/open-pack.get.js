@@ -2,6 +2,7 @@
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { mintQueue } from '../../utils/queues'
 import { prisma as db } from '@/server/prisma'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 /* ───────── helpers ────────────────────────────────────────── */
 
@@ -203,6 +204,7 @@ export default defineEventHandler(async (event) => {
     id:                      c.id,
     name:                    c.name,
     assetPath:               c.assetPath,
+    ...ogGtoonDisplay(c),
     rarity:                  c.rarity,
     isGtoon:                 c.isGtoon,
     cost:                    c.cost,

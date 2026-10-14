@@ -60,7 +60,7 @@
             <div class="modal-header">
               <h2 class="modal-title">
                 <template v-if="spinResult.tripleNothingCtoon">Oh no! Three misses in a row. Take this! 🎁</template>
-                <template v-else-if="spinResult.type === 'nothing'">You got nothing 😢</template>
+                <template v-else-if="spinResult.type === 'nothing'">{{ nothingText }}</template>
                 <template v-else-if="spinResult.type === 'points'">
                   <span v-if="spinResult.amount < spinCost">Small Prize: +{{ Number(spinResult.amount).toLocaleString() }} pts! 🎉</span>
                   <span v-else>You won {{ Number(spinResult.amount).toLocaleString() }} pts! 🏆</span>
@@ -70,11 +70,12 @@
             </div>
             <div class="modal-body">
               <template v-if="spinResult.type === 'nothing' && !spinResult.tripleNothingCtoon">
-                <img src="/images/nothing1225.gif" alt="Nothing" class="nothing-gif" />
+                <img :src="nothingGifSrc" alt="Nothing" class="nothing-gif" />
               </template>
               <div v-if="spinResult.ctoon" class="modal-ctoon">
                 <CtoonAsset
                   :src="spinResult.ctoon.assetPath"
+                  :ctoon="spinResult.ctoon"
                   :alt="spinResult.ctoon.name"
                   :name="spinResult.ctoon.name"
                   :ctoon-id="spinResult.ctoon.id"
@@ -85,6 +86,7 @@
               <div v-if="spinResult.tripleNothingCtoon" class="modal-ctoon">
                 <CtoonAsset
                   :src="spinResult.tripleNothingCtoon.assetPath"
+                  :ctoon="spinResult.tripleNothingCtoon"
                   :alt="spinResult.tripleNothingCtoon.name"
                   :name="spinResult.tripleNothingCtoon.name"
                   :ctoon-id="spinResult.tripleNothingCtoon.id"
@@ -152,6 +154,7 @@
                   </span>
                   <CtoonAsset
                     :src="item.assetPath"
+                    :ctoon="item"
                     :alt="item.name"
                     :name="item.name"
                     :ctoon-id="item.id"
@@ -242,9 +245,13 @@ const scavenger = useScavengerHunt()
 const winWheelImagePath = ref('')
 const winWheelSoundPath = ref('')
 const winWheelSoundMode = ref('repeat')
+const winWheelNothingGifPath = ref('')
+const winWheelNothingText    = ref('')
 const exclusivePool     = ref([])
 
 const wheelSrc = computed(() => winWheelImagePath.value || '/images/wheel.svg')
+const nothingGifSrc = computed(() => winWheelNothingGifPath.value || '/images/nothing1225.gif')
+const nothingText = computed(() => winWheelNothingText.value || 'You got nothing 😢')
 const spinTransition = computed(() =>
   isSpinning.value
     ? `transform ${spinDurationMs / 1000}s cubic-bezier(0.33, 1, 0.68, 1)`
@@ -262,6 +269,8 @@ async function fetchStatus() {
     winWheelImagePath: wheelPath,
     winWheelSoundPath: soundPath,
     winWheelSoundMode: soundMode,
+    winWheelNothingGifPath: nothingGifPath,
+    winWheelNothingText: nothingTextVal,
     exclusivePool: pool
   } = res
 
@@ -279,6 +288,8 @@ async function fetchStatus() {
     fallbackAudio = null
   }
   winWheelSoundMode.value  = soundMode || 'repeat'
+  winWheelNothingGifPath.value = nothingGifPath || ''
+  winWheelNothingText.value    = nothingTextVal || ''
   exclusivePool.value      = Array.isArray(pool) ? pool : []
   updateCountdown()
 }

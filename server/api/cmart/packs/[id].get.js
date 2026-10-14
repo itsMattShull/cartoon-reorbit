@@ -22,6 +22,7 @@
 
 import { defineEventHandler, createError, getRequestHeader } from 'h3'
 import { prisma as db } from '@/server/prisma'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 function computeDecayedPrice(basePrice, sentAt, decayAmount, decayDays, priceFloor) {
   if (!sentAt || decayAmount <= 0 || decayDays <= 0) return basePrice
@@ -65,7 +66,7 @@ export default defineEventHandler(async (event) => {
             ctoonId: true,
             ctoon:   {
               select: {
-                name: true, rarity: true, assetPath: true, isGtoon: true, cost: true, power: true,
+                name: true, rarity: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT, isGtoon: true, cost: true, power: true,
                 inCmart: true,
                 isSecondEdition: true,
                 secondEditionOverlayX: true,
@@ -101,6 +102,7 @@ export default defineEventHandler(async (event) => {
     ctoonId: o.ctoonId,
     name:    o.ctoon.name,
     assetPath:o.ctoon.assetPath,
+    ...ogGtoonDisplay(o.ctoon),
     rarity:  o.ctoon.rarity,
     isGtoon: o.ctoon.isGtoon,
     cost:    o.ctoon.cost,

@@ -12,6 +12,7 @@ import { Prisma } from '@prisma/client'
 import { redis } from '@/server/utils/redis'
 import { MIN_SAMPLE_SIZE } from '@/server/utils/economyValuation'
 import { ensureEconomyDataFresh } from '@/server/utils/economyFreshness'
+import { ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 import {
   parseExclusions,
   exclusionCacheKey,
@@ -114,6 +115,7 @@ export default defineEventHandler(async (event) => {
         )
         SELECT
           c."id", c."name", c."assetPath", c."rarity", c."releaseDate", c."createdAt",
+          c."isOgGtoon", c."gtoonColor", c."gtoonValue", c."gtoonCardStyle",
           -- Anything below MIN_SAMPLE_SIZE ranks as 0, so a cToon with one or two
           -- transactions is indistinguishable from one with none. Ranking on the
           -- raw count would turn the tail of this list into an enumeration of
@@ -126,7 +128,8 @@ export default defineEventHandler(async (event) => {
         LIMIT ${PAGE_SIZE} OFFSET ${offset}
       `
     : prisma.$queryRaw`
-        SELECT c."id", c."name", c."assetPath", c."rarity", c."releaseDate", c."createdAt"
+        SELECT c."id", c."name", c."assetPath", c."rarity", c."releaseDate", c."createdAt",
+          c."isOgGtoon", c."gtoonColor", c."gtoonValue", c."gtoonCardStyle"
         FROM "Ctoon" c
         ${whereSql}
         ORDER BY ${sort.orderBy}
@@ -178,6 +181,7 @@ export default defineEventHandler(async (event) => {
       ctoonId: c.id,
       name: c.name,
       assetPath: c.assetPath,
+      ...ogGtoonDisplay(c),
       rarity: c.rarity,
       releaseDate: c.releaseDate || c.createdAt,
       avgAuctionPrice: prices.avgAuctionPrice ?? null,

@@ -195,7 +195,7 @@
             </div>
             <div class="flex flex-col gap-1">
               <label class="text-xs font-medium">Final Release At (CST/CDT)</label>
-              <input :value="new Date(new Date(bulkReleaseDate).getTime() + delayHours*3600000).toLocaleString('en-US',{timeZone:'America/Chicago',hour12:false})" disabled class="border rounded-md px-2 py-1.5 text-sm bg-gray-100" />
+              <input :value="new Date(zonedTimeToUtc(bulkReleaseDate, 'America/Chicago').getTime() + delayHours*3600000).toLocaleString('en-US',{timeZone:'America/Chicago',hour12:false})" disabled class="border rounded-md px-2 py-1.5 text-sm bg-gray-100" />
             </div>
           </div>
         </section>
@@ -900,8 +900,9 @@ async function uploadAll() {
     if (f.totalQuantity && bulkReleaseDate.value) {
       const init = Math.max(1, Math.floor((Number(f.totalQuantity) * Number(releasePercent.value)) / 100))
       const fin  = Math.max(0, Number(f.totalQuantity) - init)
-      const finAt = new Date(new Date(bulkReleaseDate.value).getTime() + Number(delayHours.value) * 60 * 60 * 1000)
-      formData.append('initialReleaseAt', new Date(bulkReleaseDate.value).toISOString())
+      const releaseUtc = zonedTimeToUtc(bulkReleaseDate.value, 'America/Chicago')
+      const finAt = new Date(releaseUtc.getTime() + Number(delayHours.value) * 60 * 60 * 1000)
+      formData.append('initialReleaseAt', releaseUtc.toISOString())
       formData.append('finalReleaseAt', finAt.toISOString())
       formData.append('initialReleaseQty', init)
       formData.append('finalReleaseQty', fin)

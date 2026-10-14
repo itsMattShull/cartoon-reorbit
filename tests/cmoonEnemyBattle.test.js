@@ -4,6 +4,7 @@ import {
   resolveBattleRound, rollEnemyAction, rollEnemyRewards, buildGrantableReward, rollHitDamage,
   isValidBattleAction, BATTLE_ACTIONS, PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE,
   HEAL_ON_SUCCESSFUL_BLOCK, resolveRound, combinePlayerMaxHp,
+  SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, isValidPlayerSubmittedAction,
 } from '../server/utils/cmoonEnemyBattle.js'
 
 const baseEnemyMember = { critChanceAgainstPercent: 0, critChanceFromPercent: 0, maxHp: 5 }
@@ -272,4 +273,118 @@ test('combinePlayerMaxHp: treats a missing/non-numeric bonus as 0, not NaN', () 
 
 test('HEAL_ON_SUCCESSFUL_BLOCK is a single positive HP amount', () => {
   assert.equal(HEAL_ON_SUCCESSFUL_BLOCK, 1)
+})
+
+// ── Special attacks (see CMoonSpecialAttack's own schema comment) ──────────────────────────
+test('HIT_STREAK_THRESHOLD is the 3 consecutive hits specified by the feature', () => {
+  assert.equal(HIT_STREAK_THRESHOLD, 3)
+})
+
+test('isValidPlayerSubmittedAction accepts the 4 lane moves plus SPECIAL_ACTION, nothing else', () => {
+  for (const a of BATTLE_ACTIONS) assert.equal(isValidPlayerSubmittedAction(a), true)
+  assert.equal(isValidPlayerSubmittedAction(SPECIAL_ACTION), true)
+  assert.equal(isValidPlayerSubmittedAction(PARALYZED_ACTION), false) // server-only, never client-submittable
+  assert.equal(isValidPlayerSubmittedAction('NOT_A_REAL_ACTION'), false)
+  assert.equal(isValidPlayerSubmittedAction(null), false)
+})
+
+test('resolveBattleRound: SPECIAL_ACTION and PARALYZED_ACTION both count as neither attacking nor blocking', () => {
+  for (const sentinel of [SPECIAL_ACTION, PARALYZED_ACTION]) {
+    // A real attack still lands on a side using one of these sentinels — not blocking it.
+    assert.deepEqual(resolveBattleRound(sentinel, 'ATTACK_HIGH'), { playerHit: true, enemyHit: false, playerBlocked: false, enemyBlocked: false })
+    assert.deepEqual(resolveBattleRound('ATTACK_LOW', sentinel), { playerHit: false, enemyHit: true, playerBlocked: false, enemyBlocked: false })
+    // Two sentinels together: nobody attacked, so nothing lands and nobody "successfully blocked" either.
+    assert.deepEqual(resolveBattleRound(sentinel, sentinel), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false })
+  }
+})
+
+test('resolveRound: a paralyzed player cannot land a hit even when submitting ATTACK_HIGH', () => {
+  for (let i = 0; i < 100; i++) {
+    const result = resolveRound({
+      playerAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember,
+      playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP, playerParalyzedTurns: 2,
+    })
+    assert.equal(result.roundEntry.playerAction, PARALYZED_ACTION)
+    assert.equal(result.enemyHit, false)
+    assert.equal(result.newPlayerParalyzedTurns, 1) // decremented by exactly 1 this round
+  }
+})
+
+test('resolveRound: a paralyzed enemy cannot land a hit on the player', () => {
+  let sawEnemyAttack = false
+  for (let i = 0; i < 100; i++) {
+    const result = resolveRound({
+      playerAction: 'BLOCK_HIGH', enemyMember: baseEnemyMember,
+      playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP, enemyParalyzedTurns: 1,
+    })
+    if (result.roundEntry.enemyAction === PARALYZED_ACTION) sawEnemyAttack = true
+    assert.equal(result.newPlayerHp, PLAYER_MAX_HP) // never took damage while the enemy was stunned
+    assert.equal(result.newEnemyParalyzedTurns, 0)
+  }
+  assert.equal(sawEnemyAttack, true)
+})
+
+test('resolveRound: paralyzedTurns floors at 0 and never goes negative', () => {
+  const result = resolveRound({
+    playerAction: 'BLOCK_HIGH', enemyMember: baseEnemyMember,
+    playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP, playerParalyzedTurns: 0, enemyParalyzedTurns: 0,
+  })
+  assert.equal(result.newPlayerParalyzedTurns, 0)
+  assert.equal(result.newEnemyParalyzedTurns, 0)
+})
+
+test('resolveRound: playerAtkBonus increases the player\'s landed-hit damage on the enemy, floored at 0', () => {
+  let sawAHit = false
+  for (let i = 0; i < 200; i++) {
+    const result = resolveRound({
+      playerAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember,
+      playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP, playerAtkBonus: 5,
+    })
+    if (result.enemyHit) { sawAHit = true; assert.equal(result.enemyDamage, NORMAL_HIT_DAMAGE + 5) }
+  }
+  assert.equal(sawAHit, true)
+
+  // A heavy enough penalty floors the dealt damage at 0, never negative.
+  let sawAHit2 = false
+  for (let i = 0; i < 200; i++) {
+    const result = resolveRound({
+      playerAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember,
+      playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP, playerAtkBonus: -999,
+    })
+    if (result.enemyHit) { sawAHit2 = true; assert.equal(result.enemyDamage, 0) }
+  }
+  assert.equal(sawAHit2, true)
+})
+
+test('resolveRound: enemyAtkBonus increases the damage the enemy deals to the player, floored at 0', () => {
+  let sawAHit = false
+  for (let i = 0; i < 200; i++) {
+    const result = resolveRound({
+      playerAction: 'BLOCK_HIGH', enemyMember: baseEnemyMember,
+      playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP, enemyAtkBonus: 4,
+    })
+    if (result.newPlayerHp < PLAYER_MAX_HP) { sawAHit = true; assert.equal(PLAYER_MAX_HP - result.newPlayerHp, NORMAL_HIT_DAMAGE + 4) }
+  }
+  assert.equal(sawAHit, true)
+
+  // A heavy enough penalty floors the enemy's dealt damage at 0 — the player's HP never drops
+  // even on a round where the enemy's attack otherwise would have landed.
+  for (let i = 0; i < 200; i++) {
+    const result = resolveRound({
+      playerAction: 'BLOCK_HIGH', enemyMember: baseEnemyMember,
+      playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP, enemyAtkBonus: -999,
+    })
+    assert.equal(result.newPlayerHp, PLAYER_MAX_HP)
+  }
+})
+
+test('resolveRound: using SPECIAL_ACTION as the player action never lands a lane hit on the enemy', () => {
+  for (let i = 0; i < 100; i++) {
+    const result = resolveRound({
+      playerAction: SPECIAL_ACTION, enemyMember: baseEnemyMember,
+      playerHpRemaining: PLAYER_MAX_HP, playerMaxHp: PLAYER_MAX_HP,
+    })
+    assert.equal(result.enemyHit, false)
+    assert.equal(result.enemyDamage, 0)
+  }
 })

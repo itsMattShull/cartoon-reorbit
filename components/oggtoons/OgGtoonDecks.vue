@@ -73,14 +73,17 @@
             <div
               v-for="pos in 12"
               :key="pos"
+              v-on="slots[pos-1] ? gestureFor(slots[pos-1]).events : {}"
+              @click.capture="slots[pos-1] && gestureFor(slots[pos-1]).clickCapture($event)"
               @click="slots[pos-1] && removeFromSlot(pos-1)"
+              style="-webkit-touch-callout: none; -webkit-user-select: none; user-select: none"
               :class="[
                 'relative border-2 rounded flex flex-col items-center justify-center h-24 cursor-pointer transition',
                 slots[pos-1] ? 'border-indigo-400 bg-white/5' : 'border-dashed border-white/30 bg-white/5'
               ]"
             >
               <template v-if="slots[pos-1]">
-                <img :src="slots[pos-1].assetPath" :alt="slots[pos-1].name" class="h-14 object-contain" />
+                <CtoonImage :ctoon="slots[pos-1]" class="h-14 og-inspectable" hover-fx />
                 <p class="text-[10px] text-center truncate w-full px-1">{{ slots[pos-1].name }}</p>
               </template>
               <span v-else class="text-xs text-gray-400">Slot {{ pos }}</span>
@@ -92,7 +95,10 @@
             <div
               v-for="c in gtoons"
               :key="c.id"
+              v-on="gestureFor(c).events"
+              @click.capture="gestureFor(c).clickCapture($event)"
               @click="addCard(c)"
+              style="-webkit-touch-callout: none; -webkit-user-select: none; user-select: none"
               :class="[
                 'p-1 border rounded cursor-pointer flex flex-col items-center transition transform',
                 usedIds.includes(c.ctoonId)
@@ -100,7 +106,7 @@
                   : 'hover:scale-105 bg-white/5'
               ]"
             >
-              <img :src="c.assetPath" :alt="c.name" class="object-contain h-16 mb-1" />
+              <CtoonImage :ctoon="c" class="object-contain h-16 mb-1 og-inspectable" hover-fx />
               <p class="text-xs font-semibold text-center truncate w-full">{{ c.name }}</p>
               <p class="text-[10px]" :style="{ color: colorHex(c.gtoonColor) }">{{ c.gtoonColor }}</p>
               <p class="text-[10px] text-gray-300">Value: {{ c.gtoonValue }}</p>
@@ -137,12 +143,31 @@
         </div>
       </div>
     </transition>
+
+    <!-- Printed properties of a card (right-click / long-press) -->
+    <OgGtoonInfoModal />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import Toast from '@/components/Toast.vue'
+import CtoonImage from '@/components/CtoonImage.vue'
+import OgGtoonInfoModal from '@/components/oggtoons/OgGtoonInfoModal.vue'
+import { useOgGtoonInfo } from '@/composables/useOgGtoonInfo'
+
+// Right-click / long-press a card for its printed properties; one gesture handler set per card object.
+const { inspectGesture } = useOgGtoonInfo()
+const gestureCache = new WeakMap()
+function gestureFor(card) {
+  let g = gestureCache.get(card)
+  if (!g) {
+    const { clickCapture, ...events } = inspectGesture(() => card)
+    g = { events, clickCapture }
+    gestureCache.set(card, g)
+  }
+  return g
+}
 
 const toast = ref({ visible: false, message: '', type: 'success', timeout: null })
 function showToast(message, type = 'success') {
@@ -203,7 +228,8 @@ function editDeck(deck) {
   for (const dc of deck.cards) {
     next[dc.position] = {
       ctoonId: dc.id, name: dc.name, assetPath: dc.assetPath,
-      gtoonColor: dc.gtoonColor, gtoonValue: dc.gtoonValue, isSlamGtoon: dc.isSlamGtoon
+      gtoonColor: dc.gtoonColor, gtoonValue: dc.gtoonValue, isSlamGtoon: dc.isSlamGtoon,
+      isOgGtoon: dc.isOgGtoon, gtoonCardStyle: dc.gtoonCardStyle
     }
   }
   slots.value = next

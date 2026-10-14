@@ -2,6 +2,7 @@ import { defineEventHandler, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 import { isLockedCopy } from '@/server/utils/lockRules'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   const requesterId = event.context.userId
@@ -44,7 +45,7 @@ export default defineEventHandler(async (event) => {
         user: { select: { username: true, avatar: true } },
         lockedByUserId: true,
         tradeListItems: { select: { userId: true } },
-        ctoon: { select: { id: true, name: true, assetPath: true, isSecondEdition: true } }
+        ctoon: { select: { id: true, name: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT, isSecondEdition: true } }
       }
     })
 
@@ -60,6 +61,7 @@ export default defineEventHandler(async (event) => {
       ctoonId: row.ctoon.id,
       name: row.ctoon.name,
       assetPath: row.ctoon.assetPath,
+      ...ogGtoonDisplay(row.ctoon),
       isSecondEdition: row.ctoon.isSecondEdition,
       mintNumber: row.mintNumber,
       ownerUsername: row.user.username,
@@ -79,6 +81,10 @@ export default defineEventHandler(async (event) => {
       c."id" AS "ctoonId",
       c."name" AS "name",
       c."assetPath" AS "assetPath",
+      c."isOgGtoon" AS "isOgGtoon",
+      c."gtoonColor" AS "gtoonColor",
+      c."gtoonValue" AS "gtoonValue",
+      c."gtoonCardStyle" AS "gtoonCardStyle",
       c."isSecondEdition" AS "isSecondEdition",
       MAX(uc."mintNumber") AS "highestMint"
     FROM "UserCtoon" uc
@@ -101,6 +107,7 @@ export default defineEventHandler(async (event) => {
     ctoonId: row.ctoonId,
     name: row.name,
     assetPath: row.assetPath,
+    ...ogGtoonDisplay(row),
     isSecondEdition: row.isSecondEdition,
     highestMint: row.highestMint ?? 0
   }))

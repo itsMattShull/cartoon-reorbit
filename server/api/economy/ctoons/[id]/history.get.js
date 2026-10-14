@@ -6,6 +6,7 @@ import { defineEventHandler, getQuery, getRouterParam, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { isValidSource, MIN_SAMPLE_SIZE } from '@/server/utils/economyValuation'
 import { ensureEconomyDataFresh } from '@/server/utils/economyFreshness'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 function bucketKey(date, granularity) {
   const d = new Date(date)
@@ -42,7 +43,7 @@ export default defineEventHandler(async (event) => {
 
   const ctoon = await prisma.ctoon.findUnique({
     where: { id: ctoonId },
-    select: { id: true, name: true, assetPath: true, releaseDate: true, createdAt: true }
+    select: { id: true, name: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT, releaseDate: true, createdAt: true }
   })
   if (!ctoon) {
     throw createError({ statusCode: 404, statusMessage: 'cToon not found' })
@@ -92,6 +93,7 @@ export default defineEventHandler(async (event) => {
     ctoonId: ctoon.id,
     name: ctoon.name,
     assetPath: ctoon.assetPath,
+    ...ogGtoonDisplay(ctoon),
     releaseDate: ctoon.releaseDate || ctoon.createdAt,
     source,
     granularity,

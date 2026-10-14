@@ -6,6 +6,8 @@ import { encryptIp } from '@/server/utils/ip-encrypt'
 import { enqueueVpnCheck } from '@/server/utils/vpn-queue'
 import { isHotPath } from '@/server/utils/hotPaths'
 import { getClientRequestIP } from '@/server/utils/request-ip'
+import { hasFlag, setFlag } from '@/server/utils/cache'
+import { createHmac } from 'node:crypto'
 
 export default defineEventHandler(async (event) => {
   // Per-interaction game endpoints skip the login/IP bookkeeping — a 25-question run would
@@ -18,6 +20,14 @@ export default defineEventHandler(async (event) => {
 
   const ip = getClientRequestIP(event)
   if (!ip) return
+
+  // Everything below is once-per-day-per-(user, IP) work (one LoginLog row, one UserIP row + VPN
+  // check). Remember in Redis that it's done so the user's remaining API calls today skip its 2-3
+  // queries. The IP is HMAC'd so no raw address is stored in Redis. Fail-open on Redis errors.
+  const dayStart = startOfDay(new Date())
+  const ipHash = createHmac('sha256', useRuntimeConfig(event).jwtSecret || 'login-log').update(ip).digest('hex').slice(0, 24)
+  const doneKey = `login-log:${userId}:${ipHash}:${dayStart.getTime()}`
+  if (await hasFlag(doneKey)) return
 
   const encryptedLoginIp = encryptIp(ip)
   if (!encryptedLoginIp) {
@@ -66,4 +76,6 @@ export default defineEventHandler(async (event) => {
       }
     }
   }
+
+  await setFlag(doneKey, 26 * 60 * 60)
 })

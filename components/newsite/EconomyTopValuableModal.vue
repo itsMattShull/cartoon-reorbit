@@ -19,7 +19,7 @@
         @keyup.enter="select(row)"
       >
         <span class="tv-rank">{{ idx + 1 }}</span>
-        <img v-if="row.assetPath" class="tv-thumb" :src="row.assetPath" :alt="row.name" />
+        <CtoonImage v-if="row.assetPath" class="tv-thumb" :ctoon="row" :alt="row.name" />
         <span class="tv-name">{{ row.name }}</span>
         <span class="tv-price">{{ formatPrice(row.avgPrice) }}</span>
       </li>
@@ -33,6 +33,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 
 const props = defineProps({

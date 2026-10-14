@@ -131,7 +131,7 @@
           @keyup.enter="openHistory(row.ctoonId)"
         >
           <span class="ctoon-rank">{{ idx + 1 }}</span>
-          <img v-if="row.assetPath" class="ctoon-thumb" :src="row.assetPath" :alt="row.name" />
+          <CtoonImage v-if="row.assetPath" class="ctoon-thumb" :ctoon="row" :alt="row.name" />
           <span class="ctoon-name">{{ row.name }}</span>
           <span class="ctoon-metric">{{ row.volume }} txns</span>
         </li>
@@ -177,7 +177,7 @@
           @click="openHistory(row.ctoonId)"
           @keyup.enter="openHistory(row.ctoonId)"
         >
-          <img v-if="row.assetPath" class="ctoon-thumb" :src="row.assetPath" :alt="row.name" />
+          <CtoonImage v-if="row.assetPath" class="ctoon-thumb" :ctoon="row" :alt="row.name" />
           <span class="ctoon-name">{{ row.name }}</span>
           <!-- Show the key the list was ordered by, or a volume sort looks like
                it did nothing — most rows' prices read "N/A". -->
@@ -233,6 +233,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRequestHeaders } from '#app'
 

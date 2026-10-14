@@ -4,6 +4,7 @@ import { resolveUserCtoonId } from '@/server/utils/userCtoonId'
 import { isSyntheticUserCtoonId, encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 import { getActiveSale } from '@/server/utils/activeSaleCache'
 import { isLockedCopy } from '@/server/utils/lockRules'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 function asString(value) {
   return typeof value === 'string' && value.trim() ? value.trim() : null
@@ -37,8 +38,8 @@ export default defineEventHandler(async (event) => {
   //   uc|…  — encoded token from all other endpoints (resolve to real UUID first)
   // For cz: tokens fall through to the ctoonId-only path so the modal still opens.
   const editionInclude = {
-    relatedFirstEdition:  { select: { id: true, name: true, assetPath: true } },
-    relatedSecondEdition: { select: { id: true, name: true, assetPath: true } },
+    relatedFirstEdition:  { select: { id: true, name: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT } },
+    relatedSecondEdition: { select: { id: true, name: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT } },
     // Explicit select, never a bare `cMoon: true` — CMoon also has `members`/
     // `captains` relations that pull full User rows (Discord tokens, email);
     // this endpoint must only ever expose the same public-safe fields as the
@@ -195,6 +196,7 @@ export default defineEventHandler(async (event) => {
       id: ctoon.id,
       name: ctoon.name,
       assetPath: ctoon.assetPath,
+      ...ogGtoonDisplay(ctoon),
       rarity: ctoon.rarity,
       set: ctoon.set,
       series: ctoon.series,

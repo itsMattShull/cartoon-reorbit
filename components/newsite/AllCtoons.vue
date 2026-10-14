@@ -45,7 +45,7 @@
             >
               <template #header>
                 <div class="card-header-wrap" @click="openInfo(c)">
-                  <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img" />
+                  <CtoonImage v-if="c.assetPath" :ctoon="c" :alt="c.name" class="card-img" />
                   <span
                     class="owned-badge"
                     :class="c.isOwned ? 'owned-badge--owned' : 'owned-badge--unowned'"
@@ -90,6 +90,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 const { open: openCtoonModal } = useCtoonModal()
 const activeTab = useAllCtoonsTab()
 const filter    = useAllCtoonsFilter()

@@ -37,10 +37,10 @@
 // is cheaper than the PointsLog-based version it replaces, not more expensive.
 import { Prisma } from '@prisma/client'
 import { prisma } from '../prisma.js'
-import { achievementsQueue } from '../utils/queues.js'
+import { enqueueAchievementChecks as enqueueAchievementJobs } from '../utils/queues.js'
 import { USER_TABLE_BULK_WRITE_LOCK_KEY } from '../utils/dbLocks.js'
 
-// Shared with recomputeLastActivity (server/cron/sync-guild-members.js) — see
+// Shared with recomputeLastActivity (server/cron/jobHandlers.js) — see
 // server/utils/dbLocks.js. Both do a full-table UPDATE...FROM against "User"
 // and used to be able to land in the same tick and deadlock each other.
 const LOCK_KEY = USER_TABLE_BULK_WRITE_LOCK_KEY
@@ -55,12 +55,10 @@ async function enqueueAchievementChecks(changedUserIds) {
   // A points-total change is the only thing that can newly satisfy a cMoonPointsGte
   // achievement, so this is the trigger for re-evaluating those users well before the
   // once-daily enqueueAchievementsDaily batch would otherwise reach them.
-  for (const userId of changedUserIds) {
-    try {
-      await achievementsQueue.add('processUserAchievements', { userId })
-    } catch (err) {
-      console.error('[cmoon-points-aggregate] failed to enqueue achievement check', { userId, error: err?.message })
-    }
+  try {
+    await enqueueAchievementJobs(changedUserIds)
+  } catch (err) {
+    console.error('[cmoon-points-aggregate] failed to enqueue achievement checks', { count: changedUserIds.length, error: err?.message })
   }
 }
 
@@ -68,7 +66,7 @@ export async function runCMoonPointsAggregate() {
   const [{ locked }] = await prisma.$queryRaw`SELECT pg_try_advisory_lock(${LOCK_KEY}::bigint) AS locked`
   if (!locked) {
     console.log('[cmoon-points-aggregate] another run already holds the lock, skipping')
-    return { changed: 0 }
+    return { changed: 0, skipped: true, reason: 'advisory lock held by another bulk User-table job' }
   }
 
   try {

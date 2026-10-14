@@ -21,8 +21,40 @@ export const HEAL_ON_SUCCESSFUL_BLOCK = 1 // both sides use the same amount — 
 
 export const BATTLE_ACTIONS = ['ATTACK_HIGH', 'ATTACK_LOW', 'BLOCK_HIGH', 'BLOCK_LOW']
 
+// A player's 5th possible submitted action — "spend this round firing your cMoon's special
+// attack instead of attacking/blocking" (see CMoonSpecialAttack's own schema comment). Never
+// rolled for the enemy and never counted in BATTLE_ACTIONS (isValidBattleAction stays exactly
+// the 4 lane moves, used for the plain attack/block buttons) — isAttack/isBlock below both
+// naturally return false for it, which is exactly the desired "neither attacks nor blocks this
+// round" lane behavior, so resolveBattleRound needs no special-casing beyond accepting it.
+export const SPECIAL_ACTION = 'SPECIAL_ATTACK'
+// A forced stand-in for whichever side is paralyzed this round (see
+// CMoonEnemyBattle.playerParalyzedTurns/enemyParalyzedTurns) — same "neither attacks nor blocks"
+// shape as SPECIAL_ACTION, just logged under a distinct label so the round log/UI can tell
+// "chose to use their special" apart from "was stunned and couldn't act at all".
+export const PARALYZED_ACTION = 'PARALYZED'
+
+// How many consecutive landed hits charge up a side's special attack — see
+// CMoonEnemyBattle.playerHitStreak/enemyHitStreak's own schema comment.
+export const HIT_STREAK_THRESHOLD = 3
+
 export function isValidBattleAction(action) {
   return BATTLE_ACTIONS.includes(action)
+}
+
+// What action.post.js actually accepts from the client as this round's player action — the 4
+// lane moves, or SPECIAL_ACTION (gated separately on battle.playerSpecialCharged there; this is
+// purely a shape check). PARALYZED_ACTION is never client-submittable — it's a server-only
+// override applied inside resolveRound below.
+export function isValidPlayerSubmittedAction(action) {
+  return isValidBattleAction(action) || action === SPECIAL_ACTION
+}
+
+// Exported for server/utils/cmoonEnemyRaid.js's own resolveRaidRound, which needs the identical
+// "4 lane moves, or one of the two server-only sentinels" shape check — never for client-facing
+// input validation (that's isValidPlayerSubmittedAction above).
+export function isKnownAction(action) {
+  return isValidBattleAction(action) || action === SPECIAL_ACTION || action === PARALYZED_ACTION
 }
 
 // Combines the admin-configured site-wide default (GlobalGameConfig.cMoonEnemyBattleDefaultHp)
@@ -64,8 +96,8 @@ function attackLands(attackerAction, defenderAction) {
 // the heal-on-successful-block mechanic (see action.post.js) — a side only heals for stopping a
 // real attack, never for a round where neither side threw one.
 export function resolveBattleRound(playerAction, enemyAction) {
-  if (!isValidBattleAction(playerAction)) throw new Error(`Invalid player action: ${playerAction}`)
-  if (!isValidBattleAction(enemyAction)) throw new Error(`Invalid enemy action: ${enemyAction}`)
+  if (!isKnownAction(playerAction)) throw new Error(`Invalid player action: ${playerAction}`)
+  if (!isKnownAction(enemyAction)) throw new Error(`Invalid enemy action: ${enemyAction}`)
   const playerHit = attackLands(enemyAction, playerAction)
   const enemyHit = attackLands(playerAction, enemyAction)
   return {
@@ -96,14 +128,34 @@ export function rollHitDamage(hit, critChancePercent) {
 // that DB-specific branch can't live in this DB-free file. Used by both the real battle endpoint
 // and the admin preview endpoint (server/api/admin/cmoon-enemy-members/[id]/preview-action.post.js)
 // so the two can never drift out of sync on the actual combat math.
-export function resolveRound({ playerAction, enemyMember, playerHpRemaining, playerMaxHp }) {
-  const enemyAction = rollEnemyAction()
-  const { playerHit, enemyHit, playerBlocked, enemyBlocked } = resolveBattleRound(playerAction, enemyAction)
+// `playerAtkBonus`/`enemyAtkBonus` are each side's net special-attack-driven damage modifier
+// (see CMoonEnemyBattle.playerAtkBonus/enemyAtkBonus's own schema comment) added to that side's
+// OWN landed-hit damage, floored at 0 so a heavy LOWER_OPPONENT_ATTACK stack can never flip a hit
+// into healing. `playerParalyzedTurns`/`enemyParalyzedTurns` are each side's CURRENT remaining
+// stun count going into this round (already including anything a special attack applied THIS
+// round before this call — see action.post.js's ordering) — a side with turns > 0 has its
+// action forced to PARALYZED_ACTION regardless of what was submitted/rolled, then that count is
+// decremented by 1 in the returned new*ParalyzedTurns (floored at 0), same "however many turns
+// were left, one just elapsed" semantics whether this round was the one the paralysis was cast
+// in or a later one.
+export function resolveRound({
+  playerAction, enemyMember, playerHpRemaining, playerMaxHp,
+  playerAtkBonus = 0, enemyAtkBonus = 0, playerParalyzedTurns = 0, enemyParalyzedTurns = 0,
+}) {
+  const rolledEnemyAction = rollEnemyAction()
+  const effectivePlayerAction = playerParalyzedTurns > 0 ? PARALYZED_ACTION : playerAction
+  const effectiveEnemyAction = enemyParalyzedTurns > 0 ? PARALYZED_ACTION : rolledEnemyAction
+  const { playerHit, enemyHit, playerBlocked, enemyBlocked } = resolveBattleRound(effectivePlayerAction, effectiveEnemyAction)
   // critChanceFromPercent is this enemy's own attacks landing critically against the player;
   // critChanceAgainstPercent is the player's attacks landing critically against this enemy — see
   // those columns' own schema comments.
-  const { damage: playerDamage, isCrit: playerCrit } = rollHitDamage(playerHit, enemyMember.critChanceFromPercent)
-  const { damage: enemyDamage, isCrit: enemyCrit } = rollHitDamage(enemyHit, enemyMember.critChanceAgainstPercent)
+  const { damage: playerDamageBase, isCrit: playerCrit } = rollHitDamage(playerHit, enemyMember.critChanceFromPercent)
+  const { damage: enemyDamageBase, isCrit: enemyCrit } = rollHitDamage(enemyHit, enemyMember.critChanceAgainstPercent)
+  // The ENEMY's own attack bonus/penalty applies to damage it deals (landing on the player); the
+  // PLAYER's own applies to damage the player deals (landing on the enemy) — named from each
+  // side's own schema comment.
+  const playerDamage = playerHit ? Math.max(0, playerDamageBase + enemyAtkBonus) : 0
+  const enemyDamage = enemyHit ? Math.max(0, enemyDamageBase + playerAtkBonus) : 0
 
   let newPlayerHp = playerHpRemaining
   if (playerHit) newPlayerHp = Math.max(0, newPlayerHp - playerDamage)
@@ -114,11 +166,16 @@ export function resolveRound({ playerAction, enemyMember, playerHpRemaining, pla
   else if (playerBlocked) newPlayerHp = Math.min(playerMaxHp, newPlayerHp + HEAL_ON_SUCCESSFUL_BLOCK)
 
   return {
-    roundEntry: { playerAction, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit },
+    roundEntry: {
+      playerAction: effectivePlayerAction, enemyAction: effectiveEnemyAction,
+      playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit,
+    },
     newPlayerHp,
     enemyDamage,
     enemyHit,
     enemyBlocked,
+    newPlayerParalyzedTurns: Math.max(0, playerParalyzedTurns - 1),
+    newEnemyParalyzedTurns: Math.max(0, enemyParalyzedTurns - 1),
   }
 }
 
@@ -199,8 +256,12 @@ export function serializeEnemyForClient(member) {
 }
 
 // Shape sent to the client for an in-progress or just-resolved battle. `battle` must have its
-// `enemyMember` (with `enemyMember.faction`) relation included by the caller.
+// `enemyMember` (with `enemyMember.faction`) relation included by the caller, and — to surface
+// the player's own special-attack button at all — its `cMoon` (with `cMoon.specialAttack`)
+// relation too (both nullable: a battle with no cMoon, or whose cMoon has no attack assigned,
+// simply never offers the button; see CMoonBattlePopupHost.vue's own v-if on this field).
 export function serializeBattleForClient(battle) {
+  const specialAttack = battle.cMoon?.specialAttack
   return {
     id: battle.id,
     status: battle.status,
@@ -212,6 +273,24 @@ export function serializeBattleForClient(battle) {
     pointsAwarded: battle.pointsAwarded || 0,
     rewardsGranted: battle.rewardsGranted || null,
     enemy: serializeEnemyForClient(battle.enemyMember),
+    // Meter/charge state for the special-attack button — see
+    // CMoonEnemyBattle.playerHitStreak/playerSpecialCharged's own schema comment.
+    playerHitStreak: battle.playerHitStreak || 0,
+    playerSpecialCharged: !!battle.playerSpecialCharged,
+    // Rounds left where the player can't act at all (set by the enemy's own PARALYZE_OPPONENT
+    // special) — surfaced so the UI can explain why their moves (including an already-charged
+    // special) are about to whiff, rather than that just appearing to happen with no warning.
+    playerParalyzedTurns: battle.playerParalyzedTurns || 0,
+    playerSpecialAttack: specialAttack
+      ? {
+          id: specialAttack.id,
+          name: specialAttack.name,
+          description: specialAttack.description || null,
+          effectType: specialAttack.effectType,
+          amount: specialAttack.amount,
+          soundPath: specialAttack.soundPath || null,
+        }
+      : null,
   }
 }
 

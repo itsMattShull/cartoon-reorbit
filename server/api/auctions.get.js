@@ -2,6 +2,7 @@
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   // 1) Auth
@@ -31,7 +32,7 @@ export default defineEventHandler(async (event) => {
           userId: true,
           ctoonId: true,
           mintNumber: true,
-          ctoon: { select: { name: true, series: true, set: true, rarity: true, isGtoon: true, cost: true, power: true, assetPath: true, characters: true, isSecondEdition: true, secondEditionOverlayX: true, secondEditionOverlayY: true, secondEditionOverlaySize: true, cMoon: { select: { id: true, name: true, color: true } } } }
+          ctoon: { select: { name: true, series: true, set: true, rarity: true, isGtoon: true, cost: true, power: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT, characters: true, isSecondEdition: true, secondEditionOverlayX: true, secondEditionOverlayY: true, secondEditionOverlaySize: true, cMoon: { select: { id: true, name: true, color: true } } } }
         }
       },
       bids: { select: { amount: true }, orderBy: { amount: 'desc' }, take: 1 },
@@ -78,6 +79,7 @@ export default defineEventHandler(async (event) => {
     characters:   a.userCtoon.ctoon.characters || [],
     mintNumber:   a.userCtoon.mintNumber,
     assetPath:    a.userCtoon.ctoon.assetPath,
+    ...ogGtoonDisplay(a.userCtoon.ctoon),
     endAt:        a.endAt.toISOString(),
     initialBid:   a.initialBet,
     highestBid:   a.bids.length > 0 ? a.bids[0].amount : a.initialBet,

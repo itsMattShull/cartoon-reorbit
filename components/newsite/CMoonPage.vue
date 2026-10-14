@@ -186,14 +186,12 @@
                 <div class="cmp-claim-option-body">
                   <div class="cmp-claim-option-label">{{ opt.label }}</div>
                   <div v-if="opt.ctoons?.length || opt.backgrounds?.length" class="cmp-claim-option-thumbs">
-                    <img
+                    <CtoonImage
                       v-for="(c, i) in opt.ctoons.filter(c => c.imagePath)" :key="'c' + i"
-                      :src="c.imagePath" class="cmp-claim-option-thumb" :alt="c.name" :title="`${c.name} × ${c.quantity}`"
-                    />
-                    <img
+                      :ctoon="c" :src="c.imagePath" class="cmp-claim-option-thumb" :alt="c.name" :title="`${c.name} × ${c.quantity}`" />
+                    <CtoonImage
                       v-for="(b, i) in opt.backgrounds.filter(b => b.imagePath)" :key="'b' + i"
-                      :src="b.imagePath" class="cmp-claim-option-thumb" :alt="b.label" :title="b.label"
-                    />
+                      :ctoon="b" :src="b.imagePath" class="cmp-claim-option-thumb" :alt="b.label" :title="b.label" />
                   </div>
                   <div class="cmp-claim-option-detail">
                     <span v-if="opt.ctoons?.length">{{ opt.ctoons.map(c => `${c.name} × ${c.quantity}`).join(', ') }}</span>
@@ -232,7 +230,7 @@
               >
                 <ShortCard>
                   <template #header>
-                    <img :src="c.assetPath" :alt="c.name" class="cmp-featured-img" loading="lazy" />
+                    <CtoonImage :ctoon="c" :alt="c.name" class="cmp-featured-img" loading="lazy" />
                   </template>
                   <template #middle>
                     <span class="cmp-featured-name">{{ c.name }}</span>
@@ -356,7 +354,7 @@
                 :disabled="!!o.myClaim || o.status !== 'OPEN' || !eligible || offerClaiming[o.id]"
                 @click="offerSelections[o.id] = opt.id"
               >
-                <img :src="opt.assetPath" :alt="opt.name" class="cmp-card-img" loading="lazy" />
+                <CtoonImage :ctoon="opt" :alt="opt.name" class="cmp-card-img" loading="lazy" />
                 <span class="cmp-card-name">{{ opt.name }}</span>
                 <span v-if="o.myClaim && o.myClaim.optionId === opt.id" class="cmp-offer-picked-badge">Your pick</span>
               </button>
@@ -377,6 +375,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { computed, reactive, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { cMoonPaletteStyle } from '@/utils/cmoonPalette'
 import { cmoonJoinEffectDescriptor } from '@/utils/cmoonJoinEffectDescriptor'

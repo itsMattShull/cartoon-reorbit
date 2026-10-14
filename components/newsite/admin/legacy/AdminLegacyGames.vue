@@ -860,6 +860,38 @@
             </label>
           </div>
 
+          <hr class="my-4 border-gray-200" />
+
+          <h3 class="text-xs font-semibold text-gray-800 mb-1">Card reveal pacing</h3>
+          <p class="text-[11px] text-gray-500 mb-2">
+            Cards are revealed one at a time — player 1's slot 1, player 2's slot 1, player 1's slot 2, and so
+            on. After each card the board updates: values, colors, knock-outs and both totals. These timings
+            (in milliseconds) set how fast that plays. The next phase's countdown starts only after the
+            animation finishes, so a slower pace never costs players discard/swap/placing time. Leave a
+            field blank to use its default.
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-2">
+            <label v-for="f in ogRevealFields" :key="f.key" class="flex flex-col gap-0.5 p-2 border rounded bg-white">
+              <span class="text-xs font-semibold text-gray-800">{{ f.label }}</span>
+              <span class="text-[11px] text-gray-500">{{ f.help }}</span>
+              <span class="flex items-center gap-1 mt-1">
+                <input
+                  type="number" inputmode="numeric" step="50" :min="f.min" :max="f.max" :placeholder="String(f.def)"
+                  v-model.number="ogRevealMs[f.key]"
+                  class="w-24 border rounded px-2 py-1 text-xs" />
+                <span class="text-[11px] text-gray-500">ms (default {{ f.def }}, {{ f.min }}–{{ f.max }})</span>
+              </span>
+              <span v-if="ogRevealErrors[f.key]" class="text-[11px] text-red-600">{{ ogRevealErrors[f.key] }}</span>
+            </label>
+          </div>
+          <p class="text-[11px] text-gray-600 mb-2">
+            A typical round of 4 cards per player (8 reveals) takes about
+            <strong>{{ ogRevealPreviewSeconds.min }}–{{ ogRevealPreviewSeconds.max }}s</strong>
+            ({{ ogRevealPreviewSeconds.min }}s if no card's power changes anything, {{ ogRevealPreviewSeconds.max }}s if every one does).
+          </p>
+          <button type="button" @click="resetOgReveal" class="mb-4 px-2 py-1 text-[11px] rounded border bg-white hover:bg-gray-50">Reset pacing to defaults</button>
+
+          <br />
           <button @click="saveOgGtoonsConfig" :disabled="loadingOgGtoons || !!ogGtoonsConfigError" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingOgGtoons">Save gToons Settings</span>
             <span v-else>Saving…</span>
@@ -960,6 +992,52 @@
             <div v-if="winWheelSoundPath" class="mt-2">
               <p class="text-xs text-gray-600 break-all">Saved path: {{ winWheelSoundPath }}</p>
               <audio :src="winWheelSoundPath" controls class="w-full mt-2"></audio>
+            </div>
+          </div>
+
+          <!-- "Nothing" result gif + text for Win Wheel -->
+          <div class="space-y-3 mb-6">
+            <label class="block text-xs font-medium text-gray-700">
+              "Nothing" Result Text
+            </label>
+            <input
+              type="text"
+              v-model="winWheelNothingText"
+              placeholder="You got nothing 😢"
+              class="border rounded-md px-2 py-1.5 text-sm w-full"
+            />
+
+            <label class="block text-xs font-medium text-gray-700">
+              "Nothing" Result Image (GIF/PNG/JPEG)
+            </label>
+            <input
+              type="file"
+              accept=".gif,image/gif,.png,image/png,.jpg,.jpeg,image/jpeg"
+              @change="onWinWheelNothingGifChange"
+              class="block w-full text-xs"
+            />
+            <div class="flex items-center gap-3">
+              <button
+                class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                @click="uploadWinWheelNothingGif"
+                :disabled="!winWheelNothingGifFile || uploadingNothingGif"
+              >
+                <span v-if="!uploadingNothingGif">Upload Image</span>
+                <span v-else>Uploading…</span>
+              </button>
+              <button
+                v-if="winWheelNothingGifPath"
+                type="button"
+                class="px-2 py-1 text-xs border rounded-md hover:bg-gray-50"
+                @click="removeWinWheelNothingGif"
+              >Remove Image</button>
+            </div>
+
+            <div class="mt-2">
+              <p v-if="winWheelNothingGifPath" class="text-xs text-gray-600 break-all">Saved path: {{ winWheelNothingGifPath }}</p>
+              <div class="mt-2 border rounded-md p-2 bg-gray-50">
+                <img :src="nothingGifPreviewSrc" alt="Nothing result preview" class="max-h-40 mx-auto" />
+              </div>
             </div>
           </div>
 
@@ -1678,14 +1756,26 @@
                   class="block w-full text-xs mb-1"
                   @change="onFlappyImageFile(s.slot, $event)"
                 />
-                <button
-                  class="px-2 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                  :disabled="!flappyImageFiles[s.slot] || uploadingFlappyImage[s.slot]"
-                  @click="uploadFlappyImage(s.slot)"
-                >
-                  <span v-if="!uploadingFlappyImage[s.slot]">Upload</span>
-                  <span v-else>Uploading…</span>
-                </button>
+                <div class="flex gap-1">
+                  <button
+                    class="px-2 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                    :disabled="!flappyImageFiles[s.slot] || uploadingFlappyImage[s.slot]"
+                    @click="uploadFlappyImage(s.slot)"
+                  >
+                    <span v-if="!uploadingFlappyImage[s.slot]">Upload</span>
+                    <span v-else>Uploading…</span>
+                  </button>
+                  <button
+                    v-if="flappyImages[s.slot]"
+                    type="button"
+                    class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50 disabled:opacity-50"
+                    :disabled="clearingFlappyImage[s.slot]"
+                    @click="clearFlappyImage(s.slot)"
+                  >
+                    <span v-if="!clearingFlappyImage[s.slot]">Clear</span>
+                    <span v-else>Clearing…</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -2008,7 +2098,8 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { REVEAL_TIMING_DEFAULTS, REVEAL_TIMING_LIMITS, normalizeRevealTiming } from '~/utils/ogGtoonReveal'
 
 const tabs = [
   { key: 'Global',       label: 'Global Settings' },
@@ -2113,6 +2204,33 @@ const ogGtoonsLeaderboardEnabled  = ref(false)
 const ogGtoonsPracticeEnabled     = ref(false)
 const ogGtoonsGamesPageVisible    = ref(true)
 const loadingOgGtoons             = ref(false)
+// Card-reveal pacing (ms). null/blank = use the built-in default; see utils/ogGtoonReveal.js.
+const ogRevealFields = [
+  { key: 'ogGtoonsRevealFirstMs',   label: 'Pause before the first card', help: 'Beat after the round resolves, before anything flips.', ...REVEAL_TIMING_LIMITS.firstMs, def: REVEAL_TIMING_DEFAULTS.firstMs },
+  { key: 'ogGtoonsRevealCardMs',    label: 'Card face-up time', help: 'How long a new card shows its printed value before its powers land.', ...REVEAL_TIMING_LIMITS.cardMs, def: REVEAL_TIMING_DEFAULTS.cardMs },
+  { key: 'ogGtoonsRevealEffectsMs', label: 'Effects time', help: 'Values, colors, knock-outs and totals update; held this long when something changed.', ...REVEAL_TIMING_LIMITS.effectsMs, def: REVEAL_TIMING_DEFAULTS.effectsMs },
+  { key: 'ogGtoonsRevealQuietMs',   label: 'Quiet beat', help: 'Short pause used instead when a card changed nothing.', ...REVEAL_TIMING_LIMITS.quietMs, def: REVEAL_TIMING_DEFAULTS.quietMs }
+]
+const ogRevealMs = reactive({ ogGtoonsRevealFirstMs: null, ogGtoonsRevealCardMs: null, ogGtoonsRevealEffectsMs: null, ogGtoonsRevealQuietMs: null })
+const ogRevealErrors = computed(() => {
+  const errs = {}
+  for (const f of ogRevealFields) {
+    const v = ogRevealMs[f.key]
+    if (v === null || v === '' || v === undefined) continue
+    if (!Number.isInteger(v) || v < f.min || v > f.max) errs[f.key] = `Whole number between ${f.min} and ${f.max}.`
+  }
+  return errs
+})
+const ogRevealTiming = computed(() => normalizeRevealTiming({
+  firstMs: ogRevealMs.ogGtoonsRevealFirstMs, cardMs: ogRevealMs.ogGtoonsRevealCardMs,
+  effectsMs: ogRevealMs.ogGtoonsRevealEffectsMs, quietMs: ogRevealMs.ogGtoonsRevealQuietMs
+}))
+const ogRevealPreviewSeconds = computed(() => {
+  const t = ogRevealTiming.value
+  const round = (changed) => Math.round((t.firstMs + 8 * (t.cardMs + (changed ? t.effectsMs : t.quietMs))) / 100) / 10
+  return { min: round(false), max: round(true) }
+})
+function resetOgReveal() { for (const k of Object.keys(ogRevealMs)) ogRevealMs[k] = null }
 const ogGtoonsConfigError         = ref('')
 
 const winballBumperGeometry = ref([
@@ -2524,6 +2642,7 @@ async function loadSettings() {
     ogGtoonsLeaderboardEnabled.value  = og.ogGtoonsLeaderboardEnabled  === true
     ogGtoonsPracticeEnabled.value     = og.ogGtoonsPracticeEnabled     === true
     ogGtoonsGamesPageVisible.value    = og.ogGtoonsGamesPageVisible    !== false
+    for (const k of Object.keys(ogRevealMs)) ogRevealMs[k] = Number.isInteger(og[k]) ? og[k] : null
     ogGtoonsConfigError.value = ''
   } catch (e) {
     ogGtoonsConfigError.value = e?.data?.statusMessage || e?.message || 'Could not load these settings.'
@@ -2631,9 +2750,15 @@ const winWheelSoundFile  = ref(null)
 const uploadingSound     = ref(false)
 const winWheelSoundPath  = ref('')
 const winWheelSoundMode  = ref('repeat')
+// "nothing" result gif + text upload state
+const winWheelNothingGifFile = ref(null)
+const uploadingNothingGif    = ref(false)
+const winWheelNothingGifPath = ref('')
+const winWheelNothingText    = ref('')
 
 // preview fallback
 const previewSrc = computed(() => winWheelImagePath.value || '/images/wheel.svg')
+const nothingGifPreviewSrc = computed(() => winWheelNothingGifPath.value || '/images/nothing1225.gif')
 
 const filteredMatchesWW = computed(() => {
   const t = searchTermWW.value.trim().toLowerCase()
@@ -2687,6 +2812,8 @@ async function loadWinWheelConfig() {
   winWheelImagePath.value = ww.winWheelImagePath || ''
   winWheelSoundPath.value = ww.winWheelSoundPath || ''
   winWheelSoundMode.value = ww.winWheelSoundMode || 'repeat'
+  winWheelNothingGifPath.value = ww.winWheelNothingGifPath || ''
+  winWheelNothingText.value    = ww.winWheelNothingText || ''
   poolCtoons.value        = (ww.exclusiveCtoons || []).map(o => o.ctoon)
   tripleNothingCtoon.value = ww.tripleNothingCtoon || null
   searchTermTN.value       = ww.tripleNothingCtoon?.name || ''
@@ -2758,6 +2885,39 @@ async function uploadWinWheelSound() {
 }
 function removeWinWheelSound() {
   winWheelSoundPath.value = ''
+}
+
+// ── "Nothing" result gif upload handlers ─────
+function onWinWheelNothingGifChange(e) {
+  const f = e.target.files?.[0]
+  winWheelNothingGifFile.value = f || null
+}
+async function uploadWinWheelNothingGif() {
+  if (!winWheelNothingGifFile.value) return
+  uploadingNothingGif.value = true
+  toastMessage.value = ''
+  try {
+    const fd = new FormData()
+    fd.append('image', winWheelNothingGifFile.value)
+
+    const res = await $fetch('/api/admin/winwheel-nothing-image', {
+      method: 'POST',
+      body: fd
+    })
+    winWheelNothingGifPath.value = res.assetPath
+    toastMessage.value = 'Image uploaded.'
+    toastType.value = 'success'
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = 'Image upload failed'
+    toastType.value = 'error'
+  } finally {
+    uploadingNothingGif.value = false
+    winWheelNothingGifFile.value = null
+  }
+}
+function removeWinWheelNothingGif() {
+  winWheelNothingGifPath.value = ''
 }
 
 // ── Winball backboard image upload handlers ──
@@ -2844,6 +3004,8 @@ async function saveWinWheelConfig() {
         winWheelImagePath: winWheelImagePath.value || null,
         winWheelSoundPath: winWheelSoundPath.value || null,
         winWheelSoundMode: winWheelSoundMode.value || 'repeat',
+        winWheelNothingGifPath: winWheelNothingGifPath.value || null,
+        winWheelNothingText: winWheelNothingText.value || null,
         tripleNothingCtoonId: tripleNothingCtoon.value?.id || null
       }
     })
@@ -2978,6 +3140,10 @@ async function savePkmnConfig() {
 }
 
 async function saveOgGtoonsConfig() {
+  if (Object.keys(ogRevealErrors.value).length) {
+    toastMessage.value = 'Fix the reveal pacing values first.'; toastType.value = 'error'
+    return
+  }
   loadingOgGtoons.value = true; toastMessage.value = ''
   try {
     await $fetch('/api/admin/game-config', {
@@ -2989,7 +3155,9 @@ async function saveOgGtoonsConfig() {
         ogGtoonsDeckBuildingEnabled: ogGtoonsDeckBuildingEnabled.value,
         ogGtoonsLeaderboardEnabled:  ogGtoonsLeaderboardEnabled.value,
         ogGtoonsPracticeEnabled:     ogGtoonsPracticeEnabled.value,
-        ogGtoonsGamesPageVisible:    ogGtoonsGamesPageVisible.value
+        ogGtoonsGamesPageVisible:    ogGtoonsGamesPageVisible.value,
+        // null/blank resets a field to its built-in default on the server
+        ...Object.fromEntries(Object.keys(ogRevealMs).map(k => [k, ogRevealMs[k] === '' ? null : ogRevealMs[k]]))
       }
     })
     toastMessage.value = 'gToons settings saved!'; toastType.value = 'success'
@@ -3460,6 +3628,7 @@ const flappyImageSlots = [
 const flappyImages      = ref({ blossom: '', bubbles: '', buttercup: '', city: '' })
 const flappyImageFiles  = ref({ blossom: null, bubbles: null, buttercup: null, city: null })
 const uploadingFlappyImage = ref({ blossom: false, bubbles: false, buttercup: false, city: false })
+const clearingFlappyImage = ref({ blossom: false, bubbles: false, buttercup: false, city: false })
 
 function onFlappyImageFile(slot, e) {
   flappyImageFiles.value[slot] = e.target.files?.[0] || null
@@ -3483,6 +3652,21 @@ async function uploadFlappyImage(slot) {
     toastMessage.value = e?.data?.statusMessage || 'Error uploading image'; toastType.value = 'error'
   } finally {
     uploadingFlappyImage.value[slot] = false
+  }
+}
+
+async function clearFlappyImage(slot) {
+  clearingFlappyImage.value[slot] = true
+  toastMessage.value = ''
+  try {
+    await $fetch('/api/admin/flappy-image', { method: 'DELETE', body: { slot } })
+    flappyImages.value[slot] = ''
+    toastMessage.value = 'Reverted to the default image.'; toastType.value = 'success'
+  } catch (e) {
+    console.error(e)
+    toastMessage.value = e?.data?.statusMessage || 'Error clearing image'; toastType.value = 'error'
+  } finally {
+    clearingFlappyImage.value[slot] = false
   }
 }
 

@@ -7,13 +7,12 @@
   >
     <!-- Header: splash bg + image -->
     <div class="tc-header">
-      <img
-        :src="ctoon.assetPath"
+      <CtoonImage
+        :ctoon="ctoon"
         :alt="ctoon.name"
         class="tc-img"
         loading="lazy"
-        draggable="false"
-      />
+        draggable="false" />
       <SecondEditionOverlay :ctoon="ctoon" />
       <!-- Owned / Unowned badge -->
       <span v-if="badge" class="tc-badge" :class="badgeClassComputed">{{ badge }}</span>
@@ -48,6 +47,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { computed } from 'vue'
 import { formatQuantity } from '~/utils/formatQuantity'
 

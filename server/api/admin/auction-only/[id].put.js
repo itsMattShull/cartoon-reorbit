@@ -1,6 +1,7 @@
 // server/api/admin/auction-only/[id].put.js
 import { defineEventHandler, getRequestHeader, readBody, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { scheduleAuctionOnlyStart, bestEffort } from '@/server/utils/queues'
 import { logAuctionOnlyError } from '@/server/utils/auctionOnlyErrorLog'
 import { FEATURED_OWN_LIMIT_OPTIONS, DEFAULT_FEATURED_OWN_LIMIT } from '@/server/utils/featuredEligibility'
 
@@ -78,6 +79,8 @@ async function handleAuctionOnlyUpdate(event) {
     },
     select: { id: true }
   })
+
+  await bestEffort('auction-only schedule', () => scheduleAuctionOnlyStart(updated.id, normStarts))
 
   return { ok: true, id: updated.id }
 }

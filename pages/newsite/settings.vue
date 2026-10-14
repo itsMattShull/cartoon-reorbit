@@ -53,6 +53,28 @@
             </p>
             <p v-if="error" class="settings-error">{{ error }}</p>
 
+            <div class="settings-row">
+              <div>
+                <h2 class="settings-row-title">cMoon Enemy Encounters</h2>
+                <p class="settings-row-desc">Show the cMoon enemy encounter popup while browsing the site. Turning this off also stops raid boss encounters from appearing for you.</p>
+              </div>
+
+              <div class="toggle-wrap">
+                <div v-if="loading" class="toggle-skeleton"></div>
+                <label v-else class="toggle-label">
+                  <input type="checkbox" class="sr-only" v-model="allowCMoonPopups" @change="onToggleCMoonPopups" :disabled="cMoonPopupsSaving || loading" />
+                  <div :class="['toggle-track', allowCMoonPopups ? 'toggle-on' : 'toggle-off']">
+                    <div :class="['toggle-knob', allowCMoonPopups ? 'toggle-knob-on' : '']"></div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <p class="settings-status" :class="{ 'settings-status-dim': cMoonPopupsSaving || loading }">
+              {{ loading ? '' : cMoonPopupsSaving ? 'Saving…' : 'Changes are saved instantly.' }}
+            </p>
+            <p v-if="cMoonPopupsError" class="settings-error">{{ cMoonPopupsError }}</p>
+
             <div class="settings-row settings-row-haptic">
               <div>
                 <h2 class="settings-row-title">Haptic Sounds</h2>
@@ -231,6 +253,10 @@ const loading = ref(true)
 const error   = ref('')
 const avatars = ref([])
 
+const allowCMoonPopups  = ref(true)
+const cMoonPopupsSaving = ref(false)
+const cMoonPopupsError  = ref('')
+
 const showAvatarModal      = ref(false)
 const showUsernameModal    = ref(false)
 const showCertificateModal = ref(false)
@@ -301,6 +327,7 @@ async function loadSetting() {
     if (!res.ok) throw new Error(await res.text())
     const data = await res.json()
     allow.value = !!data.allowAuctionNotifications
+    allowCMoonPopups.value = data.allowCMoonEnemyPopups !== false
   } catch (e) {
     console.error(e)
     error.value = 'Failed to load preference.'
@@ -331,6 +358,31 @@ async function onToggle() {
     error.value = 'Could not save. Please try again.'
   } finally {
     saving.value = false
+  }
+}
+
+async function onToggleCMoonPopups() {
+  if (loading.value) return
+  cMoonPopupsError.value = ''
+  const next = allowCMoonPopups.value
+  const prev = !allowCMoonPopups.value
+  cMoonPopupsSaving.value = true
+  try {
+    const res = await fetch('/api/user/notifications', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ allowCMoonEnemyPopups: next })
+    })
+    if (!res.ok) throw new Error(await res.text())
+    const data = await res.json()
+    allowCMoonPopups.value = data.allowCMoonEnemyPopups !== false
+  } catch (err) {
+    console.error(err)
+    allowCMoonPopups.value = prev
+    cMoonPopupsError.value = 'Could not save. Please try again.'
+  } finally {
+    cMoonPopupsSaving.value = false
   }
 }
 

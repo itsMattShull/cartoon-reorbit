@@ -76,12 +76,12 @@ import { announceCMoonRaidBoss, resolveCMoonRaidDiscordChannelId, sendCMoonTeamU
 import { getActiveBossLoreRiddle } from './cmoonRiddle.js'
 import { notifyCMoonRaidBossStarted } from './notifications.js'
 import { pushUserNotification } from './realtimeNotify.js'
-import { buildGrantableReward } from './cmoonEnemyBattle.js'
+import { buildGrantableReward, isValidPlayerSubmittedAction } from './cmoonEnemyBattle.js'
 import { resolveMemberSoundPaths } from './cmoonEnemy.js'
 import {
-  resolveRaidRound, rollEnemyAction, rollEnemyRewards, isValidBattleAction, PLAYER_MAX_HP,
+  resolveRaidRound, rollEnemyAction, rollEnemyRewards, PLAYER_MAX_HP,
   JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE, MAX_ROUNDS_SAFETY,
-  checkRaidBossAvailability,
+  checkRaidBossAvailability, SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD,
 } from './cmoonEnemyRaid.js'
 import * as raidRedis from './cmoonRaidRedisState.js'
 
@@ -104,9 +104,34 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *   battleMusicPath,                         // ditto — the faction's own looping battle music
  *   enemyStats: { maxHp, critChanceAgainstPercent, critChanceFromPercent, cMoonPointsReward },
  *   enemyHpRemaining, roundNumber, currentEnemyAction, roundDeadlineAt, joinDeadlineAt,
- *   participants: Map<userId, { userId, username, hpRemaining, knockedOutAt, isInitiator,
- *                                pendingAction, joinedAt }>,
+ *   participants: Map<userId, { userId, username, hpRemaining, maxHp, knockedOutAt, isInitiator,
+ *                                pendingAction, joinedAt, hitStreak, specialCharged }>,
  *   roundLog: [], startedAt, combatStartedAt, endedAt, outcome, resolving,
+ *
+ *   // ── Special attacks (see CMoonSpecialAttack's own schema comment and this file's sibling
+ *   // cmoonEnemyRaid.js header comment for the full party-wide-vs-per-participant design) ────
+ *   cMoonSpecialAttack,   // { id, name, description, effectType, amount, soundPath, healsAllies }
+ *                         // or null — snapshotted ONCE at raid creation from the party's shared
+ *                         // cMoon (every participant is necessarily the same cMoon by raid design,
+ *                         // so this is correct for the whole party, not just the initiator).
+ *   enemySpecialAttack,   // same shape, from enemyMember.faction.specialAttack, or null — NEVER
+ *                         // sent to a client in advance (see publicRaidView), same "don't spoil
+ *                         // the enemy's kit" stance the solo battle already takes.
+ *   enemyHitStreak,       // the boss's own SHARED streak — advances the instant its one rolled
+ *                         // action lands on at least one alive participant, resets otherwise.
+ *   partyAtkBonus,        // net damage modifier EVERY participant's own landed hit gets, for the
+ *   enemyAtkBonus,        // rest of the fight — raised by a player's RAISE_ALLY_ATTACK/lowered by
+ *                         // the boss's own LOWER_OPPONENT_ATTACK (partyAtkBonus), and the mirror
+ *                         // for enemyAtkBonus (raised by the boss's own RAISE_ALLY_ATTACK —
+ *                         // meaningless unless assigned, since a solo boss has no "allies" either
+ *                         // — lowered by a player's LOWER_OPPONENT_ATTACK).
+ *   enemyParalyzedTurns,  // rounds left where the boss's one shared action whiffs for everyone —
+ *   partyParalyzedTurns,  // set by a PLAYER's PARALYZE_OPPONENT. Rounds left where EVERY alive
+ *                         // participant's own action whiffs that round regardless of what they
+ *                         // chose/were auto-filled with — set by the boss's own auto-fired
+ *                         // PARALYZE_OPPONENT (see this feature's "whole party" boss-target
+ *                         // decision). Both decrement by 1 every round they're used, same
+ *                         // "elapses the round it's consulted in" semantics as the solo battle.
  * }
  */
 const raids = new Map()       // raidId -> raid
@@ -156,6 +181,18 @@ function publicRaidView(raid) {
     joinDeadlineAt: raid.joinDeadlineAt,
     roundDeadlineAt: raid.roundDeadlineAt,
     outcome: raid.outcome || null,
+    // The party's own special attack (see CMoonSpecialAttack's own schema comment) — every
+    // participant shares the same one, since a raid is scoped to one cMoon. Never
+    // enemySpecialAttack here: the boss's own kit stays unrevealed until it actually fires (see
+    // each round's own `specials`, broadcast via cmoonraid:roundResolved), same as the solo
+    // battle never telling the player what the enemy's special does in advance.
+    cMoonSpecialAttack: raid.cMoonSpecialAttack || null,
+    // The boss's own charge progress toward auto-firing its special — intentionally shown (unlike
+    // its actual identity/effect) so the party gets some "it's about to do something" tension, the
+    // same way a lot of boss fights telegraph an incoming attack without naming it outright.
+    enemyHitStreak: raid.enemyHitStreak || 0,
+    enemyParalyzedTurns: raid.enemyParalyzedTurns || 0,
+    partyParalyzedTurns: raid.partyParalyzedTurns || 0,
     participants: Array.from(raid.participants.values()).map(p => ({
       userId: p.userId,
       username: p.username,
@@ -167,6 +204,12 @@ function publicRaidView(raid) {
       knockedOut: !!p.knockedOutAt,
       isInitiator: p.isInitiator,
       hasActed: raid.status === 'IN_PROGRESS' && !p.knockedOutAt ? !!p.pendingAction : false,
+      // Shown to the WHOLE party, not just this participant themselves — seeing a teammate's
+      // meter climb is part of the co-op "epic" feel this feature asked for, and it's no more
+      // revealing than their own HP bar already is (unlike the enemy's own kit above, there's no
+      // balance-sensitive secret here to protect).
+      hitStreak: p.hitStreak || 0,
+      specialCharged: !!p.specialCharged,
     })),
   }
 }
@@ -242,6 +285,7 @@ function addParticipant(raid, { userId, username, isInitiator, maxHp }) {
   raid.participants.set(userId, {
     userId, username, hpRemaining: maxHp, maxHp, knockedOutAt: null,
     isInitiator: !!isInitiator, pendingAction: null, joinedAt: Date.now(),
+    hitStreak: 0, specialCharged: false,
   })
   raidByUser.set(userId, raid.id)
 }
@@ -292,13 +336,22 @@ function describeRaidParticipantResult(raid, result) {
   return `${name} held steady`
 }
 
+// A special firing, player-cast or the boss's own auto-fire — see this file's own `specialEvents`
+// (built in closeRound) for the shape. Named generically ("unleashed", not "attacked/healed/...")
+// since one line has to read naturally for all five effect types.
+function describeRaidSpecialEvent(raid, s) {
+  const who = s.side === 'PLAYER' ? (raid.participants.get(s.userId)?.username || 'A player') : raid.enemyName
+  return `✨ ${who} unleashed **${s.name}**!`
+}
+
 // One short Discord message per round for team spectators — see this session's "separate
 // message per round" decision (no message-editing support exists to update one in place).
-function formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant }) {
+function formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant, specialEvents }) {
   const header = `⚔️ **Round ${raid.roundNumber}** — ${raid.cMoonName} vs ${raid.enemyName}`
   const hpLine = `${raid.enemyName} HP: ${raid.enemyHpRemaining}/${raid.enemyStats.maxHp} (-${enemyDamageDealt})`
+  const specialLines = (specialEvents || []).map(s => describeRaidSpecialEvent(raid, s))
   const lines = perParticipant.map(r => describeRaidParticipantResult(raid, r))
-  return [header, hpLine, ...lines].join('\n')
+  return [header, hpLine, ...specialLines, ...lines].join('\n')
 }
 
 const RAID_RECAP_HEADLINES = {
@@ -319,6 +372,50 @@ function formatRaidRecapMessage(raid, { pointsAwarded }) {
   return lines.join('\n')
 }
 
+// Applies one fired special's effect in place against the raid's own shared state (and, for a
+// party-wide heal, every alive participant's HP) — shared by both the player-cast branch and the
+// boss's own auto-fire branch below, since both ultimately read the same five effectType branches
+// off the same CMoonSpecialAttack shape, just from opposite casters. `caster` is `{ side, userId?
+// }` purely for the specialEvents entry pushed to the room/roundLog/Discord — it has no bearing on
+// who the effect targets (see this file's own header comment: every effect here targets whichever
+// side is already shared, never a hand-picked player).
+function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvents) {
+  specialEvents.push({
+    side: caster.side, userId: caster.userId || null, name: attack.name,
+    effectType: attack.effectType, amount: attack.amount, soundPath: attack.soundPath || null,
+  })
+  if (attack.effectType === 'DAMAGE_OPPONENT') {
+    if (caster.side === 'PLAYER') {
+      raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - attack.amount)
+    } else {
+      for (const p of alive) {
+        p.hpRemaining = Math.max(0, p.hpRemaining - attack.amount)
+        if (p.hpRemaining <= 0 && !p.knockedOutAt) p.knockedOutAt = Date.now()
+      }
+    }
+  } else if (attack.effectType === 'HEAL_SELF') {
+    if (caster.side === 'PLAYER') {
+      const casterParticipant = raid.participants.get(caster.userId)
+      if (attack.healsAllies) {
+        for (const p of alive) p.hpRemaining = Math.min(p.maxHp, p.hpRemaining + attack.amount)
+      } else if (casterParticipant && !casterParticipant.knockedOutAt) {
+        casterParticipant.hpRemaining = Math.min(casterParticipant.maxHp, casterParticipant.hpRemaining + attack.amount)
+      }
+    } else {
+      raid.enemyHpRemaining = Math.min(raid.enemyStats.maxHp, raid.enemyHpRemaining + attack.amount)
+    }
+  } else if (attack.effectType === 'PARALYZE_OPPONENT') {
+    if (caster.side === 'PLAYER') raid.enemyParalyzedTurns += attack.amount
+    else raid.partyParalyzedTurns += attack.amount
+  } else if (attack.effectType === 'LOWER_OPPONENT_ATTACK') {
+    if (caster.side === 'PLAYER') raid.enemyAtkBonus -= attack.amount
+    else raid.partyAtkBonus -= attack.amount
+  } else if (attack.effectType === 'RAISE_ALLY_ATTACK') {
+    if (caster.side === 'PLAYER') raid.partyAtkBonus += attack.amount
+    else raid.enemyAtkBonus += attack.amount
+  }
+}
+
 async function closeRound(io, raid) {
   if (raid.status !== 'IN_PROGRESS' || raid.resolving) return
   raid.resolving = true
@@ -326,12 +423,44 @@ async function closeRound(io, raid) {
     const alive = aliveParticipants(raid)
     // A straggler who never acted before the deadline is auto-filled with a uniform-random
     // action (see this file's own header comment) so they can never freeze the round forever.
+    // Never SPECIAL_ACTION — only an explicit cmoonraid:action submission can choose that.
     for (const p of alive) if (!p.pendingAction) p.pendingAction = rollEnemyAction()
 
+    const specialEvents = []
+
+    // ── 1. Any PLAYER specials chosen this round fire FIRST, in participant join order — same
+    // ordering the solo battle uses (apply the special, THEN resolve the round's lane exchange),
+    // so e.g. a freshly-cast PARALYZE_OPPONENT also stops the boss's action THIS round, not just
+    // future ones. Re-checks specialCharged/cMoonSpecialAttack defensively (already validated at
+    // submission time in the cmoonraid:action handler below; nothing can change either between
+    // then and here since both only ever change inside this same synchronous function). ────────
+    for (const p of alive) {
+      if (p.pendingAction !== SPECIAL_ACTION) continue
+      if (!p.specialCharged || !raid.cMoonSpecialAttack) continue
+      p.hitStreak = 0
+      p.specialCharged = false
+      applyRaidSpecialAttack(raid, alive, raid.cMoonSpecialAttack, { side: 'PLAYER', userId: p.userId }, specialEvents)
+    }
+
+    // ── 2. This round's lane exchange — every alive participant's OWN action (SPECIAL_ACTION
+    // counts as neither attacking nor blocking, same as solo — see isAttack/isBlock in
+    // cmoonEnemyBattle.js) against the ONE shared boss action, both substituted with
+    // PARALYZED_ACTION if whichever side is currently stunned (set just above, or carried over
+    // from an earlier round) — mirrors the solo battle's own paralysis override exactly, just
+    // applied to "the boss" and "the whole party" instead of two individual sides. ─────────────
+    const bossParalyzedThisRound = raid.enemyParalyzedTurns > 0
+    const partyParalyzedThisRound = raid.partyParalyzedTurns > 0
+    const effectiveEnemyAction = bossParalyzedThisRound ? PARALYZED_ACTION : raid.currentEnemyAction
+
     const { enemyAction, perParticipant, enemyDamageDealt } = resolveRaidRound({
-      enemyAction: raid.currentEnemyAction,
+      enemyAction: effectiveEnemyAction,
       enemyMember: raid.enemyStats,
-      participants: alive.map(p => ({ userId: p.userId, action: p.pendingAction, hpRemaining: p.hpRemaining, maxHp: p.maxHp })),
+      participants: alive.map(p => ({
+        userId: p.userId,
+        action: partyParalyzedThisRound ? PARALYZED_ACTION : p.pendingAction,
+        hpRemaining: p.hpRemaining, maxHp: p.maxHp,
+      })),
+      partyAtkBonus: raid.partyAtkBonus, enemyAtkBonus: raid.enemyAtkBonus,
     })
 
     for (const result of perParticipant) {
@@ -339,22 +468,45 @@ async function closeRound(io, raid) {
       p.hpRemaining = result.hpRemaining
       p.pendingAction = null
       if (result.knockedOut && !p.knockedOutAt) p.knockedOutAt = Date.now()
+      // This participant's OWN streak — see CMoonEnemyRaidParticipant's in-memory shape comment
+      // above for why this stays per-player even though every other new field here is shared.
+      p.hitStreak = result.enemyHit ? p.hitStreak + 1 : 0
+      if (p.hitStreak >= HIT_STREAK_THRESHOLD) p.specialCharged = true
     }
     raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - enemyDamageDealt)
+    if (raid.enemyParalyzedTurns > 0) raid.enemyParalyzedTurns -= 1
+    if (raid.partyParalyzedTurns > 0) raid.partyParalyzedTurns -= 1
+
+    // ── 3. The boss's own SHARED streak — advances the instant its one rolled action lands on at
+    // least one alive participant this round (see this file's own header comment on why this is
+    // one counter, not per-participant) — and its faction's special, if any, auto-fires the
+    // moment that streak caps out, same "no choice to make, it just fires" shape the solo battle
+    // already uses for the enemy side. ─────────────────────────────────────────────────────────
+    const bossLandedAHit = perParticipant.some(r => r.playerHit)
+    raid.enemyHitStreak = bossLandedAHit ? raid.enemyHitStreak + 1 : 0
+    if (raid.enemyHitStreak >= HIT_STREAK_THRESHOLD && raid.enemySpecialAttack) {
+      raid.enemyHitStreak = 0
+      // Re-reads `alive` from the Map rather than the stale array captured above — a participant
+      // this round's own DAMAGE_OPPONENT/lane exchange just knocked out must not also be hit by
+      // the boss's bonus effect this same round (they're already down).
+      applyRaidSpecialAttack(raid, aliveParticipants(raid), raid.enemySpecialAttack, { side: 'ENEMY' }, specialEvents)
+    }
+
     raid.roundLog.push({
       round: raid.roundNumber, enemyAction, enemyDamageDealt,
       enemyHpRemaining: raid.enemyHpRemaining,
       participants: perParticipant.map(({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit }) =>
         ({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit })),
+      ...(specialEvents.length ? { specials: specialEvents } : {}),
     })
 
     const everyoneDown = Array.from(raid.participants.values()).every(p => !!p.knockedOutAt)
     const nextRoundNumber = raid.roundNumber + 1
 
     broadcast(io, raid, EV('roundResolved'), {
-      round: { roundNumber: raid.roundNumber, enemyAction, enemyDamageDealt, participants: perParticipant },
+      round: { roundNumber: raid.roundNumber, enemyAction, enemyDamageDealt, participants: perParticipant, specials: specialEvents },
     })
-    sendCMoonTeamUpdate(raidDiscordPostTarget(raid), formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant }))
+    sendCMoonTeamUpdate(raidDiscordPostTarget(raid), formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant, specialEvents }))
 
     if (raid.enemyHpRemaining <= 0) {
       await resolveCMoonRaidOutcome(io, raid, 'WIN')
@@ -522,8 +674,21 @@ export function startCMoonRaidSweep(io) {
 export async function restoreCMoonRaids() {
   const restored = await raidRedis.scanCMoonRaids()
   for (const [raidId, raid] of restored.entries()) {
-    raid.participants = new Map(raid.participants.map(p => [p.userId, p]))
+    raid.participants = new Map(raid.participants.map(p => ([
+      p.userId, { hitStreak: 0, specialCharged: false, ...p },
+    ])))
     raid.resolving = false
+    // Backfills a raid whose Redis snapshot predates special attacks (created on an older deploy,
+    // restored after a restart mid-fight — a narrow window, but a missing numeric field here would
+    // otherwise feed NaN straight into resolveRaidRound's arithmetic, silently corrupting combat
+    // for the rest of the raid rather than just... not having specials).
+    raid.cMoonSpecialAttack ??= null
+    raid.enemySpecialAttack ??= null
+    raid.enemyHitStreak ??= 0
+    raid.partyAtkBonus ??= 0
+    raid.enemyAtkBonus ??= 0
+    raid.enemyParalyzedTurns ??= 0
+    raid.partyParalyzedTurns ??= 0
     raids.set(raidId, raid)
     for (const uid of raid.participants.keys()) raidByUser.set(uid, raidId)
   }
@@ -542,7 +707,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         return socket.emit(EV('error'), { message: 'cMoon Enemy Battles is currently disabled' })
       }
       const enemyMember = await db.cMoonEnemyMember.findUnique({
-        where: { id: enemyMemberId }, include: { faction: true },
+        where: { id: enemyMemberId }, include: { faction: { include: { specialAttack: true } } },
       })
       if (!enemyMember || !enemyMember.active || !enemyMember.faction.active) {
         return socket.emit(EV('error'), { message: 'That enemy is no longer available' })
@@ -556,7 +721,13 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       const elig = await loadEligibility({ userId: me.id, enemyMember })
       if (!elig.ok) return socket.emit(EV('error'), { message: elig.message })
 
-      const cMoon = await db.cMoon.findUnique({ where: { id: elig.user.cMoonId }, select: { id: true, name: true, discordChannelId: true } })
+      // Every participant in this raid is necessarily this SAME cMoon (see raid.cMoonId's own
+      // scoping), so its specialAttack — if any — is snapshotted once here for the whole party,
+      // not re-fetched per joiner (see the raid object's own shape comment on cMoonSpecialAttack).
+      const cMoon = await db.cMoon.findUnique({
+        where: { id: elig.user.cMoonId },
+        select: { id: true, name: true, discordChannelId: true, specialAttack: true },
+      })
       if (!cMoon) return socket.emit(EV('error'), { message: 'Your cMoon could not be found' })
 
       const initiatorMaxHp = await getPlayerCombatMaxHp(me.id, config)
@@ -578,6 +749,12 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         joinDeadlineAt: Date.now() + JOIN_WINDOW_SECONDS * 1000,
         participants: new Map(), roundLog: [],
         startedAt: Date.now(), combatStartedAt: null, endedAt: null, outcome: null, resolving: false,
+        // Special attacks — see the raid object's own shape comment up top for what each field
+        // means and cmoonEnemyRaid.js's header comment for why every effect here is party-wide.
+        cMoonSpecialAttack: cMoon.specialAttack || null,
+        enemySpecialAttack: enemyMember.faction?.specialAttack || null,
+        enemyHitStreak: 0, partyAtkBonus: 0, enemyAtkBonus: 0,
+        enemyParalyzedTurns: 0, partyParalyzedTurns: 0,
       }
       addParticipant(raid, { userId: me.id, username: me.username, isInitiator: true, maxHp: initiatorMaxHp })
       raids.set(raidId, raid)
@@ -735,7 +912,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
   socket.on(EV('action'), async ({ raidId, action, roundNumber }) => {
     const me = await resolveSocketUser(socket)
     if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
-    if (!isValidBattleAction(action)) return socket.emit(EV('error'), { message: 'Invalid action' })
+    if (!isValidPlayerSubmittedAction(action)) return socket.emit(EV('error'), { message: 'Invalid action' })
     const raid = raids.get(raidId)
     if (!raid || raid.status !== 'IN_PROGRESS') return socket.emit(EV('error'), { message: 'This raid is not in combat' })
     if (Number(roundNumber) !== raid.roundNumber) return socket.emit(EV('error'), { message: 'Stale round — reload this raid' })
@@ -743,6 +920,17 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     if (!p) return socket.emit(EV('error'), { message: 'You are not in this raid' })
     if (p.knockedOutAt) return socket.emit(EV('error'), { message: 'You have been knocked out of this raid' })
     if (p.pendingAction) return // already locked in this round — a duplicate click is a no-op, not an error
+    if (action === SPECIAL_ACTION) {
+      if (!p.specialCharged) return socket.emit(EV('error'), { message: 'Your special attack is not charged yet' })
+      if (!raid.cMoonSpecialAttack) return socket.emit(EV('error'), { message: 'Your cMoon has no special attack assigned' })
+      // The whole party can't act at all this round (see raid.partyParalyzedTurns's own shape
+      // comment) — including firing an already-charged special, same guard the solo battle has
+      // for its own paralyzed player. The charge itself is untouched so it's still there once
+      // paralysis wears off.
+      if (raid.partyParalyzedTurns > 0) {
+        return socket.emit(EV('error'), { message: `Your party is paralyzed and can't act for ${raid.partyParalyzedTurns} more round(s)` })
+      }
+    }
     p.pendingAction = action
     fireSync(raid.id, raid)
     broadcast(io, raid, EV('participantActed'), { actedUserId: me.id })

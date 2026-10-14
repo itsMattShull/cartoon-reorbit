@@ -575,7 +575,7 @@ const schedule = computed(() => {
   if (!hasQty || !hasDate) return { initialQty: null, finalQty: null, finalAt: null, finalAtDisplay: '' }
   const init = Math.max(1, Math.floor((qty * Number(releasePercent.value)) / 100))
   const fin = Math.max(0, qty - init)
-  const base = new Date(releaseDate.value)
+  const base = zonedTimeToUtc(releaseDate.value, 'America/Chicago')
   const finAt = new Date(base.getTime() + Number(delayHours.value) * 60 * 60 * 1000)
   const finDisplay = finAt.toLocaleString('en-US', { timeZone: 'America/Chicago', hour12: false })
   return { initialQty: init, finalQty: fin, finalAt: finAt, finalAtDisplay: finDisplay }
@@ -619,7 +619,7 @@ async function submitForm() {
   formData.append('totalQuantity', mintLimitType.value === 'defined' ? (totalQuantity.value ?? '') : '')
   formData.append('initialQuantity', mintLimitType.value === 'defined' ? (initialQuantity.value ?? '') : '')
   // advisory schedule fields
-  formData.append('initialReleaseAt', releaseDate.value ? new Date(releaseDate.value).toISOString() : '')
+  formData.append('initialReleaseAt', releaseDate.value ? zonedTimeToUtc(releaseDate.value, 'America/Chicago').toISOString() : '')
   formData.append('finalReleaseAt', schedule.value.finalAt ? schedule.value.finalAt.toISOString() : '')
   formData.append('initialReleaseQty', schedule.value.initialQty ?? '')
   formData.append('finalReleaseQty', schedule.value.finalQty ?? '')

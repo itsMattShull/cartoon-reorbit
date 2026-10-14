@@ -3,6 +3,7 @@ import { prisma } from '../../server/prisma.js'
 import { mintQueue } from '../../server/utils/queues.js'
 import { announceAchievement, assignDiscordRoleByName } from '../../server/utils/discord.js'
 import { getWordleWinCount, getWordleCurrentStreak } from '../../server/utils/wordle.js'
+import { createMemoClient } from './memoClient.js'
 
 let cachedAchievements     = null
 let cachedAchievementsTime = 0
@@ -426,7 +427,7 @@ export async function awardAchievementToUser(client, userId, achievement) {
   // Non-transactional side-effects. cMoon-rank Discord roles are deliberately NOT granted
   // here — they go through the nightly syncCMoonDiscordRoles reconciliation cron instead,
   // the same add-only convention the base cMoon role already uses (see server/utils/discord.js
-  // and server/cron/sync-guild-members.js), so this stays the achievement-role convention
+  // and server/cron/jobHandlers.js), so this stays the achievement-role convention
   // (assign by name, synchronously) without also inventing a second synchronous, snowflake-
   // based grant path here.
   let assignedRoleName = null
@@ -468,38 +469,44 @@ export async function processAchievementsForUser(userId) {
   }
   const achievements = cachedAchievements
 
+  // Everything this user already has, in ONE query (this used to be an achievementUser lookup per
+  // achievement), and a per-pass memo so the same user/points/cToon-count reads that many
+  // achievements share are executed once instead of once per achievement.
+  const owned = new Set(
+    (await prisma.achievementUser.findMany({ where: { userId }, select: { achievementId: true } }))
+      .map(r => r.achievementId)
+  )
+  const memo = createMemoClient(prisma)
+
   let awarded = 0
   for (const ach of achievements) {
     // Cheap, in-memory pre-filter before either DB round trip below: a cMoon-rank achievement
     // only ever applies to members of the specific cMoon that rank belongs to (the same rule
     // evaluateUserAgainstAchievement enforces), so skip it immediately for every other member
-    // instead of paying an achievementUser lookup + a full evaluate call for it. Without this,
-    // a universal rank tier's N-cMoons-worth of auto-provisioned achievements (see
-    // server/utils/cmoonRankTiers.js) would mean nearly all of them are wasted work for any
-    // given user — only one cMoon's copy is ever relevant to them at a time.
+    // instead of paying a full evaluate call for it. Without this, a universal rank tier's
+    // N-cMoons-worth of auto-provisioned achievements (see server/utils/cmoonRankTiers.js) would
+    // mean nearly all of them are wasted work for any given user — only one cMoon's copy is ever
+    // relevant to them at a time.
     if (ach.cMoonRankId && ach.cMoonRank && ach.cMoonRank.cMoonId !== user.cMoonId) {
       continue
     }
 
     // Skip if already achieved
-    const has = await prisma.achievementUser.findUnique({ where: { achievementId_userId: { achievementId: ach.id, userId } } })
-    if (has) {
-      // console.log('[achievements] process: skip already has', { userId, ach: ach.slug })
-      continue
-    }
+    if (owned.has(ach.id)) continue
 
-    const ok = await evaluateUserAgainstAchievement(prisma, userId, ach)
-    if (!ok) {
-      // console.log('[achievements] process: not eligible', { userId, ach: ach.slug })
-      continue
-    }
+    const ok = await evaluateUserAgainstAchievement(memo, userId, ach)
+    if (!ok) continue
 
     try {
+      // The award itself runs on the real client (its transaction and writes must not be memoized).
       await awardAchievementToUser(prisma, userId, ach)
       awarded++
+      owned.add(ach.id)
+      // An award can change what later achievements see (points, cToons, cMoon rank), so drop
+      // the memoized reads before evaluating the next one.
+      memo.clear()
     } catch (err) {
       // uniqueness or other issue — skip; continue others
-      // console.log('[achievements] process: award failed', { userId, ach: ach.slug, error: err?.message })
     }
   }
 

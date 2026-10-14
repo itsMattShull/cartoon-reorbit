@@ -22,8 +22,9 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
+import { ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
-const CACHE_KEY = 'economy:active-top-auctions:v1'
+const CACHE_KEY = 'economy:active-top-auctions:v2'
 // Shorter than the ~15s client poll so a cache hit never serves a genuinely
 // stale rank order across more than one poll cycle.
 const CACHE_TTL = 10
@@ -40,6 +41,10 @@ async function computeActiveTopAuctions() {
       a.id AS "auctionId",
       c."name" AS "ctoonName",
       c."assetPath" AS "assetPath",
+      c."isOgGtoon" AS "isOgGtoon",
+      c."gtoonColor" AS "gtoonColor",
+      c."gtoonValue" AS "gtoonValue",
+      c."gtoonCardStyle" AS "gtoonCardStyle",
       c."rarity" AS "rarity",
       a."highestBid" AS "highestBid",
       a."endAt" AS "endAt"
@@ -57,6 +62,7 @@ async function computeActiveTopAuctions() {
     auctionId: r.auctionId,
     ctoonName: r.ctoonName,
     assetPath: r.assetPath || null,
+    ...ogGtoonDisplay(r),
     rarity: r.rarity,
     highestBid: Number(r.highestBid),
     endAt: r.endAt

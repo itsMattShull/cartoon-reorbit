@@ -32,7 +32,7 @@
           <div class="feat-track" ref="trackEl">
             <div v-for="item in items" :key="item.id" class="feat-item">
               <div class="feat-img-wrap">
-                <img class="feat-img" :src="item.assetPath" :alt="item.ctoonName" draggable="false" />
+                <CtoonImage class="feat-img" :ctoon="item" :alt="item.ctoonName" draggable="false" />
                 <span v-if="item.ended" class="feat-ended-badge">Ended</span>
               </div>
 
@@ -94,6 +94,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { ref, onMounted, onUnmounted } from 'vue'
 import { formatRemainingShort } from '~/server/utils/auctionDuration'
 

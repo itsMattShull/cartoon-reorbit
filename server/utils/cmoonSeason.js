@@ -39,6 +39,17 @@ async function battleCounts(startedAt, outcome) {
   return new Map(rows.map(r => [r.cMoonId, r._count._all]))
 }
 
+// The single combined "enemies defeated" count the enemiesDefeatedGoal bar measures — every
+// WIN since the season started, regardless of cMoonId (even a battle a non-cMoon player fought,
+// see CMoonEnemyBattle.cMoonId's own nullable comment, still counts toward the community total)
+// and regardless of raid vs. non-raid (a raid win creates one synthetic CMoonEnemyBattle row per
+// participant — see CMoonEnemyRaid's own header comment — so it already counts once per player
+// credited with the kill, same as every other "defeated" count in this codebase, e.g.
+// CMoonEnemyMember.minPriorDefeats's own db.cMoonEnemyBattle.count query).
+async function totalEnemiesDefeated(startedAt) {
+  return prisma.cMoonEnemyBattle.count({ where: { outcome: 'WIN', endedAt: { gte: startedAt } } })
+}
+
 // Sum of CMoonScoreLog points since the season started — deliberately NOT current-membership
 // scoped (unlike the leaderboard's avgScore, see that file's own comment on why IT restricts to
 // current members): every point actually logged for a team this season counts toward its own
@@ -53,7 +64,7 @@ async function seasonPointTotals(startedAt) {
   return new Map(rows.map(r => [r.cMoonId, r._sum.points || 0]))
 }
 
-// Returns { config, trackers: [{ id, label, metricType, targetValue, progress: [{ cMoonId, name, color, value }] }] }.
+// Returns { config, trackers: [{ id, label, metricType, targetValue, progress: [{ cMoonId, name, color, value }] }], enemiesGoal: { enabled, label, target, current } }.
 // `trackers` is already filtered to active ones, ordered for display.
 export async function computeSeasonProgress() {
   const [config, trackers, cmoons] = await Promise.all([
@@ -65,7 +76,16 @@ export async function computeSeasonProgress() {
     prisma.cMoon.findMany({ where: { joinLocked: false }, select: { id: true, name: true, color: true, memberCount: true } }),
   ])
 
-  if (!trackers.length) return { config, trackers: [] }
+  // Only queried when the admin has actually turned the bar on — no point counting rows for a
+  // bar nobody will see.
+  const enemiesGoal = {
+    enabled: config.enemiesDefeatedGoalEnabled,
+    label: config.enemiesDefeatedGoalLabel,
+    target: config.enemiesDefeatedGoalTarget,
+    current: config.enemiesDefeatedGoalEnabled ? await totalEnemiesDefeated(config.startedAt) : 0,
+  }
+
+  if (!trackers.length) return { config, trackers: [], enemiesGoal }
 
   const neededMetrics = new Set(trackers.map(t => t.metricType))
   const [wins, losses, points] = await Promise.all([
@@ -93,5 +113,6 @@ export async function computeSeasonProgress() {
       targetValue: t.targetValue,
       progress: cmoons.map(c => ({ cMoonId: c.id, name: c.name, color: c.color, value: valueFor(t.metricType, c) })),
     })),
+    enemiesGoal,
   }
 }

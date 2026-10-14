@@ -5,8 +5,10 @@ import {
   CRIT_CHANCE_MIN, CRIT_CHANCE_MAX, POINTS_REWARD_MIN, POINTS_REWARD_MAX, ENEMY_RANKS, RANK_DEFAULT,
   MIN_PRIOR_DEFEATS_MIN, MIN_PRIOR_DEFEATS_MAX, MIN_PRIOR_DEFEATS_DEFAULT,
   isValidOccurrencePercent, OCCURRENCE_PERCENT_MIN, OCCURRENCE_PERCENT_MAX, OCCURRENCE_PERCENT_DEFAULT,
-  filterToHighestRank, pickWeightedEnemy, resolveMemberSoundPaths,
+  filterToHighestRank, pickWeightedEnemy, filterCappedNonRaidCandidates, resolveMemberSoundPaths,
   MEMBER_SOUND_SLOTS, FACTION_DEFAULT_SOUND_SLOTS,
+  parseSpecialAttackBody, isValidSpecialAttackName, isValidSpecialAttackEffectType, isValidSpecialAttackAmount,
+  SPECIAL_ATTACK_EFFECT_TYPES, SPECIAL_ATTACK_NAME_MAX_LENGTH, SPECIAL_ATTACK_AMOUNT_MIN, SPECIAL_ATTACK_AMOUNT_MAX,
 } from '../server/utils/cmoonEnemy.js'
 
 const baseMemberBody = {
@@ -332,6 +334,35 @@ test('pickWeightedEnemy: heavily favors a much higher weight over many rolls (st
   assert.ok(highCount > trials * 0.9, `expected 'high' to win the vast majority of rolls, got ${highCount}/${trials}`)
 })
 
+// ── filterCappedNonRaidCandidates ─────────────────────────────────────────
+
+test('filterCappedNonRaidCandidates: cap of 0 (disabled) returns the list unchanged regardless of recent count', () => {
+  const candidates = [{ id: 'a', isRaidBoss: false }, { id: 'b', isRaidBoss: true }]
+  assert.deepEqual(filterCappedNonRaidCandidates(candidates, 999, 0), candidates)
+})
+
+test('filterCappedNonRaidCandidates: a negative cap is treated the same as 0 (disabled)', () => {
+  const candidates = [{ id: 'a', isRaidBoss: false }]
+  assert.deepEqual(filterCappedNonRaidCandidates(candidates, 999, -1), candidates)
+})
+
+test('filterCappedNonRaidCandidates: under the cap returns the list unchanged', () => {
+  const candidates = [{ id: 'a', isRaidBoss: false }, { id: 'b', isRaidBoss: true }]
+  assert.deepEqual(filterCappedNonRaidCandidates(candidates, 3, 4), candidates)
+})
+
+test('filterCappedNonRaidCandidates: at or above the cap narrows to raid bosses only', () => {
+  const nonRaid = { id: 'a', isRaidBoss: false }
+  const raid = { id: 'b', isRaidBoss: true }
+  assert.deepEqual(filterCappedNonRaidCandidates([nonRaid, raid], 4, 4), [raid])
+  assert.deepEqual(filterCappedNonRaidCandidates([nonRaid, raid], 5, 4), [raid])
+})
+
+test('filterCappedNonRaidCandidates: capped out with no raid boss candidates empties the list', () => {
+  const nonRaid = { id: 'a', isRaidBoss: false }
+  assert.deepEqual(filterCappedNonRaidCandidates([nonRaid], 4, 4), [])
+})
+
 // ── resolveMemberSoundPaths ──────────────────────────────────────────────
 
 test('resolveMemberSoundPaths: MEMBER_SOUND_SLOTS and FACTION_DEFAULT_SOUND_SLOTS stay index-aligned', () => {
@@ -366,4 +397,82 @@ test('resolveMemberSoundPaths: resolves all six slots independently', () => {
   assert.equal(resolved.attackingSoundPath, null)
   assert.equal(resolved.victorySoundPath, 'f-victory')
   assert.equal(resolved.defeatSoundPath, null)
+})
+
+// ── Special attacks (CMoonSpecialAttack) ────────────────────────────────────────────────────
+const baseSpecialAttackBody = { name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10 }
+
+test('isValidSpecialAttackName: non-empty up to the max length, rejects blank/too-long/non-string', () => {
+  assert.equal(isValidSpecialAttackName('Toxic Bite'), true)
+  assert.equal(isValidSpecialAttackName('x'.repeat(SPECIAL_ATTACK_NAME_MAX_LENGTH)), true)
+  assert.equal(isValidSpecialAttackName('x'.repeat(SPECIAL_ATTACK_NAME_MAX_LENGTH + 1)), false)
+  assert.equal(isValidSpecialAttackName(''), false)
+  assert.equal(isValidSpecialAttackName('   '), false)
+  assert.equal(isValidSpecialAttackName(null), false)
+  assert.equal(isValidSpecialAttackName(123), false)
+})
+
+test('isValidSpecialAttackEffectType accepts every declared type and rejects anything else', () => {
+  for (const t of SPECIAL_ATTACK_EFFECT_TYPES) assert.equal(isValidSpecialAttackEffectType(t), true)
+  assert.equal(isValidSpecialAttackEffectType('DAMAGE_SELF'), false)
+  assert.equal(isValidSpecialAttackEffectType(''), false)
+  assert.equal(isValidSpecialAttackEffectType(null), false)
+})
+
+test('isValidSpecialAttackAmount: whole numbers within [MIN, MAX], rejects out-of-range/fractional/non-numeric', () => {
+  assert.equal(isValidSpecialAttackAmount(SPECIAL_ATTACK_AMOUNT_MIN), true)
+  assert.equal(isValidSpecialAttackAmount(SPECIAL_ATTACK_AMOUNT_MAX), true)
+  assert.equal(isValidSpecialAttackAmount(SPECIAL_ATTACK_AMOUNT_MIN - 1), false)
+  assert.equal(isValidSpecialAttackAmount(SPECIAL_ATTACK_AMOUNT_MAX + 1), false)
+  assert.equal(isValidSpecialAttackAmount(5.5), false)
+  assert.equal(isValidSpecialAttackAmount(NaN), false)
+  assert.equal(isValidSpecialAttackAmount(undefined), false)
+})
+
+test('parseSpecialAttackBody: a valid create body parses with trimmed name and the given fields', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, name: '  Toxic Bite  ' })
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.data, { name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10, healsAllies: false })
+})
+
+test('parseSpecialAttackBody: rejects a missing/blank name', () => {
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, name: '' }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, name: undefined }).ok, false)
+})
+
+test('parseSpecialAttackBody: rejects an invalid effectType or amount', () => {
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'NOT_REAL' }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, amount: 0 }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, amount: 1000 }).ok, false)
+})
+
+test('parseSpecialAttackBody: a blank/null description normalizes to null, a real one is trimmed', () => {
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, description: '' }).data.description, null)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, description: null }).data.description, null)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, description: '  A nasty bite.  ' }).data.description, 'A nasty bite.')
+})
+
+test('parseSpecialAttackBody: on update, an omitted field falls back to the existing row, not a bare default', () => {
+  const existing = { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7, healsAllies: true }
+  const result = parseSpecialAttackBody({ amount: 20 }, existing)
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.data, { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 20, healsAllies: true })
+})
+
+test('parseSpecialAttackBody: healsAllies is only ever stored true when effectType is HEAL_SELF', () => {
+  // A truthy healsAllies sent alongside any other effectType is silently normalized to false —
+  // see that field's own schema comment on why this is never trusted to the client/admin UI alone.
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', healsAllies: true })
+  assert.equal(result.ok, true)
+  assert.equal(result.data.healsAllies, false)
+
+  const healResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'HEAL_SELF', healsAllies: true })
+  assert.equal(healResult.ok, true)
+  assert.equal(healResult.data.healsAllies, true)
+})
+
+test('parseSpecialAttackBody: an omitted healsAllies defaults to false on create', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'HEAL_SELF' })
+  assert.equal(result.ok, true)
+  assert.equal(result.data.healsAllies, false)
 })

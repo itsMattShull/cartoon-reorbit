@@ -95,7 +95,7 @@ export const WIN_GAME_OPTIONS = WIN_GAMES.map(({ name, label }) => ({ key: name,
 // RIDDLE_SOLVE from server/utils/cmoonRiddle.js (the Discord riddle system), and HUNT_COMPLETE
 // from server/utils/cmoonHunt.js (the split-clue scavenger hunt). Exported so the admin
 // points-log endpoint has a fixed filter list without a DISTINCT query.
-export const CMOON_SCORE_LOG_CATEGORIES = ['HIGH_SCORE', 'TOP10', 'DAILY_TASK', 'ADMIN_BACKFILL', 'ENEMY_BATTLE_WIN', 'ENEMY_RAID_WIN', 'RIDDLE_SOLVE', 'HUNT_COMPLETE']
+export const CMOON_SCORE_LOG_CATEGORIES = ['HIGH_SCORE', 'TOP10', 'DAILY_TASK', 'ADMIN_BACKFILL', 'ADMIN_GRANT', 'ENEMY_BATTLE_WIN', 'ENEMY_RAID_WIN', 'RIDDLE_SOLVE', 'HUNT_COMPLETE']
 
 const GAME_LABEL_BY_KEY = new Map([...SCORE_GAMES, ...WIN_GAMES].map(g => [g.name, g.label]))
 
@@ -119,6 +119,11 @@ export function describeCMoonScoreLogSource(category, detail) {
       return 'Daily Task completion'
     case 'ADMIN_BACKFILL':
       return 'Admin backfill (Backfill cMoon Points tool)'
+    case 'ADMIN_GRANT':
+      // userId is null for a team-only grant (see award-points.post.js) — this function only
+      // sees (category, detail), so that distinction shows up in the points-log row itself
+      // (blank username) rather than in this label.
+      return detail ? `Admin grant — ${detail}` : 'Admin grant'
     case 'ENEMY_BATTLE_WIN':
       return 'Enemy Battle victory'
     case 'ENEMY_RAID_WIN':
@@ -807,7 +812,7 @@ export function isValidCMoonEffectType(value) {
 // actually earned — a leadership title overriding the shown label only. Nothing about their
 // underlying progression changes: cMoonPoints keeps accruing, currentCMoonRankId keeps getting
 // granted/upgraded normally by the achievement engine, and the nightly Discord role sync
-// (server/cron/sync-guild-members.js) still grants the earned rank's own role — this is a
+// (server/cron/jobHandlers.js) still grants the earned rank's own role — this is a
 // read-side label swap in the handful of places a member's rank name is surfaced to other
 // players (cZone page, cMoon leaderboard, standings), not a change to the rank system itself.
 export const CAPTAIN_DISPLAY_RANK_NAME = 'Captain'
@@ -1070,7 +1075,7 @@ function withTimeout(promise, ms) {
 
 // Real-time (not nightly-cron) Discord role sync for a single user's cMoon change. Revoking a
 // role is new capability, not an existing pattern being reused: every other Discord sync in this
-// codebase (server/cron/sync-guild-members.js's addRoleToMember-backed jobs) is grant-only by
+// codebase (server/cron/jobHandlers.js's addRoleToMember-backed jobs) is grant-only by
 // deliberate design, so this is scoped tightly — called only from selectCMoonForUser above (grant
 // only, no prior role to revoke) and reassignUserCMoon below (one user, one admin-initiated change
 // at a time), never from a bulk or cron path. Returns true/false once both calls resolve within

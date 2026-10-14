@@ -8,6 +8,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma as db } from '@/server/prisma'
+import { scheduleAnnouncementSend, bestEffort } from '@/server/utils/queues'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'
@@ -158,6 +159,9 @@ export default defineEventHandler(async (event) => {
       createdAt: true
     }
   })
+
+  // Post at the exact scheduled minute (the 5-minute cron sweep is only the safety net).
+  await bestEffort('announcement schedule', () => scheduleAnnouncementSend(row.id, row.scheduledAt))
 
   return { ok: true, item: row }
 })

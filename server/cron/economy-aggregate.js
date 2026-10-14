@@ -2,7 +2,7 @@
 // Daily aggregation for the Economy page: turns raw Auction/TradeOffer
 // activity into per-cToon-per-day price/volume rows (CtoonPriceDaily),
 // which server/api/economy/* reads live. Scheduled from
-// server/cron/sync-guild-members.js, and also triggered on demand (Redis-gated)
+// server/cron/jobHandlers.js, and also triggered on demand (Redis-gated)
 // by server/utils/economyFreshness.js from the Economy API routes themselves —
 // so the page self-heals even if that cron worker isn't deployed. Can also be
 // run by hand with `npm run economy:aggregate` (useful for a full rebuild).
@@ -44,10 +44,10 @@ async function withAdvisoryLock(fn) {
   const [{ locked }] = await prisma.$queryRaw`SELECT pg_try_advisory_lock(${LOCK_KEY}::bigint) AS locked`
   if (!locked) {
     console.log('[economy-aggregate] another run already holds the lock, skipping')
-    return
+    return { skipped: true, reason: 'advisory lock held by another run' }
   }
   try {
-    await fn()
+    return await fn()
   } finally {
     await prisma.$queryRaw`SELECT pg_advisory_unlock(${LOCK_KEY}::bigint)`
   }
@@ -203,7 +203,7 @@ async function aggregateTrades(sinceDate) {
 }
 
 export async function runEconomyAggregate() {
-  await withAdvisoryLock(async () => {
+  return withAdvisoryLock(async () => {
     const cursor = await getCursor()
     const runStartedAt = new Date()
 
@@ -220,6 +220,7 @@ export async function runEconomyAggregate() {
       `[economy-aggregate] auctions: ${auctions.days} day(s)/${auctions.rows} row(s), ` +
       `trades: ${trades.days} day(s)/${trades.rows} row(s)`
     )
+    return { auctionDays: auctions.days, tradeDays: trades.days }
   })
 }
 

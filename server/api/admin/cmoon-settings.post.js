@@ -80,6 +80,25 @@ export default defineEventHandler(async (event) => {
     data.cMoonBattlePopupCooldownMinutes = minutes
   }
 
+  // Caps how many NON-raid-boss enemies a single player can be offered within a rolling window —
+  // see GlobalGameConfig.cMoonEnemySpawnCapCount's own schema comment. 0 disables the cap (same
+  // "0 disables" convention as the popup chance % above); the window field is only meaningful once
+  // the cap itself is > 0, but still validated independently so an admin can pre-set it either way.
+  if (body?.cMoonEnemySpawnCapCount !== undefined) {
+    const cap = Number(body.cMoonEnemySpawnCapCount)
+    if (!Number.isInteger(cap) || cap < 0 || cap > 1000) {
+      throw createError({ statusCode: 400, statusMessage: 'Spawn cap must be a whole number between 0 and 1000' })
+    }
+    data.cMoonEnemySpawnCapCount = cap
+  }
+  if (body?.cMoonEnemySpawnCapWindowHours !== undefined) {
+    const hours = Number(body.cMoonEnemySpawnCapWindowHours)
+    if (!Number.isInteger(hours) || hours < 1 || hours > 720) {
+      throw createError({ statusCode: 400, statusMessage: 'Spawn cap window must be a whole number of hours between 1 and 720' })
+    }
+    data.cMoonEnemySpawnCapWindowHours = hours
+  }
+
   // Discord channel a raid boss announcement posts to — see announceCMoonRaidBoss in
   // server/utils/discord.js. Same admin-configurable-with-env-fallback shape as
   // achievementDiscordChannelId; empty string clears it back to null (falls back to
@@ -172,6 +191,8 @@ export default defineEventHandler(async (event) => {
       cMoonEnemyBattlesEnabled: existing?.cMoonEnemyBattlesEnabled,
       cMoonBattlePopupChancePercent: existing?.cMoonBattlePopupChancePercent,
       cMoonBattlePopupCooldownMinutes: existing?.cMoonBattlePopupCooldownMinutes,
+      cMoonEnemySpawnCapCount: existing?.cMoonEnemySpawnCapCount,
+      cMoonEnemySpawnCapWindowHours: existing?.cMoonEnemySpawnCapWindowHours,
       cMoonRaidBossDiscordChannelId: existing?.cMoonRaidBossDiscordChannelId,
       cMoonEnemyBattleDefaultHp: existing?.cMoonEnemyBattleDefaultHp,
       cMoonEnemyHigherTierFirst: existing?.cMoonEnemyHigherTierFirst,
@@ -189,6 +210,8 @@ export default defineEventHandler(async (event) => {
       cMoonEnemyBattlesEnabled: updated.cMoonEnemyBattlesEnabled,
       cMoonBattlePopupChancePercent: updated.cMoonBattlePopupChancePercent,
       cMoonBattlePopupCooldownMinutes: updated.cMoonBattlePopupCooldownMinutes,
+      cMoonEnemySpawnCapCount: updated.cMoonEnemySpawnCapCount,
+      cMoonEnemySpawnCapWindowHours: updated.cMoonEnemySpawnCapWindowHours,
       cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
       cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
       cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,
@@ -208,6 +231,8 @@ export default defineEventHandler(async (event) => {
     cMoonEnemyBattlesEnabled: updated.cMoonEnemyBattlesEnabled,
     cMoonBattlePopupChancePercent: updated.cMoonBattlePopupChancePercent,
     cMoonBattlePopupCooldownMinutes: updated.cMoonBattlePopupCooldownMinutes,
+    cMoonEnemySpawnCapCount: updated.cMoonEnemySpawnCapCount,
+    cMoonEnemySpawnCapWindowHours: updated.cMoonEnemySpawnCapWindowHours,
     cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
     cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
     cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,

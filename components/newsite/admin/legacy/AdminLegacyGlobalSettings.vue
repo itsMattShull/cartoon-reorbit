@@ -507,6 +507,26 @@
             {{ savingDiscord ? 'Saving…' : 'Save' }}
           </button>
         </div>
+
+        <!-- Slash Commands -->
+        <div class="border-t pt-3">
+          <h2 class="text-xs font-semibold text-gray-800 mb-1">Slash Commands</h2>
+          <p class="text-[10px] text-gray-500 mb-2">
+            Re-registers every slash command (<code>/czone</code>, <code>/trade</code>, <code>/riddle</code>,
+            <code>/hunt</code>) with Discord for the guild set in <code>DISCORD_GUILD_ID</code>. Commands are
+            guild-scoped, not global — this is the only thing that ever tells Discord they exist, so run it
+            whenever a command is added/changed, or if a command isn't showing up when typed in Discord.
+            Guild commands usually propagate within a minute or two.
+          </p>
+          <button
+            class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+            :disabled="registeringCommands" @click="registerDiscordCommands"
+          >{{ registeringCommands ? 'Registering…' : 'Register Discord Commands' }}</button>
+          <div v-if="commandsResult" class="mt-2 text-[11px]" :class="commandsResult.error ? 'text-red-600' : 'text-green-700'">
+            <template v-if="commandsResult.error">{{ commandsResult.error }}</template>
+            <template v-else>Registered: {{ commandsResult.names.join(', ') }}</template>
+          </div>
+        </div>
       </section>
 
       <div v-if="toast" :class="['fixed bottom-4 left-1/2 -translate-x-1/2 px-3 py-2 text-xs rounded-md max-w-[90vw] text-center break-words',
@@ -532,6 +552,8 @@ const savingDiscord = ref(false)
 const czoneContestDiscordChannelId = ref('')
 const devPrDiscordChannelId = ref('')
 const prodPrDiscordChannelId = ref('')
+const registeringCommands = ref(false)
+const commandsResult = ref(null)
 
 // cMart state
 const firstAdditionalCzoneCost      = ref(25000)
@@ -828,6 +850,20 @@ async function saveDiscord() {
     console.error(e); toast.value = { type: 'error', msg: e?.statusMessage || e?.data?.statusMessage || 'Save failed' }
   } finally {
     savingDiscord.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+async function registerDiscordCommands() {
+  registeringCommands.value = true
+  commandsResult.value = null
+  try {
+    const res = await $fetch('/api/discord/register-commands', { method: 'POST' })
+    const names = Array.isArray(res) ? res.map(c => `/${c.name}`) : []
+    commandsResult.value = { names }
+  } catch (e) {
+    commandsResult.value = { error: e?.data?.statusMessage || e?.statusMessage || 'Failed to register commands' }
+  } finally {
+    registeringCommands.value = false
   }
 }
 

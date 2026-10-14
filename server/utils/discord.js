@@ -99,7 +99,7 @@ async function addRoleToMember(discordUserId, roleId) {
 
 // Shared PUT/DELETE-a-guild-member-role primitive backing the two exported functions below.
 // Every other role sync in this codebase (addRoleToMember above, the cMoon/verified-role cron
-// jobs in server/cron/sync-guild-members.js) is grant-only by deliberate design. These two are
+// jobs in server/cron/jobHandlers.js) is grant-only by deliberate design. These two are
 // the first calls in the app that can also REVOKE a Discord role — used only for real-time cMoon
 // membership sync (see reassignUserCMoon in server/utils/cmoon.js), never from a bulk/cron path.
 async function putOrDeleteMemberRole(method, discordUserId, roleId) {
