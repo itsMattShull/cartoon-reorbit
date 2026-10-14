@@ -86,6 +86,17 @@
                 v-for="d in playerFloatingDamage" :key="d.id" class="cbp-dmg-float" :class="{ 'cbp-dmg-float-crit': d.crit }"
               >-{{ d.amount }}</span>
             </div>
+            <!-- Stamina row — only present when the mechanic is on for this battle (see
+                 isOutOfStamina's own comment); each attack costs one pip, each block refills one. -->
+            <div v-if="battle?.playerMaxStamina > 0" class="cbp-hp-row">
+              <span class="cbp-hp-label">Stamina</span>
+              <div class="cbp-stamina-pips">
+                <span
+                  v-for="i in battle.playerMaxStamina" :key="i" class="cbp-stamina-pip"
+                  :class="{ 'cbp-stamina-pip-empty': i > battle.playerStamina }"
+                >⚡</span>
+              </div>
+            </div>
           </div>
 
           <p v-if="battle?.playerParalyzedTurns > 0" class="cbp-paralyzed-badge">
@@ -103,12 +114,13 @@
           <p v-if="error" class="cbp-error">{{ error }}</p>
 
           <div class="cbp-move-grid">
-            <button type="button" class="cbp-move cbp-move-attack" :disabled="busy" @click="act('ATTACK_HIGH')">Attack High</button>
-            <button type="button" class="cbp-move cbp-move-attack" :disabled="busy" @click="act('ATTACK_LOW')">Attack Low</button>
+            <button type="button" class="cbp-move cbp-move-attack" :disabled="busy || isOutOfStamina" @click="act('ATTACK_HIGH')">Attack High</button>
+            <button type="button" class="cbp-move cbp-move-attack" :disabled="busy || isOutOfStamina" @click="act('ATTACK_LOW')">Attack Low</button>
             <BlueButton type="button" class="cbp-move" :disabled="busy" @click="act('BLOCK_HIGH')">Block High</BlueButton>
             <BlueButton type="button" class="cbp-move" :disabled="busy" @click="act('BLOCK_LOW')">Block Low</BlueButton>
           </div>
-          <p class="cbp-hint">Blocking the same side as their attack cancels it (and heals 1 HP) — anything else lands a hit.</p>
+          <p v-if="isOutOfStamina" class="cbp-hint cbp-hint-warning">Out of stamina — block to recover before you can attack again.</p>
+          <p v-else class="cbp-hint">Blocking the same side as their attack cancels it (and heals 1 HP) — anything else lands a hit.</p>
 
           <!-- ── Special attack: dormant until the player's own cMoon has one assigned, then
                fills up with each consecutive hit landed — see useCMoonBattlePopup.js/
@@ -283,11 +295,15 @@ const specialFillStyle = computed(() => {
 // by construction, not just in practice.
 const lastRoundLabel = computed(() => {
   if (!lastRound.value) return ''
-  const { playerAction, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked } = lastRound.value
+  const { playerAction, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked, counterHit } = lastRound.value
   const actions = `You ${actionLabel(playerAction)}, they ${actionLabel(enemyAction)} — `
   if (playerHit && enemyHit) return `${actions}you both landed a hit!`
   if (playerHit) return `${actions}you took a hit!`
   if (enemyHit) return `${actions}you landed a hit!`
+  // counterHit (see resolveRound's own comment, server-side) means the block ALSO chipped the
+  // enemy for guaranteed damage, on top of the ordinary heal — a materially better outcome than
+  // a plain block, worth its own line rather than folding into the "healed 1 HP" copy below.
+  if (playerBlocked && counterHit) return `${actions}you blocked it, healed 1 HP, and countered for damage!`
   if (playerBlocked) return `${actions}you blocked it and healed 1 HP!`
   if (enemyBlocked) return `${actions}they blocked it and healed 1 HP!`
   return `${actions}no hits landed.`
@@ -416,7 +432,11 @@ let floatingDamageSeq = 0
 const FLOATING_DAMAGE_LIFETIME_MS = 900
 watch(lastRound, (round) => {
   if (!round) return
-  if (round.enemyHit && round.enemyDamage > 0) {
+  // enemyDamage > 0 alone is enough — it's only ever nonzero when EITHER enemyHit is true OR a
+  // block landed a counter-hit (see resolveRound's own comment, server-side: those two cases are
+  // mutually exclusive by construction), so this also correctly pops the number for a counter,
+  // not just an ordinary landed attack.
+  if (round.enemyDamage > 0) {
     const id = ++floatingDamageSeq
     floatingDamage.value.push({ id, side: 'enemy', amount: round.enemyDamage, crit: round.enemyCrit })
     setTimeout(() => { floatingDamage.value = floatingDamage.value.filter(d => d.id !== id) }, FLOATING_DAMAGE_LIFETIME_MS)
@@ -453,6 +473,15 @@ watch(() => battle.value?.playerHitStreak || 0, (streak, prevStreak) => {
 const HIT_STREAK_THRESHOLD = 3
 const enemySpecialWarning = computed(() => {
   return !!battle.value?.enemyHasSpecialAttack && (battle.value?.enemyHitStreak || 0) >= HIT_STREAK_THRESHOLD - 1
+})
+
+// ── Stamina gate (see CMoonEnemyBattle.playerStamina's own schema comment) — disables the two
+// Attack buttons client-side as a UX nicety mirroring the real 409 guard action.post.js enforces
+// server-side; this is never the actual enforcement, just saves a doomed round-trip. false
+// (never disabled) whenever playerMaxStamina <= 0, which already covers both an admin-disabled
+// mechanic and every pre-this-feature historical battle shape. ───────────────────────────────
+const isOutOfStamina = computed(() => {
+  return (battle.value?.playerMaxStamina || 0) > 0 && (battle.value?.playerStamina || 0) <= 0
 })
 
 // ── FINAL_BOSS entrance punch — a one-shot full-bleed flash + a bigger modal "pop" exactly when a
@@ -863,6 +892,12 @@ watch(() => route.path, maybeCheck)
 .cbp-heart { color: #f87171; font-size: 15px; }
 .cbp-heart-lost { color: rgba(255, 255, 255, 0.2); }
 
+/* Stamina pips — same row layout as the hearts above, gold instead of red so the two resources
+   never read as the same thing at a glance (see isOutOfStamina/the stamina row above). */
+.cbp-stamina-pips { flex: 1; display: flex; gap: 3px; }
+.cbp-stamina-pip { color: #facc15; font-size: 14px; }
+.cbp-stamina-pip-empty { color: rgba(255, 255, 255, 0.2); }
+
 /* Floating damage numbers — anchored to their own .cbp-hp-row (position: relative above), so one
    pops over the enemy bar and the other over the player's hearts independently. Pure CSS
    pop-up-and-fade, auto-removed from the DOM by the JS timer in the script block once the
@@ -1015,6 +1050,7 @@ watch(() => route.path, maybeCheck)
 }
 .cbp-move-attack:active { box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.3); }
 .cbp-hint { font-size: 10.5px; color: rgba(255, 255, 255, 0.5); margin-top: 8px; }
+.cbp-hint-warning { color: #fbbf24; font-weight: 600; }
 
 /* ── Special attack button ────────────────────────────────────────────────────────────────
    Dormant (flat, muted) until charged, then lights up gold/epic. --cbp-special-fill (set inline

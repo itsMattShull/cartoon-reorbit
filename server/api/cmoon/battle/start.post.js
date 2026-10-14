@@ -96,6 +96,10 @@ export default defineEventHandler(async (event) => {
   // Snapshotted once at battle-start — see CMoonEnemyBattle.playerMaxHp's own schema comment on
   // why this is never re-read live mid-fight.
   const playerMaxHp = await getPlayerCombatMaxHp(userId, config)
+  // Same snapshot-at-start timing as playerMaxHp above — see
+  // CMoonEnemyBattle.playerMaxStamina's own schema comment. Floored at 0 (never negative), which
+  // also naturally disables the mechanic for this battle if an admin has set it to 0 or less.
+  const playerMaxStamina = Math.max(0, Number(config?.cMoonEnemyBattleStartingStamina) || 0)
 
   let battle
   try {
@@ -107,6 +111,8 @@ export default defineEventHandler(async (event) => {
         playerHpRemaining: playerMaxHp,
         playerMaxHp,
         enemyHpRemaining,
+        playerStamina: playerMaxStamina,
+        playerMaxStamina,
         activeUserId: userId,
       },
       include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },

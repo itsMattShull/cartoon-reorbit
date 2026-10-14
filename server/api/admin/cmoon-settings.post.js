@@ -121,6 +121,24 @@ export default defineEventHandler(async (event) => {
     data.cMoonEnemyBattleDefaultHp = hp
   }
 
+  // Stamina mechanic (solo battles only) — see GlobalGameConfig.cMoonEnemyBattleStartingStamina's
+  // own schema comment. 0 disables it for every new battle; upper bound matches the HP field's
+  // own "keep this sane relative to a fight's own round count" reasoning above.
+  if (body?.cMoonEnemyBattleStartingStamina !== undefined) {
+    const stamina = Number(body.cMoonEnemyBattleStartingStamina)
+    if (!Number.isInteger(stamina) || stamina < 0 || stamina > 50) {
+      throw createError({ statusCode: 400, statusMessage: 'Starting stamina must be a whole number between 0 and 50' })
+    }
+    data.cMoonEnemyBattleStartingStamina = stamina
+  }
+  if (body?.cMoonEnemyBattleBlockCounterDamage !== undefined) {
+    const dmg = Number(body.cMoonEnemyBattleBlockCounterDamage)
+    if (!Number.isInteger(dmg) || dmg < 0 || dmg > 50) {
+      throw createError({ statusCode: 400, statusMessage: 'Block counter damage must be a whole number between 0 and 50' })
+    }
+    data.cMoonEnemyBattleBlockCounterDamage = dmg
+  }
+
   // "Higher tiered enemies first" — see GlobalGameConfig.cMoonEnemyHigherTierFirst's own schema
   // comment. Read by consider.post.js's candidate roll, nowhere else.
   if (body?.cMoonEnemyHigherTierFirst !== undefined) {
@@ -286,6 +304,8 @@ export default defineEventHandler(async (event) => {
       cMoonEnemySpawnCapWindowHours: existing?.cMoonEnemySpawnCapWindowHours,
       cMoonRaidBossDiscordChannelId: existing?.cMoonRaidBossDiscordChannelId,
       cMoonEnemyBattleDefaultHp: existing?.cMoonEnemyBattleDefaultHp,
+      cMoonEnemyBattleStartingStamina: existing?.cMoonEnemyBattleStartingStamina,
+      cMoonEnemyBattleBlockCounterDamage: existing?.cMoonEnemyBattleBlockCounterDamage,
       cMoonEnemyHigherTierFirst: existing?.cMoonEnemyHigherTierFirst,
       cMoonRiddlePoints: existing?.cMoonRiddlePoints,
       cMoonRiddleRotationEnabled: existing?.cMoonRiddleRotationEnabled,
@@ -319,6 +339,8 @@ export default defineEventHandler(async (event) => {
       cMoonEnemySpawnCapWindowHours: updated.cMoonEnemySpawnCapWindowHours,
       cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
       cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
+      cMoonEnemyBattleStartingStamina: updated.cMoonEnemyBattleStartingStamina,
+      cMoonEnemyBattleBlockCounterDamage: updated.cMoonEnemyBattleBlockCounterDamage,
       cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,
       cMoonRiddlePoints: updated.cMoonRiddlePoints,
       cMoonRiddleRotationEnabled: updated.cMoonRiddleRotationEnabled,
@@ -354,6 +376,8 @@ export default defineEventHandler(async (event) => {
     cMoonEnemySpawnCapWindowHours: updated.cMoonEnemySpawnCapWindowHours,
     cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
     cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
+    cMoonEnemyBattleStartingStamina: updated.cMoonEnemyBattleStartingStamina,
+    cMoonEnemyBattleBlockCounterDamage: updated.cMoonEnemyBattleBlockCounterDamage,
     cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,
     cMoonRiddlePoints: updated.cMoonRiddlePoints,
     cMoonRiddleRotationEnabled: updated.cMoonRiddleRotationEnabled,

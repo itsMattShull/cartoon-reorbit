@@ -16,6 +16,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { assertSameOrigin } from '@/server/utils/requireAdmin'
+import { getGlobalConfig } from '@/server/utils/cmoon'
 import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from '@/server/utils/achievements'
 import { recomputeCMoonPointsForUsers } from '@/server/cron/cmoon-points-aggregate'
 import { announceTeamEnemiesMilestone, checkAndAnnounceSeasonGoalReached, announceSharedPoolBossDefeated } from '@/server/utils/cmoonDiscordEvents'
@@ -23,6 +24,7 @@ import {
   isValidPlayerSubmittedAction, resolveRound, rollEnemyRewards, buildGrantableReward,
   serializeBattleForClient, MAX_ROUNDS_SAFETY, HEAL_ON_SUCCESSFUL_BLOCK,
   SPECIAL_ACTION, HIT_STREAK_THRESHOLD, shouldForcePityReward, forcePickOneReward, grantSummaryIsEmpty,
+  isAttack,
 } from '@/server/utils/cmoonEnemyBattle'
 
 const BATTLE_INCLUDE = {
@@ -85,8 +87,24 @@ export default defineEventHandler(async (event) => {
   if (isSpecial && battle.playerParalyzedTurns > 0) {
     throw createError({ statusCode: 409, statusMessage: `You're paralyzed and can't act for ${battle.playerParalyzedTurns} more round(s)` })
   }
+  // Stamina gate (see CMoonEnemyBattle.playerStamina's own schema comment) — the actual point of
+  // the mechanic: an attack submission is flatly rejected once the pool hits 0, forcing at least
+  // one block before swinging again. Skipped while paralyzed: that round's action is about to be
+  // silently overridden to PARALYZED_ACTION by resolveRound regardless of what was submitted
+  // (same as the ordinary 4-move case, which has never rejected a submission on that basis), so
+  // rejecting here first would surface the wrong reason for a round that couldn't have cost
+  // stamina either way. Never fires when playerMaxStamina <= 0 (mechanic off for this battle).
+  if (!isSpecial && isAttack(playerAction) && battle.playerParalyzedTurns <= 0
+    && battle.playerMaxStamina > 0 && battle.playerStamina <= 0) {
+    throw createError({ statusCode: 409, statusMessage: "You're out of stamina — block to recover before attacking again" })
+  }
 
   const isSharedPool = battle.enemyMember.battleMode === 'SHARED_POOL'
+  // Only read when stamina is actually active for this battle — same "don't query for nothing"
+  // discipline consider.post.js's own spawn-cap/pity reads already follow.
+  const blockCounterDamage = battle.playerMaxStamina > 0
+    ? Math.max(0, Number((await getGlobalConfig())?.cMoonEnemyBattleBlockCounterDamage) || 0)
+    : 0
 
   // ── Local working copies of every per-round-mutable field — applied to the DB once, at the
   // bottom, in a single update (or folded into resolveWin/resolveLoss/resolveAbandoned on a
@@ -97,6 +115,7 @@ export default defineEventHandler(async (event) => {
   let enemyAtkBonus = battle.enemyAtkBonus
   let playerParalyzedTurns = battle.playerParalyzedTurns
   let enemyParalyzedTurns = battle.enemyParalyzedTurns
+  let playerStamina = battle.playerStamina
   let playerHitStreak = battle.playerHitStreak
   let playerSpecialCharged = battle.playerSpecialCharged
   let enemyHitStreak = battle.enemyHitStreak
@@ -189,16 +208,25 @@ export default defineEventHandler(async (event) => {
   // below), while the enemy still rolls (and lands, if not paralyzed) normally. ───────────────
   const {
     roundEntry: roundCore, newPlayerHp, enemyHit, enemyBlocked, enemyDamage,
-    newPlayerParalyzedTurns, newEnemyParalyzedTurns,
+    newPlayerParalyzedTurns, newEnemyParalyzedTurns, newPlayerStamina,
   } = resolveRound({
     playerAction, enemyMember: battle.enemyMember, playerHpRemaining: playerHp, playerMaxHp: battle.playerMaxHp,
     playerAtkBonus, enemyAtkBonus, playerParalyzedTurns, enemyParalyzedTurns,
+    playerStamina, playerMaxStamina: battle.playerMaxStamina, blockCounterDamage,
   })
   playerHp = newPlayerHp
   playerParalyzedTurns = newPlayerParalyzedTurns
   enemyParalyzedTurns = newEnemyParalyzedTurns
+  playerStamina = newPlayerStamina
 
-  if (enemyHit) totalDamageDealt += await damageEnemy(enemyDamage)
+  // enemyDamage > 0 (not the narrower enemyHit) is the right trigger here — see resolveRound's
+  // own comment: enemyDamage is nonzero whenever EITHER a normal attack landed (enemyHit) OR a
+  // successful player block countered (playerBlocked + blockCounterDamage > 0), and those two
+  // cases are mutually exclusive. Gating on enemyHit alone would silently drop every counter-hit:
+  // the round would still SHOW the damage (roundEntry.enemyDamage, the floating-number UI) but
+  // never actually apply it via damageEnemy() — cosmetic only, the one bug that would have made
+  // this whole mechanic pointless.
+  if (enemyDamage > 0) totalDamageDealt += await damageEnemy(enemyDamage)
   else if (enemyBlocked) await healEnemy(HEAL_ON_SUCCESSFUL_BLOCK)
 
   // ── 3. Hit-streak bookkeeping, both sides — see CMoonEnemyBattle.playerHitStreak/
@@ -232,7 +260,10 @@ export default defineEventHandler(async (event) => {
     ...(specialEvents.length ? { specials: specialEvents } : {}),
   }
   const roundLog = [...(Array.isArray(battle.roundLog) ? battle.roundLog : []), roundEntry]
-  const statMods = { playerAtkBonus, enemyAtkBonus, playerParalyzedTurns, enemyParalyzedTurns, playerHitStreak, playerSpecialCharged, enemyHitStreak }
+  const statMods = {
+    playerAtkBonus, enemyAtkBonus, playerParalyzedTurns, enemyParalyzedTurns,
+    playerHitStreak, playerSpecialCharged, enemyHitStreak, playerStamina,
+  }
 
   // WIN takes priority over a same-round mutual KO (both sides would have hit 0 hp this round)
   // — the player still gets credit for the kill rather than being denied a reward on a technicality.
@@ -245,21 +276,21 @@ export default defineEventHandler(async (event) => {
     // UNCREDITED instead, with no reward/points/achievement/leaderboard credit — the team
     // already got full credit via whichever OTHER player's own battle actually landed the kill.
     if (totalDamageDealt > 0) {
-      const { battle: resultBattle, isFirstWinAgainstThisEnemy } = await resolveWin(battle, roundLog, submittedRound, playerHp, totalDamageDealt)
+      const { battle: resultBattle, isFirstWinAgainstThisEnemy } = await resolveWin(battle, roundLog, submittedRound, playerHp, totalDamageDealt, playerStamina)
       return { round: roundEntry, battle: serializeBattleForClient(resultBattle), isFirstWinAgainstThisEnemy }
     }
-    const uncredited = await resolveUncredited(battle, roundLog, submittedRound, playerHp)
+    const uncredited = await resolveUncredited(battle, roundLog, submittedRound, playerHp, playerStamina)
     return { round: roundEntry, battle: serializeBattleForClient(uncredited), isFirstWinAgainstThisEnemy: false }
   }
   if (playerHp <= 0) {
-    const result = await resolveLoss(battle, roundLog, submittedRound, newEnemyHp, totalDamageDealt)
+    const result = await resolveLoss(battle, roundLog, submittedRound, newEnemyHp, totalDamageDealt, playerStamina)
     return { round: roundEntry, battle: serializeBattleForClient(result) }
   }
   // Neither side reached 0 this round — under a pathological RNG streak (see this constant's own
   // comment) a battle could otherwise run indefinitely, one round per request, so cap it here the
   // same way an idle timeout does: no penalty, just ended.
   if (submittedRound + 1 >= MAX_ROUNDS_SAFETY) {
-    const result = await resolveAbandoned(battle, roundLog, submittedRound, playerHp, newEnemyHp, totalDamageDealt)
+    const result = await resolveAbandoned(battle, roundLog, submittedRound, playerHp, newEnemyHp, totalDamageDealt, playerStamina)
     return { round: roundEntry, battle: serializeBattleForClient(result) }
   }
 
@@ -306,7 +337,7 @@ export async function filterForcePityCandidates(tx, userId, rewardRows) {
   return candidates
 }
 
-async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining, damageDealt) {
+async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining, damageDealt, playerStamina) {
   // Whether this player has ever beaten THIS SPECIFIC enemy member before — read before the
   // transaction below creates this win's own row, so it's naturally excluded from the count (no
   // off-by-one guard needed). Display-only (a "First victory!" toast — see
@@ -408,7 +439,7 @@ async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining, d
       where: { id: battle.id },
       data: {
         status: 'RESOLVED', outcome: 'WIN', roundNumber: submittedRound + 1,
-        playerHpRemaining, enemyHpRemaining: 0, damageDealt,
+        playerHpRemaining, enemyHpRemaining: 0, damageDealt, playerStamina,
         roundLog, pointsAwarded, rewardsGranted, endedAt: new Date(), activeUserId: null,
       },
       include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
@@ -436,7 +467,7 @@ async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining, d
   return { battle: txResult.updated, isFirstWinAgainstThisEnemy }
 }
 
-async function resolveLoss(battle, roundLog, submittedRound, enemyHpRemaining, damageDealt) {
+async function resolveLoss(battle, roundLog, submittedRound, enemyHpRemaining, damageDealt, playerStamina) {
   return db.$transaction(async (tx) => {
     // No cMoon to credit a loss to for a null-cMoonId battle — see resolveWin's pointsAwarded comment.
     if (battle.cMoonId) {
@@ -446,7 +477,7 @@ async function resolveLoss(battle, roundLog, submittedRound, enemyHpRemaining, d
       where: { id: battle.id },
       data: {
         status: 'RESOLVED', outcome: 'LOSS', roundNumber: submittedRound + 1,
-        playerHpRemaining: 0, enemyHpRemaining, damageDealt,
+        playerHpRemaining: 0, enemyHpRemaining, damageDealt, playerStamina,
         roundLog, endedAt: new Date(), activeUserId: null,
       },
       include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
@@ -457,12 +488,12 @@ async function resolveLoss(battle, roundLog, submittedRound, enemyHpRemaining, d
 // MAX_ROUNDS_SAFETY was reached with neither side at 0 — ends the battle the same way the idle
 // timeout does (ABANDONED: no CMoon.battleLosses increment, no penalty — see that enum value's
 // own schema comment), just triggered by round count instead of elapsed time.
-async function resolveAbandoned(battle, roundLog, submittedRound, playerHpRemaining, enemyHpRemaining, damageDealt) {
+async function resolveAbandoned(battle, roundLog, submittedRound, playerHpRemaining, enemyHpRemaining, damageDealt, playerStamina) {
   return db.cMoonEnemyBattle.update({
     where: { id: battle.id },
     data: {
       status: 'RESOLVED', outcome: 'ABANDONED', roundNumber: submittedRound + 1,
-      playerHpRemaining, enemyHpRemaining, damageDealt,
+      playerHpRemaining, enemyHpRemaining, damageDealt, playerStamina,
       roundLog, endedAt: new Date(), activeUserId: null,
     },
     include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
@@ -480,12 +511,12 @@ async function resolveAbandoned(battle, roundLog, submittedRound, playerHpRemain
 // - Not ABANDONED: that outcome's existing client copy ("the fight timed out") would be a flat
 //   lie here — nothing timed out, the enemy is genuinely dead.
 // Same "ends clean, no penalty, no further side effects" shape as resolveAbandoned otherwise.
-async function resolveUncredited(battle, roundLog, submittedRound, playerHpRemaining) {
+async function resolveUncredited(battle, roundLog, submittedRound, playerHpRemaining, playerStamina) {
   return db.cMoonEnemyBattle.update({
     where: { id: battle.id },
     data: {
       status: 'RESOLVED', outcome: 'UNCREDITED', roundNumber: submittedRound + 1,
-      playerHpRemaining, enemyHpRemaining: 0, damageDealt: 0,
+      playerHpRemaining, enemyHpRemaining: 0, damageDealt: 0, playerStamina,
       roundLog, endedAt: new Date(), activeUserId: null,
     },
     include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },

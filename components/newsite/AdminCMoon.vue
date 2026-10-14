@@ -165,6 +165,33 @@
           </p>
           <p v-if="defaultHpError" class="text-[11px] text-red-600 mt-1">{{ defaultHpError }}</p>
 
+          <label class="block text-xs font-medium mb-1 mt-3">Starting stamina / block counter damage</label>
+          <div class="flex items-center gap-2 flex-wrap">
+            <input
+              v-model.number="enemyBattleStartingStamina" type="number" min="0" max="50" inputmode="numeric"
+              class="cm-field w-20 border rounded px-2 py-1" style="font-size:16px"
+            />
+            <label class="block text-xs font-medium ml-2">counter dmg</label>
+            <input
+              v-model.number="enemyBattleBlockCounterDamage" type="number" min="0" max="50" inputmode="numeric"
+              class="cm-field w-20 border rounded px-2 py-1" style="font-size:16px"
+            />
+            <button
+              class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              :disabled="staminaSaving" @click="saveStamina"
+            >{{ staminaSaving ? 'Saving…' : 'Save' }}</button>
+          </div>
+          <p class="text-[11px] text-gray-600 mt-1">
+            Solo battles only. Every attack costs 1 stamina (starting pool above); choosing to
+            block refills 1, capped back at that same starting value — a player hits 0 and can't
+            attack again until they block at least once. A successful block also chips the enemy
+            for the counter-damage amount, on top of its existing 1-HP self-heal, so blocking
+            contributes toward winning instead of being pure defense. 0 starting stamina disables
+            the whole mechanic (unlimited attacks, the old behavior); 0 counter damage leaves
+            block as heal-only.
+          </p>
+          <p v-if="staminaError" class="text-[11px] text-red-600 mt-1">{{ staminaError }}</p>
+
           <label class="block text-xs font-medium mb-1 mt-3">Raid boss Discord announcement channel</label>
           <div class="flex items-center gap-2">
             <input
@@ -1512,6 +1539,10 @@ const raidBossChannelError = ref('')
 const enemyBattleDefaultHp = ref(5)
 const defaultHpSaving = ref(false)
 const defaultHpError = ref('')
+const enemyBattleStartingStamina = ref(3)
+const enemyBattleBlockCounterDamage = ref(1)
+const staminaSaving = ref(false)
+const staminaError = ref('')
 const teamMilestoneEnabled = ref(false)
 const teamMilestoneEnemiesInterval = ref(100)
 const teamMilestonePointsInterval = ref(1000)
@@ -2579,6 +2610,8 @@ async function load() {
     spawnCapWindowHours.value = Number.isInteger(data.cMoonEnemySpawnCapWindowHours) ? data.cMoonEnemySpawnCapWindowHours : 4
     raidBossDiscordChannelId.value = data.cMoonRaidBossDiscordChannelId || ''
     enemyBattleDefaultHp.value = Number.isInteger(data.cMoonEnemyBattleDefaultHp) ? data.cMoonEnemyBattleDefaultHp : 5
+    enemyBattleStartingStamina.value = Number.isInteger(data.cMoonEnemyBattleStartingStamina) ? data.cMoonEnemyBattleStartingStamina : 3
+    enemyBattleBlockCounterDamage.value = Number.isInteger(data.cMoonEnemyBattleBlockCounterDamage) ? data.cMoonEnemyBattleBlockCounterDamage : 1
     teamMilestoneEnabled.value = !!data.cMoonTeamMilestoneEnabled
     teamMilestoneEnemiesInterval.value = Number.isInteger(data.cMoonTeamMilestoneEnemiesInterval) ? data.cMoonTeamMilestoneEnemiesInterval : 100
     teamMilestonePointsInterval.value = Number.isInteger(data.cMoonTeamMilestonePointsInterval) ? data.cMoonTeamMilestonePointsInterval : 1000
@@ -2956,6 +2989,33 @@ async function saveDefaultHp() {
     defaultHpError.value = e?.data?.statusMessage || 'Failed to save Default HP'
   } finally {
     defaultHpSaving.value = false
+  }
+}
+
+async function saveStamina() {
+  const stamina = Math.trunc(Number(enemyBattleStartingStamina.value))
+  const counter = Math.trunc(Number(enemyBattleBlockCounterDamage.value))
+  if (!Number.isInteger(stamina) || stamina < 0 || stamina > 50) {
+    staminaError.value = 'Starting stamina must be a whole number between 0 and 50'
+    return
+  }
+  if (!Number.isInteger(counter) || counter < 0 || counter > 50) {
+    staminaError.value = 'Block counter damage must be a whole number between 0 and 50'
+    return
+  }
+  staminaSaving.value = true
+  staminaError.value = ''
+  try {
+    const res = await $fetch('/api/admin/cmoon-settings', {
+      method: 'POST',
+      body: { cMoonEnemyBattleStartingStamina: stamina, cMoonEnemyBattleBlockCounterDamage: counter },
+    })
+    enemyBattleStartingStamina.value = res.cMoonEnemyBattleStartingStamina
+    enemyBattleBlockCounterDamage.value = res.cMoonEnemyBattleBlockCounterDamage
+  } catch (e) {
+    staminaError.value = e?.data?.statusMessage || 'Failed to save stamina settings'
+  } finally {
+    staminaSaving.value = false
   }
 }
 

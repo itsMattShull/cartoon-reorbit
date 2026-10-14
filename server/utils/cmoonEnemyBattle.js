@@ -15,6 +15,11 @@ export const PLAYER_MAX_HP = 5
 export const MAX_ROUNDS_SAFETY = 100 // a battle can't loop forever even under a pathological RNG streak
 export const ABANDON_AFTER_MINUTES = 10 // reclaim an IN_PROGRESS battle with no action in this long
 
+// Hardcoded fallback for GlobalGameConfig.cMoonEnemyBattleStartingStamina, same role
+// PLAYER_MAX_HP plays for cMoonEnemyBattleDefaultHp — only used if that config row is ever
+// unexpectedly missing.
+export const STARTING_STAMINA = 3
+
 export const NORMAL_HIT_DAMAGE = 1
 export const CRITICAL_HIT_DAMAGE = 2
 export const HEAL_ON_SUCCESSFUL_BLOCK = 1 // both sides use the same amount — see resolveBattleRound's playerBlocked/enemyBlocked
@@ -69,8 +74,12 @@ export function combinePlayerMaxHp(defaultHp, bonus) {
   return Math.max(1, (Number(defaultHp) || 0) + (Number(bonus) || 0))
 }
 
-function isAttack(action) { return action === 'ATTACK_HIGH' || action === 'ATTACK_LOW' }
-function isBlock(action) { return action === 'BLOCK_HIGH' || action === 'BLOCK_LOW' }
+// Exported for action.post.js's own stamina-cost gating (is the player's SUBMITTED action an
+// attack?) and for resolveRound's own stamina cost/regen below (is the EFFECTIVE action, after
+// any paralysis override, an attack or a block?) — same two predicates either caller needs,
+// never duplicated.
+export function isAttack(action) { return action === 'ATTACK_HIGH' || action === 'ATTACK_LOW' }
+export function isBlock(action) { return action === 'BLOCK_HIGH' || action === 'BLOCK_LOW' }
 function lane(action) { return action.endsWith('_HIGH') ? 'HIGH' : 'LOW' }
 
 // One side's attack lands on the other UNLESS the other blocked the exact same lane. This is
@@ -138,9 +147,17 @@ export function rollHitDamage(hit, critChancePercent) {
 // decremented by 1 in the returned new*ParalyzedTurns (floored at 0), same "however many turns
 // were left, one just elapsed" semantics whether this round was the one the paralysis was cast
 // in or a later one.
+// `playerStamina`/`playerMaxStamina`/`blockCounterDamage` drive the stamina mechanic (see
+// GlobalGameConfig.cMoonEnemyBattleStartingStamina's own schema comment for why it exists) —
+// `playerMaxStamina <= 0` (the default for every param here, and for a pre-feature battle row)
+// fully disables it: newPlayerStamina always equals playerStamina unchanged, and a block never
+// adds counter damage, reproducing the exact pre-this-feature math. The caller (action.post.js)
+// is responsible for REJECTING an attack submission when playerStamina is already 0 — this
+// function only applies cost/regen to an already-accepted effective action, it never blocks one.
 export function resolveRound({
   playerAction, enemyMember, playerHpRemaining, playerMaxHp,
   playerAtkBonus = 0, enemyAtkBonus = 0, playerParalyzedTurns = 0, enemyParalyzedTurns = 0,
+  playerStamina = 0, playerMaxStamina = 0, blockCounterDamage = 0,
 }) {
   const rolledEnemyAction = rollEnemyAction(enemyMember.attackChancePercent)
   const effectivePlayerAction = playerParalyzedTurns > 0 ? PARALYZED_ACTION : playerAction
@@ -155,7 +172,15 @@ export function resolveRound({
   // PLAYER's own applies to damage the player deals (landing on the enemy) — named from each
   // side's own schema comment.
   const playerDamage = playerHit ? Math.max(0, playerDamageBase + enemyAtkBonus) : 0
-  const enemyDamage = enemyHit ? Math.max(0, enemyDamageBase + playerAtkBonus) : 0
+  // A successful player block (playerBlocked) and a landed player attack (enemyHit) can never
+  // both be true in the same round — playerBlocked requires the player's OWN action to be a
+  // block, enemyHit requires it to be an attack, and a single action can't be both — so folding
+  // the block-counter bonus into the same enemyDamage total a landed hit would have produced is
+  // safe: whichever branch applies, the other is already guaranteed 0. This lets a counter-hit
+  // reuse every existing "damage dealt to the enemy" code path (the SHARED_POOL atomic update,
+  // CMoonEnemyBattle.damageDealt credit, the floating-damage-number UI) with zero new plumbing.
+  const counterDamage = (playerBlocked && blockCounterDamage > 0) ? blockCounterDamage : 0
+  const enemyDamage = enemyHit ? Math.max(0, enemyDamageBase + playerAtkBonus) : counterDamage
 
   let newPlayerHp = playerHpRemaining
   if (playerHit) newPlayerHp = Math.max(0, newPlayerHp - playerDamage)
@@ -164,6 +189,16 @@ export function resolveRound({
   // getPlayerCombatMaxHp() in server/utils/cmoon.js, which is what every real caller now computes
   // this from. Required, no default, so a caller can never silently fall back to the wrong cap.
   else if (playerBlocked) newPlayerHp = Math.min(playerMaxHp, newPlayerHp + HEAL_ON_SUCCESSFUL_BLOCK)
+
+  // Stamina cost/regen is keyed off the EFFECTIVE action (post-paralysis-override) — a round the
+  // player spent paralyzed never costs stamina (they didn't choose to attack, they couldn't act
+  // at all), and SPECIAL_ACTION touches neither (it's gated by its own separate hit-streak charge
+  // resource, see playerSpecialCharged, deliberately kept independent of this one).
+  let newPlayerStamina = playerStamina
+  if (playerMaxStamina > 0) {
+    if (isAttack(effectivePlayerAction)) newPlayerStamina = Math.max(0, playerStamina - 1)
+    else if (isBlock(effectivePlayerAction)) newPlayerStamina = Math.min(playerMaxStamina, playerStamina + 1)
+  }
 
   return {
     roundEntry: {
@@ -175,6 +210,10 @@ export function resolveRound({
       // Always 0 when that side didn't land a hit, same convention playerDamage/enemyDamage
       // themselves already follow below.
       playerDamage, enemyDamage,
+      // Distinguishes "you blocked and your counter chipped them for N" from "you landed a
+      // normal hit for N" — both already fold into the same enemyDamage above, this is purely so
+      // the client's round-summary copy (CMoonBattlePopupHost.vue) can tell which happened.
+      counterHit: counterDamage > 0,
     },
     newPlayerHp,
     enemyDamage,
@@ -182,6 +221,7 @@ export function resolveRound({
     enemyBlocked,
     newPlayerParalyzedTurns: Math.max(0, playerParalyzedTurns - 1),
     newEnemyParalyzedTurns: Math.max(0, enemyParalyzedTurns - 1),
+    newPlayerStamina,
   }
 }
 
@@ -357,6 +397,11 @@ export function serializeBattleForClient(battle) {
     // special) — surfaced so the UI can explain why their moves (including an already-charged
     // special) are about to whiff, rather than that just appearing to happen with no warning.
     playerParalyzedTurns: battle.playerParalyzedTurns || 0,
+    // See CMoonEnemyBattle.playerStamina/playerMaxStamina's own schema comment — playerMaxStamina
+    // <= 0 means the mechanic is off for this battle (the UI shows nothing and never disables the
+    // attack buttons), either an admin-disabled feature or a pre-this-feature historical row.
+    playerStamina: battle.playerStamina || 0,
+    playerMaxStamina: battle.playerMaxStamina || 0,
     playerSpecialAttack: specialAttack
       ? {
           id: specialAttack.id,

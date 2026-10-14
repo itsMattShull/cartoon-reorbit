@@ -1849,6 +1849,31 @@ model GlobalGameConfig {
   // as the hardcoded fallback getPlayerCombatMaxHp() uses if this row is ever unexpectedly missing.
   // See CMoonRankTier.cMoonEnemyBattleHpBonus below for the per-rank addition on top of this.
   cMoonEnemyBattleDefaultHp          Int       @default(5)
+  // Every SOLO player's starting/max stamina for a cMoon Enemy Battle — see
+  // CMoonEnemyBattle.playerMaxStamina's own schema comment for the exact cost/regen rules this
+  // drives (attacking costs 1, choosing to block refills 1, capped back at this same value).
+  // Exists specifically to close a dominant-strategy gap: without SOME cost on attacking, landing
+  // a hit is strictly better than ever blocking (blocking the old way only ever mitigated damage/
+  // healed 1 HP — never dealt any), so a player who just mashed Attack every round out-produced
+  // total damage dealt over a fight versus any more cautious mix, even accounting for the extra
+  // damage taken, because losing has never carried a real penalty (free retry). This value is
+  // snapshotted once per battle (same timing as cMoonEnemyBattleDefaultHp above), so a mid-fight
+  // config change never shifts an already-started battle's own pool. 0 fully disables the
+  // mechanic for every NEW battle created after the change (old unlimited-attack behavior) —
+  // same "0 disables" convention as cMoonEnemyHigherTierFirst/the spawn cap above; an
+  // already-in-progress battle keeps whatever pool (or lack of one) it was snapshotted with.
+  // Raid combat is a separate, Redis-backed engine (see cmoonRaidSocket.js) and does not read
+  // this column — stamina is solo-only for now.
+  cMoonEnemyBattleStartingStamina    Int       @default(3)
+  // Guaranteed bonus damage dealt to the enemy on a player's own SUCCESSFUL block (see
+  // CMoonEnemyBattle.playerBlocked's own schema comment on what counts) — on top of the existing
+  // 1-HP self-heal, which by itself gives blocking no way to contribute to actually winning.
+  // Folded into the SAME enemyDamage value a landed attack would have produced (see
+  // resolveRound's own comment), so it reuses every existing SHARED_POOL atomic-update/
+  // damageDealt-credit/floating-damage-number code path with no separate plumbing. 0 disables it
+  // (block stays pure defense + heal, the pre-this-feature behavior) — solo-only, same scope as
+  // the stamina mechanic above.
+  cMoonEnemyBattleBlockCounterDamage Int       @default(1)
   // When true, consider.post.js's candidate roll restricts itself to only the highest
   // CMoonEnemyRank tier actually present among this player's eligible candidates (active,
   // not-defeated, minPriorDefeats already met, raid-availability already checked) before applying
@@ -5906,6 +5931,23 @@ model CMoonEnemyBattle {
   // it's > 0 (see resolveRound's own newPlayerParalyzedTurns/newEnemyParalyzedTurns).
   playerParalyzedTurns  Int     @default(0)
   enemyParalyzedTurns   Int     @default(0)
+  // ── Player stamina (see GlobalGameConfig.cMoonEnemyBattleStartingStamina's own schema comment
+  // for why this exists) — SOLO BATTLES ONLY, same scope note as that config column. `playerStamina`
+  // is the live current pool: an ATTACK_HIGH/LOW action costs 1 (floored at 0), a BLOCK_HIGH/LOW
+  // action refills 1 (capped at playerMaxStamina), SPECIAL_ATTACK/PARALYZED touch neither. An
+  // attack is rejected server-side (409, same style as the special-attack-charge guard) whenever
+  // playerStamina is already 0 — a player MUST block (or fire an already-charged special) at
+  // least once before they can swing again, which is the actual point: it makes "just mash
+  // Attack every round" mechanically impossible rather than merely suboptimal.
+  // `playerMaxStamina` is the snapshotted cap for THIS battle (same snapshot-at-start timing as
+  // playerMaxHp above — a mid-fight config change never shifts an already-running battle's own
+  // pool). <= 0 means the mechanic is off entirely for this battle (every attack always allowed),
+  // either because an admin disabled it or because this is a row from before the feature existed
+  // (default 0 — intentionally NOT defaulting to the config's own starting value, so every
+  // already-resolved historical row reads as "stamina wasn't a factor in this fight", which is
+  // the truth).
+  playerStamina         Int     @default(0)
+  playerMaxStamina      Int     @default(0)
   // [{ round, playerAction, enemyAction, playerHit, enemyHit, specials? }, ...] — audit trail for
   // the admin battle-logs page and for debugging a disputed result; never read back to resolve
   // anything. `specials`, when present, is [{ side, name, effectType, amount }] for whichever
