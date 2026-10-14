@@ -45,6 +45,7 @@ function serializeMatch(match) {
     discardReady: match.discardReady,
     pendingDiscard: match.pendingDiscard || null,
     goalColor: match.goalColor,
+    goalCardIdx: match.goalCardIdx,
     swapUsed: match.swapUsed,
     ready: match.ready,
     revealed: match.revealed, // roundLog itself is built once, at match completion, not carried live

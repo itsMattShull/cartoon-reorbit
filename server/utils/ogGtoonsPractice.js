@@ -29,7 +29,7 @@
 import { randomUUID } from 'crypto'
 import { getOgGtoonsConfig } from './ogGtoonsConfig.js'
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
-import { deriveGoalColor, slotsForRound } from './ogGtoonEngine.js'
+import { assignRandomGoals, slotsForRound } from './ogGtoonEngine.js'
 import {
   publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd,
   placeCard, unplaceSlot, checkCommit, applyHandSwap, submitDiscard, resolveDiscardPhase
@@ -270,7 +270,6 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
       usernames: [user.username, BOT_USERNAME],
       sockets: new Set([socket.id]),
       deckOrder: [userDeck, botDeck],
-      goalColor: [deriveGoalColor(userDeck), deriveGoalColor(botDeck)],
       stake: [0, 0],
       ending: false,
       botTimer: null,
@@ -278,6 +277,7 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
       lastActivity: Date.now()
     }
     initHands(match, d.rng)
+    assignRandomGoals(match, d.rng)
     matches.set(user.id, match)
     markPracticing(user.id)
     socket.data.ogGtoonsPracticeUserId = user.id

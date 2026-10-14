@@ -7,7 +7,7 @@
 // differ (stakes, swap cost, persistence, matchmaking) stay in the module that owns them.
 //
 // Match shape (index 0 / 1 = player 1 / player 2):
-//   { id, players, usernames, deckOrder, goalColor, swapUsed, ready, revealed, stake,
+//   { id, players, usernames, deckOrder, goalColor, goalCardIdx, swapUsed, ready, revealed, stake,
 //     currentRound, practice?,
 //     hand,        // [[deckIdx...], [deckIdx...]]  cards each player holds (private to them)
 //     undealt,     // [[deckIdx...], [deckIdx...]]  not yet dealt (private; the discard-phase draw)
@@ -20,7 +20,7 @@
 import { resolveFinalBoard } from './ogGtoonEffects.js'
 import {
   determineWinner, hasSuddenDeathCardsRemaining, dealOpeningHand, discardAndDeal,
-  swapForRandomUndealt, slotsForRound, isSuddenDeathRound, REGULATION_ROUNDS, DISCARD_AFTER_ROUND
+  swapForRandomUndealt, goalCardFor, slotsForRound, isSuddenDeathRound, REGULATION_ROUNDS, DISCARD_AFTER_ROUND
 } from './ogGtoonEngine.js'
 
 export const TOTAL_ROUNDS = REGULATION_ROUNDS
@@ -64,6 +64,11 @@ export function initHands(match, rng = Math.random) {
   return match
 }
 
+function goalCardView(match, idx) {
+  const c = goalCardFor(match, idx)
+  return { name: c.name, assetPath: c.assetPath, color: c.color }
+}
+
 /** A card as the OWNER sees it in their hand — never sent to the opponent. */
 function handCardView(match, meIdx, deckIdx) {
   const c = match.deckOrder[meIdx][deckIdx]
@@ -93,7 +98,7 @@ export function publicMatchView(match, uid) {
       userId: uid,
       username: match.usernames[meIdx],
       goalColor: match.goalColor[meIdx],
-      goalCard: { name: match.deckOrder[meIdx][11].name, assetPath: match.deckOrder[meIdx][11].assetPath, color: match.deckOrder[meIdx][11].color },
+      goalCard: goalCardView(match, meIdx),
       swapUsed: match.swapUsed[meIdx],
       stake: match.stake[meIdx],
       revealed: match.revealed[meIdx],
@@ -108,7 +113,7 @@ export function publicMatchView(match, uid) {
     opponent: {
       username: match.usernames[oppIdx],
       goalColor: match.goalColor[oppIdx],
-      goalCard: { name: match.deckOrder[oppIdx][11].name, assetPath: match.deckOrder[oppIdx][11].assetPath, color: match.deckOrder[oppIdx][11].color },
+      goalCard: goalCardView(match, oppIdx),
       swapUsed: match.swapUsed[oppIdx],
       revealed: match.revealed[oppIdx],
       handCount: (match.hand?.[oppIdx] || []).length,
@@ -237,7 +242,7 @@ export function finalBoardInputFor(match, idx) {
       type1: r.type1, type2: r.type2, type3: r.type3, group: r.group,
       isSlam: r.isSlam, effect: r.effect, round: r.round, slot: r.slot
     })),
-    goalCard: match.deckOrder[idx][11]
+    goalCard: goalCardFor(match, idx)
   }
 }
 

@@ -64,8 +64,8 @@
 
           <p class="mb-1 text-sm">
             Tap a gToon below to add it to the next open slot. Tap a filled slot to remove it.
-            <span class="font-semibold">Slot 12 is your Goal Card</span> — its color sets your goal color for the match.
-            The order of the other slots doesn't matter: your 12 cards are shuffled and 6 are dealt to your hand at the start of a match.
+            Slot order doesn't matter: your 12 cards are shuffled and 6 are dealt to your hand at the start of a match.
+            At the start of a match one random card from each player's deck is picked as their Goal Card, and its color sets that player's goal color.
           </p>
 
           <!-- The 12 ordered slots -->
@@ -76,15 +76,9 @@
               @click="slots[pos-1] && removeFromSlot(pos-1)"
               :class="[
                 'relative border-2 rounded flex flex-col items-center justify-center h-24 cursor-pointer transition',
-                pos === 12
-                  ? 'border-amber-400 bg-amber-500/10'
-                  : (slots[pos-1] ? 'border-indigo-400 bg-white/5' : 'border-dashed border-white/30 bg-white/5')
+                slots[pos-1] ? 'border-indigo-400 bg-white/5' : 'border-dashed border-white/30 bg-white/5'
               ]"
             >
-              <span
-                v-if="pos === 12"
-                class="absolute -top-2 left-1/2 -translate-x-1/2 text-[9px] font-bold uppercase tracking-wide bg-amber-500 text-black px-1.5 rounded"
-              >Goal Card</span>
               <template v-if="slots[pos-1]">
                 <img :src="slots[pos-1].assetPath" :alt="slots[pos-1].name" class="h-14 object-contain" />
                 <p class="text-[10px] text-center truncate w-full px-1">{{ slots[pos-1].name }}</p>

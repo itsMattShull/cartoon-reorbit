@@ -431,3 +431,16 @@ test('resolveFinalBoard: neighbor adjacency follows the slot, so an empty slot b
   assert.equal(value('near'), 5)
   assert.equal(value('far'), 2)
 })
+
+test('assignRandomGoals picks one random card from each deck as that player\'s goal', async () => {
+  const { assignRandomGoals, goalCardFor } = await import('../server/utils/ogGtoonEngine.js')
+  const mk = colors => colors.map((color, i) => ({ color, name: `c${i}` }))
+  const match = { deckOrder: [mk(['RED', 'BLUE', 'GREEN', 'PINK']), mk(['BLACK', 'YELLOW', 'ORANGE', 'PURPLE'])] }
+  assignRandomGoals(match, () => 0.5)
+  assert.deepEqual(match.goalCardIdx, [2, 2])
+  assert.deepEqual(match.goalColor, ['GREEN', 'ORANGE'])
+  assert.equal(goalCardFor(match, 0).name, 'c2')
+  // Matches without goalCardIdx (legacy) still use slot 11.
+  const legacy = { deckOrder: [new Array(12).fill(null).map((_, i) => ({ name: `c${i}` })), []] }
+  assert.equal(goalCardFor(legacy, 0).name, 'c11')
+})

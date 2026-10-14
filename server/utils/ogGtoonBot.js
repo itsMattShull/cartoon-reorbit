@@ -47,12 +47,10 @@ function cardScore(card, goalColor, difficulty) {
 /**
  * Builds the bot's 12-card deck from the player's verified deck snapshot. Returns NEW card
  * objects with renumbered `position`s; the input is not mutated. Cards are dealt in random order
- * at match start, so only the bottom (position 11) card matters: it sets the goal color.
+ * at match start and the goal card is picked at random from the whole deck.
  *
- *   easy   — every card shuffled, including the bottom (goal) card, so the bot's goal color is
- *            random.
- *   normal / hard — the player's goal card stays at position 11 (same goal color as the player),
- *            the other 11 shuffled.
+ *   easy   — every card shuffled, including the bottom card.
+ *   normal / hard — the player's bottom card stays at position 11, the other 11 shuffled.
  */
 export function buildBotDeck(deck, difficulty = DEFAULT_DIFFICULTY, rng = Math.random) {
   const level = normalizeDifficulty(difficulty)

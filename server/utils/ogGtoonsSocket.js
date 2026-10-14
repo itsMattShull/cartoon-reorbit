@@ -41,7 +41,7 @@
 
 import { randomUUID, randomInt } from 'crypto'
 import { prisma as db } from '../prisma.js'
-import { deriveGoalColor, SWAP_COST } from './ogGtoonEngine.js'
+import { assignRandomGoals, SWAP_COST } from './ogGtoonEngine.js'
 import {
   publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd, buildRoundLog,
   placeCard, unplaceSlot, checkCommit, checkSwap, applyHandSwap, submitDiscard, resolveDiscardPhase
@@ -143,7 +143,6 @@ async function startMatch(io, a, b, { isChallenge }) {
     usernames: [a.username, b.username],
     sockets: [new Set([a.socket.id]), new Set([b.socket.id])],
     deckOrder: [deckA, deckB],
-    goalColor: [deriveGoalColor(deckA), deriveGoalColor(deckB)],
     stake: [stake, stake],
     isChallenge: !!isChallenge,
     ending: false,
@@ -153,6 +152,8 @@ async function startMatch(io, a, b, { isChallenge }) {
   }
   // Shuffle both decks and deal the opening hands (also sets ready/revealed/swapUsed/round 1).
   initHands(match, secureRng)
+  // Goal colors come from one random card out of each player's chosen deck.
+  assignRandomGoals(match, secureRng)
 
   // Debit stakes now (match really starts here) — mirrors Clash's startPvpMatch exactly:
   // verify balances and debit both inside one transaction, refusing to start if either is short.

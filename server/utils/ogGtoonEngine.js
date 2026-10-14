@@ -97,6 +97,24 @@ export function deriveGoalColor(orderedDeck) {
   return orderedDeck?.[11]?.color ?? null
 }
 
+/** Index of the goal card for a match: one random card from the player's chosen deck. */
+export function pickGoalCardIdx(orderedDeck, rng = Math.random) {
+  const n = orderedDeck?.length || 0
+  return n ? Math.min(n - 1, Math.floor(rng() * n)) : 0
+}
+
+/** The goal card for one side of a match (matches saved before random goals fall back to slot 11). */
+export function goalCardFor(match, idx) {
+  return match.deckOrder[idx][match.goalCardIdx?.[idx] ?? 11]
+}
+
+/** Sets match.goalCardIdx / match.goalColor from one random card out of each player's deck. */
+export function assignRandomGoals(match, rng = Math.random) {
+  match.goalCardIdx = match.deckOrder.map(d => pickGoalCardIdx(d, rng))
+  match.goalColor = match.deckOrder.map((d, i) => d[match.goalCardIdx[i]]?.color ?? null)
+  return match
+}
+
 /** A deck save must carry exactly 12 cards at unique positions 0-11. */
 export function validateDeckPositions(cards) {
   if (!Array.isArray(cards) || cards.length !== 12) return false
