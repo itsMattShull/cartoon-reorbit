@@ -141,5 +141,18 @@ export default defineEventHandler(async (event) => {
     pingFinalBossAppeared(user.cMoonId, chosen.id, chosen.name).catch(() => {})
   }
 
-  return { offered: true, resumed: false, enemy: serializeEnemyForClient(chosen), inCMoon: !!user.cMoonId }
+  // Only worth the extra read when pity is actually enabled for this member — see
+  // serializeEnemyForClient's own comment on why this is the one caller that supplies a real
+  // streak (the OFFER screen is the "should I fight this" decision point pity progress matters
+  // most at). A player with no row yet (never had an empty win against this member) simply shows
+  // 0/threshold, same starting point as the real upsert in action.post.js would create.
+  const pityRow = chosen.pityThreshold > 0
+    ? await db.cMoonEnemyRewardPity.findUnique({
+        where: { userId_enemyMemberId: { userId, enemyMemberId: chosen.id } },
+        select: { emptyWinStreak: true },
+      })
+    : null
+  const pityEmptyWinStreak = chosen.pityThreshold > 0 ? (pityRow?.emptyWinStreak || 0) : null
+
+  return { offered: true, resumed: false, enemy: serializeEnemyForClient(chosen, pityEmptyWinStreak), inCMoon: !!user.cMoonId }
 })

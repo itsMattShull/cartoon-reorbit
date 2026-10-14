@@ -257,7 +257,13 @@ export function grantSummaryIsEmpty(summary) {
 // fields useFullscreenEffect().play()'s CUSTOM config expects — the same shape
 // utils/cmoonJoinEffectDescriptor.js builds from a CMoon's own customJoinEffect — never the raw
 // Prisma row (no id/createdAt/etc leaking to every logged-in player).
-export function serializeEnemyForClient(member) {
+// `pityEmptyWinStreak` is this VIEWER's own current CMoonEnemyRewardPity.emptyWinStreak against
+// this member (a DB read the caller does, if at all — this function stays pure/DB-free). Only
+// consider.post.js's OFFER roll passes a real value today, specifically so a player deciding
+// whether to fight can see "N more empty wins until a guaranteed drop" before committing — every
+// other caller (a resumed/in-progress battle, the admin preview tool) omits it, which is also
+// correct: the streak can't change mid-fight, so there's nothing new to show there anyway.
+export function serializeEnemyForClient(member, pityEmptyWinStreak = null) {
   const hp = member.battleMode === 'SHARED_POOL' ? member.currentHp : member.maxHp
   const fx = member.faction?.appearEffect
   // A member's own null sound slot falls back to its faction's matching default — see
@@ -282,6 +288,12 @@ export function serializeEnemyForClient(member) {
     isRaidBoss: !!member.isRaidBoss,
     maxHp: member.maxHp,
     hp,
+    // Null hides the UI entirely — pity disabled for this member, or the caller didn't pass a
+    // streak (see this function's own comment on who does). Never sent for a raid boss (pity is
+    // solo-only — see CMoonEnemyMember.pityThreshold's own schema comment).
+    pityProgress: (member.pityThreshold > 0 && pityEmptyWinStreak != null)
+      ? { emptyWinStreak: pityEmptyWinStreak, threshold: member.pityThreshold }
+      : null,
     // Named from the enemy's own perspective — see the schema comment on these columns.
     appearSoundPath: sounds.appearSoundPath,
     damageTakenSoundPath: sounds.damageTakenSoundPath,

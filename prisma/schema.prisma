@@ -1892,6 +1892,16 @@ model GlobalGameConfig {
   // (see grantCMoonRank in server/utils/achievements.js, and the admin bulk-recalc's `upgraded`
   // classification in cmoon-rank-recalc.worker.js) — never fires on a downgrade from either path.
   cMoonRankUpAnnounceEnabled         Boolean   @default(false)
+  // Floor on the above: only a rank-up REACHING a rank at or above this CMoonRank.sortOrder
+  // actually posts — 0 (the default) announces every rank-up, same as before this field existed.
+  // Exists so a server with many active members climbing the ladder (every GOON->ENFORCER bump,
+  // say) doesn't flood a team channel with low-stakes promotions; an admin can raise this to only
+  // celebrate the ones worth a shout-out (e.g. UNDERBOSS+). Compared directly against whichever
+  // CMoonRank was just granted — a hand-authored per-cMoon custom rank (no mirrored
+  // CMoonRankTier) uses its own cMoonId-scoped sortOrder same as any other, so this floor's exact
+  // meaning is only consistent across cMoons for tier-mirrored ranks, which share one universal
+  // sortOrder by construction (see CMoonRank.tierId's own comment).
+  cMoonRankUpAnnounceMinSortOrder    Int       @default(0)
   // Pings a cMoon's own Discord channel when a solo (non-raid) FINAL_BOSS-rank enemy appears for
   // one of its members (see consider.post.js) — cooldown guards against spamming the channel if
   // the same team's members keep rolling the boss in quick succession; see
@@ -5434,6 +5444,17 @@ enum CMoonEnemyBattleOutcome {
   // CMoon.battleLosses: the player never actually took 5 hits, so crediting a real loss would
   // misrepresent what happened.
   ABANDONED
+  // The enemy died — but NOT from this battle's own player (see CMoonEnemyBattle.damageDealt's
+  // own comment: a SHARED_POOL community boss's live HP is visible before a fight even starts,
+  // and re-read fresh every round, so a player who contributed zero damage can still have their
+  // battle resolve the instant someone else lands the kill). No CMoon.battleWins increment, no
+  // points, no reward-table roll, no pity/first-win-bonus progress, no achievement credit — the
+  // team/community already got full credit via whichever player's OWN battle actually closed the
+  // kill (their outcome is WIN, not this). Same "ends clean, no penalty" shape as ABANDONED, just
+  // triggered by someone else's hit instead of elapsed time/rounds. Never produced for a
+  // PER_PLAYER member — nothing but this battle's own player can move that mode's HP at all, so
+  // damageDealt is always > 0 there by construction.
+  UNCREDITED
 }
 
 enum CMoonEnemyRewardType {
@@ -5893,6 +5914,20 @@ model CMoonEnemyBattle {
   roundLog          Json                     @default("[]")
   pointsAwarded     Int                      @default(0)
   rewardsGranted    Json? // [{ type, name, quantity }] — display-only summary for the log
+  // Total damage THIS battle's own player actually dealt to the enemy — every landed lane hit's
+  // enemyDamage plus the player's own DAMAGE_OPPONENT special, summed across every round (never
+  // the enemy's own healing/attacks, never another player's hits on a shared pool). Exists
+  // solely to detect a SHARED_POOL "snipe": that battle mode re-reads the enemy's live, publicly
+  // visible currentHp every round (see serializeEnemyForClient), so a player can start a fight
+  // against an already-nearly-dead community boss, contribute nothing, and still have their next
+  // round resolve the instant SOME OTHER player's hit finishes it off. action.post.js's main
+  // handler now checks this is > 0 before routing a dead-enemy round to resolveWin — a win with
+  // zero contribution resolves as UNCREDITED instead (see that outcome's own comment), which
+  // keeps every `outcome: 'WIN'` reward/points/achievement/leaderboard/first-win-bonus query
+  // elsewhere correct for free, with no changes needed at any of those call sites. Always > 0 by
+  // construction for a real PER_PLAYER win (nothing else can move that mode's HP), so this is a
+  // complete no-op for every pre-existing battle shape.
+  damageDealt       Int                      @default(0)
   startedAt         DateTime                 @default(now())
   // Bumped on every round resolved (and at creation) — the idle-timeout clock for reclaiming an
   // ABANDONED battle. NOT bumped by merely viewing/polling the battle, only by actually

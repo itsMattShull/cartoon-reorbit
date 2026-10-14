@@ -31,6 +31,7 @@
             <template v-if="inCMoon">A win earns cMoon points for your team and a chance at prizes.</template>
             <template v-else>A win earns a chance at prizes — join a cMoon to also earn points for a team.</template>
           </p>
+          <p v-if="pityProgressText" class="cbp-pity-progress">{{ pityProgressText }}</p>
           <p v-if="currentTaunt" class="cbp-taunt">&ldquo;{{ currentTaunt }}&rdquo;</p>
           <p v-if="error" class="cbp-error">{{ error }}</p>
           <p v-if="enemy?.isRaidBoss" class="cbp-flavor">
@@ -147,6 +148,7 @@
             </div>
           </template>
           <p v-else-if="battle?.outcome === 'ABANDONED'" class="cbp-flavor">The fight timed out — no penalty, try again anytime.</p>
+          <p v-else-if="battle?.outcome === 'UNCREDITED'" class="cbp-flavor">Someone else landed the final blow on this one — no prize this time, but good luck on the next bounty!</p>
           <p v-else class="cbp-flavor">No penalty beyond the loss itself — take another shot anytime.</p>
 
           <div class="cbp-actions">
@@ -176,6 +178,19 @@ const {
 const bannerStyle = computed(() => {
   const path = phase.value === 'OFFER' ? enemy.value?.faction?.bannerImagePath : battle.value?.enemy?.faction?.bannerImagePath
   return path ? { backgroundImage: `url(${path})` } : {}
+})
+
+// Reward-pity progress on the OFFER screen only — see server/utils/cmoonEnemyBattle.js's
+// serializeEnemyForClient for why this is the one screen the server bothers sending it on (the
+// streak can't change mid-fight, so there's nothing new to show once Fight! is pressed). null
+// enemy.pityProgress means either pity is disabled for this member or this isn't the OFFER
+// screen — both correctly show nothing.
+const pityProgressText = computed(() => {
+  const p = enemy.value?.pityProgress
+  if (!p) return ''
+  const remaining = Math.max(0, p.threshold - p.emptyWinStreak)
+  if (remaining === 0) return 'Your next win against this enemy is guaranteed to drop something!'
+  return `${remaining} more empty win${remaining === 1 ? '' : 's'} against this enemy until a guaranteed drop (${p.emptyWinStreak}/${p.threshold}).`
 })
 
 const enemyHpPercent = computed(() => {
@@ -255,6 +270,9 @@ const lastRoundClass = computed(() => {
 const resultTitle = computed(() => {
   if (battle.value?.outcome === 'WIN') return 'Victory!'
   if (battle.value?.outcome === 'ABANDONED') return 'Battle ended'
+  // See CMoonEnemyBattleOutcome.UNCREDITED's own schema comment: the enemy is genuinely dead,
+  // just not by this player's own hand — "Defeated" (implying THEY lost) would be a flat lie.
+  if (battle.value?.outcome === 'UNCREDITED') return 'Bounty claimed — by someone else'
   return 'Defeated'
 })
 const resultTitleClass = computed(() => {
@@ -298,7 +316,10 @@ const nearMissFlavor = computed(() => {
 const resultFlash = ref('')
 let resultFlashTimer = null
 watch(phase, (p) => {
-  if (p === 'RESULT' && battle.value?.outcome && battle.value.outcome !== 'ABANDONED') {
+  // UNCREDITED (see that outcome's own schema comment) is neither a win nor a loss from this
+  // player's perspective — excluded here the same way ABANDONED already is, so it never flashes
+  // red as if they'd been defeated.
+  if (p === 'RESULT' && battle.value?.outcome && battle.value.outcome !== 'ABANDONED' && battle.value.outcome !== 'UNCREDITED') {
     resultFlash.value = battle.value.outcome === 'WIN' ? 'win' : 'loss'
     if (resultFlashTimer) clearTimeout(resultFlashTimer)
     resultFlashTimer = setTimeout(() => { resultFlash.value = '' }, 500)
@@ -571,6 +592,15 @@ watch(() => route.path, maybeCheck)
 .cbp-title-loss { color: #f87171; }
 .cbp-sub { font-size: 0.78rem; color: rgba(255, 255, 255, 0.6); margin-bottom: 8px; }
 .cbp-flavor { font-size: 12px; color: rgba(255, 255, 255, 0.75); margin-bottom: 12px; line-height: 1.4; }
+/* Reward-pity progress — a quiet gold-tinted aside on the OFFER screen only, same family as the
+   result screen's own cbp-first-win/cbp-near-miss asides but intentionally less loud (this is a
+   helpful hint, not a celebration). */
+.cbp-pity-progress {
+  font-size: 11.5px;
+  font-style: italic;
+  color: #fde68a;
+  margin: 0 0 10px;
+}
 /* Admin-authored enemy taunt line (see CMoonEnemyTaunt's own schema comment) — styled as a quoted
    speech-bubble aside, distinct from both the plain .cbp-flavor copy and the red/green round
    summary, since it's the enemy's own "voice" rather than a system message. */

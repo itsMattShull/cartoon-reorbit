@@ -142,13 +142,18 @@ export async function announceTeamPointsMilestones(beforeById, afterRows, config
 /* ── Rank-up ──────────────────────────────────────────────────────────────────────────────────── */
 
 // Called from the normal gameplay rank-up path (grantCMoonRank's return value, surfaced through
-// awardAchievementToUser in server/utils/achievements.js).
-export async function announceCMoonRankUp(userId, rankName) {
+// awardAchievementToUser in server/utils/achievements.js). `sortOrder` is the just-granted
+// CMoonRank's own sortOrder, checked against cMoonRankUpAnnounceMinSortOrder's floor (see that
+// column's own schema comment) before this does anything else — every existing caller already
+// has it in hand from the same query that returned the rank's id/name, so this never needs an
+// extra lookup.
+export async function announceCMoonRankUp(userId, rankName, sortOrder) {
   try {
     const config = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: {
-      cMoonRankUpAnnounceEnabled: true, cMoonRaidBossDiscordChannelId: true,
+      cMoonRankUpAnnounceEnabled: true, cMoonRaidBossDiscordChannelId: true, cMoonRankUpAnnounceMinSortOrder: true,
     } })
     if (!config?.cMoonRankUpAnnounceEnabled) return
+    if ((sortOrder ?? 0) < (config.cMoonRankUpAnnounceMinSortOrder ?? 0)) return
     const user = await prisma.user.findUnique({ where: { id: userId }, select: {
       username: true, cMoon: { select: { name: true, discordChannelId: true } },
     } })
@@ -165,13 +170,15 @@ export async function announceCMoonRankUp(userId, rankName) {
 // each user it classifies as `upgraded` — a genuinely separate code path from grantCMoonRank above
 // that never calls it, so this needs its own entry point. The caller already has every field this
 // needs in hand (one row per user, already loaded for its own progress feed), so this takes plain
-// values rather than re-querying.
-export async function announceCMoonRankUpFromRecalc(cMoonDiscordChannelId, cMoonName, username, newRankName) {
+// values rather than re-querying. `sortOrder` is checked the same way announceCMoonRankUp's own
+// does — see that function's own comment.
+export async function announceCMoonRankUpFromRecalc(cMoonDiscordChannelId, cMoonName, username, newRankName, sortOrder) {
   try {
     const config = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: {
-      cMoonRankUpAnnounceEnabled: true, cMoonRaidBossDiscordChannelId: true,
+      cMoonRankUpAnnounceEnabled: true, cMoonRaidBossDiscordChannelId: true, cMoonRankUpAnnounceMinSortOrder: true,
     } })
     if (!config?.cMoonRankUpAnnounceEnabled) return
+    if ((sortOrder ?? 0) < (config.cMoonRankUpAnnounceMinSortOrder ?? 0)) return
     const channelId = resolveCMoonChannelId(cMoonDiscordChannelId, config)
     if (!channelId) return
     await sendCMoonTeamUpdate(channelId, buildRankUpMessage(username, newRankName))

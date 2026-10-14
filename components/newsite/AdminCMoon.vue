@@ -226,6 +226,17 @@
               Posts to a member's own team channel when they rank up (gameplay or the admin
               "Recalculate cMoon Points" tool's upgrades only — never a downgrade).
             </p>
+            <div v-if="rankUpAnnounceEnabled" class="flex items-center gap-2 mt-1.5">
+              <label class="text-xs w-28">Only announce</label>
+              <select v-model.number="rankUpAnnounceMinSortOrder" class="cm-field border rounded px-2 py-1 text-xs" style="font-size:16px">
+                <option :value="0">Every rank-up</option>
+                <option v-for="t in rankTiers" :key="t.id" :value="t.sortOrder">{{ t.name }} and above</option>
+              </select>
+            </div>
+            <p v-if="rankUpAnnounceEnabled" class="text-[11px] text-gray-500 mt-1">
+              With many active members, every single promotion can flood a team channel — raise
+              this to only celebrate the ones worth a shout-out.
+            </p>
           </div>
 
           <div>
@@ -1505,6 +1516,7 @@ const teamMilestoneEnabled = ref(false)
 const teamMilestoneEnemiesInterval = ref(100)
 const teamMilestonePointsInterval = ref(1000)
 const rankUpAnnounceEnabled = ref(false)
+const rankUpAnnounceMinSortOrder = ref(0)
 const finalBossPingEnabled = ref(false)
 const finalBossPingCooldownMinutes = ref(60)
 const welcomePostEnabled = ref(false)
@@ -2571,6 +2583,7 @@ async function load() {
     teamMilestoneEnemiesInterval.value = Number.isInteger(data.cMoonTeamMilestoneEnemiesInterval) ? data.cMoonTeamMilestoneEnemiesInterval : 100
     teamMilestonePointsInterval.value = Number.isInteger(data.cMoonTeamMilestonePointsInterval) ? data.cMoonTeamMilestonePointsInterval : 1000
     rankUpAnnounceEnabled.value = !!data.cMoonRankUpAnnounceEnabled
+    rankUpAnnounceMinSortOrder.value = Number.isInteger(data.cMoonRankUpAnnounceMinSortOrder) ? data.cMoonRankUpAnnounceMinSortOrder : 0
     finalBossPingEnabled.value = !!data.cMoonFinalBossPingEnabled
     finalBossPingCooldownMinutes.value = Number.isInteger(data.cMoonFinalBossPingCooldownMinutes) ? data.cMoonFinalBossPingCooldownMinutes : 60
     welcomePostEnabled.value = !!data.cMoonWelcomePostEnabled
@@ -2892,6 +2905,7 @@ async function saveDiscordEvents() {
         cMoonTeamMilestoneEnemiesInterval: teamMilestoneEnemiesInterval.value,
         cMoonTeamMilestonePointsInterval: teamMilestonePointsInterval.value,
         cMoonRankUpAnnounceEnabled: rankUpAnnounceEnabled.value,
+        cMoonRankUpAnnounceMinSortOrder: rankUpAnnounceMinSortOrder.value,
         cMoonFinalBossPingEnabled: finalBossPingEnabled.value,
         cMoonFinalBossPingCooldownMinutes: finalBossPingCooldownMinutes.value,
         cMoonWelcomePostEnabled: welcomePostEnabled.value,
@@ -2907,6 +2921,7 @@ async function saveDiscordEvents() {
     teamMilestoneEnemiesInterval.value = res.cMoonTeamMilestoneEnemiesInterval
     teamMilestonePointsInterval.value = res.cMoonTeamMilestonePointsInterval
     rankUpAnnounceEnabled.value = res.cMoonRankUpAnnounceEnabled
+    rankUpAnnounceMinSortOrder.value = res.cMoonRankUpAnnounceMinSortOrder ?? 0
     finalBossPingEnabled.value = res.cMoonFinalBossPingEnabled
     finalBossPingCooldownMinutes.value = res.cMoonFinalBossPingCooldownMinutes
     welcomePostEnabled.value = res.cMoonWelcomePostEnabled

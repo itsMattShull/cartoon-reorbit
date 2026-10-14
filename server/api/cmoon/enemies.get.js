@@ -34,8 +34,43 @@ export default defineEventHandler(async (event) => {
   })
   const winsByMember = new Map(winTallies.map(t => [t.enemyMemberId, t._count._all]))
 
+  // Personal summary strip at the top of the page — every number here is read off data this
+  // endpoint (or a sibling query shaped exactly like its own existing ones) already touches, no
+  // new tables and nothing cached between requests. favoriteEnemyId is just winTallies' own max
+  // entry; the matching name is filled in below once the faction/member list is built, since
+  // that's the one place this handler already has every member's name in hand.
+  const personalLossCount = await db.cMoonEnemyBattle.count({ where: { userId, outcome: 'LOSS' } })
+  const favoriteTally = winTallies.length
+    ? winTallies.reduce((best, t) => (t._count._all > best._count._all ? t : best))
+    : null
+  // Resolved against the active member list already being built below — a favorite from history
+  // whose member an admin has since deactivated simply has no name to show, same "member list is
+  // active-only" scope the rest of this endpoint already follows.
+  const allMembers = factions.flatMap(f => f.members)
+  const favoriteEnemyName = favoriteTally
+    ? allMembers.find(m => m.id === favoriteTally.enemyMemberId)?.name || null
+    : null
+
+  // A short "hype feed" of recently-defeated SHARED_POOL community bosses, server-wide (not
+  // scoped to this viewer) — reuses the exact same permanent CMoonEnemyBattle log the admin
+  // battle-logs page already reads, just a tiny LIMIT 5 slice of it; nothing new is written or
+  // cached anywhere for this.
+  const recentCommunityKills = await db.cMoonEnemyBattle.findMany({
+    where: { outcome: 'WIN', enemyMember: { battleMode: 'SHARED_POOL' } },
+    orderBy: { endedAt: 'desc' },
+    take: 5,
+    select: { endedAt: true, user: { select: { username: true } }, enemyMember: { select: { name: true } } },
+  })
+
   return {
     personalWinCount,
+    personalLossCount,
+    favoriteEnemy: favoriteEnemyName ? { name: favoriteEnemyName, wins: favoriteTally._count._all } : null,
+    recentCommunityKills: recentCommunityKills.map(k => ({
+      username: k.user?.username || 'Someone',
+      enemyName: k.enemyMember?.name || '(deleted)',
+      endedAt: k.endedAt,
+    })),
     factions: factions.map(f => ({
       id: f.id,
       name: f.name,

@@ -120,7 +120,7 @@ const worker = new Worker(QUEUE_KEY, async (job) => {
           // Never a downgrade/clear — filtered to this branch only, per this tool's own
           // upgraded/downgraded/cleared classification above (see cmoonDiscordEvents.js's own
           // comment on why this is a separate hook from grantCMoonRank's gameplay path).
-          announceCMoonRankUpFromRecalc(user.cMoon?.discordChannelId, user.cMoon?.name, user.username, newRank.name).catch(() => {})
+          announceCMoonRankUpFromRecalc(user.cMoon?.discordChannelId, user.cMoon?.name, user.username, newRank.name, newRank.sortOrder).catch(() => {})
         } else {
           downgraded++
         }

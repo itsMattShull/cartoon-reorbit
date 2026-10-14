@@ -9,6 +9,26 @@
     <p v-if="loadError" class="enroster-error">{{ loadError }}</p>
 
     <template v-else-if="!loading">
+      <!-- Personal summary — every number here is already returned by the same request that
+           loads the roster below, nothing extra fetched for this. -->
+      <div class="enroster-stats-strip">
+        <div class="enroster-stat"><span class="enroster-stat-value">{{ personalWinCount }}</span><span class="enroster-stat-label">Wins</span></div>
+        <div class="enroster-stat"><span class="enroster-stat-value">{{ personalLossCount }}</span><span class="enroster-stat-label">Losses</span></div>
+        <div v-if="favoriteEnemy" class="enroster-stat">
+          <span class="enroster-stat-value">{{ favoriteEnemy.wins }}x</span>
+          <span class="enroster-stat-label">vs. {{ favoriteEnemy.name }}</span>
+        </div>
+      </div>
+
+      <!-- Recently-defeated community bosses, server-wide — a small "hype feed" off the same
+           permanent battle log the admin page reads, not anything tracked live. -->
+      <div v-if="recentCommunityKills.length" class="enroster-ticker">
+        <span class="enroster-ticker-label">Recently defeated:</span>
+        <span v-for="(k, i) in recentCommunityKills" :key="i" class="enroster-ticker-item">
+          <strong>{{ k.enemyName }}</strong> by {{ k.username }}<span v-if="i < recentCommunityKills.length - 1">, </span>
+        </span>
+      </div>
+
       <div v-for="f in factions" :key="f.id" class="enroster-faction">
         <div class="enroster-faction-header">
           <img v-if="f.bannerImagePath" :src="f.bannerImagePath" alt="" class="enroster-faction-banner" />
@@ -66,12 +86,20 @@ const RANK_LABELS = { GOON: 'Goon', ENFORCER: 'Enforcer', UNDERBOSS: 'Underboss'
 const factions = ref([])
 const loading = ref(true)
 const loadError = ref('')
+const personalWinCount = ref(0)
+const personalLossCount = ref(0)
+const favoriteEnemy = ref(null)
+const recentCommunityKills = ref([])
 
 const { data, error } = await useFetch('/api/cmoon/enemies')
 if (error.value) {
   loadError.value = 'Could not load the enemy roster right now.'
 } else {
   factions.value = data.value?.factions || []
+  personalWinCount.value = data.value?.personalWinCount || 0
+  personalLossCount.value = data.value?.personalLossCount || 0
+  favoriteEnemy.value = data.value?.favoriteEnemy || null
+  recentCommunityKills.value = data.value?.recentCommunityKills || []
 }
 loading.value = false
 </script>
@@ -90,6 +118,31 @@ loading.value = false
 .enroster-title { font-size: 1.6rem; font-weight: 800; margin: 0 0 4px; }
 .enroster-subtitle { font-size: 0.9rem; color: rgba(255, 255, 255, 0.65); margin: 0 0 20px; }
 .enroster-error, .enroster-empty { font-size: 0.9rem; color: rgba(255, 255, 255, 0.65); }
+
+.enroster-stats-strip {
+  display: flex;
+  gap: 18px;
+  margin-bottom: 14px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+.enroster-stat { display: flex; flex-direction: column; }
+.enroster-stat-value { font-size: 1.15rem; font-weight: 800; }
+.enroster-stat-label { font-size: 0.68rem; color: rgba(255, 255, 255, 0.55); white-space: nowrap; }
+
+.enroster-ticker {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 20px;
+  padding: 6px 10px;
+  background: rgba(74, 222, 128, 0.06);
+  border: 1px solid rgba(74, 222, 128, 0.15);
+  border-radius: 8px;
+}
+.enroster-ticker-label { font-weight: 700; color: #4ade80; margin-right: 6px; }
+.enroster-ticker-item strong { color: #fff; }
 
 .enroster-faction { margin-bottom: 28px; }
 .enroster-faction-header {

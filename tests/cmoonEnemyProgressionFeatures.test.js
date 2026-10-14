@@ -6,6 +6,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   rollEnemyAction, shouldForcePityReward, forcePickOneReward, isValidBattleAction, grantSummaryIsEmpty,
+  serializeEnemyForClient,
 } from '../server/utils/cmoonEnemyBattle.js'
 import {
   isValidAttackChance, isValidPityThreshold, isValidFirstWinBonusPoints,
@@ -183,4 +184,35 @@ test('grantSummaryIsEmpty: a hit that grantRewardInTx deduped away to 0 new avat
 test('grantSummaryIsEmpty: tolerates a missing/undefined summary without throwing', () => {
   assert.equal(grantSummaryIsEmpty(undefined), true)
   assert.equal(grantSummaryIsEmpty({}), true)
+})
+
+// ── serializeEnemyForClient's new pityProgress field — see that function's own comment on why
+// only a caller that explicitly passes a streak (consider.post.js's OFFER roll) gets anything
+// back. ──────────────────────────────────────────────────────────────────────────────────────
+
+const baseMember = {
+  id: 'm1', name: 'Test Enemy', battleMode: 'PER_PLAYER', rank: 'GOON', isRaidBoss: false, maxHp: 5,
+  critChanceAgainstPercent: 0, critChanceFromPercent: 0, pityThreshold: 0,
+}
+
+test('serializeEnemyForClient: pityProgress is null when pity is disabled for this member (0)', () => {
+  const result = serializeEnemyForClient({ ...baseMember, pityThreshold: 0 }, 2)
+  assert.equal(result.pityProgress, null)
+})
+
+test('serializeEnemyForClient: pityProgress is null when the caller omits a streak, even with pity enabled', () => {
+  const result = serializeEnemyForClient({ ...baseMember, pityThreshold: 3 })
+  assert.equal(result.pityProgress, null)
+})
+
+test('serializeEnemyForClient: pityProgress carries the real streak/threshold when both are present', () => {
+  const result = serializeEnemyForClient({ ...baseMember, pityThreshold: 3 }, 2)
+  assert.deepEqual(result.pityProgress, { emptyWinStreak: 2, threshold: 3 })
+})
+
+test('serializeEnemyForClient: a streak of exactly 0 is NOT treated as "no streak passed" (0 !== null)', () => {
+  // A player with no empty-win history yet still has a genuine 0/threshold to show — this must
+  // not collapse into the same "nothing to show" case an omitted/null streak hits.
+  const result = serializeEnemyForClient({ ...baseMember, pityThreshold: 5 }, 0)
+  assert.deepEqual(result.pityProgress, { emptyWinStreak: 0, threshold: 5 })
 })

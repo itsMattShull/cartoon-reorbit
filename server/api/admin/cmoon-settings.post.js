@@ -201,6 +201,13 @@ export default defineEventHandler(async (event) => {
   if (body?.cMoonRankUpAnnounceEnabled !== undefined) {
     data.cMoonRankUpAnnounceEnabled = !!body.cMoonRankUpAnnounceEnabled
   }
+  if (body?.cMoonRankUpAnnounceMinSortOrder !== undefined) {
+    const minSortOrder = Number(body.cMoonRankUpAnnounceMinSortOrder)
+    if (!Number.isInteger(minSortOrder) || minSortOrder < 0 || minSortOrder > 1000) {
+      throw createError({ statusCode: 400, statusMessage: 'Rank-up announce floor must be a whole number between 0 and 1000' })
+    }
+    data.cMoonRankUpAnnounceMinSortOrder = minSortOrder
+  }
 
   // Solo Final Boss appearance ping — see pingFinalBossAppeared in server/utils/cmoonDiscordEvents.js.
   if (body?.cMoonFinalBossPingEnabled !== undefined) {
@@ -290,6 +297,7 @@ export default defineEventHandler(async (event) => {
       cMoonTeamMilestoneEnemiesInterval: existing?.cMoonTeamMilestoneEnemiesInterval,
       cMoonTeamMilestonePointsInterval: existing?.cMoonTeamMilestonePointsInterval,
       cMoonRankUpAnnounceEnabled: existing?.cMoonRankUpAnnounceEnabled,
+      cMoonRankUpAnnounceMinSortOrder: existing?.cMoonRankUpAnnounceMinSortOrder,
       cMoonFinalBossPingEnabled: existing?.cMoonFinalBossPingEnabled,
       cMoonFinalBossPingCooldownMinutes: existing?.cMoonFinalBossPingCooldownMinutes,
       cMoonWelcomePostEnabled: existing?.cMoonWelcomePostEnabled,
@@ -322,6 +330,7 @@ export default defineEventHandler(async (event) => {
       cMoonTeamMilestoneEnemiesInterval: updated.cMoonTeamMilestoneEnemiesInterval,
       cMoonTeamMilestonePointsInterval: updated.cMoonTeamMilestonePointsInterval,
       cMoonRankUpAnnounceEnabled: updated.cMoonRankUpAnnounceEnabled,
+      cMoonRankUpAnnounceMinSortOrder: updated.cMoonRankUpAnnounceMinSortOrder,
       cMoonFinalBossPingEnabled: updated.cMoonFinalBossPingEnabled,
       cMoonFinalBossPingCooldownMinutes: updated.cMoonFinalBossPingCooldownMinutes,
       cMoonWelcomePostEnabled: updated.cMoonWelcomePostEnabled,
@@ -356,6 +365,7 @@ export default defineEventHandler(async (event) => {
     cMoonTeamMilestoneEnemiesInterval: updated.cMoonTeamMilestoneEnemiesInterval,
     cMoonTeamMilestonePointsInterval: updated.cMoonTeamMilestonePointsInterval,
     cMoonRankUpAnnounceEnabled: updated.cMoonRankUpAnnounceEnabled,
+    cMoonRankUpAnnounceMinSortOrder: updated.cMoonRankUpAnnounceMinSortOrder,
     cMoonFinalBossPingEnabled: updated.cMoonFinalBossPingEnabled,
     cMoonFinalBossPingCooldownMinutes: updated.cMoonFinalBossPingCooldownMinutes,
     cMoonWelcomePostEnabled: updated.cMoonWelcomePostEnabled,
