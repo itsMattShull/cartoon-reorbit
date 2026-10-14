@@ -197,7 +197,7 @@
 
       <!-- End-of-match result screen -->
       <transition name="fade">
-        <div v-if="matchEnded && !flipping" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div v-if="matchEnded && !flipping && resultOpen" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div class="bg-gray-900 border border-white/20 rounded-xl p-6 w-[26rem] max-w-[95vw] text-center">
             <h2 class="text-2xl font-bold mb-2" :class="matchEnded.won ? 'text-green-400' : (matchEnded.outcome === 'TIE' ? 'text-amber-300' : 'text-red-400')">
               {{ matchEnded.outcome === 'TIE' ? "It's a Tie!" : (matchEnded.won ? 'You Win!' : 'You Lose') }}
@@ -209,10 +209,18 @@
               <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-1">Game Log</p>
               <OgGtoonGameLog :entries="gameLog" />
             </div>
-            <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">{{ isPractice ? 'Back to Practice' : 'Back to Lobby' }}</button>
+            <div class="flex gap-2 justify-center">
+              <button @click="resultOpen = false" class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-sm">View board</button>
+              <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">{{ isPractice ? 'Back to Practice' : 'Back to Lobby' }}</button>
+            </div>
           </div>
         </div>
       </transition>
+      <!-- With the result closed, the finished board stays visible; these bring the result back or leave. -->
+      <div v-if="matchEnded && !flipping && !resultOpen" class="fixed bottom-3 inset-x-0 z-40 flex justify-center gap-2">
+        <button @click="resultOpen = true" class="bg-gray-800/90 border border-white/20 hover:bg-gray-700 px-4 py-2 rounded text-sm">Show result</button>
+        <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">{{ isPractice ? 'Back to Practice' : 'Back to Lobby' }}</button>
+      </div>
     </template>
 
     <!-- Printed properties of a card (right-click / long-press) -->
@@ -259,6 +267,9 @@ const difficultyLabel = computed(() => {
 
 const inDiscardPhase = computed(() => matchState.value?.phase === 'discard')
 const inSwapPhase = computed(() => matchState.value?.phase === 'swap')
+// The end-of-match result can be closed to look over the finished board; it reopens for each new result.
+const resultOpen = ref(true)
+watch(matchEnded, () => { resultOpen.value = true })
 const inColorPhase = computed(() => matchState.value?.phase === 'color')
 const REAL_COLORS = ['BLUE', 'RED', 'YELLOW', 'GREEN', 'PURPLE', 'ORANGE', 'PINK']
 const roundLabel = computed(() => {
@@ -372,7 +383,10 @@ const boardValues = computed(() => toShown(matchState.value?.board))
 function displayed(entry, side) {
   if (!entry) return null
   const o = (playback.value ? playback.value.shown : boardValues.value).get(cardKey(side, entry.slot))
-  return o ? { ...entry, ...o } : entry
+  const card = o ? { ...entry, ...o } : entry
+  // A Silver card shows (and sweeps to) the colour its owner picked once the colour phase has resolved.
+  const picked = side === youSide.value ? matchState.value?.you?.silverColor : matchState.value?.opponent?.silverColor
+  return picked && card.color === 'SILVER' ? { ...card, color: picked } : card
 }
 
 /* ── Slots ───────────────────────────────────────────────────────────────────────────────── */
