@@ -25,13 +25,12 @@
         class="aat-item"
         @click="openAuction(item.auctionId)"
       >
-        <img
+        <CtoonImage
           v-if="item.assetPath"
-          :src="item.assetPath"
+          :ctoon="item"
           :alt="item.ctoonName"
           class="aat-thumb"
-          draggable="false"
-        />
+          draggable="false" />
         <span class="aat-item-text">
           <span class="aat-item-name">{{ item.ctoonName }}</span>
           <span class="aat-item-bid">{{ formatPoints(item.highestBid) }} pts</span>
@@ -54,6 +53,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 
 const POLL_MS = 15000

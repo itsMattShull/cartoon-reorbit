@@ -6,7 +6,10 @@
       </div>
 
       <template v-else>
-        <div class="cr-card bg-white rounded border p-4 space-y-3" :class="{ 'cr-shake': shaking, 'cr-shake-crit': shaking && shakeCrit }">
+        <div
+          class="cr-card bg-white rounded border p-4 space-y-3"
+          :class="{ 'cr-shake': shaking, 'cr-shake-crit': shaking && shakeCrit, 'cr-result-flash-win': resultFlash === 'win', 'cr-result-flash-loss': resultFlash === 'loss' }"
+        >
           <div class="flex items-center gap-3">
             <div class="w-16 h-16 rounded border flex-shrink-0 overflow-hidden bg-gray-100 flex items-center justify-center">
               <img v-if="raid.enemyImagePath" :src="raid.enemyImagePath" alt="" class="max-w-full max-h-full object-contain" />
@@ -19,15 +22,17 @@
           </div>
 
           <div class="space-y-1">
-            <div class="flex items-center gap-2 text-xs">
+            <div class="flex items-center gap-2 text-xs relative">
               <span class="w-14 flex-shrink-0 text-gray-500">Boss HP</span>
               <div class="flex-1 h-2.5 bg-gray-200 rounded overflow-hidden">
-                <div class="h-full bg-red-500 transition-all" :style="{ width: enemyHpPercent + '%' }"></div>
+                <div class="h-full transition-all" :class="enemyHpFillClass" :style="{ width: enemyHpPercent + '%' }"></div>
               </div>
               <span class="w-16 flex-shrink-0 text-right tabular-nums">{{ raid.enemyHpRemaining }}/{{ raid.enemyMaxHp }}</span>
+              <span v-for="d in enemyFloatingDamage" :key="d.id" class="cr-dmg-float" :class="{ 'cr-dmg-float-crit': d.crit }">-{{ d.amount }}</span>
             </div>
           </div>
 
+          <p v-if="currentTaunt" class="cr-taunt">&ldquo;{{ currentTaunt }}&rdquo;</p>
           <p v-if="raidSocket.lastError.value" class="text-sm text-red-600">{{ raidSocket.lastError.value }}</p>
 
           <!-- ── FORMING: roster + join countdown ────────────────────────── -->
@@ -54,12 +59,16 @@
           <div v-else-if="raid.status === 'IN_PROGRESS'" class="space-y-3">
             <p class="text-xs text-gray-500">Round {{ raid.roundNumber }}</p>
             <ul class="space-y-1.5">
-              <li v-for="p in raid.participants" :key="p.userId" class="flex items-center gap-2 text-xs">
+              <li v-for="p in raid.participants" :key="p.userId" class="flex items-center gap-2 text-xs relative">
                 <span class="w-24 flex-shrink-0 truncate" :class="p.knockedOut ? 'text-gray-400 line-through' : ''">{{ p.username }}</span>
                 <div class="flex-1 h-2 bg-gray-200 rounded overflow-hidden">
-                  <div class="h-full bg-green-500 transition-all" :style="{ width: (p.hpRemaining / (p.maxHp || 1) * 100) + '%' }"></div>
+                  <div class="h-full transition-all" :class="participantHpFillClass(p)" :style="{ width: (p.hpRemaining / (p.maxHp || 1) * 100) + '%' }"></div>
                 </div>
                 <span class="w-10 flex-shrink-0 text-right tabular-nums">{{ p.hpRemaining }}/{{ p.maxHp }}</span>
+                <span
+                  v-for="d in (p.userId === user?.id ? myFloatingDamage : [])" :key="d.id"
+                  class="cr-dmg-float" :class="{ 'cr-dmg-float-crit': d.crit }"
+                >-{{ d.amount }}</span>
                 <!-- Teammate charge meter — shown for everyone, not just myself (see the raid
                      page's own cMoonSpecialAttack v-if below for why this is co-op-visible). -->
                 <span
@@ -109,6 +118,7 @@
             </Transition>
 
             <p v-if="raidSocket.lastError.value" class="text-sm text-red-600">{{ raidSocket.lastError.value }}</p>
+            <p v-if="comboCallout" class="cr-combo-callout">{{ comboCallout }}</p>
 
             <template v-if="myself && !myself.knockedOut">
               <p v-if="myself.hasActed" class="text-sm text-gray-500">Locked in — waiting on the rest of the party…</p>
@@ -154,7 +164,17 @@
             <ul class="text-xs space-y-0.5">
               <li v-for="p in raid.participants" :key="p.userId">{{ p.username }}{{ p.knockedOut ? ' (knocked out)' : '' }}</li>
             </ul>
-            <p v-if="raid.outcome === 'WIN'" class="text-xs text-gray-600">Everyone who joined received the same prize.</p>
+            <p v-if="myself?.isFirstWinAgainstThisEnemy" class="cr-first-win">🏆 First victory over {{ raid.enemyName }}!</p>
+            <p v-if="nearMissFlavor" class="cr-near-miss">{{ nearMissFlavor }}</p>
+            <template v-if="raid.outcome === 'WIN'">
+              <div v-if="myRewardsList.length" class="cr-rewards">
+                <p class="cr-rewards-title">Your prizes:</p>
+                <ul>
+                  <li v-for="(r, i) in myRewardsList" :key="i" class="cr-reward-item" :style="{ animationDelay: (i * 150) + 'ms' }">{{ r }}</li>
+                </ul>
+              </div>
+              <p class="text-xs text-gray-600">Everyone who joined received the same prize.</p>
+            </template>
             <NuxtLink to="/newsite" class="inline-block px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50">Back home</NuxtLink>
           </div>
         </div>
@@ -182,11 +202,53 @@ const enemyHpPercent = computed(() => {
   if (!raid.value) return 0
   return Math.max(0, Math.min(100, Math.round((raid.value.enemyHpRemaining / (raid.value.enemyMaxHp || 1)) * 100)))
 })
+// Same green/yellow/red escalation as components/CMoonBattlePopupHost.vue's solo enemyHpFillClass
+// — a shared boss bar gets the same tension cue a solo fight already has.
+const enemyHpFillClass = computed(() => {
+  if (enemyHpPercent.value <= 25) return 'cr-hp-fill-critical'
+  if (enemyHpPercent.value <= 50) return 'cr-hp-fill-mid'
+  return 'cr-hp-fill-ok'
+})
+function participantHpFillClass(p) {
+  const pct = Math.max(0, Math.min(100, Math.round((p.hpRemaining / (p.maxHp || 1)) * 100)))
+  if (pct <= 25) return 'bg-red-500'
+  if (pct <= 50) return 'bg-amber-500'
+  return 'bg-green-500'
+}
 
 const outcomeLabel = computed(() => {
   if (raid.value?.outcome === 'WIN') return 'Victory! The party brought the boss down.'
   if (raid.value?.outcome === 'LOSS') return 'Defeat — the whole party was knocked out.'
   return 'The raid ended without a clear finish.'
+})
+
+// Mirrors components/CMoonBattlePopupHost.vue's rewardsList, read off MY OWN participant row
+// (myself.rewardsGranted) rather than a single shared battle object — every participant has their
+// own independently-granted roll (see resolveCMoonRaidOutcome's own comment on why), so this is
+// genuinely per-viewer, not shared with the rest of the party.
+const myRewardsList = computed(() => {
+  const rewards = Array.isArray(myself.value?.rewardsGranted) ? myself.value.rewardsGranted : []
+  return rewards.map(r => {
+    if (r.type === 'CTOON') return `${r.name || 'cToon'}${r.quantity > 1 ? ` x${r.quantity}` : ''}`
+    if (r.type === 'AVATAR') return `Avatar${r.quantity > 1 ? ` x${r.quantity}` : ''}`
+    if (r.type === 'POINTS') return `${r.quantity} points`
+    return `Background${r.quantity > 1 ? ` x${r.quantity}` : ''}`
+  })
+})
+
+// Mirrors components/CMoonBattlePopupHost.vue's nearMissFlavor, read off MY OWN HP for a clutch
+// win and the shared boss HP for a party-wide "so close" loss.
+const nearMissFlavor = computed(() => {
+  if (!raid.value || !myself.value) return ''
+  if (raid.value.outcome === 'WIN' && (myself.value.hpRemaining ?? 99) <= 1) {
+    return 'Clutch win — you barely made it out!'
+  }
+  if (raid.value.outcome === 'LOSS') {
+    const max = raid.value.enemyMaxHp || 1
+    const remaining = raid.value.enemyHpRemaining ?? max
+    if (remaining > 0 && remaining / max <= 0.15) return 'So close! The boss was nearly down.'
+  }
+  return ''
 })
 
 function usernameFor(userId) {
@@ -238,6 +300,43 @@ function tickCountdown() {
   joinCountdown.value = Math.max(0, Math.ceil((raid.value.joinDeadlineAt - Date.now()) / 1000))
 }
 
+// One random pick from an enemy's admin-authored taunt pool — mirrors
+// composables/useCMoonBattlePopup.js's own pickRandomTaunt exactly (no shared import path between
+// a composable and this page, so duplicated client-side the same way ACTION_LABELS already is).
+function pickRandomTaunt(list) {
+  if (!Array.isArray(list) || !list.length) return null
+  return list[Math.floor(Math.random() * list.length)]
+}
+// The currently-showing taunt line — set on first reveal (an APPEAR taunt) and on the boss's own
+// landed crit (a CRIT taunt, see the lastRound watch below); '' means nothing to show.
+const currentTaunt = ref('')
+
+// ── Floating damage numbers — see components/CMoonBattlePopupHost.vue's own floatingDamage for
+// the full rationale; this page just has two independent pools (boss aggregate, my own HP) rather
+// than one-entry-per-side, since a raid round can have several participants land hits on the boss
+// at once (see the lastRound watch below for how each pool is fed).
+const enemyFloatingDamage = ref([])
+const myFloatingDamage = ref([])
+let floatingDamageSeq = 0
+const FLOATING_DAMAGE_LIFETIME_MS = 900
+
+// ── Combo callout — a transient "Nx HIT STREAK!" for MY OWN streak climbing (see the myHitStreak
+// watch below), same shape as the solo popup's comboCallout.
+const comboCallout = ref('')
+let comboTimer = null
+
+// ── Result-screen flash — a brief full-bleed tint the instant the raid resolves, driven off the
+// status transition itself (mirrors the solo popup's own phase-transition-based resultFlash).
+const resultFlash = ref('')
+let resultFlashTimer = null
+watch(() => raid.value?.status, (status) => {
+  if (status === 'RESOLVED' && raid.value?.outcome && raid.value.outcome !== 'ABANDONED') {
+    resultFlash.value = raid.value.outcome === 'WIN' ? 'win' : 'loss'
+    if (resultFlashTimer) clearTimeout(resultFlashTimer)
+    resultFlashTimer = setTimeout(() => { resultFlash.value = '' }, 500)
+  }
+})
+
 // ── Impact feedback + sound/music — same "juice" components/CMoonBattlePopupHost.vue gives a
 // solo battle (see that component's own comments for the full rationale), adapted to a raid's
 // shared screen: a shake/crit badge triggers off the WHOLE PARTY's round (anyone landing or
@@ -288,6 +387,46 @@ watch(() => raidSocket.lastRound.value, (round) => {
   // Special-attack sounds play for the whole room, not just "my own" — a special firing is a
   // shared moment (same as appear/victory/defeat), unlike the routine per-hit sounds above.
   for (const s of (round.specials || [])) playSound(s.soundPath)
+
+  // ── Floating damage — one aggregate "-N" over the shared boss bar (round.enemyDamageDealt is
+  // already the party's combined total, matching the single shared HP pool it comes out of), plus
+  // one "-N" over MY OWN row if the boss's shared action landed on me this round. Mirrors
+  // components/CMoonBattlePopupHost.vue's floatingDamage ref/lifetime exactly, just fed from this
+  // page's own round shape instead of a solo battle's single-target one.
+  if (round.enemyDamageDealt > 0) {
+    const id = ++floatingDamageSeq
+    const crit = round.participants.some(r => r.enemyCrit)
+    enemyFloatingDamage.value.push({ id, amount: round.enemyDamageDealt, crit })
+    setTimeout(() => { enemyFloatingDamage.value = enemyFloatingDamage.value.filter(d => d.id !== id) }, FLOATING_DAMAGE_LIFETIME_MS)
+  }
+  if (myRow?.playerHit && myRow.playerDamage > 0) {
+    const id = ++floatingDamageSeq
+    myFloatingDamage.value.push({ id, amount: myRow.playerDamage, crit: myRow.playerCrit })
+    setTimeout(() => { myFloatingDamage.value = myFloatingDamage.value.filter(d => d.id !== id) }, FLOATING_DAMAGE_LIFETIME_MS)
+  }
+
+  // ── CRIT taunt — fires only on the boss's own landed crit against ANY participant, same
+  // "enemy's own crit, never a player's" trigger scope as the solo popup's CRIT taunt (see
+  // useCMoonBattlePopup.js's submitAction). Cleared on any other round so a stale line doesn't
+  // linger past its own moment.
+  const bossCrit = round.participants.some(r => r.playerCrit)
+  if (bossCrit) {
+    const taunt = pickRandomTaunt(raid.value?.enemyTaunts?.crit)
+    currentTaunt.value = taunt ? taunt.text : ''
+    if (taunt) playSound(taunt.soundPath)
+  } else {
+    currentTaunt.value = ''
+  }
+})
+
+// ── Combo callout — MY OWN hit streak climbing, same shape as the solo popup's comboCallout.
+const myHitStreak = computed(() => myself.value?.hitStreak || 0)
+watch(myHitStreak, (streak, prevStreak) => {
+  if (streak > 0 && streak > (prevStreak || 0)) {
+    comboCallout.value = `${streak}x HIT STREAK!`
+    if (comboTimer) clearTimeout(comboTimer)
+    comboTimer = setTimeout(() => { comboCallout.value = '' }, 1200)
+  }
 })
 
 // ── Battle music — loops for as long as combat is actually running, same FIGHT-phase-only
@@ -321,6 +460,11 @@ watch(raid, (r) => {
   if (!r || announcedRaidId === r.id) return
   announcedRaidId = r.id
   playSound(r.enemySounds?.appearSoundPath)
+  const taunt = pickRandomTaunt(r.enemyTaunts?.appear)
+  if (taunt) {
+    currentTaunt.value = taunt.text
+    playSound(taunt.soundPath)
+  }
 })
 
 // Victory/defeat sound — once, the instant the raid actually resolves (never on ABANDONED, same
@@ -337,6 +481,8 @@ onMounted(() => {
 onUnmounted(() => {
   if (countdownTimer) clearInterval(countdownTimer)
   if (shakeTimer) clearTimeout(shakeTimer)
+  if (comboTimer) clearTimeout(comboTimer)
+  if (resultFlashTimer) clearTimeout(resultFlashTimer)
   stopBattleMusic()
 })
 </script>
@@ -360,6 +506,126 @@ onUnmounted(() => {
 .cr-shake-crit { animation: cr-shake-crit-kf 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
 @media (prefers-reduced-motion: reduce) {
   .cr-shake, .cr-shake-crit { animation: none; }
+}
+
+/* Result-screen flash — mirrors components/CMoonBattlePopupHost.vue's cbp-result-flash, applied
+   to this page's own light card (.cr-card, the root element resultFlash binds onto) instead of a
+   dark modal. */
+.cr-result-flash-win, .cr-result-flash-loss { position: relative; }
+.cr-result-flash-win::after, .cr-result-flash-loss::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  animation: cr-result-flash-fade 0.5s ease-out forwards;
+}
+.cr-result-flash-win::after { background: radial-gradient(circle, rgba(74, 222, 128, 0.35), transparent 70%); }
+.cr-result-flash-loss::after { background: radial-gradient(circle, rgba(248, 113, 113, 0.35), transparent 70%); }
+@keyframes cr-result-flash-fade {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cr-result-flash-win::after, .cr-result-flash-loss::after { animation: none; display: none; }
+}
+
+/* Boss HP bar color escalation — same bands as components/CMoonBattlePopupHost.vue's
+   cbp-hp-fill-mid/-critical, re-colored for this page's light card UI. */
+.cr-hp-fill-ok { background: #22c55e; }
+.cr-hp-fill-mid { background: #f59e0b; }
+.cr-hp-fill-critical { background: #dc2626; animation: cr-hp-critical-pulse 1s ease-in-out infinite; }
+@keyframes cr-hp-critical-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.35); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cr-hp-fill-critical { animation: none; }
+}
+
+/* Floating damage numbers — same pop-up-and-fade as components/CMoonBattlePopupHost.vue's
+   cbp-dmg-float, auto-removed from the DOM by the JS timer once the animation has finished. */
+.cr-dmg-float {
+  position: absolute;
+  right: 44px;
+  top: -2px;
+  font-size: 12px;
+  font-weight: 800;
+  color: #dc2626;
+  pointer-events: none;
+  animation: cr-dmg-float-up 0.9s ease-out forwards;
+}
+.cr-dmg-float-crit { font-size: 15px; color: #d97706; }
+@keyframes cr-dmg-float-up {
+  0% { transform: translateY(4px); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translateY(-24px); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cr-dmg-float { animation: none; opacity: 0; }
+}
+
+/* Combo callout — same pop as components/CMoonBattlePopupHost.vue's cbp-combo-callout. */
+.cr-combo-callout {
+  font-size: 14px;
+  font-weight: 800;
+  color: #ca8a04;
+  text-align: center;
+  margin: 2px 0;
+  animation: cr-combo-pop 0.4s ease-out;
+}
+@keyframes cr-combo-pop {
+  0% { transform: scale(0.7); opacity: 0; }
+  60% { transform: scale(1.1); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cr-combo-callout { animation: none; }
+}
+
+/* Taunt line — re-colored for the light card, same shape as components/CMoonBattlePopupHost.vue's
+   cbp-taunt. */
+.cr-taunt {
+  font-size: 12px;
+  font-style: italic;
+  color: #b91c1c;
+  background: rgba(220, 38, 38, 0.08);
+  border: 1px solid rgba(220, 38, 38, 0.25);
+  border-radius: 6px;
+  padding: 5px 9px;
+  margin: 0;
+  animation: cr-taunt-pop 0.3s ease-out;
+}
+@keyframes cr-taunt-pop {
+  0% { transform: translateY(-4px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cr-taunt { animation: none; }
+}
+
+.cr-first-win {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: #92400e;
+  background: rgba(250, 204, 21, 0.18);
+  border: 1px solid rgba(250, 204, 21, 0.5);
+  border-radius: 6px;
+  padding: 4px 9px;
+  margin: 0;
+}
+.cr-near-miss { font-size: 11.5px; font-style: italic; color: #4b5563; margin: 0; }
+
+.cr-rewards { text-align: left; background: rgba(0, 0, 0, 0.04); border-radius: 6px; padding: 7px 9px; }
+.cr-rewards-title { font-size: 10.5px; font-weight: 700; color: #6b7280; margin-bottom: 3px; }
+.cr-rewards ul { margin: 0; padding-left: 16px; font-size: 11.5px; }
+.cr-reward-item { opacity: 0; animation: cr-reward-pop 0.35s ease-out forwards; }
+@keyframes cr-reward-pop {
+  0% { transform: translateX(-6px); opacity: 0; }
+  100% { transform: translateX(0); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cr-reward-item { opacity: 1; animation: none; }
 }
 
 .cr-reveal-panel {

@@ -1,6 +1,7 @@
 // server/api/collections/all.get.js
 import { defineEventHandler, getRequestHeader, createError, getQuery } from 'h3'
 import { prisma } from '@/server/prisma'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -23,7 +24,7 @@ export default defineEventHandler(async (event) => {
     const ctoons = await prisma.ctoon.findMany({
       orderBy,
       select: {
-        id: true, name: true, assetPath: true, releaseDate: true,
+        id: true, name: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT, releaseDate: true,
         set: true, series: true, rarity: true, price: true,
         isGtoon: true,
         cost: true,

@@ -152,14 +152,14 @@
               </div>
               <div v-if="contest.winnerPrizes?.ctoons?.length" class="ccd-prize-ctoons">
                 <div v-for="(ct, i) in contest.winnerPrizes.ctoons" :key="i" class="ccd-prize-ctoon">
-                  <img v-if="ct.assetPath" :src="ct.assetPath" :alt="ct.name" class="ccd-prize-ctoon-img" />
+                  <CtoonImage v-if="ct.assetPath" :ctoon="ct" :alt="ct.name" class="ccd-prize-ctoon-img" />
                   <div class="ccd-prize-ctoon-name">{{ ct.name }}</div>
                   <div v-if="ct.qty > 1" class="ccd-prize-ctoon-qty">×{{ ct.qty }}</div>
                 </div>
               </div>
               <div v-if="contest.winnerPrizes?.backgrounds?.length" class="ccd-prize-bgs">
-                <img v-for="(bg, i) in contest.winnerPrizes.backgrounds" :key="i"
-                  v-if="bg.imagePath" :src="bg.imagePath" :alt="bg.label" class="ccd-prize-bg" />
+                <CtoonImage v-for="(bg, i) in contest.winnerPrizes.backgrounds" :key="i"
+                  v-if="bg.imagePath" :ctoon="bg" :src="bg.imagePath" :alt="bg.label" class="ccd-prize-bg" />
               </div>
               <div v-if="!hasPrize(contest.winnerPrizes)" class="ccd-no-prize">None configured.</div>
             </div>
@@ -171,14 +171,14 @@
               </div>
               <div v-if="contest.participantPrizes?.ctoons?.length" class="ccd-prize-ctoons">
                 <div v-for="(ct, i) in contest.participantPrizes.ctoons" :key="i" class="ccd-prize-ctoon">
-                  <img v-if="ct.assetPath" :src="ct.assetPath" :alt="ct.name" class="ccd-prize-ctoon-img" />
+                  <CtoonImage v-if="ct.assetPath" :ctoon="ct" :alt="ct.name" class="ccd-prize-ctoon-img" />
                   <div class="ccd-prize-ctoon-name">{{ ct.name }}</div>
                   <div v-if="ct.qty > 1" class="ccd-prize-ctoon-qty">×{{ ct.qty }}</div>
                 </div>
               </div>
               <div v-if="contest.participantPrizes?.backgrounds?.length" class="ccd-prize-bgs">
-                <img v-for="(bg, i) in contest.participantPrizes.backgrounds" :key="i"
-                  v-if="bg.imagePath" :src="bg.imagePath" :alt="bg.label" class="ccd-prize-bg" />
+                <CtoonImage v-for="(bg, i) in contest.participantPrizes.backgrounds" :key="i"
+                  v-if="bg.imagePath" :ctoon="bg" :src="bg.imagePath" :alt="bg.label" class="ccd-prize-bg" />
               </div>
               <div v-if="!hasPrize(contest.participantPrizes)" class="ccd-no-prize">None configured.</div>
             </div>
@@ -238,6 +238,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 definePageMeta({
   layout: 'newsite-template',
   middleware: 'newsite',

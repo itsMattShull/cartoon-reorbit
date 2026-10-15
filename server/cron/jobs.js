@@ -53,6 +53,8 @@ export const CRON_JOBS = [
     description: 'Creates the weekly cZone contest when it is time' },
   { name: 'checkAndPostWeeklyRiddle', tier: TIER_CRITICAL, pattern: '* * * * *', tz: CHI, intervalSec: 60, quiet: true,
     description: 'Posts the weekly cMoon riddle when it is time' },
+  { name: 'checkAndPostWeeklyCMoonRecap', tier: TIER_CRITICAL, pattern: '* * * * *', tz: CHI, intervalSec: 60, quiet: true,
+    description: 'Posts each cMoon\'s weekly top-slayer recap when it is time' },
   { name: 'runCMoonPointsAggregate', tier: TIER_CRITICAL, pattern: '10,40 * * * *', intervalSec: 1800, catchUpAfterSec: 5400,
     description: 'Recomputes cMoon points and queues achievement checks for whoever changed' },
   { name: 'enqueueAchievementsDaily', tier: TIER_CRITICAL, pattern: '0 3 * * *', tz: CHI, intervalSec: DAY, catchUpAfterSec: 30 * 3600,

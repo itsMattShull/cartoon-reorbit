@@ -11,7 +11,7 @@
     <div class="hist-overlay" @click.self="$emit('close')">
       <div class="hist-card">
         <div class="hist-header">
-          <img v-if="info?.assetPath" class="hist-thumb" :src="info.assetPath" :alt="info?.name" />
+          <CtoonImage v-if="info?.assetPath" class="hist-thumb" :ctoon="info" :alt="info?.name" />
           <div class="hist-heading">
             <h3 class="hist-name">{{ info?.name || 'Loading…' }}</h3>
             <p v-if="info?.releaseDate" class="hist-sub">Released {{ formatDate(info.releaseDate) }}</p>
@@ -82,6 +82,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import {
   Chart, LineController, LineElement, PointElement,

@@ -75,6 +75,7 @@
               <div v-if="spinResult.ctoon" class="modal-ctoon">
                 <CtoonAsset
                   :src="spinResult.ctoon.assetPath"
+                  :ctoon="spinResult.ctoon"
                   :alt="spinResult.ctoon.name"
                   :name="spinResult.ctoon.name"
                   :ctoon-id="spinResult.ctoon.id"
@@ -85,6 +86,7 @@
               <div v-if="spinResult.tripleNothingCtoon" class="modal-ctoon">
                 <CtoonAsset
                   :src="spinResult.tripleNothingCtoon.assetPath"
+                  :ctoon="spinResult.tripleNothingCtoon"
                   :alt="spinResult.tripleNothingCtoon.name"
                   :name="spinResult.tripleNothingCtoon.name"
                   :ctoon-id="spinResult.tripleNothingCtoon.id"
@@ -152,6 +154,7 @@
                   </span>
                   <CtoonAsset
                     :src="item.assetPath"
+                    :ctoon="item"
                     :alt="item.name"
                     :name="item.name"
                     :ctoon-id="item.id"

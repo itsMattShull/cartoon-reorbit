@@ -172,45 +172,65 @@
              every pending one is shown, lowest tier first, not just the most recent. -->
         <div v-if="pendingRankClaims.length" class="cmp-rank-claim">
           <div v-for="a in pendingRankClaims" :key="a.achievementId" class="cmp-rank-claim-item">
-            <h2 class="cmp-section-title">You reached {{ a.rankName || a.title }}! Choose your reward:</h2>
-            <div class="cmp-claim-options" role="radiogroup" :aria-label="`Reward options for ${a.title}`">
+            <!-- blockedElsewhere: this tier's reward was already claimed through a DIFFERENT
+                 cMoon's copy of the achievement (see rank-progress.get.js's
+                 annotateUnclaimableTierClaims) — every claim attempt here would always fail, so
+                 there's nothing to pick; just let the player clear the dead card from their page. -->
+            <template v-if="a.blockedElsewhere">
+              <div class="cmp-rank-claim-blocked-header">
+                <h2 class="cmp-section-title">{{ a.rankName || a.title }} reward already claimed</h2>
+                <button
+                  type="button"
+                  class="cmp-rank-claim-dismiss-btn"
+                  aria-label="Dismiss"
+                  :disabled="rankClaiming[a.achievementId]"
+                  @click="dismissRankClaim(a)"
+                >✕</button>
+              </div>
+              <p class="cmp-claim-option-detail">
+                You already claimed this rank's reward through another cMoon, so it can't be claimed again here.
+              </p>
+              <p v-if="rankClaimErrors[a.achievementId]" class="cmp-offer-error">{{ rankClaimErrors[a.achievementId] }}</p>
+            </template>
+            <template v-else>
+              <h2 class="cmp-section-title">You reached {{ a.rankName || a.title }}! Choose your reward:</h2>
+              <div class="cmp-claim-options" role="radiogroup" :aria-label="`Reward options for ${a.title}`">
+                <button
+                  v-for="opt in a.claimOptions" :key="opt.id"
+                  type="button"
+                  class="cmp-claim-option"
+                  :class="{ 'cmp-claim-option--selected': rankClaimChoices[a.achievementId] === opt.id }"
+                  role="radio"
+                  :aria-checked="rankClaimChoices[a.achievementId] === opt.id"
+                  @click="rankClaimChoices[a.achievementId] = opt.id"
+                >
+                  <div class="cmp-claim-option-body">
+                    <div class="cmp-claim-option-label">{{ opt.label }}</div>
+                    <div v-if="opt.ctoons?.length || opt.backgrounds?.length" class="cmp-claim-option-thumbs">
+                      <CtoonImage
+                        v-for="(c, i) in opt.ctoons.filter(c => c.imagePath)" :key="'c' + i"
+                        :ctoon="c" :src="c.imagePath" class="cmp-claim-option-thumb" :alt="c.name" :title="`${c.name} × ${c.quantity}`" />
+                      <CtoonImage
+                        v-for="(b, i) in opt.backgrounds.filter(b => b.imagePath)" :key="'b' + i"
+                        :ctoon="b" :src="b.imagePath" class="cmp-claim-option-thumb" :alt="b.label" :title="b.label" />
+                    </div>
+                    <div class="cmp-claim-option-detail">
+                      <span v-if="opt.ctoons?.length">{{ opt.ctoons.map(c => `${c.name} × ${c.quantity}`).join(', ') }}</span>
+                      <span v-if="opt.backgrounds?.length">{{ opt.ctoons?.length ? ' + ' : '' }}{{ opt.backgrounds.length }} background{{ opt.backgrounds.length !== 1 ? 's' : '' }}</span>
+                      <span v-if="opt.points">{{ (opt.ctoons?.length || opt.backgrounds?.length) ? ' + ' : '' }}{{ opt.points.toLocaleString() }} pts</span>
+                    </div>
+                  </div>
+                  <span class="cmp-claim-option-check" aria-hidden="true">{{ rankClaimChoices[a.achievementId] === opt.id ? '●' : '○' }}</span>
+                </button>
+              </div>
               <button
-                v-for="opt in a.claimOptions" :key="opt.id"
                 type="button"
-                class="cmp-claim-option"
-                :class="{ 'cmp-claim-option--selected': rankClaimChoices[a.achievementId] === opt.id }"
-                role="radio"
-                :aria-checked="rankClaimChoices[a.achievementId] === opt.id"
-                @click="rankClaimChoices[a.achievementId] = opt.id"
-              >
-                <div class="cmp-claim-option-body">
-                  <div class="cmp-claim-option-label">{{ opt.label }}</div>
-                  <div v-if="opt.ctoons?.length || opt.backgrounds?.length" class="cmp-claim-option-thumbs">
-                    <img
-                      v-for="(c, i) in opt.ctoons.filter(c => c.imagePath)" :key="'c' + i"
-                      :src="c.imagePath" class="cmp-claim-option-thumb" :alt="c.name" :title="`${c.name} × ${c.quantity}`"
-                    />
-                    <img
-                      v-for="(b, i) in opt.backgrounds.filter(b => b.imagePath)" :key="'b' + i"
-                      :src="b.imagePath" class="cmp-claim-option-thumb" :alt="b.label" :title="b.label"
-                    />
-                  </div>
-                  <div class="cmp-claim-option-detail">
-                    <span v-if="opt.ctoons?.length">{{ opt.ctoons.map(c => `${c.name} × ${c.quantity}`).join(', ') }}</span>
-                    <span v-if="opt.backgrounds?.length">{{ opt.ctoons?.length ? ' + ' : '' }}{{ opt.backgrounds.length }} background{{ opt.backgrounds.length !== 1 ? 's' : '' }}</span>
-                    <span v-if="opt.points">{{ (opt.ctoons?.length || opt.backgrounds?.length) ? ' + ' : '' }}{{ opt.points.toLocaleString() }} pts</span>
-                  </div>
-                </div>
-                <span class="cmp-claim-option-check" aria-hidden="true">{{ rankClaimChoices[a.achievementId] === opt.id ? '●' : '○' }}</span>
-              </button>
-            </div>
-            <button
-              type="button"
-              class="cmp-claim-confirm-btn"
-              :disabled="!rankClaimChoices[a.achievementId] || rankClaiming[a.achievementId]"
-              @click="claimRankReward(a)"
-            >{{ rankClaiming[a.achievementId] ? 'Claiming…' : 'Confirm reward' }}</button>
-            <p v-if="rankClaimErrors[a.achievementId]" class="cmp-offer-error">{{ rankClaimErrors[a.achievementId] }}</p>
+                class="cmp-claim-confirm-btn"
+                :disabled="!rankClaimChoices[a.achievementId] || rankClaiming[a.achievementId]"
+                @click="claimRankReward(a)"
+              >{{ rankClaiming[a.achievementId] ? 'Claiming…' : 'Confirm reward' }}</button>
+              <p v-if="rankClaimErrors[a.achievementId]" class="cmp-offer-error">{{ rankClaimErrors[a.achievementId] }}</p>
+            </template>
           </div>
         </div>
 
@@ -232,7 +252,7 @@
               >
                 <ShortCard>
                   <template #header>
-                    <img :src="c.assetPath" :alt="c.name" class="cmp-featured-img" loading="lazy" />
+                    <CtoonImage :ctoon="c" :alt="c.name" class="cmp-featured-img" loading="lazy" />
                   </template>
                   <template #middle>
                     <span class="cmp-featured-name">{{ c.name }}</span>
@@ -356,7 +376,7 @@
                 :disabled="!!o.myClaim || o.status !== 'OPEN' || !eligible || offerClaiming[o.id]"
                 @click="offerSelections[o.id] = opt.id"
               >
-                <img :src="opt.assetPath" :alt="opt.name" class="cmp-card-img" loading="lazy" />
+                <CtoonImage :ctoon="opt" :alt="opt.name" class="cmp-card-img" loading="lazy" />
                 <span class="cmp-card-name">{{ opt.name }}</span>
                 <span v-if="o.myClaim && o.myClaim.optionId === opt.id" class="cmp-offer-picked-badge">Your pick</span>
               </button>
@@ -377,6 +397,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { computed, reactive, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import { cMoonPaletteStyle } from '@/utils/cmoonPalette'
 import { cmoonJoinEffectDescriptor } from '@/utils/cmoonJoinEffectDescriptor'
@@ -688,6 +709,28 @@ async function claimRankReward(a) {
     else reveal()
   } catch (err) {
     rankClaimErrors[a.achievementId] = err?.data?.statusMessage || 'Unable to claim reward. Please try again.'
+  } finally {
+    rankClaiming[a.achievementId] = false
+  }
+}
+
+// Clears a dead-end claim card (its tier's reward was already claimed through a different
+// cMoon — see rank-progress.get.js's blockedElsewhere flag) from this page for good. Reuses
+// rankClaiming/rankClaimErrors for busy/error state, same as claimRankReward above, since the
+// two actions are mutually exclusive per card.
+async function dismissRankClaim(a) {
+  if (rankClaiming[a.achievementId]) return
+  rankClaiming[a.achievementId] = true
+  rankClaimErrors[a.achievementId] = ''
+  try {
+    await $fetch(`/api/achievements/${a.achievementId}/dismiss-tier-claim`, { method: 'POST' })
+    if (rankProgress.value) {
+      rankProgress.value.unclaimedRankRewards = rankProgress.value.unclaimedRankRewards.filter(
+        (x) => x.achievementId !== a.achievementId
+      )
+    }
+  } catch (err) {
+    rankClaimErrors[a.achievementId] = err?.data?.statusMessage || 'Unable to dismiss. Please try again.'
   } finally {
     rankClaiming[a.achievementId] = false
   }
@@ -1363,6 +1406,33 @@ onBeforeUnmount(() => {
   background: var(--cm-tile-bg, rgba(255,255,255,0.08));
   border-radius: 8px;
   padding: 14px;
+}
+
+.cmp-rank-claim-blocked-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.cmp-rank-claim-dismiss-btn {
+  flex: 0 0 auto;
+  min-width: 32px;
+  min-height: 32px;
+  border: 2px solid var(--cm-border, rgba(255,255,255,0.15));
+  border-radius: 6px;
+  background: transparent;
+  color: var(--cm-text, #ffffff);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+}
+.cmp-rank-claim-dismiss-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+@media (hover: hover) and (pointer: fine) {
+  .cmp-rank-claim-dismiss-btn:not(:disabled):hover { background: var(--cm-bg, rgba(255,255,255,0.08)); }
 }
 
 .cmp-claim-options {

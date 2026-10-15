@@ -1,6 +1,7 @@
 import { prisma } from '@/server/prisma'
 import { createError } from 'h3'
 import { getChicagoMorningWindowStart } from '@/server/utils/dailyTaskWindows'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -25,7 +26,7 @@ export default defineEventHandler(async (event) => {
       exclusiveCtoons: {
         include: {
           ctoon: {
-            select: { id: true, name: true, assetPath: true }
+            select: { id: true, name: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT }
           }
         }
       }
@@ -63,6 +64,7 @@ export default defineEventHandler(async (event) => {
     id: c.id,
     name: c.name,
     assetPath: c.assetPath,
+    ...ogGtoonDisplay(c),
     owned: ownedSet.has(c.id)
   }))
 

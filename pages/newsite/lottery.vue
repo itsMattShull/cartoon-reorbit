@@ -36,6 +36,7 @@
               >
                 <CtoonAsset
                   :src="ctoon.assetPath"
+                  :ctoon="ctoon"
                   :alt="ctoon.name"
                   :name="ctoon.name"
                   :ctoon-id="ctoon.id"
@@ -65,6 +66,7 @@
                 <div v-if="modalCtoon" class="modal-ctoon">
                   <CtoonAsset
                     :src="modalCtoon.assetPath"
+                    :ctoon="modalCtoon"
                     :alt="modalCtoon.name"
                     :name="modalCtoon.name"
                     :ctoon-id="modalCtoon.id"

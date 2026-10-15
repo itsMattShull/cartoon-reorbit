@@ -4,6 +4,7 @@ import { mintQueue } from '../../server/utils/queues.js'
 import { announceAchievement, assignDiscordRoleByName } from '../../server/utils/discord.js'
 import { getWordleWinCount, getWordleCurrentStreak } from '../../server/utils/wordle.js'
 import { createMemoClient } from './memoClient.js'
+import { announceCMoonRankUp } from './cmoonDiscordEvents.js'
 
 let cachedAchievements     = null
 let cachedAchievementsTime = 0
@@ -361,8 +362,9 @@ export async function enqueueCtoonJobs(userId, ctoonJobs, method) {
 
 // Grants a cMoon rank if it outranks the user's current rank for that same cMoon. Locks the
 // user row (FOR UPDATE) so two concurrent rank-ups for the same user can't both read a stale
-// "current rank" and race. Returns { id, name } if a new rank was granted, else null (no
-// rank achieved yet — the user's already at/above it, or they've since left that cMoon).
+// "current rank" and race. Returns { id, name, sortOrder } if a new rank was granted, else null
+// (no rank achieved yet — the user's already at/above it, or they've since left that cMoon).
+// sortOrder is passed straight through to announceCMoonRankUp's own min-rank floor check.
 async function grantCMoonRank(tx, userId, cMoonRankId) {
   const newRank = await tx.cMoonRank.findUnique({
     where: { id: cMoonRankId },
@@ -385,7 +387,7 @@ async function grantCMoonRank(tx, userId, cMoonRankId) {
   // Reset the role-grant cursor so syncCMoonDiscordRoles picks up and grants the NEW rank's
   // Discord role too — it's add-only, so the previous rank's role (if any) is left in place.
   await tx.user.update({ where: { id: userId }, data: { currentCMoonRankId: newRank.id, cMoonRankRoleGrantedAt: null } })
-  return { id: newRank.id, name: newRank.name }
+  return { id: newRank.id, name: newRank.name, sortOrder: newRank.sortOrder }
 }
 
 export async function awardAchievementToUser(client, userId, achievement) {
@@ -441,6 +443,14 @@ export async function awardAchievementToUser(client, userId, achievement) {
     try {
       await announceAchievement(db, userId, achievement.title, awardSummary, assignedRoleName)
     } catch {}
+  }
+
+  // Separate from the achievement-channel announcement above (achievementDiscordChannelId) —
+  // this posts to the player's OWN cMoon team channel instead, gated on its own admin toggle
+  // (GlobalGameConfig.cMoonRankUpAnnounceEnabled), so a team can celebrate the promotion in its
+  // own channel regardless of whether this achievement also notifies the global one.
+  if (awardSummary.cMoonRank?.name) {
+    announceCMoonRankUp(userId, awardSummary.cMoonRank.name, awardSummary.cMoonRank.sortOrder).catch(() => {})
   }
 }
 

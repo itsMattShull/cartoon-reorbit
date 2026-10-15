@@ -11,7 +11,7 @@
       <div class="sh-body">
         <template v-if="!result">
           <div v-if="step" class="sh-step">
-            <img v-if="step.imagePath" :src="step.imagePath" alt="" class="sh-step-img" />
+            <CtoonImage v-if="step.imagePath" :ctoon="step" :src="step.imagePath" alt="" class="sh-step-img" />
             <p class="sh-desc">{{ step.description }}</p>
             <div class="sh-choices">
               <button :disabled="loading" class="sh-btn sh-btn-primary" @click="choose('A')">
@@ -37,7 +37,7 @@
             <template v-else>
               <p class="sh-result-title">You found an exclusive cToon! 🎉</p>
               <div v-if="result.ctoon" class="sh-ctoon">
-                <img :src="result.ctoon.assetPath" :alt="result.ctoon.name" class="sh-ctoon-img" />
+                <CtoonImage :ctoon="result.ctoon" :alt="result.ctoon.name" class="sh-ctoon-img" />
                 <div class="sh-ctoon-name">{{ result.ctoon.name }}</div>
               </div>
               <p v-if="result.text" class="sh-result-sub">{{ result.text }}</p>
@@ -56,6 +56,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { computed } from 'vue'
 import { useScavengerHunt } from '@/composables/useScavengerHunt'
 

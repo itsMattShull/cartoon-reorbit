@@ -30,6 +30,9 @@ export function useOgGtoonsSocket() {
     })
     socket.on('disconnect', () => { isConnected.value = false })
 
+    // The game log is left out of high-frequency updates (placing/unplacing); keep the last one.
+    const keepLog = (state) => (state && state.gameLog === undefined && matchState.value?.gameLog
+      ? { ...state, gameLog: matchState.value.gameLog } : state)
     socket.on('oggtoons:matchStart', state => {
       matchState.value = state
       matchEnded.value = null
@@ -38,9 +41,9 @@ export function useOgGtoonsSocket() {
     })
     // Full per-player view pushed after any private action (place/unplace/swap/discard) and when
     // the opponent commits or finishes discarding.
-    socket.on('oggtoons:state', state => { matchState.value = state })
+    socket.on('oggtoons:state', state => { matchState.value = keepLog(state) })
     socket.on('oggtoons:reveal', state => {
-      matchState.value = state
+      matchState.value = keepLog(state)
       lastReveal.value = state.reveal
     })
     // Ready flags only travel in full-state payloads (matchStart/reveal), which are sent when a
@@ -62,8 +65,8 @@ export function useOgGtoonsSocket() {
       matchState.value = matchState.value ? { ...matchState.value, opponentDropped: null } : matchState.value
     })
     socket.on('oggtoons:matchEnd', state => {
-      matchState.value = state
-      matchEnded.value = state
+      matchState.value = keepLog(state)
+      matchEnded.value = matchState.value
     })
     socket.on('oggtoons:error', err => { lastError.value = err })
   }
@@ -85,8 +88,12 @@ export function useOgGtoonsSocket() {
   /** Put hand card `cardIdx` (deck index) into board slot `slot`; moves it if already placed. */
   function place(cardIdx, slot) { send('place', { cardIdx, slot }) }
   function unplace(slot) { send('unplace', { slot }) }
-  /** Trade hand card `cardIdx` for a random undealt card (once per match). */
-  function swap(cardIdx) { send('swap', { cardIdx }) }
+  /** Round 3: replace the card in slot 7 with a random undealt card (10 pts in PvP). */
+  function swap() { send('swap', {}) }
+  /** Round 3: keep slot 7 as it is. */
+  function swapSkip() { send('swapSkip', {}) }
+  /** End of the game: choose the real colour your Silver cards count as. */
+  function chooseColor(color) { send('chooseColor', { color }) }
   /** Discard phase: drop these hand cards (possibly none) and finish discarding. */
   function discard(cardIdxs) { send('discard', { cardIdxs }) }
   function startPractice(deckId, difficulty) {
@@ -103,6 +110,6 @@ export function useOgGtoonsSocket() {
 
   return {
     socket, matchState, lastReveal, matchEnded, isConnected, currentMatchId, lastError,
-    commit, place, unplace, swap, discard, leaveMatch, startPractice
+    commit, place, unplace, swap, swapSkip, chooseColor, discard, leaveMatch, startPractice
   }
 }

@@ -14,7 +14,7 @@
 
           <!-- cToon preview -->
           <div class="am-preview">
-            <img class="am-preview-img" :src="ctoon.assetPath" :alt="ctoon.name" draggable="false" />
+            <CtoonImage class="am-preview-img" :ctoon="ctoon" :alt="ctoon.name" draggable="false" />
             <div class="am-preview-info">
               <div class="am-preview-name">{{ ctoon.name }}</div>
               <div class="am-preview-meta">
@@ -130,6 +130,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 const props = defineProps({
   ctoon:   { type: Object, required: true },
   // Optional starting values, used when re-listing something that didn't sell:

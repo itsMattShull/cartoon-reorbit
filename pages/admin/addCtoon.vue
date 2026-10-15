@@ -7,9 +7,9 @@
       <form @submit.prevent="submitForm" class="space-y-4">
         <!-- Image Upload -->
         <div>
-          <label class="block mb-1 font-medium">Upload Image (PNG or GIF)</label>
-          <input type="file" accept="image/png,image/gif" @change="handleFile" required class="w-full" />
-          <p class="text-sm text-gray-500">This image will represent the cToon visually. PNG or GIF only.</p>
+          <label class="block mb-1 font-medium">Upload Image (PNG, GIF, or AVIF)</label>
+          <input type="file" accept="image/png,image/gif,image/avif,.avif" @change="handleFile" required class="w-full" />
+          <p class="text-sm text-gray-500">This image will represent the cToon visually. PNG, GIF, or AVIF only.</p>
           <p v-if="errors.image" class="text-red-600 text-sm mt-1">{{ errors.image }}</p>
           <div v-if="duplicateStatus !== 'idle'" class="mt-2">
             <p v-if="duplicateStatus === 'checking'" class="text-sm text-gray-500">Checking for duplicates...</p>
@@ -488,8 +488,8 @@ function handleFile(e) {
     errors.image = 'Image is required.'
     return
   }
-  if (!['image/png', 'image/gif'].includes(file.type)) {
-    errors.image = 'Only PNG or GIF files allowed.'
+  if (!['image/png', 'image/gif', 'image/avif'].includes(file.type)) {
+    errors.image = 'Only PNG, GIF, or AVIF files allowed.'
     return
   }
   imageFile.value = file
@@ -619,7 +619,7 @@ async function submitForm() {
   formData.append('totalQuantity', mintLimitType.value === 'defined' ? (totalQuantity.value ?? '') : '')
   formData.append('initialQuantity', mintLimitType.value === 'defined' ? (initialQuantity.value ?? '') : '')
   // advisory schedule fields
-  formData.append('initialReleaseAt', releaseDate.value ? new Date(releaseDate.value).toISOString() : '')
+  formData.append('initialReleaseAt', releaseDate.value ? zonedTimeToUtc(releaseDate.value, 'America/Chicago').toISOString() : '')
   formData.append('finalReleaseAt', schedule.value.finalAt ? schedule.value.finalAt.toISOString() : '')
   formData.append('initialReleaseQty', schedule.value.initialQty ?? '')
   formData.append('finalReleaseQty', schedule.value.finalQty ?? '')

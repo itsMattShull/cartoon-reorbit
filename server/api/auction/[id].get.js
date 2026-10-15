@@ -2,6 +2,7 @@ import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 import { findConcurrentFeaturedLead } from '@/server/utils/featuredEligibility'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -92,6 +93,7 @@ export default defineEventHandler(async (event) => {
       id:         auction.userCtoon.ctoonId,
       userCtoonId: encodeUserCtoonId(auction.userCtoon.userId, auction.userCtoon.ctoonId, auction.userCtoon.mintNumber),
       assetPath:  auction.userCtoon.ctoon.assetPath,
+      ...ogGtoonDisplay(auction.userCtoon.ctoon),
       name:       auction.userCtoon.ctoon.name,
       series:     auction.userCtoon.ctoon.series,
       rarity:     auction.userCtoon.ctoon.rarity,

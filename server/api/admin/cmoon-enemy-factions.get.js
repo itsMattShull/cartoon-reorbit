@@ -12,6 +12,7 @@ export default defineEventHandler(async (event) => {
       _count: { select: { members: true } },
       appearEffect: { select: { id: true, name: true } },
       specialAttack: { select: { id: true, name: true } },
+      taunts: { orderBy: [{ trigger: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }] },
     },
   })
 
@@ -37,6 +38,9 @@ export default defineEventHandler(async (event) => {
       // DELETE /cmoon-enemy-factions/:id blocks on any member at all, so the admin list can
       // disable its delete button off this same number rather than waiting for the 409.
       memberCount: f._count?.members ?? 0,
+      taunts: f.taunts.map(t => ({
+        id: t.id, trigger: t.trigger, text: t.text, soundPath: t.soundPath, active: t.active, sortOrder: t.sortOrder,
+      })),
     })),
   }
 })

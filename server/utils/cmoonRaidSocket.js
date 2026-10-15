@@ -78,6 +78,7 @@ import { notifyCMoonRaidBossStarted } from './notifications.js'
 import { pushUserNotification } from './realtimeNotify.js'
 import { buildGrantableReward, isValidPlayerSubmittedAction } from './cmoonEnemyBattle.js'
 import { resolveMemberSoundPaths } from './cmoonEnemy.js'
+import { announceTeamEnemiesMilestone, checkAndAnnounceSeasonGoalReached } from './cmoonDiscordEvents.js'
 import {
   resolveRaidRound, rollEnemyAction, rollEnemyRewards, PLAYER_MAX_HP,
   JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE, MAX_ROUNDS_SAFETY,
@@ -175,6 +176,13 @@ function publicRaidView(raid) {
     // battle's own enemy serialization.
     enemySounds: raid.enemySounds,
     battleMusicPath: raid.battleMusicPath,
+    // Snapshotted once at creation, same as enemySounds/battleMusicPath above — the full active
+    // taunt pool for each trigger moment (see CMoonEnemyTaunt's own schema comment), sent as a
+    // list rather than one pre-picked line so the client does its own random pick at the actual
+    // moment (appear once at FORMING, crit on a round where the boss lands one), mirroring the
+    // solo popup's own useCMoonBattlePopup.js pickRandomTaunt. null when the faction has none
+    // configured for either trigger, never an error.
+    enemyTaunts: raid.enemyTaunts || null,
     enemyMaxHp: raid.enemyStats.maxHp,
     enemyHpRemaining: raid.enemyHpRemaining,
     roundNumber: raid.roundNumber,
@@ -210,6 +218,12 @@ function publicRaidView(raid) {
       // balance-sensitive secret here to protect).
       hitStreak: p.hitStreak || 0,
       specialCharged: !!p.specialCharged,
+      // Both null/false until the raid actually resolves (see resolveCMoonRaidOutcome, which
+      // mutates these directly onto this same in-memory participant object) — a reward
+      // breakdown and first-victory flag for the RESOLVED screen, same shape/intent as the solo
+      // battle's own rewardsGranted/isFirstWinAgainstThisEnemy.
+      rewardsGranted: p.rewardsGranted || null,
+      isFirstWinAgainstThisEnemy: !!p.isFirstWinAgainstThisEnemy,
     })),
   }
 }
@@ -297,7 +311,7 @@ function startCombat(io, raid) {
 }
 
 function openRound(io, raid) {
-  raid.currentEnemyAction = rollEnemyAction()
+  raid.currentEnemyAction = rollEnemyAction(raid.enemyStats.attackChancePercent)
   raid.roundDeadlineAt = Date.now() + ROUND_TIMEOUT_SECONDS * 1000
   for (const p of raid.participants.values()) {
     if (!p.knockedOutAt) p.pendingAction = null
@@ -559,6 +573,13 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
   const pointsShareByUser = new Map(participantIds.map((userId, i) =>
     [userId, baseShare + (i < remainder ? 1 : 0)]))
 
+  // Pre-increment value for the team enemies-defeated milestone diff below — only fetched on a
+  // WIN, same "don't query for nothing" stance the rest of this file takes.
+  const cMoonBeforeWin = outcome === 'WIN'
+    ? await db.cMoon.findUnique({ where: { id: raid.cMoonId }, select: { battleWins: true } })
+    : null
+  let cMoonAfterWin = null
+
   const ctoonJobsByUser = new Map()
   try {
     await db.$transaction(async tx => {
@@ -596,6 +617,17 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
           },
         })
 
+        // Whether THIS participant has ever beaten THIS SPECIFIC enemy member before — same
+        // "read before this win's own synthetic row exists" off-by-one-free timing as the solo
+        // battle's own isFirstWinAgainstThisEnemy (see action.post.js's resolveWin). Mutated
+        // directly onto the live in-memory participant object (not a local-only variable) so
+        // the next publicRaidView broadcast — the RESOLVED one the client actually reads — can
+        // surface both this flag and the reward breakdown just granted above.
+        p.rewardsGranted = granted
+        p.isFirstWinAgainstThisEnemy = outcome === 'WIN'
+          ? (await tx.cMoonEnemyBattle.count({ where: { userId, enemyMemberId: raid.enemyMemberId, outcome: 'WIN' } })) === 0
+          : false
+
         // Synthetic per-participant CMoonEnemyBattle row — see CMoonEnemyBattle.raidId's own
         // schema comment for why: this is what makes minPriorDefeats and the rank-scoped
         // achievement criteria count a raid win/loss with zero changes to either system.
@@ -623,7 +655,7 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
       }
 
       if (outcome === 'WIN') {
-        await tx.cMoon.update({ where: { id: raid.cMoonId }, data: { battleWins: { increment: 1 } } })
+        cMoonAfterWin = await tx.cMoon.update({ where: { id: raid.cMoonId }, data: { battleWins: { increment: 1 } } })
         // Drives checkRaidBossAvailability's raidOneTime/raidCooldownMinutes gate for the NEXT
         // encounter — never set on a LOSS/ABANDONED, since the boss wasn't actually defeated.
         await tx.cMoonEnemyMember.update({ where: { id: raid.enemyMemberId }, data: { raidDefeatedAt: new Date() } })
@@ -643,6 +675,10 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
   if (pointsAwarded > 0) recomputeCMoonPointsForUsers(participantIds).catch(() => {})
   for (const userId of participantIds) processAchievementsForUser(userId).catch(() => {})
   sendCMoonTeamUpdate(raidDiscordPostTarget(raid), formatRaidRecapMessage(raid, { pointsAwarded }))
+  if (cMoonAfterWin) {
+    announceTeamEnemiesMilestone(raid.cMoonId, cMoonBeforeWin?.battleWins, cMoonAfterWin.battleWins).catch(() => {})
+    checkAndAnnounceSeasonGoalReached().catch(() => {})
+  }
 
   broadcast(io, raid, EV('ended'))
   destroyRaid(raid.id)
@@ -707,7 +743,15 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         return socket.emit(EV('error'), { message: 'cMoon Enemy Battles is currently disabled' })
       }
       const enemyMember = await db.cMoonEnemyMember.findUnique({
-        where: { id: enemyMemberId }, include: { faction: { include: { specialAttack: true } } },
+        where: { id: enemyMemberId },
+        include: {
+          faction: {
+            include: {
+              specialAttack: true,
+              taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+            },
+          },
+        },
       })
       if (!enemyMember || !enemyMember.active || !enemyMember.faction.active) {
         return socket.emit(EV('error'), { message: 'That enemy is no longer available' })
@@ -738,11 +782,18 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         enemyName: enemyMember.name, enemyImagePath: enemyMember.imagePath || null,
         enemySounds: resolveMemberSoundPaths(enemyMember, enemyMember.faction),
         battleMusicPath: enemyMember.faction?.battleMusicPath || null,
+        // Same shape useCMoonBattlePopup.js's solo flow already sends the client — see
+        // publicRaidView's own comment on why this is a pool, not one pre-picked line.
+        enemyTaunts: {
+          appear: (enemyMember.faction?.taunts || []).filter(t => t.trigger === 'APPEAR').map(t => ({ text: t.text, soundPath: t.soundPath })),
+          crit: (enemyMember.faction?.taunts || []).filter(t => t.trigger === 'CRIT').map(t => ({ text: t.text, soundPath: t.soundPath })),
+        },
         enemyStats: {
           maxHp: enemyMember.maxHp,
           critChanceAgainstPercent: enemyMember.critChanceAgainstPercent,
           critChanceFromPercent: enemyMember.critChanceFromPercent,
           cMoonPointsReward: enemyMember.cMoonPointsReward,
+          attackChancePercent: enemyMember.attackChancePercent,
         },
         status: 'FORMING', enemyHpRemaining: enemyMember.maxHp, roundNumber: 1,
         currentEnemyAction: null, roundDeadlineAt: null,

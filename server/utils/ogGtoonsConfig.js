@@ -5,6 +5,7 @@
 // nearly every REST call and socket action for the feature, and a Redis/Postgres round-trip per
 // call would cost more than the query it replaces.
 import { prisma as db } from '../prisma.js'
+import { normalizeRevealTiming, REVEAL_TIMING_DEFAULTS } from '../../utils/ogGtoonReveal.js'
 
 const TTL_MS = 60_000
 
@@ -22,7 +23,11 @@ async function load() {
         ogGtoonsDeckBuildingEnabled: true,
         ogGtoonsLeaderboardEnabled: true,
         ogGtoonsPracticeEnabled: true,
-        ogGtoonsGamesPageVisible: true
+        ogGtoonsGamesPageVisible: true,
+        ogGtoonsRevealFirstMs: true,
+        ogGtoonsRevealCardMs: true,
+        ogGtoonsRevealEffectsMs: true,
+        ogGtoonsRevealQuietMs: true
       }
     })
     return {
@@ -38,15 +43,20 @@ async function load() {
       // schema comment. It isn't part of the rollout-safety gate those four exist for, so a
       // missing row (or a read failure) leaves it visible by default; only an explicit `false`
       // hides the Games page tile, and it never gates the feature itself.
-      gamesPageVisible: row?.ogGtoonsGamesPageVisible !== false
+      gamesPageVisible: row?.ogGtoonsGamesPageVisible !== false,
+      // Pace of the one-card-at-a-time reveal; null columns fall back to the built-in defaults.
+      reveal: normalizeRevealTiming({
+        firstMs: row?.ogGtoonsRevealFirstMs, cardMs: row?.ogGtoonsRevealCardMs,
+        effectsMs: row?.ogGtoonsRevealEffectsMs, quietMs: row?.ogGtoonsRevealQuietMs
+      })
     }
   } catch (err) {
     console.error('[ogGtoons] config read failed:', err)
-    return { matchmakingEnabled: false, gameEnabled: false, deckBuildingEnabled: false, leaderboardEnabled: false, practiceEnabled: false, gamesPageVisible: true }
+    return { matchmakingEnabled: false, gameEnabled: false, deckBuildingEnabled: false, leaderboardEnabled: false, practiceEnabled: false, gamesPageVisible: true, reveal: { ...REVEAL_TIMING_DEFAULTS } }
   }
 }
 
-/** { matchmakingEnabled, gameEnabled, deckBuildingEnabled, leaderboardEnabled, practiceEnabled, gamesPageVisible } */
+/** { matchmakingEnabled, gameEnabled, deckBuildingEnabled, leaderboardEnabled, practiceEnabled, gamesPageVisible, reveal } */
 export async function getOgGtoonsConfig() {
   const now = Date.now()
   if (cache && now - cachedAt < TTL_MS) return cache
@@ -59,6 +69,15 @@ export async function getOgGtoonsConfig() {
     return cache
   })()
   return inflight
+}
+
+/**
+ * The reveal pacing right now, synchronously: whatever is cached (even if the TTL has lapsed — these are
+ * tuning knobs, not switches), else the defaults. Every live match has already gone through
+ * getOgGtoonsConfig(), so the cache is warm by the time a round resolves.
+ */
+export function peekRevealTiming() {
+  return cache?.reveal ? { ...cache.reveal } : { ...REVEAL_TIMING_DEFAULTS }
 }
 
 /** Drops the cache so an admin toggle takes effect without waiting out the TTL. */

@@ -85,9 +85,10 @@
             </div>
 
             <div class="grid grid-cols-5 gap-2">
-              <img
+              <CtoonImage
                 v-for="(it, idx) in set.items"
                 :key="it.id || idx"
+                :ctoon="it?.ctoon || {}"
                 :src="it?.ctoon?.assetPath || ''"
                 class="rounded object-contain w-16 h-16"
               />
@@ -117,6 +118,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 definePageMeta({
   title: 'Set Username',
   middleware: ['auth'],

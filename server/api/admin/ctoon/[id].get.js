@@ -36,6 +36,7 @@ export default defineEventHandler(async (event) => {
         gtoonValue:  true,
         isSlamGtoon: true,
         gtoonEffect: true,
+        gtoonCardStyle: true,
         gtoonType1:  true,
         gtoonType2:  true,
         gtoonType3:  true,

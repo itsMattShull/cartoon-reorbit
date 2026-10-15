@@ -64,8 +64,8 @@
 
           <p class="mb-1 text-sm">
             Tap a gToon below to add it to the next open slot. Tap a filled slot to remove it.
-            <span class="font-semibold">Slot 12 is your Goal Card</span> — its color sets your goal color for the match.
-            The order of the other slots doesn't matter: your 12 cards are shuffled and 6 are dealt to your hand at the start of a match.
+            Slot order doesn't matter: your 12 cards are shuffled and 6 are dealt to your hand at the start of a match.
+            At the start of a match one random card from each player's deck is picked as their Goal Card, and its color sets that player's goal color.
           </p>
 
           <!-- The 12 ordered slots -->
@@ -73,20 +73,17 @@
             <div
               v-for="pos in 12"
               :key="pos"
+              v-on="slots[pos-1] ? gestureFor(slots[pos-1]).events : {}"
+              @click.capture="slots[pos-1] && gestureFor(slots[pos-1]).clickCapture($event)"
               @click="slots[pos-1] && removeFromSlot(pos-1)"
+              style="-webkit-touch-callout: none; -webkit-user-select: none; user-select: none"
               :class="[
                 'relative border-2 rounded flex flex-col items-center justify-center h-24 cursor-pointer transition',
-                pos === 12
-                  ? 'border-amber-400 bg-amber-500/10'
-                  : (slots[pos-1] ? 'border-indigo-400 bg-white/5' : 'border-dashed border-white/30 bg-white/5')
+                slots[pos-1] ? 'border-indigo-400 bg-white/5' : 'border-dashed border-white/30 bg-white/5'
               ]"
             >
-              <span
-                v-if="pos === 12"
-                class="absolute -top-2 left-1/2 -translate-x-1/2 text-[9px] font-bold uppercase tracking-wide bg-amber-500 text-black px-1.5 rounded"
-              >Goal Card</span>
               <template v-if="slots[pos-1]">
-                <img :src="slots[pos-1].assetPath" :alt="slots[pos-1].name" class="h-14 object-contain" />
+                <CtoonImage :ctoon="slots[pos-1]" class="h-14 og-inspectable" hover-fx />
                 <p class="text-[10px] text-center truncate w-full px-1">{{ slots[pos-1].name }}</p>
               </template>
               <span v-else class="text-xs text-gray-400">Slot {{ pos }}</span>
@@ -98,7 +95,10 @@
             <div
               v-for="c in gtoons"
               :key="c.id"
+              v-on="gestureFor(c).events"
+              @click.capture="gestureFor(c).clickCapture($event)"
               @click="addCard(c)"
+              style="-webkit-touch-callout: none; -webkit-user-select: none; user-select: none"
               :class="[
                 'p-1 border rounded cursor-pointer flex flex-col items-center transition transform',
                 usedIds.includes(c.ctoonId)
@@ -106,7 +106,7 @@
                   : 'hover:scale-105 bg-white/5'
               ]"
             >
-              <img :src="c.assetPath" :alt="c.name" class="object-contain h-16 mb-1" />
+              <CtoonImage :ctoon="c" class="object-contain h-16 mb-1 og-inspectable" hover-fx />
               <p class="text-xs font-semibold text-center truncate w-full">{{ c.name }}</p>
               <p class="text-[10px]" :style="{ color: colorHex(c.gtoonColor) }">{{ c.gtoonColor }}</p>
               <p class="text-[10px] text-gray-300">Value: {{ c.gtoonValue }}</p>
@@ -143,12 +143,31 @@
         </div>
       </div>
     </transition>
+
+    <!-- Printed properties of a card (right-click / long-press) -->
+    <OgGtoonInfoModal />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import Toast from '@/components/Toast.vue'
+import CtoonImage from '@/components/CtoonImage.vue'
+import OgGtoonInfoModal from '@/components/oggtoons/OgGtoonInfoModal.vue'
+import { useOgGtoonInfo } from '@/composables/useOgGtoonInfo'
+
+// Right-click / long-press a card for its printed properties; one gesture handler set per card object.
+const { inspectGesture } = useOgGtoonInfo()
+const gestureCache = new WeakMap()
+function gestureFor(card) {
+  let g = gestureCache.get(card)
+  if (!g) {
+    const { clickCapture, ...events } = inspectGesture(() => card)
+    g = { events, clickCapture }
+    gestureCache.set(card, g)
+  }
+  return g
+}
 
 const toast = ref({ visible: false, message: '', type: 'success', timeout: null })
 function showToast(message, type = 'success') {
@@ -209,7 +228,8 @@ function editDeck(deck) {
   for (const dc of deck.cards) {
     next[dc.position] = {
       ctoonId: dc.id, name: dc.name, assetPath: dc.assetPath,
-      gtoonColor: dc.gtoonColor, gtoonValue: dc.gtoonValue, isSlamGtoon: dc.isSlamGtoon
+      gtoonColor: dc.gtoonColor, gtoonValue: dc.gtoonValue, isSlamGtoon: dc.isSlamGtoon,
+      isOgGtoon: dc.isOgGtoon, gtoonCardStyle: dc.gtoonCardStyle
     }
   }
   slots.value = next

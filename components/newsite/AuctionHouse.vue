@@ -46,7 +46,7 @@
         >
           <!-- Thumbnail -->
           <div class="ah-img-wrap" @click="openInfoModal(item)">
-            <img class="ah-img" :src="item.assetPath" :alt="item.name" draggable="false" />
+            <CtoonImage class="ah-img" :ctoon="item" :alt="item.name" draggable="false" />
             <SecondEditionOverlay :ctoon="item" />
             <span
               v-if="activeTab === 'current'"
@@ -131,7 +131,7 @@
         >
           <template #header>
             <div class="ah-card-header" @click="openInfoModal(item)">
-              <img v-if="item.assetPath" :src="item.assetPath" :alt="item.name" class="ah-card-img" draggable="false" />
+              <CtoonImage v-if="item.assetPath" :ctoon="item" :alt="item.name" class="ah-card-img" draggable="false" />
               <SecondEditionOverlay :ctoon="item" />
               <div class="ah-card-time-badge" :class="{ ended: isEnded(item.endAt) }">
                 <template v-if="!isEnded(item.endAt)">{{ formatRemaining(item.endAt) }}</template>
@@ -192,6 +192,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 import { formatRemainingShort } from '~/server/utils/auctionDuration'
 const filter   = useNewSiteCtoonFilter()
 const aFilters = useAuctionHouseFilters()

@@ -16,7 +16,7 @@
         >
           <template #header>
             <div class="card-header-wrap" @click="openInfo(c)">
-              <img v-if="c.assetPath" :src="c.assetPath" :alt="c.name" class="card-img" />
+              <CtoonImage v-if="c.assetPath" :ctoon="c" :alt="c.name" class="card-img" />
               <SecondEditionOverlay :ctoon="c" />
               <span
                 class="owned-badge"
@@ -43,6 +43,7 @@
 </template>
 
 <script setup>
+import CtoonImage from '@/components/CtoonImage.vue'
 const { open: openCtoonModal } = useCtoonModal()
 const filter = useMyWishlistFilter()
 const { remove: wishlistRemove } = useWishlist()

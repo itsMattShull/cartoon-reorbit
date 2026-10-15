@@ -16,16 +16,29 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { assertSameOrigin } from '@/server/utils/requireAdmin'
+import { getGlobalConfig } from '@/server/utils/cmoon'
 import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from '@/server/utils/achievements'
 import { recomputeCMoonPointsForUsers } from '@/server/cron/cmoon-points-aggregate'
+import { announceTeamEnemiesMilestone, checkAndAnnounceSeasonGoalReached, announceSharedPoolBossDefeated } from '@/server/utils/cmoonDiscordEvents'
 import {
   isValidPlayerSubmittedAction, resolveRound, rollEnemyRewards, buildGrantableReward,
   serializeBattleForClient, MAX_ROUNDS_SAFETY, HEAL_ON_SUCCESSFUL_BLOCK,
-  SPECIAL_ACTION, HIT_STREAK_THRESHOLD,
+  SPECIAL_ACTION, HIT_STREAK_THRESHOLD, shouldForcePityReward, forcePickOneReward, grantSummaryIsEmpty,
+  isAttack,
 } from '@/server/utils/cmoonEnemyBattle'
 
 const BATTLE_INCLUDE = {
-  enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true } } } },
+  enemyMember: {
+    include: {
+      faction: {
+        include: {
+          appearEffect: true,
+          specialAttack: true,
+          taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+        },
+      },
+    },
+  },
   cMoon: { include: { specialAttack: true } },
 }
 
@@ -74,8 +87,24 @@ export default defineEventHandler(async (event) => {
   if (isSpecial && battle.playerParalyzedTurns > 0) {
     throw createError({ statusCode: 409, statusMessage: `You're paralyzed and can't act for ${battle.playerParalyzedTurns} more round(s)` })
   }
+  // Stamina gate (see CMoonEnemyBattle.playerStamina's own schema comment) — the actual point of
+  // the mechanic: an attack submission is flatly rejected once the pool hits 0, forcing at least
+  // one block before swinging again. Skipped while paralyzed: that round's action is about to be
+  // silently overridden to PARALYZED_ACTION by resolveRound regardless of what was submitted
+  // (same as the ordinary 4-move case, which has never rejected a submission on that basis), so
+  // rejecting here first would surface the wrong reason for a round that couldn't have cost
+  // stamina either way. Never fires when playerMaxStamina <= 0 (mechanic off for this battle).
+  if (!isSpecial && isAttack(playerAction) && battle.playerParalyzedTurns <= 0
+    && battle.playerMaxStamina > 0 && battle.playerStamina <= 0) {
+    throw createError({ statusCode: 409, statusMessage: "You're out of stamina — block to recover before attacking again" })
+  }
 
   const isSharedPool = battle.enemyMember.battleMode === 'SHARED_POOL'
+  // Only read when stamina is actually active for this battle — same "don't query for nothing"
+  // discipline consider.post.js's own spawn-cap/pity reads already follow.
+  const blockCounterDamage = battle.playerMaxStamina > 0
+    ? Math.max(0, Number((await getGlobalConfig())?.cMoonEnemyBattleBlockCounterDamage) || 0)
+    : 0
 
   // ── Local working copies of every per-round-mutable field — applied to the DB once, at the
   // bottom, in a single update (or folded into resolveWin/resolveLoss/resolveAbandoned on a
@@ -86,10 +115,23 @@ export default defineEventHandler(async (event) => {
   let enemyAtkBonus = battle.enemyAtkBonus
   let playerParalyzedTurns = battle.playerParalyzedTurns
   let enemyParalyzedTurns = battle.enemyParalyzedTurns
+  let playerStamina = battle.playerStamina
   let playerHitStreak = battle.playerHitStreak
   let playerSpecialCharged = battle.playerSpecialCharged
   let enemyHitStreak = battle.enemyHitStreak
+  // Running total of real damage THIS battle's own player has dealt — see
+  // CMoonEnemyBattle.damageDealt's own schema comment for why this exists (closing the
+  // SHARED_POOL "snipe a nearly-dead community boss for a free win" gap). Only ever incremented
+  // by damageEnemy()'s own return value, which is 0 whenever the pool was already at 0 the
+  // instant that call ran — so a round that merely OBSERVES the enemy already dead (someone
+  // else's hit) contributes nothing here, exactly as it should.
+  let totalDamageDealt = battle.damageDealt || 0
   const specialEvents = []
+  // Set true only by THIS request's own decrement actually bringing the shared pool from >0 to
+  // 0 — see damageEnemy's own comment below for why a simultaneous other caller who merely
+  // observes an already-0 pool can never also set this, so the Discord announcement after the
+  // WIN branch below can never double-fire for the same kill.
+  let sharedPoolJustDefeated = false
 
   let enemyHp = isSharedPool
     ? (await db.cMoonEnemyMember.findUnique({ where: { id: battle.enemyMemberId }, select: { currentHp: true } })).currentHp
@@ -98,16 +140,37 @@ export default defineEventHandler(async (event) => {
   // Flat damage against the enemy, honoring SHARED_POOL's atomic concurrency rules — same
   // GREATEST-clamped conditional UPDATE a normal landed hit already used, reused here so a
   // special attack's guaranteed damage can never race another player's hit into a negative pool.
+  // Returns the REAL amount this call actually removed from the pool (0 if the pool was already
+  // dead when it ran) — the caller accumulates this into totalDamageDealt, see that variable's
+  // own comment above for why a merely-observed-already-dead pool must never count.
   async function damageEnemy(amount) {
-    if (amount <= 0 || enemyHp <= 0) return
-    if (!isSharedPool) { enemyHp = Math.max(0, enemyHp - amount); return }
+    if (amount <= 0 || enemyHp <= 0) return 0
+    if (!isSharedPool) {
+      const before = enemyHp
+      enemyHp = Math.max(0, enemyHp - amount)
+      return before - enemyHp
+    }
     const rows = await db.$queryRaw`
       UPDATE "CMoonEnemyMember" SET "currentHp" = GREATEST("currentHp" - ${amount}, 0)
       WHERE id = ${battle.enemyMemberId} AND "currentHp" > 0
       RETURNING "currentHp"
     `
+    // rows.length === 0 means the WHERE "currentHp" > 0 clause matched nothing — the pool was
+    // ALREADY at 0 from some other player's hit by the time this UPDATE ran, so this request
+    // never caused a transition. rows.length === 1 means THIS UPDATE is what moved it, and
+    // GREATEST floors it at 0, so rows[0].currentHp <= 0 here means this exact request just
+    // landed the killing blow — the only signal announceSharedPoolBossDefeated below is allowed
+    // to fire on, so two simultaneous finishing hits can never both announce the same kill.
     enemyHp = rows.length ? rows[0].currentHp : 0
-    if (enemyHp <= 0) await db.cMoonEnemyMember.update({ where: { id: battle.enemyMemberId }, data: { defeatedAt: new Date() } })
+    if (rows.length && enemyHp <= 0) {
+      sharedPoolJustDefeated = true
+      await db.cMoonEnemyMember.update({ where: { id: battle.enemyMemberId }, data: { defeatedAt: new Date() } })
+    }
+    // rows.length > 0 means the WHERE matched a genuinely positive pool — a real contribution,
+    // even in the rare edge case where GREATEST's floor clamped the exact numeric delta below
+    // `amount` (the pool had less than `amount` left); the exact magnitude doesn't matter here,
+    // only that it's non-zero.
+    return rows.length ? amount : 0
   }
   async function healEnemy(amount) {
     if (amount <= 0 || enemyHp <= 0) return // never revives an already-defeated shared pool
@@ -131,7 +194,7 @@ export default defineEventHandler(async (event) => {
       effectType: playerSpecialAttack.effectType, amount: playerSpecialAttack.amount,
       soundPath: playerSpecialAttack.soundPath || null,
     })
-    if (playerSpecialAttack.effectType === 'DAMAGE_OPPONENT') await damageEnemy(playerSpecialAttack.amount)
+    if (playerSpecialAttack.effectType === 'DAMAGE_OPPONENT') totalDamageDealt += await damageEnemy(playerSpecialAttack.amount)
     else if (playerSpecialAttack.effectType === 'HEAL_SELF') playerHp = Math.min(battle.playerMaxHp, playerHp + playerSpecialAttack.amount)
     else if (playerSpecialAttack.effectType === 'PARALYZE_OPPONENT') enemyParalyzedTurns += playerSpecialAttack.amount
     else if (playerSpecialAttack.effectType === 'LOWER_OPPONENT_ATTACK') enemyAtkBonus -= playerSpecialAttack.amount
@@ -145,16 +208,25 @@ export default defineEventHandler(async (event) => {
   // below), while the enemy still rolls (and lands, if not paralyzed) normally. ───────────────
   const {
     roundEntry: roundCore, newPlayerHp, enemyHit, enemyBlocked, enemyDamage,
-    newPlayerParalyzedTurns, newEnemyParalyzedTurns,
+    newPlayerParalyzedTurns, newEnemyParalyzedTurns, newPlayerStamina,
   } = resolveRound({
     playerAction, enemyMember: battle.enemyMember, playerHpRemaining: playerHp, playerMaxHp: battle.playerMaxHp,
     playerAtkBonus, enemyAtkBonus, playerParalyzedTurns, enemyParalyzedTurns,
+    playerStamina, playerMaxStamina: battle.playerMaxStamina, blockCounterDamage,
   })
   playerHp = newPlayerHp
   playerParalyzedTurns = newPlayerParalyzedTurns
   enemyParalyzedTurns = newEnemyParalyzedTurns
+  playerStamina = newPlayerStamina
 
-  if (enemyHit) await damageEnemy(enemyDamage)
+  // enemyDamage > 0 (not the narrower enemyHit) is the right trigger here — see resolveRound's
+  // own comment: enemyDamage is nonzero whenever EITHER a normal attack landed (enemyHit) OR a
+  // successful player block countered (playerBlocked + blockCounterDamage > 0), and those two
+  // cases are mutually exclusive. Gating on enemyHit alone would silently drop every counter-hit:
+  // the round would still SHOW the damage (roundEntry.enemyDamage, the floating-number UI) but
+  // never actually apply it via damageEnemy() — cosmetic only, the one bug that would have made
+  // this whole mechanic pointless.
+  if (enemyDamage > 0) totalDamageDealt += await damageEnemy(enemyDamage)
   else if (enemyBlocked) await healEnemy(HEAL_ON_SUCCESSFUL_BLOCK)
 
   // ── 3. Hit-streak bookkeeping, both sides — see CMoonEnemyBattle.playerHitStreak/
@@ -188,23 +260,37 @@ export default defineEventHandler(async (event) => {
     ...(specialEvents.length ? { specials: specialEvents } : {}),
   }
   const roundLog = [...(Array.isArray(battle.roundLog) ? battle.roundLog : []), roundEntry]
-  const statMods = { playerAtkBonus, enemyAtkBonus, playerParalyzedTurns, enemyParalyzedTurns, playerHitStreak, playerSpecialCharged, enemyHitStreak }
+  const statMods = {
+    playerAtkBonus, enemyAtkBonus, playerParalyzedTurns, enemyParalyzedTurns,
+    playerHitStreak, playerSpecialCharged, enemyHitStreak, playerStamina,
+  }
 
   // WIN takes priority over a same-round mutual KO (both sides would have hit 0 hp this round)
   // — the player still gets credit for the kill rather than being denied a reward on a technicality.
   if (newEnemyHp <= 0) {
-    const result = await resolveWin(battle, roundLog, submittedRound, playerHp)
-    return { round: roundEntry, battle: serializeBattleForClient(result) }
+    if (sharedPoolJustDefeated) announceSharedPoolBossDefeated(battle.enemyMember.name).catch(() => {})
+    // totalDamageDealt > 0 gates whether THIS player's own battle gets credited as a WIN — see
+    // CMoonEnemyBattle.damageDealt's own schema comment. Always true for a real PER_PLAYER win
+    // (nothing else can move that mode's HP), so this only ever changes behavior for the
+    // SHARED_POOL snipe this closes: a battle whose player contributed zero damage resolves as
+    // UNCREDITED instead, with no reward/points/achievement/leaderboard credit — the team
+    // already got full credit via whichever OTHER player's own battle actually landed the kill.
+    if (totalDamageDealt > 0) {
+      const { battle: resultBattle, isFirstWinAgainstThisEnemy } = await resolveWin(battle, roundLog, submittedRound, playerHp, totalDamageDealt, playerStamina)
+      return { round: roundEntry, battle: serializeBattleForClient(resultBattle), isFirstWinAgainstThisEnemy }
+    }
+    const uncredited = await resolveUncredited(battle, roundLog, submittedRound, playerHp, playerStamina)
+    return { round: roundEntry, battle: serializeBattleForClient(uncredited), isFirstWinAgainstThisEnemy: false }
   }
   if (playerHp <= 0) {
-    const result = await resolveLoss(battle, roundLog, submittedRound, newEnemyHp)
+    const result = await resolveLoss(battle, roundLog, submittedRound, newEnemyHp, totalDamageDealt, playerStamina)
     return { round: roundEntry, battle: serializeBattleForClient(result) }
   }
   // Neither side reached 0 this round — under a pathological RNG streak (see this constant's own
   // comment) a battle could otherwise run indefinitely, one round per request, so cap it here the
   // same way an idle timeout does: no penalty, just ended.
   if (submittedRound + 1 >= MAX_ROUNDS_SAFETY) {
-    const result = await resolveAbandoned(battle, roundLog, submittedRound, playerHp, newEnemyHp)
+    const result = await resolveAbandoned(battle, roundLog, submittedRound, playerHp, newEnemyHp, totalDamageDealt, playerStamina)
     return { round: roundEntry, battle: serializeBattleForClient(result) }
   }
 
@@ -212,6 +298,7 @@ export default defineEventHandler(async (event) => {
     where: { id: battleId },
     data: {
       roundNumber: submittedRound + 1, playerHpRemaining: playerHp, enemyHpRemaining: newEnemyHp, roundLog,
+      damageDealt: totalDamageDealt,
       ...statMods,
     },
     include: BATTLE_INCLUDE,
@@ -219,20 +306,107 @@ export default defineEventHandler(async (event) => {
   return { round: roundEntry, battle: serializeBattleForClient(updated) }
 })
 
-async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining) {
+// Reward rows that could never actually grant anything to this user right now — an AVATAR/
+// BACKGROUND they already own (grantRewardInTx's own ownership dedup — see that function's own
+// comment) or a CTOON whose configured supply cap is already fully minted out (mirrors
+// grantRewardInTx's own canGive computation) — are excluded from pity's forced pick, so pity's
+// one "guaranteed" reward never lands on a row that would itself grant nothing. A POINTS row is
+// always grantable (no ownership/supply concept) and always passes through unfiltered. Read-only;
+// called inside the same transaction as the eventual grant so it sees a consistent snapshot.
+// Exported for a direct Prisma smoke test against real ownership/supply-cap rows.
+export async function filterForcePityCandidates(tx, userId, rewardRows) {
+  const avatarIds = [...new Set(rewardRows.filter(r => r.rewardType === 'AVATAR').map(r => r.avatarId))]
+  const backgroundIds = [...new Set(rewardRows.filter(r => r.rewardType === 'BACKGROUND').map(r => r.backgroundId))]
+  const [ownedAvatars, ownedBackgrounds] = await Promise.all([
+    avatarIds.length ? tx.userAvatar.findMany({ where: { userId, avatarId: { in: avatarIds } }, select: { avatarId: true } }) : [],
+    backgroundIds.length ? tx.userBackground.findMany({ where: { userId, backgroundId: { in: backgroundIds } }, select: { backgroundId: true } }) : [],
+  ])
+  const ownedAvatarSet = new Set(ownedAvatars.map(a => a.avatarId))
+  const ownedBackgroundSet = new Set(ownedBackgrounds.map(b => b.backgroundId))
+
+  const candidates = []
+  for (const row of rewardRows) {
+    if (row.rewardType === 'AVATAR' && ownedAvatarSet.has(row.avatarId)) continue
+    if (row.rewardType === 'BACKGROUND' && ownedBackgroundSet.has(row.backgroundId)) continue
+    if (row.rewardType === 'CTOON' && row.ctoon?.quantity != null) {
+      const minted = await tx.userCtoon.count({ where: { ctoonId: row.ctoonId } })
+      if (minted >= row.ctoon.quantity) continue
+    }
+    candidates.push(row)
+  }
+  return candidates
+}
+
+async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining, damageDealt, playerStamina) {
+  // Whether this player has ever beaten THIS SPECIFIC enemy member before — read before the
+  // transaction below creates this win's own row, so it's naturally excluded from the count (no
+  // off-by-one guard needed). Display-only (a "First victory!" toast — see
+  // CMoonBattlePopupHost.vue), never gates anything; distinct from minPriorDefeats' own lifetime
+  // ANY-enemy win count used for the popup-consider unlock gate.
+  const priorWinsAgainstThisEnemy = await db.cMoonEnemyBattle.count({
+    where: { userId: battle.userId, enemyMemberId: battle.enemyMemberId, outcome: 'WIN' },
+  })
+  const isFirstWinAgainstThisEnemy = priorWinsAgainstThisEnemy === 0
+
   const rewardRows = await db.cMoonEnemyReward.findMany({
     where: { enemyMemberId: battle.enemyMemberId },
     include: { ctoon: { select: { quantity: true, name: true } } },
   })
-  const hitRewards = rollEnemyRewards(rewardRows)
-  const grantable = buildGrantableReward(hitRewards)
+  let hitRewards = rollEnemyRewards(rewardRows)
   // A player with no cMoon (battle.cMoonId is null — see that column's own schema comment) never
   // earns cMoon points: there's no team to credit, and crediting one anyway would misattribute a
-  // non-member's win. Every other reward type and achievement progress below still applies.
-  const pointsAwarded = battle.cMoonId ? Math.max(0, Number(battle.enemyMember.cMoonPointsReward) || 0) : 0
+  // non-member's win. Every other reward type and achievement progress below still applies. The
+  // first-win bonus follows the exact same cMoon-required gate as the base reward, since it's
+  // still cMoonPointsReward money, just conditional on isFirstWinAgainstThisEnemy.
+  const basePoints = Math.max(0, Number(battle.enemyMember.cMoonPointsReward) || 0)
+  const firstWinBonus = isFirstWinAgainstThisEnemy ? Math.max(0, Number(battle.enemyMember.firstWinBonusPoints) || 0) : 0
+  const pointsAwarded = battle.cMoonId ? (basePoints + firstWinBonus) : 0
 
   const txResult = await db.$transaction(async (tx) => {
-    const summary = await grantRewardInTx(tx, battle.userId, grantable, 'CMOON_ENEMY_BATTLE_WIN')
+    // Grant whatever actually rolled FIRST — an empty hitRewards array, or one whose only hit
+    // was an avatar/background the player already owns, resolves to a fully zeroed, side-
+    // effect-free summary (grantRewardInTx's own ownership dedup), so this is always safe to
+    // call unconditionally rather than branching on hitRewards.length up front.
+    let grantable = buildGrantableReward(hitRewards)
+    let summary = await grantRewardInTx(tx, battle.userId, grantable, 'CMOON_ENEMY_BATTLE_WIN')
+
+    // Reward pity (see CMoonEnemyMember.pityThreshold's own schema comment) — SOLO BATTLES ONLY.
+    // Keyed off whether the player actually walked away with something tangible (the GRANT's own
+    // outcome), never the raw roll — a hit that only landed on an already-owned avatar/background
+    // is just as empty-handed as rolling nothing at all, and must count as an empty win for pity
+    // purposes rather than silently resetting the streak for a reward the player never received.
+    const grantedNothing = grantSummaryIsEmpty(summary)
+
+    if (grantedNothing && battle.enemyMember.pityThreshold > 0 && rewardRows.length > 0) {
+      const pity = await tx.cMoonEnemyRewardPity.upsert({
+        where: { userId_enemyMemberId: { userId: battle.userId, enemyMemberId: battle.enemyMemberId } },
+        create: { userId: battle.userId, enemyMemberId: battle.enemyMemberId, emptyWinStreak: 1 },
+        update: { emptyWinStreak: { increment: 1 } },
+      })
+      if (shouldForcePityReward(pity.emptyWinStreak, battle.enemyMember.pityThreshold)) {
+        // Force-pick only from rows that can ACTUALLY grant something right now — forcing a dead
+        // row (an owned avatar/background, a sold-out cToon) would make pity's one "guaranteed"
+        // reward just as empty-handed as the streak it exists to end.
+        const candidates = await filterForcePityCandidates(tx, battle.userId, rewardRows)
+        const forced = forcePickOneReward(candidates)
+        if (forced) {
+          hitRewards = [forced]
+          grantable = buildGrantableReward(hitRewards)
+          summary = await grantRewardInTx(tx, battle.userId, grantable, 'CMOON_ENEMY_BATTLE_WIN')
+          await tx.cMoonEnemyRewardPity.update({ where: { id: pity.id }, data: { emptyWinStreak: 0 } })
+        }
+        // If every configured row is currently a dead end (e.g. the player already owns every
+        // avatar/background this member offers), there's nothing pity CAN force — the streak
+        // stays incremented and tries again on the next win, same as any other miss.
+      }
+    } else if (!grantedNothing) {
+      // A real reward was actually granted — reset any existing streak back to 0 (no-op, not an
+      // upsert, if this user/member never had a pity row to begin with).
+      await tx.cMoonEnemyRewardPity.updateMany({
+        where: { userId: battle.userId, enemyMemberId: battle.enemyMemberId },
+        data: { emptyWinStreak: 0 },
+      })
+    }
 
     if (pointsAwarded > 0) {
       // cMoonPoints is a fully-recomputed aggregate (see server/cron/cmoon-points-aggregate.js),
@@ -249,8 +423,9 @@ async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining) {
     }
 
     // No cMoon to credit a win to for a null-cMoonId battle — see pointsAwarded's own comment.
+    let updatedCMoon = null
     if (battle.cMoonId) {
-      await tx.cMoon.update({ where: { id: battle.cMoonId }, data: { battleWins: { increment: 1 } } })
+      updatedCMoon = await tx.cMoon.update({ where: { id: battle.cMoonId }, data: { battleWins: { increment: 1 } } })
     }
 
     const rewardsGranted = [
@@ -264,27 +439,35 @@ async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining) {
       where: { id: battle.id },
       data: {
         status: 'RESOLVED', outcome: 'WIN', roundNumber: submittedRound + 1,
-        playerHpRemaining, enemyHpRemaining: 0,
+        playerHpRemaining, enemyHpRemaining: 0, damageDealt, playerStamina,
         roundLog, pointsAwarded, rewardsGranted, endedAt: new Date(), activeUserId: null,
       },
-      include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true } } } }, cMoon: { include: { specialAttack: true } } },
+      include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
     })
 
-    return { updated, ctoonJobs: summary.ctoonJobs }
+    return { updated, ctoonJobs: summary.ctoonJobs, updatedCMoon }
   })
 
   if (txResult.ctoonJobs.length) await enqueueCtoonJobs(battle.userId, txResult.ctoonJobs, 'CMOON_ENEMY_BATTLE_WIN')
   if (pointsAwarded > 0) await recomputeCMoonPointsForUsers([battle.userId])
+  // Team enemies-defeated milestone — compares the pre-increment value already loaded on `battle`
+  // (from this handler's own findUnique, before this win's transaction ran) against the just-
+  // committed post-increment value, so no extra read is needed. Also checks the server-wide
+  // season "enemies defeated" goal, which has nothing to do with any one team's own battleWins.
+  if (txResult.updatedCMoon) {
+    announceTeamEnemiesMilestone(battle.cMoonId, battle.cMoon?.battleWins, txResult.updatedCMoon.battleWins).catch(() => {})
+  }
+  checkAndAnnounceSeasonGoalReached().catch(() => {})
   // Fire-and-forget, same pattern server/api/tko/event.post.js uses right after its own win is
   // persisted — checks every active achievement (e.g. "defeat N cMoon enemies") against this
   // player's now-updated stats and awards any newly met. Never awaited: a slow/failed check must
   // not hold up or fail the battle response the player is waiting on.
   processAchievementsForUser(battle.userId).catch(() => {})
 
-  return txResult.updated
+  return { battle: txResult.updated, isFirstWinAgainstThisEnemy }
 }
 
-async function resolveLoss(battle, roundLog, submittedRound, enemyHpRemaining) {
+async function resolveLoss(battle, roundLog, submittedRound, enemyHpRemaining, damageDealt, playerStamina) {
   return db.$transaction(async (tx) => {
     // No cMoon to credit a loss to for a null-cMoonId battle — see resolveWin's pointsAwarded comment.
     if (battle.cMoonId) {
@@ -294,10 +477,10 @@ async function resolveLoss(battle, roundLog, submittedRound, enemyHpRemaining) {
       where: { id: battle.id },
       data: {
         status: 'RESOLVED', outcome: 'LOSS', roundNumber: submittedRound + 1,
-        playerHpRemaining: 0, enemyHpRemaining,
+        playerHpRemaining: 0, enemyHpRemaining, damageDealt, playerStamina,
         roundLog, endedAt: new Date(), activeUserId: null,
       },
-      include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true } } } }, cMoon: { include: { specialAttack: true } } },
+      include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
     })
   })
 }
@@ -305,14 +488,37 @@ async function resolveLoss(battle, roundLog, submittedRound, enemyHpRemaining) {
 // MAX_ROUNDS_SAFETY was reached with neither side at 0 — ends the battle the same way the idle
 // timeout does (ABANDONED: no CMoon.battleLosses increment, no penalty — see that enum value's
 // own schema comment), just triggered by round count instead of elapsed time.
-async function resolveAbandoned(battle, roundLog, submittedRound, playerHpRemaining, enemyHpRemaining) {
+async function resolveAbandoned(battle, roundLog, submittedRound, playerHpRemaining, enemyHpRemaining, damageDealt, playerStamina) {
   return db.cMoonEnemyBattle.update({
     where: { id: battle.id },
     data: {
       status: 'RESOLVED', outcome: 'ABANDONED', roundNumber: submittedRound + 1,
-      playerHpRemaining, enemyHpRemaining,
+      playerHpRemaining, enemyHpRemaining, damageDealt, playerStamina,
       roundLog, endedAt: new Date(), activeUserId: null,
     },
-    include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true } } } }, cMoon: { include: { specialAttack: true } } },
+    include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
+  })
+}
+
+// A SHARED_POOL community boss died from some OTHER player's own hits while THIS battle's player
+// dealt zero damage of their own (damageDealt === 0 — see that column's own schema comment on
+// the exact gap this closes: currentHp is visible before a fight even starts, and re-read fresh
+// every round, so merely having an in-progress battle open when someone else lands the kill used
+// to be enough for a full, free win). Deliberately its own outcome rather than WIN or ABANDONED:
+// - Not WIN: this player didn't earn the kill, so no reward roll, no points, no pity/first-win
+//   progress, no CMoon.battleWins increment, no achievement credit — the team already got full
+//   credit via whichever OTHER player's own battle actually resolved as the real WIN.
+// - Not ABANDONED: that outcome's existing client copy ("the fight timed out") would be a flat
+//   lie here — nothing timed out, the enemy is genuinely dead.
+// Same "ends clean, no penalty, no further side effects" shape as resolveAbandoned otherwise.
+async function resolveUncredited(battle, roundLog, submittedRound, playerHpRemaining, playerStamina) {
+  return db.cMoonEnemyBattle.update({
+    where: { id: battle.id },
+    data: {
+      status: 'RESOLVED', outcome: 'UNCREDITED', roundNumber: submittedRound + 1,
+      playerHpRemaining, enemyHpRemaining: 0, damageDealt: 0, playerStamina,
+      roundLog, endedAt: new Date(), activeUserId: null,
+    },
+    include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
   })
 }

@@ -15,9 +15,9 @@
             </div>
 
             <div class="flex flex-col gap-1">
-              <label class="text-xs font-medium">Upload Image (PNG or GIF)</label>
-              <input type="file" accept="image/png,image/gif" @change="handleFile" required class="text-xs" />
-              <p class="text-[11px] text-gray-500">This image will represent the cToon visually. PNG or GIF only.</p>
+              <label class="text-xs font-medium">Upload Image (PNG, GIF, or AVIF)</label>
+              <input type="file" accept="image/png,image/gif,image/avif,.avif" @change="handleFile" required class="text-xs" />
+              <p class="text-[11px] text-gray-500">This image will represent the cToon visually. PNG, GIF, or AVIF only.</p>
               <p v-if="errors.image" class="text-red-600 text-[11px] mt-1">{{ errors.image }}</p>
               <div v-if="duplicateStatus !== 'idle'" class="mt-1">
                 <p v-if="duplicateStatus === 'checking'" class="text-[11px] text-gray-500">Checking for duplicates...</p>
@@ -323,14 +323,21 @@
             </label>
 
             <div v-if="isOgGtoon" class="border rounded-md bg-amber-50 p-3 space-y-3">
-              <div class="flex flex-col gap-1">
-                <label class="text-xs font-medium">Color</label>
-                <select v-model="gtoonColor" required class="border rounded-md px-2 py-1.5 text-sm bg-white">
-                  <option disabled value="">Select a color</option>
-                  <option v-for="c in gtoonColorOptions" :key="c" :value="c">{{ c }}</option>
-                </select>
-                <p class="text-[11px] text-gray-500">Black/Silver are neutral goal colors; every other color is non-neutral for the color-bonus scoring rule.</p>
-              </div>
+              <OgGtoonLookEditor
+
+                v-model:color="gtoonColor"
+
+                v-model:card-style="gtoonCardStyle"
+
+                :image-url="imagePreview"
+
+                :value="gtoonValue"
+
+                :name="name"
+
+                :seed="name"
+
+              />
               <div class="flex flex-col gap-1">
                 <label class="text-xs font-medium">Value <span class="text-[11px] font-normal text-gray-500">(0 – 99)</span></label>
                 <input v-model.number="gtoonValue" type="number" min="0" max="99" required class="border rounded-md px-2 py-1.5 text-sm" />
@@ -668,6 +675,8 @@ import { zonedTimeToUtc } from 'date-fns-tz'
 import abilityMeta from '~/data/abilities.json'
 import { useRouter } from 'vue-router'
 import SecondEditionFields from '~/components/admin/SecondEditionFields.vue'
+import OgGtoonLookEditor from '~/components/newsite/admin/legacy/OgGtoonLookEditor.vue'
+import { defaultGtoonCardStyle, sanitizeGtoonCardStyle } from '~/utils/gtoonCardStyle'
 
 const router = useRouter()
 const name = ref('')
@@ -738,6 +747,7 @@ function titleCase(s) { return s ? s.charAt(0) + s.slice(1).toLowerCase() : s }
 
 const isOgGtoon   = ref(false)
 const gtoonColor  = ref('')
+const gtoonCardStyle = ref(defaultGtoonCardStyle())
 const gtoonValue  = ref(1)
 const gtoonType1  = ref('')
 const gtoonType2  = ref('')
@@ -832,7 +842,18 @@ function schemaToUiEffect(eff) {
   } else if (ui.action.type === 'setColor') {
     ui.action.color = a.color || 'BLACK'
   }
+  // Keep the exact server-side effect: the editable row only covers part of the schema (several
+  // filters, character lists, OR/AND conditions, slot/opposite checks...), so an untouched row is
+  // saved from this copy instead of being rebuilt from the row's fields.
+  ui._raw = JSON.parse(JSON.stringify(eff))
+  ui._sig = uiEffectSig(ui)
   return ui
+}
+
+/** Signature of a row's editable fields (everything except the preserved original). */
+function uiEffectSig(e) {
+  const { _raw, _sig, ...rest } = e
+  return JSON.stringify(rest)
 }
 
 function coerceFilterValue(by, v) { return by === 'value' ? Number(v) : v }
@@ -840,6 +861,7 @@ function coerceFilterValue(by, v) { return by === 'value' ? Number(v) : v }
 /** Strips UI-only fields and maps each effect row to the server's schema shape. */
 function buildGtoonEffectPayload() {
   return gtoonEffects.value.map(e => {
+    if (e._raw && uiEffectSig(e) === e._sig) return JSON.parse(JSON.stringify(e._raw))
     let target
     if (e.target.selector === 'cardByCharacter') {
       target = { selector: 'cardByCharacter', character: (e.target.character || '').trim() }
@@ -1000,8 +1022,8 @@ function handleFile(e) {
     errors.image = 'Image is required.'
     return
   }
-  if (!['image/png', 'image/gif'].includes(file.type)) {
-    errors.image = 'Only PNG or GIF files allowed.'
+  if (!['image/png', 'image/gif', 'image/avif'].includes(file.type)) {
+    errors.image = 'Only PNG, GIF, or AVIF files allowed.'
     return
   }
   imageFile.value = file
@@ -1135,7 +1157,7 @@ async function submitForm() {
   formData.append('totalQuantity', mintLimitType.value === 'defined' ? (totalQuantity.value ?? '') : '')
   formData.append('initialQuantity', mintLimitType.value === 'defined' ? (initialQuantity.value ?? '') : '')
   // advisory schedule fields
-  formData.append('initialReleaseAt', releaseDate.value ? new Date(releaseDate.value).toISOString() : '')
+  formData.append('initialReleaseAt', releaseDate.value ? zonedTimeToUtc(releaseDate.value, 'America/Chicago').toISOString() : '')
   formData.append('finalReleaseAt', schedule.value.finalAt ? schedule.value.finalAt.toISOString() : '')
   formData.append('initialReleaseQty', schedule.value.initialQty ?? '')
   formData.append('finalReleaseQty', schedule.value.finalQty ?? '')
@@ -1157,6 +1179,7 @@ async function submitForm() {
   formData.append('isOgGtoon', isOgGtoon.value)
   if (isOgGtoon.value) {
     formData.append('gtoonColor', gtoonColor.value)
+    formData.append('gtoonCardStyle', JSON.stringify(gtoonCardStyle.value))
     formData.append('gtoonValue', gtoonValue.value)
     formData.append('isSlamGtoon', isSlamGtoon.value)
     formData.append('gtoonEffect', isSlamGtoon.value ? JSON.stringify(buildGtoonEffectPayload()) : '')

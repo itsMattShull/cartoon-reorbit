@@ -5,6 +5,7 @@ import { defineEventHandler, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { getGlobalConfig, isCMoonCaptain, displayRankName } from '@/server/utils/cmoon'
 import { resolveBorderStyle, resolveGlowStyle } from '@/server/utils/czoneEffect'
+import { ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 function normalizeZones(layoutData, background, targetCount) {
   let zones = []
@@ -163,6 +164,7 @@ export default defineEventHandler(async (event) => {
       rarity: uc.ctoon.rarity,
       isFirstEdition: uc.isFirstEdition,
       ctoonId: uc.ctoon.id,
+      og: ogGtoonDisplay(uc.ctoon),
       isGtoon: uc.ctoon.isGtoon,
       cost: uc.ctoon.cost,
       power: uc.ctoon.power,
@@ -264,6 +266,8 @@ export default defineEventHandler(async (event) => {
         rarity: meta.rarity ?? null,
         isFirstEdition: meta.isFirstEdition ?? null,
         ctoonId: meta.ctoonId ?? null,
+        // Live OG gToon look (never the snapshot persisted in the layout), so admin edits show up everywhere.
+        ...(meta.og || { isOgGtoon: false }),
         isGtoon: meta.isGtoon ?? null,
         cost: meta.cost ?? null,
         power: meta.power ?? null,

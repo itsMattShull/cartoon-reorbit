@@ -1,4 +1,5 @@
 import { prisma } from '@/server/prisma'
+import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 const TIME_BASED_CAP = 999999999
 
@@ -45,7 +46,7 @@ export default defineEventHandler(async () => {
       set: true,
       series: true,
       rarity: true,
-      assetPath: true,
+      assetPath: true, ...OG_GTOON_DISPLAY_SELECT,
       price: true,
       releaseDate: true,
       quantity: true,
