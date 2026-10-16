@@ -52,8 +52,9 @@
           <template v-else-if="isVotingPhase">
             <span class="cc-voting-notice">Submissions closed — voting is open</span>
           </template>
-          <template v-else-if="me && !hasOwnSubmission && isSubmissionPhase">
-            <OrangeButton @click="openSubmit">Submit Your cZone</OrangeButton>
+          <template v-else-if="me && isSubmissionPhase">
+            <span v-if="hasOwnSubmission" class="cc-submitted-label">✓ Submitted</span>
+            <OrangeButton @click="openSubmit">{{ hasOwnSubmission ? 'Resubmit Your cZone' : 'Submit Your cZone' }}</OrangeButton>
           </template>
           <template v-else-if="me && hasOwnSubmission">
             <span class="cc-submitted-label">✓ Submitted</span>
@@ -180,6 +181,12 @@
                 <select class="cc-select" v-model="submitZoneIndex">
                   <option v-for="(z, i) in myZones" :key="i" :value="i">Zone {{ i + 1 }}</option>
                 </select>
+                <div v-if="hasOwnSubmission" class="cc-resubmit-note">You already submitted — submitting again will replace your previous entry.</div>
+                <label class="cc-field-label">Preview</label>
+                <div class="cc-preview-wrap">
+                  <img v-if="previewUrl" :src="previewUrl" class="cc-preview-img" alt="cZone preview" />
+                  <div v-else class="cc-empty">{{ previewLoading ? 'Rendering preview…' : 'No preview available' }}</div>
+                </div>
                 <div v-if="submitError" class="cc-submit-error">{{ submitError }}</div>
               </div>
             </template>
@@ -407,45 +414,76 @@ function loadImage(src) {
   })
 }
 
+async function renderZoneBlob(zone) {
+  const canvas = document.createElement('canvas')
+  canvas.width  = 800
+  canvas.height = 600
+  const ctx = canvas.getContext('2d')
+
+  // Fill background colour first so transparent areas aren't white
+  ctx.fillStyle = '#003466'
+  ctx.fillRect(0, 0, 800, 600)
+
+  // Draw background image with cover behaviour
+  const bgSrc = bgUrl(zone?.background)
+  if (bgSrc) {
+    try {
+      const bgImg = await loadImage(bgSrc)
+      const scale = Math.max(800 / bgImg.naturalWidth, 600 / bgImg.naturalHeight)
+      const w = bgImg.naturalWidth  * scale
+      const h = bgImg.naturalHeight * scale
+      ctx.drawImage(bgImg, (800 - w) / 2, (600 - h) / 2, w, h)
+    } catch { /* background failed — keep dark fill */ }
+  }
+
+  // Draw each toon in order
+  for (const toon of (zone?.toons || [])) {
+    try {
+      const img = await loadImage(toon.assetPath)
+      const w = (toon.width  || img.naturalWidth)  * (toon.sizeScale || 1)
+      const h = (toon.height || img.naturalHeight) * (toon.sizeScale || 1)
+      ctx.drawImage(img, toon.x, toon.y, w, h)
+    } catch { /* skip toons that fail to load */ }
+  }
+
+  const blob = await new Promise(r => canvas.toBlob(r, 'image/png'))
+  if (!blob) throw new Error('Failed to capture')
+  return blob
+}
+
+// Live preview of the selected zone (same render as the submitted image)
+const previewUrl     = ref('')
+const previewLoading = ref(false)
+let previewSeq = 0
+
+function clearPreview() {
+  if (previewUrl.value) URL.revokeObjectURL(previewUrl.value)
+  previewUrl.value = ''
+}
+
+watch([submitOpen, myZonesLoading, submitZoneIndex, myZones], async () => {
+  const seq = ++previewSeq
+  if (!submitOpen.value || myZonesLoading.value || !myZones.value.length) { clearPreview(); return }
+  previewLoading.value = true
+  try {
+    const blob = await renderZoneBlob(myZones.value[submitZoneIndex.value])
+    if (seq !== previewSeq) return
+    clearPreview()
+    previewUrl.value = URL.createObjectURL(blob)
+  } catch {
+    if (seq === previewSeq) clearPreview()
+  } finally {
+    if (seq === previewSeq) previewLoading.value = false
+  }
+})
+
+onUnmounted(clearPreview)
+
 async function doSubmit() {
   submitError.value = ''
   submitLoading.value = true
   try {
-    const zone = myZones.value[submitZoneIndex.value]
-
-    const canvas = document.createElement('canvas')
-    canvas.width  = 800
-    canvas.height = 600
-    const ctx = canvas.getContext('2d')
-
-    // Fill background colour first so transparent areas aren't white
-    ctx.fillStyle = '#003466'
-    ctx.fillRect(0, 0, 800, 600)
-
-    // Draw background image with cover behaviour
-    const bgSrc = bgUrl(zone?.background)
-    if (bgSrc) {
-      try {
-        const bgImg = await loadImage(bgSrc)
-        const scale = Math.max(800 / bgImg.naturalWidth, 600 / bgImg.naturalHeight)
-        const w = bgImg.naturalWidth  * scale
-        const h = bgImg.naturalHeight * scale
-        ctx.drawImage(bgImg, (800 - w) / 2, (600 - h) / 2, w, h)
-      } catch { /* background failed — keep dark fill */ }
-    }
-
-    // Draw each toon in order
-    for (const toon of (zone?.toons || [])) {
-      try {
-        const img = await loadImage(toon.assetPath)
-        const w = (toon.width  || img.naturalWidth)  * (toon.sizeScale || 1)
-        const h = (toon.height || img.naturalHeight) * (toon.sizeScale || 1)
-        ctx.drawImage(img, toon.x, toon.y, w, h)
-      } catch { /* skip toons that fail to load */ }
-    }
-
-    const blob = await new Promise(r => canvas.toBlob(r, 'image/png'))
-    if (!blob) throw new Error('Failed to capture')
+    const blob = await renderZoneBlob(myZones.value[submitZoneIndex.value])
 
     const fd = new FormData()
     fd.append('image', blob, 'zone.png')
@@ -686,6 +724,9 @@ async function doSubmit() {
 }
 .cc-select option { background: #1a3a58; color: #fff; }
 .cc-submit-error { font-size: 0.68rem; color: #e07a7a; }
+.cc-resubmit-note { font-size: 0.66rem; color: #f4a800; }
+.cc-preview-wrap { aspect-ratio: 800/600; width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15); border-radius: 4px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+.cc-preview-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* Image lightbox */
 .cc-lightbox {
