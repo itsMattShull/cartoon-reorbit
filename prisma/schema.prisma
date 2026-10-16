@@ -273,6 +273,16 @@ model Ctoon {
   rarity          String
   assetPath       String
   soundPath       String?
+  // Optional Flash interactivity — see RufflePlayer.vue. `assetPath` above stays the REQUIRED
+  // static thumbnail used by every ordinary cToon-rendering surface (collection grid, trade,
+  // cMart, wishlist, auctions, leaderboards, admin lists — all unchanged); when isSwf is true and
+  // swfPath is set, a cZone placement of this cToon instead mounts the real original .swf live via
+  // Ruffle (components/newsite/MyCzone.vue), giving back its native click/sound interactivity
+  // rather than a re-implementation of it. isSwf is a separate flag (not just `swfPath != null`)
+  // so an admin can stage the file without flipping live rendering on, same convention as every
+  // other boolean/detail-field pair on this model (isGtoon/gtoonType, isOgGtoon/gtoonColor, …).
+  isSwf           Boolean   @default(false)
+  swfPath         String?
   releaseDate     DateTime?
   perUserLimit    Int?
   codeOnly        Boolean   @default(false)
@@ -1680,6 +1690,10 @@ model GlobalGameConfig {
   gameTileEdrpsImagePath             String?
   gameTileFruitsamuraiImagePath      String?
   gameTilePokemonbattleImagePath     String?
+  // "Flash Arcade" tile — links to /newsite/flash-games (an admin-managed FlashGame list) rather
+  // than one hardcoded game page, the only gameTile*/GamesHome.vue tile that does this. See
+  // FlashGame's own schema comment.
+  gameTileFlashArcadeImagePath       String?
   // Account-dissolve "featured auction" rules: cToons matching any of these
   // rarities/series/sets are marked isFeatured when an account is dissolved.
   // Each is a JSON array of strings, edited via the "Edit Featured" modal on
@@ -5816,6 +5830,27 @@ model CMoonEnemyTaunt {
   faction CMoonEnemyFaction @relation(fields: [factionId], references: [id], onDelete: Cascade)
 
   @@index([factionId, trigger, active])
+}
+
+// An admin-uploaded standalone Flash game, played via Ruffle (RufflePlayer.vue) at
+// /newsite/flash-games/[id] — the "Flash Arcade" tile on the Games page (see
+// GlobalGameConfig.gameTileFlashArcadeImagePath) links to /newsite/flash-games, which lists every
+// active row here. Deliberately unrelated to the Ctoon model's own isSwf/swfPath (a standalone
+// game, not a collectible) — purely "browse and play," no points/achievements wired in for v1.
+model FlashGame {
+  id            String   @id @default(uuid())
+  title         String
+  description   String?
+  // Null shows a plain text tile on the listing page, same convention GamesHome.vue's own
+  // tiles already follow for a game with no configured image.
+  thumbnailPath String?
+  swfPath       String
+  active        Boolean  @default(true)
+  sortOrder     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([active, sortOrder])
 }
 
 // One admin-configured possible prize for defeating a CMoonEnemyMember. Each row's chance is

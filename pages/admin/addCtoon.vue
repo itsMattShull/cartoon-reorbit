@@ -51,6 +51,19 @@
           <p v-if="soundFile" class="text-sm text-green-600 mt-1">Selected: {{ soundFile.name }}</p>
         </div>
 
+        <!-- Flash cToon Upload (optional) -->
+        <div>
+          <label class="block mb-1 font-medium">Upload Flash cToon (.swf, optional)</label>
+          <input type="file" accept=".swf" @change="handleSwfFile" class="w-full" />
+          <p class="text-sm text-gray-500">
+            Plays the original SWF live (via Ruffle) when placed on a cZone, with its own native
+            click/sound interactivity — the image above is still required as the thumbnail shown
+            everywhere else (collection, trade, cMart, etc).
+          </p>
+          <p v-if="errors.swf" class="text-red-600 text-sm mt-1">{{ errors.swf }}</p>
+          <p v-if="swfFile" class="text-sm text-green-600 mt-1">Selected: {{ swfFile.name }}</p>
+        </div>
+
         <!-- Type (auto-filled) -->
         <div>
           <label class="block mb-1 font-medium">Type</label>
@@ -399,7 +412,8 @@ watch(abilityKey, () => { abilityParam.value = null })
 const rarityOptions = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare', 'Prize Only', 'Code Only', 'Auction Only']
 
 const soundFile = ref(null)
-const errors = reactive({ image: '', name: '', series: '', rarity: '', cost: '', power: '', sound: '' })
+const swfFile = ref(null)
+const errors = reactive({ image: '', name: '', series: '', rarity: '', cost: '', power: '', sound: '', swf: '' })
 
 // only show suggestions once the user has typed ≥3 chars
 const filteredSeriesOptions = computed(() => {
@@ -476,6 +490,21 @@ function handleSoundFile(e) {
     return
   }
   soundFile.value = file
+}
+
+// Browsers don't reliably set a useful file.type for .swf (often empty or
+// application/octet-stream), unlike audio/image files above — extension is the only client-side
+// signal worth checking here. The server's own magic-byte sniff (sniffSwfType) is the real check.
+function handleSwfFile(e) {
+  errors.swf = ''
+  const file = e.target.files?.[0]
+  if (!file) { swfFile.value = null; return }
+  if (!/\.swf$/i.test(file.name)) {
+    errors.swf = 'Only .swf files allowed.'
+    swfFile.value = null
+    return
+  }
+  swfFile.value = file
 }
 
 function handleFile(e) {
@@ -640,6 +669,7 @@ async function submitForm() {
   }
 
   if (soundFile.value) formData.append('sound', soundFile.value)
+  if (swfFile.value) formData.append('swf', swfFile.value)
 
   formData.append('isSecondEdition', secondEdition.value.isSecondEdition)
   if (secondEdition.value.isSecondEdition) {

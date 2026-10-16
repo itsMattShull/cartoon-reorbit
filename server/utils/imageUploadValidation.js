@@ -58,6 +58,21 @@ export function sniffImageType(buf) {
   return null
 }
 
+// SWF cToons (Ctoon.swfPath) and uploaded Flash games (FlashGame.swfPath) share this same
+// upload-validation discipline — magic-byte sniffing, never trusting the client-declared MIME
+// type, same reasoning as sniffImageType above.
+export const MAX_SWF_BYTES = 20 * 1024 * 1024 // 20MB — generous for an old Flash cToon/game file
+
+// First 3 bytes: 'FWS' (uncompressed), 'CWS' (zlib-compressed body), or 'ZWS' (LZMA-compressed
+// body) — the only three valid SWF signatures. Byte 4 is the format version (any single byte is
+// structurally valid, SWF has shipped versions 1 through 43+), so it's read but not range-checked.
+export function sniffSwfType(buf) {
+  if (!buf || buf.length < 8) return null
+  const sig = buf.toString('ascii', 0, 3)
+  if (sig !== 'FWS' && sig !== 'CWS' && sig !== 'ZWS') return null
+  return 'application/x-shockwave-flash'
+}
+
 export function sanitizeFilename(name) {
   return String(name || 'image').replace(/[^A-Za-z0-9._-]/g, '') || 'image'
 }

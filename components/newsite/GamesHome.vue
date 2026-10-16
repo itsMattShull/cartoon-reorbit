@@ -76,6 +76,10 @@
         <img v-if="tiles.gtoonsclassic" :src="tiles.gtoonsclassic" alt="gToons" class="tile-img" />
         <span v-else>gToons</span>
       </NuxtLink>
+      <NuxtLink to="/newsite/flash-games" class="quadrant quadrant--flasharcade">
+        <img v-if="tiles.flasharcade" :src="tiles.flasharcade" alt="Flash Arcade" class="tile-img" />
+        <span v-else>Flash Arcade</span>
+      </NuxtLink>
     </div>
   </div>
 </template>
@@ -104,7 +108,7 @@ const isHidden = (slot) => hidden.value.has(slot)
 // those pinned `1fr` rows had no space to divide and collapsed toward 0px -- tiles were still in
 // the DOM, just rendered at ~0 height, which looked identical to a game "not showing up". Reading
 // the var back inside the stylesheet keeps the cascade -- and the mobile override -- intact.
-const TOTAL_TILES = 16
+const TOTAL_TILES = 17
 const gridStyle = computed(() => ({
   '--total-rows': Math.ceil((TOTAL_TILES - hidden.value.size) / 2)
 }))
@@ -205,6 +209,7 @@ const gridStyle = computed(() => ({
 .quadrant--pokemonbattle { background: #2a75bb; }
 .quadrant--fruitsamurai  { background: #6d1f4a; }
 .quadrant--gtoonsclassic { background: #3a7d44; }
+.quadrant--flasharcade   { background: #c4471a; }
 
 /* Hover is emulated on touch devices and sticks after a tap, leaving a tile permanently
    scaled and brightened. */

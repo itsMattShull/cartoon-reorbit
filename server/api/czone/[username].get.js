@@ -171,7 +171,11 @@ export default defineEventHandler(async (event) => {
       isSecondEdition: uc.ctoon.isSecondEdition,
       secondEditionOverlayX: uc.ctoon.secondEditionOverlayX,
       secondEditionOverlayY: uc.ctoon.secondEditionOverlayY,
-      secondEditionOverlaySize: uc.ctoon.secondEditionOverlaySize
+      secondEditionOverlaySize: uc.ctoon.secondEditionOverlaySize,
+      // Live, not the raw item's own snapshotted assetPath below — see MyCzone.vue's own isSwf
+      // branch (renders a RufflePlayer instead of the plain img when set).
+      isSwf: uc.ctoon.isSwf,
+      swfPath: uc.ctoon.swfPath
     }
   }
 
@@ -274,7 +278,9 @@ export default defineEventHandler(async (event) => {
         isSecondEdition: meta.isSecondEdition ?? null,
         secondEditionOverlayX: meta.secondEditionOverlayX ?? null,
         secondEditionOverlayY: meta.secondEditionOverlayY ?? null,
-        secondEditionOverlaySize: meta.secondEditionOverlaySize ?? null
+        secondEditionOverlaySize: meta.secondEditionOverlaySize ?? null,
+        isSwf: meta.isSwf ?? false,
+        swfPath: meta.swfPath ?? null
       }
     })
     return {

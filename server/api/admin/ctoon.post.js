@@ -11,7 +11,7 @@ import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { computeMultiHash, bucketFromHash } from '@/server/utils/multiHash'
 import { scheduleMintEnd } from '@/server/utils/queues'
 import { parseSecondEditionFields } from '@/server/utils/secondEdition'
-import { sanitizePathSegment, sanitizeFilename, assertInside, sniffImageType, MAX_IMAGE_BYTES } from '@/server/utils/imageUploadValidation'
+import { sanitizePathSegment, sanitizeFilename, assertInside, sniffImageType, MAX_IMAGE_BYTES, sniffSwfType, MAX_SWF_BYTES } from '@/server/utils/imageUploadValidation'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 import { validateEffectSchema } from '@/server/utils/ogGtoonEffects'
 import { parseGtoonCardStyleInput } from '@/server/utils/ogGtoonDisplay'
@@ -51,8 +51,10 @@ export default defineEventHandler(async (event) => {
   const fields = {}
   let imagePart = null
   let soundPart = null
+  let swfPart = null
   for (const part of parts) {
     if (part.filename && part.name === 'sound') soundPart = part
+    else if (part.filename && part.name === 'swf') swfPart = part
     else if (part.filename) imagePart = part
     else fields[part.name] = Buffer.isBuffer(part.data) ? part.data.toString('utf-8') : part.data
   }
@@ -255,6 +257,28 @@ export default defineEventHandler(async (event) => {
       : `/cToon-sounds/${safeSeries}/${safeSoundName}`
   }
 
+  /* 4b. Save SWF (optional) — see Ctoon.isSwf/swfPath's own schema comment ---- */
+  let swfPath = null
+  if (swfPart) {
+    if (swfPart.data.length > MAX_SWF_BYTES) {
+      throw createError({ statusCode: 400, statusMessage: `SWF too large (max ${MAX_SWF_BYTES / 1024 / 1024}MB).` })
+    }
+    // Magic-byte sniff, not the client-declared MIME type — same discipline sniffImageType above
+    // already follows (browsers don't reliably send a consistent type for .swf anyway).
+    if (!sniffSwfType(swfPart.data)) {
+      throw createError({ statusCode: 400, statusMessage: 'That file is not a valid SWF.' })
+    }
+    const swfUploadDir = process.env.NODE_ENV === 'production'
+      ? join(baseDir, 'cartoon-reorbit-images', 'cToon-swf', safeSeries)
+      : join(baseDir, 'public', 'cToon-swf', safeSeries)
+    await mkdir(swfUploadDir, { recursive: true })
+    const safeSwfName = sanitizeFilename(swfPart.filename)
+    await writeFile(assertInside(swfUploadDir, join(swfUploadDir, safeSwfName)), swfPart.data)
+    swfPath = process.env.NODE_ENV === 'production'
+      ? `/images/cToon-swf/${safeSeries}/${safeSwfName}`
+      : `/cToon-swf/${safeSeries}/${safeSwfName}`
+  }
+
   /* 5. Persist to DB ---------------------------------------- */
   const newCtoon = await prisma.ctoon.create({
     data: {
@@ -279,6 +303,8 @@ export default defineEventHandler(async (event) => {
       cMoonId,
 
       soundPath,
+      isSwf: !!swfPath,
+      swfPath,
 
       /* NEW columns */
       isGtoon:    isGtoonBool,

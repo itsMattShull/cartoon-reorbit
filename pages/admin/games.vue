@@ -1626,6 +1626,11 @@
           </button>
         </section>
 
+        <!-- Flash Arcade -->
+        <section v-if="activeTab === 'FlashArcade'" role="tabpanel" aria-label="Flash Arcade">
+          <AdminFlashGames />
+        </section>
+
         <!-- TKO -->
         <section v-if="activeTab === 'TKO'" role="tabpanel" aria-label="TKO Events">
           <h2 class="text-2xl font-semibold mb-4">TKO Events</h2>
@@ -1784,7 +1789,8 @@ const tabs = [
   { key: 'OperationAsteroid', label: 'Op. A.S.T.E.R.O.I.D.' },
   { key: 'FlappyPowerpuff', label: 'Flappy Powerpuff' },
   { key: 'FruitSamurai', label: 'Fruit Samurai' },
-  { key: 'Blackjack',    label: 'ReOrbit Blackjack' }
+  { key: 'Blackjack',    label: 'ReOrbit Blackjack' },
+  { key: 'FlashArcade',  label: 'Flash Arcade' }
 ]
 const activeTab = ref('Global')
 async function switchTab(k) {
@@ -2138,6 +2144,7 @@ async function loadSettings() {
   // when one was uploaded.
   gameTileImages.value.blackjack    = g.gameTileBlackjackImagePath    || ''
   gameTileImages.value.edrps        = g.gameTileEdrpsImagePath        || ''
+  gameTileImages.value.flasharcade  = g.gameTileFlashArcadeImagePath  || ''
 
   const wb = await $fetch('/api/admin/game-config?gameName=Winball')
   leftCupPoints.value  = wb.leftCupPoints
@@ -2688,11 +2695,12 @@ const gameTileSlots = [
   { slot: 'flappy',       label: 'Flappy Powerpuff' },
   { slot: 'fruitsamurai', label: 'Fruit Samurai' },
   { slot: 'blackjack',    label: 'ReOrbit Blackjack' },
-  { slot: 'edrps',        label: 'Ed, Edd n Eddy RPS' }
+  { slot: 'edrps',        label: 'Ed, Edd n Eddy RPS' },
+  { slot: 'flasharcade',  label: 'Flash Arcade' }
 ]
-const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '', asteroid: '', flappy: '', blackjack: '', edrps: '', fruitsamurai: '' })
-const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null, asteroid: null, flappy: null, blackjack: null, edrps: null, fruitsamurai: null })
-const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false, asteroid: false, flappy: false, blackjack: false, edrps: false, fruitsamurai: false })
+const gameTileImages = ref({ winball: '', lotto: '', winwheel: '', clash: '', tko: '', reorbitmatch: '', tower: '', reorbitmemory: '', guessctoon: '', asteroid: '', flappy: '', blackjack: '', edrps: '', fruitsamurai: '', flasharcade: '' })
+const gameTileFiles  = ref({ winball: null, lotto: null, winwheel: null, clash: null, tko: null, reorbitmatch: null, tower: null, reorbitmemory: null, guessctoon: null, asteroid: null, flappy: null, blackjack: null, edrps: null, fruitsamurai: null, flasharcade: null })
+const uploadingGameTile = ref({ winball: false, lotto: false, winwheel: false, clash: false, tko: false, reorbitmatch: false, tower: false, reorbitmemory: false, guessctoon: false, asteroid: false, flappy: false, blackjack: false, edrps: false, fruitsamurai: false, flasharcade: false })
 
 function onGameTileFile(slot, e) {
   gameTileFiles.value[slot] = e.target.files?.[0] || null

@@ -42,6 +42,19 @@
               <p v-if="err.sound" class="text-red-600 text-[11px] mt-1">{{ err.sound }}</p>
               <p v-if="newSoundFile" class="text-[11px] text-green-600 mt-1">Selected: {{ newSoundFile.name }}</p>
             </div>
+
+            <div class="flex flex-col gap-1">
+              <label class="text-xs font-medium">Flash cToon (.swf, optional)</label>
+              <div v-if="currentSwfPath && !clearSwf" class="flex items-center gap-3">
+                <span class="text-[11px] text-gray-700">Flash cToon currently set.</span>
+                <button type="button" @click="clearSwf = true" class="text-[11px] text-red-600 hover:underline">Remove</button>
+              </div>
+              <p v-else-if="clearSwf" class="text-[11px] text-amber-600">Flash cToon will be removed on save. <button type="button" @click="clearSwf = false" class="underline">Undo</button></p>
+              <input type="file" accept=".swf" @change="handleSwfFile" class="text-xs" />
+              <p class="text-[11px] text-gray-500">Plays the original SWF live (via Ruffle) on cZones, with its own native click/sound interactivity. Leave blank to keep existing.</p>
+              <p v-if="err.swf" class="text-red-600 text-[11px] mt-1">{{ err.swf }}</p>
+              <p v-if="newSwfFile" class="text-[11px] text-green-600 mt-1">Selected: {{ newSwfFile.name }}</p>
+            </div>
           </section>
 
           <!-- ── Identity & Classification ────────────────────────── -->
@@ -702,6 +715,11 @@ const currentSoundPath = ref('')
 const newSoundFile = ref(null)
 const clearSound = ref(false)
 
+/* swf refs */
+const currentSwfPath = ref('')
+const newSwfFile = ref(null)
+const clearSwf = ref(false)
+
 /* Second Edition refs */
 const secondEdition = ref({
   isSecondEdition: false,
@@ -921,7 +939,7 @@ function buildGtoonEffectPayload() {
 }
 
 /* validation errors */
-const err = reactive({ cost:'', power:'', image:'', sound:'', gtoonValue:'' })
+const err = reactive({ cost:'', power:'', image:'', sound:'', swf:'', gtoonValue:'' })
 
 /* series + set + rarity lists */
 const seriesOptions = ref([])
@@ -1048,6 +1066,7 @@ onMounted(async ()=>{
     timeBasedLimitCountStr.value      = ctoon.timeBasedLimitCount      != null ? String(ctoon.timeBasedLimitCount)      : ''
     timeBasedLimitWindowDaysStr.value = ctoon.timeBasedLimitWindowDays != null ? String(ctoon.timeBasedLimitWindowDays) : ''
     currentSoundPath.value = ctoon.soundPath || ''
+    currentSwfPath.value = ctoon.swfPath || ''
     if (ctoon.quantity != null && ctoon.initialReleaseQty != null) {
       const qty = Number(ctoon.quantity)
       const initQty = Number(ctoon.initialReleaseQty)
@@ -1152,6 +1171,19 @@ function handleSoundFile(e){
   clearSound.value = false
 }
 
+function handleSwfFile(e){
+  err.swf = ''
+  const file = e.target.files?.[0]
+  if (!file){ newSwfFile.value = null; return }
+  if (!/\.swf$/i.test(file.name)){
+    err.swf = 'Only .swf files allowed.'
+    newSwfFile.value = null
+    return
+  }
+  newSwfFile.value = file
+  clearSwf.value = false
+}
+
 function handleNewFile(e){
   err.image = ''
   const file = e.target.files?.[0]
@@ -1195,8 +1227,8 @@ async function submitForm(){
   }
   const gtoonTypeValue = isGtoon.value ? gtoonType.value.trim() : ''
 
-  // If a new image or sound is selected, send multipart; else JSON.
-  if (newImageFile.value || newSoundFile.value){
+  // If a new image, sound, or swf is selected, send multipart; else JSON.
+  if (newImageFile.value || newSoundFile.value || newSwfFile.value){
     const fd = new FormData()
     if (newImageFile.value) fd.append('image', newImageFile.value)
     fd.append('name', name.value.trim())
@@ -1245,6 +1277,9 @@ async function submitForm(){
 
     if (newSoundFile.value) fd.append('sound', newSoundFile.value)
     else if (clearSound.value) fd.append('clearSound', 'true')
+
+    if (newSwfFile.value) fd.append('swf', newSwfFile.value)
+    else if (clearSwf.value) fd.append('clearSwf', 'true')
 
     fd.append('isSecondEdition', secondEdition.value.isSecondEdition)
     if (secondEdition.value.isSecondEdition) {
@@ -1320,7 +1355,8 @@ async function submitForm(){
     secondEditionOverlayY: secondEdition.value.isSecondEdition ? secondEdition.value.overlayY : null,
     secondEditionOverlaySize: secondEdition.value.isSecondEdition ? secondEdition.value.overlaySize : null,
 
-    clearSound: clearSound.value || false
+    clearSound: clearSound.value || false,
+    clearSwf: clearSwf.value || false
   }
 
   const res = await fetch(`/api/admin/ctoon/${id}`, {

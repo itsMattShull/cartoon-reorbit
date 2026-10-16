@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
         rarity: true, assetPath: true, releaseDate: true,
         price: true, inCmart: true, codeOnly: true,
         quantity: true, initialQuantity: true, perUserLimit: true,
-        characters: true, description: true, soundPath: true,
+        characters: true, description: true, soundPath: true, isSwf: true, swfPath: true,
         cMoonId: true,
 
         // NEW G-toon fields

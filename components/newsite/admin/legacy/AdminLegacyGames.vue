@@ -1971,6 +1971,11 @@
           </button>
         </section>
 
+        <!-- Flash Arcade -->
+        <section v-if="activeTab === 'FlashArcade'" role="tabpanel" aria-label="Flash Arcade">
+          <AdminFlashGames />
+        </section>
+
         <!-- TKO -->
         <section v-if="activeTab === 'TKO'" role="tabpanel" aria-label="TKO Events">
           <h2 class="text-sm font-semibold mb-3">TKO Events</h2>
@@ -2120,7 +2125,8 @@ const tabs = [
   { key: 'OperationAsteroid', label: 'Op. A.S.T.E.R.O.I.D.' },
   { key: 'FlappyPowerpuff', label: 'Flappy Powerpuff' },
   { key: 'FruitSamurai', label: 'Fruit Samurai' },
-  { key: 'Blackjack',    label: 'ReOrbit Blackjack' }
+  { key: 'Blackjack',    label: 'ReOrbit Blackjack' },
+  { key: 'FlashArcade',  label: 'Flash Arcade' }
 ]
 const activeTab = ref('Global')
 async function switchTab(k) {
@@ -3302,7 +3308,8 @@ const gameTileSlots = [
   { slot: 'fruitsamurai',  label: 'Fruit Samurai',          column: 'gameTileFruitsamuraiImagePath' },
   { slot: 'blackjack',     label: 'ReOrbit Blackjack',      column: 'gameTileBlackjackImagePath' },
   { slot: 'edrps',         label: 'Ed, Edd n Eddy RPS',     column: 'gameTileEdrpsImagePath' },
-  { slot: 'pokemonbattle', label: 'Pokemon: Fire, Water, Grass!', column: 'gameTilePokemonbattleImagePath' }
+  { slot: 'pokemonbattle', label: 'Pokemon: Fire, Water, Grass!', column: 'gameTilePokemonbattleImagePath' },
+  { slot: 'flasharcade',   label: 'Flash Arcade',           column: 'gameTileFlashArcadeImagePath' }
 ]
 const fromSlots = (value) => Object.fromEntries(gameTileSlots.map(t => [t.slot, value]))
 const gameTileImages = ref(fromSlots(''))

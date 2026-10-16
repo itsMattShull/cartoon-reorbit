@@ -207,7 +207,7 @@
             class="cz-item"
             :class="{ 'is-dragging': isToonDragging(toon), 'is-viewable': !cz.buildMode, 'is-build': cz.buildMode, 'is-long-pressing': longPressToon?.toon?.id === toon.id, 'is-selected': selectedToonIds.has(toon.id) }"
             :style="{ left: toon.x + 'px', top: toon.y + 'px', width: toonW(toon) + 'px', height: toonH(toon) + 'px' }"
-            @click.stop="onToonClick(toon)"
+            @click.stop="(toon.isSwf && !cz.buildMode) ? null : onToonClick(toon)"
             @mousedown="cz.buildMode && onItemMouseDown(toon, $event)"
             @touchstart="cz.buildMode && onItemTouchStart(toon, $event)"
             @contextmenu.prevent.stop="cz.buildMode && removeToon(toon)"
@@ -226,6 +226,16 @@
                 effects="static"
               />
             </div>
+            <!-- SWF cToon (see Ctoon.isSwf's own schema comment) — the real original .swf running
+                 live via Ruffle, giving back its native click/sound interactivity, instead of the
+                 static assetPath thumbnail every other cToon (and every other rendering surface
+                 for THIS one) uses. Build mode deliberately stays on the plain thumbnail below —
+                 a live Flash stage capturing mousedown would fight with drag-to-reposition. -->
+            <RufflePlayer
+              v-else-if="toon.isSwf && !cz.buildMode && toon.swfPath"
+              :src="toon.swfPath"
+              class="cz-item-swf"
+            />
             <img
               v-else
               :src="toon.assetPath" :alt="toon.name"
@@ -234,6 +244,15 @@
               draggable="false"
               @load="e => onToonImgLoad(e, toon)"
             />
+            <!-- Clicking an SWF item's own body now goes to the SWF itself (see the outer
+                 @click.stop above), so this is the only way back to the ordinary info modal
+                 (trade/details/etc) for one — never shown in build mode, same as the plain
+                 bring-to-front/resize buttons below. -->
+            <button
+              v-if="toon.isSwf && !cz.buildMode"
+              type="button" class="cz-item-info-btn" title="cToon info"
+              @click.stop="onToonClick(toon)"
+            >ⓘ</button>
             <SecondEditionOverlay v-if="!cz.buildMode" :ctoon="toon" :respect-art-mode="true" />
             <div v-if="cz.buildMode" class="cz-item-btns" @mousedown.stop @touchstart.stop>
               <button
@@ -2519,6 +2538,32 @@ defineExpose({ save, clearZone })
   pointer-events: none;
   display: block;
 }
+/* Unlike .cz-item-img above, deliberately NOT pointer-events: none — a click here needs to reach
+   the live Ruffle player itself (its own native button/click handling), not just the parent
+   .cz-item div. See the template's own comment on why this only ever renders outside build mode. */
+.cz-item-swf {
+  width: 100%;
+  height: 100%;
+}
+.cz-item-info-btn {
+  position: absolute;
+  bottom: 2px;
+  left: 2px;
+  z-index: 2;
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cz-item-info-btn:hover { background: rgba(0, 0, 0, 0.8); }
 
 .cz-item-btns {
   position: absolute;

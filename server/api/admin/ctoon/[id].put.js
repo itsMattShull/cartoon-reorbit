@@ -13,7 +13,7 @@ import { parseSecondEditionFields } from '@/server/utils/secondEdition'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join, dirname, extname, basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { sanitizePathSegment, sanitizeFilename, assertInside, sniffImageType, MAX_IMAGE_BYTES } from '@/server/utils/imageUploadValidation'
+import { sanitizePathSegment, sanitizeFilename, assertInside, sniffImageType, MAX_IMAGE_BYTES, sniffSwfType, MAX_SWF_BYTES } from '@/server/utils/imageUploadValidation'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 import { validateEffectSchema } from '@/server/utils/ogGtoonEffects'
 import { parseGtoonCardStyleInput } from '@/server/utils/ogGtoonDisplay'
@@ -53,11 +53,13 @@ export default defineEventHandler(async (event) => {
   let payload = {}
   let imagePart = null
   let soundPart = null
+  let swfPart = null
 
   if (contentType.includes('multipart/form-data')) {
     const parts = await readMultipartFormData(event)
     for (const part of parts || []) {
       if (part.filename && part.name === 'sound') soundPart = part
+      else if (part.filename && part.name === 'swf') swfPart = part
       else if (part.filename) imagePart = part
       else payload[part.name] = Buffer.isBuffer(part.data) ? part.data.toString('utf-8') : part.data
     }
@@ -74,7 +76,7 @@ export default defineEventHandler(async (event) => {
     isOgGtoon, gtoonColor, gtoonValue, isSlamGtoon, gtoonEffect, gtoonCardStyle,
     gtoonType1, gtoonType2, gtoonType3, gtoonGroup,
     initialReleaseAt, finalReleaseAt, initialReleaseQty, finalReleaseQty,
-    clearSound,
+    clearSound, clearSwf,
     mintLimitType: mintLimitTypeRaw, mintEndDate: mintEndDateRaw,
     timeBasedLimitCount: timeBasedLimitCountRaw,
     timeBasedLimitWindowDays: timeBasedLimitWindowDaysRaw,
@@ -319,6 +321,32 @@ export default defineEventHandler(async (event) => {
     updateData.soundPath = null
   }
 
+  // 7c) Optional SWF save — see Ctoon.isSwf/swfPath's own schema comment
+  if (swfPart) {
+    if (swfPart.data.length > MAX_SWF_BYTES) {
+      throw createError({ statusCode: 400, statusMessage: `SWF too large (max ${MAX_SWF_BYTES / 1024 / 1024}MB).` })
+    }
+    if (!sniffSwfType(swfPart.data)) {
+      throw createError({ statusCode: 400, statusMessage: 'That file is not a valid SWF.' })
+    }
+    const safeSeries = sanitizePathSegment(series)
+    const swfUploadDir = process.env.NODE_ENV === 'production'
+      ? join(baseDir, 'cartoon-reorbit-images', 'cToon-swf', safeSeries)
+      : join(baseDir, 'public', 'cToon-swf', safeSeries)
+    await mkdir(swfUploadDir, { recursive: true })
+    const swfExt = extname(swfPart.filename || '') || '.swf'
+    const swfBase = basename(swfPart.filename || 'flash', swfExt) || 'flash'
+    const swfFilename = `${swfBase}-${Date.now()}${swfExt}`
+    await writeFile(join(swfUploadDir, swfFilename), swfPart.data)
+    updateData.swfPath = process.env.NODE_ENV === 'production'
+      ? `/images/cToon-swf/${safeSeries}/${swfFilename}`
+      : `/cToon-swf/${safeSeries}/${swfFilename}`
+    updateData.isSwf = true
+  } else if (String(clearSwf) === 'true' || clearSwf === true) {
+    updateData.swfPath = null
+    updateData.isSwf = false
+  }
+
   // 8) Persist (fetch before and then update)
   const before = await prisma.ctoon.findUnique({ where: { id } })
   const updated = await prisma.ctoon.update({
@@ -350,7 +378,7 @@ export default defineEventHandler(async (event) => {
     const area = `Ctoon:${id}`
     const keys = [
       'name','series','description','rarity','price','releaseDate','perUserLimit','quantity','initialQuantity','inCmart','set','characters','cMoonId',
-      'isGtoon','gtoonType','cost','power','abilityKey','abilityData','assetPath','type','soundPath',
+      'isGtoon','gtoonType','cost','power','abilityKey','abilityData','assetPath','type','soundPath','isSwf','swfPath',
       'isOgGtoon','gtoonColor','gtoonValue','isSlamGtoon','gtoonEffect','gtoonCardStyle',
       'gtoonType1','gtoonType2','gtoonType3','gtoonGroup',
       'initialReleaseAt','finalReleaseAt','initialReleaseQty','finalReleaseQty',

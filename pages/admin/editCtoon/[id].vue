@@ -38,6 +38,20 @@
           <p v-if="newSoundFile" class="text-sm text-green-600 mt-1">Selected: {{ newSoundFile.name }}</p>
         </div>
 
+        <!-- Flash cToon Upload -->
+        <div>
+          <label class="block mb-1 font-medium">Flash cToon (.swf, optional)</label>
+          <div v-if="currentSwfPath && !clearSwf" class="flex items-center gap-3 mb-2">
+            <span class="text-sm text-gray-700">Flash cToon currently set.</span>
+            <button type="button" @click="clearSwf = true" class="text-sm text-red-600 hover:underline">Remove</button>
+          </div>
+          <p v-else-if="clearSwf" class="text-sm text-amber-600 mb-2">Flash cToon will be removed on save. <button type="button" @click="clearSwf = false" class="underline">Undo</button></p>
+          <input type="file" accept=".swf" @change="handleSwfFile" class="w-full" />
+          <p class="text-sm text-gray-500">Leave blank to keep existing. Uploading a new file replaces the current one.</p>
+          <p v-if="err.swf" class="text-red-600 text-sm mt-1">{{ err.swf }}</p>
+          <p v-if="newSwfFile" class="text-sm text-green-600 mt-1">Selected: {{ newSwfFile.name }}</p>
+        </div>
+
         <!-- Type (read-only) -->
         <div>
           <label class="block mb-1 font-medium">Type</label>
@@ -338,6 +352,11 @@ const currentSoundPath = ref('')
 const newSoundFile = ref(null)
 const clearSound = ref(false)
 
+/* swf refs */
+const currentSwfPath = ref('')
+const newSwfFile = ref(null)
+const clearSwf = ref(false)
+
 /* Second Edition refs */
 const secondEdition = ref({
   isSecondEdition: false,
@@ -362,7 +381,7 @@ const selectedAbility = computed(() =>
 )
 
 /* validation errors */
-const err = reactive({ cost:'', power:'', image:'', sound:'' })
+const err = reactive({ cost:'', power:'', image:'', sound:'', swf:'' })
 
 /* series + set + rarity lists */
 const seriesOptions = ref([])
@@ -489,6 +508,7 @@ onMounted(async ()=>{
     timeBasedLimitCountStr.value      = ctoon.timeBasedLimitCount      != null ? String(ctoon.timeBasedLimitCount)      : ''
     timeBasedLimitWindowDaysStr.value = ctoon.timeBasedLimitWindowDays != null ? String(ctoon.timeBasedLimitWindowDays) : ''
     currentSoundPath.value = ctoon.soundPath || ''
+    currentSwfPath.value = ctoon.swfPath || ''
     if (ctoon.quantity != null && ctoon.initialReleaseQty != null) {
       const qty = Number(ctoon.quantity)
       const initQty = Number(ctoon.initialReleaseQty)
@@ -559,6 +579,20 @@ function handleSoundFile(e){
   clearSound.value = false
 }
 
+// See addCtoon.vue's own handleSwfFile for why extension (not file.type) is the check here.
+function handleSwfFile(e){
+  err.swf = ''
+  const file = e.target.files?.[0]
+  if (!file){ newSwfFile.value = null; return }
+  if (!/\.swf$/i.test(file.name)){
+    err.swf = 'Only .swf files allowed.'
+    newSwfFile.value = null
+    return
+  }
+  newSwfFile.value = file
+  clearSwf.value = false
+}
+
 function handleNewFile(e){
   err.image = ''
   const file = e.target.files?.[0]
@@ -598,8 +632,8 @@ async function submitForm(){
   }
   const gtoonTypeValue = isGtoon.value ? gtoonType.value.trim() : ''
 
-  // If a new image or sound is selected, send multipart; else JSON.
-  if (newImageFile.value || newSoundFile.value){
+  // If a new image, sound, or swf is selected, send multipart; else JSON.
+  if (newImageFile.value || newSoundFile.value || newSwfFile.value){
     const fd = new FormData()
     if (newImageFile.value) fd.append('image', newImageFile.value)
     fd.append('name', name.value.trim())
@@ -638,6 +672,9 @@ async function submitForm(){
 
     if (newSoundFile.value) fd.append('sound', newSoundFile.value)
     else if (clearSound.value) fd.append('clearSound', 'true')
+
+    if (newSwfFile.value) fd.append('swf', newSwfFile.value)
+    else if (clearSwf.value) fd.append('clearSwf', 'true')
 
     fd.append('isSecondEdition', secondEdition.value.isSecondEdition)
     if (secondEdition.value.isSecondEdition) {
@@ -702,7 +739,8 @@ async function submitForm(){
     secondEditionOverlayY: secondEdition.value.isSecondEdition ? secondEdition.value.overlayY : null,
     secondEditionOverlaySize: secondEdition.value.isSecondEdition ? secondEdition.value.overlaySize : null,
 
-    clearSound: clearSound.value || false
+    clearSound: clearSound.value || false,
+    clearSwf: clearSwf.value || false
   }
 
   const res = await fetch(`/api/admin/ctoon/${id}`, {
