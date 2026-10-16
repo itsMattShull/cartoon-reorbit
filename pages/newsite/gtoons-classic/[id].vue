@@ -5,7 +5,7 @@
 </template>
 
 <script setup>
-import { useRouter } from '#imports'
+import { useRouter, onBeforeUnmount } from '#imports'
 import OgGtoonMatchBoard from '@/components/OgGtoonMatchBoard.vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 
@@ -18,8 +18,10 @@ definePageMeta({
   description: 'A live gToons match on Cartoon ReOrbit.'
 })
 
-const { clearSidebarMiddle } = useNewsiteLayout()
-clearSidebarMiddle()
+// The sidebar's middle section shows both players' name, points and goal-color counts during the match.
+const { setSidebarMiddle, clearSidebarMiddle } = useNewsiteLayout()
+setSidebarMiddle('OgGtoonSidebar')
+onBeforeUnmount(clearSidebarMiddle)
 
 // The match id in the URL (route.params.id) is purely for navigation/bookmarking — the actual
 // match state is entirely server-held and reattached over the socket (see useOgGtoonsSocket /
