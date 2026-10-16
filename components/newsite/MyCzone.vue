@@ -121,6 +121,19 @@
               </div>
             </template>
 
+            <template v-if="isOwnZone && cz.zones.length > 1">
+              <div class="cz-options-label">📌 Main cZone: {{ cz.mainZoneIndex + 1 }}</div>
+              <div class="cz-options-choices">
+                <button
+                  v-for="(zone, i) in cz.zones" :key="i"
+                  type="button"
+                  class="cz-cosmetic-option"
+                  :class="{ active: cz.mainZoneIndex === i }"
+                  @click="setMainZone(i)"
+                >{{ i + 1 }}</button>
+              </div>
+            </template>
+
             <!-- Cross-cZone navigation, not a viewing/customizing toggle for THIS zone like the
                  options above — still lives here since it's the one menu every viewer already
                  has open, rather than adding a second trigger elsewhere in the topbar. -->
@@ -624,6 +637,18 @@ async function setGlow(cMoonId) {
   optionsOpen.value = false
   try {
     await $fetch('/api/czone/glow', { method: 'POST', body: { cMoonId } })
+    await fetchSelf({ force: true })
+    if (viewedUsername.value === user.value?.username) await loadZone(viewedUsername.value)
+  } catch {}
+}
+
+// Which zone (by index) opens first for anyone loading this cZone — see
+// User.mainZoneIndex's own schema comment. Same picker shape as setBorder/setGlow above:
+// close the panel, persist, then reload so the view jumps to the new choice immediately.
+async function setMainZone(index) {
+  optionsOpen.value = false
+  try {
+    await $fetch('/api/czone/main-zone', { method: 'POST', body: { index } })
     await fetchSelf({ force: true })
     if (viewedUsername.value === user.value?.username) await loadZone(viewedUsername.value)
   } catch {}
@@ -1602,11 +1627,11 @@ async function loadZone(username) {
   isFavorited.value    = false
   try {
     const data = await $fetch(`/api/czone/${target}`)
-    cz.value.zones       = data.cZone.zones
-    const firstActive    = data.cZone.zones.findIndex(z => z.toons.length > 0)
-    cz.value.activeZone  = firstActive >= 0 ? firstActive : 0
-    viewedOwner.value    = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null, border: data.border ?? null, glow: data.glow ?? null }
-    isFavorited.value    = !!data.isFavorited
+    cz.value.zones         = data.cZone.zones
+    cz.value.mainZoneIndex = data.cZone.mainZoneIndex ?? 0
+    cz.value.activeZone    = cz.value.mainZoneIndex
+    viewedOwner.value      = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null, border: data.border ?? null, glow: data.glow ?? null }
+    isFavorited.value      = !!data.isFavorited
     loadCzoneSearchItems()
     eagerLoadMissingDimensions()
 
@@ -1668,9 +1693,11 @@ async function toggleBuild() {
       mobileSidebarCollapsed.value = true
     }
     await save()
-    const firstActive = cz.value.zones.findIndex(z => z.toons.length > 0)
-    if (firstActive >= 0 && cz.value.zones[cz.value.activeZone]?.toons.length === 0) {
-      cz.value.activeZone = firstActive
+    // Land back on the owner's chosen main zone, not a "first non-empty" guess — see
+    // User.mainZoneIndex's own schema comment. Only when the zone being left behind is empty,
+    // so mid-edit navigation to a specific (possibly also-empty) zone isn't fought.
+    if (cz.value.zones[cz.value.activeZone]?.toons.length === 0) {
+      cz.value.activeZone = cz.value.mainZoneIndex
     }
   } else {
     // Enter build mode: always fetch fresh data first so the sidebar is never blank.
