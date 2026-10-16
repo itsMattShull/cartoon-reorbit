@@ -130,23 +130,26 @@ async function botDiscard(io, match, deps) {
 
 /** The bot picks the colour that serves it best (the board is public, so this is fair). */
 async function botColor(io, match, deps) {
-  if (match.colorReady[1]) return
-  submitColor(match, 1, { color: autoSilverColor(match, 1) })
+  // Already done (no Silver card to colour): the phase may still be waiting on nothing but a settle.
+  if (!match.colorReady[1]) submitColor(match, 1, { color: autoSilverColor(match, 1) })
   match.lastActivity = Date.now()
   emitState(io, match)
   settleColor(io, match, deps)
 }
 
 async function botSwap(io, match, deps) {
-  if (match.swapReady[1]) return
-  const slotSeven = match.revealed[1].find(r => r.slot === 7)
-  const doSwap = chooseBotSwap({
-    difficulty: match.difficulty,
-    slotCard: slotSeven ? { value: slotSeven.baseValue, color: slotSeven.color } : null,
-    undealt: botCards(match, match.undealt[1]),
-    goalColor: match.goalColor[1]
-  })
-  recordSwapChoice(match, 1, doSwap)
+  // Already done (nothing to swap) still falls through to settle: when neither side can be offered
+  // a swap both start ready, and without this the phase would sit waiting until the timer died.
+  if (!match.swapReady[1]) {
+    const slotSeven = match.revealed[1].find(r => r.slot === 7)
+    const doSwap = chooseBotSwap({
+      difficulty: match.difficulty,
+      slotCard: slotSeven ? { value: slotSeven.baseValue, color: slotSeven.color } : null,
+      undealt: botCards(match, match.undealt[1]),
+      goalColor: match.goalColor[1]
+    })
+    recordSwapChoice(match, 1, doSwap)
+  }
   match.lastActivity = Date.now()
   emitState(io, match)
   await settleSwap(io, match, deps)

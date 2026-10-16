@@ -544,12 +544,14 @@ model User {
   cMoon                  CMoon?          @relation(fields: [cMoonId], references: [id], onDelete: SetNull)
   cMoonSelectedAt        DateTime?
   cMoonAutoAssigned      Boolean         @default(false)
-  // cMoon Enemy Battles: when the site-wide battle popup was last SHOWN to this user (a chance
-  // roll that hit — see server/api/cmoon/battle/consider.post.js), regardless of whether they
-  // went on to fight or just dismissed it. Distinct from CMoonEnemyBattle.startedAt, which is
-  // only set once a battle is actually started — without this separate field, a user who
-  // repeatedly dismisses the popup without ever fighting would have no record to cool down
-  // against, and the chance would re-roll (and could re-hit) on every single page navigation.
+  // cMoon Enemy Battles: when this user last actually ENGAGED a battle popup offer — started a
+  // solo fight (server/api/cmoon/battle/start.post.js) or started a raid (the initiator only, in
+  // the 'cmoonraid:start' socket handler) — never merely shown one. Deliberately NOT stamped by
+  // consider.post.js's own offer roll: a player who declines ("Not now") costs nothing here, so
+  // the chance re-rolls fresh on their very next navigation rather than being penalized for
+  // skipping an encounter they didn't want. The cooldown this field drives (
+  // GlobalGameConfig.cMoonBattlePopupCooldownMinutes) only ever throttles how often a player can
+  // actually FIGHT, not how often the popup can appear in front of them.
   lastCMoonBattlePopupAt DateTime?
   // Full opt-out of the cMoon Enemy Battles popup — same "allow*" positive-boolean convention as
   // allowAuctionNotifications below (default true, so existing players keep today's behavior).
@@ -1827,11 +1829,15 @@ model GlobalGameConfig {
   // bypassed by a client that already has a stale "battle available" prompt on screen.
   cMoonEnemyBattlesEnabled           Boolean   @default(false)
   cMoonBattlePopupChancePercent      Int       @default(3) // 0-100; rolled on each route navigation; 0 disables
-  cMoonBattlePopupCooldownMinutes    Int       @default(20) // minimum time between popups shown to the same user
-  // Caps how many NON-raid-boss enemies can be offered to a single player within a rolling window
-  // of cMoonEnemySpawnCapWindowHours — e.g. "4 per 4 hours". A raid boss is NEVER subject to this
-  // cap (it already has its own per-member raidOneTime/raidCooldownMinutes gate); once a player's
-  // count of recent non-raid offers (CMoonEnemyPopupLog rows, see that model's own comment) hits
+  // Minimum time between a player actually ENGAGING a battle popup (fighting solo or starting a
+  // raid — see User.lastCMoonBattlePopupAt's own schema comment) and being offered another;
+  // declining ("Not now") is free and never starts this clock.
+  cMoonBattlePopupCooldownMinutes    Int       @default(20)
+  // Caps how many NON-raid-boss battles a single player can actually START within a rolling
+  // window of cMoonEnemySpawnCapWindowHours — e.g. "4 per 4 hours" (declining an offer never
+  // counts against this, same as the cooldown above). A raid boss is NEVER subject to this cap
+  // (it already has its own per-member raidOneTime/raidCooldownMinutes gate); once a player's
+  // count of recent non-raid starts (CMoonEnemyPopupLog rows, see that model's own comment) hits
   // this many, consider.post.js narrows its candidate pool to raid bosses only for the rest of the
   // window rather than refusing to offer anything at all. 0 disables the cap (unlimited), same
   // "0 disables" convention as cMoonBattlePopupChancePercent above. See
@@ -5855,15 +5861,16 @@ model CMoonEnemyRewardPity {
   @@unique([userId, enemyMemberId])
 }
 
-// One row per NON-raid-boss enemy actually OFFERED to a player (the chance roll in
-// consider.post.js hit AND the chosen candidate wasn't a raid boss) — purely a rolling-window
-// counter for GlobalGameConfig.cMoonEnemySpawnCapCount/-WindowHours (see that field's own
-// comment), never written for a raid-boss offer since those are exempt from the cap. Distinct
+// One row per NON-raid-boss battle a player actually STARTED (see start.post.js — never a
+// raid boss, which is exempt from the cap this exists to enforce, and never a merely-offered-
+// then-declined popup) — purely a rolling-window counter for
+// GlobalGameConfig.cMoonEnemySpawnCapCount/-WindowHours (see that field's own comment). Distinct
 // from User.lastCMoonBattlePopupAt (a single most-recent timestamp, useless for "how many in the
-// last N hours") and from CMoonEnemyBattle (which only exists once a player actually clicks
-// "Fight!" — a dismissed popup still counts toward this cap, matching how the cap is meant to
-// pace how often the popup INTERRUPTS a player, not how often they choose to engage). No admin UI
-// reads this table directly; it exists solely to be counted and aged out by its own window.
+// last N hours") and from CMoonEnemyBattle (the full battle record this log deliberately doesn't
+// duplicate — it exists only to be counted and aged out by its own window). "Not now" costs
+// nothing against this cap, same as it costs nothing against the cooldown — the cap paces how
+// often a player actually FIGHTS, not how often the popup appears in front of them. No admin UI
+// reads this table directly.
 model CMoonEnemyPopupLog {
   id      String   @id @default(uuid())
   userId  String

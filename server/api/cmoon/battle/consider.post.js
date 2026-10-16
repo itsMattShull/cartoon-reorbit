@@ -127,12 +127,11 @@ export default defineEventHandler(async (event) => {
   const tierFiltered = filterToHighestRank(candidates, !!config?.cMoonEnemyHigherTierFirst)
   const chosen = pickWeightedEnemy(tierFiltered)
 
-  // CMoonEnemyPopupLog only ever records a NON-raid-boss offer — see that model's own comment —
-  // since raid bosses never count against the cap this log exists to enforce.
-  await Promise.all([
-    db.user.update({ where: { id: userId }, data: { lastCMoonBattlePopupAt: new Date() } }),
-    chosen.isRaidBoss ? null : db.cMoonEnemyPopupLog.create({ data: { userId } }),
-  ])
+  // Deliberately NOT stamping lastCMoonBattlePopupAt / logging to CMoonEnemyPopupLog here — see
+  // those columns' own schema comments. Both only record an ACTUAL engagement now (start.post.js
+  // for a solo fight, the raid-start socket handler for a raid boss), never a mere offer, so
+  // declining ("Not now") costs nothing: the very next navigation can roll and offer again. Only
+  // choosing to fight spends the cooldown/spawn-cap slot.
 
   // A raid-boss FINAL_BOSS already gets its own announceCMoonRaidBoss ping once a raid actually
   // starts — this only ever fires for a SOLO Final Boss encounter, which otherwise has no

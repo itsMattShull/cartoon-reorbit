@@ -824,6 +824,14 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
           db.cMoonEnemyRaidParticipant.create({
             data: { raidId, userId: me.id, hpRemaining: initiatorMaxHp, isInitiator: true, activeUserId: me.id },
           }),
+          // Engagement signal for the INITIATOR's own popup cooldown — see
+          // User.lastCMoonBattlePopupAt's own schema comment on why this only stamps on an actual
+          // "Start Raid!", never on a merely-offered-then-declined popup. Never written to
+          // CMoonEnemyPopupLog (the spawn-CAP counter): raid bosses have always been exempt from
+          // that cap, only solo offers count against it — this is the cooldown timestamp alone.
+          // A later JOINER's own cooldown is untouched here — they never saw this particular
+          // offer; only the player who actually rolled and acted on it gets stamped.
+          db.user.update({ where: { id: me.id }, data: { lastCMoonBattlePopupAt: new Date() } }),
         ])
       } catch (err) {
         // Roll back the in-memory registration too — otherwise this raid lives on with no

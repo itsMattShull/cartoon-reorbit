@@ -705,8 +705,9 @@ export function resolveFinalBoard({ player1, player2, cancelDuplicates = true })
     for (const { b } of all) if (idOf(b) != null && idCount.get(idOf(b)) > 1) knock.set(b, { kind: 'duplicate' })
     const printedValue = (b) => (b.data.value != null ? b.data.value : (b.data.gtoonValue ?? 0))
     const byCharacter = new Map() // normalized name -> { name, cards: [{ side, b }] }
+    // Duplicate-cancelled cards still take part here: a card that was cancelled stays cancelled, and
+    // the lower gToon it knocked out the higher one with must not "reactivate" it by being cancelled.
     for (const e of all) {
-      if (knock.has(e.b)) continue
       const chars = Array.isArray(e.b.data.characters) ? e.b.data.characters : []
       for (const name of new Set(chars.map(normName))) {
         if (!name) continue // blank character entries never count as a shared character

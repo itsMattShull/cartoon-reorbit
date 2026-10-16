@@ -116,8 +116,10 @@
           </div>
           <p class="text-[11px] text-gray-600 mt-1">
             Chance the cMoon Enemy Battles popup rolls on any page navigation (0 = never), and how
-            long after an offer (fought or declined) before a player can be offered another. Has no
-            effect while Enemy Battles is disabled above. Manage the enemies themselves on the
+            long after a player actually fights (solo or raid) before they can be offered another.
+            Clicking "Not now" costs nothing — it doesn't start this cooldown, so the next
+            navigation rolls fresh. Has no effect while Enemy Battles is disabled above. Manage the
+            enemies themselves on the
             <NuxtLink to="/newsite/admin/cMoonEnemies" class="text-indigo-600 hover:underline">Manage cMoon Enemies</NuxtLink> page.
           </p>
           <p v-if="battlePopupError" class="text-[11px] text-red-600 mt-1">{{ battlePopupError }}</p>
@@ -139,9 +141,10 @@
             >{{ spawnCapSaving ? 'Saving…' : 'Save' }}</button>
           </div>
           <p class="text-[11px] text-gray-600 mt-1">
-            How many non-raid-boss enemies one player can be offered within a rolling window — e.g.
-            4 per 4 hours. 0 = unlimited. Raid bosses are never capped by this (they already have
-            their own one-time/cooldown gate per boss); once a player hits the cap, they can still
+            How many non-raid-boss battles one player can actually START within a rolling window —
+            e.g. 4 per 4 hours. Declining an offer never counts against this. 0 = unlimited. Raid
+            bosses are never capped by this (they already have their own one-time/cooldown gate per
+            boss); once a player hits the cap, they can still
             encounter a raid boss, just not another regular enemy, until the window rolls forward.
           </p>
           <p v-if="spawnCapError" class="text-[11px] text-red-600 mt-1">{{ spawnCapError }}</p>
