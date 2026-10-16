@@ -1,6 +1,6 @@
 // POST /api/czone-contest/[id]/submit — submit a zone snapshot to the contest
 import { defineEventHandler, getRequestHeader, readMultipartFormData, createError } from 'h3'
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile, unlink } from 'node:fs/promises'
 import { join, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma } from '@/server/prisma'
@@ -33,7 +33,7 @@ export default defineEventHandler(async (event) => {
   const existing = await prisma.cZoneContestSubmission.findUnique({
     where: { contestId_userId: { contestId: id, userId: me.id } }
   })
-  if (existing) throw createError({ statusCode: 400, statusMessage: 'You have already submitted to this contest' })
+  // Resubmitting during the submission window overwrites the previous entry (handled below)
 
   // Parse multipart
   const parts = await readMultipartFormData(event)
@@ -78,14 +78,24 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: `Failed to save image: ${err.message}` })
   }
 
-  // Create submission record
+  // Create or overwrite submission record (update in place so existing votes are kept)
   let submission
   try {
-    submission = await prisma.cZoneContestSubmission.create({
-      data: { contestId: id, userId: me.id, zoneIndex, imageUrl }
-    })
+    submission = existing
+      ? await prisma.cZoneContestSubmission.update({
+          where: { id: existing.id },
+          data: { zoneIndex, imageUrl }
+        })
+      : await prisma.cZoneContestSubmission.create({
+          data: { contestId: id, userId: me.id, zoneIndex, imageUrl }
+        })
   } catch (err) {
     throw createError({ statusCode: 500, statusMessage: `Failed to save submission: ${err.message}` })
+  }
+
+  // Remove the replaced image file (best-effort)
+  if (existing?.imageUrl && existing.imageUrl !== imageUrl) {
+    try { await unlink(join(uploadDir, existing.imageUrl.split('/').pop())) } catch {}
   }
 
   return { id: submission.id, imageUrl }
