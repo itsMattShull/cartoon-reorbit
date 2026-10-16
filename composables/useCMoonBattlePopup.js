@@ -229,8 +229,9 @@ export function useCMoonBattlePopup() {
     }
   }
 
-  // The chance-roll's cooldown is already spent at offer time (see consider.post.js updating
-  // lastCMoonBattlePopupAt before this ever renders) — declining costs nothing further server-side.
+  // consider.post.js never stamps the cooldown/spawn-cap for a mere offer (see its own comment) —
+  // only an actual "Fight!"/raid-start does, in start.post.js / cmoonRaidSocket.js. So declining
+  // costs nothing server-side; this is purely a client-side dismiss.
   function decline() {
     visible.value = false
     enemy.value = null
