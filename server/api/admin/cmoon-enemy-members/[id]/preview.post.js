@@ -8,7 +8,7 @@ import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 import { serializeEnemyForClient } from '@/server/utils/cmoonEnemyBattle'
-import { getPlayerCombatMaxHp } from '@/server/utils/cmoon'
+import { getGlobalConfig, getPlayerCombatMaxHp } from '@/server/utils/cmoon'
 
 export default defineEventHandler(async (event) => {
   await requireAdmin(event)
@@ -21,13 +21,22 @@ export default defineEventHandler(async (event) => {
   })
   if (!member) throw createError({ statusCode: 404, statusMessage: 'Enemy member not found' })
 
+  const config = await getGlobalConfig()
   // No userId — this preview is deliberately NOT personalized by the admin's own cMoon rank (see
   // this file's own header comment on why nothing here ever touches a real account's state); it
   // always reflects the plain admin-configured default, same experience for every admin.
-  const playerMaxHp = await getPlayerCombatMaxHp(null)
+  const playerMaxHp = await getPlayerCombatMaxHp(null, config)
+  // Same snapshot-at-start timing as playerMaxHp above — see CMoonEnemyBattle.playerMaxStamina's
+  // own schema comment. Floored at 0, which also naturally disables the mechanic for this preview
+  // if an admin has set it to 0 or less (and reproduces every preview's behavior before this
+  // mechanic existed, which never modeled stamina at all).
+  const playerMaxStamina = Math.max(0, Number(config?.cMoonEnemyBattleStartingStamina) || 0)
 
   return {
     enemy: serializeEnemyForClient(member),
-    state: { playerHpRemaining: playerMaxHp, playerMaxHp, enemyHpRemaining: member.maxHp, roundNumber: 1 },
+    state: {
+      playerHpRemaining: playerMaxHp, playerMaxHp, enemyHpRemaining: member.maxHp,
+      playerStamina: playerMaxStamina, playerMaxStamina, roundNumber: 1,
+    },
   }
 })

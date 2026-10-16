@@ -57,136 +57,101 @@
           </div>
         </div>
 
-        <!-- ── Fight: an in-progress battle ────────────────────────────── -->
-        <div v-else-if="phase === 'FIGHT'" class="cbp-body">
-          <div class="cbp-portrait-wrap" :class="{ 'cbp-portrait-warning': enemySpecialWarning }">
-            <img v-if="battle?.enemy?.imagePath" :src="battle.enemy.imagePath" alt="" class="cbp-portrait" />
-            <span v-if="enemySpecialWarning" class="cbp-warning-badge" title="This enemy is about to unleash a special attack!">⚠</span>
-          </div>
-          <h2 id="cbp-title" class="cbp-title">
-            {{ battle?.enemy?.name }}
-            <span v-if="battle?.enemy?.rank" class="cbp-rank-badge" :class="'cbp-rank-' + battle.enemy.rank">{{ RANK_LABELS[battle.enemy.rank] }}</span>
-          </h2>
-
-          <div class="cbp-hp-tile">
-            <div class="cbp-hp-row">
-              <span class="cbp-hp-label">Enemy</span>
-              <div class="cbp-hp-bar"><div class="cbp-hp-fill cbp-hp-fill-enemy" :class="enemyHpFillClass" :style="{ width: enemyHpPercent + '%' }"></div></div>
-              <span class="cbp-hp-count">{{ battle?.enemyHpRemaining }}/{{ battle?.enemy?.maxHp }}</span>
+        <!-- ── Fight/Result: shared with the admin "Preview Encounter" modal, see that
+             component's own header comment on why this card is extracted. ─────────────────── -->
+        <div v-else class="cbp-body">
+          <CMoonBattleCard
+            :phase="phase"
+            title-id="cbp-title"
+            :enemy-name="battle?.enemy?.name"
+            :enemy-rank="battle?.enemy?.rank"
+            :enemy-image-path="battle?.enemy?.imagePath"
+            :enemy-max-hp="battle?.enemy?.maxHp"
+            :enemy-hp-remaining="battle?.enemyHpRemaining"
+            :player-hp-remaining="battle?.playerHpRemaining ?? 0"
+            :player-max-hp="battle?.playerMaxHp || 1"
+            :player-stamina="battle?.playerStamina ?? 0"
+            :player-max-stamina="battle?.playerMaxStamina ?? 0"
+            :busy="busy"
+            :error="error"
+            :last-round-label="lastRoundLabel"
+            :last-round-class="lastRoundClass"
+            :crit-badge="!!(lastRound?.playerCrit || lastRound?.enemyCrit)"
+            :portrait-warning="enemySpecialWarning"
+            :outcome="battle?.outcome"
+            :result-title="resultTitle"
+            :result-title-class="resultTitleClass"
+            :points-awarded="battle?.pointsAwarded || 0"
+            :rewards-list="rewardsList"
+            @action="act"
+            @close="onClose"
+          >
+            <template #portrait-badge>
+              <span v-if="enemySpecialWarning" class="cbp-warning-badge" title="This enemy is about to unleash a special attack!">⚠</span>
+            </template>
+            <template #enemy-dmg-float>
               <span
                 v-for="d in enemyFloatingDamage" :key="d.id" class="cbp-dmg-float" :class="{ 'cbp-dmg-float-crit': d.crit }"
               >-{{ d.amount }}</span>
-            </div>
-            <div class="cbp-hp-row">
-              <span class="cbp-hp-label">You</span>
-              <!-- A single heart + "current/max" number, not one heart glyph per HP point — a
-                   per-rank HP bonus (see CMoonRankTier.cMoonEnemyBattleHpBonus) can push a
-                   player's own max well past the old flat 5, and a row of 20+ heart glyphs
-                   wrapped onto multiple lines and broke the layout. Mirrors the enemy row's own
-                   X/Y count styling just above, so the two numbers read as the same family. -->
-              <div class="cbp-heart-wrap"><span class="cbp-heart">♥</span></div>
-              <span class="cbp-hp-count">{{ battle?.playerHpRemaining ?? 0 }}/{{ battle?.playerMaxHp || 1 }}</span>
+            </template>
+            <template #player-dmg-float>
               <span
                 v-for="d in playerFloatingDamage" :key="d.id" class="cbp-dmg-float" :class="{ 'cbp-dmg-float-crit': d.crit }"
               >-{{ d.amount }}</span>
-            </div>
-            <!-- Stamina row — only present when the mechanic is on for this battle (see
-                 isOutOfStamina's own comment); each attack costs 1, each block refills 1. Same
-                 single-icon + "current/max" styling as the You row above, for the same reason —
-                 the admin-configurable starting pool (0-50) could otherwise render as a long row
-                 of pips that wraps and breaks the tile's layout. -->
-            <div v-if="battle?.playerMaxStamina > 0" class="cbp-hp-row">
-              <span class="cbp-hp-label">Stamina</span>
-              <div class="cbp-heart-wrap"><span class="cbp-stamina-icon">⚡</span></div>
-              <span class="cbp-hp-count">{{ battle.playerStamina }}/{{ battle.playerMaxStamina }}</span>
-            </div>
-          </div>
-
-          <p v-if="battle?.playerParalyzedTurns > 0" class="cbp-paralyzed-badge">
-            ⚡ Paralyzed — can't act for {{ battle.playerParalyzedTurns }} more round{{ battle.playerParalyzedTurns === 1 ? '' : 's' }}
-          </p>
-          <p v-if="lastRound" class="cbp-round-summary" :class="lastRoundClass">
-            {{ lastRoundLabel }}
-            <span v-if="lastRound.playerCrit || lastRound.enemyCrit" class="cbp-crit-badge">CRITICAL!</span>
-          </p>
-          <p v-for="(s, i) in (lastRound?.specials || [])" :key="i" class="cbp-special-flash" :class="s.side === 'PLAYER' ? 'cbp-special-flash-player' : 'cbp-special-flash-enemy'">
-            {{ s.side === 'PLAYER' ? 'You' : battle?.enemy?.name || 'The enemy' }} unleashed <strong>{{ s.name }}</strong>!
-          </p>
-          <p v-if="comboCallout" class="cbp-combo-callout">{{ comboCallout }}</p>
-          <p v-if="currentTaunt" class="cbp-taunt">&ldquo;{{ currentTaunt }}&rdquo;</p>
-          <p v-if="error" class="cbp-error">{{ error }}</p>
-
-          <div class="cbp-move-grid">
-            <button type="button" class="cbp-move cbp-move-attack" :disabled="busy || isOutOfStamina" @click="act('ATTACK_HIGH')">Attack High</button>
-            <button type="button" class="cbp-move cbp-move-attack" :disabled="busy || isOutOfStamina" @click="act('ATTACK_LOW')">Attack Low</button>
-            <BlueButton type="button" class="cbp-move" :disabled="busy" @click="act('BLOCK_HIGH')">Block High</BlueButton>
-            <BlueButton type="button" class="cbp-move" :disabled="busy" @click="act('BLOCK_LOW')">Block Low</BlueButton>
-          </div>
-          <p v-if="isOutOfStamina" class="cbp-hint cbp-hint-warning">Out of stamina — block to recover before you can attack again.</p>
-          <p v-else class="cbp-hint">Blocking the same side as their attack cancels it (and heals 1 HP) — anything else lands a hit.</p>
-
-          <!-- ── Special attack: dormant until the player's own cMoon has one assigned, then
-               fills up with each consecutive hit landed — see useCMoonBattlePopup.js/
-               action.post.js for the charge/fire mechanics. ────────────────────────────────── -->
-          <div v-if="battle?.playerSpecialAttack" class="cbp-special-wrap">
-            <button
-              type="button" class="cbp-special-btn" :class="{ 'cbp-special-charged': battle.playerSpecialCharged && !battle.playerParalyzedTurns }"
-              :disabled="busy || !battle.playerSpecialCharged || battle.playerParalyzedTurns > 0" :style="specialFillStyle"
-              @click="act('SPECIAL_ATTACK')"
-            >
-              <span class="cbp-special-glow" aria-hidden="true"></span>
-              <span class="cbp-special-label">
-                <span class="cbp-special-icon">★</span>
-                {{ battle.playerSpecialAttack.name }}
-              </span>
-              <span class="cbp-special-meter">{{ Math.min(battle.playerHitStreak, 3) }}/3</span>
-            </button>
-            <button
-              type="button" class="cbp-special-help" aria-label="What does this special attack do?"
-              @click="showSpecialInfo = !showSpecialInfo" @mouseenter="showSpecialInfo = true" @mouseleave="showSpecialInfo = false"
-            >?</button>
-            <div v-if="showSpecialInfo" class="cbp-special-tooltip" role="tooltip">
-              <p class="cbp-special-tooltip-title">{{ battle.playerSpecialAttack.name }}</p>
-              <p v-if="battle.playerSpecialAttack.description">{{ battle.playerSpecialAttack.description }}</p>
-              <p>{{ specialEffectDescription(battle.playerSpecialAttack) }}</p>
-              <p class="cbp-special-tooltip-charge">Land 3 hits in a row to charge it up — it stays ready until you use it.</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- ── Result: just resolved ───────────────────────────────────── -->
-        <div v-else class="cbp-body">
-          <div v-if="confettiPieces.length" class="cbp-confetti" aria-hidden="true">
-            <span
-              v-for="p in confettiPieces" :key="p.id" class="cbp-confetti-piece"
-              :style="{ left: p.left + '%', animationDelay: p.delay + 'ms', background: p.color }"
-            ></span>
-          </div>
-          <h2 id="cbp-title" class="cbp-title" :class="resultTitleClass">
-            {{ resultTitle }}
-            <span v-if="lastRound?.playerCrit || lastRound?.enemyCrit" class="cbp-crit-badge">CRITICAL!</span>
-          </h2>
-          <p class="cbp-sub">{{ battle?.enemy?.name }}</p>
-          <p v-if="isFirstWinAgainstThisEnemy" class="cbp-first-win">🏆 First victory over {{ battle?.enemy?.name || 'this enemy' }}!</p>
-          <p v-if="nearMissFlavor" class="cbp-near-miss">{{ nearMissFlavor }}</p>
-          <p v-if="overkillFlavor && battle?.outcome === 'WIN'" class="cbp-overkill">{{ overkillFlavor }}</p>
-
-          <template v-if="battle?.outcome === 'WIN'">
-            <p v-if="battle?.pointsAwarded" class="cbp-points">+{{ battle.pointsAwarded }} cMoon points</p>
-            <div v-if="rewardsList.length" class="cbp-rewards">
-              <p class="cbp-rewards-title">Prizes:</p>
-              <ul>
-                <li v-for="(r, i) in rewardsList" :key="i" class="cbp-reward-item" :style="{ animationDelay: (i * 150) + 'ms' }">{{ r }}</li>
-              </ul>
-            </div>
-          </template>
-          <p v-else-if="battle?.outcome === 'ABANDONED'" class="cbp-flavor">The fight timed out — no penalty, try again anytime.</p>
-          <p v-else-if="battle?.outcome === 'UNCREDITED'" class="cbp-flavor">Someone else landed the final blow on this one — no prize this time, but good luck on the next bounty!</p>
-          <p v-else class="cbp-flavor">No penalty beyond the loss itself — take another shot anytime.</p>
-
-          <div class="cbp-actions">
-            <button type="button" class="cbp-btn-secondary cbp-btn-secondary-solid" @click="onClose">Close</button>
-          </div>
+            </template>
+            <template #above-summary>
+              <p v-if="battle?.playerParalyzedTurns > 0" class="cbp-paralyzed-badge">
+                ⚡ Paralyzed — can't act for {{ battle.playerParalyzedTurns }} more round{{ battle.playerParalyzedTurns === 1 ? '' : 's' }}
+              </p>
+              <p v-for="(s, i) in (lastRound?.specials || [])" :key="i" class="cbp-special-flash" :class="s.side === 'PLAYER' ? 'cbp-special-flash-player' : 'cbp-special-flash-enemy'">
+                {{ s.side === 'PLAYER' ? 'You' : battle?.enemy?.name || 'The enemy' }} unleashed <strong>{{ s.name }}</strong>!
+              </p>
+              <p v-if="comboCallout" class="cbp-combo-callout">{{ comboCallout }}</p>
+              <p v-if="currentTaunt" class="cbp-taunt">&ldquo;{{ currentTaunt }}&rdquo;</p>
+            </template>
+            <template #special-attack>
+              <!-- ── Special attack: dormant until the player's own cMoon has one assigned, then
+                   fills up with each consecutive hit landed — see useCMoonBattlePopup.js/
+                   action.post.js for the charge/fire mechanics. ────────────────────────────── -->
+              <div v-if="battle?.playerSpecialAttack" class="cbp-special-wrap">
+                <button
+                  type="button" class="cbp-special-btn" :class="{ 'cbp-special-charged': battle.playerSpecialCharged && !battle.playerParalyzedTurns }"
+                  :disabled="busy || !battle.playerSpecialCharged || battle.playerParalyzedTurns > 0" :style="specialFillStyle"
+                  @click="act('SPECIAL_ATTACK')"
+                >
+                  <span class="cbp-special-glow" aria-hidden="true"></span>
+                  <span class="cbp-special-label">
+                    <span class="cbp-special-icon">★</span>
+                    {{ battle.playerSpecialAttack.name }}
+                  </span>
+                  <span class="cbp-special-meter">{{ Math.min(battle.playerHitStreak, 3) }}/3</span>
+                </button>
+                <button
+                  type="button" class="cbp-special-help" aria-label="What does this special attack do?"
+                  @click="showSpecialInfo = !showSpecialInfo" @mouseenter="showSpecialInfo = true" @mouseleave="showSpecialInfo = false"
+                >?</button>
+                <div v-if="showSpecialInfo" class="cbp-special-tooltip" role="tooltip">
+                  <p class="cbp-special-tooltip-title">{{ battle.playerSpecialAttack.name }}</p>
+                  <p v-if="battle.playerSpecialAttack.description">{{ battle.playerSpecialAttack.description }}</p>
+                  <p>{{ specialEffectDescription(battle.playerSpecialAttack) }}</p>
+                  <p class="cbp-special-tooltip-charge">Land 3 hits in a row to charge it up — it stays ready until you use it.</p>
+                </div>
+              </div>
+            </template>
+            <template #result-top>
+              <div v-if="confettiPieces.length" class="cbp-confetti" aria-hidden="true">
+                <span
+                  v-for="p in confettiPieces" :key="p.id" class="cbp-confetti-piece"
+                  :style="{ left: p.left + '%', animationDelay: p.delay + 'ms', background: p.color }"
+                ></span>
+              </div>
+            </template>
+            <template #result-extra>
+              <p v-if="isFirstWinAgainstThisEnemy" class="cbp-first-win">🏆 First victory over {{ battle?.enemy?.name || 'this enemy' }}!</p>
+              <p v-if="nearMissFlavor" class="cbp-near-miss">{{ nearMissFlavor }}</p>
+              <p v-if="overkillFlavor && battle?.outcome === 'WIN'" class="cbp-overkill">{{ overkillFlavor }}</p>
+            </template>
+          </CMoonBattleCard>
         </div>
       </div>
     </div>
@@ -239,21 +204,6 @@ const bossEnrageText = computed(() => {
   const pct = cur / max
   if (pct <= 0.1) return 'This community boss is nearly down — one more good push could finish it!'
   if (pct <= 0.25) return 'This community boss is already faltering — team up to finish it off!'
-  return ''
-})
-
-const enemyHpPercent = computed(() => {
-  const max = battle.value?.enemy?.maxHp || 1
-  const cur = battle.value?.enemyHpRemaining ?? max
-  return Math.max(0, Math.min(100, Math.round((cur / max) * 100)))
-})
-// Standard health-bar color escalation (green -> yellow -> red) as the enemy's HP drops — the
-// base .cbp-hp-fill-enemy color below is the ">50%" state; these two classes override it for the
-// lower bands. Purely a readability/tension cue, same spirit as the floating damage numbers and
-// combo callout below — no change to the underlying HP math.
-const enemyHpFillClass = computed(() => {
-  if (enemyHpPercent.value <= 25) return 'cbp-hp-fill-critical'
-  if (enemyHpPercent.value <= 50) return 'cbp-hp-fill-mid'
   return ''
 })
 
@@ -314,10 +264,11 @@ const lastRoundLabel = computed(() => {
 const lastRoundClass = computed(() => {
   if (!lastRound.value) return ''
   const { playerHit, enemyHit, playerBlocked } = lastRound.value
-  if (enemyHit && !playerHit) return 'cbp-round-good'
-  if (playerHit && !enemyHit) return 'cbp-round-bad'
-  if (playerBlocked) return 'cbp-round-good'
-  return 'cbp-round-neutral'
+  // cbc- (not cbp-) — these classes are applied inside CMoonBattleCard.vue, which owns them.
+  if (enemyHit && !playerHit) return 'cbc-round-good'
+  if (playerHit && !enemyHit) return 'cbc-round-bad'
+  if (playerBlocked) return 'cbc-round-good'
+  return 'cbc-round-neutral'
 })
 
 const resultTitle = computed(() => {
@@ -329,8 +280,9 @@ const resultTitle = computed(() => {
   return 'Defeated'
 })
 const resultTitleClass = computed(() => {
-  if (battle.value?.outcome === 'WIN') return 'cbp-title-win'
-  if (battle.value?.outcome === 'LOSS') return 'cbp-title-loss'
+  // cbc- (not cbp-) — applied inside CMoonBattleCard.vue, which owns the result title element.
+  if (battle.value?.outcome === 'WIN') return 'cbc-title-win'
+  if (battle.value?.outcome === 'LOSS') return 'cbc-title-loss'
   return ''
 })
 const rewardsList = computed(() => {
@@ -476,15 +428,6 @@ watch(() => battle.value?.playerHitStreak || 0, (streak, prevStreak) => {
 const HIT_STREAK_THRESHOLD = 3
 const enemySpecialWarning = computed(() => {
   return !!battle.value?.enemyHasSpecialAttack && (battle.value?.enemyHitStreak || 0) >= HIT_STREAK_THRESHOLD - 1
-})
-
-// ── Stamina gate (see CMoonEnemyBattle.playerStamina's own schema comment) — disables the two
-// Attack buttons client-side as a UX nicety mirroring the real 409 guard action.post.js enforces
-// server-side; this is never the actual enforcement, just saves a doomed round-trip. false
-// (never disabled) whenever playerMaxStamina <= 0, which already covers both an admin-disabled
-// mechanic and every pre-this-feature historical battle shape. ───────────────────────────────
-const isOutOfStamina = computed(() => {
-  return (battle.value?.playerMaxStamina || 0) > 0 && (battle.value?.playerStamina || 0) <= 0
 })
 
 // ── FINAL_BOSS entrance punch — a one-shot full-bleed flash + a bigger modal "pop" exactly when a
@@ -688,8 +631,9 @@ watch(() => route.path, maybeCheck)
 }
 
 /* Standing "enemy special is about to fire" vignette — extends the existing portrait-only warning
-   ring (.cbp-portrait-warning further down) to the whole card, confined to the modal's own box
-   (position: relative set above) rather than the full viewport. */
+   ring (.cbc-portrait-warning in CMoonBattleCard.vue, driven by the portraitWarning prop) to the
+   whole card, confined to the modal's own box (position: relative set above) rather than the full
+   viewport. */
 .cbp-enrage-vignette {
   position: absolute;
   inset: 0;
@@ -803,8 +747,6 @@ watch(() => route.path, maybeCheck)
   .cbp-portrait { animation: none; }
 }
 .cbp-title { font-size: 1.1rem; font-weight: 600; margin: 4px 0 2px; color: #fff; }
-.cbp-title-win { color: #4ade80; }
-.cbp-title-loss { color: #f87171; }
 .cbp-sub { font-size: 0.78rem; color: rgba(255, 255, 255, 0.6); margin-bottom: 8px; }
 .cbp-flavor { font-size: 12px; color: rgba(255, 255, 255, 0.75); margin-bottom: 12px; line-height: 1.4; }
 /* Reward-pity progress — a quiet gold-tinted aside on the OFFER screen only, same family as the
@@ -866,44 +808,12 @@ watch(() => route.path, maybeCheck)
 }
 .cbp-btn-secondary:hover { background: #991b1b; }
 .cbp-btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }
-.cbp-btn-secondary-solid { width: 100%; }
 
-.cbp-hp-tile {
-  background: rgba(255, 255, 255, 0.07);
-  border-radius: 6px;
-  padding: 8px 10px;
-  margin: 8px 0;
-}
-.cbp-hp-row { display: flex; align-items: center; gap: 8px; position: relative; }
-.cbp-hp-row + .cbp-hp-row { margin-top: 6px; }
-.cbp-hp-label { font-size: 11px; font-weight: 600; color: rgba(255, 255, 255, 0.6); width: 42px; text-align: left; flex-shrink: 0; }
-.cbp-hp-bar { flex: 1; height: 10px; border-radius: 999px; background: rgba(0, 0, 0, 0.35); overflow: hidden; }
-/* Standard health-bar escalation as the enemy's HP drops — green (healthy, >50%) is the base
-   color here; .cbp-hp-fill-mid/-critical (set via enemyHpFillClass) override it below 50%/25%. */
-.cbp-hp-fill-enemy { height: 100%; background: #22c55e; transition: width 0.25s ease, background-color 0.25s ease; }
-.cbp-hp-fill-mid { background: #f59e0b; }
-.cbp-hp-fill-critical { background: #dc2626; animation: cbp-hp-critical-pulse 1s ease-in-out infinite; }
-@keyframes cbp-hp-critical-pulse {
-  0%, 100% { filter: brightness(1); }
-  50% { filter: brightness(1.35); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .cbp-hp-fill-critical { animation: none; }
-}
-.cbp-hp-count { font-size: 11px; color: rgba(255, 255, 255, 0.6); width: 44px; text-align: right; flex-shrink: 0; }
-/* Single heart icon, flex:1 like the enemy row's own .cbp-hp-bar above it — keeps the "You" row's
-   .cbp-hp-count lined up at the same right-hand edge as the enemy row's. */
-.cbp-heart-wrap { flex: 1; display: flex; align-items: center; }
-.cbp-heart { color: #f87171; font-size: 15px; }
-
-/* Stamina pips — same row layout as the hearts above, gold instead of red so the two resources
-   never read as the same thing at a glance (see isOutOfStamina/the stamina row above). */
-.cbp-stamina-icon { color: #facc15; font-size: 14px; }
-
-/* Floating damage numbers — anchored to their own .cbp-hp-row (position: relative above), so one
-   pops over the enemy bar and the other over the player's hearts independently. Pure CSS
-   pop-up-and-fade, auto-removed from the DOM by the JS timer in the script block once the
-   animation has had time to finish. */
+/* Floating damage numbers — anchored to their own .cbc-hp-row (position: relative, defined in
+   CMoonBattleCard.vue, which owns that element; these spans are slotted into it — see the
+   enemy-dmg-float/player-dmg-float templates above), so one pops over the enemy bar and the
+   other over the player's bar independently. Pure CSS pop-up-and-fade, auto-removed from the DOM
+   by the JS timer in the script block once the animation has had time to finish. */
 .cbp-dmg-float {
   position: absolute;
   right: 44px;
@@ -935,20 +845,9 @@ watch(() => route.path, maybeCheck)
   padding: 5px 8px;
   margin: 8px 0 0;
 }
-/* Warning pulse on the enemy portrait once their own hit streak is one away from auto-firing a
-   special (see enemySpecialWarning above) — a ring + badge rather than touching the shake/crit
-   treatment, so it reads as "building tension" distinct from "impact just landed." */
-.cbp-portrait-warning {
-  box-shadow: 0 0 0 3px #fbbf24, 0 0 16px rgba(251, 191, 36, 0.7);
-  animation: cbp-portrait-warning-pulse 1s ease-in-out infinite;
-}
-@keyframes cbp-portrait-warning-pulse {
-  0%, 100% { box-shadow: 0 0 0 3px #fbbf24, 0 0 10px rgba(251, 191, 36, 0.5); }
-  50% { box-shadow: 0 0 0 3px #fde68a, 0 0 20px rgba(251, 191, 36, 0.9); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .cbp-portrait-warning { animation: none; }
-}
+/* The warning RING itself (pulsing box-shadow on the portrait) lives in CMoonBattleCard.vue now
+   (.cbc-portrait-warning, driven by the portraitWarning prop below) — this badge icon is the only
+   piece of that warning still authored here, since it's passed through the portrait-badge slot. */
 .cbp-warning-badge {
   position: absolute;
   top: -4px;
@@ -987,28 +886,6 @@ watch(() => route.path, maybeCheck)
   .cbp-combo-callout, .cbp-overkill { animation: none; }
 }
 
-.cbp-round-summary { font-size: 12px; color: rgba(255, 255, 255, 0.75); margin: 8px 0; }
-.cbp-round-good { color: #4ade80; font-weight: 600; }
-.cbp-round-bad { color: #f87171; font-weight: 600; }
-.cbp-round-neutral { color: rgba(255, 255, 255, 0.6); font-weight: 600; }
-.cbp-crit-badge {
-  display: inline-block;
-  margin-left: 6px;
-  padding: 1px 6px;
-  border-radius: 10px;
-  background: #f59e0b;
-  color: #1a1200;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  animation: cbp-crit-pop 0.35s ease-out;
-}
-@keyframes cbp-crit-pop {
-  0% { transform: scale(0.4); opacity: 0; }
-  60% { transform: scale(1.15); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
-}
-
 /* Cosmetic difficulty tier badge — see CMoonEnemyRank's own schema comment. Colors escalate
    low-to-high, matching the admin page's own RANK_BADGE_CLASS palette. */
 .cbp-rank-badge {
@@ -1025,34 +902,6 @@ watch(() => route.path, maybeCheck)
 .cbp-rank-ENFORCER { background: #1d4ed8; color: #dbeafe; }
 .cbp-rank-UNDERBOSS { background: #7e22ce; color: #f3e8ff; }
 .cbp-rank-FINAL_BOSS { background: #b91c1c; color: #fee2e2; }
-
-.cbp-move-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-/* Block moves use the real BlueButton component (see the template); Attack moves keep a locally
-   red-styled button matching BlueButton's own padding/radius/border/font-weight/text-shadow
-   treatment, since attack/block's own red-vs-blue color split predates this restyle and there's
-   no reusable red move-button component to swap in. */
-.cbp-move {
-  padding: 12px 6px;
-  border-radius: 6px;
-  font-size: 12.5px;
-  font-weight: bold;
-  color: #fff;
-  cursor: pointer;
-  width: 100%;
-}
-.cbp-move:disabled { opacity: 0.45; cursor: not-allowed; }
-.cbp-move-attack {
-  border: 2px solid #7a1515;
-  background: #dc2626;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    inset -1px 0 0 rgba(255, 255, 255, 0.25),
-    -1px 1px 1px rgba(0, 0, 0, 0.3);
-}
-.cbp-move-attack:active { box-shadow: inset 0 1px 0 rgba(0, 0, 0, 0.2), 0 1px 2px rgba(0, 0, 0, 0.3); }
-.cbp-hint { font-size: 10.5px; color: rgba(255, 255, 255, 0.5); margin-top: 8px; }
-.cbp-hint-warning { color: #fbbf24; font-weight: 600; }
 
 /* ── Special attack button ────────────────────────────────────────────────────────────────
    Dormant (flat, muted) until charged, then lights up gold/epic. --cbp-special-fill (set inline
@@ -1159,21 +1008,6 @@ watch(() => route.path, maybeCheck)
 }
 @media (prefers-reduced-motion: reduce) {
   .cbp-special-flash { animation: none; }
-}
-
-.cbp-points { font-size: 15px; font-weight: 700; color: #4ade80; margin-bottom: 8px; }
-.cbp-rewards { text-align: left; background: rgba(255, 255, 255, 0.07); border-radius: 6px; padding: 8px 10px; margin-bottom: 12px; }
-.cbp-rewards-title { font-size: 11px; font-weight: 700; color: rgba(255, 255, 255, 0.6); margin-bottom: 4px; }
-.cbp-rewards ul { margin: 0; padding-left: 16px; font-size: 12px; }
-/* Each prize pops in with a beat of delay after the one before it (animationDelay set inline per
-   row — see the template) rather than the whole list appearing at once. */
-.cbp-reward-item { opacity: 0; animation: cbp-reward-pop 0.35s ease-out forwards; }
-@keyframes cbp-reward-pop {
-  0% { transform: translateX(-6px); opacity: 0; }
-  100% { transform: translateX(0); opacity: 1; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .cbp-reward-item { animation: none; opacity: 1; }
 }
 
 .cbp-first-win {
