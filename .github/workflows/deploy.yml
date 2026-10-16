@@ -47,16 +47,6 @@ jobs:
                 npx prisma generate
                 npm run build
 
-                # Graceful rolling reload — waits for each process to signal ready
-                # before killing the old instance (zero-downtime for nuxt-server,
-                # clean drain for socket-server and workers).
-                # NOTE: first deploy after adding this file requires:
-                #   pm2 start ecosystem.config.cjs  (one-time manual step on server)
-                # The old single cron process (guild-checker) was split into cron-critical +
-                # cron-maintenance; stop it so the old node-cron schedules don't run twice.
-                pm2 delete guild-checker 2>/dev/null || true
-                # guild-checker was split into cron-critical + cron-maintenance (see production job)
-          pm2 delete guild-checker 2>/dev/null || true
           pm2 reload ecosystem.config.cjs --update-env
               "'
   deploy_development:
