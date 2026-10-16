@@ -545,6 +545,13 @@ model User {
   warning210                        Boolean   @default(false)
   warning240                        Boolean   @default(false)
   additionalCzones                  Int       @default(0)
+  // Which sub-zone index (within CZone.layoutData.zones, see that model's own comment) this
+  // user has chosen as their "main" display — the one shown first when anyone (including the
+  // owner) loads their cZone page, replacing the old implicit "first zone with toons in it,
+  // else index 0" heuristic in server/api/czone/[username].get.js. Clamped against the user's
+  // current zone count wherever it's read, since GlobalGameConfig.czoneCount/additionalCzones
+  // can change after this is set.
+  mainZoneIndex                     Int       @default(0)
   usernameChangedAt                 DateTime?
   vpnDetected                       Boolean   @default(false)
 
