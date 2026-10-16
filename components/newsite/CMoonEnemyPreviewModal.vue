@@ -1,83 +1,63 @@
 <template>
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-2">
-    <div class="absolute inset-0 bg-black/50" @click="onClose"></div>
-    <div class="relative bg-white w-full max-w-md rounded-lg shadow-lg flex flex-col max-h-[92vh] overflow-y-auto">
-      <div class="flex items-center justify-between px-4 py-3 border-b flex-shrink-0">
-        <h3 class="text-sm font-semibold">Preview Encounter</h3>
-        <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="onClose">✕</button>
+  <div class="cepm-overlay">
+    <div class="cepm-modal" role="dialog" aria-modal="true" aria-labelledby="cepm-title">
+      <div class="cepm-banner" :style="bannerStyle">
+        <button type="button" class="cepm-close" aria-label="Close" @click="onClose">✕</button>
       </div>
-
-      <div class="p-4 space-y-3 text-sm">
-        <p class="text-[11px] text-gray-500">
+      <div class="cepm-body">
+        <p class="cepm-note">
           Test-only — nothing here is saved: no battle log, no rewards, no points, and it never
           counts toward your own "prior wins" total.
         </p>
 
-        <div v-if="loading" class="text-gray-500">Loading…</div>
-        <p v-else-if="error" class="text-red-600">{{ error }}</p>
+        <div v-if="loading" class="cepm-loading">Loading…</div>
+        <p v-else-if="startError" class="cepm-start-error">{{ startError }}</p>
 
-        <template v-else-if="enemy">
-          <div class="flex items-center gap-3">
-            <div class="w-16 h-16 rounded border flex-shrink-0 overflow-hidden bg-gray-100 flex items-center justify-center">
-              <img v-if="enemy.imagePath" :src="enemy.imagePath" alt="" class="max-w-full max-h-full object-contain" />
-              <span v-else class="text-gray-400 text-[10px]">No art</span>
-            </div>
-            <div class="min-w-0">
-              <div class="font-semibold">
-                {{ enemy.name }}
-                <span class="inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold" :class="RANK_BADGE_CLASS[enemy.rank]">{{ RANK_LABELS[enemy.rank] }}</span>
-              </div>
-              <div class="text-[11px] text-gray-500">{{ enemy.faction?.name }} · {{ enemy.battleMode === 'SHARED_POOL' ? 'Shared pool' : 'Per player' }}</div>
-            </div>
-          </div>
-
-          <div class="space-y-1">
-            <div class="flex items-center gap-2 text-[11px]">
-              <span class="w-12 flex-shrink-0 text-gray-500">Enemy</span>
-              <div class="flex-1 h-2 bg-gray-200 rounded overflow-hidden">
-                <div class="h-full bg-red-500" :style="{ width: enemyHpPercent + '%' }"></div>
-              </div>
-              <span class="w-14 flex-shrink-0 text-right tabular-nums">{{ state.enemyHpRemaining }}/{{ enemy.maxHp }}</span>
-            </div>
-            <div class="flex items-center gap-2 text-[11px]">
-              <span class="w-12 flex-shrink-0 text-gray-500">You</span>
-              <div class="flex-1 h-2 bg-gray-200 rounded overflow-hidden">
-                <div class="h-full bg-green-500" :style="{ width: playerHpPercent + '%' }"></div>
-              </div>
-              <span class="w-14 flex-shrink-0 text-right tabular-nums">{{ state.playerHpRemaining }}/{{ state.playerMaxHp }}</span>
-            </div>
-          </div>
-
-          <p v-if="lastRound" class="text-[11px]" :class="lastRoundClass">{{ lastRoundLabel }}</p>
-
-          <template v-if="!outcome">
-            <div class="grid grid-cols-2 gap-2">
-              <button type="button" class="px-2 py-2 text-xs font-semibold rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50" :disabled="busy" @click="act('ATTACK_HIGH')">Attack High</button>
-              <button type="button" class="px-2 py-2 text-xs font-semibold rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50" :disabled="busy" @click="act('ATTACK_LOW')">Attack Low</button>
-              <button type="button" class="px-2 py-2 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="busy" @click="act('BLOCK_HIGH')">Block High</button>
-              <button type="button" class="px-2 py-2 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50" :disabled="busy" @click="act('BLOCK_LOW')">Block Low</button>
+        <!-- Same card the live site-wide popup uses (CMoonBattlePopupHost.vue) — see that
+             component's own comment on why this is shared rather than a bespoke lookalike, which
+             is exactly how this modal drifted out of date (plain hearts/Tailwind look) the first
+             time around. -->
+        <CMoonBattleCard
+          v-else-if="enemy"
+          title-id="cepm-title"
+          :phase="outcome ? 'RESULT' : 'FIGHT'"
+          :enemy-name="enemy.name"
+          :enemy-rank="enemy.rank"
+          :enemy-image-path="enemy.imagePath"
+          :enemy-max-hp="enemy.maxHp"
+          :enemy-hp-remaining="state.enemyHpRemaining"
+          :player-hp-remaining="state.playerHpRemaining"
+          :player-max-hp="state.playerMaxHp"
+          :player-stamina="state.playerStamina"
+          :player-max-stamina="state.playerMaxStamina"
+          :busy="busy"
+          :error="actionError"
+          :last-round-label="lastRoundLabel"
+          :last-round-class="lastRoundClass"
+          :crit-badge="!!(lastRound?.playerCrit || lastRound?.enemyCrit)"
+          :outcome="outcome"
+          :result-title="resultTitle"
+          :result-title-class="resultTitleClass"
+          :points-awarded="wouldGrant?.cMoonPoints || 0"
+          :rewards-list="rewardsList"
+          @action="act"
+          @close="onClose"
+        >
+          <template #result-extra>
+            <p class="cepm-note cepm-note-result">
+              Preview only — nothing above was actually granted (points assume the player is in a cMoon).
+            </p>
+            <p v-if="outcome === 'WIN' && !rewardsList.length" class="cepm-note cepm-note-result">
+              No prize rows hit this roll — re-preview to try again.
+            </p>
+          </template>
+          <template #result-actions>
+            <div class="cepm-result-actions">
+              <BlueButton type="button" @click="restart">Fight again</BlueButton>
+              <button type="button" class="cepm-btn-secondary" @click="onClose">Close</button>
             </div>
           </template>
-
-          <template v-else>
-            <div class="border rounded p-3 space-y-1" :class="outcome === 'WIN' ? 'bg-green-50 border-green-200' : outcome === 'LOSS' ? 'bg-red-50 border-red-200' : 'bg-gray-50'">
-              <p class="font-semibold">{{ outcomeLabel }}</p>
-              <template v-if="outcome === 'WIN'">
-                <p class="text-[11px] text-gray-600">Would award {{ wouldGrant?.cMoonPoints || 0 }} cMoon points (if the player is in a cMoon), plus:</p>
-                <ul v-if="wouldGrant?.items?.length" class="text-[11px] list-disc pl-4">
-                  <li v-for="(item, i) in wouldGrant.items" :key="i">
-                    {{ item.type === 'CTOON' ? `${item.label}${item.quantity > 1 ? ` x${item.quantity}` : ''}` : '' }}
-                    {{ item.type === 'AVATAR' ? `Avatar: ${item.label}` : '' }}
-                    {{ item.type === 'BACKGROUND' ? `Background: ${item.label}` : '' }}
-                    {{ item.type === 'POINTS' ? `${item.quantity} points` : '' }}
-                  </li>
-                </ul>
-                <p v-else class="text-[11px] text-gray-500">No prize rows hit this roll — re-preview to try again.</p>
-              </template>
-            </div>
-            <button type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50" @click="restart">Fight again</button>
-          </template>
-        </template>
+        </CMoonBattleCard>
       </div>
     </div>
   </div>
@@ -87,62 +67,80 @@
 const props = defineProps({ memberId: { type: String, required: true } })
 const emit = defineEmits(['close'])
 
-const RANK_LABELS = { GOON: 'Goon', ENFORCER: 'Enforcer', UNDERBOSS: 'Underboss', FINAL_BOSS: 'Final Boss' }
-const RANK_BADGE_CLASS = {
-  GOON: 'bg-gray-200 text-gray-700',
-  ENFORCER: 'bg-blue-100 text-blue-700',
-  UNDERBOSS: 'bg-purple-100 text-purple-700',
-  FINAL_BOSS: 'bg-red-100 text-red-700',
-}
-
 const loading = ref(true)
-const error = ref('')
+const startError = ref('')
+const actionError = ref('')
 const busy = ref(false)
 const enemy = ref(null)
-// playerMaxHp comes from the server (GlobalGameConfig.cMoonEnemyBattleDefaultHp — see
-// preview.post.js) rather than a hardcoded client constant, since an admin can change that
-// default at any time; this preview is deliberately NOT personalized by the admin's own cMoon
-// rank (see preview.post.js's own comment), so it's always just that plain default.
-const state = reactive({ playerHpRemaining: 0, playerMaxHp: 0, enemyHpRemaining: 0, roundNumber: 1 })
+// playerMaxHp/playerMaxStamina come from the server (GlobalGameConfig.cMoonEnemyBattleDefaultHp/
+// cMoonEnemyBattleStartingStamina — see preview.post.js) rather than hardcoded client constants,
+// since an admin can change either default at any time; this preview is deliberately NOT
+// personalized by the admin's own cMoon rank (see preview.post.js's own comment), so it's always
+// just those plain defaults.
+const state = reactive({
+  playerHpRemaining: 0, playerMaxHp: 0, playerStamina: 0, playerMaxStamina: 0,
+  enemyHpRemaining: 0, roundNumber: 1,
+})
 const lastRound = ref(null)
 const outcome = ref(null)
 const wouldGrant = ref(null)
 
-const enemyHpPercent = computed(() => {
-  const max = enemy.value?.maxHp || 1
-  return Math.max(0, Math.min(100, Math.round((state.enemyHpRemaining / max) * 100)))
+const bannerStyle = computed(() => {
+  const path = enemy.value?.faction?.bannerImagePath
+  return path ? { backgroundImage: `url(${path})` } : {}
 })
-const playerHpPercent = computed(() => Math.max(0, Math.min(100, Math.round((state.playerHpRemaining / (state.playerMaxHp || 1)) * 100))))
 
 const ACTION_LABELS = { ATTACK_HIGH: 'attacked high', ATTACK_LOW: 'attacked low', BLOCK_HIGH: 'blocked high', BLOCK_LOW: 'blocked low' }
+// Mirrors CMoonBattlePopupHost.vue's own lastRoundLabel, minus the SPECIAL_ATTACK/PARALYZED/
+// specials branches it has to handle — this preview never models either (see preview-action.post.js's
+// own header comment), so every round here is always one of the plain 4 lane moves.
 const lastRoundLabel = computed(() => {
   if (!lastRound.value) return ''
-  const { playerAction, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit } = lastRound.value
+  const { playerAction, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked, counterHit } = lastRound.value
   const actions = `You ${ACTION_LABELS[playerAction]}, they ${ACTION_LABELS[enemyAction]} — `
-  const critNote = (playerCrit || enemyCrit) ? ' (CRITICAL!)' : ''
-  if (playerHit && enemyHit) return `${actions}you both landed a hit!${critNote}`
-  if (playerHit) return `${actions}you took a hit!${critNote}`
-  if (enemyHit) return `${actions}you landed a hit!${critNote}`
+  if (playerHit && enemyHit) return `${actions}you both landed a hit!`
+  if (playerHit) return `${actions}you took a hit!`
+  if (enemyHit) return `${actions}you landed a hit!`
+  if (playerBlocked && counterHit) return `${actions}you blocked it, healed 1 HP, and countered for damage!`
   if (playerBlocked) return `${actions}you blocked it and healed 1 HP!`
   if (enemyBlocked) return `${actions}they blocked it and healed 1 HP!`
   return `${actions}no hits landed.`
 })
 const lastRoundClass = computed(() => {
   if (!lastRound.value) return ''
-  const { playerHit, enemyHit } = lastRound.value
-  if (enemyHit && !playerHit) return 'text-green-600 font-semibold'
-  if (playerHit && !enemyHit) return 'text-red-600 font-semibold'
-  return 'text-gray-500'
+  const { playerHit, enemyHit, playerBlocked } = lastRound.value
+  if (enemyHit && !playerHit) return 'cbc-round-good'
+  if (playerHit && !enemyHit) return 'cbc-round-bad'
+  if (playerBlocked) return 'cbc-round-good'
+  return 'cbc-round-neutral'
 })
-const outcomeLabel = computed(() => {
-  if (outcome.value === 'WIN') return 'Preview result: Win'
-  if (outcome.value === 'LOSS') return 'Preview result: Loss'
-  return 'Preview ended (round cap reached)'
+const resultTitle = computed(() => {
+  if (outcome.value === 'WIN') return 'Victory!'
+  if (outcome.value === 'LOSS') return 'Defeated'
+  return 'Battle ended' // the only other outcome this preview can reach is ABANDONED (round cap)
+})
+const resultTitleClass = computed(() => {
+  if (outcome.value === 'WIN') return 'cbc-title-win'
+  if (outcome.value === 'LOSS') return 'cbc-title-loss'
+  return ''
+})
+// Matches CMoonBattlePopupHost.vue's own rewardsList formatting exactly, just reading from
+// wouldGrant.items (preview-action.post.js's shape) instead of battle.rewardsGranted.
+const rewardsList = computed(() => {
+  const items = Array.isArray(wouldGrant.value?.items) ? wouldGrant.value.items : []
+  return items.map(item => {
+    if (item.type === 'CTOON') return `${item.label || 'cToon'}${item.quantity > 1 ? ` x${item.quantity}` : ''}`
+    if (item.type === 'AVATAR') return 'Avatar'
+    if (item.type === 'BACKGROUND') return 'Background'
+    if (item.type === 'POINTS') return `${item.quantity} points`
+    return ''
+  }).filter(Boolean)
 })
 
 async function startPreview() {
   loading.value = true
-  error.value = ''
+  startError.value = ''
+  actionError.value = ''
   outcome.value = null
   wouldGrant.value = null
   lastRound.value = null
@@ -151,7 +149,7 @@ async function startPreview() {
     enemy.value = res.enemy
     Object.assign(state, res.state)
   } catch (e) {
-    error.value = e?.data?.statusMessage || 'Could not start preview.'
+    startError.value = e?.data?.statusMessage || 'Could not start preview.'
   } finally {
     loading.value = false
   }
@@ -160,11 +158,13 @@ async function startPreview() {
 async function act(action) {
   if (busy.value || outcome.value) return
   busy.value = true
+  actionError.value = ''
   try {
     const res = await $fetch(`/api/admin/cmoon-enemy-members/${props.memberId}/preview-action`, {
       method: 'POST',
       body: {
         action, playerHpRemaining: state.playerHpRemaining, playerMaxHp: state.playerMaxHp,
+        playerStamina: state.playerStamina, playerMaxStamina: state.playerMaxStamina,
         enemyHpRemaining: state.enemyHpRemaining, roundNumber: state.roundNumber,
       },
     })
@@ -173,7 +173,7 @@ async function act(action) {
     outcome.value = res.outcome
     wouldGrant.value = res.wouldGrant
   } catch (e) {
-    error.value = e?.data?.statusMessage || 'Something went wrong.'
+    actionError.value = e?.data?.statusMessage || 'Something went wrong.'
   } finally {
     busy.value = false
   }
@@ -189,3 +189,74 @@ function onClose() {
 
 onMounted(startPreview)
 </script>
+
+<style scoped>
+/* Same dark navy branded dialog chrome as the live popup (CMoonBattlePopupHost.vue's own
+   .cbp-overlay/.cbp-modal/.cbp-banner/.cbp-close) — duplicated rather than shared because this
+   modal isn't Teleported and has its own close/restart affordances, but every class here is
+   deliberately a copy of that one so the two can never visually drift apart on the OUTER chrome
+   either, same reasoning as CMoonBattleCard.vue sharing the INNER battle card. */
+.cepm-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(0, 20, 50, 0.75);
+}
+.cepm-modal {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  max-height: 92vh;
+  overflow-y: auto;
+  background: #0d2a4d;
+  color: #fff;
+  border: 2px solid var(--OrbitDarkBlue);
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+.cepm-banner {
+  position: relative;
+  height: 64px;
+  background: linear-gradient(135deg, #1a4a7a, #0a1f3a);
+  background-size: cover;
+  background-position: center;
+  border-radius: 6px 6px 0 0;
+}
+.cepm-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  border: none;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+}
+.cepm-body { padding: 14px 16px 18px; text-align: center; }
+.cepm-note { font-size: 11px; font-style: italic; color: rgba(255, 255, 255, 0.55); margin: 0 0 10px; }
+.cepm-note-result { margin: 0 0 8px; }
+.cepm-loading { font-size: 13px; color: rgba(255, 255, 255, 0.7); padding: 20px 0; }
+.cepm-start-error { font-size: 13px; color: #f87171; padding: 20px 0; }
+
+.cepm-result-actions { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.cepm-btn-secondary {
+  padding: 9px 14px;
+  border-radius: 6px;
+  border: 2px solid #7a1515;
+  background: #b91c1c;
+  color: #fff;
+  font-weight: bold;
+  font-size: 0.85rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+.cepm-btn-secondary:hover { background: #991b1b; }
+</style>

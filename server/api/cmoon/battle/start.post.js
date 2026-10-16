@@ -117,6 +117,17 @@ export default defineEventHandler(async (event) => {
       },
       include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
     })
+    // Engagement signal for the popup cooldown/spawn-cap — see User.lastCMoonBattlePopupAt and
+    // CMoonEnemyPopupLog's own schema comments on why this moved here from consider.post.js's own
+    // offer-time write: only an actual "Fight!" should cost a cooldown/cap slot, never a merely-
+    // offered-then-declined popup. Only reached on the success path above (a genuinely NEW
+    // battle), never for a resumed battle (the early-return further up) or the P2002 race-loser
+    // branch below, both of which already had their own engagement stamped when THAT battle
+    // actually started.
+    await Promise.all([
+      db.user.update({ where: { id: userId }, data: { lastCMoonBattlePopupAt: new Date() } }),
+      db.cMoonEnemyPopupLog.create({ data: { userId } }),
+    ])
   } catch (err) {
     // Lost a race against another concurrent /start call for this same user (activeUserId is
     // @unique) — hand back whichever one actually won rather than erroring.
