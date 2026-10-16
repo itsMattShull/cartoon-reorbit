@@ -29,11 +29,12 @@
 import { randomUUID } from 'crypto'
 import { getOgGtoonsConfig, peekRevealTiming } from './ogGtoonsConfig.js'
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
-import { deriveGoalColor, slotsForRound } from './ogGtoonEngine.js'
+import { assignRandomGoals, slotsForRound } from './ogGtoonEngine.js'
 import {
   publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd,
   placeCard, unplaceSlot, checkCommit, checkSwap, recordSwapChoice, resolveSwapPhase, expirePhase,
-  submitDiscard, resolveDiscardPhase, markCommitted, extendDeadlineForReveal
+  submitDiscard, resolveDiscardPhase, markCommitted, extendDeadlineForReveal,
+  enterColorPhase, submitColor, resolveColorPhase, autoSilverColor
 } from './ogGtoonMatchCore.js'
 import {
   BOT_ID, BOT_USERNAME, buildBotDeck, chooseBotPlacements, chooseBotDiscards, chooseBotSwap,
@@ -94,6 +95,7 @@ async function botAct(io, match, deps) {
   if (match.ending) return
   if (match.phase === 'discard') return botDiscard(io, match, deps)
   if (match.phase === 'swap') return botSwap(io, match, deps)
+  if (match.phase === 'color') return botColor(io, match, deps)
   if (match.ready[1]) return
 
   const slots = slotsForRound(match.currentRound)
@@ -126,16 +128,28 @@ async function botDiscard(io, match, deps) {
   settleDiscardPhase(io, match, deps)
 }
 
+/** The bot picks the colour that serves it best (the board is public, so this is fair). */
+async function botColor(io, match, deps) {
+  // Already done (no Silver card to colour): the phase may still be waiting on nothing but a settle.
+  if (!match.colorReady[1]) submitColor(match, 1, { color: autoSilverColor(match, 1) })
+  match.lastActivity = Date.now()
+  emitState(io, match)
+  settleColor(io, match, deps)
+}
+
 async function botSwap(io, match, deps) {
-  if (match.swapReady[1]) return
-  const slotSeven = match.revealed[1].find(r => r.slot === 7)
-  const doSwap = chooseBotSwap({
-    difficulty: match.difficulty,
-    slotCard: slotSeven ? { value: slotSeven.baseValue, color: slotSeven.color } : null,
-    undealt: botCards(match, match.undealt[1]),
-    goalColor: match.goalColor[1]
-  })
-  recordSwapChoice(match, 1, doSwap)
+  // Already done (nothing to swap) still falls through to settle: when neither side can be offered
+  // a swap both start ready, and without this the phase would sit waiting until the timer died.
+  if (!match.swapReady[1]) {
+    const slotSeven = match.revealed[1].find(r => r.slot === 7)
+    const doSwap = chooseBotSwap({
+      difficulty: match.difficulty,
+      slotCard: slotSeven ? { value: slotSeven.baseValue, color: slotSeven.color } : null,
+      undealt: botCards(match, match.undealt[1]),
+      goalColor: match.goalColor[1]
+    })
+    recordSwapChoice(match, 1, doSwap)
+  }
   match.lastActivity = Date.now()
   emitState(io, match)
   await settleSwap(io, match, deps)
@@ -164,11 +178,13 @@ function concludeStep(io, match, deps, revealedRound, entries, order, { steps = 
   match.lastActivity = Date.now()
   const timing = peekRevealTiming()
 
-  const end = checkMatchEnd(match)
+  // Once the board is complete, a side with a Silver card picks its colour before anything is scored.
+  const colorPhase = enterColorPhase(match)
+  const end = colorPhase ? null : checkMatchEnd(match)
   // Advance before emitting so the state the client receives already carries the NEXT round and
   // phase; otherwise its next action would send a stale round and be silently dropped.
   if (!end) {
-    advanceRound(match)
+    if (!colorPhase) advanceRound(match)
     // The cards reveal one at a time on the client; keep that animation off the next phase's clock.
     extendDeadlineForReveal(match, steps, timing)
   }
@@ -198,6 +214,13 @@ async function settleSwap(io, match, deps) {
   const res = resolveSwapPhase(match, deps.rng)
   if (!res) return
   concludeStep(io, match, deps, match.currentRound, res.entries, res.order, { steps: res.steps, before: res.before })
+}
+
+/** Applies the Silver colour picks once both sides are done, then scores the board. */
+function settleColor(io, match, deps) {
+  if (match.ending) return
+  if (!resolveColorPhase(match)) return
+  concludeStep(io, match, deps, match.currentRound, [[], []], [])
 }
 
 /* ── Phase clock ─────────────────────────────────────────────────────────────────────────────
@@ -231,6 +254,9 @@ async function onPhaseExpired(io, match, deps) {
   } else if (phase === 'swap') {
     emitState(io, match)
     await settleSwap(io, match, deps)
+  } else if (phase === 'color') {
+    emitState(io, match)
+    settleColor(io, match, deps)
   }
 }
 
@@ -334,7 +360,6 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
       usernames: [user.username, BOT_USERNAME],
       sockets: new Set([socket.id]),
       deckOrder: [userDeck, botDeck],
-      goalColor: [deriveGoalColor(userDeck), deriveGoalColor(botDeck)],
       stake: [0, 0],
       ending: false,
       botTimer: null,
@@ -343,6 +368,7 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
       lastActivity: Date.now()
     }
     initHands(match, d.rng)
+    assignRandomGoals(match, d.rng)
     matches.set(user.id, match)
     markPracticing(user.id)
     socket.data.ogGtoonsPracticeUserId = user.id
@@ -417,6 +443,12 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
       socket.emit(OUT('swapApplied'), { matchId: match.id })
       await settleSwap(io, match, d)
     }
+  })
+
+  // End-of-game Silver colour pick; held until the bot has picked too.
+  socket.on(EV('chooseColor'), async ({ color } = {}) => {
+    const match = await liveMatch()
+    if (match && settle(submitColor(match, 0, { color }), match)) settleColor(io, match, d)
   })
 
   socket.on(EV('swapSkip'), async () => {

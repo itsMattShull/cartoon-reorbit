@@ -92,6 +92,8 @@ export function useOgGtoonsSocket() {
   function swap() { send('swap', {}) }
   /** Round 3: keep slot 7 as it is. */
   function swapSkip() { send('swapSkip', {}) }
+  /** End of the game: choose the real colour your Silver cards count as. */
+  function chooseColor(color) { send('chooseColor', { color }) }
   /** Discard phase: drop these hand cards (possibly none) and finish discarding. */
   function discard(cardIdxs) { send('discard', { cardIdxs }) }
   function startPractice(deckId, difficulty) {
@@ -108,6 +110,6 @@ export function useOgGtoonsSocket() {
 
   return {
     socket, matchState, lastReveal, matchEnded, isConnected, currentMatchId, lastError,
-    commit, place, unplace, swap, swapSkip, discard, leaveMatch, startPractice
+    commit, place, unplace, swap, swapSkip, chooseColor, discard, leaveMatch, startPractice
   }
 }

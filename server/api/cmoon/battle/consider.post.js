@@ -13,6 +13,7 @@ import { getGlobalConfig } from '@/server/utils/cmoon'
 import { serializeEnemyForClient, serializeBattleForClient } from '@/server/utils/cmoonEnemyBattle'
 import { checkRaidBossAvailability } from '@/server/utils/cmoonEnemyRaid'
 import { filterToHighestRank, pickWeightedEnemy, filterCappedNonRaidCandidates } from '@/server/utils/cmoonEnemy'
+import { pingFinalBossAppeared } from '@/server/utils/cmoonDiscordEvents'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -28,7 +29,10 @@ export default defineEventHandler(async (event) => {
   // rolling for a new one — the activeUserId sentinel/unique constraint guarantees at most one.
   const inProgress = await db.cMoonEnemyBattle.findFirst({
     where: { userId, status: 'IN_PROGRESS' },
-    include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } }, cMoon: { include: { specialAttack: true } } },
+    include: {
+      enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } },
+      cMoon: { include: { specialAttack: true } },
+    },
   })
   if (inProgress) {
     return { offered: true, resumed: true, battle: serializeBattleForClient(inProgress), inCMoon: !!user.cMoonId }
@@ -81,7 +85,7 @@ export default defineEventHandler(async (event) => {
       // player with no cMoon has no way to engage one at all, so it must never be offered to them.
       ...(user.cMoonId ? {} : { isRaidBoss: false }),
     },
-    include: { faction: { include: { appearEffect: true } } },
+    include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } },
   })
   // raidOneTime/raidCooldownMinutes can't be expressed as a single Prisma `where` filter (the
   // cooldown cutoff is a per-row computation against each member's own raidCooldownMinutes) — see
@@ -123,12 +127,31 @@ export default defineEventHandler(async (event) => {
   const tierFiltered = filterToHighestRank(candidates, !!config?.cMoonEnemyHigherTierFirst)
   const chosen = pickWeightedEnemy(tierFiltered)
 
-  // CMoonEnemyPopupLog only ever records a NON-raid-boss offer — see that model's own comment —
-  // since raid bosses never count against the cap this log exists to enforce.
-  await Promise.all([
-    db.user.update({ where: { id: userId }, data: { lastCMoonBattlePopupAt: new Date() } }),
-    chosen.isRaidBoss ? null : db.cMoonEnemyPopupLog.create({ data: { userId } }),
-  ])
+  // Deliberately NOT stamping lastCMoonBattlePopupAt / logging to CMoonEnemyPopupLog here — see
+  // those columns' own schema comments. Both only record an ACTUAL engagement now (start.post.js
+  // for a solo fight, the raid-start socket handler for a raid boss), never a mere offer, so
+  // declining ("Not now") costs nothing: the very next navigation can roll and offer again. Only
+  // choosing to fight spends the cooldown/spawn-cap slot.
 
-  return { offered: true, resumed: false, enemy: serializeEnemyForClient(chosen), inCMoon: !!user.cMoonId }
+  // A raid-boss FINAL_BOSS already gets its own announceCMoonRaidBoss ping once a raid actually
+  // starts — this only ever fires for a SOLO Final Boss encounter, which otherwise has no
+  // announcement at all.
+  if (!chosen.isRaidBoss && chosen.rank === 'FINAL_BOSS' && user.cMoonId) {
+    pingFinalBossAppeared(user.cMoonId, chosen.id, chosen.name).catch(() => {})
+  }
+
+  // Only worth the extra read when pity is actually enabled for this member — see
+  // serializeEnemyForClient's own comment on why this is the one caller that supplies a real
+  // streak (the OFFER screen is the "should I fight this" decision point pity progress matters
+  // most at). A player with no row yet (never had an empty win against this member) simply shows
+  // 0/threshold, same starting point as the real upsert in action.post.js would create.
+  const pityRow = chosen.pityThreshold > 0
+    ? await db.cMoonEnemyRewardPity.findUnique({
+        where: { userId_enemyMemberId: { userId, enemyMemberId: chosen.id } },
+        select: { emptyWinStreak: true },
+      })
+    : null
+  const pityEmptyWinStreak = chosen.pityThreshold > 0 ? (pityRow?.emptyWinStreak || 0) : null
+
+  return { offered: true, resumed: false, enemy: serializeEnemyForClient(chosen, pityEmptyWinStreak), inCMoon: !!user.cMoonId }
 })

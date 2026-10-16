@@ -59,8 +59,8 @@ export default defineEventHandler(async (event) => {
 
   /* 3. Basic validations (unchanged) ------------------------- */
   if (!imagePart) throw createError({ statusCode: 400, statusMessage: 'Image required.' })
-  if (!['image/png', 'image/gif'].includes(imagePart.type)) {
-    throw createError({ statusCode: 400, statusMessage: 'PNG or GIF only.' })
+  if (!['image/png', 'image/gif', 'image/avif'].includes(imagePart.type)) {
+    throw createError({ statusCode: 400, statusMessage: 'PNG, GIF, or AVIF only.' })
   }
 
   const {
@@ -145,8 +145,15 @@ export default defineEventHandler(async (event) => {
   const limitInt = perUserLimit ? parseInt(perUserLimit, 10) : null
   const timeBasedLimitCountInt      = timeBasedLimitCountRaw      != null && timeBasedLimitCountRaw      !== '' ? parseInt(timeBasedLimitCountRaw,      10) : null
   const timeBasedLimitWindowDaysInt = timeBasedLimitWindowDaysRaw != null && timeBasedLimitWindowDaysRaw !== '' ? parseInt(timeBasedLimitWindowDaysRaw, 10) : null
-  const initialReleaseAtDate = initialReleaseAt ? new Date(initialReleaseAt) : null
-  const finalReleaseAtDate   = finalReleaseAt   ? new Date(finalReleaseAt)   : null
+  // Schedule is server-authoritative: initial = releaseDate, final = releaseDate + configured delay
+  // (never trust client-computed times; they were prone to browser-timezone drift).
+  let finalDelayHours = 12
+  try {
+    const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { finalReleaseDelayHours: true } })
+    if (typeof cfg?.finalReleaseDelayHours === 'number') finalDelayHours = cfg.finalReleaseDelayHours
+  } catch {}
+  const initialReleaseAtDate = releaseDate
+  const finalReleaseAtDate   = new Date(releaseDate.getTime() + finalDelayHours * 60 * 60 * 1000)
   const initialReleaseQtyInt = initialReleaseQty == null || initialReleaseQty === '' ? null : parseInt(initialReleaseQty, 10)
   const finalReleaseQtyInt   = finalReleaseQty   == null || finalReleaseQty   === '' ? null : parseInt(finalReleaseQty, 10)
 

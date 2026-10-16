@@ -8,7 +8,7 @@ import { defineEventHandler, getQuery } from 'h3'
 import { prisma } from '@/server/prisma'
 import { requireAdmin } from '@/server/utils/requireAdmin'
 
-const OUTCOMES = ['WIN', 'LOSS', 'ABANDONED']
+const OUTCOMES = ['WIN', 'LOSS', 'ABANDONED', 'UNCREDITED']
 const STATUSES = ['IN_PROGRESS', 'RESOLVED']
 
 function parseStartYMD(ymd) {
@@ -83,6 +83,7 @@ export default defineEventHandler(async (event) => {
     roundNumber: r.roundNumber,
     playerHpRemaining: r.playerHpRemaining,
     enemyHpRemaining: r.enemyHpRemaining,
+    damageDealt: r.damageDealt,
     pointsAwarded: r.pointsAwarded,
     rewardsGranted: r.rewardsGranted,
     roundLog: r.roundLog,

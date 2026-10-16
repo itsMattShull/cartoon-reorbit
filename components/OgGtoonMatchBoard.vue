@@ -40,6 +40,23 @@
                 <button v-if="!matchState.you.discardReady" @click="confirmDiscard" class="bg-red-500 hover:bg-red-600 og-btn">{{ discardPick.size ? `Discard ${discardPick.size} & draw` : 'Keep my hand' }}</button>
                 <span v-else class="og-note">Waiting for opponent to finish discarding...</span>
               </template>
+              <template v-else-if="inColorPhase">
+                <template v-if="matchState.you.mayChooseColor">
+                  <span class="og-note w-full text-center">Your Silver cards count as:</span>
+                  <button
+                    v-for="c in REAL_COLORS"
+                    :key="c"
+                    @click="chooseColor(c)"
+                    class="og-color-btn"
+                    :class="c === matchState.you.goalColor ? 'og-color-goal' : ''"
+                    :title="c.charAt(0) + c.slice(1).toLowerCase()"
+                    :aria-label="c.charAt(0) + c.slice(1).toLowerCase()"
+                  ><span :style="{ background: colorHex(c) }"></span></button>
+                </template>
+                <span v-else class="og-note">
+                  {{ matchState.you.pendingColor ? `Silver set to ${matchState.you.pendingColor.toLowerCase()} — waiting for opponent...` : 'Waiting for opponent...' }}
+                </span>
+              </template>
               <template v-else-if="inSwapPhase">
                 <template v-if="matchState.you.maySwap">
                   <button @click="openSwapSheet" class="bg-indigo-500 hover:bg-indigo-600 og-btn">{{ isPractice ? 'Swap slot 7 (free)' : 'Swap slot 7 (10 pts)' }}</button>
@@ -184,7 +201,7 @@
 
       <!-- End-of-match result screen -->
       <transition name="fade">
-        <div v-if="matchEnded && !flipping" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div v-if="matchEnded && !flipping && resultOpen" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div class="bg-gray-900 border border-white/20 rounded-xl p-6 w-[26rem] max-w-[95vw] text-center">
             <h2 class="text-2xl font-bold mb-2" :class="matchEnded.won ? 'text-green-400' : (matchEnded.outcome === 'TIE' ? 'text-amber-300' : 'text-red-400')">
               {{ matchEnded.outcome === 'TIE' ? "It's a Tie!" : (matchEnded.won ? 'You Win!' : 'You Lose') }}
@@ -196,10 +213,18 @@
               <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-1">Game Log</p>
               <OgGtoonGameLog :entries="gameLog" />
             </div>
-            <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">{{ isPractice ? 'Back to Practice' : 'Back to Lobby' }}</button>
+            <div class="flex gap-2 justify-center">
+              <button @click="resultOpen = false" class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-sm">View board</button>
+              <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">{{ isPractice ? 'Back to Practice' : 'Back to Lobby' }}</button>
+            </div>
           </div>
         </div>
       </transition>
+      <!-- With the result closed, the finished board stays visible; these bring the result back or leave. -->
+      <div v-if="matchEnded && !flipping && !resultOpen" class="fixed bottom-3 inset-x-0 z-40 flex justify-center gap-2">
+        <button @click="resultOpen = true" class="bg-gray-800/90 border border-white/20 hover:bg-gray-700 px-4 py-2 rounded text-sm">Show result</button>
+        <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">{{ isPractice ? 'Back to Practice' : 'Back to Lobby' }}</button>
+      </div>
     </template>
   </div>
 </template>
@@ -217,7 +242,7 @@ import OgGtoonGameLog from '@/components/OgGtoonGameLog.vue'
 
 defineEmits(['exit'])
 
-const { matchState, lastReveal, matchEnded, lastError, commit, place, unplace, swap, swapSkip, discard } = useOgGtoonsSocket()
+const { matchState, lastReveal, matchEnded, lastError, commit, place, unplace, swap, swapSkip, chooseColor, discard } = useOgGtoonsSocket()
 
 const COLOR_HEX = {
   BLACK: '#cccccc', SILVER: '#c0c0c0', BLUE: '#60a5fa', RED: '#f87171',
@@ -233,11 +258,17 @@ const difficultyLabel = computed(() => {
 
 const inDiscardPhase = computed(() => matchState.value?.phase === 'discard')
 const inSwapPhase = computed(() => matchState.value?.phase === 'swap')
+// The end-of-match result can be closed to look over the finished board; it reopens for each new result.
+const resultOpen = ref(true)
+watch(matchEnded, () => { resultOpen.value = true })
+const inColorPhase = computed(() => matchState.value?.phase === 'color')
+const REAL_COLORS = ['BLUE', 'RED', 'YELLOW', 'GREEN', 'PURPLE', 'ORANGE', 'PINK']
 const roundLabel = computed(() => {
   const m = matchState.value
   if (!m) return ''
   if (m.suddenDeath) return 'Sudden Death'
   if (m.phase === 'discard') return 'Discard Phase'
+  if (m.phase === 'color') return 'Silver Colour'
   if (m.phase === 'swap') return `Round ${m.round} / ${m.totalRounds} · Swap`
   return `Round ${m.round} / ${m.totalRounds}`
 })
@@ -343,7 +374,10 @@ const boardValues = computed(() => toShown(matchState.value?.board))
 function displayed(entry, side) {
   if (!entry) return null
   const o = (playback.value ? playback.value.shown : boardValues.value).get(cardKey(side, entry.slot))
-  return o ? { ...entry, ...o } : entry
+  const card = o ? { ...entry, ...o } : entry
+  // A Silver card shows (and sweeps to) the colour its owner picked once the colour phase has resolved.
+  const picked = side === youSide.value ? matchState.value?.you?.silverColor : matchState.value?.opponent?.silverColor
+  return picked && card.color === 'SILVER' ? { ...card, color: picked } : card
 }
 
 /* ── Slots ───────────────────────────────────────────────────────────────────────────────── */
@@ -474,6 +508,11 @@ const helpText = computed(() => {
   if (m.phase === 'discard') {
     return 'Discard phase: tap any cards you want to throw away, then confirm. Your hand is refilled to 6 from your undealt cards. If time runs out you keep your hand.'
   }
+  if (m.phase === 'color') {
+    return m.you.mayChooseColor
+      ? 'Silver cards are colourless. Choose the colour your Silver cards count as for the goal-colour totals. Your opponent chooses at the same time and picks are revealed together. If time runs out, the best colour is picked for you.'
+      : (m.you.hasSilver ? 'Waiting for your opponent to choose...' : 'You have no Silver cards, so nothing to choose. Waiting for your opponent...')
+  }
   if (m.phase === 'swap') {
     return m.you.maySwap
       ? 'Last chance: swap the card in slot 7 for a random undealt card, or keep it. If time runs out you keep it.'
@@ -492,6 +531,7 @@ const oppStatusReady = computed(() => {
 })
 const oppStatusLabel = computed(() => {
   if (inDiscardPhase.value) return oppStatusReady.value ? 'Done discarding' : 'Choosing discards...'
+  if (inColorPhase.value) return matchState.value?.opponent?.colorReady ? 'Colour chosen' : 'Choosing a Silver colour...'
   if (inSwapPhase.value) return matchState.value?.opponent?.swapReady ? 'Swap decided' : 'Deciding on a swap...'
   return oppStatusReady.value ? 'Committed' : 'Thinking...'
 })
@@ -640,6 +680,9 @@ onBeforeUnmount(() => { sidebarState.value = null })
 .og-help-btn { width: 20px; height: 20px; border-radius: 50%; font-size: .7rem; font-weight: 800; background: rgba(0, 0, 0, .25); border: 1px solid rgba(255, 255, 255, .6); line-height: 1; }
 .og-help-on { background: var(--og-accent); color: #0a3a4a; }
 .og-btn { color: #fff; padding: 5px 14px; border-radius: 6px; font-size: .8rem; font-weight: 700; }
+.og-color-btn { width: 24px; height: 24px; border-radius: 50%; padding: 2px; border: 2px solid transparent; background: rgba(0,0,0,.25); }
+.og-color-btn span { display: block; width: 100%; height: 100%; border-radius: 50%; border: 1px solid rgba(255,255,255,.6); }
+.og-color-goal { border-color: #fbbf24; }
 .og-note { font-size: .75rem; color: #fff3b0; }
 .og-error { font-size: .7rem; color: #ffd0d0; text-align: center; margin: 0; }
 .og-help { position: absolute; left: 6px; right: 6px; top: calc(100% + 4px); padding: 8px 10px; border-radius: 6px; font-size: .75rem; line-height: 1.35; background: rgba(10, 30, 50, .95); border: 1px solid var(--og-accent); box-shadow: 0 6px 16px rgba(0, 0, 0, .4); }

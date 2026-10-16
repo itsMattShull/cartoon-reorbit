@@ -25,6 +25,7 @@
           :alt="card.name"
           :effects="isRevealed && animate ? 'full' : 'static'"
           :ambient="isRevealed && animate"
+          :signal-transition="SIGNAL_REVEAL_ENABLED"
         />
       </div>
     </div>
@@ -43,6 +44,9 @@
 import { computed, ref, watch } from 'vue'
 import GtoonCard from '@/components/GtoonCard.vue'
 import { useOgGtoonInfo } from '@/composables/useOgGtoonInfo'
+
+// The Noise→Signal CRT power-on on reveal is switched off for now (the card just flips in). Set to true to bring it back.
+const SIGNAL_REVEAL_ENABLED = false
 
 const props = defineProps({
   card: { type: Object, default: null },        // hand card ({ value }) or revealed entry ({ finalValue })

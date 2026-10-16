@@ -14,8 +14,8 @@
 
         <!-- Upload New Image -->
         <div>
-          <label class="block mb-1 font-medium">Upload New Image (PNG or GIF)</label>
-          <input type="file" accept="image/png,image/gif" @change="handleNewFile" class="w-full" />
+          <label class="block mb-1 font-medium">Upload New Image (PNG, GIF, or AVIF)</label>
+          <input type="file" accept="image/png,image/gif,image/avif,.avif" @change="handleNewFile" class="w-full" />
           <p class="text-sm text-gray-500">Optional. If set, the image and type will update. A timestamped filename will bypass cache.</p>
           <p v-if="err.image" class="text-red-600 text-sm mt-1">{{ err.image }}</p>
           <div v-if="newImagePreview" class="mt-2">
@@ -563,8 +563,8 @@ function handleNewFile(e){
   err.image = ''
   const file = e.target.files?.[0]
   if (!file){ newImageFile.value = null; newImagePreview.value = ''; return }
-  if (!['image/png','image/gif'].includes(file.type)){
-    err.image = 'Only PNG or GIF files allowed.'
+  if (!['image/png','image/gif','image/avif'].includes(file.type)){
+    err.image = 'Only PNG, GIF, or AVIF files allowed.'
     return
   }
   newImageFile.value = file
@@ -631,7 +631,7 @@ async function submitForm(){
     }
 
     // advisory schedule fields
-    fd.append('initialReleaseAt', releaseDate.value ? new Date(releaseDate.value).toISOString() : '')
+    fd.append('initialReleaseAt', releaseDate.value ? zonedTimeToUtc(releaseDate.value, 'America/Chicago').toISOString() : '')
     fd.append('finalReleaseAt', schedule.value.finalAt ? schedule.value.finalAt.toISOString() : '')
     fd.append('initialReleaseQty', schedule.value.initialQty ?? '')
     fd.append('finalReleaseQty', schedule.value.finalQty ?? '')
@@ -691,7 +691,7 @@ async function submitForm(){
                       : null,
 
     // advisory schedule fields
-    initialReleaseAt: releaseDate.value ? new Date(releaseDate.value).toISOString() : null,
+    initialReleaseAt: releaseDate.value ? zonedTimeToUtc(releaseDate.value, 'America/Chicago').toISOString() : null,
     finalReleaseAt:   schedule.value.finalAt ? schedule.value.finalAt.toISOString() : null,
     initialReleaseQty: schedule.value.initialQty ?? null,
     finalReleaseQty:   schedule.value.finalQty ?? null,

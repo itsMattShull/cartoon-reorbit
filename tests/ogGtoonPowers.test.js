@@ -541,6 +541,16 @@ test('rule: a knocked-out card scores 0, loses its power, is not counted by powe
   assert.equal(res.player2.revealed[0].finalValue, 3)
 })
 
+test('rule: a cancelled card never reactivates — the lower gToon being duplicate-cancelled does not free the higher one', () => {
+  const low = C('akuLow', { characters: ['Aku'], value: 3 })
+  const high = C('akuHigh', { characters: ['Aku'], value: 8 })
+  // `low` is on both boards (duplicate cancel); `high` shares the Aku character with it.
+  const res = runBoard([low, high], [low, C('b2')])
+  assert.equal(res.player1.revealed[0].finalValue, 0)
+  assert.equal(res.player2.revealed[0].finalValue, 0)
+  assert.equal(res.player1.revealed[1].finalValue, 0, 'the higher Aku stays cancelled')
+})
+
 test('rule: cards tied for the lowest value all stay; the exact same gToon cancels every copy', () => {
   const tie = runBoard([C('t1', { characters: ['Bubbles'], value: 5 })], [C('t2', { characters: ['Bubbles'], value: 5 })])
   assert.equal(tie.player1.revealed[0].finalValue, 5)

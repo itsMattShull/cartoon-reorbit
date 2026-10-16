@@ -4,7 +4,7 @@
 import { defineEventHandler, createError, setHeader, getRouterParam } from 'h3'
 import { prisma } from '@/server/prisma'
 import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
-import { powerDescriptionFor } from '~/server/utils/ogGtoonPowerCatalog'
+import { powerDescriptionFor, describeEffects } from '~/server/utils/ogGtoonPowerCatalog'
 
 export default defineEventHandler(async (event) => {
   if (!event.context.userId) {
@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
     group: c.gtoonGroup ?? null,
     power: {
       isSlam: !!c.isSlamGtoon,
-      description: c.isSlamGtoon ? powerDescriptionFor(c.gtoonEffect) : null
+      description: c.isSlamGtoon ? (powerDescriptionFor(c.gtoonEffect) || describeEffects(c.gtoonEffect)) : null
     },
     ...ogGtoonDisplay(c)
   }

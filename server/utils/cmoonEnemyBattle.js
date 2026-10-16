@@ -15,6 +15,11 @@ export const PLAYER_MAX_HP = 5
 export const MAX_ROUNDS_SAFETY = 100 // a battle can't loop forever even under a pathological RNG streak
 export const ABANDON_AFTER_MINUTES = 10 // reclaim an IN_PROGRESS battle with no action in this long
 
+// Hardcoded fallback for GlobalGameConfig.cMoonEnemyBattleStartingStamina, same role
+// PLAYER_MAX_HP plays for cMoonEnemyBattleDefaultHp — only used if that config row is ever
+// unexpectedly missing.
+export const STARTING_STAMINA = 3
+
 export const NORMAL_HIT_DAMAGE = 1
 export const CRITICAL_HIT_DAMAGE = 2
 export const HEAL_ON_SUCCESSFUL_BLOCK = 1 // both sides use the same amount — see resolveBattleRound's playerBlocked/enemyBlocked
@@ -69,8 +74,12 @@ export function combinePlayerMaxHp(defaultHp, bonus) {
   return Math.max(1, (Number(defaultHp) || 0) + (Number(bonus) || 0))
 }
 
-function isAttack(action) { return action === 'ATTACK_HIGH' || action === 'ATTACK_LOW' }
-function isBlock(action) { return action === 'BLOCK_HIGH' || action === 'BLOCK_LOW' }
+// Exported for action.post.js's own stamina-cost gating (is the player's SUBMITTED action an
+// attack?) and for resolveRound's own stamina cost/regen below (is the EFFECTIVE action, after
+// any paralysis override, an attack or a block?) — same two predicates either caller needs,
+// never duplicated.
+export function isAttack(action) { return action === 'ATTACK_HIGH' || action === 'ATTACK_LOW' }
+export function isBlock(action) { return action === 'BLOCK_HIGH' || action === 'BLOCK_LOW' }
 function lane(action) { return action.endsWith('_HIGH') ? 'HIGH' : 'LOW' }
 
 // One side's attack lands on the other UNLESS the other blocked the exact same lane. This is
@@ -138,11 +147,19 @@ export function rollHitDamage(hit, critChancePercent) {
 // decremented by 1 in the returned new*ParalyzedTurns (floored at 0), same "however many turns
 // were left, one just elapsed" semantics whether this round was the one the paralysis was cast
 // in or a later one.
+// `playerStamina`/`playerMaxStamina`/`blockCounterDamage` drive the stamina mechanic (see
+// GlobalGameConfig.cMoonEnemyBattleStartingStamina's own schema comment for why it exists) —
+// `playerMaxStamina <= 0` (the default for every param here, and for a pre-feature battle row)
+// fully disables it: newPlayerStamina always equals playerStamina unchanged, and a block never
+// adds counter damage, reproducing the exact pre-this-feature math. The caller (action.post.js)
+// is responsible for REJECTING an attack submission when playerStamina is already 0 — this
+// function only applies cost/regen to an already-accepted effective action, it never blocks one.
 export function resolveRound({
   playerAction, enemyMember, playerHpRemaining, playerMaxHp,
   playerAtkBonus = 0, enemyAtkBonus = 0, playerParalyzedTurns = 0, enemyParalyzedTurns = 0,
+  playerStamina = 0, playerMaxStamina = 0, blockCounterDamage = 0,
 }) {
-  const rolledEnemyAction = rollEnemyAction()
+  const rolledEnemyAction = rollEnemyAction(enemyMember.attackChancePercent)
   const effectivePlayerAction = playerParalyzedTurns > 0 ? PARALYZED_ACTION : playerAction
   const effectiveEnemyAction = enemyParalyzedTurns > 0 ? PARALYZED_ACTION : rolledEnemyAction
   const { playerHit, enemyHit, playerBlocked, enemyBlocked } = resolveBattleRound(effectivePlayerAction, effectiveEnemyAction)
@@ -155,7 +172,15 @@ export function resolveRound({
   // PLAYER's own applies to damage the player deals (landing on the enemy) — named from each
   // side's own schema comment.
   const playerDamage = playerHit ? Math.max(0, playerDamageBase + enemyAtkBonus) : 0
-  const enemyDamage = enemyHit ? Math.max(0, enemyDamageBase + playerAtkBonus) : 0
+  // A successful player block (playerBlocked) and a landed player attack (enemyHit) can never
+  // both be true in the same round — playerBlocked requires the player's OWN action to be a
+  // block, enemyHit requires it to be an attack, and a single action can't be both — so folding
+  // the block-counter bonus into the same enemyDamage total a landed hit would have produced is
+  // safe: whichever branch applies, the other is already guaranteed 0. This lets a counter-hit
+  // reuse every existing "damage dealt to the enemy" code path (the SHARED_POOL atomic update,
+  // CMoonEnemyBattle.damageDealt credit, the floating-damage-number UI) with zero new plumbing.
+  const counterDamage = (playerBlocked && blockCounterDamage > 0) ? blockCounterDamage : 0
+  const enemyDamage = enemyHit ? Math.max(0, enemyDamageBase + playerAtkBonus) : counterDamage
 
   let newPlayerHp = playerHpRemaining
   if (playerHit) newPlayerHp = Math.max(0, newPlayerHp - playerDamage)
@@ -165,10 +190,30 @@ export function resolveRound({
   // this from. Required, no default, so a caller can never silently fall back to the wrong cap.
   else if (playerBlocked) newPlayerHp = Math.min(playerMaxHp, newPlayerHp + HEAL_ON_SUCCESSFUL_BLOCK)
 
+  // Stamina cost/regen is keyed off the EFFECTIVE action (post-paralysis-override) — a round the
+  // player spent paralyzed never costs stamina (they didn't choose to attack, they couldn't act
+  // at all), and SPECIAL_ACTION touches neither (it's gated by its own separate hit-streak charge
+  // resource, see playerSpecialCharged, deliberately kept independent of this one).
+  let newPlayerStamina = playerStamina
+  if (playerMaxStamina > 0) {
+    if (isAttack(effectivePlayerAction)) newPlayerStamina = Math.max(0, playerStamina - 1)
+    else if (isBlock(effectivePlayerAction)) newPlayerStamina = Math.min(playerMaxStamina, playerStamina + 1)
+  }
+
   return {
     roundEntry: {
       playerAction: effectivePlayerAction, enemyAction: effectiveEnemyAction,
       playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit,
+      // Display-only — the floating damage-number UI in CMoonBattlePopupHost.vue reads these
+      // straight off the round rather than re-deriving "1, or 2 on a crit" client-side, so a
+      // future balance change here (e.g. a non-flat crit multiplier) stays correct for free.
+      // Always 0 when that side didn't land a hit, same convention playerDamage/enemyDamage
+      // themselves already follow below.
+      playerDamage, enemyDamage,
+      // Distinguishes "you blocked and your counter chipped them for N" from "you landed a
+      // normal hit for N" — both already fold into the same enemyDamage above, this is purely so
+      // the client's round-summary copy (CMoonBattlePopupHost.vue) can tell which happened.
+      counterHit: counterDamage > 0,
     },
     newPlayerHp,
     enemyDamage,
@@ -176,14 +221,23 @@ export function resolveRound({
     enemyBlocked,
     newPlayerParalyzedTurns: Math.max(0, playerParalyzedTurns - 1),
     newEnemyParalyzedTurns: Math.max(0, enemyParalyzedTurns - 1),
+    newPlayerStamina,
   }
 }
 
-// The NPC's move for this round — uniform random among all 4 actions. No difficulty/bias knob
-// today; every enemy member plays identically regardless of its configured HP. (An admin-tunable
-// "aggression" weighting would be a natural, low-risk future extension of just this function.)
-export function rollEnemyAction() {
-  return BATTLE_ACTIONS[Math.floor(Math.random() * BATTLE_ACTIONS.length)]
+// The NPC's move for this round. `attackChancePercent` (CMoonEnemyMember.attackChancePercent,
+// 0-100) biases attack vs block; whichever side wins that roll is then split evenly between its
+// own HIGH/LOW lane, same as before this knob existed. The default (50, or no argument at all)
+// reproduces the original plain-uniform-among-4-actions roll bit-for-bit, so every existing
+// caller that doesn't pass a value — notably cmoonRaidSocket.js's straggler-participant
+// autofill, which reuses this same function for an unrelated purpose (see its own comment) and
+// must stay unbiased — is completely unaffected by this feature.
+export function rollEnemyAction(attackChancePercent = 50) {
+  const chance = Number(attackChancePercent)
+  const pct = Number.isFinite(chance) ? Math.min(100, Math.max(0, chance)) : 50
+  const isAttack = Math.random() * 100 < pct
+  const isHigh = Math.random() < 0.5
+  return isAttack ? (isHigh ? 'ATTACK_HIGH' : 'ATTACK_LOW') : (isHigh ? 'BLOCK_HIGH' : 'BLOCK_LOW')
 }
 
 // Rolls each reward row's dropChancePercent INDEPENDENTLY (not a normalized weighted pick) —
@@ -200,6 +254,37 @@ export function rollEnemyRewards(rewardRows) {
   })
 }
 
+// ── Reward pity (see CMoonEnemyMember.pityThreshold's own schema comment — SOLO BATTLES ONLY) ──
+
+// Pure decision: has `emptyWinStreak` (the count AFTER this win, i.e. already incremented) hit
+// the point where this win must force a reward? `pityThreshold <= 0` means the feature is off for
+// this member and never forces anything, regardless of streak.
+export function shouldForcePityReward(emptyWinStreak, pityThreshold) {
+  const threshold = Number(pityThreshold) || 0
+  if (threshold <= 0) return false
+  return Number(emptyWinStreak) >= threshold
+}
+
+// Picks exactly one row uniformly at random from the member's configured reward table, ignoring
+// each row's own dropChancePercent — this is the "guaranteed" pick a pity trigger forces, not
+// another independent roll. Returns null for an empty table (nothing to force).
+export function forcePickOneReward(rewardRows) {
+  if (!rewardRows?.length) return null
+  return rewardRows[Math.floor(Math.random() * rewardRows.length)]
+}
+
+// Whether a grantRewardInTx summary actually handed the player nothing tangible — the single
+// source of truth action.post.js's resolveWin uses to decide reward pity, rather than the raw
+// roll (rollEnemyRewards' own hitRewards). A roll CAN hit a row and still grant nothing: an
+// AVATAR/BACKGROUND the player already owns is deduped away inside grantRewardInTx itself (see
+// that function's own ownership check), so "something rolled" and "something was actually
+// granted" are different facts — only the latter should ever reset an empty-win pity streak.
+// border/glow aren't reachable from a cMoon enemy reward table (buildGrantableReward never sets
+// borderCMoonId/glowCMoonId for this caller), so they're deliberately not checked here.
+export function grantSummaryIsEmpty(summary) {
+  return !summary?.points && !summary?.backgrounds && !summary?.avatars && !summary?.ctoonJobs?.length
+}
+
 // Turns the rolled reward rows above into the `reward` bundle grantRewardInTx expects (plus a
 // `points` field the caller sets separately, since that comes from the enemy member's own
 // cMoonPointsReward, not a CMoonEnemyReward row). Kept as a pure mapping, separate from the
@@ -212,12 +297,28 @@ export function rollEnemyRewards(rewardRows) {
 // fields useFullscreenEffect().play()'s CUSTOM config expects — the same shape
 // utils/cmoonJoinEffectDescriptor.js builds from a CMoon's own customJoinEffect — never the raw
 // Prisma row (no id/createdAt/etc leaking to every logged-in player).
-export function serializeEnemyForClient(member) {
+// `pityEmptyWinStreak` is this VIEWER's own current CMoonEnemyRewardPity.emptyWinStreak against
+// this member (a DB read the caller does, if at all — this function stays pure/DB-free). Only
+// consider.post.js's OFFER roll passes a real value today, specifically so a player deciding
+// whether to fight can see "N more empty wins until a guaranteed drop" before committing — every
+// other caller (a resumed/in-progress battle, the admin preview tool) omits it, which is also
+// correct: the streak can't change mid-fight, so there's nothing new to show there anyway.
+export function serializeEnemyForClient(member, pityEmptyWinStreak = null) {
   const hp = member.battleMode === 'SHARED_POOL' ? member.currentHp : member.maxHp
   const fx = member.faction?.appearEffect
   // A member's own null sound slot falls back to its faction's matching default — see
   // CMoonEnemyFaction's default*SoundPath columns and resolveMemberSoundPaths' own comment.
   const sounds = resolveMemberSoundPaths(member, member.faction)
+  // The full active taunt pool for each trigger moment (see CMoonEnemyTaunt's own schema
+  // comment) — the caller must have included `faction.taunts` filtered to active rows (every
+  // query that reaches here already does, see consider.post.js/start.post.js/action.post.js/
+  // [id].get.js/preview.post.js). Sent as a full small list rather than one pre-picked line: the
+  // client (CMoonBattlePopupHost.vue) does the random pick itself at the actual moment, so a
+  // resumed battle or a re-fetch doesn't lock in whichever line happened to be rolled first.
+  const taunts = {
+    appear: (member.faction?.taunts || []).filter(t => t.trigger === 'APPEAR').map(t => ({ text: t.text, soundPath: t.soundPath })),
+    crit: (member.faction?.taunts || []).filter(t => t.trigger === 'CRIT').map(t => ({ text: t.text, soundPath: t.soundPath })),
+  }
   return {
     id: member.id,
     name: member.name,
@@ -227,6 +328,12 @@ export function serializeEnemyForClient(member) {
     isRaidBoss: !!member.isRaidBoss,
     maxHp: member.maxHp,
     hp,
+    // Null hides the UI entirely — pity disabled for this member, or the caller didn't pass a
+    // streak (see this function's own comment on who does). Never sent for a raid boss (pity is
+    // solo-only — see CMoonEnemyMember.pityThreshold's own schema comment).
+    pityProgress: (member.pityThreshold > 0 && pityEmptyWinStreak != null)
+      ? { emptyWinStreak: pityEmptyWinStreak, threshold: member.pityThreshold }
+      : null,
     // Named from the enemy's own perspective — see the schema comment on these columns.
     appearSoundPath: sounds.appearSoundPath,
     damageTakenSoundPath: sounds.damageTakenSoundPath,
@@ -234,6 +341,7 @@ export function serializeEnemyForClient(member) {
     attackingSoundPath: sounds.attackingSoundPath,
     victorySoundPath: sounds.victorySoundPath,
     defeatSoundPath: sounds.defeatSoundPath,
+    taunts,
     faction: member.faction
       ? {
           id: member.faction.id,
@@ -277,10 +385,23 @@ export function serializeBattleForClient(battle) {
     // CMoonEnemyBattle.playerHitStreak/playerSpecialCharged's own schema comment.
     playerHitStreak: battle.playerHitStreak || 0,
     playerSpecialCharged: !!battle.playerSpecialCharged,
+    // The enemy's OWN consecutive-hit streak against the player (see
+    // CMoonEnemyBattle.enemyHitStreak's own schema comment) — surfaced so the UI can telegraph an
+    // incoming automatic special as it climbs toward HIT_STREAK_THRESHOLD, same spirit as
+    // playerParalyzedTurns above. enemyHasSpecialAttack is a bare boolean, never the attack's own
+    // name/effect/amount — those stay hidden until it actually fires (see action.post.js's
+    // `specials` round events), this is only enough for a "something's coming" warning pulse.
+    enemyHitStreak: battle.enemyHitStreak || 0,
+    enemyHasSpecialAttack: !!battle.enemyMember?.faction?.specialAttack,
     // Rounds left where the player can't act at all (set by the enemy's own PARALYZE_OPPONENT
     // special) — surfaced so the UI can explain why their moves (including an already-charged
     // special) are about to whiff, rather than that just appearing to happen with no warning.
     playerParalyzedTurns: battle.playerParalyzedTurns || 0,
+    // See CMoonEnemyBattle.playerStamina/playerMaxStamina's own schema comment — playerMaxStamina
+    // <= 0 means the mechanic is off for this battle (the UI shows nothing and never disables the
+    // attack buttons), either an admin-disabled feature or a pre-this-feature historical row.
+    playerStamina: battle.playerStamina || 0,
+    playerMaxStamina: battle.playerMaxStamina || 0,
     playerSpecialAttack: specialAttack
       ? {
           id: specialAttack.id,

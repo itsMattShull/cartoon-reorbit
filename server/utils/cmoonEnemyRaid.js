@@ -149,6 +149,12 @@ export function resolveRaidRound({ enemyAction, enemyMember, participants, party
     return {
       userId, action, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked,
       playerCrit, enemyCrit, hpRemaining: newHp, knockedOut: newHp <= 0,
+      // Display-only, same reasoning/shape as the solo battle's own roundEntry.playerDamage/
+      // enemyDamage (see resolveRound's own comment) — the floating damage-number UI reads
+      // these directly instead of re-deriving "1, or 2 on a crit" client-side. playerDamage is
+      // damage dealt TO THIS PARTICIPANT (by the enemy); enemyDamage is damage THIS
+      // PARTICIPANT dealt to the enemy — always 0 when that side didn't land a hit.
+      playerDamage, enemyDamage,
     }
   })
 

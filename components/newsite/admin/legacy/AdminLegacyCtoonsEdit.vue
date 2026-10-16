@@ -20,8 +20,8 @@
             </div>
 
             <div class="flex flex-col gap-1">
-              <label class="text-xs font-medium">Upload New Image (PNG or GIF)</label>
-              <input type="file" accept="image/png,image/gif" @change="handleNewFile" class="text-xs" />
+              <label class="text-xs font-medium">Upload New Image (PNG, GIF, or AVIF)</label>
+              <input type="file" accept="image/png,image/gif,image/avif,.avif" @change="handleNewFile" class="text-xs" />
               <p class="text-[11px] text-gray-500">Optional. If set, the image and type will update. A timestamped filename will bypass cache.</p>
               <p v-if="err.image" class="text-red-600 text-[11px] mt-1">{{ err.image }}</p>
               <div v-if="newImagePreview" class="mt-1">
@@ -846,7 +846,7 @@ function effectFromServerShape(e) {
   // Keep the exact server-side effect: the editable row only covers part of the schema (several
   // filters, character lists, OR/AND conditions, slot/opposite checks...), so an untouched row is
   // saved from this copy instead of being rebuilt from the row's fields.
-  ui._raw = JSON.parse(JSON.stringify(eff))
+  ui._raw = JSON.parse(JSON.stringify(e))
   ui._sig = uiEffectSig(ui)
   return ui
 }
@@ -1098,8 +1098,14 @@ onMounted(async ()=>{
           const res = await $fetch('/api/admin/oggtoons/power-catalog')
           powerCatalog.value = res.catalog || []
         }
-        const stored = JSON.stringify(ctoon.gtoonEffect)
-        const match = powerCatalog.value.find(p => JSON.stringify(p.effect) === stored)
+        // Compare with sorted keys: the DB's JSON column returns keys in a different order than the catalog.
+        const canon = v => JSON.stringify(v, (_k, val) => (
+          val && typeof val === 'object' && !Array.isArray(val)
+            ? Object.fromEntries(Object.keys(val).sort().map(k => [k, val[k]]))
+            : val
+        ))
+        const stored = canon(ctoon.gtoonEffect)
+        const match = powerCatalog.value.find(p => canon(p.effect) === stored)
         if (match) selectedPowerDescription.value = match.description
       } catch { /* non-fatal: combobox just stays on "No Power" */ }
     }
@@ -1150,8 +1156,8 @@ function handleNewFile(e){
   err.image = ''
   const file = e.target.files?.[0]
   if (!file){ newImageFile.value = null; newImagePreview.value = ''; return }
-  if (!['image/png','image/gif'].includes(file.type)){
-    err.image = 'Only PNG or GIF files allowed.'
+  if (!['image/png','image/gif','image/avif'].includes(file.type)){
+    err.image = 'Only PNG, GIF, or AVIF files allowed.'
     return
   }
   newImageFile.value = file
@@ -1232,7 +1238,7 @@ async function submitForm(){
     fd.append('gtoonGroup', isOgGtoon.value ? gtoonGroup.value : '')
 
     // advisory schedule fields
-    fd.append('initialReleaseAt', releaseDate.value ? new Date(releaseDate.value).toISOString() : '')
+    fd.append('initialReleaseAt', releaseDate.value ? zonedTimeToUtc(releaseDate.value, 'America/Chicago').toISOString() : '')
     fd.append('finalReleaseAt', schedule.value.finalAt ? schedule.value.finalAt.toISOString() : '')
     fd.append('initialReleaseQty', schedule.value.initialQty ?? '')
     fd.append('finalReleaseQty', schedule.value.finalQty ?? '')
@@ -1303,7 +1309,7 @@ async function submitForm(){
     gtoonGroup:  isOgGtoon.value ? (gtoonGroup.value || null) : null,
 
     // advisory schedule fields
-    initialReleaseAt: releaseDate.value ? new Date(releaseDate.value).toISOString() : null,
+    initialReleaseAt: releaseDate.value ? zonedTimeToUtc(releaseDate.value, 'America/Chicago').toISOString() : null,
     finalReleaseAt:   schedule.value.finalAt ? schedule.value.finalAt.toISOString() : null,
     initialReleaseQty: schedule.value.initialQty ?? null,
     finalReleaseQty:   schedule.value.finalQty ?? null,

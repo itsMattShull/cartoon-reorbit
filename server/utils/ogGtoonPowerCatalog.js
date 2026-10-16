@@ -269,3 +269,100 @@ export function powerDescriptionFor(effect) {
   }
   return byEffect.get(canonical(effect)) || null
 }
+
+/* ── Plain-English fallback ───────────────────────────────────────────────────────────────
+ * powerDescriptionFor() only recognizes an effect that is byte-for-byte a catalog entry. A card whose
+ * effect was hand-built (or otherwise differs) would have no text to show, so describeEffects() renders
+ * any effect array from the schema in ogGtoonEffects.js as a readable sentence for the info modal. */
+const titleCase = (s) => String(s).toLowerCase().split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')
+const nameList = (v) => (Array.isArray(v) ? v : [v]).filter(Boolean).join(' or ')
+
+function clauseText(c) {
+  if (!c) return ''
+  if (c.by === 'anyOf') return (c.value || []).map(clauseText).filter(Boolean).join(' or ')
+  if (c.by === 'value') return `printed ${c.value}`
+  if (c.by === 'character') return nameList(c.value)
+  return titleCase(c.value)
+}
+
+function filtersText(list) {
+  return (list || []).map(clauseText).filter(Boolean).join(' ')
+}
+
+function targetText(t = {}) {
+  switch (t.selector) {
+    case 'self': return 'this card'
+    case 'ownActiveCard': return 'your card'
+    case 'opponentActiveCard': return 'the opposing card'
+    case 'allOwnRevealed': return 'all your cards'
+    case 'allOpponentRevealed': return "all of your opponent's cards"
+    case 'cardByCharacter': return nameList(t.character)
+    case 'neighborOwn': {
+      const f = filtersText(t.filter ? (t.filter.filters || [t.filter]) : [])
+      const pos = Array.isArray(t.positions) && t.positions.length === 1
+        ? (t.positions[0] === 'prev' ? 'the previous' : 'the next') + (f ? ` ${f}` : '') + ' card'
+        : `each neighboring${f ? ` ${f}` : ''} card`
+      return pos
+    }
+    case 'allMatching': {
+      const f = filtersText(t.filters)
+      const side = t.scope === 'own' ? ' on your side' : t.scope === 'opponent' ? " on your opponent's side" : ''
+      return `all${t.excludeSelf ? ' other' : ''}${f ? ` ${f}` : ''} cards${side}`
+    }
+    default: return 'this card'
+  }
+}
+
+function conditionText(c) {
+  if (!c) return ''
+  const where = c.adjacentOnly ? 'next to this card' : c.oppositeOnly ? 'opposite this card' : 'in play'
+  const other = c.excludeSelf ? 'other ' : ''
+  switch (c.type) {
+    case 'characterInPlay': return `${nameList(c.character)} is ${where}`
+    case 'typeInPlay': return `any ${other}${titleCase(c.cardType)} is ${where}`
+    case 'groupInPlay': return `any ${other}${titleCase(c.group)} member is ${where}`
+    case 'colorInPlay': return `any ${other}${titleCase(c.color)} card is ${where}`
+    case 'valueInPlay': return `a card with value ${c.value} is ${where}`
+    case 'targetLacksType': return `the target is not a ${titleCase(c.cardType)}`
+    case 'targetHasType': return `the target is a ${titleCase(c.cardType)}`
+    case 'slotIs': return c.slot === 7 ? 'played as the last card' : `played in slot ${c.slot}`
+    default: return ''
+  }
+}
+
+function effectText(e) {
+  const a = e?.action || {}
+  const target = targetText(e?.target)
+  const self = e?.target?.selector === 'self'
+  let text
+  if (a.type === 'setColor') {
+    text = `${target} becomes ${titleCase(a.color)}`
+  } else if (a.type === 'negateEffect') {
+    text = `${target} loses its power`
+  } else if (a.type === 'negateAdjacency') {
+    text = `${target} loses all adjacency effects`
+  } else {
+    const n = Number(a.amount)
+    const amt = a.operation === 'multiply' ? `x${n}` : a.operation === 'set' ? `Set to ${n}` : `${n >= 0 ? '+' : '−'}${Math.abs(n)}`
+    const pm = a.perMatch
+    const per = pm
+      ? ` for each ${pm.excludeSelf ? 'other ' : ''}${filtersText(pm.filters || [pm])}${pm.scope === 'neighborOwn' ? ' next to it' : pm.scope === 'own' ? ' on your side' : pm.scope === 'opponent' ? " on your opponent's side" : ' in play'}`
+      : ''
+    text = a.operation === 'set'
+      ? `${self ? 'This card is' : `${target} are`} ${amt.toLowerCase()}${per}`
+      : `${amt}${per}${self ? '' : ` to ${target}`}`
+  }
+  const cond = conditionText(e?.condition)
+  return cond ? `${text} if ${cond}` : text
+}
+
+/** Plain-English text for any effect array (null when there is nothing to describe). */
+export function describeEffects(effect) {
+  if (!Array.isArray(effect) || effect.length === 0) return null
+  try {
+    const out = effect.map(effectText).map(s => s.charAt(0).toUpperCase() + s.slice(1))
+    return out.join('. ')
+  } catch {
+    return null
+  }
+}

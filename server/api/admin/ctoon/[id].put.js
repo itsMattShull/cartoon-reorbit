@@ -89,6 +89,11 @@ export default defineEventHandler(async (event) => {
   if (!rarity)         throw createError({ statusCode: 400, statusMessage: 'Rarity required.' })
 
   const newReleaseDate = new Date(releaseDate)
+  let finalDelayHours = 12
+  try {
+    const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { finalReleaseDelayHours: true } })
+    if (typeof cfg?.finalReleaseDelayHours === 'number') finalDelayHours = cfg.finalReleaseDelayHours
+  } catch {}
   if (isNaN(newReleaseDate)) throw createError({ statusCode: 400, statusMessage: 'Invalid release date.' })
 
   // Validated before any file I/O so a bad cMoonId never leaves an orphaned
@@ -247,8 +252,9 @@ export default defineEventHandler(async (event) => {
     secondEditionOverlaySize: secondEdition.secondEditionOverlaySize,
 
     // advisory schedule fields
-    initialReleaseAt: initialReleaseAt ? new Date(initialReleaseAt) : null,
-    finalReleaseAt:   finalReleaseAt   ? new Date(finalReleaseAt)   : null,
+    // server-authoritative: derived from releaseDate + configured delay
+    initialReleaseAt: newReleaseDate,
+    finalReleaseAt:   new Date(newReleaseDate.getTime() + finalDelayHours * 60 * 60 * 1000),
     initialReleaseQty: initialReleaseQty == null || initialReleaseQty === '' ? null : Number(initialReleaseQty),
     finalReleaseQty:   finalReleaseQty   == null || finalReleaseQty   === '' ? null : Number(finalReleaseQty),
 
@@ -261,8 +267,8 @@ export default defineEventHandler(async (event) => {
 
   // 7) Optional image save with timestamped filename
   if (imagePart) {
-    if (!['image/png','image/gif'].includes(imagePart.type)) {
-      throw createError({ statusCode: 400, statusMessage: 'PNG or GIF only.' })
+    if (!['image/png','image/gif','image/avif'].includes(imagePart.type)) {
+      throw createError({ statusCode: 400, statusMessage: 'PNG, GIF, or AVIF only.' })
     }
 
     const { phash, dhash } = await computeMultiHash(imagePart.data)

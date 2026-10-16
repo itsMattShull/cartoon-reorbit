@@ -30,7 +30,7 @@ export default defineEventHandler(async (event) => {
   // while) instead of leaving the player permanently soft-locked out of ever fighting again.
   const existing = await db.cMoonEnemyBattle.findFirst({
     where: { userId, status: 'IN_PROGRESS' },
-    include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } }, cMoon: { include: { specialAttack: true } } },
+    include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
   })
   if (existing) {
     const idleMs = Date.now() - existing.lastActionAt.getTime()
@@ -56,7 +56,7 @@ export default defineEventHandler(async (event) => {
 
   const enemyMember = await db.cMoonEnemyMember.findUnique({
     where: { id: enemyMemberId },
-    include: { faction: { include: { appearEffect: true } } },
+    include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } },
   })
   if (!enemyMember || !enemyMember.active || !enemyMember.faction.active) {
     throw createError({ statusCode: 404, statusMessage: 'That enemy is no longer available' })
@@ -96,6 +96,10 @@ export default defineEventHandler(async (event) => {
   // Snapshotted once at battle-start — see CMoonEnemyBattle.playerMaxHp's own schema comment on
   // why this is never re-read live mid-fight.
   const playerMaxHp = await getPlayerCombatMaxHp(userId, config)
+  // Same snapshot-at-start timing as playerMaxHp above — see
+  // CMoonEnemyBattle.playerMaxStamina's own schema comment. Floored at 0 (never negative), which
+  // also naturally disables the mechanic for this battle if an admin has set it to 0 or less.
+  const playerMaxStamina = Math.max(0, Number(config?.cMoonEnemyBattleStartingStamina) || 0)
 
   let battle
   try {
@@ -107,17 +111,30 @@ export default defineEventHandler(async (event) => {
         playerHpRemaining: playerMaxHp,
         playerMaxHp,
         enemyHpRemaining,
+        playerStamina: playerMaxStamina,
+        playerMaxStamina,
         activeUserId: userId,
       },
-      include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } }, cMoon: { include: { specialAttack: true } } },
+      include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
     })
+    // Engagement signal for the popup cooldown/spawn-cap — see User.lastCMoonBattlePopupAt and
+    // CMoonEnemyPopupLog's own schema comments on why this moved here from consider.post.js's own
+    // offer-time write: only an actual "Fight!" should cost a cooldown/cap slot, never a merely-
+    // offered-then-declined popup. Only reached on the success path above (a genuinely NEW
+    // battle), never for a resumed battle (the early-return further up) or the P2002 race-loser
+    // branch below, both of which already had their own engagement stamped when THAT battle
+    // actually started.
+    await Promise.all([
+      db.user.update({ where: { id: userId }, data: { lastCMoonBattlePopupAt: new Date() } }),
+      db.cMoonEnemyPopupLog.create({ data: { userId } }),
+    ])
   } catch (err) {
     // Lost a race against another concurrent /start call for this same user (activeUserId is
     // @unique) — hand back whichever one actually won rather than erroring.
     if (err?.code === 'P2002') {
       const winner = await db.cMoonEnemyBattle.findFirst({
         where: { userId, status: 'IN_PROGRESS' },
-        include: { enemyMember: { include: { faction: { include: { appearEffect: true } } } }, cMoon: { include: { specialAttack: true } } },
+        include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
       })
       if (winner) return { battle: serializeBattleForClient(winner) }
     }

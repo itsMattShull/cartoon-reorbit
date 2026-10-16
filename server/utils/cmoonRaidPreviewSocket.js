@@ -130,7 +130,7 @@ function startCombat(io, raid) {
 }
 
 function openRound(io, raid) {
-  raid.currentEnemyAction = rollEnemyAction()
+  raid.currentEnemyAction = rollEnemyAction(raid.enemyStats.attackChancePercent)
   raid.roundDeadlineAt = Date.now() + ROUND_TIMEOUT_SECONDS * 1000
   for (const p of raid.participants.values()) {
     if (!p.knockedOutAt) p.pendingAction = null
@@ -276,6 +276,7 @@ export function registerCMoonRaidPreview(io, socket, resolveSocketUser) {
           critChanceAgainstPercent: enemyMember.critChanceAgainstPercent,
           critChanceFromPercent: enemyMember.critChanceFromPercent,
           cMoonPointsReward: enemyMember.cMoonPointsReward,
+          attackChancePercent: enemyMember.attackChancePercent,
         },
         defaultMaxHp,
         status: 'FORMING', enemyHpRemaining: enemyMember.maxHp, roundNumber: 1,
