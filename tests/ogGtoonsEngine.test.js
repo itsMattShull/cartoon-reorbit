@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   deriveGoalColor, validateDeckPositions, canSwap, applySwap, SWAP_COST, determineWinner,
   slotsForRound, isSuddenDeathRound, dealOpeningHand, discardAndDeal, swapForRandomUndealt,
-  shuffled, HAND_SIZE, REGULATION_SLOTS
+  shuffled, HAND_SIZE, REGULATION_SLOTS, assignRandomGoals
 } from '../server/utils/ogGtoonEngine.js'
 import {
   resolveRoundEffects, resolveFinalBoard, isValidEffect, validateEffectSchema
@@ -587,4 +587,24 @@ test('assignRandomGoals picks one random card from each deck as that player\'s g
   // Matches without goalCardIdx (legacy) still use slot 11.
   const legacy = { deckOrder: [new Array(12).fill(null).map((_, i) => ({ name: `c${i}` })), []] }
   assert.equal(goalCardFor(legacy, 0).name, 'c11')
+})
+
+test('assignRandomGoals: a deck with only Black/Silver cards has no target color', () => {
+  const deck = Array.from({ length: 12 }, (_, i) => ({ color: i % 2 ? 'BLACK' : 'SILVER' }))
+  const match = assignRandomGoals({ deckOrder: [deck, deck] })
+  assert.deepEqual(match.goalCardIdx, [null, null])
+  assert.deepEqual(match.goalColor, ['BLACK', 'BLACK'])
+})
+
+test('determineWinner: both players reveal the same color -> one target color, +15 bonus, points decide', () => {
+  const card = (color, v) => ({ color, finalValue: v })
+  const out = determineWinner({
+    player1GoalColor: 'RED', player2GoalColor: 'RED',
+    player1Revealed: [card('RED', 1), card('RED', 1), card('BLUE', 1)],
+    player2Revealed: [card('RED', 20), card('BLUE', 10)]
+  })
+  assert.equal(out.reason, 'total_value')
+  assert.equal(out.bonus.player, 'player1')
+  assert.equal(out.player1Score, 18)
+  assert.equal(out.winner, 'player2')
 })
