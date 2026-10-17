@@ -557,7 +557,7 @@ const helpText = computed(() => {
   }
   if (m.phase === 'swap') {
     return m.you.maySwap
-      ? 'Slot 7 is still face down. Swap your slot-7 card for a random card from your deck (10 points), or keep it. Both slot-7 cards are revealed once you have both decided. If time runs out you keep it.'
+      ? `Swap your slot-7 card for a random card from your deck, or keep it. ${isPractice.value ? 'Swapping is free in practice.' : 'Swapping costs you 10 points.'} Keeping it is free. Slot 7 stays face down for your opponent until you have both decided. If time runs out you keep it.`
       : (m.you.swapReady ? 'Waiting for your opponent to choose...' : 'You have no cards left in your deck to swap with.')
   }
   if (m.you.ready) return 'Your cards are face down. They flip, in slot order, when your opponent commits.'
