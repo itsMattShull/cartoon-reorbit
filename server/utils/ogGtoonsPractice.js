@@ -14,7 +14,7 @@
 //
 // ── Practice never awards, spends or records points ─────────────────────────────────────────
 //   • No stake: the match is created with stake [0, 0]; there is no stake input at all.
-//   • The round-3 slot-7 swap is free and handled purely in memory — PvP's debit path is not reachable from here.
+//   • The round-3 slot-7 swap costs 10 points off the match score (as in PvP) but never touches the points balance; it is handled purely in memory.
 //   • Nothing is persisted. In particular no OgGtoonMatch row is written, which is also what keeps
 //     practice out of the leaderboard (it is computed from that table).
 //   • This module deliberately does not import Prisma, gamePoints or any points/match-writing
@@ -432,8 +432,8 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
     await resolveRound(io, match, d)
   })
 
-  // Round-3 slot-7 swap. Free in practice: there is no balance check and no debit — the PvP debit
-  // path is not reachable from here. Held until the bot has chosen too, like PvP.
+  // Round-3 slot-7 swap. Costs 10 off the match score like PvP, with no balance check or debit.
+  // Held until the bot has chosen too, like PvP.
   socket.on(EV('swap'), async () => {
     const match = await liveMatch()
     if (!match) return

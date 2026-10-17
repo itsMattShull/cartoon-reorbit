@@ -30,7 +30,7 @@ import { resolveFinalBoard } from './ogGtoonEffects.js'
 import {
   determineWinner, recolorSilver, isRealColor, REAL_COLORS, COLOR_MS, hasSuddenDeathCardsRemaining, dealOpeningHand, discardAndDeal,
   goalCardFor, targetColorsOf, slotsForRound, isSuddenDeathRound, shuffled, REGULATION_ROUNDS, DISCARD_AFTER_ROUND,
-  SWAP_AFTER_ROUND, REGULATION_SLOTS, PLACE_MS, DISCARD_MS, SWAP_MS
+  SWAP_AFTER_ROUND, SWAP_SCORE_PENALTY, REGULATION_SLOTS, PLACE_MS, DISCARD_MS, SWAP_MS
 } from './ogGtoonEngine.js'
 
 export const TOTAL_ROUNDS = REGULATION_ROUNDS
@@ -200,7 +200,7 @@ export function startPhaseClock(match, now = Date.now()) {
     ] }] })
   } else if (match.phase === 'swap') {
     logEvent(match, { kind: 'phase', title: 'Round 3 — slot-7 swap', sections: [{ label: null, lines: [
-      `Optional: replace your slot-7 card with a random undealt card (${match.practice ? 'free in practice' : '10 points'}). ${secs}s (no swap if time runs out).`
+      `Optional: replace your slot-7 card with a random undealt card (costs ${SWAP_SCORE_PENALTY} points off your match score). ${secs}s (no swap if time runs out).`
     ] }] })
   } else {
     const slots = slotsForRound(match.currentRound)
@@ -373,6 +373,11 @@ export function autoFillPlacements(match, idx, rng = Math.random) {
 
 /* ── Round-3 slot-7 swap ─────────────────────────────────────────────────────────────────── */
 
+/** Match-score penalty for each side: SWAP_SCORE_PENALTY once they have swapped their slot-7 card. */
+function swapPenalties(match) {
+  return { player1Penalty: match.swapUsed?.[0] ? SWAP_SCORE_PENALTY : 0, player2Penalty: match.swapUsed?.[1] ? SWAP_SCORE_PENALTY : 0 }
+}
+
 /** Whether a card placed in `slot` this round stays face down until the swap phase is settled. */
 function holdsBack(match, slot) {
   return slot === REGULATION_SLOTS && match.currentRound === SWAP_AFTER_ROUND
@@ -543,7 +548,7 @@ export function autoSilverColor(match, idx) {
     const o = determineWinner({
       player1GoalColor: match.goalColor[0], player2GoalColor: match.goalColor[1],
       player1Revealed: final.player1.revealed, player2Revealed: final.player2.revealed,
-      player1SilverColor: silvers[0], player2SilverColor: silvers[1]
+      player1SilverColor: silvers[0], player2SilverColor: silvers[1], ...swapPenalties(match)
     })
     const mine = idx === 0 ? o.player1Score : o.player2Score
     const other = idx === 0 ? o.player2Score : o.player1Score
@@ -713,7 +718,8 @@ export function runFinalBoardResolution(match) {
     player1Revealed: final.player1.revealed,
     player2Revealed: final.player2.revealed,
     player1SilverColor: silvers[0],
-    player2SilverColor: silvers[1]
+    player2SilverColor: silvers[1],
+    ...swapPenalties(match)
   })
   return { outcome, final }
 }
@@ -946,6 +952,7 @@ function logFinalScoring(match, outcome, final, continues) {
   const d = describeBoard(match, final)
   const [n0, n1] = [nameOfSide(match, 0), nameOfSide(match, 1)]
   const totals = [`${n0}: ${outcome.player1Score}   ${n1}: ${outcome.player2Score}`]
+  for (const i of [0, 1]) if (match.swapUsed?.[i]) totals.push(`${nameOfSide(match, i)} loses ${SWAP_SCORE_PENALTY} points for swapping slot 7.`)
   if (outcome.bonus) totals.push(`${nameOfSide(match, outcome.bonus.player === 'player1' ? 0 : 1)} gets +15 for holding more ${COLOR_WORD(outcome.bonus.color)} cards.`)
   const verdict = outcome.winner === null
     ? (continues ? 'Tied — sudden death.' : 'Tied — no cards left to break it.')

@@ -977,3 +977,15 @@ test('practice module imports only the allow-listed modules', () => {
     './ogGtoonsConfig.js', './ogGtoonDeck.js', 'crypto'
   ].sort())
 })
+
+test('core: a slot-7 swap takes 10 off the swapper\'s match score, only for the side that swapped', () => {
+  const m = playToSwapPhase(freshMatch(makeDeck({ goal: 'BLACK' }), makeDeck({ goal: 'BLACK' })))
+  recordSwapChoice(m, 0, true); recordSwapChoice(m, 1, false)
+  resolveSwapPhase(m, seeded(3))
+  const raw = (i) => m.revealed[i].reduce((a, r) => a + r.finalValue, 0)
+  const end = checkMatchEnd(m)
+  const res = end || runFinalBoardResolution(m).outcome
+  const [s1, s2] = end ? [end.player1Score, end.player2Score] : [res.player1Score, res.player2Score]
+  assert.equal(s1, raw(0) - 10)
+  assert.equal(s2, raw(1))
+})

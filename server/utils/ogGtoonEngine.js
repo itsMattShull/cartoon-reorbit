@@ -188,6 +188,8 @@ export function canSwap({ swapUsed, pointBalance, roundRevealed }) {
 }
 
 export const SWAP_COST = 10
+/** Taken off a side's match score (not its points balance) when it swaps its slot-7 card. */
+export const SWAP_SCORE_PENALTY = SWAP_COST
 
 /**
  * LEGACY fixed-order swap (kept for its unit tests; matches no longer use deck order).
@@ -235,6 +237,8 @@ function countColor(revealed, color) {
  * @param {Array<{finalValue:number,color:string}>} params.player2Revealed
  * @param {string} [params.player1SilverColor] real colour player 1's (still Silver) cards count as
  * @param {string} [params.player2SilverColor]
+ * @param {number} [params.player1Penalty] taken off player 1's score (slot-7 swap)
+ * @param {number} [params.player2Penalty]
  * @returns {{ winner: 'player1'|'player2'|null, reason: string, player1Score: number,
  *             player2Score: number, bonus: object|null }}
  *   winner === null means a genuine tie (sudden death should continue, or if both decks are
@@ -242,7 +246,8 @@ function countColor(revealed, color) {
  */
 export function determineWinner({
   player1GoalColor, player2GoalColor, player1Revealed: p1Raw, player2Revealed: p2Raw,
-  player1SilverColor = null, player2SilverColor = null
+  player1SilverColor = null, player2SilverColor = null,
+  player1Penalty = 0, player2Penalty = 0
 }) {
   // Silver is colourless until its owner picks a colour: it then counts as that colour for the
   // goal-colour counts below (values are untouched).
@@ -251,8 +256,9 @@ export function determineWinner({
   const p1Total = sum(player1Revealed.map(r => r.finalValue))
   const p2Total = sum(player2Revealed.map(r => r.finalValue))
 
-  let player1Score = p1Total
-  let player2Score = p2Total
+  // Points taken off a side's match score (the slot-7 swap fee); never touches the points balance.
+  let player1Score = p1Total - (player1Penalty || 0)
+  let player2Score = p2Total - (player2Penalty || 0)
   let bonus = null
 
   const targets = targetColorsOf([player1GoalColor, player2GoalColor])

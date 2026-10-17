@@ -227,10 +227,10 @@
               <strong>random</strong> undealt card takes slot 7.
             </p>
           </div>
-          <p class="text-xs text-gray-400 mb-3">{{ isPractice ? 'Free in practice.' : 'Costs 10 points.' }} You can only do this once per match. Both players choose before the new cards are revealed.</p>
+          <p class="text-xs text-gray-400 mb-3">Costs 10 points off your match score. You can only do this once per match. Both players choose before the new cards are revealed.</p>
           <div class="flex justify-end gap-2">
             <button @click="closeSwapSheet" class="px-4 py-2 bg-gray-700 rounded text-sm">Cancel</button>
-            <button @click="confirmSwap" class="px-4 py-2 bg-indigo-500 rounded text-sm">{{ isPractice ? 'Swap' : 'Swap for 10 pts' }}</button>
+            <button @click="confirmSwap" class="px-4 py-2 bg-indigo-500 rounded text-sm">Swap (-10 points)</button>
           </div>
         </div>
       </transition>
@@ -557,7 +557,7 @@ const helpText = computed(() => {
   }
   if (m.phase === 'swap') {
     return m.you.maySwap
-      ? `Swap your slot-7 card for a random card from your deck, or keep it. ${isPractice.value ? 'Swapping is free in practice.' : 'Swapping costs you 10 points.'} Keeping it is free. Slot 7 stays face down for your opponent until you have both decided. If time runs out you keep it.`
+      ? `Swap your slot-7 card for a random card from your deck, or keep it. Swapping takes 10 points off your match score. Keeping it costs nothing. Slot 7 stays face down for your opponent until you have both decided. If time runs out you keep it.`
       : (m.you.swapReady ? 'Waiting for your opponent to choose...' : 'You have no cards left in your deck to swap with.')
   }
   if (m.you.ready) return 'Your cards are face down. They flip, in slot order, when your opponent commits.'

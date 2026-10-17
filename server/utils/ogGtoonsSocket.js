@@ -41,7 +41,7 @@
 
 import { randomUUID, randomInt } from 'crypto'
 import { prisma as db } from '../prisma.js'
-import { assignRandomGoals, SWAP_COST } from './ogGtoonEngine.js'
+import { assignRandomGoals } from './ogGtoonEngine.js'
 import {
   publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd, buildRoundLog,
   placeCard, unplaceSlot, checkCommit, checkSwap, recordSwapChoice, resolveSwapPhase, expirePhase,
@@ -762,7 +762,8 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     emitStateTo(io, side.match, side.idx)
   })
 
-  // Round-3 swap: pay to replace the card in slot 7 with a random undealt one. The choice is held
+  // Round-3 swap: replace the card in slot 7 with a random undealt one. The 10-point fee comes off the
+  // match score at scoring (never the points balance). The choice is held
   // until both players have made theirs, so neither sees the other's result first.
   socket.on(EV('swap'), async () => {
     const side = await liveSide()
@@ -770,34 +771,8 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     const { user, match, idx } = side
     const check = checkSwap(match, idx)
     if (!check.ok) return reject(check)
-    try {
-      await db.$transaction(async tx => {
-        const pts = await tx.userPoints.findUnique({ where: { userId: user.id } })
-        if ((pts?.points ?? 0) < SWAP_COST) throw new Error('INSUFFICIENT_SWAP_BALANCE')
-        const after = await tx.userPoints.update({ where: { userId: user.id }, data: { points: { decrement: SWAP_COST } } })
-        await tx.pointsLog.create({ data: { userId: user.id, points: SWAP_COST, total: after.points, method: POINTS_METHOD, direction: 'decrease' } })
-      })
-    } catch (err) {
-      if (String(err?.message) === 'INSUFFICIENT_SWAP_BALANCE') {
-        return socket.emit(EV('error'), { code: 'insufficient_points', message: `You need ${SWAP_COST} points to swap.` })
-      }
-      console.error('[ogGtoons] swap debit failed:', err)
-      return socket.emit(EV('error'), { code: 'swapFailed', message: 'Could not process the swap.' })
-    }
-    // The debit above awaited, so the phase may have timed out meanwhile; recordSwapChoice
-    // re-validates, and a swap that no longer applies is refunded.
     const res = recordSwapChoice(match, idx, true)
-    if (!res.ok) {
-      try {
-        await db.$transaction(async tx => {
-          const back = await tx.userPoints.update({ where: { userId: user.id }, data: { points: { increment: SWAP_COST } } })
-          await tx.pointsLog.create({ data: { userId: user.id, points: SWAP_COST, total: back.points, method: POINTS_METHOD, direction: 'increase' } })
-        })
-      } catch (err) {
-        console.error('[ogGtoons] swap refund failed:', err)
-      }
-      return reject(res)
-    }
+    if (!res.ok) return reject(res)
     match.lastActivity = Date.now()
     fireSync(match.id, match)
     socket.emit(EV('swapApplied'), { matchId: match.id })

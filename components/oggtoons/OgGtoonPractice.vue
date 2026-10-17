@@ -4,8 +4,8 @@
 
     <div class="mb-4 p-3 bg-amber-500/10 border border-amber-400/60 rounded text-sm">
       <strong>Practice Mode</strong> — play a full match against a computer opponent that uses a
-      shuffled copy of your deck. <strong>No points are won, lost or staked</strong>, swaps are
-      free, and practice matches don't count toward the leaderboard.
+      shuffled copy of your deck. <strong>No points are won, lost or staked</strong>, a slot-7 swap
+      still takes 10 off your match score, and practice matches don't count toward the leaderboard.
     </div>
 
     <div v-if="loadingDecks" class="h-24 bg-white/20 rounded animate-pulse mb-4"></div>
