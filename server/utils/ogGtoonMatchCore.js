@@ -30,7 +30,7 @@ import { resolveFinalBoard } from './ogGtoonEffects.js'
 import {
   determineWinner, recolorSilver, isRealColor, REAL_COLORS, COLOR_MS, hasSuddenDeathCardsRemaining, dealOpeningHand, discardAndDeal,
   goalCardFor, targetColorsOf, slotsForRound, isSuddenDeathRound, shuffled, REGULATION_ROUNDS, DISCARD_AFTER_ROUND,
-  SWAP_AFTER_ROUND, PLACE_MS, DISCARD_MS, SWAP_MS
+  SWAP_AFTER_ROUND, REGULATION_SLOTS, PLACE_MS, DISCARD_MS, SWAP_MS
 } from './ogGtoonEngine.js'
 
 export const TOTAL_ROUNDS = REGULATION_ROUNDS
@@ -159,6 +159,7 @@ export function initHands(match, rng = Math.random) {
   match.silverColor = [null, null]
   match.colorDone = false
   match.revealed = [[], []]
+  match.held = [null, null]
   match.currentRound = 1
   logEvent(match, {
     kind: 'start', title: 'Match started',
@@ -250,6 +251,8 @@ export function publicMatchView(match, uid, opts = {}) {
       swapUsed: match.swapUsed[meIdx],
       stake: match.stake[meIdx],
       revealed: match.revealed[meIdx],
+      // Private: the owner's own face-down slot-7 card (what they are deciding whether to swap).
+      heldCard: match.held?.[meIdx] ? match.held[meIdx] : null,
       // Private: the owner always sees their own hand and where they have placed cards.
       hand: (match.hand?.[meIdx] || []).map(i => handCardView(match, meIdx, i)),
       placements: myPlacements.map(p => ({ slot: p.slot, cardIdx: p.cardIdx })),
@@ -272,6 +275,8 @@ export function publicMatchView(match, uid, opts = {}) {
       goalCard: goalCardView(match, oppIdx),
       swapUsed: match.swapUsed[oppIdx],
       revealed: match.revealed[oppIdx],
+      // Only that a slot-7 card is face down — never which one.
+      heldSlot: match.held?.[oppIdx] ? match.held[oppIdx].slot : null,
       handCount: (match.hand?.[oppIdx] || []).length,
       // Only WHICH slots the opponent has committed to (shown face down) — never which cards,
       // and nothing at all until they commit.
@@ -368,9 +373,14 @@ export function autoFillPlacements(match, idx, rng = Math.random) {
 
 /* ── Round-3 slot-7 swap ─────────────────────────────────────────────────────────────────── */
 
-/** The revealed entry sitting in the last regulation slot for side `idx`, if any. */
+/** Whether a card placed in `slot` this round stays face down until the swap phase is settled. */
+function holdsBack(match, slot) {
+  return slot === REGULATION_SLOTS && match.currentRound === SWAP_AFTER_ROUND
+}
+
+/** The side's slot-7 card, which stays hidden (held back from the board) until the swap phase settles. */
 function slotSevenEntry(match, idx) {
-  return match.revealed[idx].find(r => r.slot === 7) || null
+  return match.held?.[idx] || null
 }
 
 /** Whether `idx` can be offered the swap at all: a card in slot 7 and an undealt card to draw. */
@@ -430,21 +440,29 @@ export function resolveSwapPhase(match, rng = Math.random) {
       match.undealt[i] = match.undealt[i].slice()
       match.undealt[i][pick - handLen] = old.deckIdx
     }
-    const entry = toRevealEntry(match.deckOrder[i][drawnIdx], match.currentRound, old.slot, drawnIdx)
-    match.revealed[i] = match.revealed[i].map(r => (r === old ? entry : r))
-    entries[i].push(entry)
+    match.held[i] = toRevealEntry(match.deckOrder[i][drawnIdx], match.currentRound, old.slot, drawnIdx)
     match.swapUsed[i] = true
   }
+  // Only now do both slot-7 cards (kept or swapped) flip onto the board. The log names no cards
+  // until then, so the swap choice leaks nothing the opponent could use.
   const lines = []
   for (const i of [0, 1]) {
-    if (entries[i].length) {
-      const was = swapped[i]
-      lines.push(`${nameOfSide(match, i)} swapped slot 7: ${was.name} → ${entries[i][0].name}`)
-    } else if (match.revealed[i].some(r => r.slot === 7)) {
-      lines.push(`${nameOfSide(match, i)} kept their slot-7 card.`)
-    }
+    if (match.held[i]) lines.push(`${nameOfSide(match, i)} ${match.swapUsed[i] && swapped[i] ? 'swapped' : 'kept'} their slot-7 card.`)
   }
   logEvent(match, { kind: 'swap', title: 'Slot-7 swap', sections: [{ label: null, lines }] })
+  for (const i of [0, 1]) {
+    const e = match.held[i]
+    if (!e) continue
+    entries[i].push(e)
+    match.revealed[i].push(e)
+    match.revealed[i].sort((a, b) => a.slot - b.slot)
+    match.held[i] = null
+  }
+  const showCard = (e) => (e ? `${e.name} (${e.baseValue}, ${COLOR_WORD(e.color)})` : '—')
+  logEvent(match, {
+    kind: 'reveal', title: 'Slot 7 revealed',
+    sections: [{ label: null, lines: [`Slot 7: ${nameOfSide(match, 0)} ${showCard(entries[0][0])}  vs  ${nameOfSide(match, 1)} ${showCard(entries[1][0])}`] }]
+  })
   match.pendingSwap = [false, false]
   match.swapReady = [false, false]
   match.phase = 'play' // the caller either ends the match or advances into sudden death
@@ -810,6 +828,12 @@ export function revealPlacedCards(match) {
     for (const p of match.placements[i]) {
       const card = match.deckOrder[i][p.cardIdx]
       const entry = toRevealEntry(card, match.currentRound, p.slot, p.cardIdx)
+      if (holdsBack(match, p.slot)) {
+        // The last card stays face down until both players have decided whether to swap it.
+        if (!match.held) match.held = [null, null]
+        match.held[i] = entry
+        continue
+      }
       entries[i].push(entry)
       match.revealed[i].push(entry)
     }

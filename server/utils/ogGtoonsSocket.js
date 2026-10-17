@@ -529,6 +529,7 @@ export async function restoreOgGtoonsMatches(io) {
     // Same for a match saved before the 4/3 layout and the swap phase (no swapReady): its rounds
     // no longer line up with the board.
     if (!Array.isArray(match.hand) || !Array.isArray(match.swapReady)) initHands(match, secureRng)
+    if (!Array.isArray(match.held)) match.held = [null, null]
     if (!Array.isArray(match.colorReady)) {
       match.colorReady = [false, false]
       match.pendingColor = [null, null]

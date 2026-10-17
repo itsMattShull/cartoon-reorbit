@@ -141,7 +141,7 @@ async function botSwap(io, match, deps) {
   // Already done (nothing to swap) still falls through to settle: when neither side can be offered
   // a swap both start ready, and without this the phase would sit waiting until the timer died.
   if (!match.swapReady[1]) {
-    const slotSeven = match.revealed[1].find(r => r.slot === 7)
+    const slotSeven = match.held?.[1] || null
     const doSwap = chooseBotSwap({
       difficulty: match.difficulty,
       slotCard: slotSeven ? { value: slotSeven.baseValue, color: slotSeven.color } : null,

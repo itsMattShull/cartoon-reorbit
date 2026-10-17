@@ -15,9 +15,10 @@
 //   • Right after round 1 there is a discard phase: discard any number of cards still in hand,
 //     then the hand is refilled back up to 6 from the undealt cards (4 + n when 4 were played
 //     and n discarded). Discarded cards are out of the match.
-//   • Round 3 places nothing: after round 2 is revealed, each player may pay SWAP_COST to replace
+//   • Round 3 places nothing: slot 7 is NOT revealed with the rest of round 2 — it stays face down (the
+//     owner can see their own). Each player may pay SWAP_COST to replace
 //     the card in slot 7 with a random undealt card (the old card returns to the undealt pile),
-//     or skip. Both choices resolve together, then the board is scored.
+//     or skip. Both choices resolve together, then both slot-7 cards flip and the board is scored.
 //   • A tie after the board is scored goes to sudden death: one extra slot (8, 9, ...) per round,
 //     each player placing exactly one card from whatever hand/undealt cards they have left.
 //   • Silver cards are colourless. After the swap and before scoring, each player who has a Silver

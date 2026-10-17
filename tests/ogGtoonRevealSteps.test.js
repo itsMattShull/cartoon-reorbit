@@ -112,9 +112,9 @@ test('a later round steps through its own cards on top of the earlier board', ()
   autoPlay(m, 0); autoPlay(m, 1)
   const { steps, before } = revealPlacedCards(m)
   assert.equal(before.cards.length, 8)                        // round 1's four-per-side board is already up
-  assert.equal(steps.length, 6)                               // slots 5-7, both players
+  assert.equal(steps.length, 4)                               // slots 5-6, both players; slot 7 waits for the swap phase
   assert.deepEqual(steps[0].cards.length, 9)
-  assert.deepEqual(steps.map(s => [s.side, s.slot]), [[0, 5], [1, 5], [0, 6], [1, 6], [0, 7], [1, 7]])
+  assert.deepEqual(steps.map(s => [s.side, s.slot]), [[0, 5], [1, 5], [0, 6], [1, 6]])
   // player 1's earlier cards are lifted again when a new player-1 card lands
   const slot1At = (s) => s.cards.find(c => c.side === 0 && c.slot === 1).finalValue
   assert.ok(slot1At(steps[0]) > slot1At(before))
@@ -133,7 +133,7 @@ test('duplicate gToons knock each other out as soon as the second copy is reveal
   assert.equal(firstOfAny.cards.every(c => !c.cancelled), true)
 })
 
-test('swap phase: only the swapped cards are stepped, in player order', () => {
+test('swap phase: both held slot-7 cards are stepped, in player order', () => {
   const m = freshMatch(makeDeck({ prefix: 'a' }), makeDeck({ prefix: 'b' }))
   autoPlay(m, 0); autoPlay(m, 1)
   revealPlacedCards(m); advanceRound(m)

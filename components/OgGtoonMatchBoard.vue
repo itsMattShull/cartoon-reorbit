@@ -446,19 +446,24 @@ const slotsFilled = computed(() => {
   if (!m) return false
   return placedCount.value >= Math.min((m.roundSlots || []).length, (m.you.hand || []).length)
 })
-const slotSevenCard = computed(() => youRevealed.value.find(r => r.slot === 7) || null)
+// Your slot-7 card stays face down on the board (visible only to you) until both players have decided on the swap.
+const slotSevenCard = computed(() => matchState.value?.you?.heldCard || youRevealed.value.find(r => r.slot === 7) || null)
 const roundSlots = computed(() => matchState.value?.roundSlots || [])
 const isOpenSlot = (slot) => canEdit.value && roundSlots.value.includes(slot)
 
 function yourSlotCard(slot) {
   const rev = revealedAt(youRevealed.value, slot)
   if (rev) return displayed(rev, youSide.value)
+  const held = matchState.value?.you?.heldCard
+  if (held && held.slot === slot) return held
   const idx = placementsBySlot.value.get(slot)
   return idx === undefined ? null : handById.value.get(idx) || null
 }
 function yourSlotFaceDown(slot) {
   const rev = revealedAt(youRevealed.value, slot)
   if (rev) return stillHidden(rev, youSide.value)
+  // Your held slot-7 card is shown to you (not face down) so you can decide whether to swap it.
+  if (matchState.value?.you?.heldCard?.slot === slot) return false
   // Committed (not yet revealed) cards show their back, even to their owner.
   return matchState.value?.you?.ready && placementsBySlot.value.has(slot)
 }
@@ -474,6 +479,7 @@ function oppSlotCard(slot) {
 function oppSlotFaceDown(slot) {
   const rev = revealedAt(oppRevealed.value, slot)
   if (rev) return stillHidden(rev, oppSide.value)
+  if (matchState.value?.opponent?.heldSlot === slot) return true
   return (matchState.value?.opponent?.committedSlots || []).includes(slot)
 }
 
@@ -551,7 +557,7 @@ const helpText = computed(() => {
   }
   if (m.phase === 'swap') {
     return m.you.maySwap
-      ? 'Last chance: swap the card in slot 7 for a random undealt card, or keep it. If time runs out you keep it.'
+      ? 'Slot 7 is still face down. Swap your slot-7 card for a random card from your deck (10 points), or keep it. Both slot-7 cards are revealed once you have both decided. If time runs out you keep it.'
       : (m.you.swapReady ? 'Waiting for your opponent to choose...' : 'You have no cards left in your deck to swap with.')
   }
   if (m.you.ready) return 'Your cards are face down. They flip, in slot order, when your opponent commits.'
