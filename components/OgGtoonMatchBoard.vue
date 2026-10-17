@@ -193,6 +193,26 @@
         </aside>
       </div>
 
+      <!-- Opening "how you win" modal, shown once at the start of a match -->
+      <transition name="fade">
+        <div v-if="introOpen && !matchEnded" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-3">
+          <div class="bg-gray-900 border border-white/20 rounded-xl p-5 w-[30rem] max-w-full max-h-[90vh] overflow-y-auto">
+            <h2 class="text-xl font-bold mb-1 text-center">How to win</h2>
+            <p class="text-xs text-gray-400 mb-3 text-center">Your goal colors are shown at the top of the board. What decides the game depends on them:</p>
+            <ul class="space-y-2 text-sm">
+              <li v-for="s in winScenarios" :key="s.key" class="rounded-lg border p-3" :class="s.key === introScenarioKey ? 'border-cyan-300/70 bg-cyan-300/10' : 'border-white/10 bg-black/20'">
+                <p class="font-semibold">{{ s.title }}<span v-if="s.key === introScenarioKey" class="ml-2 text-[10px] uppercase tracking-wide text-cyan-300">This match</span></p>
+                <p class="text-xs text-gray-300 mt-1">{{ s.text }}</p>
+              </li>
+            </ul>
+            <p class="text-xs text-gray-400 mt-3">Black and Silver cards are never a target color. Silver cards become a color of your choice before scoring. If it is still tied after points, sudden death adds one extra card each until someone leads.</p>
+            <div class="flex justify-center mt-4">
+              <button @click="introOpen = false" class="bg-indigo-500 hover:bg-indigo-600 px-6 py-2 rounded font-semibold">Let's Play</button>
+            </div>
+          </div>
+        </div>
+      </transition>
+
       <!-- Swap bottom sheet: confirm replacing slot 7 with a random undealt card -->
       <transition name="fade">
         <div v-if="swapSheetOpen" class="fixed inset-0 bg-black/50 z-40" @click="closeSwapSheet"></div>
@@ -668,6 +688,22 @@ watchEffect(() => {
   }
 })
 onBeforeUnmount(() => { sidebarState.value = null })
+
+/* ── Opening "how to win" modal ──────────────────────────────────────────────────────────── */
+const winScenarios = [
+  { key: 'two', title: 'Two different colors revealed', text: 'Whoever has the most cards of both colors combined wins outright, regardless of points. If the combined count is tied, the higher point total wins.' },
+  { key: 'one', title: 'One color revealed (or both the same)', text: 'The player with more cards of that color earns 15 bonus points. The higher point total then wins.' },
+  { key: 'none', title: 'No target color', text: 'The higher point total wins.' }
+]
+const introScenarioKey = computed(() => (goalColors.value.length >= 2 ? 'two' : goalColors.value.length === 1 ? 'one' : 'none'))
+const introOpen = ref(false)
+let introShown = false
+// Only at the start of a match: a reconnect mid-match (round > 1) skips it.
+watch(matchState, (m) => {
+  if (introShown || !m) return
+  introShown = true
+  if (m.round === 1 && !matchEnded.value) introOpen.value = true
+}, { immediate: true })
 </script>
 
 <style scoped>
