@@ -87,11 +87,19 @@ test('chooseBotDiscards: easy keeps everything; normal drops clearly weak cards 
 })
 
 test('chooseBotSwap: easy never swaps; nothing to swap with or no slot-7 card never swaps', () => {
-  const base = { slotCard: { value: 1, color: 'BLUE' }, undealt: handOf([9, 9]), goalColor: 'RED' }
+  const base = { slotCard: { value: 1, color: 'BLUE' }, undealt: handOf([25, 25]), goalColor: 'RED' }
   assert.equal(chooseBotSwap({ ...base, difficulty: 'easy' }), false)
   assert.equal(chooseBotSwap({ ...base, difficulty: 'normal', undealt: [] }), false)
   assert.equal(chooseBotSwap({ ...base, difficulty: 'normal', slotCard: null }), false)
   assert.equal(chooseBotSwap({ ...base, difficulty: 'normal' }), true)
+})
+
+test('chooseBotSwap: an upgrade smaller than the 10-point swap penalty (plus margin) is not worth it', () => {
+  const base = { slotCard: { value: 1, color: 'BLUE' }, goalColor: 'RED' }
+  assert.equal(chooseBotSwap({ ...base, difficulty: 'normal', undealt: handOf([9, 9]) }), false)    // +8 < 10
+  assert.equal(chooseBotSwap({ ...base, difficulty: 'normal', undealt: handOf([13, 13]) }), false)  // +12 < 10 + 3
+  assert.equal(chooseBotSwap({ ...base, difficulty: 'normal', undealt: handOf([14, 14]) }), true)   // +13 >= 10 + 3
+  assert.equal(chooseBotSwap({ ...base, difficulty: 'hard', undealt: handOf([13, 13]) }), true)     // +12 >= 10 + 2
 })
 
 test('chooseBotSwap: keeps a strong slot-7 card', () => {
