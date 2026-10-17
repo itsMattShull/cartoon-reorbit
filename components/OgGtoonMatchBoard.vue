@@ -9,6 +9,11 @@
       <div class="og-layout">
         <!-- Board: opponent on top, you on the bottom, call-to-action strip between -->
         <section class="og-arena">
+          <div v-if="sidebarState" class="og-pbar">
+            <span class="og-pbar-name">{{ sidebarState.opponent.name }}</span>
+            <span class="og-pbar-score">{{ sidebarState.opponent.score }}</span>
+            <span v-for="col in sidebarState.colors" :key="col.name" class="og-pbar-color"><i :style="{ background: col.hex }"></i>{{ sidebarState.opponent.counts[col.name] ?? 0 }}</span>
+          </div>
           <div class="og-plate og-plate-opp">
             <div class="og-row og-row-outer">
               <div v-for="n in outerSlots" :key="'opp-'+n" class="og-slot" @click="onBoardCardClick(oppSlotCard(n))">
@@ -86,6 +91,11 @@
                 <OgGtoonCardTile :card="yourSlotCard(n)" :face-down="yourSlotFaceDown(n)" :label="n" size="board" :inspectable="false" :tone="yourSlotTone(n)" :marker="markerFor(youSide, n, yourSlotCard(n), yourSlotFaceDown(n))" />
               </div>
             </div>
+          </div>
+          <div v-if="sidebarState" class="og-pbar">
+            <span class="og-pbar-name">{{ sidebarState.you.name }}</span>
+            <span class="og-pbar-score">{{ sidebarState.you.score }}</span>
+            <span v-for="col in sidebarState.colors" :key="col.name" class="og-pbar-color"><i :style="{ background: col.hex }"></i>{{ sidebarState.you.counts[col.name] ?? 0 }}</span>
           </div>
         </section>
 
@@ -667,6 +677,13 @@ onBeforeUnmount(() => { sidebarState.value = null })
 .og-row > .og-slot { grid-column: span 2; justify-self: center; position: relative; width: var(--s); height: var(--s); cursor: pointer; }
 .og-row-outer > .og-slot:first-child { grid-column: 2 / span 2; }
 
+/* ── Per-player bar (mobile only): name, score and goal-color counts on one line ── */
+.og-pbar { display: none; align-items: center; gap: 8px; flex: 0 0 auto; padding: 3px 8px; border-radius: 6px; font-size: .75rem; font-weight: 700; background: rgba(127, 152, 179, .9); }
+.og-pbar-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.og-pbar-score { font-family: ui-monospace, monospace; }
+.og-pbar-color { display: inline-flex; align-items: center; gap: 3px; }
+.og-pbar-color i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255, 255, 255, .7); }
+
 /* ── Middle strip ── */
 .og-strip { position: relative; flex: 0 0 auto; min-height: 76px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; padding: 4px 6px;
   background: rgba(127, 152, 179, .9); border-radius: 6px; z-index: 5; }
@@ -712,7 +729,9 @@ onBeforeUnmount(() => { sidebarState.value = null })
   .og-side { min-height: 0; }
   .og-info-box { height: 18rem; flex: 0 0 auto; }
   .og-deck-box { height: 16rem; flex: 0 0 auto; }
-  .og-mobile-score { display: inline; }
+  .og-mobile-score { display: none; }
+  .og-deck-box { order: -1; }
+  .og-pbar { display: flex; }
 }
 
 .og-delta { position: absolute; left: 0; right: 0; top: -0.9rem; z-index: 10; text-align: center; font-weight: 800; font-size: 1rem; line-height: 1; text-shadow: 0 1px 3px rgba(0,0,0,.9); pointer-events: none; animation: og-delta-rise 1.5s ease-out forwards; }
