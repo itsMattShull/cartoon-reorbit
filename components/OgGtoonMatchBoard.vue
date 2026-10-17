@@ -532,7 +532,7 @@ const helpText = computed(() => {
   if (m.phase === 'swap') {
     return m.you.maySwap
       ? 'Last chance: swap the card in slot 7 for a random undealt card, or keep it. If time runs out you keep it.'
-      : (m.you.swapReady ? 'Waiting for your opponent to choose...' : 'You have no undealt cards left to swap with.')
+      : (m.you.swapReady ? 'Waiting for your opponent to choose...' : 'You have no cards left in your deck to swap with.')
   }
   if (m.you.ready) return 'Your cards are face down. They flip, in slot order, when your opponent commits.'
   const slots = m.roundSlots

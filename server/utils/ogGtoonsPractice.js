@@ -119,7 +119,7 @@ async function botDiscard(io, match, deps) {
     cardIdxs: chooseBotDiscards({
       difficulty: match.difficulty,
       hand: botCards(match, match.hand[1]),
-      undealt: botCards(match, match.undealt[1]),
+      undealt: botCards(match, [...match.hand[1], ...match.undealt[1]]),
       goalColor: match.goalColor[1]
     })
   })
@@ -145,7 +145,7 @@ async function botSwap(io, match, deps) {
     const doSwap = chooseBotSwap({
       difficulty: match.difficulty,
       slotCard: slotSeven ? { value: slotSeven.baseValue, color: slotSeven.color } : null,
-      undealt: botCards(match, match.undealt[1]),
+      undealt: botCards(match, [...match.hand[1], ...match.undealt[1]]),
       goalColor: match.goalColor[1]
     })
     recordSwapChoice(match, 1, doSwap)

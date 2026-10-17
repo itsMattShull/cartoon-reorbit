@@ -240,10 +240,10 @@ test('core: round 2 opens with 3 slots and round 3 is a swap phase with no placi
   assert.equal(checkCommit(m, 0, 3).code, 'wrongPhase')
 })
 
-test('core: slot-7 swap is held until both choose, then replaces slot 7 with an undealt card', () => {
+test('core: slot-7 swap is held until both choose, then replaces slot 7 with a card still in the deck', () => {
   const m = playToSwapPhase(freshMatch(makeDeck(), makeDeck()))
   const old = m.revealed[0].find(r => r.slot === 7)
-  const undealtBefore = [...m.undealt[0]]
+  const poolBefore = [...m.hand[0], ...m.undealt[0]]
   assert.equal(checkSwap(m, 0).ok, true)
   assert.equal(recordSwapChoice(m, 0, true).ok, true)
   assert.equal(checkSwap(m, 0).code, 'already_swapped')
@@ -257,21 +257,35 @@ test('core: slot-7 swap is held until both choose, then replaces slot 7 with an 
   const now = m.revealed[0].find(r => r.slot === 7)
   assert.notEqual(now.deckIdx, old.deckIdx)
   assert.equal(now.round, 3)
-  assert.equal(undealtBefore.includes(now.deckIdx), true)
-  assert.equal(m.undealt[0].includes(old.deckIdx), true)             // old card went back
-  assert.equal(m.undealt[0].length, 2)
+  assert.equal(poolBefore.includes(now.deckIdx), true)
+  const poolAfter = [...m.hand[0], ...m.undealt[0]]
+  assert.equal(poolAfter.includes(old.deckIdx), true)                // old card went back
+  assert.equal(poolAfter.length, poolBefore.length)
   assert.equal(m.revealed[0].length, 7)
   assert.equal(m.swapUsed[0], true)
   assert.equal(m.swapUsed[1], false)
   assert.equal(m.phase, 'play')
 })
 
-test('core: a player with no undealt cards is not offered the swap and cannot choose it', () => {
+test('core: a player who discarded everything still has hand cards to swap with', () => {
+  const m = freshMatch(makeDeck(), makeDeck())
+  autoPlay(m, 0); autoPlay(m, 1); revealPlacedCards(m); advanceRound(m)
+  submitDiscard(m, 0, { cardIdxs: [...m.hand[0]] }); submitDiscard(m, 1, { cardIdxs: [] }); resolveDiscardPhase(m)
+  assert.equal(m.undealt[0].length, 0)
+  autoPlay(m, 0); autoPlay(m, 1); revealPlacedCards(m)
+  advanceRound(m)
+  assert.equal(m.swapReady[0], false)
+  assert.equal(publicMatchView(m, 'a').you.maySwap, true)
+  assert.equal(checkSwap(m, 0).ok, true)
+})
+
+test('core: a player with no cards left in the deck is not offered the swap and cannot choose it', () => {
   const m = freshMatch(makeDeck(), makeDeck())
   autoPlay(m, 0); autoPlay(m, 1); revealPlacedCards(m); advanceRound(m)
   submitDiscard(m, 0, { cardIdxs: [] }); submitDiscard(m, 1, { cardIdxs: [] }); resolveDiscardPhase(m)
   autoPlay(m, 0); autoPlay(m, 1); revealPlacedCards(m)
   m.undealt[0] = []
+  m.hand[0] = []
   advanceRound(m)
   assert.deepEqual(m.swapReady, [true, false])
   assert.equal(publicMatchView(m, 'a').you.maySwap, false)

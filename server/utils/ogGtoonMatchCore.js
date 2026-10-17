@@ -264,7 +264,7 @@ export function publicMatchView(match, uid, opts = {}) {
       // Private until the colour phase resolves; then both picks are public.
       silverColor: match.silverColor?.[meIdx] ?? null,
       pendingColor: match.pendingColor?.[meIdx] ?? null,
-      maySwap: match.phase === 'swap' && !match.swapReady?.[meIdx] && (match.undealt?.[meIdx] || []).length > 0
+      maySwap: match.phase === 'swap' && !match.swapReady?.[meIdx] && ((match.undealt?.[meIdx] || []).length + (match.hand?.[meIdx] || []).length) > 0
     },
     opponent: {
       username: match.usernames[oppIdx],
@@ -375,7 +375,12 @@ function slotSevenEntry(match, idx) {
 
 /** Whether `idx` can be offered the swap at all: a card in slot 7 and an undealt card to draw. */
 function canOfferSwap(match, idx) {
-  return !!slotSevenEntry(match, idx) && (match.undealt[idx] || []).length > 0
+  return !!slotSevenEntry(match, idx) && swapPoolSize(match, idx) > 0
+}
+
+/** Cards a slot-7 swap can draw: everything still in the deck, i.e. unplayed hand cards plus undealt ones. */
+function swapPoolSize(match, idx) {
+  return (match.hand[idx] || []).length + (match.undealt[idx] || []).length
 }
 
 /** Pre-flight for the slot-7 swap (PvP validates, then debits points, then records it). */
@@ -383,7 +388,7 @@ export function checkSwap(match, idx) {
   if (match.ending) return bad('over', 'The match is over.')
   if (match.phase !== 'swap') return bad('wrongPhase', 'Not the swap phase.')
   if (match.swapReady[idx]) return bad('already_swapped', 'You already made your swap choice.')
-  if (!canOfferSwap(match, idx)) return bad('nothingToSwap', 'There are no undealt cards left to swap with.')
+  if (!canOfferSwap(match, idx)) return bad('nothingToSwap', 'There are no cards left in your deck to swap with.')
   return OK
 }
 
@@ -392,7 +397,7 @@ export function recordSwapChoice(match, idx, swap) {
   if (match.ending) return bad('over', 'The match is over.')
   if (match.phase !== 'swap') return bad('wrongPhase', 'Not the swap phase.')
   if (match.swapReady[idx]) return bad('already_swapped', 'You already made your swap choice.')
-  if (swap && !canOfferSwap(match, idx)) return bad('nothingToSwap', 'There are no undealt cards left to swap with.')
+  if (swap && !canOfferSwap(match, idx)) return bad('nothingToSwap', 'There are no cards left in your deck to swap with.')
   match.pendingSwap[idx] = !!swap
   match.swapReady[idx] = true
   return OK
@@ -412,11 +417,19 @@ export function resolveSwapPhase(match, rng = Math.random) {
     if (!match.pendingSwap[i]) continue
     const old = slotSevenEntry(match, i)
     swapped[i] = old
-    if (!old || !match.undealt[i].length) continue
-    const pick = Math.floor(rng() * match.undealt[i].length)
-    const drawnIdx = match.undealt[i][pick]
-    match.undealt[i] = match.undealt[i].slice()
-    match.undealt[i][pick] = old.deckIdx
+    if (!old || !swapPoolSize(match, i)) continue
+    const handLen = match.hand[i].length
+    const pick = Math.floor(rng() * swapPoolSize(match, i))
+    let drawnIdx
+    if (pick < handLen) {
+      drawnIdx = match.hand[i][pick]
+      match.hand[i] = match.hand[i].slice()
+      match.hand[i][pick] = old.deckIdx
+    } else {
+      drawnIdx = match.undealt[i][pick - handLen]
+      match.undealt[i] = match.undealt[i].slice()
+      match.undealt[i][pick - handLen] = old.deckIdx
+    }
     const entry = toRevealEntry(match.deckOrder[i][drawnIdx], match.currentRound, old.slot, drawnIdx)
     match.revealed[i] = match.revealed[i].map(r => (r === old ? entry : r))
     entries[i].push(entry)
