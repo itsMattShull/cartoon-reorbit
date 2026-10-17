@@ -35,8 +35,8 @@ test('determineWinner counts a Silver card as its owner\'s picked colour', () =>
     player1Revealed: [r('RED'), r('SILVER'), r('SILVER')],
     player2Revealed: [r('BLUE'), r('BLUE'), r('RED')]
   }
-  // Silver stays colourless until picked: nobody holds more of both colours.
-  assert.equal(determineWinner(base).reason, 'tie')
+  // Silver stays colourless until picked: combined Red+Blue is 1 vs 3, so p2 leads.
+  assert.equal(determineWinner(base).winner, 'player2')
   // p1 holds more Red (2 vs 1); a Blue pick gives them more Blue (3 vs 1) too, so they win outright.
   const sides = {
     player1GoalColor: 'RED', player2GoalColor: 'BLUE',

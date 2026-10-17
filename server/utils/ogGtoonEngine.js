@@ -256,15 +256,13 @@ export function determineWinner({
 
   const targets = targetColorsOf([player1GoalColor, player2GoalColor])
   if (targets.length === 2) {
-    // Two different target colours: outright win if you have MORE cards of BOTH than the opponent.
+    // Two different target colours: outright win if you have MORE cards of both colours COMBINED
+    // than the opponent. A tie in the combined count falls through to total value below.
     const [c1, c2] = targets
-    const p1Of1 = countColor(player1Revealed, c1)
-    const p2Of1 = countColor(player2Revealed, c1)
-    const p1Of2 = countColor(player1Revealed, c2)
-    const p2Of2 = countColor(player2Revealed, c2)
-    if (p1Of1 > p2Of1 && p1Of2 > p2Of2) return { winner: 'player1', reason: 'both_colors', player1Score, player2Score, bonus }
-    if (p2Of1 > p1Of1 && p2Of2 > p1Of2) return { winner: 'player2', reason: 'both_colors', player1Score, player2Score, bonus }
-    // else fall through to total value below
+    const p1Combined = countColor(player1Revealed, c1) + countColor(player1Revealed, c2)
+    const p2Combined = countColor(player2Revealed, c1) + countColor(player2Revealed, c2)
+    if (p1Combined > p2Combined) return { winner: 'player1', reason: 'both_colors', player1Score, player2Score, bonus }
+    if (p2Combined > p1Combined) return { winner: 'player2', reason: 'both_colors', player1Score, player2Score, bonus }
   } else if (targets.length === 1) {
     // One target colour (one side revealed it, or both revealed the same one): the card-count
     // leader of that colour gets +15 before comparing totals.

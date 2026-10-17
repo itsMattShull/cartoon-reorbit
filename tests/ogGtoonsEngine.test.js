@@ -71,20 +71,30 @@ test('determineWinner: exactly one non-neutral -> color-count leader gets +15 be
   assert.equal(out.player2Score, 26)
 })
 
-test('determineWinner: both non-neutral -> outright win requires MORE of BOTH goal colors', () => {
+test('determineWinner: both non-neutral, equal combined count -> falls back to total value', () => {
   const out = determineWinner({
     player1GoalColor: 'RED',
     player2GoalColor: 'BLUE',
     player1Revealed: revealed([[1, 'RED'], [1, 'RED'], [1, 'BLUE']]), // 2 RED, 1 BLUE
     player2Revealed: revealed([[1, 'RED'], [1, 'BLUE'], [1, 'BLUE']]) // 1 RED, 2 BLUE
   })
-  // player1 does not have MORE blue than player2, and player2 does not have MORE red than
-  // player1 -- neither wins outright, so it falls back to total value (a tie here: 3 vs 3).
+  // Combined RED+BLUE is 3 vs 3 -- no outright win, so it falls back to total value (a tie here: 3 vs 3).
   assert.equal(out.winner, null)
   assert.equal(out.reason, 'tie')
 })
 
-test('determineWinner: both non-neutral, one player leads BOTH colors -> outright win regardless of total value', () => {
+test('determineWinner: both non-neutral, equal combined count, higher points wins the tiebreak', () => {
+  const out = determineWinner({
+    player1GoalColor: 'RED',
+    player2GoalColor: 'BLUE',
+    player1Revealed: revealed([[1, 'RED'], [1, 'RED'], [1, 'BLUE']]), // 3 combined, total 3
+    player2Revealed: revealed([[5, 'RED'], [1, 'BLUE'], [1, 'BLUE']]) // 3 combined, total 7
+  })
+  assert.equal(out.winner, 'player2')
+  assert.equal(out.reason, 'total_value')
+})
+
+test('determineWinner: both non-neutral, one player has the most of both colors combined -> outright win regardless of total value', () => {
   const out = determineWinner({
     player1GoalColor: 'RED',
     player2GoalColor: 'BLUE',

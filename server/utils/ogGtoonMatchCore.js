@@ -58,7 +58,7 @@ const COLOR_WORD = (c) => (c ? c.charAt(0) + c.slice(1).toLowerCase() : '?')
 const targetWord = (c) => (isRealColor(c) ? COLOR_WORD(c) : 'none')
 function targetSummary(goalColors) {
   const t = targetColorsOf(goalColors)
-  if (t.length === 2) return `Two target colors revealed (${t.map(COLOR_WORD).join(' and ')}): more cards of both colors wins the game regardless of points.`
+  if (t.length === 2) return `Two target colors revealed (${t.map(COLOR_WORD).join(' and ')}): the most cards of both colors combined wins the game regardless of points. A tie is broken by points.`
   if (t.length === 1) return `One target color revealed (${COLOR_WORD(t[0])}): decided by points; more ${COLOR_WORD(t[0])} cards earns a 15 point bonus.`
   return 'No target color revealed: decided by points only.'
 }
@@ -912,7 +912,7 @@ function logFinalScoring(match, outcome, final, continues) {
   if (outcome.bonus) totals.push(`${nameOfSide(match, outcome.bonus.player === 'player1' ? 0 : 1)} gets +15 for holding more ${COLOR_WORD(outcome.bonus.color)} cards.`)
   const verdict = outcome.winner === null
     ? (continues ? 'Tied — sudden death.' : 'Tied — no cards left to break it.')
-    : `${outcome.winner === 'player1' ? n0 : n1} wins ${outcome.reason === 'both_colors' ? 'by holding more of both goal colors' : 'on total value'}.`
+    : `${outcome.winner === 'player1' ? n0 : n1} wins ${outcome.reason === 'both_colors' ? 'by holding the most cards of both goal colors combined' : 'on total value'}.`
   if (!d.notable && !d.sections[4].lines.length) d.sections[0].lines.push('No powers fired — every card scores its printed value.')
   logEvent(match, {
     kind: 'scoring', title: isSuddenDeathRound(match.currentRound) ? 'Sudden-death scoring' : 'Final scoring',

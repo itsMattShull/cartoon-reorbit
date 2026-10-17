@@ -640,11 +640,11 @@ const goalColors = computed(() => {
   const list = [m?.you?.goalColor, m?.opponent?.goalColor].filter(c => REAL_COLORS.includes(c))
   return [...new Set(list)]
 })
-/* Target colours revealed at the start (Black/Silver never count): two different = whoever has more of
- * both wins outright, one = +15 bonus to whoever has more of it, none = decided by points only. */
+/* Target colours revealed at the start (Black/Silver never count): two different = whoever has the most of
+ * both combined wins outright (a tie goes to points), one = +15 bonus to whoever has more of it, none = decided by points only. */
 const targetInfo = computed(() => {
   const colors = goalColors.value
-  if (colors.length >= 2) return { colors, title: 'Two colors revealed', detail: 'Having more cards of both colors wins the game, regardless of points.' }
+  if (colors.length >= 2) return { colors, title: 'Two colors revealed', detail: 'Having the most cards of both colors combined wins the game, regardless of points. A tie is broken by points.' }
   if (colors.length === 1) return { colors, title: 'One color revealed', detail: 'This game will be determined by points. The player with more cards of this color earns 15 bonus points.' }
   return { colors, title: 'No target color', detail: 'This game will be determined by points only.' }
 })
