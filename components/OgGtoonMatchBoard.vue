@@ -70,7 +70,7 @@
               </template>
               <template v-else-if="inSwapPhase">
                 <template v-if="matchState.you.maySwap">
-                  <button @click="openSwapSheet" class="bg-indigo-500 hover:bg-indigo-600 og-btn">{{ isPractice ? 'Swap slot 7 (free)' : 'Swap slot 7 (10 pts)' }}</button>
+                  <button @click="openSwapSheet" class="bg-indigo-500 hover:bg-indigo-600 og-btn">Swap slot 7 (-10 points)</button>
                   <button @click="swapSkip" class="bg-gray-600 hover:bg-gray-500 og-btn">Keep slot 7</button>
                 </template>
                 <span v-else class="og-note">Waiting for opponent...</span>
