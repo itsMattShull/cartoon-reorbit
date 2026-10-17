@@ -805,6 +805,9 @@ model User {
   // members that actually hold a rank before the join/sort, pruning the (usually majority)
   // no-rank rows first rather than sorting the whole membership.
   @@index([cMoonId, currentCMoonRankId])
+  // Makes cMoon Events' activeMemberCount() (server/utils/cmoonEvent.js) an index-only scan —
+  // it runs once per role on every progress read.
+  @@index([cMoonId, lastActivity])
 }
 
 model CtoonUserSuggestion {
@@ -2335,6 +2338,15 @@ model ClashGame {
   player1 User  @relation("ClashGamePlayer1", fields: [player1UserId], references: [id])
   player2 User? @relation("ClashGamePlayer2", fields: [player2UserId], references: [id])
   winner  User? @relation("ClashGameWinner", fields: [winnerUserId], references: [id])
+
+  // Added for cMoon Events' GAME_WINS metric source (server/utils/cmoonEvent.js), which needs a
+  // cheap rolling-window win-count query — this table previously had no indexes at all (see
+  // EdRpsMatch's own comment, which flagged this exact gap), mirroring that table's shape.
+  @@index([startedAt])
+  @@index([endedAt])
+  @@index([player1UserId, endedAt])
+  @@index([player2UserId, endedAt])
+  @@index([winnerUserId, endedAt])
 }
 
 enum GtoonColor {
@@ -3870,6 +3882,11 @@ model CMoon {
   // at all. onDelete: Restrict, same reassign-before-delete shape as customJoinEffectId above.
   specialAttackId  String?
   specialAttack    CMoonSpecialAttack?  @relation(fields: [specialAttackId], references: [id], onDelete: Restrict)
+
+  // cMoon Events — see that model's own header comment above CMoonSeasonTracker.
+  eventTargetOf      CMoonEvent[]       @relation("CMoonEventTarget")
+  eventRoles         CMoonEventRole[]   @relation("CMoonEventRoleCMoon")
+  eventRoleBuffsFrom CMoonEventRole[]   @relation("CMoonEventRoleBuffTarget")
 
   @@index([memberCount])
   @@index([teamScore])
@@ -5413,6 +5430,7 @@ model EncyclopediaEntry {
   updatedAt     DateTime @updatedAt
 
   riddles CMoonRiddle[]
+  cMoonEventMilestones CMoonEventMilestone[]
 
   @@index([active, sortOrder])
 }
@@ -5616,6 +5634,7 @@ model CMoonEnemyFaction {
 
   members CMoonEnemyMember[]
   taunts  CMoonEnemyTaunt[]
+  cMoonEvents CMoonEvent[]
 
   @@index([active, sortOrder])
 }
@@ -6327,4 +6346,129 @@ model CMoonSeasonTracker {
   updatedAt   DateTime                 @updatedAt
 
   @@index([active, sortOrder])
+}
+
+// ── cMoon Events — reusable faction-campaign system ───────────────────────────────────────────
+//
+// Unlike CMoonSeasonTracker above (one metric compared the SAME way across every cMoon), an
+// Event gives each cMoon its OWN distinct role and point source, all contributing to one shared
+// storyline (launch instance: "Defense of ToonTown", Disney Moon's city, from "the Cogs"). A
+// future event with a different target moon, different enemy, and different per-moon roles is
+// purely new rows in these three tables — no code change. Progress is never stored/incremented
+// here; it's always recomputed live from the existing domain tables it points at (see
+// server/utils/cmoonEvent.js), so there is nothing new for a race condition to double-count.
+enum CMoonEventMetricSource {
+  ENEMY_FACTION_WINS  // CMoonEnemyBattle: outcome=WIN, cMoonId=role's cMoon, enemyMember.factionId = metricConfig.factionId
+  GAME_WINS           // a PvP match table (EdRpsMatch/PokemonBattleMatch/ClashGame): winner.cMoonId=role's cMoon, loser on a different cMoon
+  DAILY_TASKS         // CMoonScoreLog: category='DAILY_TASK', cMoonId=role's cMoon — the one solo, inherently collusion-proof source
+  CROSS_MOON_TRADES   // TradeOffer: status=ACCEPTED, the two parties' CURRENT cMoonId differ and one of them is role's cMoon
+  CROSS_MOON_AUCTIONS // Auction: status=CLOSED with a winner, creator/winner CURRENT cMoonId differ and one of them is role's cMoon
+}
+
+enum CMoonEventBuffType {
+  NONE
+  COMBAT_HP_BONUS      // added into getPlayerCombatMaxHp's bonus term for the buff target cMoon's own members — snapshotted once per battle/raid-join, same as every other HP input
+  REWARD_MULTIPLIER    // reserved for a future, lower-risk buff shape; not wired into any reward path yet
+}
+
+model CMoonEvent {
+  id   String @id @default(uuid())
+  name String
+  slug String @unique
+  // Sanitized HTML (sanitizeEncyclopediaHtml), same convention as CMoonSeasonConfig.blurb.
+  lore            String?
+  bannerImagePath String?
+  // Display-only narrative sugar — NEVER read by computeRoleProgress/getEventCombatBonus/etc.
+  // Left nullable/unused-by-the-math on purpose, so a future event can leave either blank
+  // without the engine caring.
+  targetCMoonId  String?
+  targetCMoon    CMoon?             @relation("CMoonEventTarget", fields: [targetCMoonId], references: [id], onDelete: SetNull)
+  enemyFactionId String?
+  enemyFaction   CMoonEnemyFaction? @relation(fields: [enemyFactionId], references: [id], onDelete: SetNull)
+  // Trailing window (days) used to compute each role's "active member" denominator — see
+  // activeMemberCount() in server/utils/cmoonEvent.js. Admin-tunable per event.
+  activeMemberWindowDays Int @default(14)
+  // Finale gate: true = every role must independently reach 100% of its own quota (the launch
+  // default); false = the finale instead fires once the AVERAGE of all roles' progress reaches
+  // 100%, so one lagging moon can never block it. Either way, each role's own quota is already
+  // normalized to that moon's own active roster, so neither setting disadvantages a small moon.
+  requireAllMoonsForFinale Boolean @default(true)
+  // Exactly one CMoonEvent may have active=true at a time — enforced by a hand-added partial
+  // unique index in this migration (Prisma cannot express a partial unique index directly; same
+  // precedent as Auction's own active-listing constraint).
+  active    Boolean   @default(false)
+  startedAt DateTime?
+  endedAt   DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  roles      CMoonEventRole[]
+  milestones CMoonEventMilestone[]
+
+  @@index([active])
+}
+
+model CMoonEventRole {
+  id         String @id @default(uuid())
+  eventId    String
+  cMoonId    String
+  roleLabel  String // "Home Guard", "Recon", "Supply Depot", "Evac Corps"
+  flavorText String?
+  metricSource CMoonEventMetricSource
+  // Shape depends on metricSource — validated by one small pure function per source in
+  // server/utils/cmoonEvent.js (never trusted blindly, e.g. gameTable/factionId are checked
+  // against a fixed allowlist before ever being interpolated into raw SQL):
+  //   ENEMY_FACTION_WINS:   { factionId }
+  //   GAME_WINS:            { gameTable: 'EdRpsMatch'|'PokemonBattleMatch'|'ClashGame', maxPerPairPerDay }
+  //   DAILY_TASKS:          {} (no extra config needed)
+  //   CROSS_MOON_TRADES:    { minPointsInvolved, minCtoonCount, maxPerPairPerDay }
+  //   CROSS_MOON_AUCTIONS:  { minBid, maxPerPairPerDay }
+  // maxPerPairPerDay is validated >= 1 at admin-save time wherever it applies, so it can never be
+  // accidentally set to a value that disables the anti-collusion cap entirely.
+  metricConfig   Json
+  perMemberQuota Float // quota = max(1, round(activeMemberCount * perMemberQuota))
+  // Optional cross-moon buff this role's OWN progress grants — see CMoonEventBuffType. Scales
+  // linearly with this role's own progressPercent (0 at 0%, buffMagnitude at 100%). Null
+  // buffTargetCMoonId or buffType=NONE means this role grants nothing.
+  buffTargetCMoonId String?
+  buffTargetCMoon   CMoon?             @relation("CMoonEventRoleBuffTarget", fields: [buffTargetCMoonId], references: [id], onDelete: SetNull)
+  buffType          CMoonEventBuffType @default(NONE)
+  buffMagnitude     Float              @default(0)
+  sortOrder         Int                @default(0)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  event      CMoonEvent            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  cMoon      CMoon                 @relation("CMoonEventRoleCMoon", fields: [cMoonId], references: [id], onDelete: Cascade)
+  milestones CMoonEventMilestone[]
+
+  // Exactly one role per cMoon per event — DB-enforced, not just an admin-UI convention.
+  @@unique([eventId, cMoonId])
+  @@index([eventId])
+}
+
+model CMoonEventMilestone {
+  id      String  @id @default(uuid())
+  eventId String
+  roleId  String? // null = whole-event finale milestone; set = this one role's own milestone
+  thresholdPercent Int // 25/50/75/100, checked against that scope's own live progress
+  // Supports {cmoon}/{role}/{percent} placeholders — same spirit as raidAnnouncementText's own
+  // {cmoon}/{enemy} substitution.
+  discordMessageTemplate String
+  // Pre-authored by the admin (not auto-generated) and inactive until this milestone fires, at
+  // which point announceCMoonEventMilestone() flips it to active:true — a single UPDATE, not a
+  // runtime-synthesized entry, so lore quality is always admin-reviewed ahead of time.
+  encyclopediaEntryId String?
+  encyclopediaEntry   EncyclopediaEntry? @relation(fields: [encyclopediaEntryId], references: [id], onDelete: SetNull)
+  // Atomic claim stamp — set via `updateMany({where:{id, firedAt:null}, data:{firedAt:now()}})`,
+  // the same idiom pingFinalBossAppeared already uses — so two concurrent actions crossing the
+  // same threshold at once can never double-post.
+  firedAt   DateTime?
+  createdAt DateTime  @default(now())
+
+  event CMoonEvent      @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  role  CMoonEventRole? @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, roleId, thresholdPercent])
+  @@index([eventId])
 }
