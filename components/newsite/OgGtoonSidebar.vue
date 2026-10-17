@@ -47,4 +47,9 @@ const panels = computed(() => {
 .og-sb-color { display: flex; align-items: center; gap: 6px; }
 .og-sb-dot { width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .7); box-shadow: 0 2px 4px rgba(0, 0, 0, .3); }
 .og-sb-count { font-size: 1.4rem; font-weight: 800; color: #fff; }
+
+/* On mobile the match board shows a compact name / score / color-count bar above and below the cards instead. */
+@media (max-width: 767px) {
+  .og-sb { display: none; }
+}
 </style>
