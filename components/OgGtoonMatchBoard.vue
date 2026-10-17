@@ -679,8 +679,10 @@ function colorCounts(list, side) {
   for (const c of goalColors.value) out[c] = 0
   for (const r of list) {
     if (stillHidden(r, side)) continue
-    const col = displayed(r, side)?.color
-    if (col in out) out[col] += 1
+    const card = displayed(r, side)
+    // Cancelled (knocked-out) cards count for nothing, including their printed colour.
+    if (card?.cancelled) continue
+    if (card?.color in out) out[card.color] += 1
   }
   return out
 }
