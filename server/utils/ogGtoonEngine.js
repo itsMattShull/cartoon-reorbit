@@ -136,16 +136,27 @@ export function goalCardFor(match, idx) {
   return match.deckOrder[idx][gi ?? 11] ?? null
 }
 
+/** Stored goal colour for a side with no target colour (a deck of only Black/Silver cards). */
+export const NO_TARGET_COLOR = 'BLACK'
+
 /**
  * Sets match.goalCardIdx / match.goalColor from one random non-Black, non-Silver card out of each
- * player's deck. A deck with none gets a random real colour and no goal card.
+ * player's deck. A deck with none has no target colour (NO_TARGET_COLOR, no goal card).
  */
 export function assignRandomGoals(match, rng = Math.random) {
   match.goalCardIdx = match.deckOrder.map(d => pickGoalCardIdx(d, rng))
   match.goalColor = match.deckOrder.map((d, i) => (match.goalCardIdx[i] === null
-    ? REAL_COLORS[Math.min(REAL_COLORS.length - 1, Math.floor(rng() * REAL_COLORS.length))]
+    ? NO_TARGET_COLOR
     : d[match.goalCardIdx[i]].color))
   return match
+}
+
+/**
+ * The distinct target colours in play for a pair of goal colours (Black/Silver are not target
+ * colours). 2 = both revealed and different, 1 = one revealed (or both the same), 0 = none.
+ */
+export function targetColorsOf(goalColors) {
+  return [...new Set((goalColors || []).filter(isRealColor))]
 }
 
 /** A deck save must carry exactly 12 cards at unique positions 0-11. */
@@ -238,35 +249,34 @@ export function determineWinner({
   const player2Revealed = recolorSilver(p2Raw, player2SilverColor)
   const p1Total = sum(player1Revealed.map(r => r.finalValue))
   const p2Total = sum(player2Revealed.map(r => r.finalValue))
-  const p1Neutral = isNeutralColor(player1GoalColor)
-  const p2Neutral = isNeutralColor(player2GoalColor)
 
   let player1Score = p1Total
   let player2Score = p2Total
   let bonus = null
 
-  if (!p1Neutral && !p2Neutral) {
-    // Both non-neutral: outright win if you have MORE cards of BOTH goal colors than opponent.
-    const p1OfP1 = countColor(player1Revealed, player1GoalColor)
-    const p2OfP1 = countColor(player2Revealed, player1GoalColor)
-    const p1OfP2 = countColor(player1Revealed, player2GoalColor)
-    const p2OfP2 = countColor(player2Revealed, player2GoalColor)
-    const p1WinsOutright = p1OfP1 > p2OfP1 && p1OfP2 > p2OfP2
-    const p2WinsOutright = p2OfP1 > p1OfP1 && p2OfP2 > p1OfP2
-    if (p1WinsOutright) return { winner: 'player1', reason: 'both_colors', player1Score, player2Score, bonus }
-    if (p2WinsOutright) return { winner: 'player2', reason: 'both_colors', player1Score, player2Score, bonus }
+  const targets = targetColorsOf([player1GoalColor, player2GoalColor])
+  if (targets.length === 2) {
+    // Two different target colours: outright win if you have MORE cards of BOTH than the opponent.
+    const [c1, c2] = targets
+    const p1Of1 = countColor(player1Revealed, c1)
+    const p2Of1 = countColor(player2Revealed, c1)
+    const p1Of2 = countColor(player1Revealed, c2)
+    const p2Of2 = countColor(player2Revealed, c2)
+    if (p1Of1 > p2Of1 && p1Of2 > p2Of2) return { winner: 'player1', reason: 'both_colors', player1Score, player2Score, bonus }
+    if (p2Of1 > p1Of1 && p2Of2 > p1Of2) return { winner: 'player2', reason: 'both_colors', player1Score, player2Score, bonus }
     // else fall through to total value below
-  } else if (p1Neutral !== p2Neutral) {
-    // Exactly one non-neutral: that color's card-count leader gets +15 before comparing totals.
-    const nonNeutralColor = p1Neutral ? player2GoalColor : player1GoalColor
-    const p1Count = countColor(player1Revealed, nonNeutralColor)
-    const p2Count = countColor(player2Revealed, nonNeutralColor)
+  } else if (targets.length === 1) {
+    // One target colour (one side revealed it, or both revealed the same one): the card-count
+    // leader of that colour gets +15 before comparing totals.
+    const [color] = targets
+    const p1Count = countColor(player1Revealed, color)
+    const p2Count = countColor(player2Revealed, color)
     if (p1Count > p2Count) {
       player1Score += 15
-      bonus = { player: 'player1', color: nonNeutralColor, count: p1Count }
+      bonus = { player: 'player1', color, count: p1Count }
     } else if (p2Count > p1Count) {
       player2Score += 15
-      bonus = { player: 'player2', color: nonNeutralColor, count: p2Count }
+      bonus = { player: 'player2', color, count: p2Count }
     }
   }
   // Both neutral (or the both-non-neutral fallback): higher total value wins.

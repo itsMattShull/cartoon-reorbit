@@ -29,7 +29,7 @@ import { revealDurationMs } from '../../utils/ogGtoonReveal.js'
 import { resolveFinalBoard } from './ogGtoonEffects.js'
 import {
   determineWinner, recolorSilver, isRealColor, REAL_COLORS, COLOR_MS, hasSuddenDeathCardsRemaining, dealOpeningHand, discardAndDeal,
-  goalCardFor, slotsForRound, isSuddenDeathRound, shuffled, REGULATION_ROUNDS, DISCARD_AFTER_ROUND,
+  goalCardFor, targetColorsOf, slotsForRound, isSuddenDeathRound, shuffled, REGULATION_ROUNDS, DISCARD_AFTER_ROUND,
   SWAP_AFTER_ROUND, PLACE_MS, DISCARD_MS, SWAP_MS
 } from './ogGtoonEngine.js'
 
@@ -55,6 +55,13 @@ const nameOfSide = (match, idx) => match.usernames?.[idx] ?? `Player ${idx + 1}`
 const sideIdx = (side) => (side === 'player1' ? 0 : 1)
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 const COLOR_WORD = (c) => (c ? c.charAt(0) + c.slice(1).toLowerCase() : '?')
+const targetWord = (c) => (isRealColor(c) ? COLOR_WORD(c) : 'none')
+function targetSummary(goalColors) {
+  const t = targetColorsOf(goalColors)
+  if (t.length === 2) return `Two target colors revealed (${t.map(COLOR_WORD).join(' and ')}): more cards of both colors wins the game regardless of points.`
+  if (t.length === 1) return `One target color revealed (${COLOR_WORD(t[0])}): decided by points; more ${COLOR_WORD(t[0])} cards earns a 15 point bonus.`
+  return 'No target color revealed: decided by points only.'
+}
 const signed = (n) => (n >= 0 ? `+${n}` : `${n}`)
 
 function describeApplication(e) {
@@ -156,7 +163,8 @@ export function initHands(match, rng = Math.random) {
   logEvent(match, {
     kind: 'start', title: 'Match started',
     sections: [{ label: null, lines: [
-      `${nameOfSide(match, 0)} (goal ${COLOR_WORD(match.goalColor?.[0])}) vs ${nameOfSide(match, 1)} (goal ${COLOR_WORD(match.goalColor?.[1])})`,
+      `${nameOfSide(match, 0)} (target ${targetWord(match.goalColor?.[0])}) vs ${nameOfSide(match, 1)} (target ${targetWord(match.goalColor?.[1])})`,
+      targetSummary(match.goalColor),
       'Each player was dealt 6 cards from their 12-card deck.'
     ] }]
   })

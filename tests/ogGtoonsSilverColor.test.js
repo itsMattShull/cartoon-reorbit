@@ -19,12 +19,12 @@ test('goal cards are never Black or Silver', () => {
   for (let n = 0; n < 50; n++) assert.ok(['RED', 'BLUE'].includes(deck[pickGoalCardIdx(deck, Math.random)].color))
 })
 
-test('a deck with no eligible goal card gets a random real colour and no goal card', () => {
+test('a deck with no eligible goal card has no target colour and no goal card', () => {
   const deck = deckOf(Array(12).fill('SILVER'))
   assert.equal(pickGoalCardIdx(deck), null)
   const m = assignRandomGoals({ deckOrder: [deck, deck] }, () => 0)
   assert.deepEqual(m.goalCardIdx, [null, null])
-  assert.deepEqual(m.goalColor, [REAL_COLORS[0], REAL_COLORS[0]])
+  assert.deepEqual(m.goalColor, ['BLACK', 'BLACK'])
   assert.equal(goalCardFor(m, 0), null)
 })
 

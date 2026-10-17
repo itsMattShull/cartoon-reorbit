@@ -40,6 +40,12 @@
               <button class="og-help-btn" :class="{ 'og-help-on': helpOpen }" :aria-expanded="helpOpen" aria-label="How to play this phase" @click="helpOpen = !helpOpen">?</button>
             </div>
 
+            <div class="og-strip-line og-target" :title="targetInfo.detail">
+              <span class="og-target-title">{{ targetInfo.title }}</span>
+              <span v-for="col in targetInfo.colors" :key="col" class="og-pbar-color"><i :style="{ background: colorHex(col) }"></i>{{ col.charAt(0) + col.slice(1).toLowerCase() }}</span>
+              <span class="og-note">{{ targetInfo.detail }}</span>
+            </div>
+
             <div class="og-strip-line og-actions">
               <template v-if="inDiscardPhase">
                 <button v-if="!matchState.you.discardReady" @click="confirmDiscard" class="bg-red-500 hover:bg-red-600 og-btn">{{ discardPick.size ? `Discard ${discardPick.size} & draw` : 'Keep my hand' }}</button>
@@ -631,8 +637,16 @@ watch(inSwapPhase, (on) => { if (!on) swapSheetOpen.value = false })
 const sidebarState = useState('ogGtoonSidebar', () => null)
 const goalColors = computed(() => {
   const m = matchState.value
-  const list = [m?.you?.goalColor, m?.opponent?.goalColor].filter(Boolean)
+  const list = [m?.you?.goalColor, m?.opponent?.goalColor].filter(c => REAL_COLORS.includes(c))
   return [...new Set(list)]
+})
+/* Target colours revealed at the start (Black/Silver never count): two different = whoever has more of
+ * both wins outright, one = +15 bonus to whoever has more of it, none = decided by points only. */
+const targetInfo = computed(() => {
+  const colors = goalColors.value
+  if (colors.length >= 2) return { colors, title: 'Two colors revealed', detail: 'Having more cards of both colors wins the game, regardless of points.' }
+  if (colors.length === 1) return { colors, title: 'One color revealed', detail: 'This game will be determined by points. The player with more cards of this color earns 15 bonus points.' }
+  return { colors, title: 'No target color', detail: 'This game will be determined by points only.' }
 })
 function colorCounts(list, side) {
   const out = {}
@@ -701,6 +715,8 @@ onBeforeUnmount(() => { sidebarState.value = null })
 .og-color-btn span { display: block; width: 100%; height: 100%; border-radius: 50%; border: 1px solid rgba(255,255,255,.6); }
 .og-color-goal { border-color: #fbbf24; }
 .og-note { font-size: .75rem; color: #fff3b0; }
+.og-target { flex-wrap: wrap; gap: 6px; align-items: center; }
+.og-target-title { font-size: .75rem; font-weight: 700; text-transform: uppercase; color: #99ffff; }
 .og-error { font-size: .7rem; color: #ffd0d0; text-align: center; margin: 0; }
 .og-help { position: absolute; left: 6px; right: 6px; top: calc(100% + 4px); padding: 8px 10px; border-radius: 6px; font-size: .75rem; line-height: 1.35; background: rgba(10, 30, 50, .95); border: 1px solid var(--og-accent); box-shadow: 0 6px 16px rgba(0, 0, 0, .4); }
 
