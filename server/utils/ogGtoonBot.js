@@ -15,7 +15,7 @@
 // own hand and undealt cards, the round's open slots, and its own goal color. None of them is
 // ever handed the human's hand, placements or undealt cards.
 
-import { isNeutralColor } from './ogGtoonEngine.js'
+import { isNeutralColor, SWAP_SCORE_PENALTY } from './ogGtoonEngine.js'
 
 export const BOT_USERNAME = 'Practice Bot'
 export const BOT_ID = 'practice-bot'
@@ -118,7 +118,7 @@ export function chooseBotDiscards({ difficulty, hand, undealt, goalColor }) {
 /**
  * Decides whether the bot pays for the round-3 swap: replacing the card in its slot 7 with a random
  * undealt card. Easy never swaps; Normal/Hard swap when the undealt cards average clearly better
- * than the slot-7 card they would be replacing.
+ * than the slot-7 card they would be replacing by more than the swap's score penalty plus a margin.
  *
  * @param {object} view
  * @param {string} view.difficulty
@@ -133,7 +133,8 @@ export function chooseBotSwap({ difficulty, slotCard, undealt, goalColor }) {
   if (!Array.isArray(undealt) || undealt.length === 0) return false
   const avg = undealt.reduce((a, c) => a + cardScore(c, goalColor, level), 0) / undealt.length
   const threshold = level === 'hard' ? 2 : 3
-  return avg - cardScore(slotCard, goalColor, level) >= threshold
+  // Swapping takes SWAP_SCORE_PENALTY off the bot's match score, so the expected gain has to beat that too.
+  return avg - cardScore(slotCard, goalColor, level) - SWAP_SCORE_PENALTY >= threshold
 }
 
 /** Cosmetic think time before the bot commits a round (the choice itself is already made). */

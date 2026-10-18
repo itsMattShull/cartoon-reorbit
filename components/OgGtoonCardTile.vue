@@ -36,7 +36,7 @@
         <GtoonCard mode="noise" effects="static" color="SILVER" alt="Face-down gToon" />
       </div>
     </div>
-    <span v-else class="text-[10px] text-gray-400">{{ label }}</span>
+    <span v-else class="og-empty-label">{{ label }}</span>
   </div>
 </template>
 
@@ -54,7 +54,8 @@ const props = defineProps({
   label: { type: [String, Number], default: '' },
   // 'idle' | 'selected' | 'open' (a slot you can place into) | 'filled' | 'discard'
   tone: { type: String, default: 'idle' },
-  size: { type: String, default: 'slot' },      // 'slot' | 'hand'
+  size: { type: String, default: 'slot' },      // 'slot' | 'hand' | 'board' (fills its square parent, round)
+  inspectable: { type: Boolean, default: true }, // false → no right-click / long-press popup (the board shows Info in its own panel)
   animate: { type: Boolean, default: true },    // false → always the static card (e.g. inside a dialog)
   // What the game log says is happening to this card: { kind: 'knockedOut'|'cancelled'|'changed', from?, to? }.
   // Only a knock-out is shown (as a faded card); there are no badges on the tile.
@@ -63,7 +64,7 @@ const props = defineProps({
 
 // Right-click / long-press -> printed properties. Only a face-up card can be inspected.
 const { inspectGesture } = useOgGtoonInfo()
-const { clickCapture, ...gestureEvents } = inspectGesture(() => (props.card && !props.faceDown ? props.card : null))
+const { clickCapture, ...gestureEvents } = inspectGesture(() => (props.inspectable && props.card && !props.faceDown ? props.card : null))
 
 // Revealed entries carry `round`/`slot`; cards still in a hand carry `idx` instead.
 const isRevealed = computed(() => props.card?.round != null && props.card?.slot != null)
@@ -82,13 +83,14 @@ watch(shownValue, (now, was) => {
   })
 })
 
-const sizeClass = computed(() => (props.size === 'hand' ? 'h-24 w-[4.5rem]' : 'h-20'))
+const sizeClass = computed(() => (props.size === 'hand' ? 'h-24 w-[4.5rem]' : props.size === 'board' ? 'w-full h-full !rounded-full' : 'h-20'))
 // Once a card sits in a board slot (face up or face down) the slot's frame disappears and the card stands on its
 // own. The border width stays (transparent) so nothing shifts. Empty slots keep their dashed outline, and hand
 // tiles keep their selected / discard highlights, which are interaction feedback rather than a slot frame.
-const occupiedSlot = computed(() => props.size === 'slot' && !!(props.card || props.faceDown))
+const occupiedSlot = computed(() => props.size !== 'hand' && !!(props.card || props.faceDown))
 const ringClass = computed(() => {
   if (occupiedSlot.value && (props.tone === 'idle' || props.tone === 'filled')) return 'border-transparent'
+  if (props.size === 'board' && !props.card && !props.faceDown) return props.tone === 'open' ? 'og-empty og-empty-open cursor-pointer' : 'og-empty'
   return ({
     selected: 'border-amber-400 bg-amber-500/10',
     open: 'border-dashed border-emerald-400/70 bg-emerald-500/5 cursor-pointer',
@@ -100,6 +102,11 @@ const ringClass = computed(() => {
 </script>
 
 <style scoped>
+/* Empty board slot: a glass "orbit" disc with the slot number */
+.og-empty { border-radius: 9999px; border: 3px solid rgba(255, 255, 255, .55);
+  background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, .6), rgba(120, 175, 205, .55) 55%, rgba(60, 110, 150, .6)); }
+.og-empty-open { border-color: #99ffff; box-shadow: 0 0 10px rgba(153, 255, 255, .8); }
+.og-empty-label { font-size: 1.4rem; font-weight: 800; color: rgba(255, 255, 255, .8); text-shadow: 0 2px 0 rgba(0, 0, 0, .2); }
 /* No text selection / iOS long-press callout on the card, so a long-press opens the properties instead. */
 .og-tile { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
 .flip-in { animation: flip-in .35s ease-out }

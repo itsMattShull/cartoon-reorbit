@@ -56,6 +56,7 @@ function serializeMatch(match) {
     colorDone: match.colorDone,
     deadline: match.deadline,
     ready: match.ready,
+    held: match.held,
     revealed: match.revealed, // roundLog itself is built once, at match completion, not carried live
     stake: match.stake,
     currentRound: match.currentRound,

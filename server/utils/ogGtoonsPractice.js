@@ -14,7 +14,7 @@
 //
 // ── Practice never awards, spends or records points ─────────────────────────────────────────
 //   • No stake: the match is created with stake [0, 0]; there is no stake input at all.
-//   • The round-3 slot-7 swap is free and handled purely in memory — PvP's debit path is not reachable from here.
+//   • The round-3 slot-7 swap costs 10 points off the match score (as in PvP) but never touches the points balance; it is handled purely in memory.
 //   • Nothing is persisted. In particular no OgGtoonMatch row is written, which is also what keeps
 //     practice out of the leaderboard (it is computed from that table).
 //   • This module deliberately does not import Prisma, gamePoints or any points/match-writing
@@ -119,7 +119,7 @@ async function botDiscard(io, match, deps) {
     cardIdxs: chooseBotDiscards({
       difficulty: match.difficulty,
       hand: botCards(match, match.hand[1]),
-      undealt: botCards(match, match.undealt[1]),
+      undealt: botCards(match, [...match.hand[1], ...match.undealt[1]]),
       goalColor: match.goalColor[1]
     })
   })
@@ -141,11 +141,11 @@ async function botSwap(io, match, deps) {
   // Already done (nothing to swap) still falls through to settle: when neither side can be offered
   // a swap both start ready, and without this the phase would sit waiting until the timer died.
   if (!match.swapReady[1]) {
-    const slotSeven = match.revealed[1].find(r => r.slot === 7)
+    const slotSeven = match.held?.[1] || null
     const doSwap = chooseBotSwap({
       difficulty: match.difficulty,
       slotCard: slotSeven ? { value: slotSeven.baseValue, color: slotSeven.color } : null,
-      undealt: botCards(match, match.undealt[1]),
+      undealt: botCards(match, [...match.hand[1], ...match.undealt[1]]),
       goalColor: match.goalColor[1]
     })
     recordSwapChoice(match, 1, doSwap)
@@ -432,8 +432,8 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
     await resolveRound(io, match, d)
   })
 
-  // Round-3 slot-7 swap. Free in practice: there is no balance check and no debit — the PvP debit
-  // path is not reachable from here. Held until the bot has chosen too, like PvP.
+  // Round-3 slot-7 swap. Costs 10 off the match score like PvP, with no balance check or debit.
+  // Held until the bot has chosen too, like PvP.
   socket.on(EV('swap'), async () => {
     const match = await liveMatch()
     if (!match) return

@@ -15,9 +15,10 @@
 //   • Right after round 1 there is a discard phase: discard any number of cards still in hand,
 //     then the hand is refilled back up to 6 from the undealt cards (4 + n when 4 were played
 //     and n discarded). Discarded cards are out of the match.
-//   • Round 3 places nothing: after round 2 is revealed, each player may pay SWAP_COST to replace
+//   • Round 3 places nothing: slot 7 is NOT revealed with the rest of round 2 — it stays face down (the
+//     owner can see their own). Each player may pay SWAP_COST to replace
 //     the card in slot 7 with a random undealt card (the old card returns to the undealt pile),
-//     or skip. Both choices resolve together, then the board is scored.
+//     or skip. Both choices resolve together, then both slot-7 cards flip and the board is scored.
 //   • A tie after the board is scored goes to sudden death: one extra slot (8, 9, ...) per round,
 //     each player placing exactly one card from whatever hand/undealt cards they have left.
 //   • Silver cards are colourless. After the swap and before scoring, each player who has a Silver
@@ -136,16 +137,27 @@ export function goalCardFor(match, idx) {
   return match.deckOrder[idx][gi ?? 11] ?? null
 }
 
+/** Stored goal colour for a side with no target colour (a deck of only Black/Silver cards). */
+export const NO_TARGET_COLOR = 'BLACK'
+
 /**
  * Sets match.goalCardIdx / match.goalColor from one random non-Black, non-Silver card out of each
- * player's deck. A deck with none gets a random real colour and no goal card.
+ * player's deck. A deck with none has no target colour (NO_TARGET_COLOR, no goal card).
  */
 export function assignRandomGoals(match, rng = Math.random) {
   match.goalCardIdx = match.deckOrder.map(d => pickGoalCardIdx(d, rng))
   match.goalColor = match.deckOrder.map((d, i) => (match.goalCardIdx[i] === null
-    ? REAL_COLORS[Math.min(REAL_COLORS.length - 1, Math.floor(rng() * REAL_COLORS.length))]
+    ? NO_TARGET_COLOR
     : d[match.goalCardIdx[i]].color))
   return match
+}
+
+/**
+ * The distinct target colours in play for a pair of goal colours (Black/Silver are not target
+ * colours). 2 = both revealed and different, 1 = one revealed (or both the same), 0 = none.
+ */
+export function targetColorsOf(goalColors) {
+  return [...new Set((goalColors || []).filter(isRealColor))]
 }
 
 /** A deck save must carry exactly 12 cards at unique positions 0-11. */
@@ -176,6 +188,8 @@ export function canSwap({ swapUsed, pointBalance, roundRevealed }) {
 }
 
 export const SWAP_COST = 10
+/** Taken off a side's match score (not its points balance) when it swaps its slot-7 card. */
+export const SWAP_SCORE_PENALTY = SWAP_COST
 
 /**
  * LEGACY fixed-order swap (kept for its unit tests; matches no longer use deck order).
@@ -223,6 +237,8 @@ function countColor(revealed, color) {
  * @param {Array<{finalValue:number,color:string}>} params.player2Revealed
  * @param {string} [params.player1SilverColor] real colour player 1's (still Silver) cards count as
  * @param {string} [params.player2SilverColor]
+ * @param {number} [params.player1Penalty] taken off player 1's score (slot-7 swap)
+ * @param {number} [params.player2Penalty]
  * @returns {{ winner: 'player1'|'player2'|null, reason: string, player1Score: number,
  *             player2Score: number, bonus: object|null }}
  *   winner === null means a genuine tie (sudden death should continue, or if both decks are
@@ -230,7 +246,8 @@ function countColor(revealed, color) {
  */
 export function determineWinner({
   player1GoalColor, player2GoalColor, player1Revealed: p1Raw, player2Revealed: p2Raw,
-  player1SilverColor = null, player2SilverColor = null
+  player1SilverColor = null, player2SilverColor = null,
+  player1Penalty = 0, player2Penalty = 0
 }) {
   // Silver is colourless until its owner picks a colour: it then counts as that colour for the
   // goal-colour counts below (values are untouched).
@@ -238,35 +255,33 @@ export function determineWinner({
   const player2Revealed = recolorSilver(p2Raw, player2SilverColor)
   const p1Total = sum(player1Revealed.map(r => r.finalValue))
   const p2Total = sum(player2Revealed.map(r => r.finalValue))
-  const p1Neutral = isNeutralColor(player1GoalColor)
-  const p2Neutral = isNeutralColor(player2GoalColor)
 
-  let player1Score = p1Total
-  let player2Score = p2Total
+  // Points taken off a side's match score (the slot-7 swap fee); never touches the points balance.
+  let player1Score = p1Total - (player1Penalty || 0)
+  let player2Score = p2Total - (player2Penalty || 0)
   let bonus = null
 
-  if (!p1Neutral && !p2Neutral) {
-    // Both non-neutral: outright win if you have MORE cards of BOTH goal colors than opponent.
-    const p1OfP1 = countColor(player1Revealed, player1GoalColor)
-    const p2OfP1 = countColor(player2Revealed, player1GoalColor)
-    const p1OfP2 = countColor(player1Revealed, player2GoalColor)
-    const p2OfP2 = countColor(player2Revealed, player2GoalColor)
-    const p1WinsOutright = p1OfP1 > p2OfP1 && p1OfP2 > p2OfP2
-    const p2WinsOutright = p2OfP1 > p1OfP1 && p2OfP2 > p1OfP2
-    if (p1WinsOutright) return { winner: 'player1', reason: 'both_colors', player1Score, player2Score, bonus }
-    if (p2WinsOutright) return { winner: 'player2', reason: 'both_colors', player1Score, player2Score, bonus }
-    // else fall through to total value below
-  } else if (p1Neutral !== p2Neutral) {
-    // Exactly one non-neutral: that color's card-count leader gets +15 before comparing totals.
-    const nonNeutralColor = p1Neutral ? player2GoalColor : player1GoalColor
-    const p1Count = countColor(player1Revealed, nonNeutralColor)
-    const p2Count = countColor(player2Revealed, nonNeutralColor)
+  const targets = targetColorsOf([player1GoalColor, player2GoalColor])
+  if (targets.length === 2) {
+    // Two different target colours: outright win if you have MORE cards of both colours COMBINED
+    // than the opponent. A tie in the combined count falls through to total value below.
+    const [c1, c2] = targets
+    const p1Combined = countColor(player1Revealed, c1) + countColor(player1Revealed, c2)
+    const p2Combined = countColor(player2Revealed, c1) + countColor(player2Revealed, c2)
+    if (p1Combined > p2Combined) return { winner: 'player1', reason: 'both_colors', player1Score, player2Score, bonus }
+    if (p2Combined > p1Combined) return { winner: 'player2', reason: 'both_colors', player1Score, player2Score, bonus }
+  } else if (targets.length === 1) {
+    // One target colour (one side revealed it, or both revealed the same one): the card-count
+    // leader of that colour gets +15 before comparing totals.
+    const [color] = targets
+    const p1Count = countColor(player1Revealed, color)
+    const p2Count = countColor(player2Revealed, color)
     if (p1Count > p2Count) {
       player1Score += 15
-      bonus = { player: 'player1', color: nonNeutralColor, count: p1Count }
+      bonus = { player: 'player1', color, count: p1Count }
     } else if (p2Count > p1Count) {
       player2Score += 15
-      bonus = { player: 'player2', color: nonNeutralColor, count: p2Count }
+      bonus = { player: 'player2', color, count: p2Count }
     }
   }
   // Both neutral (or the both-non-neutral fallback): higher total value wins.

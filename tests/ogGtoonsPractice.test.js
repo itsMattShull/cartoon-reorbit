@@ -87,11 +87,19 @@ test('chooseBotDiscards: easy keeps everything; normal drops clearly weak cards 
 })
 
 test('chooseBotSwap: easy never swaps; nothing to swap with or no slot-7 card never swaps', () => {
-  const base = { slotCard: { value: 1, color: 'BLUE' }, undealt: handOf([9, 9]), goalColor: 'RED' }
+  const base = { slotCard: { value: 1, color: 'BLUE' }, undealt: handOf([25, 25]), goalColor: 'RED' }
   assert.equal(chooseBotSwap({ ...base, difficulty: 'easy' }), false)
   assert.equal(chooseBotSwap({ ...base, difficulty: 'normal', undealt: [] }), false)
   assert.equal(chooseBotSwap({ ...base, difficulty: 'normal', slotCard: null }), false)
   assert.equal(chooseBotSwap({ ...base, difficulty: 'normal' }), true)
+})
+
+test('chooseBotSwap: an upgrade smaller than the 10-point swap penalty (plus margin) is not worth it', () => {
+  const base = { slotCard: { value: 1, color: 'BLUE' }, goalColor: 'RED' }
+  assert.equal(chooseBotSwap({ ...base, difficulty: 'normal', undealt: handOf([9, 9]) }), false)    // +8 < 10
+  assert.equal(chooseBotSwap({ ...base, difficulty: 'normal', undealt: handOf([13, 13]) }), false)  // +12 < 10 + 3
+  assert.equal(chooseBotSwap({ ...base, difficulty: 'normal', undealt: handOf([14, 14]) }), true)   // +13 >= 10 + 3
+  assert.equal(chooseBotSwap({ ...base, difficulty: 'hard', undealt: handOf([13, 13]) }), true)     // +12 >= 10 + 2
 })
 
 test('chooseBotSwap: keeps a strong slot-7 card', () => {
@@ -233,45 +241,68 @@ test('core: round 2 opens with 3 slots and round 3 is a swap phase with no placi
   const m = playToSwapPhase(freshMatch(makeDeck(), makeDeck()))
   assert.equal(m.currentRound, 3)
   assert.equal(m.phase, 'swap')
-  assert.deepEqual(m.revealed[0].map(r => r.slot), [1, 2, 3, 4, 5, 6, 7])
+  assert.deepEqual(m.revealed[0].map(r => r.slot), [1, 2, 3, 4, 5, 6])   // slot 7 is held face down until the swap settles
+  assert.equal(m.held[0].slot, 7)
+  const view = publicMatchView(m, 'a')
+  assert.equal(view.you.heldCard.slot, 7)                                // the owner sees their own held card...
+  assert.equal(view.opponent.heldSlot, 7)                                // ...the opponent only sees that one is held
+  assert.equal(JSON.stringify(view.opponent).includes(m.held[1].name), false)
   assert.equal(m.undealt[0].length, 2)
   assert.deepEqual(publicMatchView(m, 'a').roundSlots, [])
   assert.equal(placeCard(m, 0, { cardIdx: m.hand[0][0], slot: 7 }).code, 'wrongPhase')
   assert.equal(checkCommit(m, 0, 3).code, 'wrongPhase')
 })
 
-test('core: slot-7 swap is held until both choose, then replaces slot 7 with an undealt card', () => {
+test('core: slot-7 swap is held until both choose, then replaces slot 7 with a card still in the deck', () => {
   const m = playToSwapPhase(freshMatch(makeDeck(), makeDeck()))
-  const old = m.revealed[0].find(r => r.slot === 7)
-  const undealtBefore = [...m.undealt[0]]
+  const old = m.held[0]
+  const poolBefore = [...m.hand[0], ...m.undealt[0]]
   assert.equal(checkSwap(m, 0).ok, true)
   assert.equal(recordSwapChoice(m, 0, true).ok, true)
   assert.equal(checkSwap(m, 0).code, 'already_swapped')
   assert.equal(resolveSwapPhase(m, seeded(3)), null)                 // opponent still deciding
-  assert.equal(m.revealed[0].find(r => r.slot === 7), old)           // nothing visible yet
+  assert.equal(m.held[0], old)                                       // nothing visible yet
+  assert.equal(m.revealed[0].some(r => r.slot === 7), false)
   assert.equal(recordSwapChoice(m, 1, false).ok, true)
+  const kept = m.held[1]
   const res = resolveSwapPhase(m, seeded(3))
   assert.deepEqual(res.order, [7])
   assert.equal(res.entries[0].length, 1)
-  assert.equal(res.entries[1].length, 0)
+  assert.equal(res.entries[1].length, 1)                             // the unswapped card flips too
+  assert.equal(res.entries[1][0], kept)
+  assert.deepEqual(m.held, [null, null])
   const now = m.revealed[0].find(r => r.slot === 7)
   assert.notEqual(now.deckIdx, old.deckIdx)
   assert.equal(now.round, 3)
-  assert.equal(undealtBefore.includes(now.deckIdx), true)
-  assert.equal(m.undealt[0].includes(old.deckIdx), true)             // old card went back
-  assert.equal(m.undealt[0].length, 2)
+  assert.equal(poolBefore.includes(now.deckIdx), true)
+  const poolAfter = [...m.hand[0], ...m.undealt[0]]
+  assert.equal(poolAfter.includes(old.deckIdx), true)                // old card went back
+  assert.equal(poolAfter.length, poolBefore.length)
   assert.equal(m.revealed[0].length, 7)
   assert.equal(m.swapUsed[0], true)
   assert.equal(m.swapUsed[1], false)
   assert.equal(m.phase, 'play')
 })
 
-test('core: a player with no undealt cards is not offered the swap and cannot choose it', () => {
+test('core: a player who discarded everything still has hand cards to swap with', () => {
+  const m = freshMatch(makeDeck(), makeDeck())
+  autoPlay(m, 0); autoPlay(m, 1); revealPlacedCards(m); advanceRound(m)
+  submitDiscard(m, 0, { cardIdxs: [...m.hand[0]] }); submitDiscard(m, 1, { cardIdxs: [] }); resolveDiscardPhase(m)
+  assert.equal(m.undealt[0].length, 0)
+  autoPlay(m, 0); autoPlay(m, 1); revealPlacedCards(m)
+  advanceRound(m)
+  assert.equal(m.swapReady[0], false)
+  assert.equal(publicMatchView(m, 'a').you.maySwap, true)
+  assert.equal(checkSwap(m, 0).ok, true)
+})
+
+test('core: a player with no cards left in the deck is not offered the swap and cannot choose it', () => {
   const m = freshMatch(makeDeck(), makeDeck())
   autoPlay(m, 0); autoPlay(m, 1); revealPlacedCards(m); advanceRound(m)
   submitDiscard(m, 0, { cardIdxs: [] }); submitDiscard(m, 1, { cardIdxs: [] }); resolveDiscardPhase(m)
   autoPlay(m, 0); autoPlay(m, 1); revealPlacedCards(m)
   m.undealt[0] = []
+  m.hand[0] = []
   advanceRound(m)
   assert.deepEqual(m.swapReady, [true, false])
   assert.equal(publicMatchView(m, 'a').you.maySwap, false)
@@ -356,7 +387,7 @@ test('game log: records the whole match as it goes, in order, with sequence numb
   assert.deepEqual(m.gameLog.map(e => e.seq), m.gameLog.map((_, i) => i + 1))
   const scoring = entryOf(m, 'scoring')[0]
   assert.ok(sectionLines(scoring, 'Result').length >= 2)
-  assert.equal(entryOf(m, 'reveal').length, 2)
+  assert.equal(entryOf(m, 'reveal').length, 3)                       // rounds 1 and 2, then the held slot 7
   assert.match(entryOf(m, 'reveal')[0].sections[0].lines[0], /^Slot 1: A /)
 })
 
@@ -479,9 +510,9 @@ test('core: expiry only acts for players who have not finished the phase', () =>
 
 test('core: discard expiry keeps the hand; swap expiry means no swap', () => {
   const m = playToSwapPhase(freshMatch(makeDeck(), makeDeck()))
-  const before = m.revealed[0].find(r => r.slot === 7)
+  const before = m.held[0]
   assert.deepEqual(expirePhase(m, seeded(4)), [0, 1])
-  assert.deepEqual(resolveSwapPhase(m, seeded(4)).order, [])
+  assert.deepEqual(resolveSwapPhase(m, seeded(4)).order, [7])
   assert.equal(m.revealed[0].find(r => r.slot === 7), before)
 
   const d = freshMatch(makeDeck(), makeDeck())
@@ -772,12 +803,15 @@ test('practice: the slot-7 swap is free, happens once the bot has chosen too, an
   assert.deepEqual(view.roundSlots, [])
   assert.equal(view.you.maySwap, true)
   assert.equal(view.you.undealtCount, 2)
-  const old = view.you.revealed.find(r => r.slot === 7)
+  assert.equal(view.you.revealed.some(r => r.slot === 7), false)   // slot 7 is not on the board yet
+  const old = view.you.heldCard
+  assert.equal(view.opponent.heldSlot, 7)
   await h.handlers['oggtoons:practice:swap']()
   assert.equal(h.events('oggtoons:swapApplied').length, 1)
   const reveal = await until(() => h.events('oggtoons:reveal').find(r => r.reveal.round === 3))
   assert.deepEqual(reveal.reveal.order, [7])
   assert.equal(reveal.reveal.you[0].slot, 7)
+  assert.equal(reveal.reveal.opponent[0].slot, 7)
   assert.notEqual(reveal.reveal.you[0].ctoonId, old.ctoonId)
   assert.equal(reveal.you.swapUsed, true)
   await h.handlers['oggtoons:practice:leave']()
@@ -894,7 +928,7 @@ test('practice: when each phase times out the server plays the default and the m
   t.mock.timers.tick(PLACE_MS); await settle()
   rev = h.events('oggtoons:reveal').at(-1)
   assert.equal(rev.reveal.round, 2)
-  assert.deepEqual(rev.reveal.you.map(e => e.slot), [5, 6, 7])
+  assert.deepEqual(rev.reveal.you.map(e => e.slot), [5, 6])      // slot 7 stays face down for the swap decision
   assert.equal(rev.phase, 'swap')
   const round2Reveal = revealDurationMs(rev.reveal.steps, rev.reveal.timing)
   assert.equal(rev.phaseEndsAt - Date.now(), SWAP_MS + round2Reveal)
@@ -903,7 +937,7 @@ test('practice: when each phase times out the server plays the default and the m
   t.mock.timers.tick(SWAP_MS + round2Reveal); await settle()
   rev = h.events('oggtoons:reveal').at(-1)
   assert.equal(rev.reveal.round, 3)
-  assert.deepEqual(rev.reveal.order, [])
+  assert.deepEqual(rev.reveal.order, [7])
   assert.equal(rev.you.swapUsed, false)
   assert.equal(rev.you.revealed.length >= 7, true)
   await h.handlers['oggtoons:practice:leave']()
@@ -950,4 +984,16 @@ test('practice module imports only the allow-listed modules', () => {
     './ogGtoonBot.js', './ogGtoonEngine.js', './ogGtoonMatchCore.js', './ogGtoonPresence.js',
     './ogGtoonsConfig.js', './ogGtoonDeck.js', 'crypto'
   ].sort())
+})
+
+test('core: a slot-7 swap takes 10 off the swapper\'s match score, only for the side that swapped', () => {
+  const m = playToSwapPhase(freshMatch(makeDeck({ goal: 'BLACK' }), makeDeck({ goal: 'BLACK' })))
+  recordSwapChoice(m, 0, true); recordSwapChoice(m, 1, false)
+  resolveSwapPhase(m, seeded(3))
+  const raw = (i) => m.revealed[i].reduce((a, r) => a + r.finalValue, 0)
+  const end = checkMatchEnd(m)
+  const res = end || runFinalBoardResolution(m).outcome
+  const [s1, s2] = end ? [end.player1Score, end.player2Score] : [res.player1Score, res.player2Score]
+  assert.equal(s1, raw(0) - 10)
+  assert.equal(s2, raw(1))
 })

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   deriveGoalColor, validateDeckPositions, canSwap, applySwap, SWAP_COST, determineWinner,
   slotsForRound, isSuddenDeathRound, dealOpeningHand, discardAndDeal, swapForRandomUndealt,
-  shuffled, HAND_SIZE, REGULATION_SLOTS
+  shuffled, HAND_SIZE, REGULATION_SLOTS, assignRandomGoals
 } from '../server/utils/ogGtoonEngine.js'
 import {
   resolveRoundEffects, resolveFinalBoard, isValidEffect, validateEffectSchema
@@ -71,20 +71,30 @@ test('determineWinner: exactly one non-neutral -> color-count leader gets +15 be
   assert.equal(out.player2Score, 26)
 })
 
-test('determineWinner: both non-neutral -> outright win requires MORE of BOTH goal colors', () => {
+test('determineWinner: both non-neutral, equal combined count -> falls back to total value', () => {
   const out = determineWinner({
     player1GoalColor: 'RED',
     player2GoalColor: 'BLUE',
     player1Revealed: revealed([[1, 'RED'], [1, 'RED'], [1, 'BLUE']]), // 2 RED, 1 BLUE
     player2Revealed: revealed([[1, 'RED'], [1, 'BLUE'], [1, 'BLUE']]) // 1 RED, 2 BLUE
   })
-  // player1 does not have MORE blue than player2, and player2 does not have MORE red than
-  // player1 -- neither wins outright, so it falls back to total value (a tie here: 3 vs 3).
+  // Combined RED+BLUE is 3 vs 3 -- no outright win, so it falls back to total value (a tie here: 3 vs 3).
   assert.equal(out.winner, null)
   assert.equal(out.reason, 'tie')
 })
 
-test('determineWinner: both non-neutral, one player leads BOTH colors -> outright win regardless of total value', () => {
+test('determineWinner: both non-neutral, equal combined count, higher points wins the tiebreak', () => {
+  const out = determineWinner({
+    player1GoalColor: 'RED',
+    player2GoalColor: 'BLUE',
+    player1Revealed: revealed([[1, 'RED'], [1, 'RED'], [1, 'BLUE']]), // 3 combined, total 3
+    player2Revealed: revealed([[5, 'RED'], [1, 'BLUE'], [1, 'BLUE']]) // 3 combined, total 7
+  })
+  assert.equal(out.winner, 'player2')
+  assert.equal(out.reason, 'total_value')
+})
+
+test('determineWinner: both non-neutral, one player has the most of both colors combined -> outright win regardless of total value', () => {
   const out = determineWinner({
     player1GoalColor: 'RED',
     player2GoalColor: 'BLUE',
@@ -587,4 +597,24 @@ test('assignRandomGoals picks one random card from each deck as that player\'s g
   // Matches without goalCardIdx (legacy) still use slot 11.
   const legacy = { deckOrder: [new Array(12).fill(null).map((_, i) => ({ name: `c${i}` })), []] }
   assert.equal(goalCardFor(legacy, 0).name, 'c11')
+})
+
+test('assignRandomGoals: a deck with only Black/Silver cards has no target color', () => {
+  const deck = Array.from({ length: 12 }, (_, i) => ({ color: i % 2 ? 'BLACK' : 'SILVER' }))
+  const match = assignRandomGoals({ deckOrder: [deck, deck] })
+  assert.deepEqual(match.goalCardIdx, [null, null])
+  assert.deepEqual(match.goalColor, ['BLACK', 'BLACK'])
+})
+
+test('determineWinner: both players reveal the same color -> one target color, +15 bonus, points decide', () => {
+  const card = (color, v) => ({ color, finalValue: v })
+  const out = determineWinner({
+    player1GoalColor: 'RED', player2GoalColor: 'RED',
+    player1Revealed: [card('RED', 1), card('RED', 1), card('BLUE', 1)],
+    player2Revealed: [card('RED', 20), card('BLUE', 10)]
+  })
+  assert.equal(out.reason, 'total_value')
+  assert.equal(out.bonus.player, 'player1')
+  assert.equal(out.player1Score, 18)
+  assert.equal(out.winner, 'player2')
 })

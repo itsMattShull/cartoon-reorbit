@@ -19,12 +19,12 @@ test('goal cards are never Black or Silver', () => {
   for (let n = 0; n < 50; n++) assert.ok(['RED', 'BLUE'].includes(deck[pickGoalCardIdx(deck, Math.random)].color))
 })
 
-test('a deck with no eligible goal card gets a random real colour and no goal card', () => {
+test('a deck with no eligible goal card has no target colour and no goal card', () => {
   const deck = deckOf(Array(12).fill('SILVER'))
   assert.equal(pickGoalCardIdx(deck), null)
   const m = assignRandomGoals({ deckOrder: [deck, deck] }, () => 0)
   assert.deepEqual(m.goalCardIdx, [null, null])
-  assert.deepEqual(m.goalColor, [REAL_COLORS[0], REAL_COLORS[0]])
+  assert.deepEqual(m.goalColor, ['BLACK', 'BLACK'])
   assert.equal(goalCardFor(m, 0), null)
 })
 
@@ -35,8 +35,8 @@ test('determineWinner counts a Silver card as its owner\'s picked colour', () =>
     player1Revealed: [r('RED'), r('SILVER'), r('SILVER')],
     player2Revealed: [r('BLUE'), r('BLUE'), r('RED')]
   }
-  // Silver stays colourless until picked: nobody holds more of both colours.
-  assert.equal(determineWinner(base).reason, 'tie')
+  // Silver stays colourless until picked: combined Red+Blue is 1 vs 3, so p2 leads.
+  assert.equal(determineWinner(base).winner, 'player2')
   // p1 holds more Red (2 vs 1); a Blue pick gives them more Blue (3 vs 1) too, so they win outright.
   const sides = {
     player1GoalColor: 'RED', player2GoalColor: 'BLUE',

@@ -29,8 +29,8 @@ import { revealDurationMs } from '../../utils/ogGtoonReveal.js'
 import { resolveFinalBoard } from './ogGtoonEffects.js'
 import {
   determineWinner, recolorSilver, isRealColor, REAL_COLORS, COLOR_MS, hasSuddenDeathCardsRemaining, dealOpeningHand, discardAndDeal,
-  goalCardFor, slotsForRound, isSuddenDeathRound, shuffled, REGULATION_ROUNDS, DISCARD_AFTER_ROUND,
-  SWAP_AFTER_ROUND, PLACE_MS, DISCARD_MS, SWAP_MS
+  goalCardFor, targetColorsOf, slotsForRound, isSuddenDeathRound, shuffled, REGULATION_ROUNDS, DISCARD_AFTER_ROUND,
+  SWAP_AFTER_ROUND, SWAP_SCORE_PENALTY, REGULATION_SLOTS, PLACE_MS, DISCARD_MS, SWAP_MS
 } from './ogGtoonEngine.js'
 
 export const TOTAL_ROUNDS = REGULATION_ROUNDS
@@ -55,6 +55,13 @@ const nameOfSide = (match, idx) => match.usernames?.[idx] ?? `Player ${idx + 1}`
 const sideIdx = (side) => (side === 'player1' ? 0 : 1)
 const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`
 const COLOR_WORD = (c) => (c ? c.charAt(0) + c.slice(1).toLowerCase() : '?')
+const targetWord = (c) => (isRealColor(c) ? COLOR_WORD(c) : 'none')
+function targetSummary(goalColors) {
+  const t = targetColorsOf(goalColors)
+  if (t.length === 2) return `Two target colors revealed (${t.map(COLOR_WORD).join(' and ')}): the most cards of both colors combined wins the game regardless of points. A tie is broken by points.`
+  if (t.length === 1) return `One target color revealed (${COLOR_WORD(t[0])}): decided by points; more ${COLOR_WORD(t[0])} cards earns a 15 point bonus.`
+  return 'No target color revealed: decided by points only.'
+}
 const signed = (n) => (n >= 0 ? `+${n}` : `${n}`)
 
 function describeApplication(e) {
@@ -152,11 +159,13 @@ export function initHands(match, rng = Math.random) {
   match.silverColor = [null, null]
   match.colorDone = false
   match.revealed = [[], []]
+  match.held = [null, null]
   match.currentRound = 1
   logEvent(match, {
     kind: 'start', title: 'Match started',
     sections: [{ label: null, lines: [
-      `${nameOfSide(match, 0)} (goal ${COLOR_WORD(match.goalColor?.[0])}) vs ${nameOfSide(match, 1)} (goal ${COLOR_WORD(match.goalColor?.[1])})`,
+      `${nameOfSide(match, 0)} (target ${targetWord(match.goalColor?.[0])}) vs ${nameOfSide(match, 1)} (target ${targetWord(match.goalColor?.[1])})`,
+      targetSummary(match.goalColor),
       'Each player was dealt 6 cards from their 12-card deck.'
     ] }]
   })
@@ -191,7 +200,7 @@ export function startPhaseClock(match, now = Date.now()) {
     ] }] })
   } else if (match.phase === 'swap') {
     logEvent(match, { kind: 'phase', title: 'Round 3 — slot-7 swap', sections: [{ label: null, lines: [
-      `Optional: replace your slot-7 card with a random undealt card (${match.practice ? 'free in practice' : '10 points'}). ${secs}s (no swap if time runs out).`
+      `Optional: replace your slot-7 card with a random undealt card (costs ${SWAP_SCORE_PENALTY} points off your match score). ${secs}s (no swap if time runs out).`
     ] }] })
   } else {
     const slots = slotsForRound(match.currentRound)
@@ -242,6 +251,8 @@ export function publicMatchView(match, uid, opts = {}) {
       swapUsed: match.swapUsed[meIdx],
       stake: match.stake[meIdx],
       revealed: match.revealed[meIdx],
+      // Private: the owner's own face-down slot-7 card (what they are deciding whether to swap).
+      heldCard: match.held?.[meIdx] ? match.held[meIdx] : null,
       // Private: the owner always sees their own hand and where they have placed cards.
       hand: (match.hand?.[meIdx] || []).map(i => handCardView(match, meIdx, i)),
       placements: myPlacements.map(p => ({ slot: p.slot, cardIdx: p.cardIdx })),
@@ -256,7 +267,7 @@ export function publicMatchView(match, uid, opts = {}) {
       // Private until the colour phase resolves; then both picks are public.
       silverColor: match.silverColor?.[meIdx] ?? null,
       pendingColor: match.pendingColor?.[meIdx] ?? null,
-      maySwap: match.phase === 'swap' && !match.swapReady?.[meIdx] && (match.undealt?.[meIdx] || []).length > 0
+      maySwap: match.phase === 'swap' && !match.swapReady?.[meIdx] && ((match.undealt?.[meIdx] || []).length + (match.hand?.[meIdx] || []).length) > 0
     },
     opponent: {
       username: match.usernames[oppIdx],
@@ -264,6 +275,8 @@ export function publicMatchView(match, uid, opts = {}) {
       goalCard: goalCardView(match, oppIdx),
       swapUsed: match.swapUsed[oppIdx],
       revealed: match.revealed[oppIdx],
+      // Only that a slot-7 card is face down — never which one.
+      heldSlot: match.held?.[oppIdx] ? match.held[oppIdx].slot : null,
       handCount: (match.hand?.[oppIdx] || []).length,
       // Only WHICH slots the opponent has committed to (shown face down) — never which cards,
       // and nothing at all until they commit.
@@ -360,14 +373,29 @@ export function autoFillPlacements(match, idx, rng = Math.random) {
 
 /* ── Round-3 slot-7 swap ─────────────────────────────────────────────────────────────────── */
 
-/** The revealed entry sitting in the last regulation slot for side `idx`, if any. */
+/** Match-score penalty for each side: SWAP_SCORE_PENALTY once they have swapped their slot-7 card. */
+function swapPenalties(match) {
+  return { player1Penalty: match.swapUsed?.[0] ? SWAP_SCORE_PENALTY : 0, player2Penalty: match.swapUsed?.[1] ? SWAP_SCORE_PENALTY : 0 }
+}
+
+/** Whether a card placed in `slot` this round stays face down until the swap phase is settled. */
+function holdsBack(match, slot) {
+  return slot === REGULATION_SLOTS && match.currentRound === SWAP_AFTER_ROUND
+}
+
+/** The side's slot-7 card, which stays hidden (held back from the board) until the swap phase settles. */
 function slotSevenEntry(match, idx) {
-  return match.revealed[idx].find(r => r.slot === 7) || null
+  return match.held?.[idx] || null
 }
 
 /** Whether `idx` can be offered the swap at all: a card in slot 7 and an undealt card to draw. */
 function canOfferSwap(match, idx) {
-  return !!slotSevenEntry(match, idx) && (match.undealt[idx] || []).length > 0
+  return !!slotSevenEntry(match, idx) && swapPoolSize(match, idx) > 0
+}
+
+/** Cards a slot-7 swap can draw: everything still in the deck, i.e. unplayed hand cards plus undealt ones. */
+function swapPoolSize(match, idx) {
+  return (match.hand[idx] || []).length + (match.undealt[idx] || []).length
 }
 
 /** Pre-flight for the slot-7 swap (PvP validates, then debits points, then records it). */
@@ -375,7 +403,7 @@ export function checkSwap(match, idx) {
   if (match.ending) return bad('over', 'The match is over.')
   if (match.phase !== 'swap') return bad('wrongPhase', 'Not the swap phase.')
   if (match.swapReady[idx]) return bad('already_swapped', 'You already made your swap choice.')
-  if (!canOfferSwap(match, idx)) return bad('nothingToSwap', 'There are no undealt cards left to swap with.')
+  if (!canOfferSwap(match, idx)) return bad('nothingToSwap', 'There are no cards left in your deck to swap with.')
   return OK
 }
 
@@ -384,7 +412,7 @@ export function recordSwapChoice(match, idx, swap) {
   if (match.ending) return bad('over', 'The match is over.')
   if (match.phase !== 'swap') return bad('wrongPhase', 'Not the swap phase.')
   if (match.swapReady[idx]) return bad('already_swapped', 'You already made your swap choice.')
-  if (swap && !canOfferSwap(match, idx)) return bad('nothingToSwap', 'There are no undealt cards left to swap with.')
+  if (swap && !canOfferSwap(match, idx)) return bad('nothingToSwap', 'There are no cards left in your deck to swap with.')
   match.pendingSwap[idx] = !!swap
   match.swapReady[idx] = true
   return OK
@@ -404,26 +432,42 @@ export function resolveSwapPhase(match, rng = Math.random) {
     if (!match.pendingSwap[i]) continue
     const old = slotSevenEntry(match, i)
     swapped[i] = old
-    if (!old || !match.undealt[i].length) continue
-    const pick = Math.floor(rng() * match.undealt[i].length)
-    const drawnIdx = match.undealt[i][pick]
-    match.undealt[i] = match.undealt[i].slice()
-    match.undealt[i][pick] = old.deckIdx
-    const entry = toRevealEntry(match.deckOrder[i][drawnIdx], match.currentRound, old.slot, drawnIdx)
-    match.revealed[i] = match.revealed[i].map(r => (r === old ? entry : r))
-    entries[i].push(entry)
+    if (!old || !swapPoolSize(match, i)) continue
+    const handLen = match.hand[i].length
+    const pick = Math.floor(rng() * swapPoolSize(match, i))
+    let drawnIdx
+    if (pick < handLen) {
+      drawnIdx = match.hand[i][pick]
+      match.hand[i] = match.hand[i].slice()
+      match.hand[i][pick] = old.deckIdx
+    } else {
+      drawnIdx = match.undealt[i][pick - handLen]
+      match.undealt[i] = match.undealt[i].slice()
+      match.undealt[i][pick - handLen] = old.deckIdx
+    }
+    match.held[i] = toRevealEntry(match.deckOrder[i][drawnIdx], match.currentRound, old.slot, drawnIdx)
     match.swapUsed[i] = true
   }
+  // Only now do both slot-7 cards (kept or swapped) flip onto the board. The log names no cards
+  // until then, so the swap choice leaks nothing the opponent could use.
   const lines = []
   for (const i of [0, 1]) {
-    if (entries[i].length) {
-      const was = swapped[i]
-      lines.push(`${nameOfSide(match, i)} swapped slot 7: ${was.name} → ${entries[i][0].name}`)
-    } else if (match.revealed[i].some(r => r.slot === 7)) {
-      lines.push(`${nameOfSide(match, i)} kept their slot-7 card.`)
-    }
+    if (match.held[i]) lines.push(`${nameOfSide(match, i)} ${match.swapUsed[i] && swapped[i] ? 'swapped' : 'kept'} their slot-7 card.`)
   }
   logEvent(match, { kind: 'swap', title: 'Slot-7 swap', sections: [{ label: null, lines }] })
+  for (const i of [0, 1]) {
+    const e = match.held[i]
+    if (!e) continue
+    entries[i].push(e)
+    match.revealed[i].push(e)
+    match.revealed[i].sort((a, b) => a.slot - b.slot)
+    match.held[i] = null
+  }
+  const showCard = (e) => (e ? `${e.name} (${e.baseValue}, ${COLOR_WORD(e.color)})` : '—')
+  logEvent(match, {
+    kind: 'reveal', title: 'Slot 7 revealed',
+    sections: [{ label: null, lines: [`Slot 7: ${nameOfSide(match, 0)} ${showCard(entries[0][0])}  vs  ${nameOfSide(match, 1)} ${showCard(entries[1][0])}`] }]
+  })
   match.pendingSwap = [false, false]
   match.swapReady = [false, false]
   match.phase = 'play' // the caller either ends the match or advances into sudden death
@@ -504,7 +548,7 @@ export function autoSilverColor(match, idx) {
     const o = determineWinner({
       player1GoalColor: match.goalColor[0], player2GoalColor: match.goalColor[1],
       player1Revealed: final.player1.revealed, player2Revealed: final.player2.revealed,
-      player1SilverColor: silvers[0], player2SilverColor: silvers[1]
+      player1SilverColor: silvers[0], player2SilverColor: silvers[1], ...swapPenalties(match)
     })
     const mine = idx === 0 ? o.player1Score : o.player2Score
     const other = idx === 0 ? o.player2Score : o.player1Score
@@ -674,7 +718,8 @@ export function runFinalBoardResolution(match) {
     player1Revealed: final.player1.revealed,
     player2Revealed: final.player2.revealed,
     player1SilverColor: silvers[0],
-    player2SilverColor: silvers[1]
+    player2SilverColor: silvers[1],
+    ...swapPenalties(match)
   })
   return { outcome, final }
 }
@@ -789,6 +834,12 @@ export function revealPlacedCards(match) {
     for (const p of match.placements[i]) {
       const card = match.deckOrder[i][p.cardIdx]
       const entry = toRevealEntry(card, match.currentRound, p.slot, p.cardIdx)
+      if (holdsBack(match, p.slot)) {
+        // The last card stays face down until both players have decided whether to swap it.
+        if (!match.held) match.held = [null, null]
+        match.held[i] = entry
+        continue
+      }
       entries[i].push(entry)
       match.revealed[i].push(entry)
     }
@@ -901,10 +952,11 @@ function logFinalScoring(match, outcome, final, continues) {
   const d = describeBoard(match, final)
   const [n0, n1] = [nameOfSide(match, 0), nameOfSide(match, 1)]
   const totals = [`${n0}: ${outcome.player1Score}   ${n1}: ${outcome.player2Score}`]
+  for (const i of [0, 1]) if (match.swapUsed?.[i]) totals.push(`${nameOfSide(match, i)} loses ${SWAP_SCORE_PENALTY} points for swapping slot 7.`)
   if (outcome.bonus) totals.push(`${nameOfSide(match, outcome.bonus.player === 'player1' ? 0 : 1)} gets +15 for holding more ${COLOR_WORD(outcome.bonus.color)} cards.`)
   const verdict = outcome.winner === null
     ? (continues ? 'Tied — sudden death.' : 'Tied — no cards left to break it.')
-    : `${outcome.winner === 'player1' ? n0 : n1} wins ${outcome.reason === 'both_colors' ? 'by holding more of both goal colors' : 'on total value'}.`
+    : `${outcome.winner === 'player1' ? n0 : n1} wins ${outcome.reason === 'both_colors' ? 'by holding the most cards of both goal colors combined' : 'on total value'}.`
   if (!d.notable && !d.sections[4].lines.length) d.sections[0].lines.push('No powers fired — every card scores its printed value.')
   logEvent(match, {
     kind: 'scoring', title: isSuddenDeathRound(match.currentRound) ? 'Sudden-death scoring' : 'Final scoring',
