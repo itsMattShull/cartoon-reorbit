@@ -11,11 +11,6 @@
 // config sources, same "complete" thresholds and the same two daily-reset
 // boundaries from dailyTaskWindows.js), just evaluated over every day in the
 // trailing week and OR'd across tasks, instead of only "today" per task.
-//
-// Monster barcode scans are the one checklist item left out on purpose:
-// UserBarcodeScan stores one upserted row per (user, mapping) with a single
-// lastScannedAt, not a full per-scan log, so a past day's scan count can't be
-// reconstructed from it after the fact — only "most recent scan" is knowable.
 import { Prisma } from '@prisma/client'
 import { prisma } from '@/server/prisma'
 import { COMBAT_POOL_GAME_NAMES } from './gamePoints'

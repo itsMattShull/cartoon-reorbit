@@ -1,6 +1,7 @@
 // server/api/admin/users.get.js
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { cleanAdminPermissions } from '@/utils/adminPermissions'
 
 export default defineEventHandler(async (event) => {
   // 1) Admin check
@@ -30,7 +31,8 @@ export default defineEventHandler(async (event) => {
       isBooster: true,
       boosterSince: true,
       isAdmin: true,
-      isSubAdmin: true,
+      adminRestricted: true,
+      adminPermissions: true,
       active: true,
       banned: true,
       suspendedUntil: true,
@@ -87,7 +89,8 @@ export default defineEventHandler(async (event) => {
     isBooster:     u.isBooster,
     boosterSince:  u.boosterSince,
     isAdmin:       u.isAdmin,
-    isSubAdmin:    u.isSubAdmin,
+    adminRestricted: Boolean(u.isAdmin && u.adminRestricted),
+    adminPermissions: u.isAdmin && u.adminRestricted ? cleanAdminPermissions(u.adminPermissions) : [],
     active:        u.active,
     banned:        u.banned,
     suspendedUntil:  u.suspendedUntil,

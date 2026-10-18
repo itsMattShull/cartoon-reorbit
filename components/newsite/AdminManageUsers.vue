@@ -69,9 +69,11 @@
                 :title="`Suspended until ${formatDate(u.suspendedUntil)}`"
               >Suspended</span>
               <span
-                v-if="u.isSubAdmin"
-                class="px-1.5 py-0 rounded text-[10px] font-medium bg-sky-100 text-sky-800"
-              >Sub-admin</span>
+                v-if="u.isAdmin"
+                class="px-1.5 py-0 rounded text-[10px] font-medium"
+                :class="u.adminRestricted ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'"
+                :title="u.adminRestricted ? `Sub-admin: ${u.adminPermissions.length} admin tools` : 'Full admin'"
+              >{{ u.adminRestricted ? `Sub-admin · ${u.adminPermissions.length}` : 'Admin' }}</span>
               <div class="relative">
                 <button
                   class="ml-0.5 h-6 w-6 grid place-items-center text-gray-500 hover:text-gray-700 rounded hover:bg-gray-100"
@@ -87,6 +89,7 @@
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openLockedPoints(u); closeMenu()">See Locked Points</button>
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openPendingTrades(u); closeMenu()">View Pending Trades</button>
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openAdditionalZones(u); closeMenu()">Additional Zones</button>
+                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openResetPackLimit(u); closeMenu()">Reset Pack Limit</button>
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openUpdateUsername(u); closeMenu()">Update Username</button>
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openUpdateCMoon(u); closeMenu()">Update cMoon</button>
                   <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openVpnInfo(u); closeMenu()">VPN Info</button>
@@ -126,20 +129,30 @@
                     @click="openTransferModal(u); closeMenu()"
                   >Transfer</button>
                   <button
-                    v-if="isSuperAdmin && (!u.isAdmin || u.isSubAdmin)"
+                    v-if="isFullAdmin && !u.isAdmin"
+                    class="w-full text-left px-2 py-1 text-[11px] text-blue-700 font-semibold hover:bg-blue-50"
+                    @click="openSubAdminModal(u); closeMenu()"
+                  >Make sub-admin…</button>
+                  <button
+                    v-if="isFullAdmin && u.isAdmin && u.adminRestricted"
+                    class="w-full text-left px-2 py-1 text-[11px] text-blue-700 font-semibold hover:bg-blue-50"
+                    @click="openSubAdminModal(u); closeMenu()"
+                  >Edit sub-admin access…</button>
+                  <button
+                    v-if="isSuperAdmin && u.isAdmin && !u.adminRestricted && u.discordId !== superAdminId"
+                    class="w-full text-left px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-50"
+                    @click="openSubAdminModal(u); closeMenu()"
+                  >Convert to sub-admin…</button>
+                  <button
+                    v-if="isSuperAdmin && !u.isAdmin"
                     class="w-full text-left px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-50"
                     @click="makeAdmin(u); closeMenu()"
-                  >Make Admin</button>
+                  >Make Admin (full)</button>
                   <button
-                    v-if="!u.isAdmin"
-                    class="w-full text-left px-2 py-1 text-[11px] text-sky-700 hover:bg-sky-50"
-                    @click="makeSubAdmin(u); closeMenu()"
-                  >Make sub-admin</button>
-                  <button
-                    v-if="u.isSubAdmin"
-                    class="w-full text-left px-2 py-1 text-[11px] text-amber-700 hover:bg-amber-50"
-                    @click="removeSubAdmin(u); closeMenu()"
-                  >Remove sub-admin</button>
+                    v-if="isSuperAdmin && u.isAdmin && u.adminRestricted"
+                    class="w-full text-left px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-50"
+                    @click="makeAdmin(u); closeMenu()"
+                  >Promote to full Admin</button>
                   <button
                     v-if="isSuperAdmin && u.isAdmin && u.discordId !== superAdminId"
                     class="w-full text-left px-2 py-1 text-[11px] text-amber-700 hover:bg-amber-50"
@@ -510,6 +523,45 @@
       </div>
     </div>
 
+    <!-- Reset Pack Limit modal -->
+    <div v-if="showResetPackLimitModal" class="fixed inset-0 z-50 flex items-center justify-center">
+      <div class="absolute inset-0 bg-black/50" @click="closeResetPackLimitModal()"></div>
+      <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
+        <h3 class="text-lg font-semibold">Reset Pack Limit — {{ resetPackLimitTarget?.username || resetPackLimitTarget?.discordTag || 'user' }}</h3>
+        <p class="mt-2 text-sm text-gray-600">Pick a pack to let this user buy up to its daily limit again today.</p>
+
+        <div class="mt-4">
+          <label class="block text-sm font-medium text-gray-700">Pack</label>
+          <select v-model="resetPackLimitPackId" class="mt-2 w-full border rounded-md px-3 py-2 text-sm">
+            <option value="" disabled>{{ resetPackLimitPacksLoading ? 'Loading packs…' : 'Select a pack' }}</option>
+            <option v-for="p in resetPackLimitPacks" :key="p.id" :value="p.id">
+              {{ p.name }} (limit {{ p.dailyPurchaseLimit }}/day)
+            </option>
+          </select>
+          <p v-if="!resetPackLimitPacksLoading && !resetPackLimitPacks.length" class="mt-1 text-xs text-gray-500">
+            No packs currently have a daily purchase limit configured.
+          </p>
+        </div>
+
+        <div v-if="resetPackLimitSuccess" class="mt-3 rounded-md border border-emerald-200 bg-emerald-50 p-2 text-sm text-emerald-700">
+          Pack limit reset — this user can buy up to the daily limit again.
+        </div>
+        <div v-if="resetPackLimitError" class="mt-2 text-sm text-red-600">{{ resetPackLimitError }}</div>
+
+        <div class="mt-4 flex items-center justify-end gap-2">
+          <button class="px-3 py-1 text-sm border rounded-md" @click="closeResetPackLimitModal()" :disabled="resetPackLimitWorking">Close</button>
+          <button
+            class="px-3 py-1 text-sm rounded-md text-white"
+            :class="resetPackLimitCanSave ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'"
+            :disabled="!resetPackLimitCanSave || resetPackLimitWorking"
+            @click="saveResetPackLimit"
+          >
+            {{ resetPackLimitWorking ? 'Resetting…' : 'Reset' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Update Username modal -->
     <div v-if="showUpdateUsernameModal" class="fixed inset-0 z-50 flex items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click="closeUpdateUsernameModal()"></div>
@@ -669,7 +721,7 @@
             <li>Trade offers rejected: {{ dissolveSummary.tradeOffersRejected }}</li>
           </ul>
           <p class="text-xs mt-2">
-            <a href="/admin/dissolve-queue" class="underline font-medium text-emerald-800">View Dissolve Queue →</a>
+            <a href="/newsite/admin/dissolveQueue" class="underline font-medium text-emerald-800">View Dissolve Queue →</a>
           </p>
         </div>
 
@@ -696,6 +748,15 @@
     </div>
 
     <!-- Transfer User modal -->
+    <!-- Make / edit sub-admin access -->
+    <AdminSubAdminModal
+      v-if="subAdminTarget"
+      :user="subAdminTarget"
+      :sub-admins="subAdmins"
+      @close="subAdminTarget = null"
+      @saved="onSubAdminSaved"
+    />
+
     <AdminTransferModal
       :show="showTransferModal"
       :source-user="transferTarget"
@@ -716,6 +777,7 @@ function viewCollection(u) {
   router.push({ path: '/newsite/admin/manageCollection', query: { username: u.username } })
 }
 import AdminTransferModal from '@/components/newsite/AdminTransferModal.vue'
+import AdminSubAdminModal from '@/components/newsite/AdminSubAdminModal.vue'
 
 const users    = ref([])
 const official = ref(null)
@@ -725,6 +787,23 @@ const filter   = ref(typeof route.query.username === 'string' ? route.query.user
 
 const superAdminId = '732319322093125695'
 const isSuperAdmin = computed(() => meData.value?.discordId === superAdminId)
+// Only full admins (not sub-admins) may create or edit sub-admins; the server enforces it too.
+const isFullAdmin = computed(() => Boolean(meData.value?.isAdmin && meData.value?.adminScope?.full))
+const subAdmins = computed(() => users.value.filter(u => u.isAdmin && u.adminRestricted))
+const subAdminTarget = ref(null)
+function openSubAdminModal(u) { subAdminTarget.value = u }
+function onSubAdminSaved(res) {
+  const idx = users.value.findIndex(x => x.id === res.id)
+  if (idx !== -1) {
+    users.value[idx] = {
+      ...users.value[idx],
+      isAdmin: res.isAdmin,
+      adminRestricted: res.adminRestricted,
+      adminPermissions: res.adminPermissions
+    }
+  }
+  subAdminTarget.value = null
+}
 
 onMounted(async () => {
   try {
@@ -1157,6 +1236,66 @@ async function saveAdditionalZones() {
   }
 }
 
+// Reset Pack Limit state
+const showResetPackLimitModal = ref(false)
+const resetPackLimitTarget = ref(null)
+const resetPackLimitPackId = ref('')
+const resetPackLimitError = ref('')
+const resetPackLimitSuccess = ref(false)
+const resetPackLimitWorking = ref(false)
+const resetPackLimitCanSave = computed(() => !!resetPackLimitPackId.value)
+
+// Packs with a daily limit, fetched once and reused across modal opens.
+const resetPackLimitPacks = ref([])
+const resetPackLimitPacksLoading = ref(false)
+let resetPackLimitPacksPromise = null
+async function ensureResetPackLimitPacksLoaded() {
+  if (resetPackLimitPacks.value.length || resetPackLimitPacksPromise) return resetPackLimitPacksPromise
+  resetPackLimitPacksLoading.value = true
+  resetPackLimitPacksPromise = $fetch('/api/admin/packs', { query: { limit: 200 } })
+    .then(res => {
+      resetPackLimitPacks.value = (res?.items || []).filter(p => p.dailyPurchaseLimit != null)
+    })
+    .catch(() => { resetPackLimitPacks.value = [] })
+    .finally(() => { resetPackLimitPacksLoading.value = false })
+  return resetPackLimitPacksPromise
+}
+
+function openResetPackLimit(u) {
+  resetPackLimitTarget.value = u
+  resetPackLimitPackId.value = ''
+  resetPackLimitError.value = ''
+  resetPackLimitSuccess.value = false
+  resetPackLimitWorking.value = false
+  showResetPackLimitModal.value = true
+  ensureResetPackLimitPacksLoaded()
+}
+function closeResetPackLimitModal() {
+  showResetPackLimitModal.value = false
+  resetPackLimitTarget.value = null
+  resetPackLimitPackId.value = ''
+  resetPackLimitError.value = ''
+  resetPackLimitSuccess.value = false
+  resetPackLimitWorking.value = false
+}
+async function saveResetPackLimit() {
+  if (!resetPackLimitTarget.value || !resetPackLimitCanSave.value) return
+  resetPackLimitWorking.value = true
+  resetPackLimitError.value = ''
+  resetPackLimitSuccess.value = false
+  try {
+    await $fetch(`/api/admin/users/${resetPackLimitTarget.value.id}/reset-pack-limit`, {
+      method: 'POST',
+      body: { packId: resetPackLimitPackId.value }
+    })
+    resetPackLimitSuccess.value = true
+  } catch (e) {
+    resetPackLimitError.value = e?.data?.statusMessage || e?.message || 'Failed to reset pack limit.'
+  } finally {
+    resetPackLimitWorking.value = false
+  }
+}
+
 // Update Username state
 const showUpdateUsernameModal = ref(false)
 const updateUsernameTarget = ref(null)
@@ -1336,29 +1475,9 @@ async function makeAdmin(u) {
   try {
     await $fetch(`/api/admin/users/${u.id}/make-admin`, { method: 'POST' })
     const idx = users.value.findIndex(x => x.id === u.id)
-    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: true, isSubAdmin: false }
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: true, adminRestricted: false, adminPermissions: [] }
   } catch (e) {
     alert(e?.data?.statusMessage || e?.message || 'Failed to make admin')
-  }
-}
-
-async function makeSubAdmin(u) {
-  try {
-    await $fetch(`/api/admin/users/${u.id}/make-sub-admin`, { method: 'POST' })
-    const idx = users.value.findIndex(x => x.id === u.id)
-    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: true, isSubAdmin: true }
-  } catch (e) {
-    alert(e?.data?.statusMessage || e?.message || 'Failed to make sub-admin')
-  }
-}
-
-async function removeSubAdmin(u) {
-  try {
-    await $fetch(`/api/admin/users/${u.id}/remove-sub-admin`, { method: 'POST' })
-    const idx = users.value.findIndex(x => x.id === u.id)
-    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: false, isSubAdmin: false }
-  } catch (e) {
-    alert(e?.data?.statusMessage || e?.message || 'Failed to remove sub-admin')
   }
 }
 
@@ -1366,7 +1485,7 @@ async function removeAdmin(u) {
   try {
     await $fetch(`/api/admin/users/${u.id}/remove-admin`, { method: 'POST' })
     const idx = users.value.findIndex(x => x.id === u.id)
-    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: false, isSubAdmin: false }
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: false, adminRestricted: false, adminPermissions: [] }
   } catch (e) {
     alert(e?.data?.statusMessage || e?.message || 'Failed to remove admin')
   }

@@ -1,32 +1,26 @@
 import { useAuth } from '~/composables/useAuth'
 import { navigateTo } from '#app'
-import { isPageDeniedForSubAdmin, isSectionDeniedForSubAdmin } from '~/utils/adminAccess'
-import { resolveAdminRoute } from '~/utils/adminSections'
-
-// Console URL prefix; everything after it is the section path (utils/adminSections.js).
-const CONSOLE_PREFIX = '/newsite/admin'
 
 export default defineNuxtRouteMiddleware(async (to) => {
-  const { isAdmin, isSubAdmin, fetchSelf } = useAuth()
+  const { user, isAdmin, isFullAdmin, fetchSelf } = useAuth()
 
   // If admin state is unknown on first load, fetch session once
   if (!isAdmin.value) {
     try { await fetchSelf() } catch {}
+  }
+  // A cached user from before sub-admins existed has no adminScope; refetch rather than guess
+  // its access level.
+  if (isAdmin.value && !user.value?.adminScope) {
+    try { await fetchSelf({ force: true }) } catch {}
   }
 
   if (!isAdmin.value) {
     return navigateTo('/')
   }
 
-  // Sub-admins: the tools are also refused server-side (server/middleware/sub-admin-guard.js);
-  // this just keeps them off a page that would render and then 403 on every request.
-  if (isSubAdmin.value) {
-    let denied = isPageDeniedForSubAdmin(to.path)
-    if (!denied && (to.path === CONSOLE_PREFIX || to.path.startsWith(CONSOLE_PREFIX + '/'))) {
-      const segments = to.path.slice(CONSOLE_PREFIX.length).split('/').filter(Boolean)
-      const resolved = resolveAdminRoute(segments)
-      denied = !!resolved && isSectionDeniedForSubAdmin(resolved.section.key)
-    }
-    if (denied) return navigateTo(CONSOLE_PREFIX)
+  // Sub-admins only get the admin console. The legacy /admin/* pages predate per-tool
+  // permissions, so they stay full-admin only.
+  if (!isFullAdmin.value && !to.path.startsWith('/newsite/admin')) {
+    return navigateTo('/newsite/admin')
   }
 })

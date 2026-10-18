@@ -4,6 +4,8 @@ import jwt from 'jsonwebtoken'
 import { prisma } from '@/server/prisma'
 import { refreshDiscordTokenAndRoles } from '../../utils/refreshDiscordTokenAndRoles.js'
 import { resolveBorderStyle, resolveGlowStyle } from '@/server/utils/czoneEffect'
+import { adminScopeOf } from '@/utils/adminPermissions'
+import { SUPER_ADMIN_DISCORD_ID } from '@/server/utils/adminAuth'
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
@@ -44,7 +46,8 @@ export default defineEventHandler(async (event) => {
       suspendedUntil: true,
       suspendedReason: true,
       isAdmin: true,
-      isSubAdmin: true,
+      adminRestricted: true,
+      adminPermissions: true,
       inGuild: true,
       points: true,
       isBooster: true,
@@ -139,7 +142,11 @@ export default defineEventHandler(async (event) => {
     needsSetup: !(user.username && user.avatar && ctoonCount > 0),
     inGuild: user.inGuild,
     isAdmin: user.isAdmin,
-    isSubAdmin: user.isSubAdmin,
+    // Sub-admin scope. The super admin is always full whatever the row says. Clients use this
+    // only to shape the UI; server/middleware/require-admin-scope.js is what enforces it.
+    adminScope: user.discordId === SUPER_ADMIN_DISCORD_ID
+      ? { full: true, permissions: [] }
+      : adminScopeOf(user),
     active: user.active,
     ctoonCount,
     uniqueCtoonCount: uniqueCtoonRows.length,

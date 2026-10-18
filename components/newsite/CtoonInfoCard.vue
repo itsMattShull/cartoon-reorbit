@@ -406,7 +406,7 @@
           <div class="ctic-foot-right">
             <NuxtLink
               v-if="isAdmin && ctoon.id"
-              :to="`/admin/editCtoon/${ctoon.id}`"
+              :to="`/newsite/admin/ctoons/edit/${ctoon.id}`"
               class="ctic-edit-btn"
             >
               Edit cToon

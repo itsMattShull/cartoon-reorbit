@@ -2,6 +2,7 @@
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { invalidateAdminScope } from '@/server/utils/adminScope'
 
 const SUPER_ADMIN_DISCORD_ID = '732319322093125695'
 
@@ -26,7 +27,7 @@ export default defineEventHandler(async (event) => {
   // Fetch target user for checks and logging
   const target = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, isAdmin: true, isSubAdmin: true, username: true, discordId: true }
+    select: { id: true, isAdmin: true, username: true, discordId: true, adminRestricted: true, adminPermissions: true }
   })
   if (!target) throw createError({ statusCode: 404, statusMessage: 'User not found' })
 
@@ -35,16 +36,22 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Cannot remove admin from super admin' })
   }
 
-  // Set isAdmin = false
-  await prisma.user.update({ where: { id }, data: { isAdmin: false, isSubAdmin: false } })
+  // Set isAdmin = false and drop any sub-admin scope so a later re-grant starts clean.
+  await prisma.user.update({
+    where: { id },
+    data: { isAdmin: false, adminRestricted: false, adminPermissions: [] }
+  })
+  invalidateAdminScope(id)
 
   // Admin change log (best-effort)
   await logAdminChange(prisma, {
     userId: me.id,
     area: 'Admin:Users',
     key: 'removeAdmin',
-    prevValue: { isAdmin: target.isAdmin, isSubAdmin: target.isSubAdmin },
-    newValue: { isAdmin: false, isSubAdmin: false }
+    prevValue: { isAdmin: target.isAdmin, adminRestricted: target.adminRestricted, adminPermissions: target.adminPermissions },
+    newValue: { isAdmin: false, adminRestricted: false, adminPermissions: [] },
+    targetUserId: target.id,
+    targetUsername: target.username
   })
 
   return { ok: true }

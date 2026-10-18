@@ -8,8 +8,6 @@
 // `load` is a dynamic import so each section is its own chunk — the console has
 // ~60 sections and an admin opens one at a time.
 
-import { isSectionDeniedForSubAdmin, isPageDeniedForSubAdmin } from './adminAccess.js'
-
 const S = (key, label, group, load, extra = {}) => ({ key, label, group, load, ...extra })
 
 // The loader carries its own source path so the contract test can assert the
@@ -41,33 +39,35 @@ export const ADMIN_SECTIONS = [
   // Component existed on disk but was wired into neither the nav nor the router.
   S('packAnalytics', 'Pack Analytics', 'analytics', nu('AdminPackAnalytics')),
   S('checkUserMints', 'Check User Mints', 'analytics', nu('AdminCheckUserMints')),
+  S('retention', 'Retention', 'analytics', nu('AdminRetention'), { desc: 'Cohort retention by last activity' }),
 
   // ── Users & Moderation ──────────────────────────────────────
-  S('manageUsers', 'Manage Users', 'users', nu('AdminManageUsers')),
-  S('manageCollection', 'Manage Collection', 'users', nu('AdminManageCollection')),
+  S('manageUsers', 'Manage Users', 'users', nu('AdminManageUsers'), { sensitive: true, desc: 'Ban, suspend, dissolve, rename' }),
+  S('manageCollection', 'Manage Collection', 'users', nu('AdminManageCollection'), { sensitive: true, desc: 'Edit what a user owns' }),
+  S('userCtoons', 'User cToons', 'users', nu('AdminUserCtoons'), { superOnly: true, desc: 'Every owned cToon across all users' }),
   S('cheatFinder', 'Cheat Finder', 'users', nu('AdminCheatFinder')),
-  S('checkCheating', 'Check Cheating', 'users', legacy('AdminLegacyCheckCheating')),
-  S('cheatingTool', 'Cheating Tool', 'users', legacy('AdminLegacyCheatingTool')),
+  S('checkCheating', 'Check Cheating', 'users', legacy('AdminLegacyCheckCheating'), { sensitive: true, desc: 'Can seize points and cToons' }),
+  S('cheatingTool', 'Cheating Tool', 'users', legacy('AdminLegacyCheatingTool'), { sensitive: true, desc: 'Applies seizures' }),
   S('suspiciousActivity', 'Suspicious Activity', 'users', legacy('AdminLegacySuspiciousActivity')),
-  S('deviceFingerprints', 'Browser Fingerprints', 'users', nu('AdminDeviceFingerprintLogs')),
+  S('deviceFingerprints', 'Browser Fingerprints', 'users', nu('AdminDeviceFingerprintLogs'), { sensitive: true, desc: 'Shows device data' }),
   S('vpn-queue', 'VPN Queue', 'users', nu('AdminVpnQueue')),
-  S('initiateTrade', 'Initiate Trade', 'users', legacy('AdminLegacyInitiateTrade')),
+  S('initiateTrade', 'Initiate Trade', 'users', legacy('AdminLegacyInitiateTrade'), { sensitive: true, desc: 'Moves cToons between users' }),
 
   // ── Content ─────────────────────────────────────────────────
-  S('ctoons', 'Manage cToons', 'content', legacy('AdminLegacyCtoons')),
-  S('ctoons/new', 'Add cToon', 'content', legacy('AdminLegacyCtoonsNew'), { hidden: true }),
-  S('ctoons/edit', 'Edit cToon', 'content', legacy('AdminLegacyCtoonsEdit'), { hidden: true, acceptsSubPath: true }),
+  S('ctoons', 'Manage cToons', 'content', legacy('AdminLegacyCtoons'), { desc: 'Includes add and edit' }),
+  S('ctoons/new', 'Add cToon', 'content', legacy('AdminLegacyCtoonsNew'), { hidden: true, perm: 'ctoons' }),
+  S('ctoons/edit', 'Edit cToon', 'content', legacy('AdminLegacyCtoonsEdit'), { hidden: true, acceptsSubPath: true, perm: 'ctoons' }),
   S('ctoonsBulkUpload', 'Bulk Upload cToons', 'content', legacy('AdminLegacyCtoonsBulkUpload'), { dense: true }),
   S('submittedCtoons', 'Submitted cToons', 'content', legacy('AdminLegacySubmittedCtoons')),
   S('ctoonSuggestions', 'cToon Suggestions', 'content', legacy('AdminLegacyCtoonSuggestions')),
   S('starterSets', 'Starter Sets', 'content', legacy('AdminLegacyStarterSets')),
-  S('packs', 'Manage Packs', 'content', legacy('AdminLegacyPacks')),
-  S('packs/new', 'New Pack', 'content', legacy('AdminLegacyPacksNew'), { hidden: true }),
-  S('packs/edit', 'Edit Pack', 'content', legacy('AdminLegacyPacksEdit'), { hidden: true, acceptsSubPath: true }),
+  S('packs', 'Manage Packs', 'content', legacy('AdminLegacyPacks'), { desc: 'Includes new and edit' }),
+  S('packs/new', 'New Pack', 'content', legacy('AdminLegacyPacksNew'), { hidden: true, perm: 'packs' }),
+  S('packs/edit', 'Edit Pack', 'content', legacy('AdminLegacyPacksEdit'), { hidden: true, acceptsSubPath: true, perm: 'packs' }),
   S('backgrounds', 'Backgrounds', 'content', legacy('AdminLegacyBackgrounds')),
   S('czoneSearch', 'cZone Search', 'content', legacy('AdminLegacyCzoneSearch'), { dense: true }),
   S('czoneContest', 'cZone Contests', 'content', nu('AdminCzoneContest')),
-  S('czoneEdit', 'Edit a cZone', 'content', legacy('AdminLegacyCzoneEdit'), { hidden: true, acceptsSubPath: true }),
+  S('czoneEdit', 'Edit a cZone', 'content', legacy('AdminLegacyCzoneEdit'), { hidden: true, acceptsSubPath: true, perm: 'czoneSearch' }),
   S('homepage', 'Manage Homepage', 'content', legacy('AdminLegacyHomepage')),
   S('announcements', 'Announcements', 'content', legacy('AdminLegacyAnnouncements')),
   S('ads', 'Manage Ads', 'content', legacy('AdminLegacyAds')),
@@ -77,13 +77,13 @@ export const ADMIN_SECTIONS = [
   S('siteTheme', 'Manage Site Theme', 'content', nu('AdminSiteTheme')),
 
   // ── Economy ─────────────────────────────────────────────────
-  S('manageSales', 'Manage Sales', 'economy', nu('AdminManageSales')),
-  S('codes', 'Manage Codes', 'economy', legacy('AdminLegacyCodes')),
-  S('codes/new', 'Create Code', 'economy', legacy('AdminLegacyCodesNew'), { hidden: true }),
-  S('codes/edit', 'Edit Code', 'economy', legacy('AdminLegacyCodesEdit'), { hidden: true }),
+  S('manageSales', 'Manage Sales', 'economy', nu('AdminManageSales'), { sensitive: true, desc: 'Changes prices' }),
+  S('codes', 'Manage Codes', 'economy', legacy('AdminLegacyCodes'), { sensitive: true, desc: 'Creates points and cToon codes' }),
+  S('codes/new', 'Create Code', 'economy', legacy('AdminLegacyCodesNew'), { hidden: true, perm: 'codes' }),
+  S('codes/edit', 'Edit Code', 'economy', legacy('AdminLegacyCodesEdit'), { hidden: true, perm: 'codes' }),
   S('auctions', 'Auction Only', 'economy', legacy('AdminLegacyAuctions')),
-  S('auctions/new', 'Add Auction', 'economy', legacy('AdminLegacyAuctionsNew'), { hidden: true }),
-  S('dissolveQueue', 'Dissolve Queue', 'economy', legacy('AdminLegacyDissolveQueue')),
+  S('auctions/new', 'Add Auction', 'economy', legacy('AdminLegacyAuctionsNew'), { hidden: true, perm: 'auctions' }),
+  S('dissolveQueue', 'Dissolve Queue', 'economy', legacy('AdminLegacyDissolveQueue'), { sensitive: true, desc: 'Approves account dissolves' }),
 
   // ── Games & Events ──────────────────────────────────────────
   S('games', 'Manage Games', 'games', legacy('AdminLegacyGames'), { dense: true }),
@@ -97,20 +97,19 @@ export const ADMIN_SECTIONS = [
   S('cMoonHunts', 'cMoon Scavenger Hunts', 'games', nu('AdminCMoonHunts')),
   S('lotto', 'Manage Lotto', 'games', legacy('AdminLegacyLotto')),
   S('clashTournaments', 'Clash Tournaments', 'games', legacy('AdminLegacyClashTournaments')),
-  S('monsters', 'Manage Monsters', 'games', legacy('AdminLegacyMonsters'), { dense: true }),
   S('scavenger', 'Scavenger Hunt', 'games', legacy('AdminLegacyScavenger')),
   S('achievements', 'Achievements', 'games', legacy('AdminLegacyAchievements')),
   S('holidayEvents', 'Holiday Events', 'games', legacy('AdminLegacyHolidayEvents')),
-  S('holidayEvents/new', 'Add Holiday Event', 'games', legacy('AdminLegacyHolidayEventsNew'), { hidden: true }),
-  S('holidayEvents/edit', 'Edit Holiday Event', 'games', legacy('AdminLegacyHolidayEventsEdit'), { hidden: true, acceptsSubPath: true }),
+  S('holidayEvents/new', 'Add Holiday Event', 'games', legacy('AdminLegacyHolidayEventsNew'), { hidden: true, perm: 'holidayEvents' }),
+  S('holidayEvents/edit', 'Edit Holiday Event', 'games', legacy('AdminLegacyHolidayEventsEdit'), { hidden: true, acceptsSubPath: true, perm: 'holidayEvents' }),
 
   // ── Logs ────────────────────────────────────────────────────
   S('errorLogs', 'Error Logs', 'logs', nu('AdminErrorLogs')),
   S('cronRunLogs', 'Cron Run Logs', 'logs', nu('AdminCronRunLogs')),
   S('queueMonitor', 'Queue Monitor', 'logs', nu('AdminQueueMonitor')),
-  S('authLogs', 'Auth Logs', 'logs', nu('AdminAuthLogs')),
+  S('authLogs', 'Auth Logs', 'logs', nu('AdminAuthLogs'), { sensitive: true, desc: 'Shows IP addresses' }),
   S('tradeLogs', 'Trade Logs', 'logs', nu('AdminTradeLogs')),
-  S('touchTrades', 'Track Touch Trades', 'logs', nu('AdminTouchTrades')),
+  S('touchTrades', 'Track Touch Trades', 'logs', nu('AdminTouchTrades'), { superOnly: true, desc: 'Decrypted IPs and device info' }),
   S('auctionLogs', 'Auction Logs', 'logs', nu('AdminAuctionLogs')),
   S('ctoonOwnerLogs', 'cToon Owner Logs', 'logs', nu('AdminCtoonOwnerLogs')),
   S('czoneSearchLogs', 'cZone Search Logs', 'logs', nu('AdminCzoneSearchLogs')),
@@ -121,17 +120,16 @@ export const ADMIN_SECTIONS = [
   S('gtoonsClashLogs', 'gToons Clash Logs', 'logs', nu('AdminGtoonsClashLogs')),
   S('edRpsLogs', 'Ed Edd n Eddy RPS Logs', 'logs', nu('AdminEdRpsLogs')),
   S('pokemonBattleLogs', 'Pokemon FWG Logs', 'logs', nu('AdminPokemonBattleLogs')),
-  S('monsterBattleLogs', 'Monster Battle Logs', 'logs', nu('AdminMonsterBattleLogs')),
   S('lottoLogs', 'Lotto Logs', 'logs', nu('AdminLottoLogs')),
   S('winWheelLogs', 'Win Wheel Logs', 'logs', nu('AdminWinWheelLogs')),
   S('scavengerLogs', 'Scavenger Logs', 'logs', nu('AdminScavengerLogs')),
-  S('adminChanges', 'Admin Changes', 'logs', legacy('AdminLegacyAdminChanges')),
+  S('adminChanges', 'Admin Changes', 'logs', legacy('AdminLegacyAdminChanges'), { sensitive: true, desc: 'Audit trail of every admin action' }),
 
   // ── System ──────────────────────────────────────────────────
-  S('globalSettings', 'Global Settings', 'system', legacy('AdminLegacyGlobalSettings')),
+  S('globalSettings', 'Global Settings', 'system', legacy('AdminLegacyGlobalSettings'), { sensitive: true, desc: 'Site-wide switches and limits' }),
   // Powers the production droplet off/on and resizes it. The server-side guard
   // is still a plain isAdmin check — see the note in the admin page.
-  S('production', 'Production Instance', 'system', legacy('AdminLegacyProduction'), { destructive: true })
+  S('production', 'Production Instance', 'system', legacy('AdminLegacyProduction'), { destructive: true, sensitive: true, desc: 'Powers the server off and on' })
 ]
 
 // A null-prototype Map so `constructor` / `__proto__` in the URL cannot resolve
@@ -173,99 +171,41 @@ export function resolveAdminRoute (segments) {
   return null
 }
 
-/** Nav tree: groups in declared order, each with its visible sections. */
-export function adminNavTree ({ subAdmin = false } = {}) {
+/** The permission a section is gated by: its own `perm`, else its key. */
+export function permOf (section) {
+  return section?.perm || section?.key
+}
+
+/**
+ * Nav tree: groups in declared order, each with its visible sections. Pass `canAccess(perm)`
+ * to narrow it to what the caller's admin scope covers. A super-admin-only tool is not a
+ * grantable permission, so a restricted admin's scope never covers it.
+ */
+export function adminNavTree (canAccess) {
   return ADMIN_GROUPS
     .map(g => ({
       ...g,
       items: ADMIN_SECTIONS.filter(s =>
-        s.group === g.id && !s.hidden && !(subAdmin && isSectionDeniedForSubAdmin(s.key)))
+        s.group === g.id && !s.hidden && (!canAccess || canAccess(permOf(s))))
     }))
     .filter(g => g.items.length)
 }
 
-/** The old /admin/* menu with the pages a sub-admin may not open removed. */
-export function oldAdminGroupsFor ({ subAdmin = false } = {}) {
-  if (!subAdmin) return OLD_ADMIN_GROUPS
-  return OLD_ADMIN_GROUPS
-    .map(g => ({ ...g, items: g.items.filter(i => !isPageDeniedForSubAdmin(i.to)) }))
+/** Every grantable tool, grouped, for the Make sub-admin modal. Super-admin-only tools are included flagged. */
+export function grantableAdminTree () {
+  return ADMIN_GROUPS
+    .map(g => ({
+      id: g.id,
+      label: g.label,
+      items: ADMIN_SECTIONS
+        .filter(s => s.group === g.id && !s.hidden)
+        .map(s => ({
+          perm: permOf(s),
+          label: s.label,
+          desc: s.desc || '',
+          sensitive: Boolean(s.sensitive || s.destructive),
+          superOnly: Boolean(s.superOnly)
+        }))
+    }))
     .filter(g => g.items.length)
 }
-
-/**
- * The original /admin/* pages, kept live as a fallback while the consolidated
- * console is being verified in production. They are reachable from the console's
- * "Old Admin" menu and from the legacy nav, and they render the untouched
- * pre-migration components under layouts/admin.vue.
- *
- * This is deliberately duplicated with ADMIN_SECTIONS above: the console renders
- * codemodded copies under components/newsite/admin/legacy/, while these are the
- * originals. Once each console section is confirmed working, delete its old page
- * here and in pages/admin/, and re-add a redirect so old bookmarks still resolve.
- */
-export const OLD_ADMIN_GROUPS = [
-  {
-    id: 'old-core',
-    label: 'Old Admin — Core',
-    items: [
-      { label: 'Analytics', to: '/admin' },
-      { label: 'Manage Users', to: '/admin/users' },
-      { label: 'Manage Homepage', to: '/admin/manage-homepage' },
-      { label: 'Global Settings', to: '/admin/global-settings' },
-      { label: 'Manage Ads', to: '/admin/manage-ads' },
-      { label: 'Manage Announcements', to: '/admin/announcements' },
-      { label: 'Admin Changes', to: '/admin/admin-changes' },
-      { label: 'cToon Suggestions', to: '/admin/ctoon-suggestions' },
-      { label: 'Manage Production', to: '/admin/manage-dev' },
-      { label: 'Initiate Trade', to: '/admin/initiate-trade' }
-    ]
-  },
-  {
-    id: 'old-content',
-    label: 'Old Admin — Content',
-    items: [
-      { label: 'Manage cToons', to: '/admin/ctoons' },
-      { label: 'Submitted cToons', to: '/admin/submitted-ctoons' },
-      { label: 'Manage Packs', to: '/admin/packs' },
-      { label: 'Manage Starter Sets', to: '/admin/starter-sets' },
-      { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
-      { label: 'Manage Codes', to: '/admin/codes' },
-      { label: 'Manage Monsters', to: '/admin/manage-monster' },
-      { label: 'Manage cZone Search', to: '/admin/manage-czone-search' },
-      { label: 'Manage Lotto', to: '/admin/manage-lotto' },
-      { label: 'Manage Games', to: '/admin/games' },
-      { label: 'Manage Clash Tournaments', to: '/admin/gtoons-clash-tournaments' },
-      { label: 'Manage Scavenger Hunt', to: '/admin/scavenger' },
-      { label: 'Manage Holiday Events', to: '/admin/holidayevents' },
-      { label: 'Manage Auction Only', to: '/admin/manage-auctions' },
-      { label: 'Dissolved Queue', to: '/admin/dissolve-queue' },
-      { label: 'Manage Achievements', to: '/admin/achievements' },
-      { label: 'Manage cZone Contests', to: '/admin/czone-contest' }
-    ]
-  },
-  {
-    id: 'old-logs',
-    label: 'Old Admin — Logs',
-    items: [
-      { label: 'Suspicious Activity', to: '/admin/suspicious-activity' },
-      { label: 'Check Cheating', to: '/admin/check-cheating' },
-      { label: 'Cheating Tool', to: '/admin/cheating-tool' },
-      { label: 'Auction Logs', to: '/admin/auctions' },
-      { label: 'Trade Logs', to: '/admin/trades' },
-      { label: 'Auth Logs', to: '/admin/auth-logs' },
-      { label: 'cToon Owner Logs', to: '/admin/ctoonOwnerLogs' },
-      { label: 'cZone Search Logs', to: '/admin/czone-search-logs' },
-      { label: 'Point Logs', to: '/admin/points-log' },
-      { label: 'Achievement Logs', to: '/admin/achievement-logs' },
-      { label: 'gToons Clash Logs', to: '/admin/gtoons-logs' },
-      { label: 'Monster Battle Logs', to: '/admin/manage-monster-battles' },
-      { label: 'Lotto Logs', to: '/admin/lotto-logs' },
-      { label: 'Win Wheel Logs', to: '/admin/winwheellogs' },
-      { label: 'Pack Analytics', to: '/admin/packanalytics' },
-      { label: 'Scavenger Logs', to: '/admin/scavenger-logs' }
-    ]
-  }
-]
-
-/** Flat list of every old-admin path, for tests and tooling. */
-export const OLD_ADMIN_PATHS = OLD_ADMIN_GROUPS.flatMap(g => g.items.map(i => i.to))

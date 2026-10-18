@@ -12,8 +12,9 @@ const read = p => readFileSync(join(root, p), 'utf8')
 // blackjackClientRoutes / edRpsWiring: no server, no browser.
 const {
   ADMIN_SECTIONS, ADMIN_GROUPS, adminNavTree, resolveAdminRoute,
-  getAdminSection, OLD_ADMIN_GROUPS, OLD_ADMIN_PATHS
+  getAdminSection
 } = await import(join(root, 'utils/adminSections.js'))
+const { OLD_ADMIN_REDIRECTS, OLD_ADMIN_ROUTE_RULES } = await import(join(root, 'utils/oldAdminRedirects.js'))
 
 // The registry is the source of truth for the nav AND the router, so these
 // invariants are what keep a tool from silently disappearing.
@@ -90,42 +91,47 @@ test('prototype keys cannot resolve to a section', () => {
   }
 })
 
-// ── Old admin fallback ────────────────────────────────────────────────────
-// The original /admin/* pages stay live until each console section is
-// confirmed working. These guard the fallback itself: a menu entry pointing at
-// a page that no longer exists is a dead end at exactly the moment someone is
-// reaching for it because the new console misbehaved.
+// ── Old /admin/* URLs ─────────────────────────────────────────────────────
+// The original pages are gone; these redirects are all that keeps old bookmarks
+// and Discord links working, so a target that stopped resolving would turn a
+// redirect into a 404 at exactly the moment someone follows an old link.
 
-test('every Old Admin menu entry resolves to a real page file', () => {
-  for (const group of OLD_ADMIN_GROUPS) {
-    for (const item of group.items) {
-      const slug = item.to.replace(/^\/admin\/?/, '') || 'index'
-      assert.ok(
-        existsSync(join(root, 'pages/admin', `${slug}.vue`)),
-        `Old Admin entry "${item.label}" -> ${item.to} has no page`
-      )
-    }
+const CONSOLE = '/newsite/admin'
+
+// What resolveAdminRoute wants for a redirect target, with a sample id standing
+// in for the `/**` remainder.
+function resolveTarget (target) {
+  const path = target.replace(/\/\*\*$/, '/sample-id')
+  assert.ok(path === CONSOLE || path.startsWith(`${CONSOLE}/`), `${target} is not a console path`)
+  return resolveAdminRoute(path.slice(CONSOLE.length).split('/').filter(Boolean))
+}
+
+test('every old /admin redirect lands on a real console section', () => {
+  for (const [from, to] of Object.entries(OLD_ADMIN_REDIRECTS)) {
+    assert.ok(resolveTarget(to), `${from} -> ${to} does not resolve to a console section`)
   }
 })
 
-test('Old Admin entries all point into /admin and have labels', () => {
-  assert.ok(OLD_ADMIN_PATHS.length > 0)
-  for (const group of OLD_ADMIN_GROUPS) {
-    assert.ok(group.items.length, `empty Old Admin group ${group.id}`)
-    for (const item of group.items) {
-      assert.ok(item.to === '/admin' || item.to.startsWith('/admin/'), `${item.to} is not an old admin path`)
-      assert.ok(item.label && item.label.trim().length, `entry ${item.to} has no label`)
-    }
+test('redirects that carry an id only target sections that accept one', () => {
+  for (const [from, to] of Object.entries(OLD_ADMIN_REDIRECTS)) {
+    if (!to.endsWith('/**') || from === '/admin/**') continue
+    assert.ok(from.endsWith('/**'), `${from} must also end in /** to carry the id through`)
+    assert.equal(resolveTarget(to).subPath.length, 1, `${from} -> ${to} should land on a record id`)
   }
 })
 
-test('Old Admin paths are unique', () => {
-  assert.equal(new Set(OLD_ADMIN_PATHS).size, OLD_ADMIN_PATHS.length)
+test('old /admin URLs all redirect, with a catch-all for removed pages', () => {
+  assert.equal(OLD_ADMIN_REDIRECTS['/admin'], CONSOLE)
+  assert.equal(OLD_ADMIN_REDIRECTS['/admin/**'], CONSOLE)
+  for (const [from, rule] of Object.entries(OLD_ADMIN_ROUTE_RULES)) {
+    assert.ok(from === '/admin' || from.startsWith('/admin/'), `${from} is not an old admin path`)
+    assert.equal(rule.redirect.to, OLD_ADMIN_REDIRECTS[from])
+  }
 })
 
-test('the old admin layout still exists for the fallback pages', () => {
-  assert.ok(existsSync(join(root, 'layouts/admin.vue')), 'layouts/admin.vue is required by pages/admin/*')
-  assert.ok(existsSync(join(root, 'pages/admin/index.vue')), 'pages/admin/index.vue missing')
+test('the old admin pages and layout are really gone', () => {
+  assert.ok(!existsSync(join(root, 'pages/admin')), 'pages/admin should not exist; /admin/* redirects to the console')
+  assert.ok(!existsSync(join(root, 'layouts/admin.vue')), 'layouts/admin.vue was only used by pages/admin')
 })
 
 test('the legacy nav offers a way into the new console', () => {

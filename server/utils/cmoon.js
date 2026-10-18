@@ -305,11 +305,11 @@ function eligibleHolders(rows, minAccountAgeCutoff) {
 }
 
 // Set-based daily task completion check, restricted to current cMoon members past the
-// minimum account age gate. Mirrors the 7 status checks in server/api/onboarding/daily.get.js
+// minimum account age gate. Mirrors the 6 status checks in server/api/onboarding/daily.get.js
 // exactly (same boundaries, same thresholds) so a player's onboarding checklist and this job
 // can never silently disagree about whether "today" was completed. Runs frequently (see
 // server/cron/record-daily-task-completions.js) rather than once daily: the underlying tasks
-// reset at two different times (8pm Chicago for most, 8am for Winwheel/Lotto/monster scans),
+// reset at two different times (8pm Chicago for most, 8am for Winwheel/Lotto),
 // so a single daily run would leave a window where 8am-boundary activity could go unrecorded —
 // and, since DAILY_TASK points below are now awarded live off each newly-detected completion,
 // how often this runs is also how soon a player's rank bar reflects it — every 30 minutes rather
@@ -343,16 +343,13 @@ export async function recordDailyTaskCompletions({
       .catch(() => {})
   }
 
-  const [globalConfig, winwheelConfig, lottoSettings, barcodeConfig] = await Promise.all([
+  const [globalConfig, winwheelConfig, lottoSettings] = await Promise.all([
     prisma.globalGameConfig.findUnique({
       where: { id: 'singleton' },
       select: { dailyPointLimit: true, tkoDailyPointLimit: true, czoneVisitMaxPerDay: true }
     }),
     prisma.gameConfig.findUnique({ where: { gameName: 'Winwheel' }, select: { maxDailySpins: true } }),
     prisma.lottoSettings.findUnique({ where: { id: 'lotto' }, select: { countPerDay: true } }),
-    prisma.barcodeGameConfig.findFirst({
-      where: { isActive: true }, orderBy: { createdAt: 'desc' }, select: { monsterDailyScanLimit: true }
-    }),
   ])
 
   const czoneVisitMaxPerDay = Number(globalConfig?.czoneVisitMaxPerDay ?? 10)
@@ -360,7 +357,6 @@ export async function recordDailyTaskCompletions({
   const tkoDailyPointLimit = Number(globalConfig?.tkoDailyPointLimit ?? 250)
   const winwheelMaxDailySpins = Number(winwheelConfig?.maxDailySpins ?? 0)
   const lottoCountPerDay = Number(lottoSettings?.countPerDay ?? 0)
-  const monsterDailyScanLimit = Number(barcodeConfig?.monsterDailyScanLimit ?? 0)
 
   const dailyBoundary = dailyBoundaryOverride ?? getChicagoDailyBoundary()
   const morningBoundary = morningBoundaryOverride ?? getChicagoMorningWindowStart()
@@ -417,36 +413,28 @@ export async function recordDailyTaskCompletions({
           AND "userId" IN (SELECT id FROM eligible)
         GROUP BY "userId" HAVING COUNT(*) >= ${winwheelMaxDailySpins}`
     : inert
-  // lotto/scans can only ever be checked LIVE, never backfilled: LottoUser.purchasesToday and
-  // UserBarcodeScan.lastScannedAt are both current-state columns upserted in place on every new
-  // purchase/scan (LottoUser has one row per user; UserBarcodeScan is unique on (userId,
-  // mappingId)), not append-only logs — a later purchase/scan overwrites the very value a
-  // historical boundary would need to check, so there is no way to reconstruct "did this user
-  // qualify on that past day" from either table once time has moved on. Forcing both inert
-  // whenever a historical boundary is passed in avoids crediting (or wrongly denying) a past day
-  // using data that actually reflects a totally different, more recent day.
+  // lotto can only ever be checked LIVE, never backfilled: LottoUser.purchasesToday is a
+  // current-state column upserted in place on every new purchase (LottoUser has one row per
+  // user), not an append-only log — a later purchase overwrites the very value a historical
+  // boundary would need to check, so there is no way to reconstruct "did this user qualify on
+  // that past day" from it once time has moved on. Forcing it inert whenever a historical
+  // boundary is passed in avoids crediting (or wrongly denying) a past day using data that
+  // actually reflects a totally different, more recent day.
   const lottoBranch = lottoCountPerDay > 0 && !isHistorical
     ? Prisma.sql`
         SELECT "userId" FROM "LottoUser"
         WHERE "lastReset" >= ${morningBoundary} AND "purchasesToday" >= ${lottoCountPerDay}
           AND "userId" IN (SELECT id FROM eligible)`
     : inert
-  const scansBranch = monsterDailyScanLimit > 0 && !isHistorical
-    ? Prisma.sql`
-        SELECT "userId" FROM "UserBarcodeScan"
-        WHERE "lastScannedAt" >= ${morningBoundary}
-          AND "userId" IN (SELECT id FROM eligible)
-        GROUP BY "userId" HAVING COUNT(*) >= ${monsterDailyScanLimit}`
-    : inert
 
   // Two separate qualifying groups, each recorded under ITS OWN boundary as the completion
-  // "date" — login/czone/gamepts/tkopts reset at 8pm (dailyBoundary), wheel/lotto/scans reset
+  // "date" — login/czone/gamepts/tkopts reset at 8pm (dailyBoundary), wheel/lotto reset
   // at 8am (morningBoundary). Recording every group under one shared date used to let the two
-  // clocks drift apart: a player who qualified via wheel/lotto/scans earlier in the day was
+  // clocks drift apart: a player who qualified via wheel/lotto earlier in the day was
   // still "qualifying" (their cumulative count doesn't disappear) once dailyBoundary rolled
   // over at 8pm, so the very same activity could insert a second, distinct-date completion row
   // a few minutes after 8pm — a real double-award, not a hypothetical, hit by any player doing
-  // those three tasks during normal daytime hours. Recording each group under its own boundary
+  // those tasks during normal daytime hours. Recording each group under its own boundary
   // means a row only becomes insertable again once that group's OWN reset actually happens.
   //
   // A player who satisfies both groups in the same real day now gets two completion rows (one
@@ -468,7 +456,6 @@ export async function recordDailyTaskCompletions({
     tkopts AS (${tkoptsBranch}),
     wheel AS (${wheelBranch}),
     lotto AS (${lottoBranch}),
-    scans AS (${scansBranch}),
     eveningQualifying AS (
       SELECT "userId" FROM login
       UNION SELECT "userId" FROM czone
@@ -478,7 +465,6 @@ export async function recordDailyTaskCompletions({
     morningQualifying AS (
       SELECT "userId" FROM wheel
       UNION SELECT "userId" FROM lotto
-      UNION SELECT "userId" FROM scans
     )
     INSERT INTO "UserDailyTaskCompletion" (id, "userId", "date")
     SELECT gen_random_uuid()::text, "userId", ${dailyBoundary} FROM eveningQualifying
@@ -664,7 +650,7 @@ export async function runDailyCMoonScoring() {
   candidates.push(...newCandidates)
 
   // weekStart here is deliberately row.date, not the outer weekStart — a completion recorded
-  // under morningBoundary (wheel/lotto/scans, see recordDailyTaskCompletions) must produce the
+  // under morningBoundary (wheel/lotto, see recordDailyTaskCompletions) must produce the
   // exact same (weekStart, detail) pair here as it would have from the live-award path, or the
   // CMoonScoreLog unique constraint stops deduping it and this backstop double-awards it.
   const dailyTaskRows = await prisma.userDailyTaskCompletion.findMany({

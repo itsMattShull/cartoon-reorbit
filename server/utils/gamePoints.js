@@ -2,7 +2,7 @@
 // Shared daily-capped point award logic. The head-to-head games — TKO, gToons Clash and
 // Ed, Edd n Eddy RPS — share a single daily cap ("combat" pool, tracked via
 // GamePointLog.gameName in COMBAT_POOL_GAME_NAMES) while other games (Winball, ReOrbit
-// Match, monster scans) share a separate general pool.
+// Match) share a separate general pool.
 import { getDailyWindowStart } from './centralTime.js'
 
 /**
@@ -60,7 +60,7 @@ export const COMBAT_POOL_GAME_NAMES = ['TKO', 'Clash', 'EdRps', 'PokemonBattle']
 
 /**
  * Awards points from the GENERAL daily pool — everything that is not a combat-pool game
- * (Winball, ReOrbit Match, Tower Stack, ReOrbit Memory, Flappy Powerpuff, monster scans).
+ * (Winball, ReOrbit Match, Tower Stack, ReOrbit Memory, Flappy Powerpuff).
  *
  * This is the mirror image of `awardCappedGamePoints`: that one sums `gameName IN (names)`,
  * which is right for the combat pool but wrong here — the general pool is defined by

@@ -3,6 +3,7 @@ import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { SUPER_ADMIN_DISCORD_ID } from '@/server/utils/adminAuth'
+import { invalidateAdminScope } from '@/server/utils/adminScope'
 
 export default defineEventHandler(async (event) => {
   // Authenticate via existing session -> /api/auth/me
@@ -25,20 +26,27 @@ export default defineEventHandler(async (event) => {
   // Fetch current state to log previous value
   const target = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, isAdmin: true, isSubAdmin: true, username: true }
+    select: { id: true, isAdmin: true, username: true, adminRestricted: true, adminPermissions: true }
   })
   if (!target) throw createError({ statusCode: 404, statusMessage: 'User not found' })
 
-  // Set isAdmin = true
-  await prisma.user.update({ where: { id }, data: { isAdmin: true, isSubAdmin: false } })
+  // Set isAdmin = true. This is the FULL admin grant, so it also clears any sub-admin
+  // restriction (promoting a sub-admin to full admin).
+  await prisma.user.update({
+    where: { id },
+    data: { isAdmin: true, adminRestricted: false, adminPermissions: [] }
+  })
+  invalidateAdminScope(id)
 
   // Admin change log (best-effort)
   await logAdminChange(prisma, {
     userId: me.id,
     area: 'Admin:Users',
     key: 'makeAdmin',
-    prevValue: { isAdmin: target.isAdmin, isSubAdmin: target.isSubAdmin },
-    newValue: { isAdmin: true, isSubAdmin: false }
+    prevValue: { isAdmin: target.isAdmin, adminRestricted: target.adminRestricted, adminPermissions: target.adminPermissions },
+    newValue: { isAdmin: true, adminRestricted: false, adminPermissions: [] },
+    targetUserId: target.id,
+    targetUsername: target.username
   })
 
   return { ok: true }

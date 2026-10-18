@@ -3,12 +3,11 @@
     <AdminNav
       :sections="navTree"
       :active-key="section?.key"
-      :old-admin-groups="oldAdminGroups"
       v-model:open="navOpen"
     />
 
     <div class="newsite-admin-body">
-      <Suspense>
+      <Suspense v-if="!denied">
         <component
           :is="activeComponent"
           :key="section.key"
@@ -24,7 +23,7 @@
 
 <script setup>
 import { computed, ref, shallowRef, watch, defineAsyncComponent } from 'vue'
-import { adminNavTree, resolveAdminRoute, oldAdminGroupsFor } from '~/utils/adminSections'
+import { adminNavTree, resolveAdminRoute, permOf } from '~/utils/adminSections'
 
 definePageMeta({
   layout: 'newsite-template',
@@ -49,11 +48,9 @@ const { clearSidebarMiddle } = useNewsiteLayout()
 clearSidebarMiddle()
 
 const route = useRoute()
-const { isSubAdmin } = useAuth()
-const navTree = adminNavTree({ subAdmin: isSubAdmin.value })
-// The original /admin/* pages stay live as a fallback until each console
-// section is confirmed working in production.
-const oldAdminGroups = oldAdminGroupsFor({ subAdmin: isSubAdmin.value })
+const { canAccessAdmin } = useAuth()
+// Sub-admins only see the tools they were granted (see utils/adminPermissions.js).
+const navTree = computed(() => adminNavTree(canAccessAdmin))
 const navOpen = ref(false)
 
 const resolved = computed(() => resolveAdminRoute(route.params.path))
@@ -67,6 +64,20 @@ if (!resolved.value) {
 const section = computed(() => resolved.value?.section ?? null)
 const subPath = computed(() => resolved.value?.subPath ?? [])
 
+// A sub-admin opening a tool they were not granted (typed URL, stale link, or the default
+// Overview landing page they do not have) goes to the first tool they do have. The server
+// refuses the data calls regardless; this just avoids showing a broken page.
+const denied = computed(() => Boolean(section.value) && !canAccessAdmin(permOf(section.value)))
+async function leaveDeniedSection () {
+  const first = navTree.value[0]?.items[0]
+  if (first) {
+    await navigateTo(`/newsite/admin/${first.key}`, { replace: true })
+  } else {
+    throw createError({ statusCode: 403, statusMessage: 'You do not have access to any admin tools', fatal: true })
+  }
+}
+if (denied.value) await leaveDeniedSection()
+
 // Async components are memoised per section key so navigating away and back
 // does not build a second wrapper (and so the chunk is fetched once).
 const cache = new Map()
@@ -77,11 +88,15 @@ function selectComponent (sec) {
   if (!cache.has(sec.key)) cache.set(sec.key, defineAsyncComponent(sec.load))
   activeComponent.value = cache.get(sec.key)
 }
-selectComponent(section.value)
+if (!denied.value) selectComponent(section.value)
 
 watch(section, (sec, prev) => {
   if (!sec) {
     throw createError({ statusCode: 404, statusMessage: 'Unknown admin section', fatal: true })
+  }
+  if (denied.value) {
+    leaveDeniedSection()
+    return
   }
   if (sec.key !== prev?.key) selectComponent(sec)
   navOpen.value = false

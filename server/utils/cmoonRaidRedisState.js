@@ -1,7 +1,7 @@
 // server/utils/cmoonRaidRedisState.js
 //
 // Redis-backed crash/restart persistence for in-progress cMoon Enemy Battles raids, kept separate
-// from server/utils/redisState.js (Clash/monster-battle/trade-room specific) and
+// from server/utils/redisState.js (Clash/trade-room specific) and
 // server/utils/ogGtoonsRedisState.js (that game's own match shape) rather than extended into
 // either — mirrors both exactly: setX/delX/scanX for one state kind, keyed under its own prefix,
 // so this feature's serialization shape can change without touching either file's key layout.

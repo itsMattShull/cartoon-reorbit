@@ -1,7 +1,7 @@
 // server/utils/ogGtoonsRedisState.js
 //
 // Redis-backed crash/restart persistence for in-progress original gToons (2002) matches, kept
-// separate from server/utils/redisState.js (which is Clash/monster-battle/trade-room specific)
+// separate from server/utils/redisState.js (which is Clash/trade-room specific)
 // rather than extended in place, so this game's serialization shape can change without touching
 // that file's existing key layout or TTLs. Mirrors its pattern exactly: setX/delX/scanX per
 // state kind, keyed under its own prefix.
