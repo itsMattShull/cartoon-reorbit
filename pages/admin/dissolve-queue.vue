@@ -7,6 +7,7 @@
         <h1 class="text-2xl font-semibold">Dissolve Queue</h1>
         <div class="flex items-center gap-4">
           <button @click="openErrorsModal" class="text-sm text-red-600 underline">Errors</button>
+          <button @click="openMisfiresModal" class="text-sm text-red-600 underline">Misfires</button>
           <button @click="openFeaturedModal" class="text-sm text-blue-600 underline">Edit Featured</button>
           <button @click="loadData" class="text-sm text-blue-600 underline">Refresh</button>
         </div>
@@ -485,6 +486,94 @@
       </div>
     </div>
 
+    <!-- Misfires modal: cToons a scheduled dissolve auction tried to (or did) auction off after
+         the item had already legitimately changed hands — see DissolveMisfireLog's own schema
+         comment for the full story. -->
+    <div v-if="showMisfiresModal" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" @click.self="closeMisfiresModal">
+      <div class="bg-white rounded-lg shadow-lg w-[calc(100%-2rem)] max-w-3xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
+        <div class="flex items-center justify-between mb-4 gap-2">
+          <h2 class="text-xl font-semibold">Dissolve Auction Misfires</h2>
+          <div class="flex items-center gap-2">
+            <button
+              type="button"
+              class="px-3 py-1.5 text-sm rounded border border-blue-600 text-blue-700 hover:bg-blue-50 disabled:opacity-50"
+              :disabled="misfireScanRunning"
+              @click="runMisfireScan"
+            >{{ misfireScanRunning ? 'Scanning…' : 'Scan for Historical Misfires' }}</button>
+            <button class="text-gray-500 hover:text-gray-700 p-2 -m-2" @click="closeMisfiresModal">X</button>
+          </div>
+        </div>
+
+        <p class="text-xs text-gray-500 mb-3">
+          A cToon traded away from the official account (or scheduled into a second auction)
+          while it still had a pending dissolve-auction queue entry could get auctioned off a
+          second time, out from under its real owner. The worker now checks ownership before
+          launching one (PREVENTED rows below are cases it caught live); "Scan for Historical
+          Misfires" looks for cases that already happened before that fix.
+        </p>
+        <p v-if="misfireScanResult" class="text-xs mb-3" :class="misfireScanResult.found ? 'text-red-700 font-medium' : 'text-green-700'">
+          Scanned {{ misfireScanResult.scanned }} official-account auction(s) — found {{ misfireScanResult.found }} new misfire(s).
+        </p>
+
+        <div v-if="misfireLoading" class="text-gray-500 py-6 text-center">Loading…</div>
+        <template v-else>
+          <div v-if="misfireLog.length" class="bg-gray-50 rounded-lg border divide-y">
+            <div v-for="m in misfireLog" :key="m.id" class="p-3 sm:p-4">
+              <div class="flex flex-wrap items-center gap-2 text-sm">
+                <span
+                  class="px-1.5 py-0.5 rounded text-xs font-medium"
+                  :class="{
+                    'bg-amber-100 text-amber-800': m.source === 'PREVENTED',
+                    'bg-orange-100 text-orange-800': m.source === 'HISTORICAL_ACTIVE',
+                    'bg-red-100 text-red-800': m.source === 'HISTORICAL_RESOLVED'
+                  }"
+                >{{ misfireSourceLabel(m.source) }}</span>
+                <span class="font-medium">{{ m.ctoonName || 'Unknown cToon' }}</span>
+                <span v-if="m.mintNumber != null" class="text-gray-500">Mint #{{ m.mintNumber }}</span>
+                <span v-if="m.reviewedAt" class="text-green-700 text-xs">✓ Reviewed</span>
+              </div>
+              <div class="text-sm mt-2">
+                <span class="font-medium">Rightful owner:</span>
+                {{ m.rightfulOwnerUsername || m.rightfulOwnerUserId || 'Unknown' }}
+                <span v-if="m.rightfulOwnerMethod" class="text-gray-500">
+                  — acquired via {{ m.rightfulOwnerMethod }}{{ m.rightfulOwnerSince ? ' on ' + fmtCST(m.rightfulOwnerSince) : '' }}
+                </span>
+              </div>
+              <div v-if="m.source === 'HISTORICAL_RESOLVED'" class="text-sm mt-1 text-red-700">
+                <span class="font-medium">Wrongly sold to:</span>
+                {{ m.wrongWinnerUsername || m.wrongWinnerUserId || 'Unknown' }}
+                <span v-if="m.wrongWinnerPaidPoints != null">for {{ m.wrongWinnerPaidPoints }} pts</span>
+              </div>
+              <div class="flex flex-wrap items-center gap-2 text-xs text-gray-500 mt-1">
+                <span>Detected {{ fmtCST(m.detectedAt) }}</span>
+                <span v-if="m.bogusAuctionId">· Auction: {{ m.bogusAuctionId }}</span>
+                <span v-if="m.userCtoonId">· userCtoonId: {{ m.userCtoonId }}</span>
+              </div>
+              <div v-if="m.reviewedAt" class="text-sm text-green-700 mt-1.5">
+                Reviewed by {{ m.reviewedByUsername || m.reviewedByUserId }} on {{ fmtCST(m.reviewedAt) }}
+                <span v-if="m.reviewNote">— "{{ m.reviewNote }}"</span>
+              </div>
+              <div v-else class="flex items-center gap-2 mt-2">
+                <input
+                  v-model="misfireNoteDrafts[m.id]"
+                  type="text"
+                  placeholder="Note (optional) — e.g. 'item returned, winner refunded'"
+                  class="flex-1 border rounded px-2 py-1 text-sm"
+                />
+                <button
+                  type="button"
+                  class="px-2 py-1 text-sm border border-green-600 text-green-700 rounded hover:bg-green-50 whitespace-nowrap"
+                  @click="markMisfireReviewed(m.id)"
+                >Mark Reviewed</button>
+              </div>
+            </div>
+          </div>
+          <p v-else class="text-gray-500">No misfires logged.</p>
+        </template>
+        <p v-if="misfireError" class="text-red-600 mt-2 text-sm">{{ misfireError }}</p>
+      </div>
+    </div>
+
     <!-- Reschedule error modal: surfaces details when a reschedule save fails -->
     <div v-if="showRescheduleErrorModal" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" @click.self="closeRescheduleErrorModal">
       <div class="bg-white rounded-lg shadow-lg w-[calc(100%-2rem)] max-w-xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
@@ -511,7 +600,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRequestHeaders } from '#app'
 import Nav from '~/components/Nav.vue'
 
@@ -970,6 +1059,68 @@ async function clearErrorLog() {
     errorLog.value = []
   } catch (e) {
     errorLogError.value = e?.data?.statusMessage || 'Failed to clear error log.'
+  }
+}
+
+// ── Misfires modal (cToons auctioned off a second time after already changing hands) ──────
+const showMisfiresModal  = ref(false)
+const misfireLog         = ref([])
+const misfireLoading     = ref(false)
+const misfireError       = ref('')
+const misfireScanRunning = ref(false)
+const misfireScanResult  = ref(null)
+const misfireNoteDrafts  = reactive({})
+
+function misfireSourceLabel(source) {
+  if (source === 'PREVENTED') return 'Prevented'
+  if (source === 'HISTORICAL_ACTIVE') return 'Still Active'
+  if (source === 'HISTORICAL_RESOLVED') return 'Already Sold'
+  return source
+}
+
+async function loadMisfireLog() {
+  misfireError.value   = ''
+  misfireLoading.value = true
+  try {
+    misfireLog.value = await $fetch('/api/admin/dissolve-misfires', { headers })
+  } catch (e) {
+    misfireError.value = e?.data?.statusMessage || 'Failed to load misfire log.'
+  } finally {
+    misfireLoading.value = false
+  }
+}
+
+async function openMisfiresModal() {
+  showMisfiresModal.value = true
+  misfireScanResult.value = null
+  await loadMisfireLog()
+}
+
+function closeMisfiresModal() {
+  showMisfiresModal.value = false
+}
+
+async function runMisfireScan() {
+  misfireScanRunning.value = true
+  misfireError.value       = ''
+  try {
+    const result = await $fetch('/api/admin/dissolve-misfires/scan', { method: 'POST' })
+    misfireScanResult.value = result
+    await loadMisfireLog()
+  } catch (e) {
+    misfireError.value = e?.data?.statusMessage || 'Scan failed.'
+  } finally {
+    misfireScanRunning.value = false
+  }
+}
+
+async function markMisfireReviewed(id) {
+  try {
+    const note = misfireNoteDrafts[id] || ''
+    await $fetch(`/api/admin/dissolve-misfires/${id}`, { method: 'PATCH', body: { note } })
+    await loadMisfireLog()
+  } catch (e) {
+    misfireError.value = e?.data?.statusMessage || 'Failed to save review.'
   }
 }
 </script>
