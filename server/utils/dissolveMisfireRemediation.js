@@ -12,8 +12,15 @@ import { prisma } from '../prisma.js'
 import { getAuctionReferenceValues, getCmartPrices, pickReferenceValue, MIN_SAMPLE_SIZE } from './economyValuation.js'
 import { rarityFloor } from './auctionPriceSuggestion.js'
 import { sendDiscordDMByDiscordId } from './discord.js'
+import { logAdminChange } from './adminChangeLog.js'
 
 export const DISSOLVE_MISFIRE_CORRECTION_METHOD = 'DISSOLVE_MISFIRE_CORRECTION'
+
+// Compensation is paid at double the underlying value (exact bid paid, or approximate market
+// value) as a goodwill gesture for the inconvenience of being wrongly dispossessed — confirmed
+// policy. Applies uniformly to every compensation entry, refund or approximate alike; it never
+// touches the original winner, who gets the cToon itself back, not points.
+export const COMPENSATION_MULTIPLIER = 2
 
 // Methods that put the item into the official account's inventory as part of a dissolve —
 // the starting point this remediation walks forward from. Both are written by the two paths
@@ -139,19 +146,24 @@ export async function computeRemediationPlan(misfireLogId) {
       && person.userId === misfire.wrongWinnerUserId
       && misfire.wrongWinnerPaidPoints != null
     if (isWrongWinner) {
+      const basePoints = misfire.wrongWinnerPaidPoints
       compensations.push({
         userId: person.userId,
         username: person.username,
-        points: misfire.wrongWinnerPaidPoints,
-        reason: 'Refund of the exact points paid for this cToon in the bogus auction.',
+        basePoints,
+        multiplier: COMPENSATION_MULTIPLIER,
+        points: basePoints * COMPENSATION_MULTIPLIER,
+        reason: `Double refund (${COMPENSATION_MULTIPLIER}x the exact points paid for this cToon in the bogus auction).`,
         basis: 'exact_refund'
       })
     } else {
       compensations.push({
         userId: person.userId,
         username: person.username,
-        points: approxValue,
-        reason: 'Approximate value of the cToon, now being returned to its original winner.',
+        basePoints: approxValue,
+        multiplier: COMPENSATION_MULTIPLIER,
+        points: approxValue * COMPENSATION_MULTIPLIER,
+        reason: `Double the approximate value of the cToon (${COMPENSATION_MULTIPLIER}x), now being returned to its original winner.`,
         basis: approxBasis
       })
     }
@@ -281,6 +293,16 @@ export async function executeRemediationPlan(plan, { adminId, adminUsername }) {
     })
 
     return summary
+  })
+
+  await logAdminChange(prisma, {
+    userId: adminId,
+    area: 'Admin:DissolveMisfires',
+    key: 'resolve',
+    targetUserId: plan.originalWinner.userId,
+    targetUsername: plan.originalWinner.username,
+    prevValue: { misfireLogId: plan.misfireLogId, currentOwnerId: plan.currentOwnerId },
+    newValue: resolutionSummary
   })
 
   notifyRemediationParties(plan).catch(() => {})
