@@ -19,10 +19,11 @@
 <template>
   <Teleport to="body">
     <div v-if="step" class="tut-root" data-tutorial-overlay>
-      <div class="tut-dim" :class="{ 'tut-dim-hole': !!hole }" :style="dimStyle"></div>
+      <!-- Faded out while a reveal plays (no help text then), so the board can be watched unshaded; taps stay locked. -->
+      <div class="tut-dim" :class="{ 'tut-dim-hole': !!hole, 'tut-dim-off': !isReady }" :style="dimStyle"></div>
       <div v-if="hole && step.kind === 'action' && isReady" class="tut-arrow" :class="{ 'tut-arrow-up': arrowBelow }" :style="arrowStyle" aria-hidden="true">{{ arrowBelow ? '▲' : '▼' }}</div>
 
-      <!-- A reveal is animating: everything stays locked and the guide says nothing yet. -->
+      <!-- While a reveal is animating the shade is off and the guide says nothing; everything stays locked. -->
       <div v-if="isReady" ref="cardEl" class="tut-card" :class="cardSide === 'top' ? 'tut-card-top' : 'tut-card-bottom'" role="dialog" aria-live="polite" :aria-label="step.title">
         <p class="tut-step">Step {{ index + 1 }} of {{ total }}</p>
         <h3 class="tut-title">{{ step.title }}</h3>
@@ -212,7 +213,8 @@ body[data-tut-lock] [data-tut-spot="action"], body[data-tut-lock] [data-tut-spot
 <style scoped>
 .tut-root { position: fixed; inset: 0; z-index: 2147483000; pointer-events: none; }
 /* No spot: the whole window is dimmed. With one: a box over it whose shadow dims everything around it. */
-.tut-dim { position: fixed; inset: 0; background: rgba(2, 8, 20, .72); pointer-events: none; }
+.tut-dim { position: fixed; inset: 0; background: rgba(2, 8, 20, .72); pointer-events: none; transition: opacity .25s ease; }
+.tut-dim-off { opacity: 0; }
 .tut-dim-hole { inset: auto; background: transparent; border-radius: 12px; box-shadow: 0 0 0 200vmax rgba(2, 8, 20, .72); }
 .tut-arrow { position: fixed; width: 24px; text-align: center; font-size: 22px; line-height: 24px; color: #fbbf24; text-shadow: 0 1px 3px rgba(0, 0, 0, .9); pointer-events: none; animation: tut-bounce .8s ease-in-out infinite; }
 .tut-arrow-up { animation-name: tut-bounce-up; }
