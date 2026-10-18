@@ -62,6 +62,10 @@ export const SUB_ADMIN_DENIED_API = [
   { prefix: `${API}/auction-only` },
   { prefix: `${API}/auction-creators` },
 
+  // ── Dissolve misfire resolver: restores items AND pays compensation, in bulk. Scanning,
+  //    previewing and marking a misfire reviewed stay open. ────────────────────────────────────
+  { path: `${API}/dissolve-misfires/resolve` },
+
   // ── Deleting logs / job history (evidence tampering) ────────────────────────────────────────
   { path: `${API}/cron-run-logs/delete` },
   { re: /^\/api\/admin\/queues\/[^/]+\/clean$/ },

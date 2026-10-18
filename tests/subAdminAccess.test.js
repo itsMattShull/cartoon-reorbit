@@ -47,6 +47,13 @@ test('tier-1 tools are refused to a sub-admin', () => {
   for (const [m, p] of cases) assert.ok(denied(m, p), `${m} ${p} should be denied`)
 })
 
+test('the dissolve-misfire resolver (pays compensation) is refused; scan/preview/review stay open', () => {
+  assert.ok(denied('POST', '/api/admin/dissolve-misfires/resolve'))
+  assert.ok(!denied('POST', '/api/admin/dissolve-misfires/scan'))
+  assert.ok(!denied('POST', '/api/admin/dissolve-misfires/abc/preview'))
+  assert.ok(!denied('PATCH', '/api/admin/dissolve-misfires/abc'))
+})
+
 test('Auction Only is refused, in full', () => {
   for (const [m, p] of [
     ['GET', '/api/admin/auction-only'], ['POST', '/api/admin/auction-only'],
