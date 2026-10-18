@@ -89,6 +89,16 @@ async function handleAuctionOnlyCreate(event) {
     if (!uc || uc.userId !== owner.id) {
       throw createError({ statusCode: 400, statusMessage: 'UserCtoon not owned by official account' })
     }
+    // Already scheduled for a dissolve auction — picking it here would create a second,
+    // independent auction for the same item. See DissolveMisfireLog's own schema comment for
+    // what goes wrong if one of these launches after the item has since changed hands.
+    const alreadyDissolveQueued = await prisma.dissolveAuctionQueue.findUnique({
+      where: { userCtoonId: ucIdIn },
+      select: { id: true }
+    })
+    if (alreadyDissolveQueued) {
+      throw createError({ statusCode: 400, statusMessage: 'This cToon is already queued for a dissolve auction.' })
+    }
     ctoonId = uc.ctoonId
   }
 
@@ -99,13 +109,18 @@ async function handleAuctionOnlyCreate(event) {
   // Owner-owned copies of this cToon that are not already scheduled as a pending
   // (unstarted) AuctionOnly. `client` may be the base prisma or a tx client.
   async function loadAvailable(client) {
-    const pending = await client.auctionOnly.findMany({
-      where: { isStarted: false },
-      select: { userCtoonId: true }
-    })
-    const pendingIds = pending.map(p => p.userCtoonId)
+    const [pending, dissolveQueued] = await Promise.all([
+      client.auctionOnly.findMany({
+        where: { isStarted: false },
+        select: { userCtoonId: true }
+      }),
+      // Excluded for the same reason as the single-item ucIdIn check above: these already have
+      // their own scheduled dissolve-auction launch pending.
+      client.dissolveAuctionQueue.findMany({ select: { userCtoonId: true } })
+    ])
+    const excludedIds = [...pending.map(p => p.userCtoonId), ...dissolveQueued.map(d => d.userCtoonId)]
     return client.userCtoon.findMany({
-      where: { userId: owner.id, ctoonId, id: { notIn: pendingIds } },
+      where: { userId: owner.id, ctoonId, id: { notIn: excludedIds } },
       orderBy: [{ mintNumber: 'asc' }, { createdAt: 'asc' }],
       select: { id: true, mintNumber: true, createdAt: true }
     })
