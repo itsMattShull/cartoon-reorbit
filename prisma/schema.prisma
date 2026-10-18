@@ -515,6 +515,9 @@ model User {
   isAdmin                           Boolean   @default(false)
   inGuild                           Boolean   @default(true)
   active                            Boolean   @default(true)
+  // Set once the player has finished, skipped or exited the original gToons tutorial, so it only
+  // auto-prompts on their first visit (the Replay button is always available). Null = never seen.
+  ogGtoonsTutorialSeenAt            DateTime?
   banned                            Boolean   @default(false)
   // Temporary suspension — distinct from `banned`: it blocks login/play for a set window
   // (see server/api/admin/users/[id]/suspend.post.js) but deliberately never touches Discord
