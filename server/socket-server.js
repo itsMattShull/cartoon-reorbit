@@ -32,6 +32,7 @@ import { registerPokemonBattle, startPokemonBattleSweep } from './utils/pokemonB
 // header of server/utils/ogGtoonsSocket.js for the full rationale.
 import { registerOgGtoons, startOgGtoonsSweep, restoreOgGtoonsMatches } from './utils/ogGtoonsSocket.js'
 import { registerOgGtoonsPractice, startOgGtoonsPracticeSweep } from './utils/ogGtoonsPractice.js'
+import { registerOgGtoonsTutorial, startOgGtoonsTutorialSweep } from './utils/ogGtoonsTutorial.js'
 import { registerCMoonRaid, startCMoonRaidSweep, restoreCMoonRaids } from './utils/cmoonRaidSocket.js'
 import { registerCMoonRaidPreview, startCMoonRaidPreviewSweep } from './utils/cmoonRaidPreviewSocket.js'
 
@@ -1517,6 +1518,9 @@ io.on('connection', socket => {
   // Practice vs. a bot — separate module on purpose (never touches PvP's queue, stakes or
   // persistence); see the header of server/utils/ogGtoonsPractice.js.
   registerOgGtoonsPractice(io, socket, resolveSocketUser)
+  // The guided, scripted tutorial match — also its own module (never touches PvP or points); see
+  // the header of server/utils/ogGtoonsTutorial.js.
+  registerOgGtoonsTutorial(io, socket, resolveSocketUser)
 
   // cMoon Enemy Battles raid boss co-op mode — see server/utils/cmoonRaidSocket.js.
   registerCMoonRaid(io, socket, resolveSocketUser)
@@ -2197,8 +2201,8 @@ io.on('connection', socket => {
   socket.on('stw:allow', async () => {
     const auth = await resolveSocketUser(socket)
     if (!auth) return socket.emit('stw:error', { message: 'Not authenticated.' })
-    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
-    if (!dbUser?.isAdmin) return socket.emit('stw:error', { message: 'Admin only.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true, adminRestricted: true } })
+    if (!(dbUser?.isAdmin && !dbUser.adminRestricted)) return socket.emit('stw:error', { message: 'Admin only.' })
     if (spinWheelState.spinning) return socket.emit('stw:error', { message: 'Wheel is spinning.' })
     spinWheelState.isOpen = true
     io.to(STW_ROOM).emit('stw:state', stwSnapshot())
@@ -2207,8 +2211,8 @@ io.on('connection', socket => {
   socket.on('stw:clear', async () => {
     const auth = await resolveSocketUser(socket)
     if (!auth) return socket.emit('stw:error', { message: 'Not authenticated.' })
-    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
-    if (!dbUser?.isAdmin) return socket.emit('stw:error', { message: 'Admin only.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true, adminRestricted: true } })
+    if (!(dbUser?.isAdmin && !dbUser.adminRestricted)) return socket.emit('stw:error', { message: 'Admin only.' })
     spinWheelState.participants = []
     spinWheelState.isOpen = false
     spinWheelState.spinning = false
@@ -2219,8 +2223,8 @@ io.on('connection', socket => {
   socket.on('stw:spin', async () => {
     const auth = await resolveSocketUser(socket)
     if (!auth) return socket.emit('stw:error', { message: 'Not authenticated.' })
-    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
-    if (!dbUser?.isAdmin) return socket.emit('stw:error', { message: 'Admin only.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true, adminRestricted: true } })
+    if (!(dbUser?.isAdmin && !dbUser.adminRestricted)) return socket.emit('stw:error', { message: 'Admin only.' })
     if (spinWheelState.spinning) return socket.emit('stw:error', { message: 'Already spinning.' })
     if (spinWheelState.participants.length === 0) return socket.emit('stw:error', { message: 'No participants.' })
 
@@ -2265,8 +2269,8 @@ io.on('connection', socket => {
   socket.on('marbles:allow', async () => {
     const auth = await resolveSocketUser(socket)
     if (!auth) return socket.emit('marbles:error', { message: 'Not authenticated.' })
-    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
-    if (!dbUser?.isAdmin)                 return socket.emit('marbles:error', { message: 'Admin only.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true, adminRestricted: true } })
+    if (!(dbUser?.isAdmin && !dbUser.adminRestricted))                 return socket.emit('marbles:error', { message: 'Admin only.' })
     if (marblesState.phase !== 'waiting') return socket.emit('marbles:error', { message: 'Race not in waiting phase.' })
     marblesState.isOpen = true
     io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
@@ -2275,8 +2279,8 @@ io.on('connection', socket => {
   socket.on('marbles:clear', async () => {
     const auth = await resolveSocketUser(socket)
     if (!auth) return socket.emit('marbles:error', { message: 'Not authenticated.' })
-    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
-    if (!dbUser?.isAdmin) return socket.emit('marbles:error', { message: 'Admin only.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true, adminRestricted: true } })
+    if (!(dbUser?.isAdmin && !dbUser.adminRestricted)) return socket.emit('marbles:error', { message: 'Admin only.' })
     stopMarblesPhysics()
     marblesState.marbles   = []
     marblesState.isOpen    = false
@@ -2289,8 +2293,8 @@ io.on('connection', socket => {
   socket.on('marbles:start', async () => {
     const auth = await resolveSocketUser(socket)
     if (!auth) return socket.emit('marbles:error', { message: 'Not authenticated.' })
-    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true } })
-    if (!dbUser?.isAdmin)                 return socket.emit('marbles:error', { message: 'Admin only.' })
+    const dbUser = await db.user.findUnique({ where: { id: auth.id }, select: { isAdmin: true, adminRestricted: true } })
+    if (!(dbUser?.isAdmin && !dbUser.adminRestricted))                 return socket.emit('marbles:error', { message: 'Admin only.' })
     if (marblesState.phase !== 'waiting') return socket.emit('marbles:error', { message: 'Already started.' })
     if (marblesState.marbles.length === 0) return socket.emit('marbles:error', { message: 'No marbles to race.' })
     marblesState.isOpen = false
@@ -2373,6 +2377,7 @@ startEdRpsAiSweep()
 startPokemonBattleSweep(io)
 startOgGtoonsSweep(io)
 startOgGtoonsPracticeSweep()
+startOgGtoonsTutorialSweep()
 restoreOgGtoonsMatches(io)
   .then(n => { if (n) console.log(`[ogGtoons] restored ${n} in-progress match(es) from Redis`) })
   .catch(err => console.error('[ogGtoons] failed to restore matches from Redis:', err))

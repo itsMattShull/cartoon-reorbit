@@ -6,6 +6,7 @@
         <h1 class="text-base font-semibold">Dissolve Queue</h1>
         <div class="flex items-center gap-3">
           <button @click="openErrorsModal" class="text-xs text-red-600 hover:underline">Errors</button>
+          <button @click="openMisfiresModal" class="text-xs text-red-600 hover:underline">Misfires</button>
           <button @click="openFeaturedModal" class="text-xs text-blue-600 hover:underline">Edit Featured</button>
           <button @click="loadData" class="text-xs text-blue-600 hover:underline">Refresh</button>
         </div>
@@ -481,6 +482,181 @@
       </div>
     </div>
 
+    <!-- Misfires modal: cToons a scheduled dissolve auction tried to (or did) auction off after
+         the item had already legitimately changed hands — see DissolveMisfireLog's own schema
+         comment for the full story. -->
+    <div v-if="showMisfiresModal" class="fixed inset-0 z-[1000] flex items-center justify-center p-2 bg-black/50" @click.self="closeMisfiresModal">
+      <div class="relative bg-white w-full max-w-3xl rounded-lg shadow-lg flex flex-col max-h-[calc(100dvh-1rem)] overflow-hidden">
+        <div class="px-4 py-3 border-b flex-shrink-0 flex flex-wrap items-center justify-between gap-2">
+          <h2 class="text-sm font-semibold">Dissolve Auction Misfires</h2>
+          <div class="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              class="px-2 py-1 text-xs border border-indigo-600 text-indigo-700 rounded-md hover:bg-indigo-50 disabled:opacity-50"
+              :disabled="resolveRunning || !readyToResolveCount"
+              @click="resolveAllReady"
+            >{{ resolveRunning ? 'Resolving…' : `Resolve All Ready (${readyToResolveCount})` }}</button>
+            <button
+              type="button"
+              class="px-2 py-1 text-xs border border-blue-600 text-blue-700 rounded-md hover:bg-blue-50 disabled:opacity-50"
+              :disabled="misfireScanRunning || resolveRunning"
+              @click="runMisfireScan"
+            >{{ misfireScanRunning ? 'Scanning…' : 'Scan for Historical Misfires' }}</button>
+            <button @click="closeMisfiresModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
+          </div>
+        </div>
+        <div class="overflow-y-auto overscroll-contain flex-1 min-h-0 px-4 py-3">
+          <p class="text-[11px] text-gray-500 mb-2">
+            A cToon traded away from the official account (or scheduled into a second
+            auction) while it still had a pending dissolve-auction queue entry could get
+            auctioned off a second time, out from under its real owner. The worker now checks
+            ownership before launching one (PREVENTED rows below are cases it caught live);
+            "Scan for Historical Misfires" looks for cases that already happened before that fix.
+            "Resolve" restores the cToon to whoever ORIGINALLY won it at auction and credits
+            points to everyone else who legitimately held it since.
+          </p>
+          <p v-if="misfireScanResult" class="text-[11px] mb-2" :class="misfireScanResult.found ? 'text-red-700 font-medium' : 'text-green-700'">
+            Scanned {{ misfireScanResult.scanned }} official-account auction(s) — found {{ misfireScanResult.found }} new misfire(s).
+            <span v-if="misfireScanResult.prunedFalsePositives">Removed {{ misfireScanResult.prunedFalsePositives }} previously-flagged row(s) that turned out not to be real misfires.</span>
+          </p>
+
+          <div v-if="resolveRunning || resolveStatus === 'completed' || resolveStatus === 'failed'" class="border rounded-md p-2.5 space-y-2 mb-2">
+            <div class="flex items-center justify-between text-[11px] text-gray-600">
+              <span>{{ resolveProgressLabel }}</span>
+              <span>{{ resolvePct }}%</span>
+            </div>
+            <div class="w-full h-2 bg-gray-100 rounded overflow-hidden">
+              <div class="h-full bg-indigo-600 transition-all" :style="{ width: resolvePct + '%' }"></div>
+            </div>
+            <p v-if="resolveCurrent" class="text-[11px] text-gray-500 truncate">
+              {{ resolveCurrent.status }}<span v-if="resolveCurrent.ctoonName"> — {{ resolveCurrent.ctoonName }}</span>
+              <span v-if="resolveCurrent.originalWinner"> → {{ resolveCurrent.originalWinner }}</span>
+              <span v-if="resolveCurrent.totalCompensationPoints != null"> ({{ resolveCurrent.totalCompensationPoints }} pts compensation)</span>
+              <span v-if="resolveCurrent.reason"> — {{ resolveCurrent.reason }}</span>
+            </p>
+            <div v-if="resolveSummary" class="text-[11px] bg-gray-50 border rounded p-2">
+              <p class="font-medium">{{ resolveStatus === 'failed' ? 'Run failed' : 'Resolve run complete' }}</p>
+              <p class="text-gray-600">
+                {{ resolveSummary.resolved }} resolved, {{ resolveSummary.alreadyCorrect }} already correct,
+                {{ resolveSummary.blocked }} blocked, {{ resolveSummary.failed }} failed (of {{ resolveSummary.total }}).
+              </p>
+            </div>
+          </div>
+
+          <div v-if="misfireLoading" class="text-gray-500 py-6 text-center">Loading…</div>
+          <template v-else-if="!resolveRunning">
+            <div v-if="misfireLog.length" class="bg-gray-50 rounded-md border divide-y">
+              <div v-for="m in misfireLog" :key="m.id" class="p-2.5">
+                <div class="flex flex-wrap items-center gap-2 text-xs">
+                  <span
+                    class="px-1.5 py-0.5 rounded text-[10px] font-medium"
+                    :class="{
+                      'bg-amber-100 text-amber-800': m.source === 'PREVENTED',
+                      'bg-orange-100 text-orange-800': m.source === 'HISTORICAL_ACTIVE',
+                      'bg-red-100 text-red-800': m.source === 'HISTORICAL_RESOLVED'
+                    }"
+                  >{{ misfireSourceLabel(m.source) }}</span>
+                  <span class="font-medium">{{ m.ctoonName || 'Unknown cToon' }}</span>
+                  <span v-if="m.mintNumber != null" class="text-gray-500">Mint #{{ m.mintNumber }}</span>
+                  <span v-if="m.reviewedAt" class="text-green-700 text-[10px]">✓ Reviewed</span>
+                  <span v-if="m.resolvedAt" class="text-indigo-700 text-[10px]">✓ Resolved</span>
+                </div>
+                <div class="text-[11px] mt-1.5">
+                  <span class="font-medium">Rightful owner:</span>
+                  {{ m.rightfulOwnerUsername || m.rightfulOwnerUserId || 'Unknown' }}
+                  <span v-if="m.rightfulOwnerMethod" class="text-gray-500">
+                    — acquired via {{ m.rightfulOwnerMethod }}{{ m.rightfulOwnerSince ? ' on ' + fmtCST(m.rightfulOwnerSince) : '' }}
+                  </span>
+                </div>
+                <div v-if="m.source === 'HISTORICAL_RESOLVED'" class="text-[11px] mt-1 text-red-700">
+                  <span class="font-medium">Wrongly sold to:</span>
+                  {{ m.wrongWinnerUsername || m.wrongWinnerUserId || 'Unknown' }}
+                  <span v-if="m.wrongWinnerPaidPoints != null">for {{ m.wrongWinnerPaidPoints }} pts</span>
+                </div>
+                <div class="flex flex-wrap items-center gap-2 text-[10px] text-gray-500 mt-1">
+                  <span>Detected {{ fmtCST(m.detectedAt) }}</span>
+                  <span v-if="m.bogusAuctionId">· Auction: {{ m.bogusAuctionId }}</span>
+                  <span v-if="m.userCtoonId">· userCtoonId: {{ m.userCtoonId }}</span>
+                </div>
+
+                <!-- Ownership journey / automated resolution -->
+                <div v-if="m.resolvedAt" class="text-[11px] text-indigo-700 bg-indigo-50 border border-indigo-200 rounded p-2 mt-1.5">
+                  <p class="font-medium">Resolved on {{ fmtCST(m.resolvedAt) }} by {{ m.resolvedByUsername || m.resolvedByUserId }}</p>
+                  <template v-if="m.resolutionSummary?.alreadyCorrect">
+                    <p class="text-indigo-700/80">Current owner already matched the original winner — no changes were needed.</p>
+                  </template>
+                  <template v-else-if="m.resolutionSummary?.originalWinner">
+                    <p>Restored to <span class="font-medium">{{ m.resolutionSummary.originalWinner.username }}</span>
+                      (won via {{ m.resolutionSummary.originalWinner.method }}).</p>
+                    <ul v-if="m.resolutionSummary.compensations?.length" class="list-disc ml-4 mt-1">
+                      <li v-for="c in m.resolutionSummary.compensations" :key="c.userId">
+                        {{ c.username || c.userId }}: +{{ c.points }} pts — {{ c.reason }}
+                      </li>
+                    </ul>
+                  </template>
+                </div>
+                <div v-else-if="misfirePreviewLoading[m.id]" class="text-[10px] text-gray-500 mt-1.5">Checking ownership journey…</div>
+                <div v-else-if="misfirePreviews[m.id]?.blocked" class="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 mt-1.5">
+                  <span class="font-medium">Can't auto-resolve:</span> {{ misfirePreviews[m.id].blocked }}
+                </div>
+                <div v-else-if="misfirePreviews[m.id]?.alreadyCorrect" class="text-[11px] text-gray-600 bg-gray-50 border rounded p-2 mt-1.5 flex items-center justify-between gap-2">
+                  <span>Current owner already matches the original winner — nothing to restore.</span>
+                  <button
+                    type="button"
+                    class="px-2 py-1 text-[10px] border border-indigo-600 text-indigo-700 rounded-md hover:bg-indigo-50 whitespace-nowrap"
+                    @click="confirmResolve(m.id)"
+                  >Mark Resolved</button>
+                </div>
+                <div v-else-if="misfirePreviews[m.id]" class="text-[11px] bg-indigo-50 border border-indigo-200 rounded p-2 mt-1.5 space-y-1">
+                  <p>
+                    Will restore to <span class="font-medium">{{ misfirePreviews[m.id].originalWinner.username }}</span>
+                    (won via {{ misfirePreviews[m.id].originalWinner.method }} on {{ fmtCST(misfirePreviews[m.id].originalWinner.since) }}).
+                  </p>
+                  <ul v-if="misfirePreviews[m.id].compensations?.length" class="list-disc ml-4">
+                    <li v-for="c in misfirePreviews[m.id].compensations" :key="c.userId">
+                      {{ c.username || c.userId }}: +{{ c.points }} pts ({{ c.basis }}) — {{ c.reason }}
+                    </li>
+                  </ul>
+                  <p v-if="misfirePreviews[m.id].cancelAuctions?.length" class="text-amber-800">
+                    Will cancel {{ misfirePreviews[m.id].cancelAuctions.length }} active auction(s) (bidders' locked points released).
+                  </p>
+                  <p v-if="misfirePreviews[m.id].withdrawTradeOffers?.length" class="text-amber-800">
+                    Will withdraw {{ misfirePreviews[m.id].withdrawTradeOffers.length }} pending trade offer(s).
+                  </p>
+                  <p class="text-[10px] text-gray-600">Total compensation: {{ misfirePreviews[m.id].totalCompensationPoints }} pts</p>
+                  <button
+                    type="button"
+                    class="px-2 py-1 text-[10px] border border-indigo-600 text-indigo-700 rounded-md hover:bg-indigo-50"
+                    @click="confirmResolve(m.id)"
+                  >Resolve This Misfire</button>
+                </div>
+
+                <div v-if="m.reviewedAt" class="text-[11px] text-green-700 mt-1">
+                  Reviewed by {{ m.reviewedByUsername || m.reviewedByUserId }} on {{ fmtCST(m.reviewedAt) }}
+                  <span v-if="m.reviewNote">— "{{ m.reviewNote }}"</span>
+                </div>
+                <div v-else class="flex items-center gap-2 mt-1.5">
+                  <input
+                    v-model="misfireNoteDrafts[m.id]"
+                    type="text"
+                    placeholder="Note (optional) — e.g. 'item returned, winner refunded'"
+                    class="flex-1 border rounded px-2 py-1 text-[11px]"
+                  />
+                  <button
+                    type="button"
+                    class="px-2 py-1 text-[11px] border border-green-600 text-green-700 rounded-md hover:bg-green-50 whitespace-nowrap"
+                    @click="markMisfireReviewed(m.id)"
+                  >Mark Reviewed</button>
+                </div>
+              </div>
+            </div>
+            <p v-else class="text-gray-500">No misfires logged.</p>
+          </template>
+          <p v-if="misfireError" class="text-red-600 mt-2 text-xs">{{ misfireError }}</p>
+        </div>
+      </div>
+    </div>
+
     <!-- Reschedule error modal: surfaces details when a reschedule save fails -->
     <div v-if="showRescheduleErrorModal" class="fixed inset-0 z-50 flex items-center justify-center p-2 bg-black/50" @click.self="closeRescheduleErrorModal">
       <div class="relative bg-white w-full max-w-xl rounded-lg shadow-lg flex flex-col max-h-[92vh]">
@@ -507,7 +683,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRequestHeaders } from '#app'
 
 const headers = process.server ? useRequestHeaders(['cookie']) : undefined
@@ -965,4 +1141,202 @@ async function clearErrorLog() {
     errorLogError.value = e?.data?.statusMessage || 'Failed to clear error log.'
   }
 }
+
+// ── Misfires modal (cToons auctioned off a second time after already changing hands) ──────
+const showMisfiresModal  = ref(false)
+const misfireLog         = ref([])
+const misfireLoading     = ref(false)
+const misfireError       = ref('')
+const misfireScanRunning = ref(false)
+const misfireScanResult  = ref(null)
+const misfireNoteDrafts  = reactive({})
+
+function misfireSourceLabel(source) {
+  if (source === 'PREVENTED') return 'Prevented'
+  if (source === 'HISTORICAL_ACTIVE') return 'Still Active'
+  if (source === 'HISTORICAL_RESOLVED') return 'Already Sold'
+  return source
+}
+
+async function loadMisfireLog() {
+  misfireError.value   = ''
+  misfireLoading.value = true
+  try {
+    misfireLog.value = await $fetch('/api/admin/dissolve-misfires', { headers })
+    await loadAllPreviews()
+  } catch (e) {
+    misfireError.value = e?.data?.statusMessage || 'Failed to load misfire log.'
+  } finally {
+    misfireLoading.value = false
+  }
+}
+
+async function openMisfiresModal() {
+  showMisfiresModal.value = true
+  misfireScanResult.value = null
+  await loadMisfireLog()
+  await checkResolveInFlight()
+}
+
+function closeMisfiresModal() {
+  showMisfiresModal.value = false
+  stopResolvePolling()
+}
+
+// Lock the page behind the modal so touch-scrolling moves the modal body, not the page.
+watch(showMisfiresModal, (open) => {
+  if (typeof document === 'undefined') return
+  document.body.style.overflow = open ? 'hidden' : ''
+})
+onBeforeUnmount(() => {
+  if (typeof document !== 'undefined') document.body.style.overflow = ''
+})
+
+async function runMisfireScan() {
+  misfireScanRunning.value = true
+  misfireError.value       = ''
+  try {
+    const result = await $fetch('/api/admin/dissolve-misfires/scan', { method: 'POST' })
+    misfireScanResult.value = result
+    await loadMisfireLog()
+  } catch (e) {
+    misfireError.value = e?.data?.statusMessage || 'Scan failed.'
+  } finally {
+    misfireScanRunning.value = false
+  }
+}
+
+async function markMisfireReviewed(id) {
+  try {
+    const note = misfireNoteDrafts[id] || ''
+    await $fetch(`/api/admin/dissolve-misfires/${id}`, { method: 'PATCH', body: { note } })
+    await loadMisfireLog()
+  } catch (e) {
+    misfireError.value = e?.data?.statusMessage || 'Failed to save review.'
+  }
+}
+
+// ── Misfire resolution (restore to original winner + compensate everyone else) ────────────
+const misfirePreviews        = reactive({})
+const misfirePreviewLoading  = reactive({})
+const resolveStatus          = ref('idle') // idle | waiting | active | completed | failed
+const resolvePct             = ref(0)
+const resolveProcessed       = ref(0)
+const resolveTotal           = ref(0)
+const resolveRecent          = ref([])
+const resolveCurrent         = ref(null)
+const resolveSummary         = ref(null)
+let resolveJobId             = null
+let resolvePollTimer         = null
+
+const resolveRunning = computed(() => resolveStatus.value === 'waiting' || resolveStatus.value === 'active')
+const resolveProgressLabel = computed(() => {
+  if (resolveStatus.value === 'completed') return `Done — ${resolveProcessed.value}/${resolveTotal.value}`
+  if (resolveStatus.value === 'failed') return `Stopped — ${resolveProcessed.value}/${resolveTotal.value}`
+  if (!resolveTotal.value) return 'Starting…'
+  return `Resolving ${resolveProcessed.value}/${resolveTotal.value}`
+})
+const readyToResolveCount = computed(() => {
+  return misfireLog.value.filter(m => {
+    if (m.resolvedAt) return false
+    const p = misfirePreviews[m.id]
+    return p && !p.blocked
+  }).length
+})
+
+async function fetchMisfirePreview(id) {
+  misfirePreviewLoading[id] = true
+  try {
+    misfirePreviews[id] = await $fetch(`/api/admin/dissolve-misfires/${id}/preview`, { method: 'POST', headers })
+  } catch (e) {
+    misfirePreviews[id] = { blocked: e?.data?.statusMessage || 'Failed to compute remediation plan.' }
+  } finally {
+    misfirePreviewLoading[id] = false
+  }
+}
+
+async function loadAllPreviews() {
+  const unresolved = misfireLog.value.filter(m => !m.resolvedAt)
+  await Promise.all(unresolved.map(m => fetchMisfirePreview(m.id)))
+}
+
+function applyResolveStatus(data) {
+  resolveStatus.value    = data.status
+  resolvePct.value       = data.pct ?? 0
+  resolveProcessed.value = data.processed ?? 0
+  resolveTotal.value     = data.total ?? 0
+  resolveRecent.value    = data.recent ?? []
+  resolveCurrent.value   = data.current ?? null
+  if (data.status === 'completed') resolveSummary.value = data.summary || null
+  if (data.status === 'failed') misfireError.value = data.error || 'Resolve run failed'
+}
+
+function stopResolvePolling() {
+  if (resolvePollTimer) { clearInterval(resolvePollTimer); resolvePollTimer = null }
+}
+
+function pollResolveStatus() {
+  stopResolvePolling()
+  resolvePollTimer = setInterval(async () => {
+    try {
+      const data = await $fetch('/api/admin/dissolve-misfires/resolve-status', { params: { jobId: resolveJobId } })
+      applyResolveStatus(data)
+      if (data.status === 'completed' || data.status === 'failed') {
+        stopResolvePolling()
+        await loadMisfireLog()
+      }
+    } catch (e) {
+      misfireError.value = e?.data?.statusMessage || 'Lost connection to the resolve job'
+      stopResolvePolling()
+    }
+  }, 1000)
+}
+
+async function checkResolveInFlight() {
+  try {
+    const data = await $fetch('/api/admin/dissolve-misfires/resolve-status')
+    if (data.status === 'waiting' || data.status === 'active') {
+      resolveJobId = data.jobId
+      applyResolveStatus(data)
+      pollResolveStatus()
+    }
+  } catch {
+    // Transient lookup error — fall through to the idle list view.
+  }
+}
+
+async function startResolve(misfireIds) {
+  misfireError.value   = ''
+  resolveSummary.value = null
+  try {
+    const res = await $fetch('/api/admin/dissolve-misfires/resolve', { method: 'POST', body: { misfireIds } })
+    resolveJobId        = res.jobId
+    resolveStatus.value = 'waiting'
+    pollResolveStatus()
+  } catch (e) {
+    misfireError.value = e?.data?.statusMessage || 'Failed to start resolve run.'
+  }
+}
+
+async function confirmResolve(id) {
+  const plan = misfirePreviews[id]
+  if (!plan) return
+  const label = plan.alreadyCorrect
+    ? 'Mark this misfire as resolved (no ownership change needed)?'
+    : `Restore to ${plan.originalWinner.username} and credit ${plan.totalCompensationPoints} pts in compensation?`
+  if (!window.confirm(label)) return
+  await startResolve([id])
+}
+
+async function resolveAllReady() {
+  const ids = misfireLog.value
+    .filter(m => !m.resolvedAt && misfirePreviews[m.id] && !misfirePreviews[m.id].blocked)
+    .map(m => m.id)
+  if (!ids.length) return
+  const totalPts = ids.reduce((sum, id) => sum + (misfirePreviews[id].totalCompensationPoints || 0), 0)
+  if (!window.confirm(`Resolve ${ids.length} misfire(s)? Total compensation to be paid out: ${totalPts} pts.`)) return
+  await startResolve(ids)
+}
+
+onBeforeUnmount(stopResolvePolling)
 </script>

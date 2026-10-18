@@ -68,6 +68,12 @@
                 class="px-1.5 py-0 rounded text-[10px] font-medium bg-orange-100 text-orange-800"
                 :title="`Suspended until ${formatDate(u.suspendedUntil)}`"
               >Suspended</span>
+              <span
+                v-if="u.isAdmin"
+                class="px-1.5 py-0 rounded text-[10px] font-medium"
+                :class="u.adminRestricted ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'"
+                :title="u.adminRestricted ? `Sub-admin: ${u.adminPermissions.length} admin tools` : 'Full admin'"
+              >{{ u.adminRestricted ? `Sub-admin · ${u.adminPermissions.length}` : 'Admin' }}</span>
               <div class="relative">
                 <button
                   class="ml-0.5 h-6 w-6 grid place-items-center text-gray-500 hover:text-gray-700 rounded hover:bg-gray-100"
@@ -123,10 +129,30 @@
                     @click="openTransferModal(u); closeMenu()"
                   >Transfer</button>
                   <button
+                    v-if="isFullAdmin && !u.isAdmin"
+                    class="w-full text-left px-2 py-1 text-[11px] text-blue-700 font-semibold hover:bg-blue-50"
+                    @click="openSubAdminModal(u); closeMenu()"
+                  >Make sub-admin…</button>
+                  <button
+                    v-if="isFullAdmin && u.isAdmin && u.adminRestricted"
+                    class="w-full text-left px-2 py-1 text-[11px] text-blue-700 font-semibold hover:bg-blue-50"
+                    @click="openSubAdminModal(u); closeMenu()"
+                  >Edit sub-admin access…</button>
+                  <button
+                    v-if="isSuperAdmin && u.isAdmin && !u.adminRestricted && u.discordId !== superAdminId"
+                    class="w-full text-left px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-50"
+                    @click="openSubAdminModal(u); closeMenu()"
+                  >Convert to sub-admin…</button>
+                  <button
                     v-if="isSuperAdmin && !u.isAdmin"
                     class="w-full text-left px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-50"
                     @click="makeAdmin(u); closeMenu()"
-                  >Make Admin</button>
+                  >Make Admin (full)</button>
+                  <button
+                    v-if="isSuperAdmin && u.isAdmin && u.adminRestricted"
+                    class="w-full text-left px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-50"
+                    @click="makeAdmin(u); closeMenu()"
+                  >Promote to full Admin</button>
                   <button
                     v-if="isSuperAdmin && u.isAdmin && u.discordId !== superAdminId"
                     class="w-full text-left px-2 py-1 text-[11px] text-amber-700 hover:bg-amber-50"
@@ -722,6 +748,15 @@
     </div>
 
     <!-- Transfer User modal -->
+    <!-- Make / edit sub-admin access -->
+    <AdminSubAdminModal
+      v-if="subAdminTarget"
+      :user="subAdminTarget"
+      :sub-admins="subAdmins"
+      @close="subAdminTarget = null"
+      @saved="onSubAdminSaved"
+    />
+
     <AdminTransferModal
       :show="showTransferModal"
       :source-user="transferTarget"
@@ -742,6 +777,7 @@ function viewCollection(u) {
   router.push({ path: '/newsite/admin/manageCollection', query: { username: u.username } })
 }
 import AdminTransferModal from '@/components/newsite/AdminTransferModal.vue'
+import AdminSubAdminModal from '@/components/newsite/AdminSubAdminModal.vue'
 
 const users    = ref([])
 const official = ref(null)
@@ -751,6 +787,23 @@ const filter   = ref(typeof route.query.username === 'string' ? route.query.user
 
 const superAdminId = '732319322093125695'
 const isSuperAdmin = computed(() => meData.value?.discordId === superAdminId)
+// Only full admins (not sub-admins) may create or edit sub-admins; the server enforces it too.
+const isFullAdmin = computed(() => Boolean(meData.value?.isAdmin && meData.value?.adminScope?.full))
+const subAdmins = computed(() => users.value.filter(u => u.isAdmin && u.adminRestricted))
+const subAdminTarget = ref(null)
+function openSubAdminModal(u) { subAdminTarget.value = u }
+function onSubAdminSaved(res) {
+  const idx = users.value.findIndex(x => x.id === res.id)
+  if (idx !== -1) {
+    users.value[idx] = {
+      ...users.value[idx],
+      isAdmin: res.isAdmin,
+      adminRestricted: res.adminRestricted,
+      adminPermissions: res.adminPermissions
+    }
+  }
+  subAdminTarget.value = null
+}
 
 onMounted(async () => {
   try {
@@ -1422,7 +1475,7 @@ async function makeAdmin(u) {
   try {
     await $fetch(`/api/admin/users/${u.id}/make-admin`, { method: 'POST' })
     const idx = users.value.findIndex(x => x.id === u.id)
-    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: true }
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: true, adminRestricted: false, adminPermissions: [] }
   } catch (e) {
     alert(e?.data?.statusMessage || e?.message || 'Failed to make admin')
   }
@@ -1432,7 +1485,7 @@ async function removeAdmin(u) {
   try {
     await $fetch(`/api/admin/users/${u.id}/remove-admin`, { method: 'POST' })
     const idx = users.value.findIndex(x => x.id === u.id)
-    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: false }
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: false, adminRestricted: false, adminPermissions: [] }
   } catch (e) {
     alert(e?.data?.statusMessage || e?.message || 'Failed to remove admin')
   }

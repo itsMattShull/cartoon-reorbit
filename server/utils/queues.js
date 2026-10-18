@@ -297,6 +297,25 @@ export const cmoonDailyTaskBackfillQueue = new Queue(
   }
 )
 
+// Queue for the admin "Resolve Dissolve Misfires" tool
+// (server/workers/dissolve-misfire-resolve.worker.js) — restores a cToon to its original auction
+// winner and compensates everyone else who held it since, one misfire at a time, per-row or in
+// bulk. Not given a single fixed jobId (like cmoonDailyTaskBackfillQueue, unlike
+// cmoonRankRecalcQueue): an admin may run this again later for a fresh batch of misfires, and
+// each run's own job.data.misfireIds scopes it — see
+// server/api/admin/dissolve-misfires/resolve.post.js for how an in-flight run is instead detected
+// by scanning the queue's own active/waiting/delayed jobs.
+export const dissolveMisfireResolveQueue = new Queue(
+  process.env.DISSOLVE_MISFIRE_RESOLVE_QUEUE_KEY || 'dissolveMisfireResolveQueue',
+  {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 20 },
+      removeOnFail:     { count: 20 },
+    },
+  }
+)
+
 // ─── Exact-time "scheduled events" ──────────────────────────────────────────────
 // Delayed jobs that fire a scheduled event at the exact minute it was set for — a pack going live
 // or off in cMart, an AuctionOnly row starting, an announcement posting — instead of waiting for

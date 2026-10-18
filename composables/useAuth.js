@@ -1,3 +1,5 @@
+import { scopeAllows } from '~/utils/adminPermissions'
+
 export const useAuth = () => {
     const user = useState('user', () => null)
     const fetchSelfInFlight = useState('auth:fetch-self-in-flight', () => null)
@@ -115,6 +117,12 @@ export const useAuth = () => {
     const setPoints = (points) => { setUser({ points: Math.max(0, Number(points) || 0) }) }
   
     const isAdmin = computed(() => Boolean(user.value?.isAdmin))
+    // Sub-admins are admins (isAdmin) with a restricted scope. A missing adminScope (a stale
+    // cached user from before sub-admins existed) is treated as restricted, never as full.
+    const adminScope = computed(() => user.value?.adminScope || { full: false, permissions: [] })
+    const isFullAdmin = computed(() => Boolean(user.value?.isAdmin && adminScope.value.full))
+    // UI gate only; server/middleware/require-admin-scope.js is what actually enforces it.
+    const canAccessAdmin = (perm) => Boolean(user.value?.isAdmin) && scopeAllows(adminScope.value, perm)
 
-    return { user, isAdmin, login, logout, fetchSelf, setUser, setPoints, blockedRedirect }
+    return { user, isAdmin, isFullAdmin, adminScope, canAccessAdmin, login, logout, fetchSelf, setUser, setPoints, blockedRedirect }
   }

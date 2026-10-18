@@ -126,6 +126,24 @@ export default defineEventHandler(async (event) => {
         statusMessage: 'One or more of the cToons offered is in an active auction.'
       })
     }
+
+    // 7a) Prevent trading away a cToon still sitting in the dissolve-auction queue — it hasn't
+    // launched into a real Auction yet (so the check above misses it), but it has a scheduled
+    // job that will try to auction it off later. Without this, that job later fires against a
+    // userCtoonId the official account no longer owns — see DissolveMisfireLog's own schema
+    // comment for the full story. The worker itself now also guards against this (defense in
+    // depth), but rejecting it here is what gives the admin a clear reason instead of a silent
+    // no-op auction weeks later.
+    const offeredInDissolveQueue = await prisma.dissolveAuctionQueue.findFirst({
+      where: { userCtoonId: { in: resolvedOffered } },
+      select: { id: true }
+    })
+    if (offeredInDissolveQueue) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'One or more of the cToons offered is queued for a dissolve auction — remove it from the queue first.'
+      })
+    }
   }
   if (resolvedRequested.length) {
     const requestedActiveAuction = await prisma.auction.findFirst({

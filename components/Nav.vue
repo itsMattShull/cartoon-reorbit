@@ -159,7 +159,8 @@
         </div>
 
         <!-- admin groups -->
-        <template v-if="user?.isAdmin">
+        <!-- legacy /admin/* menu: full admins only (sub-admins use the console) -->
+        <template v-if="user?.isAdmin && user?.adminScope?.full">
           <div
             v-for="group in adminGroups"
             :key="group.key"

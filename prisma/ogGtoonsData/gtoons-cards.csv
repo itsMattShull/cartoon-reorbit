@@ -1,0 +1,393 @@
+Image,Name,Character,Points,Color,Type 1,Type 2,Type 3,Group,Power Description,Rarity,Show Source,Card Series,Date Released
+x,Absolution,Absolution,2,Silver,Vehicle,,,,+5 if any TOM is in play,Rare,Toonami Base,Series 1,2002-10-14
+x,Abuelito,Abuelito,7,Blue,Male,,,,No Power,Uncommon,Mucha Lucha,Series 5,2006-01-24
+x,Action Hank,Action Hank,8,Black,Male,Hero,Prop,,No power,Uncommon,Dexter's Laboratory,Series 1,2002-11-11
+x,Agent Honeydew,Agent Honeydew,8,Black,Female,Hero,,G.L.O.B.A.L.,No power,Uncommon,Dexter's Laboratory,Series 1,2002-10-14
+x,Ah-Ma,Ah-Ma,5,Green,Female,,,,+3 to Juniper Lee; x2 if Granny is in play,Common,Juniper Lee,Series 5,2006-01-24
+x,Aku,Aku,10,Green,Male,Villain,,,No power,Uncommon,Samurai Jack,Series 1,2003-03-24
+x,Aku Bat,Aku,5,Purple,Male,Villain,,,x2 if next to any Samurai Jack,Common,Samurai Jack,Series 1,2003-03-24
+x,Aku Beast,Aku,6,Green,Male,Villain,,,No power,Common,Samurai Jack,Series 1,2002-10-14
+x,Alex,Alex,8,Green,Female,Hero,,WOOHP,No power,Uncommon,Totally Spies!,Series 5,2006-01-24
+x,Alfred Pennyworth,Alfred Pennyworth,4,Orange,Male,,,,+4 if next to any Hero; +3 to any Batman,Common,Batman,Series 1,2003-02-18
+x,Amazo,Amazo,1,Silver,Prop,Villain,,,+2 for each Justice League member in play,Rare,Justice League,Series 3,2004-01-05
+x,Amoeba Boys,Amoeba Boys,7,Blue,Male,Villain,,,-5 to neighboring and opposite Villains,Common,Powerpuff Girls,Series 1,2002-10-14
+x,Aqualad,Aqualad,10,Black,Male,Hero,,,No power,Uncommon,Teen Titans,Series 5,2005-10-31
+x,Aquaman,Aquaman,2,Purple,Male,Hero,,,+3 to all Green cards,Rare,Justice League,Series 1,2002-10-14
+x,Astro,Astro,4,Purple,Male,Animal,,,No power,Common,The The Jetsons,Series 2,2003-06-23
+x,Atomic Betty,Atomic Betty,9,Yellow,Female,Hero,,,No power,Uncommon,Atomic Betty,Series 5,2005-12-02
+x,Baby Bugs,Bugs Bunny,7,Blue,Male,Animal,,,No power,Uncommon,Looney Tunes,Series 3,2004-01-05
+x,Baby Daffy,Daffy Duck,6,Purple,Male,Animal,,,-5 to opposing card if not an Animal,Common,Looney Tunes,Series 3,2004-01-05
+x,Baby Lola,Lola,1,Yellow,Female,Animal,,,+4 for each opponent Red card,Rare,Looney Tunes,Series 4,2004-07-06
+x,Baby Sylvester,Sylvester,7,Purple,Male,Animal,,,-3 to all other Purple cards,Common,Looney Tunes,Series 3,2004-01-05
+x,Baby Taz,Taz,2,Green,Male,Animal,,,-3 to all Props,Rare,Looney Tunes,Series 4,2004-07-06
+x,Baby Tweety,Tweety,6,Green,Male,Animal,,,No power,Common,Looney Tunes,Series 3,2004-01-05
+x,Bamm-Bamm Baby,Bamm-Bamm,6,Orange,Male,,,,No power,Common,The Flintstones,Series 1,2002-10-14
+x,Bamm-Bamm Teen,Bamm-Bamm,8,Blue,Male,,,,No power,Uncommon,The Flintstones,Series 1,2003-02-17
+x,Barney Rubble,Barney Rubble,3,Purple,Male,,,,+10 if next to any Fred Flintstone,Rare,The Flintstones,Series 1,2002-10-14
+x,Batgirl,Batgirl,10,Black,Female,Hero,,,No power,Uncommon,Batman,Series 1,2002-10-14
+x,Batman,Batman,7,Green,Male,Hero,,Justice League,-5 to opposite card if not a Hero,Common,Justice League,Series 1,2002-10-14
+x,Batman Running,Batman,10,Blue,Male,Hero,,Justice League,No Power,Uncommon,Batman,Series 1,2003-03-24
+x,Batmobile,Batmobile,9,Black,Vehicle,,,,No power,Uncommon,Batman,Series 2,2003-06-23
+x,Beast Boy,Beast Boy,4,Green,Male,Hero,,Teen Titans,+3 if Robin is in play,Common,Teen Titans,Series 2,2003-07-21
+x,Beast Boy Gorilla,Beast Boy,5,Green,Male,Animal,,Teen Titans,No power,Common,Teen Titans,Series 2,2003-12-22
+x,Beast Boy Kitten,Beast Boy,3,Silver,Male,Animal,,Teen Titans,+8 if next to Thunder; -1 to all Female cards,Rare,Teen Titans,Series 2,2003-12-22
+x,Betty Rubble,Betty Rubble,5,Red,Female,,,,+6 if any Barney Rubble is in play,Common,The Flintstones,Series 1,2002-10-14
+x,Bigfoot,Bigfoot,2,Blue,Monster,,,,-5 to opposing card it not a Monster,Rare,Scooby-Doo,Series 4,2004-07-06
+x,Billy,Billy,9,Black,Male,,,,No power,Uncommon,The Grim Adventures of Billy & Mandy,Series 1,2002-10-14
+x,Billy's Dad,Billy's Dad,1,Purple,Male,,,,+3 to all Orange cards,Rare,The Grim Adventures of Billy & Mandy,Series 2,2003-06-23
+x,Billy's Mom,Billy's Mom,8,Black,Female,,,,No power,Uncommon,The Grim Adventures of Billy & Mandy,Series 2,2003-06-23
+x,Bizarro,Bizarro,5,Yellow,Male,Villain,,,No power,Common,Superman,Series 2,2003-06-23
+x,Black Knight,Black Knight,8,Black,Male,Villain,,,No power,Uncommon,Scooby-Doo,Series 2,2003-06-23
+x,Bloo,Bloo,10,Green,Male,,,Imaginary Friend,No power,Common,Foster's Home for Imaginary Friends,Series 5,2006-01-24
+x,Blossom Fighting,Blossom,10,Blue,Female,Hero,,Powerpuff Girls,No power,Uncommon,Powerpuff Girls,Series 1,2003-03-24
+x,Blossom Landing,Blossom,9,Purple,Female,Hero,,Powerpuff Girls,No power,Uncommon,Powerpuff Girls,Series 1,2002-10-14
+x,Blossom with Bunny,Blossom,4,Orange,Female,Hero,,Powerpuff Girls,+5 if any Bugs Bunny is in play,Common,Powerpuff Girls,Series 1,2002-11-11
+x,Boo Boo Bear,Boo Boo Bear,1,Green,Male,Animal,,,+3 to all Animals; +5 if any Yogi Bear is in play,Rare,Yogi Bear,Series 1,2002-10-14
+x,Booster Gold,Booster Gold,3,Silver,Male,Hero,,,+6 to all 8s,Rare,Justice League Unlimited,Series 5,2006-01-24
+x,Boskov,Boskov,5,Purple,Male,Animal,,,No power,Common,The Grim Adventures of Billy & Mandy,Series 1,2002-10-14
+x,Brainiac,Brainiac,4,Yellow,Male,Villain,,,+4 if next to any Lex Luthor; +4 if any Superman is in play,Common,Superman,Series 1,2002-10-14
+x,Bubbles Flying,Bubbles,8,Yellow,Female,Hero,,Powerpuff Girls,No power,Uncommon,Powerpuff Girls,Series 1,2002-10-14
+x,Bubbles Laughing,Bubbles,5,Orange,Female,Hero,,Powerpuff Girls,+6 to any other Powerpuff Girls member,Common,Powerpuff Girls,Series 1,2002-11-08
+x,Bubbles with Flowers,Bubbles,7,Orange,Female,Hero,,Powerpuff Girls,"+2 to any Buttercup, Blossom, Ms. Keane, or Professor Utonium",Common,Powerpuff Girls,Series 1,2003-02-18
+x,Bubbles with Octi,Bubbles,10,Red,Female,Hero,,Powerpuff Girls,No power,Uncommon,Powerpuff Girls,Series 1,2002-10-25
+x,Buena Girl,Buena Girl,3,Silver,Female,,,Mucha Lucha,x2 to Rikochet if the Flea is in play,Rare,Mucha Lucha,Series 5,2006-01-24
+x,Bugs Grinnin',Bugs Bunny,10,Orange,Male,Animal,,,No power,Uncommon,Looney Tunes,Series 1,2002-10-14
+x,Bugs Laughin',Bugs Bunny,7,Green,Male,Animal,,,No power,Common,Looney Tunes,Series 2,2003-06-23
+x,Bugs Singin',Bugs Bunny,6,Yellow,Male,Animal,,,+5 if next to any Daffy Duck,Common,Looney Tunes,Series 1,2003-03-24
+x,Bugs Teasin',Bugs Bunny,9,Red,Male,Animal,,,No power,Uncommon,Looney Tunes,Series 1,2003-03-24
+x,Bugs with Carrot,Bugs Bunny,8,Orange,Male,Animal,,,No power,Uncommon,Looney Tunes,Series 1,2002-10-14
+x,Bunny Bravo,Bunny Bravo,1,Orange,Female,,,,+5 if next to any Johnny Bravo,Rare,Johnny Bravo,Series 1,2002-10-14
+x,Buttercup Fighting,Buttercup,6,Blue,Female,Hero,,Powerpuff Girls,+1 for each Villain in play,Rare,Powerpuff Girls,Series 1,2002-10-25
+x,Buttercup Frowning,Buttercup,7,Blue,Female,Hero,,Powerpuff Girls,No power,Common,Powerpuff Girls,Series 1,2002-10-14
+x,Buttercup with Snowball,Buttercup,10,Blue,Female,Hero,,Powerpuff Girls,No power,Uncommon,Powerpuff Girls,Series 1,2002-11-25
+x,Captain Dodgers,Duck Dodgers,10,Orange,Male,Animal,Hero,,No power,Uncommon,Duck Dodgers,Series 4,2004-07-06
+x,Carl,Carl,7,Purple,Male,,,,No power,Common,Johnny Bravo,Series 1,2002-10-14
+x,Carlotta,Carlotta,8,Black,Female,Villain,,,No power,Uncommon,Scooby-Doo,Series 1,2003-03-24
+x,Catwoman,Catwoman,9,Black,Female,Villain,,,No power,Uncommon,Batman,Series 1,2002-10-14
+x,Cheetah,Cheetah,10,Black,Female,Villain,,Injustice Gang,No power,Uncommon,Justice League,Series 1,2002-10-14
+x,Chemical X,Chemical X,1,Silver,Prop,,,,+1 for each Female in Play,Rare,Powerpuff Girls,Series 4,2004-07-06
+x,Chewy,Chewy,8,Black,Male,,,,No power,Uncommon,Codename: Kids Next Door,Series 3,2004-01-05
+x,Chicago Gangsters,Chicago Gangsters,6,Red,Male,,,,No power,Common,Samurai Jack,Series 2,2003-06-23
+x,Chicken,Chicken,8,Purple,Male,Animal,,,No power,Uncommon,Cow & Chicken,Series 3,2004-01-05
+x,Chicken from Outer Space,Chicken from Outer Space,3,Silver,Male,Animal,,,"+3 for each Courage, Eustace, and Muriel in play",Rare,Courage the Cowardly Dog,Series 1,2002-11-25
+x,Chritchellites Leader,Chritchellites Leader,4,Purple,Male,Villain,,,No power,Common,Samurai Jack,Series 1,2003-03-24
+x,Cinderblock,Cinderblock,2,Silver,Male,Villain,,,-2 to all Purple cards,Rare,Teen Titans,Series 2,2003-08-04
+x,Cindy Bear,Cindy Bear,3,Green,Female,Animal,,,+10 if next to any Yogi Bear,Rare,Yogi Bear,Series 1,2003-02-17
+x,Clam,Clam,2,Silver,Male,Animal,,Bean Scouts,x2 to Raj if Lazlo is in play,Rare,Camp Lazlo,Series 5,2006-01-24
+x,Clayface,Clayface,2,Red,Male,Villain,Monster,,-2 to all Orange cards,Rare,Batman,Series 1,2003-01-20
+x,Clover,Clover,10,Orange,Female,Hero,,WOOHP,No power,Uncommon,Totally Spies!,Series 5,2006-01-24
+x,Clyde 50,Clyde 50,1,Silver,Prop,,,,+10 if next to any TOM,Rare,Toonami Base,Series 1,2002-10-14
+x,Coco,Coco,7,Green,Female,Animal,,Imaginary Friend,+2 to all Props,Common,Foster's Home for Imaginary Friends,Series 5,2006-01-24
+x,Commander General,Commander General,10,Black,Male,,,G.L.O.B.A.L.,No power,Uncommon,Dexter's Laboratory,Series 1,2003-03-24
+x,Common Cold,Common Cold,6,Orange,Male,Villain,,,-3 to all other Orange cards,Common,Codename: Kids Next Door,Series 3,2004-01-05
+x,Coop,Coop,10,Orange,Male,Hero,,,x2 to Megas,Slam,Megas XLR,Series 5,2006-01-24
+x,Cootie Bug,Cootie Bug,1,Silver,Animal,,,,-2 to all Males,Rare,Dexter's Laboratory,Series 1,2002-10-14
+x,Copperhead,Copperhead,5,Yellow,Male,Villain,,Injustice Gang,+2 to any Injustice Gang member,Common,Justice League,Series 1,2002-10-14
+x,Cosmo Spacely,Cosmo Spacely,7,Orange,Male,,,,-4 to any George Jetson; -1 if any Stella Spacely is in play,Common,The Jetsons,Series 1,2002-10-14
+x,Count Muerte,Count Muerte,10,Black,Male,Villain,,,No power,Uncommon,Duck Dodgers,Series 4,2004-07-06
+x,Courage Mecha,Courage,2,Yellow,Monster,,,,-2 to all Animals,Rare,Courage the Cowardly Dog,Series 2,2003-06-23
+x,Courage Screaming,Courage,7,Purple,Male,Animal,,,No power,Common,Courage the Cowardly Dog,Series 1,2002-10-14
+x,Courage Sleeping,Courage,4,Blue,Male,Animal,,,-2 for each Monster in play,Common,Courage the Cowardly Dog,Series 1,2003-02-18
+x,Cow,Cow,9,Green,Female,Animal,,,No power,Uncommon,Cow & Chicken,Series 3,2004-01-05
+x,Creeper,Creeper,9,Black,Male,Villain,Monster,,No power,Uncommon,Scooby-Doo,Series 1,2002-10-14
+x,Cyborg,Cyborg,9,Black,Male,Hero,,Teen Titans,No power,Uncommon,Teen Titans,Series 2,2003-07-21
+x,Cyborg Quits,Cyborg,6,Purple,Male,Hero,,,No power,Common,Teen Titans,Series 4,2004-07-06
+x,Daffy Duck,Daffy Duck,7,Blue,Male,Animal,,,No power,Common,Looney Tunes,Series 1,2002-10-14
+x,Daphne Blake,Daphne Blake,5,Purple,Female,,,"Mystery, Inc.",No power,Common,Scooby-Doo,Series 1,2002-10-14
+x,Daphne Celebrating,Daphne Blake,10,Green,Female,,,"Mystery, Inc.",No power,Uncommon,Scooby-Doo,Series 1,2003-03-24
+x,Deadshot,Deadshot,6,Red,Male,Villain,,,No power,Common,Justice League,Series 1,2003-03-24
+x,Dee Dee,Dee Dee,6,Purple,Female,,,,+5 if next to Dexter,Uncommon,Dexter's Laboratory,Series 1,2002-10-14
+x,Dee Dee Ballerina,Dee Dee,8,Yellow,Female,,,,No power,Uncommon,Dexter's Laboratory,Series 2,2003-06-23
+x,Dee Dee Monster,Dee Dee,10,Yellow,Female,Monster,,,No power,Uncommon,Dexter's Laboratory,Series 1,2003-02-24
+x,Delightful Children,Delightful Children,8,Black,Villain,,,,No power,Uncommon,Codename: Kids Next Door,Series 3,2004-01-05
+x,Denny Yogman,Denny Yogman,1,Silver,Male,,,,+2 to all Red cards,Rare,Robot Jones,Series 1,2002-11-25
+x,Dexter,Dexter,10,Blue,Male,,,,No power,Uncommon,Dexter's Laboratory,Series 1,2002-10-14
+x,Dexter Dimwit,Dexter,1,Green,Male,,,,"+3 to any Ed, Edd, or Eddy in play",Rare,Dexter's Laboratory,Series 1,2002-11-25
+x,Dexter Geezer,Dexter,4,Orange,Male,,,,No power,Common,Dexter's Laboratory,Series 1,2003-02-18
+x,Dexter's Dad,Dexter's Dad,4,Red,Male,,,,No power,Common,Dexter's Laboratory,Series 1,2002-10-14
+x,Dexter's Mom,Dexter's Mom,3,Silver,Female,,,,+10 if next to any Dexter's Dad,Rare,Dexter's Laboratory,Series 1,2002-10-14
+x,Dino,Dino,7,Green,Male,Animal,,,No power,Common,The Flintstones,Series 1,2002-10-14
+x,Disappearo Device,Disappearo Device,1,Silver,Prop,,,,No power,Rare,Duck Dodgers,Series 4,2004-07-06
+x,Dove,Dove,6,Green,Female,Hero,,,+6 if Hawk is in play,Common,Justice League Unlimited,Series 5,2006-01-24
+x,Dr. Fate,Dr. Fate,6,Blue,Male,,,,Treats opposing card as Black,Rare,Justice League,Series 3,2004-01-05
+x,Dr. I.Q. Hi,Dr. I.Q. Hi,9,Orange,Male,,,,No power,Uncommon,Duck Dodgers,Series 3,2004-01-05
+x,Dr. Woe,Dr. Woe,8,Blue,Male,Villain,,,No power,Uncommon,Duck Dodgers,Series 4,2004-07-06
+x,Dracula,Dracula,7,Purple,Male,Villain,,,+5 if next to Vampire Bat,Common,Scooby-Doo,Series 1,2003-02-18
+x,Drake Darkstar,Drake Darkstar,8,Orange,Male,Animal,Villain,,No power,Uncommon,Duck Dodgers,Series 3,2004-01-05
+x,Drill Sergeant,Drill Sergeant,4,Green,Male,,,,Opposing card loses all adjacency effects,Common,Duck Dodgers,Series 4,2004-07-06
+x,Duck Codgers,Duck Dodgers,3,Green,Male,Hero,Animal,,+4 for each opponent Blue card,Rare,Duck Dodgers,Series 4,2004-07-06
+x,Duck Dodgers,Duck Dodgers,9,Black,Male,Animal,,,No power,Uncommon,Duck Dodgers,Series 3,2004-01-05
+x,Eager Young Space Cadet,Porky Pig,4,Blue,Male,Hero,Animal,,-5 to any opponent's Props,Common,Duck Dodgers,Series 3,2004-01-05
+x,Earl,Earl,10,Purple,Male,,,,No power,Uncommon,Cow & Chicken,Series 3,2004-01-05
+x,Ed Running,Ed,5,Yellow,Male,,,,+4 for each Edd and Eddy in play,Common,"Ed, Edd 'n Eddy",Series 1,2002-10-14
+x,Ed with Flashlight,Ed,8,Purple,Male,,,,No power,Uncommon,"Ed, Edd 'n Eddy",Series 1,2002-10-14
+x,Edd,Edd,6,Green,Male,,,,+2 for each Prop in play,Common,"Ed, Edd 'n Eddy",Series 1,2002-10-14
+x,Eddy,Eddy,4,Purple,Male,,,,No power,Common,"Ed, Edd 'n Eddy",Series 1,2002-10-14
+x,Eddy in Shades,Eddy,9,Red,Male,,,,No power,Uncommon,"Ed, Edd 'n Eddy",Series 1,2003-03-24
+x,Eduardo,Eduardo,3,Purple,Male,,,Imaginary Friend,x4 if opposite card is purple,Rare,Foster's Home for Imaginary Friends,Series 5,2006-01-24
+x,Edward,Edward,6,Blue,Male,Animal,,Bean Scouts,+2 for each other Bean Scout in play,Common,Camp Lazlo,Series 5,2006-01-24
+x,Elmer Fudd,Elmer Fudd,6,Yellow,Male,,,,x2 if any Huntor is in play,Common,Looney Tunes,Series 1,2002-10-14
+x,Elroy Jetson,Elroy Jetson,1,Silver,Male,,,,+7 if any Dexter is in play,Rare,The Jetsons,Series 1,2002-10-14
+x,Emperor,Emperor,9,Black,Male,,,,No power,Uncommon,Samurai Jack,Series 1,2003-03-24
+x,Enrique Jr.,Enrique Jr.,6,Green,Male,Animal,,,No power,Common,The Grim Adventures of Billy & Mandy,Series 1,2002-10-14
+x,Eustace,Eustace,6,Green,Male,,,,No power,Common,Courage the Cowardly Dog,Series 1,2002-10-14
+x,Eustace Masked,Eustace,5,Red,Male,,,,-3 to any Courage,Common,Courage the Cowardly Dog,Series 1,2002-11-08
+x,Evil Zombie,Evil Zombie,9,Black,Male,Villain,Monster,,No power,Uncommon,Scooby-Doo,Series 1,2003-03-31
+x,Exo-Jock 4000,Exo-Jock 4000,10,Black,Prop,,,,No power,Uncommon,Dexter's Laboratory,Series 1,2002-11-08
+x,Felix Faust,Felix Faust,9,Black,Male,Villain,,,No power,Uncommon,Justice League,Series 1,2003-03-24
+x,Flash,Flash,10,Orange,Male,Hero,,Justice League,No power,Common,Justice League,Series 1,2002-10-14
+x,Flea,Flea,12,Green,Male,,,Mucha Lucha,Adjacent cards get -1 for each Yellow card in play,Uncommon,Mucha Lucha,Series 5,2006-01-24
+x,Flem,Flem,3,Silver,Male,,,,+5 if next to Chicken; +5 to Earl,Rare,Cow & Chicken,Series 4,2004-07-06
+x,Flying Ark,Flying Ark,1,Orange,Vehicle,,,,-1 to all Villains; +1 to all Animals,Rare,Hanna-Barbera,Series 2,2003-06-23
+x,Frankenstein's Monster,Frankenstein's Monster,4,Blue,Male,Villain,Monster,,+4 for each neighboring Green card,Common,Scooby-Doo,Series 1,2003-01-13
+x,Frankie,Frankie,6,Red,Female,,,,All Imaginary Friends get +1 for each Red card and -1 for each Blue card in play,Common,Foster's Home for Imaginary Friends,Series 5,2006-01-24
+x,Freaky Fred,Freaky Fred,5,Purple,Male,,,,-5 to opposing card if not Male,Common,Courage the Cowardly Dog,Series 3,2004-01-05
+x,Fred Falling,Fred Jones,10,Blue,Male,,,"Mystery, Inc.",No power,Uncommon,Scooby-Doo,Series 1,2003-03-24
+x,Fred Flintstone,Fred Flintstone,6,Blue,Male,,,,No power,Common,The Flintstones,Series 1,2002-10-14
+x,Fred Jones,Fred Jones,6,Red,Male,,,"Mystery, Inc.",x2 if next to any Daphne Blake,Common,Scooby-Doo,Series 1,2002-10-14
+x,Fretul Larry 3000,Larry 3000,7,Yellow,Prop,Hero,,Time Squad,Opposing card loses all adjacency effects,Common,Time Squad,Series 4,2004-07-06
+x,Funland Robot,Funland Robot,4,Yellow,Villain,Prop,,,No power,Common,Scooby-Doo,Series 1,2002-11-18
+\,Fusilli,The Great Fusilli,1,Blue,Male,Animal,,,"+5 if next to any Courage, -3 to all other Blue cards",,Courage the Cowardly Dog,Series 3,2004-01-05
+x,Fuzzy Lumpkins,Fuzzy Lumpkins,8,Black,Male,Villain,Monster,,No power,Uncommon,Powerpuff Girls,Series 1,2003-01-13
+x,Gangreen Gang,Gangreen Gang,2,Silver,Male,Villain,,,+8 if next to any Buttercup; +1 to any Blossom and any Bubbles,Rare,Powerpuff Girls,Series 1,2002-10-14
+x,General Skarr,General Skarr,4,Orange,Male,Villain,,,No power,Common,The Grim Adventures of Billy & Mandy,Series 1,2003-02-18
+x,George Jetson,George Jetson,10,Black,Male,,,,No power,Uncommon,The Jetsons,Series 1,2002-10-14
+x,Ghost Clown,Ghost Clown,6,Green,Male,Villain,,,+10 if next to any Funland Robot,Common,Scooby-Doo,Series 1,2002-12-23
+x,Ghost of Redbeard,Ghost of Redbeard,7,Purple,Male,Villain,,,+2 for each neighboring Red card,Common,Scooby-Doo,Series 1,2002-11-18
+x,Gizmo,Gizmo,6,Yellow,Male,Villain,,,+7 to any Numbah Two,Common,Teen Titans,Series 2,2003-08-04
+x,Gladiator Tuddrussel,Buck Tuddrussel,8,Black,Male,Hero,,Time Squad,No power,Uncommon,Time Squad,Series 3,2004-01-05
+x,Glorft,Glorft,3,Blue,Villain,,,,x4 if opposite card is Blue,Rare,Megas XLR,Series 5,2006-01-24
+x,Goat,Goat,2,Red,Male,,,,+1 for each Hero in play,Rare,Megas XLR,Series 5,2005-10-31
+x,Gooey,Gooey,7,Orange,Male,,,,-3 to all Vehicles,Common,Codename: Kids Next Door,Series 3,2004-01-05
+x,Gorilla Grodd,Gorilla Grodd,10,Black,Male,Animal,Villain,,No power,Uncommon,Justice League,Series 3,2004-01-05
+x,Gorrath,Gorrath,8,Yellow,Villain,Male,,,No power,Uncommon,Megas XLR,Series 5,2006-01-24
+x,Goth Metal Grim,Grim,9,Yellow,Male,,,,No power,Uncommon,The Grim Adventures of Billy & Mandy,Series 3,2004-01-05
+x,Gramma Stuffum,Gramma Stuffum,2,Silver,Female,Villain,,,+10 if next to Liver & Onions,Rare,Codename: Kids Next Door,Series 3,2004-01-05
+x,Granny,Granny,3,Silver,Female,,,,x2 to Tweety; -3 to Sylvester,Rare,Looney Tunes,Series 3,2004-01-05
+x,Green Ghost,Green Ghost,4,Orange,Male,Villain,,,"+2 for each Mystery, Inc. member in play",Common,Scooby-Doo,Series 1,2003-03-24
+x,Green Lantern,Green Lantern,5,Green,Male,Hero,,Justice League,Treats neighboring cards as Green,Common,Justice League,Series 1,2002-10-14
+x,Green Lantern Flying,Green Lantern,10,Orange,Male,Hero,,Justice League,No power,Uncommon,Justice League,Series 1,2003-02-17
+x,Green Loontern Dodgers,Duck Dodgers,2,Purple,Male,Hero,Animal,,-2 to all other Heroes,Rare,Duck Dodgers,Series 4,2004-07-06
+x,Grim,Grim,2,Blue,Male,,,,+1 to all Black cards in play,Rare,The Grim Adventures of Billy & Mandy,Series 1,2002-10-14
+x,Harmony Bunny,Harmony Bunny,1,Green,Female,Hero,,,+5 for each neighboring Female Animal,Slam,Powerpuff Girls,Series 3,2004-01-05
+x,Harry Vermin,Harry Vermin,1,Yellow,Male,Villain,,,x3 to any Ratman; +1 to any neighboring Animal,Rare,Duck Dodgers,Series 4,2004-07-06
+x,Hawkgirl,Hawkgirl,4,Yellow,Female,Hero,,Justice League,+5 to any Flash,Common,Justice League,Series 1,2002-10-14
+x,Hawkgirl Attacking,Hawkgirl,10,Red,Female,Hero,,Justice League,No power,Uncommon,Justice League,Series 1,2003-03-24
+x,Headmistress,Headmistress,8,Orange,Female,,,,+1 for each Mucha Lucha; +3 for each Female opponent,Slam,Mucha Lucha,Series 5,2006-01-24
+x,Heckhound,Heckhound,9,Black,Male,Villain,Animal,,No power,Uncommon,Dexter's Laboratory,Series 2,2003-06-23
+x,Hector Con Carne,Hector Con Carne,7,Blue,Male,Villain,,,No power,Common,The Grim Adventures of Billy & Mandy,Series 1,2002-10-14
+x,Him,Him,10,Black,Male,Villain,,,No power,Uncommon,Powerpuff Girls,Series 1,2003-03-24
+x,Hoss Delgado,Hoss Delgado,7,Blue,Male,Hero,,,-3 to all other Blue cards,Common,The Grim Adventures of Billy & Mandy,Series 3,2004-01-05
+x,Huntor,Huntor,7,Blue,Male,Villain,,,+1 for each Animal in play,Common,,Series 1,2003-03-24
+x,I.M. Weasel,I.M. Weasel,2,Orange,Male,Animal,,,-5 to opposing card if not a Prop,Rare,I Am Weasel,Series 3,2004-01-05
+x,I.R. Baboon,I.R. Baboon,9,Black,Male,Animal,,,No power,Uncommon,I Am Weasel,Series 3,2004-01-05
+x,Imperium,Imperium,4,Purple,Male,Villain,,,No power,Common,Justice League,Series 2,2003-06-23
+x,Irwin,Irwin,4,Yellow,Male,,,,No power,Common,The Grim Adventures of Billy & Mandy,Series 3,2004-01-05
+x,Jack Armored,Samurai Jack,6,Yellow,Male,Hero,,,No power,Common,Samurai Jack,Series 1,2003-03-24
+x,Jack Attack!,Samurai Jack,4,Green,Male,Hero,,,No power,Common,Samurai Jack,Series 1,2003-03-24
+x,Jack Bruised,Samurai Jack,2,Blue,Male,Hero,,,-2 to all Black cards,Rare,Samurai Jack,Series 1,2002-12-16
+x,Jack Fighting,Samurai Jack,10,Purple,Male,Hero,,,No power,Uncommon,Samurai Jack,Series 2,2003-06-23
+x,Jack the Astronaut,Samurai Jack,5,Red,Male,Hero,,,+6 if any Chicken from Outer Space is in play,Rare,Samurai Jack,Series 1,2002-10-14
+x,Jack the Ronin,Samurai Jack,8,Green,Male,Hero,,,No power,Uncommon,Samurai Jack,Series 2,2003-06-23
+x,Jack the Samurai,Samurai Jack,3,Purple,Male,Hero,,,-5 to any Aku,Rare,Samurai Jack,Series 1,2002-10-14
+x,Jack the Warrior,Samurai Jack,7,Red,Male,Hero,,,No power,Common,Samurai Jack,Series 1,2003-02-18
+x,Jack Training,Samurai Jack,1,Red,Male,Hero,,,+1 for each Hero in play,Rare,Samurai Jack,Series 1,2003-01-27
+x,Jack with Sword,Samurai Jack,9,Yellow,Male,Hero,,,No power,Uncommon,Samurai Jack,Series 1,2002-10-14
+x,Jamie,Jamie,8,Yellow,Villain,Male,,,No power,Uncommon,Megas XLR,Series 5,2006-01-24
+x,Jane Jetson,Jane Jetson,10,Black,Female,,,,No power,Uncommon,The Jetsons,Series 1,2002-10-14
+x,Javelin-7,Javelin-7,6,Purple,Vehicle,,,,No power,Common,Justice League,Series 1,2003-03-24
+x,Jawbreakers,Jawbreakers,1,Silver,Prop,,,,"x3 to any neighboring Ed, Edd, and Eddy",Rare,"Ed, Edd 'n Eddy",Series 1,2002-12-16
+x,Jellystone Park,Jellystone Park,10,Black,Place,,,,No power,Uncommon,Yogi Bear,Series 2,2003-06-23
+x,Jerry,Jerry Lewis,3,Silver,Male,,,WOOHP,+7 to all Blue 7s,Rare,Totally Spies!,Series 5,2006-01-24
+x,Jet Screamer,Jet Screamer,6,Orange,Male,,,,x2 if any Val Hallen is in play,Uncommon,The Jetsons,Series 1,2003-02-24
+x,Jim Gordon,Jim Gordon,2,Silver,Male,,,,+2 to all Heroes,Rare,Batman,Series 1,2002-10-14
+x,Jimmy,Jimmy,8,Black,Male,,,,No power,Uncommon,"Ed, Edd 'n Eddy",Series 1,2003-03-24
+x,Jimmy Olson,Jimmy Olson,8,Black,Male,,,Daily Planet,No power,Uncommon,Superman,Series 1,2002-10-14
+x,Jinx,Jinx,3,Orange,Female,Villain,,,+4 for each opponent Yellow card,Rare,Teen Titans,Series 3,2004-01-05
+x,Johnny Flexing,Johnny Bravo,7,Red,Male,,,,No power,Common,Johnny Bravo,Series 1,2002-10-14
+x,Johnny Superhero,Johnny Bravo,9,Purple,Male,Hero,,,No power,Uncommon,Johnny Bravo,Series 1,2003-03-24
+x,Joker,Joker,8,Black,Male,Villain,,Injustice Gang,No power,Uncommon,Batman,Series 1,2002-10-14
+x,Joker in Vegas,Joker,3,Blue,Male,Villain,,Injustice Gang,+5 if the Royal Flush Gang is in play,Rare,Justice League,Series 4,2004-07-06
+x,Judy Jetson,Judy Jetson,2,Silver,Female,,,,+10 if next to any Jet Screamer,Rare,The Jetsons,Series 1,2003-02-03
+x,Jungle Boy,Jungle Boy,5,Red,Male,,,,No power,Common,Johnny Bravo,Series 1,2003-03-24
+x,Juniper Lee,Juniper Lee,2,Red,Female,Hero,,,x2 if next to Monroe; +1 for each Villain in play,Rare,Juniper Lee,Series 5,2005-12-05
+x,Junkyard,Junkyard,8,Purple,Place,,,,No power,Uncommon,Megas XLR,Series 5,2006-01-24
+x,K-9,K-9,6,Yellow,Animal,,,,+10 if next to Marvin the Martian,Common,Looney Tunes,Series 3,2004-01-05
+x,Katz,Katz,2,Red,Male,Animal,Villain,,+2 to all Silver cards,Rare,Courage the Cowardly Dog,Series 1,2003-03-24
+x,Kaz,Kaz Harada,10,Black,Male,,,,No power,Uncommon,HiHi Puffy AmiYumi,Series 5,2005-11-07
+x,Klub Katz,Katz,3,Orange,Male,Animal,Villain,,-5 to opposing card if not a Villain,Rare,Courage the Cowardly Dog,Series 4,2004-07-06
+x,Knightbrace,Knightbrace,4,Red,Male,Villain,,,-3 to all other Red cards,Common,Codename: Kids Next Door,Series 3,2004-01-05
+x,Krunk,Krunk,3,Silver,Male,Hero,,Justice Friends,+8 if Major Glory and Val Hallen are both in play,Rare,Dexter's Laboratory,Series 1,2002-10-14
+x,Lantern on Trial,Green Lantern,4,Purple,Male,Hero,,Justice League,No power,Common,Justice League,Series 4,2004-07-06
+x,Larry 3000,Larry 3000,7,Blue,Male,,,Time Squad,No power,Common,Time Squad,Series 1,2002-11-08
+x,Lava Monster,Lava Monster,4,Red,Monster,Villain,,,x3 if Magmanamus is in play,Common,Samurai Jack,Series 1,2003-03-24
+x,Lazlo,Lazlo,3,Red,Male,Animal,,Bean Scouts,+7 to all Yellow 7s,Rare,Camp Lazlo,Series 5,2005-10-31
+x,Lee Lee,Lee Lee,9,Black,Female,,,,No power,Uncommon,Dexter's Laboratory,Series 1,2002-10-14
+x,Legion,Legion,6,Red,Hero,,,,x2 to any Superman,Common,Justice League,Series 1,2003-03-24
+x,Lenny Yogman,Lenny Yogman,2,Silver,Male,,,,+10 if next to any Denny Yogman,Rare,Robot Jones,Series 1,2002-11-25
+x,Leonardo da Vinci,Leonardo da Vinci,9,Black,Hero,,,,No power,Uncommon,Time Squad,Series 3,2004-01-05
+x,Lex Luthor,Lex Luthor,8,Black,Male,Villain,,Injustice Gang,No power,Uncommon,Justice League,Series 1,2003-01-20
+x,Liberty Belle,Liberty Belle,5,Orange,Female,Hero,,,+4 to all other Female Heroes,Slam,Powerpuff Girls,Series 2,2003-06-23
+x,Lisa the Babysitter,Lisa the Babysitter,3,Silver,Female,,,,x2 to any Dexter,Rare,Dexter's Laboratory,Series 1,2002-11-11
+x,Liver & Onions,Liver & Onions,9,Black,Male,,,,No power,Uncommon,Codename: Kids Next Door,Series 3,2004-01-05
+x,Lobo,Lobo,7,Yellow,Male,Villain,,,+10 if next to the Wolfman,Common,Superman,Series 1,2003-02-18
+x,Lois Lane,Lois Lane,8,Black,Female,,,Daily Planet,No power,Uncommon,Superman,Series 1,2002-10-14
+x,Lotta Litter,Lotta Litter,5,Blue,Female,Villain,,,No power,Common,Hanna-Barbera,Series 2,2003-06-23
+x,Lumpus,Scout Master Lumpus,4,Purple,Animal,Male,,Bean Scouts,+5 to all Green 7s,Common,Camp Lazlo,Series 5,2006-01-24
+x,Mac,Mac,10,Green,Male,,,,No power,Uncommon,Foster's Home for Imaginary Friends,Series 5,2006-01-24
+x,Mad Jack,Samurai Jack,9,Black,Male,Villain,,,No power,Uncommon,Samurai Jack,Series 2,2003-10-20
+x,Mad Mod,Mad Mod,6,Orange,Male,Villain,,,+4 to Shaggy; -2 to any Teen Titan,Slam,Teen Titans,Series 5,2006-01-24
+x,Magilla Gorilla,Magilla Gorilla,9,Black,Male,Animal,,,No power,Uncommon,Hanna-Barbera,Series 2,2003-06-23
+x,Magmanamus,Magmanamus,7,Yellow,Male,Villain,Monster,,No power,Common,Dexter's Laboratory,Series 1,2003-04-28
+x,Major Dr. Ghastly,Major Dr. Ghastly,5,Orange,Female,Villain,,,+10 if next to any General Skarr,Common,The Grim Adventures of Billy & Mandy,Series 1,2002-11-08
+x,Major Glory,Major Glory,7,Green,Male,Hero,,Justice Friends,-7 to any Major Man,Common,Dexter's Laboratory,Series 1,2002-10-14
+x,Major Man,Major Man,8,Black,Male,Villain,,,No power,Uncommon,Powerpuff Girls,Series 1,2003-03-24
+x,Mammoth,Mammoth,10,Black,Male,Villain,,,No power,Uncommon,Teen Titans,Series 2,2003-12-22
+x,Mandark,Mandark,7,Yellow,Male,,,,+2 if any Dee Dee is in play; -1 to any Dexter,Common,Dexter's Laboratory,Series 1,2002-10-14
+x,Mandark's Giant Robot,Mandark's Giant Robot,10,Purple,Prop,,,,No power,Uncommon,Dexter's Laboratory,Series 2,2003-06-23
+x,Mandy,Mandy,3,Silver,Female,,,,x3 if next to any Billy,Rare,The Grim Adventures of Billy & Mandy,Series 1,2002-10-14
+x,Mandy the Merciless,Mandy,8,Black,Female,,,,No power,Uncommon,The Grim Adventures of Billy & Mandy,Series 4,2004-07-06
+x,Mange,Mange,2,Silver,Female,Hero,,,+2 for each Black card in play,Slam,Powerpuff Girls,Series 3,2004-01-05
+x,Manhunter Android,Manhunter Android,5,Green,Villain,Prop,,,-4 to any Green Lantern,Common,Justice League,Series 1,2003-03-24
+x,Martian Commander,Marvin the Martian,8,Red,Male,Villain,,,No power,Uncommon,Duck Dodgers,Series 3,2004-01-05
+x,Martian Manhunter,Martian Manhunter,3,Yellow,Male,Hero,,Justice League,x3 if next to another Justice League member,Rare,Justice League,Series 1,2002-10-14
+x,Martian Manhunter Flying,Martian Manhunter,10,Yellow,Male,Hero,,Justice League,No power,Uncommon,Justice League,Series 1,2003-03-24
+x,Martian Queen,Martian Queen,4,Orange,Female,Villain,,,Opposing card loses all adjacency effects,Common,Looney Tunes,Series 4,2004-07-06
+x,Marvin the Martian,Marvin the Martian,5,Red,Male,,,,x2 if any Martian Manhunter is in play,Common,Looney Tunes,Series 1,2002-10-14
+x,Mayor,Mayor,9,Black,Male,,,,No power,Uncommon,Powerpuff Girls,Series 1,2002-10-14
+x,Mee Mee,Mee Mee,4,Purple,Female,,,,+4 for each Dee Dee and Lee Lee in play,Common,Dexter's Laboratory,Series 1,2002-10-14
+x,Mojo Brain Power,Mojo Jojo,7,Yellow,Male,Villain,Animal,,No power,Common,Powerpuff Girls,Series 1,2002-10-14
+x,Mojo Jojo,Mojo Jojo,10,Orange,Male,Villain,Animal,,No power,Uncommon,Powerpuff Girls,Series 1,2003-03-24
+x,Mojo Sandcastle,Mojo Jojo,3,Yellow,Male,Villain,Animal,,x3 to any Simion; +3 to any neighboring Powerpuff Girls member,Rare,Powerpuff Girls,Series 1,2002-10-14
+x,Mom Droid,Mom Droid,3,Silver,Female,,,,+10 if next to any Dexter's Dad,Rare,Dexter's Laboratory,Series 1,2003-02-24
+x,Mongul,Mongul,3,Silver,Male,Villain,,,+5 for each neighboring Hero,Rare,Justice League,Series 1,2003-03-24
+x,Monkey,Monkey,6,Blue,Male,Animal,Hero,G.L.O.B.A.L.,x2 to any Agent Honeydew,Common,Dexter's Laboratory,Series 1,2002-10-14
+x,Monroe,Monroe,6,Orange,Male,Animal,,,-4 to all Yellow 10s,Common,Juniper Lee,Series 5,2006-01-24
+x,Monster Mayor,Mayor,10,Red,Male,Monster,Villain,,No power,Uncommon,Powerpuff Girls,Series 4,2004-07-06
+x,Moodnesium,Moodnesium,9,Red,Prop,,,,x2 to Porky Pig if Duck Dodgers is in play,Uncommon,Duck Dodgers,Series 4,2004-07-06
+x,Mopey Popo,Mopey Popo,8,Black,Male,Animal,Villain,,No power,Uncommon,Powerpuff Girls,Series 4,2004-07-06
+x,Morgan Moonscar,Morgan Moonscar,3,Red,Male,Monster,,,+10 if next to any Simone,Rare,Scooby-Doo,Series 2,2003-06-23
+x,Mr. Cogswell,Mr. Cogswell,9,Black,Male,,,,No power,Uncommon,The Jetsons,Series 1,2003-03-24
+x,Mr. Herriman,Mr. Herriman,3,Purple,Animal,Male,,Imaginary Friend,+6 if Foster's Home is in play; -6 to Bugs Bunny,Rare,Foster's Home for Imaginary Friends,Series 5,2005-10-31
+x,Mr. Mxyzptlk,Mr. Mxyzptlk,7,Yellow,Male,Villain,,,No power,Common,Superman,Series 1,2003-03-24
+x,Mr. Slate,Mr. Slate,7,Orange,Male,,,,No power,Common,The Flintstones,Series 1,2003-02-18
+x,Ms. Keane,Ms. Keane,2,Red,Female,,,,+3 to all Purple cards,Rare,Powerpuff Girls,Series 1,2002-10-14
+x,Muriel,Muriel,4,Red,Female,,,,No power,Common,Courage the Cowardly Dog,Series 1,2002-10-14
+x,Muriel Toddler,Muriel,2,Blue,Female,,,,-2 to all Yellow cards,Rare,Courage the Cowardly Dog,Series 2,2003-06-23
+x,Mystery Machine,Mystery Machine,8,Black,Vehicle,,,,No power,Uncommon,Scooby-Doo,Series 1,2002-10-14
+x,Nergal,Nergal,8,Black,Villain,Monster,,,No power,Uncommon,The Grim Adventures of Billy & Mandy,Series 4,2004-07-06
+x,Nowhere,Nowhere,9,Blue,Place,,,,No power,Uncommon,Courage the Cowardly Dog,Series 3,2004-01-05
+x,Numbuh Five,Numbuh Five,5,Red,Female,,,,No power,Common,Codename: Kids Next Door,Series 2,2003-06-23
+x,Numbuh Four,Numbuh Four,4,Purple,Male,,,,No power,Common,Codename: Kids Next Door,Series 3,2004-01-05
+x,Numbuh One,Numbuh One,1,Silver,Male,,,,+2 to all Red cards,Rare,Codename: Kids Next Door,Series 1,2002-11-25
+x,Numbuh Three,Numbuh Three,3,Silver,Female,,,,No power,Rare,Codename: Kids Next Door,Series 2,2003-06-23
+x,Numbuh Two,Numbuh Two,2,Green,Male,,,,+7 to all Vehicles,Rare,Codename: Kids Next Door,Series 2,2003-07-14
+x,Octi,Octi,4,Green,Prop,,,,+5 to any Bubbles; +7 if next to any Him,Common,Powerpuff Girls,Series 1,2003-02-10
+x,Ophelia,Ophelia,7,Yellow,Female,,,,No power,Common,Juniper Lee,Series 5,2006-02-07
+x,Orm,Orm,10,Black,Male,Villain,,,No power,Uncommon,Justice League,Series 2,2003-06-23
+x,Patsy Smiles,Patsy Smiles,7,Green,Female,Animal,,Squirrel Scouts,+10 if next to Lazlo,Common,Camp Lazlo,Series 5,2006-01-24
+x,Pebbles Baby,Pebbles,2,Green,Female,,,,+5 if next to any Bamm-Bamm; +1 to all Females,Rare,The Flintstones,Series 1,2002-10-14
+x,Pebbles Teen,Pebbles,7,Purple,Female,,,,+4 if any Dee Dee is in play,Common,The Flintstones,Series 1,2003-01-27
+x,Penguin,Penguin,1,Silver,Male,Villain,,,+10 if next to any Batman; +2 to all Purple cards,Rare,Batman,Series 1,2002-10-14
+x,Pepe Le Pew,Pepe Le Pew,1,Silver,Male,Animal,,,+2 to all Blue cards,Rare,Looney Tunes,Series 4,2004-07-06
+x,Pig of Action,Porky Pig,10,Black,Male,Animal,Hero,,No power,Uncommon,Duck Dodgers,Series 4,2004-07-06
+x,Planet Killer,Grrkek the Planet Killer,2,Yellow,Villain,Male,,,All Villains get +2 for each Prop in play,Rare,Megas XLR,Series 5,2006-01-24
+x,Plasmus,Plasmus,9,Black,Villain,Monster,Male,,No power,Uncommon,Teen Titans,Series 2,2003-08-04
+x,Ponypuff Princess,Ponypuff Princess,5,Green,Prop,,,,-1 to all Males,Common,Dexter's Laboratory,Series 1,2003-03-24
+x,Pops,Pops,6,Orange,Male,,,,No power,Common,Johnny Bravo,Series 1,2003-03-24
+x,Porky Pig,Porky Pig,2,Yellow,Male,Animal,,,+10 if played as the last card,Rare,Looney Tunes,Series 5,2006-10-16
+x,Professor Utonium,Professor Utonium,6,Red,Male,,,,+5 if next to any Ms. Keane,Common,Powerpuff Girls,Series 1,2002-10-14
+x,Puddle Queen,Puddle Queen,6,Red,Female,Villain,,,+5 if Eustace is in play,Common,Courage the Cowardly Dog,Series 4,2004-07-06
+x,Pup Named Scooby,Scooby-Doo,7,Red,Male,Animal,,,No power,Common,Scooby-Doo,Series 4,2004-07-06
+x,R.E.G.I.S.,R.E.G.I.S.,5,Orange,Villain,,,,-3 to Megas; +3 to Dexter,Common,Megas XLR,Series 5,2005-10-31
+x,Raj,Raj,6,Yellow,Male,Animal,,Bean Scouts,x2 to Johnny Bravo; +1 to each adjacent card,Slam,Camp Lazlo,Series 5,2006-01-24
+x,Ranger Smith,Ranger Smith,3,Green,Male,,,,+6 if Jellystone Park is in play,Rare,Yogi Bear,Series 1,2003-03-24
+x,Ratman,Ratman,4,Blue,Male,Hero,,Justice Friends,-3 to any Batman,Common,Dexter's Laboratory,Series 1,2003-03-10
+x,Raven,Raven,1,Yellow,Female,Hero,,Teen Titans,-2 to all Silver cards; +1 to all Black cards,Rare,Teen Titans,Series 2,2003-12-29
+x,Raven Visions,Raven,8,Black,Female,Hero,,Teen Titans,No power,Uncommon,Teen Titans,Series 4,2004-07-06
+x,Ray-Ray,Ray-Ray,9,Blue,Male,,,,No power,Uncommon,Juniper Lee,Series 5,2006-01-24
+x,Red Guy,Red Guy,1,Orange,Male,Villain,,,+10 if next to Him,Rare,Cow & Chicken,Series 4,2004-07-06
+x,Red X,Red X,6,Purple,Male,,,,+6 if next to Slade,Common,Teen Titans,Series 5,2006-01-24
+x,Riddler,Riddler,4,Red,Male,Villain,,,No power,Uncommon,Batman,Series 1,2003-03-24
+x,Roach Coach,Roach Coach,3,Yellow,Male,Villain,,,-4 to Townsville,Rare,Powerpuff Girls,Series 1,2003-03-24
+x,Robin,Robin,1,Silver,Male,Hero,,,+5 if any other Hero is in play,Rare,Batman,Series 1,2002-10-14
+x,Robin Kicking,Robin,10,Black,Male,Hero,,Teen Titans,No power,Uncommon,Teen Titans,Series 2,2003-07-21
+x,Robot Jones,Robot Jones,10,Black,Male,,,,No power,Uncommon,Robot Jones,Series 1,2002-11-18
+x,Robot Spider,Robot Spider,1,Orange,Villain,Prop,,,-2 to all Red cards,Rare,Samurai Jack,Series 1,2002-11-18
+x,Roboto,Roboto,9,Black,Male,,,,No power,Uncommon,Duck Dodgers,Series 4,2004-07-06
+x,Rogue Aquaman,Aquaman,10,Yellow,Male,,,,No power,Uncommon,Justice League,Series 4,2004-07-06
+x,Rolf,Rolf,2,Silver,Male,,,,"+3 for each member of Ed, Edd 'n Eddy in play",Rare,"Ed, Edd 'n Eddy",Series 1,2002-11-08
+x,Rosey,Rosey,7,Blue,Female,,,,+2 to all Places,Common,The Jetsons,Series 1,2002-10-14
+x,Rowdyruff Boys,Rowdyruff Boys,5,Purple,Male,Villain,,,No power,Common,Powerpuff Girls,Series 1,2003-02-18
+x,Royal Flush Gang,Royal Flush Gang,10,Black,Villain,,,,No power,Uncommon,Justice League,Series 4,2004-07-06
+x,Sam,Sam,5,Orange,Female,Hero,,WOOHP,x2 if Alex or Clover is in play,Slam,Totally Spies!,Series 5,2006-01-24
+x,Sara,Sara,8,Black,Female,,,,No power,Uncommon,Toonami Base,Series 1,2002-10-14
+x,Sara Bellum,Sara Bellum,6,Red,Female,,,,No power,Common,Powerpuff Girls,Series 1,2002-10-14
+x,Sarah,Sarah,3,Silver,Female,,,,-3 to any Ed; -1 to all Males,Rare,"Ed, Edd 'n Eddy",Series 1,2002-10-14
+x,Scooby Hiding,Scooby-Doo,3,Yellow,Male,Animal,,"Mystery, Inc.",+10 if next to the Mystery Machine,Rare,Scooby-Doo,Series 1,2002-10-14
+x,Scooby-Dee,Scooby-Dee,5,Orange,Female,Animal,,,x2 to any Scooby-Doo,Common,Scooby-Doo,Series 2,2003-06-23
+x,Scooby-Doo,Scooby-Doo,10,Red,Male,Animal,,"Mystery, Inc.",No power,Uncommon,Scooby-Doo,Series 1,2002-10-14
+x,Scooby-Dum,Scooby-Dum,6,Blue,Male,Animal,,,No power,Common,Scooby-Doo,Series 1,2003-02-18
+x,Scotsman,Scotsman,1,Silver,Male,,,,+2 to all Yellow cards,Rare,Samurai Jack,Series 1,2002-10-14
+x,Scrappy-Doo,Scrappy-Doo,4,Green,Male,Animal,,,+2 for each Monster,Common,Scooby-Doo,Series 1,2002-10-14
+x,Sedusa (Ima Goodlady),Sedusa,1,Silver,Female,,,,+2 to all Orange cards,Rare,Powerpuff Girls,Series 1,2002-10-14
+x,S-Force,S-Force,8,Green,Hero,,,,No power,Uncommon,Megas XLR,Series 5,2006-01-24
+x,Sgt. Rock,Sgt. Rock,8,Yellow,Male,Hero,,,No power,Uncommon,Justice League,Series 4,2004-07-06
+x,Shade,Shade,5,Orange,Male,Villain,,Injustice Gang,+3 for each neighboring Black card,Common,Justice League,Series 1,2003-02-18
+x,Shaggy Running,Shaggy,7,Green,Male,,,"Mystery, Inc.",-2 to all Monsters,Rare,Scooby-Doo,Series 1,2002-10-14
+x,Shaggy Sandwich,Shaggy,10,Blue,Male,,,"Mystery, Inc.",No power,Uncommon,Scooby-Doo,Series 1,2003-01-13
+x,Simion,Simion,3,Silver,Male,Villain,Animal,,-5 to any Agent Honeydew,Rare,Dexter's Laboratory,Series 1,2003-01-20
+x,Simone Lenoir,Simone,3,Yellow,Female,Villain,,,x3 if Catwoman is in play,Rare,Scooby-Doo,Series 1,2003-03-24
+x,Sinestro,Sinestro,1,Red,Male,Villain,,,+4 for each opponent Black card,Rare,Justice League,Series 4,2004-07-06
+x,Slade,Slade,5,Red,Male,Villain,,,No power,Uncommon,Teen Titans,Series 5,2006-01-24
+x,Slinkman,Slinkman,3,Purple,Male,Animal,,Bean Scouts,-5 to all Black 10s; +5 if next to Lumpus,Rare,Camp Lazlo,Series 5,2006-01-24
+x,Smiling Gizmo,Gizmo,1,Green,Male,Villain,,,+3 for each Prop,Rare,Teen Titans,Series 4,2004-07-06
+x,Snagglepuss,Snagglepuss,6,Green,Male,Animal,,,No power,Common,Hanna-Barbera,Series 1,2003-03-24
+x,Snow Beast,Snow Beast,3,Silver,Male,Monster,,,+5 to Fred Jones,Rare,Scooby-Doo,Series 2,2003-06-23
+x,Solomon Grundy,Solomon Grundy,8,Green,Male,Villain,Monster,Injustice Gang,No power,Uncommon,Justice League,Series 3,2004-01-05
+x,Star Sapphire,Star Sapphire,10,Black,Female,Villain,,Injustice Gang,No power,Uncommon,Justice League,Series 1,2003-03-24
+x,Starfire,Starfire,5,Yellow,Female,Hero,,Teen Titans,+3 if Robin is in play,Common,Teen Titans,Series 2,2003-07-21
+x,Starfire Flying,Starfire,2,Silver,Female,Hero,,Teen Titans,+10 if next to Bubbles,Rare,Teen Titans,Series 3,2004-01-05
+x,Steel,Steel,1,Silver,Male,Hero,,,+2 to all Green cards,Rare,Superman,Series 1,2003-03-24
+x,Stella Spacely,Stella Spacely,1,Silver,Female,,,,+2 to all Females,Rare,The Jetsons,Series 2,2003-06-23
+x,Steve,Steve,1,Silver,Male,Monster,,,+3 for each Powerpuff Girl in play,Rare,,Series 4,2004-07-06
+x,Stickybeard,Stickybeard,5,Yellow,Male,Villain,,,-3 to all other Yellow cards,Common,Codename: Kids Next Door,Series 3,2004-01-05
+x,Super Monkey,Monkey,2,Blue,Male,Animal,Hero,,"x2 to any Dexter, Dee Dee, Dexter's Mom, or Dexter's Dad",Slam,Dexter's Laboratory,Series 2,2003-06-23
+x,Supergirl,Supergirl,6,Yellow,Female,Hero,,,No power,Common,Superman,Series 1,2003-03-24
+x,Superman,Superman,10,Green,Male,Hero,,Justice League,No power,Uncommon,Justice League,Series 1,2002-10-14
+x,Superman Unchained,Superman,2,Yellow,Male,Hero,,Justice League,+3 to all Blue cards,Rare,Justice League,Series 2,2003-06-23
+x,Suzy,Suzy,2,Silver,Female,,,,+10 if next to any Johnny Bravo,Rare,Johnny Bravo,Series 1,2002-10-14
+x,Suzy's Teacher,Suzy's Teacher,5,Orange,Female,,,,No power,Common,Johnny Bravo,Series 2,2003-06-23
+x,Sylvester,Sylvester,9,Black,Male,Animal,,,No power,Uncommon,Looney Tunes,Series 3,2004-01-05
+x,T.H.U.M.P.E.R.,T.H.U.M.P.E.R.,1,Purple,Prop,,,,+3 to all Red cards,Rare,Codename: Kids Next Door,Series 2,2003-06-23
+x,Talking Dog,Talking Dog,10,Black,Animal,,,,No power,Uncommon,Powerpuff Girls,Series 2,2003-06-23
+x,Taz,Taz,3,Red,Male,Animal,,,+5 to each neighboring Animal,Rare,Looney Tunes,Series 1,2002-10-14
+x,Titans Tower,Titans Tower,4,Red,Place,,,,No power,Common,Teen Titans,Series 2,2003-12-22
+x,Toilenator,Toilenator,1,Blue,Male,Villain,,,+4 for each opponent Orange card,Rare,Codename: Kids Next Door,Series 4,2004-07-06
+x,TOM,TOM,3,Silver,Male,,,,Treat opposing card as Black,Rare,Toonami Base,Series 1,2003-03-10
+x,TOM Classic,TOM,2,Green,Male,,,,No power,Rare,Toonami Base,Series 1,2002-10-14
+x,Townsville,Townsville,5,Purple,Place,,,,+2 to any Mojo Jojo and any Powerpuff Girls member,Common,Powerpuff Girls,Series 1,2002-12-16
+x,Townsville Prisoner,Townsville Prisoner,4,Green,Male,,,,No power,Common,Powerpuff Girls,Series 2,2003-06-23
+x,Tweety,Tweety,1,Silver,Male,Animal,,,+8 if Sylvester is in play,Rare,Looney Tunes,Series 4,2004-07-06
+x,Two-Face,Two-Face,2,Green,Male,Villain,,,No power,Rare,Batman,Series 3,2004-01-05
+x,Ultra-Humanite,Ultra-Humanite,7,Purple,Male,Villain,,Injustice Gang,No power,Common,Justice League,Series 1,2002-12-02
+x,Val Hallen,Val Hallen,5,Purple,Male,Hero,,Justice Friends,x2 if the Warrior Women is in play,Common,Dexter's Laboratory,Series 1,2002-10-14
+x,Vampire Bat,Vampire Bat,8,Black,Animal,,,,No power,Uncommon,Scooby-Doo,Series 2,2003-06-23
+x,Velma Dinkley,Velma Dinkley,10,Red,Female,,,"Mystery, Inc.",No power,Uncommon,Scooby-Doo,Series 1,2002-10-14
+x,Velma Nearsighted,Velma Dinkley,4,Blue,Female,,,"Mystery, Inc.",x2 to any Johnny Bravo,Common,Scooby-Doo,Series 1,2003-03-24
+x,Warrior Woman,Warrior Woman,6,Green,Female,,,,No power,Common,Samurai Jack,Series 1,2003-04-21
+x,Watchtower,Watchtower,2,Silver,Place,,,,+3 to any Justice League member,Rare,Justice League,Series 1,2002-12-16
+x,Weremole Muriel,Muriel,3,Purple,Female,Monster,,,+4 for each opponent Green card,Rare,Courage the Cowardly Dog,Series 4,2004-07-06
+x,Wilma Flintstone,Wilma Flintstone,10,Black,Female,,,,No power,Uncommon,The Flintstones,Series 1,2002-10-14
+x,Wintergreen,Wintergreen,7,Green,Male,Villain,,,-3 to all other Green cards,Common,Teen Titans,Series 3,2004-01-05
+x,Wishing Well,Wishing Well,10,Black,Place,,,,No power,Uncommon,Samurai Jack,Series 1,2003-03-24
+x,Witch Doctor,Witch Doctor,5,Blue,Male,Villain,,,+10 if next to any Velma Dinkley,Common,Scooby-Doo,Series 1,2002-10-14
+x,Wolfman,Wolfman,4,Orange,Male,Villain,,,No power,Common,Scooby-Doo,Series 2,2003-06-23
+x,Wonder Woman,Wonder Woman,1,Orange,Female,Hero,,Justice League,+3 for each Female Villain in play,Rare,Justice League,Series 1,2002-10-14
+x,Wonder Woman With Lariat,Wonder Woman,10,Orange,Female,Hero,,Justice League,No power,Uncommon,Justice League,Series 1,2003-02-10
+x,Woolie,Woolie,4,Purple,Animal,,,,+10 if next to any Mitchellites,Common,Samurai Jack,Series 1,2003-01-27
+,Wright Bros.,Wright Bros.,6,Blue,Male,,,,+5 if next to any Vehicle,Common,Time Squad,Series 3,2004-01-05
+x,Yakky Doodle,Yakky Doodle,9,Black,Male,Animal,,,No power,Uncommon,Hanna-Barbera,Series 1,2003-03-24
+x,Yogi Bear,Yogi Bear,1,Green,Male,Animal,,,+3 to all Yellow cards,Rare,Yogi Bear,Series 1,2002-10-14
+x,Yosemite Sam,Yosemite Sam,3,Red,Male,,,,-5 to opposing card if not a Female,Rare,Looney Tunes,Series 4,2004-07-06
+x,Yumi,Yumi,2,Silver,Female,,,,x2 to Buttercup,Rare,HiHi Puffy AmiYumi,Series 5,2005-10-31
