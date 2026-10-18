@@ -522,6 +522,7 @@
         </p>
         <p v-if="misfireScanResult" class="text-xs mb-3" :class="misfireScanResult.found ? 'text-red-700 font-medium' : 'text-green-700'">
           Scanned {{ misfireScanResult.scanned }} official-account auction(s) — found {{ misfireScanResult.found }} new misfire(s).
+          <span v-if="misfireScanResult.prunedFalsePositives">Removed {{ misfireScanResult.prunedFalsePositives }} previously-flagged row(s) that turned out not to be real misfires.</span>
         </p>
 
         <!-- Progress view while a resolve job is in flight -->

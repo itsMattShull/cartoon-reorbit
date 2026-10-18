@@ -13,6 +13,7 @@ import { getAuctionReferenceValues, getCmartPrices, pickReferenceValue, MIN_SAMP
 import { rarityFloor } from './auctionPriceSuggestion.js'
 import { sendDiscordDMByDiscordId } from './discord.js'
 import { logAdminChange } from './adminChangeLog.js'
+import { DISSOLVE_METHODS } from './dissolveMisfire.js'
 
 export const DISSOLVE_MISFIRE_CORRECTION_METHOD = 'DISSOLVE_MISFIRE_CORRECTION'
 
@@ -21,11 +22,6 @@ export const DISSOLVE_MISFIRE_CORRECTION_METHOD = 'DISSOLVE_MISFIRE_CORRECTION'
 // policy. Applies uniformly to every compensation entry, refund or approximate alike; it never
 // touches the original winner, who gets the cToon itself back, not points.
 export const COMPENSATION_MULTIPLIER = 2
-
-// Methods that put the item into the official account's inventory as part of a dissolve —
-// the starting point this remediation walks forward from. Both are written by the two paths
-// that feed DissolveAuctionQueue (an admin-initiated dissolve, and the inactivity sweep).
-const DISSOLVE_METHODS = ['DISSOLVE', 'DISSOLVE_INACTIVE']
 
 /**
  * Read-only: walks the full CtoonOwnerLog history for a misfire's userCtoonId and returns either
