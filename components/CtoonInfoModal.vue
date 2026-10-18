@@ -387,7 +387,7 @@
                 <div class="flex items-center gap-4">
                   <NuxtLink
                     v-if="isAdmin && ctoon.id"
-                    :to="`/admin/editCtoon/${ctoon.id}`"
+                    :to="`/newsite/admin/ctoons/edit/${ctoon.id}`"
                     class="px-4 py-2 rounded text-sm font-medium transition bg-indigo-600 hover:bg-indigo-700 text-white"
                   >
                     Edit cToon

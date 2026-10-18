@@ -300,62 +300,9 @@ const filteredClash = computed(() =>
 const adminGroups = [
   {
     key: 'admin-core',
-    title: 'Admin — Core',
+    title: 'Admin',
     items: [
-      { label: '★ New Admin Console', to: '/newsite/admin' },
-      { label: 'Analytics', to: '/admin' },
-      { label: 'Manage Users', to: '/admin/users' },
-      { label: 'Manage Homepage', to: '/admin/manage-homepage' },
-      { label: 'Global Settings', to: '/admin/global-settings' },
-      { label: 'Manage Ads', to: '/admin/manage-ads' },
-      { label: 'Manage Announcements', to: '/admin/announcements' },
-      { label: 'Admin Changes', to: '/admin/admin-changes' },
-      { label: 'cToon Suggestions', to: '/admin/ctoon-suggestions' },
-      { label: 'Manage Production', to: '/admin/manage-dev' },
-      { label: 'Initiate Trade', to: '/admin/initiate-trade' },
-    ]
-  },
-      {
-        key: 'content',
-        title: 'Admin — Content',
-        items: [
-          { label: 'Manage cToons', to: '/admin/ctoons' },
-          { label: 'Submitted cToons', to: '/admin/submitted-ctoons' },
-          { label: 'Manage Packs', to: '/admin/packs' },
-          { label: 'Manage Starter Sets', to: '/admin/starter-sets' },
-          { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
-          { label: 'Manage Codes', to: '/admin/codes' },
-          { label: 'Manage cZone Search', to: '/admin/manage-czone-search' },
-      { label: 'Manage Lotto', to: '/admin/manage-lotto' },
-      { label: 'Manage Games', to: '/admin/games' },
-      { label: 'Manage Clash Tournaments', to: '/admin/gtoons-clash-tournaments' },
-      { label: 'Manage Scavenger Hunt', to: '/admin/scavenger' },
-          { label: 'Manage Holiday Events', to: '/admin/holidayevents' },
-          { label: 'Manage Auction Only', to: '/admin/manage-auctions' },
-          { label: 'Dissolved Queue', to: '/admin/dissolve-queue' },
-      { label: 'Manage Achievements', to: '/admin/achievements' },
-      { label: 'Manage cZone Contests', to: '/admin/czone-contest' }
-    ]
-  },
-  {
-    key: 'logs',
-    title: 'Admin — Logs',
-    items: [
-      { label: 'Suspicious Activity', to: '/admin/suspicious-activity' },
-      { label: 'Check Cheating', to: '/admin/check-cheating' },
-      { label: 'Cheating Tool', to: '/admin/cheating-tool' },
-      { label: 'Auction Logs', to: '/admin/auctions' },
-      { label: 'Trade Logs', to: '/admin/trades' },
-      { label: 'Auth Logs', to: '/admin/auth-logs' },
-      { label: 'cToon Owner Logs', to: '/admin/ctoonOwnerLogs' },
-      { label: 'cZone Search Logs', to: '/admin/czone-search-logs' },
-      { label: 'Point Logs', to: '/admin/points-log' },
-      { label: 'Achievement Logs', to: '/admin/achievement-logs' },
-      { label: 'gToons Clash Logs', to: '/admin/gtoons-logs' },
-      { label: 'Lotto Logs', to: '/admin/lotto-logs' },
-      { label: 'Win Wheel Logs', to: '/admin/winwheellogs' },
-      { label: 'Pack Analytics', to: '/admin/packanalytics' },
-      { label: 'Scavenger Logs', to: '/admin/scavenger-logs' }
+      { label: 'Admin Console', to: '/newsite/admin' }
     ]
   }
 ]
@@ -364,9 +311,7 @@ const adminGroups = [
 const open = ref({
   'admin-core': false,
   clash: false,
-  content: false,
   games: false,
-  logs: false,
   tools: false
 })
 

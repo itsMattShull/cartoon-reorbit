@@ -3,7 +3,6 @@
     <AdminNav
       :sections="navTree"
       :active-key="section?.key"
-      :old-admin-groups="oldAdminGroups"
       v-model:open="navOpen"
     />
 
@@ -24,7 +23,7 @@
 
 <script setup>
 import { computed, ref, shallowRef, watch, defineAsyncComponent } from 'vue'
-import { adminNavTree, resolveAdminRoute, OLD_ADMIN_GROUPS } from '~/utils/adminSections'
+import { adminNavTree, resolveAdminRoute } from '~/utils/adminSections'
 
 definePageMeta({
   layout: 'newsite-template',
@@ -50,9 +49,6 @@ clearSidebarMiddle()
 
 const route = useRoute()
 const navTree = adminNavTree()
-// The original /admin/* pages stay live as a fallback until each console
-// section is confirmed working in production.
-const oldAdminGroups = OLD_ADMIN_GROUPS
 const navOpen = ref(false)
 
 const resolved = computed(() => resolveAdminRoute(route.params.path))

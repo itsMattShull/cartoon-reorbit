@@ -695,7 +695,7 @@
             <li>Trade offers rejected: {{ dissolveSummary.tradeOffersRejected }}</li>
           </ul>
           <p class="text-xs mt-2">
-            <a href="/admin/dissolve-queue" class="underline font-medium text-emerald-800">View Dissolve Queue →</a>
+            <a href="/newsite/admin/dissolveQueue" class="underline font-medium text-emerald-800">View Dissolve Queue →</a>
           </p>
         </div>
 

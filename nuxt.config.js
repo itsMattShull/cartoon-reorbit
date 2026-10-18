@@ -1,3 +1,5 @@
+import { OLD_ADMIN_ROUTE_RULES } from './utils/oldAdminRedirects.js'
+
 export default defineNuxtConfig({
   app: {
     head: {
@@ -37,6 +39,13 @@ export default defineNuxtConfig({
         // '.prisma/client/index-browser': new URL('./node_modules/.prisma/client/index-browser.js', import.meta.url).pathname
       }
     }
+  },
+
+  // ───────────────────────────────────────────────
+  // Old /admin/* URLs → the /newsite/admin console
+  // ───────────────────────────────────────────────
+  routeRules: {
+    ...OLD_ADMIN_ROUTE_RULES
   },
 
   // ───────────────────────────────────────────────
