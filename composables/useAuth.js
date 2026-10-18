@@ -115,6 +115,7 @@ export const useAuth = () => {
     const setPoints = (points) => { setUser({ points: Math.max(0, Number(points) || 0) }) }
   
     const isAdmin = computed(() => Boolean(user.value?.isAdmin))
+    const isSubAdmin = computed(() => Boolean(user.value?.isSubAdmin))
 
-    return { user, isAdmin, login, logout, fetchSelf, setUser, setPoints, blockedRedirect }
+    return { user, isAdmin, isSubAdmin, login, logout, fetchSelf, setUser, setPoints, blockedRedirect }
   }

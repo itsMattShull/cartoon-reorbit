@@ -204,6 +204,7 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useAuth } from '~/composables/useAuth'
+import { isPageDeniedForSubAdmin } from '~/utils/adminAccess'
 import { useRoute } from 'vue-router'
 
 const isOpen = ref(false)
@@ -377,9 +378,13 @@ function toggle(key) { open.value[key] = !open.value[key] }
 
 /* filter per group */
 function filteredAdmin(group) {
-  if (!q.value) return group.items
+  // Sub-admins don't get the high-risk tools in the menu (utils/adminAccess.js)
+  const items = user.value?.isSubAdmin
+    ? group.items.filter(i => !isPageDeniedForSubAdmin(i.to))
+    : group.items
+  if (!q.value) return items
   const term = q.value.toLowerCase()
-  return group.items.filter(i => i.label.toLowerCase().includes(term))
+  return items.filter(i => i.label.toLowerCase().includes(term))
 }
 
 /* ──────────────────────────────────────────────────────────────

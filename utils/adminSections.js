@@ -8,6 +8,8 @@
 // `load` is a dynamic import so each section is its own chunk — the console has
 // ~60 sections and an admin opens one at a time.
 
+import { isSectionDeniedForSubAdmin, isPageDeniedForSubAdmin } from './adminAccess.js'
+
 const S = (key, label, group, load, extra = {}) => ({ key, label, group, load, ...extra })
 
 // The loader carries its own source path so the contract test can assert the
@@ -172,9 +174,21 @@ export function resolveAdminRoute (segments) {
 }
 
 /** Nav tree: groups in declared order, each with its visible sections. */
-export function adminNavTree () {
+export function adminNavTree ({ subAdmin = false } = {}) {
   return ADMIN_GROUPS
-    .map(g => ({ ...g, items: ADMIN_SECTIONS.filter(s => s.group === g.id && !s.hidden) }))
+    .map(g => ({
+      ...g,
+      items: ADMIN_SECTIONS.filter(s =>
+        s.group === g.id && !s.hidden && !(subAdmin && isSectionDeniedForSubAdmin(s.key)))
+    }))
+    .filter(g => g.items.length)
+}
+
+/** The old /admin/* menu with the pages a sub-admin may not open removed. */
+export function oldAdminGroupsFor ({ subAdmin = false } = {}) {
+  if (!subAdmin) return OLD_ADMIN_GROUPS
+  return OLD_ADMIN_GROUPS
+    .map(g => ({ ...g, items: g.items.filter(i => !isPageDeniedForSubAdmin(i.to)) }))
     .filter(g => g.items.length)
 }
 

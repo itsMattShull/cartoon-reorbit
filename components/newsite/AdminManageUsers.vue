@@ -68,6 +68,10 @@
                 class="px-1.5 py-0 rounded text-[10px] font-medium bg-orange-100 text-orange-800"
                 :title="`Suspended until ${formatDate(u.suspendedUntil)}`"
               >Suspended</span>
+              <span
+                v-if="u.isSubAdmin"
+                class="px-1.5 py-0 rounded text-[10px] font-medium bg-sky-100 text-sky-800"
+              >Sub-admin</span>
               <div class="relative">
                 <button
                   class="ml-0.5 h-6 w-6 grid place-items-center text-gray-500 hover:text-gray-700 rounded hover:bg-gray-100"
@@ -122,10 +126,20 @@
                     @click="openTransferModal(u); closeMenu()"
                   >Transfer</button>
                   <button
-                    v-if="isSuperAdmin && !u.isAdmin"
+                    v-if="isSuperAdmin && (!u.isAdmin || u.isSubAdmin)"
                     class="w-full text-left px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-50"
                     @click="makeAdmin(u); closeMenu()"
                   >Make Admin</button>
+                  <button
+                    v-if="!u.isAdmin"
+                    class="w-full text-left px-2 py-1 text-[11px] text-sky-700 hover:bg-sky-50"
+                    @click="makeSubAdmin(u); closeMenu()"
+                  >Make sub-admin</button>
+                  <button
+                    v-if="u.isSubAdmin"
+                    class="w-full text-left px-2 py-1 text-[11px] text-amber-700 hover:bg-amber-50"
+                    @click="removeSubAdmin(u); closeMenu()"
+                  >Remove sub-admin</button>
                   <button
                     v-if="isSuperAdmin && u.isAdmin && u.discordId !== superAdminId"
                     class="w-full text-left px-2 py-1 text-[11px] text-amber-700 hover:bg-amber-50"
@@ -1322,9 +1336,29 @@ async function makeAdmin(u) {
   try {
     await $fetch(`/api/admin/users/${u.id}/make-admin`, { method: 'POST' })
     const idx = users.value.findIndex(x => x.id === u.id)
-    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: true }
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: true, isSubAdmin: false }
   } catch (e) {
     alert(e?.data?.statusMessage || e?.message || 'Failed to make admin')
+  }
+}
+
+async function makeSubAdmin(u) {
+  try {
+    await $fetch(`/api/admin/users/${u.id}/make-sub-admin`, { method: 'POST' })
+    const idx = users.value.findIndex(x => x.id === u.id)
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: true, isSubAdmin: true }
+  } catch (e) {
+    alert(e?.data?.statusMessage || e?.message || 'Failed to make sub-admin')
+  }
+}
+
+async function removeSubAdmin(u) {
+  try {
+    await $fetch(`/api/admin/users/${u.id}/remove-sub-admin`, { method: 'POST' })
+    const idx = users.value.findIndex(x => x.id === u.id)
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: false, isSubAdmin: false }
+  } catch (e) {
+    alert(e?.data?.statusMessage || e?.message || 'Failed to remove sub-admin')
   }
 }
 
@@ -1332,7 +1366,7 @@ async function removeAdmin(u) {
   try {
     await $fetch(`/api/admin/users/${u.id}/remove-admin`, { method: 'POST' })
     const idx = users.value.findIndex(x => x.id === u.id)
-    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: false }
+    if (idx !== -1) users.value[idx] = { ...users.value[idx], isAdmin: false, isSubAdmin: false }
   } catch (e) {
     alert(e?.data?.statusMessage || e?.message || 'Failed to remove admin')
   }
