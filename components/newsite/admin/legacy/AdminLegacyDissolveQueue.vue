@@ -426,11 +426,11 @@
     <!-- Misfires modal: cToons a scheduled dissolve auction tried to (or did) auction off after
          the item had already legitimately changed hands — see DissolveMisfireLog's own schema
          comment for the full story. -->
-    <div v-if="showMisfiresModal" class="fixed inset-0 z-50 flex items-center justify-center p-2 bg-black/50" @click.self="closeMisfiresModal">
-      <div class="relative bg-white w-full max-w-3xl rounded-lg shadow-lg flex flex-col max-h-[92vh]">
-        <div class="px-4 py-3 border-b flex-shrink-0 flex items-center justify-between">
+    <div v-if="showMisfiresModal" class="fixed inset-0 z-[1000] flex items-center justify-center p-2 bg-black/50" @click.self="closeMisfiresModal">
+      <div class="relative bg-white w-full max-w-3xl rounded-lg shadow-lg flex flex-col max-h-[calc(100dvh-1rem)] overflow-hidden">
+        <div class="px-4 py-3 border-b flex-shrink-0 flex flex-wrap items-center justify-between gap-2">
           <h2 class="text-sm font-semibold">Dissolve Auction Misfires</h2>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <button
               type="button"
               class="px-2 py-1 text-xs border border-indigo-600 text-indigo-700 rounded-md hover:bg-indigo-50 disabled:opacity-50"
@@ -446,7 +446,7 @@
             <button @click="closeMisfiresModal" class="text-gray-400 hover:text-gray-600 text-xl leading-none">&times;</button>
           </div>
         </div>
-        <div class="overflow-y-auto flex-1 px-4 py-3">
+        <div class="overflow-y-auto overscroll-contain flex-1 min-h-0 px-4 py-3">
           <p class="text-[11px] text-gray-500 mb-2">
             A cToon traded away from the official account (or scheduled into a second
             auction) while it still had a pending dissolve-auction queue entry could get
@@ -558,6 +558,12 @@
                       {{ c.username || c.userId }}: +{{ c.points }} pts ({{ c.basis }}) — {{ c.reason }}
                     </li>
                   </ul>
+                  <p v-if="misfirePreviews[m.id].cancelAuctions?.length" class="text-amber-800">
+                    Will cancel {{ misfirePreviews[m.id].cancelAuctions.length }} active auction(s) (bidders' locked points released).
+                  </p>
+                  <p v-if="misfirePreviews[m.id].withdrawTradeOffers?.length" class="text-amber-800">
+                    Will withdraw {{ misfirePreviews[m.id].withdrawTradeOffers.length }} pending trade offer(s).
+                  </p>
                   <p class="text-[10px] text-gray-600">Total compensation: {{ misfirePreviews[m.id].totalCompensationPoints }} pts</p>
                   <button
                     type="button"
@@ -1082,6 +1088,15 @@ function closeMisfiresModal() {
   showMisfiresModal.value = false
   stopResolvePolling()
 }
+
+// Lock the page behind the modal so touch-scrolling moves the modal body, not the page.
+watch(showMisfiresModal, (open) => {
+  if (typeof document === 'undefined') return
+  document.body.style.overflow = open ? 'hidden' : ''
+})
+onBeforeUnmount(() => {
+  if (typeof document !== 'undefined') document.body.style.overflow = ''
+})
 
 async function runMisfireScan() {
   misfireScanRunning.value = true

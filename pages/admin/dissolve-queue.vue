@@ -489,11 +489,11 @@
     <!-- Misfires modal: cToons a scheduled dissolve auction tried to (or did) auction off after
          the item had already legitimately changed hands — see DissolveMisfireLog's own schema
          comment for the full story. -->
-    <div v-if="showMisfiresModal" class="fixed inset-0 bg-black/40 flex items-center justify-center p-4 z-50" @click.self="closeMisfiresModal">
-      <div class="bg-white rounded-lg shadow-lg w-[calc(100%-2rem)] max-w-3xl max-h-[85vh] overflow-y-auto p-4 sm:p-6">
-        <div class="flex items-center justify-between mb-4 gap-2">
+    <div v-if="showMisfiresModal" class="fixed inset-0 bg-black/40 flex items-center justify-center p-3 z-[1000]" @click.self="closeMisfiresModal">
+      <div class="bg-white rounded-lg shadow-lg w-full max-w-3xl max-h-[calc(100dvh-1.5rem)] flex flex-col overflow-hidden">
+        <div class="flex flex-wrap items-center justify-between gap-2 p-4 sm:px-6 border-b flex-shrink-0">
           <h2 class="text-xl font-semibold">Dissolve Auction Misfires</h2>
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
             <button
               type="button"
               class="px-3 py-1.5 text-sm rounded border border-indigo-600 text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
@@ -510,6 +510,7 @@
           </div>
         </div>
 
+        <div class="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:px-6">
         <p class="text-xs text-gray-500 mb-3">
           A cToon traded away from the official account (or scheduled into a second auction)
           while it still had a pending dissolve-auction queue entry could get auctioned off a
@@ -518,7 +519,9 @@
           Misfires" looks for cases that already happened before that fix. "Resolve" restores the
           cToon to whoever ORIGINALLY won it at auction and credits points to everyone else who
           legitimately held it since (exact refund for a wrongly-sold auction, approximate value
-          for an intermediate trade).
+          for an intermediate trade). If the cToon is currently in a live auction or pending trade,
+          the resolve cancels the auction / withdraws the offer and credits whoever listed or
+          offered it with double the cToon's approximate value.
         </p>
         <p v-if="misfireScanResult" class="text-xs mb-3" :class="misfireScanResult.found ? 'text-red-700 font-medium' : 'text-green-700'">
           Scanned {{ misfireScanResult.scanned }} official-account auction(s) — found {{ misfireScanResult.found }} new misfire(s).
@@ -623,6 +626,12 @@
                     {{ c.username || c.userId }}: +{{ c.points }} pts ({{ c.basis }}) — {{ c.reason }}
                   </li>
                 </ul>
+                <p v-if="misfirePreviews[m.id].cancelAuctions?.length" class="text-xs text-amber-800">
+                  Will cancel {{ misfirePreviews[m.id].cancelAuctions.length }} active auction(s) (bidders' locked points released).
+                </p>
+                <p v-if="misfirePreviews[m.id].withdrawTradeOffers?.length" class="text-xs text-amber-800">
+                  Will withdraw {{ misfirePreviews[m.id].withdrawTradeOffers.length }} pending trade offer(s).
+                </p>
                 <p class="text-xs text-gray-600">Total compensation: {{ misfirePreviews[m.id].totalCompensationPoints }} pts</p>
                 <button
                   type="button"
@@ -653,6 +662,7 @@
           <p v-else class="text-gray-500">No misfires logged.</p>
         </template>
         <p v-if="misfireError" class="text-red-600 mt-2 text-sm">{{ misfireError }}</p>
+        </div>
       </div>
     </div>
 
@@ -1184,6 +1194,15 @@ function closeMisfiresModal() {
   showMisfiresModal.value = false
   stopResolvePolling()
 }
+
+// Lock the page behind the modal so touch-scrolling moves the modal body, not the page.
+watch(showMisfiresModal, (open) => {
+  if (typeof document === 'undefined') return
+  document.body.style.overflow = open ? 'hidden' : ''
+})
+onBeforeUnmount(() => {
+  if (typeof document !== 'undefined') document.body.style.overflow = ''
+})
 
 async function runMisfireScan() {
   misfireScanRunning.value = true
