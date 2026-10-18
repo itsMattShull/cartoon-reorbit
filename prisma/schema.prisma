@@ -513,6 +513,10 @@ model User {
   allowAuctionNotifications         Boolean   @default(true)
   allowWishlistAuctionNotifications Boolean   @default(true)
   isAdmin                           Boolean   @default(false)
+  // Restricted admin tier. A sub-admin ALSO has isAdmin = true so every existing `isAdmin` gate
+  // keeps working; utils/adminAccess.js + server/middleware/sub-admin-guard.js then take the
+  // high-risk tools away from anyone with this flag set.
+  isSubAdmin                        Boolean   @default(false)
   inGuild                           Boolean   @default(true)
   active                            Boolean   @default(true)
   // Set once the player has finished, skipped or exited the original gToons tutorial, so it only

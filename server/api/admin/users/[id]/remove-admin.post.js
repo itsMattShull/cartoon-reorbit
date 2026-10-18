@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
   // Fetch target user for checks and logging
   const target = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, isAdmin: true, username: true, discordId: true }
+    select: { id: true, isAdmin: true, isSubAdmin: true, username: true, discordId: true }
   })
   if (!target) throw createError({ statusCode: 404, statusMessage: 'User not found' })
 
@@ -36,15 +36,15 @@ export default defineEventHandler(async (event) => {
   }
 
   // Set isAdmin = false
-  await prisma.user.update({ where: { id }, data: { isAdmin: false } })
+  await prisma.user.update({ where: { id }, data: { isAdmin: false, isSubAdmin: false } })
 
   // Admin change log (best-effort)
   await logAdminChange(prisma, {
     userId: me.id,
     area: 'Admin:Users',
     key: 'removeAdmin',
-    prevValue: { isAdmin: target.isAdmin },
-    newValue: { isAdmin: false }
+    prevValue: { isAdmin: target.isAdmin, isSubAdmin: target.isSubAdmin },
+    newValue: { isAdmin: false, isSubAdmin: false }
   })
 
   return { ok: true }

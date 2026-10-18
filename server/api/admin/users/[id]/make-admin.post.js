@@ -25,20 +25,20 @@ export default defineEventHandler(async (event) => {
   // Fetch current state to log previous value
   const target = await prisma.user.findUnique({
     where: { id },
-    select: { id: true, isAdmin: true, username: true }
+    select: { id: true, isAdmin: true, isSubAdmin: true, username: true }
   })
   if (!target) throw createError({ statusCode: 404, statusMessage: 'User not found' })
 
   // Set isAdmin = true
-  await prisma.user.update({ where: { id }, data: { isAdmin: true } })
+  await prisma.user.update({ where: { id }, data: { isAdmin: true, isSubAdmin: false } })
 
   // Admin change log (best-effort)
   await logAdminChange(prisma, {
     userId: me.id,
     area: 'Admin:Users',
     key: 'makeAdmin',
-    prevValue: { isAdmin: target.isAdmin },
-    newValue: { isAdmin: true }
+    prevValue: { isAdmin: target.isAdmin, isSubAdmin: target.isSubAdmin },
+    newValue: { isAdmin: true, isSubAdmin: false }
   })
 
   return { ok: true }
