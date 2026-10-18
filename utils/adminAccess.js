@@ -62,14 +62,15 @@ export const SUB_ADMIN_DENIED_API = [
   { prefix: `${API}/auction-only` },
   { prefix: `${API}/auction-creators` },
 
-  // ── Dissolve misfire resolver: restores items AND pays compensation, in bulk. Scanning,
-  //    previewing and marking a misfire reviewed stay open. ────────────────────────────────────
-  { path: `${API}/dissolve-misfires/resolve` },
+  // ── Dissolve Queue, in full: the queue, its errors, the misfire scanner/resolver (restores
+  //    items AND pays compensation) and the featured-auction config the page edits ─────────────
+  { prefix: `${API}/dissolve-queue` },
+  { prefix: `${API}/dissolve-misfires` },
+  { prefix: `${API}/dissolve-featured-config` },
 
   // ── Deleting logs / job history (evidence tampering) ────────────────────────────────────────
   { path: `${API}/cron-run-logs/delete` },
-  { re: /^\/api\/admin\/queues\/[^/]+\/clean$/ },
-  { path: `${API}/dissolve-queue/errors`, writesOnly: true }
+  { re: /^\/api\/admin\/queues\/[^/]+\/clean$/ }
 ]
 
 // Console sections (utils/adminSections.js keys) hidden from and refused to a sub-admin.
@@ -84,6 +85,7 @@ export const SUB_ADMIN_DENIED_SECTIONS = new Set([
   'codes/edit',
   'auctions',          // "Auction Only" (Auction Logs is a different section: auctionLogs)
   'auctions/new',
+  'dissolveQueue',
   'globalSettings'
 ])
 
@@ -98,6 +100,7 @@ export const SUB_ADMIN_DENIED_PAGE_PREFIXES = [
   '/admin/create-code',
   '/admin/edit-code',
   '/admin/manage-auctions',
+  '/admin/dissolve-queue',
   '/admin/add-auction',
   '/admin/global-settings'
 ]

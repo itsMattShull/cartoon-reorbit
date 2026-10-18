@@ -47,11 +47,16 @@ test('tier-1 tools are refused to a sub-admin', () => {
   for (const [m, p] of cases) assert.ok(denied(m, p), `${m} ${p} should be denied`)
 })
 
-test('the dissolve-misfire resolver (pays compensation) is refused; scan/preview/review stay open', () => {
-  assert.ok(denied('POST', '/api/admin/dissolve-misfires/resolve'))
-  assert.ok(!denied('POST', '/api/admin/dissolve-misfires/scan'))
-  assert.ok(!denied('POST', '/api/admin/dissolve-misfires/abc/preview'))
-  assert.ok(!denied('PATCH', '/api/admin/dissolve-misfires/abc'))
+test('the Dissolve Queue is refused in full, reads included', () => {
+  for (const [m, p] of [
+    ['GET', '/api/admin/dissolve-queue'], ['GET', '/api/admin/dissolve-queue/errors'],
+    ['DELETE', '/api/admin/dissolve-queue/errors'], ['PATCH', '/api/admin/dissolve-queue/abc'],
+    ['POST', '/api/admin/dissolve-queue/schedule'],
+    ['GET', '/api/admin/dissolve-misfires'], ['POST', '/api/admin/dissolve-misfires/scan'],
+    ['POST', '/api/admin/dissolve-misfires/resolve'], ['PATCH', '/api/admin/dissolve-misfires/abc'],
+    ['POST', '/api/admin/dissolve-misfires/abc/preview'],
+    ['GET', '/api/admin/dissolve-featured-config'], ['POST', '/api/admin/dissolve-featured-config']
+  ]) assert.ok(denied(m, p), `${m} ${p} should be denied`)
 })
 
 test('Auction Only is refused, in full', () => {
@@ -65,8 +70,6 @@ test('Auction Only is refused, in full', () => {
 test('evidence-deletion endpoints are refused, reads stay open', () => {
   assert.ok(denied('POST', '/api/admin/cron-run-logs/delete'))
   assert.ok(denied('POST', '/api/admin/queues/cron/clean'))
-  assert.ok(denied('DELETE', '/api/admin/dissolve-queue/errors'))
-  assert.ok(!denied('GET', '/api/admin/dissolve-queue/errors'))
   assert.ok(!denied('GET', '/api/admin/queues/cron/jobs'))
 })
 
@@ -129,7 +132,7 @@ test('denied console sections exist and are gone from a sub-admin nav only', () 
   const full = adminNavTree().flatMap(g => g.items.map(i => i.key))
   const sub = adminNavTree({ subAdmin: true }).flatMap(g => g.items.map(i => i.key))
   for (const k of ['manageUsers', 'initiateTrade', 'production', 'cheatingTool', 'checkCheating',
-    'codes', 'auctions', 'globalSettings']) {
+    'codes', 'auctions', 'dissolveQueue', 'globalSettings']) {
     assert.ok(full.includes(k), `${k} should still be in the full admin nav`)
     assert.ok(!sub.includes(k), `${k} should be hidden from sub-admins`)
   }
@@ -149,7 +152,8 @@ test('denied old /admin pages exist, and are filtered from the old menu', () => 
   const subPaths = oldAdminGroupsFor({ subAdmin: true }).flatMap(g => g.items.map(i => i.to))
   assert.equal(oldAdminGroupsFor({ subAdmin: false }), OLD_ADMIN_GROUPS)
   for (const p of ['/admin/users', '/admin/initiate-trade', '/admin/manage-dev', '/admin/cheating-tool',
-    '/admin/check-cheating', '/admin/codes', '/admin/manage-auctions', '/admin/global-settings']) {
+    '/admin/check-cheating', '/admin/codes', '/admin/manage-auctions', '/admin/dissolve-queue',
+    '/admin/global-settings']) {
     assert.ok(OLD_ADMIN_PATHS.includes(p) && !subPaths.includes(p), `${p} should be filtered`)
   }
   // '/admin/auctions' is the Auction LOGS page — it must not be caught by '/admin/manage-auctions'.
