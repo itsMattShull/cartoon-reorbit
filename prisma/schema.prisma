@@ -3244,6 +3244,11 @@ model DissolveMisfireLog {
   reviewedByUserId   String?
   reviewedByUsername String?
   reviewNote         String?
+  resolvedAt              DateTime?
+  resolvedByUserId        String?
+  resolvedByUsername      String?
+  resolutionSummary       Json?   // the executed plan: originalWinner, each compensation {userId, username, points, reason, basis}, totalCompensationPoints
+  resolutionBlockedReason String? // set (reviewedAt left null) when the remediation algorithm can't auto-resolve it — distinct from "not yet attempted"
 
   @@unique([bogusAuctionId]) // lets the audit scan be re-run safely (upsert, no duplicate rows) — multiple PREVENTED rows with a null bogusAuctionId are unaffected, Postgres allows multiple NULLs in a unique index
   @@index([detectedAt])

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "test": "node --test",
-    "dev": "concurrently \"nuxt dev\" \"npm:worker\" \"npm:mint-end\" \"npm:holiday-redeem\" \"npm:cron-critical\" \"npm:cron-maintenance\" \"npm:achievements\" \"npm:dissolve\" \"npm:dissolve-launch\" \"npm:transfer\" \"npm:content-analyzer\" \"npm:cmoon-rank-recalc\" \"npm:cmoon-prize-revoke\" \"npm:cmoon-daily-task-backfill\"",
+    "dev": "concurrently \"nuxt dev\" \"npm:worker\" \"npm:mint-end\" \"npm:holiday-redeem\" \"npm:cron-critical\" \"npm:cron-maintenance\" \"npm:achievements\" \"npm:dissolve\" \"npm:dissolve-launch\" \"npm:transfer\" \"npm:content-analyzer\" \"npm:cmoon-rank-recalc\" \"npm:cmoon-prize-revoke\" \"npm:cmoon-daily-task-backfill\" \"npm:dissolve-misfire-resolve\"",
     "worker": "node server/workers/mint.worker.js",
     "mint-end": "node server/workers/mint-end.worker.js",
     "holiday-redeem": "node server/workers/holiday-redeem.worker.js",
@@ -21,6 +21,7 @@
     "cmoon-rank-recalc": "node server/workers/cmoon-rank-recalc.worker.js",
     "cmoon-prize-revoke": "node server/workers/cmoon-prize-revoke.worker.js",
     "cmoon-daily-task-backfill": "node server/workers/cmoon-daily-task-backfill.worker.js",
+    "dissolve-misfire-resolve": "node server/workers/dissolve-misfire-resolve.worker.js",
     "cron-critical": "node ./server/cron/scheduler.js critical",
     "cron-maintenance": "node ./server/cron/scheduler.js maintenance",
     "economy:aggregate": "node ./server/cron/economy-aggregate-run.js",

@@ -21,6 +21,7 @@ const ENTRIES = [
   { queue: q.cmoonRankRecalcQueue, label: 'cMoon rank recalc', description: 'Admin one-time cMoon points recalculation' },
   { queue: q.cmoonPrizeRevokeQueue, label: 'cMoon prize revoke', description: 'Admin one-time rank prize revoke' },
   { queue: q.cmoonDailyTaskBackfillQueue, label: 'cMoon backfill', description: 'Admin one-time cMoon points backfill' },
+  { queue: q.dissolveMisfireResolveQueue, label: 'Dissolve misfire resolve', description: 'Admin tool restoring misfired dissolve auctions to their rightful owner' },
 ]
 
 let registry = null
