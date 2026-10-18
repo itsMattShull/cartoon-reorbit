@@ -8,21 +8,21 @@
     <template v-else>
       <div class="og-layout">
         <!-- Board: opponent on top, you on the bottom, call-to-action strip between -->
-        <section class="og-arena">
-          <div v-if="sidebarState" class="og-pbar">
+        <section class="og-arena" data-tut="arena">
+          <div v-if="sidebarState" class="og-pbar" data-tut="pbar-opp">
             <span class="og-pbar-name">{{ sidebarState.opponent.name }}</span>
             <span class="og-pbar-score">{{ sidebarState.opponent.score }}</span>
             <span v-for="col in sidebarState.colors" :key="col.name" class="og-pbar-color"><i :style="{ background: col.hex }"></i>{{ sidebarState.opponent.counts[col.name] ?? 0 }}</span>
           </div>
           <div class="og-plate og-plate-opp">
             <div class="og-row og-row-outer">
-              <div v-for="n in outerSlots" :key="'opp-'+n" class="og-slot" @click="onBoardCardClick(oppSlotCard(n))">
+              <div v-for="n in outerSlots" :key="'opp-'+n" class="og-slot" :data-tut="'slot-opp-'+n" @click="onBoardCardClick(oppSlotCard(n))">
                 <span v-if="deltaFor(oppSide, n)" class="og-delta" :class="deltaFor(oppSide, n) > 0 ? 'text-green-400' : 'text-red-500'">{{ deltaFor(oppSide, n) > 0 ? '+' : '' }}{{ deltaFor(oppSide, n) }}</span>
                 <OgGtoonCardTile :card="oppSlotCard(n)" :face-down="oppSlotFaceDown(n)" :label="n" size="board" :inspectable="false" :marker="markerFor(oppSide, n, oppSlotCard(n), oppSlotFaceDown(n))" />
               </div>
             </div>
             <div class="og-row og-row-inner">
-              <div v-for="n in innerSlots" :key="'opp-'+n" class="og-slot" @click="onBoardCardClick(oppSlotCard(n))">
+              <div v-for="n in innerSlots" :key="'opp-'+n" class="og-slot" :data-tut="'slot-opp-'+n" @click="onBoardCardClick(oppSlotCard(n))">
                 <span v-if="deltaFor(oppSide, n)" class="og-delta" :class="deltaFor(oppSide, n) > 0 ? 'text-green-400' : 'text-red-500'">{{ deltaFor(oppSide, n) > 0 ? '+' : '' }}{{ deltaFor(oppSide, n) }}</span>
                 <OgGtoonCardTile :card="oppSlotCard(n)" :face-down="oppSlotFaceDown(n)" :label="n" size="board" :inspectable="false" :marker="markerFor(oppSide, n, oppSlotCard(n), oppSlotFaceDown(n))" />
               </div>
@@ -30,17 +30,18 @@
           </div>
 
           <!-- Middle strip: round, timer and every call to action -->
-          <div class="og-strip">
+          <div class="og-strip" data-tut="strip">
             <div class="og-strip-line">
               <span class="og-round">{{ roundLabel }}</span>
               <span v-if="secondsLeft !== null && !matchEnded" class="og-timer" :class="{ 'og-timer-low': secondsLeft <= 10 }">{{ secondsLeft }}s</span>
               <span class="og-mobile-score">{{ youScore }} – {{ oppScore }}</span>
-              <span v-if="isPractice" class="og-practice" title="Nothing here earns or costs points">Practice · Bot: {{ difficultyLabel }}</span>
-              <button v-if="isPractice && !matchEnded" class="og-mini" @click="$emit('exit')">Exit</button>
-              <button class="og-help-btn" :class="{ 'og-help-on': helpOpen }" :aria-expanded="helpOpen" aria-label="How to play this phase" @click="helpOpen = !helpOpen">?</button>
+              <span v-if="isTutorial" class="og-practice" title="Nothing here earns or costs points">Tutorial</span>
+              <span v-else-if="isPractice" class="og-practice" title="Nothing here earns or costs points">Practice · Bot: {{ difficultyLabel }}</span>
+              <button v-if="isPractice && !isTutorial && !matchEnded" class="og-mini" @click="$emit('exit')">Exit</button>
+              <button class="og-help-btn" data-tut="help-btn" :class="{ 'og-help-on': helpOpen }" :aria-expanded="helpOpen" aria-label="How to play this phase" @click="helpOpen = !helpOpen">?</button>
             </div>
 
-            <div class="og-strip-line og-target" :title="targetInfo.detail">
+            <div class="og-strip-line og-target" data-tut="target" :title="targetInfo.detail">
               <span class="og-target-title">{{ targetInfo.title }}</span>
               <span v-for="col in targetInfo.colors" :key="col" class="og-pbar-color"><i :style="{ background: colorHex(col) }"></i>{{ col.charAt(0) + col.slice(1).toLowerCase() }}</span>
               <span class="og-note">{{ targetInfo.detail }}</span>
@@ -48,7 +49,7 @@
 
             <div class="og-strip-line og-actions">
               <template v-if="inDiscardPhase">
-                <button v-if="!matchState.you.discardReady" @click="confirmDiscard" class="bg-red-500 hover:bg-red-600 og-btn">{{ discardPick.size ? `Discard ${discardPick.size} & draw` : 'Keep my hand' }}</button>
+                <button v-if="!matchState.you.discardReady" data-tut="discard-btn" @click="confirmDiscard" class="bg-red-500 hover:bg-red-600 og-btn">{{ discardPick.size ? `Discard ${discardPick.size} & draw` : 'Keep my hand' }}</button>
                 <span v-else class="og-note">Waiting for opponent to finish discarding...</span>
               </template>
               <template v-else-if="inColorPhase">
@@ -57,6 +58,7 @@
                   <button
                     v-for="c in REAL_COLORS"
                     :key="c"
+                    :data-tut="'color-' + c"
                     @click="chooseColor(c)"
                     class="og-color-btn"
                     :class="c === matchState.you.goalColor ? 'og-color-goal' : ''"
@@ -70,13 +72,13 @@
               </template>
               <template v-else-if="inSwapPhase">
                 <template v-if="matchState.you.maySwap">
-                  <button @click="openSwapSheet" class="bg-indigo-500 hover:bg-indigo-600 og-btn">Swap slot 7 (-10 points)</button>
+                  <button data-tut="swap-btn" @click="openSwapSheet" class="bg-indigo-500 hover:bg-indigo-600 og-btn">Swap slot 7 (-10 points)</button>
                   <button @click="swapSkip" class="bg-gray-600 hover:bg-gray-500 og-btn">Keep slot 7</button>
                 </template>
                 <span v-else class="og-note">Waiting for opponent...</span>
               </template>
               <template v-else>
-                <button v-if="canCommit" @click="commit(matchState.round)" :disabled="!slotsFilled" class="bg-green-500 hover:bg-green-600 disabled:opacity-50 og-btn">{{ commitLabel }}</button>
+                <button v-if="canCommit" data-tut="commit" @click="commit(matchState.round)" :disabled="!slotsFilled" class="bg-green-500 hover:bg-green-600 disabled:opacity-50 og-btn">{{ commitLabel }}</button>
                 <span v-else-if="matchState.you.ready" class="og-note">Waiting for opponent...</span>
               </template>
             </div>
@@ -86,19 +88,19 @@
 
           <div class="og-plate og-plate-you">
             <div class="og-row og-row-inner">
-              <div v-for="n in innerSlots" :key="'you-'+n" class="og-slot" @click="onSlotClick(n)">
+              <div v-for="n in innerSlots" :key="'you-'+n" class="og-slot" :data-tut="'slot-you-'+n" @click="onSlotClick(n)">
                 <span v-if="deltaFor(youSide, n)" class="og-delta" :class="deltaFor(youSide, n) > 0 ? 'text-green-400' : 'text-red-500'">{{ deltaFor(youSide, n) > 0 ? '+' : '' }}{{ deltaFor(youSide, n) }}</span>
                 <OgGtoonCardTile :card="yourSlotCard(n)" :face-down="yourSlotFaceDown(n)" :label="n" size="board" :inspectable="false" :tone="yourSlotTone(n)" :marker="markerFor(youSide, n, yourSlotCard(n), yourSlotFaceDown(n))" />
               </div>
             </div>
             <div class="og-row og-row-outer">
-              <div v-for="n in outerSlots" :key="'you-'+n" class="og-slot" @click="onSlotClick(n)">
+              <div v-for="n in outerSlots" :key="'you-'+n" class="og-slot" :data-tut="'slot-you-'+n" @click="onSlotClick(n)">
                 <span v-if="deltaFor(youSide, n)" class="og-delta" :class="deltaFor(youSide, n) > 0 ? 'text-green-400' : 'text-red-500'">{{ deltaFor(youSide, n) > 0 ? '+' : '' }}{{ deltaFor(youSide, n) }}</span>
                 <OgGtoonCardTile :card="yourSlotCard(n)" :face-down="yourSlotFaceDown(n)" :label="n" size="board" :inspectable="false" :tone="yourSlotTone(n)" :marker="markerFor(youSide, n, yourSlotCard(n), yourSlotFaceDown(n))" />
               </div>
             </div>
           </div>
-          <div v-if="sidebarState" class="og-pbar">
+          <div v-if="sidebarState" class="og-pbar" data-tut="pbar-you">
             <span class="og-pbar-name">{{ sidebarState.you.name }}</span>
             <span class="og-pbar-score">{{ sidebarState.you.score }}</span>
             <span v-for="col in sidebarState.colors" :key="col.name" class="og-pbar-color"><i :style="{ background: col.hex }"></i>{{ sidebarState.you.counts[col.name] ?? 0 }}</span>
@@ -109,18 +111,18 @@
         <aside class="og-side">
           <div class="og-box og-info-box">
             <div class="og-tabs" role="tablist">
-              <button role="tab" :aria-selected="tab === 'log'" class="og-tab" :class="{ 'og-tab-on': tab === 'log' }" @click="setTab('log')">
+              <button role="tab" data-tut="log-tab" :aria-selected="tab === 'log'" class="og-tab" :class="{ 'og-tab-on': tab === 'log' }" @click="setTab('log')">
                 Game Log
                 <span v-if="tab !== 'log' && unreadLog > 0" class="og-badge">{{ unreadLog }}</span>
               </button>
-              <button role="tab" :aria-selected="tab === 'info'" class="og-tab" :class="{ 'og-tab-on': tab === 'info' }" @click="setTab('info')">Info</button>
+              <button role="tab" data-tut="info-tab" :aria-selected="tab === 'info'" class="og-tab" :class="{ 'og-tab-on': tab === 'info' }" @click="setTab('info')">Info</button>
             </div>
 
-            <div v-show="tab === 'log'" ref="logScroller" class="og-scroll og-log">
+            <div v-show="tab === 'log'" ref="logScroller" data-tut="log-panel" class="og-scroll og-log">
               <OgGtoonGameLog :entries="gameLog" />
             </div>
 
-            <div v-show="tab === 'info'" class="og-scroll og-info">
+            <div v-show="tab === 'info'" data-tut="info-panel" class="og-scroll og-info">
               <p v-if="!infoCard" class="text-gray-300 text-xs">Click a gToon on the board or in your deck to see its info here.</p>
               <template v-else>
                 <div class="flex items-start gap-3">
@@ -178,13 +180,13 @@
             <div class="og-status" :class="oppStatusReady ? 'og-status-ready' : ''">{{ matchState.opponent.username }}: {{ oppStatusLabel }}</div>
           </div>
 
-          <div class="og-box og-deck-box">
+          <div class="og-box og-deck-box" data-tut="deck-box">
             <div class="og-deck-head">
               <span>Deck ({{ handTray.length }})</span>
               <span>Undealt {{ matchState.you.undealtCount }} · Discarded {{ matchState.you.discardedCount }}</span>
             </div>
             <div class="og-scroll og-deck">
-              <div v-for="c in handTray" :key="c.idx" class="og-deck-card" @click="onHandClick(c.idx); showInfo(c)">
+              <div v-for="c in handTray" :key="c.idx" class="og-deck-card" :data-tut="'hand-' + c.idx" @click="onHandClick(c.idx); showInfo(c)">
                 <OgGtoonCardTile :card="c" size="board" :inspectable="false" :tone="handTone(c.idx)" />
               </div>
               <p v-if="!handTray.length" class="og-deck-empty">No cards left in hand.</p>
@@ -230,14 +232,14 @@
           <p class="text-xs text-gray-400 mb-3">Costs 10 points off your match score. You can only do this once per match. Both players choose before the new cards are revealed.</p>
           <div class="flex justify-end gap-2">
             <button @click="closeSwapSheet" class="px-4 py-2 bg-gray-700 rounded text-sm">Cancel</button>
-            <button @click="confirmSwap" class="px-4 py-2 bg-indigo-500 rounded text-sm">Swap (-10 points)</button>
+            <button data-tut="swap-confirm" @click="confirmSwap" class="px-4 py-2 bg-indigo-500 rounded text-sm">Swap (-10 points)</button>
           </div>
         </div>
       </transition>
 
       <!-- End-of-match result screen -->
       <transition name="fade">
-        <div v-if="matchEnded && !flipping && resultOpen" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div v-if="matchEnded && !flipping && resultOpen && !isTutorial" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div class="bg-gray-900 border border-white/20 rounded-xl p-6 w-[26rem] max-w-[95vw] text-center">
             <h2 class="text-2xl font-bold mb-2" :class="matchEnded.won ? 'text-green-400' : (matchEnded.outcome === 'TIE' ? 'text-amber-300' : 'text-red-400')">
               {{ matchEnded.outcome === 'TIE' ? "It's a Tie!" : (matchEnded.won ? 'You Win!' : 'You Lose') }}
@@ -251,16 +253,19 @@
             </div>
             <div class="flex gap-2 justify-center">
               <button @click="resultOpen = false" class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-sm">View board</button>
-              <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">{{ isPractice ? 'Back to Practice' : 'Back to Lobby' }}</button>
+              <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">{{ isPractice ? 'Back to Matchmaking' : 'Back to Lobby' }}</button>
             </div>
           </div>
         </div>
       </transition>
       <!-- With the result closed, the finished board stays visible; these bring the result back or leave. -->
-      <div v-if="matchEnded && !flipping && !resultOpen" class="fixed bottom-3 inset-x-0 z-40 flex justify-center gap-2">
+      <div v-if="matchEnded && !flipping && !resultOpen && !isTutorial" class="fixed bottom-3 inset-x-0 z-40 flex justify-center gap-2">
         <button @click="resultOpen = true" class="bg-gray-800/90 border border-white/20 hover:bg-gray-700 px-4 py-2 rounded text-sm">Show result</button>
-        <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">{{ isPractice ? 'Back to Practice' : 'Back to Lobby' }}</button>
+        <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">{{ isPractice ? 'Back to Matchmaking' : 'Back to Lobby' }}</button>
       </div>
+
+      <!-- The guided tutorial: dims the board and points at the one move the script needs next -->
+      <OgGtoonTutorial v-if="isTutorial" :board="tutorialBoard" @exit="$emit('exit')" @finish="$emit('exit')" />
     </template>
   </div>
 </template>
@@ -275,6 +280,7 @@ import { OG_GROUP_LABELS, ogTitleCase } from '@/utils/ogGtoonLabels'
 import { GTOON_PALETTE } from '@/utils/gtoonCardStyle'
 import { normalizeRevealTiming } from '@/utils/ogGtoonReveal'
 import OgGtoonGameLog from '@/components/OgGtoonGameLog.vue'
+import OgGtoonTutorial from '@/components/oggtoons/OgGtoonTutorial.vue'
 
 defineEmits(['exit'])
 
@@ -287,6 +293,9 @@ const COLOR_HEX = {
 function colorHex(c) { return COLOR_HEX[c] || '#ffffff' }
 
 const isPractice = computed(() => !!matchState.value?.practice)
+// The guided tutorial match (also flagged practice by the server): no timers, no intro modal, no result
+// modal of its own — the guide walks through the result and its last button leaves.
+const isTutorial = computed(() => !!matchState.value?.tutorial)
 const difficultyLabel = computed(() => {
   const d = matchState.value?.difficulty
   return d ? d.charAt(0).toUpperCase() + d.slice(1) : 'Normal'
@@ -710,8 +719,20 @@ let introShown = false
 watch(matchState, (m) => {
   if (introShown || !m) return
   introShown = true
-  if (m.round === 1 && !matchEnded.value) introOpen.value = true
+  if (m.round === 1 && !matchEnded.value && !m.tutorial) introOpen.value = true
 }, { immediate: true })
+
+/* ── Tutorial guide ──────────────────────────────────────────────────────────────────────── */
+// Everything the guide's steps look at (see utils/ogGtoonTutorialSteps.js), as one object.
+const tutorialBoard = computed(() => ({
+  m: matchState.value,
+  sel: selectedCard.value,
+  tab: tab.value,
+  swapSheetOpen: swapSheetOpen.value,
+  discardPick: [...discardPick.value],
+  flipping: flipping.value,
+  ended: !!matchEnded.value
+}))
 </script>
 
 <style scoped>
