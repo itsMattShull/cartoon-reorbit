@@ -31,9 +31,7 @@ const AUTHENTICATED_HANDLERS = [
   'pvp:rejoin',
   'pve:rejoin',
   'pvp:match:rejoin',
-  'joinPvE',
-  'battle:create',
-  'battle:join'
+  'joinPvE'
 ]
 
 /**

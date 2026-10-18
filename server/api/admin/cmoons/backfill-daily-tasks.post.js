@@ -11,10 +11,10 @@
 // false`) rather than re-implementing its detection SQL, so this can never drift out of sync
 // with what the live cron actually checks — including that function's own upper-bounding of
 // every append-only-log branch to exactly the one day being checked, and its exclusion of the
-// two tasks (lotto, monster scans) that live entirely in current-state columns with no history to
-// reconstruct from. This tool CANNOT backfill those two specifically — see cmoon.js's own
-// comment on why — an admin who knows an outage spanned a boundary rollover should treat lotto/
-// scans completions from that window as genuinely lost, not recoverable after the fact.
+// one task (lotto) that lives entirely in a current-state column with no history to reconstruct
+// from. This tool CANNOT backfill that one specifically — see cmoon.js's own comment on why — an
+// admin who knows an outage spanned a boundary rollover should treat lotto completions from that
+// window as genuinely lost, not recoverable after the fact.
 //
 // Known limitation shared with the live cron itself, just more likely to matter over several
 // days: a backfilled award is attributed using the member's CURRENT team/eligibility, not

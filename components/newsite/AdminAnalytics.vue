@@ -98,14 +98,6 @@
         </div>
       </div>
 
-      <!-- Monster Scans -->
-      <div>
-        <h2 class="text-sm font-semibold mb-1">Monster Scans</h2>
-        <div class="chart-container">
-          <canvas ref="monsterScansCanvas"></canvas>
-        </div>
-      </div>
-
       <!-- Socket State / Leak Signals -->
       <div class="lg:col-span-2">
         <h2 class="text-sm font-semibold mb-1 flex items-center">
@@ -382,7 +374,6 @@ const packsCanvas   = ref(null)
 const ptsDistCanvas = ref(null)
 const ratioCanvas   = ref(null)
 const turnoverCanvas= ref(null)
-const monsterScansCanvas = ref(null)
 const socketMetricsCanvas = ref(null)
 
 // window counts
@@ -472,7 +463,7 @@ const leakRiskBadgeText = computed(() => ({
 let cumChart, pctChart, uniqueChart,
     codesChart, ctoonChart, packChart, ptsHistChart, clashChart, tradesChart,
     netChart, issuedCategoryChart, spentCategoryChart,
-    ratioChart, turnoverChart, monsterScansChart, socketMetricsChart
+    ratioChart, turnoverChart, socketMetricsChart
 let socketMetricsTimer
 // Set true once the component starts tearing down so async fetches that resolve
 // after unmount don't touch charts we've already destroyed (see onBeforeUnmount).
@@ -491,14 +482,11 @@ const colors = {
   spentBar:  '#EF4444',
   netLine:   '#111827',
   maLine:    '#FACC15',
-  scanBar:   '#F97316',
-  scanLine:  '#0EA5E9',
   socketActive: '#111827',
   socketZoneRefs: '#2563EB',
   socketTradeSockets: '#10B981',
   socketTradeSpectators: '#F97316',
   socketAuction: '#14B8A6',
-  socketMonster: '#8B5CF6',
   socketClash: '#0EA5E9',
   socketRss: '#9CA3AF'
 }
@@ -671,18 +659,6 @@ const clashOptions = {
   plugins: { legend: { position: 'top' } }
 }
 
-const monsterScansOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  scales: {
-    x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP', displayFormats: { day: 'MMM d', week: 'MMM d' } }, title: { color: '#000', display: true, text: 'Day' },
-      ticks: { color: '#000', source: 'labels', autoSkip: true, maxRotation: 45, minRotation: 45 } },
-    y:  { title: { color: '#000', display: true, text: 'Scans' }, beginAtZero: true, ticks: { color: '#000', callback: wholeTick }, grace: '20%' },
-    y1: { position: 'right', title: { color: '#000', display: true, text: 'Unique Users' }, grid: { drawOnChartArea: false }, beginAtZero: true, ticks: { color: '#000', callback: wholeTick }, grace: '20%' }
-  },
-  plugins: { legend: { position: 'top' } }
-}
-
 const socketMetricsOptions = {
   responsive: true,
   maintainAspectRatio: false,
@@ -784,7 +760,7 @@ function applyTimeUnit () {
     chart.options.scales.x.time.displayFormats = df
     chart.update('none')
   }
-  ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, tradesChart, packChart, clashChart, monsterScansChart, netChart, issuedCategoryChart, spentCategoryChart, ratioChart].forEach(set)
+  ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, tradesChart, packChart, clashChart, netChart, issuedCategoryChart, spentCategoryChart, ratioChart].forEach(set)
 }
 
 function applyPointsZoom () {
@@ -908,9 +884,8 @@ async function fetchSocketMetrics() {
   socketMetricsChart.data.datasets[2].data = series('tradeSocketsCount')
   socketMetricsChart.data.datasets[3].data = series('tradeSpectators')
   socketMetricsChart.data.datasets[4].data = series('auctionSocketMembers')
-  socketMetricsChart.data.datasets[5].data = series('monsterSocketMembers')
-  socketMetricsChart.data.datasets[6].data = series('clashSocketMembers')
-  socketMetricsChart.data.datasets[7].data = series('rssMb')
+  socketMetricsChart.data.datasets[5].data = series('clashSocketMembers')
+  socketMetricsChart.data.datasets[6].data = series('rssMb')
   socketMetricsChart.update()
 
   computeLeakRisk(samples, socketMetricsIntervalMs.value)
@@ -1082,38 +1057,6 @@ async function fetchData() {
   ]
   clashChart.update()
 
-  res = await fetch(`/api/admin/monster-scans?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
-  if (isUnmounted) return
-  const ms = await res.json()
-  monsterScansChart.data.labels = ms.map(d => dateOf(d))
-  monsterScansChart.data.datasets = [
-    {
-      type: 'bar',
-      label: 'Scans',
-      data: ms.map(d => d.scans ?? 0),
-      yAxisID: 'y',
-      backgroundColor: colors.scanBar,
-      borderColor: colors.scanBar,
-      borderWidth: 1,
-      order: 1,
-      datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } }
-    },
-    {
-      type: 'line',
-      label: 'Unique Users',
-      data: ms.map(d => d.uniqueUsers ?? 0),
-      yAxisID: 'y1',
-      borderColor: colors.scanLine,
-      backgroundColor: colors.scanLine,
-      fill: false,
-      tension: 0.3,
-      order: 0,
-      pointBackgroundColor: colors.scanLine,
-      datalabels: { anchor: 'end', align: 'top', color: '#222222', font: { weight: 'bold' } }
-    }
-  ]
-  monsterScansChart.update()
-
   res = await fetch(`/api/admin/spend-earn-ratio?timeframe=${selectedTimeframe.value}${groupParam}`, { credentials: 'include' })
   if (isUnmounted) return
   const sr = await res.json()
@@ -1259,7 +1202,6 @@ onMounted(async () => {
   packChart   = new Chart(packsCanvas.value.getContext('2d'),  { type: 'bar',  data: { labels: [], datasets: [] }, options: barOptions })
   ptsHistChart= new Chart(ptsDistCanvas.value.getContext('2d'),{ type: 'bar',  data: { labels: [], datasets: [] }, options: histOptions })
   clashChart  = new Chart(clashCanvas.value.getContext('2d'),  { data: { labels: [], datasets: [] }, options: clashOptions })
-  monsterScansChart = new Chart(monsterScansCanvas.value.getContext('2d'), { data: { labels: [], datasets: [] }, options: monsterScansOptions })
   socketMetricsChart = new Chart(socketMetricsCanvas.value.getContext('2d'), {
     type: 'line',
     data: {
@@ -1269,7 +1211,6 @@ onMounted(async () => {
         { label: 'Trade sockets', data: [], borderColor: colors.socketTradeSockets, backgroundColor: colors.socketTradeSockets, borderWidth: 2, fill: false, tension: 0.2, borderDash: [4, 3] },
         { label: 'Trade spectators', data: [], borderColor: colors.socketTradeSpectators, backgroundColor: colors.socketTradeSpectators, borderWidth: 2, fill: false, tension: 0.2 },
         { label: 'Auction sockets', data: [], borderColor: colors.socketAuction, backgroundColor: colors.socketAuction, borderWidth: 2, fill: false, tension: 0.2 },
-        { label: 'Monster sockets', data: [], borderColor: colors.socketMonster, backgroundColor: colors.socketMonster, borderWidth: 2, fill: false, tension: 0.2 },
         { label: 'Clash sockets', data: [], borderColor: colors.socketClash, backgroundColor: colors.socketClash, borderWidth: 2, fill: false, tension: 0.2 },
         { label: 'RSS MB', data: [], borderColor: colors.socketRss, backgroundColor: colors.socketRss, borderWidth: 2, fill: false, tension: 0.2, yAxisID: 'y2' }
       ]
@@ -1382,18 +1323,18 @@ onBeforeUnmount(() => {
   ;[
     cumChart, pctChart, uniqueChart, codesChart, ctoonChart, packChart,
     ptsHistChart, clashChart, tradesChart, netChart, issuedCategoryChart, spentCategoryChart,
-    ratioChart, turnoverChart, monsterScansChart, socketMetricsChart
+    ratioChart, turnoverChart, socketMetricsChart
   ].forEach(ch => { try { ch?.destroy() } catch {} })
 
   cumChart = pctChart = uniqueChart = codesChart = ctoonChart = packChart =
     ptsHistChart = clashChart = tradesChart = netChart = issuedCategoryChart = spentCategoryChart =
-    ratioChart = turnoverChart = monsterScansChart = socketMetricsChart = null
+    ratioChart = turnoverChart = socketMetricsChart = null
 })
 
 watch([selectedTimeframe, groupBy], async () => {
   if (!netChart) return
   applyTimeUnit()
-  ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, tradesChart, packChart, clashChart, monsterScansChart, netChart, ratioChart].forEach(ch => {
+  ;[cumChart, pctChart, uniqueChart, codesChart, ctoonChart, tradesChart, packChart, clashChart, netChart, ratioChart].forEach(ch => {
     if (!ch) return
     ch.data.labels = []
     ch.data.datasets.forEach(ds => (ds.data = []))

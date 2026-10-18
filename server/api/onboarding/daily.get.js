@@ -9,7 +9,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
   }
 
-  const [globalConfig, winwheelConfig, lottoSettings, barcodeConfig] = await Promise.all([
+  const [globalConfig, winwheelConfig, lottoSettings] = await Promise.all([
     db.globalGameConfig.findUnique({
       where: { id: 'singleton' },
       select: {
@@ -27,11 +27,6 @@ export default defineEventHandler(async (event) => {
     db.lottoSettings.findUnique({
       where: { id: 'lotto' },
       select: { countPerDay: true }
-    }),
-    db.barcodeGameConfig.findFirst({
-      where: { isActive: true },
-      orderBy: { createdAt: 'desc' },
-      select: { monsterDailyScanLimit: true, scanPoints: true }
     })
   ])
 
@@ -80,8 +75,6 @@ export default defineEventHandler(async (event) => {
   const czoneVisitPoints = Number(globalConfig?.czoneVisitPoints ?? 20)
   const winwheelMaxDailySpins = Number(winwheelConfig?.maxDailySpins ?? 0)
   const lottoCountPerDay = Number(lottoSettings?.countPerDay ?? 0)
-  const monsterDailyScanLimit = Number(barcodeConfig?.monsterDailyScanLimit ?? 0)
-  const scanPoints = Number(barcodeConfig?.scanPoints ?? 0)
 
   const gamePointsUsed = Number(gamePointAgg?._sum?.points || 0)
   const tkoPointsUsed = Number(tkoPointAgg?._sum?.points || 0)
@@ -91,21 +84,13 @@ export default defineEventHandler(async (event) => {
     ? Number(lottoUser?.purchasesToday || 0)
     : 0
 
-  let monsterScans = 0
-  if (Number.isFinite(monsterDailyScanLimit) && monsterDailyScanLimit > 0) {
-    monsterScans = await db.userBarcodeScan.count({
-      where: { userId, lastScannedAt: { gte: morningWindowStart } }
-    })
-  }
-
   const status = {
     dailyLoginComplete: dailyLoginCount > 0,
     czoneVisitComplete: czoneVisitMaxPerDay > 0 && czoneVisitCount >= czoneVisitMaxPerDay,
     gamePointsComplete: dailyPointLimit > 0 && gamePointsUsed >= dailyPointLimit,
     tkoPointsComplete: tkoDailyPointLimit > 0 && tkoPointsUsed >= tkoDailyPointLimit,
     winwheelComplete: winwheelMaxDailySpins > 0 && winwheelSpins >= winwheelMaxDailySpins,
-    lottoComplete: lottoCountPerDay !== -1 && lottoCountPerDay > 0 && lottoPurchasesToday >= lottoCountPerDay,
-    monsterScanComplete: monsterDailyScanLimit > 0 && monsterScans >= monsterDailyScanLimit
+    lottoComplete: lottoCountPerDay !== -1 && lottoCountPerDay > 0 && lottoPurchasesToday >= lottoCountPerDay
   }
 
   return {
@@ -116,9 +101,7 @@ export default defineEventHandler(async (event) => {
       czoneVisitMaxPerDay,
       czoneVisitPoints,
       winwheelMaxDailySpins,
-      lottoCountPerDay,
-      monsterDailyScanLimit,
-      scanPoints
+      lottoCountPerDay
     },
     status,
     counts: {
@@ -127,8 +110,7 @@ export default defineEventHandler(async (event) => {
       gamePointsUsed,
       tkoPointsUsed,
       winwheelSpins,
-      lottoPurchasesToday,
-      monsterScans
+      lottoPurchasesToday
     }
   }
 })

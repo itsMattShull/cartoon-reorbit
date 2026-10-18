@@ -7,8 +7,6 @@
  * and reconstructed on boot from the stored deadline timestamps.
  *
  * Key prefixes:
- *   battle:{id}        – monster 1v1 battle state
- *   battle:user:{uid}  – userId → battleId lookup
  *   pvproom:{id}       – PvP lobby room
  *   traderoom:{name}   – live trade room
  *   pvematch:{id}      – active clash PvE game
@@ -17,32 +15,12 @@
 
 import { getRedis } from './redis.js'
 
-const BATTLE_TTL     = 3600  // 1 hour  (seconds)
 const PVP_ROOM_TTL   = 1800  // 30 min
 const TRADE_TTL      = 1800  // 30 min
 const PVE_MATCH_TTL  = 7200  // 2 hours (active clash PvE game)
 const PVP_MATCH_TTL  = 7200  // 2 hours (active clash PvP game)
 
 // ── Serialisation helpers ────────────────────────────────────────────────────
-
-function serializeBattle(battle) {
-  return {
-    state:        battle.state,
-    recordId:     battle.recordId,
-    actions:      battle.actions,
-    deadlines:    battle.deadlines,
-    lastActivity: battle.lastActivity,
-  }
-}
-
-function deserializeBattle(data) {
-  return {
-    ...data,
-    // Timer handles are always reconstructed in memory; never stored
-    timers:           { player1: null, player2: null },
-    disconnectTimers: { player1: null, player2: null },
-  }
-}
 
 function serializePvpRoom(room) {
   return {
@@ -87,60 +65,6 @@ async function scanKeys(pattern) {
     keys.push(...batch)
   } while (cursor !== '0')
   return keys
-}
-
-// ── Monster Battles ──────────────────────────────────────────────────────────
-
-export async function setBattle(battleId, battle) {
-  const redis = getRedis()
-  await redis.setex(`battle:${battleId}`, BATTLE_TTL, JSON.stringify(serializeBattle(battle)))
-}
-
-export async function delBattle(battleId, userIds = []) {
-  const redis = getRedis()
-  const keys = [
-    `battle:${battleId}`,
-    ...userIds.map(uid => `battle:user:${uid}`)
-  ]
-  await redis.del(...keys)
-}
-
-export async function setBattleByUser(userId, battleId) {
-  const redis = getRedis()
-  await redis.setex(`battle:user:${userId}`, BATTLE_TTL, battleId)
-}
-
-export async function scanBattles() {
-  const redis = getRedis()
-  const allKeys  = await scanKeys('battle:*')
-  const stateKeys = allKeys.filter(k => !k.startsWith('battle:user:'))
-  const results  = new Map()
-  if (!stateKeys.length) return results
-
-  const values = await redis.mget(...stateKeys)
-  for (let i = 0; i < stateKeys.length; i++) {
-    if (!values[i]) continue
-    try {
-      const battleId = stateKeys[i].slice('battle:'.length)
-      results.set(battleId, deserializeBattle(JSON.parse(values[i])))
-    } catch { /* skip corrupt entries */ }
-  }
-  return results
-}
-
-export async function scanBattleByUser() {
-  const redis = getRedis()
-  const keys  = await scanKeys('battle:user:*')
-  const results = new Map()
-  if (!keys.length) return results
-
-  const values = await redis.mget(...keys)
-  for (let i = 0; i < keys.length; i++) {
-    if (!values[i]) continue
-    const userId = keys[i].slice('battle:user:'.length)
-    results.set(userId, values[i])
-  }
-  return results
 }
 
 // ── PvP Lobby Rooms ──────────────────────────────────────────────────────────

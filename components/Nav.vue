@@ -266,8 +266,7 @@ const mainLinks = [
 const gamesLinks = [
   { label: 'Winball', to: '/games/winball' },
   { label: 'Win Wheel', to: '/games/winwheel' },
-  { label: 'Lottery', to: '/lottery' },
-  { label: 'Monsters', to: '/monsters' }
+  { label: 'Lottery', to: '/lottery' }
 ]
 
 const clashLinks = [
@@ -326,7 +325,6 @@ const adminGroups = [
           { label: 'Manage Starter Sets', to: '/admin/starter-sets' },
           { label: 'Manage Backgrounds', to: '/admin/backgrounds' },
           { label: 'Manage Codes', to: '/admin/codes' },
-          { label: 'Manage Monsters', to: '/admin/manage-monster' },
           { label: 'Manage cZone Search', to: '/admin/manage-czone-search' },
       { label: 'Manage Lotto', to: '/admin/manage-lotto' },
       { label: 'Manage Games', to: '/admin/games' },
@@ -354,7 +352,6 @@ const adminGroups = [
       { label: 'Point Logs', to: '/admin/points-log' },
       { label: 'Achievement Logs', to: '/admin/achievement-logs' },
       { label: 'gToons Clash Logs', to: '/admin/gtoons-logs' },
-      { label: 'Monster Battle Logs', to: '/admin/manage-monster-battles' },
       { label: 'Lotto Logs', to: '/admin/lotto-logs' },
       { label: 'Win Wheel Logs', to: '/admin/winwheellogs' },
       { label: 'Pack Analytics', to: '/admin/packanalytics' },

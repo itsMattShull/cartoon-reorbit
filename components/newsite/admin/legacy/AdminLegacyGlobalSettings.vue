@@ -62,7 +62,7 @@
           <div class="flex flex-col gap-1">
             <label class="text-xs font-medium">Daily Game Point Cap</label>
             <input type="number" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="dailyPointLimit" />
-            <p class="text-[10px] text-gray-500">Max points from Winball, ReOrbit Match, and Monster scans per 24h window (excludes the head-to-head games: TKO, gToons Clash and Ed, Edd n Eddy RPS).</p>
+            <p class="text-[10px] text-gray-500">Max points from Winball and ReOrbit Match per 24h window (excludes the head-to-head games: TKO, gToons Clash and Ed, Edd n Eddy RPS).</p>
           </div>
           <div class="flex flex-col gap-1">
             <label class="text-xs font-medium">Head-to-Head Daily Points Cap</label>

@@ -5,7 +5,7 @@
 // given task. Two different reset times are used for different tasks — this mismatch
 // pre-dates this file and is not something introduced here:
 //  - 8pm America/Chicago: daily login, cZone visits, general/combat game points
-//  - 8am America/Chicago: Winwheel spins, Lotto purchases, monster barcode scans
+//  - 8am America/Chicago: Winwheel spins, Lotto purchases
 import { DateTime } from 'luxon'
 
 // `asOf` (default: now) lets a caller ask "what was the applicable boundary at this past

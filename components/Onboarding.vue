@@ -481,9 +481,6 @@ const items = computed(() => {
   const tkoDailyPointLimit = formatNumber(cfg.tkoDailyPointLimit)
   const winwheelMax = Number(cfg.winwheelMaxDailySpins ?? 0)
   const lottoCountRaw = Number(cfg.lottoCountPerDay ?? 0)
-  const scanLimit = Number(cfg.monsterDailyScanLimit ?? 0)
-  const scanPoints = Number(cfg.scanPoints ?? 0)
-  const scanTotal = formatNumber(scanLimit * scanPoints)
 
   const lottoText = lottoCountRaw === -1
     ? 'Try the lotto for points and exclusive cToons.'
@@ -503,7 +500,7 @@ const items = computed(() => {
     {
       id: 'games',
       done: Boolean(st.gamePointsComplete),
-      text: `Play Winball, ReOrbit Match, or scan for Monsters to win up to ${dailyPointLimit} points.`
+      text: `Play Winball or ReOrbit Match to win up to ${dailyPointLimit} points.`
     },
     {
       id: 'tko',
