@@ -35,7 +35,7 @@ export const GTOON_ROTATION_LIMITS = { min: -180, max: 180 }
 // Card palette. Keys are Ctoon.gtoonColor enum values. wvring/wvStart/wvEnd come from the
 // drawcard UFO_PALETTE; PINK is new (not on the original page).
 export const GTOON_PALETTE = {
-  RED: { wvStart: 'rgb(130, 40, 20)', wvEnd: 'rgb(230, 70, 40)', wvring: '#cc6600' },
+  RED: { wvStart: 'rgb(150, 10, 20)', wvEnd: 'rgb(255, 30, 40)', wvring: '#ff1a1a' },
   ORANGE: { wvStart: 'rgb(189, 106, 12)', wvEnd: 'rgb(253, 158, 33)', wvring: '#ff9900' },
   YELLOW: { wvStart: 'rgb(150, 140, 10)', wvEnd: 'rgb(230, 220, 40)', wvring: '#ffff00' },
   GREEN: { wvStart: 'rgb(40, 140, 50)', wvEnd: 'rgb(45, 215, 75)', wvring: '#05d659' },

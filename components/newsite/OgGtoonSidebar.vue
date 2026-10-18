@@ -3,7 +3,7 @@
      Each shows the username, points, and a count of that player's face-up cards in each goal color.
      The numbers are published by components/OgGtoonMatchBoard.vue through shared state. -->
 <template>
-  <div class="og-sb">
+  <div class="og-sb" data-tut="scoreboard">
     <section v-for="p in panels" :key="p.key" class="og-sb-panel">
       <h3 class="og-sb-name" :title="p.name">{{ p.name }}</h3>
       <div class="og-sb-label">Points</div>
