@@ -353,14 +353,20 @@
                 </div>
               </div>
 
-              <!-- total weight -->
-              <span
-                class="weight-badge"
-                :class="sumWeights(rarity) === 100 ? 'weight-ok' : 'weight-bad'"
-                :title="'Total weight = ' + sumWeights(rarity) + '%' "
-              >
-                {{ sumWeights(rarity) }} %
-              </span>
+              <div class="flex items-center gap-2">
+                <button type="button" @click="rebalance(rarity)"
+                        class="even-out-btn">
+                  Split Evenly
+                </button>
+                <!-- total weight -->
+                <span
+                  class="weight-badge"
+                  :class="sumWeights(rarity) === 100 ? 'weight-ok' : 'weight-bad'"
+                  :title="'Total weight = ' + sumWeights(rarity) + '%' "
+                >
+                  {{ sumWeights(rarity) }} %
+                </span>
+              </div>
             </div>
 
             <!-- rows -->
@@ -605,6 +611,37 @@ function onManualWeight(rarity, id) {
   weights.value[id] = Math.min(max, Math.max(1, Number(weights.value[id] || 0)))
 }
 
+/** distribute `total` points evenly (as whole numbers) across `ids`, mutating weights */
+function distributeEvenly(ids, total) {
+  if (!ids.length) return
+  const base  = Math.floor(total/ids.length)
+  let extra   = total - base*ids.length
+  for (const id of ids) {
+    weights.value[id] = base + (extra-- > 0 ? 1 : 0)
+  }
+}
+
+/**
+ * Split Evenly: non-cMart (inCmart=false) cToons share 70% of the rarity's
+ * weight, cMart (inCmart=true) cToons share the remaining 30%, each split
+ * evenly within their group so the rarity still totals 100%.
+ */
+function rebalance(rarity) {
+  const ids = grouped.value[rarity]||[]
+  if (!ids.length) return
+
+  const notInCmart = ids.filter(id => !lookup.value[id]?.inCmart)
+  const inCmartIds = ids.filter(id => lookup.value[id]?.inCmart)
+
+  if (!notInCmart.length || !inCmartIds.length) {
+    distributeEvenly(ids, 100)
+    return
+  }
+
+  distributeEvenly(notInCmart, 70)
+  distributeEvenly(inCmartIds, 30)
+}
+
 // 6️⃣ NEW: Set picker + bulk add by Set
 const sets                 = ref([])
 const setSearch            = ref('')
@@ -780,6 +817,7 @@ async function submit() {
 .weight-badge {
   @apply inline-block rounded px-1.5 py-0 text-[10px] font-medium;
 }
+.even-out-btn { @apply text-[11px] font-semibold text-blue-700 border border-blue-300 rounded-md px-2 py-0.5 hover:bg-blue-100 whitespace-nowrap; }
 .weight-ok  { @apply bg-green-100 text-green-700; }
 .weight-bad { @apply bg-red-100   text-red-700;   }
 .edition-badge {

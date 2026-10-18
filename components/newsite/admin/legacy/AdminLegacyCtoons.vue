@@ -47,6 +47,20 @@
           >
             Make 2nd Ed
           </button>
+
+          <button
+            :disabled="!canBatchAssignCMoon"
+            @click="openBatchAssignCMoon"
+            :class="[
+              'px-3 py-1.5 text-xs font-semibold rounded-md transition-colors',
+              canBatchAssignCMoon
+                ? 'bg-teal-600 text-white hover:bg-teal-700'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            ]"
+            :title="canBatchAssignCMoon ? 'Assign one cMoon to every cToon in this series/set' : 'Select a Set or Series filter first to enable Batch Assign cMoon'"
+          >
+            Batch Assign cMoon
+          </button>
         </div>
       </div>
 
@@ -163,10 +177,24 @@
                 {{ c.inCmart ? 'Yes' : 'No' }}
               </td>
               <td class="px-2 py-1.5 text-right">
-                <NuxtLink
-                  :to="`/newsite/admin/ctoons/edit/${c.id}`"
-                  class="text-blue-600 hover:text-blue-800"
-                >Edit</NuxtLink>
+                <div class="flex flex-col items-end gap-1">
+                  <NuxtLink
+                    :to="`/newsite/admin/ctoons/edit/${c.id}`"
+                    class="text-blue-600 hover:text-blue-800"
+                  >Edit</NuxtLink>
+                  <button
+                    type="button"
+                    :disabled="!!giveToOfficialDisabledReason(c)"
+                    :title="giveToOfficialDisabledReason(c) || 'Mint 5 more and give them to Official'"
+                    @click="openGiveToOfficial(c)"
+                    :class="[
+                      'px-2 py-0.5 text-[11px] font-semibold rounded-md whitespace-nowrap',
+                      giveToOfficialDisabledReason(c)
+                        ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        : 'bg-amber-600 text-white hover:bg-amber-700'
+                    ]"
+                  >Give to Official</button>
+                </div>
               </td>
             </tr>
           </tbody>
@@ -234,12 +262,28 @@
                 <p class="text-[11px] text-gray-600"><span class="text-gray-500">Series:</span> {{ c.series }}</p>
               </div>
             </div>
-            <NuxtLink
-              :to="`/newsite/admin/ctoons/edit/${c.id}`"
-              class="mt-2 inline-block px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 text-center self-end"
-            >
-              Edit
-            </NuxtLink>
+            <div class="mt-2 flex items-center justify-end gap-2">
+              <button
+                type="button"
+                :disabled="!!giveToOfficialDisabledReason(c)"
+                :title="giveToOfficialDisabledReason(c) || 'Mint 5 more and give them to Official'"
+                @click="openGiveToOfficial(c)"
+                :class="[
+                  'px-3 py-1.5 text-xs font-semibold rounded-md whitespace-nowrap',
+                  giveToOfficialDisabledReason(c)
+                    ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                    : 'bg-amber-600 text-white hover:bg-amber-700'
+                ]"
+              >
+                Give to Official
+              </button>
+              <NuxtLink
+                :to="`/newsite/admin/ctoons/edit/${c.id}`"
+                class="inline-block px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 text-center"
+              >
+                Edit
+              </NuxtLink>
+            </div>
           </article>
         </template>
       </div>
@@ -290,6 +334,23 @@
       @close="showMakeSecondEditionModal = false"
       @saved="onMakeSecondEditionSaved"
     />
+
+    <!-- Batch Assign cMoon Modal -->
+    <BatchAssignCMoonModal
+      v-if="showBatchAssignCMoonModal"
+      :ctoons="displayedCtoons"
+      :filter-label="batchAssignCMoonLabel"
+      @close="showBatchAssignCMoonModal = false"
+      @saved="onBatchAssignCMoonSaved"
+    />
+
+    <!-- Give to Official Modal -->
+    <GiveToOfficialModal
+      v-if="giveToOfficialTarget"
+      :ctoon="giveToOfficialTarget"
+      @close="giveToOfficialTarget = null"
+      @given="onGivenToOfficial"
+    />
   </div>
 </template>
 
@@ -298,7 +359,42 @@
 import { ref, onMounted, onBeforeUnmount, computed, watch, nextTick } from 'vue'
 import BulkEditCtoonModal from '~/components/BulkEditCtoonModal.vue'
 import MakeSecondEditionModal from '~/components/MakeSecondEditionModal.vue'
+import GiveToOfficialModal from '~/components/GiveToOfficialModal.vue'
+import BatchAssignCMoonModal from '~/components/BatchAssignCMoonModal.vue'
 import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
+
+/* Give to Official */
+const giveToOfficialTarget = ref(null)
+function giveToOfficialDisabledReason(c) {
+  if (c.givenToOfficialAt) return 'Already given to Official for this cToon.'
+  if (c.quantity == null || c.highestMint !== c.quantity) {
+    return 'Not eligible until highest mint equals quantity (fully sold out).'
+  }
+  return ''
+}
+function openGiveToOfficial(c) {
+  if (giveToOfficialDisabledReason(c)) return
+  giveToOfficialTarget.value = c
+}
+function patchCtoonEverywhere(id, patch) {
+  const applyTo = (list) => {
+    const idx = list.value.findIndex(c => c.id === id)
+    if (idx !== -1) list.value[idx] = { ...list.value[idx], ...patch }
+  }
+  applyTo(rawCtoons)
+  applyTo(searchResults)
+}
+function onGivenToOfficial(updatedCtoon) {
+  if (updatedCtoon?.id) {
+    patchCtoonEverywhere(updatedCtoon.id, {
+      totalMinted: updatedCtoon.totalMinted,
+      highestMint: updatedCtoon.highestMint,
+      quantity: updatedCtoon.quantity,
+      givenToOfficialAt: updatedCtoon.givenToOfficialAt,
+    })
+  }
+  giveToOfficialTarget.value = null
+}
 
 /* Meta options from API */
 const setsOptions   = ref([])
@@ -341,6 +437,29 @@ async function onMakeSecondEditionSaved(result) {
   } else {
     await loadPage(currentPage.value)
   }
+}
+
+/* Batch Assign cMoon modal — only enabled when filtering by an actual
+   Set or Series selection (not a free-text name search), matching the
+   "batch edit by series and by set" scope this tool is meant for. */
+const showBatchAssignCMoonModal = ref(false)
+const canBatchAssignCMoon = computed(() => isSearching.value && !!(selectedSet.value || selectedSeries.value))
+const batchAssignCMoonLabel = computed(() => {
+  if (selectedSeries.value) return `Series: ${selectedSeries.value}`
+  if (selectedSet.value) return `Set: ${selectedSet.value}`
+  return ''
+})
+function openBatchAssignCMoon() {
+  if (!canBatchAssignCMoon.value) return
+  showBatchAssignCMoonModal.value = true
+}
+async function onBatchAssignCMoonSaved(result) {
+  showBatchAssignCMoonModal.value = false
+  const count = result?.count ?? 0
+  alert(`Updated cMoon on ${count} cToon${count !== 1 ? 's' : ''}.`)
+  // Re-run current search to reflect updates
+  const q = String(searchTerm.value || '').trim()
+  await runSearch({ q: q.length >= 3 ? q : '', set: selectedSet.value, series: selectedSeries.value })
 }
 
 /* Route helpers */

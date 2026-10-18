@@ -39,10 +39,12 @@ export const ADMIN_SECTIONS = [
   // Component existed on disk but was wired into neither the nav nor the router.
   S('packAnalytics', 'Pack Analytics', 'analytics', nu('AdminPackAnalytics')),
   S('checkUserMints', 'Check User Mints', 'analytics', nu('AdminCheckUserMints')),
+  S('retention', 'Retention', 'analytics', nu('AdminRetention')),
 
   // ── Users & Moderation ──────────────────────────────────────
   S('manageUsers', 'Manage Users', 'users', nu('AdminManageUsers')),
   S('manageCollection', 'Manage Collection', 'users', nu('AdminManageCollection')),
+  S('userCtoons', 'User cToons', 'users', nu('AdminUserCtoons')),
   S('cheatFinder', 'Cheat Finder', 'users', nu('AdminCheatFinder')),
   S('checkCheating', 'Check Cheating', 'users', legacy('AdminLegacyCheckCheating')),
   S('cheatingTool', 'Cheating Tool', 'users', legacy('AdminLegacyCheatingTool')),
