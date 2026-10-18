@@ -105,9 +105,12 @@ function broadcast(io, raid, event, extra) {
 async function requireAdminUser(userId) {
   const me = await db.user.findUnique({
     where: { id: userId },
-    select: { id: true, username: true, isAdmin: true, banned: true, active: true },
+    select: { id: true, username: true, isAdmin: true, adminRestricted: true, adminPermissions: true, banned: true, active: true },
   })
   if (!me?.isAdmin || me.banned || me.active === false) return null
+  // A sub-admin only gets the raid preview with the cMoon enemies tool (key from
+  // utils/adminPermissions.js; this file is plain node so it can't import that module).
+  if (me.adminRestricted && !(me.adminPermissions || []).includes('cMoonEnemies')) return null
   return me
 }
 

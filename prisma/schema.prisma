@@ -513,6 +513,13 @@ model User {
   allowAuctionNotifications         Boolean   @default(true)
   allowWishlistAuctionNotifications Boolean   @default(true)
   isAdmin                           Boolean   @default(false)
+  // Sub-admin scoping. `isAdmin` stays the "can enter the admin console" flag; when
+  // `adminRestricted` is true the admin only gets the tools whose permission key
+  // (see utils/adminPermissions.js) is listed in `adminPermissions`. Default false so
+  // every existing admin keeps full access. Both are reset whenever isAdmin is set or cleared
+  // by make-admin / remove-admin, and only written by users/[id]/admin-access.post.js.
+  adminRestricted                   Boolean   @default(false)
+  adminPermissions                  String[]  @default([])
   inGuild                           Boolean   @default(true)
   active                            Boolean   @default(true)
   banned                            Boolean   @default(false)

@@ -84,7 +84,8 @@ definePageMeta({
   description: 'Spin the wheel on Cartoon ReOrbit for a chance to win points and prizes.'
 })
 
-const { user, fetchSelf, isAdmin } = useAuth()
+// Admin controls here are full-admin only (the socket handlers refuse sub-admins)
+const { user, fetchSelf, isFullAdmin: isAdmin } = useAuth()
 const runtime = useRuntimeConfig()
 
 const wheelState = ref({
