@@ -836,7 +836,7 @@
               <input type="checkbox" v-model="ogGtoonsPracticeEnabled" class="mt-0.5" />
               <span>
                 <span class="text-xs font-semibold text-gray-800">Practice Mode</span>
-                <span class="block text-[11px] text-gray-500">Single-player practice against a bot that plays a shuffled copy of the player's own deck. Awards, spends and records no points and never appears on the leaderboard. Also requires Live Matches. Off hides the Practice tab and rejects new practice matches; in-progress ones finish normally.</span>
+                <span class="block text-[11px] text-gray-500">Single-player practice against a bot that plays a shuffled copy of the player's own deck. Awards, spends and records no points and never appears on the leaderboard. Also requires Live Matches. Off hides the Practice button on the Matchmaking tab and rejects new practice matches; in-progress ones finish normally. (The guided tutorial is separate and only needs Live Matches.)</span>
               </span>
             </label>
           </div>

@@ -12,11 +12,12 @@ const sections = await import(join(root, 'utils/adminSections.js'))
 const {
   ADMIN_PERMISSION_KEYS, ADMIN_PERMISSION_PRESETS, ADMIN_API_SEGMENT_PERMS,
   adminApiAccess, adminScopeDenial, adminScopeOf, cleanAdminPermissions,
-  normalizeAdminApiPath, isScopedAdminPath
+  normalizeAdminApiPath, isScopedAdminPath, STANDARD_SUB_ADMIN_WITHHELD
 } = perms
 const { ADMIN_SECTIONS, permOf, adminNavTree, grantableAdminTree } = sections
 
 const sub = (...p) => ({ full: false, permissions: p })
+const standard = () => sub(...ADMIN_PERMISSION_PRESETS.find(p => p.id === 'standard').perms)
 const FULL = { full: true, permissions: [] }
 
 function walk (dir) {
@@ -96,7 +97,7 @@ test('every /api/admin handler is mapped to a permission, full-only, or super-ad
       .replace(/\.js$/, '')
       .replace(/\/index$/, '')
       .replace(/\[[^\]]+\]/g, 'x')
-    const access = adminApiAccess(normalizeAdminApiPath(route))
+    const access = adminApiAccess(normalizeAdminApiPath(route), file.includes('.get.') ? 'GET' : 'POST')
     if (access.type !== 'denied') continue
     // A "denied" route is only acceptable if its handler is itself super-admin only.
     if (!/requireSuperAdmin|SUPER_ADMIN_DISCORD_ID/.test(readFileSync(file, 'utf8'))) unmapped.push(route)
@@ -218,4 +219,76 @@ test('the scope middleware, grant endpoint, and legacy-page block are wired', ()
     assert.match(src, /adminRestricted: false/, `${f} must clear the sub-admin scope`)
     assert.match(src, /targetUserId/, `${f} must record the target in the admin log`)
   }
+})
+
+// ── The earlier fixed "sub-admin" role is now the 'Standard sub-admin' preset ─────────────
+
+test('the standard preset is every tool except the high-risk ones the old role withheld', () => {
+  const preset = ADMIN_PERMISSION_PRESETS.find(p => p.id === 'standard')
+  assert.equal(preset.perms.length, ADMIN_PERMISSION_KEYS.length - STANDARD_SUB_ADMIN_WITHHELD.length)
+  for (const k of STANDARD_SUB_ADMIN_WITHHELD) {
+    assert.ok(ADMIN_PERMISSION_KEYS.includes(k), `${k} is not a real permission`)
+    assert.ok(!preset.perms.includes(k), `${k} must not be in the standard preset`)
+  }
+})
+
+test('the isSubAdmin data migration grants exactly the standard preset', () => {
+  const dir = readdirSync(join(root, 'prisma/migrations')).find(d => d.endsWith('_sub_admin_permissions'))
+  const sql = read(`prisma/migrations/${dir}/migration.sql`)
+  const m = sql.match(/"adminPermissions" = ARRAY\[([^\]]+)\]::TEXT\[\]/)
+  assert.ok(m, 'migration does not set adminPermissions for old sub-admins')
+  const fromSql = m[1].split(',').map(x => x.trim().replace(/'/g, ''))
+  assert.deepEqual(fromSql, ADMIN_PERMISSION_PRESETS.find(p => p.id === 'standard').perms)
+  assert.match(sql, /DROP COLUMN "isSubAdmin"/)
+  // The data step reads the old column, so its migration must sort after the one that added it.
+  const addedIn = readdirSync(join(root, 'prisma/migrations')).find(d => d.endsWith('_user_is_sub_admin'))
+  assert.ok(addedIn && addedIn < dir, 'must run after the migration that added isSubAdmin')
+})
+
+test('a standard sub-admin keeps the ordinary tools', () => {
+  const s = standard()
+  for (const p of [
+    '/api/admin/all-ctoons', '/api/admin/packs', '/api/admin/points-log', '/api/admin/auth-logs',
+    '/api/admin/users', '/api/admin/users/search', '/api/admin/users/u1/update-cmoon',
+    '/api/admin/check-cheating', '/api/admin/cmoons'
+  ]) assert.equal(adminScopeDenial(s, p, 'POST'), null, p)
+  assert.equal(adminScopeDenial(s, '/api/admin/global-config', 'GET'), null)
+})
+
+test('a standard sub-admin is refused every high-risk route the old role denied', () => {
+  const s = standard()
+  for (const [method, p] of [
+    ['POST', '/api/admin/users/u1/ban'], ['POST', '/api/admin/users/u1/dissolve'],
+    ['POST', '/api/admin/users/u1/update-username'], ['POST', '/api/admin/users/transfer'], ['POST', '/api/admin/users/transfer-preview'],
+    ['GET', '/api/admin/dissolve-misfires'], ['POST', '/api/admin/dissolve-misfires/resolve'],
+    ['GET', '/api/admin/cheating-tool-report'],
+    ['POST', '/api/admin/users/u1/make-admin'], ['POST', '/api/admin/users/u1/admin-access'],
+    ['GET', '/api/admin/locked-points/x'], ['POST', '/api/admin/trade-offers'],
+    ['POST', '/api/admin/dev/power'], ['POST', '/api/admin/cheating-tool-apply'],
+    ['POST', '/api/admin/cheating-tool-apply-stream'], ['POST', '/api/admin/remove-cheating'],
+    ['GET', '/api/admin/codes'], ['POST', '/api/admin/codes'],
+    ['POST', '/api/admin/global-config'], ['POST', '/api/admin/global-config/second-edition-overlay'],
+    ['POST', '/api/admin/rarity-defaults'], ['POST', '/api/discord/register-commands'],
+    ['POST', '/api/admin/ctoons/c1/give-to-official'], ['DELETE', '/api/admin/user-ctoons/u1'],
+    ['GET', '/api/admin/auction-only'], ['GET', '/api/admin/auction-creators'],
+    ['GET', '/api/admin/dissolve-queue'], ['POST', '/api/admin/dissolve-queue/x'],
+    ['GET', '/api/admin/dissolve-featured-config'],
+    ['POST', '/api/admin/cron-run-logs/delete'], ['POST', '/api/admin/queues/mint/clean']
+  ]) assert.notEqual(adminScopeDenial(s, p, method), null, `${method} ${p}`)
+})
+
+test('log deletion and give-to-official stay full-admin only even with every tool granted', () => {
+  const all = sub(...ADMIN_PERMISSION_KEYS)
+  for (const p of ['/api/admin/cron-run-logs/delete', '/api/admin/queues/mint/clean', '/api/admin/ctoons/c1/give-to-official', '/api/admin/user-ctoons']) {
+    assert.match(adminScopeDenial(all, p, 'POST'), /Full admins only/, p)
+  }
+  // ...while the tools themselves still work
+  assert.equal(adminScopeDenial(all, '/api/admin/cron-run-logs', 'GET'), null)
+  assert.equal(adminScopeDenial(all, '/api/admin/queues', 'GET'), null)
+})
+
+test('global config: read for any tool that uses it, write only with Global Settings', () => {
+  assert.equal(adminScopeDenial(sub('games'), '/api/admin/global-config', 'GET'), null)
+  assert.notEqual(adminScopeDenial(sub('games'), '/api/admin/global-config', 'POST'), null)
+  assert.equal(adminScopeDenial(sub('globalSettings'), '/api/admin/global-config', 'POST'), null)
 })

@@ -31,10 +31,13 @@ const router = useRouter()
 const { leaveMatch, matchState } = useOgGtoonsSocket()
 
 function onExit() {
-  // Read before leaveMatch() clears the state: practice sends people back to the Practice tab.
+  // Read before leaveMatch() clears the state: practice and the tutorial send people back to the
+  // Matchmaking tab (where their Practice button and the Tutorial replay live).
   const wasPractice = !!matchState.value?.practice
+  // Leaving the tutorial (finished, skipped or exited) is what stops it auto-offering itself again.
+  if (matchState.value?.tutorial) $fetch('/api/game/oggtoons/tutorial', { method: 'POST' }).catch(() => {})
   leaveMatch()
-  router.push(wasPractice ? '/newsite/gtoons-classic?tab=practice' : '/newsite/gtoons-classic')
+  router.push(wasPractice ? '/newsite/gtoons-classic?tab=matchmaking' : '/newsite/gtoons-classic')
 }
 </script>
 

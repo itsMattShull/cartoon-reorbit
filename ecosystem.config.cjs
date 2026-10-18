@@ -18,6 +18,7 @@
  *   worker-dissolve-auction-launch – BullMQ worker: dissolve auction launch
  *   worker-achieve                – BullMQ worker: daily achievements
  *   worker-content-analyzer       – BullMQ worker: survey content analysis
+ *   worker-dissolve-misfire-resolve – BullMQ worker: admin dissolve-misfire resolution
  *   cron-critical                 – BullMQ job schedulers: time-critical cron jobs + exact-time delayed jobs
  *   cron-maintenance              – BullMQ job schedulers: heavy/slow cron jobs, one at a time
  *
@@ -241,6 +242,16 @@ module.exports = {
     {
       name:      'worker-cmoon-daily-task-backfill',
       script:    'server/workers/cmoon-daily-task-backfill.worker.js',
+      exec_mode: 'fork',
+      instances: 1,
+      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+    },
+
+    // ── BullMQ worker: admin "Resolve Dissolve Misfires" one-time correction ──
+    {
+      name:      'worker-dissolve-misfire-resolve',
+      script:    'server/workers/dissolve-misfire-resolve.worker.js',
       exec_mode: 'fork',
       instances: 1,
       env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },

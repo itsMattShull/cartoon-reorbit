@@ -27,6 +27,8 @@ export function useOgGtoonsSocket() {
       socket.emit('oggtoons:subscribe')
       // Reattach to a live practice match after a refresh/reconnect (no-op if there isn't one).
       socket.emit('oggtoons:practice:resume')
+      // ...and to a tutorial match (also a no-op if there isn't one).
+      socket.emit('oggtoons:tutorial:resume')
     })
     socket.on('disconnect', () => { isConnected.value = false })
 
@@ -71,19 +73,22 @@ export function useOgGtoonsSocket() {
     socket.on('oggtoons:error', err => { lastError.value = err })
   }
 
-  // Practice matches (server flags the view with `practice: true`) use their own event names so
-  // they can never reach PvP's stake/swap-debit handlers.
+  // Practice and tutorial matches (the server flags the view with `practice: true` / `tutorial: true`)
+  // use their own event names so they can never reach PvP's stake/swap-debit handlers. A tutorial
+  // view is also flagged practice, so it is checked first.
+  const isTutorial = () => !!matchState.value?.tutorial
   const isPractice = () => !!matchState.value?.practice
+  const prefix = () => (isTutorial() ? 'oggtoons:tutorial:' : isPractice() ? 'oggtoons:practice:' : 'oggtoons:')
 
   function commit(round) {
     if (!currentMatchId.value) return
-    if (isPractice()) socket.emit('oggtoons:practice:commit', { round })
+    if (isPractice()) socket.emit(`${prefix()}commit`, { round })
     else socket.emit('oggtoons:commit', { matchId: currentMatchId.value, round })
   }
-  // Both modes use the same payloads; practice just has its own event names.
+  // All three modes use the same payloads; practice and the tutorial just have their own event names.
   const send = (name, payload) => {
     if (!currentMatchId.value) return
-    socket.emit(isPractice() ? `oggtoons:practice:${name}` : `oggtoons:${name}`, payload)
+    socket.emit(`${prefix()}${name}`, payload)
   }
   /** Put hand card `cardIdx` (deck index) into board slot `slot`; moves it if already placed. */
   function place(cardIdx, slot) { send('place', { cardIdx, slot }) }
@@ -100,8 +105,12 @@ export function useOgGtoonsSocket() {
     lastError.value = null
     socket.emit('oggtoons:practice:start', { deckId, difficulty })
   }
+  function startTutorial() {
+    lastError.value = null
+    socket.emit('oggtoons:tutorial:start')
+  }
   function leaveMatch() {
-    if (isPractice()) socket.emit('oggtoons:practice:leave')
+    if (isPractice()) socket.emit(`${prefix()}leave`)
     else socket.emit('oggtoons:leave')
     matchState.value = null
     matchEnded.value = null
@@ -110,6 +119,6 @@ export function useOgGtoonsSocket() {
 
   return {
     socket, matchState, lastReveal, matchEnded, isConnected, currentMatchId, lastError,
-    commit, place, unplace, swap, swapSkip, chooseColor, discard, leaveMatch, startPractice
+    commit, place, unplace, swap, swapSkip, chooseColor, discard, leaveMatch, startPractice, startTutorial
   }
 }

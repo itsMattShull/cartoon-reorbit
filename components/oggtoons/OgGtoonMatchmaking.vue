@@ -2,6 +2,20 @@
   <div class="tab-content overflow-y-auto h-full p-4 text-white">
     <Toast v-if="toast.visible" :message="toast.message" :type="toast.type" />
 
+    <!-- Guided tutorial: a scripted match with a lent deck (no points, nothing saved) -->
+    <div v-if="tutorialAvailable" class="mb-4 p-3 bg-amber-500/10 border border-amber-400/60 rounded" data-tut-entry="matchmaking">
+      <h3 class="font-bold mb-1">Tutorial</h3>
+      <p class="text-xs text-gray-300 mb-2">
+        New to gToons? Play a guided match with a ready-made deck. It walks you through every rule step by step,
+        with no timers, and never touches your points or your cards.
+      </p>
+      <button
+        :disabled="startingTutorial"
+        @click="startTutorialClick"
+        class="bg-amber-500 hover:bg-amber-600 disabled:opacity-50 text-white px-4 py-1.5 rounded text-sm"
+      >{{ startingTutorial ? 'Starting…' : 'Start Tutorial' }}</button>
+    </div>
+
     <div v-if="loadingDecks" class="h-24 bg-white/20 rounded animate-pulse mb-4"></div>
     <div v-else-if="!validDecks.length" class="mb-4 p-3 bg-red-500/20 border border-red-400 rounded text-sm">
       You need a valid 12-card deck before you can play. Build one on the Manage Deck tab.
@@ -110,6 +124,7 @@ import Toast from '@/components/Toast.vue'
 import { useOgGtoonsRoomSocket } from '@/composables/useOgGtoonsRoomSocket'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 
+const emit = defineEmits(['start-tutorial'])
 const router = useRouter()
 const {
   lobbyState, joinQueue, leaveQueue, sendChallenge, acceptChallenge, declineChallenge, cancelChallenge
@@ -132,6 +147,8 @@ const challengeStake = ref(0)
 const practiceDifficulty = ref('normal')
 const startingPractice = ref(false)
 const practiceAvailable = ref(true)
+const tutorialAvailable = ref(true)
+const startingTutorial = ref(false)
 
 const validDecks = computed(() => decks.value.filter(d => d.valid))
 const activeIncoming = computed(() => lobbyState.value?.incomingChallenges?.[0] || null)
@@ -139,6 +156,13 @@ const activeIncoming = computed(() => lobbyState.value?.incomingChallenges?.[0] 
 function sendChallengeClick() {
   sendChallenge(challengeTarget.value.trim(), selectedDeckId.value, challengeStake.value)
   challengeTarget.value = ''
+}
+
+// The hub page owns starting the tutorial (it is reachable from every tab); this just asks it to.
+function startTutorialClick() {
+  startingTutorial.value = true
+  emit('start-tutorial')
+  setTimeout(() => { startingTutorial.value = false }, 4000)
 }
 
 function startPracticeClick() {
@@ -152,7 +176,8 @@ function startPracticeClick() {
 watch(lastError, (err) => {
   if (!err) return
   startingPractice.value = false
-  showToast(err.message || 'Could not start practice.', 'error')
+  startingTutorial.value = false
+  showToast(err.message || 'Could not start.', 'error')
 })
 
 watch(currentMatchId, (id) => {
@@ -171,6 +196,7 @@ onMounted(async () => {
   try {
     const cfg = await $fetch('/api/game/oggtoons/config')
     practiceAvailable.value = cfg.practiceEnabled !== false && cfg.gameEnabled !== false
+    tutorialAvailable.value = cfg.gameEnabled !== false
   } catch {
     // Leave it available; the server gates the action either way.
   }

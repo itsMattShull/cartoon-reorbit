@@ -5,6 +5,7 @@ import { isStaleDissolveLaunchJob } from '../utils/dissolveAuctionLaunchStalenes
 import { rarityFloor } from '../utils/auctionPriceSuggestion.js'
 import { isAutoAuctionEligibleRarity } from '../utils/autoAuctionEligibility.js'
 import { logDissolveAuctionError } from '../utils/dissolveAuctionErrorLog.js'
+import { recordPreventedMisfire } from '../utils/dissolveMisfire.js'
 
 const QUEUE_NAME = process.env.DISSOLVE_AUCTION_LAUNCH_QUEUE_KEY || 'dissolveAuctionLaunch'
 const OFFICIAL_USERNAME = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
@@ -32,6 +33,7 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
         userCtoon: {
           select: {
             id: true,
+            ctoonId: true,
             mintNumber: true,
             ctoon: { select: { name: true, rarity: true, series: true, set: true } }
           }
@@ -81,6 +83,21 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
 
       if (existing) return null
 
+      // This entry's own queued-at-dissolve-time ownership can go stale: an admin trade, a
+      // second AuctionOnly listing, or any other path that moves the item out of the official
+      // account's inventory doesn't know to clear this queue entry (see DissolveMisfireLog's own
+      // schema comment). Re-verifying ownership here, inside the same transaction as the delete
+      // above, is what actually closes the hole — whatever let the entry go stale upstream, this
+      // is the one place that would otherwise auction off a real player's cToon out from under
+      // them, so it's the one place that has to check.
+      const currentOwner = await tx.userCtoon.findUnique({
+        where: { id: entry.userCtoonId },
+        select: { userId: true }
+      })
+      if (!currentOwner || currentOwner.userId !== officialUser.id) {
+        return { misfirePrevented: true, rightfulOwnerUserId: currentOwner?.userId ?? null }
+      }
+
       const created = await tx.auction.create({
         data: {
           userCtoonId: entry.userCtoonId,
@@ -102,7 +119,18 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
       return { auctionId: created.id, endAt }
     })
 
-    if (result) {
+    if (result?.misfirePrevented) {
+      if (result.rightfulOwnerUserId) {
+        await recordPreventedMisfire({
+          userCtoonId: entry.userCtoonId,
+          queueEntryId: entry.id,
+          ctoonId: entry.userCtoon?.ctoonId ?? null,
+          ctoonName: entry.userCtoon?.ctoon?.name ?? null,
+          mintNumber: entry.userCtoon?.mintNumber ?? null,
+          rightfulOwnerUserId: result.rightfulOwnerUserId,
+        })
+      }
+    } else if (result) {
       await scheduleAuctionClose(result.auctionId, result.endAt)
     }
   } catch (err) {

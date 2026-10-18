@@ -80,7 +80,7 @@ export const ADMIN_API_SEGMENT_PERMS = {
   'ai-monsters': ['monsters'],
   'all-ctoons': ['ctoons'],
   announcements: ['announcements'],
-  'auction-creators': ['auctions', 'auctionLogs'],
+  'auction-creators': ['auctions'],
   'auction-only': ['auctions'],
   'auction-winners': ['auctionLogs'],
   auctions: ['auctionLogs'],
@@ -140,6 +140,7 @@ export const ADMIN_API_SEGMENT_PERMS = {
   dev: ['production'],
   'device-fingerprint-logs': ['deviceFingerprints'],
   'dissolve-featured-config': ['dissolveQueue'],
+  'dissolve-misfires': ['dissolveQueue'],
   'dissolve-queue': ['dissolveQueue'],
   'duplicate-users': ['cheatFinder'],
   'duplicate-vpn': ['cheatFinder'],
@@ -227,6 +228,26 @@ export const ADMIN_API_SEGMENT_PERMS = {
   'winwheel-sound': ['games']
 }
 
+// Writes to these need the Global Settings tool even though other tools read them (a sub-admin
+// running Manage Games can read the global config but not rewrite it). Reads use the table above.
+const WRITE_ONLY_PERMS = {
+  'global-config': ['globalSettings'],
+  'rarity-defaults': ['globalSettings']
+}
+
+const READ_METHODS = new Set(['GET', 'HEAD'])
+
+// Destructive or value-minting routes inside tools that are otherwise fine to grant. A sub-admin
+// never gets them whichever tools are on: deleting log/job history is evidence tampering, and
+// the other two hand out or destroy owned cToons.
+function isFullOnlyRoute (seg, tail) {
+  if (seg === 'cron-run-logs' && tail[0] === 'delete') return true
+  if (seg === 'queues' && tail[1] === 'clean') return true
+  if (seg === 'ctoons' && tail[1] === 'give-to-official') return true
+  if (seg === 'user-ctoons') return true
+  return false
+}
+
 // Who may list every user. The list is the shared picker/table behind several tools.
 const USER_LIST_PERMS = ['manageUsers', 'checkCheating', 'cheatingTool', 'cMoon', 'authLogs', 'adminChanges']
 
@@ -236,9 +257,8 @@ function usersAccess (rest) {
   const [a, b] = rest
   // Granting or removing admin/sub-admin access is never available to a sub-admin.
   if (b === 'admin-access' || b === 'make-admin' || b === 'remove-admin') return { type: 'full-only' }
-  if (a === 'search' || a === 'transfer' || a === 'transfer-preview' || a === 'transfer-status') {
-    return { type: 'perms', perms: ['manageUsers', 'cMoon'] }
-  }
+  // The user picker is shared with the cMoon award/assign dialogs; account transfer is not.
+  if (a === 'search') return { type: 'perms', perms: ['manageUsers', 'cMoon'] }
   if (b === 'update-cmoon') return { type: 'perms', perms: ['manageUsers', 'cMoon'] }
   return { type: 'perms', perms: ['manageUsers'] }
 }
@@ -280,7 +300,7 @@ export function isScopedAdminPath (normalized) {
  *   { type: 'full-only' }     refused for every sub-admin
  *   { type: 'denied' }        not mapped, so refused (fail closed)
  */
-export function adminApiAccess (normalized) {
+export function adminApiAccess (normalized, method = 'GET') {
   const lower = normalized.toLowerCase()
   if (FULL_ADMIN_ONLY_PATHS.some(p => lower === p || lower.startsWith(p + '/'))) return { type: 'full-only' }
   if (!(lower === '/api/admin' || lower.startsWith('/api/admin/'))) return { type: 'denied' }
@@ -288,6 +308,10 @@ export function adminApiAccess (normalized) {
   if (!rest.length) return { type: 'denied' }
   const [seg, ...tail] = rest
   if (seg === 'users') return usersAccess(tail)
+  if (isFullOnlyRoute(seg, tail)) return { type: 'full-only' }
+  if (!READ_METHODS.has(String(method).toUpperCase()) && Object.prototype.hasOwnProperty.call(WRITE_ONLY_PERMS, seg)) {
+    return { type: 'perms', perms: WRITE_ONLY_PERMS[seg] }
+  }
   const perms = Object.prototype.hasOwnProperty.call(ADMIN_API_SEGMENT_PERMS, seg)
     ? ADMIN_API_SEGMENT_PERMS[seg]
     : null
@@ -296,11 +320,11 @@ export function adminApiAccess (normalized) {
 }
 
 /** Decide one request for a given scope. Returns null when allowed, else a 403 message. */
-export function adminScopeDenial (scope, rawPath) {
+export function adminScopeDenial (scope, rawPath, method = 'GET') {
   if (scope?.full) return null
   const normalized = normalizeAdminApiPath(rawPath)
   if (!isScopedAdminPath(normalized)) return null
-  const access = adminApiAccess(normalized)
+  const access = adminApiAccess(normalized, method)
   if (access.type === 'full-only') return 'Forbidden — Full admins only'
   if (access.type === 'perms' && scopeAllowsAny(scope, access.perms)) return null
   return 'Forbidden — You do not have access to this admin tool'
@@ -308,7 +332,21 @@ export function adminScopeDenial (scope, rawPath) {
 
 // Starting points offered in the Make sub-admin modal. Only a convenience: the admin can still
 // toggle any tool afterwards, and what is saved is always the explicit list.
+// What the earlier fixed "sub-admin" role withheld: user management, trades on behalf of users,
+// the production server, the seizure tools, codes, Auction Only, the dissolve queue and global
+// settings. Everything else stays on. Existing isSubAdmin accounts were migrated to exactly this
+// list (prisma/migrations/20261018130000_sub_admin_permissions).
+export const STANDARD_SUB_ADMIN_WITHHELD = [
+  'manageUsers', 'initiateTrade', 'production', 'cheatingTool', 'checkCheating', 'codes',
+  'auctions', 'dissolveQueue', 'globalSettings'
+]
+
 export const ADMIN_PERMISSION_PRESETS = [
+  {
+    id: 'standard',
+    label: 'Standard sub-admin (all except high-risk tools)',
+    perms: ADMIN_PERMISSION_KEYS.filter(k => !STANDARD_SUB_ADMIN_WITHHELD.includes(k))
+  },
   {
     id: 'moderator',
     label: 'Moderator',

@@ -36,6 +36,6 @@ export default defineEventHandler(async (event) => {
   if (!info?.isAdmin) return // not an admin: the handler's own check refuses
   if (info.scope.full) return
 
-  const denial = adminScopeDenial(info.scope, rawPath)
+  const denial = adminScopeDenial(info.scope, rawPath, event.method)
   if (denial) throw createError({ statusCode: 403, statusMessage: denial })
 })

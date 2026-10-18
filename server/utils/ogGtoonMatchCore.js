@@ -190,23 +190,26 @@ export function phaseDurationMs(match) {
 
 /** Stamps the deadline for the phase the match just entered. */
 export function startPhaseClock(match, now = Date.now()) {
-  match.deadline = now + phaseDurationMs(match)
+  // A match flagged noTimers (the tutorial) has no deadline at all, and its log mentions no clock.
+  const timed = !match.noTimers
+  match.deadline = timed ? now + phaseDurationMs(match) : null
   const secs = Math.round(phaseDurationMs(match) / 1000)
+  const clock = (text) => (timed ? ` ${secs}s (${text}).` : '')
   if (match.phase === 'discard') {
-    logEvent(match, { kind: 'phase', title: 'Discard phase', sections: [{ label: null, lines: [`Throw away any cards you don't want; hands refill to 6. ${secs}s (no discards if time runs out).`] }] })
+    logEvent(match, { kind: 'phase', title: 'Discard phase', sections: [{ label: null, lines: [`Throw away any cards you don't want; hands refill to 6.${clock('no discards if time runs out')}`] }] })
   } else if (match.phase === 'color') {
     logEvent(match, { kind: 'phase', title: 'Silver colour', sections: [{ label: null, lines: [
-      `Silver cards are colourless. Pick the colour your Silver cards count as. ${secs}s (the best colour is picked for you if time runs out).`
+      `Silver cards are colourless. Pick the colour your Silver cards count as.${clock('the best colour is picked for you if time runs out')}`
     ] }] })
   } else if (match.phase === 'swap') {
     logEvent(match, { kind: 'phase', title: 'Round 3 — slot-7 swap', sections: [{ label: null, lines: [
-      `Optional: replace your slot-7 card with a random undealt card (costs ${SWAP_SCORE_PENALTY} points off your match score). ${secs}s (no swap if time runs out).`
+      `Optional: replace your slot-7 card with a random undealt card (costs ${SWAP_SCORE_PENALTY} points off your match score).${clock('no swap if time runs out')}`
     ] }] })
   } else {
     const slots = slotsForRound(match.currentRound)
     const range = slots.length === 1 ? `slot ${slots[0]}` : `slots ${slots[0]}–${slots[slots.length - 1]}`
     logEvent(match, { kind: 'phase', title: isSuddenDeathRound(match.currentRound) ? 'Sudden death' : `Round ${match.currentRound}`, sections: [{ label: null, lines: [
-      `Fill ${range} with ${plural(slots.length, 'card')}. ${secs}s (random cards are placed if time runs out).`
+      `Fill ${range} with ${plural(slots.length, 'card')}.${clock('random cards are placed if time runs out')}`
     ] }] })
   }
 }
@@ -242,6 +245,8 @@ export function publicMatchView(match, uid, opts = {}) {
     roundSlots: slots,
     // Only present on practice matches, so PvP payloads are unchanged.
     ...(match.practice ? { practice: true, difficulty: match.difficulty } : {}),
+    // Only on tutorial matches (which are also practice-flagged: no points, nothing persisted).
+    ...(match.tutorial ? { tutorial: true } : {}),
     you: {
       sideIndex: meIdx,
       userId: uid,

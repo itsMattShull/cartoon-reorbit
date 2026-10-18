@@ -33,6 +33,7 @@ import { registerPokemonBattle, startPokemonBattleSweep } from './utils/pokemonB
 // header of server/utils/ogGtoonsSocket.js for the full rationale.
 import { registerOgGtoons, startOgGtoonsSweep, restoreOgGtoonsMatches } from './utils/ogGtoonsSocket.js'
 import { registerOgGtoonsPractice, startOgGtoonsPracticeSweep } from './utils/ogGtoonsPractice.js'
+import { registerOgGtoonsTutorial, startOgGtoonsTutorialSweep } from './utils/ogGtoonsTutorial.js'
 import { registerCMoonRaid, startCMoonRaidSweep, restoreCMoonRaids } from './utils/cmoonRaidSocket.js'
 import { registerCMoonRaidPreview, startCMoonRaidPreviewSweep } from './utils/cmoonRaidPreviewSocket.js'
 
@@ -1913,6 +1914,9 @@ io.on('connection', socket => {
   // Practice vs. a bot — separate module on purpose (never touches PvP's queue, stakes or
   // persistence); see the header of server/utils/ogGtoonsPractice.js.
   registerOgGtoonsPractice(io, socket, resolveSocketUser)
+  // The guided, scripted tutorial match — also its own module (never touches PvP or points); see
+  // the header of server/utils/ogGtoonsTutorial.js.
+  registerOgGtoonsTutorial(io, socket, resolveSocketUser)
 
   // cMoon Enemy Battles raid boss co-op mode — see server/utils/cmoonRaidSocket.js.
   registerCMoonRaid(io, socket, resolveSocketUser)
@@ -3060,6 +3064,7 @@ startEdRpsAiSweep()
 startPokemonBattleSweep(io)
 startOgGtoonsSweep(io)
 startOgGtoonsPracticeSweep()
+startOgGtoonsTutorialSweep()
 restoreOgGtoonsMatches(io)
   .then(n => { if (n) console.log(`[ogGtoons] restored ${n} in-progress match(es) from Redis`) })
   .catch(err => console.error('[ogGtoons] failed to restore matches from Redis:', err))
