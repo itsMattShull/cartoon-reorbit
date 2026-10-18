@@ -14,6 +14,7 @@ import { rarityFloor } from './auctionPriceSuggestion.js'
 import { sendDiscordDMByDiscordId } from './discord.js'
 import { logAdminChange } from './adminChangeLog.js'
 import { DISSOLVE_METHODS } from './dissolveMisfire.js'
+import { cancelAuctionClose } from './queues.js'
 
 export const DISSOLVE_MISFIRE_CORRECTION_METHOD = 'DISSOLVE_MISFIRE_CORRECTION'
 
@@ -49,15 +50,27 @@ export async function computeRemediationPlan(misfireLogId) {
   if (!uc) return { blocked: 'This UserCtoon no longer exists.' }
   if (uc.burnedAt) return { blocked: 'This cToon copy has been burned and no longer exists to restore.' }
 
-  // Never auto-transfer ownership out from under a currently-live auction (bidders may already
-  // hold locked points against it). An admin needs to cancel it first, then re-scan/resolve.
-  const activeAuction = await prisma.auction.findFirst({
-    where: { userCtoonId, status: 'ACTIVE' },
-    select: { id: true }
-  })
-  if (activeAuction) {
-    return { blocked: `An auction (${activeAuction.id}) is still active for this cToon — cancel it first, then re-run the scan.` }
-  }
+  // A live auction or pending trade involving this cToon no longer blocks the fix: the resolve
+  // cancels the auction (releasing every bidder's locked points) and withdraws the trade offers,
+  // and whoever listed/initiated them is compensated like everyone else who held the cToon.
+  const [activeAuctions, pendingTradeLinks] = await Promise.all([
+    prisma.auction.findMany({
+      where: { userCtoonId, status: 'ACTIVE' },
+      select: { id: true, creatorId: true, creator: { select: { username: true } } }
+    }),
+    prisma.tradeOfferCtoon.findMany({
+      where: { userCtoonId, tradeOffer: { status: 'PENDING' } },
+      select: {
+        role: true,
+        tradeOffer: {
+          select: {
+            id: true, initiatorId: true,
+            initiator: { select: { username: true } }
+          }
+        }
+      }
+    })
+  ])
 
   const history = await prisma.ctoonOwnerLog.findMany({
     where: { userCtoonId },
@@ -125,6 +138,31 @@ export async function computeRemediationPlan(misfireLogId) {
     return { blocked: 'Could not determine who to compensate — ownership history is inconsistent.' }
   }
 
+  // Cleanup of conflicting auctions/trades. People who weren't already owed compensation as a
+  // holder (e.g. a trade initiator asking for the cToon) are added; holders are already covered.
+  const cancelAuctions = activeAuctions.map(a => ({ id: a.id, creatorId: a.creatorId ?? null }))
+  const withdrawTradeOffers = []
+  const seenOffers = new Set()
+  for (const link of pendingTradeLinks) {
+    const o = link.tradeOffer
+    if (seenOffers.has(o.id)) continue
+    seenOffers.add(o.id)
+    withdrawTradeOffers.push({ id: o.id, initiatorId: o.initiatorId })
+  }
+  const cleanupExtras = []
+  for (const a of activeAuctions) {
+    if (a.creatorId) cleanupExtras.push({ userId: a.creatorId, username: a.creator?.username ?? null, what: 'auction was cancelled' })
+  }
+  for (const link of pendingTradeLinks) {
+    const o = link.tradeOffer
+    if (o.initiatorId) cleanupExtras.push({ userId: o.initiatorId, username: o.initiator?.username ?? null, what: 'trade offer was withdrawn' })
+  }
+  const extraWhy = new Map()
+  for (const x of cleanupExtras) {
+    if (x.userId === originalWinner.userId || compensationMap.has(x.userId) || extraWhy.has(x.userId)) continue
+    extraWhy.set(x.userId, x)
+  }
+
   const ctoonId = uc.ctoonId
   const [auctionRefs, cmartPrices] = await Promise.all([
     getAuctionReferenceValues([ctoonId]),
@@ -165,6 +203,18 @@ export async function computeRemediationPlan(misfireLogId) {
     }
   }
 
+  for (const x of extraWhy.values()) {
+    compensations.push({
+      userId: x.userId,
+      username: x.username,
+      basePoints: approxValue,
+      multiplier: COMPENSATION_MULTIPLIER,
+      points: approxValue * COMPENSATION_MULTIPLIER,
+      reason: `Double the approximate value of the cToon (${COMPENSATION_MULTIPLIER}x) — their ${x.what} so it could be returned to its original winner.`,
+      basis: approxBasis
+    })
+  }
+
   const totalCompensationPoints = compensations.reduce((sum, c) => sum + c.points, 0)
 
   return {
@@ -176,7 +226,9 @@ export async function computeRemediationPlan(misfireLogId) {
     originalWinner,
     currentOwnerId,
     compensations,
-    totalCompensationPoints
+    totalCompensationPoints,
+    cancelAuctions,
+    withdrawTradeOffers
   }
 }
 
@@ -233,11 +285,43 @@ export async function executeRemediationPlan(plan, { adminId, adminUsername }) {
     if (uc.userId !== plan.currentOwnerId) {
       throw new Error('Ownership changed since this plan was computed — re-run the preview.')
     }
-    const activeAuction = await tx.auction.findFirst({
+    // Cancel conflicting auctions / withdraw conflicting trades. Anything that appeared since the
+    // plan was computed has no compensation entry, so abort rather than silently wrong someone.
+    const planAuctionIds = (plan.cancelAuctions || []).map(a => a.id)
+    const planOfferIds = (plan.withdrawTradeOffers || []).map(o => o.id)
+    const liveAuctions = await tx.auction.findMany({
       where: { userCtoonId: plan.userCtoonId, status: 'ACTIVE' },
       select: { id: true }
     })
-    if (activeAuction) throw new Error(`Auction ${activeAuction.id} is now active for this cToon — aborting.`)
+    const livePendingOffers = await tx.tradeOffer.findMany({
+      where: { status: 'PENDING', ctoons: { some: { userCtoonId: plan.userCtoonId } } },
+      select: { id: true }
+    })
+    const newAuction = liveAuctions.find(a => !planAuctionIds.includes(a.id))
+    if (newAuction) throw new Error(`Auction ${newAuction.id} became active for this cToon since the preview — re-run it.`)
+    const newOffer = livePendingOffers.find(o => !planOfferIds.includes(o.id))
+    if (newOffer) throw new Error(`Trade offer ${newOffer.id} became pending for this cToon since the preview — re-run it.`)
+
+    const liveAuctionIds = liveAuctions.map(a => a.id)
+    if (liveAuctionIds.length) {
+      await tx.auction.updateMany({ where: { id: { in: liveAuctionIds }, status: 'ACTIVE' }, data: { status: 'CANCELLED' } })
+      await tx.lockedPoints.updateMany({
+        where: { status: 'ACTIVE', contextType: 'AUCTION', contextId: { in: liveAuctionIds } },
+        data: { status: 'RELEASED' }
+      })
+      await tx.auctionAutoBid.updateMany({ where: { auctionId: { in: liveAuctionIds } }, data: { isActive: false } })
+    }
+    const liveOfferIds = livePendingOffers.map(o => o.id)
+    if (liveOfferIds.length) {
+      await tx.tradeOffer.updateMany({
+        where: { id: { in: liveOfferIds }, status: 'PENDING' },
+        data: { status: 'WITHDRAWN', updatedAt: new Date() }
+      })
+      await tx.lockedPoints.updateMany({
+        where: { status: 'ACTIVE', contextType: 'TRADE', contextId: { in: liveOfferIds } },
+        data: { status: 'RELEASED' }
+      })
+    }
 
     await tx.userCtoon.update({
       where: { id: plan.userCtoonId },
@@ -275,7 +359,9 @@ export async function executeRemediationPlan(plan, { adminId, adminUsername }) {
     const summary = {
       originalWinner: plan.originalWinner,
       compensations: plan.compensations,
-      totalCompensationPoints: plan.totalCompensationPoints
+      totalCompensationPoints: plan.totalCompensationPoints,
+      cancelledAuctionIds: liveAuctionIds,
+      withdrawnTradeOfferIds: liveOfferIds
     }
 
     await tx.dissolveMisfireLog.update({
@@ -300,6 +386,10 @@ export async function executeRemediationPlan(plan, { adminId, adminUsername }) {
     prevValue: { misfireLogId: plan.misfireLogId, currentOwnerId: plan.currentOwnerId },
     newValue: resolutionSummary
   })
+
+  for (const auctionId of resolutionSummary.cancelledAuctionIds || []) {
+    cancelAuctionClose(auctionId).catch(() => {})
+  }
 
   notifyRemediationParties(plan).catch(() => {})
 
