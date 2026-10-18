@@ -3208,6 +3208,53 @@ model DissolveAuctionErrorLog {
   @@index([createdAt])
 }
 
+// A dissolve-auction misfire: a cToon that left the official account's inventory (traded away by
+// an admin, scheduled into a second AuctionOnly listing, etc.) WITHOUT its DissolveAuctionQueue
+// entry being cleared, so the queue's own scheduled launch later tried to auction it off again —
+// out from under whichever real player actually owned it by then. See
+// server/workers/dissolve-auction-launch.worker.js's own ownership re-check (the fix for this)
+// and server/utils/dissolveMisfireAudit.js (the scan that finds cases that already happened
+// before that fix existed). One row per detected case, regardless of source:
+//   PREVENTED          — the worker's ownership check caught it before creating a bogus auction.
+//   HISTORICAL_ACTIVE  — found by the audit scan; a bogus auction exists and is still ACTIVE.
+//   HISTORICAL_RESOLVED — found by the audit scan; the bogus auction already closed with a winner
+//                          who is not the rightful owner — the case that actually needs undoing.
+model DissolveMisfireLog {
+  id          String  @id @default(uuid())
+  userCtoonId String?
+  ctoonId     String?
+  ctoonName   String?
+  mintNumber  Int?
+  // Who actually, legitimately owned this item at the moment of the misfire, per the most recent
+  // CtoonOwnerLog row for it before the bogus event — the person an admin needs to make whole.
+  rightfulOwnerUserId   String?
+  rightfulOwnerUsername String?
+  rightfulOwnerSince    DateTime? // that CtoonOwnerLog row's own createdAt
+  rightfulOwnerMethod   String?   // that row's own method (TRADE/AUCTION/ADMIN_GRANT/...)
+  source         String // PREVENTED | HISTORICAL_ACTIVE | HISTORICAL_RESOLVED
+  queueEntryId   String? // best-effort reference, same caveat as DissolveAuctionErrorLog's own field
+  bogusAuctionId String? // null for PREVENTED (no auction was ever created)
+  // Only set for HISTORICAL_RESOLVED — who the bogus auction actually paid out to, and what they
+  // paid, so an admin can see both sides of what needs reversing.
+  wrongWinnerUserId     String?
+  wrongWinnerUsername   String?
+  wrongWinnerPaidPoints Int?
+  detectedAt         DateTime  @default(now())
+  reviewedAt         DateTime?
+  reviewedByUserId   String?
+  reviewedByUsername String?
+  reviewNote         String?
+  resolvedAt              DateTime?
+  resolvedByUserId        String?
+  resolvedByUsername      String?
+  resolutionSummary       Json?   // the executed plan: originalWinner, each compensation {userId, username, points, reason, basis}, totalCompensationPoints
+  resolutionBlockedReason String? // set (reviewedAt left null) when the remediation algorithm can't auto-resolve it — distinct from "not yet attempted"
+
+  @@unique([bogusAuctionId]) // lets the audit scan be re-run safely (upsert, no duplicate rows) — multiple PREVENTED rows with a null bogusAuctionId are unaffected, Postgres allows multiple NULLs in a unique index
+  @@index([detectedAt])
+  @@index([reviewedAt])
+}
+
 model HomepageConfig {
   id                      String   @id
   topLeftImagePath        String?
