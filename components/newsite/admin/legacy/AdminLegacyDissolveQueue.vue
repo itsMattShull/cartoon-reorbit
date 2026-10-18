@@ -458,6 +458,7 @@
           </p>
           <p v-if="misfireScanResult" class="text-[11px] mb-2" :class="misfireScanResult.found ? 'text-red-700 font-medium' : 'text-green-700'">
             Scanned {{ misfireScanResult.scanned }} official-account auction(s) — found {{ misfireScanResult.found }} new misfire(s).
+            <span v-if="misfireScanResult.prunedFalsePositives">Removed {{ misfireScanResult.prunedFalsePositives }} previously-flagged row(s) that turned out not to be real misfires.</span>
           </p>
 
           <div v-if="resolveRunning || resolveStatus === 'completed' || resolveStatus === 'failed'" class="border rounded-md p-2.5 space-y-2 mb-2">
