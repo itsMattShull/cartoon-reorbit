@@ -21,7 +21,14 @@
 //
 // Idempotent: a card is skipped when an original gToon with the same name + set already exists.
 //
+// IMPORTANT: on a server that serves images from the sibling cartoon-reorbit-images/ folder (the
+// production layout used by the deployed sites, including a deployed "dev" site), run with
+// NODE_ENV=production so files and assetPath ("/images/cToons/...") match what the admin page
+// writes there. Without it the script uses the local-dev layout (public/cToons, "/cToons/...").
+// Re-running with NODE_ENV=production also repairs cards an earlier dev-layout run created.
+//
 // Usage:  node prisma/createOgGtoonsFromCsv.js
+//         NODE_ENV=production node prisma/createOgGtoonsFromCsv.js
 //         DRY_RUN=true node prisma/createOgGtoonsFromCsv.js    # validate only: no DB, no file moves
 //         IMAGES_BASE_DIR=/srv/app node prisma/createOgGtoonsFromCsv.js   # override image root
 
@@ -132,6 +139,28 @@ function buildCard(r) {
 
 const exists = p => access(p).then(() => true, () => false)
 
+/**
+ * Fixes a card an earlier run created in dev layout (assetPath "/cToons/..." with the file in the
+ * repo's public/cToons) when this run is in production layout (served from the sibling
+ * cartoon-reorbit-images/ folder under "/images/cToons/..."): moves the file and updates assetPath.
+ */
+async function repairAssetPath(prisma, ctoon) {
+  if (!IS_PROD || !ctoon.assetPath?.startsWith('/cToons/')) return false
+  const rel = ctoon.assetPath.slice('/cToons/'.length)
+  const from = join(process.cwd(), 'public', 'cToons', rel)
+  const to = join(BASE_DIR, 'cartoon-reorbit-images', 'cToons', rel)
+  if (await exists(from)) {
+    await mkdir(dirname(to), { recursive: true })
+    await copyFile(from, to)
+    await unlink(from)
+  } else if (!(await exists(to))) {
+    console.warn(`  ! "${ctoon.name}": image missing at both ${from} and ${to}`)
+    return false
+  }
+  await prisma.ctoon.update({ where: { id: ctoon.id }, data: { assetPath: `/images/cToons/${rel}` } })
+  return true
+}
+
 async function main() {
   const cards = parseCsv(await readFile(join(DATA_DIR, 'gtoons-cards.csv'), 'utf8')).map(buildCard)
   const imageMap = JSON.parse(await readFile(join(DATA_DIR, 'card-images.json'), 'utf8'))
@@ -149,6 +178,7 @@ async function main() {
   }
 
   const { prisma } = await import('../server/prisma.js')
+  console.log(`Mode: ${IS_PROD ? 'PRODUCTION' : 'DEVELOPMENT'} layout (NODE_ENV=${process.env.NODE_ENV || 'unset'}). Images go to ${IS_PROD ? join(BASE_DIR, 'cartoon-reorbit-images', 'cToons') : join(BASE_DIR, 'public', 'cToons')}`)
   try {
     let finalDelayHours = 12, initialPercent = 75, rarityDefaults = RARITY_DEFAULTS
     const cfg = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' } }).catch(() => null)
@@ -160,11 +190,15 @@ async function main() {
 
     const releaseDate = new Date(Date.now() + 5 * 60 * 1000)
     const finalReleaseAt = new Date(releaseDate.getTime() + finalDelayHours * 60 * 60 * 1000)
-    let created = 0, skipped = 0, placeholders = 0
+    let created = 0, skipped = 0, repaired = 0, placeholders = 0
 
     for (const c of cards) {
-      const dup = await prisma.ctoon.findFirst({ where: { name: c.name, set: c.set, isOgGtoon: true }, select: { id: true } })
-      if (dup) { skipped++; console.log(`  • "${c.name}" (${c.set}) already exists — skipping`); continue }
+      const dup = await prisma.ctoon.findFirst({ where: { name: c.name, set: c.set, isOgGtoon: true }, select: { id: true, name: true, assetPath: true } })
+      if (dup) {
+        if (await repairAssetPath(prisma, dup)) { repaired++; console.log(`  • "${c.name}" already exists — moved its image to the production images folder`) }
+        else { skipped++; console.log(`  • "${c.name}" (${c.set}) already exists — skipping`) }
+        continue
+      }
 
       // ── image: move from public/cards (or copy the placeholder) into the cToons folder ──
       const srcName = imageMap[c.name]
@@ -232,7 +266,7 @@ async function main() {
       created++
       console.log(`  • Created "${c.name}" [${c.set}]${usePlaceholder ? ' (placeholder image)' : ''}`)
     }
-    console.log(`✅ Done: ${created} created (${placeholders} with placeholder images), ${skipped} skipped.`)
+    console.log(`✅ Done: ${created} created (${placeholders} with placeholder images), ${skipped} skipped, ${repaired} image paths repaired.`)
   } finally {
     await prisma.$disconnect()
   }
