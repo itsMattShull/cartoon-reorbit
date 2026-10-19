@@ -484,8 +484,11 @@
 
     <!-- Misfires modal: cToons a scheduled dissolve auction tried to (or did) auction off after
          the item had already legitimately changed hands — see DissolveMisfireLog's own schema
-         comment for the full story. -->
-    <div v-if="showMisfiresModal" class="fixed inset-0 z-[1000] flex items-center justify-center p-2 bg-black/50" @click.self="closeMisfiresModal">
+         comment for the full story. Teleported to <body>: the layout's `.site-container` is
+         transform-scaled on desktop, which traps `fixed` descendants in its own stacking context
+         (z-index only competes inside it) and sizes them to the container rather than the viewport. -->
+    <Teleport to="body">
+    <div v-if="showMisfiresModal" class="fixed inset-0 z-[10001] flex items-center justify-center p-2 bg-black/50" @click.self="closeMisfiresModal">
       <div class="relative bg-white w-full max-w-3xl rounded-lg shadow-lg flex flex-col max-h-[calc(100dvh-1rem)] overflow-hidden">
         <div class="px-4 py-3 border-b flex-shrink-0 flex flex-wrap items-center justify-between gap-2">
           <h2 class="text-sm font-semibold">Dissolve Auction Misfires</h2>
@@ -663,6 +666,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
 
     <!-- Reschedule error modal: surfaces details when a reschedule save fails -->
     <div v-if="showRescheduleErrorModal" class="fixed inset-0 z-50 flex items-center justify-center p-2 bg-black/50" @click.self="closeRescheduleErrorModal">
