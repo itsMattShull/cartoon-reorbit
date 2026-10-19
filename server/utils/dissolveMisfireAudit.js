@@ -10,9 +10,10 @@ import { findRightfulOwnerBefore, hasDissolveEventBefore } from './dissolveMisfi
 /**
  * Scans every auction the official account ever created for a case where chain-of-custody
  * (CtoonOwnerLog) shows a different, real player legitimately owned the item immediately before
- * that auction was created — the historical signature of the bug. Idempotent: upserts on
+ * that auction was created — the historical signature of the bug. Idempotent: keyed on
  * (bogusAuctionId), so re-running this never creates duplicate rows or disturbs an already-
- * reviewed one.
+ * reviewed one. An existing unresolved row only has its auction-state snapshot refreshed; one
+ * resolved as "already correct" is re-opened if its auction has since sold the item.
  *
  * Only ACTIVE auctions (still locked right now, recoverable by cancelling) and CLOSED auctions
  * with a winner (the item already changed hands to a third party — the case that actually needs
@@ -60,6 +61,7 @@ export async function scanForHistoricalMisfires() {
 
   let found = 0
   let prunedFalsePositives = 0
+  let reopened = 0
   for (const a of candidates) {
     if (!a.userCtoon) continue
     const rightfulOwner = await findRightfulOwnerBefore(prisma, a.userCtoon.id, a.createdAt)
@@ -85,10 +87,42 @@ export async function scanForHistoricalMisfires() {
     }
 
     found++
-    await prisma.dissolveMisfireLog.upsert({
-      where: { bogusAuctionId: a.id },
-      update: {}, // leave an already-logged row (and any admin review on it) exactly as it is
-      create: {
+    const source = a.status === 'ACTIVE' ? 'HISTORICAL_ACTIVE' : 'HISTORICAL_RESOLVED'
+    const wrongWinner = {
+      wrongWinnerUserId: a.status === 'CLOSED' ? a.winnerId : null,
+      wrongWinnerUsername: a.status === 'CLOSED' ? (a.winner?.username ?? null) : null,
+      wrongWinnerPaidPoints: a.status === 'CLOSED' ? a.highestBid : null,
+    }
+    const existing = await prisma.dissolveMisfireLog.findUnique({ where: { bogusAuctionId: a.id } })
+
+    if (existing) {
+      // The auction's state moves on after the row is first logged (ACTIVE -> CLOSED with a winner),
+      // so a row that's still unresolved needs its source / wrong-winner snapshot brought current —
+      // otherwise it keeps claiming "Still Active" and the remediation would never see who was
+      // actually paid out. Admin review fields are never touched.
+      if (!existing.resolvedAt) {
+        await prisma.dissolveMisfireLog.update({ where: { id: existing.id }, data: { source, ...wrongWinner } })
+      } else if (existing.resolutionSummary?.alreadyCorrect && a.status === 'CLOSED' && a.winnerId) {
+        // An earlier resolve closed this out as "owner already correct" while the bogus auction was
+        // still live; it has since settled and moved the item to the wrong winner, so that
+        // resolution no longer holds. Re-open it (resolved + reviewed state cleared) so the
+        // restore + compensation can actually run.
+        await prisma.dissolveMisfireLog.update({
+          where: { id: existing.id },
+          data: {
+            source, ...wrongWinner,
+            resolvedAt: null, resolvedByUserId: null, resolvedByUsername: null, resolutionSummary: null,
+            resolutionBlockedReason: null,
+            reviewedAt: null, reviewedByUserId: null, reviewedByUsername: null, reviewNote: null
+          }
+        })
+        reopened++
+      }
+      continue
+    }
+
+    await prisma.dissolveMisfireLog.create({
+      data: {
         userCtoonId: a.userCtoon.id,
         ctoonId: a.userCtoon.ctoonId,
         ctoonName: a.userCtoon.ctoon?.name ?? null,
@@ -97,13 +131,11 @@ export async function scanForHistoricalMisfires() {
         rightfulOwnerUsername: rightfulOwner.username,
         rightfulOwnerSince: rightfulOwner.since,
         rightfulOwnerMethod: rightfulOwner.method,
-        source: a.status === 'ACTIVE' ? 'HISTORICAL_ACTIVE' : 'HISTORICAL_RESOLVED',
+        source,
         bogusAuctionId: a.id,
-        wrongWinnerUserId: a.status === 'CLOSED' ? a.winnerId : null,
-        wrongWinnerUsername: a.status === 'CLOSED' ? (a.winner?.username ?? null) : null,
-        wrongWinnerPaidPoints: a.status === 'CLOSED' ? a.highestBid : null,
+        ...wrongWinner,
       }
     })
   }
-  return { scanned: candidates.length, found, prunedFalsePositives }
+  return { scanned: candidates.length, found, prunedFalsePositives, reopened }
 }

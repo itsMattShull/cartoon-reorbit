@@ -53,7 +53,7 @@ export async function computeRemediationPlan(misfireLogId) {
   // A live auction or pending trade involving this cToon no longer blocks the fix: the resolve
   // cancels the auction (releasing every bidder's locked points) and withdraws the trade offers,
   // and whoever listed/initiated them is compensated like everyone else who held the cToon.
-  const [activeAuctions, pendingTradeLinks] = await Promise.all([
+  const [activeAuctions, pendingTradeLinks, bogusAuctionRow] = await Promise.all([
     prisma.auction.findMany({
       where: { userCtoonId, status: 'ACTIVE' },
       select: { id: true, creatorId: true, creator: { select: { username: true } } }
@@ -69,8 +69,22 @@ export async function computeRemediationPlan(misfireLogId) {
           }
         }
       }
-    })
+    }),
+    // Live state of the bogus auction. The logged wrongWinner* fields are a snapshot from when
+    // the scan first saw the row — a misfire detected while its auction was still ACTIVE has none,
+    // even if that auction has since closed and paid out to someone.
+    misfire.bogusAuctionId
+      ? prisma.auction.findUnique({
+          where: { id: misfire.bogusAuctionId },
+          select: { status: true, winnerId: true, highestBid: true }
+        })
+      : Promise.resolve(null)
   ])
+
+  const wrongWinnerUserId = misfire.wrongWinnerUserId
+    ?? (bogusAuctionRow?.status === 'CLOSED' ? bogusAuctionRow.winnerId : null)
+  const wrongWinnerPaidPoints = misfire.wrongWinnerPaidPoints
+    ?? (bogusAuctionRow?.status === 'CLOSED' && bogusAuctionRow.winnerId ? bogusAuctionRow.highestBid : null)
 
   const history = await prisma.ctoonOwnerLog.findMany({
     where: { userCtoonId },
@@ -114,7 +128,30 @@ export async function computeRemediationPlan(misfireLogId) {
 
   const currentOwnerId = uc.userId
   if (currentOwnerId === originalWinner.userId) {
-    return { alreadyCorrect: true, misfireLogId, originalWinner, currentOwnerId }
+    // The owner matching is NOT the same as "nothing to fix" when this misfire's bogus auction is
+    // still ACTIVE: an ACTIVE auction doesn't move the item until it closes, so the rightful owner
+    // still holds it right now — but the auction-close worker will hand it to the top bidder
+    // regardless of who owns it at that moment. Marking this resolved without cancelling that
+    // auction just lets the misfire complete after the fact. Cancel only the bogus auction here
+    // (not any other listing/trade the owner may legitimately have made since).
+    const bogusAuction = misfire.bogusAuctionId ? activeAuctions.find(a => a.id === misfire.bogusAuctionId) : null
+    if (!bogusAuction) {
+      return { alreadyCorrect: true, misfireLogId, originalWinner, currentOwnerId }
+    }
+    return {
+      misfireLogId,
+      userCtoonId,
+      ctoonId: uc.ctoonId,
+      ctoonName: uc.ctoon?.name ?? misfire.ctoonName ?? null,
+      mintNumber: uc.mintNumber ?? misfire.mintNumber ?? null,
+      originalWinner,
+      currentOwnerId,
+      restoreItem: false,
+      compensations: [],
+      totalCompensationPoints: 0,
+      cancelAuctions: [{ id: bogusAuction.id, creatorId: bogusAuction.creatorId ?? null }],
+      withdrawTradeOffers: []
+    }
   }
 
   // Every distinct person who held it since (besides the original winner), in the order first
@@ -157,9 +194,15 @@ export async function computeRemediationPlan(misfireLogId) {
     const o = link.tradeOffer
     if (o.initiatorId) cleanupExtras.push({ userId: o.initiatorId, username: o.initiator?.username ?? null, what: 'trade offer was withdrawn' })
   }
+  // The bogus auction itself is listed under the official account — it was never a real seller
+  // who lost something, so it must not be paid "compensation" for its own cancelled listing.
+  const official = await prisma.user.findUnique({
+    where: { username: process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial' },
+    select: { id: true }
+  })
   const extraWhy = new Map()
   for (const x of cleanupExtras) {
-    if (x.userId === originalWinner.userId || compensationMap.has(x.userId) || extraWhy.has(x.userId)) continue
+    if (x.userId === originalWinner.userId || x.userId === official?.id || compensationMap.has(x.userId) || extraWhy.has(x.userId)) continue
     extraWhy.set(x.userId, x)
   }
 
@@ -176,11 +219,11 @@ export async function computeRemediationPlan(misfireLogId) {
 
   const compensations = []
   for (const person of compensationMap.values()) {
-    const isWrongWinner = misfire.wrongWinnerUserId
-      && person.userId === misfire.wrongWinnerUserId
-      && misfire.wrongWinnerPaidPoints != null
+    const isWrongWinner = wrongWinnerUserId
+      && person.userId === wrongWinnerUserId
+      && wrongWinnerPaidPoints != null
     if (isWrongWinner) {
-      const basePoints = misfire.wrongWinnerPaidPoints
+      const basePoints = wrongWinnerPaidPoints
       compensations.push({
         userId: person.userId,
         username: person.username,
@@ -289,18 +332,27 @@ export async function executeRemediationPlan(plan, { adminId, adminUsername }) {
     // plan was computed has no compensation entry, so abort rather than silently wrong someone.
     const planAuctionIds = (plan.cancelAuctions || []).map(a => a.id)
     const planOfferIds = (plan.withdrawTradeOffers || []).map(o => o.id)
-    const liveAuctions = await tx.auction.findMany({
+    // A cancel-only plan (restoreItem: false — the rightful owner already holds the item, only the
+    // still-live bogus auction needs stopping) touches nothing but the auctions it names; the
+    // owner's other listings/trades are theirs and aren't ours to cancel or to abort over.
+    const cancelOnly = plan.restoreItem === false
+    const activeAuctionsNow = await tx.auction.findMany({
       where: { userCtoonId: plan.userCtoonId, status: 'ACTIVE' },
       select: { id: true }
     })
-    const livePendingOffers = await tx.tradeOffer.findMany({
+    const liveAuctions = cancelOnly ? activeAuctionsNow.filter(a => planAuctionIds.includes(a.id)) : activeAuctionsNow
+    const livePendingOffers = cancelOnly ? [] : await tx.tradeOffer.findMany({
       where: { status: 'PENDING', ctoons: { some: { userCtoonId: plan.userCtoonId } } },
       select: { id: true }
     })
-    const newAuction = liveAuctions.find(a => !planAuctionIds.includes(a.id))
-    if (newAuction) throw new Error(`Auction ${newAuction.id} became active for this cToon since the preview — re-run it.`)
-    const newOffer = livePendingOffers.find(o => !planOfferIds.includes(o.id))
-    if (newOffer) throw new Error(`Trade offer ${newOffer.id} became pending for this cToon since the preview — re-run it.`)
+    if (!cancelOnly) {
+      const newAuction = liveAuctions.find(a => !planAuctionIds.includes(a.id))
+      if (newAuction) throw new Error(`Auction ${newAuction.id} became active for this cToon since the preview — re-run it.`)
+      const newOffer = livePendingOffers.find(o => !planOfferIds.includes(o.id))
+      if (newOffer) throw new Error(`Trade offer ${newOffer.id} became pending for this cToon since the preview — re-run it.`)
+    } else if (!liveAuctions.length) {
+      throw new Error('The bogus auction is no longer active since the preview — re-run it.')
+    }
 
     const liveAuctionIds = liveAuctions.map(a => a.id)
     if (liveAuctionIds.length) {
@@ -323,21 +375,27 @@ export async function executeRemediationPlan(plan, { adminId, adminUsername }) {
       })
     }
 
+    // isTradeable is re-enabled either way: the launch worker locked it when it created the bogus
+    // auction, and nothing else unlocks it once that auction is cancelled.
     await tx.userCtoon.update({
       where: { id: plan.userCtoonId },
-      data: { userId: plan.originalWinner.userId, isTradeable: true }
+      data: cancelOnly
+        ? { isTradeable: true }
+        : { userId: plan.originalWinner.userId, isTradeable: true }
     })
 
-    await tx.ctoonOwnerLog.create({
-      data: {
-        userId: plan.originalWinner.userId,
-        ctoonId: plan.ctoonId,
-        userCtoonId: plan.userCtoonId,
-        mintNumber: plan.mintNumber,
-        method: DISSOLVE_MISFIRE_CORRECTION_METHOD,
-        counterpartyUserId: plan.currentOwnerId
-      }
-    })
+    if (!cancelOnly) {
+      await tx.ctoonOwnerLog.create({
+        data: {
+          userId: plan.originalWinner.userId,
+          ctoonId: plan.ctoonId,
+          userCtoonId: plan.userCtoonId,
+          mintNumber: plan.mintNumber,
+          method: DISSOLVE_MISFIRE_CORRECTION_METHOD,
+          counterpartyUserId: plan.currentOwnerId
+        }
+      })
+    }
 
     for (const comp of plan.compensations) {
       const updated = await tx.userPoints.upsert({
@@ -357,6 +415,7 @@ export async function executeRemediationPlan(plan, { adminId, adminUsername }) {
     }
 
     const summary = {
+      restoreItem: !cancelOnly,
       originalWinner: plan.originalWinner,
       compensations: plan.compensations,
       totalCompensationPoints: plan.totalCompensationPoints,
@@ -391,7 +450,8 @@ export async function executeRemediationPlan(plan, { adminId, adminUsername }) {
     cancelAuctionClose(auctionId).catch(() => {})
   }
 
-  notifyRemediationParties(plan).catch(() => {})
+  // Nobody was dispossessed or paid on a cancel-only resolve, so there's nothing to tell anyone.
+  if (plan.restoreItem !== false) notifyRemediationParties(plan).catch(() => {})
 
   return resolutionSummary
 }

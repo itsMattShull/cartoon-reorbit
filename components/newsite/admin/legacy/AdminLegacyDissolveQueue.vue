@@ -484,8 +484,11 @@
 
     <!-- Misfires modal: cToons a scheduled dissolve auction tried to (or did) auction off after
          the item had already legitimately changed hands — see DissolveMisfireLog's own schema
-         comment for the full story. -->
-    <div v-if="showMisfiresModal" class="fixed inset-0 z-[1000] flex items-center justify-center p-2 bg-black/50" @click.self="closeMisfiresModal">
+         comment for the full story. Teleported to <body>: the layout's `.site-container` is
+         transform-scaled on desktop, which traps `fixed` descendants in its own stacking context
+         (z-index only competes inside it) and sizes them to the container rather than the viewport. -->
+    <Teleport to="body">
+    <div v-if="showMisfiresModal" class="fixed inset-0 z-[10001] flex items-center justify-center p-2 bg-black/50" @click.self="closeMisfiresModal">
       <div class="relative bg-white w-full max-w-3xl rounded-lg shadow-lg flex flex-col max-h-[calc(100dvh-1rem)] overflow-hidden">
         <div class="px-4 py-3 border-b flex-shrink-0 flex flex-wrap items-center justify-between gap-2">
           <h2 class="text-sm font-semibold">Dissolve Auction Misfires</h2>
@@ -517,6 +520,7 @@
           </p>
           <p v-if="misfireScanResult" class="text-[11px] mb-2" :class="misfireScanResult.found ? 'text-red-700 font-medium' : 'text-green-700'">
             Scanned {{ misfireScanResult.scanned }} official-account auction(s) — found {{ misfireScanResult.found }} new misfire(s).
+            <span v-if="misfireScanResult.reopened">Re-opened {{ misfireScanResult.reopened }} row(s) that had been closed out while their auction was still live and has since sold the cToon. </span>
             <span v-if="misfireScanResult.prunedFalsePositives">Removed {{ misfireScanResult.prunedFalsePositives }} previously-flagged row(s) that turned out not to be real misfires.</span>
           </p>
 
@@ -585,6 +589,9 @@
                   <template v-if="m.resolutionSummary?.alreadyCorrect">
                     <p class="text-indigo-700/80">Current owner already matched the original winner — no changes were needed.</p>
                   </template>
+                  <template v-else-if="m.resolutionSummary?.restoreItem === false">
+                    <p>Cancelled the still-live bogus auction — <span class="font-medium">{{ m.resolutionSummary.originalWinner.username }}</span> already held the cToon, so no transfer was needed.</p>
+                  </template>
                   <template v-else-if="m.resolutionSummary?.originalWinner">
                     <p>Restored to <span class="font-medium">{{ m.resolutionSummary.originalWinner.username }}</span>
                       (won via {{ m.resolutionSummary.originalWinner.method }}).</p>
@@ -608,7 +615,10 @@
                   >Mark Resolved</button>
                 </div>
                 <div v-else-if="misfirePreviews[m.id]" class="text-[11px] bg-indigo-50 border border-indigo-200 rounded p-2 mt-1.5 space-y-1">
-                  <p>
+                  <p v-if="misfirePreviews[m.id].restoreItem === false">
+                    <span class="font-medium">{{ misfirePreviews[m.id].originalWinner.username }}</span> still holds the cToon, but the bogus auction is still live and would hand it to the top bidder when it closes.
+                  </p>
+                  <p v-else>
                     Will restore to <span class="font-medium">{{ misfirePreviews[m.id].originalWinner.username }}</span>
                     (won via {{ misfirePreviews[m.id].originalWinner.method }} on {{ fmtCST(misfirePreviews[m.id].originalWinner.since) }}).
                   </p>
@@ -656,6 +666,7 @@
         </div>
       </div>
     </div>
+    </Teleport>
 
     <!-- Reschedule error modal: surfaces details when a reschedule save fails -->
     <div v-if="showRescheduleErrorModal" class="fixed inset-0 z-50 flex items-center justify-center p-2 bg-black/50" @click.self="closeRescheduleErrorModal">
@@ -1323,7 +1334,9 @@ async function confirmResolve(id) {
   if (!plan) return
   const label = plan.alreadyCorrect
     ? 'Mark this misfire as resolved (no ownership change needed)?'
-    : `Restore to ${plan.originalWinner.username} and credit ${plan.totalCompensationPoints} pts in compensation?`
+    : plan.restoreItem === false
+      ? `Cancel the still-live bogus auction (${plan.originalWinner.username} already holds the cToon)?`
+      : `Restore to ${plan.originalWinner.username} and credit ${plan.totalCompensationPoints} pts in compensation?`
   if (!window.confirm(label)) return
   await startResolve([id])
 }
