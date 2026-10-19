@@ -174,6 +174,7 @@ export default defineEventHandler(async (event) => {
         description: meta.description ?? null,
         imagePath,
         inCmart: meta.inCmart ?? false,
+        priceDecays: meta.priceDecays !== false,
         sellOutBehavior: meta.sellOutBehavior ?? 'REMOVE_ON_ANY_RARITY_EMPTY',
         scheduledAt,
         scheduledOffAt,

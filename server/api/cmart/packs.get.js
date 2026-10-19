@@ -5,8 +5,8 @@
 import { defineEventHandler, createError, getRequestHeader } from 'h3'
 import { prisma as db } from '@/server/prisma'
 
-function computeDecayedPrice(basePrice, sentAt, decayAmount, decayDays, priceFloor) {
-  if (!sentAt || decayAmount <= 0 || decayDays <= 0) return basePrice
+function computeDecayedPrice(basePrice, sentAt, decayAmount, decayDays, priceFloor, priceDecays = true) {
+  if (!priceDecays || !sentAt || decayAmount <= 0 || decayDays <= 0) return basePrice
   const msPerDay = 24 * 60 * 60 * 1000
   const daysSinceListed = Math.floor((Date.now() - new Date(sentAt).getTime()) / msPerDay)
   const periods = Math.floor(daysSinceListed / decayDays)
@@ -33,6 +33,7 @@ export default defineEventHandler(async (event) => {
           price: true,
           imagePath: true,
           sentAt: true,
+          priceDecays: true,
           rarityConfigs: {
             select: { rarity: true, count: true, probabilityPercent: true }
           }
@@ -54,7 +55,7 @@ export default defineEventHandler(async (event) => {
 
     return packs.map(pack => ({
       ...pack,
-      effectivePrice: computeDecayedPrice(pack.price, pack.sentAt, decayAmount, decayDays, priceFloor)
+      effectivePrice: computeDecayedPrice(pack.price, pack.sentAt, decayAmount, decayDays, priceFloor, pack.priceDecays)
     }))
   } catch (err) {
     console.error('[GET /api/cmart/packs]', err)

@@ -43,6 +43,16 @@
               <label class="text-xs font-medium">Price (points)</label>
               <input v-model.number="price" type="number" min="0" required
                 class="border rounded-md px-2 py-1.5 text-sm"/>
+              <label class="flex items-start gap-2 mt-1 cursor-pointer">
+                <input v-model="priceDecays" type="checkbox" class="mt-0.5"/>
+                <span class="text-xs select-none">
+                  Price drops over time
+                  <span class="block text-[10px] text-gray-500">
+                    On: the cMart price falls the longer the pack is listed, using the decay
+                    settings in Global Settings. Off: the price stays exactly as set above.
+                  </span>
+                </span>
+              </label>
             </div>
 
             <!-- description -->
@@ -324,6 +334,7 @@ const loadedOk = computed(() => !pending.value && !error.value)
 /* ---------------- basic meta refs ---------------- */
 const name               = ref('')
 const price              = ref(0)
+const priceDecays        = ref(true)
 const description        = ref('')
 const inCmart            = ref(false)
 const scheduledAtLocal   = ref('')
@@ -562,6 +573,8 @@ onMounted(async () => {
     /* base meta */
     name.value        = p.name
     price.value       = p.price
+    // Only an explicit false turns decay off, so a pack predating the column keeps decaying.
+    priceDecays.value = p.priceDecays !== false
     description.value = p.description
     inCmart.value     = p.inCmart
     sellOutBehavior.value    = p.sellOutBehavior || 'REMOVE_ON_ANY_RARITY_EMPTY'
@@ -611,6 +624,7 @@ async function submit () {
   form.append('meta', JSON.stringify({
     name: name.value.trim(),
     price: price.value,
+    priceDecays: priceDecays.value,
     description: description.value,
     inCmart: inCmart.value,
     scheduledAtLocal: scheduledAtLocal.value || '',

@@ -24,8 +24,8 @@ import { defineEventHandler, createError, getRequestHeader } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
-function computeDecayedPrice(basePrice, sentAt, decayAmount, decayDays, priceFloor) {
-  if (!sentAt || decayAmount <= 0 || decayDays <= 0) return basePrice
+function computeDecayedPrice(basePrice, sentAt, decayAmount, decayDays, priceFloor, priceDecays = true) {
+  if (!priceDecays || !sentAt || decayAmount <= 0 || decayDays <= 0) return basePrice
   const msPerDay = 24 * 60 * 60 * 1000
   const daysSinceListed = Math.floor((Date.now() - new Date(sentAt).getTime()) / msPerDay)
   const periods = Math.floor(daysSinceListed / decayDays)
@@ -57,6 +57,7 @@ export default defineEventHandler(async (event) => {
         price: true,
         imagePath: true,
         sentAt: true,
+        priceDecays: true,
         rarityConfigs: {
           select: { rarity: true, count: true, probabilityPercent: true }
         },
@@ -95,7 +96,7 @@ export default defineEventHandler(async (event) => {
   const decayAmount = globalCfg?.packPriceDecayAmount ?? 100
   const decayDays   = globalCfg?.packPriceDecayDays   ?? 7
   const priceFloor  = globalCfg?.packPriceFloor        ?? 700
-  const effectivePrice = computeDecayedPrice(pack.price, pack.sentAt, decayAmount, decayDays, priceFloor)
+  const effectivePrice = computeDecayedPrice(pack.price, pack.sentAt, decayAmount, decayDays, priceFloor, pack.priceDecays)
 
   /* ── flatten ctoonOptions (merge name + rarity) ───────── */
   const flavouredCtoons = pack.ctoonOptions.map(o => ({

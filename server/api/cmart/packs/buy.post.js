@@ -43,7 +43,7 @@ export default defineEventHandler(async (event) => {
   const [pack, userPts, activeLocks, globalCfg] = await Promise.all([
     db.pack.findUnique({
       where:  { id: packId },
-      select: { id: true, price: true, inCmart: true, dailyPurchaseLimit: true, maxBuysPerUser: true, sentAt: true }
+      select: { id: true, price: true, inCmart: true, dailyPurchaseLimit: true, maxBuysPerUser: true, sentAt: true, priceDecays: true }
     }),
     db.userPoints.findUnique({ where: { userId: me.id }, select: { points: true } }),
     db.lockedPoints.findMany({
@@ -69,7 +69,7 @@ export default defineEventHandler(async (event) => {
   const decayDays   = globalCfg?.packPriceDecayDays   ?? 7
   const priceFloor  = globalCfg?.packPriceFloor        ?? 700
   let decayedPrice = pack.price
-  if (pack.sentAt && decayAmount > 0 && decayDays > 0) {
+  if (pack.priceDecays !== false && pack.sentAt && decayAmount > 0 && decayDays > 0) {
     const msPerDay = 24 * 60 * 60 * 1000
     const daysSinceListed = Math.floor((Date.now() - new Date(pack.sentAt).getTime()) / msPerDay)
     const periods = Math.floor(daysSinceListed / decayDays)

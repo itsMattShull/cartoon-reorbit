@@ -55,6 +55,16 @@
               class="border rounded-md px-2 py-1.5 text-sm"
               required
             />
+            <label class="flex items-start gap-2 mt-1 cursor-pointer">
+              <input v-model="priceDecays" type="checkbox" class="mt-0.5" />
+              <span class="text-xs select-none">
+                Price drops over time
+                <span class="block text-[10px] text-gray-500">
+                  On: the cMart price falls the longer the pack is listed, using the decay settings
+                  in Global Settings. Off: the price stays exactly as set above.
+                </span>
+              </span>
+            </label>
           </div>
 
           <!-- Description -->
@@ -442,6 +452,7 @@ const uploadResources = useAdminResources()
 // 1️⃣ Basic pack fields
 const name        = ref('')
 const price       = ref(900)
+const priceDecays = ref(true)
 const description = ref('')
 const inCmart     = ref(false)
 const scheduledAtLocal    = ref('')
@@ -786,6 +797,7 @@ async function submit() {
   const meta = {
     name: name.value,
     price: price.value,
+    priceDecays: priceDecays.value,
     description: description.value,
     inCmart: inCmart.value,
     scheduledAtLocal: scheduledAtLocal.value || '',

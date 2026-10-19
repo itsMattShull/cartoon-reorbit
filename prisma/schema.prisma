@@ -1064,6 +1064,9 @@ model Pack {
   sellOutBehavior    PackSellOutBehavior @default(REMOVE_ON_ANY_RARITY_EMPTY)
   dailyPurchaseLimit Int?
   maxBuysPerUser     Int?
+  // Whether the cMart price drops the longer the pack has been listed (the global decay
+  // amount / days / floor on GlobalGameConfig). Off keeps the price at exactly `price`.
+  priceDecays        Boolean             @default(true)
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
