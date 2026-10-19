@@ -31,6 +31,7 @@ import { registerPokemonBattle, startPokemonBattleSweep } from './utils/pokemonB
 // in-memory state, separate socket.data namespace via socket.data.ogGtoonsMatchId). See the
 // header of server/utils/ogGtoonsSocket.js for the full rationale.
 import { registerOgGtoons, startOgGtoonsSweep, restoreOgGtoonsMatches } from './utils/ogGtoonsSocket.js'
+import { isClashHidden } from './utils/clashConfig.js'
 import { registerOgGtoonsPractice, startOgGtoonsPracticeSweep } from './utils/ogGtoonsPractice.js'
 import { registerOgGtoonsTutorial, startOgGtoonsTutorialSweep } from './utils/ogGtoonsTutorial.js'
 import { registerCMoonRaid, startCMoonRaidSweep, restoreCMoonRaids } from './utils/cmoonRaidSocket.js'
@@ -1579,6 +1580,13 @@ io.on('connection', socket => {
     if (!me) return
     const uid = sid(me.id)
 
+    // Hidden by an admin: no new rooms. Hiding the page alone would leave this reachable by
+    // anyone who already has it open, and a win pays points.
+    if (await isClashHidden()) {
+      socket.emit('joinError', { message: 'gToons Clash is currently unavailable.' })
+      return
+    }
+
     // Room ids come from the client (Date.now()), so they have to be constrained before they
     // are used as a Map key or a socket.io room name. Digits only: the names of every other
     // broadcast channel on this server — zone names, `auction_<id>`, 'spin-the-wheel',
@@ -1733,6 +1741,12 @@ io.on('connection', socket => {
       } else {
         socket.emit('joinError', { message: 'Room unavailable.' })
       }
+      return
+    }
+
+    // Matches already under way finish (handled above); a hidden game takes no new players.
+    if (await isClashHidden()) {
+      socket.emit('joinError', { message: 'gToons Clash is currently unavailable.' })
       return
     }
 
@@ -1892,6 +1906,10 @@ io.on('connection', socket => {
       const me = await requireSocketUser(socket, 'joinError')
       if (!me) return
       const userId = me.id
+      if (await isClashHidden()) {
+        socket.emit('joinError', { message: 'gToons Clash is currently unavailable.' })
+        return
+      }
       const normalize = (arr = []) => arr.slice(0, 12).map(d => {
         const c = d?.ctoon ?? d
         return {

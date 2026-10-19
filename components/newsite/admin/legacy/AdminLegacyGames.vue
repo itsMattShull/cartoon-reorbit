@@ -571,6 +571,22 @@
         <!-- gToon Clash -->
         <section v-if="activeTab === 'Clash'" role="tabpanel" aria-label="gToon Clash Settings">
           <h2 class="text-sm font-semibold mb-3">gToon Clash Settings</h2>
+
+          <label class="flex items-start gap-2 mb-3 p-2 border rounded bg-white">
+            <input type="checkbox" v-model="clashHidden" class="mt-0.5" />
+            <span>
+              <span class="text-xs font-semibold text-gray-800">Hide gToons Clash from players</span>
+              <span class="block text-[11px] text-gray-500">
+                On removes the gToons Clash tile from the Games page and sends players away from
+                every Clash page (hub, play vs AI, rooms, tournaments). It also refuses the
+                underlying Clash requests — deck, leaderboard and meta fetches, tournament
+                opt-in, and creating or joining a new game — so nothing can be played for points
+                through a link or an already-open page. Matches already in progress are allowed
+                to finish. On by default.
+              </span>
+            </span>
+          </label>
+
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div>
               <label class="block text-xs font-medium text-gray-700">Points Per Win</label>
@@ -2146,6 +2162,7 @@ const leftCupPoints         = ref(0)
 const rightCupPoints        = ref(0)
 const goldCupPoints         = ref(0)
 const clashPointsPerWin     = ref(1)
+const clashHidden           = ref(true)
 const tkoPointsPerWin       = ref(300)
 const loadingWinball        = ref(false)
 const winballBackboardFile  = ref(null)
@@ -2591,6 +2608,8 @@ async function loadSettings() {
 
   const cc = await $fetch('/api/admin/game-config?gameName=Clash')
   clashPointsPerWin.value = cc.pointsPerWin
+  // Only an explicit false shows the game, so a row predating the migration reads as hidden.
+  clashHidden.value = cc.clashHidden !== false
 
   // Guarded, unlike the fetches around it. loadSettings() is one unbroken await chain with no
   // try/catch at the call site, so any single rejection silently abandons every config after
@@ -3103,6 +3122,7 @@ async function saveClashConfig() {
       body: {
         gameName:        'Clash',
         pointsPerWin:    clashPointsPerWin.value,
+        clashHidden:     clashHidden.value,
         dailyPointLimit: globalDailyPointLimit.value
       }
     })

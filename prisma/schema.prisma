@@ -1586,6 +1586,12 @@ model GameConfig {
   // points, so "not visible" has to mean "not earning" too.
   pokemonBattleEnabled Boolean? @default(true)
 
+  // gToons Clash: admin switch to hide the game from players. Opposite polarity to
+  // pokemonBattleEnabled on purpose -- the admin toggle is "Hide", and it defaults to hidden.
+  // On hides the Games-page tile and the Clash pages AND refuses the Clash APIs and socket
+  // actions that start a game, because the routes stay reachable by URL and a win pays points.
+  clashHidden Boolean? @default(true)
+
   // Uploaded art and music, as one JSON map of { slot: { path, width, height } } rather than
   // eleven more columns. GameConfig already carries 256 of them, several callers still do a
   // bare findUnique that ships every one, and art slots are the kind of thing that gets added

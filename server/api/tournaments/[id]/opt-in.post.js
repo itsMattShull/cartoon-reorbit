@@ -1,7 +1,13 @@
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { isClashHidden } from '@/server/utils/clashConfig'
 
 export default defineEventHandler(async (event) => {
+  // Hidden by an admin: refuse here too, since hiding the page alone leaves this reachable.
+  if (await isClashHidden()) {
+    throw createError({ statusCode: 404, statusMessage: 'gToons Clash is currently unavailable.' })
+  }
+
   const { id } = event.context.params || {}
   if (!id) throw createError({ statusCode: 400, statusMessage: 'Missing tournament id' })
 

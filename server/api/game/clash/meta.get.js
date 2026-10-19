@@ -1,5 +1,6 @@
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { isClashHidden } from '@/server/utils/clashConfig'
 
 const DEFAULT_DAYS = 30
 const VALID_DAYS = new Set([7, 14, 30, 60, 90])
@@ -63,6 +64,11 @@ function pickMostCommonName(nameCounts) {
 }
 
 export default defineEventHandler(async (event) => {
+  // Hidden by an admin: refuse here too, since hiding the page alone leaves this reachable.
+  if (await isClashHidden()) {
+    throw createError({ statusCode: 404, statusMessage: 'gToons Clash is currently unavailable.' })
+  }
+
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {
