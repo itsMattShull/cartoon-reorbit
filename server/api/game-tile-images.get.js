@@ -2,6 +2,7 @@ import { defineEventHandler } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { getPokemonBattleAssets } from '@/server/utils/pokemonBattleAssets'
 import { getOgGtoonsConfig } from '@/server/utils/ogGtoonsConfig'
+import { getClashConfig } from '@/server/utils/clashConfig'
 
 export default defineEventHandler(async () => {
   const cfg = await db.globalGameConfig.findUnique({
@@ -35,7 +36,9 @@ export default defineEventHandler(async () => {
   // functional section is closed, matching the hub page itself, which shows an "unavailable"
   // notice rather than an empty shell whenever a section is still open.
   const ogGtoonsFunctionallyOpen = og.matchmakingEnabled || og.gameEnabled || og.deckBuildingEnabled || og.leaderboardEnabled
+  const clash = await getClashConfig()
   const hidden = [
+    ...(clash.hidden ? ['clash'] : []),
     ...(config.enabled ? [] : ['pokemonbattle']),
     ...(og.gamesPageVisible && ogGtoonsFunctionallyOpen ? [] : ['gtoonsclassic'])
   ]

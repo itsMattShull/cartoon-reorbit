@@ -44,7 +44,7 @@
 
           <dt class="text-gray-400">Power</dt>
           <dd>
-            <template v-if="detail.power.isSlam">{{ detail.power.description || 'Custom power (see the Game Log for how it plays out).' }}</template>
+            <template v-if="detail.power.description">{{ detail.power.description }}</template>
             <template v-else>No power</template>
           </dd>
 

@@ -9,6 +9,7 @@ import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { invalidateAssets } from '@/server/utils/pokemonBattleAssets'
 import { invalidateOgGtoonsConfigCache } from '@/server/utils/ogGtoonsConfig'
+import { invalidateClashConfigCache } from '@/server/utils/clashConfig'
 import { REVEAL_TIMING_LIMITS } from '~/utils/ogGtoonReveal'
 
 // ── Operation A.S.T.E.R.O.I.D. field tables ──────────────────────────────────────────────
@@ -229,6 +230,9 @@ function validatePayload(payload) {
   } else if (payload.gameName === 'Clash' || payload.gameName === 'TKO') {
     if (payload.pointsPerWin == null || typeof payload.pointsPerWin !== 'number') {
       throw createError({ statusCode: 400, statusMessage: 'Missing or invalid "pointsPerWin", must be a number' })
+    }
+    if (payload.clashHidden != null && typeof payload.clashHidden !== 'boolean') {
+      throw createError({ statusCode: 400, statusMessage: '"clashHidden" must be true or false' })
     }
 
   } else if (payload.gameName === 'Winwheel') {
@@ -888,6 +892,11 @@ export default defineEventHandler(async (event) => {
       } else if (gameName === 'Clash' || gameName === 'TKO') {
         createData = { ...createData, pointsPerWin }
         updateData = { ...updateData, pointsPerWin }
+        // Explicit null check, not a truthiness one: `false` (show the game) is a real value.
+        if (gameName === 'Clash' && body.clashHidden != null) {
+          createData.clashHidden = Boolean(body.clashHidden)
+          updateData.clashHidden = Boolean(body.clashHidden)
+        }
       } else if (gameName === 'Winwheel') {
         console.log('Upserting Winwheel config with image path:', winWheelImagePath)
         createData = {
@@ -1180,6 +1189,18 @@ export default defineEventHandler(async (event) => {
           if (before?.pointsPerWin !== pointsPerWin) {
             await logAdminChange(tx, { userId: me.id, area, key: 'pointsPerWin', prevValue: before?.pointsPerWin, newValue: pointsPerWin })
           }
+          // Hiding or revealing a game is the kind of change someone asks about later, so it is
+          // logged like any other.
+          if (gameName === 'Clash' && body.clashHidden != null) {
+            const wasHidden = before?.clashHidden !== false
+            const nowHidden = Boolean(body.clashHidden)
+            if (wasHidden !== nowHidden) {
+              await logAdminChange(tx, {
+                userId: me.id, area, key: 'clashHidden',
+                prevValue: String(wasHidden), newValue: String(nowHidden)
+              })
+            }
+          }
         } else if (gameName === 'Winwheel') {
           const changes = [
             ['spinCost', before?.spinCost, spinCost],
@@ -1217,6 +1238,7 @@ export default defineEventHandler(async (event) => {
     // toggle would silently lag on the Games Home page and the game route itself.
     if (gameName === 'PokemonBattle') invalidateAssets()
     if (gameName === 'OgGtoons') invalidateOgGtoonsConfigCache()
+    if (gameName === 'Clash') invalidateClashConfigCache()
 
     return result
   } catch (err) {

@@ -19,7 +19,7 @@
         <img v-if="tiles.winwheel" :src="tiles.winwheel" alt="Win Wheel" class="tile-img" />
         <span v-else>Win Wheel</span>
       </NuxtLink>
-      <NuxtLink to="/newsite/gtoons" class="quadrant quadrant--profile">
+      <NuxtLink v-if="!isHidden('clash')" to="/newsite/gtoons" class="quadrant quadrant--profile">
         <img v-if="tiles.clash" :src="tiles.clash" alt="gToons Clash" class="tile-img" />
         <span v-else>gToons Clash</span>
       </NuxtLink>

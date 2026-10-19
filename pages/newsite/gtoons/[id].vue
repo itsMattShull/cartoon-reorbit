@@ -237,7 +237,7 @@ import ClashCardInfoModal from '@/components/ClashCardInfoModal.vue'
 
 definePageMeta({
   layout: 'newsite-template',
-  middleware: 'newsite',
+  middleware: ['newsite', 'clash-visible'],
   showAdbar: true,
   showNav: true,
   showSidebar: false,

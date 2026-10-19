@@ -179,17 +179,21 @@ export default defineEventHandler(async (event) => {
     if (isNaN(gtoonValueInt) || gtoonValueInt < 0 || gtoonValueInt > 99) {
       throw createError({ statusCode: 400, statusMessage: 'gToon value must be between 0 and 99.' })
     }
-    if (isSlamGtoonBool) {
-      try {
-        gtoonEffectArr = gtoonEffect
+    // A card's power (its effect) is independent of the Slam flag, so it is parsed, validated
+    // and saved whenever one is sent. Slam is only the flag; an empty effect means no power.
+    try {
+      gtoonEffectArr = gtoonEffect
           ? (typeof gtoonEffect === 'string' ? JSON.parse(gtoonEffect) : gtoonEffect)
           : []
-      } catch {
-        throw createError({ statusCode: 400, statusMessage: 'Slam gToon effect must be valid JSON.' })
-      }
-      if (!Array.isArray(gtoonEffectArr) || gtoonEffectArr.length === 0) {
-        throw createError({ statusCode: 400, statusMessage: 'A Slam gToon needs at least one effect.' })
-      }
+    } catch {
+      throw createError({ statusCode: 400, statusMessage: 'gToon effect must be valid JSON.' })
+    }
+    if (!Array.isArray(gtoonEffectArr)) {
+      throw createError({ statusCode: 400, statusMessage: 'gToon effect must be a list of effects.' })
+    }
+    if (gtoonEffectArr.length === 0) {
+      gtoonEffectArr = null
+    } else {
       for (const e of gtoonEffectArr) {
         if (e?.action?.type === 'modifyValue') {
           e.action.amount = Math.max(-MAX_EFFECT_AMOUNT, Math.min(MAX_EFFECT_AMOUNT, Number(e.action.amount)))
@@ -197,7 +201,7 @@ export default defineEventHandler(async (event) => {
       }
       const { ok, errors: effectErrors } = validateEffectSchema(gtoonEffectArr)
       if (!ok) {
-        throw createError({ statusCode: 400, statusMessage: `Invalid Slam gToon effect: ${effectErrors.join('; ')}` })
+        throw createError({ statusCode: 400, statusMessage: `Invalid gToon effect: ${effectErrors.join('; ')}` })
       }
     }
   }
@@ -237,7 +241,7 @@ export default defineEventHandler(async (event) => {
     gtoonColor:  isOgGtoonBool ? gtoonColor : null,
     gtoonValue:  isOgGtoonBool ? gtoonValueInt : null,
     isSlamGtoon: isSlamGtoonBool,
-    gtoonEffect: isSlamGtoonBool ? gtoonEffectArr : null,
+    gtoonEffect: gtoonEffectArr,
     gtoonCardStyle: isOgGtoonBool ? parseGtoonCardStyleInput(gtoonCardStyle) : null,
     gtoonType1: isOgGtoonBool ? gtoonType1Val : null,
     gtoonType2: isOgGtoonBool ? gtoonType2Val : null,

@@ -36,7 +36,10 @@ export default defineEventHandler(async (event) => {
     group: c.gtoonGroup ?? null,
     power: {
       isSlam: !!c.isSlamGtoon,
-      description: c.isSlamGtoon ? (powerDescriptionFor(c.gtoonEffect) || describeEffects(c.gtoonEffect)) : null
+      // The power is the effect itself; Slam is a separate flag.
+      description: Array.isArray(c.gtoonEffect) && c.gtoonEffect.length
+        ? (powerDescriptionFor(c.gtoonEffect) || describeEffects(c.gtoonEffect))
+        : null
     },
     ...ogGtoonDisplay(c)
   }

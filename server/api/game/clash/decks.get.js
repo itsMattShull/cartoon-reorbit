@@ -1,8 +1,14 @@
 // File: server/api/game/clash/decks.get.js
 import { defineEventHandler, createError, getRequestHeader } from 'h3'
 import { prisma } from '~/server/prisma'
+import { isClashHidden } from '~/server/utils/clashConfig'
 
 export default defineEventHandler(async (event) => {
+  // Hidden by an admin: refuse here too, since hiding the page alone leaves this reachable.
+  if (await isClashHidden()) {
+    throw createError({ statusCode: 404, statusMessage: 'gToons Clash is currently unavailable.' })
+  }
+
   // 1) Authenticate the user
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me

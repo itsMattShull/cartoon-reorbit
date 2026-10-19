@@ -390,15 +390,15 @@
                   <option value="No Power" />
                   <option v-for="p in powerCatalog" :key="p.description" :value="p.description" />
                 </datalist>
-                <p class="text-[11px] text-gray-500">Pick a historical power to auto-fill the effect below (marks this a Slam gToon), or leave as "No Power". You can still hand-tweak the result in Advanced.</p>
+                <p class="text-[11px] text-gray-500">Pick a historical power to auto-fill the effect below or leave as "No Power". This does not change the Slam gToon setting below. You can still hand-tweak the result in Advanced.</p>
               </div>
 
               <label class="flex items-center gap-2">
                 <input type="checkbox" v-model="isSlamGtoon" />
-                <span class="text-xs font-medium">Slam gToon (has a special ability)</span>
+                <span class="text-xs font-medium">Slam gToon (separate from the Power above)</span>
               </label>
 
-              <details v-if="isSlamGtoon" class="space-y-2">
+              <details class="space-y-2">
                 <summary class="text-xs font-medium text-indigo-700 cursor-pointer select-none">Advanced: edit effect manually</summary>
                 <div class="space-y-2 mt-2">
                 <div v-for="(effect, i) in gtoonEffects" :key="i" class="border rounded-md bg-white p-2 space-y-2">
@@ -769,11 +769,10 @@ function onPowerSelected() {
   const desc = selectedPowerDescription.value
   const entry = powerCatalog.value.find(e => e.description === desc)
   if (!entry || desc === 'No Power' || desc === 'No power') {
-    isSlamGtoon.value = false
     gtoonEffects.value = []
     return
   }
-  isSlamGtoon.value = true
+  // Picking a power only fills the effect. "Slam gToon" is a separate flag the admin sets by hand.
   gtoonEffects.value = entry.effect.length ? entry.effect.map(schemaToUiEffect) : [newGtoonEffect()]
 }
 
@@ -794,10 +793,6 @@ function newGtoonEffect() {
   }
 }
 function addGtoonEffect() { gtoonEffects.value.push(newGtoonEffect()) }
-watch(isSlamGtoon, val => {
-  if (val && gtoonEffects.value.length === 0) addGtoonEffect()
-  if (!val) { gtoonEffects.value = []; selectedPowerDescription.value = 'No Power' }
-})
 
 /** Maps one server-schema effect object (from the power catalog, or a prior save) into the UI's editable row shape. */
 function schemaToUiEffect(eff) {
@@ -1182,7 +1177,7 @@ async function submitForm() {
     formData.append('gtoonCardStyle', JSON.stringify(gtoonCardStyle.value))
     formData.append('gtoonValue', gtoonValue.value)
     formData.append('isSlamGtoon', isSlamGtoon.value)
-    formData.append('gtoonEffect', isSlamGtoon.value ? JSON.stringify(buildGtoonEffectPayload()) : '')
+    formData.append('gtoonEffect', gtoonEffects.value.length ? JSON.stringify(buildGtoonEffectPayload()) : '')
     formData.append('gtoonType1', gtoonType1.value)
     formData.append('gtoonType2', gtoonType2.value)
     formData.append('gtoonType3', gtoonType3.value)

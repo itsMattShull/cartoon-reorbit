@@ -373,15 +373,15 @@
                   <option value="No Power" />
                   <option v-for="p in powerCatalog" :key="p.description" :value="p.description" />
                 </datalist>
-                <p class="text-[11px] text-gray-500">Pick a historical power to auto-fill the effect below (marks this a Slam gToon), or leave as "No Power". You can still hand-tweak the result in Advanced.</p>
+                <p class="text-[11px] text-gray-500">Pick a historical power to auto-fill the effect below or leave as "No Power". This does not change the Slam gToon setting below. You can still hand-tweak the result in Advanced.</p>
               </div>
 
               <label class="flex items-center gap-2">
                 <input type="checkbox" v-model="isSlamGtoon" />
-                <span class="text-xs font-medium">Slam gToon (has a special ability)</span>
+                <span class="text-xs font-medium">Slam gToon (separate from the Power above)</span>
               </label>
 
-              <details v-if="isSlamGtoon" class="space-y-2">
+              <details class="space-y-2">
                 <summary class="text-xs font-medium text-indigo-700 cursor-pointer select-none">Advanced: edit effect manually</summary>
                 <div class="space-y-2 mt-2">
                 <div v-for="(effect, i) in gtoonEffects" :key="i" class="border rounded-md bg-white p-2 space-y-2">
@@ -771,11 +771,10 @@ function onPowerSelected() {
   const desc = selectedPowerDescription.value
   const entry = powerCatalog.value.find(e => e.description === desc)
   if (!entry || desc === 'No Power' || desc === 'No power') {
-    isSlamGtoon.value = false
     gtoonEffects.value = []
     return
   }
-  isSlamGtoon.value = true
+  // Picking a power only fills the effect. "Slam gToon" is a separate flag the admin sets by hand.
   gtoonEffects.value = entry.effect.length ? entry.effect.map(effectFromServerShape) : [newGtoonEffect()]
 }
 
@@ -796,10 +795,6 @@ function newGtoonEffect() {
   }
 }
 function addGtoonEffect() { gtoonEffects.value.push(newGtoonEffect()) }
-watch(isSlamGtoon, val => {
-  if (val && gtoonEffects.value.length === 0) addGtoonEffect()
-  if (!val) { gtoonEffects.value = []; selectedPowerDescription.value = 'No Power' }
-})
 /** Maps a stored server-shape effect (from Ctoon.gtoonEffect, or the power catalog) back to the editable UI shape. */
 function effectFromServerShape(e) {
   const ui = newGtoonEffect()
@@ -1090,7 +1085,7 @@ onMounted(async ()=>{
       : []
     // Prefill the Power combobox with a catalog match, if this card's effect is byte-for-byte
     // one of the 198 historical powers (best-effort; a hand-authored/edited effect just won't
-    // match anything and the combobox stays on "No Power" without affecting isSlamGtoon/effects).
+    // match anything and the combobox stays on "No Power" without affecting effects).
     selectedPowerDescription.value = 'No Power'
     if (Array.isArray(ctoon.gtoonEffect) && ctoon.gtoonEffect.length) {
       try {
@@ -1231,7 +1226,7 @@ async function submitForm(){
     fd.append('gtoonCardStyle', isOgGtoon.value ? JSON.stringify(gtoonCardStyle.value) : '')
     fd.append('gtoonValue', isOgGtoon.value ? gtoonValue.value : '')
     fd.append('isSlamGtoon', isOgGtoon.value ? isSlamGtoon.value : false)
-    fd.append('gtoonEffect', isOgGtoon.value && isSlamGtoon.value ? JSON.stringify(buildGtoonEffectPayload()) : '')
+    fd.append('gtoonEffect', isOgGtoon.value && gtoonEffects.value.length ? JSON.stringify(buildGtoonEffectPayload()) : '')
     fd.append('gtoonType1', isOgGtoon.value ? gtoonType1.value : '')
     fd.append('gtoonType2', isOgGtoon.value ? gtoonType2.value : '')
     fd.append('gtoonType3', isOgGtoon.value ? gtoonType3.value : '')
@@ -1302,7 +1297,7 @@ async function submitForm(){
     gtoonCardStyle: isOgGtoon.value ? gtoonCardStyle.value : null,
     gtoonValue:  isOgGtoon.value ? gtoonValue.value : null,
     isSlamGtoon: isOgGtoon.value ? isSlamGtoon.value : false,
-    gtoonEffect: isOgGtoon.value && isSlamGtoon.value ? JSON.stringify(buildGtoonEffectPayload()) : null,
+    gtoonEffect: isOgGtoon.value && gtoonEffects.value.length ? JSON.stringify(buildGtoonEffectPayload()) : null,
     gtoonType1:  isOgGtoon.value ? (gtoonType1.value || null) : null,
     gtoonType2:  isOgGtoon.value ? (gtoonType2.value || null) : null,
     gtoonType3:  isOgGtoon.value ? (gtoonType3.value || null) : null,

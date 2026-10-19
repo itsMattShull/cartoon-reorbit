@@ -5,7 +5,7 @@
 <script setup>
 definePageMeta({
   layout: 'newsite-template',
-  middleware: 'newsite',
+  middleware: ['newsite', 'clash-visible'],
   showAdbar: true,
   showNav: true,
   title: 'gToons Clash',
