@@ -78,9 +78,11 @@
     <p class="stat-note">Site-wide totals — the filters above don't apply here.</p>
     <div class="stat-row">
       <div class="stat-card">
-        <div class="stat-label">Avg Points / Player</div>
+        <div class="stat-label">Avg Points / Active Player</div>
         <div class="stat-value">{{ summary ? formatNumber(summary.avgPointsPerPlayer, 0) : '—' }}</div>
-        <div v-if="summary" class="stat-foot">Median {{ formatNumber(summary.medianPointsPerPlayer) }}</div>
+        <div v-if="summary" class="stat-foot">
+          Median {{ formatNumber(summary.medianPointsPerPlayer) }} · active = redeemed a code in the last {{ summary.activePlayerWindowDays }} days
+        </div>
       </div>
       <div class="stat-card">
         <div class="stat-label">Net Points (7d)</div>

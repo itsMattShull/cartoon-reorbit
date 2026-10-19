@@ -1,5 +1,5 @@
 // GET /api/economy/summary
-// Top-of-page stat tiles for the Economy page: average points per player,
+// Top-of-page stat tiles for the Economy page: average points per active player,
 // overall trade/auction volume, and net points issued over the last 7 days.
 import { defineEventHandler, createError } from 'h3'
 import { prisma } from '@/server/prisma'
@@ -7,8 +7,15 @@ import { redis } from '@/server/utils/redis'
 import { EXCLUDED_SYSTEM_USER_ID } from '@/server/utils/economyValuation'
 import { activeDailyTaskUsersFragment } from '@/server/utils/activeDailyTaskUsers'
 
-const CACHE_KEY = 'economy:summary:v3'
+const CACHE_KEY = 'economy:summary:v4'
 const CACHE_TTL = 60 // seconds — matches the page's polling interval, no point hitting Postgres more often
+
+// "Active" for the Avg/Median Points per Player tile: redeemed at least one claim code in the
+// trailing window. Plain account.active (not dissolved/banned) alone includes every account that
+// has ever existed, even ones that logged in once years ago and never came back — redemption
+// recency is a much stronger signal that the balance behind it reflects a player who's actually
+// still around.
+const ACTIVE_PLAYER_WINDOW_DAYS = 14
 
 async function computeSummary() {
   const activeUsersSql = await activeDailyTaskUsersFragment()
@@ -25,6 +32,11 @@ async function computeSummary() {
       WHERE u."active" = true
         AND COALESCE(u."banned", false) = false
         AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
+        AND EXISTS (
+          SELECT 1 FROM "Claim" c
+          WHERE c."userId" = u."id"
+            AND c."claimedAt" >= NOW() - make_interval(days => ${ACTIVE_PLAYER_WINDOW_DAYS}::int)
+        )
     `,
     prisma.tradeOffer.count({ where: { status: 'ACCEPTED' } }),
     prisma.auction.count({ where: { status: 'CLOSED', winnerId: { not: null } } }),
@@ -48,6 +60,7 @@ async function computeSummary() {
   return {
     avgPointsPerPlayer: Math.round((pointsAgg[0]?.avgPoints || 0) * 100) / 100,
     medianPointsPerPlayer: Math.round(pointsAgg[0]?.medianPoints || 0),
+    activePlayerWindowDays: ACTIVE_PLAYER_WINDOW_DAYS,
     totalTradeVolume,
     totalAuctionVolume,
     netPoints7d: earned - spent
