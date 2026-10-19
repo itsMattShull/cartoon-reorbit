@@ -13,7 +13,7 @@
 //   Name -> name                Show Source -> series (blank for Huntor/Steve: see SHOW_SOURCE_FIXES)        "gToons " + Card Series -> set
 //   Character -> characters[]   Rarity -> rarity              Color -> gtoonColor
 //   Points -> gtoonValue        Type 1/2/3 -> gtoonType1/2/3  Group -> gtoonGroup
-//   Power Description -> gtoonEffect (+ isSlamGtoon when the power is not "No Power")
+//   Power Description -> gtoonEffect (isSlamGtoon is left false: a power is not a Slam)
 // Not in C-mart, not code-only, isOgGtoon = true.
 //
 // Image matching lives in prisma/ogGtoonsData/card-images.json (card name -> file in
@@ -257,7 +257,8 @@ async function main() {
           gtoonType2: c.types[1],
           gtoonType3: c.types[2],
           gtoonGroup: c.group,
-          isSlamGtoon: !!c.effect,
+          // A power does not make a card a Slam gToon; that flag is set by hand in the admin.
+          isSlamGtoon: false,
           gtoonEffect: c.effect,
 
           imageHash: { create: { phash, dhash, bucket: bucketFromHash(phash) } }

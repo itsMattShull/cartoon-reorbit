@@ -8,10 +8,10 @@
 //
 // This is what the admin UI's "Power" combobox (AdminLegacyCtoonsNew.vue /
 // AdminLegacyCtoonsEdit.vue, served via server/api/admin/oggtoons/power-catalog.get.js) is built
-// from: picking a description sets Ctoon.isSlamGtoon = true and fills Ctoon.gtoonEffect with
-// this entry's `effect` array (which the admin can then hand-tweak in the "Advanced" manual
-// effect-row builder). "No Power" / "No power" (both casings appear verbatim in the source data,
-// so both get their own catalog key) map to effect: [] and isSlamGtoon should be left false.
+// from: picking a description fills Ctoon.gtoonEffect with this entry's `effect` array (which the
+// admin can then hand-tweak in the "Advanced" manual effect-row builder). It does NOT touch
+// Ctoon.isSlamGtoon, which is a separate flag. "No Power" / "No power" (both casings appear
+// verbatim in the source data, so both get their own catalog key) map to effect: [].
 //
 // ── Fidelity ────────────────────────────────────────────────────────────────────────────────
 // Every entry is an exact translation of its printed text. tests/ogGtoonPowers.test.js re-reads each

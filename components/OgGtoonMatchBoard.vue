@@ -161,7 +161,7 @@
                     <dd>{{ infoDetail.group ? (OG_GROUP_LABELS[infoDetail.group] || infoDetail.group) : '—' }}</dd>
                     <dt class="text-gray-400">Power</dt>
                     <dd>
-                      <template v-if="infoDetail.power.isSlam">{{ infoDetail.power.description || 'Custom power (see the Game Log for how it plays out).' }}</template>
+                      <template v-if="infoDetail.power.description">{{ infoDetail.power.description }}</template>
                       <template v-else>No power</template>
                     </dd>
                     <template v-if="infoDetail.characters.length">

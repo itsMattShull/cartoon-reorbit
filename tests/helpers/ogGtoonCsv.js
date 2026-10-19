@@ -61,7 +61,7 @@ export function loadOgGtoonCtoons() {
       gtoonValue: parseInt(r['Points'], 10),
       gtoonType1: types[0], gtoonType2: types[1], gtoonType3: types[2],
       gtoonGroup: r['Group'] ? GROUPS[r['Group']] : null,
-      isSlamGtoon: !!(entry && entry.effect.length),
+      isSlamGtoon: false,
       gtoonEffect: entry && entry.effect.length ? entry.effect : null,
       gtoonCardStyle: null
     })
