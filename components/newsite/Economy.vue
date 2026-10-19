@@ -81,7 +81,7 @@
         <div class="stat-label">Avg Points / Active Player</div>
         <div class="stat-value">{{ summary ? formatNumber(summary.avgPointsPerPlayer, 0) : '—' }}</div>
         <div v-if="summary" class="stat-foot">
-          Median {{ formatNumber(summary.medianPointsPerPlayer) }} · active = redeemed a code in the last {{ summary.activePlayerWindowDays }} days
+          Median {{ formatNumber(summary.medianPointsPerPlayer) }} · active = activity in the last {{ summary.activePlayerWindowDays }} days
         </div>
       </div>
       <div class="stat-card">

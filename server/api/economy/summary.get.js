@@ -7,14 +7,16 @@ import { redis } from '@/server/utils/redis'
 import { EXCLUDED_SYSTEM_USER_ID } from '@/server/utils/economyValuation'
 import { activeDailyTaskUsersFragment } from '@/server/utils/activeDailyTaskUsers'
 
-const CACHE_KEY = 'economy:summary:v4'
+const CACHE_KEY = 'economy:summary:v5'
 const CACHE_TTL = 60 // seconds — matches the page's polling interval, no point hitting Postgres more often
 
-// "Active" for the Avg/Median Points per Player tile: redeemed at least one claim code in the
-// trailing window. Plain account.active (not dissolved/banned) alone includes every account that
-// has ever existed, even ones that logged in once years ago and never came back — redemption
-// recency is a much stronger signal that the balance behind it reflects a player who's actually
-// still around.
+// "Active" for the Avg/Median Points per Player tile: User.lastActivity falls within the trailing
+// window. Plain account.active (not dissolved/banned) alone includes every account that has ever
+// existed, even one that logged in once years ago and never came back — lastActivity is a much
+// stronger signal the balance behind it belongs to someone still actually playing. It's kept fresh
+// by the recomputeLastActivity cron job (server/cron/jobHandlers.js), which sets it to the most
+// recent of login, points activity, game activity, site visits, and wheel spins — the same field
+// the dormancy-warning/enforcement jobs and the admin retention report already rely on.
 const ACTIVE_PLAYER_WINDOW_DAYS = 14
 
 async function computeSummary() {
@@ -32,11 +34,7 @@ async function computeSummary() {
       WHERE u."active" = true
         AND COALESCE(u."banned", false) = false
         AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
-        AND EXISTS (
-          SELECT 1 FROM "Claim" c
-          WHERE c."userId" = u."id"
-            AND c."claimedAt" >= NOW() - make_interval(days => ${ACTIVE_PLAYER_WINDOW_DAYS}::int)
-        )
+        AND u."lastActivity" >= NOW() - make_interval(days => ${ACTIVE_PLAYER_WINDOW_DAYS}::int)
     `,
     prisma.tradeOffer.count({ where: { status: 'ACCEPTED' } }),
     prisma.auction.count({ where: { status: 'CLOSED', winnerId: { not: null } } }),
