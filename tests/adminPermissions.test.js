@@ -241,7 +241,7 @@ test('the isSubAdmin data migration grants exactly the standard preset', () => {
   // The migration is a snapshot of the preset on the day it was written. Tools retired since
   // are dropped on read (cleanAdminPermissions), and tools added since are not back-granted.
   const RETIRED_SINCE = ['monsters', 'monsterBattleLogs']
-  const ADDED_SINCE = ['retention']
+  const ADDED_SINCE = ['retention', 'cmartMetrics']
   assert.deepEqual(
     fromSql.filter(k => !RETIRED_SINCE.includes(k)),
     ADMIN_PERMISSION_PRESETS.find(p => p.id === 'standard').perms.filter(k => !ADDED_SINCE.includes(k))

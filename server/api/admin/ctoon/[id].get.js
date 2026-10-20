@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
         rarity: true, assetPath: true, releaseDate: true,
         price: true, inCmart: true, codeOnly: true,
         quantity: true, initialQuantity: true, perUserLimit: true,
+        totalMinted: true, standardizeMetric: true,
         characters: true, description: true, soundPath: true,
         cMoonId: true,
 

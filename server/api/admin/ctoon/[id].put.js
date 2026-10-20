@@ -17,6 +17,8 @@ import { sanitizePathSegment, sanitizeFilename, assertInside, sniffImageType, MA
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 import { validateEffectSchema } from '@/server/utils/ogGtoonEffects'
 import { parseGtoonCardStyleInput } from '@/server/utils/ogGtoonDisplay'
+import { isStandardizableRarity, getStandardizedMetricPercentages, computeStandardizedQuantity } from '@/server/utils/cmartStandardizedMetrics'
+import { getActivePlayerCount } from '@/server/utils/activePlayers'
 
 const OG_GTOON_COLORS = new Set(['BLACK', 'SILVER', 'BLUE', 'RED', 'YELLOW', 'GREEN', 'PURPLE', 'ORANGE', 'PINK'])
 const OG_GTOON_CARD_TYPES = new Set(['ANIMAL', 'FEMALE', 'HERO', 'MALE', 'MONSTER', 'PLACE', 'PROP', 'VEHICLE', 'VILLAIN'])
@@ -48,6 +50,10 @@ export default defineEventHandler(async (event) => {
   const me = await requireAdmin(event)
   assertSameOrigin(event)
 
+  // Fetched early (not just at step 8) so the Standardize Metric clamp below can see
+  // totalMinted before computing the new quantity; step 8 reuses this same row.
+  const before = await prisma.ctoon.findUnique({ where: { id } })
+
   // 2) Accept JSON or multipart
   const contentType = (getRequestHeader(event, 'content-type') || '').toLowerCase()
   let payload = {}
@@ -69,7 +75,7 @@ export default defineEventHandler(async (event) => {
   const {
     name, series, rarity, price, releaseDate, perUserLimit,
     quantity, initialQuantity, inCmart, set, description, characters,
-    cMoonId: cMoonIdRaw,
+    cMoonId: cMoonIdRaw, standardizeMetric: standardizeMetricRaw,
     isGtoon, cost, power, abilityKey, abilityData, gtoonType,
     isOgGtoon, gtoonColor, gtoonValue, isSlamGtoon, gtoonEffect, gtoonCardStyle,
     gtoonType1, gtoonType2, gtoonType3, gtoonGroup,
@@ -106,21 +112,52 @@ export default defineEventHandler(async (event) => {
 
   // 5) Normalizations
   const priceInt    = price == null || price === '' ? 0 : Number(price)
-  const qtyInt      = quantity == null || quantity === '' ? null : Number(quantity)
-  const initQtyInt  = initialQuantity == null || initialQuantity === '' ? null : Number(initialQuantity)
+  let qtyInt        = quantity == null || quantity === '' ? null : Number(quantity)
+  let initQtyInt    = initialQuantity == null || initialQuantity === '' ? null : Number(initialQuantity)
   const perUserInt  = perUserLimit == null || perUserLimit === '' ? null : Number(perUserLimit)
-  const inCmartBool = String(inCmart) === 'true' || inCmart === true
+  let inCmartBool   = String(inCmart) === 'true' || inCmart === true
   const isGtoonBool = String(isGtoon) === 'true' || isGtoon === true
+
+  const standardizeMetricBool = String(standardizeMetricRaw) === 'true' || standardizeMetricRaw === true
+  if (standardizeMetricBool) {
+    if (!isStandardizableRarity(rarity)) {
+      throw createError({ statusCode: 400, statusMessage: 'Standardize Metric is only available for Common, Uncommon, Rare, Very Rare, and Crazy Rare.' })
+    }
+    // codeOnly isn't editable via this endpoint (not in the payload, not in updateData below) —
+    // read it off the existing row. Same invariant ctoon.post.js enforces at creation: a
+    // Code-Only exclusive cToon must never also be forced into cMart.
+    if (before?.codeOnly) {
+      throw createError({ statusCode: 400, statusMessage: 'Cannot use Standardize Metric on a Code-Only cToon.' })
+    }
+    // Server-authoritative once standardized, same precedent as initialReleaseAt/finalReleaseAt
+    // below: a standardized cToon is always in cMart with a defined (not time-based) limit,
+    // regardless of what the client sent.
+    inCmartBool = true
+  }
 
   // Mint limit type
   const TIME_BASED_CAP = 999999999
-  const mintLimitType = mintLimitTypeRaw === 'timeBased' ? 'timeBased' : 'defined'
+  const mintLimitType = standardizeMetricBool ? 'defined' : (mintLimitTypeRaw === 'timeBased' ? 'timeBased' : 'defined')
   let mintEndDate = null
   if (mintLimitType === 'timeBased') {
     mintEndDate = mintEndDateRaw ? new Date(mintEndDateRaw) : null
     if (!mintEndDate || isNaN(mintEndDate)) {
       throw createError({ statusCode: 400, statusMessage: 'Mint End Date is required for Time Based Limit.' })
     }
+  }
+
+  // Standardize Metric: quantity is server-computed from the current active-player count and
+  // this rarity's configured percentage, overriding whatever the client sent. Never shrinks
+  // below copies already minted — a drop in the active-player count since this cToon was
+  // created must not silently cap below what's already circulating.
+  if (standardizeMetricBool) {
+    const [activePlayerCount, percentages] = await Promise.all([
+      getActivePlayerCount(),
+      getStandardizedMetricPercentages()
+    ])
+    const computed = computeStandardizedQuantity(rarity, activePlayerCount, percentages, { floorAt: before?.totalMinted })
+    qtyInt = computed
+    initQtyInt = computed
   }
 
   // characters
@@ -224,6 +261,7 @@ export default defineEventHandler(async (event) => {
     initialQuantity: mintLimitType === 'timeBased' ? TIME_BASED_CAP : initQtyInt,
     mintLimitType,
     mintEndDate,
+    standardizeMetric: standardizeMetricBool,
     inCmart: inCmartBool,
     set,
     description: description?.trim() || null,
@@ -323,8 +361,7 @@ export default defineEventHandler(async (event) => {
     updateData.soundPath = null
   }
 
-  // 8) Persist (fetch before and then update)
-  const before = await prisma.ctoon.findUnique({ where: { id } })
+  // 8) Persist (before was already fetched above, ahead of the Standardize Metric clamp)
   const updated = await prisma.ctoon.update({
     where: { id },
     data: updateData
@@ -353,7 +390,7 @@ export default defineEventHandler(async (event) => {
   try {
     const area = `Ctoon:${id}`
     const keys = [
-      'name','series','description','rarity','price','releaseDate','perUserLimit','quantity','initialQuantity','inCmart','set','characters','cMoonId',
+      'name','series','description','rarity','price','releaseDate','perUserLimit','quantity','initialQuantity','standardizeMetric','inCmart','set','characters','cMoonId',
       'isGtoon','gtoonType','cost','power','abilityKey','abilityData','assetPath','type','soundPath',
       'isOgGtoon','gtoonColor','gtoonValue','isSlamGtoon','gtoonEffect','gtoonCardStyle',
       'gtoonType1','gtoonType2','gtoonType3','gtoonGroup',
