@@ -1,6 +1,7 @@
 // server/api/admin/winball-grand-prize.post.js
 import { defineEventHandler, getRequestHeader, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
+import { scheduleWinballPrizeUpdate, bestEffort } from '@/server/utils/queues'
 
 // Parse "YYYY-MM-DD HH:mm" -> { y,m,d,h,mi }
 function parseLocalYmdHm(s) {
@@ -71,6 +72,8 @@ export default defineEventHandler(async (event) => {
     data: { ctoonId, startsAt: startsAtUtc, createdById: me.id },
     include: { ctoon: { select: { id: true, name: true, rarity: true, assetPath: true } } }
   })
+
+  await bestEffort('winball prize schedule', () => scheduleWinballPrizeUpdate(row.id, row.startsAt))
 
   return { ok: true, item: row }
 })
