@@ -975,7 +975,7 @@ async function markScheduledPacksInCmart() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Winball: set current grand prize from schedule (runs hourly)
+// Winball: set current grand prize from schedule (exact-time delayed job per row + 5-minute safety-net sweep)
 async function updateWinballGrandPrizeFromSchedule() {
   {
     const now = new Date()
@@ -1081,4 +1081,5 @@ export const SCHEDULED_EVENT_HANDLERS = {
   packOff: (data) => togglePacks(data?.packId ? String(data.packId) : null),
   auctionOnlyStart: () => startDueAuctions(),
   announcementSend: () => sendDueAnnouncements(),
+  winballPrizeUpdate: () => updateWinballGrandPrizeFromSchedule(),
 }
