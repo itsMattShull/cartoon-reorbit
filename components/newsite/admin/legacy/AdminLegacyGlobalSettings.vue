@@ -406,6 +406,97 @@
             <span v-if="!savingCmart">Save</span><span v-else>Saving…</span>
           </button>
         </div>
+
+        <!-- Standardized Mint Quantities -->
+        <div class="border-t pt-3">
+          <h2 class="text-xs font-semibold text-gray-800 mb-1">Standardized Mint Quantities</h2>
+          <p class="text-[10px] text-gray-500 mb-2">
+            Powers the "Fill from Active Players" button on the Add/Edit cToon forms: clicking it
+            fills Total/Initial Quantity with <strong>active players × the percentage below</strong>
+            for that rarity. The fields stay freely editable afterward — nothing here is enforced
+            automatically.
+          </p>
+
+          <div v-if="metricsLoading" class="text-gray-500 py-4 text-center">Loading…</div>
+          <div v-else-if="metricsLoadError" class="text-red-600">{{ metricsLoadError }}</div>
+          <template v-else-if="metrics">
+            <!-- Stat tiles -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-3">
+              <div class="border rounded-lg p-3">
+                <div class="text-[11px] text-gray-500 uppercase tracking-wide">Active Players</div>
+                <div class="text-xl font-semibold tabular-nums">{{ formatMetricNumber(metrics.activePlayerCount) }}</div>
+                <div class="text-[11px] text-gray-500 mt-0.5">Active {{ metrics.windowStartDaysAgo }}–{{ metrics.windowEndDaysAgo }} days ago</div>
+              </div>
+              <div class="border rounded-lg p-3">
+                <div class="text-[11px] text-gray-500 uppercase tracking-wide">Median Points / Active Player</div>
+                <div class="text-xl font-semibold tabular-nums">{{ formatMetricNumber(metrics.medianPointsPerPlayer) }}</div>
+                <div class="text-[11px] text-gray-500 mt-0.5">Half of active players hold less than this</div>
+              </div>
+              <div class="border rounded-lg p-3">
+                <div class="text-[11px] text-gray-500 uppercase tracking-wide">Avg Points / Active Player</div>
+                <div class="text-xl font-semibold tabular-nums">{{ formatMetricNumber(metrics.avgPointsPerPlayer) }}</div>
+                <div class="text-[11px] text-gray-500 mt-0.5">Skewed upward by big holders — median above is more typical</div>
+              </div>
+            </div>
+
+            <p class="text-xs text-gray-600 mb-2">
+              The button fills in <strong>active players × percentage</strong>, rounded, minimum 1.
+            </p>
+
+            <!-- Desktop table -->
+            <div class="overflow-x-auto hidden sm:block mb-3">
+              <table class="min-w-full text-xs">
+                <thead>
+                  <tr>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Rarity</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Percentage</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Fills In Right Now</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="r in metricRarityOrder" :key="r" class="border-b">
+                    <td class="px-2 py-1.5 font-medium">{{ r }}</td>
+                    <td class="px-2 py-1.5">
+                      <div class="flex items-center gap-1">
+                        <input type="number" min="1" max="1000" class="border rounded-md px-2 py-1 text-xs w-20" v-model.number="metricPercentages[r]" />
+                        <span class="text-gray-500">%</span>
+                      </div>
+                    </td>
+                    <td class="px-2 py-1.5 tabular-nums">{{ formatMetricNumber(previewMetricQuantity(r)) }} copies</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Mobile cards -->
+            <div class="space-y-2 sm:hidden mb-3">
+              <div v-for="r in metricRarityOrder" :key="r" class="bg-white border rounded-lg shadow p-2">
+                <div class="font-semibold text-xs text-gray-800 mb-1.5">{{ r }}</div>
+                <div class="grid grid-cols-1 gap-2">
+                  <div class="flex flex-col gap-1">
+                    <label class="text-xs font-medium">Percentage</label>
+                    <div class="flex items-center gap-1">
+                      <input type="number" min="1" max="1000" class="border rounded-md px-2 py-1.5 text-sm" v-model.number="metricPercentages[r]" />
+                      <span class="text-gray-500">%</span>
+                    </div>
+                  </div>
+                  <div class="text-[11px] text-gray-600">Fills in right now: <span class="font-medium tabular-nums">{{ formatMetricNumber(previewMetricQuantity(r)) }}</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <button
+                type="button"
+                class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                :disabled="savingMetrics"
+                @click="saveMetrics"
+              >
+                <span v-if="!savingMetrics">Save</span><span v-else>Saving…</span>
+              </button>
+            </div>
+          </template>
+        </div>
       </section>
 
       <!-- Second Editions tab -->
@@ -539,7 +630,8 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
+import { STANDARDIZABLE_RARITIES as metricRarityOrder } from '~/utils/cmartStandardizedRarities'
 
 const activeTab = ref('Global Points')
 const toast  = ref(null)
@@ -548,6 +640,7 @@ const savingRarity = ref(false)
 const savingDuplicates = ref(false)
 const savingAuctions = ref(false)
 const savingCmart = ref(false)
+const savingMetrics = ref(false)
 const savingDiscord = ref(false)
 const czoneContestDiscordChannelId = ref('')
 const devPrDiscordChannelId = ref('')
@@ -832,6 +925,56 @@ async function saveCmart() {
     savingCmart.value = false; setTimeout(() => { toast.value = null }, 2500)
   }
 }
+
+// Standardized Mint Quantities ("Fill from Active Players" button config)
+const metricsLoading = ref(true)
+const metricsLoadError = ref('')
+const metrics = ref(null)
+const metricPercentages = reactive({})
+
+function formatMetricNumber(n) {
+  if (n == null || Number.isNaN(n)) return '—'
+  return Number(n).toLocaleString()
+}
+
+function previewMetricQuantity(rarity) {
+  if (!metrics.value) return null
+  const pct = Number(metricPercentages[rarity])
+  if (!Number.isFinite(pct)) return null
+  return Math.max(1, Math.round(metrics.value.activePlayerCount * pct / 100))
+}
+
+async function loadMetrics() {
+  metricsLoading.value = true
+  metricsLoadError.value = ''
+  try {
+    const res = await $fetch('/api/admin/cmart-metrics')
+    metrics.value = res
+    for (const r of metricRarityOrder) metricPercentages[r] = res.percentages?.[r] ?? 0
+  } catch (e) {
+    metricsLoadError.value = e?.data?.statusMessage || 'Failed to load cMart metrics.'
+  } finally {
+    metricsLoading.value = false
+  }
+}
+
+async function saveMetrics() {
+  savingMetrics.value = true; toast.value = null
+  try {
+    const res = await $fetch('/api/admin/cmart-metrics', {
+      method: 'POST',
+      body: { percentages: { ...metricPercentages } }
+    })
+    for (const r of metricRarityOrder) metricPercentages[r] = res.percentages?.[r] ?? metricPercentages[r]
+    toast.value = { type: 'ok', msg: 'cMart metrics saved.' }
+  } catch (e) {
+    console.error(e); toast.value = { type: 'error', msg: e?.data?.statusMessage || e?.statusMessage || 'Save failed' }
+  } finally {
+    savingMetrics.value = false; setTimeout(() => { toast.value = null }, 2500)
+  }
+}
+
+onMounted(loadMetrics)
 
 async function saveDiscord() {
   savingDiscord.value = true; toast.value = null
