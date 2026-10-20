@@ -510,9 +510,10 @@
         </div>
         <div class="overflow-y-auto overscroll-contain flex-1 min-h-0 px-4 py-3">
           <p class="text-[11px] text-gray-500 mb-2">
-            A cToon traded away from the official account (or scheduled into a second
-            auction) while it still had a pending dissolve-auction queue entry could get
-            auctioned off a second time, out from under its real owner. The worker now checks
+            A cToon released from the official account (dissolved into it, or granted to it —
+            AuctionOnly, give-to-official, admin correction) to a real player could get
+            auctioned off a second time, out from under its real owner (e.g. via a stale
+            dissolve-auction queue entry). The worker now checks
             ownership before launching one (PREVENTED rows below are cases it caught live);
             "Scan for Historical Misfires" looks for cases that already happened before that fix.
             "Resolve" restores the cToon to whoever ORIGINALLY won it at auction and credits
@@ -571,6 +572,10 @@
                   <span v-if="m.rightfulOwnerMethod" class="text-gray-500">
                     — acquired via {{ m.rightfulOwnerMethod }}{{ m.rightfulOwnerSince ? ' on ' + fmtCST(m.rightfulOwnerSince) : '' }}
                   </span>
+                </div>
+                <div v-if="m.releaseMethod" class="text-[11px] mt-1 text-gray-600">
+                  <span class="font-medium">Entered official via:</span> {{ m.releaseMethod }}
+                  <span v-if="m.releaseMethod !== 'DISSOLVE' && m.releaseMethod !== 'DISSOLVE_INACTIVE'" class="text-amber-700">(not a dissolve — verify this isn't an auction reassigned after its seller was dissolved)</span>
                 </div>
                 <div v-if="m.source === 'HISTORICAL_RESOLVED'" class="text-[11px] mt-1 text-red-700">
                   <span class="font-medium">Wrongly sold to:</span>

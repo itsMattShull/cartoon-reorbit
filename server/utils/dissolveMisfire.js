@@ -28,28 +28,44 @@ export async function findRightfulOwnerBefore(client, userCtoonId, beforeDate) {
 
 // Methods that put an item into the official account's inventory as part of a dissolve — written
 // by dissolve.worker.js (admin-initiated) and the inactivity sweep (server/cron/jobHandlers.js).
-// Shared by the remediation algorithm (dissolveMisfireRemediation.js), which needs the full list
-// of matching rows to walk forward from, not just an existence check.
+// Not the only way official acquires an item; see findOfficialReleaseBefore.
 export const DISSOLVE_METHODS = ['DISSOLVE', 'DISSOLVE_INACTIVE']
 
 /**
- * True when this userCtoonId actually went through a dissolve event before the given time — the
- * one thing that distinguishes a genuine dissolve-auction misfire from an auction whose creatorId
- * just happens to be the official account for an unrelated, legitimate reason. Both dissolve.worker.js
- * and the inactivity sweep (server/cron/jobHandlers.js) reassign creatorId to official on a
- * cToon's ALREADY-ACTIVE auction when its owner gets dissolved mid-auction — that auction selling
- * through afterward is correct, intended behavior, not a misfire, and it never gets a DISSOLVE log
- * row (the item itself never entered official's inventory). Without this check, every one of those
- * normal auctions looks identical to a real misfire to a plain "was there a different owner before
- * this auction?" test.
+ * Index of the LAST row in an ascending CtoonOwnerLog history at which the official account took
+ * (or was handed) the item — a dissolve row, or any row owned by official (AuctionOnly / give-to-
+ * official ADMIN_GRANT, an ADMIN_CORRECTION revoke, etc.). That row is the "release event": whoever
+ * received the item right after it is the original legitimate winner. -1 when official never held it.
  */
-export async function hasDissolveEventBefore(client, userCtoonId, beforeDate) {
-  if (!userCtoonId) return false
+export function findLastOfficialHoldIndex(history, officialId) {
+  for (let i = history.length - 1; i >= 0; i--) {
+    const row = history[i]
+    if (DISSOLVE_METHODS.includes(row.method) || (officialId && row.userId === officialId)) return i
+  }
+  return -1
+}
+
+/**
+ * The most recent time, strictly before the given time, that the official account held this item
+ * — the one thing that distinguishes a genuine misfire (an item official released to a real player,
+ * then auctioned again) from an auction whose creatorId merely became official because its seller's
+ * account was dissolved while the auction was still active (the item itself never entered
+ * official's inventory, so no such row exists). Official can acquire an item by a DISSOLVE /
+ * DISSOLVE_INACTIVE, or by being granted it directly (AuctionOnly mint, give-to-official,
+ * ADMIN_CORRECTION) — all count. Returns { method, since } or null.
+ */
+export async function findOfficialReleaseBefore(client, userCtoonId, beforeDate, officialId) {
+  if (!userCtoonId) return null
   const row = await client.ctoonOwnerLog.findFirst({
-    where: { userCtoonId, method: { in: DISSOLVE_METHODS }, createdAt: { lt: beforeDate } },
-    select: { id: true }
+    where: {
+      userCtoonId,
+      createdAt: { lt: beforeDate },
+      OR: [{ method: { in: DISSOLVE_METHODS } }, ...(officialId ? [{ userId: officialId }] : [])]
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { method: true, createdAt: true }
   })
-  return !!row
+  return row ? { method: row.method, since: row.createdAt } : null
 }
 
 /**
