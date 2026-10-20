@@ -123,13 +123,12 @@
 
             <div class="flex flex-col gap-1">
               <label class="text-xs font-medium">Mint Limit</label>
-              <select v-model="mintLimitType" :disabled="standardizeMetric" class="border rounded-md px-2 py-1.5 text-sm bg-white disabled:bg-gray-100">
+              <select v-model="mintLimitType" class="border rounded-md px-2 py-1.5 text-sm bg-white">
                 <option value="defined">Defined Number Limit</option>
                 <option value="timeBased">Time Based Limit</option>
               </select>
               <p class="text-[11px] text-gray-500">
-                <template v-if="standardizeMetric">Locked to Defined Number Limit while Standardize Metric is on.</template>
-                <template v-else-if="mintLimitType === 'defined'">Set a fixed quantity. cToon sells out when all are minted.</template>
+                <template v-if="mintLimitType === 'defined'">Set a fixed quantity. cToon sells out when all are minted.</template>
                 <template v-else>Allow unlimited minting until the Mint End Date, then cap based on demand.</template>
               </p>
             </div>
@@ -183,23 +182,26 @@
                 <label class="text-xs font-medium">Per-User Limit</label>
                 <input v-model.number="perUserLimit" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
               </div>
-              <div v-if="mintLimitType === 'defined' && !standardizeMetric" class="flex flex-col gap-1">
+              <div v-if="mintLimitType === 'defined'" class="flex flex-col gap-1">
                 <label class="text-xs font-medium">Total Quantity</label>
                 <input v-model.number="quantity" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
               </div>
-              <div v-if="mintLimitType === 'defined' && !standardizeMetric" class="flex flex-col gap-1">
+              <div v-if="mintLimitType === 'defined'" class="flex flex-col gap-1">
                 <label class="text-xs font-medium">Initial Quantity</label>
                 <input v-model.number="initialQuantity" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
               </div>
             </div>
 
-            <div v-if="mintLimitType === 'defined' && standardizeMetric" class="flex flex-col gap-1">
-              <label class="text-xs font-medium">Total / Initial Quantity</label>
-              <input :value="standardizedPreviewQty != null ? `${standardizedPreviewQty} (computed)` : 'Loading…'" disabled class="border rounded-md px-2 py-1.5 text-sm bg-gray-100" />
+            <div v-if="mintLimitType === 'defined' && isStandardizableRarity" class="flex items-center justify-between gap-2">
               <p class="text-[11px] text-gray-500">
-                {{ standardizedPercent }}% of {{ cmartMetricsInfo?.activePlayerCount ?? '…' }} active players (last {{ activePlayerWindowDays }} days) — recomputed every time this cToon is saved.
-                <span v-if="ctoonTotalMinted > 0">Will never drop below the {{ ctoonTotalMinted }} already minted.</span>
+                Fills Total/Initial Quantity above from {{ cmartMetricsInfo?.activePlayerCount ?? '…' }} players active {{ windowStartDaysAgo }}–{{ windowEndDaysAgo }} days ago × the Common/Uncommon/Rare/etc percentage set on Admin &gt; cMart Metrics. Still editable afterward.
               </p>
+              <button
+                type="button"
+                class="px-2 py-1.5 text-xs font-medium rounded-md border border-indigo-600 text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 whitespace-nowrap"
+                :disabled="!cmartMetricsInfo"
+                @click="fillFromActivePlayers"
+              >Fill from Active Players</button>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3" v-if="schedule.initialQty != null && schedule.finalAtDisplay">
@@ -230,18 +232,10 @@
 
             <label class="flex items-center gap-2">
               <input v-model="inCmart" type="checkbox"
-                     :disabled="standardizeMetric || rarity === 'Prize Only' || rarity === 'Auction Only' || (rarity === 'Code Only' && !inCmart)" />
+                     :disabled="rarity === 'Prize Only' || rarity === 'Auction Only' || (rarity === 'Code Only' && !inCmart)" />
               <span class="text-xs font-medium">In C-mart</span>
             </label>
             <p class="text-[11px] text-gray-500">Whether this cToon is purchasable in the c-mart shop. Disabled automatically for Prize/Auction Only rarities.</p>
-
-            <label v-if="isStandardizableRarity" class="flex items-center gap-2">
-              <input type="checkbox" v-model="standardizeMetric" />
-              <span class="text-xs font-medium">Standardize Metric in cMart</span>
-            </label>
-            <p v-if="isStandardizableRarity" class="text-[11px] text-gray-500">
-              Computes Total/Initial Quantity from the current active-player count instead of a hand-typed number — forces In Cmart on and Mint Limit to Defined. Adjust the percentage per rarity under Admin &gt; cMart Metrics.
-            </p>
           </section>
 
           <!-- ── Description & Characters ─────────────────────────── -->
@@ -705,21 +699,23 @@ const initialQuantity = ref(null); const inCmart = ref(false)
 const assetPath = ref(''); const setField = ref('')
 const characters = ref('')
 const description = ref('')
-const standardizeMetric = ref(false)
 const cmartMetricsInfo = ref(null)
-const activePlayerWindowDays = ref(14)
-const ctoonTotalMinted = ref(0)
+const windowStartDaysAgo = ref(14)
+const windowEndDaysAgo = ref(7)
 // codeOnly isn't itself editable from this form (see the PUT endpoint — it's read from the
-// existing row, not the payload), but it's loaded here so Standardize Metric can be hidden for a
-// Code-Only cToon even if its rarity was later changed away from "Code Only" — otherwise the
-// checkbox would be offered only to be rejected server-side.
+// existing row, not the payload), but it's loaded here so the fill button can be hidden for a
+// Code-Only cToon even if its rarity was later changed away from "Code Only".
 const ctoonCodeOnly = ref(false)
 const isStandardizableRarity = computed(() => STANDARDIZABLE_RARITIES.includes(rarity.value) && !ctoonCodeOnly.value)
-const standardizedPercent = computed(() => cmartMetricsInfo.value?.percentages?.[rarity.value] ?? null)
-const standardizedPreviewQty = computed(() => {
-  if (!cmartMetricsInfo.value || standardizedPercent.value == null) return null
-  return Math.max(ctoonTotalMinted.value || 1, Math.round(cmartMetricsInfo.value.activePlayerCount * standardizedPercent.value / 100))
-})
+
+function fillFromActivePlayers() {
+  if (!cmartMetricsInfo.value) return
+  const percent = cmartMetricsInfo.value.percentages?.[rarity.value]
+  if (percent == null) return
+  const qty = Math.max(1, Math.round(cmartMetricsInfo.value.activePlayerCount * percent / 100))
+  quantity.value = qty
+  initialQuantity.value = qty
+}
 
 /* mint limit refs */
 const mintLimitType = ref('defined')
@@ -1068,8 +1064,6 @@ onMounted(async ()=>{
     quantity.value = ctoon.quantity
     initialQuantity.value = ctoon.initialQuantity
     inCmart.value = ctoon.inCmart
-    standardizeMetric.value = !!ctoon.standardizeMetric
-    ctoonTotalMinted.value = ctoon.totalMinted || 0
     ctoonCodeOnly.value = !!ctoon.codeOnly
     assetPath.value = ctoon.assetPath
     setField.value = ctoon.set || ''
@@ -1149,7 +1143,8 @@ onMounted(async ()=>{
     ])
     try {
       cmartMetricsInfo.value = await cmartMetricsRes.json()
-      if (cmartMetricsInfo.value?.activePlayerWindowDays) activePlayerWindowDays.value = cmartMetricsInfo.value.activePlayerWindowDays
+      if (cmartMetricsInfo.value?.windowStartDaysAgo) windowStartDaysAgo.value = cmartMetricsInfo.value.windowStartDaysAgo
+      if (cmartMetricsInfo.value?.windowEndDaysAgo) windowEndDaysAgo.value = cmartMetricsInfo.value.windowEndDaysAgo
     } catch {}
     seriesOptions.value = await sRes.json()
     setsOptions.value = (await setsRes.json()).filter(Boolean)
@@ -1166,20 +1161,12 @@ onMounted(async ()=>{
 
 watch(rarity, v => {
   if (!ctoonLoaded.value) return
-  if (!STANDARDIZABLE_RARITIES.includes(v)) standardizeMetric.value = false
   const d = rarityDefaults.value?.[v]
   if (d) {
     price.value = Number(d.price ?? 0)
   } else {
     const map = { Common:100, Uncommon:200, Rare:400, 'Very Rare':750, 'Crazy Rare':1250 }
     price.value = map[v] || 0
-  }
-})
-
-watch(standardizeMetric, on => {
-  if (on) {
-    inCmart.value = true
-    mintLimitType.value = 'defined'
   }
 })
 
@@ -1260,7 +1247,6 @@ async function submitForm(){
     fd.append('quantity', mintLimitType.value === 'defined' ? (quantity.value ?? '') : '')
     fd.append('initialQuantity', mintLimitType.value === 'defined' ? (initialQuantity.value ?? '') : '')
     fd.append('inCmart', inCmart.value)
-    fd.append('standardizeMetric', standardizeMetric.value)
     fd.append('set', setField.value)
     fd.append('description', description.value.trim())
     fd.append('characters', JSON.stringify(characters.value.split(',').map(s=>s.trim()).filter(Boolean)))
@@ -1329,7 +1315,6 @@ async function submitForm(){
     quantity:        mintLimitType.value === 'defined' ? quantity.value : null,
     initialQuantity: mintLimitType.value === 'defined' ? initialQuantity.value : null,
     inCmart:         inCmart.value,
-    standardizeMetric: standardizeMetric.value,
 
     set:             setField.value,
     description:     description.value.trim() || null,

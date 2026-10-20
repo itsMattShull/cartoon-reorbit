@@ -1,10 +1,12 @@
 // server/utils/cmartStandardizedMetrics.js
 //
-// "Standardize Metric in cMart" computes a cToon's mint quantity from the current active-player
-// count (server/utils/activePlayers.js) and a per-rarity percentage, instead of an admin hand-
-// typing a number — so supply scales with the real population instead of a guess that goes stale
-// as the player base grows or shrinks. Percentages are admin-configurable on the "cMart Metrics"
-// page (server/api/admin/cmart-metrics.get.js / .post.js), stored the same way
+// Backs the "Fill from Active Players" button on the Add/Edit cToon forms: a one-time suggestion
+// for Total/Initial Quantity, computed from the prior-week active-player count
+// (server/utils/activePlayers.js) and a per-rarity percentage, instead of an admin guessing a
+// number that goes stale as the player base grows or shrinks. The button only fills the fields —
+// they're ordinary editable inputs afterward, and nothing is enforced server-side at save time.
+// Percentages are admin-configurable on the "cMart Metrics" page
+// (server/api/admin/cmart-metrics.get.js / .post.js), stored the same way
 // GlobalGameConfig.rarityDefaults already is: a Json? column merged with hardcoded fallback
 // defaults (see server/api/rarity-defaults.get.js for the sibling pattern).
 import { prisma } from '../prisma.js'
@@ -32,19 +34,13 @@ export async function getStandardizedMetricPercentages() {
 }
 
 /**
- * Pure function: the mint quantity for a standardizable rarity. Returns null for a rarity this
- * doesn't apply to (caller decides what that means — for the cToon create/edit endpoints it's a
- * validation error, since the toggle should never have been settable there in the first place).
- *
- * `floorAt` keeps the result from coming out lower than some caller-supplied minimum — used by
- * the edit endpoint so a drop in the active-player count since a cToon was created can never
- * silently shrink its quantity below how many copies have already been minted.
+ * Pure function: the suggested mint quantity for a standardizable rarity. Returns null for a
+ * rarity this doesn't apply to (the Add/Edit cToon forms hide the fill button in that case, so
+ * this is a defensive fallback, not a validation path — nothing is enforced server-side).
  */
-export function computeStandardizedQuantity(rarity, activePlayerCount, percentages, { floorAt } = {}) {
+export function computeStandardizedQuantity(rarity, activePlayerCount, percentages) {
   if (!isStandardizableRarity(rarity)) return null
   const percent = Number(percentages?.[rarity])
   if (!Number.isFinite(percent)) return null
-  const raw = Math.round((Number(activePlayerCount) || 0) * percent / 100)
-  const minimum = Math.max(1, Number.isFinite(floorAt) ? floorAt : 1)
-  return Math.max(minimum, raw)
+  return Math.max(1, Math.round((Number(activePlayerCount) || 0) * percent / 100))
 }

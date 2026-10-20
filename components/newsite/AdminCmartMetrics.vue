@@ -1,8 +1,8 @@
 <!-- components/newsite/AdminCmartMetrics.vue
-     Admin page for the "Standardize Metric in cMart" feature (see Add/Edit cToon's own toggle of
-     the same name): shows the data needed to pick sensible per-rarity percentages — active player
-     count, median/avg points per active player — and lets an admin tune those percentages, with a
-     live preview of the mint quantity each one currently produces. -->
+     Admin page for the "Fill from Active Players" button on the Add/Edit cToon forms: shows the
+     data needed to pick sensible per-rarity percentages — active player count, median/avg points
+     per active player — and lets an admin tune those percentages, with a live preview of the mint
+     quantity each one currently suggests. -->
 <template>
   <div class="bg-gray-50 text-xs text-gray-900">
     <div class="p-2">
@@ -10,10 +10,9 @@
         <div>
           <h1 class="text-base font-semibold text-gray-900">cMart Metrics</h1>
           <p class="text-[11px] text-gray-500 mt-0.5">
-            Controls "Standardize Metric in cMart" on the Add/Edit cToon forms: when that toggle is
-            on, a cToon's Total/Initial Quantity is computed as this percentage of the current
-            active-player count instead of being hand-typed, recomputed fresh every time it's
-            saved.
+            Controls the "Fill from Active Players" button on the Add/Edit cToon forms: clicking it
+            fills Total/Initial Quantity with this percentage of the active-player count below. The
+            fields stay freely editable afterward — nothing here is enforced automatically.
           </p>
         </div>
 
@@ -25,7 +24,7 @@
             <div class="border rounded-lg p-3">
               <div class="text-[11px] text-gray-500 uppercase tracking-wide">Active Players</div>
               <div class="text-xl font-semibold tabular-nums">{{ formatNumber(data.activePlayerCount) }}</div>
-              <div class="text-[11px] text-gray-500 mt-0.5">Activity in the last {{ data.activePlayerWindowDays }} days</div>
+              <div class="text-[11px] text-gray-500 mt-0.5">Active {{ data.windowStartDaysAgo }}–{{ data.windowEndDaysAgo }} days ago</div>
             </div>
             <div class="border rounded-lg p-3">
               <div class="text-[11px] text-gray-500 uppercase tracking-wide">Median Points / Active Player</div>
@@ -42,8 +41,7 @@
           <!-- Percentage table -->
           <div>
             <p class="text-xs text-gray-600 mb-2">
-              Mint quantity for a standardized cToon = <strong>active players × percentage</strong>, rounded,
-              minimum 1 (and never shrunk below copies already minted, when editing an existing cToon).
+              The button fills in <strong>active players × percentage</strong>, rounded, minimum 1.
             </p>
 
             <!-- Desktop table -->

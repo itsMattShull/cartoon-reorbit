@@ -295,12 +295,6 @@ model Ctoon {
   mintLimitType String    @default("defined")
   mintEndDate   DateTime?
 
-  // When true, quantity/initialQuantity are computed from the active-player count and this
-  // rarity's configured percentage (GlobalGameConfig.cmartStandardizedMetrics) rather than
-  // hand-typed — recomputed fresh every time the cToon is saved. See
-  // server/utils/cmartStandardizedMetrics.js and server/api/admin/ctoon.post.js.
-  standardizeMetric Boolean @default(false)
-
   // Two-phase release (advisory fields; availability driven by global settings)
   initialReleaseAt  DateTime?
   finalReleaseAt    DateTime?

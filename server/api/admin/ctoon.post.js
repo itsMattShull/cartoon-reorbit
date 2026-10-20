@@ -15,8 +15,6 @@ import { sanitizePathSegment, sanitizeFilename, assertInside, sniffImageType, MA
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 import { validateEffectSchema } from '@/server/utils/ogGtoonEffects'
 import { parseGtoonCardStyleInput } from '@/server/utils/ogGtoonDisplay'
-import { isStandardizableRarity, getStandardizedMetricPercentages, computeStandardizedQuantity } from '@/server/utils/cmartStandardizedMetrics'
-import { getActivePlayerCount } from '@/server/utils/activePlayers'
 
 const OG_GTOON_COLORS = new Set(['BLACK', 'SILVER', 'BLUE', 'RED', 'YELLOW', 'GREEN', 'PURPLE', 'ORANGE', 'PINK'])
 const OG_GTOON_CARD_TYPES = new Set(['ANIMAL', 'FEMALE', 'HERO', 'MALE', 'MONSTER', 'PLACE', 'PROP', 'VEHICLE', 'VILLAIN'])
@@ -70,7 +68,7 @@ export default defineEventHandler(async (event) => {
     name, series, rarity, releaseDate: releaseRaw,
     totalQuantity, initialQuantity, perUserLimit,
     codeOnly, inCmart, price, set: setField, characters: charsRaw, type,
-    cMoonId: cMoonIdRaw, standardizeMetric: standardizeMetricRaw,
+    cMoonId: cMoonIdRaw,
 
     /* NEW G-toon fields */
     isGtoon, cost, power, abilityKey, abilityData, gtoonType,
@@ -112,28 +110,14 @@ export default defineEventHandler(async (event) => {
   if (releaseDate <= new Date()) throw createError({ statusCode: 400, statusMessage: 'Release must be future.' })
 
   const codeOnlyBool = String(codeOnly) === 'true'
-  let inCmartBool  = String(inCmart)  === 'true'
+  const inCmartBool  = String(inCmart)  === 'true'
   if (codeOnlyBool && inCmartBool) {
     throw createError({ statusCode: 400, statusMessage: 'Cannot be Code-Only and in C-mart.' })
   }
 
-  const standardizeMetricBool = String(standardizeMetricRaw) === 'true'
-  if (standardizeMetricBool) {
-    if (!isStandardizableRarity(rarity)) {
-      throw createError({ statusCode: 400, statusMessage: 'Standardize Metric is only available for Common, Uncommon, Rare, Very Rare, and Crazy Rare.' })
-    }
-    if (codeOnlyBool) {
-      throw createError({ statusCode: 400, statusMessage: 'Cannot be Code-Only and use Standardize Metric.' })
-    }
-    // Server-authoritative once standardized, same precedent as initialReleaseAt/finalReleaseAt
-    // below: a standardized cToon is always in cMart with a defined (not time-based) limit,
-    // regardless of what the client sent.
-    inCmartBool = true
-  }
-
-  let totQty  = totalQuantity  == null || totalQuantity  === '' ? null : parseInt(totalQuantity,10)
-  let initQty = initialQuantity == null || initialQuantity === '' ? null : parseInt(initialQuantity,10)
-  if (!standardizeMetricBool && initQty != null && totQty != null && initQty > totQty) {
+  const totQty  = totalQuantity  == null || totalQuantity  === '' ? null : parseInt(totalQuantity,10)
+  const initQty = initialQuantity == null || initialQuantity === '' ? null : parseInt(initialQuantity,10)
+  if (initQty != null && totQty != null && initQty > totQty) {
     throw createError({ statusCode: 400, statusMessage: 'Initial qty > total qty.' })
   }
 
@@ -148,25 +132,13 @@ export default defineEventHandler(async (event) => {
 
   // Mint limit type
   const TIME_BASED_CAP = 999999999
-  const mintLimitType = standardizeMetricBool ? 'defined' : (mintLimitTypeRaw === 'timeBased' ? 'timeBased' : 'defined')
+  const mintLimitType = mintLimitTypeRaw === 'timeBased' ? 'timeBased' : 'defined'
   let mintEndDate = null
   if (mintLimitType === 'timeBased') {
     mintEndDate = mintEndDateRaw ? new Date(mintEndDateRaw) : null
     if (!mintEndDate || isNaN(mintEndDate)) {
       throw createError({ statusCode: 400, statusMessage: 'Mint End Date is required for Time Based Limit.' })
     }
-  }
-
-  // Standardize Metric: quantity is server-computed from the current active-player count and
-  // this rarity's configured percentage, overriding whatever the client sent.
-  if (standardizeMetricBool) {
-    const [activePlayerCount, percentages] = await Promise.all([
-      getActivePlayerCount(),
-      getStandardizedMetricPercentages()
-    ])
-    const computed = computeStandardizedQuantity(rarity, activePlayerCount, percentages)
-    totQty = computed
-    initQty = computed
   }
 
   const priceInt = price ? parseInt(price, 10) : 0
@@ -303,7 +275,6 @@ export default defineEventHandler(async (event) => {
       perUserLimit: limitInt,
       mintLimitType,
       mintEndDate,
-      standardizeMetric: standardizeMetricBool,
       timeBasedLimitCount:      mintLimitType === 'timeBased' ? timeBasedLimitCountInt      : null,
       timeBasedLimitWindowDays: mintLimitType === 'timeBased' ? timeBasedLimitWindowDaysInt : null,
       set: setField,

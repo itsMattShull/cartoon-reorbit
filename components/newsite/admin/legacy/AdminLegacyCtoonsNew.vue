@@ -138,18 +138,29 @@
 
             <div class="flex flex-col gap-1">
               <label class="text-xs font-medium">Mint Limit</label>
-              <select v-model="mintLimitType" :disabled="standardizeMetric" class="border rounded-md px-2 py-1.5 text-sm bg-white disabled:bg-gray-100">
+              <select v-model="mintLimitType" class="border rounded-md px-2 py-1.5 text-sm bg-white">
                 <option value="defined">Defined Number Limit</option>
                 <option value="timeBased">Time Based Limit</option>
               </select>
               <p class="text-[11px] text-gray-500">
-                <template v-if="standardizeMetric">Locked to Defined Number Limit while Standardize Metric is on.</template>
-                <template v-else-if="mintLimitType === 'defined'">Set a fixed quantity. cToon sells out when all are minted.</template>
+                <template v-if="mintLimitType === 'defined'">Set a fixed quantity. cToon sells out when all are minted.</template>
                 <template v-else>Allow unlimited minting until the Mint End Date, then cap based on demand.</template>
               </p>
             </div>
 
-            <div class="grid grid-cols-2 gap-3" v-if="mintLimitType === 'defined' && !standardizeMetric">
+            <div v-if="mintLimitType === 'defined' && isStandardizableRarity" class="flex items-center justify-between gap-2">
+              <p class="text-[11px] text-gray-500">
+                Fills Total/Initial Quantity below from {{ cmartMetricsInfo?.activePlayerCount ?? '…' }} players active {{ windowStartDaysAgo }}–{{ windowEndDaysAgo }} days ago × the Common/Uncommon/Rare/etc percentage set on Admin &gt; cMart Metrics. Still editable afterward.
+              </p>
+              <button
+                type="button"
+                class="px-2 py-1.5 text-xs font-medium rounded-md border border-indigo-600 text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 whitespace-nowrap"
+                :disabled="!cmartMetricsInfo"
+                @click="fillFromActivePlayers"
+              >Fill from Active Players</button>
+            </div>
+
+            <div class="grid grid-cols-2 gap-3" v-if="mintLimitType === 'defined'">
               <div class="flex flex-col gap-1">
                 <label class="text-xs font-medium">Total Quantity</label>
                 <input v-model.number="totalQuantity" type="number" min="1" class="border rounded-md px-2 py-1.5 text-sm" />
@@ -160,14 +171,6 @@
                 <input v-model.number="initialQuantity" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
                 <p class="text-[11px] text-gray-500">Number of First Editions available. Must be ≤ total quantity.</p>
               </div>
-            </div>
-
-            <div v-if="mintLimitType === 'defined' && standardizeMetric" class="flex flex-col gap-1">
-              <label class="text-xs font-medium">Total / Initial Quantity</label>
-              <input :value="standardizedPreviewQty != null ? `${standardizedPreviewQty} (computed)` : 'Loading…'" disabled class="border rounded-md px-2 py-1.5 text-sm bg-gray-100" />
-              <p class="text-[11px] text-gray-500">
-                {{ standardizedPercent }}% of {{ cmartMetricsInfo?.activePlayerCount ?? '…' }} active players (last {{ activePlayerWindowDays }} days) — recomputed every time this cToon is saved.
-              </p>
             </div>
 
             <div v-if="mintLimitType === 'timeBased'" class="flex flex-col gap-1">
@@ -246,14 +249,6 @@
               <span class="text-xs font-medium">In Cmart</span>
             </label>
             <p class="text-[11px] text-gray-500">Whether this cToon is purchasable in the c-mart shop. Select "Code Only" rarity for exclusive reward drops instead.</p>
-
-            <label v-if="isStandardizableRarity" class="flex items-center gap-2">
-              <input type="checkbox" v-model="standardizeMetric" />
-              <span class="text-xs font-medium">Standardize Metric in cMart</span>
-            </label>
-            <p v-if="isStandardizableRarity" class="text-[11px] text-gray-500">
-              Computes Total/Initial Quantity from the current active-player count instead of a hand-typed number — forces In Cmart on and Mint Limit to Defined. Adjust the percentage per rarity under Admin &gt; cMart Metrics.
-            </p>
           </section>
 
           <!-- ── G-toon Gameplay ───────────────────────────────────── -->
@@ -714,9 +709,9 @@ const initialQuantity = ref(null)
 const perUserLimit = ref(null)
 const codeOnly = ref(false)
 const inCmart = ref(false)
-const standardizeMetric = ref(false)
 const cmartMetricsInfo = ref(null)
-const activePlayerWindowDays = ref(14)
+const windowStartDaysAgo = ref(14)
+const windowEndDaysAgo = ref(7)
 const price = ref(0)
 const imageFile = ref(null)
 const seriesOptions = ref([])
@@ -948,11 +943,15 @@ watch(abilityKey, () => { abilityParam.value = null })
 // Added rarityOptions array
 const rarityOptions = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare', 'Prize Only', 'Code Only', 'Auction Only']
 const isStandardizableRarity = computed(() => STANDARDIZABLE_RARITIES.includes(rarity.value))
-const standardizedPercent = computed(() => cmartMetricsInfo.value?.percentages?.[rarity.value] ?? null)
-const standardizedPreviewQty = computed(() => {
-  if (!cmartMetricsInfo.value || standardizedPercent.value == null) return null
-  return Math.max(1, Math.round(cmartMetricsInfo.value.activePlayerCount * standardizedPercent.value / 100))
-})
+
+function fillFromActivePlayers() {
+  if (!cmartMetricsInfo.value) return
+  const percent = cmartMetricsInfo.value.percentages?.[rarity.value]
+  if (percent == null) return
+  const qty = Math.max(1, Math.round(cmartMetricsInfo.value.activePlayerCount * percent / 100))
+  totalQuantity.value = qty
+  initialQuantity.value = qty
+}
 
 const soundFile = ref(null)
 const errors = reactive({ image: '', name: '', series: '', rarity: '', cost: '', power: '', sound: '', gtoonValue: '', gtoonEffects: '' })
@@ -991,12 +990,12 @@ onMounted(async () => {
   try { const r = await relRes.json(); releasePercent.value = Number(r.initialReleasePercent ?? 75); delayHours.value = Number(r.finalReleaseDelayHours ?? 12) } catch {}
   try {
     cmartMetricsInfo.value = await cmartMetricsRes.json()
-    if (cmartMetricsInfo.value?.activePlayerWindowDays) activePlayerWindowDays.value = cmartMetricsInfo.value.activePlayerWindowDays
+    if (cmartMetricsInfo.value?.windowStartDaysAgo) windowStartDaysAgo.value = cmartMetricsInfo.value.windowStartDaysAgo
+    if (cmartMetricsInfo.value?.windowEndDaysAgo) windowEndDaysAgo.value = cmartMetricsInfo.value.windowEndDaysAgo
   } catch {}
 })
 
 watch(rarity, val => {
-  if (!STANDARDIZABLE_RARITIES.includes(val)) standardizeMetric.value = false
   const d = rarityDefaults.value?.[val]
   if (d) {
     totalQuantity.value   = d.totalQuantity ?? null
@@ -1025,13 +1024,6 @@ watch(rarity, val => {
   }
   codeOnly.value = val === 'Code Only'
   if (val === 'Code Only') inCmart.value = false
-})
-
-watch(standardizeMetric, on => {
-  if (on) {
-    inCmart.value = true
-    mintLimitType.value = 'defined'
-  }
 })
 
 function handleSoundFile(e) {
@@ -1199,7 +1191,6 @@ async function submitForm() {
   formData.append('perUserLimit', perUserLimit.value ?? '')
   formData.append('codeOnly', codeOnly.value)
   formData.append('inCmart', inCmart.value)
-  formData.append('standardizeMetric', standardizeMetric.value)
   formData.append('price', price.value)
   formData.append('isGtoon',      isGtoon.value)
   if (isGtoon.value) {

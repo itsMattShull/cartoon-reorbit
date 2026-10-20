@@ -44,12 +44,3 @@ test('computeStandardizedQuantity returns null when the percentage config is mis
 test('computeStandardizedQuantity never goes below 1 even with zero active players', () => {
   assert.equal(computeStandardizedQuantity('Crazy Rare', 0, DEFAULT_PERCENTAGES), 1)
 })
-
-test('computeStandardizedQuantity floorAt clamps the result up, never down', () => {
-  // Raw result (10 * 0.5 = 5) is below floorAt (200 already minted) -> clamps up to 200.
-  assert.equal(computeStandardizedQuantity('Crazy Rare', 10, DEFAULT_PERCENTAGES, { floorAt: 200 }), 200)
-  // Raw result (1000 * 0.5 = 500) is above floorAt (50) -> floorAt has no effect.
-  assert.equal(computeStandardizedQuantity('Crazy Rare', 1000, DEFAULT_PERCENTAGES, { floorAt: 50 }), 500)
-  // A non-finite floorAt (e.g. totalMinted undefined on create, no existing row) falls back to 1.
-  assert.equal(computeStandardizedQuantity('Crazy Rare', 0, DEFAULT_PERCENTAGES, { floorAt: undefined }), 1)
-})
