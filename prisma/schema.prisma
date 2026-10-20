@@ -3251,6 +3251,7 @@ model DissolveMisfireLog {
   rightfulOwnerSince    DateTime? // that CtoonOwnerLog row's own createdAt
   rightfulOwnerMethod   String?   // that row's own method (TRADE/AUCTION/ADMIN_GRANT/...)
   source         String // PREVENTED | HISTORICAL_ACTIVE | HISTORICAL_RESOLVED
+  releaseMethod  String? // how the official account got the item before releasing it (DISSOLVE / DISSOLVE_INACTIVE / ADMIN_GRANT / ADMIN_CORRECTION / ...); null for older rows and PREVENTED
   queueEntryId   String? // best-effort reference, same caveat as DissolveAuctionErrorLog's own field
   bogusAuctionId String? // null for PREVENTED (no auction was ever created)
   // Only set for HISTORICAL_RESOLVED — who the bogus auction actually paid out to, and what they

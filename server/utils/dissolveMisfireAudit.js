@@ -5,7 +5,7 @@
 // DissolveMisfireLog's schema comment and server/utils/dissolveMisfire.js for the live-prevention
 // side of this.
 import { prisma } from '../prisma.js'
-import { findRightfulOwnerBefore, hasDissolveEventBefore } from './dissolveMisfire.js'
+import { findRightfulOwnerBefore, findOfficialReleaseBefore } from './dissolveMisfire.js'
 
 /**
  * Scans every auction the official account ever created for a case where chain-of-custody
@@ -20,8 +20,9 @@ import { findRightfulOwnerBefore, hasDissolveEventBefore } from './dissolveMisfi
  * reversing) are considered. A CANCELLED or no-bid CLOSED auction never moved anything, so
  * there's no victim to surface for it.
  *
- * A candidate only counts as a genuine misfire when the item actually went through a DISSOLVE
- * event before this auction (see hasDissolveEventBefore) — otherwise this is almost certainly an
+ * A candidate only counts as a genuine misfire when official actually HELD the item before this
+ * auction — via a dissolve, or a direct grant (AuctionOnly mint, give-to-official, admin
+ * correction); see findOfficialReleaseBefore. Otherwise this is almost certainly an
  * ordinary auction whose creatorId was reassigned to official because its seller's account got
  * dissolved while the auction was still active (both dissolve.worker.js and the inactivity sweep
  * do this deliberately, and it's correct behavior, not a misfire). Re-running the scan also prunes
@@ -69,11 +70,13 @@ export async function scanForHistoricalMisfires() {
     // either way this is a legitimate first-pass dissolve auction, not a misfire. Absence of
     // evidence isn't treated as evidence of the bug.
     const isCandidate = rightfulOwner && rightfulOwner.userId !== official.id
-    // A genuine misfire requires the item to have actually gone through a DISSOLVE event before
-    // this auction — otherwise this is an ordinary auction whose creatorId got reassigned to
-    // official because its seller's account was dissolved mid-auction (see this function's own
-    // comment above).
-    const isGenuineMisfire = isCandidate && await hasDissolveEventBefore(prisma, a.userCtoon.id, a.createdAt)
+    // A genuine misfire requires official to have actually held the item before this auction —
+    // otherwise this is an ordinary auction whose creatorId got reassigned to official because its
+    // seller's account was dissolved mid-auction (see this function's own comment above).
+    const release = isCandidate
+      ? await findOfficialReleaseBefore(prisma, a.userCtoon.id, a.createdAt, official.id)
+      : null
+    const isGenuineMisfire = !!release
 
     if (!isGenuineMisfire) {
       // Clean up a previously-logged row for this auction that no longer qualifies — but only
@@ -101,7 +104,7 @@ export async function scanForHistoricalMisfires() {
       // otherwise it keeps claiming "Still Active" and the remediation would never see who was
       // actually paid out. Admin review fields are never touched.
       if (!existing.resolvedAt) {
-        await prisma.dissolveMisfireLog.update({ where: { id: existing.id }, data: { source, ...wrongWinner } })
+        await prisma.dissolveMisfireLog.update({ where: { id: existing.id }, data: { source, releaseMethod: release.method, ...wrongWinner } })
       } else if (existing.resolutionSummary?.alreadyCorrect && a.status === 'CLOSED' && a.winnerId) {
         // An earlier resolve closed this out as "owner already correct" while the bogus auction was
         // still live; it has since settled and moved the item to the wrong winner, so that
@@ -110,7 +113,7 @@ export async function scanForHistoricalMisfires() {
         await prisma.dissolveMisfireLog.update({
           where: { id: existing.id },
           data: {
-            source, ...wrongWinner,
+            source, releaseMethod: release.method, ...wrongWinner,
             resolvedAt: null, resolvedByUserId: null, resolvedByUsername: null, resolutionSummary: null,
             resolutionBlockedReason: null,
             reviewedAt: null, reviewedByUserId: null, reviewedByUsername: null, reviewNote: null
@@ -132,6 +135,7 @@ export async function scanForHistoricalMisfires() {
         rightfulOwnerSince: rightfulOwner.since,
         rightfulOwnerMethod: rightfulOwner.method,
         source,
+        releaseMethod: release.method,
         bogusAuctionId: a.id,
         ...wrongWinner,
       }

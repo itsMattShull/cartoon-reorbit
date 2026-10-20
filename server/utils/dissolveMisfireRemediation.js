@@ -1,8 +1,8 @@
 // server/utils/dissolveMisfireRemediation.js
 //
 // Computes and executes the automated fix for a DissolveMisfireLog row: restore the cToon to
-// the ORIGINAL auction winner (the first legitimate recipient after it was dissolved into the
-// official account), and compensate everyone else who held it since — exactly their paid bid if
+// the ORIGINAL auction winner (the first legitimate recipient after it left the official account —
+// dissolved into it or granted to it), and compensate everyone else who held it since — exactly their paid bid if
 // they wrongly won the bogus second auction, or an approximate market value (the same cascade the
 // Economy page uses) if they received it via an ordinary legitimate trade/grant in between. See
 // prisma/schema.prisma's DissolveMisfireLog comment and this session's approved plan for the
@@ -13,7 +13,7 @@ import { getAuctionReferenceValues, getCmartPrices, pickReferenceValue, MIN_SAMP
 import { rarityFloor } from './auctionPriceSuggestion.js'
 import { sendDiscordDMByDiscordId } from './discord.js'
 import { logAdminChange } from './adminChangeLog.js'
-import { DISSOLVE_METHODS } from './dissolveMisfire.js'
+import { findLastOfficialHoldIndex } from './dissolveMisfire.js'
 import { cancelAuctionClose } from './queues.js'
 
 export const DISSOLVE_MISFIRE_CORRECTION_METHOD = 'DISSOLVE_MISFIRE_CORRECTION'
@@ -95,17 +95,19 @@ export async function computeRemediationPlan(misfireLogId) {
     }
   })
 
-  let dissolveIdx = -1
-  for (let i = history.length - 1; i >= 0; i--) {
-    if (DISSOLVE_METHODS.includes(history[i].method)) { dissolveIdx = i; break }
-  }
+  // The release event is the last time official held the item (a dissolve, or a direct grant such
+  // as an AuctionOnly mint / give-to-official / admin correction) — the first person after it is
+  // the original winner.
+  const officialUsername = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
+  const official = await prisma.user.findUnique({ where: { username: officialUsername }, select: { id: true } })
+  const dissolveIdx = findLastOfficialHoldIndex(history, official?.id)
   if (dissolveIdx === -1) {
-    return { blocked: "No DISSOLVE ownership event found in this cToon's history — cannot determine the original winner." }
+    return { blocked: "The official account never appears as a holder in this cToon's history — cannot determine the original winner." }
   }
 
   const afterDissolve = history.slice(dissolveIdx + 1)
   if (!afterDissolve.length) {
-    return { blocked: 'No ownership event recorded after the dissolve — nothing to restore.' }
+    return { blocked: 'No ownership event recorded after official released it — nothing to restore.' }
   }
 
   const originalWinnerRow = afterDissolve[0]
@@ -196,10 +198,6 @@ export async function computeRemediationPlan(misfireLogId) {
   }
   // The bogus auction itself is listed under the official account — it was never a real seller
   // who lost something, so it must not be paid "compensation" for its own cancelled listing.
-  const official = await prisma.user.findUnique({
-    where: { username: process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial' },
-    select: { id: true }
-  })
   const extraWhy = new Map()
   for (const x of cleanupExtras) {
     if (x.userId === originalWinner.userId || x.userId === official?.id || compensationMap.has(x.userId) || extraWhy.has(x.userId)) continue
