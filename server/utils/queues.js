@@ -395,3 +395,18 @@ export async function scheduleAnnouncementSend(announcementId, scheduledAt) {
 export async function cancelAnnouncementSend(announcementId) {
   await removeDelayedJob(`announcement-${String(announcementId)}`)
 }
+
+/**
+ * (Re)schedule the job that applies the Winball grand-prize schedule at a row's startsAt. The
+ * handler re-reads the schedule, so it is idempotent; a 1s buffer keeps it from firing just before
+ * the row becomes "active" (startsAt <= now).
+ */
+export async function scheduleWinballPrizeUpdate(scheduleId, startsAt) {
+  const id = String(scheduleId)
+  if (!startsAt) return removeDelayedJob(`winball-prize-${id}`)
+  await replaceDelayedJob('winballPrizeUpdate', `winball-prize-${id}`, { scheduleId: id }, new Date(startsAt).getTime() + 1000)
+}
+
+export async function cancelWinballPrizeUpdate(scheduleId) {
+  await removeDelayedJob(`winball-prize-${String(scheduleId)}`)
+}

@@ -1,6 +1,7 @@
 // server/api/admin/winball-grand-prize/[id].delete.js
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
+import { cancelWinballPrizeUpdate, bestEffort } from '@/server/utils/queues'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -13,5 +14,7 @@ export default defineEventHandler(async (event) => {
   if (!id) throw createError({ statusCode: 400, statusMessage: 'Missing id' })
 
   await db.winballGrandPrizeSchedule.delete({ where: { id } })
+  await bestEffort('winball prize cancel', () => cancelWinballPrizeUpdate(id))
+
   return { ok: true }
 })
