@@ -9,150 +9,154 @@
       </div>
       <p class="text-gray-500">
         Controls the seasonal-updates section on the bottom half of the cMoon navigation page:
-        header, live team leaderboard, progress trackers, and a text blurb.
+        each season has its own start/end date, header, live team leaderboard + win/loss recap,
+        progress trackers, and a text blurb. Seasons can be scheduled ahead of time — the nav page
+        shows a countdown to whichever one is next.
       </p>
 
       <p v-if="loadError" class="text-red-600">{{ loadError }}</p>
 
-      <!-- Season header + start-new-season -->
-      <div class="bg-white border rounded p-3 space-y-3">
-        <h2 class="font-semibold text-sm">Season</h2>
-
-        <div>
-          <label class="block text-xs font-medium mb-1">Header ({{ header.length }}/80)</label>
-          <input v-model="header" maxlength="80" class="w-full border rounded px-2 py-1" placeholder="e.g. cMoons Season 1" />
-          <p class="text-[11px] text-gray-500 mt-1">Saved together with the blurb below via "Save Season Settings."</p>
+      <!-- Seasons list -->
+      <div class="bg-white border rounded p-3 space-y-2">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold text-sm">Seasons</h2>
+          <button
+            type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700"
+            @click="openAddForm"
+          >+ Add Season</button>
         </div>
 
-        <div class="border-t pt-3">
-          <p class="text-gray-600">
-            Season started <span class="font-medium">{{ formatDate(startedAt) }}</span>.
-            Every tracker below only counts what's happened since then.
-          </p>
-          <button
-            type="button" class="mt-2 px-3 py-1.5 text-xs font-semibold rounded-md border border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-50"
-            :disabled="startingNew" @click="startNewSeason"
-          >{{ startingNew ? 'Starting…' : 'Start New Season' }}</button>
-          <p class="text-[11px] text-gray-500 mt-1">
-            Resets every tracker's progress to zero going forward. Past battles and points are
-            never deleted — just no longer counted toward the current season.
-          </p>
+        <div v-if="loading" class="text-gray-500 py-4 text-center">Loading…</div>
+        <template v-else>
+          <div v-for="s in seasons" :key="s.id" class="border rounded p-2 flex items-center gap-3 flex-wrap">
+            <div class="min-w-0 flex-1">
+              <div class="font-semibold break-words">
+                Season {{ s.seasonNumber }}<span v-if="s.header"> — {{ s.header }}</span>
+                <span
+                  class="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium"
+                  :class="statusClass(s)"
+                >{{ statusLabel(s) }}</span>
+              </div>
+              <div class="text-[11px] text-gray-600">{{ formatDate(s.startAt) }} – {{ formatDate(s.endAt) }}</div>
+            </div>
+            <div class="flex items-center gap-3 flex-shrink-0">
+              <button
+                v-if="isFuture(s)" type="button" class="text-indigo-600 hover:underline"
+                @click="openEditForm(s)"
+              >Edit</button>
+              <button
+                v-if="isFuture(s)" type="button" class="text-red-600 hover:underline disabled:opacity-40"
+                :disabled="deletingId === s.id" @click="removeSeason(s)"
+              >{{ deletingId === s.id ? 'Deleting…' : 'Delete' }}</button>
+            </div>
+          </div>
+          <p v-if="!seasons.length" class="text-gray-500 px-1">No seasons yet — click "+ Add Season" to create one.</p>
+        </template>
+      </div>
+
+      <!-- Add/Edit season form -->
+      <div v-if="formOpen" class="bg-white border rounded p-3 space-y-3">
+        <h2 class="font-semibold text-sm">{{ editingId ? 'Edit Season' : 'Add Season' }}</h2>
+        <p v-if="formError" class="text-red-600">{{ formError }}</p>
+
+        <div class="flex gap-2 flex-wrap">
+          <div class="flex-1 min-w-[160px]">
+            <label class="block text-xs font-medium mb-1">Start date</label>
+            <input v-model="form.startAt" type="datetime-local" class="w-full border rounded px-2 py-1" />
+          </div>
+          <div class="flex-1 min-w-[160px]">
+            <label class="block text-xs font-medium mb-1">End date</label>
+            <input v-model="form.endAt" type="datetime-local" class="w-full border rounded px-2 py-1" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium mb-1">Header ({{ form.header.length }}/80)</label>
+          <input v-model="form.header" maxlength="80" class="w-full border rounded px-2 py-1" placeholder="e.g. cMoons Season 1" />
         </div>
 
         <div class="border-t pt-3 space-y-2">
           <label class="flex items-center gap-2">
-            <input type="checkbox" v-model="enemiesGoalEnabled" />
+            <input type="checkbox" v-model="form.enemiesGoalEnabled" />
             <span class="text-xs font-medium">Show a combined "enemies defeated" progress bar</span>
           </label>
           <p class="text-[11px] text-gray-500">
-            One shared bar for the whole playerbase — every enemy defeated since the season
-            started, regular enemies and raid bosses alike. Saved together with the rest of this
-            card via "Save Season Settings."
+            One shared bar for the whole playerbase — every enemy defeated during this season,
+            regular enemies and raid bosses alike.
           </p>
-          <div v-if="enemiesGoalEnabled" class="flex gap-2 flex-wrap">
+          <div v-if="form.enemiesGoalEnabled" class="flex gap-2 flex-wrap">
             <div class="flex-1 min-w-[160px]">
-              <label class="block text-xs font-medium mb-1">Bar label ({{ enemiesGoalLabel.length }}/60)</label>
-              <input v-model="enemiesGoalLabel" maxlength="60" class="w-full border rounded px-2 py-1" placeholder="e.g. Enemies Defeated" />
+              <label class="block text-xs font-medium mb-1">Bar label ({{ form.enemiesGoalLabel.length }}/60)</label>
+              <input v-model="form.enemiesGoalLabel" maxlength="60" class="w-full border rounded px-2 py-1" placeholder="e.g. Enemies Defeated" />
             </div>
             <div class="w-32 flex-shrink-0">
               <label class="block text-xs font-medium mb-1">Target</label>
-              <input v-model.number="enemiesGoalTarget" type="number" min="1" step="1" class="w-full border rounded px-2 py-1" />
+              <input v-model.number="form.enemiesGoalTarget" type="number" min="1" step="1" class="w-full border rounded px-2 py-1" />
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Trackers -->
-      <div class="space-y-2">
-        <h2 class="font-semibold text-sm px-1">Progress Trackers</h2>
-        <div v-for="t in trackers" :key="t.id" class="bg-white rounded border p-3 flex items-center gap-3 flex-wrap">
-          <div class="min-w-0 flex-1">
-            <div class="font-semibold break-words">{{ t.label }}<span v-if="!t.active" class="ml-2 text-[10px] font-normal text-gray-500">(inactive)</span></div>
-            <div class="text-[11px] text-gray-600">{{ metricLabel(t.metricType) }} · target {{ t.targetValue }}</div>
-          </div>
-          <div class="flex items-center gap-3 flex-shrink-0">
-            <button type="button" class="text-indigo-600 hover:underline" @click="startEditTracker(t)">Edit</button>
-            <button type="button" class="text-red-600 hover:underline disabled:opacity-40" :disabled="deletingId === t.id" @click="removeTracker(t)">
-              {{ deletingId === t.id ? 'Deleting…' : 'Delete' }}
-            </button>
-          </div>
-        </div>
-        <p v-if="!loading && !trackers.length" class="text-gray-500 px-1">No trackers yet — the seasonal section shows just the header, leaderboard, and blurb until you add one.</p>
-      </div>
-
-      <div class="bg-white border rounded p-3 space-y-3">
-        <h3 class="font-semibold text-sm">{{ trackerForm.id ? 'Edit tracker' : 'New tracker' }}</h3>
-        <p v-if="trackerFormError" class="text-red-600">{{ trackerFormError }}</p>
-
-        <div>
-          <label class="block text-xs font-medium mb-1">Label</label>
-          <input v-model="trackerForm.label" maxlength="60" class="w-full border rounded px-2 py-1" placeholder="e.g. NPC Victories" />
-        </div>
-
-        <div class="flex gap-2">
-          <div class="flex-1 min-w-0">
-            <label class="block text-xs font-medium mb-1">Metric</label>
-            <select v-model="trackerForm.metricType" class="w-full border rounded px-2 py-1">
-              <option v-for="m in METRIC_OPTIONS" :key="m.value" :value="m.value">{{ m.label }}</option>
-            </select>
-          </div>
-          <div class="w-32 flex-shrink-0">
-            <label class="block text-xs font-medium mb-1">Target</label>
-            <input v-model.number="trackerForm.targetValue" type="number" min="0" step="any" class="w-full border rounded px-2 py-1" />
-          </div>
-        </div>
-
-        <div class="flex gap-2">
-          <div class="w-24 flex-shrink-0">
-            <label class="block text-xs font-medium mb-1">Order</label>
-            <input v-model.number="trackerForm.sortOrder" type="number" class="w-full border rounded px-2 py-1" />
-          </div>
-          <div class="flex items-end pb-1.5">
-            <label class="flex items-center gap-2">
-              <input type="checkbox" v-model="trackerForm.active" />
+        <!-- Trackers (local list, saved together with the season) -->
+        <div class="border-t pt-3 space-y-2">
+          <h3 class="font-semibold text-sm">Progress Trackers</h3>
+          <div v-for="(t, idx) in form.trackers" :key="idx" class="border rounded p-2 flex gap-2 flex-wrap items-end">
+            <div class="flex-1 min-w-[140px]">
+              <label class="block text-xs font-medium mb-1">Label</label>
+              <input v-model="t.label" maxlength="60" class="w-full border rounded px-2 py-1" placeholder="e.g. NPC Victories" />
+            </div>
+            <div class="flex-1 min-w-[140px]">
+              <label class="block text-xs font-medium mb-1">Metric</label>
+              <select v-model="t.metricType" class="w-full border rounded px-2 py-1">
+                <option v-for="m in METRIC_OPTIONS" :key="m.value" :value="m.value">{{ m.label }}</option>
+              </select>
+            </div>
+            <div class="w-28 flex-shrink-0">
+              <label class="block text-xs font-medium mb-1">Target</label>
+              <input v-model.number="t.targetValue" type="number" min="0" step="any" class="w-full border rounded px-2 py-1" />
+            </div>
+            <div class="w-20 flex-shrink-0">
+              <label class="block text-xs font-medium mb-1">Order</label>
+              <input v-model.number="t.sortOrder" type="number" class="w-full border rounded px-2 py-1" />
+            </div>
+            <label class="flex items-center gap-1.5 pb-1.5">
+              <input type="checkbox" v-model="t.active" />
               <span class="text-xs font-medium">Active</span>
             </label>
+            <button type="button" class="text-red-600 hover:underline pb-1.5" @click="form.trackers.splice(idx, 1)">Remove</button>
           </div>
+          <button type="button" class="text-indigo-600 hover:underline" @click="addTrackerRow">+ Add tracker</button>
+        </div>
+
+        <!-- Blurb -->
+        <div class="border-t pt-3 space-y-2">
+          <h3 class="font-semibold text-sm">Blurb</h3>
+          <p class="text-gray-500">Shown beneath the trackers, styled like the Tutorial page's prose.</p>
+          <ClientOnly>
+            <div v-if="blurbEditor" class="border rounded">
+              <div class="flex flex-wrap gap-1 border-b bg-gray-50 p-1">
+                <button type="button" class="px-2 py-1 rounded hover:bg-gray-200" :class="{ 'bg-gray-300': blurbEditor.isActive('bold') }" @click="blurbEditor.chain().focus().toggleBold().run()"><b>B</b></button>
+                <button type="button" class="px-2 py-1 rounded hover:bg-gray-200" :class="{ 'bg-gray-300': blurbEditor.isActive('italic') }" @click="blurbEditor.chain().focus().toggleItalic().run()"><i>I</i></button>
+                <button type="button" class="px-2 py-1 rounded hover:bg-gray-200" :class="{ 'bg-gray-300': blurbEditor.isActive('heading', { level: 2 }) }" @click="blurbEditor.chain().focus().toggleHeading({ level: 2 }).run()">H2</button>
+                <button type="button" class="px-2 py-1 rounded hover:bg-gray-200" :class="{ 'bg-gray-300': blurbEditor.isActive('bulletList') }" @click="blurbEditor.chain().focus().toggleBulletList().run()">• List</button>
+                <button type="button" class="px-2 py-1 rounded hover:bg-gray-200" @click="setBlurbLink">Link</button>
+                <button type="button" class="px-2 py-1 rounded hover:bg-gray-200" @click="blurbEditor.chain().focus().unsetLink().run()">Unlink</button>
+              </div>
+              <EditorContent :editor="blurbEditor" class="tiptap-body p-2 min-h-[100px]" />
+            </div>
+            <template #fallback>
+              <div class="border rounded p-2 min-h-[100px] text-gray-400">Loading editor…</div>
+            </template>
+          </ClientOnly>
         </div>
 
         <div class="flex items-center gap-3 flex-wrap pt-1">
           <button
             type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-            :disabled="trackerSaving" @click="saveTracker"
-          >{{ trackerSaving ? 'Saving…' : (trackerForm.id ? 'Save changes' : 'Create tracker') }}</button>
-          <button type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50" @click="resetTrackerForm">Cancel</button>
+            :disabled="saving" @click="saveSeason"
+          >{{ saving ? 'Saving…' : (editingId ? 'Save changes' : 'Create season') }}</button>
+          <button type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50" @click="closeForm">Cancel</button>
         </div>
       </div>
-
-      <!-- Blurb -->
-      <ClientOnly>
-        <div class="bg-white border rounded p-3 space-y-2">
-          <h2 class="font-semibold text-sm">Blurb</h2>
-          <p class="text-gray-500">Shown beneath the trackers, styled like the Tutorial page's prose.</p>
-          <div v-if="blurbEditor" class="border rounded">
-            <div class="flex flex-wrap gap-1 border-b bg-gray-50 p-1">
-              <button type="button" class="px-2 py-1 rounded hover:bg-gray-200" :class="{ 'bg-gray-300': blurbEditor.isActive('bold') }" @click="blurbEditor.chain().focus().toggleBold().run()"><b>B</b></button>
-              <button type="button" class="px-2 py-1 rounded hover:bg-gray-200" :class="{ 'bg-gray-300': blurbEditor.isActive('italic') }" @click="blurbEditor.chain().focus().toggleItalic().run()"><i>I</i></button>
-              <button type="button" class="px-2 py-1 rounded hover:bg-gray-200" :class="{ 'bg-gray-300': blurbEditor.isActive('heading', { level: 2 }) }" @click="blurbEditor.chain().focus().toggleHeading({ level: 2 }).run()">H2</button>
-              <button type="button" class="px-2 py-1 rounded hover:bg-gray-200" :class="{ 'bg-gray-300': blurbEditor.isActive('bulletList') }" @click="blurbEditor.chain().focus().toggleBulletList().run()">• List</button>
-              <button type="button" class="px-2 py-1 rounded hover:bg-gray-200" @click="setBlurbLink">Link</button>
-              <button type="button" class="px-2 py-1 rounded hover:bg-gray-200" @click="blurbEditor.chain().focus().unsetLink().run()">Unlink</button>
-            </div>
-            <EditorContent :editor="blurbEditor" class="tiptap-body p-2 min-h-[100px]" />
-          </div>
-          <button
-            type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-            :disabled="blurbSaving" @click="saveBlurb"
-          >{{ blurbSaving ? 'Saving…' : 'Save Season Settings' }}</button>
-          <span v-if="blurbError" class="text-red-600 ml-2">{{ blurbError }}</span>
-        </div>
-        <template #fallback>
-          <div class="bg-white border rounded p-3 space-y-2">
-            <h2 class="font-semibold text-sm">Blurb</h2>
-            <div class="border rounded p-2 min-h-[100px] text-gray-400">Loading editor…</div>
-          </div>
-        </template>
-      </ClientOnly>
     </div>
   </div>
 </template>
@@ -168,28 +172,26 @@ const METRIC_OPTIONS = [
   { value: 'TEAM_SCORE', label: 'Team Score (points)' },
   { value: 'AVG_POINTS', label: 'Average Points per Member' },
 ]
-function metricLabel(v) { return METRIC_OPTIONS.find(m => m.value === v)?.label || v }
 
 const loading = ref(false)
 const loadError = ref('')
-
-const header = ref('')
-const startedAt = ref(null)
-const startingNew = ref(false)
-
-const enemiesGoalEnabled = ref(false)
-const enemiesGoalLabel = ref('Enemies Defeated')
-const enemiesGoalTarget = ref(1000)
-
-const trackers = ref([])
+const seasons = ref([])
 const deletingId = ref('')
-const trackerSaving = ref(false)
-const trackerFormError = ref('')
-const emptyTrackerForm = () => ({ id: '', label: '', metricType: 'BATTLE_WINS', targetValue: 100, active: true, sortOrder: 0 })
-const trackerForm = reactive(emptyTrackerForm())
 
-const blurbSaving = ref(false)
-const blurbError = ref('')
+const formOpen = ref(false)
+const editingId = ref('')
+const saving = ref(false)
+const formError = ref('')
+
+function emptyForm() {
+  return {
+    startAt: '', endAt: '', header: '',
+    enemiesGoalEnabled: false, enemiesGoalLabel: 'Enemies Defeated', enemiesGoalTarget: 1000,
+    trackers: [],
+  }
+}
+const form = reactive(emptyForm())
+
 const blurbEditor = useEditor({
   content: '',
   extensions: [
@@ -198,9 +200,33 @@ const blurbEditor = useEditor({
   ],
 })
 
+function toLocalInput(d) {
+  if (!d) return ''
+  const dt = new Date(d)
+  const pad = n => String(n).padStart(2, '0')
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`
+}
+
 function formatDate(d) {
   if (!d) return '—'
   return new Date(d).toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+}
+
+function isFuture(s) { return new Date(s.startAt).getTime() > Date.now() }
+function isPast(s) { return new Date(s.endAt).getTime() <= Date.now() }
+function statusLabel(s) {
+  if (isFuture(s)) return 'Future'
+  if (isPast(s)) return 'Past'
+  return 'Current'
+}
+function statusClass(s) {
+  if (isFuture(s)) return 'bg-blue-100 text-blue-700'
+  if (isPast(s)) return 'bg-gray-100 text-gray-600'
+  return 'bg-green-100 text-green-700'
+}
+
+function addTrackerRow() {
+  form.trackers.push({ label: '', metricType: 'BATTLE_WINS', targetValue: 100, active: true, sortOrder: form.trackers.length })
 }
 
 function setBlurbLink() {
@@ -218,109 +244,107 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const res = await $fetch('/api/admin/cmoon-season')
-    header.value = res.header || ''
-    startedAt.value = res.startedAt
-    trackers.value = res.trackers || []
-    enemiesGoalEnabled.value = !!res.enemiesDefeatedGoalEnabled
-    enemiesGoalLabel.value = res.enemiesDefeatedGoalLabel || 'Enemies Defeated'
-    enemiesGoalTarget.value = res.enemiesDefeatedGoalTarget || 1000
-    blurbEditor.value?.commands.setContent(res.blurb || '', false)
+    const res = await $fetch('/api/admin/cmoon-seasons')
+    seasons.value = res.items || []
   } catch (e) {
-    loadError.value = e?.data?.statusMessage || 'Failed to load navigation settings'
+    loadError.value = e?.data?.statusMessage || 'Failed to load seasons'
   } finally {
     loading.value = false
   }
 }
 
-async function startNewSeason() {
-  if (!confirm('Start a new season? Every tracker resets to zero progress going forward. Past battles and points are not deleted.')) return
-  startingNew.value = true
-  try {
-    const res = await $fetch('/api/admin/cmoon-season/start-new', { method: 'POST' })
-    startedAt.value = res.startedAt
-  } catch (e) {
-    loadError.value = e?.data?.statusMessage || 'Failed to start a new season'
-  } finally {
-    startingNew.value = false
+function openAddForm() {
+  editingId.value = ''
+  formError.value = ''
+  Object.assign(form, emptyForm())
+  // Default the very first season's start date to whenever cMoons first launched — nothing to
+  // default to for a later season, left blank for the admin to pick.
+  if (!seasons.value.length) {
+    $fetch('/api/admin/cmoons').then(res => {
+      if (res?.cMoonEnabledAt) form.startAt = toLocalInput(res.cMoonEnabledAt)
+    }).catch(() => {})
   }
+  blurbEditor.value?.commands.setContent('', false)
+  formOpen.value = true
 }
 
-function resetTrackerForm() {
-  trackerFormError.value = ''
-  Object.assign(trackerForm, emptyTrackerForm())
+function openEditForm(s) {
+  editingId.value = s.id
+  formError.value = ''
+  Object.assign(form, {
+    startAt: toLocalInput(s.startAt),
+    endAt: toLocalInput(s.endAt),
+    header: s.header || '',
+    enemiesGoalEnabled: !!s.enemiesDefeatedGoalEnabled,
+    enemiesGoalLabel: s.enemiesDefeatedGoalLabel || 'Enemies Defeated',
+    enemiesGoalTarget: s.enemiesDefeatedGoalTarget || 1000,
+    trackers: (s.trackers || []).map(t => ({ label: t.label, metricType: t.metricType, targetValue: t.targetValue, active: !!t.active, sortOrder: t.sortOrder })),
+  })
+  blurbEditor.value?.commands.setContent(s.blurb || '', false)
+  formOpen.value = true
 }
 
-function startEditTracker(t) {
-  resetTrackerForm()
-  Object.assign(trackerForm, { id: t.id, label: t.label, metricType: t.metricType, targetValue: t.targetValue, active: !!t.active, sortOrder: t.sortOrder })
+function closeForm() {
+  formOpen.value = false
+  editingId.value = ''
+  formError.value = ''
 }
 
-async function saveTracker() {
-  trackerFormError.value = ''
-  if (!trackerForm.label.trim()) { trackerFormError.value = 'Label is required.'; return }
-  const targetValue = Number(trackerForm.targetValue)
-  if (!Number.isFinite(targetValue) || targetValue <= 0) { trackerFormError.value = 'Target must be a positive number.'; return }
+async function saveSeason() {
+  formError.value = ''
+  if (!form.startAt || !form.endAt) { formError.value = 'Start and end date are both required.'; return }
+  const startAt = new Date(form.startAt)
+  const endAt = new Date(form.endAt)
+  if (isNaN(startAt.getTime()) || isNaN(endAt.getTime())) { formError.value = 'Invalid date.'; return }
+  if (startAt >= endAt) { formError.value = 'Start date must be before end date.'; return }
+  if (!form.header.trim()) { formError.value = 'Header is required.'; return }
 
-  trackerSaving.value = true
+  for (const t of form.trackers) {
+    if (!t.label.trim()) { formError.value = 'Every tracker needs a label.'; return }
+    if (!Number.isFinite(Number(t.targetValue)) || Number(t.targetValue) <= 0) { formError.value = `Tracker "${t.label}" needs a positive target.`; return }
+  }
+
+  saving.value = true
   try {
     const body = {
-      label: trackerForm.label.trim(),
-      metricType: trackerForm.metricType,
-      targetValue,
-      active: trackerForm.active,
-      sortOrder: Math.trunc(Number(trackerForm.sortOrder)) || 0,
+      startAt: startAt.toISOString(),
+      endAt: endAt.toISOString(),
+      header: form.header.trim(),
+      blurb: blurbEditor.value?.getHTML() || '',
+      enemiesDefeatedGoalEnabled: form.enemiesGoalEnabled,
+      enemiesDefeatedGoalLabel: form.enemiesGoalLabel.trim(),
+      enemiesDefeatedGoalTarget: Math.trunc(Number(form.enemiesGoalTarget)) || 0,
+      trackers: form.trackers.map(t => ({
+        label: t.label.trim(), metricType: t.metricType,
+        targetValue: Number(t.targetValue), active: !!t.active,
+        sortOrder: Math.trunc(Number(t.sortOrder)) || 0,
+      })),
     }
-    if (trackerForm.id) {
-      await $fetch(`/api/admin/cmoon-season-trackers/${trackerForm.id}`, { method: 'PUT', body })
+    if (editingId.value) {
+      await $fetch(`/api/admin/cmoon-seasons/${editingId.value}`, { method: 'PUT', body })
     } else {
-      await $fetch('/api/admin/cmoon-season-trackers', { method: 'POST', body })
+      await $fetch('/api/admin/cmoon-seasons', { method: 'POST', body })
     }
-    resetTrackerForm()
+    closeForm()
     await load()
   } catch (e) {
-    trackerFormError.value = e?.data?.statusMessage || 'Failed to save tracker'
+    formError.value = e?.data?.statusMessage || 'Failed to save season'
   } finally {
-    trackerSaving.value = false
+    saving.value = false
   }
 }
 
-async function removeTracker(t) {
-  if (!confirm(`Delete "${t.label}"? This can't be undone.`)) return
-  deletingId.value = t.id
+async function removeSeason(s) {
+  if (!confirm(`Delete Season ${s.seasonNumber}? This can't be undone.`)) return
+  deletingId.value = s.id
   try {
-    await $fetch(`/api/admin/cmoon-season-trackers/${t.id}`, { method: 'DELETE' })
-    if (trackerForm.id === t.id) resetTrackerForm()
+    await $fetch(`/api/admin/cmoon-seasons/${s.id}`, { method: 'DELETE' })
+    if (editingId.value === s.id) closeForm()
     await load()
   } catch (e) {
-    loadError.value = e?.data?.statusMessage || 'Failed to delete tracker'
+    loadError.value = e?.data?.statusMessage || 'Failed to delete season'
   } finally {
     deletingId.value = ''
-  }
-}
-
-async function saveBlurb() {
-  blurbError.value = ''
-  blurbSaving.value = true
-  try {
-    const res = await $fetch('/api/admin/cmoon-season', {
-      method: 'POST',
-      body: {
-        header: header.value.trim(),
-        blurb: blurbEditor.value?.getHTML() || '',
-        enemiesDefeatedGoalEnabled: enemiesGoalEnabled.value,
-        enemiesDefeatedGoalLabel: enemiesGoalLabel.value.trim(),
-        enemiesDefeatedGoalTarget: Math.trunc(Number(enemiesGoalTarget.value)) || 0,
-      },
-    })
-    blurbEditor.value?.commands.setContent(res.blurb || '', false)
-    enemiesGoalEnabled.value = !!res.enemiesDefeatedGoalEnabled
-    enemiesGoalLabel.value = res.enemiesDefeatedGoalLabel || enemiesGoalLabel.value
-    enemiesGoalTarget.value = res.enemiesDefeatedGoalTarget || enemiesGoalTarget.value
-  } catch (e) {
-    blurbError.value = e?.data?.statusMessage || 'Failed to save blurb'
-  } finally {
-    blurbSaving.value = false
   }
 }
 

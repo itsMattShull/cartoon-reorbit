@@ -6660,60 +6660,84 @@ model CMoonHuntCompletion {
   @@unique([huntId, cMoonId])
 }
 
-// ── cMoon Season Nav feature ─────────────────────────────────────────────
-// Powers the customizable "seasonal updates" section on the bottom half of the cMoon navigation
-// page (components/newsite/CMoonNav.vue): an editable header/blurb plus a small set of
-// admin-defined progress trackers (e.g. "100 NPC battle wins", "500 average points") shown as one
-// progress bar per cMoon team. Deliberately season-scoped, not all-time: every tracker's current
-// value is computed fresh from CMoonEnemyBattle/CMoonScoreLog rows dated on/after `startedAt`
-// (see server/utils/cmoonSeason.js), never from the lifetime running totals on CMoon itself
-// (battleWins/battleLosses/teamScore) — those never reset, so a goal meant to describe "this
-// season" would otherwise silently keep counting a previous season's progress forever. Starting a
-// new season (server/api/admin/cmoon-season.post.js) only ever moves `startedAt` forward; it never
-// deletes CMoonEnemyBattle/CMoonScoreLog history, so a later admin change is non-destructive and a
-// past season's raw data is still there if ever needed, just no longer in any tracker's window.
-model CMoonSeasonConfig {
-  id        String   @id // always 'singleton', same convention as GlobalGameConfig
-  header    String   @default("cMoons Season 1")
-  startedAt DateTime @default(now())
+// ── cMoon Seasons ──────────────────────────────────────────────────────
+// Powers the "seasonal updates" section on the bottom half of the cMoon navigation page
+// (components/newsite/CMoonNav.vue). Replaces an earlier single-current-season design (a
+// `CMoonSeasonConfig` singleton with only a `startedAt`, no end date, no scheduling, no history —
+// "starting a new season" just moved that one row's `startedAt` forward and the previous season's
+// own header/blurb/goal were simply overwritten) with a real historical table: every season is its
+// own row with both a start AND an end date, so seasons can be scheduled ahead of time, and a
+// completed season's own numbers stay queryable forever for the nav page's recap list.
+//
+// "Current season" = the row where `startAt <= now() < endAt`. Admin-enforced non-overlap (checked
+// at the API layer, not expressible as a DB constraint since it's a range comparison across rows)
+// keeps at most one season ever "current" at a time. "Next season" = the earliest row with
+// `startAt > now()`. "Past season" = any row with `endAt <= now()`.
+//
+// Every season-scoped number (the enemies-defeated goal below, each CMoonSeasonTracker, the
+// win/loss leaderboard, the recap's winning-cMoon/top-slayer) is computed fresh from
+// CMoonEnemyBattle/CMoonScoreLog rows dated within [startAt, endAt] — never from the lifetime
+// running totals on CMoon itself (battleWins/battleLosses/teamScore), which never reset and would
+// otherwise bleed a prior season's progress into the next one. No CMoonEnemyBattle/CMoonScoreLog
+// row is ever deleted by anything season-related, so a past season's recap numbers are always
+// re-derivable, computed live rather than cached/persisted (see server/utils/cmoonSeason.js) —
+// cheap at this scale (cMoon count in the tens, a handful of seasons).
+model CMoonSeason {
+  id           String   @id @default(uuid())
+  // Display-only sequence ("Season N"), assigned once at creation as
+  // (highest existing seasonNumber) + 1 — never recomputed or renumbered later, so a deleted
+  // future season (see the admin delete endpoint's own future-only restriction) never shifts an
+  // already-shown past season's number.
+  seasonNumber Int      @unique
+  header       String   @default("")
   // Sanitized HTML — see server/utils/sanitizeEncyclopediaHtml.js (reused as-is; this blurb has
   // the exact same "short admin-authored prose, styled like the Tutorial page" shape as an
   // Encyclopedia entry's body, so a second sanitizer would just be the same allowlist twice).
-  blurb     String   @default("")
-  // One shared, server-wide progress bar toward a total "cMoon enemies defeated" goal for the
-  // season — distinct from the per-cMoon CMoonSeasonTracker rows above, which render one bar
-  // PER TEAM so teams can be compared against each other; this is a single combined bar for the
-  // whole playerbase (every WIN, both regular enemies and raid bosses, counts toward it). Same
-  // season-scoped-not-lifetime convention as this model's own header comment: computed live from
-  // CMoonEnemyBattle rows dated on/after startedAt (see computeSeasonProgress in
-  // server/utils/cmoonSeason.js), never from a lifetime counter — so it resets cleanly whenever
-  // startedAt moves forward. Lives here rather than as a CMoonSeasonTracker row since that model's
-  // metricType enum is inherently per-cMoon-comparison shaped (BATTLE_WINS etc. are read per
-  // cMoon); a single combined counter has no "which cMoon" axis to render multiple bars from.
-  enemiesDefeatedGoalEnabled Boolean @default(false)
-  enemiesDefeatedGoalLabel   String  @default("Enemies Defeated")
-  enemiesDefeatedGoalTarget  Int     @default(1000)
+  blurb        String   @default("")
+  startAt      DateTime
+  endAt        DateTime
+  // One shared, server-wide progress bar toward a total "cMoon enemies defeated" goal for THIS
+  // season — distinct from the per-cMoon CMoonSeasonTracker rows below, which render one bar PER
+  // TEAM so teams can be compared against each other; this is a single combined bar for the whole
+  // playerbase (every WIN, both regular enemies and raid bosses, counts toward it). Lives here
+  // rather than as a CMoonSeasonTracker row since that model's metricType enum is inherently
+  // per-cMoon-comparison shaped (BATTLE_WINS etc. are read per cMoon); a single combined counter
+  // has no "which cMoon" axis to render multiple bars from.
+  enemiesDefeatedGoalEnabled     Boolean   @default(false)
+  enemiesDefeatedGoalLabel       String    @default("Enemies Defeated")
+  enemiesDefeatedGoalTarget      Int       @default(1000)
   // Atomic claim stamp for the server-wide "goal reached" Discord announcement — set via a
   // conditional UPDATE ... WHERE enemiesDefeatedGoalAnnouncedAt IS NULL the moment a WIN (solo or
-  // raid) is recorded that pushes computeSeasonProgress()'s live total past enemiesDefeatedGoalTarget,
-  // so concurrent wins racing across the threshold can only ever post once. Reset to null by
-  // start-new.post.js on every season rollover (alongside startedAt moving forward) so the
-  // announcement can fire again for the new season's own goal.
+  // raid) is recorded that pushes this season's live total past enemiesDefeatedGoalTarget, so
+  // concurrent wins racing across the threshold can only ever post once. Each season gets its own
+  // fresh row (and so its own null announcedAt), so no "reset on rollover" step is needed the way
+  // the old singleton design required.
   enemiesDefeatedGoalAnnouncedAt DateTime?
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  trackers CMoonSeasonTracker[]
+
+  @@index([startAt])
+  @@index([endAt])
 }
 
 enum CMoonSeasonTrackerMetric {
-  BATTLE_WINS // count of CMoonEnemyBattle rows with outcome=WIN, endedAt >= startedAt
+  BATTLE_WINS // count of CMoonEnemyBattle rows with outcome=WIN, endedAt within the season's range
   BATTLE_LOSSES // same, outcome=LOSS
-  TEAM_SCORE // SUM(CMoonScoreLog.points) where createdAt >= startedAt — season-scoped teamScore
+  TEAM_SCORE // SUM(CMoonScoreLog.points) where createdAt within the season's range
   AVG_POINTS // the same sum divided by the cMoon's current memberCount (plain average, no
   // small-team shrinkage — shrinkage exists to keep the competitive leaderboard's RANKING fair to
   // small teams, which doesn't apply to a single team's own progress toward its own goal)
 }
 
+// One admin-defined progress bar, scoped to a single season (e.g. "100 NPC battle wins this
+// season") — shown once per cMoon team so teams can be compared. Scoped per-season (not a flat
+// always-on list, as in the earlier singleton design) so planning a future season's trackers never
+// touches whichever season is currently live.
 model CMoonSeasonTracker {
   id          String                   @id @default(uuid())
+  seasonId    String
   label       String
   metricType  CMoonSeasonTrackerMetric
   targetValue Float
@@ -6722,5 +6746,7 @@ model CMoonSeasonTracker {
   createdAt   DateTime                 @default(now())
   updatedAt   DateTime                 @updatedAt
 
-  @@index([active, sortOrder])
+  season CMoonSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@index([seasonId, active, sortOrder])
 }
