@@ -128,6 +128,16 @@
               original {{ counterMissingCount === 1 ? 'is' : 'are' }} no longer available and
               {{ counterMissingCount === 1 ? 'was' : 'were' }} left out.
             </span>
+            <span v-if="counterTrimmedPackCount" class="tr-counter-warn">
+              {{ counterTrimmedPackCount }} pack{{ counterTrimmedPackCount === 1 ? '' : 's' }} from the
+              original {{ counterTrimmedPackCount === 1 ? 'was' : 'were' }} left out — a trade can
+              carry at most {{ MAX_PACKS_PER_SIDE }} packs per side.
+            </span>
+            <span v-if="counterMissingPackCount" class="tr-counter-warn">
+              {{ counterMissingPackCount }} pack{{ counterMissingPackCount === 1 ? '' : 's' }} from the
+              original {{ counterMissingPackCount === 1 ? 'is' : 'are' }} no longer available and
+              {{ counterMissingPackCount === 1 ? 'was' : 'were' }} left out.
+            </span>
           </div>
           <button class="tr-counter-cancel" @click="cancelCounter">Cancel counter</button>
         </div>
@@ -258,7 +268,7 @@
               into the request side, so requiring a selection here would dead-end
               the flow. The server still rejects a wholly empty offer.
             -->
-            <button class="tr-btn-primary" :disabled="!selectedTargetCtoons.length && !isCounterMode" @click="tradeCurrentStep = 2">
+            <button class="tr-btn-primary" :disabled="!selectedTargetCtoons.length && !selectedTargetPacks.length && !isCounterMode" @click="tradeCurrentStep = 2">
               Next →
             </button>
           </div>
@@ -314,13 +324,42 @@
             </template>
           </template>
 
+          <!-- Sealed packs: a much smaller list than the cToon collection above,
+               so it gets a plain grid with no pagination or filters. -->
+          <template v-if="otherPacks.length">
+            <div class="tr-step-title">{{ tradeTargetUser.username }}'s Sealed Packs</div>
+            <div v-if="selectedTargetPacks.length" class="tr-chips">
+              <span class="tr-chips-label">Requesting {{ selectedTargetPacks.length }} / {{ MAX_PACKS_PER_SIDE }} packs:</span>
+              <button
+                v-for="p in selectedTargetPacks"
+                :key="p.userPackId"
+                class="tr-chip"
+                @click="removeSelectedTargetPack(p)"
+              >
+                <span class="tr-chip-name">{{ p.name }}</span>
+                <span class="tr-chip-x" aria-hidden="true">✕</span>
+              </button>
+            </div>
+            <div class="tr-cards">
+              <div v-for="p in otherPacks" :key="p.userPackId" class="tr-card-wrap">
+                <PackCard
+                  :pack="p"
+                  :selected="selectedTargetPacksMap.has(p.userPackId)"
+                  :disabled="p.unavailable || (targetPackAtLimit && !selectedTargetPacksMap.has(p.userPackId))"
+                  :disabled-label="p.unavailable ? 'Unavailable' : 'Limit'"
+                  @toggle="toggleTargetPack(p)"
+                />
+              </div>
+            </div>
+          </template>
+
           <div class="tr-step-footer">
             <!--
               Countering an offer that was points-only leaves nothing to mirror
               into the request side, so requiring a selection here would dead-end
               the flow. The server still rejects a wholly empty offer.
             -->
-            <button class="tr-btn-primary" :disabled="!selectedTargetCtoons.length && !isCounterMode" @click="tradeCurrentStep = 2">
+            <button class="tr-btn-primary" :disabled="!selectedTargetCtoons.length && !selectedTargetPacks.length && !isCounterMode" @click="tradeCurrentStep = 2">
               Next →
             </button>
           </div>
@@ -375,7 +414,7 @@
             </div>
             <div class="tr-step-btns">
               <button class="tr-btn-secondary" @click="tradeCurrentStep = 1">← Back</button>
-              <button class="tr-btn-primary" :disabled="(selectedInitiatorCtoons.length === 0 && pointsToOffer === 0 && !(isCounterMode && pointsToRequest > 0)) || makingOffer" @click="tradeCurrentStep = 3">
+              <button class="tr-btn-primary" :disabled="(selectedInitiatorCtoons.length === 0 && selectedInitiatorPacks.length === 0 && pointsToOffer === 0 && !(isCounterMode && pointsToRequest > 0)) || makingOffer" @click="tradeCurrentStep = 3">
                 Confirm →
               </button>
             </div>
@@ -434,6 +473,33 @@
                 </div>
               </div>
             </template>
+          </template>
+
+          <template v-if="selfPacks.length">
+            <div class="tr-step-title">Your Sealed Packs</div>
+            <div v-if="selectedInitiatorPacks.length" class="tr-chips">
+              <span class="tr-chips-label">Offering {{ selectedInitiatorPacks.length }} / {{ MAX_PACKS_PER_SIDE }} packs:</span>
+              <button
+                v-for="p in selectedInitiatorPacks"
+                :key="p.userPackId"
+                class="tr-chip"
+                @click="removeSelectedInitiatorPack(p)"
+              >
+                <span class="tr-chip-name">{{ p.name }}</span>
+                <span class="tr-chip-x" aria-hidden="true">✕</span>
+              </button>
+            </div>
+            <div class="tr-cards">
+              <div v-for="p in selfPacks" :key="p.userPackId" class="tr-card-wrap">
+                <PackCard
+                  :pack="p"
+                  :selected="selectedInitiatorPacksMap.has(p.userPackId)"
+                  :disabled="p.unavailable || (initiatorPackAtLimit && !selectedInitiatorPacksMap.has(p.userPackId))"
+                  :disabled-label="p.unavailable ? 'In Trade' : 'Limit'"
+                  @toggle="toggleInitiatorPack(p)"
+                />
+              </div>
+            </div>
           </template>
         </template>
 
@@ -510,7 +576,7 @@
           <div class="tr-confirm-grid">
             <div class="tr-confirm-col">
               <div class="tr-confirm-label">Requesting from {{ tradeTargetUser.username }}</div>
-              <div v-if="!selectedTargetCtoons.length" class="tr-suggest-dim tr-confirm-empty">No cToons selected.</div>
+              <div v-if="!selectedTargetCtoons.length && !selectedTargetPacks.length" class="tr-suggest-dim tr-confirm-empty">Nothing selected.</div>
               <div v-else class="tr-confirm-cards">
                 <div v-for="c in selectedTargetCtoons" :key="c.id" class="tr-confirm-card">
                   <div class="tr-confirm-img-wrap">
@@ -520,13 +586,20 @@
                   <span class="tr-confirm-name">{{ c.name }}</span>
                   <span class="tr-suggest-dim">{{ c.rarity }}</span>
                 </div>
+                <div v-for="p in selectedTargetPacks" :key="p.userPackId" class="tr-confirm-card">
+                  <div class="tr-confirm-img-wrap">
+                    <img v-if="p.imagePath" :src="p.imagePath" :alt="p.name" class="tr-confirm-img" loading="lazy" />
+                  </div>
+                  <span class="tr-confirm-name">{{ p.name }}</span>
+                  <span class="tr-suggest-dim">Sealed Pack</span>
+                </div>
               </div>
             </div>
             <div class="tr-confirm-col">
               <div class="tr-confirm-label">You're offering</div>
               <div v-if="isCounterMode && pointsToRequest > 0" class="tr-confirm-points">Points requested from them: {{ Number(pointsToRequest).toLocaleString() }}</div>
               <div class="tr-confirm-points">Points: {{ Number(pointsToOffer).toLocaleString() }}</div>
-              <div v-if="!selectedInitiatorCtoons.length" class="tr-suggest-dim tr-confirm-empty">No cToons offered.</div>
+              <div v-if="!selectedInitiatorCtoons.length && !selectedInitiatorPacks.length" class="tr-suggest-dim tr-confirm-empty">Nothing offered.</div>
               <div v-else class="tr-confirm-cards">
                 <div v-for="c in selectedInitiatorCtoons" :key="c.id" class="tr-confirm-card">
                   <div class="tr-confirm-img-wrap">
@@ -535,6 +608,13 @@
                   </div>
                   <span class="tr-confirm-name">{{ c.name }}</span>
                   <span class="tr-suggest-dim">{{ c.rarity }}</span>
+                </div>
+                <div v-for="p in selectedInitiatorPacks" :key="p.userPackId" class="tr-confirm-card">
+                  <div class="tr-confirm-img-wrap">
+                    <img v-if="p.imagePath" :src="p.imagePath" :alt="p.name" class="tr-confirm-img" loading="lazy" />
+                  </div>
+                  <span class="tr-confirm-name">{{ p.name }}</span>
+                  <span class="tr-suggest-dim">Sealed Pack</span>
                 </div>
               </div>
             </div>
@@ -620,7 +700,7 @@
             <div class="tm-cols">
               <!-- Offered cToons -->
               <div class="tm-col">
-                <div class="tm-col-title">Offered cToons</div>
+                <div class="tm-col-title">Offered Items</div>
                 <div class="tm-points-row">
                   <span class="tm-points-label">Points Offered</span>
                   <span class="tm-points-value">{{ Number(currentOffer.pointsOffered).toLocaleString() }}</span>
@@ -644,12 +724,23 @@
                     <span v-if="tc.userCtoon.ctoon.isSecondEdition" class="tm-2nd-badge">2nd Edition</span>
                     <span v-else class="tm-dim">First Edition</span>
                   </div>
-                  <div v-if="!currentOffer.ctoons.filter(c => c.role === 'OFFERED').length" class="tm-empty-col">None</div>
+                  <div
+                    v-for="tp in (currentOffer.packs || []).filter(p => p.role === 'OFFERED')"
+                    :key="tp.id"
+                    class="tm-card"
+                  >
+                    <div class="tm-card-img-wrap">
+                      <img v-if="tp.userPack.pack.imagePath" :src="tp.userPack.pack.imagePath" :alt="tp.userPack.pack.name" class="tm-card-img" />
+                    </div>
+                    <span class="tm-card-name">{{ tp.userPack.pack.name }}</span>
+                    <span class="tm-dim">Sealed Pack</span>
+                  </div>
+                  <div v-if="!currentOffer.ctoons.filter(c => c.role === 'OFFERED').length && !(currentOffer.packs || []).filter(p => p.role === 'OFFERED').length" class="tm-empty-col">None</div>
                 </div>
               </div>
               <!-- Requested cToons -->
               <div class="tm-col">
-                <div class="tm-col-title">Requested cToons</div>
+                <div class="tm-col-title">Requested Items</div>
                 <div v-if="currentOffer.pointsRequested > 0" class="tm-points-row">
                   <span class="tm-points-label">Points Requested</span>
                   <span class="tm-points-value">{{ Number(currentOffer.pointsRequested).toLocaleString() }}</span>
@@ -682,7 +773,18 @@
                       <span v-else class="tm-dim">Loading…</span>
                     </div>
                   </div>
-                  <div v-if="!currentOffer.ctoons.filter(c => c.role === 'REQUESTED').length" class="tm-empty-col">None</div>
+                  <div
+                    v-for="tp in (currentOffer.packs || []).filter(p => p.role === 'REQUESTED')"
+                    :key="tp.id"
+                    class="tm-card"
+                  >
+                    <div class="tm-card-img-wrap">
+                      <img v-if="tp.userPack.pack.imagePath" :src="tp.userPack.pack.imagePath" :alt="tp.userPack.pack.name" class="tm-card-img" />
+                    </div>
+                    <span class="tm-card-name">{{ tp.userPack.pack.name }}</span>
+                    <span class="tm-dim">Sealed Pack</span>
+                  </div>
+                  <div v-if="!currentOffer.ctoons.filter(c => c.role === 'REQUESTED').length && !(currentOffer.packs || []).filter(p => p.role === 'REQUESTED').length" class="tm-empty-col">None</div>
                 </div>
               </div>
             </div>
@@ -747,8 +849,9 @@ import { useAuth } from '@/composables/useAuth'
 import { formatQuantity } from '~/utils/formatQuantity'
 import { disabledReasonFor } from '~/server/utils/lockRules'
 import { duplicateCtoonIds } from '~/utils/duplicateCtoonIds'
-import { MAX_CTOONS_PER_SIDE } from '~/server/utils/tradeOfferLimits'
+import { MAX_CTOONS_PER_SIDE, MAX_PACKS_PER_SIDE } from '~/server/utils/tradeOfferLimits'
 import CtoonCard from '@/components/trade/CtoonCard.vue'
+import PackCard from '@/components/trade/PackCard.vue'
 
 const route = useRoute()
 const { user, fetchSelf } = useAuth()
@@ -1350,10 +1453,14 @@ async function clearTarget(focusInput = false) {
   // wizard already funnels through (sendOffer and "Change" both call it).
   tradeCounterSourceId.value = null; tradeCounterSummary.value = null
   preselectTargetKeys.value = []; preselectSelfKeys.value = []; counterMissingCount.value = 0; counterTrimmedCount.value = 0
+  preselectTargetPackIds.value = []; preselectSelfPackIds.value = []; counterMissingPackCount.value = 0; counterTrimmedPackCount.value = 0
   pinnedTargetIds.value = new Set(); pinnedInitiatorIds.value = new Set()
   limitNotified.target = false; limitNotified.initiator = false
+  limitNotifiedPacks.target = false; limitNotifiedPacks.initiator = false
   selectedTargetCtoons.value = []; selectedInitiatorCtoons.value = []; pointsToOffer.value = 0; pointsToRequest.value = 0
+  selectedTargetPacks.value = []; selectedInitiatorPacks.value = []
   otherCtoons.value = []; selfCtoons.value = []; otherTradeList.value = []; selfTradeList.value = []
+  otherPacks.value = []; selfPacks.value = []
   pageOther.value = 1; pageSelf.value = 1
   tradeFiltersOther.value = { nameQuery: '', set: 'All', series: 'All', cMoon: 'All', rarity: 'All', duplicates: 'all', owned: 'all' }
   tradeFiltersSelf.value = { nameQuery: '', set: 'All', series: 'All', cMoon: 'All', rarity: 'All', duplicates: 'all', owned: 'all', wishlistOnly: false }
@@ -1375,10 +1482,17 @@ async function clearTarget(focusInput = false) {
 const loadingCollections = reactive({ other: false, self: false })
 const otherCtoons = ref([])
 const selfCtoons = ref([])
+const otherPacks = ref([])
+const selfPacks = ref([])
+const selectedTargetPacks = ref([])
+const selectedInitiatorPacks = ref([])
 const otherTradeList = ref([])
 const selfTradeList = ref([])
 const targetWishlist = ref([])
 const manualPreselectUserCtoonId = ref(null)
+
+const selectedTargetPacksMap = computed(() => new Map(selectedTargetPacks.value.map(p => [p.userPackId, p])))
+const selectedInitiatorPacksMap = computed(() => new Map(selectedInitiatorPacks.value.map(p => [p.userPackId, p])))
 
 const targetOwnedIds = computed(() => new Set(otherCtoons.value.map(c => c.ctoonId)))
 const selfOwnedIdsCreate = computed(() => new Set(selfCtoons.value.map(c => c.ctoonId)))
@@ -1408,18 +1522,23 @@ async function bootstrapCollections() {
     const params = tradeCounterSourceId.value
       ? { excludeTradeOfferId: tradeCounterSourceId.value }
       : undefined
-    const [other, self, otherTrade, selfTrade] = await Promise.all([
+    const [other, self, otherTrade, selfTrade, otherPackList, selfPackList] = await Promise.all([
       $fetch(`/api/collection/${tradeTargetUser.value.username}`, { params }),
       $fetch(`/api/collection/${user.value.username}`, { params }),
       $fetch(`/api/trade-list/users/${tradeTargetUser.value.username}`).catch(() => []),
       $fetch('/api/trade-list').catch(() => []),
+      $fetch(`/api/packs/users/${tradeTargetUser.value.username}`, { params }).catch(() => []),
+      $fetch(`/api/packs/users/${user.value.username}`, { params }).catch(() => []),
     ])
     otherCtoons.value = Array.isArray(other) ? other : []
     selfCtoons.value = Array.isArray(self) ? self : []
     otherTradeList.value = Array.isArray(otherTrade) ? otherTrade : []
     selfTradeList.value = Array.isArray(selfTrade) ? selfTrade : []
+    otherPacks.value = Array.isArray(otherPackList) ? otherPackList : []
+    selfPacks.value = Array.isArray(selfPackList) ? selfPackList : []
     updateFilterOptions()
     applyPreselectedCtoons()
+    applyPreselectedPacks()
   } finally { loadingCollections.other = false; loadingCollections.self = false }
 }
 
@@ -1582,6 +1701,49 @@ function applyPreselectedCtoons() {
   preselectSelfKeys.value = []
 }
 
+// Pack equivalents of the preselect state/logic above. Simpler than the cToon
+// version: /api/packs/users/:username and TradeOfferPack both key off the real
+// UserPack id directly, so there is no synthetic-token indirection to bridge —
+// unlike toonKey(), which exists only because /api/collection/:username's ids
+// and the trade-offer endpoints' ids live in different spaces.
+const preselectTargetPackIds = ref([])
+const preselectSelfPackIds = ref([])
+const counterMissingPackCount = ref(0)
+const counterTrimmedPackCount = ref(0)
+
+function applyPreselectedPacks() {
+  if (!preselectTargetPackIds.value.length && !preselectSelfPackIds.value.length) return
+
+  const pick = (pool, ids) => {
+    const byId = new Map(pool.map(p => [p.userPackId, p]))
+    const found = []
+    let missing = 0
+    for (const id of ids) {
+      const hit = byId.get(id)
+      if (hit && !hit.unavailable) found.push(hit); else missing++
+    }
+    return { found, missing }
+  }
+
+  const target = pick(otherPacks.value, preselectTargetPackIds.value)
+  const self = pick(selfPacks.value, preselectSelfPackIds.value)
+
+  const trim = (list) => {
+    if (list.length <= MAX_PACKS_PER_SIDE) return { kept: list, trimmed: 0 }
+    return { kept: list.slice(0, MAX_PACKS_PER_SIDE), trimmed: list.length - MAX_PACKS_PER_SIDE }
+  }
+  const targetTrim = trim(target.found)
+  const selfTrim = trim(self.found)
+
+  selectedTargetPacks.value = targetTrim.kept
+  selectedInitiatorPacks.value = selfTrim.kept
+  counterMissingPackCount.value = target.missing + self.missing
+  counterTrimmedPackCount.value = targetTrim.trimmed + selfTrim.trimmed
+
+  preselectTargetPackIds.value = []
+  preselectSelfPackIds.value = []
+}
+
 // ── Per-side ceiling ──────────────────────────────────────────────
 // MAX_CTOONS_PER_SIDE is imported from the same module the server enforces it
 // with, so the two cannot drift. Enforced here as well as server-side so the
@@ -1601,6 +1763,18 @@ function notifyAtLimit(side) {
   showPageToast(`You can include at most ${MAX_CTOONS_PER_SIDE} cToons per side of a trade.`, 'error')
 }
 
+// Packs have their own independent ceiling — see MAX_PACKS_PER_SIDE's own
+// comment in tradeOfferLimits.js for why it is a separate constant from
+// MAX_CTOONS_PER_SIDE rather than one shared limit.
+const targetPackAtLimit = computed(() => selectedTargetPacks.value.length >= MAX_PACKS_PER_SIDE)
+const initiatorPackAtLimit = computed(() => selectedInitiatorPacks.value.length >= MAX_PACKS_PER_SIDE)
+const limitNotifiedPacks = reactive({ target: false, initiator: false })
+function notifyPackAtLimit(side) {
+  if (limitNotifiedPacks[side]) return
+  limitNotifiedPacks[side] = true
+  showPageToast(`You can include at most ${MAX_PACKS_PER_SIDE} packs per side of a trade.`, 'error')
+}
+
 function toggleTargetCtoon(c) {
   if (c.unavailable) return
   const i = selectedTargetCtoons.value.findIndex(x => x.id === c.id)
@@ -1614,6 +1788,29 @@ function toggleInitiatorCtoon(c) {
   if (i >= 0) { selectedInitiatorCtoons.value.splice(i, 1); limitNotified.initiator = false; return }
   if (initiatorAtLimit.value) return notifyAtLimit('initiator')
   selectedInitiatorCtoons.value.push(c)
+}
+
+function toggleTargetPack(p) {
+  if (p.unavailable) return
+  const i = selectedTargetPacks.value.findIndex(x => x.userPackId === p.userPackId)
+  if (i >= 0) { selectedTargetPacks.value.splice(i, 1); limitNotifiedPacks.target = false; return }
+  if (targetPackAtLimit.value) return notifyPackAtLimit('target')
+  selectedTargetPacks.value.push(p)
+}
+function toggleInitiatorPack(p) {
+  if (p.unavailable) return
+  const i = selectedInitiatorPacks.value.findIndex(x => x.userPackId === p.userPackId)
+  if (i >= 0) { selectedInitiatorPacks.value.splice(i, 1); limitNotifiedPacks.initiator = false; return }
+  if (initiatorPackAtLimit.value) return notifyPackAtLimit('initiator')
+  selectedInitiatorPacks.value.push(p)
+}
+function removeSelectedTargetPack(p) {
+  const i = selectedTargetPacks.value.findIndex(x => x.userPackId === p.userPackId)
+  if (i >= 0) { selectedTargetPacks.value.splice(i, 1); limitNotifiedPacks.target = false }
+}
+function removeSelectedInitiatorPack(p) {
+  const i = selectedInitiatorPacks.value.findIndex(x => x.userPackId === p.userPackId)
+  if (i >= 0) { selectedInitiatorPacks.value.splice(i, 1); limitNotifiedPacks.initiator = false }
 }
 
 // ── Filtering ─────────────────────────────────────────────────────
@@ -1740,7 +1937,7 @@ const offeredLockedSummary = computed(() =>
     .join(', ')
 )
 const sendBlocked = computed(() =>
-  (selectedInitiatorCtoons.value.length === 0 && pointsToOffer.value === 0 &&
+  (selectedInitiatorCtoons.value.length === 0 && selectedInitiatorPacks.value.length === 0 && pointsToOffer.value === 0 &&
     !(isCounterMode.value && pointsToRequest.value > 0)) ||
   makingOffer.value ||
   (offeredLocked.value.length > 0 && !lockAck.value)
@@ -1761,11 +1958,18 @@ async function sendOffer() {
     showPageToast(`A trade can include at most ${MAX_CTOONS_PER_SIDE} cToons per side.`, 'error')
     return
   }
+  if (selectedTargetPacks.value.length > MAX_PACKS_PER_SIDE ||
+      selectedInitiatorPacks.value.length > MAX_PACKS_PER_SIDE) {
+    showPageToast(`A trade can include at most ${MAX_PACKS_PER_SIDE} packs per side.`, 'error')
+    return
+  }
   const counterId = tradeCounterSourceId.value
   const payload = {
     recipientUsername: tradeTargetUser.value.username,
     ctoonIdsRequested: selectedTargetCtoons.value.map(c => c.id),
     ctoonIdsOffered: selectedInitiatorCtoons.value.map(c => c.id),
+    packIdsRequested: selectedTargetPacks.value.map(p => p.userPackId),
+    packIdsOffered: selectedInitiatorPacks.value.map(p => p.userPackId),
     pointsOffered: pointsToOffer.value,
   }
   try {
@@ -1802,6 +2006,8 @@ async function sendOffer() {
 async function startCounter(offer) {
   const mine = offer.ctoons.filter(tc => tc.role === 'REQUESTED').map(tc => tc.userCtoon)
   const theirs = offer.ctoons.filter(tc => tc.role === 'OFFERED').map(tc => tc.userCtoon)
+  const minePacks = (offer.packs || []).filter(tp => tp.role === 'REQUESTED').map(tp => tp.userPack)
+  const theirsPacks = (offer.packs || []).filter(tp => tp.role === 'OFFERED').map(tp => tp.userPack)
 
   closeModal()
   await clearTarget(false)
@@ -1822,6 +2028,8 @@ async function startCounter(offer) {
   pointsToOffer.value = Number(offer.pointsRequested) || 0
   preselectTargetKeys.value = theirs.map(toonKey)
   preselectSelfKeys.value = mine.map(toonKey)
+  preselectTargetPackIds.value = theirsPacks.map(p => p.id)
+  preselectSelfPackIds.value = minePacks.map(p => p.id)
 
   tradeActiveTab.value = 'create'
   findTab.value = 'user'
@@ -1842,6 +2050,8 @@ function cancelCounter() {
   tradeCounterSummary.value = null
   counterMissingCount.value = 0
   counterTrimmedCount.value = 0
+  counterMissingPackCount.value = 0
+  counterTrimmedPackCount.value = 0
   pointsToRequest.value = 0
   showPageToast('Counter cancelled — this will send as a new offer.', 'success')
 }
@@ -1891,7 +2101,9 @@ function sortMintResults(list) {
     return (a?.ownerUsername || '').localeCompare(b?.ownerUsername || '', undefined, { sensitivity: 'base' })
   })
 }
-function countByRole(offer, role) { return offer.ctoons.filter(c => c.role === role).length }
+function countByRole(offer, role) {
+  return offer.ctoons.filter(c => c.role === role).length + (offer.packs || []).filter(p => p.role === role).length
+}
 function formatDate(iso) { return new Date(iso).toLocaleDateString() }
 function formatDateTime(iso) { return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) }
 function statusBadgeClass(status) {

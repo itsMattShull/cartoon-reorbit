@@ -157,7 +157,12 @@ export default defineEventHandler(async (event) => {
   if (cMoonFilter === '__none__') ctoonWhere.cMoonId = null
   else if (cMoonFilter) ctoonWhere.cMoonId = cMoonFilter
 
-  const where = { status: 'CLOSED' }
+  // Pack auctions are out of scope for this view — excluded, not crashed on.
+  // Every field below reads through `userCtoon.ctoon.*`, so a pack auction row
+  // would just render as an all-null entry rather than failing outright thanks
+  // to the optional chaining already in place, but that's a broken-looking row,
+  // not a real result.
+  const where = { status: 'CLOSED', userCtoonId: { not: null } }
   if (featuredOnly) where.isFeatured = true
   if (hasBidsOnly) where.bids = { some: {} }
   if (Object.keys(ctoonWhere).length) where.userCtoon = { ctoon: ctoonWhere }

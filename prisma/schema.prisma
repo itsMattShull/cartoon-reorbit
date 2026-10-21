@@ -1121,6 +1121,8 @@ model UserPack {
   user         User        @relation(fields: [userId], references: [id])
   pack         Pack        @relation(fields: [packId], references: [id])
   mintedCtoons UserCtoon[]
+  tradeOffers  TradeOfferPack[]
+  auctions     Auction[]
 }
 
 // An admin-issued watermark that exempts a user's already-made purchases of a
@@ -1686,6 +1688,11 @@ model GlobalGameConfig {
   packPriceDecayDays             Int     @default(7) // days between each price drop
   packPriceFloor                 Int     @default(700) // minimum price after decay
   packMaxDefaultBuysPerUser      Int     @default(5) // default maxBuysPerUser set on new packs
+  // Minimum starting bid for a pack auction, as a percentage of Pack.price — packs have no
+  // rarity to floor a bid against the way a cToon auction does (see rarityFloor() in
+  // server/utils/auctionPriceSuggestion.js), so this is the pack equivalent, read in
+  // server/api/auctions.post.js's pack-specific branch.
+  packAuctionMinBidPercent       Int     @default(25)
   // Per-rarity time-based purchase limits: { "Common": { "count": 5, "windowDays": null }, ... }
   // windowDays null = full release window (releaseDate → mintEndDate)
   timeBasedPurchaseLimits        Json?
@@ -2144,6 +2151,7 @@ model TradeOffer {
   counteredBy TradeOffer? @relation("TradeCounter")
 
   ctoons         TradeOfferCtoon[]
+  packs          TradeOfferPack[]
   ctoonOwnerLogs CtoonOwnerLog[]
 
   // incoming.get.js / outgoing.get.js filter on one party and sort by createdAt;
@@ -2174,6 +2182,24 @@ model TradeOfferCtoon {
 enum TradeOfferCtoonRole {
   OFFERED
   REQUESTED
+}
+
+/// Join table tying a specific sealed UserPack to a TradeOffer, tagged OFFERED or REQUESTED —
+/// exact mirror of TradeOfferCtoon above, for trading unopened packs. No separate "tradeable"
+/// flag the way UserCtoon has (isTradeable/lockedByUserId/burnedAt, for admin-escrow scenarios
+/// that have no pack equivalent today) — `opened: false` alone is the full availability gate, the
+/// same way a burned cToon is permanently unavailable.
+model TradeOfferPack {
+  id           String              @id @default(uuid())
+  tradeOfferId String
+  userPackId   String
+  role         TradeOfferCtoonRole
+
+  tradeOffer TradeOffer @relation(fields: [tradeOfferId], references: [id])
+  userPack   UserPack   @relation(fields: [userPackId], references: [id])
+
+  @@unique([tradeOfferId, userPackId, role])
+  @@index([userPackId])
 }
 
 enum AuctionStatus {
@@ -2227,7 +2253,14 @@ enum GtoonTournamentResolutionPolicy {
 
 model Auction {
   id                 String        @id @default(uuid())
-  userCtoonId        String
+  // Exactly one of userCtoonId/userPackId is set per row (enforced by a hand-written CHECK
+  // constraint — see migration 20261021140000_auction_packs, Prisma can't express this natively,
+  // same convention as the partial indexes noted below). A cToon auction's rarity-driven minimum
+  // bid, mint-number display, and holiday-flag Discord embed logic all live behind a userCtoonId
+  // branch in server/api/auctions.post.js; a pack auction's minimum bid is a percentage of
+  // Pack.price instead (GlobalGameConfig.packAuctionMinBidPercent) since packs have no rarity.
+  userCtoonId        String?
+  userPackId         String?
   initialBet         Int
   duration           Int // days; 0 for any sub-day listing. Kept for back-compat — read durationMinutes instead.
   // Exact listed length in minutes. Nullable because rows predating the column,
@@ -2253,7 +2286,8 @@ model Auction {
   // FK since the AuctionOnly row can later be deleted while this Auction lives on.
   auctionOnlyId      String?       @unique
 
-  userCtoon     UserCtoon @relation(fields: [userCtoonId], references: [id])
+  userCtoon     UserCtoon? @relation(fields: [userCtoonId], references: [id])
+  userPack      UserPack?  @relation(fields: [userPackId], references: [id])
   creator       User?     @relation("AuctionsCreated", fields: [creatorId], references: [id])
   highestBidder User?     @relation("HighestBidder", fields: [highestBidderId], references: [id])
   winner        User?     @relation("AuctionWinner", fields: [winnerId], references: [id])
@@ -2276,7 +2310,12 @@ model Auction {
   // not expressible in the Prisma schema language, so it lives only in
   // migration 20260803000000_unique_active_auction_per_user_ctoon and shows up
   // as drift in `prisma migrate dev`. Do not drop it.
+  //
+  // NOTE: a parallel partial unique index, "Auction_active_userPackId_key" ON
+  // ("userPackId") WHERE status = 'ACTIVE', exists for the same reason on the pack side — see
+  // migration 20261021140000_auction_packs.
   @@index([userCtoonId, status])
+  @@index([userPackId, status])
   // The Auction House's default view filters status='ACTIVE' and orders by
   // endAt, and socket-server's ending-soon notifier re-runs that same shape
   // every 60 seconds. Without this the sort had no index to lean on.

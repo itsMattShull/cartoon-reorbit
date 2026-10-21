@@ -22,17 +22,20 @@ export default defineEventHandler(async (event) => {
     where: { id },
     include: {
       userCtoon: { include: { ctoon: true } },
+      userPack: { include: { pack: true } },
       winner: { select: { username: true } },
       highestBidder: { select: { username: true } }
     }
   })
   if (!auction) throw createError({ statusCode: 404, statusMessage: 'Auction not found' })
 
-  // Holiday flag for this cToon
-  const isHolidayItem = !!(await prisma.holidayEventItem.findFirst({
-    where: { ctoonId: auction.userCtoon.ctoonId },
-    select: { id: true }
-  }))
+  // Holiday flag for this cToon — packs have no holiday-item concept
+  const isHolidayItem = auction.userPack
+    ? false
+    : !!(await prisma.holidayEventItem.findFirst({
+        where: { ctoonId: auction.userCtoon.ctoonId },
+        select: { id: true }
+      }))
 
   const bids = await prisma.bid.findMany({
     where: { auctionId: id },
@@ -46,8 +49,10 @@ export default defineEventHandler(async (event) => {
 
   // Featured auctions: a user can't hold the lead on more than one active
   // featured auction for the same cToon (1st/2nd edition combined) at a time.
+  // Pack auctions are never featured (see auctions.post.js), so this never
+  // runs for them.
   let blockedByFeaturedLead = false
-  if (auction.isFeatured) {
+  if (auction.isFeatured && auction.userCtoon) {
     const conflict = await findConcurrentFeaturedLead(prisma, userId, {
       excludeAuctionId: auction.id,
       ctoon: {
@@ -59,20 +64,27 @@ export default defineEventHandler(async (event) => {
     blockedByFeaturedLead = !!conflict
   }
 
-  // Closed with nobody bidding: the cToon never left its owner, so whoever holds
+  // Closed with nobody bidding: the item never left its owner, so whoever holds
   // it now can put it straight back up. Deliberately keyed on current ownership
-  // rather than auction.creatorId — an unsold cToon becomes tradeable again and
+  // rather than auction.creatorId — an unsold item becomes tradeable again and
   // may have changed hands since it closed.
   let canRelist = false
-  if (auction.status === 'CLOSED' &&
-      auction.winnerId === null &&
-      auction.userCtoon.userId === userId &&
-      !auction.userCtoon.burnedAt) {
-    const blocking = await prisma.auction.findFirst({
-      where: { userCtoonId: auction.userCtoonId, status: 'ACTIVE' },
-      select: { id: true }
-    })
-    canRelist = !blocking
+  if (auction.status === 'CLOSED' && auction.winnerId === null) {
+    if (auction.userPack) {
+      if (auction.userPack.userId === userId && !auction.userPack.opened) {
+        const blockingPack = await prisma.auction.findFirst({
+          where: { userPackId: auction.userPackId, status: 'ACTIVE' },
+          select: { id: true }
+        })
+        canRelist = !blockingPack
+      }
+    } else if (auction.userCtoon.userId === userId && !auction.userCtoon.burnedAt) {
+      const blocking = await prisma.auction.findFirst({
+        where: { userCtoonId: auction.userCtoonId, status: 'ACTIVE' },
+        select: { id: true }
+      })
+      canRelist = !blocking
+    }
   }
 
   // Points this caller already has locked on THIS auction. The bid/autobid
@@ -86,26 +98,38 @@ export default defineEventHandler(async (event) => {
 
   return {
     id: auction.id,
+    itemType: auction.userPack ? 'pack' : 'ctoon',
     isFeatured: auction.isFeatured,
     blockedByFeaturedLead,
     myLockedHere,
-    ctoon: {
-      id:         auction.userCtoon.ctoonId,
-      userCtoonId: encodeUserCtoonId(auction.userCtoon.userId, auction.userCtoon.ctoonId, auction.userCtoon.mintNumber),
-      assetPath:  auction.userCtoon.ctoon.assetPath,
-      ...ogGtoonDisplay(auction.userCtoon.ctoon),
-      name:       auction.userCtoon.ctoon.name,
-      series:     auction.userCtoon.ctoon.series,
-      rarity:     auction.userCtoon.ctoon.rarity,
-      isGtoon:    auction.userCtoon.ctoon.isGtoon,
-      cost:       auction.userCtoon.ctoon.cost,
-      power:      auction.userCtoon.ctoon.power,
-      mintNumber: auction.userCtoon.mintNumber,
-      isSecondEdition: auction.userCtoon.ctoon.isSecondEdition,
-      secondEditionOverlayX: auction.userCtoon.ctoon.secondEditionOverlayX,
-      secondEditionOverlayY: auction.userCtoon.ctoon.secondEditionOverlayY,
-      secondEditionOverlaySize: auction.userCtoon.ctoon.secondEditionOverlaySize
-    },
+    ...(auction.userPack
+      ? {
+          pack: {
+            id:         auction.userPack.pack.id,
+            userPackId: auction.userPack.id,
+            name:       auction.userPack.pack.name,
+            imagePath:  auction.userPack.pack.imagePath
+          }
+        }
+      : {
+          ctoon: {
+            id:         auction.userCtoon.ctoonId,
+            userCtoonId: encodeUserCtoonId(auction.userCtoon.userId, auction.userCtoon.ctoonId, auction.userCtoon.mintNumber),
+            assetPath:  auction.userCtoon.ctoon.assetPath,
+            ...ogGtoonDisplay(auction.userCtoon.ctoon),
+            name:       auction.userCtoon.ctoon.name,
+            series:     auction.userCtoon.ctoon.series,
+            rarity:     auction.userCtoon.ctoon.rarity,
+            isGtoon:    auction.userCtoon.ctoon.isGtoon,
+            cost:       auction.userCtoon.ctoon.cost,
+            power:      auction.userCtoon.ctoon.power,
+            mintNumber: auction.userCtoon.mintNumber,
+            isSecondEdition: auction.userCtoon.ctoon.isSecondEdition,
+            secondEditionOverlayX: auction.userCtoon.ctoon.secondEditionOverlayX,
+            secondEditionOverlayY: auction.userCtoon.ctoon.secondEditionOverlayY,
+            secondEditionOverlaySize: auction.userCtoon.ctoon.secondEditionOverlaySize
+          }
+        }),
     isHolidayItem, // ← added
     createdAt:  auction.createdAt.toISOString(),
     endAt:      auction.endAt.toISOString(),

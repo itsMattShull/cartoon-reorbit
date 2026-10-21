@@ -44,13 +44,17 @@ export default defineEventHandler(async (event) => {
 
   const {
     userCtoonId,
+    userPackId,
     initialBet,
     durationDays = 0,
     durationMinutes = 0,
     createInitialBid = false
   } = body
 
-  if (!userCtoonId || initialBet == null) {
+  // Exactly one of the two, mirroring the Auction_exactly_one_item_check DB
+  // constraint this create must satisfy — rejected here with a clear message
+  // instead of surfacing as a raw 23514 from Postgres.
+  if ((!userCtoonId && !userPackId) || (userCtoonId && userPackId) || initialBet == null) {
     throw createError({ statusCode: 422, statusMessage: 'Missing required fields' })
   }
 
@@ -85,58 +89,115 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 422, statusMessage: 'Initial bet is too large' })
   }
 
-  const resolvedUserCtoonId = await resolveUserCtoonId(userCtoonId)
-  if (!resolvedUserCtoonId) {
-    throw createError({ statusCode: 400, statusMessage: 'Invalid cToon reference' })
-  }
+  let resolvedUserCtoonId = null
+  let resolvedUserPackId = null
+  let userCtoonRec = null
+  let packRec = null
+  let expectedInitialBet
 
-  // 3. Ownership check + fetch rarity
-  const userCtoonRec = await prisma.userCtoon.findUnique({
-    where: { id: resolvedUserCtoonId },
-    select: {
-      userId: true,
-      ctoonId: true, // needed to check Holiday flag
-      burnedAt: true,
-      mintNumber: true,
-      ctoon: { select: { rarity: true, name: true, assetPath: true, isSecondEdition: true } }
-    }
-  })
-  if (!userCtoonRec || userCtoonRec.userId !== userId) {
-    throw createError({ statusCode: 403, statusMessage: 'You do not own this cToon' })
-  }
-  if (userCtoonRec.burnedAt) {
-    throw createError({ statusCode: 400, statusMessage: 'This cToon has been burned and cannot be auctioned' })
-  }
-
-  // Rarity -> insta-bid floor. Shared with the pricing hint so the two can't drift.
-  const expectedInitialBet = rarityFloor(userCtoonRec.ctoon?.rarity)
-
-  // Enforce minimum initial bet
-  if (bet < expectedInitialBet) {
-    throw createError({
-      statusCode: 422,
-      statusMessage: `Initial bet must be at least ${expectedInitialBet} pts for rarity "${userCtoonRec.ctoon?.rarity ?? 'N/A'}"`
+  if (userPackId) {
+    // 3p. Ownership check + fetch pack price (packs have no rarity to floor
+    // against — see GlobalGameConfig.packAuctionMinBidPercent's own comment).
+    resolvedUserPackId = userPackId
+    packRec = await prisma.userPack.findUnique({
+      where: { id: resolvedUserPackId },
+      select: {
+        userId: true,
+        opened: true,
+        pack: { select: { name: true, imagePath: true, price: true } }
+      }
     })
-  }
+    if (!packRec || packRec.userId !== userId) {
+      throw createError({ statusCode: 403, statusMessage: 'You do not own this pack' })
+    }
+    if (packRec.opened) {
+      throw createError({ statusCode: 400, statusMessage: 'This pack has already been opened and cannot be auctioned' })
+    }
 
-  // 4. Active auction check
-  const existing = await prisma.auction.findFirst({
-    where: { userCtoonId: resolvedUserCtoonId, status: 'ACTIVE' }
-  })
-  if (existing) {
-    throw createError({ statusCode: 400, statusMessage: "There's already an active auction for this cToon" })
-  }
+    const config = await prisma.globalGameConfig.findFirst({ select: { packAuctionMinBidPercent: true } })
+    const minBidPercent = config?.packAuctionMinBidPercent ?? 25
+    expectedInitialBet = Math.max(1, Math.round((packRec.pack?.price ?? 0) * minBidPercent / 100))
 
-  // 4.5 Active pending trade check — block auctions if this UserCtoon is in any pending trade
-  const inPendingTrade = await prisma.tradeOfferCtoon.findFirst({
-    where: {
-      userCtoonId: resolvedUserCtoonId,
-      tradeOffer: { status: 'PENDING' }
-    },
-    select: { id: true }
-  })
-  if (inPendingTrade) {
-    throw createError({ statusCode: 400, statusMessage: 'This cToon is already in a pending trade. Please resolve the trade before auctioning it.' })
+    if (bet < expectedInitialBet) {
+      throw createError({
+        statusCode: 422,
+        statusMessage: `Initial bet must be at least ${expectedInitialBet} pts for this pack`
+      })
+    }
+
+    // 4p. Active auction check
+    const existingPackAuction = await prisma.auction.findFirst({
+      where: { userPackId: resolvedUserPackId, status: 'ACTIVE' }
+    })
+    if (existingPackAuction) {
+      throw createError({ statusCode: 400, statusMessage: "There's already an active auction for this pack" })
+    }
+
+    // 4.5p. Active pending trade check
+    const packInPendingTrade = await prisma.tradeOfferPack.findFirst({
+      where: {
+        userPackId: resolvedUserPackId,
+        tradeOffer: { status: 'PENDING' }
+      },
+      select: { id: true }
+    })
+    if (packInPendingTrade) {
+      throw createError({ statusCode: 400, statusMessage: 'This pack is already in a pending trade. Please resolve the trade before auctioning it.' })
+    }
+  } else {
+    resolvedUserCtoonId = await resolveUserCtoonId(userCtoonId)
+    if (!resolvedUserCtoonId) {
+      throw createError({ statusCode: 400, statusMessage: 'Invalid cToon reference' })
+    }
+
+    // 3. Ownership check + fetch rarity
+    userCtoonRec = await prisma.userCtoon.findUnique({
+      where: { id: resolvedUserCtoonId },
+      select: {
+        userId: true,
+        ctoonId: true, // needed to check Holiday flag
+        burnedAt: true,
+        mintNumber: true,
+        ctoon: { select: { rarity: true, name: true, assetPath: true, isSecondEdition: true } }
+      }
+    })
+    if (!userCtoonRec || userCtoonRec.userId !== userId) {
+      throw createError({ statusCode: 403, statusMessage: 'You do not own this cToon' })
+    }
+    if (userCtoonRec.burnedAt) {
+      throw createError({ statusCode: 400, statusMessage: 'This cToon has been burned and cannot be auctioned' })
+    }
+
+    // Rarity -> insta-bid floor. Shared with the pricing hint so the two can't drift.
+    expectedInitialBet = rarityFloor(userCtoonRec.ctoon?.rarity)
+
+    // Enforce minimum initial bet
+    if (bet < expectedInitialBet) {
+      throw createError({
+        statusCode: 422,
+        statusMessage: `Initial bet must be at least ${expectedInitialBet} pts for rarity "${userCtoonRec.ctoon?.rarity ?? 'N/A'}"`
+      })
+    }
+
+    // 4. Active auction check
+    const existing = await prisma.auction.findFirst({
+      where: { userCtoonId: resolvedUserCtoonId, status: 'ACTIVE' }
+    })
+    if (existing) {
+      throw createError({ statusCode: 400, statusMessage: "There's already an active auction for this cToon" })
+    }
+
+    // 4.5 Active pending trade check — block auctions if this UserCtoon is in any pending trade
+    const inPendingTrade = await prisma.tradeOfferCtoon.findFirst({
+      where: {
+        userCtoonId: resolvedUserCtoonId,
+        tradeOffer: { status: 'PENDING' }
+      },
+      select: { id: true }
+    })
+    if (inPendingTrade) {
+      throw createError({ statusCode: 400, statusMessage: 'This cToon is already in a pending trade. Please resolve the trade before auctioning it.' })
+    }
   }
 
   // 5. Compute endAt
@@ -169,6 +230,23 @@ export default defineEventHandler(async (event) => {
   let auction
   try {
     auction = await prisma.$transaction(async (tx) => {
+      if (resolvedUserPackId) {
+        // Packs have no isTradeable/lockedByUserId flags to claim — opened:false
+        // in the ownership check above plus the partial unique index
+        // "Auction_active_userPackId_key" (WHERE status = 'ACTIVE') is the whole
+        // guard, same reasoning as the cToon branch's index-is-the-real-guard note.
+        return tx.auction.create({
+          data: {
+            userPackId: resolvedUserPackId,
+            initialBet: bet,
+            duration: Math.floor(totalMinutes / 1440),
+            durationMinutes: totalMinutes,
+            endAt: endAtUtc,
+            ...(userId ? { creatorId: userId } : {})
+          }
+        })
+      }
+
       // Claim the cToon BEFORE creating the auction, in the same transaction.
       //
       // This is both the lock guard and a fix for the write that used to sit
@@ -222,7 +300,7 @@ export default defineEventHandler(async (event) => {
     })
   } catch (err) {
     if (err?.code === 'P2002') {
-      throw createError({ statusCode: 400, statusMessage: "There's already an active auction for this cToon" })
+      throw createError({ statusCode: 400, statusMessage: `There's already an active auction for this ${resolvedUserPackId ? 'pack' : 'cToon'}` })
     }
     throw err
   }
@@ -258,11 +336,13 @@ export default defineEventHandler(async (event) => {
   // 8. Tradeability was already disabled by the claim in step 6, which is what
   // makes it atomic with the auction row.
 
-  // 8.5 Holiday flag for Discord message
-  const isHolidayItem = !!(await prisma.holidayEventItem.findFirst({
-    where: { ctoonId: userCtoonRec.ctoonId },
-    select: { id: true }
-  }))
+  // 8.5 Holiday flag for Discord message — packs have no holiday-item concept
+  const isHolidayItem = resolvedUserPackId
+    ? false
+    : !!(await prisma.holidayEventItem.findFirst({
+        where: { ctoonId: userCtoonRec.ctoonId },
+        select: { id: true }
+      }))
 
   // 9. Send Discord notification (best effort)
   ;(async () => {
@@ -317,8 +397,12 @@ export default defineEventHandler(async (event) => {
           ? 'https://www.cartoonreorbit.com'
           : `http://localhost:${config.public.socketPort || 3000}`)
 
-      const { name, rarity, assetPath, isSecondEdition } = userCtoonRec.ctoon || {}
-      const mintNumber   = userCtoonRec.mintNumber
+      // Pack auctions have no rarity, mint number, or second-edition concept —
+      // the embed below only ever shows what's true for the item type.
+      const { name, rarity, assetPath, isSecondEdition } = resolvedUserPackId
+        ? { name: packRec.pack?.name, rarity: null, assetPath: packRec.pack?.imagePath, isSecondEdition: false }
+        : (userCtoonRec.ctoon || {})
+      const mintNumber   = resolvedUserPackId ? null : userCtoonRec.mintNumber
       const durationText = formatAuctionDuration(totalMinutes)
 
       const auctionLink = `${baseUrl}/auction/${auction.id}`
@@ -327,13 +411,19 @@ export default defineEventHandler(async (event) => {
         : null
       const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
 
-      const lines = [
-        `**Rarity:** ${rarity ?? 'N/A'}`,
-        ...(!isHolidayItem ? [`**Mint #:** ${mintNumber ?? 'N/A'}`] : []),
-        ...(isSecondEdition ? [`**Second Edition**`] : []),
-        `**Starting Bid:** ${bet} pts`,
-        `**Duration:** ${durationText}`
-      ]
+      const lines = resolvedUserPackId
+        ? [
+            `**Sealed Pack**`,
+            `**Starting Bid:** ${bet} pts`,
+            `**Duration:** ${durationText}`
+          ]
+        : [
+            `**Rarity:** ${rarity ?? 'N/A'}`,
+            ...(!isHolidayItem ? [`**Mint #:** ${mintNumber ?? 'N/A'}`] : []),
+            ...(isSecondEdition ? [`**Second Edition**`] : []),
+            `**Starting Bid:** ${bet} pts`,
+            `**Duration:** ${durationText}`
+          ]
 
       const payload = {
         content: `<@${me.discordId}> has created a new auction!`,

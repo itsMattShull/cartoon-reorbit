@@ -26,14 +26,43 @@
         <div v-for="p in sealedPacks" :key="p.userPackId" class="mc-pack-card">
           <img v-if="p.imagePath" :src="p.imagePath" :alt="p.name" class="mc-pack-img" />
           <div class="mc-pack-name">{{ p.name }}</div>
-          <button
-            type="button" class="mc-pack-open-btn"
-            :disabled="openingPackId === p.userPackId"
-            @click="openPack(p)"
-          >{{ openingPackId === p.userPackId ? 'Opening…' : 'Open' }}</button>
+          <span v-if="p.unavailable" class="mc-pack-unavailable">In trade/auction</span>
+          <div class="mc-pack-actions">
+            <button
+              type="button" class="mc-pack-open-btn"
+              :disabled="openingPackId === p.userPackId || p.unavailable"
+              @click="openPack(p)"
+            >{{ openingPackId === p.userPackId ? 'Opening…' : 'Open' }}</button>
+            <button
+              type="button" class="mc-pack-auction-btn"
+              :disabled="p.unavailable"
+              @click="openPackAuctionModal(p)"
+            >Auction</button>
+          </div>
         </div>
       </div>
       <p v-if="packRevealError" class="mc-pack-error">{{ packRevealError }}</p>
+    </div>
+
+    <!-- ── Auction a sealed pack ──────────────────────────────────── -->
+    <div v-if="auctioningPack" class="mc-pack-reveal-overlay" @click.self="closePackAuctionModal">
+      <div class="mc-pack-reveal-modal mc-pack-auction-modal">
+        <h3 class="mc-pack-reveal-title">Auction "{{ auctioningPack.name }}"</h3>
+        <label class="mc-pack-auction-label">
+          Initial Bet
+          <input type="number" v-model.number="packAuctionBet" min="1" step="1" class="mc-pack-auction-input" />
+        </label>
+        <AuctionDurationPicker @update="d => packAuctionDuration = d" />
+        <p v-if="packAuctionError" class="mc-pack-error">{{ packAuctionError }}</p>
+        <div class="mc-pack-auction-btns">
+          <button type="button" class="mc-pack-reveal-close" @click="closePackAuctionModal">Cancel</button>
+          <button
+            type="button" class="mc-pack-auction-send"
+            :disabled="packAuctionSending || packAuctionBet < 1 || !packAuctionDuration?.valid"
+            @click="sendPackToAuction"
+          >{{ packAuctionSending ? 'Sending…' : 'Send to Auction' }}</button>
+        </div>
+      </div>
     </div>
 
     <!-- ── Pack reveal results ──────────────────────────────────── -->
@@ -155,6 +184,7 @@
 
 <script setup>
 import CtoonImage from '@/components/CtoonImage.vue'
+import AuctionDurationPicker from '@/components/newsite/AuctionDurationPicker.vue'
 import { duplicateCtoonIds, groupByCtoonId } from '@/utils/duplicateCtoonIds'
 
 const { open: openCtoonModal } = useCtoonModal()
@@ -228,6 +258,53 @@ async function openPack(p) {
 
 function closePackReveal() {
   packRevealResults.value = null
+}
+
+// ── Auction a sealed pack ─────────────────────────────────────
+const auctioningPack = ref(null)
+const packAuctionBet = ref(0)
+const packAuctionDuration = ref(null)
+const packAuctionError = ref('')
+const packAuctionSending = ref(false)
+
+function openPackAuctionModal(p) {
+  if (p.unavailable) return
+  auctioningPack.value = p
+  // Pre-filled to the pack's own price: comfortably clears the server's
+  // percent-of-price floor (GlobalGameConfig.packAuctionMinBidPercent) by
+  // construction, without this modal needing to know that percentage itself.
+  packAuctionBet.value = Math.max(1, p.price || 1)
+  packAuctionDuration.value = null
+  packAuctionError.value = ''
+}
+
+function closePackAuctionModal() {
+  auctioningPack.value = null
+}
+
+async function sendPackToAuction() {
+  if (!auctioningPack.value || !packAuctionDuration.value?.valid) return
+  packAuctionSending.value = true
+  packAuctionError.value = ''
+  try {
+    const { durationDays, durationMinutes } = packAuctionDuration.value
+    await $fetch('/api/auctions', {
+      method: 'POST',
+      body: {
+        userPackId: auctioningPack.value.userPackId,
+        initialBet: packAuctionBet.value,
+        durationDays,
+        durationMinutes,
+        createInitialBid: false
+      }
+    })
+    sealedPacks.value = sealedPacks.value.filter(x => x.userPackId !== auctioningPack.value.userPackId)
+    closePackAuctionModal()
+  } catch (err) {
+    packAuctionError.value = err?.data?.statusMessage || 'Failed to create auction'
+  } finally {
+    packAuctionSending.value = false
+  }
 }
 
 // "Avg. trade value" is explicitly labeled "(est.)": unlike an auction sale or
@@ -975,7 +1052,7 @@ onMounted(() => {
 }
 .mc-pack-card {
   flex: 0 0 auto;
-  width: 88px;
+  width: 104px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -984,6 +1061,62 @@ onMounted(() => {
   border-radius: 0.375rem;
   padding: 0.4rem;
   background: #f9fafb;
+}
+.mc-pack-unavailable {
+  font-size: 0.58rem;
+  color: #b45309;
+  text-align: center;
+}
+.mc-pack-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+.mc-pack-auction-btn {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+  background: #0891b2;
+  color: #fff;
+  border: none;
+}
+.mc-pack-auction-btn:disabled {
+  opacity: 0.5;
+}
+.mc-pack-auction-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  width: 320px;
+}
+.mc-pack-auction-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: #374151;
+}
+.mc-pack-auction-input {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 0.25rem;
+}
+.mc-pack-auction-btns {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+.mc-pack-auction-send {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 0.25rem;
+  background: #16a34a;
+  color: #fff;
+  border: none;
+}
+.mc-pack-auction-send:disabled {
+  opacity: 0.5;
 }
 .mc-pack-img {
   width: 56px;

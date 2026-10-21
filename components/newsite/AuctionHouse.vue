@@ -654,6 +654,10 @@ function nextPage() {
 }
 
 function openInfoModal(item) {
+  // Packs have no cToon-info modal to show — the detail page is the only place
+  // that renders a pack auction's info, so clicking its thumbnail goes straight
+  // there instead of opening a cToon modal with no ctoonId to look up.
+  if (item.itemType === 'pack') { goToAuction(item.id); return }
   openCtoonModal({
     ctoonId:     item.ctoonId    || null,
     userCtoonId: item.userCtoonId || null,

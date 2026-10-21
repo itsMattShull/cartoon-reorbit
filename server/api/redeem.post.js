@@ -159,6 +159,8 @@ export default defineEventHandler(async (event) => {
           data: { userId, packId: award.packId, opened: false, pricePaid: null }
         })
         createdUserPackIds.push(userPack.id)
+        award.userPackIds = award.userPackIds || []
+        award.userPackIds.push(userPack.id)
       }
     }
   })

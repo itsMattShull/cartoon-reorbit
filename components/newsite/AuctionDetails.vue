@@ -4,7 +4,7 @@
     <!-- ── Header ── -->
     <div class="adet-header">
       <button class="adet-back" @click="$emit('back')">‹ Back</button>
-      <span class="adet-title">{{ loading ? 'Auction' : auction.ctoon.name }}</span>
+      <span class="adet-title">{{ loading ? 'Auction' : displayItem.name }}</span>
       <span v-if="!loading && auction.isFeatured" class="adet-feat">★ Featured</span>
     </div>
 
@@ -20,23 +20,23 @@
       <div class="adet-top">
 
         <!-- cToon image -->
-        <div class="adet-img-wrap adet-img-clickable" @click="openInfoModal">
-          <CtoonImage class="adet-img" :ctoon="auction.ctoon" :alt="auction.ctoon.name" draggable="false" />
-          <SecondEditionOverlay :ctoon="auction.ctoon" />
+        <div class="adet-img-wrap" :class="{ 'adet-img-clickable': !isPackAuction }" @click="!isPackAuction && openInfoModal()">
+          <CtoonImage class="adet-img" :ctoon="displayItem" :alt="displayItem.name" draggable="false" />
+          <SecondEditionOverlay :ctoon="displayItem" />
           <div v-if="ended" class="adet-ended-badge">Ended</div>
         </div>
 
         <!-- Details + actions -->
         <div class="adet-info">
           <div class="adet-name">
-            {{ auction.ctoon.name }}
-            <span v-if="auction.ctoon.isSecondEdition" class="adet-2nd-badge">2nd Edition</span>
+            {{ displayItem.name }}
+            <span v-if="displayItem.isSecondEdition" class="adet-2nd-badge">2nd Edition</span>
           </div>
 
           <div class="adet-meta">
-            <span class="adet-rarity" :class="`r-${rarityKey(auction.ctoon.rarity)}`">{{ auction.ctoon.rarity }}</span>
-            <span v-if="!auction.isHolidayItem && auction.ctoon.mintNumber" class="adet-dim">#{{ auction.ctoon.mintNumber }}</span>
-            <span v-if="auction.ctoon.series" class="adet-dim">{{ auction.ctoon.series }}</span>
+            <span class="adet-rarity" :class="`r-${rarityKey(displayItem.rarity)}`">{{ displayItem.rarity }}</span>
+            <span v-if="!auction.isHolidayItem && displayItem.mintNumber" class="adet-dim">#{{ displayItem.mintNumber }}</span>
+            <span v-if="displayItem.series" class="adet-dim">{{ displayItem.series }}</span>
           </div>
 
           <!-- Timer / winner -->
@@ -47,9 +47,9 @@
           </div>
           <div v-else class="adet-unsold">Ended with no bids.</div>
 
-          <!-- Re-list: this cToon never left its owner, so it can go back up -->
+          <!-- Re-list: this item never left its owner, so it can go back up -->
           <div v-if="auction.canRelist" class="adet-relist-wrap">
-            <button class="adet-relist" @click="openRelist">Re-list this cToon</button>
+            <button class="adet-relist" :disabled="relisting" @click="openRelist">{{ relisting ? 'Re-listing…' : `Re-list this ${isPackAuction ? 'pack' : 'cToon'}` }}</button>
             <div class="adet-hint">Starts a new auction — you can change the price and duration.</div>
           </div>
 
@@ -67,7 +67,7 @@
 
           <!-- Featured notice -->
           <div v-if="auction.isFeatured" class="adet-featured-notice">
-            ⭐ Featured — you can't bid if you already own 2+<template v-if="auction.ctoon.isSecondEdition"> (1st + 2nd edition combined)</template>
+            ⭐ Featured — you can't bid if you already own 2+<template v-if="displayItem.isSecondEdition"> (1st + 2nd edition combined)</template>
             or have received 2+ in the last 30 days. You also can't lead more than one active featured auction for this cToon at the same time.
           </div>
 
@@ -171,6 +171,25 @@ const myLockedHere = ref(0)
 let timer, featuredLeadTimer, socket
 
 // ── Computed ─────────────────────────────────────────────────────
+// Normalizes the two item shapes the detail endpoint can return (`ctoon` or
+// `pack`) into the one set of display fields the template below reads, so the
+// template doesn't need an `itemType` branch at every single usage.
+const displayItem = computed(() => {
+  if (auction.value.itemType === 'pack' && auction.value.pack) {
+    return {
+      id:          auction.value.pack.id,
+      userCtoonId: null,
+      name:        auction.value.pack.name,
+      assetPath:   auction.value.pack.imagePath,
+      rarity:      'Sealed Pack',
+      mintNumber:  null,
+      series:      null,
+      isSecondEdition: false
+    }
+  }
+  return auction.value.ctoon || {}
+})
+const isPackAuction = computed(() => auction.value.itemType === 'pack')
 const ended = computed(() => auction.value.endAt && new Date(auction.value.endAt) <= now.value)
 const hasBids = computed(() => (auction.value?.highestBid ?? 0) > 0)
 const displayedBid = computed(() => {
@@ -274,8 +293,38 @@ function openInfoModal() {
   })
 }
 
-function openRelist() {
+const relisting = ref(false)
+
+async function openRelist() {
   if (!auction.value?.canRelist) return
+
+  // Packs have no equivalent of AuctionModal.vue (that modal is built entirely
+  // around cToon fields — rarity floor, mint number), so a pack re-list is a
+  // direct repeat of the same create call instead of a prefilled form.
+  if (isPackAuction.value) {
+    if (relisting.value) return
+    relisting.value = true
+    try {
+      await $fetch('/api/auctions', {
+        method: 'POST',
+        body: {
+          userPackId: auction.value.pack.userPackId,
+          initialBet: auction.value.initialBet,
+          durationDays: 0,
+          durationMinutes: auction.value.durationMinutes ?? 1440,
+          createInitialBid: false
+        }
+      })
+      auction.value.canRelist = false
+      showToast('Pack re-listed!', 'success')
+    } catch (err) {
+      showToast(err?.data?.statusMessage || 'Failed to re-list pack.', 'error')
+    } finally {
+      relisting.value = false
+    }
+    return
+  }
+
   const duration = reconstructDurationPrefill(auction.value.createdAt, auction.value.endAt, auction.value.durationMinutes)
   openAuctionModal({
     ctoon: {

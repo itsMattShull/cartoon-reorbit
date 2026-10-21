@@ -26,6 +26,13 @@ export default defineEventHandler(async (event) => {
             include: { ctoon: true }
           }
         }
+      },
+      packs: {
+        include: {
+          userPack: {
+            include: { pack: true }
+          }
+        }
       }
     }
   })

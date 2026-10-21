@@ -22,9 +22,13 @@ export default defineEventHandler(async (event) => {
   const hasBidsOnly = ['1', 'true', 'yes'].includes(String(query.hasBids || '').toLowerCase())
 
   // 2) Active auctions (ids only for ranking)
+  // Pack auctions are out of scope for this view — excluded, not crashed on.
+  // Every field read below (steps 5-6) goes through userCtoon.ctoon.* with no
+  // optional chaining, so a pack auction ranking into the top 3 would throw.
   const active = await prisma.auction.findMany({
     where: {
       status: 'ACTIVE',
+      userCtoonId: { not: null },
       ...(hasBidsOnly ? { bids: { some: {} } } : {})
     },
     select: { id: true, endAt: true }

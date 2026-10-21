@@ -16,6 +16,7 @@ import {
 import { prisma } from '@/server/prisma'
 import {
   resolveOfferCtoons,
+  resolveOfferPacks,
   validateTradeOfferInputs,
   createTradeOfferTx,
   assertOfferHasContent,
@@ -57,6 +58,8 @@ export default defineEventHandler(async (event) => {
   const {
     ctoonIdsRequested = [],
     ctoonIdsOffered = [],
+    packIdsRequested = [],
+    packIdsOffered = [],
     pointsOffered = 0,
     // Only this route accepts it: asking the other party for points is a
     // counter-only feature, so offers.post.js deliberately has no such field.
@@ -100,19 +103,26 @@ export default defineEventHandler(async (event) => {
     ctoonIdsOffered,
     ctoonIdsRequested
   })
-  assertOfferHasContent({ resolvedOffered, resolvedRequested, pointsOffered, pointsRequested })
+  const { resolvedOfferedPacks, resolvedRequestedPacks } = resolveOfferPacks({
+    packIdsOffered,
+    packIdsRequested
+  })
+  assertOfferHasContent({ resolvedOffered, resolvedRequested, resolvedOfferedPacks, resolvedRequestedPacks, pointsOffered, pointsRequested })
 
   // 4) Ownership, availability and funding.
   //
   // excludeOfferIds is what makes a counter possible at all: a counter re-uses
-  // the very cToons committed to the offer it replaces, which the pending-trade
-  // guard would otherwise reject. The exemption is scoped to this one offer, so
-  // a cToon that is ALSO in some unrelated pending offer still fails.
+  // the very cToons/packs committed to the offer it replaces, which the
+  // pending-trade guard would otherwise reject. The exemption is scoped to
+  // this one offer, so an item that is ALSO in some unrelated pending offer
+  // still fails.
   await validateTradeOfferInputs({
     initiatorId: callerId,
     recipient,
     resolvedOffered,
     resolvedRequested,
+    resolvedOfferedPacks,
+    resolvedRequestedPacks,
     pointsOffered,
     pointsRequested,
     excludeOfferIds: [original.id]
@@ -156,6 +166,8 @@ export default defineEventHandler(async (event) => {
       pointsRequested,
       resolvedOffered,
       resolvedRequested,
+      resolvedOfferedPacks,
+      resolvedRequestedPacks,
       counteredOfferId: original.id,
       initiatorIp,
       initiatorUserAgent

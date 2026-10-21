@@ -78,8 +78,15 @@
                   <CtoonImage v-if="pack.imagePath" :ctoon="pack" :src="pack.imagePath" class="rd-bg-img" />
                   <div class="rd-bg-info">
                     <div class="rd-bg-label">{{ pack.name }}</div>
-                    <div class="rd-bg-sub">{{ pack.quantity }}× added to your packs — open it anytime</div>
+                    <div class="rd-bg-sub">{{ pack.quantity }}× sealed pack{{ pack.quantity === 1 ? '' : 's' }} added to your collection</div>
                   </div>
+                  <button
+                    v-if="pack.userPackIds?.length"
+                    type="button"
+                    class="rd-pack-open-btn"
+                    :disabled="openingPack"
+                    @click="openPack(pack)"
+                  >{{ openingPack ? 'Opening…' : 'Open' }}</button>
                 </div>
               </div>
             </div>
@@ -98,6 +105,8 @@
           </div>
         </transition>
       </Teleport>
+
+      <PackOpenOverlay ref="packOverlayRef" @closed="onPackOverlayClosed" />
 </template>
 
 <script setup>
@@ -132,6 +141,23 @@ function showToast(message, type = 'error') {
 
 const showBalloons = ref(false)
 const balloons = ref([])
+
+const packOverlayRef = ref(null)
+const openingPack = ref(false)
+
+function openPack(pack) {
+  if (openingPack.value || !pack.userPackIds?.length) return
+  openingPack.value = true
+  const userPackId = pack.userPackIds.shift()
+  pack.quantity = Math.max(0, pack.quantity - 1)
+  packOverlayRef.value?.open({ userPackId, name: pack.name, imagePath: pack.imagePath })
+}
+
+// PackOpenOverlay's own close button is the only exit from the sequence, so
+// "done opening" is read off its 'closed' emit rather than a fixed timer here.
+function onPackOverlayClosed() {
+  openingPack.value = false
+}
 
 async function submit() {
   success.value = false
@@ -379,6 +405,28 @@ body {
 .rd-bg-sub {
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.4);
+}
+
+.rd-pack-open-btn {
+  flex-shrink: 0;
+  margin-left: auto;
+  background: var(--OrbitDarkBlue, #003466);
+  border: 1px solid var(--OrbitLightBlue, #3399cc);
+  color: #fff;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.rd-pack-open-btn:hover:not(:disabled) {
+  background: var(--OrbitLightBlue, #3399cc);
+}
+
+.rd-pack-open-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .rd-toast {

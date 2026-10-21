@@ -13,6 +13,9 @@ import {
   assertNoCrossSideOverlap,
   assertValidPointsRequested,
   pendingTradeGuardWhere,
+  normalizePackIdList,
+  assertNoCrossSidePackOverlap,
+  pendingTradePackGuardWhere,
   fmtPoints
 } from '@/server/utils/tradeOfferRules'
 import {
@@ -98,6 +101,19 @@ export async function resolveOfferCtoons ({ ctoonIdsOffered, ctoonIdsRequested }
 }
 
 /**
+ * Pack equivalent of resolveOfferCtoons — simpler, since packs are referenced by raw UserPack id
+ * directly with no synthetic-token indirection to resolve (that exists for cToons for
+ * mint-number-privacy reasons that don't apply to packs). Just normalizes + dedupes + checks
+ * cross-side overlap; real existence/ownership is checked in validateTradeOfferInputs below.
+ */
+export function resolveOfferPacks ({ packIdsOffered, packIdsRequested }) {
+  const resolvedOfferedPacks = normalizePackIdList(packIdsOffered, 'packIdsOffered')
+  const resolvedRequestedPacks = normalizePackIdList(packIdsRequested, 'packIdsRequested')
+  assertNoCrossSidePackOverlap(resolvedOfferedPacks, resolvedRequestedPacks)
+  return { resolvedOfferedPacks, resolvedRequestedPacks }
+}
+
+/**
  * Every ownership / availability / funding check that must pass before an offer
  * may be created. Throws createError on the first failure.
  *
@@ -109,6 +125,8 @@ export async function validateTradeOfferInputs ({
   recipient,
   resolvedOffered,
   resolvedRequested,
+  resolvedOfferedPacks = [],
+  resolvedRequestedPacks = [],
   pointsOffered,
   pointsRequested = 0,
   excludeOfferIds = []
@@ -216,6 +234,53 @@ export async function validateTradeOfferInputs ({
     }
   }
 
+  // Packs: same shape as the cToon checks above, simpler since packs have no lock concept
+  // (opened: false is the complete availability gate — see TradeOfferPack's own schema comment).
+  const allPackIds = [...resolvedOfferedPacks, ...resolvedRequestedPacks]
+  if (allPackIds.length) {
+    const ownedPacks = await prisma.userPack.findMany({
+      where: { id: { in: allPackIds }, opened: false },
+      select: { id: true, userId: true }
+    })
+    const packOwnerById = new Map(ownedPacks.map(r => [r.id, r.userId]))
+
+    if (resolvedOfferedPacks.some(id => packOwnerById.get(id) !== initiatorId)) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'One or more offered packs are not owned by you or no longer available'
+      })
+    }
+    if (resolvedRequestedPacks.some(id => packOwnerById.get(id) !== recipient.id)) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'One or more requested packs are not owned by the recipient or no longer available'
+      })
+    }
+
+    const [inPendingTradePack, inPackAuction] = await Promise.all([
+      prisma.tradeOfferPack.findFirst({
+        where: pendingTradePackGuardWhere(allPackIds, excludeOfferIds),
+        select: { userPackId: true }
+      }),
+      prisma.auction.findFirst({
+        where: { userPackId: { in: allPackIds }, status: 'ACTIVE' },
+        select: { userPackId: true }
+      })
+    ])
+    if (inPendingTradePack) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'One or more packs in this trade are already part of a pending trade.'
+      })
+    }
+    if (inPackAuction) {
+      throw createError({
+        statusCode: 400,
+        statusMessage: 'One or more packs in this trade are currently in an active auction.'
+      })
+    }
+  }
+
   // Not locked (unlike offered points) — the recipient is not a party to this
   // request yet — but a request they plainly could not pay is refused up front
   // rather than left to fail on accept. Accept re-checks.
@@ -267,6 +332,8 @@ export async function createTradeOfferTx (tx, {
   pointsRequested = 0,
   resolvedOffered,
   resolvedRequested,
+  resolvedOfferedPacks = [],
+  resolvedRequestedPacks = [],
   counteredOfferId = null,
   // Request metadata for the offer's creator, captured by the caller (see
   // offers.post.js / counter.post.js) and stored encrypted for the admin
@@ -312,6 +379,14 @@ export async function createTradeOfferTx (tx, {
           data: [
             ...resolvedOffered.map(id => ({ userCtoonId: id, role: 'OFFERED' })),
             ...resolvedRequested.map(id => ({ userCtoonId: id, role: 'REQUESTED' }))
+          ]
+        }
+      },
+      packs: {
+        createMany: {
+          data: [
+            ...resolvedOfferedPacks.map(id => ({ userPackId: id, role: 'OFFERED' })),
+            ...resolvedRequestedPacks.map(id => ({ userPackId: id, role: 'REQUESTED' }))
           ]
         }
       }

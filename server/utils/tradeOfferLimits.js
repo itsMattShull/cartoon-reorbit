@@ -21,6 +21,11 @@
 /// raising this further.
 export const MAX_CTOONS_PER_SIDE = 10000
 
+/// Same guardrail as MAX_CTOONS_PER_SIDE, for the packs a side of an offer may contain — a
+/// smaller ceiling since a sealed pack is a much coarser-grained item than a cToon (nobody
+/// legitimately trades thousands of packs at once the way a cToon collection can run large).
+export const MAX_PACKS_PER_SIDE = 500
+
 /// How many counters deep one negotiation may go. A counter is cheap to send and
 /// DMs the other party, so an unbounded chain is a notification-spam vector.
 export const MAX_COUNTER_CHAIN_DEPTH = 20
