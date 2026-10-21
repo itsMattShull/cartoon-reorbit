@@ -275,6 +275,65 @@
             </button>
           </div>
 
+          <!-- Pack Rewards -->
+          <div class="flex flex-col gap-1">
+            <label class="text-xs font-medium">Pack Rewards</label>
+
+            <div
+              v-for="(rp, idx) in packRewards"
+              :key="idx"
+              class="flex items-center gap-2"
+            >
+              <datalist :id="`pack-list-${idx}`">
+                <option
+                  v-for="p in filteredPacks(rp.packName)"
+                  :key="p.id"
+                  :value="packLabel(p)"
+                />
+              </datalist>
+
+              <input
+                v-model="rp.packName"
+                :list="`pack-list-${idx}`"
+                type="text"
+                class="flex-1 border rounded-md px-2 py-1.5 text-sm"
+                placeholder="Type 3+ characters to search"
+              />
+
+              <img
+                v-if="findPackByInput(rp.packName)?.imagePath"
+                :src="findPackByInput(rp.packName).imagePath"
+                class="w-7 h-7 object-cover rounded border"
+                alt="Pack preview"
+              />
+
+              <input
+                v-model.number="rp.quantity"
+                type="number"
+                min="1"
+                class="w-16 border rounded px-1 py-1 text-sm"
+                placeholder="Qty"
+              />
+
+              <button
+                type="button"
+                @click="removePackReward(idx)"
+                class="text-red-700 hover:underline text-[11px]"
+              >
+                Remove
+              </button>
+            </div>
+
+            <button
+              type="button"
+              @click="addPackReward"
+              class="text-blue-600 hover:underline text-xs text-left"
+            >
+              + Add another pack
+            </button>
+            <p class="text-[10px] text-gray-500">Gives a sealed (unopened) pack — the player opens it themselves later.</p>
+          </div>
+
           <div class="flex flex-col gap-1">
             <label class="text-xs font-medium">Background Rewards (CODE_ONLY)</label>
             <datalist id="bg-list">
@@ -382,6 +441,52 @@ function findBg(value) {
 function addBgReward() { bgRewards.value.push({ bgLabel: '' }) }
 function removeBgReward(i) { bgRewards.value.splice(i,1) }
 
+// list of all packs from the DB, for the Pack Rewards typeahead
+const packOptions = ref([])
+const packRewards = ref([{ packName: '', quantity: 1 }])
+function addPackReward() { packRewards.value.push({ packName: '', quantity: 1 }) }
+function removePackReward(i) { packRewards.value.splice(i, 1) }
+function packLabel(p) { return `${p.name} (${p.id})` }
+function filteredPacks(input) {
+  const v = (input || '').trim()
+  if (v.length < 2) return []
+  return packOptions.value.filter(p =>
+    p.name.toLowerCase().includes(v.toLowerCase()) ||
+    p.id.toLowerCase().includes(v.toLowerCase())
+  )
+}
+function resolvePackId(input) {
+  const v = (input || '').trim()
+  if (!v) return { id: null }
+  const direct = packOptions.value.find(p => p.id === v)
+  if (direct) return { id: direct.id }
+  const idMatch = v.match(/\(([^)]+)\)\s*$/)
+  if (idMatch) {
+    const id = idMatch[1].trim()
+    const byId = packOptions.value.find(p => p.id === id)
+    if (byId) return { id: byId.id }
+  }
+  const matches = packOptions.value.filter(p => p.name === v)
+  if (matches.length === 1) return { id: matches[0].id }
+  if (matches.length > 1) return { id: null, reason: 'ambiguous', name: v }
+  return { id: null, reason: 'notfound', name: v }
+}
+function findPackByInput(input) {
+  const v = (input || '').trim()
+  if (!v) return null
+  const direct = packOptions.value.find(p => p.id === v)
+  if (direct) return direct
+  const idMatch = v.match(/\(([^)]+)\)\s*$/)
+  if (idMatch) {
+    const id = idMatch[1].trim()
+    const byId = packOptions.value.find(p => p.id === id)
+    if (byId) return byId
+  }
+  const matches = packOptions.value.filter(p => p.name === v)
+  if (matches.length === 1) return matches[0]
+  return null
+}
+
 function filteredCtoons(input) {
   const v = (input || '').trim()
   if (v.length < 2) return []
@@ -447,6 +552,9 @@ onMounted(async () => {
 
     const resBgs = await fetch('/api/admin/list-backgrounds', { credentials: 'include' })
     if (resBgs.ok) bgOptions.value = await resBgs.json() // [{id,label,imagePath}]
+
+    const resPacks = await fetch('/api/admin/list-packs', { credentials: 'include' })
+    if (resPacks.ok) packOptions.value = await resPacks.json() // [{id,name,imagePath}]
   } catch (e) {
     console.error('Failed to load cToons', e)
   }
@@ -535,9 +643,25 @@ async function submitForm() {
     }
   }
 
+  const validPacks = []
+  for (const rp of packRewards.value) {
+    const name = (rp.packName || '').trim()
+    if (!name || rp.quantity < 1) continue
+    const resolved = resolvePackId(name)
+    if (!resolved.id) {
+      if (resolved.reason === 'ambiguous') {
+        error.value = `Multiple packs named “${resolved.name}”. Select one by ID from the dropdown.`
+      } else {
+        error.value = `Unrecognized pack: “${resolved.name}”`
+      }
+      return
+    }
+    validPacks.push({ packId: resolved.id, quantity: rp.quantity })
+  }
+
   // build payload
   // build either fixed cToons or pooled
-  let rewardBlock = { points: points.value, backgrounds: backgroundsPayload }
+  let rewardBlock = { points: points.value, backgrounds: backgroundsPayload, packs: validPacks }
 
   if (pooledEnabled.value) {
     const validPool = []

@@ -45,7 +45,7 @@ export default defineEventHandler(async (event) => {
   const existing = await prisma.claimCode.findUnique({
     where: { code },
     include: {
-      rewards: { include: { ctoons: true, poolCtoons: true, backgrounds: true } },
+      rewards: { include: { ctoons: true, poolCtoons: true, backgrounds: true, packs: true } },
       prerequisites: true
     }
   })
@@ -58,6 +58,16 @@ export default defineEventHandler(async (event) => {
       const id = typeof b === 'string' ? b : b?.backgroundId ?? b?.id
       if (!id || typeof id !== 'string') throw createError({ statusCode: 400, statusMessage: `Invalid backgroundId in ${where}[${idx}]` })
       return id
+    })
+  }
+
+  function normPackCreates(arr, where) {
+    if (arr == null) return []
+    if (!Array.isArray(arr)) throw createError({ statusCode: 400, statusMessage: `${where} must be an array.` })
+    return arr.map((p, j) => {
+      if (!p?.packId || typeof p.packId !== 'string') throw createError({ statusCode: 400, statusMessage: `Invalid packId in ${where}[${j}].` })
+      if (typeof p.quantity !== 'number' || p.quantity < 1) throw createError({ statusCode: 400, statusMessage: `Invalid quantity in ${where}[${j}].` })
+      return { packId: p.packId, quantity: p.quantity }
     })
   }
 
@@ -74,6 +84,7 @@ export default defineEventHandler(async (event) => {
       ...normBgIds(r?.backgroundIds, `rewards[${i}].backgroundIds`)
     ]
     const bgCreates = bgIds.map(id => ({ backgroundId: id }))
+    const packCreates = normPackCreates(r?.packs, `rewards[${i}].packs`)
 
     if (usePool) {
       if (!Array.isArray(r.pool.items) || r.pool.items.length === 0) throw createError({ statusCode: 400, statusMessage: `rewards[${i}].pool.items must be a non-empty array.` })
@@ -88,7 +99,8 @@ export default defineEventHandler(async (event) => {
         points: points ?? 0,
         pooledUniqueCount: r.pool.uniqueCount,
         poolCtoons: { create: poolCreates },
-        ...(bgCreates.length ? { backgrounds: { create: bgCreates } } : {})
+        ...(bgCreates.length ? { backgrounds: { create: bgCreates } } : {}),
+        ...(packCreates.length ? { packs: { create: packCreates } } : {})
       }
     }
 
@@ -102,7 +114,8 @@ export default defineEventHandler(async (event) => {
     return {
       points: points ?? 0,
       ctoons: { create: fixedCreates },
-      ...(bgCreates.length ? { backgrounds: { create: bgCreates } } : {})
+      ...(bgCreates.length ? { backgrounds: { create: bgCreates } } : {}),
+      ...(packCreates.length ? { packs: { create: packCreates } } : {})
     }
   })
 
@@ -123,6 +136,7 @@ export default defineEventHandler(async (event) => {
     prisma.rewardCtoon.deleteMany({ where: { reward: { codeId } } }),
     prisma.rewardCtoonPool.deleteMany({ where: { reward: { codeId } } }), // NEW
     prisma.rewardBackground.deleteMany({ where: { reward: { codeId } } }),
+    prisma.rewardPack.deleteMany({ where: { reward: { codeId } } }),
     prisma.claimCodeReward.deleteMany({ where: { codeId } }),
     prisma.claimCodePrerequisite.deleteMany({ where: { codeId } }),
     prisma.claimCode.update({
@@ -133,7 +147,7 @@ export default defineEventHandler(async (event) => {
   const updated = await prisma.claimCode.findUnique({
     where: { code },
     include: {
-      rewards: { include: { ctoons: true, poolCtoons: true, backgrounds: true } },
+      rewards: { include: { ctoons: true, poolCtoons: true, backgrounds: true, packs: true } },
       prerequisites: true
     }
   })
@@ -149,7 +163,8 @@ export default defineEventHandler(async (event) => {
         pooledUniqueCount: r.pooledUniqueCount ?? null,
         ctoons: (r.ctoons || []).map(x => ({ ctoonId: x.ctoonId, quantity: x.quantity, endBonusAt: x.endBonusAt ? new Date(x.endBonusAt).toISOString() : null })),
         pool: (r.poolCtoons || []).map(x => ({ ctoonId: x.ctoonId, weight: x.weight })),
-        backgrounds: (r.backgrounds || []).map(b => b.backgroundId)
+        backgrounds: (r.backgrounds || []).map(b => b.backgroundId),
+        packs: (r.packs || []).map(p => ({ packId: p.packId, quantity: p.quantity }))
       })),
       prerequisites: (cc.prerequisites || []).map(p => p.ctoonId)
     }
