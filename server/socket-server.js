@@ -33,6 +33,7 @@ import { registerPokemonBattle, startPokemonBattleSweep } from './utils/pokemonB
 import { registerOgGtoons, startOgGtoonsSweep, restoreOgGtoonsMatches } from './utils/ogGtoonsSocket.js'
 import { isClashHidden } from './utils/clashConfig.js'
 import { registerOgGtoonsPractice, startOgGtoonsPracticeSweep } from './utils/ogGtoonsPractice.js'
+import { recordPracticeResult } from './utils/ogGtoonPracticeRecord.js'
 import { registerOgGtoonsTutorial, startOgGtoonsTutorialSweep } from './utils/ogGtoonsTutorial.js'
 import { registerCMoonRaid, startCMoonRaidSweep, restoreCMoonRaids } from './utils/cmoonRaidSocket.js'
 import { registerCMoonRaidPreview, startCMoonRaidPreviewSweep } from './utils/cmoonRaidPreviewSocket.js'
@@ -1518,7 +1519,7 @@ io.on('connection', socket => {
   registerOgGtoons(io, socket, resolveSocketUser)
   // Practice vs. a bot — separate module on purpose (never touches PvP's queue, stakes or
   // persistence); see the header of server/utils/ogGtoonsPractice.js.
-  registerOgGtoonsPractice(io, socket, resolveSocketUser)
+  registerOgGtoonsPractice(io, socket, resolveSocketUser, { recordResult: recordPracticeResult })
   // The guided, scripted tutorial match — also its own module (never touches PvP or points); see
   // the header of server/utils/ogGtoonsTutorial.js.
   registerOgGtoonsTutorial(io, socket, resolveSocketUser)

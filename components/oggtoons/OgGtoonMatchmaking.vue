@@ -48,17 +48,18 @@
         </div>
       </div>
 
-      <!-- Practice vs. the computer (no stake, no points, not on the leaderboard) -->
+      <!-- Practice vs. the computer (no stake, no points; finished matches count on the Practice Matches leaderboard) -->
       <div v-if="practiceAvailable" class="p-3 bg-white/5 rounded border border-white/10">
         <h3 class="font-bold mb-1">Practice Match</h3>
         <p class="text-xs text-gray-300 mb-2">
-          Play the computer with your selected deck. No points are staked and it doesn't count toward the leaderboard.
+          Play the computer with your selected deck. No points are staked or won. Practice matches you play to the end count on the
+          Practice Matches leaderboard; ones you leave early aren't recorded.
         </p>
         <div class="flex items-center gap-2 flex-wrap">
           <label class="text-sm">Difficulty:</label>
           <select v-model="practiceDifficulty" class="border rounded px-2 py-1 text-gray-800 text-sm">
             <option value="easy">Easy</option>
-            <option value="normal">Normal</option>
+            <option value="normal">Medium</option>
             <option value="hard">Hard</option>
           </select>
           <button

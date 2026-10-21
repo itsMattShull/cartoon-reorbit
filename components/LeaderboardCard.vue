@@ -36,17 +36,19 @@
         <div class="text-sm tabular-nums font-semibold text-gray-900">
           <template v-if="valueType === 'percent'">
             {{ formatPercent(row.value) }}
-            <span v-if="hasFrac(row)" class="text-gray-500 font-normal">
+            <span v-if="showRecord && hasRecord(row)" class="text-gray-500 font-normal">({{ record(row) }})</span>
+            <span v-else-if="hasFrac(row)" class="text-gray-500 font-normal">
               ({{ formatInt(row.num) }}/{{ formatInt(row.den) }})
             </span>
           </template>
           <template v-else>
             {{ formatInt(row.value) }} <span v-if="suffix" class="text-gray-500 font-normal">{{ suffix }}</span>
+            <span v-if="showRecord && hasRecord(row)" class="text-gray-500 font-normal">({{ record(row) }})</span>
           </template>
         </div>
       </li>
       <li v-if="!rows?.length" class="px-4 py-6 text-gray-500 text-sm text-center">
-        No data for this timeframe.
+        {{ emptyText }}
       </li>
     </ul>
   </div>
@@ -58,12 +60,17 @@ defineProps({
   rows: { type: Array, default: () => [] },
   loading: { type: Boolean, default: false },
   valueType: { type: String, default: 'count' }, // 'count' | 'percent'
-  suffix: { type: String, default: '' }          // ← optional
+  suffix: { type: String, default: '' },         // ← optional
+  // Show each row's Wins-Losses-Ties (rows carry numeric wins / losses / ties) next to its value.
+  showRecord: { type: Boolean, default: false },
+  emptyText: { type: String, default: 'No data for this timeframe.' }
 })
 
 const hasFrac = (row) =>
   row && typeof row.num === 'number' && typeof row.den === 'number' && row.den > 0
 
+const hasRecord = (row) => row && ['wins', 'losses', 'ties'].every(k => typeof row[k] === 'number')
+const record = (row) => `${row.wins}-${row.losses}-${row.ties}`
 const formatInt = (v) => new Intl.NumberFormat().format(Math.round(Number(v || 0)))
 const formatPercent = (v) => `${Number(v || 0).toFixed(1)}%`
 </script>

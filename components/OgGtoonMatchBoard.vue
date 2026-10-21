@@ -293,6 +293,7 @@ import { normalizeRevealTiming } from '@/utils/ogGtoonReveal'
 import OgGtoonGameLog from '@/components/OgGtoonGameLog.vue'
 import OgGtoonTutorial from '@/components/oggtoons/OgGtoonTutorial.vue'
 import OgGtoonTournamentResult from '@/components/oggtoons/OgGtoonTournamentResult.vue'
+import { difficultyLabel as ogDifficultyLabel } from '@/utils/ogGtoonDifficulty'
 
 defineEmits(['exit'])
 
@@ -310,10 +311,7 @@ const isTournament = computed(() => !!matchState.value?.tournament)
 // The guided tutorial match (also flagged practice by the server): no timers, no intro modal, no result
 // modal of its own — the guide walks through the result and its last button leaves.
 const isTutorial = computed(() => !!matchState.value?.tutorial)
-const difficultyLabel = computed(() => {
-  const d = matchState.value?.difficulty
-  return d ? d.charAt(0).toUpperCase() + d.slice(1) : 'Normal'
-})
+const difficultyLabel = computed(() => ogDifficultyLabel(matchState.value?.difficulty))
 
 const inDiscardPhase = computed(() => matchState.value?.phase === 'discard')
 const inSwapPhase = computed(() => matchState.value?.phase === 'swap')

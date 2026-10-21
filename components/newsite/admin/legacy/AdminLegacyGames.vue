@@ -844,15 +844,15 @@
             <label class="flex items-start gap-2 p-2 border rounded bg-white">
               <input type="checkbox" v-model="ogGtoonsLeaderboardEnabled" class="mt-0.5" />
               <span>
-                <span class="text-xs font-semibold text-gray-800">Leaderboard</span>
-                <span class="block text-[11px] text-gray-500">Off hides the Leaderboard tab and rejects the leaderboard fetch.</span>
+                <span class="text-xs font-semibold text-gray-800">Leaderboard &amp; Meta</span>
+                <span class="block text-[11px] text-gray-500">Off hides the Leaderboard and Meta tabs and rejects their fetches. Both are cached for an hour, so new results can take up to an hour to show.</span>
               </span>
             </label>
             <label class="flex items-start gap-2 p-2 border rounded bg-white">
               <input type="checkbox" v-model="ogGtoonsPracticeEnabled" class="mt-0.5" />
               <span>
                 <span class="text-xs font-semibold text-gray-800">Practice Mode</span>
-                <span class="block text-[11px] text-gray-500">Single-player practice against a bot that plays a shuffled copy of the player's own deck. Awards, spends and records no points and never appears on the leaderboard. Also requires Live Matches. Off hides the Practice button on the Matchmaking tab and rejects new practice matches; in-progress ones finish normally. (The guided tutorial is separate and only needs Live Matches.)</span>
+                <span class="block text-[11px] text-gray-500">Single-player practice against a bot that plays a shuffled copy of the player's own deck. Awards, spends and records no points. A match played to the end saves only its win/loss/tie result (shown on the Practice Matches leaderboard); it never appears on the Meta tab, and quitting early records nothing. Also requires Live Matches. Off hides the Practice button on the Matchmaking tab and rejects new practice matches; in-progress ones finish normally. (The guided tutorial is separate and only needs Live Matches.)</span>
               </span>
             </label>
             <label class="flex items-start gap-2 p-2 border rounded bg-white">

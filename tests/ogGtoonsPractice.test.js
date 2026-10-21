@@ -607,7 +607,7 @@ test('core: an unplayed card of the opponent is never exposed in the view', () =
 
 /* ── Practice runtime (fake sockets, injected deps) ──────────────────────────────────────── */
 
-function harness({ config, deck = makeDeck(), isInPvp = false, userId = 'u1', loadBotDeck = async () => null } = {}) {
+function harness({ config, deck = makeDeck(), isInPvp = false, userId = 'u1', loadBotDeck = async () => null, recordResult } = {}) {
   const handlers = {}
   const sent = []
   const io = { local: { to: (sid) => ({ emit: (ev, payload) => sent.push({ sid, ev, payload }) }) } }
@@ -623,7 +623,8 @@ function harness({ config, deck = makeDeck(), isInPvp = false, userId = 'u1', lo
     getConfig: async () => config || { gameEnabled: true, practiceEnabled: true },
     botDelay: () => 0,
     rng: seeded(11),
-    isInPvp: () => isInPvp
+    isInPvp: () => isInPvp,
+    recordResult
   })
   const events = (name) => sent.filter(s => s.ev === name).map(s => s.payload)
   const waitFor = async (name, ms = 3000) => {
@@ -704,6 +705,48 @@ test('practice: a full match also plays out when the human takes the slot-7 swap
   assert.equal(h.events('oggtoons:swapApplied').length, 1)
   assert.equal(end.you.swapUsed, true)
   assert.equal(end.you.revealed.find(r => r.slot === 7).round, 3)
+})
+
+test('practice: a finished match saves exactly one result record (outcome, difficulty, user, id)', async () => {
+  const saved = []
+  const h = harness({ userId: 'rec1', recordResult: async (r) => { saved.push(r) } })
+  const end = await playToEnd(h, { difficulty: 'hard' })
+  await until(() => saved.length)
+  await tick(30)
+  assert.equal(saved.length, 1)
+  const [r] = saved
+  assert.equal(r.userId, 'rec1')
+  assert.equal(r.difficulty, 'hard')
+  assert.equal(typeof r.startedAt, 'number')
+  const expected = end.outcome === 'TIE' ? 'TIE' : (end.won ? 'PLAYER_WIN' : 'BOT_WIN')
+  assert.equal(r.outcome, expected)
+  assert.ok(['PLAYER_WIN', 'BOT_WIN', 'TIE'].includes(r.outcome))
+})
+
+test('practice: quitting a match saves nothing', async () => {
+  const saved = []
+  const h = harness({ userId: 'rec2', recordResult: async (r) => { saved.push(r) } })
+  await h.handlers['oggtoons:practice:start']({ deckId: 'd1', difficulty: 'easy' })
+  await h.waitFor('oggtoons:matchStart')
+  await h.handlers['oggtoons:practice:leave']()
+  await tick(50)
+  assert.equal(saved.length, 0)
+  assert.equal(hasLivePracticeMatch('rec2'), false)
+})
+
+test('practice: a failing or rejecting recorder never disturbs the result screen', async () => {
+  const quiet = console.error; console.error = () => {}
+  try {
+    for (const [userId, recordResult] of [
+      ['rec3', async () => { throw new Error('db down') }],
+      ['rec4', () => { throw new Error('sync boom') }]
+    ]) {
+      const h = harness({ userId, recordResult })
+      const end = await playToEnd(h)
+      assert.equal(end.over, true)
+      assert.equal(hasLivePracticeMatch(userId), false)
+    }
+  } finally { console.error = quiet }
 })
 
 test('practice: committing with unfilled slots is rejected and nothing is revealed', async () => {

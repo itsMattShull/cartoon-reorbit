@@ -669,6 +669,7 @@ model User {
   ogGtoonMatchesAsPlayer2   OgGtoonMatch[]                @relation("OgGtoonMatchPlayer2")
   ogGtoonMatchesWhoLeft     OgGtoonMatch[]                @relation("OgGtoonMatchWhoLeft")
   ogGtoonMatchesAsWinner    OgGtoonMatch[]                @relation("OgGtoonMatchWinner")
+  ogGtoonPracticeMatches    OgGtoonPracticeMatch[]
   edRpsMatchesAsPlayer1     EdRpsMatch[]                  @relation("EdRpsMatchPlayer1")
   edRpsMatchesAsPlayer2     EdRpsMatch[]                  @relation("EdRpsMatchPlayer2")
   edRpsMatchesAsWinner      EdRpsMatch[]                  @relation("EdRpsMatchWinner")
@@ -2417,6 +2418,38 @@ enum OgGtoonMatchOutcome {
   PLAYER2
   TIE
   INCOMPLETE
+}
+
+enum OgGtoonPracticeDifficulty {
+  easy
+  normal
+  hard
+}
+
+enum OgGtoonPracticeOutcome {
+  PLAYER_WIN
+  BOT_WIN
+  TIE
+}
+
+// One finished original gToons PRACTICE match (the player vs. the bot). This is deliberately a
+// separate, lightweight table rather than OgGtoonMatch with a nullable player2: OgGtoonMatch has
+// required deck snapshots, goal colors and a roundLog, and every Meta / leaderboard query would
+// otherwise need an exclusion to keep bot games out. It holds NO deck data, so practice can never
+// reach the Meta tab. Written once, at a natural finish only (a quit / idle sweep / the tutorial
+// records nothing); the practice match uuid is the primary key so a retry cannot double-count.
+// Read by the Practice Matches leaderboard.
+model OgGtoonPracticeMatch {
+  id         String                     @id // the practice match's uuid
+  userId     String
+  difficulty OgGtoonPracticeDifficulty
+  outcome    OgGtoonPracticeOutcome
+  startedAt  DateTime
+  endedAt    DateTime                   @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([endedAt])
 }
 
 // One original gToons (2002 game) match. Unlike ClashGame, both players are required

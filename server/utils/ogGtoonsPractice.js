@@ -16,11 +16,14 @@
 // ── Practice never awards, spends or records points ─────────────────────────────────────────
 //   • No stake: the match is created with stake [0, 0]; there is no stake input at all.
 //   • The round-3 slot-7 swap costs 10 points off the match score (as in PvP) but never touches the points balance; it is handled purely in memory.
-//   • Nothing is persisted. In particular no OgGtoonMatch row is written, which is also what keeps
-//     practice out of the leaderboard (it is computed from that table).
+//   • No match row, deck snapshot or round log is persisted, which is what keeps practice out of the
+//     Meta tab. The ONE thing saved is a tiny result record (who won, the difficulty) for a match that
+//     reaches a natural finish, so the Practice Matches leaderboard can count it. A quit, an idle/
+//     orphan sweep or a replaced match saves nothing.
 //   • This module deliberately does not import Prisma, gamePoints or any points/match-writing
 //     helper; tests/ogGtoonsPractice.test.js asserts that, so a future edit can't quietly add it.
-// The only database access is the deck reads, injected as `deps.loadDeck` and `deps.loadBotDeck`.
+// The only database access is injected: the deck reads (`deps.loadDeck`, `deps.loadBotDeck`) and the
+// result write (`deps.recordResult`, wired in socket-server.js; with no recorder nothing is saved).
 //
 // ── Process locality / resources ────────────────────────────────────────────────────────────
 // In-memory and single-process like PvP, not mirrored to Redis: a server restart simply ends a
@@ -203,7 +206,7 @@ function concludeStep(io, match, deps, revealedRound, entries, order, { steps = 
       player2Score: end.player2Score,
       endReason: 'natural',
       effectsResolved: end.effectsResolved
-    })
+    }, deps)
     return
   }
   armPhaseTimer(io, match, deps)
@@ -262,8 +265,8 @@ async function onPhaseExpired(io, match, deps) {
   }
 }
 
-/** Nothing is persisted or paid here — see the header. */
-function endMatch(io, match, params) {
+/** Nothing is paid here — see the header. Only a natural finish saves a result record. */
+function endMatch(io, match, params, deps = {}) {
   if (match.ending) return
   match.ending = true
   emitToHuman(io, match, OUT('matchEnd'), {
@@ -276,7 +279,26 @@ function endMatch(io, match, params) {
     player2Score: params.player2Score,
     effectsResolved: params.effectsResolved || []
   })
+  // After the player has their result, so a slow or failing write can never delay or break it.
+  if (params.endReason === 'natural') saveResult(match, params, deps)
   destroyMatch(match)
+}
+
+/** Fire-and-forget: the recorder owns its own retries and never throws; this is belt and braces. */
+function saveResult(match, params, deps) {
+  if (typeof deps.recordResult !== 'function') return
+  const outcome = params.outcome === 'TIE' ? 'TIE' : (params.won ? 'PLAYER_WIN' : 'BOT_WIN')
+  try {
+    Promise.resolve(deps.recordResult({
+      id: match.id,
+      userId: match.humanId,
+      difficulty: match.difficulty,
+      outcome,
+      startedAt: match.startedAt
+    })).catch(err => console.error('[ogGtoonsPractice] could not record result:', err))
+  } catch (err) {
+    console.error('[ogGtoonsPractice] could not record result:', err)
+  }
 }
 
 /* ── Sweep ───────────────────────────────────────────────────────────────────────────────── */
@@ -302,7 +324,8 @@ export function startOgGtoonsPracticeSweep() {
 /* ── Registration ────────────────────────────────────────────────────────────────────────── */
 
 /**
- * @param deps  injectable for tests: { loadDeck, loadBotDeck, getConfig, botDelay, rng, isInPvp }
+ * @param deps  injectable for tests: { loadDeck, loadBotDeck, getConfig, botDelay, rng, isInPvp, recordResult }
+ *              `recordResult` has no default on purpose: tests never write to a database by accident.
  */
 export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {}) {
   const d = {
@@ -311,7 +334,8 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
     getConfig: deps.getConfig || getOgGtoonsConfig,
     botDelay: deps.botDelay || (() => botCommitDelayMs()),
     rng: deps.rng || Math.random,
-    isInPvp: deps.isInPvp || isInPvp
+    isInPvp: deps.isInPvp || isInPvp,
+    recordResult: deps.recordResult || null
   }
   const fail = (code, message) => socket.emit(OUT('error'), { code, message })
 

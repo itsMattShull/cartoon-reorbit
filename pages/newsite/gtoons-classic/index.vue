@@ -28,6 +28,7 @@
       <OgGtoonDecks v-else-if="activeTab === 'decks'" />
       <OgGtoonMatchmaking v-else-if="activeTab === 'matchmaking'" @start-tutorial="launchTutorial" />
       <OgGtoonLeaderboard v-else-if="activeTab === 'leaderboard'" />
+      <OgGtoonMeta v-else-if="activeTab === 'meta'" />
       <OgGtoonTournaments v-else-if="activeTab === 'tournaments'" @switch-tab="activeTab = $event" />
     </div>
 
@@ -62,6 +63,7 @@ import { useRoute, useRouter } from '#imports'
 import OgGtoonDecks from '@/components/oggtoons/OgGtoonDecks.vue'
 import OgGtoonMatchmaking from '@/components/oggtoons/OgGtoonMatchmaking.vue'
 import OgGtoonLeaderboard from '@/components/oggtoons/OgGtoonLeaderboard.vue'
+import OgGtoonMeta from '@/components/oggtoons/OgGtoonMeta.vue'
 import OgGtoonChallengeModal from '@/components/oggtoons/OgGtoonChallengeModal.vue'
 import OgGtoonTournaments from '@/components/oggtoons/OgGtoonTournaments.vue'
 import OgGtoonTournamentReadyModal from '@/components/oggtoons/OgGtoonTournamentReadyModal.vue'
@@ -84,6 +86,8 @@ const TABS = [
   { id: 'decks',       label: 'Manage Deck',  flag: 'deckBuildingEnabled' },
   { id: 'matchmaking', label: 'Matchmaking',  flag: 'matchmakingEnabled' },
   { id: 'leaderboard', label: 'Leaderboard',  flag: 'leaderboardEnabled' },
+  // Same standings data as the Leaderboard, broken down by deck, so it follows the Leaderboard switch.
+  { id: 'meta',        label: 'Meta',         flag: 'leaderboardEnabled' },
   // Opt-in rather than opt-out: the tab only appears once an admin has explicitly turned tournaments on.
   { id: 'tournaments', label: 'Tournaments',  flag: 'tournamentsEnabled', strict: true }
 ]
