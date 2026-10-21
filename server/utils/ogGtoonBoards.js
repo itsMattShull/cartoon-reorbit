@@ -11,7 +11,7 @@
 //   • Leaderboard: a forfeit counts (the player who left takes the loss). Meta: forfeits are skipped,
 //     because the decks never really played.
 
-export const CACHE_VERSION = 'v3'
+export const CACHE_VERSION = 'v4'
 // The boards are read-mostly standings, so an hour-old answer is fine and keeps the heavy scans rare.
 export const CACHE_TTL_SEC = 3600
 
@@ -88,16 +88,13 @@ const rowOut = (r, value) => ({
   wins: r.wins,
   losses: r.losses,
   ties: r.ties,
-  played: r.played,
-  // How the wins were decided (more goal-colour cards vs. higher points); forfeits and older games are in neither.
-  winsByColor: r.winsByColor,
-  winsByPoints: r.winsByPoints
+  played: r.played
 })
 
 const byName = (a, b) => String(a.username || '').localeCompare(String(b.username || ''))
 
 /**
- * @param rows  [{ uid, username, played, wins, losses, ties, winsByColor, winsByPoints, earned }] — one per player, already
+ * @param rows  [{ uid, username, played, wins, losses, ties, earned }] — one per player, already
  *              limited to the cached (mode, filter/difficulty, timeframe). played = wins + losses + ties.
  */
 export function buildLeaderboard(rows, params, generatedAt = new Date()) {
@@ -108,8 +105,6 @@ export function buildLeaderboard(rows, params, generatedAt = new Date()) {
     wins: Number(r.wins) || 0,
     losses: Number(r.losses) || 0,
     ties: Number(r.ties) || 0,
-    winsByColor: Number(r.winsByColor) || 0,
-    winsByPoints: Number(r.winsByPoints) || 0,
     earned: Number(r.earned) || 0
   }))
   const top = (arr, cmp) => arr.sort((a, b) => cmp(a, b) || byName(a, b)).slice(0, BOARD_SIZE)
@@ -168,7 +163,7 @@ const num = (v) => Number(v) || 0
  * @param cached {
  *   totalGames, decidedGames, generatedAt,
  *   decks: [{ deckId, deckKey, goalCtoonId, games, wins, losses, ties, mirrors }],
- *   cards: [{ ctoonId, name, assetPath, color, value, isSlam, appearances, wins, losses, ties }]
+ *   cards: [{ ctoonId, name, assetPath, color, value, isSlam, power, appearances, wins, losses, ties }]
  * }
  *   decks.games counts a mirror match (both players on the same 12 cards) once; the win/loss/tie
  *   counts leave mirrors out, so a mirror cannot drag a deck toward 50 %.
@@ -181,6 +176,7 @@ export function buildMetaResponse(cached, params) {
     color: c.color || null,
     value: c.value == null ? null : num(c.value),
     isSlam: !!c.isSlam,
+    power: c.power || null,
     appearances: num(c.appearances),
     wins: num(c.wins),
     losses: num(c.losses),
@@ -234,6 +230,7 @@ export function buildMetaResponse(cached, params) {
       name: c.name,
       color: c.color,
       value: c.value,
+      power: c.power,
       wins: c.wins,
       winSharePct: decidedGames > 0 ? (c.wins / decidedGames) * 100 : 0
     }))
@@ -247,7 +244,7 @@ export function buildMetaResponse(cached, params) {
   const dictionary = {}
   for (const id of needed) {
     const c = cardById.get(id)
-    if (c) dictionary[id] = { name: c.name, assetPath: c.assetPath, color: c.color, value: c.value, isSlam: c.isSlam }
+    if (c) dictionary[id] = { name: c.name, assetPath: c.assetPath, color: c.color, value: c.value, isSlam: c.isSlam, power: c.power }
   }
 
   return {
@@ -263,5 +260,94 @@ export function buildMetaResponse(cached, params) {
     cards: dictionary,
     cardUsage,
     winningCards
+  }
+}
+
+/* ── One player's stats (the modal opened from a leaderboard row) ────────────────────────── */
+
+export const PRACTICE_LEVELS = ['easy', 'normal', 'hard']
+
+/** The username is looked up exactly (usernames are unique); anything odd just won't match. */
+export function normalizePlayerParams(query = {}) {
+  const username = typeof query.username === 'string' ? query.username.trim().slice(0, 64) : ''
+  return { username, timeframe: pick(query.timeframe, TIMEFRAMES, 'all') }
+}
+
+export function playerCacheKey(userId, timeframe) {
+  return `og-player:${CACHE_VERSION}:${userId}:${timeframe}`
+}
+
+const SUM_KEYS = ['played', 'wins', 'losses', 'ties', 'winsByColor', 'winsByPoints']
+const sumRows = (rows) => {
+  const out = Object.fromEntries(SUM_KEYS.map(k => [k, 0]))
+  for (const r of rows) for (const k of SUM_KEYS) out[k] += Number(r[k]) || 0
+  return out
+}
+const recordOf = (r) => ({
+  played: r.played, wins: r.wins, losses: r.losses, ties: r.ties,
+  winPct: winPct(r.wins, r.ties, r.played)
+})
+const share = (n, whole) => (whole > 0 ? (n / whole) * 100 : 0)
+
+/**
+ * How a player's wins were decided. "Other" is every win with no recorded reason: forfeits (the
+ * opponent left) and games finished before the reason was saved.
+ */
+export function winMethodOf(r) {
+  const color = r.winsByColor || 0
+  const points = r.winsByPoints || 0
+  const other = Math.max((r.wins || 0) - color - points, 0)
+  return {
+    color, points, other,
+    colorPct: share(color, r.wins), pointsPct: share(points, r.wins), otherPct: share(other, r.wins)
+  }
+}
+
+/**
+ * @param raw  { human: [{ tournament, played, wins, losses, ties, winsByColor, winsByPoints, gamesLeft, earned }],
+ *               topDecks: [{ deckId, goalName, games, wins, losses, ties }],
+ *               recent: [{ result: 'W'|'L'|'T', tournament }],
+ *               practice: [{ difficulty, played, wins, losses, ties, winsByColor, winsByPoints }] }
+ */
+export function buildPlayerStats(raw, { username, timeframe }, generatedAt = new Date()) {
+  const humanRows = raw?.human || []
+  const total = sumRows(humanRows)
+  const casual = sumRows(humanRows.filter(r => !r.tournament))
+  const tournament = sumRows(humanRows.filter(r => r.tournament))
+
+  const practiceRows = raw?.practice || []
+  const practiceTotal = sumRows(practiceRows)
+  const byDifficulty = PRACTICE_LEVELS.map(level => {
+    const row = sumRows(practiceRows.filter(r => r.difficulty === level))
+    return { difficulty: level, ...recordOf(row) }
+  })
+
+  return {
+    username,
+    timeframe,
+    generatedAt: new Date(generatedAt).toISOString(),
+    human: {
+      ...recordOf(total),
+      winMethod: winMethodOf(total),
+      casual: recordOf(casual),
+      tournament: recordOf(tournament),
+      gamesLeft: humanRows.reduce((n, r) => n + (Number(r.gamesLeft) || 0), 0),
+      stakePointsWon: humanRows.reduce((n, r) => n + (Number(r.earned) || 0), 0),
+      topDecks: (raw?.topDecks || []).map(d => ({
+        deckId: d.deckId,
+        deckName: d.goalName ? `Goal: ${d.goalName}` : 'Unnamed deck',
+        games: Number(d.games) || 0,
+        wins: Number(d.wins) || 0,
+        losses: Number(d.losses) || 0,
+        ties: Number(d.ties) || 0,
+        winPct: winPct(Number(d.wins) || 0, Number(d.ties) || 0, Number(d.games) || 0)
+      })),
+      recent: (raw?.recent || []).map(r => ({ result: r.result, tournament: !!r.tournament }))
+    },
+    practice: {
+      ...recordOf(practiceTotal),
+      winMethod: winMethodOf(practiceTotal),
+      byDifficulty
+    }
   }
 }

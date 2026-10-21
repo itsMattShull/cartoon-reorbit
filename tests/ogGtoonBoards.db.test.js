@@ -17,6 +17,7 @@ let db
 let Sql
 let Boards
 let Record
+let Catalog
 
 async function setup() {
   if (db) return
@@ -25,12 +26,18 @@ async function setup() {
   Sql = await import('../server/utils/ogGtoonBoardsSql.js')
   Boards = await import('../server/utils/ogGtoonBoards.js')
   Record = await import('../server/utils/ogGtoonPracticeRecord.js')
+  Catalog = await import('../server/utils/ogGtoonPowerCatalog.js')
+  POWER_EFFECT = Catalog.OG_GTOON_POWER_CATALOG.find(e => e.effect.length).effect
 }
 
 const stamp = Date.now()
+// A power straight from the catalog, so the test also proves the text matches what the Decks tab shows.
+let POWER_EFFECT = []
 const deckOf = (tag) => Array.from({ length: 12 }, (_, i) => ({
   ctoonId: `${tag}-${stamp}-${i}`, name: `${tag} card ${i}`, assetPath: `/${tag}${i}.png`, characters: [],
-  color: i === 11 ? 'RED' : 'BLUE', value: i + 1, isSlam: false, effect: null, position: i
+  color: i === 11 ? 'RED' : 'BLUE', value: i + 1, isSlam: false,
+  // card 0 of each deck has a real catalog power; the rest have none
+  effect: i === 0 ? POWER_EFFECT : null, position: i
 }))
 const keyOf = (deck) => deck.map(c => c.ctoonId).sort().join(',')
 
@@ -94,13 +101,12 @@ run('human leaderboard: finished games only; forfeits count; sweeps and voided g
   const { A, B, C } = await seed()
 
   const casual = await Sql.loadHumanLeaderboardRows({ timeframe: 'all', filter: 'non_tournament' })
-  assert.deepEqual(pick(rowOf(casual, A)), { played: 6, wins: 3, losses: 2, ties: 1, earned: 25, winsByColor: 1, winsByPoints: 2 })
-  // B's forfeit win has no reason, so it is in `wins` but in neither split.
-  assert.deepEqual(pick(rowOf(casual, B)), { played: 5, wins: 2, losses: 2, ties: 1, earned: 20, winsByColor: 1, winsByPoints: 0 })
-  assert.deepEqual(pick(rowOf(casual, C)), { played: 1, wins: 0, losses: 1, ties: 0, earned: 0, winsByColor: 0, winsByPoints: 0 })
+  assert.deepEqual(pick(rowOf(casual, A)), { played: 6, wins: 3, losses: 2, ties: 1, earned: 25 })
+  assert.deepEqual(pick(rowOf(casual, B)), { played: 5, wins: 2, losses: 2, ties: 1, earned: 20 })
+  assert.deepEqual(pick(rowOf(casual, C)), { played: 1, wins: 0, losses: 1, ties: 0, earned: 0 })
 
   const tournament = await Sql.loadHumanLeaderboardRows({ timeframe: 'all', filter: 'tournament' })
-  assert.deepEqual(pick(rowOf(tournament, A)), { played: 1, wins: 1, losses: 0, ties: 0, earned: 0, winsByColor: 0, winsByPoints: 0 })
+  assert.deepEqual(pick(rowOf(tournament, A)), { played: 1, wins: 1, losses: 0, ties: 0, earned: 0 })
 
   const all = await Sql.loadHumanLeaderboardRows({ timeframe: 'all', filter: 'all' })
   assert.equal(rowOf(all, A).played, 7)
@@ -114,12 +120,11 @@ run('human leaderboard: finished games only; forfeits count; sweeps and voided g
 run('practice leaderboard: per difficulty, and All adds them up', async () => {
   const { A } = await seed()
   const all = await Sql.loadPracticeLeaderboardRows({ timeframe: 'all', difficulty: 'all' })
-  // the BOT_WIN row's reason belongs to the bot's win, so it is not one of the player's wins by color
-  assert.deepEqual(pick(rowOf(all, A)), { played: 4, wins: 2, losses: 1, ties: 1, earned: 0, winsByColor: 1, winsByPoints: 1 })
+  assert.deepEqual(pick(rowOf(all, A)), { played: 4, wins: 2, losses: 1, ties: 1, earned: 0 })
   const easy = await Sql.loadPracticeLeaderboardRows({ timeframe: 'all', difficulty: 'easy' })
-  assert.deepEqual(pick(rowOf(easy, A)), { played: 2, wins: 2, losses: 0, ties: 0, earned: 0, winsByColor: 1, winsByPoints: 1 })
+  assert.deepEqual(pick(rowOf(easy, A)), { played: 2, wins: 2, losses: 0, ties: 0, earned: 0 })
   const hard = await Sql.loadPracticeLeaderboardRows({ timeframe: 'all', difficulty: 'hard' })
-  assert.deepEqual(pick(rowOf(hard, A)), { played: 1, wins: 0, losses: 0, ties: 1, earned: 0, winsByColor: 0, winsByPoints: 0 })
+  assert.deepEqual(pick(rowOf(hard, A)), { played: 1, wins: 0, losses: 0, ties: 1, earned: 0 })
 })
 
 run('meta: decks keyed by their 12 cards; mirror counted once; forfeits, sweeps and voided games skipped', async () => {
@@ -141,6 +146,10 @@ run('meta: decks keyed by their 12 cards; mirror counted once; forfeits, sweeps 
   const card = agg.cards.find(c => c.ctoonId === X[0].ctoonId)
   assert.equal(card.appearances, 7) // 5 vs Y + 2 in the mirror
   assert.equal(card.name, X[0].name)
+  // The card's power text is what the Decks tab shows for that effect; a card with no power has none.
+  assert.equal(card.power, Catalog.powerDescriptionFor(POWER_EFFECT) || Catalog.describeEffects(POWER_EFFECT))
+  assert.ok(card.power)
+  assert.equal(agg.cards.find(c => c.ctoonId === X[1].ctoonId).power, null)
 
   // And the response builder turns it into the page's shape.
   // (a big limit: the scratch database may hold other games that would push these decks past the top 25)
@@ -150,6 +159,40 @@ run('meta: decks keyed by their 12 cards; mirror counted once; forfeits, sweeps 
   assert.equal(outX.deckName, `Goal: ${X[11].name}`)
   assert.equal(outX.winPct, 70) // (3 + 0.5) / 5 rated games
   assert.ok(out.cards[X[0].ctoonId])
+})
+
+run('player stats: record split by tournament, how wins were decided, decks, recent form, practice by difficulty', async () => {
+  const { A, C } = await seed()
+  const raw = await Sql.loadPlayerStats(A.id, 'all')
+  const out = Boards.buildPlayerStats(raw, { username: A.username, timeframe: 'all' })
+
+  // 7 finished games: the casual 6 (3-2-1, one of them a forfeit A took the loss on) + 1 tournament win.
+  assert.deepEqual([out.human.played, out.human.wins, out.human.losses, out.human.ties], [7, 4, 2, 1])
+  assert.deepEqual([out.human.casual.played, out.human.tournament.played], [6, 1])
+  assert.equal(out.human.gamesLeft, 1)
+  assert.equal(out.human.stakePointsWon, 25)
+  // Wins: COLOR once, POINTS twice, and the tournament win has no recorded reason ("other").
+  assert.deepEqual([out.human.winMethod.color, out.human.winMethod.points, out.human.winMethod.other], [1, 2, 1])
+  assert.equal(out.human.recent.length, 7)
+  assert.deepEqual(['W', 'L', 'T'].map(r => out.human.recent.filter(x => x.result === r).length), [4, 2, 1])
+  assert.equal(out.human.recent.filter(x => x.tournament).length, 1)
+
+  // Their one deck (forfeit excluded): 6 games, 4-1-1 (incl. the mirror and the tournament game).
+  assert.equal(out.human.topDecks.length, 1)
+  assert.deepEqual([out.human.topDecks[0].games, out.human.topDecks[0].wins, out.human.topDecks[0].losses, out.human.topDecks[0].ties], [6, 4, 1, 1])
+  assert.match(out.human.topDecks[0].deckName, /^Goal: x card 11$/)
+
+  // Practice: easy 2 wins (one by color, one by points), normal 1 loss, hard 1 tie.
+  assert.deepEqual(out.practice.byDifficulty.map(d => [d.difficulty, d.played, d.wins]), [['easy', 2, 2], ['normal', 1, 0], ['hard', 1, 0]])
+  assert.deepEqual([out.practice.winMethod.color, out.practice.winMethod.points, out.practice.winMethod.other], [1, 1, 0])
+
+  // The opponent in the mirror (C): lost once, never left, no practice.
+  const c = Boards.buildPlayerStats(await Sql.loadPlayerStats(C.id, 'all'), { username: C.username, timeframe: 'all' })
+  assert.deepEqual([c.human.played, c.human.wins, c.human.losses, c.practice.played], [1, 0, 1, 0])
+
+  // A timeframe with nothing in it is empty, not an error.
+  const none = await Sql.loadPlayerStats('no-such-user', '1w')
+  assert.deepEqual([none.human.length, none.practice.length, none.recent.length], [0, 0, 0])
 })
 
 run('practice recorder: one row per match, a duplicate is a no-op, a bad record is refused', async () => {
@@ -163,5 +206,5 @@ run('practice recorder: one row per match, a duplicate is a no-op, a bad record 
   assert.equal(await Record.recordPracticeResult({ ...r, id: `${id}-x`, difficulty: 'impossible' }), false)
 })
 
-function pick(r) { return { played: r.played, wins: r.wins, losses: r.losses, ties: r.ties, earned: r.earned, winsByColor: r.winsByColor, winsByPoints: r.winsByPoints } }
+function pick(r) { return { played: r.played, wins: r.wins, losses: r.losses, ties: r.ties, earned: r.earned } }
 function pick2(d) { return { games: d.games, wins: d.wins, losses: d.losses, ties: d.ties, mirrors: d.mirrors } }

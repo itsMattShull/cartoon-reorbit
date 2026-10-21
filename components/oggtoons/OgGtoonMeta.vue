@@ -146,6 +146,7 @@
                     <span :style="{ color: colorHex(card.color) }">{{ titleCase(card.color) }}</span>
                     · Value {{ card.value ?? '—' }} · {{ card.wins }} wins
                   </div>
+                  <div class="text-[11px] mt-0.5" :class="card.power ? 'text-gray-200' : 'text-gray-500'">{{ card.power || 'No power' }}</div>
                 </div>
                 <div class="text-xs text-gray-400 text-right shrink-0 pl-2">
                   {{ pct(card.winSharePct) }}
@@ -212,6 +213,7 @@
                   <div class="text-[11px] ml-9 text-gray-400">
                     <span :style="{ color: colorHex(card.color) }">{{ titleCase(card.color) }}</span> · Value {{ card.value ?? '—' }}
                   </div>
+                  <div class="text-[11px] ml-9 max-w-[22rem]" :class="card.power ? 'text-gray-200' : 'text-gray-500'">{{ card.power || 'No power' }}</div>
                 </td>
                 <td class="py-1.5 pr-3 tabular-nums">{{ card.appearances }}</td>
                 <td class="py-1.5 pr-3 tabular-nums">{{ pct(card.usePct) }}</td>
@@ -262,6 +264,7 @@
                 <div class="text-xs text-gray-400">
                   <span :style="{ color: colorHex(card.color) }">{{ titleCase(card.color) }}</span> · Value {{ card.value ?? '—' }}
                 </div>
+                <div class="text-[11px] mt-0.5 w-full line-clamp-3" :class="card.power ? 'text-gray-200' : 'text-gray-500'" :title="card.power || undefined">{{ card.power || 'No power' }}</div>
                 <div class="text-[10px] font-bold mt-0.5 flex gap-1.5">
                   <span v-if="card.isGoal" class="text-sky-300">GOAL CARD</span>
                   <span v-if="card.isSlam" class="text-yellow-300">SLAM</span>

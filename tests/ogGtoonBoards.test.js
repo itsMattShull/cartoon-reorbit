@@ -5,7 +5,8 @@ import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import {
   normalizeLeaderboardParams, leaderboardCacheKey, buildLeaderboard, showsEarned, winPct, timeframeStart,
-  normalizeMetaParams, metaCacheKey, buildMetaResponse, deckLabel, PRACTICE_MIN_GAMES, CACHE_TTL_SEC
+  normalizeMetaParams, metaCacheKey, buildMetaResponse, deckLabel, PRACTICE_MIN_GAMES, CACHE_TTL_SEC,
+  normalizePlayerParams, playerCacheKey, buildPlayerStats, winMethodOf
 } from '../server/utils/ogGtoonBoards.js'
 import { recordPracticeResult } from '../server/utils/ogGtoonPracticeRecord.js'
 import { determineWinner } from '../server/utils/ogGtoonEngine.js'
@@ -61,10 +62,10 @@ test('win % counts a tie as half; timeframe start', () => {
 
 /* ── Leaderboard shaping ─────────────────────────────────────────────────────────────────── */
 
-const R = (username, wins, losses, ties, earned = 0, winsByColor = 0, winsByPoints = 0) => ({ uid: username, username, wins, losses, ties, played: wins + losses + ties, earned, winsByColor, winsByPoints })
+const R = (username, wins, losses, ties, earned = 0) => ({ uid: username, username, wins, losses, ties, played: wins + losses + ties, earned })
 
 test('leaderboard: top-10 boards, win % uses ties as half and honours minGames, W-L-T on rows', () => {
-  const rows = [R('ann', 6, 2, 0, 40, 2, 3), R('bob', 3, 0, 0, 0), R('cy', 2, 2, 2, 5), R('dee', 0, 4, 0)]
+  const rows = [R('ann', 6, 2, 0, 40), R('bob', 3, 0, 0, 0), R('cy', 2, 2, 2, 5), R('dee', 0, 4, 0)]
   const params = normalizeLeaderboardParams({ minGames: '4' })
   const out = buildLeaderboard(rows, params, '2026-01-01T00:00:00Z')
   assert.deepEqual(out.wins.map(r => r.username), ['ann', 'bob', 'cy'])
@@ -73,9 +74,8 @@ test('leaderboard: top-10 boards, win % uses ties as half and honours minGames, 
   assert.deepEqual(out.winPct.map(r => r.username), ['ann', 'cy', 'dee'])
   assert.equal(out.winPct[1].value, 50)
   assert.deepEqual([out.wins[0].wins, out.wins[0].losses, out.wins[0].ties], [6, 2, 0])
-  // How the wins were decided rides on every board's rows (the 6th win is a forfeit / older game: in neither split).
-  assert.deepEqual([out.wins[0].winsByColor, out.wins[0].winsByPoints], [2, 3])
-  assert.deepEqual([out.winPct[0].winsByColor, out.winPct[0].winsByPoints], [2, 3])
+  // How wins were decided is NOT on the boards; it lives in the player-stats modal.
+  assert.equal('winsByColor' in out.wins[0], false)
   assert.deepEqual(out.earned.map(r => r.username), ['ann', 'cy'])
   assert.equal(out.generatedAt, '2026-01-01T00:00:00.000Z')
 })
@@ -100,7 +100,7 @@ test('leaderboard: empty input gives empty boards', () => {
 /* ── Meta shaping ────────────────────────────────────────────────────────────────────────── */
 
 function metaFixture() {
-  const card = (id, extra = {}) => ({ ctoonId: id, name: `Card ${id}`, assetPath: `/${id}.png`, color: 'RED', value: 5, isSlam: false, appearances: 10, wins: 6, losses: 3, ties: 1, ...extra })
+  const card = (id, extra = {}) => ({ ctoonId: id, name: `Card ${id}`, assetPath: `/${id}.png`, color: 'RED', value: 5, isSlam: false, power: id === 'a' ? 'Adds 2 to your next card' : null, appearances: 10, wins: 6, losses: 3, ties: 1, ...extra })
   return {
     generatedAt: '2026-01-01T00:00:00.000Z',
     totalGames: 20,
@@ -129,6 +129,9 @@ test('meta: sorts, applies minGames, labels decks by their goal card, builds one
   // Only the cards the page draws are sent.
   assert.deepEqual(Object.keys(byWin.cards).sort(), ['a', 'b', 'c', 'z'])
   assert.equal(byWin.cards.a.name, 'Card a')
+  // Each card's power rides along (null = no power) for the usage table, the winners list and the deck dialog.
+  assert.equal(byWin.cards.a.power, 'Adds 2 to your next card')
+  assert.equal(byWin.cards.b.power, null)
 })
 
 test('meta: card usage and winning gToons', () => {
@@ -137,6 +140,8 @@ test('meta: card usage and winning gToons', () => {
   assert.equal(out.cardUsage[0].usePct, 25) // 10 of 40 deck appearances
   assert.equal(out.cardUsage[0].winPct, 65)
   assert.equal(out.winningCards[0].wins, 6)
+  assert.equal(out.winningCards.find(c => c.ctoonId === 'a').power, 'Adds 2 to your next card')
+  assert.equal(out.cardUsage.find(c => c.ctoonId === 'a').power, 'Adds 2 to your next card')
   assert.ok(Math.abs(out.winningCards[0].winSharePct - (6 / 18) * 100) < 1e-9)
 })
 
@@ -144,6 +149,61 @@ test('meta: an empty aggregate is harmless', () => {
   const out = buildMetaResponse(null, normalizeMetaParams({}))
   assert.deepEqual([out.totalGames, out.decks, out.cardUsage, out.winningCards], [0, [], [], []])
   assert.equal(deckLabel(undefined), 'Unnamed deck')
+})
+
+/* ── One player's stats (the leaderboard modal) ──────────────────────────────────────────── */
+
+test('player params: exact trimmed username, timeframe defaults to All Time, junk is dropped', () => {
+  assert.deepEqual(normalizePlayerParams({ username: '  Ann  ', timeframe: '3m' }), { username: 'Ann', timeframe: '3m' })
+  assert.deepEqual(normalizePlayerParams({ username: 'Ann', timeframe: 'sometime' }), { username: 'Ann', timeframe: 'all' })
+  assert.deepEqual(normalizePlayerParams({ username: ['a', 'b'] }), { username: '', timeframe: 'all' })
+  assert.equal(normalizePlayerParams({ username: 'x'.repeat(500) }).username.length, 64)
+  assert.match(playerCacheKey('u1', '1m'), /^og-player:v\d+:u1:1m$/)
+})
+
+test('win method: goal colors / points / other shares of all wins', () => {
+  const m = winMethodOf({ wins: 10, winsByColor: 3, winsByPoints: 5 })
+  assert.deepEqual([m.color, m.points, m.other], [3, 5, 2])
+  assert.deepEqual([m.colorPct, m.pointsPct, m.otherPct], [30, 50, 20])
+  assert.deepEqual(winMethodOf({ wins: 0 }), { color: 0, points: 0, other: 0, colorPct: 0, pointsPct: 0, otherPct: 0 })
+})
+
+test('player stats: totals, tournament split, win method, practice by difficulty', () => {
+  const raw = {
+    human: [
+      { tournament: false, played: 6, wins: 3, losses: 2, ties: 1, winsByColor: 1, winsByPoints: 2, gamesLeft: 1, earned: 25 },
+      { tournament: true, played: 2, wins: 1, losses: 1, ties: 0, winsByColor: 0, winsByPoints: 0, gamesLeft: 0, earned: 0 }
+    ],
+    topDecks: [{ deckId: 'd1', goalName: 'Dexter', games: 7, wins: 4, losses: 2, ties: 1 }, { deckId: 'd2', goalName: null, games: 1, wins: 0, losses: 1, ties: 0 }],
+    recent: [{ result: 'W', tournament: false }, { result: 'L', tournament: true }],
+    practice: [
+      { difficulty: 'easy', played: 4, wins: 3, losses: 1, ties: 0, winsByColor: 1, winsByPoints: 2 },
+      { difficulty: 'hard', played: 2, wins: 0, losses: 1, ties: 1, winsByColor: 0, winsByPoints: 0 }
+    ]
+  }
+  const out = buildPlayerStats(raw, { username: 'ann', timeframe: 'all' }, '2026-01-01T00:00:00Z')
+  assert.equal(out.username, 'ann')
+  assert.equal(out.generatedAt, '2026-01-01T00:00:00.000Z')
+  assert.deepEqual([out.human.played, out.human.wins, out.human.losses, out.human.ties], [8, 4, 3, 1])
+  assert.equal(out.human.winPct, 56.25) // (4 + .5) / 8
+  assert.deepEqual([out.human.casual.played, out.human.tournament.played], [6, 2])
+  assert.equal(out.human.tournament.winPct, 50)
+  assert.deepEqual([out.human.winMethod.color, out.human.winMethod.points, out.human.winMethod.other], [1, 2, 1])
+  assert.equal(out.human.gamesLeft, 1)
+  assert.equal(out.human.stakePointsWon, 25)
+  assert.equal(out.human.topDecks[0].deckName, 'Goal: Dexter')
+  assert.equal(out.human.topDecks[1].deckName, 'Unnamed deck')
+  assert.equal(out.human.recent.length, 2)
+  // Practice always lists all three levels, in order, even with no games at one of them.
+  assert.deepEqual(out.practice.byDifficulty.map(d => [d.difficulty, d.played]), [['easy', 4], ['normal', 0], ['hard', 2]])
+  assert.ok(Math.abs(out.practice.winPct - (3.5 / 6) * 100) < 1e-9) // 3 wins + 1 tie in 6 games
+})
+
+test('player stats: a player with no games gets zeros, not errors', () => {
+  const out = buildPlayerStats(null, { username: 'new', timeframe: '1m' })
+  assert.deepEqual([out.human.played, out.human.winPct, out.practice.played], [0, 0, 0])
+  assert.equal(out.human.topDecks.length, 0)
+  assert.equal(out.practice.byDifficulty.length, 3)
 })
 
 /* ── Practice recorder (no database: the write is injected) ──────────────────────────────── */

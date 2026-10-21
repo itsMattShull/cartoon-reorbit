@@ -63,23 +63,31 @@
       :class="{ 'opacity-60': refreshing }"
       :aria-busy="loading || refreshing"
     >
-      <LeaderboardCard title="Total Games Won" subtitle="(Win-Loss-Tie)" :rows="wins" :loading="loading" show-record show-win-method :empty-text="emptyText" />
-      <LeaderboardCard title="Win Percentage" subtitle="(Win-Loss-Tie)" :rows="winPct" value-type="percent" :loading="loading" show-record show-win-method :empty-text="winPctEmptyText" />
-      <LeaderboardCard v-if="showEarned" title="Stake Points Earned (Top 10)" :rows="earned" suffix="pts" :loading="loading" :empty-text="emptyText" />
-      <LeaderboardCard title="Total Games Played" subtitle="(Win-Loss-Tie)" :rows="played" :loading="loading" show-record :empty-text="emptyText" />
+      <LeaderboardCard title="Total Games Won" subtitle="(Win-Loss-Tie)" :rows="wins" :loading="loading" show-record selectable :empty-text="emptyText" @select="openPlayer" />
+      <LeaderboardCard title="Win Percentage" subtitle="(Win-Loss-Tie)" :rows="winPct" value-type="percent" :loading="loading" show-record selectable :empty-text="winPctEmptyText" @select="openPlayer" />
+      <LeaderboardCard v-if="showEarned" title="Stake Points Earned (Top 10)" :rows="earned" suffix="pts" :loading="loading" selectable :empty-text="emptyText" @select="openPlayer" />
+      <LeaderboardCard title="Total Games Played" subtitle="(Win-Loss-Tie)" :rows="played" :loading="loading" show-record selectable :empty-text="emptyText" @select="openPlayer" />
     </div>
 
     <p class="text-xs text-gray-400 mt-3">
-      Win % counts a tie as half a win and needs {{ minGamesShown }}+ games. "By color" is a win from holding more cards of
-      the goal colors; "by points" is a win on total value. Forfeits and games played before this was tracked aren't split.
+      Win % counts a tie as half a win and needs {{ minGamesShown }}+ games. Select a player's name to see their gToons stats.
     </p>
+
+    <OgGtoonPlayerStats
+      v-if="playerOpen"
+      :key="playerOpen"
+      :username="playerOpen"
+      :initial-timeframe="timeframe"
+      @close="closePlayer"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from '#imports'
 import LeaderboardCard from '@/components/LeaderboardCard.vue'
+import OgGtoonPlayerStats from '@/components/oggtoons/OgGtoonPlayerStats.vue'
 import { DIFFICULTY_LABELS } from '@/utils/ogGtoonDifficulty'
 
 const MODES = ['human', 'practice']
@@ -131,6 +139,18 @@ const updatedText = computed(() => {
   if (!at || Number.isNaN(at.getTime())) return ''
   return `Updated ${at.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} · refreshes about once an hour`
 })
+
+// The player-stats modal: remember what opened it so closing puts focus back there.
+const playerOpen = ref('')
+let playerOpener = null
+function openPlayer(username, evt) {
+  playerOpener = evt?.currentTarget || null
+  playerOpen.value = username
+}
+function closePlayer() {
+  playerOpen.value = ''
+  nextTick(() => playerOpener?.focus?.())
+}
 
 let requestId = 0
 let mounted = true

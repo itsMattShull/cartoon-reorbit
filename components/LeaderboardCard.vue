@@ -29,7 +29,17 @@
           <span class="inline-flex items-center justify-center w-6 h-6 text-xs font-bold text-gray-700 bg-gray-100 rounded">
             {{ idx + 1 }}
           </span>
+          <button
+            v-if="selectable"
+            type="button"
+            class="text-indigo-600 hover:underline font-medium truncate max-w-[12rem] sm:max-w-none text-left"
+            :aria-label="`${row.username}: view stats`"
+            @click="emit('select', row.username, $event)"
+          >
+            {{ row.username }}
+          </button>
           <NuxtLink
+            v-else
             class="text-indigo-600 hover:underline font-medium truncate max-w-[12rem] sm:max-w-none"
             :to="`/czone/${encodeURIComponent(row.username)}`"
           >
@@ -48,9 +58,6 @@
             {{ formatInt(row.value) }} <span v-if="suffix" class="text-gray-500 font-normal">{{ suffix }}</span>
             <span v-if="showRecord && hasRecord(row)" class="text-gray-500 font-normal">({{ record(row) }})</span>
           </template>
-          <div v-if="showWinMethod && hasWinMethod(row)" class="text-[11px] font-normal text-gray-500 text-right">
-            {{ row.winsByColor }} by color · {{ row.winsByPoints }} by points
-          </div>
         </div>
       </li>
       <li v-if="!rows?.length" class="px-4 py-6 text-gray-500 text-sm text-center">
@@ -61,6 +68,8 @@
 </template>
 
 <script setup>
+const emit = defineEmits(['select'])
+
 defineProps({
   title: { type: String, required: true },
   rows: { type: Array, default: () => [] },
@@ -69,8 +78,8 @@ defineProps({
   suffix: { type: String, default: '' },         // ← optional
   // Show each row's Wins-Losses-Ties (rows carry numeric wins / losses / ties) next to its value.
   showRecord: { type: Boolean, default: false },
-  // Under the value, how the wins were decided (rows carry numeric winsByColor / winsByPoints).
-  showWinMethod: { type: Boolean, default: false },
+  // Make each username a button that emits `select` (with the username) instead of linking to the cZone page.
+  selectable: { type: Boolean, default: false },
   // Small print beside the title, e.g. what the figures in brackets mean.
   subtitle: { type: String, default: '' },
   emptyText: { type: String, default: 'No data for this timeframe.' }
@@ -80,7 +89,6 @@ const hasFrac = (row) =>
   row && typeof row.num === 'number' && typeof row.den === 'number' && row.den > 0
 
 const hasRecord = (row) => row && ['wins', 'losses', 'ties'].every(k => typeof row[k] === 'number')
-const hasWinMethod = (row) => row && typeof row.winsByColor === 'number' && typeof row.winsByPoints === 'number' && (row.winsByColor + row.winsByPoints) > 0
 const record = (row) => `${row.wins}-${row.losses}-${row.ties}`
 const formatInt = (v) => new Intl.NumberFormat().format(Math.round(Number(v || 0)))
 const formatPercent = (v) => `${Number(v || 0).toFixed(1)}%`
