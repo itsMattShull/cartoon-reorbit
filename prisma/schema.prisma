@@ -4638,11 +4638,14 @@ model CMoonRankTier {
   // rank (see User.currentCMoonRankId — "reached", not "passed through": a player below this
   // tier gets no part of it, matching how a reward-cToon choice isn't partially granted either).
   // 0 (the default) means this rank confers no HP change at all — admins opt a tier into this
-  // per rank, it isn't automatic just because a ladder exists. Read at battle-start via
-  // getPlayerCombatMaxHp() in server/utils/cmoon.js, which walks
-  // User.currentCMoonRank.tier.cMoonEnemyBattleHpBonus — a hand-authored per-cMoon custom rank
-  // (CMoonRank.tierId null) has no tier to read this from, so it never grants a bonus either,
-  // matching this field's "global ranks only" scope.
+  // per rank, it isn't automatic just because a ladder exists. STACKS with every other
+  // bonus-granting tier at or below the player's current one — reaching a later rank with no
+  // bonus of its own does not erase a bonus already earned from an earlier one. Read at
+  // battle-start via getPlayerCombatMaxHp() in server/utils/cmoon.js, which sums
+  // cMoonEnemyBattleHpBonus across every CMoonRankTier whose sortOrder is <= the player's current
+  // rank's tier — a hand-authored per-cMoon custom rank (CMoonRank.tierId null) has no tier to
+  // anchor that sum from, so it never grants (or carries) a bonus, matching this field's "global
+  // ranks only" scope.
   cMoonEnemyBattleHpBonus Int      @default(0)
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
