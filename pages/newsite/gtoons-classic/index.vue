@@ -10,14 +10,6 @@
           @click="activeTab = t.id"
         >{{ t.label }}<span v-if="t.id === 'tournaments' && tournamentAction" class="ah-dot" title="You have a tournament match to play"><span class="sr-only">You have a tournament match to play</span></span></button>
       </div>
-      <!-- Reachable from every tab, so a player with no deck yet can still learn the game first. -->
-      <button
-        v-if="tutorialAvailable"
-        class="ah-tutorial"
-        data-tut-entry="hub"
-        :disabled="startingTutorial"
-        @click="launchTutorial"
-      >{{ startingTutorial ? 'Starting…' : 'Tutorial' }}</button>
     </div>
 
     <div class="gtoons-classic-content">
@@ -45,7 +37,7 @@
           <h2 class="text-xl font-bold mb-2">New to gToons?</h2>
           <p class="text-sm text-gray-300 mb-4">
             Take a guided match with a ready-made deck. It walks you through every rule, step by step, with no timers,
-            and it doesn't touch your points or your cards. You can replay it any time from the Tutorial button.
+            and it doesn't touch your points or your cards. You can replay it any time from the Matchmaking tab.
           </p>
           <div class="flex justify-center gap-2">
             <button class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-sm" @click="dismissPrompt">Maybe later</button>
@@ -230,22 +222,6 @@ body {
   white-space: nowrap;
   transition: background 0.15s, color 0.15s;
 }
-
-.ah-tutorial {
-  padding: 3px 10px;
-  border: none;
-  border-radius: 4px;
-  background: #f59e0b;
-  color: #000;
-  font-size: 0.62rem;
-  font-weight: bold;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.ah-tutorial:disabled { opacity: 0.6; cursor: default; }
-.ah-tutorial:not(:disabled):hover { background: #fbbf24; }
 
 .fade-enter-active, .fade-leave-active { transition: opacity .2s ease }
 .fade-enter-from, .fade-leave-to { opacity: 0 }
