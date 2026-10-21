@@ -37,6 +37,7 @@
               <span class="og-mobile-score">{{ youScore }} – {{ oppScore }}</span>
               <span v-if="isTutorial" class="og-practice" title="Nothing here earns or costs points">Tutorial</span>
               <span v-else-if="isPractice" class="og-practice" title="Nothing here earns or costs points">Practice · Bot: {{ difficultyLabel }}</span>
+              <span v-else-if="isTournament" class="og-practice" :title="`${matchState.tournament.name} — best of ${matchState.tournament.bestOf}`">🏆 {{ matchState.tournament.label }} · Game {{ matchState.tournament.gameNumber }}</span>
               <button v-if="isPractice && !isTutorial && !matchEnded" class="og-mini" @click="$emit('exit')">Exit</button>
               <button class="og-help-btn" data-tut="help-btn" :class="{ 'og-help-on': helpOpen }" :aria-expanded="helpOpen" aria-label="How to play this phase" @click="helpOpen = !helpOpen">?</button>
             </div>
@@ -239,7 +240,7 @@
 
       <!-- End-of-match result screen -->
       <transition name="fade">
-        <div v-if="matchEnded && !flipping && resultOpen && !isTutorial" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
+        <div v-if="matchEnded && !flipping && resultOpen && !isTutorial && !isTournament" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
           <div class="bg-gray-900 border border-white/20 rounded-xl p-6 w-[26rem] max-w-[95vw] text-center">
             <h2 class="text-2xl font-bold mb-2" :class="matchEnded.won ? 'text-green-400' : (matchEnded.outcome === 'TIE' ? 'text-amber-300' : 'text-red-400')">
               {{ matchEnded.outcome === 'TIE' ? "It's a Tie!" : (matchEnded.won ? 'You Win!' : 'You Lose') }}
@@ -259,7 +260,17 @@
         </div>
       </transition>
       <!-- With the result closed, the finished board stays visible; these bring the result back or leave. -->
-      <div v-if="matchEnded && !flipping && !resultOpen && !isTutorial" class="fixed bottom-3 inset-x-0 z-40 flex justify-center gap-2">
+      <!-- A tournament game: the series card says where the best-of-3 stands and lines up the next game. -->
+      <OgGtoonTournamentResult
+        v-if="matchEnded && !flipping && resultOpen && isTournament"
+        :ended="matchEnded" :tournament="matchState.tournament"
+        @exit="$emit('exit')" @view-board="resultOpen = false"
+      />
+      <div v-if="matchEnded && !flipping && !resultOpen && isTournament" class="fixed bottom-3 inset-x-0 z-40 flex justify-center gap-2">
+        <button @click="resultOpen = true" class="bg-gray-800/90 border border-white/20 hover:bg-gray-700 px-4 py-2 rounded text-sm">Show series</button>
+        <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">Back to tournament</button>
+      </div>
+      <div v-if="matchEnded && !flipping && !resultOpen && !isTutorial && !isTournament" class="fixed bottom-3 inset-x-0 z-40 flex justify-center gap-2">
         <button @click="resultOpen = true" class="bg-gray-800/90 border border-white/20 hover:bg-gray-700 px-4 py-2 rounded text-sm">Show result</button>
         <button @click="$emit('exit')" class="bg-indigo-500 hover:bg-indigo-600 px-4 py-2 rounded text-sm">{{ isPractice ? 'Back to Matchmaking' : 'Back to Lobby' }}</button>
       </div>
@@ -281,6 +292,7 @@ import { GTOON_PALETTE } from '@/utils/gtoonCardStyle'
 import { normalizeRevealTiming } from '@/utils/ogGtoonReveal'
 import OgGtoonGameLog from '@/components/OgGtoonGameLog.vue'
 import OgGtoonTutorial from '@/components/oggtoons/OgGtoonTutorial.vue'
+import OgGtoonTournamentResult from '@/components/oggtoons/OgGtoonTournamentResult.vue'
 
 defineEmits(['exit'])
 
@@ -293,6 +305,8 @@ const COLOR_HEX = {
 function colorHex(c) { return COLOR_HEX[c] || '#ffffff' }
 
 const isPractice = computed(() => !!matchState.value?.practice)
+// One game of a tournament best-of-3 (the server tags the view; the series card replaces the usual result screen).
+const isTournament = computed(() => !!matchState.value?.tournament)
 // The guided tutorial match (also flagged practice by the server): no timers, no intro modal, no result
 // modal of its own — the guide walks through the result and its last button leaves.
 const isTutorial = computed(() => !!matchState.value?.tutorial)

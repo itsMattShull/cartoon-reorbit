@@ -21,7 +21,7 @@ export const ADMIN_PERMISSION_KEYS = [
   'certificate', 'encyclopedia', 'siteTheme',
   'manageSales', 'codes', 'auctions', 'dissolveQueue',
   'games', 'cMoon', 'cMoonJoinEffects', 'czoneEffects', 'cmoonChangeRequests', 'manageNavigation',
-  'cMoonEnemies', 'cMoonRiddles', 'cMoonHunts', 'lotto', 'clashTournaments',
+  'cMoonEnemies', 'cMoonRiddles', 'cMoonHunts', 'lotto', 'clashTournaments', 'ogGtoonTournaments',
   'scavenger', 'achievements', 'holidayEvents',
   'errorLogs', 'cronRunLogs', 'queueMonitor', 'authLogs', 'tradeLogs', 'auctionLogs',
   'ctoonOwnerLogs', 'czoneSearchLogs', 'pointLogs', 'cmoonPointLogs', 'cMoonBattleLogs',
@@ -163,6 +163,9 @@ export const ADMIN_API_SEGMENT_PERMS = {
   'official-collection': ['initiateTrade'],
   'official-collection-filters': ['initiateTrade'],
   oggtoons: ['ctoons'],
+  // Its own first segment on purpose: under `oggtoons/` a tournament admin would need the cToons
+  // tool, and a cToons admin would get tournament and prize powers.
+  'og-tournaments': ['ogGtoonTournaments'],
   'pack-analytics': ['packAnalytics'],
   'pack-analytics-detail': ['setAnalytics', 'packAnalytics'],
   packs: ['packs'],
@@ -358,7 +361,7 @@ export const ADMIN_PERMISSION_PRESETS = [
     id: 'events',
     label: 'Event manager',
     perms: ['games', 'cMoon', 'cMoonJoinEffects', 'czoneEffects', 'cmoonChangeRequests', 'manageNavigation',
-      'cMoonEnemies', 'cMoonRiddles', 'cMoonHunts', 'lotto', 'clashTournaments', 'scavenger',
+      'cMoonEnemies', 'cMoonRiddles', 'cMoonHunts', 'lotto', 'clashTournaments', 'ogGtoonTournaments', 'scavenger',
       'achievements', 'holidayEvents', 'achievementLogs', 'lottoLogs', 'winWheelLogs', 'scavengerLogs',
       'cMoonBattleLogs']
   },

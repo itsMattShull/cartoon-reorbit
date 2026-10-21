@@ -51,8 +51,14 @@ import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
 import { isPracticing, registerPvpProbe, onPresenceChange } from './ogGtoonPresence.js'
 import * as ogRedis from './ogGtoonsRedisState.js'
 import { getOgGtoonsConfig, peekRevealTiming } from './ogGtoonsConfig.js'
+import { clearLive, isPairingClosed, flagNeedsAdmin } from './ogGtoonTournamentLive.js'
+import { enqueueOgTournamentJob } from './queues.js'
+import { registerOgGtoonsTournament } from './ogGtoonsTournamentSocket.js'
 
 const RECONNECT_GRACE_MS = 20_000
+// A dropped connection costs a game of a best-of-3 that is played for a prize, so tournament games
+// give a backgrounded phone tab much longer to come back.
+const TOURNAMENT_RECONNECT_GRACE_MS = 90_000
 const MATCH_MAX_AGE_MS = 30 * 60 * 1000
 const QUEUE_STALE_MS = 5 * 60 * 1000
 const CHALLENGE_STALE_MS = 5 * 60 * 1000
@@ -155,7 +161,7 @@ function destroyMatch(matchId) {
 
 /* ── Starting a match ────────────────────────────────────────────────────────────────────── */
 
-async function startMatch(io, a, b, { isChallenge }) {
+async function startMatch(io, a, b, { isChallenge, tournament = null, matchId: forcedMatchId = null }) {
   // a, b: { userId, username, deckId, socket, stake }
   // Checked here, not just at queueJoin/challengeSend, because "Live Matches" (gameEnabled) is
   // independent of "Matchmaking" (matchmakingEnabled) — an admin can close live play while still
@@ -168,10 +174,13 @@ async function startMatch(io, a, b, { isChallenge }) {
     return null
   }
 
-  const [deckA, deckB] = await Promise.all([
-    loadVerifiedDeckSnapshot(a.userId, a.deckId),
-    loadVerifiedDeckSnapshot(b.userId, b.deckId)
-  ])
+  // A tournament game plays each player's LOCKED deck, already verified by the caller.
+  const [deckA, deckB] = tournament
+    ? [a.deckSnapshot || null, b.deckSnapshot || null]
+    : await Promise.all([
+      loadVerifiedDeckSnapshot(a.userId, a.deckId),
+      loadVerifiedDeckSnapshot(b.userId, b.deckId)
+    ])
   if (!deckA || !deckB) {
     const bad = !deckA ? a : b
     for (const p of [a, b]) {
@@ -184,9 +193,10 @@ async function startMatch(io, a, b, { isChallenge }) {
     return null
   }
 
-  const stake = Math.max(0, Math.min(Math.floor(a.stake || 0), Math.floor(b.stake || 0)))
+  // Tournament games never carry a stake.
+  const stake = tournament ? 0 : Math.max(0, Math.min(Math.floor(a.stake || 0), Math.floor(b.stake || 0)))
 
-  const matchId = randomUUID()
+  const matchId = forcedMatchId || randomUUID()
   const match = {
     id: matchId,
     players: [a.userId, b.userId],
@@ -195,6 +205,7 @@ async function startMatch(io, a, b, { isChallenge }) {
     deckOrder: [deckA, deckB],
     stake: [stake, stake],
     isChallenge: !!isChallenge,
+    tournament: tournament || null,
     ending: false,
     graceTimers: {},
     startedAt: Date.now(),
@@ -415,7 +426,8 @@ async function persistAndSettle(match, { outcome, winnerUserId, player1Score, pl
         outcome,
         startedAt: new Date(match.startedAt),
         endedAt: new Date(),
-        whoLeftUserId: whoLeftUserId || null
+        whoLeftUserId: whoLeftUserId || null,
+        tournamentMatchId: match.tournament?.matchId || null
       }
     })
 
@@ -436,19 +448,63 @@ async function persistAndSettle(match, { outcome, winnerUserId, player1Score, pl
   })
 }
 
+/**
+ * A tournament game that did not finish normally (stale sweep, or its pairing was decided while it
+ * was running) is saved as INCOMPLETE: it never counts toward the series and is simply replayed.
+ */
+function tournamentEndParams(match, params) {
+  if (!match.tournament) return params
+  if (params.endReason === 'sweep' || params.endReason === 'closed') {
+    return { ...params, outcome: 'INCOMPLETE', winnerUserId: null }
+  }
+  return params
+}
+
+/** Saves a finished game; tournament games retry, because losing one would lose a series game. */
+async function persistFinishedGame(match, params) {
+  const attempts = match.tournament ? 3 : 1
+  let lastErr
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      await persistAndSettle(match, params)
+      return true
+    } catch (err) {
+      lastErr = err
+      console.error(`[ogGtoons] failed to persist match ${match.id} (attempt ${i + 1}/${attempts}):`, err)
+      if (i < attempts - 1) await new Promise(r => setTimeout(r, 400 * (i + 1)))
+    }
+  }
+  if (match.tournament) {
+    flagNeedsAdmin(match.tournament.matchId, 'A game result could not be saved — check the match and set the result').catch(() => {})
+  }
+  return lastErr ? false : true
+}
+
+/** After a tournament game: free the pairing and ask the worker to score it and build the next round. */
+async function afterTournamentGame(match) {
+  const t = match.tournament
+  if (!t) return
+  try {
+    await clearLive(t.matchId, match.id)
+    await enqueueOgTournamentJob('ogTournamentAdvance', { tournamentId: t.tournamentId, matchId: t.matchId }, { key: t.matchId })
+  } catch (err) {
+    // The tournament cron scores any unscored game and clears stale live markers, so this is only a delay.
+    console.error('[ogGtoons] could not queue tournament advance:', err?.message || err)
+  }
+}
+
 async function endMatch(io, match, params) {
   if (match.ending) return
   match.ending = true
+  params = tournamentEndParams(match, params)
   if (params.endReason === 'forfeit') {
     logAbnormalEnd(match, `${match.usernames[match.players.indexOf(params.whoLeftUserId)] ?? 'A player'} left the match — their opponent wins by forfeit.`)
   } else if (params.endReason === 'sweep') {
-    logAbnormalEnd(match, 'The match timed out and ended in a tie.')
+    logAbnormalEnd(match, match.tournament ? 'The game timed out and will be replayed.' : 'The match timed out and ended in a tie.')
+  } else if (params.endReason === 'closed') {
+    logAbnormalEnd(match, 'This tournament match was decided, so the game was ended.')
   }
-  try {
-    await persistAndSettle(match, params)
-  } catch (err) {
-    console.error(`[ogGtoons] failed to persist match ${match.id}:`, err)
-  }
+  await persistFinishedGame(match, params)
 
   emitToPlayers(io, match, EV('matchEnd'), (uid, i) => ({
     ...publicMatchView(match, uid),
@@ -462,6 +518,7 @@ async function endMatch(io, match, params) {
   }))
 
   destroyMatch(match.id)
+  afterTournamentGame(match).catch(() => {})
 }
 
 /* ── Leaving / disconnect ────────────────────────────────────────────────────────────────── */
@@ -491,13 +548,14 @@ function handleLeave(io, { matchId, userId, socketId, immediate }) {
   if (immediate) { forfeit(); return }
 
   if (match.graceTimers[idx]) clearTimeout(match.graceTimers[idx])
+  const graceMs = match.tournament ? TOURNAMENT_RECONNECT_GRACE_MS : RECONNECT_GRACE_MS
   match.graceTimers[idx] = setTimeout(() => {
     if (match.sockets[idx].size === 0) forfeit()
-  }, RECONNECT_GRACE_MS)
+  }, graceMs)
 
   const oppIdx = idx === 0 ? 1 : 0
   for (const sid of match.sockets[oppIdx]) {
-    io.local.to(sid).emit(EV('opponentDropped'), { graceMs: RECONNECT_GRACE_MS })
+    io.local.to(sid).emit(EV('opponentDropped'), { graceMs })
   }
 }
 
@@ -568,6 +626,23 @@ function sweep(io) {
     if (now - match.startedAt < MATCH_MAX_AGE_MS) continue
     endMatch(io, match, { outcome: 'TIE', winnerUserId: null, player1Score: 0, player2Score: 0, endReason: 'sweep' })
       .catch(err => console.error('[ogGtoons] sweep end failed:', err))
+  }
+  reconcileTournamentGames(io).catch(err => console.error('[ogGtoons] tournament reconcile failed:', err))
+}
+
+/**
+ * Ends any live tournament game whose pairing has since been decided (an admin set the result, the
+ * deadline passed, a player was disqualified, the tournament was cancelled). One cheap query per
+ * live tournament game per minute. The game is saved as INCOMPLETE and does not count.
+ */
+async function reconcileTournamentGames(io) {
+  for (const match of [...matches.values()]) {
+    if (match.ending || !match.tournament) continue
+    if (!(await isPairingClosed(match.tournament.matchId))) continue
+    for (const uid of match.players) {
+      io.local.to(userRoom(uid)).emit(EV('error'), { code: 'tournamentClosed', message: 'This tournament match was decided by an admin or the deadline, so this game was ended.' })
+    }
+    await endMatch(io, match, { outcome: 'INCOMPLETE', winnerUserId: null, player1Score: 0, player2Score: 0, endReason: 'closed' })
   }
 }
 
@@ -645,6 +720,11 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     const oppIdx = idx === 0 ? 1 : 0
     for (const sid of match.sockets[oppIdx]) io.local.to(sid).emit(EV('opponentReturned'))
   }
+
+  // Tournament ready-up / start. Lives in its own file; it borrows the runtime's internals here.
+  registerOgGtoonsTournament(io, socket, {
+    auth, startMatch, matchByUser, queueByUser, removeFromQueue, userRoom, isPracticing, EV
+  })
 
   socket.on(EV('subscribe'), async () => {
     const user = await auth()

@@ -97,6 +97,7 @@ export const ADMIN_SECTIONS = [
   S('cMoonHunts', 'cMoon Scavenger Hunts', 'games', nu('AdminCMoonHunts')),
   S('lotto', 'Manage Lotto', 'games', legacy('AdminLegacyLotto')),
   S('clashTournaments', 'Clash Tournaments', 'games', legacy('AdminLegacyClashTournaments')),
+  S('ogGtoonTournaments', 'OG gToons Tournaments', 'games', nu('AdminOgGtoonTournaments'), { desc: 'Create tournaments, set prizes, decide pairings' }),
   S('scavenger', 'Scavenger Hunt', 'games', legacy('AdminLegacyScavenger')),
   S('achievements', 'Achievements', 'games', legacy('AdminLegacyAchievements')),
   S('holidayEvents', 'Holiday Events', 'games', legacy('AdminLegacyHolidayEvents')),

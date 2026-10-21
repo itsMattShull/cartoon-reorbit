@@ -410,3 +410,21 @@ export async function scheduleWinballPrizeUpdate(scheduleId, startsAt) {
 export async function cancelWinballPrizeUpdate(scheduleId) {
   await removeDelayedJob(`winball-prize-${String(scheduleId)}`)
 }
+
+/**
+ * OG gToons tournaments: hand work to the critical cron worker (see SCHEDULED_EVENT_HANDLERS in
+ * server/cron/jobHandlers.js) instead of doing it on the caller's event loop. The socket server in
+ * particular must only record a finished game and queue this — advancing a round sends Discord DMs
+ * and can pay prizes, none of which belongs on the process every live game shares.
+ *
+ * `bucketSec` de-duplicates bursts: the jobId includes the time bucket, so several games ending in
+ * the same few seconds collapse into one run, while a later request still queues normally. Every
+ * handler is idempotent and the tournament cron is the safety net if a job is ever lost.
+ */
+export async function enqueueOgTournamentJob(name, data, { key, delayMs = 500, bucketSec = 5 } = {}) {
+  const bucket = Math.floor(Date.now() / (bucketSec * 1000))
+  await scheduledEventsQueue.add(name, data, {
+    jobId: `og-t-${name}-${key || 'x'}-${bucket}`,
+    delay: delayMs
+  })
+}

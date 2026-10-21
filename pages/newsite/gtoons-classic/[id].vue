@@ -5,7 +5,7 @@
 </template>
 
 <script setup>
-import { useRouter, onBeforeUnmount } from '#imports'
+import { useRouter, useRoute, watch, onBeforeUnmount } from '#imports'
 import OgGtoonMatchBoard from '@/components/OgGtoonMatchBoard.vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 
@@ -28,16 +28,27 @@ onBeforeUnmount(clearSidebarMiddle)
 // ogGtoonsSocket.js's reattach()); the client never asserts anything about the match by way of
 // this route param, so it is not otherwise read here.
 const router = useRouter()
-const { leaveMatch, matchState } = useOgGtoonsSocket()
+const route = useRoute()
+const { leaveMatch, matchState, currentMatchId } = useOgGtoonsSocket()
+
+// A tournament series is several games in a row: when the next one starts, keep the address bar in step.
+watch(currentMatchId, (id) => {
+  if (id && matchState.value?.tournament && id !== route.params.id) router.replace(`/newsite/gtoons-classic/${id}`)
+})
 
 function onExit() {
   // Read before leaveMatch() clears the state: practice and the tutorial send people back to the
-  // Matchmaking tab (where their Practice button and the Tutorial replay live).
+  // Matchmaking tab (where their Practice button and the Tutorial replay live), and a tournament
+  // game goes back to its tournament.
+  const tournament = matchState.value?.tournament
   const wasPractice = !!matchState.value?.practice
   // Leaving the tutorial (finished, skipped or exited) is what stops it auto-offering itself again.
   if (matchState.value?.tutorial) $fetch('/api/game/oggtoons/tutorial', { method: 'POST' }).catch(() => {})
   leaveMatch()
-  router.push(wasPractice ? '/newsite/gtoons-classic?tab=matchmaking' : '/newsite/gtoons-classic')
+  router.push(
+    tournament ? `/newsite/gtoons-classic?tab=tournaments&t=${tournament.tournamentId}`
+      : wasPractice ? '/newsite/gtoons-classic?tab=matchmaking' : '/newsite/gtoons-classic'
+  )
 }
 </script>
 

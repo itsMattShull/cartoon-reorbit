@@ -12,6 +12,11 @@ const matchEnded = ref(null)
 const isConnected = ref(false)
 const currentMatchId = ref(null)
 const lastError = ref(null)
+// Tournament pairings: tournamentMatchId -> { myReady, opponentReady, opponentOnline, live, ... } (pushed by the server).
+const tournamentStates = ref({})
+// The latest "your opponent is ready to play" ping: { tournamentMatchId, tournamentName, username, n }.
+const tournamentOpponentReady = ref(null)
+let tournamentPingCount = 0
 let socket
 
 export function useOgGtoonsSocket() {
@@ -71,6 +76,12 @@ export function useOgGtoonsSocket() {
       matchEnded.value = matchState.value
     })
     socket.on('oggtoons:error', err => { lastError.value = err })
+    socket.on('oggtoons:tournamentState', s => {
+      if (s?.tournamentMatchId) tournamentStates.value = { ...tournamentStates.value, [s.tournamentMatchId]: s }
+    })
+    socket.on('oggtoons:tournamentOpponentReady', p => {
+      tournamentOpponentReady.value = { ...p, n: ++tournamentPingCount }
+    })
   }
 
   // Practice and tutorial matches (the server flags the view with `practice: true` / `tutorial: true`)
@@ -109,6 +120,18 @@ export function useOgGtoonsSocket() {
     lastError.value = null
     socket.emit('oggtoons:tutorial:start')
   }
+  /** Press Play on a tournament pairing. The server starts the game once both players are ready and online. */
+  function tournamentReady(tournamentMatchId) {
+    lastError.value = null
+    socket.emit('oggtoons:tournamentReady', { tournamentMatchId })
+  }
+  function tournamentUnready(tournamentMatchId) {
+    socket.emit('oggtoons:tournamentUnready', { tournamentMatchId })
+  }
+  /** Ask for the live picture of a pairing (opponent online? ready?). */
+  function tournamentSync(tournamentMatchId) {
+    socket.emit('oggtoons:tournamentSync', { tournamentMatchId })
+  }
   function leaveMatch() {
     if (isPractice()) socket.emit(`${prefix()}leave`)
     else socket.emit('oggtoons:leave')
@@ -119,6 +142,7 @@ export function useOgGtoonsSocket() {
 
   return {
     socket, matchState, lastReveal, matchEnded, isConnected, currentMatchId, lastError,
-    commit, place, unplace, swap, swapSkip, chooseColor, discard, leaveMatch, startPractice, startTutorial
+    commit, place, unplace, swap, swapSkip, chooseColor, discard, leaveMatch, startPractice, startTutorial,
+    tournamentStates, tournamentOpponentReady, tournamentReady, tournamentUnready, tournamentSync
   }
 }

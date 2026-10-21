@@ -683,6 +683,13 @@ model User {
   gtoonTournamentMatchesAsB GtoonTournamentMatch[]        @relation("GtoonTournamentMatchPlayerB")
   gtoonTournamentMatchesWon GtoonTournamentMatch[]        @relation("GtoonTournamentMatchWinner")
   gtoonTournamentRecords    GtoonTournamentPlayerRecord[]
+  ogGtoonTournamentsWon       OgGtoonTournament[]             @relation("OgGtoonTournamentWinner")
+  ogGtoonTournamentOptIns     OgGtoonTournamentOptIn[]
+  ogGtoonTournamentMatchesAsA OgGtoonTournamentMatch[]        @relation("OgGtoonTournamentMatchPlayerA")
+  ogGtoonTournamentMatchesAsB OgGtoonTournamentMatch[]        @relation("OgGtoonTournamentMatchPlayerB")
+  ogGtoonTournamentMatchesWon OgGtoonTournamentMatch[]        @relation("OgGtoonTournamentMatchWinner")
+  ogGtoonTournamentRecords    OgGtoonTournamentPlayerRecord[]
+  ogGtoonTournamentPrizes     OgGtoonTournamentPrizeGrant[]
   monsterBattlesAsPlayer1   MonsterBattle[]               @relation("MonsterBattlePlayer1")
   monsterBattlesAsPlayer2   MonsterBattle[]               @relation("MonsterBattlePlayer2")
   monsterBattlesAsWinner    MonsterBattle[]               @relation("MonsterBattleWinner")
@@ -1635,6 +1642,10 @@ model GameConfig {
   ogGtoonsRevealCardMs    Int?
   ogGtoonsRevealEffectsMs Int?
   ogGtoonsRevealQuietMs   Int?
+
+  // OG gToons tournaments (Tournaments tab + the server-side opt-in / play / forfeit actions).
+  // Same explicit-true rule as the four switches above: a missing row leaves it off.
+  ogGtoonsTournamentsEnabled Boolean? @default(false)
 }
 
 model GlobalGameConfig {
@@ -2436,10 +2447,17 @@ model OgGtoonMatch {
   endedAt       DateTime?
   whoLeftUserId String?
 
+  // Set when this game was one game of a tournament series. A tournament game that did not
+  // finish normally (stale sweep) is written with outcome INCOMPLETE and does not count toward
+  // the series. Indexed by a hand-written PARTIAL index (see the og_gtoons_tournaments
+  // migration), which Prisma's schema language cannot express.
+  tournamentMatchId String?
+
   player1 User  @relation("OgGtoonMatchPlayer1", fields: [player1UserId], references: [id])
   player2 User  @relation("OgGtoonMatchPlayer2", fields: [player2UserId], references: [id])
   winner  User? @relation("OgGtoonMatchWinner", fields: [winnerUserId], references: [id])
   whoLeft User? @relation("OgGtoonMatchWhoLeft", fields: [whoLeftUserId], references: [id])
+  tournamentMatch OgGtoonTournamentMatch? @relation(fields: [tournamentMatchId], references: [id])
 
   @@index([player1UserId, startedAt])
   @@index([player2UserId, startedAt])
@@ -2757,6 +2775,269 @@ model OgGtoonDeckCard {
 
   @@unique([deckId, position])
   @@index([ctoonId])
+}
+
+// ── OG gToons tournaments ───────────────────────────────────────────────────────────────────
+// Modeled on the gToons Clash tournament tables below (GtoonTournament*), but a separate set:
+// every pairing is a best-of-3 of dedicated, zero-stake, server-created matches played from a
+// deck locked at opt-in. Series scores are derived from OgGtoonMatch rows carrying the
+// tournamentMatchId, unless the pairing was decided another way (forfeit, walkover, admin),
+// in which case `lockedAt` + `resolution` are authoritative. See server/utils/ogGtoonTournament.js.
+enum OgGtoonTournamentStatus {
+  DRAFT
+  OPT_IN_OPEN
+  OPT_IN_CLOSED
+  SWISS_ACTIVE
+  BRACKET_ACTIVE
+  COMPLETE
+  CANCELLED
+}
+
+enum OgGtoonTournamentStage {
+  SWISS
+  BRACKET
+}
+
+enum OgGtoonTournamentFormat {
+  BRACKET_8_OR_LESS
+  SWISS_THEN_TOP8
+}
+
+enum OgGtoonTournamentMatchStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETE
+  BYE
+}
+
+enum OgGtoonTournamentMatchOutcome {
+  A_WIN
+  B_WIN
+  TIE
+}
+
+enum OgGtoonTournamentResolution {
+  PLAYED
+  FORFEIT
+  WALKOVER
+  DEADLINE
+  ADMIN
+}
+
+enum OgGtoonTournamentPrizeTier {
+  FIRST
+  TOP8
+}
+
+enum OgGtoonTournamentPrizeStatus {
+  PENDING_APPROVAL
+  PENDING
+  PAID
+  FAILED
+  SKIPPED
+}
+
+model OgGtoonTournament {
+  id                  String                   @id @default(uuid())
+  name                String
+  description         String?
+  status              OgGtoonTournamentStatus  @default(DRAFT)
+  optInStartAt        DateTime
+  optInEndAt          DateTime
+  format              OgGtoonTournamentFormat?
+  // Null = derive from the field size when opt-in closes (see tournamentCore.swissRoundsFor).
+  swissRoundsOverride Int?
+  swissRoundsPlanned  Int?
+  bestOf              Int                      @default(3) // always 3 (first to 2 game wins); stored so history stays readable
+  maxExtraGames       Int                      @default(4) // bracket only: extra sudden-death games when a series ends level
+  roundWindowHours    Int                      @default(72)
+
+  // Prizes: a reward bundle { points, ctoons:[{ctoonId,quantity}], backgrounds:[{backgroundId}] }
+  // for the winner, and another for places 2-8 (only paid when the field has at least
+  // minEntrantsTop8Prize entrants, so a tiny bracket cannot be farmed for the second prize).
+  firstPrizeJson       Json?
+  top8PrizeJson        Json?
+  minEntrantsTop8Prize Int       @default(9)
+  requirePrizeApproval Boolean   @default(true)
+  prizesQueuedAt       DateTime?
+  prizesApprovedAt     DateTime?
+  prizesApprovedById   String?
+
+  // Random bracket seeding: the seed is stored so an admin can see how a bracket was drawn.
+  seedValue String?
+
+  announcementChannelId              String
+  lastAnnouncementAt                 DateTime?
+  nextAnnouncementAt                 DateTime?
+  finalOptInMidnightAnnouncementSent Boolean   @default(false)
+
+  finalizedAt           DateTime?
+  finalPlacementsJson   Json?
+  winnerUserId          String?
+  tournamentCompletedAt DateTime?
+  lastAdvancedAt        DateTime?
+  createdById           String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  winner User? @relation("OgGtoonTournamentWinner", fields: [winnerUserId], references: [id])
+
+  optIns        OgGtoonTournamentOptIn[]
+  rounds        OgGtoonTournamentRound[]
+  matches       OgGtoonTournamentMatch[]
+  playerRecords OgGtoonTournamentPlayerRecord[]
+  prizeGrants   OgGtoonTournamentPrizeGrant[]
+
+  @@index([status])
+  @@index([optInStartAt])
+  @@index([optInEndAt])
+}
+
+model OgGtoonTournamentOptIn {
+  id               String    @id @default(uuid())
+  tournamentId     String
+  userId           String
+  optedInAt        DateTime  @default(now())
+  isActive         Boolean   @default(true)
+  sourceDeckId     String?
+  // The locked deck: [{ position, ctoonId, userCtoonId }] x 12. Card stats are read live when a
+  // game starts (so an admin fix to a broken effect still applies); only WHICH copies were
+  // registered is frozen here.
+  deckSnapshotJson Json
+  repairCount      Int       @default(0)
+  lastRepairedAt   DateTime?
+  disqualified     Boolean   @default(false)
+  disqualifiedNote String?
+
+  tournament OgGtoonTournament @relation(fields: [tournamentId], references: [id])
+  user       User              @relation(fields: [userId], references: [id])
+
+  @@unique([tournamentId, userId])
+  @@index([tournamentId, isActive])
+  @@index([userId])
+}
+
+model OgGtoonTournamentRound {
+  id           String                 @id @default(uuid())
+  tournamentId String
+  stage        OgGtoonTournamentStage
+  roundNumber  Int
+  openedAt     DateTime               @default(now())
+  dueAt        DateTime?
+
+  tournament OgGtoonTournament        @relation(fields: [tournamentId], references: [id])
+  matches    OgGtoonTournamentMatch[]
+
+  @@unique([tournamentId, stage, roundNumber])
+  @@index([tournamentId, stage])
+}
+
+model OgGtoonTournamentMatch {
+  id            String                 @id @default(uuid())
+  tournamentId  String
+  roundId       String
+  stage         OgGtoonTournamentStage
+  roundNumber   Int
+  tableNumber   Int?
+  playerAUserId String
+  playerBUserId String
+
+  status       OgGtoonTournamentMatchStatus   @default(PENDING)
+  bestOf       Int                            @default(3)
+  winsA        Int                            @default(0)
+  winsB        Int                            @default(0)
+  ties         Int                            @default(0)
+  gamesCounted Int                            @default(0)
+  outcome      OgGtoonTournamentMatchOutcome?
+  winnerUserId String?
+  resolution   OgGtoonTournamentResolution?
+
+  requiresWinner Boolean @default(false)
+  seedA          Int?
+  seedB          Int?
+
+  pairedAt    DateTime  @default(now())
+  dueAt       DateTime?
+  lockedAt    DateTime?
+  completedAt DateTime?
+
+  // Ready-up is stored here (not only in socket memory) so it survives a restart and so the
+  // deadline rules can see who actually showed up.
+  readyAAt     DateTime?
+  readyBAt     DateTime?
+  firstReadyAt DateTime?
+  liveMatchId  String? // the in-flight OgGtoonMatch id while a game of this series is being played
+  liveStartedAt DateTime? // when that game started; a marker older than a match can last is stale and is cleared
+
+  voidedGames       Int       @default(0)
+  extraGamesCounted Int       @default(0)
+  needsAdmin        Boolean   @default(false)
+  needsAdminReason  String?
+  adminNotes        String?
+  reminder24SentAt  DateTime?
+  reminder4SentAt   DateTime?
+
+  tournament OgGtoonTournament      @relation(fields: [tournamentId], references: [id])
+  round      OgGtoonTournamentRound @relation(fields: [roundId], references: [id])
+  playerA    User                   @relation("OgGtoonTournamentMatchPlayerA", fields: [playerAUserId], references: [id])
+  playerB    User                   @relation("OgGtoonTournamentMatchPlayerB", fields: [playerBUserId], references: [id])
+  winner     User?                  @relation("OgGtoonTournamentMatchWinner", fields: [winnerUserId], references: [id])
+  games      OgGtoonMatch[]
+
+  @@unique([roundId, tableNumber])
+  @@index([tournamentId, stage, roundNumber])
+  @@index([tournamentId, status])
+  @@index([status, dueAt])
+  @@index([playerAUserId])
+  @@index([playerBUserId])
+}
+
+model OgGtoonTournamentPlayerRecord {
+  id                  String   @id @default(uuid())
+  tournamentId        String
+  userId              String
+  swissWins           Int      @default(0)
+  swissLosses         Int      @default(0)
+  swissTies           Int      @default(0)
+  swissByes           Int      @default(0)
+  bracketWins         Int      @default(0)
+  bracketLosses       Int      @default(0)
+  points              Int      @default(0)
+  swissGameWins       Int      @default(0)
+  swissGameLosses     Int      @default(0)
+  swissGameTies       Int      @default(0)
+  opponentMatchWinPct Float    @default(0)
+  gameWinPct          Float    @default(0)
+  lastUpdatedAt       DateTime @default(now())
+
+  tournament OgGtoonTournament @relation(fields: [tournamentId], references: [id])
+  user       User              @relation(fields: [userId], references: [id])
+
+  @@unique([tournamentId, userId])
+  @@index([tournamentId, points])
+}
+
+// One row per prize recipient. Created up front (PENDING_APPROVAL or PENDING) so a crash mid-payout
+// resumes from the ledger instead of losing the remaining recipients.
+model OgGtoonTournamentPrizeGrant {
+  id           String                       @id @default(uuid())
+  tournamentId String
+  userId       String
+  tier         OgGtoonTournamentPrizeTier
+  place        Int
+  status       OgGtoonTournamentPrizeStatus @default(PENDING)
+  rewardJson   Json
+  summaryJson  Json?
+  errorMessage String?
+  attempts     Int                          @default(0)
+  createdAt    DateTime                     @default(now())
+  grantedAt    DateTime?
+
+  tournament OgGtoonTournament @relation(fields: [tournamentId], references: [id])
+  user       User              @relation(fields: [userId], references: [id])
+
+  @@unique([tournamentId, userId])
+  @@index([tournamentId, status])
 }
 
 model GtoonTournament {

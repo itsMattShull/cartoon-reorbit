@@ -8,7 +8,7 @@
           class="ah-tab"
           :class="{ active: activeTab === t.id }"
           @click="activeTab = t.id"
-        >{{ t.label }}</button>
+        >{{ t.label }}<span v-if="t.id === 'tournaments' && tournamentAction" class="ah-dot" title="You have a tournament match to play"><span class="sr-only">You have a tournament match to play</span></span></button>
       </div>
       <!-- Reachable from every tab, so a player with no deck yet can still learn the game first. -->
       <button
@@ -28,10 +28,14 @@
       <OgGtoonDecks v-else-if="activeTab === 'decks'" />
       <OgGtoonMatchmaking v-else-if="activeTab === 'matchmaking'" @start-tutorial="launchTutorial" />
       <OgGtoonLeaderboard v-else-if="activeTab === 'leaderboard'" />
+      <OgGtoonTournaments v-else-if="activeTab === 'tournaments'" @switch-tab="activeTab = $event" />
     </div>
 
+    <!-- "Your tournament opponent is ready" — over whichever tab is open. -->
+    <OgGtoonTournamentReadyModal />
+
     <!-- A match request from another player, shown over whichever tab is open. -->
-    <OgGtoonChallengeModal :show-errors="activeTab !== 'matchmaking'" />
+    <OgGtoonChallengeModal :show-errors="activeTab !== 'matchmaking' && activeTab !== 'tournaments'" />
 
     <!-- First visit: offer the guided tutorial once. Either button counts as having seen it. -->
     <transition name="fade">
@@ -59,6 +63,8 @@ import OgGtoonDecks from '@/components/oggtoons/OgGtoonDecks.vue'
 import OgGtoonMatchmaking from '@/components/oggtoons/OgGtoonMatchmaking.vue'
 import OgGtoonLeaderboard from '@/components/oggtoons/OgGtoonLeaderboard.vue'
 import OgGtoonChallengeModal from '@/components/oggtoons/OgGtoonChallengeModal.vue'
+import OgGtoonTournaments from '@/components/oggtoons/OgGtoonTournaments.vue'
+import OgGtoonTournamentReadyModal from '@/components/oggtoons/OgGtoonTournamentReadyModal.vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 
 definePageMeta({
@@ -77,13 +83,17 @@ clearSidebarMiddle()
 const TABS = [
   { id: 'decks',       label: 'Manage Deck',  flag: 'deckBuildingEnabled' },
   { id: 'matchmaking', label: 'Matchmaking',  flag: 'matchmakingEnabled' },
-  { id: 'leaderboard', label: 'Leaderboard',  flag: 'leaderboardEnabled' }
+  { id: 'leaderboard', label: 'Leaderboard',  flag: 'leaderboardEnabled' },
+  // Opt-in rather than opt-out: the tab only appears once an admin has explicitly turned tournaments on.
+  { id: 'tournaments', label: 'Tournaments',  flag: 'tournamentsEnabled', strict: true }
 ]
 // Defaults to everything on so the tabs don't flash hidden-then-shown while the config fetch
 // is in flight — an admin closing a section is a rare, deliberate action, not something that
 // needs to race the page's first paint.
-const config = ref({ matchmakingEnabled: true, gameEnabled: true, deckBuildingEnabled: true, leaderboardEnabled: true, practiceEnabled: true })
-const visibleTabs = computed(() => TABS.filter(t => config.value[t.flag] !== false))
+const config = ref({ matchmakingEnabled: true, gameEnabled: true, deckBuildingEnabled: true, leaderboardEnabled: true, practiceEnabled: true, tournamentsEnabled: false })
+const visibleTabs = computed(() => TABS.filter(t => (t.strict ? config.value[t.flag] === true && config.value.gameEnabled !== false : config.value[t.flag] !== false)))
+// A tournament match is waiting for you (shown as a dot on the tab).
+const tournamentAction = ref(false)
 const route = useRoute()
 const router = useRouter()
 // ?tab=… (e.g. the match screen sending people back to Matchmaking) always wins; otherwise the tab is
@@ -151,8 +161,14 @@ onMounted(async () => {
     activeTab.value = hasDeck && matchmakingOpen ? 'matchmaking' : 'decks'
   }
   ready.value = true
-  // First visit only; never over a match that is already running.
-  if (seen.status === 'fulfilled' && !seen.value.seen && tutorialAvailable.value && !currentMatchId.value) promptOpen.value = true
+  if (config.value.tournamentsEnabled === true) {
+    $fetch('/api/game/oggtoons/tournaments').then((list) => {
+      tournamentAction.value = Array.isArray(list) && list.some(t => t.needsAction)
+    }).catch(() => {})
+  }
+  // First visit only; never over a match that is already running, and never over a tournament link
+  // (a Discord message about a pairing lands here with ?tab=tournaments).
+  if (seen.status === 'fulfilled' && !seen.value.seen && tutorialAvailable.value && !currentMatchId.value && requestedTab !== 'tournaments') promptOpen.value = true
 })
 </script>
 
@@ -231,6 +247,7 @@ body {
 .fade-enter-from, .fade-leave-to { opacity: 0 }
 
 .ah-tab.active { background: var(--OrbitLightBlue); color: #fff; }
+.ah-dot { display: inline-block; width: 7px; height: 7px; margin-left: 5px; border-radius: 9999px; background: #fb923c; vertical-align: middle; }
 .ah-tab:not(.active):hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); }
 
 .gtoons-classic-content {

@@ -247,6 +247,8 @@ export function publicMatchView(match, uid, opts = {}) {
     ...(match.practice ? { practice: true, difficulty: match.difficulty } : {}),
     // Only on tutorial matches (which are also practice-flagged: no points, nothing persisted).
     ...(match.tutorial ? { tutorial: true } : {}),
+    // Only on tournament games: which tournament/pairing this game belongs to (public, not secret).
+    ...(match.tournament ? { tournament: match.tournament } : {}),
     you: {
       sideIndex: meIdx,
       userId: uid,
