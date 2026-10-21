@@ -4,38 +4,17 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
-import { EXCLUDED_SYSTEM_USER_ID } from '@/server/utils/economyValuation'
 import { activeDailyTaskUsersFragment } from '@/server/utils/activeDailyTaskUsers'
+import { getActivePlayerPointsStats, ACTIVE_PLAYER_WINDOW_DAYS } from '@/server/utils/activePlayers'
 
 const CACHE_KEY = 'economy:summary:v5'
 const CACHE_TTL = 60 // seconds — matches the page's polling interval, no point hitting Postgres more often
 
-// "Active" for the Avg/Median Points per Player tile: User.lastActivity falls within the trailing
-// window. Plain account.active (not dissolved/banned) alone includes every account that has ever
-// existed, even one that logged in once years ago and never came back — lastActivity is a much
-// stronger signal the balance behind it belongs to someone still actually playing. It's kept fresh
-// by the recomputeLastActivity cron job (server/cron/jobHandlers.js), which sets it to the most
-// recent of login, points activity, game activity, site visits, and wheel spins — the same field
-// the dormancy-warning/enforcement jobs and the admin retention report already rely on.
-const ACTIVE_PLAYER_WINDOW_DAYS = 14
-
 async function computeSummary() {
   const activeUsersSql = await activeDailyTaskUsersFragment()
 
-  const [pointsAgg, totalTradeVolume, totalAuctionVolume, netPointsAgg] = await Promise.all([
-    // Median alongside the mean: point balances are heavily right-skewed, so the
-    // mean alone overstates what a typical player actually holds.
-    prisma.$queryRaw`
-      SELECT
-        AVG(up."points")::float AS "avgPoints",
-        (PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY up."points"))::float AS "medianPoints"
-      FROM "UserPoints" up
-      JOIN "User" u ON u.id = up."userId"
-      WHERE u."active" = true
-        AND COALESCE(u."banned", false) = false
-        AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
-        AND u."lastActivity" >= NOW() - make_interval(days => ${ACTIVE_PLAYER_WINDOW_DAYS}::int)
-    `,
+  const [pointsStats, totalTradeVolume, totalAuctionVolume, netPointsAgg] = await Promise.all([
+    getActivePlayerPointsStats(),
     prisma.tradeOffer.count({ where: { status: 'ACCEPTED' } }),
     prisma.auction.count({ where: { status: 'CLOSED', winnerId: { not: null } } }),
     // Restricted to accounts that were actually active (completed at least one
@@ -56,8 +35,8 @@ async function computeSummary() {
   const spent = Number(netPointsAgg[0]?.spent || 0)
 
   return {
-    avgPointsPerPlayer: Math.round((pointsAgg[0]?.avgPoints || 0) * 100) / 100,
-    medianPointsPerPlayer: Math.round(pointsAgg[0]?.medianPoints || 0),
+    avgPointsPerPlayer: pointsStats.avgPoints,
+    medianPointsPerPlayer: pointsStats.medianPoints,
     activePlayerWindowDays: ACTIVE_PLAYER_WINDOW_DAYS,
     totalTradeVolume,
     totalAuctionVolume,

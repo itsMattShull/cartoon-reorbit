@@ -48,11 +48,17 @@ import {
   submitDiscard, resolveDiscardPhase, enterColorPhase, submitColor, resolveColorPhase, startPhaseClock, markCommitted, logAbnormalEnd, extendDeadlineForReveal
 } from './ogGtoonMatchCore.js'
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
-import { isPracticing, registerPvpProbe } from './ogGtoonPresence.js'
+import { isPracticing, registerPvpProbe, onPresenceChange } from './ogGtoonPresence.js'
 import * as ogRedis from './ogGtoonsRedisState.js'
 import { getOgGtoonsConfig, peekRevealTiming } from './ogGtoonsConfig.js'
+import { clearLive, isPairingClosed, flagNeedsAdmin } from './ogGtoonTournamentLive.js'
+import { enqueueOgTournamentJob } from './queues.js'
+import { registerOgGtoonsTournament } from './ogGtoonsTournamentSocket.js'
 
 const RECONNECT_GRACE_MS = 20_000
+// A dropped connection costs a game of a best-of-3 that is played for a prize, so tournament games
+// give a backgrounded phone tab much longer to come back.
+const TOURNAMENT_RECONNECT_GRACE_MS = 90_000
 const MATCH_MAX_AGE_MS = 30 * 60 * 1000
 const QUEUE_STALE_MS = 5 * 60 * 1000
 const CHALLENGE_STALE_MS = 5 * 60 * 1000
@@ -70,6 +76,51 @@ const challenges = new Map()     // challengeId -> { id, fromUserId, fromUsernam
 const challengesByUser = new Map() // userId -> Set(challengeId) (both sent and received, for cleanup)
 const matches = new Map()        // matchId -> match
 const matchByUser = new Map()    // userId -> matchId
+// Players currently looking at the Matchmaking tab (they populate everyone's "Challenge a Player" dropdown).
+const lobby = new Map()          // userId -> { username, sockets: Set<socketId> }
+
+/* ── Lobby: who can be challenged ─────────────────────────────────────────────────────────── */
+
+let lobbyIo = null
+let lobbyTimer = null
+
+/** Why this user can't be offered a challenge right now, or null when they can. */
+function busyReason(userId) {
+  if (matchByUser.has(userId) || isPracticing(userId)) return 'in a match'
+  if (queueByUser.has(userId)) return 'searching for a match'
+  if (challengesByUser.get(userId)?.size) return 'already handling a match request'
+  return null
+}
+
+/** Lobby usernames a challenge could go to right now (everyone but `exceptUserId`), sorted. */
+function availableLobbyUsers(exceptUserId) {
+  const out = []
+  for (const [uid, entry] of lobby) {
+    if (uid !== exceptUserId && !busyReason(uid)) out.push(entry.username)
+  }
+  return out.sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+}
+
+/** Pushes each lobby member their own dropdown list. Debounced — state changes tend to arrive in bursts. */
+function scheduleLobbyBroadcast() {
+  if (!lobbyIo || lobbyTimer) return
+  lobbyTimer = setTimeout(() => {
+    lobbyTimer = null
+    for (const [uid, entry] of lobby) {
+      const users = availableLobbyUsers(uid)
+      for (const sid of entry.sockets) lobbyIo.local.to(sid).emit(EV('lobbyUsers'), { users })
+    }
+  }, 150)
+  lobbyTimer.unref?.()
+}
+
+function lobbyLeaveSocket(userId, socketId) {
+  const entry = lobby.get(userId)
+  if (!entry) return
+  entry.sockets.delete(socketId)
+  if (!entry.sockets.size) lobby.delete(userId)
+  scheduleLobbyBroadcast()
+}
 
 /* ── Helpers ──────────────────────────────────────────────────────────────────────────────── */
 
@@ -105,11 +156,12 @@ function destroyMatch(matchId) {
   for (const uid of match.players) if (matchByUser.get(uid) === matchId) matchByUser.delete(uid)
   matches.delete(matchId)
   fireDelete(matchId)
+  scheduleLobbyBroadcast()
 }
 
 /* ── Starting a match ────────────────────────────────────────────────────────────────────── */
 
-async function startMatch(io, a, b, { isChallenge }) {
+async function startMatch(io, a, b, { isChallenge, tournament = null, matchId: forcedMatchId = null }) {
   // a, b: { userId, username, deckId, socket, stake }
   // Checked here, not just at queueJoin/challengeSend, because "Live Matches" (gameEnabled) is
   // independent of "Matchmaking" (matchmakingEnabled) — an admin can close live play while still
@@ -122,10 +174,13 @@ async function startMatch(io, a, b, { isChallenge }) {
     return null
   }
 
-  const [deckA, deckB] = await Promise.all([
-    loadVerifiedDeckSnapshot(a.userId, a.deckId),
-    loadVerifiedDeckSnapshot(b.userId, b.deckId)
-  ])
+  // A tournament game plays each player's LOCKED deck, already verified by the caller.
+  const [deckA, deckB] = tournament
+    ? [a.deckSnapshot || null, b.deckSnapshot || null]
+    : await Promise.all([
+      loadVerifiedDeckSnapshot(a.userId, a.deckId),
+      loadVerifiedDeckSnapshot(b.userId, b.deckId)
+    ])
   if (!deckA || !deckB) {
     const bad = !deckA ? a : b
     for (const p of [a, b]) {
@@ -138,9 +193,10 @@ async function startMatch(io, a, b, { isChallenge }) {
     return null
   }
 
-  const stake = Math.max(0, Math.min(Math.floor(a.stake || 0), Math.floor(b.stake || 0)))
+  // Tournament games never carry a stake.
+  const stake = tournament ? 0 : Math.max(0, Math.min(Math.floor(a.stake || 0), Math.floor(b.stake || 0)))
 
-  const matchId = randomUUID()
+  const matchId = forcedMatchId || randomUUID()
   const match = {
     id: matchId,
     players: [a.userId, b.userId],
@@ -149,6 +205,7 @@ async function startMatch(io, a, b, { isChallenge }) {
     deckOrder: [deckA, deckB],
     stake: [stake, stake],
     isChallenge: !!isChallenge,
+    tournament: tournament || null,
     ending: false,
     graceTimers: {},
     startedAt: Date.now(),
@@ -193,6 +250,10 @@ async function startMatch(io, a, b, { isChallenge }) {
   matchByUser.set(a.userId, matchId)
   matchByUser.set(b.userId, matchId)
   fireSync(matchId, match)
+  // Anything either player still had pending (other challenges they sent or were sent) is moot now.
+  dropChallengesFor(io, a.userId)
+  dropChallengesFor(io, b.userId)
+  scheduleLobbyBroadcast()
 
   a.socket.join(matchId)
   b.socket.join(matchId)
@@ -265,6 +326,7 @@ async function concludeStep(io, match, revealedRound, entries, order, { steps = 
       player1Score: end.player1Score,
       player2Score: end.player2Score,
       endReason: 'natural',
+      winReason: end.winReason,
       effectsResolved: end.effectsResolved
     })
     return
@@ -337,7 +399,7 @@ async function onPhaseExpired(io, match) {
 
 /* ── Ending a match + settling stakes ────────────────────────────────────────────────────── */
 
-async function persistAndSettle(match, { outcome, winnerUserId, player1Score, player2Score, endReason, whoLeftUserId, effectsResolved }) {
+async function persistAndSettle(match, { outcome, winnerUserId, player1Score, player2Score, endReason, whoLeftUserId, effectsResolved, winReason }) {
   const [p1, p2] = match.players
   const s1 = match.stake[0] || 0
   const s2 = match.stake[1] || 0
@@ -363,9 +425,12 @@ async function persistAndSettle(match, { outcome, winnerUserId, player1Score, pl
         isChallenge: match.isChallenge,
         winnerUserId: winnerUserId || null,
         outcome,
+        // Only a game that was actually played to a result has a reason; forfeits / sweeps have none.
+        winReason: endReason === 'natural' ? (winReason || null) : null,
         startedAt: new Date(match.startedAt),
         endedAt: new Date(),
-        whoLeftUserId: whoLeftUserId || null
+        whoLeftUserId: whoLeftUserId || null,
+        tournamentMatchId: match.tournament?.matchId || null
       }
     })
 
@@ -386,19 +451,63 @@ async function persistAndSettle(match, { outcome, winnerUserId, player1Score, pl
   })
 }
 
+/**
+ * A tournament game that did not finish normally (stale sweep, or its pairing was decided while it
+ * was running) is saved as INCOMPLETE: it never counts toward the series and is simply replayed.
+ */
+function tournamentEndParams(match, params) {
+  if (!match.tournament) return params
+  if (params.endReason === 'sweep' || params.endReason === 'closed') {
+    return { ...params, outcome: 'INCOMPLETE', winnerUserId: null }
+  }
+  return params
+}
+
+/** Saves a finished game; tournament games retry, because losing one would lose a series game. */
+async function persistFinishedGame(match, params) {
+  const attempts = match.tournament ? 3 : 1
+  let lastErr
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      await persistAndSettle(match, params)
+      return true
+    } catch (err) {
+      lastErr = err
+      console.error(`[ogGtoons] failed to persist match ${match.id} (attempt ${i + 1}/${attempts}):`, err)
+      if (i < attempts - 1) await new Promise(r => setTimeout(r, 400 * (i + 1)))
+    }
+  }
+  if (match.tournament) {
+    flagNeedsAdmin(match.tournament.matchId, 'A game result could not be saved — check the match and set the result').catch(() => {})
+  }
+  return lastErr ? false : true
+}
+
+/** After a tournament game: free the pairing and ask the worker to score it and build the next round. */
+async function afterTournamentGame(match) {
+  const t = match.tournament
+  if (!t) return
+  try {
+    await clearLive(t.matchId, match.id)
+    await enqueueOgTournamentJob('ogTournamentAdvance', { tournamentId: t.tournamentId, matchId: t.matchId }, { key: t.matchId })
+  } catch (err) {
+    // The tournament cron scores any unscored game and clears stale live markers, so this is only a delay.
+    console.error('[ogGtoons] could not queue tournament advance:', err?.message || err)
+  }
+}
+
 async function endMatch(io, match, params) {
   if (match.ending) return
   match.ending = true
+  params = tournamentEndParams(match, params)
   if (params.endReason === 'forfeit') {
     logAbnormalEnd(match, `${match.usernames[match.players.indexOf(params.whoLeftUserId)] ?? 'A player'} left the match — their opponent wins by forfeit.`)
   } else if (params.endReason === 'sweep') {
-    logAbnormalEnd(match, 'The match timed out and ended in a tie.')
+    logAbnormalEnd(match, match.tournament ? 'The game timed out and will be replayed.' : 'The match timed out and ended in a tie.')
+  } else if (params.endReason === 'closed') {
+    logAbnormalEnd(match, 'This tournament match was decided, so the game was ended.')
   }
-  try {
-    await persistAndSettle(match, params)
-  } catch (err) {
-    console.error(`[ogGtoons] failed to persist match ${match.id}:`, err)
-  }
+  await persistFinishedGame(match, params)
 
   emitToPlayers(io, match, EV('matchEnd'), (uid, i) => ({
     ...publicMatchView(match, uid),
@@ -412,6 +521,7 @@ async function endMatch(io, match, params) {
   }))
 
   destroyMatch(match.id)
+  afterTournamentGame(match).catch(() => {})
 }
 
 /* ── Leaving / disconnect ────────────────────────────────────────────────────────────────── */
@@ -441,13 +551,14 @@ function handleLeave(io, { matchId, userId, socketId, immediate }) {
   if (immediate) { forfeit(); return }
 
   if (match.graceTimers[idx]) clearTimeout(match.graceTimers[idx])
+  const graceMs = match.tournament ? TOURNAMENT_RECONNECT_GRACE_MS : RECONNECT_GRACE_MS
   match.graceTimers[idx] = setTimeout(() => {
     if (match.sockets[idx].size === 0) forfeit()
-  }, RECONNECT_GRACE_MS)
+  }, graceMs)
 
   const oppIdx = idx === 0 ? 1 : 0
   for (const sid of match.sockets[oppIdx]) {
-    io.local.to(sid).emit(EV('opponentDropped'), { graceMs: RECONNECT_GRACE_MS })
+    io.local.to(sid).emit(EV('opponentDropped'), { graceMs })
   }
 }
 
@@ -457,6 +568,7 @@ function removeFromQueue(userId) {
   const idx = queue.findIndex(e => e.userId === userId)
   if (idx !== -1) queue.splice(idx, 1)
   queueByUser.delete(userId)
+  scheduleLobbyBroadcast()
 }
 
 async function tryPairQueue(io) {
@@ -483,6 +595,20 @@ function untrackChallenge(challenge) {
   challenges.delete(challenge.id)
   challengesByUser.get(challenge.fromUserId)?.delete(challenge.id)
   challengesByUser.get(challenge.toUserId)?.delete(challenge.id)
+  scheduleLobbyBroadcast()
+}
+
+/** Withdraws every challenge `userId` sent or was sent, telling the player on the other end. */
+function dropChallengesFor(io, userId) {
+  for (const c of [...challenges.values()]) {
+    if (c.fromUserId === userId) {
+      untrackChallenge(c)
+      io.local.to(userRoom(c.toUserId)).emit(EV('challengeCancelled'), { id: c.id })
+    } else if (c.toUserId === userId) {
+      untrackChallenge(c)
+      io.local.to(userRoom(c.fromUserId)).emit(EV('challengeDeclined'), { id: c.id, toUsername: c.toUsername, reason: 'busy' })
+    }
+  }
 }
 
 /* ── Sweep ───────────────────────────────────────────────────────────────────────────────── */
@@ -492,14 +618,34 @@ function sweep(io) {
   for (let i = queue.length - 1; i >= 0; i--) {
     if (now - queue[i].joinedAt > QUEUE_STALE_MS) removeFromQueue(queue[i].userId)
   }
-  for (const c of challenges.values()) {
-    if (now - c.createdAt > CHALLENGE_STALE_MS) untrackChallenge(c)
+  for (const c of [...challenges.values()]) {
+    if (now - c.createdAt <= CHALLENGE_STALE_MS) continue
+    untrackChallenge(c)
+    io.local.to(userRoom(c.toUserId)).emit(EV('challengeCancelled'), { id: c.id })
+    io.local.to(userRoom(c.fromUserId)).emit(EV('challengeDeclined'), { id: c.id, toUsername: c.toUsername, reason: 'expired' })
   }
   for (const [matchId, match] of matches.entries()) {
     if (match.ending) continue
     if (now - match.startedAt < MATCH_MAX_AGE_MS) continue
     endMatch(io, match, { outcome: 'TIE', winnerUserId: null, player1Score: 0, player2Score: 0, endReason: 'sweep' })
       .catch(err => console.error('[ogGtoons] sweep end failed:', err))
+  }
+  reconcileTournamentGames(io).catch(err => console.error('[ogGtoons] tournament reconcile failed:', err))
+}
+
+/**
+ * Ends any live tournament game whose pairing has since been decided (an admin set the result, the
+ * deadline passed, a player was disqualified, the tournament was cancelled). One cheap query per
+ * live tournament game per minute. The game is saved as INCOMPLETE and does not count.
+ */
+async function reconcileTournamentGames(io) {
+  for (const match of [...matches.values()]) {
+    if (match.ending || !match.tournament) continue
+    if (!(await isPairingClosed(match.tournament.matchId))) continue
+    for (const uid of match.players) {
+      io.local.to(userRoom(uid)).emit(EV('error'), { code: 'tournamentClosed', message: 'This tournament match was decided by an admin or the deadline, so this game was ended.' })
+    }
+    await endMatch(io, match, { outcome: 'INCOMPLETE', winnerUserId: null, player1Score: 0, player2Score: 0, endReason: 'closed' })
   }
 }
 
@@ -549,6 +695,7 @@ export async function restoreOgGtoonsMatches(io) {
 /* ── Registration ────────────────────────────────────────────────────────────────────────── */
 
 export function registerOgGtoons(io, socket, resolveSocketUser) {
+  lobbyIo = io
   const auth = async (errorEvent = EV('error')) => {
     const user = await resolveSocketUser(socket)
     if (!user) {
@@ -577,6 +724,11 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     for (const sid of match.sockets[oppIdx]) io.local.to(sid).emit(EV('opponentReturned'))
   }
 
+  // Tournament ready-up / start. Lives in its own file; it borrows the runtime's internals here.
+  registerOgGtoonsTournament(io, socket, {
+    auth, startMatch, matchByUser, queueByUser, removeFromQueue, userRoom, isPracticing, EV
+  })
+
   socket.on(EV('subscribe'), async () => {
     const user = await auth()
     if (!user) return
@@ -590,6 +742,27 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
       incomingChallenges: incoming,
       sentChallenges: sent
     })
+  })
+
+  // The Matchmaking tab being open is what puts a player in everyone's "Challenge a Player" dropdown.
+  socket.on(EV('lobbyJoin'), async () => {
+    const user = await auth()
+    if (!user) return
+    const entry = lobby.get(user.id) || { username: user.username, sockets: new Set() }
+    entry.username = user.username
+    entry.sockets.add(socket.id)
+    lobby.set(user.id, entry)
+    socket.data.ogGtoonsLobbyUserId = user.id
+    // The newcomer gets their list right away; everyone else's refreshes on the debounce.
+    socket.emit(EV('lobbyUsers'), { users: availableLobbyUsers(user.id) })
+    scheduleLobbyBroadcast()
+  })
+
+  socket.on(EV('lobbyLeave'), async () => {
+    const userId = socket.data.ogGtoonsLobbyUserId
+    const lobbyUserId = socket.data?.ogGtoonsLobbyUserId
+    if (lobbyUserId) lobbyLeaveSocket(lobbyUserId, socket.id)
+    socket.data.ogGtoonsLobbyUserId = null
   })
 
   socket.on(EV('queueJoin'), async ({ deckId, stake } = {}) => {
@@ -619,6 +792,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     const entry = { userId: user.id, username: user.username, deckId, socket, stake: stakeAmt, joinedAt: Date.now() }
     queue.push(entry)
     queueByUser.set(user.id, entry)
+    scheduleLobbyBroadcast()
     socket.emit(EV('queueJoined'))
     await tryPairQueue(io)
   })
@@ -650,6 +824,13 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     if (target.id === user.id) {
       return socket.emit(EV('error'), { code: 'badTarget', message: "You can't challenge yourself." })
     }
+    const busy = busyReason(target.id)
+    if (busy) {
+      return socket.emit(EV('error'), { code: 'targetBusy', message: `${target.username} is ${busy} right now.` })
+    }
+    if (!(await io.in(userRoom(target.id)).local.fetchSockets()).length) {
+      return socket.emit(EV('error'), { code: 'targetOffline', message: `${target.username} is no longer online.` })
+    }
     const stakeAmt = Math.max(0, Math.floor(Number(stake) || 0))
     if (stakeAmt > 0) {
       const pts = await db.userPoints.findUnique({ where: { userId: user.id } })
@@ -671,6 +852,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     challenges.set(challengeId, challenge)
     trackChallenge(user.id, challengeId)
     trackChallenge(target.id, challengeId)
+    scheduleLobbyBroadcast()
     socket.emit(EV('challengeSent'), { id: challengeId, toUsername: target.username, stake: stakeAmt })
     io.local.to(userRoom(target.id)).emit(EV('challengeReceived'), {
       id: challengeId, fromUsername: user.username, stake: stakeAmt, createdAt: challenge.createdAt
@@ -699,6 +881,12 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
       return socket.emit(EV('error'), { code: 'challengerOffline', message: 'That player is no longer online.' })
     }
     untrackChallenge(challenge)
+    // Accepting is a choice of THIS match over any random search either player had going.
+    for (const uid of [challenge.fromUserId, user.id]) {
+      if (!queueByUser.has(uid)) continue
+      removeFromQueue(uid)
+      io.local.to(userRoom(uid)).emit(EV('queueLeft'))
+    }
     const match = await startMatch(
       io,
       { userId: challenge.fromUserId, username: challenge.fromUsername, deckId: challenge.deckId, socket: challengerSocket, stake },
@@ -714,7 +902,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     const challenge = challenges.get(challengeId)
     if (!challenge || challenge.toUserId !== user.id) return
     untrackChallenge(challenge)
-    io.local.to(userRoom(challenge.fromUserId)).emit(EV('challengeDeclined'), { id: challengeId })
+    io.local.to(userRoom(challenge.fromUserId)).emit(EV('challengeDeclined'), { id: challengeId, toUsername: challenge.toUsername, reason: 'declined' })
   })
 
   socket.on(EV('challengeCancel'), async ({ challengeId } = {}) => {
@@ -858,9 +1046,13 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     const userId = socket.data?.authUser?.id
     const matchId = socket.data?.ogGtoonsMatchId
     if (userId) removeFromQueue(userId)
+    const lobbyUserId = socket.data?.ogGtoonsLobbyUserId
+    if (lobbyUserId) lobbyLeaveSocket(lobbyUserId, socket.id)
     if (userId && matchId) handleLeave(io, { matchId, userId, socketId: socket.id, immediate: false })
   })
 }
 
 // Lets practice mode refuse to start while the user is in a live PvP match or the queue.
 registerPvpProbe((userId) => matchByUser.has(userId) || queueByUser.has(userId))
+// Practice / tutorial matches take a player out of the lobby's challengeable list, too.
+onPresenceChange(scheduleLobbyBroadcast)

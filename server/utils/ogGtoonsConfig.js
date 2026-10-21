@@ -23,6 +23,7 @@ async function load() {
         ogGtoonsDeckBuildingEnabled: true,
         ogGtoonsLeaderboardEnabled: true,
         ogGtoonsPracticeEnabled: true,
+        ogGtoonsTournamentsEnabled: true,
         ogGtoonsGamesPageVisible: true,
         ogGtoonsRevealFirstMs: true,
         ogGtoonsRevealCardMs: true,
@@ -39,6 +40,8 @@ async function load() {
       deckBuildingEnabled: row?.ogGtoonsDeckBuildingEnabled === true,
       leaderboardEnabled: row?.ogGtoonsLeaderboardEnabled === true,
       practiceEnabled: row?.ogGtoonsPracticeEnabled === true,
+      // Needs live matches too (a tournament game is a live match); checked where it is used.
+      tournamentsEnabled: row?.ogGtoonsTournamentsEnabled === true,
       // Independent of the four above, and opposite polarity on purpose — see this column's
       // schema comment. It isn't part of the rollout-safety gate those four exist for, so a
       // missing row (or a read failure) leaves it visible by default; only an explicit `false`
@@ -52,11 +55,11 @@ async function load() {
     }
   } catch (err) {
     console.error('[ogGtoons] config read failed:', err)
-    return { matchmakingEnabled: false, gameEnabled: false, deckBuildingEnabled: false, leaderboardEnabled: false, practiceEnabled: false, gamesPageVisible: true, reveal: { ...REVEAL_TIMING_DEFAULTS } }
+    return { matchmakingEnabled: false, gameEnabled: false, deckBuildingEnabled: false, leaderboardEnabled: false, practiceEnabled: false, tournamentsEnabled: false, gamesPageVisible: true, reveal: { ...REVEAL_TIMING_DEFAULTS } }
   }
 }
 
-/** { matchmakingEnabled, gameEnabled, deckBuildingEnabled, leaderboardEnabled, practiceEnabled, gamesPageVisible, reveal } */
+/** { matchmakingEnabled, gameEnabled, deckBuildingEnabled, leaderboardEnabled, practiceEnabled, tournamentsEnabled, gamesPageVisible, reveal } */
 export async function getOgGtoonsConfig() {
   const now = Date.now()
   if (cache && now - cachedAt < TTL_MS) return cache

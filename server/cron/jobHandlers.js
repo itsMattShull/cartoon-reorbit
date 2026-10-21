@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { prisma } from '../prisma.js'
 import { enqueueAchievementChecks } from '../utils/queues.js'
 import { runTournamentScheduler } from '../../server/utils/gtoonTournament.js'
+import { runOgGtoonTournamentScheduler, advanceAndNotify, notifyOpponentReady } from '../../server/utils/ogGtoonTournament.js'
 import { syncWordleResults } from '../../server/utils/wordle.js'
 import { checkAndCreateWeeklyCZoneContest } from './create-weekly-czone-contest.js'
 import { checkAndPostWeeklyRiddle } from './cmoon-riddle-rotation.js'
@@ -1025,6 +1026,10 @@ async function runTournamentCron() {
   await runTournamentScheduler(prisma)
 }
 
+async function runOgGtoonTournamentCron() {
+  return runOgGtoonTournamentScheduler(prisma)
+}
+
 // Sync Wordle daily crown results from Discord
 async function syncWordleResultsDaily() {
   await syncWordleResults()
@@ -1053,6 +1058,7 @@ export const JOB_HANDLERS = {
   markScheduledPacksInCmart,
   updateWinballGrandPrizeFromSchedule,
   runTournamentCron,
+  runOgGtoonTournamentCron,
   recordDailyTaskCompletions: runRecordDailyTaskCompletions,
   cmoonDailyScoreCheck: checkAndRunCMoonDailyScoring,
   checkAndCreateWeeklyCZoneContest,
@@ -1082,4 +1088,7 @@ export const SCHEDULED_EVENT_HANDLERS = {
   auctionOnlyStart: () => startDueAuctions(),
   announcementSend: () => sendDueAnnouncements(),
   winballPrizeUpdate: () => updateWinballGrandPrizeFromSchedule(),
+  // OG gToons tournaments: queued by the socket server / REST handlers (enqueueOgTournamentJob).
+  ogTournamentAdvance: (data) => (data?.tournamentId ? advanceAndNotify(prisma, String(data.tournamentId), { matchId: data.matchId ? String(data.matchId) : null }) : undefined),
+  ogTournamentNotifyReady: (data) => (data?.tournamentMatchId ? notifyOpponentReady(prisma, { tournamentMatchId: String(data.tournamentMatchId), readyUserId: String(data.readyUserId) }) : undefined),
 }

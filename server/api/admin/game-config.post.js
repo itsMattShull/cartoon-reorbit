@@ -880,7 +880,7 @@ export default defineEventHandler(async (event) => {
       } else if (gameName === 'OgGtoons') {
         // Explicit null checks, not truthiness ones: `false` is the whole point of each field.
         const ogGtoonsData = {}
-        for (const key of ['ogGtoonsMatchmakingEnabled', 'ogGtoonsGameEnabled', 'ogGtoonsDeckBuildingEnabled', 'ogGtoonsLeaderboardEnabled', 'ogGtoonsPracticeEnabled', 'ogGtoonsGamesPageVisible']) {
+        for (const key of ['ogGtoonsMatchmakingEnabled', 'ogGtoonsGameEnabled', 'ogGtoonsDeckBuildingEnabled', 'ogGtoonsLeaderboardEnabled', 'ogGtoonsPracticeEnabled', 'ogGtoonsTournamentsEnabled', 'ogGtoonsGamesPageVisible']) {
           if (body[key] != null) ogGtoonsData[key] = Boolean(body[key])
         }
         // Reveal pacing (ms). Blank/null resets a field to the built-in default.

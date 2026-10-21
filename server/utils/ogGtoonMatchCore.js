@@ -247,6 +247,8 @@ export function publicMatchView(match, uid, opts = {}) {
     ...(match.practice ? { practice: true, difficulty: match.difficulty } : {}),
     // Only on tutorial matches (which are also practice-flagged: no points, nothing persisted).
     ...(match.tutorial ? { tutorial: true } : {}),
+    // Only on tournament games: which tournament/pairing this game belongs to (public, not secret).
+    ...(match.tournament ? { tournament: match.tournament } : {}),
     you: {
       sideIndex: meIdx,
       userId: uid,
@@ -926,6 +928,13 @@ export function extendDeadlineForReveal(match, steps, timing) {
   if (match.deadline) match.deadline += revealDurationMs(steps, timing)
 }
 
+/** The engine's win reason as the stored value: 'COLOR' | 'POINTS', or null for a tie. */
+export function winReasonOf(reason) {
+  if (reason === 'both_colors') return 'COLOR'
+  if (reason === 'total_value') return 'POINTS'
+  return null
+}
+
 /**
  * After a reveal: decides whether the match is over. After the last regulation round, and every
  * sudden-death round after that, runs the ONE full-board effects pass to see whether the tie
@@ -947,6 +956,7 @@ export function checkMatchEnd(match) {
   return {
     outcome: outcome.winner === null ? 'TIE' : (outcome.winner === 'player1' ? 'PLAYER1' : 'PLAYER2'),
     winnerIdx: outcome.winner ? (outcome.winner === 'player1' ? 0 : 1) : null,
+    winReason: winReasonOf(outcome.reason),
     player1Score: outcome.player1Score,
     player2Score: outcome.player2Score,
     effectsResolved: final.effectsResolved

@@ -263,6 +263,22 @@ export const cmoonRankRecalcQueue = new Queue(
   }
 )
 
+// Queue for the admin "HP Catch Up" tool (server/workers/cmoon-hp-catchup.worker.js) — repairs
+// any cMoon whose rank ladder failed to fully provision, then re-runs the same safe rank
+// correction cmoonRankRecalcQueue performs (they share server/utils/cmoonRankRecalc.js). Same
+// one-time, fixed-jobId shape as cmoonRankRecalcQueue — see
+// server/api/admin/cmoons/hp-catch-up.post.js.
+export const cmoonHpCatchUpQueue = new Queue(
+  process.env.CMOON_HP_CATCHUP_QUEUE_KEY || 'cmoonHpCatchUpQueue',
+  {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 20 },
+      removeOnFail:     { count: 20 },
+    },
+  }
+)
+
 // Queue for the admin "Revoke Invalid cMoon Rank Prizes" tool
 // (server/workers/cmoon-prize-revoke.worker.js) — claws back rank-tier prize cToons a member
 // only received because of the old cMoonPoints bug, and resets the underlying achievement/claim
@@ -409,4 +425,22 @@ export async function scheduleWinballPrizeUpdate(scheduleId, startsAt) {
 
 export async function cancelWinballPrizeUpdate(scheduleId) {
   await removeDelayedJob(`winball-prize-${String(scheduleId)}`)
+}
+
+/**
+ * OG gToons tournaments: hand work to the critical cron worker (see SCHEDULED_EVENT_HANDLERS in
+ * server/cron/jobHandlers.js) instead of doing it on the caller's event loop. The socket server in
+ * particular must only record a finished game and queue this — advancing a round sends Discord DMs
+ * and can pay prizes, none of which belongs on the process every live game shares.
+ *
+ * `bucketSec` de-duplicates bursts: the jobId includes the time bucket, so several games ending in
+ * the same few seconds collapse into one run, while a later request still queues normally. Every
+ * handler is idempotent and the tournament cron is the safety net if a job is ever lost.
+ */
+export async function enqueueOgTournamentJob(name, data, { key, delayMs = 500, bucketSec = 5 } = {}) {
+  const bucket = Math.floor(Date.now() / (bucketSec * 1000))
+  await scheduledEventsQueue.add(name, data, {
+    jobId: `og-t-${name}-${key || 'x'}-${bucket}`,
+    delay: delayMs
+  })
 }

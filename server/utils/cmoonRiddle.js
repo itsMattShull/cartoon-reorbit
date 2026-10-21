@@ -44,22 +44,30 @@ export async function claimCMoonRiddleSolve(prisma, { riddleId, userId, cMoonId 
     await recomputeCMoonPointsForUsers([userId])
   }
 
-  // Fire-and-forget: the winning team's own channel gets a congratulatory ping, but a failed
-  // Discord post must never make an otherwise-successful claim look like it failed to the caller.
-  announceRiddleSolveToTeam(prisma, { userId, cMoonId, pointsAwarded }).catch(() => {})
+  // Fire-and-forget: every cMoon's channel gets the announcement, but a failed Discord post must
+  // never make an otherwise-successful claim look like it failed to the caller.
+  announceRiddleSolveEverywhere(prisma, { riddleId, userId, cMoonId, pointsAwarded }).catch(() => {})
 
   return { claimed: true, pointsAwarded }
 }
 
-async function announceRiddleSolveToTeam(prisma, { userId, cMoonId, pointsAwarded }) {
-  const [user, cMoon] = await Promise.all([
+// Tells every team, not just the winner's — the whole point of a "first solver wins" race is
+// that everyone was racing for it, so everyone (not only the winning cMoon's own channel) needs
+// to see who won AND what the answer was, both so the race visibly resolves and so a solved
+// WEEKLY riddle doesn't leave other teams still guessing at an answer that's no longer in play.
+async function announceRiddleSolveEverywhere(prisma, { riddleId, userId, cMoonId, pointsAwarded }) {
+  const [user, cMoon, riddle] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { username: true } }),
-    prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { name: true, discordChannelId: true } }),
+    prisma.cMoon.findUnique({ where: { id: cMoonId }, select: { name: true } }),
+    prisma.cMoonRiddle.findUnique({ where: { id: riddleId }, select: { answer: true } }),
   ])
   if (!cMoon) return
-  const channelId = await resolveCMoonRaidDiscordChannelId(prisma, cMoon.discordChannelId)
   const pointsLine = pointsAwarded > 0 ? ` and earns ${pointsAwarded} points` : ''
-  await sendCMoonTeamUpdate(channelId, `🧩 **Riddle solved!** ${user?.username || 'A player'} was first — ${cMoon.name}${pointsLine}!`)
+  const answerLine = riddle?.answer ? `\n**Answer:** ${riddle.answer}` : ''
+  await broadcastToAllCMoonChannels(
+    prisma,
+    `🧩 **Riddle solved!** ${user?.username || 'A player'} (${cMoon.name}) was first${pointsLine}!${answerLine}`
+  )
 }
 
 // The currently-open WEEKLY riddle, if any — active, already posted (postedAt set), and not yet

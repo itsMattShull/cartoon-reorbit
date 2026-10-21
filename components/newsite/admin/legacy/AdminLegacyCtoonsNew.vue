@@ -148,6 +148,18 @@
               </p>
             </div>
 
+            <div v-if="mintLimitType === 'defined' && isStandardizableRarity" class="flex items-center justify-between gap-2">
+              <p class="text-[11px] text-gray-500">
+                Fills Total/Initial Quantity below from {{ cmartMetricsInfo?.activePlayerCount ?? '…' }} players active {{ windowStartDaysAgo }}–{{ windowEndDaysAgo }} days ago × the Common/Uncommon/Rare/etc percentage set on Admin &gt; cMart Metrics. Still editable afterward.
+              </p>
+              <button
+                type="button"
+                class="px-2 py-1.5 text-xs font-medium rounded-md border border-indigo-600 text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 whitespace-nowrap"
+                :disabled="!cmartMetricsInfo"
+                @click="fillFromActivePlayers"
+              >Fill from Active Players</button>
+            </div>
+
             <div class="grid grid-cols-2 gap-3" v-if="mintLimitType === 'defined'">
               <div class="flex flex-col gap-1">
                 <label class="text-xs font-medium">Total Quantity</label>
@@ -677,6 +689,7 @@ import { useRouter } from 'vue-router'
 import SecondEditionFields from '~/components/admin/SecondEditionFields.vue'
 import OgGtoonLookEditor from '~/components/newsite/admin/legacy/OgGtoonLookEditor.vue'
 import { defaultGtoonCardStyle, sanitizeGtoonCardStyle } from '~/utils/gtoonCardStyle'
+import { STANDARDIZABLE_RARITIES } from '~/utils/cmartStandardizedRarities'
 
 const router = useRouter()
 const name = ref('')
@@ -696,6 +709,9 @@ const initialQuantity = ref(null)
 const perUserLimit = ref(null)
 const codeOnly = ref(false)
 const inCmart = ref(false)
+const cmartMetricsInfo = ref(null)
+const windowStartDaysAgo = ref(14)
+const windowEndDaysAgo = ref(7)
 const price = ref(0)
 const imageFile = ref(null)
 const seriesOptions = ref([])
@@ -926,6 +942,16 @@ watch(abilityKey, () => { abilityParam.value = null })
 
 // Added rarityOptions array
 const rarityOptions = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare', 'Prize Only', 'Code Only', 'Auction Only']
+const isStandardizableRarity = computed(() => STANDARDIZABLE_RARITIES.includes(rarity.value))
+
+function fillFromActivePlayers() {
+  if (!cmartMetricsInfo.value) return
+  const percent = cmartMetricsInfo.value.percentages?.[rarity.value]
+  if (percent == null) return
+  const qty = Math.max(1, Math.round(cmartMetricsInfo.value.activePlayerCount * percent / 100))
+  totalQuantity.value = qty
+  initialQuantity.value = qty
+}
 
 const soundFile = ref(null)
 const errors = reactive({ image: '', name: '', series: '', rarity: '', cost: '', power: '', sound: '', gtoonValue: '', gtoonEffects: '' })
@@ -951,16 +977,22 @@ const releasePercent = ref(75)
 const delayHours = ref(12)
 
 onMounted(async () => {
-  const [seriesRes, setsRes, rarityRes, relRes] = await Promise.all([
+  const [seriesRes, setsRes, rarityRes, relRes, cmartMetricsRes] = await Promise.all([
     fetch('/api/admin/series', { credentials: 'include' }),
     fetch('/api/admin/sets', { credentials: 'include' }),
     fetch('/api/rarity-defaults'),
-    fetch('/api/release-settings')
+    fetch('/api/release-settings'),
+    fetch('/api/cmart-standardized-metrics')
   ])
   seriesOptions.value = await seriesRes.json()
   setsOptions.value = await setsRes.json()
   try { const j = await rarityRes.json(); rarityDefaults.value = j?.defaults || null } catch {}
   try { const r = await relRes.json(); releasePercent.value = Number(r.initialReleasePercent ?? 75); delayHours.value = Number(r.finalReleaseDelayHours ?? 12) } catch {}
+  try {
+    cmartMetricsInfo.value = await cmartMetricsRes.json()
+    if (cmartMetricsInfo.value?.windowStartDaysAgo) windowStartDaysAgo.value = cmartMetricsInfo.value.windowStartDaysAgo
+    if (cmartMetricsInfo.value?.windowEndDaysAgo) windowEndDaysAgo.value = cmartMetricsInfo.value.windowEndDaysAgo
+  } catch {}
 })
 
 watch(rarity, val => {

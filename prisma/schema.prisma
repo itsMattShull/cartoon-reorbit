@@ -669,6 +669,7 @@ model User {
   ogGtoonMatchesAsPlayer2   OgGtoonMatch[]                @relation("OgGtoonMatchPlayer2")
   ogGtoonMatchesWhoLeft     OgGtoonMatch[]                @relation("OgGtoonMatchWhoLeft")
   ogGtoonMatchesAsWinner    OgGtoonMatch[]                @relation("OgGtoonMatchWinner")
+  ogGtoonPracticeMatches    OgGtoonPracticeMatch[]
   edRpsMatchesAsPlayer1     EdRpsMatch[]                  @relation("EdRpsMatchPlayer1")
   edRpsMatchesAsPlayer2     EdRpsMatch[]                  @relation("EdRpsMatchPlayer2")
   edRpsMatchesAsWinner      EdRpsMatch[]                  @relation("EdRpsMatchWinner")
@@ -683,6 +684,13 @@ model User {
   gtoonTournamentMatchesAsB GtoonTournamentMatch[]        @relation("GtoonTournamentMatchPlayerB")
   gtoonTournamentMatchesWon GtoonTournamentMatch[]        @relation("GtoonTournamentMatchWinner")
   gtoonTournamentRecords    GtoonTournamentPlayerRecord[]
+  ogGtoonTournamentsWon       OgGtoonTournament[]             @relation("OgGtoonTournamentWinner")
+  ogGtoonTournamentOptIns     OgGtoonTournamentOptIn[]
+  ogGtoonTournamentMatchesAsA OgGtoonTournamentMatch[]        @relation("OgGtoonTournamentMatchPlayerA")
+  ogGtoonTournamentMatchesAsB OgGtoonTournamentMatch[]        @relation("OgGtoonTournamentMatchPlayerB")
+  ogGtoonTournamentMatchesWon OgGtoonTournamentMatch[]        @relation("OgGtoonTournamentMatchWinner")
+  ogGtoonTournamentRecords    OgGtoonTournamentPlayerRecord[]
+  ogGtoonTournamentPrizes     OgGtoonTournamentPrizeGrant[]
   monsterBattlesAsPlayer1   MonsterBattle[]               @relation("MonsterBattlePlayer1")
   monsterBattlesAsPlayer2   MonsterBattle[]               @relation("MonsterBattlePlayer2")
   monsterBattlesAsWinner    MonsterBattle[]               @relation("MonsterBattleWinner")
@@ -1635,6 +1643,10 @@ model GameConfig {
   ogGtoonsRevealCardMs    Int?
   ogGtoonsRevealEffectsMs Int?
   ogGtoonsRevealQuietMs   Int?
+
+  // OG gToons tournaments (Tournaments tab + the server-side opt-in / play / forfeit actions).
+  // Same explicit-true rule as the four switches above: a missing row leaves it off.
+  ogGtoonsTournamentsEnabled Boolean? @default(false)
 }
 
 model GlobalGameConfig {
@@ -1649,6 +1661,11 @@ model GlobalGameConfig {
   phashDuplicateThreshold        Int     @default(14)
   dhashDuplicateThreshold        Int     @default(16)
   rarityDefaults                 Json?
+  // Per-rarity percentage of the active-player count used to compute a cToon's mint quantity
+  // when its "Standardize Metric in cMart" toggle is on. { "Crazy Rare": 50, "Rare": 90, ... } —
+  // same merge-with-hardcoded-defaults pattern as rarityDefaults above. See
+  // server/utils/cmartStandardizedMetrics.js.
+  cmartStandardizedMetrics       Json?
   achievementDiscordChannelId    String?
   czoneContestDiscordChannelId   String?
   devPrDiscordChannelId          String? // posts PR opened/merged notices for the dev branch
@@ -2408,6 +2425,47 @@ enum OgGtoonMatchOutcome {
   INCOMPLETE
 }
 
+// How a finished game was decided, from the engine's determineWinner reason: COLOR = more cards of
+// the two goal colours combined, POINTS = higher total value (the +15 single-goal-colour bonus is
+// part of the total). Null for ties, forfeits, sweeps, and games finished before this was recorded.
+enum OgGtoonWinReason {
+  COLOR
+  POINTS
+}
+
+enum OgGtoonPracticeDifficulty {
+  easy
+  normal
+  hard
+}
+
+enum OgGtoonPracticeOutcome {
+  PLAYER_WIN
+  BOT_WIN
+  TIE
+}
+
+// One finished original gToons PRACTICE match (the player vs. the bot). This is deliberately a
+// separate, lightweight table rather than OgGtoonMatch with a nullable player2: OgGtoonMatch has
+// required deck snapshots, goal colors and a roundLog, and every Meta / leaderboard query would
+// otherwise need an exclusion to keep bot games out. It holds NO deck data, so practice can never
+// reach the Meta tab. Written once, at a natural finish only (a quit / idle sweep / the tutorial
+// records nothing); the practice match uuid is the primary key so a retry cannot double-count.
+// Read by the Practice Matches leaderboard.
+model OgGtoonPracticeMatch {
+  id         String                     @id // the practice match's uuid
+  userId     String
+  difficulty OgGtoonPracticeDifficulty
+  outcome    OgGtoonPracticeOutcome
+  winReason  OgGtoonWinReason? // see the enum: null for a tie or a game finished before this was recorded
+  startedAt  DateTime
+  endedAt    DateTime                   @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([endedAt])
+}
+
 // One original gToons (2002 game) match. Unlike ClashGame, both players are required
 // (no AI opponent in v1 — see gtoons-plan.md). roundLog is written ONCE, at match
 // completion — live round-by-round state lives in Redis/in-memory during play
@@ -2432,14 +2490,22 @@ model OgGtoonMatch {
 
   winnerUserId  String?
   outcome       OgGtoonMatchOutcome?
+  winReason     OgGtoonWinReason?
   startedAt     DateTime             @default(now())
   endedAt       DateTime?
   whoLeftUserId String?
+
+  // Set when this game was one game of a tournament series. A tournament game that did not
+  // finish normally (stale sweep) is written with outcome INCOMPLETE and does not count toward
+  // the series. Indexed by a hand-written PARTIAL index (see the og_gtoons_tournaments
+  // migration), which Prisma's schema language cannot express.
+  tournamentMatchId String?
 
   player1 User  @relation("OgGtoonMatchPlayer1", fields: [player1UserId], references: [id])
   player2 User  @relation("OgGtoonMatchPlayer2", fields: [player2UserId], references: [id])
   winner  User? @relation("OgGtoonMatchWinner", fields: [winnerUserId], references: [id])
   whoLeft User? @relation("OgGtoonMatchWhoLeft", fields: [whoLeftUserId], references: [id])
+  tournamentMatch OgGtoonTournamentMatch? @relation(fields: [tournamentMatchId], references: [id])
 
   @@index([player1UserId, startedAt])
   @@index([player2UserId, startedAt])
@@ -2757,6 +2823,269 @@ model OgGtoonDeckCard {
 
   @@unique([deckId, position])
   @@index([ctoonId])
+}
+
+// ── OG gToons tournaments ───────────────────────────────────────────────────────────────────
+// Modeled on the gToons Clash tournament tables below (GtoonTournament*), but a separate set:
+// every pairing is a best-of-3 of dedicated, zero-stake, server-created matches played from a
+// deck locked at opt-in. Series scores are derived from OgGtoonMatch rows carrying the
+// tournamentMatchId, unless the pairing was decided another way (forfeit, walkover, admin),
+// in which case `lockedAt` + `resolution` are authoritative. See server/utils/ogGtoonTournament.js.
+enum OgGtoonTournamentStatus {
+  DRAFT
+  OPT_IN_OPEN
+  OPT_IN_CLOSED
+  SWISS_ACTIVE
+  BRACKET_ACTIVE
+  COMPLETE
+  CANCELLED
+}
+
+enum OgGtoonTournamentStage {
+  SWISS
+  BRACKET
+}
+
+enum OgGtoonTournamentFormat {
+  BRACKET_8_OR_LESS
+  SWISS_THEN_TOP8
+}
+
+enum OgGtoonTournamentMatchStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETE
+  BYE
+}
+
+enum OgGtoonTournamentMatchOutcome {
+  A_WIN
+  B_WIN
+  TIE
+}
+
+enum OgGtoonTournamentResolution {
+  PLAYED
+  FORFEIT
+  WALKOVER
+  DEADLINE
+  ADMIN
+}
+
+enum OgGtoonTournamentPrizeTier {
+  FIRST
+  TOP8
+}
+
+enum OgGtoonTournamentPrizeStatus {
+  PENDING_APPROVAL
+  PENDING
+  PAID
+  FAILED
+  SKIPPED
+}
+
+model OgGtoonTournament {
+  id                  String                   @id @default(uuid())
+  name                String
+  description         String?
+  status              OgGtoonTournamentStatus  @default(DRAFT)
+  optInStartAt        DateTime
+  optInEndAt          DateTime
+  format              OgGtoonTournamentFormat?
+  // Null = derive from the field size when opt-in closes (see tournamentCore.swissRoundsFor).
+  swissRoundsOverride Int?
+  swissRoundsPlanned  Int?
+  bestOf              Int                      @default(3) // always 3 (first to 2 game wins); stored so history stays readable
+  maxExtraGames       Int                      @default(4) // bracket only: extra sudden-death games when a series ends level
+  roundWindowHours    Int                      @default(72)
+
+  // Prizes: a reward bundle { points, ctoons:[{ctoonId,quantity}], backgrounds:[{backgroundId}] }
+  // for the winner, and another for places 2-8 (only paid when the field has at least
+  // minEntrantsTop8Prize entrants, so a tiny bracket cannot be farmed for the second prize).
+  firstPrizeJson       Json?
+  top8PrizeJson        Json?
+  minEntrantsTop8Prize Int       @default(9)
+  requirePrizeApproval Boolean   @default(true)
+  prizesQueuedAt       DateTime?
+  prizesApprovedAt     DateTime?
+  prizesApprovedById   String?
+
+  // Random bracket seeding: the seed is stored so an admin can see how a bracket was drawn.
+  seedValue String?
+
+  announcementChannelId              String
+  lastAnnouncementAt                 DateTime?
+  nextAnnouncementAt                 DateTime?
+  finalOptInMidnightAnnouncementSent Boolean   @default(false)
+
+  finalizedAt           DateTime?
+  finalPlacementsJson   Json?
+  winnerUserId          String?
+  tournamentCompletedAt DateTime?
+  lastAdvancedAt        DateTime?
+  createdById           String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  winner User? @relation("OgGtoonTournamentWinner", fields: [winnerUserId], references: [id])
+
+  optIns        OgGtoonTournamentOptIn[]
+  rounds        OgGtoonTournamentRound[]
+  matches       OgGtoonTournamentMatch[]
+  playerRecords OgGtoonTournamentPlayerRecord[]
+  prizeGrants   OgGtoonTournamentPrizeGrant[]
+
+  @@index([status])
+  @@index([optInStartAt])
+  @@index([optInEndAt])
+}
+
+model OgGtoonTournamentOptIn {
+  id               String    @id @default(uuid())
+  tournamentId     String
+  userId           String
+  optedInAt        DateTime  @default(now())
+  isActive         Boolean   @default(true)
+  sourceDeckId     String?
+  // The locked deck: [{ position, ctoonId, userCtoonId }] x 12. Card stats are read live when a
+  // game starts (so an admin fix to a broken effect still applies); only WHICH copies were
+  // registered is frozen here.
+  deckSnapshotJson Json
+  repairCount      Int       @default(0)
+  lastRepairedAt   DateTime?
+  disqualified     Boolean   @default(false)
+  disqualifiedNote String?
+
+  tournament OgGtoonTournament @relation(fields: [tournamentId], references: [id])
+  user       User              @relation(fields: [userId], references: [id])
+
+  @@unique([tournamentId, userId])
+  @@index([tournamentId, isActive])
+  @@index([userId])
+}
+
+model OgGtoonTournamentRound {
+  id           String                 @id @default(uuid())
+  tournamentId String
+  stage        OgGtoonTournamentStage
+  roundNumber  Int
+  openedAt     DateTime               @default(now())
+  dueAt        DateTime?
+
+  tournament OgGtoonTournament        @relation(fields: [tournamentId], references: [id])
+  matches    OgGtoonTournamentMatch[]
+
+  @@unique([tournamentId, stage, roundNumber])
+  @@index([tournamentId, stage])
+}
+
+model OgGtoonTournamentMatch {
+  id            String                 @id @default(uuid())
+  tournamentId  String
+  roundId       String
+  stage         OgGtoonTournamentStage
+  roundNumber   Int
+  tableNumber   Int?
+  playerAUserId String
+  playerBUserId String
+
+  status       OgGtoonTournamentMatchStatus   @default(PENDING)
+  bestOf       Int                            @default(3)
+  winsA        Int                            @default(0)
+  winsB        Int                            @default(0)
+  ties         Int                            @default(0)
+  gamesCounted Int                            @default(0)
+  outcome      OgGtoonTournamentMatchOutcome?
+  winnerUserId String?
+  resolution   OgGtoonTournamentResolution?
+
+  requiresWinner Boolean @default(false)
+  seedA          Int?
+  seedB          Int?
+
+  pairedAt    DateTime  @default(now())
+  dueAt       DateTime?
+  lockedAt    DateTime?
+  completedAt DateTime?
+
+  // Ready-up is stored here (not only in socket memory) so it survives a restart and so the
+  // deadline rules can see who actually showed up.
+  readyAAt     DateTime?
+  readyBAt     DateTime?
+  firstReadyAt DateTime?
+  liveMatchId  String? // the in-flight OgGtoonMatch id while a game of this series is being played
+  liveStartedAt DateTime? // when that game started; a marker older than a match can last is stale and is cleared
+
+  voidedGames       Int       @default(0)
+  extraGamesCounted Int       @default(0)
+  needsAdmin        Boolean   @default(false)
+  needsAdminReason  String?
+  adminNotes        String?
+  reminder24SentAt  DateTime?
+  reminder4SentAt   DateTime?
+
+  tournament OgGtoonTournament      @relation(fields: [tournamentId], references: [id])
+  round      OgGtoonTournamentRound @relation(fields: [roundId], references: [id])
+  playerA    User                   @relation("OgGtoonTournamentMatchPlayerA", fields: [playerAUserId], references: [id])
+  playerB    User                   @relation("OgGtoonTournamentMatchPlayerB", fields: [playerBUserId], references: [id])
+  winner     User?                  @relation("OgGtoonTournamentMatchWinner", fields: [winnerUserId], references: [id])
+  games      OgGtoonMatch[]
+
+  @@unique([roundId, tableNumber])
+  @@index([tournamentId, stage, roundNumber])
+  @@index([tournamentId, status])
+  @@index([status, dueAt])
+  @@index([playerAUserId])
+  @@index([playerBUserId])
+}
+
+model OgGtoonTournamentPlayerRecord {
+  id                  String   @id @default(uuid())
+  tournamentId        String
+  userId              String
+  swissWins           Int      @default(0)
+  swissLosses         Int      @default(0)
+  swissTies           Int      @default(0)
+  swissByes           Int      @default(0)
+  bracketWins         Int      @default(0)
+  bracketLosses       Int      @default(0)
+  points              Int      @default(0)
+  swissGameWins       Int      @default(0)
+  swissGameLosses     Int      @default(0)
+  swissGameTies       Int      @default(0)
+  opponentMatchWinPct Float    @default(0)
+  gameWinPct          Float    @default(0)
+  lastUpdatedAt       DateTime @default(now())
+
+  tournament OgGtoonTournament @relation(fields: [tournamentId], references: [id])
+  user       User              @relation(fields: [userId], references: [id])
+
+  @@unique([tournamentId, userId])
+  @@index([tournamentId, points])
+}
+
+// One row per prize recipient. Created up front (PENDING_APPROVAL or PENDING) so a crash mid-payout
+// resumes from the ledger instead of losing the remaining recipients.
+model OgGtoonTournamentPrizeGrant {
+  id           String                       @id @default(uuid())
+  tournamentId String
+  userId       String
+  tier         OgGtoonTournamentPrizeTier
+  place        Int
+  status       OgGtoonTournamentPrizeStatus @default(PENDING)
+  rewardJson   Json
+  summaryJson  Json?
+  errorMessage String?
+  attempts     Int                          @default(0)
+  createdAt    DateTime                     @default(now())
+  grantedAt    DateTime?
+
+  tournament OgGtoonTournament @relation(fields: [tournamentId], references: [id])
+  user       User              @relation(fields: [userId], references: [id])
+
+  @@unique([tournamentId, userId])
+  @@index([tournamentId, status])
 }
 
 model GtoonTournament {
@@ -6331,60 +6660,84 @@ model CMoonHuntCompletion {
   @@unique([huntId, cMoonId])
 }
 
-// ── cMoon Season Nav feature ─────────────────────────────────────────────
-// Powers the customizable "seasonal updates" section on the bottom half of the cMoon navigation
-// page (components/newsite/CMoonNav.vue): an editable header/blurb plus a small set of
-// admin-defined progress trackers (e.g. "100 NPC battle wins", "500 average points") shown as one
-// progress bar per cMoon team. Deliberately season-scoped, not all-time: every tracker's current
-// value is computed fresh from CMoonEnemyBattle/CMoonScoreLog rows dated on/after `startedAt`
-// (see server/utils/cmoonSeason.js), never from the lifetime running totals on CMoon itself
-// (battleWins/battleLosses/teamScore) — those never reset, so a goal meant to describe "this
-// season" would otherwise silently keep counting a previous season's progress forever. Starting a
-// new season (server/api/admin/cmoon-season.post.js) only ever moves `startedAt` forward; it never
-// deletes CMoonEnemyBattle/CMoonScoreLog history, so a later admin change is non-destructive and a
-// past season's raw data is still there if ever needed, just no longer in any tracker's window.
-model CMoonSeasonConfig {
-  id        String   @id // always 'singleton', same convention as GlobalGameConfig
-  header    String   @default("cMoons Season 1")
-  startedAt DateTime @default(now())
+// ── cMoon Seasons ──────────────────────────────────────────────────────
+// Powers the "seasonal updates" section on the bottom half of the cMoon navigation page
+// (components/newsite/CMoonNav.vue). Replaces an earlier single-current-season design (a
+// `CMoonSeasonConfig` singleton with only a `startedAt`, no end date, no scheduling, no history —
+// "starting a new season" just moved that one row's `startedAt` forward and the previous season's
+// own header/blurb/goal were simply overwritten) with a real historical table: every season is its
+// own row with both a start AND an end date, so seasons can be scheduled ahead of time, and a
+// completed season's own numbers stay queryable forever for the nav page's recap list.
+//
+// "Current season" = the row where `startAt <= now() < endAt`. Admin-enforced non-overlap (checked
+// at the API layer, not expressible as a DB constraint since it's a range comparison across rows)
+// keeps at most one season ever "current" at a time. "Next season" = the earliest row with
+// `startAt > now()`. "Past season" = any row with `endAt <= now()`.
+//
+// Every season-scoped number (the enemies-defeated goal below, each CMoonSeasonTracker, the
+// win/loss leaderboard, the recap's winning-cMoon/top-slayer) is computed fresh from
+// CMoonEnemyBattle/CMoonScoreLog rows dated within [startAt, endAt] — never from the lifetime
+// running totals on CMoon itself (battleWins/battleLosses/teamScore), which never reset and would
+// otherwise bleed a prior season's progress into the next one. No CMoonEnemyBattle/CMoonScoreLog
+// row is ever deleted by anything season-related, so a past season's recap numbers are always
+// re-derivable, computed live rather than cached/persisted (see server/utils/cmoonSeason.js) —
+// cheap at this scale (cMoon count in the tens, a handful of seasons).
+model CMoonSeason {
+  id           String   @id @default(uuid())
+  // Display-only sequence ("Season N"), assigned once at creation as
+  // (highest existing seasonNumber) + 1 — never recomputed or renumbered later, so a deleted
+  // future season (see the admin delete endpoint's own future-only restriction) never shifts an
+  // already-shown past season's number.
+  seasonNumber Int      @unique
+  header       String   @default("")
   // Sanitized HTML — see server/utils/sanitizeEncyclopediaHtml.js (reused as-is; this blurb has
   // the exact same "short admin-authored prose, styled like the Tutorial page" shape as an
   // Encyclopedia entry's body, so a second sanitizer would just be the same allowlist twice).
-  blurb     String   @default("")
-  // One shared, server-wide progress bar toward a total "cMoon enemies defeated" goal for the
-  // season — distinct from the per-cMoon CMoonSeasonTracker rows above, which render one bar
-  // PER TEAM so teams can be compared against each other; this is a single combined bar for the
-  // whole playerbase (every WIN, both regular enemies and raid bosses, counts toward it). Same
-  // season-scoped-not-lifetime convention as this model's own header comment: computed live from
-  // CMoonEnemyBattle rows dated on/after startedAt (see computeSeasonProgress in
-  // server/utils/cmoonSeason.js), never from a lifetime counter — so it resets cleanly whenever
-  // startedAt moves forward. Lives here rather than as a CMoonSeasonTracker row since that model's
-  // metricType enum is inherently per-cMoon-comparison shaped (BATTLE_WINS etc. are read per
-  // cMoon); a single combined counter has no "which cMoon" axis to render multiple bars from.
-  enemiesDefeatedGoalEnabled Boolean @default(false)
-  enemiesDefeatedGoalLabel   String  @default("Enemies Defeated")
-  enemiesDefeatedGoalTarget  Int     @default(1000)
+  blurb        String   @default("")
+  startAt      DateTime
+  endAt        DateTime
+  // One shared, server-wide progress bar toward a total "cMoon enemies defeated" goal for THIS
+  // season — distinct from the per-cMoon CMoonSeasonTracker rows below, which render one bar PER
+  // TEAM so teams can be compared against each other; this is a single combined bar for the whole
+  // playerbase (every WIN, both regular enemies and raid bosses, counts toward it). Lives here
+  // rather than as a CMoonSeasonTracker row since that model's metricType enum is inherently
+  // per-cMoon-comparison shaped (BATTLE_WINS etc. are read per cMoon); a single combined counter
+  // has no "which cMoon" axis to render multiple bars from.
+  enemiesDefeatedGoalEnabled     Boolean   @default(false)
+  enemiesDefeatedGoalLabel       String    @default("Enemies Defeated")
+  enemiesDefeatedGoalTarget      Int       @default(1000)
   // Atomic claim stamp for the server-wide "goal reached" Discord announcement — set via a
   // conditional UPDATE ... WHERE enemiesDefeatedGoalAnnouncedAt IS NULL the moment a WIN (solo or
-  // raid) is recorded that pushes computeSeasonProgress()'s live total past enemiesDefeatedGoalTarget,
-  // so concurrent wins racing across the threshold can only ever post once. Reset to null by
-  // start-new.post.js on every season rollover (alongside startedAt moving forward) so the
-  // announcement can fire again for the new season's own goal.
+  // raid) is recorded that pushes this season's live total past enemiesDefeatedGoalTarget, so
+  // concurrent wins racing across the threshold can only ever post once. Each season gets its own
+  // fresh row (and so its own null announcedAt), so no "reset on rollover" step is needed the way
+  // the old singleton design required.
   enemiesDefeatedGoalAnnouncedAt DateTime?
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  trackers CMoonSeasonTracker[]
+
+  @@index([startAt])
+  @@index([endAt])
 }
 
 enum CMoonSeasonTrackerMetric {
-  BATTLE_WINS // count of CMoonEnemyBattle rows with outcome=WIN, endedAt >= startedAt
+  BATTLE_WINS // count of CMoonEnemyBattle rows with outcome=WIN, endedAt within the season's range
   BATTLE_LOSSES // same, outcome=LOSS
-  TEAM_SCORE // SUM(CMoonScoreLog.points) where createdAt >= startedAt — season-scoped teamScore
+  TEAM_SCORE // SUM(CMoonScoreLog.points) where createdAt within the season's range
   AVG_POINTS // the same sum divided by the cMoon's current memberCount (plain average, no
   // small-team shrinkage — shrinkage exists to keep the competitive leaderboard's RANKING fair to
   // small teams, which doesn't apply to a single team's own progress toward its own goal)
 }
 
+// One admin-defined progress bar, scoped to a single season (e.g. "100 NPC battle wins this
+// season") — shown once per cMoon team so teams can be compared. Scoped per-season (not a flat
+// always-on list, as in the earlier singleton design) so planning a future season's trackers never
+// touches whichever season is currently live.
 model CMoonSeasonTracker {
   id          String                   @id @default(uuid())
+  seasonId    String
   label       String
   metricType  CMoonSeasonTrackerMetric
   targetValue Float
@@ -6393,5 +6746,7 @@ model CMoonSeasonTracker {
   createdAt   DateTime                 @default(now())
   updatedAt   DateTime                 @updatedAt
 
-  @@index([active, sortOrder])
+  season CMoonSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
+
+  @@index([seasonId, active, sortOrder])
 }

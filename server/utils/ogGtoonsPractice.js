@@ -1,7 +1,8 @@
 // server/utils/ogGtoonsPractice.js
 //
 // Practice mode for original gToons (2002): a server-authoritative single-player match against a
-// bot that plays a copy of the player's own deck. Registered per-connection from
+// bot that brings one of its own pre-defined decks for the chosen difficulty (see ogGtoonBotDecks.js;
+// a copy of the player's deck only if those cards are not available). Registered per-connection from
 // socket-server.js right after registerOgGtoons.
 //
 // ── Why this is NOT a branch inside ogGtoonsSocket.js ───────────────────────────────────────
@@ -15,11 +16,14 @@
 // ── Practice never awards, spends or records points ─────────────────────────────────────────
 //   • No stake: the match is created with stake [0, 0]; there is no stake input at all.
 //   • The round-3 slot-7 swap costs 10 points off the match score (as in PvP) but never touches the points balance; it is handled purely in memory.
-//   • Nothing is persisted. In particular no OgGtoonMatch row is written, which is also what keeps
-//     practice out of the leaderboard (it is computed from that table).
+//   • No match row, deck snapshot or round log is persisted, which is what keeps practice out of the
+//     Meta tab. The ONE thing saved is a tiny result record (who won, the difficulty) for a match that
+//     reaches a natural finish, so the Practice Matches leaderboard can count it. A quit, an idle/
+//     orphan sweep or a replaced match saves nothing.
 //   • This module deliberately does not import Prisma, gamePoints or any points/match-writing
 //     helper; tests/ogGtoonsPractice.test.js asserts that, so a future edit can't quietly add it.
-// The only database access is the deck read, injected as `deps.loadDeck`.
+// The only database access is injected: the deck reads (`deps.loadDeck`, `deps.loadBotDeck`) and the
+// result write (`deps.recordResult`, wired in socket-server.js; with no recorder nothing is saved).
 //
 // ── Process locality / resources ────────────────────────────────────────────────────────────
 // In-memory and single-process like PvP, not mirrored to Redis: a server restart simply ends a
@@ -29,6 +33,7 @@
 import { randomUUID } from 'crypto'
 import { getOgGtoonsConfig, peekRevealTiming } from './ogGtoonsConfig.js'
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
+import { loadBotDeck } from './ogGtoonBotDeck.js'
 import { assignRandomGoals, slotsForRound } from './ogGtoonEngine.js'
 import {
   publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd,
@@ -200,8 +205,9 @@ function concludeStep(io, match, deps, revealedRound, entries, order, { steps = 
       player1Score: end.player1Score,
       player2Score: end.player2Score,
       endReason: 'natural',
+      winReason: end.winReason,
       effectsResolved: end.effectsResolved
-    })
+    }, deps)
     return
   }
   armPhaseTimer(io, match, deps)
@@ -260,8 +266,8 @@ async function onPhaseExpired(io, match, deps) {
   }
 }
 
-/** Nothing is persisted or paid here — see the header. */
-function endMatch(io, match, params) {
+/** Nothing is paid here — see the header. Only a natural finish saves a result record. */
+function endMatch(io, match, params, deps = {}) {
   if (match.ending) return
   match.ending = true
   emitToHuman(io, match, OUT('matchEnd'), {
@@ -274,7 +280,27 @@ function endMatch(io, match, params) {
     player2Score: params.player2Score,
     effectsResolved: params.effectsResolved || []
   })
+  // After the player has their result, so a slow or failing write can never delay or break it.
+  if (params.endReason === 'natural') saveResult(match, params, deps)
   destroyMatch(match)
+}
+
+/** Fire-and-forget: the recorder owns its own retries and never throws; this is belt and braces. */
+function saveResult(match, params, deps) {
+  if (typeof deps.recordResult !== 'function') return
+  const outcome = params.outcome === 'TIE' ? 'TIE' : (params.won ? 'PLAYER_WIN' : 'BOT_WIN')
+  try {
+    Promise.resolve(deps.recordResult({
+      id: match.id,
+      userId: match.humanId,
+      difficulty: match.difficulty,
+      outcome,
+      winReason: params.winReason || null,
+      startedAt: match.startedAt
+    })).catch(err => console.error('[ogGtoonsPractice] could not record result:', err))
+  } catch (err) {
+    console.error('[ogGtoonsPractice] could not record result:', err)
+  }
 }
 
 /* ── Sweep ───────────────────────────────────────────────────────────────────────────────── */
@@ -300,15 +326,18 @@ export function startOgGtoonsPracticeSweep() {
 /* ── Registration ────────────────────────────────────────────────────────────────────────── */
 
 /**
- * @param deps  injectable for tests: { loadDeck, getConfig, botDelay, rng, isInPvp }
+ * @param deps  injectable for tests: { loadDeck, loadBotDeck, getConfig, botDelay, rng, isInPvp, recordResult }
+ *              `recordResult` has no default on purpose: tests never write to a database by accident.
  */
 export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {}) {
   const d = {
     loadDeck: deps.loadDeck || loadVerifiedDeckSnapshot,
+    loadBotDeck: deps.loadBotDeck || loadBotDeck,
     getConfig: deps.getConfig || getOgGtoonsConfig,
     botDelay: deps.botDelay || (() => botCommitDelayMs()),
     rng: deps.rng || Math.random,
-    isInPvp: deps.isInPvp || isInPvp
+    isInPvp: deps.isInPvp || isInPvp,
+    recordResult: deps.recordResult || null
   }
   const fail = (code, message) => socket.emit(OUT('error'), { code, message })
 
@@ -342,15 +371,24 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
       return fail('busy', 'Practice is busy right now. Try again shortly.')
     }
 
-    const userDeck = await d.loadDeck(user.id, deckId)
+    const level = normalizeDifficulty(difficulty)
+    // Both reads run together; a bot deck that can't be loaded just means the fallback below.
+    const [userDeck, botPick] = await Promise.all([
+      d.loadDeck(user.id, deckId),
+      (async () => d.loadBotDeck(level, d.rng))().catch((err) => {
+        console.error('[ogGtoonsPractice] bot deck load failed:', err)
+        return null
+      })
+    ])
     if (!userDeck) {
       return fail('badDeck', 'That deck is not a valid 12-card gToons deck.')
     }
     // The user may have started another practice match while the deck was loading.
     if (matches.has(user.id)) return fail('tooFast', 'Slow down — try again in a moment.')
 
-    const level = normalizeDifficulty(difficulty)
-    const botDeck = buildBotDeck(userDeck, level, d.rng)
+    // The bot brings one of its pre-defined decks for this difficulty; if none can be built (the cards are
+    // not imported), it plays a copy of the player's own deck as it used to.
+    const botDeck = botPick?.cards ?? buildBotDeck(userDeck, level, d.rng)
     const match = {
       id: randomUUID(),
       practice: true,

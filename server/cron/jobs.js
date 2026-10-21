@@ -47,6 +47,8 @@ export const CRON_JOBS = [
     description: 'Safety-net sweep: sets the current Winball grand prize from its schedule (exact timing comes from delayed jobs)' },
   { name: 'runTournamentCron', tier: TIER_CRITICAL, pattern: '7,22,37,52 * * * *', intervalSec: 900, quiet: true,
     description: 'Advances gToons tournaments (state, announcements, matches, rounds)' },
+  { name: 'runOgGtoonTournamentCron', tier: TIER_CRITICAL, pattern: '12,27,42,57 * * * *', intervalSec: 900, quiet: true,
+    description: 'Advances OG gToons tournaments (opt-in windows, deadlines, reminders, rounds, prizes) — a safety net behind the instant advance after each game' },
   { name: 'recordDailyTaskCompletions', tier: TIER_CRITICAL, pattern: '8,38 * * * *', tz: CHI, intervalSec: 1800, quiet: true,
     description: 'Records cMoon daily-task completions' },
   { name: 'checkAndCreateWeeklyCZoneContest', tier: TIER_CRITICAL, pattern: '* * * * *', tz: CHI, intervalSec: 60, quiet: true,

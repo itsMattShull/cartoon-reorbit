@@ -48,17 +48,18 @@
         </div>
       </div>
 
-      <!-- Practice vs. the computer (no stake, no points, not on the leaderboard) -->
+      <!-- Practice vs. the computer (no stake, no points; finished matches count on the Practice Matches leaderboard) -->
       <div v-if="practiceAvailable" class="p-3 bg-white/5 rounded border border-white/10">
         <h3 class="font-bold mb-1">Practice Match</h3>
         <p class="text-xs text-gray-300 mb-2">
-          Play the computer with your selected deck. No points are staked and it doesn't count toward the leaderboard.
+          Play the computer with your selected deck. No points are staked or won. Practice matches you play to the end count on the
+          Practice Matches leaderboard; ones you leave early aren't recorded.
         </p>
         <div class="flex items-center gap-2 flex-wrap">
           <label class="text-sm">Difficulty:</label>
           <select v-model="practiceDifficulty" class="border rounded px-2 py-1 text-gray-800 text-sm">
             <option value="easy">Easy</option>
-            <option value="normal">Normal</option>
+            <option value="normal">Medium</option>
             <option value="hard">Hard</option>
           </select>
           <button
@@ -73,15 +74,26 @@
       <div class="p-3 bg-white/5 rounded border border-white/10">
         <h3 class="font-bold mb-2">Challenge a Player</h3>
         <div class="flex items-center gap-2 flex-wrap">
-          <input v-model="challengeTarget" type="text" placeholder="Username" class="border rounded px-2 py-1 text-gray-800 text-sm w-40" />
+          <select
+            v-model="challengeTarget"
+            aria-label="Player to challenge"
+            class="border rounded px-2 py-1 text-gray-800 text-sm w-48"
+          >
+            <option value="">{{ lobbyUsers.length ? 'Select a player…' : 'No players available' }}</option>
+            <option v-for="u in lobbyUsers" :key="u" :value="u">{{ u }}</option>
+          </select>
           <label class="text-sm">Stake:</label>
           <input v-model.number="challengeStake" type="number" min="0" class="w-24 border rounded px-2 py-1 text-gray-800 text-sm" />
           <button
-            :disabled="!challengeTarget.trim() || !selectedDeckId"
+            :disabled="!challengeTarget || !selectedDeckId"
             @click="sendChallengeClick"
             class="bg-indigo-500 hover:bg-indigo-600 disabled:opacity-50 text-white px-4 py-1.5 rounded text-sm"
           >Send Challenge</button>
         </div>
+
+        <p class="mt-2 text-xs text-gray-400">
+          Lists players who are on this tab right now and aren't in a match or already handling a request.
+        </p>
 
         <div v-if="lobbyState?.sentChallenges?.length" class="mt-3 space-y-1">
           <p class="text-xs text-gray-300">Pending challenges you sent:</p>
@@ -92,44 +104,20 @@
         </div>
       </div>
     </div>
-
-    <!-- Incoming challenge — compact mobile-safe bottom-aligned modal, not a full-screen takeover -->
-    <transition name="fade">
-      <div
-        v-if="activeIncoming"
-        class="fixed inset-x-0 bottom-0 md:inset-0 md:flex md:items-center md:justify-center z-50"
-      >
-        <div class="bg-white text-gray-800 rounded-t-xl md:rounded-xl shadow-lg p-5 w-full md:w-96 mx-auto">
-          <h3 class="text-lg font-bold mb-2">gToons Challenge</h3>
-          <p class="mb-1"><strong>{{ activeIncoming.fromUsername }}</strong> has challenged you!</p>
-          <p class="mb-4 text-sm text-gray-600">Stake: <strong>{{ activeIncoming.stake }} points</strong></p>
-          <div class="flex justify-end gap-2">
-            <button @click="declineChallenge(activeIncoming.id)" class="px-4 py-2 bg-gray-200 rounded">Decline</button>
-            <button
-              :disabled="!selectedDeckId"
-              @click="acceptChallenge(activeIncoming.id, selectedDeckId)"
-              class="px-4 py-2 bg-green-500 disabled:opacity-50 text-white rounded"
-            >Accept</button>
-          </div>
-        </div>
-      </div>
-    </transition>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
-import { useRouter } from '#imports'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import Toast from '@/components/Toast.vue'
 import { useOgGtoonsRoomSocket } from '@/composables/useOgGtoonsRoomSocket'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 
 const emit = defineEmits(['start-tutorial'])
-const router = useRouter()
 const {
-  lobbyState, joinQueue, leaveQueue, sendChallenge, acceptChallenge, declineChallenge, cancelChallenge
+  lobbyState, lobbyUsers, joinLobby, leaveLobby, joinQueue, leaveQueue, sendChallenge, cancelChallenge
 } = useOgGtoonsRoomSocket()
-const { currentMatchId, lastError, startPractice } = useOgGtoonsSocket()
+const { lastError, startPractice } = useOgGtoonsSocket()
 
 const toast = ref({ visible: false, message: '', type: 'success', timeout: null })
 function showToast(message, type = 'success') {
@@ -140,7 +128,8 @@ function showToast(message, type = 'success') {
 
 const decks = ref([])
 const loadingDecks = ref(true)
-const selectedDeckId = ref('')
+// Shared with the match-request prompt (OgGtoonChallengeModal), which offers the same deck by default.
+const selectedDeckId = useState('ogGtoonSelectedDeckId', () => '')
 const queueStake = ref(0)
 const challengeTarget = ref('')
 const challengeStake = ref(0)
@@ -151,12 +140,16 @@ const tutorialAvailable = ref(true)
 const startingTutorial = ref(false)
 
 const validDecks = computed(() => decks.value.filter(d => d.valid))
-const activeIncoming = computed(() => lobbyState.value?.incomingChallenges?.[0] || null)
 
 function sendChallengeClick() {
-  sendChallenge(challengeTarget.value.trim(), selectedDeckId.value, challengeStake.value)
+  sendChallenge(challengeTarget.value, selectedDeckId.value, challengeStake.value)
   challengeTarget.value = ''
 }
+
+// A chosen player who has since left the tab or become busy is no longer a valid pick.
+watch(lobbyUsers, (users) => {
+  if (challengeTarget.value && !users.includes(challengeTarget.value)) challengeTarget.value = ''
+})
 
 // The hub page owns starting the tutorial (it is reachable from every tab); this just asks it to.
 function startTutorialClick() {
@@ -180,15 +173,12 @@ watch(lastError, (err) => {
   showToast(err.message || 'Could not start.', 'error')
 })
 
-watch(currentMatchId, (id) => {
-  if (id) router.push(`/newsite/gtoons-classic/${id}`)
-})
-
 onMounted(async () => {
+  joinLobby()
   loadingDecks.value = true
   try {
     decks.value = await $fetch('/api/game/oggtoons/decks')
-    if (validDecks.value.length) selectedDeckId.value = validDecks.value[0].id
+    if (validDecks.value.length && !validDecks.value.some(d => d.id === selectedDeckId.value)) selectedDeckId.value = validDecks.value[0].id
   } catch {
     showToast('Failed to load decks.', 'error')
   }
@@ -201,6 +191,7 @@ onMounted(async () => {
     // Leave it available; the server gates the action either way.
   }
 })
+onBeforeUnmount(leaveLobby)
 </script>
 
 <style scoped>

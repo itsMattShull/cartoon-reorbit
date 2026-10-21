@@ -8,16 +8,8 @@
           class="ah-tab"
           :class="{ active: activeTab === t.id }"
           @click="activeTab = t.id"
-        >{{ t.label }}</button>
+        >{{ t.label }}<span v-if="t.id === 'tournaments' && tournamentAction" class="ah-dot" title="You have a tournament match to play"><span class="sr-only">You have a tournament match to play</span></span></button>
       </div>
-      <!-- Reachable from every tab, so a player with no deck yet can still learn the game first. -->
-      <button
-        v-if="tutorialAvailable"
-        class="ah-tutorial"
-        data-tut-entry="hub"
-        :disabled="startingTutorial"
-        @click="launchTutorial"
-      >{{ startingTutorial ? 'Starting…' : 'Tutorial' }}</button>
     </div>
 
     <div class="gtoons-classic-content">
@@ -28,7 +20,15 @@
       <OgGtoonDecks v-else-if="activeTab === 'decks'" />
       <OgGtoonMatchmaking v-else-if="activeTab === 'matchmaking'" @start-tutorial="launchTutorial" />
       <OgGtoonLeaderboard v-else-if="activeTab === 'leaderboard'" />
+      <OgGtoonMeta v-else-if="activeTab === 'meta'" />
+      <OgGtoonTournaments v-else-if="activeTab === 'tournaments'" @switch-tab="activeTab = $event" />
     </div>
+
+    <!-- "Your tournament opponent is ready" — over whichever tab is open. -->
+    <OgGtoonTournamentReadyModal />
+
+    <!-- A match request from another player, shown over whichever tab is open. -->
+    <OgGtoonChallengeModal :show-errors="activeTab !== 'matchmaking' && activeTab !== 'tournaments'" />
 
     <!-- First visit: offer the guided tutorial once. Either button counts as having seen it. -->
     <transition name="fade">
@@ -37,7 +37,7 @@
           <h2 class="text-xl font-bold mb-2">New to gToons?</h2>
           <p class="text-sm text-gray-300 mb-4">
             Take a guided match with a ready-made deck. It walks you through every rule, step by step, with no timers,
-            and it doesn't touch your points or your cards. You can replay it any time from the Tutorial button.
+            and it doesn't touch your points or your cards. You can replay it any time from the Matchmaking tab.
           </p>
           <div class="flex justify-center gap-2">
             <button class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-sm" @click="dismissPrompt">Maybe later</button>
@@ -50,11 +50,15 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from '#imports'
 import OgGtoonDecks from '@/components/oggtoons/OgGtoonDecks.vue'
 import OgGtoonMatchmaking from '@/components/oggtoons/OgGtoonMatchmaking.vue'
 import OgGtoonLeaderboard from '@/components/oggtoons/OgGtoonLeaderboard.vue'
+import OgGtoonMeta from '@/components/oggtoons/OgGtoonMeta.vue'
+import OgGtoonChallengeModal from '@/components/oggtoons/OgGtoonChallengeModal.vue'
+import OgGtoonTournaments from '@/components/oggtoons/OgGtoonTournaments.vue'
+import OgGtoonTournamentReadyModal from '@/components/oggtoons/OgGtoonTournamentReadyModal.vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 
 definePageMeta({
@@ -66,20 +70,26 @@ definePageMeta({
   description: 'Play gToons, the original 2002 Cartoon Orbit trading card game, on Cartoon ReOrbit. Build a 12-card deck and battle other players head-to-head.'
 })
 
-const { clearSidebarMiddle } = useNewsiteLayout()
+const { setSidebarMiddle, clearSidebarMiddle } = useNewsiteLayout()
 clearSidebarMiddle()
 
 // Practice is a button on the Matchmaking tab, not a tab of its own.
 const TABS = [
   { id: 'decks',       label: 'Manage Deck',  flag: 'deckBuildingEnabled' },
   { id: 'matchmaking', label: 'Matchmaking',  flag: 'matchmakingEnabled' },
-  { id: 'leaderboard', label: 'Leaderboard',  flag: 'leaderboardEnabled' }
+  { id: 'leaderboard', label: 'Leaderboard',  flag: 'leaderboardEnabled' },
+  // Same standings data as the Leaderboard, broken down by deck, so it follows the Leaderboard switch.
+  { id: 'meta',        label: 'Meta',         flag: 'leaderboardEnabled' },
+  // Opt-in rather than opt-out: the tab only appears once an admin has explicitly turned tournaments on.
+  { id: 'tournaments', label: 'Tournaments',  flag: 'tournamentsEnabled', strict: true }
 ]
 // Defaults to everything on so the tabs don't flash hidden-then-shown while the config fetch
 // is in flight — an admin closing a section is a rare, deliberate action, not something that
 // needs to race the page's first paint.
-const config = ref({ matchmakingEnabled: true, gameEnabled: true, deckBuildingEnabled: true, leaderboardEnabled: true, practiceEnabled: true })
-const visibleTabs = computed(() => TABS.filter(t => config.value[t.flag] !== false))
+const config = ref({ matchmakingEnabled: true, gameEnabled: true, deckBuildingEnabled: true, leaderboardEnabled: true, practiceEnabled: true, tournamentsEnabled: false })
+const visibleTabs = computed(() => TABS.filter(t => (t.strict ? config.value[t.flag] === true && config.value.gameEnabled !== false : config.value[t.flag] !== false)))
+// A tournament match is waiting for you (shown as a dot on the tab).
+const tournamentAction = ref(false)
 const route = useRoute()
 const router = useRouter()
 // ?tab=… (e.g. the match screen sending people back to Matchmaking) always wins; otherwise the tab is
@@ -88,12 +98,19 @@ const requestedTab = TABS.some(t => t.id === route.query.tab) ? route.query.tab 
 const activeTab = ref(requestedTab || '')
 const ready = ref(false)
 
+// The Manage Deck tab swaps the left sidebar's middle section for the gToon search / filters.
+watch(activeTab, (tab) => {
+  if (tab === 'decks') setSidebarMiddle('OgGtoonDeckSidebar')
+  else clearSidebarMiddle()
+}, { immediate: true })
+onBeforeUnmount(clearSidebarMiddle)
+
 watch([visibleTabs, ready], ([tabs, isReady]) => {
   if (isReady && tabs.length && !tabs.some(t => t.id === activeTab.value)) activeTab.value = tabs[0].id
 }, { immediate: true })
 
 /* ── Tutorial ────────────────────────────────────────────────────────────────────────────── */
-const { currentMatchId, matchState, lastError, startTutorial } = useOgGtoonsSocket()
+const { currentMatchId, lastError, startTutorial } = useOgGtoonsSocket()
 const tutorialAvailable = computed(() => config.value.gameEnabled !== false)
 const startingTutorial = ref(false)
 const promptOpen = ref(false)
@@ -106,8 +123,10 @@ function launchTutorial() {
   setTimeout(() => { startingTutorial.value = false }, 4000)
 }
 watch(lastError, (err) => { if (err) startingTutorial.value = false })
+// Any match starting (a request someone accepted, the random queue, practice, the tutorial) takes you to
+// the board, whichever tab you were on.
 watch(currentMatchId, (id) => {
-  if (id && matchState.value?.tutorial) router.push(`/newsite/gtoons-classic/${id}`)
+  if (id) router.push(`/newsite/gtoons-classic/${id}`)
 })
 
 function markTutorialSeen() {
@@ -138,8 +157,14 @@ onMounted(async () => {
     activeTab.value = hasDeck && matchmakingOpen ? 'matchmaking' : 'decks'
   }
   ready.value = true
-  // First visit only; never over a match that is already running.
-  if (seen.status === 'fulfilled' && !seen.value.seen && tutorialAvailable.value && !currentMatchId.value) promptOpen.value = true
+  if (config.value.tournamentsEnabled === true) {
+    $fetch('/api/game/oggtoons/tournaments').then((list) => {
+      tournamentAction.value = Array.isArray(list) && list.some(t => t.needsAction)
+    }).catch(() => {})
+  }
+  // First visit only; never over a match that is already running, and never over a tournament link
+  // (a Discord message about a pairing lands here with ?tab=tournaments).
+  if (seen.status === 'fulfilled' && !seen.value.seen && tutorialAvailable.value && !currentMatchId.value && requestedTab !== 'tournaments') promptOpen.value = true
 })
 </script>
 
@@ -198,26 +223,11 @@ body {
   transition: background 0.15s, color 0.15s;
 }
 
-.ah-tutorial {
-  padding: 3px 10px;
-  border: none;
-  border-radius: 4px;
-  background: #f59e0b;
-  color: #000;
-  font-size: 0.62rem;
-  font-weight: bold;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.ah-tutorial:disabled { opacity: 0.6; cursor: default; }
-.ah-tutorial:not(:disabled):hover { background: #fbbf24; }
-
 .fade-enter-active, .fade-leave-active { transition: opacity .2s ease }
 .fade-enter-from, .fade-leave-to { opacity: 0 }
 
 .ah-tab.active { background: var(--OrbitLightBlue); color: #fff; }
+.ah-dot { display: inline-block; width: 7px; height: 7px; margin-left: 5px; border-radius: 9999px; background: #fb923c; vertical-align: middle; }
 .ah-tab:not(.active):hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); }
 
 .gtoons-classic-content {

@@ -14,6 +14,7 @@
 //
 // Key prefix: oggtoonsmatch:{matchId}
 
+import { serializeMatch } from './ogGtoonsMatchSerialize.js'
 import { getRedis } from './redis.js'
 
 const MATCH_TTL = 7200 // 2 hours
@@ -28,42 +29,6 @@ async function scanKeys(pattern) {
     keys.push(...batch)
   } while (cursor !== '0')
   return keys
-}
-
-// Sockets and timer handles cannot be serialized and are always reconstructed on restore.
-function serializeMatch(match) {
-  return {
-    id: match.id,
-    players: match.players,
-    usernames: match.usernames,
-    deckOrder: match.deckOrder,
-    hand: match.hand,
-    undealt: match.undealt,
-    discarded: match.discarded,
-    placements: match.placements,
-    phase: match.phase,
-    discardReady: match.discardReady,
-    pendingDiscard: match.pendingDiscard || null,
-    goalColor: match.goalColor,
-    goalCardIdx: match.goalCardIdx,
-    swapUsed: match.swapUsed,
-    gameLog: match.gameLog || [],
-    swapReady: match.swapReady,
-    pendingSwap: match.pendingSwap,
-    colorReady: match.colorReady,
-    pendingColor: match.pendingColor,
-    silverColor: match.silverColor,
-    colorDone: match.colorDone,
-    deadline: match.deadline,
-    ready: match.ready,
-    held: match.held,
-    revealed: match.revealed, // roundLog itself is built once, at match completion, not carried live
-    stake: match.stake,
-    currentRound: match.currentRound,
-    isChallenge: match.isChallenge,
-    startedAt: match.startedAt,
-    lastActivity: match.lastActivity
-  }
 }
 
 export async function setOgGtoonMatch(matchId, match) {
