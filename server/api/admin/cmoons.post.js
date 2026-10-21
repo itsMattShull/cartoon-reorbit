@@ -105,11 +105,33 @@ export default defineEventHandler(async (event) => {
   }
 
   // Every existing universal rank tier applies to this cMoon too — provision its ladder now
-  // rather than waiting for the next time an existing tier happens to be edited.
-  await provisionAllTiersForCMoon(created.id)
+  // rather than waiting for the next time an existing tier happens to be edited. Wrapped: this
+  // call used to run unprotected after the cMoon row above was already committed — if it threw
+  // (a DB blip, the 30s transaction timeout under load), the request failed with a 500 but the
+  // cMoon it was supposed to describe as "created" actually existed already, with zero ranks ever
+  // wired up for any of its members (nobody on it could rank up or get an HP bonus, with no
+  // visible error afterward). Logging and continuing means the admin still gets a clean success
+  // response for the cMoon they asked to create, and the "HP Catch Up" tool
+  // (server/workers/cmoon-hp-catchup.worker.js) re-runs this same idempotent provisioning call for
+  // every cMoon on each pass, so a gap here always self-heals the next time that tool runs even if
+  // nobody notices this log line.
+  let provisioningFailed = false
+  try {
+    await provisionAllTiersForCMoon(created.id)
+  } catch (err) {
+    provisioningFailed = true
+    console.error(`[cmoons.post] provisionAllTiersForCMoon failed for new cMoon ${created.id} (${name}):`, err)
+    await logAdminChange(db, {
+      userId: me.id,
+      area: 'cMoon',
+      key: `provisioning-failed:${created.id}`,
+      prevValue: null,
+      newValue: { id: created.id, name, error: err?.message || String(err) },
+    }).catch(() => {})
+  }
 
   await logAdminChange(db, { userId: me.id, area: 'cMoon', key: `create:${created.id}`, prevValue: null, newValue: { id: created.id, name } })
   invalidateCMoonList()
 
-  return { id: created.id }
+  return { id: created.id, provisioningFailed }
 })

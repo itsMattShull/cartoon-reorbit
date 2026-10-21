@@ -263,6 +263,22 @@ export const cmoonRankRecalcQueue = new Queue(
   }
 )
 
+// Queue for the admin "HP Catch Up" tool (server/workers/cmoon-hp-catchup.worker.js) — repairs
+// any cMoon whose rank ladder failed to fully provision, then re-runs the same safe rank
+// correction cmoonRankRecalcQueue performs (they share server/utils/cmoonRankRecalc.js). Same
+// one-time, fixed-jobId shape as cmoonRankRecalcQueue — see
+// server/api/admin/cmoons/hp-catch-up.post.js.
+export const cmoonHpCatchUpQueue = new Queue(
+  process.env.CMOON_HP_CATCHUP_QUEUE_KEY || 'cmoonHpCatchUpQueue',
+  {
+    connection,
+    defaultJobOptions: {
+      removeOnComplete: { count: 20 },
+      removeOnFail:     { count: 20 },
+    },
+  }
+)
+
 // Queue for the admin "Revoke Invalid cMoon Rank Prizes" tool
 // (server/workers/cmoon-prize-revoke.worker.js) — claws back rank-tier prize cToons a member
 // only received because of the old cMoonPoints bug, and resets the underlying achievement/claim
