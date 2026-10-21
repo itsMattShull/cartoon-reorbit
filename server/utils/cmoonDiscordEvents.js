@@ -298,7 +298,13 @@ async function topSlayerForCMoon(cMoonId, rangeStart, rangeEnd) {
     by: ['userId'],
     where: { cMoonId, outcome: 'WIN', endedAt: { gte: rangeStart, ...(rangeEnd ? { lt: rangeEnd } : {}) } },
     _count: { _all: true },
-    orderBy: { _count: { _all: 'desc' } },
+    // Bug fix: `orderBy: { _count: { _all: 'desc' } }` is rejected by this Prisma client version
+    // ("Unknown argument `_all`"), which meant this query threw on every single call — silently
+    // swallowed by this function's callers' own try/catch (postWeeklyTopSlayerRecap/
+    // postSeasonMvpRecap), so the weekly and season-rollover top-slayer Discord recaps have never
+    // actually posted. Order by a specific grouped field's count instead — same row-count value
+    // since `by: ['userId']` with no null userId possible.
+    orderBy: { _count: { userId: 'desc' } },
     take: 1,
   })
   if (!rows.length || !rows[0]._count._all) return null

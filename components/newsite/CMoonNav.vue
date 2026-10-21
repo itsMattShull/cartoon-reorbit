@@ -58,50 +58,84 @@
       </div>
     </div>
 
-    <!-- Seasonal updates: admin-customizable via Manage Navigation. Section renders even with no
-         trackers configured yet (just header + leaderboard + blurb) so there's never a broken
-         half-empty state while an admin is still setting it up. -->
+    <!-- Seasonal updates: admin-customizable via Manage Navigation. Three states: an active
+         season (today's full panel plus a countdown to its end), no active season but a future
+         one scheduled (countdown only, no leaderboard/trackers), or nothing scheduled at all
+         (neutral empty state). The recap list below is always shown when any season has ended. -->
     <div v-if="seasonLoaded" class="cmn-season">
-      <h2 class="cmn-season-header">{{ season.header }}</h2>
+      <template v-if="seasonData.active">
+        <h2 class="cmn-season-header">{{ seasonData.season.header }}</h2>
+        <p class="cmn-season-countdown">{{ countdownText(seasonData.season.endAt, 'Season ends in') }}</p>
 
-      <div v-if="season.enemiesGoal?.enabled" class="cmn-season-panel">
-        <h3 class="cmn-season-subheading">{{ season.enemiesGoal.label }}</h3>
-        <div class="cmn-season-progress-row">
-          <div class="cmn-season-progress-bar">
-            <div
-              class="cmn-season-progress-fill"
-              :style="{ width: progressPercent(season.enemiesGoal.current, season.enemiesGoal.target) + '%', background: 'var(--cmn-accent)' }"
-            ></div>
+        <div v-if="seasonData.season.enemiesGoal?.enabled" class="cmn-season-panel">
+          <h3 class="cmn-season-subheading">{{ seasonData.season.enemiesGoal.label }}</h3>
+          <div class="cmn-season-progress-row">
+            <div class="cmn-season-progress-bar">
+              <div
+                class="cmn-season-progress-fill"
+                :style="{ width: progressPercent(seasonData.season.enemiesGoal.current, seasonData.season.enemiesGoal.target) + '%', background: 'var(--cmn-accent)' }"
+              ></div>
+            </div>
+            <span class="cmn-season-progress-value">
+              {{ Math.round(seasonData.season.enemiesGoal.current).toLocaleString() }} / {{ Math.round(seasonData.season.enemiesGoal.target).toLocaleString() }}
+            </span>
           </div>
-          <span class="cmn-season-progress-value">
-            {{ Math.round(season.enemiesGoal.current).toLocaleString() }} / {{ Math.round(season.enemiesGoal.target).toLocaleString() }}
-          </span>
         </div>
-      </div>
 
-      <div v-if="leaderboard.length" class="cmn-season-panel">
-        <h3 class="cmn-season-subheading">Team Leaderboard</h3>
-        <div v-for="row in leaderboard" :key="row.id" class="cmn-season-lb-row">
-          <span class="cmn-season-lb-rank">{{ row.rank }}</span>
-          <span class="cmn-season-lb-swatch" :style="{ background: safeColor(row.color) }"></span>
-          <span class="cmn-season-lb-name">{{ row.name }}</span>
-          <span class="cmn-season-lb-value">{{ Math.round(row.avgScore).toLocaleString() }} <small>wtd avg</small></span>
-        </div>
-      </div>
-
-      <div v-for="t in season.trackers" :key="t.id" class="cmn-season-panel">
-        <h3 class="cmn-season-subheading">{{ t.label }}</h3>
-        <div v-for="p in t.progress" :key="p.cMoonId" class="cmn-season-progress-row">
-          <span class="cmn-season-progress-name" :style="{ color: safeColor(p.color) }">{{ p.name }}</span>
-          <div class="cmn-season-progress-bar">
-            <div class="cmn-season-progress-fill" :style="{ width: progressPercent(p.value, t.targetValue) + '%', background: safeColor(p.color) }"></div>
+        <div v-if="seasonData.leaderboard.length" class="cmn-season-panel">
+          <h3 class="cmn-season-subheading">Team Leaderboard</h3>
+          <div v-for="row in seasonData.leaderboard" :key="row.id" class="cmn-season-lb-row">
+            <span class="cmn-season-lb-rank">{{ row.rank }}</span>
+            <span class="cmn-season-lb-swatch" :style="{ background: safeColor(row.color) }"></span>
+            <span class="cmn-season-lb-name">{{ row.name }}</span>
+            <span class="cmn-season-lb-value">{{ row.wins }}W–{{ row.losses }}L <small>{{ Math.round(row.rate * 100) }}%</small></span>
           </div>
-          <span class="cmn-season-progress-value">{{ formatMetricValue(p.value, t.metricType) }} / {{ formatMetricValue(t.targetValue, t.metricType) }}</span>
         </div>
-        <p v-if="!t.progress.length" class="cmn-season-empty">No cMoons to track yet.</p>
-      </div>
 
-      <div v-if="season.blurb" class="cmn-season-blurb" v-html="season.blurb"></div>
+        <div v-for="t in seasonData.season.trackers" :key="t.id" class="cmn-season-panel">
+          <h3 class="cmn-season-subheading">{{ t.label }}</h3>
+          <div v-for="p in t.progress" :key="p.cMoonId" class="cmn-season-progress-row">
+            <span class="cmn-season-progress-name" :style="{ color: safeColor(p.color) }">{{ p.name }}</span>
+            <div class="cmn-season-progress-bar">
+              <div class="cmn-season-progress-fill" :style="{ width: progressPercent(p.value, t.targetValue) + '%', background: safeColor(p.color) }"></div>
+            </div>
+            <span class="cmn-season-progress-value">{{ formatMetricValue(p.value, t.metricType) }} / {{ formatMetricValue(t.targetValue, t.metricType) }}</span>
+          </div>
+          <p v-if="!t.progress.length" class="cmn-season-empty">No cMoons to track yet.</p>
+        </div>
+
+        <div v-if="seasonData.season.blurb" class="cmn-season-blurb" v-html="seasonData.season.blurb"></div>
+      </template>
+
+      <template v-else-if="seasonData.nextSeasonStartAt">
+        <h2 class="cmn-season-header">Next Season</h2>
+        <p class="cmn-season-countdown">{{ countdownText(seasonData.nextSeasonStartAt, 'Starts in') }}</p>
+      </template>
+
+      <template v-else>
+        <h2 class="cmn-season-header">No Season Currently Running</h2>
+      </template>
+
+      <!-- Season recap list — always shown, in every state above, when any season has ended. -->
+      <div v-if="seasonData.pastSeasons?.length" class="cmn-season-panel cmn-season-recaps">
+        <h3 class="cmn-season-subheading">Season Recaps</h3>
+        <div v-for="r in recapsNewestFirst" :key="r.seasonNumber" class="cmn-season-recap">
+          <div class="cmn-season-recap-title">Season {{ r.seasonNumber }} Recap{{ r.header ? ` — ${r.header}` : '' }}</div>
+          <div class="cmn-season-recap-dates">{{ formatRecapDate(r.startAt) }} – {{ formatRecapDate(r.endAt) }}</div>
+          <div class="cmn-season-recap-line">
+            <strong>Winning cMoon:</strong>
+            <span v-if="r.winningCMoon">
+              <span class="cmn-season-lb-swatch" :style="{ background: safeColor(r.winningCMoon.color) }"></span>
+              {{ r.winningCMoon.name }} ({{ r.winningCMoon.wins }}W–{{ r.winningCMoon.losses }}L)
+            </span>
+            <span v-else>No battles recorded</span>
+          </div>
+          <div class="cmn-season-recap-line">
+            <strong>Season's top slayer:</strong>
+            {{ r.topSlayer ? `${r.topSlayer.username} (${r.topSlayer.wins} defeats)` : 'No battles recorded' }}
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -134,8 +168,8 @@ function goBack() {
 
 // ── Seasonal updates (bottom half, admin-customizable via Manage Navigation) ─────────────────
 const seasonLoaded = ref(false)
-const season = ref({ header: '', trackers: [], blurb: '', enemiesGoal: null })
-const leaderboard = ref([])
+const seasonData = ref({ active: false, season: null, leaderboard: [], nextSeasonStartAt: null, pastSeasons: [] })
+const recapsNewestFirst = computed(() => [...(seasonData.value.pastSeasons || [])].reverse())
 
 function safeColor(color) {
   return isSafeCMoonColor(color) ? color : '#3a4a63'
@@ -146,26 +180,43 @@ function progressPercent(value, target) {
   return Math.max(0, Math.min(100, Math.round((value / target) * 100)))
 }
 
-// AVG_POINTS is a plain float (see server/utils/cmoonSeason.js) — shown to one decimal so a
+// AVG_POINTS is a plain float (see server/utils/cmoonSeasons.js) — shown to one decimal so a
 // fractional average doesn't look like a typo; every other metric here is always a whole number.
 function formatMetricValue(value, metricType) {
   const n = Number(value) || 0
   return metricType === 'AVG_POINTS' ? n.toFixed(1) : Math.round(n).toLocaleString()
 }
 
+function formatRecapDate(d) {
+  if (!d) return '—'
+  return new Date(d).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+}
+
+// Live countdown, ticking off the shared `now` ref below (re-rendered every 30s — a season
+// boundary doesn't need second-level precision, just to visibly count down).
+const now = ref(Date.now())
+let nowTimer = null
+function countdownText(targetIso, prefix) {
+  const target = new Date(targetIso).getTime()
+  const diffMs = target - now.value
+  if (diffMs <= 0) return `${prefix.replace('in', 'any moment now')}`
+  const days = Math.floor(diffMs / 86400000)
+  const hours = Math.floor((diffMs % 86400000) / 3600000)
+  const minutes = Math.floor((diffMs % 3600000) / 60000)
+  const parts = []
+  if (days) parts.push(`${days}d`)
+  if (days || hours) parts.push(`${hours}h`)
+  parts.push(`${minutes}m`)
+  return `${prefix} ${parts.join(' ')}`
+}
+
 async function loadSeason() {
-  const [seasonResult, leaderboardResult] = await Promise.allSettled([
-    $fetch('/api/cmoon-season'),
-    $fetch('/api/leaderboard/cmoons'),
-  ])
-  if (seasonResult.status === 'fulfilled') {
-    season.value = seasonResult.value || { header: '', trackers: [], blurb: '' }
+  try {
+    const res = await $fetch('/api/cmoon-season')
+    seasonData.value = res || { active: false, season: null, leaderboard: [], nextSeasonStartAt: null, pastSeasons: [] }
+  } catch {
+    // Leave the default (inactive, empty) state — the section still renders harmlessly.
   }
-  if (leaderboardResult.status === 'fulfilled') {
-    leaderboard.value = leaderboardResult.value || []
-  }
-  // Rendered even if one of the two fetches failed — a season section missing just the
-  // leaderboard (or vice versa) is still more useful than hiding the whole thing.
   seasonLoaded.value = true
 }
 
@@ -181,6 +232,12 @@ onMounted(async () => {
     error.value = 'Unable to load cMoons right now.'
   }
   loading.value = false
+
+  nowTimer = setInterval(() => { now.value = Date.now() }, 30000)
+})
+
+onBeforeUnmount(() => {
+  if (nowTimer) clearInterval(nowTimer)
 })
 
 // ── Swirl background ────────────────────────────────────────────────────
@@ -649,6 +706,45 @@ const spiralStrokeWidth = (spiral.pitch * 0.52).toFixed(2)
   margin: 0 0 0.75em;
   padding-left: 0.75em;
   color: rgba(255, 255, 255, 0.65);
+}
+
+.cmn-season-countdown {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.75);
+  margin: -0.25rem 0 0.75rem;
+}
+
+.cmn-season-recaps {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.cmn-season-recap {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.5rem;
+}
+.cmn-season-recap:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.cmn-season-recap-title {
+  font-weight: 600;
+}
+
+.cmn-season-recap-dates {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.6);
+  margin-bottom: 0.25rem;
+}
+
+.cmn-season-recap-line {
+  font-size: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
 }
 
 /* Short viewports (landscape phones): trim the chrome so the console itself keeps most of the

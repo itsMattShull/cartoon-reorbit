@@ -228,6 +228,16 @@ module.exports = {
       env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
     },
 
+    // ── BullMQ worker: admin "HP Catch Up" one-time correction ──
+    {
+      name:      'worker-cmoon-hp-catchup',
+      script:    'server/workers/cmoon-hp-catchup.worker.js',
+      exec_mode: 'fork',
+      instances: 1,
+      env:             { ...process.env, NODE_ENV: 'production',   OFFICIAL_USERNAME: OFFICIAL_USERNAME_PROD },
+      env_development: { ...process.env, NODE_ENV: 'development', OFFICIAL_USERNAME: OFFICIAL_USERNAME_DEV },
+    },
+
     // ── BullMQ worker: admin "Revoke Invalid cMoon Rank Prizes" one-time correction ──
     {
       name:      'worker-cmoon-prize-revoke',

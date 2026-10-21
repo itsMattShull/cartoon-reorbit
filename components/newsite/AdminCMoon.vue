@@ -24,9 +24,14 @@
           >Balance teams</button>
           <button
             class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50"
-            title="Recomputes cMoonPoints (and redoes ranks to match) for every current cMoon member, using the current points logic. Since cMoon Enemy Battle max HP is read live from each member's current rank, this is also the way to fix HP for members who ranked up before the per-rank HP bonus existed."
+            title="Recomputes cMoonPoints (and redoes ranks to match) for every current cMoon member, using the current points logic. Since cMoon Enemy Battle max HP is read live from each member's current rank, this also fixes HP for members who ranked up before the per-rank HP bonus existed. Use HP Catch Up instead if a whole cMoon's rank ladder may be missing."
             @click="recalcModalOpen = true"
           >Recalculate cMoon Points</button>
+          <button
+            class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50"
+            title="Repairs any cMoon whose rank ladder failed to fully set up, then recomputes every member's rank the same way Recalculate cMoon Points does — so cMoon Enemy Battle HP bonuses are correct for everyone's next new battle."
+            @click="hpCatchUpModalOpen = true"
+          >HP Catch Up</button>
           <button
             class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50"
             title="Grants a flat bonus to every current cMoon member — a catch-up for members blocked from ever earning a live award by a scoring setting since corrected"
@@ -51,6 +56,7 @@
       </div>
       <p v-if="backfillResult" class="text-[11px] text-gray-600 mb-3 -mt-2">{{ backfillResult }}</p>
       <p v-if="backfillError" class="text-[11px] text-red-600 mb-3 -mt-2">{{ backfillError }}</p>
+      <p v-if="createWarning" class="text-[11px] text-amber-600 mb-3 -mt-2">{{ createWarning }}</p>
 
       <!-- Feature flag -->
       <div class="bg-white rounded border p-3 mb-4">
@@ -1481,6 +1487,13 @@
       @done="load"
     />
 
+    <!-- ── HP Catch Up modal ───────────────────────────────────────────── -->
+    <CMoonHpCatchUpModal
+      v-if="hpCatchUpModalOpen"
+      @close="hpCatchUpModalOpen = false"
+      @done="load"
+    />
+
     <!-- ── Backfill cMoon Points modal ─────────────────────────────────── -->
     <CMoonBackfillPointsModal
       v-if="backfillModalOpen"
@@ -1570,6 +1583,7 @@ const DAY_OF_WEEK_OPTIONS = [
 const previewModalOpen = ref(false)
 const balanceModalOpen = ref(false)
 const recalcModalOpen = ref(false)
+const hpCatchUpModalOpen = ref(false)
 const backfillModalOpen = ref(false)
 const awardModalOpen = ref(false)
 const prizeRevokeModalOpen = ref(false)
@@ -3063,6 +3077,9 @@ async function save() {
     if (!id) {
       const res = await $fetch('/api/admin/cmoons', { method: 'POST', body })
       id = res.id
+      createWarning.value = res.provisioningFailed
+        ? `"${form.name.trim()}" was created, but its rank ladder failed to fully provision — run "HP Catch Up" below to repair it.`
+        : ''
     } else {
       await $fetch(`/api/admin/cmoons/${id}`, { method: 'PUT', body })
     }
@@ -3108,6 +3125,10 @@ function closeDisperse() {
 const backfillRunning = ref(false)
 const backfillResult  = ref('')
 const backfillError   = ref('')
+// Surfaced when a newly-created cMoon's rank ladder failed to fully provision (see
+// server/api/admin/cmoons.post.js) — self-heals the next time "HP Catch Up" runs, but worth
+// flagging immediately rather than leaving the admin to discover it later.
+const createWarning = ref('')
 
 async function runAffinityBackfill() {
   if (!confirm('Re-grant any affinity level reward members already qualify for but never received?')) return
