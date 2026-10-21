@@ -24,8 +24,7 @@ export default defineEventHandler(async (event) => {
   const offer = await prisma.tradeOffer.findUnique({
     where: { id: offerId },
     include: {
-      ctoons: { include: { userCtoon: true } },
-      packs: { include: { userPack: true } }
+      ctoons: { include: { userCtoon: true } }
     }
   })
   if (!offer) throw createError({ statusCode: 404, statusMessage: 'Offer not found' })
@@ -80,42 +79,6 @@ export default defineEventHandler(async (event) => {
         statusCode: 400,
         statusMessage:
           'Offer rejected: one or more requested cToons are no longer owned by the recipient.'
-      })
-    }
-  }
-
-  // 4a) Verify initiator still owns all OFFERED packs, sealed
-  const offeredPackIds = offer.packs
-    .filter(tp => tp.role === 'OFFERED')
-    .map(tp => tp.userPackId)
-  if (offeredPackIds.length) {
-    const stillOwned = await prisma.userPack.count({
-      where: { id: { in: offeredPackIds }, userId: offer.initiatorId, opened: false }
-    })
-    if (stillOwned !== offeredPackIds.length) {
-      await prisma.tradeOffer.update({ where: { id: offerId }, data: { status: 'REJECTED' } })
-      throw createError({
-        statusCode: 400,
-        statusMessage:
-          'Offer rejected: one or more offered packs are no longer available from the initiator.'
-      })
-    }
-  }
-
-  // 4b) Verify recipient still owns all REQUESTED packs, sealed
-  const requestedPackIds = offer.packs
-    .filter(tp => tp.role === 'REQUESTED')
-    .map(tp => tp.userPackId)
-  if (requestedPackIds.length) {
-    const stillOwned = await prisma.userPack.count({
-      where: { id: { in: requestedPackIds }, userId: offer.recipientId, opened: false }
-    })
-    if (stillOwned !== requestedPackIds.length) {
-      await prisma.tradeOffer.update({ where: { id: offerId }, data: { status: 'REJECTED' } })
-      throw createError({
-        statusCode: 400,
-        statusMessage:
-          'Offer rejected: one or more requested packs are no longer available from the recipient.'
       })
     }
   }
@@ -280,27 +243,6 @@ export default defineEventHandler(async (event) => {
       await tx.userTradeListItem.deleteMany({
         where: { userCtoonId: { in: ids }, userId: { not: to } }
       })
-    }
-
-    // Packs: same set-based transfer shape as the cToon side above, conditional on
-    // `opened: false` so a pack opened in the gap between validation and this transaction
-    // simply isn't matched rather than being transferred mid-open.
-    const packTransfers = [
-      { ids: offeredPackIds, from: offer.initiatorId, to: offer.recipientId },
-      { ids: requestedPackIds, from: offer.recipientId, to: offer.initiatorId }
-    ]
-    for (const { ids, from, to } of packTransfers) {
-      if (!ids.length) continue
-      const moved = await tx.userPack.updateMany({
-        where: { id: { in: ids }, userId: from, opened: false },
-        data: { userId: to }
-      })
-      if (moved.count !== ids.length) {
-        throw createError({
-          statusCode: 409,
-          statusMessage: 'One or more packs in this trade are no longer available.'
-        })
-      }
     }
 
     if (offer.ctoons.length) {

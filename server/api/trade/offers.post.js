@@ -12,7 +12,6 @@ import {
 import { prisma } from '@/server/prisma'
 import {
   resolveOfferCtoons,
-  resolveOfferPacks,
   validateTradeOfferInputs,
   createTradeOfferTx,
   assertOfferHasContent,
@@ -40,8 +39,6 @@ export default defineEventHandler(async (event) => {
     recipientUsername,
     ctoonIdsRequested = [],
     ctoonIdsOffered = [],
-    packIdsRequested = [],
-    packIdsOffered = [],
     pointsOffered = 0
   } = await readBody(event)
 
@@ -53,11 +50,7 @@ export default defineEventHandler(async (event) => {
     ctoonIdsOffered,
     ctoonIdsRequested
   })
-  const { resolvedOfferedPacks, resolvedRequestedPacks } = resolveOfferPacks({
-    packIdsOffered,
-    packIdsRequested
-  })
-  assertOfferHasContent({ resolvedOffered, resolvedRequested, resolvedOfferedPacks, resolvedRequestedPacks, pointsOffered })
+  assertOfferHasContent({ resolvedOffered, resolvedRequested, pointsOffered })
 
   // 3) Lookup recipient
   const recipient = await prisma.user.findUnique({
@@ -74,8 +67,6 @@ export default defineEventHandler(async (event) => {
     recipient,
     resolvedOffered,
     resolvedRequested,
-    resolvedOfferedPacks,
-    resolvedRequestedPacks,
     pointsOffered
   })
 
@@ -87,8 +78,6 @@ export default defineEventHandler(async (event) => {
     pointsOffered,
     resolvedOffered,
     resolvedRequested,
-    resolvedOfferedPacks,
-    resolvedRequestedPacks,
     initiatorIp,
     initiatorUserAgent
   }))

@@ -20,7 +20,7 @@ import { createError } from 'h3'
 // Imported by RELATIVE path, not the `@/` alias: this module is loaded directly
 // by `node --test`, which has no alias resolution — the same reason the header
 // above gives for keeping prisma out of here.
-import { MAX_CTOONS_PER_SIDE, MAX_PACKS_PER_SIDE, MAX_COUNTER_CHAIN_DEPTH } from './tradeOfferLimits.js'
+import { MAX_CTOONS_PER_SIDE, MAX_COUNTER_CHAIN_DEPTH } from './tradeOfferLimits.js'
 
 const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
 
@@ -59,18 +59,11 @@ export function normalizeCtoonIdList (list, label) {
 }
 
 /** An offer has to actually offer something, or it is just a notification. */
-export function assertOfferHasContent ({
-  resolvedOffered, resolvedRequested, pointsOffered, pointsRequested = 0,
-  resolvedOfferedPacks = [], resolvedRequestedPacks = [],
-}) {
-  if (
-    !resolvedOffered.length && !resolvedRequested.length &&
-    !resolvedOfferedPacks.length && !resolvedRequestedPacks.length &&
-    !pointsOffered && !pointsRequested
-  ) {
+export function assertOfferHasContent ({ resolvedOffered, resolvedRequested, pointsOffered, pointsRequested = 0 }) {
+  if (!resolvedOffered.length && !resolvedRequested.length && !pointsOffered && !pointsRequested) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'A trade offer must include at least one cToon, pack, or some points.'
+      statusMessage: 'A trade offer must include at least one cToon or some points.'
     })
   }
 }
@@ -108,45 +101,6 @@ export function pendingTradeGuardWhere (userCtoonIds, excludeOfferIds = []) {
   const tradeOffer = { status: 'PENDING' }
   if (excludeOfferIds.length) tradeOffer.id = { notIn: [...excludeOfferIds] }
   return { userCtoonId: { in: userCtoonIds }, tradeOffer }
-}
-
-/**
- * Pack equivalents of the cToon rules above — same shapes, same reasoning. Packs use raw
- * UserPack ids directly (no synthetic-token indirection the cToon side has for mint-number
- * privacy, which doesn't apply to packs).
- */
-export function normalizePackIdList (list, label) {
-  if (!Array.isArray(list)) {
-    throw createError({ statusCode: 400, statusMessage: `${label} must be an array` })
-  }
-  if (list.length > MAX_PACKS_PER_SIDE) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: `${label} may contain at most ${MAX_PACKS_PER_SIDE} packs`
-    })
-  }
-  for (const id of list) {
-    if (typeof id !== 'string' || !id) {
-      throw createError({ statusCode: 400, statusMessage: `${label} contains an invalid pack reference` })
-    }
-  }
-  return [...new Set(list)]
-}
-
-export function assertNoCrossSidePackOverlap (offeredPackIds, requestedPackIds) {
-  const requested = new Set(requestedPackIds)
-  if (offeredPackIds.some(id => requested.has(id))) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: 'The same pack cannot be both offered and requested.'
-    })
-  }
-}
-
-export function pendingTradePackGuardWhere (userPackIds, excludeOfferIds = []) {
-  const tradeOffer = { status: 'PENDING' }
-  if (excludeOfferIds.length) tradeOffer.id = { notIn: [...excludeOfferIds] }
-  return { userPackId: { in: userPackIds }, tradeOffer }
 }
 
 /**

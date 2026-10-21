@@ -35,12 +35,6 @@ export default defineEventHandler(async (event) => {
           ctoon: { select: { name: true, series: true, set: true, rarity: true, isGtoon: true, cost: true, power: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT, characters: true, isSecondEdition: true, secondEditionOverlayX: true, secondEditionOverlayY: true, secondEditionOverlaySize: true, cMoon: { select: { id: true, name: true, color: true } } } }
         }
       },
-      userPack: {
-        select: {
-          id: true,
-          pack: { select: { id: true, name: true, imagePath: true } }
-        }
-      },
       bids: { select: { amount: true }, orderBy: { amount: 'desc' }, take: 1 },
       _count: { select: { bids: true } }
     },
@@ -51,10 +45,8 @@ export default defineEventHandler(async (event) => {
 
   if (auctions.length === 0) return []
 
-  // 3) Sets for ownership and holiday membership — cToon auctions only, packs
-  // have neither concept.
-  const ctoonAuctions = auctions.filter(a => a.userCtoon)
-  const ctoonIds = ctoonAuctions.map(a => a.userCtoon.ctoonId)
+  // 3) Sets for ownership and holiday membership
+  const ctoonIds = auctions.map(a => a.userCtoon.ctoonId)
 
   const [owned, holidayItems] = await Promise.all([
     prisma.userCtoon.findMany({
@@ -70,63 +62,33 @@ export default defineEventHandler(async (event) => {
   const ownedSet = new Set(owned.map(u => u.ctoonId))
   const holidaySet = new Set(holidayItems.map(h => h.ctoonId))
 
-  // 4) Shape for client. Pack auctions share the same card shape as cToons
-  // wherever it's generic (id, endAt, bid fields) and carry `itemType: 'pack'`
-  // plus a `pack` object in place of the cToon-specific fields — the AuctionHouse
-  // grid branches on `itemType` rather than guessing from which fields exist.
-  return auctions.map(a => {
-    if (a.userPack) {
-      // Flat and field-compatible with the cToon shape below on purpose:
-      // AuctionHouse.vue's grid (CtoonImage, rarity badge, mint display) reads
-      // these same top-level fields regardless of item type, rather than
-      // branching per card — only `itemType` tells the two apart where it
-      // actually matters (see openInfoModal).
-      return {
-        id:            a.id,
-        itemType:      'pack',
-        isFeatured:    a.isFeatured,
-        packId:        a.userPack.pack.id,
-        name:          a.userPack.pack.name,
-        assetPath:     a.userPack.pack.imagePath,
-        rarity:        'Sealed Pack',
-        mintNumber:    null,
-        isOwned:       false,
-        isHolidayItem: false,
-        isGtoon:       false,
-        endAt:        a.endAt.toISOString(),
-        initialBid:   a.initialBet,
-        highestBid:   a.bids.length > 0 ? a.bids[0].amount : a.initialBet,
-        bidCount:     a._count?.bids ?? 0
-      }
-    }
-    return {
-      id:           a.id,
-      itemType:     'ctoon',
-      isFeatured:   a.isFeatured,
-      userCtoonId:  encodeUserCtoonId(a.userCtoon.userId, a.userCtoon.ctoonId, a.userCtoon.mintNumber),
-      ctoonId:      a.userCtoon.ctoonId,
-      name:         a.userCtoon.ctoon.name,
-      set:          a.userCtoon.ctoon.set,
-      cMoon:        a.userCtoon.ctoon.cMoon,
-      series:       a.userCtoon.ctoon.series,
-      rarity:       a.userCtoon.ctoon.rarity,
-      isGtoon:      a.userCtoon.ctoon.isGtoon,
-      cost:         a.userCtoon.ctoon.cost,
-      power:        a.userCtoon.ctoon.power,
-      characters:   a.userCtoon.ctoon.characters || [],
-      mintNumber:   a.userCtoon.mintNumber,
-      assetPath:    a.userCtoon.ctoon.assetPath,
-      ...ogGtoonDisplay(a.userCtoon.ctoon),
-      endAt:        a.endAt.toISOString(),
-      initialBid:   a.initialBet,
-      highestBid:   a.bids.length > 0 ? a.bids[0].amount : a.initialBet,
-      bidCount:     a._count?.bids ?? 0,
-      isOwned:      ownedSet.has(a.userCtoon.ctoonId),
-      isHolidayItem: holidaySet.has(a.userCtoon.ctoonId),
-      isSecondEdition: a.userCtoon.ctoon.isSecondEdition,
-      secondEditionOverlayX: a.userCtoon.ctoon.secondEditionOverlayX,
-      secondEditionOverlayY: a.userCtoon.ctoon.secondEditionOverlayY,
-      secondEditionOverlaySize: a.userCtoon.ctoon.secondEditionOverlaySize
-    }
-  })
+  // 4) Shape for client
+  return auctions.map(a => ({
+    id:           a.id,
+    isFeatured:   a.isFeatured,
+    userCtoonId:  encodeUserCtoonId(a.userCtoon.userId, a.userCtoon.ctoonId, a.userCtoon.mintNumber),
+    ctoonId:      a.userCtoon.ctoonId,
+    name:         a.userCtoon.ctoon.name,
+    set:          a.userCtoon.ctoon.set,
+    cMoon:        a.userCtoon.ctoon.cMoon,
+    series:       a.userCtoon.ctoon.series,
+    rarity:       a.userCtoon.ctoon.rarity,
+    isGtoon:      a.userCtoon.ctoon.isGtoon,
+    cost:         a.userCtoon.ctoon.cost,
+    power:        a.userCtoon.ctoon.power,
+    characters:   a.userCtoon.ctoon.characters || [],
+    mintNumber:   a.userCtoon.mintNumber,
+    assetPath:    a.userCtoon.ctoon.assetPath,
+    ...ogGtoonDisplay(a.userCtoon.ctoon),
+    endAt:        a.endAt.toISOString(),
+    initialBid:   a.initialBet,
+    highestBid:   a.bids.length > 0 ? a.bids[0].amount : a.initialBet,
+    bidCount:     a._count?.bids ?? 0,
+    isOwned:      ownedSet.has(a.userCtoon.ctoonId),
+    isHolidayItem: holidaySet.has(a.userCtoon.ctoonId),
+    isSecondEdition: a.userCtoon.ctoon.isSecondEdition,
+    secondEditionOverlayX: a.userCtoon.ctoon.secondEditionOverlayX,
+    secondEditionOverlayY: a.userCtoon.ctoon.secondEditionOverlayY,
+    secondEditionOverlaySize: a.userCtoon.ctoon.secondEditionOverlaySize
+  }))
 })

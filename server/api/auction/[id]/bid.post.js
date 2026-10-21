@@ -259,14 +259,11 @@ export default defineEventHandler(async (event) => {
     const finalLeaderId = finalAuction?.highestBidderId ?? null
     const finalAmount   = finalAuction?.highestBid ?? manualAmount
 
-    const item = await db.auction.findUnique({
+    const ctoon = await db.auction.findUnique({
       where: { id: auctionId },
-      select: {
-        userCtoon: { select: { ctoon: { select: { name: true } } } },
-        userPack: { select: { pack: { select: { name: true } } } }
-      }
+      select: { userCtoon: { select: { ctoon: { select: { name: true } } } } }
     })
-    const ctoonName = item?.userCtoon?.ctoon?.name || item?.userPack?.pack?.name || null
+    const ctoonName = ctoon?.userCtoon?.ctoon?.name || null
 
     const outbid = Array.from(new Set(outbidUserIds))
       .filter(uid => uid && uid !== finalLeaderId)

@@ -2413,10 +2413,9 @@ async function performAuctionClose(auctionId) {
   const auc = await db.auction.findUnique({
     where: { id: auctionId },
     select: {
-      id: true, status: true, endAt: true, creatorId: true, userCtoonId: true, userPackId: true, createdAt: true,
+      id: true, status: true, endAt: true, creatorId: true, userCtoonId: true, createdAt: true,
       // Only for the "you won" notification's text.
-      userCtoon: { select: { ctoon: { select: { name: true } } } },
-      userPack: { select: { pack: { select: { name: true } } } }
+      userCtoon: { select: { ctoon: { select: { name: true } } } }
     }
   })
 
@@ -2431,8 +2430,7 @@ async function performAuctionClose(auctionId) {
     return
   }
 
-  const { id, creatorId, userCtoonId, userPackId } = auc
-  const itemName = userPackId ? (auc.userPack?.pack?.name || null) : (auc.userCtoon?.ctoon?.name || null)
+  const { id, creatorId, userCtoonId } = auc
   const now = new Date()
 
   // Resolve seller: creatorId or OFFICIAL_USERNAME
@@ -2485,14 +2483,14 @@ async function performAuctionClose(auctionId) {
       return
     }
 
-    // Has another auction already sold this same physical cToon (or, for a pack
-    // auction, the same sealed pack) while this one was running? That should be
-    // impossible now that a partial unique index stops two ACTIVE auctions
-    // existing for one UserCtoon/UserPack, but paying out on a pair that
-    // predates it would debit a second winner, credit the seller twice and move
-    // the item off the first winner — so it is checked, not assumed.
+    // Has another auction already sold this same physical cToon while this one
+    // was running? That should be impossible now that a partial unique index
+    // stops two ACTIVE auctions existing for one UserCtoon, but paying out on a
+    // pair that predates it would debit a second winner, credit the seller
+    // twice and move the cToon off the first winner — so it is checked, not
+    // assumed.
     const otherAuctions = await tx.auction.findMany({
-      where: userPackId ? { userPackId, id: { not: id } } : { userCtoonId, id: { not: id } },
+      where: { userCtoonId, id: { not: id } },
       select: { id: true, status: true, winnerId: true, winnerAt: true }
     })
     const { outcome, conflictingAuctionId } = resolveAuctionCloseOutcome({
@@ -2503,9 +2501,9 @@ async function performAuctionClose(auctionId) {
 
     if (outcome === AUCTION_CLOSE_DOUBLE_SALE) {
       console.error(
-        `[auction] refusing to settle ${id}: ${userPackId ? `pack ${userPackId}` : `cToon ${userCtoonId}`} was already sold by auction ` +
+        `[auction] refusing to settle ${id}: cToon ${userCtoonId} was already sold by auction ` +
         `${conflictingAuctionId} while this listing was live. Closing with no winner; no points ` +
-        `moved and the item was left where it is. Needs a manual refund decision.`
+        `moved and the cToon was left where it is. Needs a manual refund decision.`
       )
       settledAsDoubleSale = true
       await tx.auction.update({
@@ -2533,46 +2531,35 @@ async function performAuctionClose(auctionId) {
     })
 
     if (winningBid) {
-      if (userPackId) {
-        // Packs have no isTradeable flag, no collection-worth metric, no trade
-        // list, and no ctoonOwnerLog-equivalent provenance table — see
-        // server/api/trade/offers/[id]/accept.post.js's own comment on skipping
-        // that audit table for packs, same reasoning here.
-        await tx.userPack.update({
-          where: { id: userPackId },
-          data:  { userId: winningBid.userId }
-        })
-      } else {
-        const uc = await tx.userCtoon.update({
-          where:  { id: userCtoonId },
-          data:   { userId: winningBid.userId, isTradeable: true },
-          select: { id: true, ctoonId: true, mintNumber: true }
-        })
+      const uc = await tx.userCtoon.update({
+        where:  { id: userCtoonId },
+        data:   { userId: winningBid.userId, isTradeable: true },
+        select: { id: true, ctoonId: true, mintNumber: true }
+      })
 
-        // Snapshot for the "last auction sold" collection-worth metric — kept
-        // fresh at write time so reading it never needs a live scan over the
-        // full Auction table. See prisma/schema.prisma's comment on these
-        // columns.
-        await tx.ctoon.update({
-          where: { id: uc.ctoonId },
-          data:  { lastAuctionSoldPrice: winningBid.amount, lastAuctionSoldAt: now }
-        })
+      // Snapshot for the "last auction sold" collection-worth metric — kept
+      // fresh at write time so reading it never needs a live scan over the
+      // full Auction table. See prisma/schema.prisma's comment on these
+      // columns.
+      await tx.ctoon.update({
+        where: { id: uc.ctoonId },
+        data:  { lastAuctionSoldPrice: winningBid.amount, lastAuctionSoldAt: now }
+      })
 
-        await tx.userTradeListItem.deleteMany({
-          where: { userCtoonId, userId: { not: winningBid.userId } }
-        })
-        await tx.ctoonOwnerLog.create({
-          data: {
-            userId:      winningBid.userId,
-            ctoonId:     uc.ctoonId,
-            userCtoonId: uc.id,
-            mintNumber:  uc.mintNumber,
-            method:      'AUCTION',
-            counterpartyUserId: resolvedCreatorId,
-            counterpartyUsername: resolvedCreatorUsername
-          }
-        })
-      }
+      await tx.userTradeListItem.deleteMany({
+        where: { userCtoonId, userId: { not: winningBid.userId } }
+      })
+      await tx.ctoonOwnerLog.create({
+        data: {
+          userId:      winningBid.userId,
+          ctoonId:     uc.ctoonId,
+          userCtoonId: uc.id,
+          mintNumber:  uc.mintNumber,
+          method:      'AUCTION',
+          counterpartyUserId: resolvedCreatorId,
+          counterpartyUsername: resolvedCreatorUsername
+        }
+      })
 
       const loserPts = await tx.userPoints.update({
         where: { userId: winningBid.userId },
@@ -2599,7 +2586,7 @@ async function performAuctionClose(auctionId) {
       await notifyAuctionWon(tx, {
         userId: winningBid.userId,
         auctionId: id,
-        ctoonName: itemName,
+        ctoonName: auc.userCtoon?.ctoon?.name || null,
         amount: winningBid.amount
       })
 
@@ -2629,14 +2616,10 @@ async function performAuctionClose(auctionId) {
         })
       }
     } else {
-      // Packs never had isTradeable cleared (they have no such flag), so there
-      // is nothing to restore on a no-sale close beyond releasing bidders' holds.
-      if (!userPackId) {
-        await tx.userCtoon.update({
-          where: { id: userCtoonId },
-          data:  { isTradeable: true }
-        })
-      }
+      await tx.userCtoon.update({
+        where: { id: userCtoonId },
+        data:  { isTradeable: true }
+      })
       await tx.lockedPoints.updateMany({
         where: { status: 'ACTIVE', contextType: 'AUCTION', contextId: id },
         data:  { status: 'RELEASED' }

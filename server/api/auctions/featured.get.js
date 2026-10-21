@@ -32,11 +32,7 @@ export default defineEventHandler(async (event) => {
     where: {
       isFeatured: true,
       status: 'ACTIVE',
-      endAt: { gt: new Date() },
-      // Pack auctions are out of scope for this view — excluded, not crashed
-      // on. Nothing in this PR ever sets isFeatured on a pack auction, but
-      // this keeps that an explicit guarantee rather than an assumption.
-      userCtoonId: { not: null }
+      endAt: { gt: new Date() }
     },
     orderBy: { endAt: 'asc' },
     include: {

@@ -10,23 +10,27 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 422, statusMessage: 'Missing auction ID' })
   }
 
-  // 2. Fetch the auction to determine which Ctoon (or pack) it was
+  // 2. Fetch the auction to determine which Ctoon it was
   const auction = await prisma.auction.findUnique({
     where: { id },
     include: {
-      userCtoon: { select: { ctoonId: true } },
-      userPack: { select: { packId: true } }
+      userCtoon: {
+        select: { ctoonId: true }
+      }
     }
   })
   if (!auction) {
     throw createError({ statusCode: 404, statusMessage: 'Auction not found' })
   }
+  const { ctoonId } = auction.userCtoon
 
-  // 3. Find the last 3 closed, successfully sold auctions for this same item
+  // 3. Find the last 3 closed, successfully sold auctions for this Ctoon
   const recent = await prisma.auction.findMany({
-    where: auction.userPack
-      ? { userPack: { packId: auction.userPack.packId }, status: 'CLOSED', winnerId: { not: null } }
-      : { userCtoon: { ctoonId: auction.userCtoon.ctoonId }, status: 'CLOSED', winnerId: { not: null } },
+    where: {
+      userCtoon: { ctoonId },
+      status: 'CLOSED',
+      winnerId: { not: null }
+    },
     orderBy: { endAt: 'desc' },
     take: 3,
     select: {

@@ -69,27 +69,6 @@
                 </div>
               </div>
             </div>
-
-            <!-- Pack unlocks -->
-            <div v-if="rewards.packs?.length" class="rd-bgs">
-              <h3 class="rd-bgs-title">Packs</h3>
-              <div class="rd-grid">
-                <div v-for="pack in rewards.packs" :key="pack.packId" class="rd-bg-card">
-                  <CtoonImage v-if="pack.imagePath" :ctoon="pack" :src="pack.imagePath" class="rd-bg-img" />
-                  <div class="rd-bg-info">
-                    <div class="rd-bg-label">{{ pack.name }}</div>
-                    <div class="rd-bg-sub">{{ pack.quantity }}× sealed pack{{ pack.quantity === 1 ? '' : 's' }} added to your collection</div>
-                  </div>
-                  <button
-                    v-if="pack.userPackIds?.length"
-                    type="button"
-                    class="rd-pack-open-btn"
-                    :disabled="openingPack"
-                    @click="openPack(pack)"
-                  >{{ openingPack ? 'Opening…' : 'Open' }}</button>
-                </div>
-              </div>
-            </div>
           </div>
 
           <ClientOnly>
@@ -105,8 +84,6 @@
           </div>
         </transition>
       </Teleport>
-
-      <PackOpenOverlay ref="packOverlayRef" @closed="onPackOverlayClosed" />
 </template>
 
 <script setup>
@@ -127,7 +104,7 @@ const rawHTML = '<!-- My special production comment for this page -->'
 
 const code = ref('')
 const success = ref(false)
-const rewards = ref({ points: 0, ctoons: [], backgrounds: [], packs: [] })
+const rewards = ref({ points: 0, ctoons: [], backgrounds: [] })
 
 const toast = reactive({ visible: false, message: '', type: 'error' })
 let toastTimer = null
@@ -142,26 +119,9 @@ function showToast(message, type = 'error') {
 const showBalloons = ref(false)
 const balloons = ref([])
 
-const packOverlayRef = ref(null)
-const openingPack = ref(false)
-
-function openPack(pack) {
-  if (openingPack.value || !pack.userPackIds?.length) return
-  openingPack.value = true
-  const userPackId = pack.userPackIds.shift()
-  pack.quantity = Math.max(0, pack.quantity - 1)
-  packOverlayRef.value?.open({ userPackId, name: pack.name, imagePath: pack.imagePath })
-}
-
-// PackOpenOverlay's own close button is the only exit from the sequence, so
-// "done opening" is read off its 'closed' emit rather than a fixed timer here.
-function onPackOverlayClosed() {
-  openingPack.value = false
-}
-
 async function submit() {
   success.value = false
-  rewards.value = { points: 0, ctoons: [], backgrounds: [], packs: [] }
+  rewards.value = { points: 0, ctoons: [], backgrounds: [] }
 
   try {
     const payload = await $fetch('/api/redeem', {
@@ -172,7 +132,6 @@ async function submit() {
     rewards.value.points = payload.points ?? 0
     rewards.value.ctoons = payload.ctoons ?? []
     rewards.value.backgrounds = payload.backgrounds ?? []
-    rewards.value.packs = payload.packs ?? []
     success.value = true
     code.value = ''
 
@@ -405,28 +364,6 @@ body {
 .rd-bg-sub {
   font-size: 0.75rem;
   color: rgba(255, 255, 255, 0.4);
-}
-
-.rd-pack-open-btn {
-  flex-shrink: 0;
-  margin-left: auto;
-  background: var(--OrbitDarkBlue, #003466);
-  border: 1px solid var(--OrbitLightBlue, #3399cc);
-  color: #fff;
-  border-radius: 6px;
-  padding: 6px 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.rd-pack-open-btn:hover:not(:disabled) {
-  background: var(--OrbitLightBlue, #3399cc);
-}
-
-.rd-pack-open-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
 }
 
 .rd-toast {

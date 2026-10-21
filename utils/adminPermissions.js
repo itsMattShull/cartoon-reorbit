@@ -154,7 +154,6 @@ export const ADMIN_API_SEGMENT_PERMS = {
   homepage: ['homepage'],
   'list-backgrounds': ['czoneContest', 'codes'],
   'list-ctoons': ['czoneContest', 'codes', 'cMoon', 'cMoonEnemies', 'achievements'],
-  'list-packs': ['codes'],
   'locked-points': ['manageUsers'],
   'lotto-logs': ['lottoLogs'],
   'lotto-logs-summary': ['lottoLogs'],

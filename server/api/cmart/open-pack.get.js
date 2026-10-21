@@ -52,25 +52,6 @@ export default defineEventHandler(async (event) => {
   if (!userPack || userPack.userId !== userId) throw createError({ statusCode: 404, statusMessage: 'Pack not found' })
   if (userPack.opened) throw createError({ statusCode: 400, statusMessage: 'Pack already opened' })
 
-  // A pack committed to a pending trade or an active auction must not be
-  // openable — opening it here would mint its contents to this owner while
-  // leaving the trade/auction to hand the counterparty/winner an already-empty
-  // husk, after they paid or gave up points/cToons for a sealed pack. Same
-  // reasoning as the opened:false check above; see server/utils/tradeOffer.js
-  // and server/api/auctions.post.js for the matching guards on that side.
-  const [inPendingTrade, inActiveAuction] = await Promise.all([
-    db.tradeOfferPack.findFirst({
-      where: { userPackId, tradeOffer: { status: 'PENDING' } },
-      select: { id: true }
-    }),
-    db.auction.findFirst({
-      where: { userPackId, status: 'ACTIVE' },
-      select: { id: true }
-    })
-  ])
-  if (inPendingTrade) throw createError({ statusCode: 400, statusMessage: 'This pack is part of a pending trade and cannot be opened.' })
-  if (inActiveAuction) throw createError({ statusCode: 400, statusMessage: 'This pack is up for auction and cannot be opened.' })
-
   /* ── 1. Build pools & choose cToons ─────────────────────── */
   const TIME_BASED_CAP = 999999999
 
