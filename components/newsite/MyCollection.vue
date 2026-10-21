@@ -19,6 +19,38 @@
       </button>
     </div>
 
+    <!-- ── Sealed Packs ──────────────────────────────────────────── -->
+    <div v-if="sealedPacks.length" class="mc-packs-panel">
+      <div class="mc-packs-title">Sealed Packs</div>
+      <div class="mc-packs-row">
+        <div v-for="p in sealedPacks" :key="p.userPackId" class="mc-pack-card">
+          <img v-if="p.imagePath" :src="p.imagePath" :alt="p.name" class="mc-pack-img" />
+          <div class="mc-pack-name">{{ p.name }}</div>
+          <button
+            type="button" class="mc-pack-open-btn"
+            :disabled="openingPackId === p.userPackId"
+            @click="openPack(p)"
+          >{{ openingPackId === p.userPackId ? 'Opening…' : 'Open' }}</button>
+        </div>
+      </div>
+      <p v-if="packRevealError" class="mc-pack-error">{{ packRevealError }}</p>
+    </div>
+
+    <!-- ── Pack reveal results ──────────────────────────────────── -->
+    <div v-if="packRevealResults" class="mc-pack-reveal-overlay" @click.self="closePackReveal">
+      <div class="mc-pack-reveal-modal">
+        <h3 class="mc-pack-reveal-title">You got:</h3>
+        <div class="mc-pack-reveal-grid">
+          <div v-for="(c, i) in packRevealResults" :key="c.id + '-' + i" class="mc-pack-reveal-item">
+            <CtoonImage v-if="c.assetPath" :ctoon="c" :alt="c.name" class="mc-pack-reveal-img" />
+            <div class="mc-pack-reveal-name">{{ c.name }}</div>
+            <div class="mc-pack-reveal-mint">#{{ c.mintNumber }} · {{ c.rarity }}</div>
+          </div>
+        </div>
+        <button type="button" class="mc-pack-reveal-close" @click="closePackReveal">Close</button>
+      </div>
+    </div>
+
     <!-- ── Collection worth breakdown (overlay, doesn't push the grid) ──── -->
     <div
       v-if="worthOpen && worth"
@@ -163,6 +195,40 @@ const worth        = ref(null)
 const worthOpen     = ref(false)
 const worthToggleEl = ref(null)
 const worthPanelEl  = ref(null)
+
+// ── Sealed Packs ─────────────────────────────────────────────
+const sealedPacks = ref([])
+const openingPackId = ref('')
+const packRevealResults = ref(null)
+const packRevealError = ref('')
+
+async function loadSealedPacks() {
+  try {
+    sealedPacks.value = await $fetch('/api/my-packs')
+  } catch (err) {
+    console.error('MyCollection: failed to load sealed packs', err)
+  }
+}
+
+async function openPack(p) {
+  openingPackId.value = p.userPackId
+  packRevealError.value = ''
+  try {
+    const minted = await $fetch('/api/cmart/open-pack', { params: { id: p.userPackId } })
+    packRevealResults.value = minted
+    sealedPacks.value = sealedPacks.value.filter(x => x.userPackId !== p.userPackId)
+    // Refresh the main grid so the newly-minted cToons show up without a full page reload.
+    try { allCtoons.value = await $fetch('/api/collections') } catch {}
+  } catch (err) {
+    packRevealError.value = err?.data?.statusMessage || 'Failed to open pack'
+  } finally {
+    openingPackId.value = ''
+  }
+}
+
+function closePackReveal() {
+  packRevealResults.value = null
+}
 
 // "Avg. trade value" is explicitly labeled "(est.)": unlike an auction sale or
 // the cMart price, it's an imputed number (server/cron/economy-aggregate.js
@@ -471,6 +537,7 @@ onMounted(() => {
       console.error('MyCollection: failed to load collection worth', err)
     }
   })()
+  loadSealedPacks()
 })
 </script>
 
@@ -887,6 +954,126 @@ onMounted(() => {
   text-overflow: ellipsis;
   flex: 1;
   text-align: center;
+}
+
+/* ── Sealed Packs ─────────────────────────────────────────── */
+.mc-packs-panel {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+.mc-packs-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  color: #374151;
+}
+.mc-packs-row {
+  display: flex;
+  gap: 0.5rem;
+  overflow-x: auto;
+  padding-bottom: 0.2rem;
+}
+.mc-pack-card {
+  flex: 0 0 auto;
+  width: 88px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 0.375rem;
+  padding: 0.4rem;
+  background: #f9fafb;
+}
+.mc-pack-img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}
+.mc-pack-name {
+  font-size: 0.65rem;
+  text-align: center;
+  color: #374151;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 100%;
+}
+.mc-pack-open-btn {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.25rem;
+  background: #4f46e5;
+  color: #fff;
+  border: none;
+}
+.mc-pack-open-btn:disabled {
+  opacity: 0.5;
+}
+.mc-pack-error {
+  font-size: 0.7rem;
+  color: #dc2626;
+  margin-top: 0.3rem;
+}
+
+.mc-pack-reveal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+.mc-pack-reveal-modal {
+  background: #fff;
+  border-radius: 0.5rem;
+  padding: 1rem;
+  max-width: 90vw;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+.mc-pack-reveal-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem;
+  text-align: center;
+}
+.mc-pack-reveal-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+  gap: 0.6rem;
+}
+.mc-pack-reveal-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+}
+.mc-pack-reveal-img {
+  width: 72px;
+  height: 72px;
+  object-fit: contain;
+}
+.mc-pack-reveal-name {
+  font-size: 0.65rem;
+  text-align: center;
+  color: #374151;
+}
+.mc-pack-reveal-mint {
+  font-size: 0.6rem;
+  color: #6b7280;
+}
+.mc-pack-reveal-close {
+  display: block;
+  margin: 1rem auto 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.35rem 1rem;
+  border-radius: 0.3rem;
+  border: 1px solid #d1d5db;
+  background: #fff;
 }
 
 </style>
