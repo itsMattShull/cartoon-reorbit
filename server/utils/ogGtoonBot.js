@@ -6,7 +6,8 @@
 //
 // The bot plays by the same rules as a human: it is dealt a hand, chooses which cards go in which
 // slots each round, may discard after round 1, and may pay for the round-3 slot-7 swap. Its whole game is:
-//   1. which deck it brings (see buildBotDeck),
+//   1. which deck it brings (a pre-defined one per difficulty, ogGtoonBotDecks.js; buildBotDeck is the fallback
+//      that reuses the player's own cards),
 //   2. which hand cards it places each round (chooseBotPlacements),
 //   3. which cards it discards (chooseBotDiscards), and
 //   4. whether it swaps its slot-7 card (chooseBotSwap).

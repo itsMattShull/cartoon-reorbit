@@ -607,7 +607,7 @@ test('core: an unplayed card of the opponent is never exposed in the view', () =
 
 /* ── Practice runtime (fake sockets, injected deps) ──────────────────────────────────────── */
 
-function harness({ config, deck = makeDeck(), isInPvp = false, userId = 'u1' } = {}) {
+function harness({ config, deck = makeDeck(), isInPvp = false, userId = 'u1', loadBotDeck = async () => null } = {}) {
   const handlers = {}
   const sent = []
   const io = { local: { to: (sid) => ({ emit: (ev, payload) => sent.push({ sid, ev, payload }) }) } }
@@ -619,6 +619,7 @@ function harness({ config, deck = makeDeck(), isInPvp = false, userId = 'u1' } =
   const user = { id: userId, username: 'Tester' }
   registerOgGtoonsPractice(io, socket, async () => user, {
     loadDeck: async (uid, deckId) => (deckId === 'bad' ? null : deck),
+    loadBotDeck,
     getConfig: async () => config || { gameEnabled: true, practiceEnabled: true },
     botDelay: () => 0,
     rng: seeded(11),
@@ -970,7 +971,7 @@ test('practice + bot code cannot touch points, point logs, or persisted matches'
     /userPoints/i, /pointsLog/i, /ogGtoonMatch\b/i, /ogGtoonMatch\./, /gamePoints/i,
     /awardCappedGamePoints/, /\$transaction/, /prisma/i, /SWAP_COST/, /canSwap/, /persistAndSettle/
   ]
-  for (const rel of ['server/utils/ogGtoonsPractice.js', 'server/utils/ogGtoonBot.js', 'server/utils/ogGtoonMatchCore.js']) {
+  for (const rel of ['server/utils/ogGtoonsPractice.js', 'server/utils/ogGtoonBot.js', 'server/utils/ogGtoonBotDecks.js', 'server/utils/ogGtoonMatchCore.js']) {
     const src = code(rel)
     for (const re of forbidden) {
       assert.equal(re.test(src), false, `${rel} must not reference ${re}`)
@@ -982,8 +983,53 @@ test('practice module imports only the allow-listed modules', () => {
   const imports = [...read('server/utils/ogGtoonsPractice.js').matchAll(/from '([^']+)'/g)].map(m => m[1]).sort()
   assert.deepEqual(imports, [
     './ogGtoonBot.js', './ogGtoonEngine.js', './ogGtoonMatchCore.js', './ogGtoonPresence.js',
-    './ogGtoonsConfig.js', './ogGtoonDeck.js', 'crypto'
+    './ogGtoonsConfig.js', './ogGtoonDeck.js', './ogGtoonBotDeck.js', 'crypto'
   ].sort())
+})
+
+/** A distinguishable 12-card bot deck: ids b0..b11 so tests can tell it from the player's c0..c11. */
+function botDeckOf(name) {
+  return { name, cards: Array.from({ length: 12 }, (_, i) => ({
+    ctoonId: `b${i}`, name: `Bot Card ${i}`, assetPath: `/b${i}.png`, characters: [`Bot ${i}`],
+    color: i < 6 ? 'GREEN' : 'BLACK', value: 8, type1: null, type2: null, type3: null, group: null, isSlam: false, effect: null, position: i
+  })) }
+}
+
+test('practice: the bot brings the pre-defined deck chosen for the difficulty, not a copy of the player\'s', async () => {
+  const asked = []
+  const h = harness({
+    userId: 'u-bot1',
+    loadBotDeck: async (level) => { asked.push(level); return botDeckOf('Test Deck') }
+  })
+  await h.handlers['oggtoons:practice:start']({ deckId: 'd1', difficulty: 'hard' })
+  const start = await h.waitFor('oggtoons:matchStart')
+  assert.deepEqual(asked, ['hard'])
+  assert.equal(start.practice, true)
+  // The bot's face-up cards (once any are revealed) must come from its own deck; before that, none of the
+  // player's own cards can be the bot's: their ids differ, so a copy of the player's deck would show c* ids.
+  const end = await playToEnd(h)
+  const botIds = end.opponent.revealed.map(r => r.ctoonId)
+  assert.ok(botIds.length >= 7)
+  assert.ok(botIds.every(id => id.startsWith('b')), `bot played ${botIds.join(',')}`)
+})
+
+test('practice: an unknown difficulty asks for the normal decks', async () => {
+  const asked = []
+  const h = harness({ userId: 'u-bot2', loadBotDeck: async (level) => { asked.push(level); return null } })
+  await h.handlers['oggtoons:practice:start']({ deckId: 'd1', difficulty: 'nonsense' })
+  await h.waitFor('oggtoons:matchStart')
+  assert.deepEqual(asked, ['normal'])
+})
+
+test('practice: with no bot deck available (cards not imported, or the lookup fails) the bot copies the player\'s deck', async () => {
+  for (const [userId, loadBotDeck] of [['u-bot3', async () => null], ['u-bot4', async () => { throw new Error('db down') }]]) {
+    const h = harness({ userId, loadBotDeck })
+    const end = await playToEnd(h)
+    assert.equal(end.over, true)
+    const botIds = end.opponent.revealed.map(r => r.ctoonId)
+    assert.ok(botIds.length >= 7)
+    assert.ok(botIds.every(id => /^c\d+$/.test(id)), `bot played ${botIds.join(',')}`)
+  }
 })
 
 test('core: a slot-7 swap takes 10 off the swapper\'s match score, only for the side that swapped', () => {

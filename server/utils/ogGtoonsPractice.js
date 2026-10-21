@@ -1,7 +1,8 @@
 // server/utils/ogGtoonsPractice.js
 //
 // Practice mode for original gToons (2002): a server-authoritative single-player match against a
-// bot that plays a copy of the player's own deck. Registered per-connection from
+// bot that brings one of its own pre-defined decks for the chosen difficulty (see ogGtoonBotDecks.js;
+// a copy of the player's deck only if those cards are not available). Registered per-connection from
 // socket-server.js right after registerOgGtoons.
 //
 // ── Why this is NOT a branch inside ogGtoonsSocket.js ───────────────────────────────────────
@@ -19,7 +20,7 @@
 //     practice out of the leaderboard (it is computed from that table).
 //   • This module deliberately does not import Prisma, gamePoints or any points/match-writing
 //     helper; tests/ogGtoonsPractice.test.js asserts that, so a future edit can't quietly add it.
-// The only database access is the deck read, injected as `deps.loadDeck`.
+// The only database access is the deck reads, injected as `deps.loadDeck` and `deps.loadBotDeck`.
 //
 // ── Process locality / resources ────────────────────────────────────────────────────────────
 // In-memory and single-process like PvP, not mirrored to Redis: a server restart simply ends a
@@ -29,6 +30,7 @@
 import { randomUUID } from 'crypto'
 import { getOgGtoonsConfig, peekRevealTiming } from './ogGtoonsConfig.js'
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
+import { loadBotDeck } from './ogGtoonBotDeck.js'
 import { assignRandomGoals, slotsForRound } from './ogGtoonEngine.js'
 import {
   publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd,
@@ -300,11 +302,12 @@ export function startOgGtoonsPracticeSweep() {
 /* ── Registration ────────────────────────────────────────────────────────────────────────── */
 
 /**
- * @param deps  injectable for tests: { loadDeck, getConfig, botDelay, rng, isInPvp }
+ * @param deps  injectable for tests: { loadDeck, loadBotDeck, getConfig, botDelay, rng, isInPvp }
  */
 export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {}) {
   const d = {
     loadDeck: deps.loadDeck || loadVerifiedDeckSnapshot,
+    loadBotDeck: deps.loadBotDeck || loadBotDeck,
     getConfig: deps.getConfig || getOgGtoonsConfig,
     botDelay: deps.botDelay || (() => botCommitDelayMs()),
     rng: deps.rng || Math.random,
@@ -342,15 +345,24 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
       return fail('busy', 'Practice is busy right now. Try again shortly.')
     }
 
-    const userDeck = await d.loadDeck(user.id, deckId)
+    const level = normalizeDifficulty(difficulty)
+    // Both reads run together; a bot deck that can't be loaded just means the fallback below.
+    const [userDeck, botPick] = await Promise.all([
+      d.loadDeck(user.id, deckId),
+      (async () => d.loadBotDeck(level, d.rng))().catch((err) => {
+        console.error('[ogGtoonsPractice] bot deck load failed:', err)
+        return null
+      })
+    ])
     if (!userDeck) {
       return fail('badDeck', 'That deck is not a valid 12-card gToons deck.')
     }
     // The user may have started another practice match while the deck was loading.
     if (matches.has(user.id)) return fail('tooFast', 'Slow down — try again in a moment.')
 
-    const level = normalizeDifficulty(difficulty)
-    const botDeck = buildBotDeck(userDeck, level, d.rng)
+    // The bot brings one of its pre-defined decks for this difficulty; if none can be built (the cards are
+    // not imported), it plays a copy of the player's own deck as it used to.
+    const botDeck = botPick?.cards ?? buildBotDeck(userDeck, level, d.rng)
     const match = {
       id: randomUUID(),
       practice: true,
