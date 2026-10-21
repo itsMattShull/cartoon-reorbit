@@ -79,7 +79,6 @@
                     <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Expires At</th>
                     <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100"># cToons</th>
                     <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100"># of Backgrounds</th>
-                    <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100"># Packs</th>
                     <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100">Points</th>
                     <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100">Actions</th>
                   </tr>
@@ -101,7 +100,6 @@
                     </td>
                     <td class="px-2 py-1.5 text-right">{{ countCtoons(c) }}</td>
                     <td class="px-2 py-1.5 text-right">{{ countBackgrounds(c) }}</td>
-                    <td class="px-2 py-1.5 text-right">{{ countPacks(c) }}</td>
                     <td class="px-2 py-1.5 text-right">{{ countPoints(c) }}</td>
                     <td class="px-2 py-1.5 text-right">
                       <NuxtLink
@@ -142,7 +140,6 @@
                   </p>
                   <p><strong># cToons:</strong> {{ countCtoons(c) }}</p>
                   <p><strong># Backgrounds:</strong> {{ countBackgrounds(c) }}</p>
-                  <p><strong># Packs:</strong> {{ countPacks(c) }}</p>
                   <p><strong>Points:</strong> {{ countPoints(c) }}</p>
                 </div>
                 <NuxtLink
@@ -409,15 +406,6 @@ function countBackgrounds(code) {
 // Helper to sum up all points for a code
 function countPoints(code) {
   return (code.rewards || []).reduce((sum, r) => sum + (r.points || 0), 0)
-}
-
-// Helper to sum up all pack quantities
-function countPacks(code) {
-  return (code.rewards || []).reduce(
-    (sum, r) =>
-      sum + ((r.packs || []).reduce((s2, rp) => s2 + (rp.quantity || 0), 0)),
-    0
-  )
 }
 
 // Helper to sum up all cToon quantities

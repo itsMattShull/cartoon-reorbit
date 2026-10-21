@@ -58,8 +58,7 @@ export default defineEventHandler(async (event) => {
     include: {
       ctoons: { include: { ctoon: { select: { id: true, name: true, initialQuantity: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT, rarity: true, set: true } } } },
       poolCtoons: { include: { ctoon: { select: { id: true, name: true, initialQuantity: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT, rarity: true, set: true } } } },
-      backgrounds: { include: { background: { select: { id: true, label: true, imagePath: true, visibility: true } } } },
-      packs: { include: { pack: { select: { id: true, name: true, imagePath: true } } } }
+      backgrounds: { include: { background: { select: { id: true, label: true, imagePath: true, visibility: true } } } }
     }
   })
 
@@ -123,20 +122,6 @@ export default defineEventHandler(async (event) => {
   const seenBg = new Set(), backgroundRewards = []
   for (const b of backgroundRewardsRaw) if (!seenBg.has(b.id)) { seenBg.add(b.id); backgroundRewards.push(b) }
 
-  // Sealed packs — unlike cToons these need no mint-queue step (the pack's contents are only
-  // minted later, when the player actually opens it), so a UserPack row is just a direct DB
-  // insert, same as a cMart pack purchase (server/api/cmart/packs/buy.post.js).
-  const packAwardsByPack = new Map()
-  for (const r of rewardDefs) {
-    for (const rp of r.packs) {
-      const prev = packAwardsByPack.get(rp.packId)
-      const quantity = (prev?.quantity || 0) + rp.quantity
-      packAwardsByPack.set(rp.packId, { packId: rp.pack.id, name: rp.pack.name, imagePath: rp.pack.imagePath, quantity })
-    }
-  }
-  const packAwards = [...packAwardsByPack.values()]
-  const createdUserPackIds = []
-
   await prisma.$transaction(async (tx) => {
     await tx.claim.create({ data: { userId, codeId: claimCode.id } })
     if (pointsToAward > 0) {
@@ -152,14 +137,6 @@ export default defineEventHandler(async (event) => {
         data: backgroundRewards.map(b => ({ userId, backgroundId: b.id, sourceCodeId: claimCode.id })),
         skipDuplicates: true
       })
-    }
-    for (const award of packAwards) {
-      for (let i = 0; i < award.quantity; i++) {
-        const userPack = await tx.userPack.create({
-          data: { userId, packId: award.packId, opened: false, pricePaid: null }
-        })
-        createdUserPackIds.push(userPack.id)
-      }
     }
   })
 
@@ -207,9 +184,6 @@ export default defineEventHandler(async (event) => {
         if (backgroundRewards.length) {
           await tx.userBackground.deleteMany({ where: { userId, sourceCodeId: claimCode.id } })
         }
-        if (createdUserPackIds.length) {
-          await tx.userPack.deleteMany({ where: { id: { in: createdUserPackIds } } })
-        }
       })
     } catch {}
     throw createError({ statusCode: 500, statusMessage: mintErr?.message || 'Failed to mint cToon. Please try again.' })
@@ -217,5 +191,5 @@ export default defineEventHandler(async (event) => {
     await qe?.close()
   }
 
-  return { points: pointsToAward, ctoons: mintedRecords, backgrounds: backgroundRewards, packs: packAwards }
+  return { points: pointsToAward, ctoons: mintedRecords, backgrounds: backgroundRewards }
 })
