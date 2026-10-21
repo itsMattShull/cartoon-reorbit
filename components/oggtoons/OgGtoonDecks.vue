@@ -50,7 +50,15 @@
         </div>
 
         <div v-else>
-          <h2 class="text-lg font-bold mb-3">{{ form.id ? 'Edit Deck' : 'Create New Deck' }}</h2>
+          <h2 class="text-lg font-bold mb-2">{{ form.id ? 'Edit Deck' : 'Create New Deck' }}</h2>
+
+          <p class="mb-3 text-xs flex items-start gap-2 bg-amber-500/10 border border-amber-400/50 rounded px-2 py-1.5" data-tut="duplicate-character-legend">
+            <span class="og-warn flex-shrink-0" aria-hidden="true">{{ WARN_ICON }}</span>
+            <span>
+              This icon means your deck already has a gToon with the same character as that card.
+              You can still add it, but you may want to pick a different one.
+            </span>
+          </p>
 
           <div class="mb-3">
             <label class="block font-medium mb-1 text-sm">Deck Name</label>
@@ -83,6 +91,13 @@
               ]"
             >
               <template v-if="slots[pos-1]">
+                <span
+                  v-if="sharedCharacters(slots[pos-1], slots).length"
+                  class="og-warn absolute top-0.5 right-0.5 z-10"
+                  role="img"
+                  :title="duplicateText(slots[pos-1])"
+                  :aria-label="duplicateText(slots[pos-1])"
+                >{{ WARN_ICON }}</span>
                 <CtoonImage :ctoon="slots[pos-1]" class="h-14 og-inspectable" hover-fx />
                 <p class="text-[10px] text-center truncate w-full px-1">{{ slots[pos-1].name }}</p>
               </template>
@@ -90,31 +105,51 @@
             </div>
           </div>
 
-          <p class="mb-2 text-sm">Your gToons:</p>
-          <div class="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-4">
+          <p class="mb-2 text-sm">
+            Your gToons:
+            <span v-if="filtersActive && gtoons.length" class="text-xs text-gray-300">
+              (showing {{ visibleGtoons.length }} of {{ gtoons.length }})
+            </span>
+          </p>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             <div
-              v-for="c in gtoons"
+              v-for="c in visibleGtoons"
               :key="c.id"
               v-on="gestureFor(c).events"
               @click.capture="gestureFor(c).clickCapture($event)"
               @click="addCard(c)"
               style="-webkit-touch-callout: none; -webkit-user-select: none; user-select: none"
               :class="[
-                'p-1 border rounded cursor-pointer flex flex-col items-center transition transform',
+                'relative p-1 border rounded cursor-pointer flex flex-col items-center transition transform',
                 usedIds.includes(c.ctoonId)
                   ? 'opacity-30 cursor-not-allowed'
                   : 'hover:scale-105 bg-white/5'
               ]"
             >
-              <CtoonImage :ctoon="c" class="object-contain h-16 mb-1 og-inspectable" hover-fx />
+              <span
+                v-if="!usedIds.includes(c.ctoonId) && sharedCharacters(c, slots).length"
+                class="og-warn absolute top-1 right-1 z-10"
+                role="img"
+                :title="duplicateText(c)"
+                :aria-label="duplicateText(c)"
+              >{{ WARN_ICON }}</span>
+              <CtoonImage :ctoon="c" class="object-contain h-28 sm:h-16 mb-1 og-inspectable" hover-fx />
               <p class="text-xs font-semibold text-center truncate w-full">{{ c.name }}</p>
               <p class="text-[10px]" :style="{ color: colorHex(c.gtoonColor) }">{{ c.gtoonColor }}</p>
               <p class="text-[10px] text-gray-300">Value: {{ c.gtoonValue }}</p>
               <p v-if="c.isSlamGtoon" class="text-[10px] font-bold text-yellow-300">SLAM</p>
+              <p
+                class="text-[10px] text-center w-full mt-0.5 sm:line-clamp-2"
+                :class="c.powerDescription ? 'text-white/90' : 'text-gray-400'"
+                :title="c.powerDescription || undefined"
+              >{{ c.powerDescription || 'No power' }}</p>
             </div>
           </div>
           <p v-if="!loadingGtoons && !gtoons.length" class="text-sm text-gray-400 mb-4">
             You don't own any gToons yet.
+          </p>
+          <p v-else-if="!loadingGtoons && !visibleGtoons.length" class="text-sm text-gray-400 mb-4">
+            No gToons match your filters.
           </p>
 
           <button
@@ -155,6 +190,7 @@ import Toast from '@/components/Toast.vue'
 import CtoonImage from '@/components/CtoonImage.vue'
 import OgGtoonInfoModal from '@/components/oggtoons/OgGtoonInfoModal.vue'
 import { useOgGtoonInfo } from '@/composables/useOgGtoonInfo'
+import { matchesDeckFilter, sharedCharacters, isDeckFilterActive, emptyDeckFilter } from '@/utils/ogGtoonDeckFilter'
 
 // Right-click / long-press a card for its printed properties; one gesture handler set per card object.
 const { inspectGesture } = useOgGtoonInfo()
@@ -192,6 +228,18 @@ const slots = ref(new Array(12).fill(undefined))
 const deckToDelete = ref(null)
 const mobileSelection = ref('')
 
+// Search/filter controls live in the left sidebar (components/newsite/OgGtoonDeckSidebar.vue).
+const filter = useOgGtoonDeckFilter()
+const filterMeta = useOgGtoonDeckMeta()
+const visibleGtoons = computed(() => gtoons.value.filter(c => matchesDeckFilter(c, filter.value)))
+const filtersActive = computed(() => isDeckFilterActive(filter.value))
+
+const WARN_ICON = '\u26A0\uFE0F'
+// "Your deck already has Batman" — the characters this card shares with a different card in the deck.
+function duplicateText(card) {
+  return `Your deck already has ${sharedCharacters(card, slots.value).join(', ')}`
+}
+
 const usedIds = computed(() => slots.value.filter(Boolean).map(c => c.ctoonId))
 const filledCount = computed(() => slots.value.filter(Boolean).length)
 const canSave = computed(() => form.value.name.trim() && filledCount.value === 12)
@@ -200,6 +248,13 @@ async function loadGToons() {
   loadingGtoons.value = true
   const rows = await $fetch('/api/user/ctoons?isOgGtoon=true')
   gtoons.value = rows
+  const values = rows.map(r => Number(r.gtoonValue)).filter(Number.isFinite)
+  filterMeta.value = {
+    sets: [...new Set(rows.map(r => r.set).filter(Boolean))].sort(),
+    series: [...new Set(rows.map(r => r.series).filter(Boolean))].sort(),
+    minNumber: values.length ? Math.min(...values) : 0,
+    maxNumber: values.length ? Math.max(...values) : 0
+  }
   loadingGtoons.value = false
 }
 
@@ -227,7 +282,7 @@ function editDeck(deck) {
   const next = new Array(12).fill(undefined)
   for (const dc of deck.cards) {
     next[dc.position] = {
-      ctoonId: dc.id, name: dc.name, assetPath: dc.assetPath,
+      ctoonId: dc.id, name: dc.name, assetPath: dc.assetPath, characters: dc.characters || [],
       gtoonColor: dc.gtoonColor, gtoonValue: dc.gtoonValue, isSlamGtoon: dc.isSlamGtoon,
       isOgGtoon: dc.isOgGtoon, gtoonCardStyle: dc.gtoonCardStyle
     }
@@ -278,12 +333,15 @@ async function deleteDeck() {
 }
 
 onMounted(async () => {
+  Object.assign(filter.value, emptyDeckFilter())
   await loadGToons()
   await loadDecks()
 })
 </script>
 
 <style scoped>
+/* Same-character warning, pinned to a card's top-right corner. */
+.og-warn { font-size: 0.95rem; line-height: 1; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.6)); cursor: help; }
 .fade-enter-active, .fade-leave-active { transition: opacity .3s ease }
 .fade-enter-from, .fade-leave-to { opacity: 0 }
 </style>

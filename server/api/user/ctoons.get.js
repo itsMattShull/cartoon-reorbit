@@ -2,6 +2,7 @@
 import { defineEventHandler, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { ogGtoonDisplay } from '@/server/utils/ogGtoonDisplay'
+import { powerDescriptionFor, describeEffects } from '@/server/utils/ogGtoonPowerCatalog'
 
 export default defineEventHandler(async (event) => {
   /* 1. Auth check ------------------------------------------------ */
@@ -65,6 +66,9 @@ export default defineEventHandler(async (event) => {
           gtoonValue:  true,
           isSlamGtoon: true,
           gtoonEffect: true,
+          gtoonType1: true,
+          gtoonType2: true,
+          gtoonType3: true,
           gtoonCardStyle: true
         }
       }
@@ -95,5 +99,15 @@ export default defineEventHandler(async (event) => {
     isSlamGtoon:   uc.ctoon.isSlamGtoon,
     gtoonEffect:   uc.ctoon.gtoonEffect,
     ...ogGtoonDisplay(uc.ctoon),
+    ...(uc.ctoon.isOgGtoon && ogGtoonPowerFields(uc.ctoon)),
   }))
 })
+
+// Deck-builder extras for an Original gToon: its type tags and its power as readable text (null = no power).
+function ogGtoonPowerFields(ctoon) {
+  const effect = Array.isArray(ctoon.gtoonEffect) && ctoon.gtoonEffect.length ? ctoon.gtoonEffect : null
+  return {
+    gtoonTypes:       [ctoon.gtoonType1, ctoon.gtoonType2, ctoon.gtoonType3].filter(Boolean),
+    powerDescription: effect ? (powerDescriptionFor(effect) || describeEffects(effect)) : null,
+  }
+}

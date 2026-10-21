@@ -314,6 +314,7 @@ html.newsite-active [role="button"]:not([aria-disabled="true"]) {
           <TradeSidebarWrapper v-show="sidebarMiddleComponent === 'TradeSidebarWrapper'" />
           <CzoneSidebarMiddle  v-show="sidebarMiddleComponent === 'CzoneSidebarMiddle'" />
           <OgGtoonSidebar     v-show="sidebarMiddleComponent === 'OgGtoonSidebar'" />
+          <OgGtoonDeckSidebar v-show="sidebarMiddleComponent === 'OgGtoonDeckSidebar'" />
         </div>
         <div class="sidebar-bottom" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-bottom-mt)' } : {}"><WinballPromo /></div>
       </template>

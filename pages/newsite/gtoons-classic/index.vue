@@ -30,6 +30,9 @@
       <OgGtoonLeaderboard v-else-if="activeTab === 'leaderboard'" />
     </div>
 
+    <!-- A match request from another player, shown over whichever tab is open. -->
+    <OgGtoonChallengeModal :show-errors="activeTab !== 'matchmaking'" />
+
     <!-- First visit: offer the guided tutorial once. Either button counts as having seen it. -->
     <transition name="fade">
       <div v-if="promptOpen" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-3">
@@ -50,11 +53,12 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useRoute, useRouter } from '#imports'
 import OgGtoonDecks from '@/components/oggtoons/OgGtoonDecks.vue'
 import OgGtoonMatchmaking from '@/components/oggtoons/OgGtoonMatchmaking.vue'
 import OgGtoonLeaderboard from '@/components/oggtoons/OgGtoonLeaderboard.vue'
+import OgGtoonChallengeModal from '@/components/oggtoons/OgGtoonChallengeModal.vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 
 definePageMeta({
@@ -66,7 +70,7 @@ definePageMeta({
   description: 'Play gToons, the original 2002 Cartoon Orbit trading card game, on Cartoon ReOrbit. Build a 12-card deck and battle other players head-to-head.'
 })
 
-const { clearSidebarMiddle } = useNewsiteLayout()
+const { setSidebarMiddle, clearSidebarMiddle } = useNewsiteLayout()
 clearSidebarMiddle()
 
 // Practice is a button on the Matchmaking tab, not a tab of its own.
@@ -88,12 +92,19 @@ const requestedTab = TABS.some(t => t.id === route.query.tab) ? route.query.tab 
 const activeTab = ref(requestedTab || '')
 const ready = ref(false)
 
+// The Manage Deck tab swaps the left sidebar's middle section for the gToon search / filters.
+watch(activeTab, (tab) => {
+  if (tab === 'decks') setSidebarMiddle('OgGtoonDeckSidebar')
+  else clearSidebarMiddle()
+}, { immediate: true })
+onBeforeUnmount(clearSidebarMiddle)
+
 watch([visibleTabs, ready], ([tabs, isReady]) => {
   if (isReady && tabs.length && !tabs.some(t => t.id === activeTab.value)) activeTab.value = tabs[0].id
 }, { immediate: true })
 
 /* ── Tutorial ────────────────────────────────────────────────────────────────────────────── */
-const { currentMatchId, matchState, lastError, startTutorial } = useOgGtoonsSocket()
+const { currentMatchId, lastError, startTutorial } = useOgGtoonsSocket()
 const tutorialAvailable = computed(() => config.value.gameEnabled !== false)
 const startingTutorial = ref(false)
 const promptOpen = ref(false)
@@ -106,8 +117,10 @@ function launchTutorial() {
   setTimeout(() => { startingTutorial.value = false }, 4000)
 }
 watch(lastError, (err) => { if (err) startingTutorial.value = false })
+// Any match starting (a request someone accepted, the random queue, practice, the tutorial) takes you to
+// the board, whichever tab you were on.
 watch(currentMatchId, (id) => {
-  if (id && matchState.value?.tutorial) router.push(`/newsite/gtoons-classic/${id}`)
+  if (id) router.push(`/newsite/gtoons-classic/${id}`)
 })
 
 function markTutorialSeen() {
