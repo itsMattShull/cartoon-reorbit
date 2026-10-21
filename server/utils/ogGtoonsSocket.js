@@ -326,6 +326,7 @@ async function concludeStep(io, match, revealedRound, entries, order, { steps = 
       player1Score: end.player1Score,
       player2Score: end.player2Score,
       endReason: 'natural',
+      winReason: end.winReason,
       effectsResolved: end.effectsResolved
     })
     return
@@ -398,7 +399,7 @@ async function onPhaseExpired(io, match) {
 
 /* ── Ending a match + settling stakes ────────────────────────────────────────────────────── */
 
-async function persistAndSettle(match, { outcome, winnerUserId, player1Score, player2Score, endReason, whoLeftUserId, effectsResolved }) {
+async function persistAndSettle(match, { outcome, winnerUserId, player1Score, player2Score, endReason, whoLeftUserId, effectsResolved, winReason }) {
   const [p1, p2] = match.players
   const s1 = match.stake[0] || 0
   const s2 = match.stake[1] || 0
@@ -424,6 +425,8 @@ async function persistAndSettle(match, { outcome, winnerUserId, player1Score, pl
         isChallenge: match.isChallenge,
         winnerUserId: winnerUserId || null,
         outcome,
+        // Only a game that was actually played to a result has a reason; forfeits / sweeps have none.
+        winReason: endReason === 'natural' ? (winReason || null) : null,
         startedAt: new Date(match.startedAt),
         endedAt: new Date(),
         whoLeftUserId: whoLeftUserId || null,

@@ -12,6 +12,7 @@ import { prisma as db } from '../prisma.js'
 
 const OUTCOMES = new Set(['PLAYER_WIN', 'BOT_WIN', 'TIE'])
 const DIFFICULTIES = new Set(['easy', 'normal', 'hard'])
+const WIN_REASONS = new Set(['COLOR', 'POINTS'])
 const RETRY_DELAY_MS = 400
 // A missing table (deploy ordering) or an outage would otherwise log on every finished match.
 const LOG_EVERY_MS = 60_000
@@ -25,7 +26,7 @@ function logThrottled(err) {
 }
 
 /**
- * @param {{ id: string, userId: string, difficulty: string, outcome: 'PLAYER_WIN'|'BOT_WIN'|'TIE', startedAt: number|Date }} result
+ * @param {{ id: string, userId: string, difficulty: string, outcome: 'PLAYER_WIN'|'BOT_WIN'|'TIE', winReason?: 'COLOR'|'POINTS'|null, startedAt: number|Date }} result
  * @returns {Promise<boolean>} true when saved (or already saved); never throws.
  */
 export async function recordPracticeResult(result, deps = {}) {
@@ -37,6 +38,7 @@ export async function recordPracticeResult(result, deps = {}) {
       userId: result.userId,
       difficulty: result.difficulty,
       outcome: result.outcome,
+      winReason: WIN_REASONS.has(result.winReason) ? result.winReason : null,
       startedAt: new Date(result.startedAt),
       endedAt: new Date()
     }

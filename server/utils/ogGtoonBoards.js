@@ -11,7 +11,7 @@
 //   • Leaderboard: a forfeit counts (the player who left takes the loss). Meta: forfeits are skipped,
 //     because the decks never really played.
 
-export const CACHE_VERSION = 'v2'
+export const CACHE_VERSION = 'v3'
 // The boards are read-mostly standings, so an hour-old answer is fine and keeps the heavy scans rare.
 export const CACHE_TTL_SEC = 3600
 
@@ -65,7 +65,7 @@ export function timeframeStart(timeframe, now = new Date()) {
 export function normalizeLeaderboardParams(query = {}) {
   const mode = pick(query.mode, BOARD_MODES, 'human')
   const timeframe = pick(query.timeframe, TIMEFRAMES, '1m')
-  const filter = mode === 'human' ? pick(query.filter, HUMAN_FILTERS, 'non_tournament') : 'all'
+  const filter = mode === 'human' ? pick(query.filter, HUMAN_FILTERS, 'all') : 'all'
   const difficulty = mode === 'practice' ? pick(query.difficulty, PRACTICE_DIFFICULTIES, 'all') : 'all'
   let minGames = Math.min(Math.max(int(query.minGames, 3), 0), 100)
   if (mode === 'practice') minGames = Math.max(minGames, PRACTICE_MIN_GAMES)
@@ -88,13 +88,16 @@ const rowOut = (r, value) => ({
   wins: r.wins,
   losses: r.losses,
   ties: r.ties,
-  played: r.played
+  played: r.played,
+  // How the wins were decided (more goal-colour cards vs. higher points); forfeits and older games are in neither.
+  winsByColor: r.winsByColor,
+  winsByPoints: r.winsByPoints
 })
 
 const byName = (a, b) => String(a.username || '').localeCompare(String(b.username || ''))
 
 /**
- * @param rows  [{ uid, username, played, wins, losses, ties, earned }] — one per player, already
+ * @param rows  [{ uid, username, played, wins, losses, ties, winsByColor, winsByPoints, earned }] — one per player, already
  *              limited to the cached (mode, filter/difficulty, timeframe). played = wins + losses + ties.
  */
 export function buildLeaderboard(rows, params, generatedAt = new Date()) {
@@ -105,6 +108,8 @@ export function buildLeaderboard(rows, params, generatedAt = new Date()) {
     wins: Number(r.wins) || 0,
     losses: Number(r.losses) || 0,
     ties: Number(r.ties) || 0,
+    winsByColor: Number(r.winsByColor) || 0,
+    winsByPoints: Number(r.winsByPoints) || 0,
     earned: Number(r.earned) || 0
   }))
   const top = (arr, cmp) => arr.sort((a, b) => cmp(a, b) || byName(a, b)).slice(0, BOARD_SIZE)

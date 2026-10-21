@@ -8,16 +8,18 @@ import {
   normalizeMetaParams, metaCacheKey, buildMetaResponse, deckLabel, PRACTICE_MIN_GAMES, CACHE_TTL_SEC
 } from '../server/utils/ogGtoonBoards.js'
 import { recordPracticeResult } from '../server/utils/ogGtoonPracticeRecord.js'
+import { determineWinner } from '../server/utils/ogGtoonEngine.js'
+import { winReasonOf } from '../server/utils/ogGtoonMatchCore.js'
 
 /* ── Parameters + cache keys ─────────────────────────────────────────────────────────────── */
 
-test('leaderboard params default to Human Matches / Non-tournament / 1 month', () => {
-  assert.deepEqual(normalizeLeaderboardParams({}), { mode: 'human', timeframe: '1m', filter: 'non_tournament', difficulty: 'all', minGames: 3 })
+test('leaderboard params default to Human Matches / All / 1 month', () => {
+  assert.deepEqual(normalizeLeaderboardParams({}), { mode: 'human', timeframe: '1m', filter: 'all', difficulty: 'all', minGames: 3 })
 })
 
 test('leaderboard params: unknown values fall back, and the other mode\'s filter is pinned to All', () => {
   const p = normalizeLeaderboardParams({ mode: 'pvp', timeframe: 'forever', filter: 'weird', difficulty: 'hard' })
-  assert.deepEqual(p, { mode: 'human', timeframe: '1m', filter: 'non_tournament', difficulty: 'all', minGames: 3 })
+  assert.deepEqual(p, { mode: 'human', timeframe: '1m', filter: 'all', difficulty: 'all', minGames: 3 })
   // Practice ignores the human match-type filter; human ignores the difficulty.
   assert.equal(normalizeLeaderboardParams({ mode: 'practice', filter: 'tournament' }).filter, 'all')
   assert.equal(normalizeLeaderboardParams({ mode: 'human', difficulty: 'easy' }).difficulty, 'all')
@@ -59,10 +61,10 @@ test('win % counts a tie as half; timeframe start', () => {
 
 /* ── Leaderboard shaping ─────────────────────────────────────────────────────────────────── */
 
-const R = (username, wins, losses, ties, earned = 0) => ({ uid: username, username, wins, losses, ties, played: wins + losses + ties, earned })
+const R = (username, wins, losses, ties, earned = 0, winsByColor = 0, winsByPoints = 0) => ({ uid: username, username, wins, losses, ties, played: wins + losses + ties, earned, winsByColor, winsByPoints })
 
 test('leaderboard: top-10 boards, win % uses ties as half and honours minGames, W-L-T on rows', () => {
-  const rows = [R('ann', 6, 2, 0, 40), R('bob', 3, 0, 0, 0), R('cy', 2, 2, 2, 5), R('dee', 0, 4, 0)]
+  const rows = [R('ann', 6, 2, 0, 40, 2, 3), R('bob', 3, 0, 0, 0), R('cy', 2, 2, 2, 5), R('dee', 0, 4, 0)]
   const params = normalizeLeaderboardParams({ minGames: '4' })
   const out = buildLeaderboard(rows, params, '2026-01-01T00:00:00Z')
   assert.deepEqual(out.wins.map(r => r.username), ['ann', 'bob', 'cy'])
@@ -71,6 +73,9 @@ test('leaderboard: top-10 boards, win % uses ties as half and honours minGames, 
   assert.deepEqual(out.winPct.map(r => r.username), ['ann', 'cy', 'dee'])
   assert.equal(out.winPct[1].value, 50)
   assert.deepEqual([out.wins[0].wins, out.wins[0].losses, out.wins[0].ties], [6, 2, 0])
+  // How the wins were decided rides on every board's rows (the 6th win is a forfeit / older game: in neither split).
+  assert.deepEqual([out.wins[0].winsByColor, out.wins[0].winsByPoints], [2, 3])
+  assert.deepEqual([out.winPct[0].winsByColor, out.winPct[0].winsByPoints], [2, 3])
   assert.deepEqual(out.earned.map(r => r.username), ['ann', 'cy'])
   assert.equal(out.generatedAt, '2026-01-01T00:00:00.000Z')
 })
@@ -149,6 +154,7 @@ test('recorder: saves a valid result, retries once, never throws', async () => {
   const saved = []
   assert.equal(await recordPracticeResult(rec, { create: async (d) => { saved.push(d) } }), true)
   assert.equal(saved[0].id, 'p1')
+  assert.equal(saved[0].winReason, null)
   assert.ok(saved[0].startedAt instanceof Date && saved[0].endedAt instanceof Date)
 
   let calls = 0
@@ -159,6 +165,38 @@ test('recorder: saves a valid result, retries once, never throws', async () => {
   try {
     assert.equal(await recordPracticeResult(rec, { retryDelayMs: 0, create: async () => { throw new Error('down') } }), false)
   } finally { console.error = quiet }
+})
+
+test('recorder: keeps a valid win reason and drops an unknown one', async () => {
+  const saved = []
+  const create = async (d) => { saved.push(d) }
+  await recordPracticeResult({ ...rec, id: 'r1', winReason: 'COLOR' }, { create })
+  await recordPracticeResult({ ...rec, id: 'r2', winReason: 'POINTS' }, { create })
+  await recordPracticeResult({ ...rec, id: 'r3', winReason: 'LUCK' }, { create })
+  assert.deepEqual(saved.map(d => d.winReason), ['COLOR', 'POINTS', null])
+})
+
+test('win reason: the engine\'s reason maps to COLOR / POINTS, a tie has none', () => {
+  const card = (color, finalValue) => ({ color, finalValue })
+  // Different goal colours: more cards of both combined wins outright -> COLOR.
+  const byColor = determineWinner({
+    player1GoalColor: 'RED', player2GoalColor: 'BLUE',
+    player1Revealed: [card('RED', 1), card('BLUE', 1), card('RED', 1)], player2Revealed: [card('RED', 9), card('GREEN', 9), card('GREEN', 9)]
+  })
+  assert.equal(byColor.winner, 'player1')
+  assert.equal(winReasonOf(byColor.reason), 'COLOR')
+  // Neutral goals: higher total wins -> POINTS.
+  const byPoints = determineWinner({
+    player1GoalColor: 'BLACK', player2GoalColor: 'SILVER',
+    player1Revealed: [card('RED', 9)], player2Revealed: [card('RED', 2)]
+  })
+  assert.equal(byPoints.winner, 'player1')
+  assert.equal(winReasonOf(byPoints.reason), 'POINTS')
+  const tie = determineWinner({
+    player1GoalColor: 'BLACK', player2GoalColor: 'SILVER', player1Revealed: [card('RED', 5)], player2Revealed: [card('RED', 5)]
+  })
+  assert.equal(tie.winner, null)
+  assert.equal(winReasonOf(tie.reason), null)
 })
 
 test('recorder: refuses malformed results without touching the database', async () => {

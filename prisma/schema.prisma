@@ -2420,6 +2420,14 @@ enum OgGtoonMatchOutcome {
   INCOMPLETE
 }
 
+// How a finished game was decided, from the engine's determineWinner reason: COLOR = more cards of
+// the two goal colours combined, POINTS = higher total value (the +15 single-goal-colour bonus is
+// part of the total). Null for ties, forfeits, sweeps, and games finished before this was recorded.
+enum OgGtoonWinReason {
+  COLOR
+  POINTS
+}
+
 enum OgGtoonPracticeDifficulty {
   easy
   normal
@@ -2444,6 +2452,7 @@ model OgGtoonPracticeMatch {
   userId     String
   difficulty OgGtoonPracticeDifficulty
   outcome    OgGtoonPracticeOutcome
+  winReason  OgGtoonWinReason? // see the enum: null for a tie or a game finished before this was recorded
   startedAt  DateTime
   endedAt    DateTime                   @default(now())
 
@@ -2476,6 +2485,7 @@ model OgGtoonMatch {
 
   winnerUserId  String?
   outcome       OgGtoonMatchOutcome?
+  winReason     OgGtoonWinReason?
   startedAt     DateTime             @default(now())
   endedAt       DateTime?
   whoLeftUserId String?

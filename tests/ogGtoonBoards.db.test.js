@@ -63,16 +63,16 @@ async function build() {
   const base = (p1, p2, d1, d2) => ({ player1UserId: p1.id, player2UserId: p2.id, player1DeckSnapshot: d1, player2DeckSnapshot: d2 })
 
   // A (deck X) vs B (deck Y), stakes 10/10
-  await game({ ...base(A, B, X, Y), player1Points: 10, player2Points: 10, outcome: 'PLAYER1', winnerUserId: A.id })
-  await game({ ...base(A, B, X, Y), player1Points: 10, player2Points: 10, outcome: 'PLAYER1', winnerUserId: A.id })
-  await game({ ...base(A, B, X, Y), player1Points: 10, player2Points: 10, outcome: 'PLAYER2', winnerUserId: B.id, player1Score: 20, player2Score: 30 })
+  await game({ ...base(A, B, X, Y), player1Points: 10, player2Points: 10, outcome: 'PLAYER1', winnerUserId: A.id, winReason: 'COLOR' })
+  await game({ ...base(A, B, X, Y), player1Points: 10, player2Points: 10, outcome: 'PLAYER1', winnerUserId: A.id, winReason: 'POINTS' })
+  await game({ ...base(A, B, X, Y), player1Points: 10, player2Points: 10, outcome: 'PLAYER2', winnerUserId: B.id, winReason: 'COLOR', player1Score: 20, player2Score: 30 })
   await game({ ...base(A, B, X, Y), player1Points: 10, player2Points: 10, outcome: 'TIE', player1Score: 25, player2Score: 25 })
   // Ugly rows the boards must handle:
   await game({ ...base(A, B, X, Y), outcome: 'TIE', player1Score: 0, player2Score: 0 }) // swept: nobody played it
   await game({ ...base(A, B, X, Y), player1Points: 10, player2Points: 10, outcome: 'PLAYER2', winnerUserId: B.id, whoLeftUserId: A.id, player1Score: 0, player2Score: 0 }) // forfeit
   await game({ ...base(A, B, X, Y), outcome: 'INCOMPLETE', winnerUserId: A.id }) // voided, kept its winner
   // Mirror: both players on the same 12 cards, stakes 5/5
-  await game({ ...base(A, C, X, X), player1Points: 5, player2Points: 5, outcome: 'PLAYER1', winnerUserId: A.id })
+  await game({ ...base(A, C, X, X), player1Points: 5, player2Points: 5, outcome: 'PLAYER1', winnerUserId: A.id, winReason: 'POINTS' })
   // A tournament game (zero stake)
   const t = await db.ogGtoonTournament.create({ data: { name: `boards ${stamp}`, optInStartAt: new Date(), optInEndAt: new Date(), announcementChannelId: 'test' } })
   const round = await db.ogGtoonTournamentRound.create({ data: { tournamentId: t.id, stage: 'SWISS', roundNumber: 1 } })
@@ -82,8 +82,8 @@ async function build() {
   await game({ ...base(A, B, X, Y), outcome: 'PLAYER1', winnerUserId: A.id, tournamentMatchId: tm.id })
 
   // Practice (A only)
-  const p = (difficulty, outcome) => db.ogGtoonPracticeMatch.create({ data: { id: `pm-${stamp}-${difficulty}-${outcome}-${Math.random()}`, userId: A.id, difficulty, outcome, startedAt: new Date() } })
-  await p('easy', 'PLAYER_WIN'); await p('easy', 'PLAYER_WIN'); await p('normal', 'BOT_WIN'); await p('hard', 'TIE')
+  const p = (difficulty, outcome, winReason = null) => db.ogGtoonPracticeMatch.create({ data: { id: `pm-${stamp}-${difficulty}-${outcome}-${Math.random()}`, userId: A.id, difficulty, outcome, winReason, startedAt: new Date() } })
+  await p('easy', 'PLAYER_WIN', 'COLOR'); await p('easy', 'PLAYER_WIN', 'POINTS'); await p('normal', 'BOT_WIN', 'COLOR'); await p('hard', 'TIE')
 
   return { A, B, C, X, Y }
 }
@@ -94,12 +94,13 @@ run('human leaderboard: finished games only; forfeits count; sweeps and voided g
   const { A, B, C } = await seed()
 
   const casual = await Sql.loadHumanLeaderboardRows({ timeframe: 'all', filter: 'non_tournament' })
-  assert.deepEqual(pick(rowOf(casual, A)), { played: 6, wins: 3, losses: 2, ties: 1, earned: 25 })
-  assert.deepEqual(pick(rowOf(casual, B)), { played: 5, wins: 2, losses: 2, ties: 1, earned: 20 })
-  assert.deepEqual(pick(rowOf(casual, C)), { played: 1, wins: 0, losses: 1, ties: 0, earned: 0 })
+  assert.deepEqual(pick(rowOf(casual, A)), { played: 6, wins: 3, losses: 2, ties: 1, earned: 25, winsByColor: 1, winsByPoints: 2 })
+  // B's forfeit win has no reason, so it is in `wins` but in neither split.
+  assert.deepEqual(pick(rowOf(casual, B)), { played: 5, wins: 2, losses: 2, ties: 1, earned: 20, winsByColor: 1, winsByPoints: 0 })
+  assert.deepEqual(pick(rowOf(casual, C)), { played: 1, wins: 0, losses: 1, ties: 0, earned: 0, winsByColor: 0, winsByPoints: 0 })
 
   const tournament = await Sql.loadHumanLeaderboardRows({ timeframe: 'all', filter: 'tournament' })
-  assert.deepEqual(pick(rowOf(tournament, A)), { played: 1, wins: 1, losses: 0, ties: 0, earned: 0 })
+  assert.deepEqual(pick(rowOf(tournament, A)), { played: 1, wins: 1, losses: 0, ties: 0, earned: 0, winsByColor: 0, winsByPoints: 0 })
 
   const all = await Sql.loadHumanLeaderboardRows({ timeframe: 'all', filter: 'all' })
   assert.equal(rowOf(all, A).played, 7)
@@ -113,11 +114,12 @@ run('human leaderboard: finished games only; forfeits count; sweeps and voided g
 run('practice leaderboard: per difficulty, and All adds them up', async () => {
   const { A } = await seed()
   const all = await Sql.loadPracticeLeaderboardRows({ timeframe: 'all', difficulty: 'all' })
-  assert.deepEqual(pick(rowOf(all, A)), { played: 4, wins: 2, losses: 1, ties: 1, earned: 0 })
+  // the BOT_WIN row's reason belongs to the bot's win, so it is not one of the player's wins by color
+  assert.deepEqual(pick(rowOf(all, A)), { played: 4, wins: 2, losses: 1, ties: 1, earned: 0, winsByColor: 1, winsByPoints: 1 })
   const easy = await Sql.loadPracticeLeaderboardRows({ timeframe: 'all', difficulty: 'easy' })
-  assert.deepEqual(pick(rowOf(easy, A)), { played: 2, wins: 2, losses: 0, ties: 0, earned: 0 })
+  assert.deepEqual(pick(rowOf(easy, A)), { played: 2, wins: 2, losses: 0, ties: 0, earned: 0, winsByColor: 1, winsByPoints: 1 })
   const hard = await Sql.loadPracticeLeaderboardRows({ timeframe: 'all', difficulty: 'hard' })
-  assert.deepEqual(pick(rowOf(hard, A)), { played: 1, wins: 0, losses: 0, ties: 1, earned: 0 })
+  assert.deepEqual(pick(rowOf(hard, A)), { played: 1, wins: 0, losses: 0, ties: 1, earned: 0, winsByColor: 0, winsByPoints: 0 })
 })
 
 run('meta: decks keyed by their 12 cards; mirror counted once; forfeits, sweeps and voided games skipped', async () => {
@@ -141,7 +143,8 @@ run('meta: decks keyed by their 12 cards; mirror counted once; forfeits, sweeps 
   assert.equal(card.name, X[0].name)
 
   // And the response builder turns it into the page's shape.
-  const out = Boards.buildMetaResponse(agg, Boards.normalizeMetaParams({ minGames: 2 }))
+  // (a big limit: the scratch database may hold other games that would push these decks past the top 25)
+  const out = Boards.buildMetaResponse(agg, { ...Boards.normalizeMetaParams({ minGames: 2 }), limit: 100000 })
   const outX = out.decks.find(d => d.deckId === deckX.deckId)
   assert.equal(outX.cardIds.length, 12)
   assert.equal(outX.deckName, `Goal: ${X[11].name}`)
@@ -152,12 +155,13 @@ run('meta: decks keyed by their 12 cards; mirror counted once; forfeits, sweeps 
 run('practice recorder: one row per match, a duplicate is a no-op, a bad record is refused', async () => {
   const { A } = await seed()
   const id = `rec-${stamp}`
-  const r = { id, userId: A.id, difficulty: 'normal', outcome: 'PLAYER_WIN', startedAt: Date.now() - 5000 }
+  const r = { id, userId: A.id, difficulty: 'normal', outcome: 'PLAYER_WIN', winReason: 'POINTS', startedAt: Date.now() - 5000 }
   assert.equal(await Record.recordPracticeResult(r), true)
   assert.equal(await Record.recordPracticeResult(r), true)
   assert.equal(await db.ogGtoonPracticeMatch.count({ where: { id } }), 1)
+  assert.equal((await db.ogGtoonPracticeMatch.findUnique({ where: { id } })).winReason, 'POINTS')
   assert.equal(await Record.recordPracticeResult({ ...r, id: `${id}-x`, difficulty: 'impossible' }), false)
 })
 
-function pick(r) { return { played: r.played, wins: r.wins, losses: r.losses, ties: r.ties, earned: r.earned } }
+function pick(r) { return { played: r.played, wins: r.wins, losses: r.losses, ties: r.ties, earned: r.earned, winsByColor: r.winsByColor, winsByPoints: r.winsByPoints } }
 function pick2(d) { return { games: d.games, wins: d.wins, losses: d.losses, ties: d.ties, mirrors: d.mirrors } }

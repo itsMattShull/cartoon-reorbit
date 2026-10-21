@@ -1,7 +1,7 @@
 // server/api/game/oggtoons/leaderboard.get.js
 // Leaderboards for original gToons (2002), computed on the fly (no persisted rating table, same
 // pattern as gToons Clash's leaderboard). Two modes:
-//   • human    — players against each other; `filter` = all | non_tournament (default) | tournament
+//   • human    — players against each other; `filter` = all (default) | non_tournament | tournament
 //   • practice — finished matches against the bot; `difficulty` = all | easy | normal | hard
 // The per-player aggregate is cached for an hour per (mode, filter/difficulty, timeframe); minGames and
 // the top-10 cut are applied per request. The rules behind every number are in ogGtoonBoards.js.

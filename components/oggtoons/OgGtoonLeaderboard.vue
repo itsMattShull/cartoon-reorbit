@@ -63,14 +63,15 @@
       :class="{ 'opacity-60': refreshing }"
       :aria-busy="loading || refreshing"
     >
-      <LeaderboardCard title="Total Games Won" :rows="wins" :loading="loading" show-record :empty-text="emptyText" />
-      <LeaderboardCard title="Win Percentage" :rows="winPct" value-type="percent" :loading="loading" show-record :empty-text="winPctEmptyText" />
+      <LeaderboardCard title="Total Games Won" subtitle="(Win-Loss-Tie)" :rows="wins" :loading="loading" show-record show-win-method :empty-text="emptyText" />
+      <LeaderboardCard title="Win Percentage" subtitle="(Win-Loss-Tie)" :rows="winPct" value-type="percent" :loading="loading" show-record show-win-method :empty-text="winPctEmptyText" />
       <LeaderboardCard v-if="showEarned" title="Stake Points Earned (Top 10)" :rows="earned" suffix="pts" :loading="loading" :empty-text="emptyText" />
-      <LeaderboardCard title="Total Games Played" :rows="played" :loading="loading" show-record :empty-text="emptyText" />
+      <LeaderboardCard title="Total Games Played" subtitle="(Win-Loss-Tie)" :rows="played" :loading="loading" show-record :empty-text="emptyText" />
     </div>
 
     <p class="text-xs text-gray-400 mt-3">
-      Records read Wins-Losses-Ties. Win % counts a tie as half a win and needs {{ minGamesShown }}+ games.
+      Win % counts a tie as half a win and needs {{ minGamesShown }}+ games. "By color" is a win from holding more cards of
+      the goal colors; "by points" is a win on total value. Forfeits and games played before this was tracked aren't split.
     </p>
   </div>
 </template>
@@ -85,7 +86,7 @@ const MODES = ['human', 'practice']
 const FILTERS = ['all', 'non_tournament', 'tournament']
 const DIFFICULTIES = ['all', 'easy', 'normal', 'hard']
 const TIMEFRAMES = ['1w', '1m', '3m', '6m', '1y', 'all']
-const DEFAULTS = { mode: 'human', filter: 'non_tournament', difficulty: 'all', timeframe: '1m' }
+const DEFAULTS = { mode: 'human', filter: 'all', difficulty: 'all', timeframe: '1m' }
 
 const route = useRoute()
 const router = useRouter()

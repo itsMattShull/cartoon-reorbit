@@ -205,6 +205,7 @@ function concludeStep(io, match, deps, revealedRound, entries, order, { steps = 
       player1Score: end.player1Score,
       player2Score: end.player2Score,
       endReason: 'natural',
+      winReason: end.winReason,
       effectsResolved: end.effectsResolved
     }, deps)
     return
@@ -294,6 +295,7 @@ function saveResult(match, params, deps) {
       userId: match.humanId,
       difficulty: match.difficulty,
       outcome,
+      winReason: params.winReason || null,
       startedAt: match.startedAt
     })).catch(err => console.error('[ogGtoonsPractice] could not record result:', err))
   } catch (err) {

@@ -720,6 +720,9 @@ test('practice: a finished match saves exactly one result record (outcome, diffi
   assert.equal(typeof r.startedAt, 'number')
   const expected = end.outcome === 'TIE' ? 'TIE' : (end.won ? 'PLAYER_WIN' : 'BOT_WIN')
   assert.equal(r.outcome, expected)
+  // How it was decided is saved with a decided game, and never with a tie.
+  if (r.outcome === 'TIE') assert.equal(r.winReason, null)
+  else assert.ok(['COLOR', 'POINTS'].includes(r.winReason), `winReason was ${r.winReason}`)
   assert.ok(['PLAYER_WIN', 'BOT_WIN', 'TIE'].includes(r.outcome))
 })
 

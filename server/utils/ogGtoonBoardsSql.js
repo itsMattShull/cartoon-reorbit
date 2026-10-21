@@ -5,6 +5,8 @@
 // touches two deck-snapshot JSON blobs per game, which would be hundreds of MB if pulled into Node
 // (and would stall the event loop that also runs live-game timers).
 //
+// Wins are also split by HOW they were decided (winsByColor / winsByPoints, from the stored winReason);
+// forfeits and games finished before the reason was recorded are in `wins` but in neither split.
 // "Finished game" means the same thing everywhere (see FINISHED): INCOMPLETE rows — stale sweeps and
 // admin-voided tournament games, which keep their old winnerUserId — are out, and so is a timed-out
 // game saved as a 0-0 tie. Winners are read from `outcome`, never from winnerUserId.
@@ -23,6 +25,12 @@ function tournamentClause(filter) {
 
 const toNumber = (v) => Number(v) || 0
 
+const recordOf = (r) => ({
+  ...r,
+  played: toNumber(r.played), wins: toNumber(r.wins), losses: toNumber(r.losses), ties: toNumber(r.ties),
+  winsByColor: toNumber(r.winsByColor), winsByPoints: toNumber(r.winsByPoints)
+})
+
 /**
  * One scan over human-vs-human games: a row per player with their record and the stake points they
  * won from opponents (a win pays out the loser's stake; a tie refunds each side, so it earns nothing).
@@ -36,6 +44,8 @@ export async function loadHumanLeaderboardRows({ timeframe, filter }) {
       COUNT(*) FILTER (WHERE (s.side = 1 AND m.outcome = 'PLAYER1') OR (s.side = 2 AND m.outcome = 'PLAYER2'))::int AS wins,
       COUNT(*) FILTER (WHERE (s.side = 1 AND m.outcome = 'PLAYER2') OR (s.side = 2 AND m.outcome = 'PLAYER1'))::int AS losses,
       COUNT(*) FILTER (WHERE m.outcome = 'TIE')::int AS ties,
+      COUNT(*) FILTER (WHERE ((s.side = 1 AND m.outcome = 'PLAYER1') OR (s.side = 2 AND m.outcome = 'PLAYER2')) AND m."winReason" = 'COLOR')::int AS "winsByColor",
+      COUNT(*) FILTER (WHERE ((s.side = 1 AND m.outcome = 'PLAYER1') OR (s.side = 2 AND m.outcome = 'PLAYER2')) AND m."winReason" = 'POINTS')::int AS "winsByPoints",
       COALESCE(SUM(CASE WHEN (s.side = 1 AND m.outcome = 'PLAYER1') OR (s.side = 2 AND m.outcome = 'PLAYER2')
                         THEN s.opp_stake ELSE 0 END), 0)::bigint AS earned
     FROM "OgGtoonMatch" m
@@ -47,7 +57,7 @@ export async function loadHumanLeaderboardRows({ timeframe, filter }) {
     WHERE ${since} AND ${FINISHED} AND ${tournamentClause(filter)}
     GROUP BY s.uid, u.username
   `
-  return rows.map(r => ({ ...r, played: toNumber(r.played), wins: toNumber(r.wins), losses: toNumber(r.losses), ties: toNumber(r.ties), earned: toNumber(r.earned) }))
+  return rows.map(r => ({ ...recordOf(r), earned: toNumber(r.earned) }))
 }
 
 /** A row per player over finished practice matches (the player vs. the bot), optionally one difficulty. */
@@ -62,13 +72,15 @@ export async function loadPracticeLeaderboardRows({ timeframe, difficulty }) {
       COUNT(*)::int AS played,
       COUNT(*) FILTER (WHERE p.outcome = 'PLAYER_WIN')::int AS wins,
       COUNT(*) FILTER (WHERE p.outcome = 'BOT_WIN')::int AS losses,
-      COUNT(*) FILTER (WHERE p.outcome = 'TIE')::int AS ties
+      COUNT(*) FILTER (WHERE p.outcome = 'TIE')::int AS ties,
+      COUNT(*) FILTER (WHERE p.outcome = 'PLAYER_WIN' AND p."winReason" = 'COLOR')::int AS "winsByColor",
+      COUNT(*) FILTER (WHERE p.outcome = 'PLAYER_WIN' AND p."winReason" = 'POINTS')::int AS "winsByPoints"
     FROM "OgGtoonPracticeMatch" p
     LEFT JOIN "User" u ON u.id = p."userId"
     WHERE ${since} AND ${level}
     GROUP BY p."userId", u.username
   `
-  return rows.map(r => ({ ...r, played: toNumber(r.played), wins: toNumber(r.wins), losses: toNumber(r.losses), ties: toNumber(r.ties), earned: 0 }))
+  return rows.map(r => ({ ...recordOf(r), earned: 0 }))
 }
 
 /**
