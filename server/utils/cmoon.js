@@ -861,20 +861,30 @@ export function invalidateGlobalConfigCache() {
 }
 
 // A player's max HP for a cMoon Enemy Battle (solo or raid): the admin-configured
-// GlobalGameConfig.cMoonEnemyBattleDefaultHp, plus — once they've actually reached that rank
-// (User.currentCMoonRankId), that rank's own CMoonRankTier.cMoonEnemyBattleHpBonus. `userId` is
-// optional: callers with no specific player in mind (the admin solo preview, the admin raid
-// preview — see their own files' comments on why those are deliberately NOT personalized) pass
-// none and get just the plain default, same experience for every admin regardless of their own
-// rank or cMoon membership. `config` lets a caller that already has a fresh GlobalGameConfig
-// (e.g. cmoonRaidSocket.js's cmoonraid:start, which already calls getGlobalConfig() for the
-// feature-enabled check) skip a second cache read.
+// GlobalGameConfig.cMoonEnemyBattleDefaultHp, plus the SUM of CMoonRankTier.cMoonEnemyBattleHpBonus
+// across every tier at or below the player's current rank's tier — i.e. every bonus-granting
+// milestone they've actually cleared on the way up, not just whichever single rank they happen to
+// be sitting on right now. `userId` is optional: callers with no specific player in mind (the
+// admin solo preview, the admin raid preview — see their own files' comments on why those are
+// deliberately NOT personalized) pass none and get just the plain default, same experience for
+// every admin regardless of their own rank or cMoon membership. `config` lets a caller that
+// already has a fresh GlobalGameConfig (e.g. cmoonRaidSocket.js's cmoonraid:start, which already
+// calls getGlobalConfig() for the feature-enabled check) skip a second cache read.
 //
-// Only a CMoonRank with a `tier` set contributes a bonus — a hand-authored custom per-cMoon rank
-// (tierId null) has no universal tier to read cMoonEnemyBattleHpBonus from, so it never grants
-// one, matching that field's own "global ranks only" schema comment. The actual default+bonus
-// arithmetic (and its floor-at-1 safety) lives in combinePlayerMaxHp() in cmoonEnemyBattle.js —
-// see its own comment for why.
+// Bug fixed here: this used to read only User.currentCMoonRank.tier.cMoonEnemyBattleHpBonus — the
+// CURRENT rank's own bonus, and nothing else. Since admins only set a bonus on SOME tiers (e.g.
+// +5 at ranks 3/6/8/11, 0 everywhere else), a player who ranked past a bonus tier into a later
+// NON-bonus tier didn't just stop gaining HP — they LOST the bonus they already had, because the
+// single rank they currently sit on no longer carries one. Summing every tier at or below the
+// current one fixes that: once a milestone is cleared, its HP stays, and each further bonus tier
+// stacks on top (confirmed stacking, not cap-at-highest, is the intended design).
+//
+// Only a CMoonRank with a `tier` set contributes anything — a hand-authored custom per-cMoon rank
+// (tierId null) has no universal tier to read a sortOrder/bonus from, so it never grants one,
+// matching that field's own "global ranks only" schema comment; a user with no current rank at all
+// (never ranked up, or currentCMoonRankId cleared by leaving their cMoon) gets a flat 0 bonus. The
+// actual default+bonus arithmetic (and its floor-at-1 safety) lives in combinePlayerMaxHp() in
+// cmoonEnemyBattle.js — see its own comment for why.
 export async function getPlayerCombatMaxHp(userId, config = null) {
   const cfg = config || await getGlobalConfig()
   const defaultHp = Number.isInteger(cfg?.cMoonEnemyBattleDefaultHp) && cfg.cMoonEnemyBattleDefaultHp > 0
@@ -884,9 +894,16 @@ export async function getPlayerCombatMaxHp(userId, config = null) {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { currentCMoonRank: { select: { tier: { select: { cMoonEnemyBattleHpBonus: true } } } } },
+    select: { currentCMoonRank: { select: { tier: { select: { sortOrder: true } } } } },
   })
-  const bonus = Number(user?.currentCMoonRank?.tier?.cMoonEnemyBattleHpBonus) || 0
+  const sortOrder = user?.currentCMoonRank?.tier?.sortOrder
+  if (sortOrder == null) return combinePlayerMaxHp(defaultHp, 0)
+
+  const clearedTiers = await prisma.cMoonRankTier.findMany({
+    where: { sortOrder: { lte: sortOrder } },
+    select: { cMoonEnemyBattleHpBonus: true },
+  })
+  const bonus = clearedTiers.reduce((sum, t) => sum + (Number(t.cMoonEnemyBattleHpBonus) || 0), 0)
   return combinePlayerMaxHp(defaultHp, bonus)
 }
 
