@@ -192,6 +192,18 @@
               </div>
             </div>
 
+            <div v-if="mintLimitType === 'defined' && isStandardizableRarity" class="flex items-center justify-between gap-2">
+              <p class="text-[11px] text-gray-500">
+                Fills Total/Initial Quantity above from {{ cmartMetricsInfo?.activePlayerCount ?? '…' }} players active {{ windowStartDaysAgo }}–{{ windowEndDaysAgo }} days ago × the Common/Uncommon/Rare/etc percentage set on Admin &gt; cMart Metrics. Still editable afterward.
+              </p>
+              <button
+                type="button"
+                class="px-2 py-1.5 text-xs font-medium rounded-md border border-indigo-600 text-indigo-700 hover:bg-indigo-50 disabled:opacity-50 whitespace-nowrap"
+                :disabled="!cmartMetricsInfo"
+                @click="fillFromActivePlayers"
+              >Fill from Active Players</button>
+            </div>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-3" v-if="schedule.initialQty != null && schedule.finalAtDisplay">
               <div class="flex flex-col gap-1">
                 <label class="text-xs font-medium">Initial Release %</label>
@@ -665,6 +677,7 @@ import abilityMeta from '~/data/abilities.json'
 import SecondEditionFields from '~/components/admin/SecondEditionFields.vue'
 import OgGtoonLookEditor from '~/components/newsite/admin/legacy/OgGtoonLookEditor.vue'
 import { defaultGtoonCardStyle, sanitizeGtoonCardStyle } from '~/utils/gtoonCardStyle'
+import { STANDARDIZABLE_RARITIES } from '~/utils/cmartStandardizedRarities'
 
 const route = useRoute()
 const router = useRouter()
@@ -686,6 +699,23 @@ const initialQuantity = ref(null); const inCmart = ref(false)
 const assetPath = ref(''); const setField = ref('')
 const characters = ref('')
 const description = ref('')
+const cmartMetricsInfo = ref(null)
+const windowStartDaysAgo = ref(14)
+const windowEndDaysAgo = ref(7)
+// codeOnly isn't itself editable from this form (see the PUT endpoint — it's read from the
+// existing row, not the payload), but it's loaded here so the fill button can be hidden for a
+// Code-Only cToon even if its rarity was later changed away from "Code Only".
+const ctoonCodeOnly = ref(false)
+const isStandardizableRarity = computed(() => STANDARDIZABLE_RARITIES.includes(rarity.value) && !ctoonCodeOnly.value)
+
+function fillFromActivePlayers() {
+  if (!cmartMetricsInfo.value) return
+  const percent = cmartMetricsInfo.value.percentages?.[rarity.value]
+  if (percent == null) return
+  const qty = Math.max(1, Math.round(cmartMetricsInfo.value.activePlayerCount * percent / 100))
+  quantity.value = qty
+  initialQuantity.value = qty
+}
 
 /* mint limit refs */
 const mintLimitType = ref('defined')
@@ -1034,6 +1064,7 @@ onMounted(async ()=>{
     quantity.value = ctoon.quantity
     initialQuantity.value = ctoon.initialQuantity
     inCmart.value = ctoon.inCmart
+    ctoonCodeOnly.value = !!ctoon.codeOnly
     assetPath.value = ctoon.assetPath
     setField.value = ctoon.set || ''
     characters.value = (ctoon.characters||[]).join(', ')
@@ -1105,10 +1136,16 @@ onMounted(async ()=>{
       } catch { /* non-fatal: combobox just stays on "No Power" */ }
     }
 
-    const [sRes, setsRes] = await Promise.all([
+    const [sRes, setsRes, cmartMetricsRes] = await Promise.all([
       fetch('/api/admin/series',{credentials:'include'}),
-      fetch('/api/admin/sets',{credentials:'include'})
+      fetch('/api/admin/sets',{credentials:'include'}),
+      fetch('/api/cmart-standardized-metrics')
     ])
+    try {
+      cmartMetricsInfo.value = await cmartMetricsRes.json()
+      if (cmartMetricsInfo.value?.windowStartDaysAgo) windowStartDaysAgo.value = cmartMetricsInfo.value.windowStartDaysAgo
+      if (cmartMetricsInfo.value?.windowEndDaysAgo) windowEndDaysAgo.value = cmartMetricsInfo.value.windowEndDaysAgo
+    } catch {}
     seriesOptions.value = await sRes.json()
     setsOptions.value = (await setsRes.json()).filter(Boolean)
 

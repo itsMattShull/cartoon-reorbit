@@ -116,6 +116,14 @@ export default defineEventHandler(async (event) => {
                 backgroundId: true,
                 background: { select: { id: true, label: true, imagePath: true } }
               }
+            },
+            // pack rewards
+            packs: {
+              select: {
+                packId: true,
+                quantity: true,
+                pack: { select: { id: true, name: true, imagePath: true } }
+              }
             }
           }
         }

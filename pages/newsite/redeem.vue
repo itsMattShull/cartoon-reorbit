@@ -69,6 +69,20 @@
                 </div>
               </div>
             </div>
+
+            <!-- Pack unlocks -->
+            <div v-if="rewards.packs?.length" class="rd-bgs">
+              <h3 class="rd-bgs-title">Packs</h3>
+              <div class="rd-grid">
+                <div v-for="pack in rewards.packs" :key="pack.packId" class="rd-bg-card">
+                  <CtoonImage v-if="pack.imagePath" :ctoon="pack" :src="pack.imagePath" class="rd-bg-img" />
+                  <div class="rd-bg-info">
+                    <div class="rd-bg-label">{{ pack.name }}</div>
+                    <div class="rd-bg-sub">{{ pack.quantity }}× added to your packs — open it anytime</div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <ClientOnly>
@@ -104,7 +118,7 @@ const rawHTML = '<!-- My special production comment for this page -->'
 
 const code = ref('')
 const success = ref(false)
-const rewards = ref({ points: 0, ctoons: [], backgrounds: [] })
+const rewards = ref({ points: 0, ctoons: [], backgrounds: [], packs: [] })
 
 const toast = reactive({ visible: false, message: '', type: 'error' })
 let toastTimer = null
@@ -121,7 +135,7 @@ const balloons = ref([])
 
 async function submit() {
   success.value = false
-  rewards.value = { points: 0, ctoons: [], backgrounds: [] }
+  rewards.value = { points: 0, ctoons: [], backgrounds: [], packs: [] }
 
   try {
     const payload = await $fetch('/api/redeem', {
@@ -132,6 +146,7 @@ async function submit() {
     rewards.value.points = payload.points ?? 0
     rewards.value.ctoons = payload.ctoons ?? []
     rewards.value.backgrounds = payload.backgrounds ?? []
+    rewards.value.packs = payload.packs ?? []
     success.value = true
     code.value = ''
 

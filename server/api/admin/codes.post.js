@@ -69,6 +69,16 @@ export default defineEventHandler(async (event) => {
     ...normalizeBackgroundIds(topLevelBackgroundIds, 'backgroundIds')
   ]
 
+  function normalizePackCreates(arr, where) {
+    if (arr == null) return []
+    if (!Array.isArray(arr)) throw createError({ statusCode: 400, statusMessage: `${where} must be an array.` })
+    return arr.map((p, j) => {
+      if (!p?.packId || typeof p.packId !== 'string') throw createError({ statusCode: 400, statusMessage: `Invalid packId in ${where}[${j}].` })
+      if (typeof p.quantity !== 'number' || p.quantity < 1) throw createError({ statusCode: 400, statusMessage: `Invalid quantity in ${where}[${j}].` })
+      return { packId: p.packId, quantity: p.quantity }
+    })
+  }
+
   const rewardCreates = rewards.map((r, i) => {
     const { points } = r || {}
     if (points != null && (typeof points !== 'number' || points < 0)) throw createError({ statusCode: 400, statusMessage: `Invalid points in rewards[${i}].` })
@@ -83,6 +93,7 @@ export default defineEventHandler(async (event) => {
     ]
     if (backgroundIds.length === 0 && topLevelIds.length > 0) backgroundIds = topLevelIds
     const backgroundCreates = backgroundIds.map(id => ({ backgroundId: id }))
+    const packCreates = normalizePackCreates(r?.packs, `rewards[${i}].packs`)
 
     if (usePool) {
       if (!Array.isArray(r.pool.items) || r.pool.items.length === 0) {
@@ -99,7 +110,8 @@ export default defineEventHandler(async (event) => {
         points: points ?? 0,
         pooledUniqueCount: r.pool.uniqueCount,
         poolCtoons: { create: poolCreates },
-        ...(backgroundCreates.length ? { backgrounds: { create: backgroundCreates } } : {})
+        ...(backgroundCreates.length ? { backgrounds: { create: backgroundCreates } } : {}),
+        ...(packCreates.length ? { packs: { create: packCreates } } : {})
       }
     }
 
@@ -114,7 +126,8 @@ export default defineEventHandler(async (event) => {
     return {
       points: points ?? 0,
       ctoons: { create: ctoonCreates },
-      ...(backgroundCreates.length ? { backgrounds: { create: backgroundCreates } } : {})
+      ...(backgroundCreates.length ? { backgrounds: { create: backgroundCreates } } : {}),
+      ...(packCreates.length ? { packs: { create: packCreates } } : {})
     }
   })
 

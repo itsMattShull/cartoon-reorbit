@@ -1661,6 +1661,11 @@ model GlobalGameConfig {
   phashDuplicateThreshold        Int     @default(14)
   dhashDuplicateThreshold        Int     @default(16)
   rarityDefaults                 Json?
+  // Per-rarity percentage of the active-player count used to compute a cToon's mint quantity
+  // when its "Standardize Metric in cMart" toggle is on. { "Crazy Rare": 50, "Rare": 90, ... } —
+  // same merge-with-hardcoded-defaults pattern as rarityDefaults above. See
+  // server/utils/cmartStandardizedMetrics.js.
+  cmartStandardizedMetrics       Json?
   achievementDiscordChannelId    String?
   czoneContestDiscordChannelId   String?
   devPrDiscordChannelId          String? // posts PR opened/merged notices for the dev branch
