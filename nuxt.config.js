@@ -1,4 +1,17 @@
+import { cpSync, existsSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { OLD_ADMIN_ROUTE_RULES } from './utils/oldAdminRedirects.js'
+
+// sharp >= 0.35 loads its native binding through a path Nitro's file tracer can't follow, so
+// @img/sharp-<platform> and @img/sharp-libvips-<platform> never reach .output/server/node_modules
+// and the built server only starts if the repo's node_modules happens to be reachable. Copy the
+// installed binaries into the output after the build to keep it self-contained (npm only installs
+// the host platform's pair).
+const IMG_DIR = fileURLToPath(new URL('./node_modules/@img', import.meta.url))
+const sharpNativePackages = existsSync(IMG_DIR)
+  ? readdirSync(IMG_DIR).filter(name => name.startsWith('sharp-'))
+  : []
 
 export default defineNuxtConfig({
   app: {
@@ -92,5 +105,15 @@ export default defineNuxtConfig({
 
   sourcemap: {
     client: 'hidden'
+  },
+
+  nitro: {
+    hooks: {
+      compiled(nitro) {
+        for (const name of sharpNativePackages) {
+          cpSync(join(IMG_DIR, name), join(nitro.options.output.serverDir, 'node_modules/@img', name), { recursive: true })
+        }
+      }
+    }
   }
 })
