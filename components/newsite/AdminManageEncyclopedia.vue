@@ -167,7 +167,7 @@ const linkableEntries = computed(() => entries.value.filter(e => e.id !== form.i
 const editor = useEditor({
   content: '',
   extensions: [
-    StarterKit.configure({ heading: { levels: [2, 3, 4] } }),
+    StarterKit.configure({ heading: { levels: [2, 3, 4] }, link: false, underline: false, trailingNode: false }),
     Link.configure({ openOnClick: false, autolink: false }),
   ],
 })
