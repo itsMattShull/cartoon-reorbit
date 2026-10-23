@@ -91,6 +91,7 @@
     "seed": "node prisma/seed.js"
   },
   "overrides": {
-    "@vercel/nft": "^0.27.4"
+    "@vercel/nft": "^0.27.4",
+    "postcss-selector-parser": "^7.1.7"
   }
 }
