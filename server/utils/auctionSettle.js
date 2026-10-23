@@ -70,7 +70,18 @@ export async function settleAuction(auctionId, { db, scheduleAuctionClose, notif
   // Set if this auction turned out to be a duplicate of one that already sold.
   let settledAsDoubleSale = false
 
+  // Set if another settlement of this same auction finished while this one was waiting.
+  let alreadySettled = false
+
   await db.$transaction(async tx => {
+    // Lock the auction row first, before reading its status. Without this, two
+    // settlements running at once (a stalled BullMQ job being retried while the
+    // first run is still going, say) both read ACTIVE, both pass the check below
+    // and both pay out: the winner is charged twice, the seller is credited twice
+    // and the ownership log gets two rows. With the lock the second one waits,
+    // then sees CLOSED and stands down. Same pattern as bid.post.js.
+    await tx.$executeRaw`SELECT id FROM "Auction" WHERE id = ${id} FOR UPDATE`
+
     // Re-check inside the transaction to close the TOCTOU gap: a concurrent bid
     // with anti-snipe may have extended endAt after our initial read above, but
     // scheduleAuctionClose skips rescheduling when the job is already 'active'.
@@ -78,7 +89,10 @@ export async function settleAuction(auctionId, { db, scheduleAuctionClose, notif
       where: { id },
       select: { status: true, endAt: true }
     })
-    if (!current || current.status !== 'ACTIVE') return
+    if (!current || current.status !== 'ACTIVE') {
+      alreadySettled = true
+      return
+    }
     if (new Date(current.endAt) > now) {
       extendedEndAt = current.endAt
       return
@@ -227,6 +241,9 @@ export async function settleAuction(auctionId, { db, scheduleAuctionClose, notif
       })
     }
   })
+
+  // Someone else settled it first; nothing was paid here and there is nothing to broadcast.
+  if (alreadySettled) return null
 
   // endAt was extended by a concurrent anti-snipe bid; reschedule and bail out.
   if (extendedEndAt) {
