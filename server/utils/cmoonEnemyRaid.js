@@ -49,17 +49,13 @@
 //     pool/shared action this engine already treats the boss as having.
 
 import {
-  resolveBattleRound, rollHitDamage, rollEnemyAction, rollEnemyRewards,
-  isValidBattleAction, isKnownAction, PLAYER_MAX_HP, HEAL_ON_SUCCESSFUL_BLOCK,
-  SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD,
+  resolveBattleRound, rollHitDamage, isKnownAction, PLAYER_MAX_HP, HEAL_ON_SUCCESSFUL_BLOCK,
 } from './cmoonEnemyBattle.js'
-
-export { rollEnemyAction, rollEnemyRewards, isValidBattleAction, PLAYER_MAX_HP, SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD }
 
 export const JOIN_WINDOW_SECONDS = 60 // FORMING -> auto-starts combat, whoever has joined by then
 export const ROUND_TIMEOUT_SECONDS = 20 // an alive participant who hasn't acted by this auto-acts
 export const MAX_PARTY_SIZE = 4 // initiator + up to 3 joiners
-export const MAX_ROUNDS_SAFETY = 100 // same runaway-RNG safety valve as a solo battle
+export const RAID_MAX_ROUNDS_SAFETY = 100 // same runaway-RNG safety valve as a solo battle
 
 // Whether a raid boss can be started right now, given its own admin-configured
 // raidOneTime/raidCooldownMinutes and the raidDefeatedAt timestamp its last WIN set (see those

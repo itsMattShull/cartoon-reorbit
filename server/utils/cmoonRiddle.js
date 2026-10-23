@@ -9,8 +9,6 @@ import { recomputeCMoonTeamScores } from './cmoon.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 import { resolveCMoonRaidDiscordChannelId, sendCMoonTeamUpdate } from './discord.js'
 
-export { normalizeRiddleAnswer, isCorrectRiddleAnswer } from './cmoonRiddleAnswer.js'
-
 // Claims a riddle's "first solver" slot for `userId`, atomically — a single conditional UPDATE
 // guards it, the same shape as this codebase's other "only one caller can win" sentinels (the
 // SHARED_POOL currentHp decrement, CMoonEnemyRaidParticipant.activeUserId). Returns

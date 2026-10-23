@@ -6,7 +6,7 @@ import { queueStatus } from './queueHealth.js'
 
 export const JOB_STATES = ['waiting', 'active', 'delayed', 'failed', 'completed', 'prioritized']
 
-export async function requireAdmin(event) {
+export async function requireQueueAdmin(event) {
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
   try {

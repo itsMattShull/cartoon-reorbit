@@ -1,9 +1,9 @@
 // POST /api/admin/queues/:name/clean { state: 'failed' | 'completed' } — delete all finished jobs of one state.
 import { defineEventHandler, readBody, createError } from 'h3'
-import { requireAdmin, requireQueue } from '@/server/utils/queueAdmin'
+import { requireQueueAdmin, requireQueue } from '@/server/utils/queueAdmin'
 
 export default defineEventHandler(async (event) => {
-  await requireAdmin(event)
+  await requireQueueAdmin(event)
   const { queue } = requireQueue(event)
   const body = (await readBody(event).catch(() => null)) || {}
   const state = String(body.state || '')

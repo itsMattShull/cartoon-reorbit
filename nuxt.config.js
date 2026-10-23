@@ -44,6 +44,11 @@ export default defineNuxtConfig({
   // 2)  Vite alias → fixes the ".prisma/client/index-browser" error
   // ───────────────────────────────────────────────
   vite: {
+    build: {
+      // three.js is already split into its own lazily-loaded chunk (~510 kB minified) and can't be
+      // broken up further; raise the limit just past it so the warning stays useful for new bloat.
+      chunkSizeWarningLimit: 600
+    },
     resolve: {
       alias: {
         '.prisma/client/index-browser':

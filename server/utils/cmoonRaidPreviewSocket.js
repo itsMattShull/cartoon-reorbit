@@ -35,9 +35,9 @@ import { randomUUID } from 'crypto'
 import { prisma as db } from '../prisma.js'
 import { notifyCMoonRaidPreviewStarted } from './notifications.js'
 import { getPlayerCombatMaxHp } from './cmoon.js'
+import { rollEnemyAction, rollEnemyRewards, isValidBattleAction } from './cmoonEnemyBattle.js'
 import {
-  resolveRaidRound, rollEnemyAction, rollEnemyRewards, isValidBattleAction,
-  JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE, MAX_ROUNDS_SAFETY,
+  resolveRaidRound, JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE, RAID_MAX_ROUNDS_SAFETY,
 } from './cmoonEnemyRaid.js'
 
 const SWEEP_INTERVAL_MS = 2000
@@ -183,7 +183,7 @@ async function closeRound(io, raid) {
       await resolvePreviewOutcome(io, raid, 'WIN')
     } else if (everyoneDown) {
       await resolvePreviewOutcome(io, raid, 'LOSS')
-    } else if (nextRoundNumber >= MAX_ROUNDS_SAFETY) {
+    } else if (nextRoundNumber >= RAID_MAX_ROUNDS_SAFETY) {
       await resolvePreviewOutcome(io, raid, 'ABANDONED')
     } else {
       raid.roundNumber = nextRoundNumber

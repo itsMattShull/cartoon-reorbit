@@ -4,7 +4,7 @@
 // server/utils/cmoonJoinEffect.js's shape/convention.
 import { isValidHexColor } from '@/server/utils/cmoon'
 
-export const NAME_MAX_LENGTH = 60
+export const CZONE_EFFECT_NAME_MAX_LENGTH = 60
 
 export const KINDS = ['BORDER', 'GLOW']
 
@@ -31,7 +31,7 @@ export const SPEED_MIN = 0.6
 export const SPEED_MAX = 10
 
 export function isValidCZoneEffectName(value) {
-  return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= NAME_MAX_LENGTH
+  return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= CZONE_EFFECT_NAME_MAX_LENGTH
 }
 
 export function isValidCZoneEffectKind(value) {
@@ -133,7 +133,7 @@ export function parseCZoneEffectBody(body, existing) {
     : Number(body.speed)
 
   if (!isValidCZoneEffectName(name)) {
-    return { ok: false, message: `Name is required (max ${NAME_MAX_LENGTH} characters)` }
+    return { ok: false, message: `Name is required (max ${CZONE_EFFECT_NAME_MAX_LENGTH} characters)` }
   }
   if (!isValidCZoneEffectKind(kind)) {
     return { ok: false, message: 'Kind must be BORDER or GLOW' }

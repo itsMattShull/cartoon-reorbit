@@ -1,7 +1,4 @@
 import { Queue } from 'bullmq'
-import { isStaleDissolveLaunchJob } from './dissolveAuctionLaunchStaleness.js'
-
-export { isStaleDissolveLaunchJob }
 
 export const redisConnection = {
   host: process.env.REDIS_HOST,
