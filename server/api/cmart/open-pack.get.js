@@ -96,10 +96,19 @@ export default defineEventHandler(async (event) => {
 
   /* ── 2. Mark opened, prune depleted, rebalance, update counts ─────────── */
   await db.$transaction(async (tx) => {
-    await tx.userPack.update({
-      where: { id: userPackId },
+    // Claim the pack. The `opened` check above ran outside this transaction, so
+    // without a conditional update here every request that arrived before the first
+    // one committed (a double click, or deliberate parallel requests) would pass
+    // that check and open the same pack again for another set of free cToons. The
+    // row lock makes the second request wait, then match nothing and bail out —
+    // before any mint is queued, since that happens after this commits.
+    const claimed = await tx.userPack.updateMany({
+      where: { id: userPackId, userId, opened: false },
       data:  { opened: true, openedAt: new Date() }
     })
+    if (claimed.count !== 1) {
+      throw createError({ statusCode: 400, statusMessage: 'Pack already opened' })
+    }
 
     const packId = userPack.pack.id
     const sellOutBehavior = userPack.pack.sellOutBehavior || 'REMOVE_ON_ANY_RARITY_EMPTY'

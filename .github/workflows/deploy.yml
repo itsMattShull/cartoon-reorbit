@@ -68,6 +68,7 @@ jobs:
         env:
           OG_BOARDS_TEST_DB: postgresql://ci:ci@localhost:5432/ci
           OG_TOURNAMENT_TEST_DB: postgresql://ci:ci@localhost:5432/ci
+          OWNERSHIP_TEST_DB: postgresql://ci:ci@localhost:5432/ci
         run: node --test --test-force-exit --test-concurrency=1 tests/*.db.test.js
 
   deploy_production:
