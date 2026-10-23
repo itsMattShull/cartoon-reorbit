@@ -82,11 +82,15 @@ test('the tile slot key is wired through all four places it has to appear', () =
 test('the Games page tile grid has a row for every tile', () => {
   const src = read('components/newsite/GamesHome.vue')
   const tiles = (src.match(/class="quadrant quadrant--/g) || []).length
-  const rows = Number(/grid-template-rows: repeat\((\d+), 1fr\)/.exec(src)?.[1])
-  // Two columns, so N tiles need ceil(N/2) explicit rows. A short grid drops the last tiles
-  // into an implicit auto-height row, and because .tile-img is absolutely positioned that row
-  // collapses to nothing — the tile is present but invisible.
-  assert.equal(rows, Math.ceil(tiles / 2), `${tiles} tiles need ${Math.ceil(tiles / 2)} grid rows, found ${rows}`)
+  // The row count is computed from TOTAL_TILES (tiles can be hidden at runtime) and handed to the
+  // stylesheet as --total-rows, so a stale TOTAL_TILES is how a tile now ends up without a row. Two
+  // columns, so N tiles need ceil(N/2) explicit rows. A short grid drops the last tiles into an
+  // implicit auto-height row, and because .tile-img is absolutely positioned that row collapses to
+  // nothing — the tile is present but invisible.
+  const total = Number(/const TOTAL_TILES = (\d+)/.exec(src)?.[1])
+  assert.equal(total, tiles, `TOTAL_TILES is ${total} but the page renders ${tiles} tiles`)
+  assert.match(src, /'--total-rows': Math\.ceil\(\(TOTAL_TILES - hidden\.value\.size\) \/ 2\)/, 'the grid no longer derives --total-rows from TOTAL_TILES')
+  assert.match(src, /grid-template-rows: repeat\(var\(--total-rows, \d+\), 1fr\)/, 'the stylesheet no longer reads --total-rows')
 })
 
 test('every Manage Games tab has a panel, and EdRps is one of them', () => {
