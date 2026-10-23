@@ -195,7 +195,7 @@ const form = reactive(emptyForm())
 const blurbEditor = useEditor({
   content: '',
   extensions: [
-    StarterKit.configure({ heading: { levels: [2, 3, 4] } }),
+    StarterKit.configure({ heading: { levels: [2, 3, 4] }, link: false, underline: false, trailingNode: false }),
     Link.configure({ openOnClick: false, autolink: false, HTMLAttributes: { target: '_blank', rel: 'noopener noreferrer' } }),
   ],
 })

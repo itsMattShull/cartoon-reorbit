@@ -103,7 +103,7 @@ const editors = reactive(SECTION_META.map((meta) => ({
   editor: useEditor({
     content: '',
     extensions: [
-      StarterKit.configure({ heading: { levels: [2, 3, 4] } }),
+      StarterKit.configure({ heading: { levels: [2, 3, 4] }, link: false, underline: false, trailingNode: false }),
       Link.configure({
         openOnClick: false,
         autolink: false,
