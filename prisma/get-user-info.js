@@ -1,9 +1,11 @@
 // Usage: node --env-file=.env prisma/get-user-info.js <username>
 
 import { PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
+import 'dotenv/config'
 import { decryptIp } from '../server/utils/ip-encrypt.js'
 
-const prisma = new PrismaClient()
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL }) })
 
 const username = process.argv[2]
 if (!username) {

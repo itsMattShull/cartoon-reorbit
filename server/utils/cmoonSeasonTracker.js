@@ -1,12 +1,12 @@
 // server/utils/cmoonSeasonTracker.js
 // Validation + parsing for admin-defined cMoon season progress trackers — mirrors
 // server/utils/cmoonEnemy.js's shape/convention: pure functions, no DB access.
+import { SORT_ORDER_MIN, SORT_ORDER_MAX, isValidSortOrder } from './sortOrder.js'
+
 export const LABEL_MAX_LENGTH = 60
 export const METRIC_TYPES = ['BATTLE_WINS', 'BATTLE_LOSSES', 'TEAM_SCORE', 'AVG_POINTS']
 export const TARGET_VALUE_MIN = 0
 export const TARGET_VALUE_MAX = 1_000_000
-export const SORT_ORDER_MIN = -9999
-export const SORT_ORDER_MAX = 9999
 
 export function isValidLabel(value) {
   return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= LABEL_MAX_LENGTH
@@ -18,10 +18,6 @@ export function isValidMetricType(value) {
 
 export function isValidTargetValue(value) {
   return typeof value === 'number' && Number.isFinite(value) && value > TARGET_VALUE_MIN && value <= TARGET_VALUE_MAX
-}
-
-export function isValidSortOrder(value) {
-  return Number.isInteger(value) && value >= SORT_ORDER_MIN && value <= SORT_ORDER_MAX
 }
 
 function toNumber(value) {

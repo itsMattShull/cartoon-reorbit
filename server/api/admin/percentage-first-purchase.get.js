@@ -52,7 +52,7 @@ export default defineEventHandler(async (event) => {
     const result = await prisma.$queryRaw`
       WITH days AS (
         SELECT generate_series(
-          date_trunc('day', ${startDate}),
+          date_trunc('day', ${startDate}::timestamp),
           date_trunc('day', now()),
           '1 day'
         ) AS day
@@ -99,7 +99,7 @@ export default defineEventHandler(async (event) => {
     const result = await prisma.$queryRaw`
       WITH months AS (
         SELECT generate_series(
-          date_trunc('month', ${startDate}),
+          date_trunc('month', ${startDate}::timestamp),
           date_trunc('month', now()),
           '1 month'
         ) AS month
@@ -145,7 +145,7 @@ export default defineEventHandler(async (event) => {
   const result = await prisma.$queryRaw`
     WITH weeks AS (
       SELECT generate_series(
-        date_trunc('week', ${startDate}),
+        date_trunc('week', ${startDate}::timestamp),
         date_trunc('week', now()),
         '1 week'
       ) AS week

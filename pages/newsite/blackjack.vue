@@ -1231,7 +1231,7 @@ onBeforeUnmount(() => {
    read as a 2003 Flash game rather than a modern casino app. */
 @font-face {
   font-family: "FuturaBdCnBT";
-  src: url("/newwinball/fonts/84_Futura BdCn BT.ttf") format("truetype");
+  src: url("/newwinball/fonts/84_Futura_BdCn_BT.ttf") format("truetype");
   font-weight: 700;
   font-display: swap;
 }

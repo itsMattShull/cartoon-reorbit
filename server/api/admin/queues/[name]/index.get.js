@@ -1,13 +1,13 @@
 // GET /api/admin/queues/:name — one queue's overview plus analytics over its retained finished jobs
 // and, for the cron queues, the registered job schedulers with their next run time.
 import { defineEventHandler } from 'h3'
-import { requireAdmin, requireQueue, queueOverview } from '@/server/utils/queueAdmin'
+import { requireQueueAdmin, requireQueue, queueOverview } from '@/server/utils/queueAdmin'
 import { summarizeFinished } from '@/server/utils/queueHealth'
 
 const SAMPLE = 500
 
 export default defineEventHandler(async (event) => {
-  await requireAdmin(event)
+  await requireQueueAdmin(event)
   const entry = requireQueue(event)
   const { queue } = entry
 

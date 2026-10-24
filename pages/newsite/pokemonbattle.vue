@@ -863,7 +863,7 @@ html.pfwg-page body ::selection { background: transparent; }
    so a swap would reflow the battle text from three lines to two mid-battle. The file is 10KB. */
 @font-face {
   font-family: 'FuturaBdCnBT';
-  src: url('/newwinball/fonts/84_Futura BdCn BT.ttf') format('truetype');
+  src: url('/newwinball/fonts/84_Futura_BdCn_BT.ttf') format('truetype');
   font-display: block;
 }
 

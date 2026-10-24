@@ -40,10 +40,23 @@ export default defineNuxtConfig({
   // ───────────────────────────────────────────────
   modules: ['@nuxtjs/tailwindcss'],
 
+  // @nuxtjs/tailwindcss registers `tailwindcss/nesting`, which Nuxt 4's PostCSS loader can't
+  // resolve from Tailwind 3 (build warns NUXT_B7027). Nothing here uses nested CSS, so skip it.
+  postcss: {
+    plugins: {
+      'tailwindcss/nesting': false
+    }
+  },
+
   // ───────────────────────────────────────────────
   // 2)  Vite alias → fixes the ".prisma/client/index-browser" error
   // ───────────────────────────────────────────────
   vite: {
+    build: {
+      // three.js is already split into its own lazily-loaded chunk (~510 kB minified) and can't be
+      // broken up further; raise the limit just past it so the warning stays useful for new bloat.
+      chunkSizeWarningLimit: 600
+    },
     resolve: {
       alias: {
         '.prisma/client/index-browser':

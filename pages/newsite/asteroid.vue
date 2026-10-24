@@ -1,175 +1,173 @@
 <template>
   <div>
-    <NuxtLayout name="newsite-template" :show-adbar="true" :show-nav="true">
-      <div class="ast-wrapper">
-        <!-- Landscape warning (short viewports only — a tablet in landscape is fine) -->
-        <div class="landscape-warning" aria-live="polite">
-          <span>Rotate your device to portrait to continue the mission</span>
-        </div>
+    <div class="ast-wrapper">
+      <!-- Landscape warning (short viewports only — a tablet in landscape is fine) -->
+      <div class="landscape-warning" aria-live="polite">
+        <span>Rotate your device to portrait to continue the mission</span>
+      </div>
 
-        <!-- Loading -->
-        <div v-if="uiState === 'loading'" class="center-content">
-          <div class="spinner" aria-label="Loading game…"></div>
-        </div>
+      <!-- Loading -->
+      <div v-if="uiState === 'loading'" class="center-content">
+        <div class="spinner" aria-label="Loading game…"></div>
+      </div>
 
-        <!-- Start screen -->
-        <div v-else-if="uiState === 'start'" class="center-content">
-          <div class="start-card">
-            <p class="start-eyebrow">Kids Next Door presents</p>
-            <h1 class="game-title">Operation<br />A.S.T.E.R.O.I.D.</h1>
-            <p class="start-expando">
-              <span class="ex-letter">A</span>steroid
-              <span class="ex-letter">S</span>mashing
-              <span class="ex-letter">T</span>reehouse
-              <span class="ex-letter">E</span>scort
-              <span class="ex-letter">R</span>un
-              <span class="ex-letter">O</span>ver
-              <span class="ex-letter">I</span>nfinite
-              <span class="ex-letter">D</span>ebris
-            </p>
-            <p class="start-sub">
-              Fly a K.N.D. ship through an endless asteroid field. Your cannon fires on its own —
-              you steer. Each ship shoots differently, so pick your weapon.
-            </p>
+      <!-- Start screen -->
+      <div v-else-if="uiState === 'start'" class="center-content">
+        <div class="start-card">
+          <p class="start-eyebrow">Kids Next Door presents</p>
+          <h1 class="game-title">Operation<br />A.S.T.E.R.O.I.D.</h1>
+          <p class="start-expando">
+            <span class="ex-letter">A</span>steroid
+            <span class="ex-letter">S</span>mashing
+            <span class="ex-letter">T</span>reehouse
+            <span class="ex-letter">E</span>scort
+            <span class="ex-letter">R</span>un
+            <span class="ex-letter">O</span>ver
+            <span class="ex-letter">I</span>nfinite
+            <span class="ex-letter">D</span>ebris
+          </p>
+          <p class="start-sub">
+            Fly a K.N.D. ship through an endless asteroid field. Your cannon fires on its own —
+            you steer. Each ship shoots differently, so pick your weapon.
+          </p>
 
-            <div class="plays-info">
-              <span class="plays-badge" :class="{ 'plays-badge--practice': rankedPlaysLeft === 0 }">
-                {{ rankedPlaysLeft > 0
-                  ? `${rankedPlaysLeft} ranked run${rankedPlaysLeft !== 1 ? 's' : ''} left`
-                  : 'Practice mode' }}
-              </span>
-              <span class="reset-text">· Resets {{ resetLabel }}</span>
-            </div>
-            <p class="plays-note">
-              Play as much as you like — only your first {{ rankedPlaysPerPeriod }} run{{ rankedPlaysPerPeriod !== 1 ? 's' : '' }}
-              each day count for the leaderboard and points.
-            </p>
-
-            <!-- Ship picker. Radios rather than buttons so arrow keys move between them and a
-                 screen reader announces it as one grouped choice. -->
-            <fieldset class="ship-picker">
-              <legend class="ship-legend">Choose your ship</legend>
-              <div class="ship-grid">
-                <label
-                  v-for="ship in ships"
-                  :key="ship.id"
-                  class="ship-card"
-                  :class="{ 'ship-card--on': selectedShipId === ship.id }"
-                >
-                  <input
-                    class="ship-radio"
-                    type="radio"
-                    name="asteroid-ship"
-                    :value="ship.id"
-                    :checked="selectedShipId === ship.id"
-                    @change="chooseShip(ship.id)"
-                  />
-                  <img class="ship-art" :src="ship.sprite" :alt="ship.name" draggable="false" @error="onShipArtError" />
-                  <span class="ship-name">{{ ship.name }}</span>
-                  <span class="ship-tagline">{{ ship.tagline }}</span>
-                  <span class="ship-weapon">{{ weaponSummary(ship) }}</span>
-                </label>
-              </div>
-              <p class="ship-blurb">{{ activeShip.blurb }}</p>
-            </fieldset>
-
-            <button class="btn-start" @click="startGame" :disabled="starting">
-              {{ starting ? 'Launching…' : 'Launch' }}
-            </button>
-            <button class="btn-howto" @click="showHowTo = true" aria-label="How to play">
-              <svg class="howto-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
-                <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
-                <path d="M9.1 9a3 3 0 1 1 4.4 3c-.9.6-1.5 1-1.5 2.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-                <circle cx="12" cy="17.4" r="1.2" fill="currentColor"/>
-              </svg>
-              <span>How to Play</span>
-            </button>
+          <div class="plays-info">
+            <span class="plays-badge" :class="{ 'plays-badge--practice': rankedPlaysLeft === 0 }">
+              {{ rankedPlaysLeft > 0
+                ? `${rankedPlaysLeft} ranked run${rankedPlaysLeft !== 1 ? 's' : ''} left`
+                : 'Practice mode' }}
+            </span>
+            <span class="reset-text">· Resets {{ resetLabel }}</span>
           </div>
-        </div>
+          <p class="plays-note">
+            Play as much as you like — only your first {{ rankedPlaysPerPeriod }} run{{ rankedPlaysPerPeriod !== 1 ? 's' : '' }}
+            each day count for the leaderboard and points.
+          </p>
 
-        <!-- Active game -->
-        <div v-else-if="uiState === 'playing'" class="game-area" role="main" aria-label="Operation A.S.T.E.R.O.I.D. game board">
-          <div class="hud" role="status" aria-live="off">
-            <div class="hud-item">
-              <span class="hud-label">Score</span>
-              <span class="hud-value">{{ hudScore.toLocaleString() }}</span>
+          <!-- Ship picker. Radios rather than buttons so arrow keys move between them and a
+               screen reader announces it as one grouped choice. -->
+          <fieldset class="ship-picker">
+            <legend class="ship-legend">Choose your ship</legend>
+            <div class="ship-grid">
+              <label
+                v-for="ship in ships"
+                :key="ship.id"
+                class="ship-card"
+                :class="{ 'ship-card--on': selectedShipId === ship.id }"
+              >
+                <input
+                  class="ship-radio"
+                  type="radio"
+                  name="asteroid-ship"
+                  :value="ship.id"
+                  :checked="selectedShipId === ship.id"
+                  @change="chooseShip(ship.id)"
+                />
+                <img class="ship-art" :src="ship.sprite" :alt="ship.name" draggable="false" @error="onShipArtError" />
+                <span class="ship-name">{{ ship.name }}</span>
+                <span class="ship-tagline">{{ ship.tagline }}</span>
+                <span class="ship-weapon">{{ weaponSummary(ship) }}</span>
+              </label>
             </div>
-            <div class="hud-item">
-              <span class="hud-label">Lives</span>
-              <span class="hud-value hud-lives">
-                <span v-for="n in Math.min(hudLives, 5)" :key="n" class="life-pip"></span>
-                <span v-if="hudLives > 5" class="life-extra">+{{ hudLives - 5 }}</span>
-                <span v-if="hudLives === 0" class="life-none">—</span>
-              </span>
-            </div>
-            <div class="hud-item">
-              <span class="hud-label">Wave</span>
-              <span class="hud-value">{{ hudWave }}</span>
-            </div>
-            <div class="hud-item hud-item--mode">
-              <span class="hud-label">Mode</span>
-              <span class="hud-value" :class="isRanked ? 'mode-ranked' : 'mode-practice'">
-                {{ isRanked ? 'RANKED' : 'PRACTICE' }}
-              </span>
-            </div>
-          </div>
+            <p class="ship-blurb">{{ activeShip.blurb }}</p>
+          </fieldset>
 
-          <!-- Active power-up timers -->
-          <div class="pu-bar" aria-hidden="true">
-            <div v-for="p in activePowerups" :key="p.key" class="pu-chip" :class="`pu-chip--${p.key}`">
-              <span class="pu-name">{{ p.label }}</span>
-              <span class="pu-meter"><i :style="{ width: p.pct + '%' }"></i></span>
-            </div>
-          </div>
-
-          <div class="canvas-container" ref="canvasContainer">
-            <canvas
-              ref="canvas"
-              class="game-canvas"
-              draggable="false"
-              @dragstart.prevent
-              @contextmenu.prevent
-              aria-label="Asteroid field"
-              role="img"
-            ></canvas>
-          </div>
-
-          <!-- Touch controls. Always rendered so a touchscreen laptop works too; the hint text
-               below switches to keyboard wording on pointer-fine devices. -->
-          <div class="controls" aria-hidden="false">
-            <button
-              class="ctrl ctrl--left"
-              :class="{ 'ctrl--on': heldMask & IN_LEFT }"
-              @pointerdown="onCtrlDown($event, IN_LEFT)"
-              @pointerup="onCtrlUp($event, IN_LEFT)"
-              @pointercancel="onCtrlUp($event, IN_LEFT)"
-              @contextmenu.prevent
-              aria-label="Rotate left"
-            >◀</button>
-            <button
-              class="ctrl ctrl--thrust"
-              :class="{ 'ctrl--on': heldMask & IN_THRUST }"
-              @pointerdown="onCtrlDown($event, IN_THRUST)"
-              @pointerup="onCtrlUp($event, IN_THRUST)"
-              @pointercancel="onCtrlUp($event, IN_THRUST)"
-              @contextmenu.prevent
-              aria-label="Thrust"
-            >THRUST</button>
-            <button
-              class="ctrl ctrl--right"
-              :class="{ 'ctrl--on': heldMask & IN_RIGHT }"
-              @pointerdown="onCtrlDown($event, IN_RIGHT)"
-              @pointerup="onCtrlUp($event, IN_RIGHT)"
-              @pointercancel="onCtrlUp($event, IN_RIGHT)"
-              @contextmenu.prevent
-              aria-label="Rotate right"
-            >▶</button>
-          </div>
-          <p class="game-hint">{{ hintText }}</p>
-          <p class="sr-only" aria-live="polite">{{ announce }}</p>
+          <button class="btn-start" @click="startGame" :disabled="starting">
+            {{ starting ? 'Launching…' : 'Launch' }}
+          </button>
+          <button class="btn-howto" @click="showHowTo = true" aria-label="How to play">
+            <svg class="howto-icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/>
+              <path d="M9.1 9a3 3 0 1 1 4.4 3c-.9.6-1.5 1-1.5 2.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="12" cy="17.4" r="1.2" fill="currentColor"/>
+            </svg>
+            <span>How to Play</span>
+          </button>
         </div>
       </div>
-    </NuxtLayout>
+
+      <!-- Active game -->
+      <div v-else-if="uiState === 'playing'" class="game-area" role="main" aria-label="Operation A.S.T.E.R.O.I.D. game board">
+        <div class="hud" role="status" aria-live="off">
+          <div class="hud-item">
+            <span class="hud-label">Score</span>
+            <span class="hud-value">{{ hudScore.toLocaleString() }}</span>
+          </div>
+          <div class="hud-item">
+            <span class="hud-label">Lives</span>
+            <span class="hud-value hud-lives">
+              <span v-for="n in Math.min(hudLives, 5)" :key="n" class="life-pip"></span>
+              <span v-if="hudLives > 5" class="life-extra">+{{ hudLives - 5 }}</span>
+              <span v-if="hudLives === 0" class="life-none">—</span>
+            </span>
+          </div>
+          <div class="hud-item">
+            <span class="hud-label">Wave</span>
+            <span class="hud-value">{{ hudWave }}</span>
+          </div>
+          <div class="hud-item hud-item--mode">
+            <span class="hud-label">Mode</span>
+            <span class="hud-value" :class="isRanked ? 'mode-ranked' : 'mode-practice'">
+              {{ isRanked ? 'RANKED' : 'PRACTICE' }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Active power-up timers -->
+        <div class="pu-bar" aria-hidden="true">
+          <div v-for="p in activePowerups" :key="p.key" class="pu-chip" :class="`pu-chip--${p.key}`">
+            <span class="pu-name">{{ p.label }}</span>
+            <span class="pu-meter"><i :style="{ width: p.pct + '%' }"></i></span>
+          </div>
+        </div>
+
+        <div class="canvas-container" ref="canvasContainer">
+          <canvas
+            ref="canvas"
+            class="game-canvas"
+            draggable="false"
+            @dragstart.prevent
+            @contextmenu.prevent
+            aria-label="Asteroid field"
+            role="img"
+          ></canvas>
+        </div>
+
+        <!-- Touch controls. Always rendered so a touchscreen laptop works too; the hint text
+             below switches to keyboard wording on pointer-fine devices. -->
+        <div class="controls" aria-hidden="false">
+          <button
+            class="ctrl ctrl--left"
+            :class="{ 'ctrl--on': heldMask & IN_LEFT }"
+            @pointerdown="onCtrlDown($event, IN_LEFT)"
+            @pointerup="onCtrlUp($event, IN_LEFT)"
+            @pointercancel="onCtrlUp($event, IN_LEFT)"
+            @contextmenu.prevent
+            aria-label="Rotate left"
+          >◀</button>
+          <button
+            class="ctrl ctrl--thrust"
+            :class="{ 'ctrl--on': heldMask & IN_THRUST }"
+            @pointerdown="onCtrlDown($event, IN_THRUST)"
+            @pointerup="onCtrlUp($event, IN_THRUST)"
+            @pointercancel="onCtrlUp($event, IN_THRUST)"
+            @contextmenu.prevent
+            aria-label="Thrust"
+          >THRUST</button>
+          <button
+            class="ctrl ctrl--right"
+            :class="{ 'ctrl--on': heldMask & IN_RIGHT }"
+            @pointerdown="onCtrlDown($event, IN_RIGHT)"
+            @pointerup="onCtrlUp($event, IN_RIGHT)"
+            @pointercancel="onCtrlUp($event, IN_RIGHT)"
+            @contextmenu.prevent
+            aria-label="Rotate right"
+          >▶</button>
+        </div>
+        <p class="game-hint">{{ hintText }}</p>
+        <p class="sr-only" aria-live="polite">{{ announce }}</p>
+      </div>
+    </div>
 
     <!-- Game Over -->
     <Teleport to="body">
@@ -265,7 +263,9 @@
 <script setup>
 // fitHeight keeps the whole playfield on screen: a timed game that can scroll
 // out from under the player is worse than one rendered a little smaller.
-definePageMeta({ ssr: false, fitHeight: true })
+// The layout comes from the page meta; a nested <NuxtLayout> inside the page would be
+// wrapped by the default layout and hydrate unreliably (a hydration mismatch on ~half of loads).
+definePageMeta({ layout: 'newsite-template', showAdbar: true, showNav: true, ssr: false, fitHeight: true })
 
 // Zoom is disabled for this page only. nuxt.config.js sets the app-wide viewport, and
 // overriding it there would kill pinch-zoom on every page of the site — an accessibility

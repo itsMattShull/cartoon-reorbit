@@ -2,7 +2,7 @@
    Round "UFO" card used for Original gToons. Ported from the drawcard prototype; every rule is scoped
    under .gtoon-card-host so it cannot leak into the rest of the site. */
 @font-face { font-family: 'tox'; src: url('/gtoon-card/tox.otf') format('opentype'); font-display: swap; }
-@font-face { font-family: 'MBCIT'; src: local('Myriad Pro Bold Condensed Italic'), local('MyriadPro-BoldCondIt'), url('/gtoon-card/Myriad_BoldCondIt.otf') format('opentype'); font-style: italic; font-weight: 700; font-display: swap; }
+@font-face { font-family: 'MBCIT'; src: local('Myriad Pro Bold Condensed Italic'), local('MyriadPro-BoldCondIt'); font-style: italic; font-weight: 700; font-display: swap; }
 .gtoon-card-host .flipper-container {
             position: absolute;
             width: 100%;

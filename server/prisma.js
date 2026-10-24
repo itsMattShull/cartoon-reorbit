@@ -1,36 +1,32 @@
 // server/prisma.js
+// Prisma 7 no longer reads .env itself, and the plain-node workers/scripts (run outside pm2) rely on it.
+import 'dotenv/config'
 import { PrismaClient } from '@prisma/client'
+import { PrismaPg } from '@prisma/adapter-pg'
 
 /**
  * Prisma client singleton with conservative pool sizing and logging.
  *
- * - Limits Postgres connections per Node process via `connection_limit`.
+ * - Limits Postgres connections per Node process via the pg adapter's pool (`max`).
  * - Adds warn/error logging by default; optional slow query logging.
  * - Preserves a single client across hot-reloads in development.
  */
 
-// Build a DATABASE_URL with conservative pool size.
-function buildUrlWithPool(originalUrl) {
-  try {
-    if (!originalUrl) return originalUrl
-    const u = new URL(originalUrl)
-    // Pool size; can be overridden via env
-    const poolSize = Number(process.env.PRISMA_POOL_SIZE || 20)
-    // Force, don't append duplicates
-    u.searchParams.set('connection_limit', String(Math.max(1, poolSize)))
-    // Optional: cap how long to wait for a pooled connection (seconds)
-    if (!u.searchParams.has('pool_timeout') && process.env.PRISMA_POOL_TIMEOUT) {
-      u.searchParams.set('pool_timeout', String(Number(process.env.PRISMA_POOL_TIMEOUT)))
-    }
-    return u.toString()
-  } catch {
-    // If URL parsing fails, fall back to original
-    return originalUrl
+// Pool options for the pg driver adapter. Prisma 7 dropped the query engine's own pool, so the old
+// `connection_limit` / `pool_timeout` URL params no longer do anything — the same env vars now
+// size the pg.Pool directly.
+function buildPoolConfig() {
+  // Pool size; can be overridden via env
+  const poolSize = Number(process.env.PRISMA_POOL_SIZE || 20)
+  // Cap how long to wait for a pooled connection (seconds; 10s matches Prisma's old default —
+  // pg's own default is to wait forever)
+  const poolTimeoutSec = Number(process.env.PRISMA_POOL_TIMEOUT || 10)
+  return {
+    connectionString: process.env.DATABASE_URL,
+    max: Math.max(1, poolSize),
+    connectionTimeoutMillis: Math.max(1, poolTimeoutSec) * 1000
   }
 }
-
-const baseUrl = process.env.DATABASE_URL
-const pooledUrl = buildUrlWithPool(baseUrl)
 
 // Configure logging: always warn/error; query logs optionally via env
 const enableQueryLogs = process.env.PRISMA_LOG_QUERIES === '1'
@@ -184,12 +180,12 @@ function applyAssetSwap(value, swapMap) {
 function prismaClientFactory() {
   let exportedBaseClient
   const baseClient = new PrismaClient({
-    datasources: pooledUrl ? { db: { url: pooledUrl } } : undefined,
+    adapter: new PrismaPg(buildPoolConfig()),
     errorFormat: 'pretty',
     log: logConfig
   })
 
-  // Ensure engine is connected before use
+  // Ensure the database is reachable before first use
   baseClient.$connect().catch((e) => {
     console.error('[Prisma] Failed to connect', e)
   })
@@ -206,8 +202,7 @@ function prismaClientFactory() {
     })
   }
 
-  // Library engine (Prisma 5+) does not support client $on('beforeExit').
-  // Instead, register process-level hooks once.
+  // The client has no 'beforeExit' hook; register process-level hooks once instead.
   if (!globalThis.__prismaProcessHooksRegistered) {
     globalThis.__prismaProcessHooksRegistered = true
     const disconnect = async () => {

@@ -39,8 +39,8 @@
     "@dnd-kit/core": "^6.3.1",
     "@fingerprintjs/fingerprintjs": "^5.2.0",
     "@nuxtjs/tailwindcss": "^6.14.0",
-    "@prisma/client": "^6.19.0",
-    "@prisma/nuxt": "^0.3.0",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
     "@socket.io/redis-adapter": "^8.3.0",
     "@tiptap/extension-link": "^3.32.0",
     "@tiptap/pm": "^3.32.0",
@@ -57,6 +57,7 @@
     "crypto": "^1.0.1",
     "date-fns": "^2.30.0",
     "date-fns-tz": "^2.0.1",
+    "dotenv": "^18.0.9",
     "gifuct-js": "^2.1.2",
     "html2canvas": "^1.4.1",
     "html5-qrcode": "^2.3.8",
@@ -68,8 +69,8 @@
     "luxon": "^3.6.1",
     "music-metadata": "^11.15.0",
     "node-cron": "^4.1.0",
-    "nuxt": "^3.17.2",
-    "pg": "^8.15.6",
+    "nuxt": "^4.6.2",
+    "pg": "^8.23.1",
     "png-to-ico": "^2.1.8",
     "sharp": "0.35.5",
     "socket.io": "^4.8.1",
@@ -83,14 +84,15 @@
   "devDependencies": {
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.1.2",
+    "node-forge": "file:vendor/node-forge-stub",
     "postcss": "^8.5.3",
-    "prisma": "^6.19.0",
+    "prisma": "^7.10.1",
     "tailwindcss": "^3.4.17"
   },
-  "prisma": {
-    "seed": "node prisma/seed.js"
-  },
+  "prisma": {},
   "overrides": {
-    "@vercel/nft": "^0.27.4"
+    "@vercel/nft": "^0.27.4",
+    "postcss-selector-parser": "^7.1.7",
+    "node-forge": "$node-forge"
   }
 }

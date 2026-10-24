@@ -3,9 +3,8 @@ import assert from 'node:assert/strict'
 import {
   resolveRaidRound, checkRaidBossAvailability,
   JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE,
-  SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD,
 } from '../server/utils/cmoonEnemyRaid.js'
-import { PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE, HEAL_ON_SUCCESSFUL_BLOCK } from '../server/utils/cmoonEnemyBattle.js'
+import { SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE, HEAL_ON_SUCCESSFUL_BLOCK } from '../server/utils/cmoonEnemyBattle.js'
 
 const baseEnemyMember = { critChanceAgainstPercent: 0, critChanceFromPercent: 0, maxHp: 20 }
 

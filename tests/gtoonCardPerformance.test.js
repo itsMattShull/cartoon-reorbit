@@ -57,7 +57,7 @@ test('only revealed slot cards loop; hand cards and face-down cards are always s
 })
 
 test('board slots lose their frame once a card is in them; empty slots and hand highlights keep theirs', () => {
-  assert.match(tile, /const occupiedSlot = computed\(\(\) => props\.size === 'slot' && !!\(props\.card \|\| props\.faceDown\)\)/)
+  assert.match(tile, /const occupiedSlot = computed\(\(\) => props\.size !== 'hand' && !!\(props\.card \|\| props\.faceDown\)\)/)
   assert.match(tile, /occupiedSlot\.value && \(props\.tone === 'idle' \|\| props\.tone === 'filled'\)\) return 'border-transparent'/)
   assert.match(tile, /idle: props\.card \|\| props\.faceDown \? 'border-indigo-400 bg-white\/5' : 'border-dashed border-white\/20 bg-white\/5'/)
   assert.match(tile, /selected: 'border-amber-400 bg-amber-500\/10'/)

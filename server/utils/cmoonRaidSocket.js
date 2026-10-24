@@ -76,13 +76,15 @@ import { announceCMoonRaidBoss, resolveCMoonRaidDiscordChannelId, sendCMoonTeamU
 import { getActiveBossLoreRiddle } from './cmoonRiddle.js'
 import { notifyCMoonRaidBossStarted } from './notifications.js'
 import { pushUserNotification } from './realtimeNotify.js'
-import { buildGrantableReward, isValidPlayerSubmittedAction } from './cmoonEnemyBattle.js'
+import {
+  buildGrantableReward, isValidPlayerSubmittedAction, rollEnemyAction, rollEnemyRewards, PLAYER_MAX_HP,
+  SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD,
+} from './cmoonEnemyBattle.js'
 import { resolveMemberSoundPaths } from './cmoonEnemy.js'
 import { announceTeamEnemiesMilestone, checkAndAnnounceSeasonGoalReached } from './cmoonDiscordEvents.js'
 import {
-  resolveRaidRound, rollEnemyAction, rollEnemyRewards, PLAYER_MAX_HP,
-  JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE, MAX_ROUNDS_SAFETY,
-  checkRaidBossAvailability, SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD,
+  resolveRaidRound, JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE, RAID_MAX_ROUNDS_SAFETY,
+  checkRaidBossAvailability,
 } from './cmoonEnemyRaid.js'
 import * as raidRedis from './cmoonRaidRedisState.js'
 
@@ -526,7 +528,7 @@ async function closeRound(io, raid) {
       await resolveCMoonRaidOutcome(io, raid, 'WIN')
     } else if (everyoneDown) {
       await resolveCMoonRaidOutcome(io, raid, 'LOSS')
-    } else if (nextRoundNumber >= MAX_ROUNDS_SAFETY) {
+    } else if (nextRoundNumber >= RAID_MAX_ROUNDS_SAFETY) {
       await resolveCMoonRaidOutcome(io, raid, 'ABANDONED')
     } else {
       raid.roundNumber = nextRoundNumber

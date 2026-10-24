@@ -8,6 +8,8 @@
 // The combat math itself lives separately in server/utils/cmoonEnemyBattle.js; this file is only
 // about what an admin is allowed to save.
 
+import { SORT_ORDER_MIN, SORT_ORDER_MAX, isValidSortOrder } from './sortOrder.js'
+
 export const FACTION_NAME_MAX_LENGTH = 60
 export const MEMBER_NAME_MAX_LENGTH = 60
 // Free-text blurb shown in the admin list; capped so one runaway paste can't bloat every list
@@ -59,10 +61,6 @@ export const FIRST_WIN_BONUS_POINTS_DEFAULT = 0
 export const POINTS_REWARD_MIN = 1
 export const POINTS_REWARD_MAX = 5000
 
-// Admin-list ordering only (see the GET endpoints' orderBy) — a generous but finite band so a
-// malformed client value can't land something absurd in an Int column.
-export const SORT_ORDER_MIN = -9999
-export const SORT_ORDER_MAX = 9999
 
 // Create-time defaults for the optional member fields — kept identical to the column defaults in
 // prisma/schema.prisma so "omitted in the POST body" means the same thing as "never set".
@@ -201,10 +199,6 @@ export function isValidFirstWinBonusPoints(value) {
 
 export function isValidPointsAmount(value) {
   return Number.isInteger(value) && value >= POINTS_REWARD_MIN && value <= POINTS_REWARD_MAX
-}
-
-export function isValidSortOrder(value) {
-  return Number.isInteger(value) && value >= SORT_ORDER_MIN && value <= SORT_ORDER_MAX
 }
 
 // Slightly stricter than czoneEffect.js's bare Number(body.field): only a real number or a

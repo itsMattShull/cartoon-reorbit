@@ -1,0 +1,8 @@
+{
+  "name": "node-forge",
+  "version": "1.4.1+local-stub",
+  "description": "Local stand-in for node-forge (see README.md). Installed via the root package.json `overrides`.",
+  "main": "index.js",
+  "license": "ISC",
+  "private": true
+}

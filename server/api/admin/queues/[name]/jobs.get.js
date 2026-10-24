@@ -1,9 +1,9 @@
 // GET /api/admin/queues/:name/jobs?state=failed&limit=25&offset=0 — newest-first page of jobs in one state.
 import { defineEventHandler, getQuery, createError } from 'h3'
-import { requireAdmin, requireQueue, serializeJob, JOB_STATES } from '@/server/utils/queueAdmin'
+import { requireQueueAdmin, requireQueue, serializeJob, JOB_STATES } from '@/server/utils/queueAdmin'
 
 export default defineEventHandler(async (event) => {
-  await requireAdmin(event)
+  await requireQueueAdmin(event)
   const { queue } = requireQueue(event)
   const q = getQuery(event)
   const state = String(q.state || 'waiting')

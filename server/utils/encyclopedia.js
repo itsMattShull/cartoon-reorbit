@@ -8,12 +8,11 @@ import { sanitizeEncyclopediaHtml } from './sanitizeEncyclopediaHtml.js'
 // utils/cmoonEffectTypes.js — see that file's own comment. Keeps slugify/isValidSlug identical
 // between this server-side validator and the admin editor's live title→slug preview.
 import { slugify, isValidSlug, SLUG_MAX_LENGTH } from '../../utils/encyclopediaSlug.js'
+import { SORT_ORDER_MIN, SORT_ORDER_MAX, isValidSortOrder } from './sortOrder.js'
 
 export { slugify, isValidSlug, SLUG_MAX_LENGTH }
 
 export const TITLE_MAX_LENGTH = 120
-export const SORT_ORDER_MIN = -9999
-export const SORT_ORDER_MAX = 9999
 
 // Path segments already used as static routes under server/api/encyclopedia/ — Nitro/h3 matches a
 // static route ahead of a dynamic [slug] one at the same depth, so an entry slugged "entries"
@@ -23,10 +22,6 @@ const RESERVED_SLUGS = new Set(['entries'])
 
 export function isValidTitle(value) {
   return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= TITLE_MAX_LENGTH
-}
-
-export function isValidSortOrder(value) {
-  return Number.isInteger(value) && value >= SORT_ORDER_MIN && value <= SORT_ORDER_MAX
 }
 
 function toNumber(value) {

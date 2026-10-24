@@ -4,9 +4,10 @@
 // per-tracker field validators so a season's trackers array is checked identically to how the
 // retired standalone tracker endpoints validated them.
 import {
-  isValidLabel, isValidMetricType, isValidTargetValue, isValidSortOrder,
+  isValidLabel, isValidMetricType, isValidTargetValue,
   LABEL_MAX_LENGTH,
 } from './cmoonSeasonTracker.js'
+import { isValidSortOrder } from './sortOrder.js'
 
 export const HEADER_MAX_LENGTH = 80
 export const ENEMIES_GOAL_LABEL_MAX_LENGTH = 60
