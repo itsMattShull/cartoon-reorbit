@@ -65,7 +65,7 @@ export const TUTORIAL_STEPS = [
   {
     id: 'board', stage: 0, kind: 'info', target: 'arena', button: 'Next',
     title: 'The board',
-    text: "You're the bottom half, the bot is the top. Each side has 7 numbered slots: slots 1-4 are filled in round 1 and slots 5-7 in round 2. Cards in the same slot number face each other (\"opposite\"), and cards in neighboring numbers sit \"next to\" each other. Powers care about both."
+    text: "You're the bottom half, the bot is the top. Each side has 7 numbered slots: slots 1-4 are filled in round 1 and slots 5-7 in round 2. Cards in the same slot number face each other (\"opposite\"), and cards in touching slots (including diagonally, since slots 5-7 sit in the gaps between slots 1-4) sit \"next to\" each other. Powers care about both."
   },
   {
     id: 'hand', stage: 0, kind: 'info', target: 'deck-box', button: 'Next',
