@@ -383,7 +383,7 @@ const pageDescription = computed(() => resolveMeta(route.meta.description) || de
 // this file's own <style> block above by relying on CSS source order: this <style> tag is
 // injected into <head> after the one unhead already emitted for this SFC's static block.
 const { styleText: siteThemeStyle } = useSiteTheme()
-useHead({ style: [{ key: 'site-theme-vars', children: siteThemeStyle }] })
+useHead({ style: [{ key: 'site-theme-vars', innerHTML: siteThemeStyle }] })
 
 useHead({ title: fullTitle })
 useSeoMeta({

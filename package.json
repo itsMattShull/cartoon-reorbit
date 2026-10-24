@@ -69,7 +69,7 @@
     "luxon": "^3.6.1",
     "music-metadata": "^11.15.0",
     "node-cron": "^4.1.0",
-    "nuxt": "^3.17.2",
+    "nuxt": "^4.6.2",
     "pg": "^8.23.1",
     "png-to-ico": "^2.1.8",
     "sharp": "0.35.5",
@@ -84,6 +84,7 @@
   "devDependencies": {
     "autoprefixer": "^10.4.21",
     "concurrently": "^9.1.2",
+    "node-forge": "file:vendor/node-forge-stub",
     "postcss": "^8.5.3",
     "prisma": "^7.10.1",
     "tailwindcss": "^3.4.17"
@@ -91,6 +92,7 @@
   "prisma": {},
   "overrides": {
     "@vercel/nft": "^0.27.4",
-    "postcss-selector-parser": "^7.1.7"
+    "postcss-selector-parser": "^7.1.7",
+    "node-forge": "$node-forge"
   }
 }
