@@ -101,7 +101,8 @@ jobs:
                 command -v node >/dev/null 2>&1 || export PATH=\"\$HOME/.local/bin:\$HOME/.npm-global/bin:/usr/local/bin:/usr/bin:\$PATH\"
 
                 cd /var/www/cartoon-reorbit
-                git pull origin master
+                git fetch origin master
+                git reset --hard origin/master
 
                 npm ci
                 npx prisma migrate deploy
