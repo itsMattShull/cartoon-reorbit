@@ -236,6 +236,22 @@
                 </div>
                 <p v-else class="mt-2 text-xs text-white/45">No cZone contests are active right now.</p>
               </div>
+              <div v-if="cMoonEnemyCountdown">
+                <p class="text-[11px] uppercase tracking-widest text-white/50">cMoon Enemies</p>
+                <div class="mt-1 text-[11px] text-white/40 leading-snug">Encounter enemies while browsing the site to earn cMoon points.</div>
+                <div class="mt-2 ob-event-card rounded-lg border border-white/10 px-3 py-2">
+                  <p v-if="cMoonEnemyCountdown.optedOut" class="text-xs text-white/55">
+                    You've opted out of cMoon Enemy pop-ups in Settings.
+                  </p>
+                  <p v-else-if="cMoonEnemyAvailableNow" class="text-sm font-semibold text-emerald-300">
+                    A cMoon Enemy may appear now!
+                  </p>
+                  <template v-else>
+                    <p class="text-xs text-white/50">Next cMoon Enemy available in</p>
+                    <p class="text-sm font-semibold text-white/90 tabular-nums">{{ cMoonEnemyCountdownText }}</p>
+                  </template>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -556,6 +572,61 @@ const holidayEvents = computed(() => (eventsData.value?.holidayEvents || []))
 const czoneSearches = computed(() => (eventsData.value?.czoneSearches || []))
 const czoneContests = computed(() => (eventsData.value?.czoneContests || []))
 
+// null entirely when cMoon Enemy Battles are off site-wide (see events.get.js) — the section
+// above is hidden rather than shown empty in that case.
+const cMoonEnemyCountdown = computed(() => (eventsData.value?.cMoonEnemyCountdown || null))
+
+// Ticks once a second, but only while something is actually counting down (see
+// syncCountdownTicking below) — not a 3rd always-on timer alongside the badge poll.
+const countdownNow = ref(Date.now())
+let countdownTimer = null
+
+const formatCountdown = (ms) => {
+  if (ms <= 0) return null
+  const totalSeconds = Math.floor(ms / 1000)
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  const pad = (n) => String(n).padStart(2, '0')
+  return hours > 0 ? `${hours}h ${pad(minutes)}m ${pad(seconds)}s` : `${minutes}m ${pad(seconds)}s`
+}
+
+const cMoonEnemyCountdownText = computed(() => {
+  const nextAt = cMoonEnemyCountdown.value?.nextAvailableAt
+  if (!nextAt) return null
+  return formatCountdown(new Date(nextAt).getTime() - countdownNow.value)
+})
+
+// True once the live tick crosses zero, even before the next /api/onboarding/events refetch
+// confirms it server-side — cosmetic only, since the real gate is still enforced by
+// consider.post.js on the player's next navigation regardless of what this shows.
+const cMoonEnemyAvailableNow = computed(() => {
+  const info = cMoonEnemyCountdown.value
+  if (!info || info.optedOut) return false
+  if (!info.nextAvailableAt) return true
+  return !cMoonEnemyCountdownText.value
+})
+
+// Only runs the per-second timer while the panel is open on the Events tab, the tab is
+// visible, and there's an active cooldown to count down — the same "no abandoned background
+// tab" discipline as startPolling/stopPolling above, just for a second, dedicated interval.
+const syncCountdownTicking = () => {
+  const shouldTick = isOpen.value
+    && activeTab.value === 'events'
+    && document.visibilityState === 'visible'
+    && !!cMoonEnemyCountdown.value?.nextAvailableAt
+  if (shouldTick) {
+    if (countdownTimer) return
+    countdownNow.value = Date.now()
+    countdownTimer = setInterval(() => { countdownNow.value = Date.now() }, 1000)
+  } else if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
+}
+
+watch([isOpen, activeTab, cMoonEnemyCountdown], syncCountdownTicking)
+
 const handleOutsideClick = (event) => {
   if (!isOpen.value) return
   const root = onboardingRef.value
@@ -592,6 +663,7 @@ const handleVisibility = () => {
   } else {
     stopPolling()
   }
+  syncCountdownTicking()
 }
 
 // Live push on top of the ~2-minute poll above (see server/utils/realtimeNotify.js) — only
@@ -641,6 +713,10 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', handleOutsideClick)
   document.removeEventListener('visibilitychange', handleVisibility)
   stopPolling()
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
   if (stopNotificationPingWatch) stopNotificationPingWatch()
 })
 </script>
