@@ -1,5 +1,6 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
+import { getGlobalConfig } from '@/server/utils/cmoon'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -10,7 +11,7 @@ export default defineEventHandler(async (event) => {
   const now = new Date()
   const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
 
-  const [holidayEvents, czoneSearches, czoneContests] = await Promise.all([
+  const [holidayEvents, czoneSearches, czoneContests, config, cmoonUser] = await Promise.all([
     db.holidayEvent.findMany({
       where: {
         isActive: true,
@@ -67,8 +68,34 @@ export default defineEventHandler(async (event) => {
         endVotingDate: true,
         distributedAt: true
       }
+    }),
+    // Cheap to add here: a cached global-config read (see getGlobalConfig's own caching) plus a
+    // single indexed primary-key User lookup for a handful of scalar fields — no extra queries
+    // beyond this one row, mirroring exactly what /api/cmoon/battle/consider.post.js already reads
+    // to gate the popup, so the countdown below can never drift from the real eligibility check.
+    getGlobalConfig(),
+    db.user.findUnique({
+      where: { id: userId },
+      select: { lastCMoonBattlePopupAt: true, allowCMoonEnemyPopups: true }
     })
   ])
+
+  // Mirrors server/api/cmoon/battle/consider.post.js's own cooldown math exactly — this must never
+  // compute a different "next available" time than what that endpoint actually enforces.
+  let cMoonEnemyCountdown = null
+  if (config?.cMoonEnemyBattlesEnabled) {
+    if (!cmoonUser?.allowCMoonEnemyPopups) {
+      cMoonEnemyCountdown = { enabled: true, optedOut: true, nextAvailableAt: null }
+    } else {
+      const cooldownMinutes = config?.cMoonBattlePopupCooldownMinutes ?? 0
+      let nextAvailableAt = null
+      if (cooldownMinutes > 0 && cmoonUser?.lastCMoonBattlePopupAt) {
+        const nextAllowed = new Date(cmoonUser.lastCMoonBattlePopupAt.getTime() + cooldownMinutes * 60 * 1000)
+        if (nextAllowed > now) nextAvailableAt = nextAllowed.toISOString()
+      }
+      cMoonEnemyCountdown = { enabled: true, optedOut: false, nextAvailableAt }
+    }
+  }
 
   return {
     holidayEvents: holidayEvents.map((row) => ({
@@ -103,6 +130,7 @@ export default defineEventHandler(async (event) => {
         distributedAt: row.distributedAt ? row.distributedAt.toISOString() : null,
         status
       }
-    })
+    }),
+    cMoonEnemyCountdown
   }
 })

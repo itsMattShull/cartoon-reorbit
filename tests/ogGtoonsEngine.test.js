@@ -421,17 +421,19 @@ test('swapForRandomUndealt: the swapped card returns to the undealt pile, the dr
   assert.throws(() => swapForRandomUndealt(hand, [], 2))
 })
 
-test('resolveFinalBoard: neighbor adjacency follows the slot, so an empty slot breaks the chain', () => {
+test('resolveFinalBoard: neighbor adjacency follows the board layout (every touching slot), so a gap breaks the chain', () => {
   const buff = [{ trigger: 'onReveal', target: { selector: 'neighborOwn' }, action: { type: 'modifyValue', operation: 'add', amount: 3 } }]
   const at = (card, slot) => ({ ...card, slot })
-  // Source in slot 2: slot 3 is its neighbor; slot 5 is not (slot 4 is empty), even though it is
-  // the next card in the revealed array.
+  // Source in slot 2 touches slots 1, 3, 5 and 6 (slot 5 sits diagonally between 1 and 2); slot 4 and
+  // slot 7 do not touch it, even though slot 4 is a numeric near-miss.
   const out = resolveFinalBoard({
     player1: {
       revealed: [
         at(revealedCard('src', 'Source', { value: 2, effect: buff }), 2),
         at(revealedCard('near', 'Near', { value: 2 }), 3),
-        at(revealedCard('far', 'Far', { value: 2 }), 5)
+        at(revealedCard('diag', 'Diagonal', { value: 2 }), 5),
+        at(revealedCard('far', 'Far', { value: 2 }), 4),
+        at(revealedCard('far7', 'Far Seven', { value: 2 }), 7)
       ],
       goalCard: null
     },
@@ -439,7 +441,9 @@ test('resolveFinalBoard: neighbor adjacency follows the slot, so an empty slot b
   })
   const value = (id) => out.player1.revealed.find(r => r.ctoonId === id).finalValue
   assert.equal(value('near'), 5)
+  assert.equal(value('diag'), 5)
   assert.equal(value('far'), 2)
+  assert.equal(value('far7'), 2)
 })
 
 

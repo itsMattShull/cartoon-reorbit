@@ -29,7 +29,7 @@
 //     selector: 'self' | 'ownActiveCard' | 'opponentActiveCard' | 'allOwnRevealed' |
 //               'allOpponentRevealed' | 'cardByCharacter' | 'neighborOwn' | 'allMatching',
 //     character?: string,                 // cardByCharacter
-//     positions?: ['prev','next'],         // neighborOwn — which neighbor slot(s); default both
+//     positions?: ['prev','next'],         // neighborOwn — narrow to previous/next slot; default all touching slots
 //     filter?: { by, value } | { filters: [{by,value}, ...] },   // neighborOwn (optional)
 //     scope?: 'own' | 'opponent' | 'both', // allMatching
 //     filters?: [{ by: 'type'|'color'|'group'|'value', value }, ...], // allMatching (AND'ed)
@@ -79,14 +79,15 @@
 //     old v1 simplification note — it only existed because the per-round resolver could not see
 //     history; the final-board resolver can.
 //   - "next to X" ("+10 if next to Bubbles") is modeled as a CONDITION scanning the source card's
-//     own immediate neighbor positions (prev/next round index, own side), via
+//     own neighbor slots (every slot touching it on the board, own side), via
 //     condition.type: 'characterInPlay' with an added `adjacentOnly: true` flag — see
 //     `conditionMet` below. "each neighboring X" ("+5 to each neighboring Animal") is instead a
 //     TARGET (`neighborOwn`) because it applies the effect to each matching neighbor card
 //     individually, not to the source card once. "+N for each neighboring X" ("+2 for each
 //     neighboring Red card") aggregates onto the source card, so it is `perMatch` with
 //     `scope: 'neighborOwn'`. Kept consistent: "next to"/"neighboring" always looks at the
-//     source card's own side, at round-index -1 and/or +1 (both, unless `positions` narrows it).
+//     source card's own side, at every touching slot (see SLOT_NEIGHBORS; diagonals included) unless
+//     `positions` narrows it to the numerically previous and/or next slot.
 //   - `allMatching` filter clauses of `by: 'value'` compare against a card's printed
 //     (`baseValue`), never its running/mutated value — "all 8s" means "printed as an 8," not
 //     "currently worth 8 after other buffs." Every other filter (`type`/`color`/`group`) is
@@ -494,19 +495,37 @@ function revealedOf(sides, side) {
   return sides[side]
 }
 
+/**
+ * Slots touching each slot (1-based) on one side of the board. Slots 1-4 form the inner row and 5-7
+ * the outer row, staggered so 5 sits between 1/2, 6 between 2/3 and 7 between 3/4 (see the board
+ * layout in OgGtoonMatchBoard.vue). "Neighboring" means every touching slot, diagonals included.
+ */
+const SLOT_NEIGHBORS = {
+  1: [2, 5],
+  2: [1, 3, 5, 6],
+  3: [2, 4, 6, 7],
+  4: [3, 7],
+  5: [1, 2, 6],
+  6: [2, 3, 5, 7],
+  7: [3, 4, 6]
+}
+
+/** Slots touching `slot`; sudden-death slots (8+) have no board position, so they only touch the slot before. */
+function neighborSlots(slot) {
+  return SLOT_NEIGHBORS[slot] || (slot > 7 ? [slot - 1] : [])
+}
+
 function neighborsOf(sides, side, roundIndex, positions) {
-  const pos = positions && positions.length ? positions : ['prev', 'next']
   const list = revealedOf(sides, side)
-  const out = []
-  if (pos.includes('prev')) {
-    const c = list.find(c => c.roundIndex === roundIndex - 1)
-    if (c) out.push(c)
+  // An explicit `positions` narrows to the numerically previous/next slot; the default is every touching slot.
+  if (positions && positions.length) {
+    return positions.flatMap(p => {
+      const c = list.find(c => c.roundIndex === roundIndex + (p === 'prev' ? -1 : 1))
+      return c ? [c] : []
+    })
   }
-  if (pos.includes('next')) {
-    const c = list.find(c => c.roundIndex === roundIndex + 1)
-    if (c) out.push(c)
-  }
-  return out
+  const touching = neighborSlots(roundIndex + 1)
+  return list.filter(c => touching.includes(c.roundIndex + 1))
 }
 
 function sameRoundOpponentCard(sides, ownerSide, roundIndex) {

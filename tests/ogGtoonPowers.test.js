@@ -11,7 +11,7 @@
 //
 // Rules the reference encodes (match the engine's documented rules):
 //   - "in play" = every revealed card, both sides. "Next to / neighboring / adjacent" = the source's
-//     own side, slot - 1 and slot + 1. "Opposite / opposing" = the other side's card in the SAME slot.
+//     own side, every slot touching it (diagonals included). "Opposite / opposing" = the other side's card in the SAME slot.
 //   - "all 8s" / "Green 7s" compare PRINTED values. "other" leaves the source card out.
 //   - Multiplies resolve before additions.
 //   - "+N to any <names>" buffs each matching card once; "+N for each <names>" counts each card once.
@@ -269,6 +269,9 @@ function referenceBoard(board, srcRef, description) {
   return result
 }
 
+// Every slot touching a slot on one side (diagonals included); mirrors the board layout, slots 5-7 sit between 1-4.
+const TOUCHING = { 1: [2, 5], 2: [1, 3, 5, 6], 3: [2, 4, 6, 7], 4: [3, 7], 5: [1, 2, 6], 6: [2, 3, 5, 7], 7: [3, 4, 6] }
+
 function referenceLive(board, srcRef, read) {
   const all = [...board.p1, ...board.p2].filter(Boolean)
   if (!read) return new Map(all.map(c => [c, { value: c.value, color: c.color }]))
@@ -276,9 +279,10 @@ function referenceLive(board, srcRef, read) {
   const theirs = srcRef.side === 'p1' ? board.p2 : board.p1
   const src = mine[srcRef.slot - 1]
   const at = (arr, i) => (i >= 0 && i < 7 ? arr[i] || null : null)
-  const neighbors = [at(mine, srcRef.slot - 2), at(mine, srcRef.slot)].filter(Boolean)
+  const around = (arr, i) => (TOUCHING[i + 1] || []).map(n => at(arr, n - 1)).filter(Boolean)
+  const neighbors = around(mine, srcRef.slot - 1)
   const place = (card) => { for (const sd of ['p1', 'p2']) { const i = board[sd].indexOf(card); if (i >= 0) return { sd, i } } return null }
-  const neighborsOf = (card) => { const { sd, i } = place(card); return [at(board[sd], i - 1), at(board[sd], i + 1)].filter(Boolean) }
+  const neighborsOf = (card) => { const { sd, i } = place(card); return around(board[sd], i) }
   const oppositeOf = (card) => { const { sd, i } = place(card); return at(board[sd === 'p1' ? 'p2' : 'p1'], i) }
   const ctx = { cards: all, src, neighbors, opposite: at(theirs, srcRef.slot - 1), own: mine.filter(Boolean), opp: theirs.filter(Boolean), neighborsOf, oppositeOf }
   ctx.src.slot = srcRef.slot
