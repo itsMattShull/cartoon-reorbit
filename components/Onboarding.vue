@@ -618,7 +618,18 @@ const syncCountdownTicking = () => {
   if (shouldTick) {
     if (countdownTimer) return
     countdownNow.value = Date.now()
-    countdownTimer = setInterval(() => { countdownNow.value = Date.now() }, 1000)
+    countdownTimer = setInterval(() => {
+      countdownNow.value = Date.now()
+      // Self-stop once the cooldown actually elapses, rather than ticking forever once the
+      // display has nothing left to count down — cMoonEnemyCountdown itself only changes on
+      // the next /api/onboarding/events refetch, which won't happen while the panel just sits
+      // open on this tab, so nothing else would ever clear this interval otherwise.
+      const nextAt = cMoonEnemyCountdown.value?.nextAvailableAt
+      if (!nextAt || new Date(nextAt).getTime() <= countdownNow.value) {
+        clearInterval(countdownTimer)
+        countdownTimer = null
+      }
+    }, 1000)
   } else if (countdownTimer) {
     clearInterval(countdownTimer)
     countdownTimer = null
