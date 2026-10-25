@@ -405,8 +405,9 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
       startedAt: Date.now(),
       lastActivity: Date.now()
     }
-    initHands(match, d.rng)
+    // Goals first: initHands logs "Match started" with each side's target color.
     assignRandomGoals(match, d.rng)
+    initHands(match, d.rng)
     matches.set(user.id, match)
     markPracticing(user.id)
     socket.data.ogGtoonsPracticeUserId = user.id

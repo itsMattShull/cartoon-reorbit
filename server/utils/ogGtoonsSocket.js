@@ -211,10 +211,11 @@ async function startMatch(io, a, b, { isChallenge, tournament = null, matchId: f
     startedAt: Date.now(),
     lastActivity: Date.now()
   }
+  // Goal colors come from one random card out of each player's chosen deck. Assigned before the deal
+  // because initHands writes the "Match started" log entry, which reports them.
+  assignRandomGoals(match, secureRng)
   // Shuffle both decks and deal the opening hands (also sets ready/revealed/swapUsed/round 1).
   initHands(match, secureRng)
-  // Goal colors come from one random card out of each player's chosen deck.
-  assignRandomGoals(match, secureRng)
 
   // Debit stakes now (match really starts here) — mirrors Clash's startPvpMatch exactly:
   // verify balances and debit both inside one transaction, refusing to start if either is short.
