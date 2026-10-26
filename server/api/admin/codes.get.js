@@ -83,6 +83,7 @@ export default defineEventHandler(async (event) => {
         startsAt: true,
         expiresAt: true,
         prereqMinOwned: true,
+        _count: { select: { claims: true } },
         prerequisites: {
           select: {
             ctoonId: true,

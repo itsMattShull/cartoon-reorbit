@@ -218,7 +218,7 @@
           <div
             v-for="(toon, toonIdx) in currentZone.toons" :key="toon.id"
             class="cz-item"
-            :class="{ 'is-dragging': isToonDragging(toon), 'is-viewable': !cz.buildMode, 'is-build': cz.buildMode, 'is-long-pressing': longPressToon?.toon?.id === toon.id, 'is-selected': selectedToonIds.has(toon.id) }"
+            :class="{ 'is-dragging': isToonDragging(toon), 'is-viewable': !cz.buildMode, 'is-build': cz.buildMode, 'is-long-pressing': longPressToon?.toon?.id === toon.id, 'is-selected': selectedToonIds.has(toon.id), 'is-highlighted': toon.id === highlightedToonId }"
             :style="{ left: toon.x + 'px', top: toon.y + 'px', width: toonW(toon) + 'px', height: toonH(toon) + 'px' }"
             @click.stop="onToonClick(toon)"
             @mousedown="cz.buildMode && onItemMouseDown(toon, $event)"
@@ -250,6 +250,7 @@
             <SecondEditionOverlay v-if="!cz.buildMode" :ctoon="toon" :respect-art-mode="true" />
             <div v-if="cz.buildMode" class="cz-item-btns" @mousedown.stop @touchstart.stop>
               <button
+                v-if="!toon.locked"
                 class="cz-bring-front-btn"
                 title="Bring to front"
                 @click.stop="bringToFrontToon(toonIdx)"
@@ -259,6 +260,7 @@
                 </svg>
               </button>
               <button
+                v-if="!toon.locked"
                 class="cz-size-cycle-btn"
                 :title="`Size: ${toon.sizeScale === 0.5 ? '50%' : toon.sizeScale === 2 ? '200%' : '100%'} — click to cycle`"
                 @click.stop="cycleToonSize(toonIdx)"
@@ -266,6 +268,19 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
                 </svg>
+              </button>
+              <!-- Protects a carefully-placed toon from an accidental drag, scale-cycle, or
+                   right-click/long-press delete while building — see onItemMouseDown,
+                   onItemTouchStart, removeToon and onContextMenu's own guards. Always visible
+                   (unlike the two buttons above, which only make sense on an unlocked toon) so
+                   a locked toon can always be unlocked again. -->
+              <button
+                class="cz-lock-toggle-btn"
+                :class="{ 'cz-lock-toggle-btn--on': toon.locked }"
+                :title="toon.locked ? 'Unlock position' : 'Lock position — prevents moving, scaling or deleting'"
+                @click.stop="toggleToonLock(toonIdx)"
+              >
+                <LockIcon :locked="!!toon.locked" :filled="!!toon.locked" />
               </button>
             </div>
           </div>
@@ -1388,6 +1403,46 @@ function goToTradeWithCtoon(item) {
   router.push(`/newsite/trade?username=${encodeURIComponent(viewedUsername.value)}&userCtoonId=${encodeURIComponent(item.userCtoonId)}`)
 }
 
+// ── Highlight jump (from CtoonInfoCard.vue's "Displayed in cZones" list) ──────
+// ?highlightZone=&highlightItem= name a placement by its position in the SAME zone/item
+// ordering server/api/czone/[username].get.js and the displayed-in endpoint both use — no
+// id-matching needed. Consumed once per loadZone() call, then stripped from the URL so a
+// reload/revisit doesn't re-trigger it.
+const highlightedToonId = ref(null)
+let highlightClearTimer = null
+const HIGHLIGHT_MS = 2600
+
+function applyHighlightFromQuery() {
+  const zoneIdx = Number(route.query.highlightZone)
+  const itemIdx = Number(route.query.highlightItem)
+  if (!Number.isInteger(zoneIdx) || !Number.isInteger(itemIdx)) return
+
+  // Strip the query params immediately regardless of whether the target still exists, so a
+  // stale/invalid combination (the owner rearranged their zone since the list was shown) never
+  // leaves the highlight params sitting in the URL to misfire again on a later reload.
+  const { highlightZone, highlightItem, ...rest } = route.query
+  router.replace({ query: rest })
+
+  // Bounds-check BEFORE touching activeZone — a negative or now-out-of-range index (the owner
+  // deleted a zone, or someone hand-edited the URL) must never land cz.value.activeZone on a
+  // slot that doesn't exist: currentZone's own fallback (`?? { background: '', toons: [] }`)
+  // would then show a blank zone with no tab reading as "active", a confusing dead end rather
+  // than the harmless no-op this is supposed to be.
+  const zones = cz.value.zones
+  if (!Array.isArray(zones) || zoneIdx < 0 || zoneIdx >= zones.length) return
+  const toon = zones[zoneIdx]?.toons?.[itemIdx]
+  if (!toon) return
+
+  cz.value.activeZone = zoneIdx
+
+  if (highlightClearTimer) clearTimeout(highlightClearTimer)
+  highlightedToonId.value = toon.id
+  highlightClearTimer = setTimeout(() => {
+    highlightedToonId.value = null
+    highlightClearTimer = null
+  }, HIGHLIGHT_MS)
+}
+
 // ── Favorite cZone (star toggle + list modal) ──────────────────
 // Whether the CURRENTLY VIEWED cZone is favorited — seeded by loadZone()'s
 // own response (server already computes it relative to the viewer) so the
@@ -1612,6 +1667,7 @@ onUnmounted(() => {
   cz.value.buildMode  = false
   // cancel any pending dimension auto-save
   clearTimeout(_dimSaveTimer)
+  if (highlightClearTimer) clearTimeout(highlightClearTimer)
   // stop any active glitch effect
   stopGlitchEffect()
 })
@@ -1631,6 +1687,7 @@ async function loadZone(username) {
     cz.value.mainZoneIndex = data.cZone.mainZoneIndex ?? 0
     cz.value.activeZone    = cz.value.mainZoneIndex
     viewedOwner.value      = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null, border: data.border ?? null, glow: data.glow ?? null }
+    applyHighlightFromQuery()
     isFavorited.value      = !!data.isFavorited
     loadCzoneSearchItems()
     eagerLoadMissingDimensions()
@@ -1759,6 +1816,11 @@ function onToonClick(toon) {
     userCtoonId: isOwnZone.value ? toon.id : undefined,
     assetPath: toon.assetPath,
     name: toon.name,
+    // Public, viewer-independent — every placement already carries it (see
+    // server/api/czone/[username].get.js). Lets the info card show "Mint #X" even for a
+    // non-owner view, where `toon.id` is a privacy-preserving synthetic token rather than a
+    // real UserCtoonId and the server can't resolve a per-copy userCtoon from it at all.
+    mintNumber: toon.mintNumber,
     context: { source: 'czone', isOwner: isOwnZone.value, username: viewedUsername.value || '' }
   })
 }
@@ -1768,10 +1830,13 @@ function onToonClick(toon) {
 // together; dragging any other toon collapses the selection down to just that one (standard
 // click-to-select-single behavior) so a plain drag never silently drags a stale group.
 function onItemMouseDown(toon, e) {
+  if (toon.locked) return
   const { x, y } = toCanvasCoords(e.clientX, e.clientY)
   if (isDesktop() && selectedToonIds.value.size > 1 && selectedToonIds.value.has(toon.id)) {
     const group = currentZone.value.toons
-      .filter(t => selectedToonIds.value.has(t.id))
+      // A locked toon never moves, even if it's part of the current selection — the rest of
+      // the group still drags together.
+      .filter(t => selectedToonIds.value.has(t.id) && !t.locked)
       .map(t => ({ toon: t, offsetX: x - t.x, offsetY: y - t.y }))
     localDrag.value = { group }
   } else {
@@ -1784,6 +1849,9 @@ function onItemMouseDown(toon, e) {
 
 // ── Item touchstart: reposition placed toon (touch drag / long-press) ──
 function onItemTouchStart(toon, e) {
+  // Blocks both the drag-reposition path below AND the long-press-to-delete timer in one
+  // guard — a locked toon can't be moved OR removed from a touch device.
+  if (toon.locked) return
   const touch = e.touches[0]
   const { x, y } = toCanvasCoords(touch.clientX, touch.clientY)
   if (window.innerWidth <= 768) {
@@ -1807,6 +1875,7 @@ function onItemTouchStart(toon, e) {
 
 // ── Remove a specific toon (right-click on item) ──────────────
 function removeToon(toon) {
+  if (toon.locked) return
   const toons = currentZone.value.toons
   const idx = toons.indexOf(toon)
   if (idx !== -1) toons.splice(idx, 1)
@@ -1918,6 +1987,9 @@ function onContextMenu(e) {
   for (let i = toons.length - 1; i >= 0; i--) {
     const t = toons[i]
     if (x >= t.x && x <= t.x + toonW(t) && y >= t.y && y <= t.y + toonH(t)) {
+      // Skip past a locked toon rather than stopping the search — an unlocked toon stacked
+      // underneath it at the same point should still be removable.
+      if (t.locked) continue
       toons.splice(i, 1); return
     }
   }
@@ -1927,14 +1999,28 @@ function onContextMenu(e) {
 function bringToFrontToon(idx) {
   const toons = currentZone.value.toons
   if (idx < 0 || idx >= toons.length) return
+  // Guarded here too, not just by hiding the button (v-if="!toon.locked") — a function-level
+  // check is what every other lock-guarded action in this file uses, so this stays safe even if
+  // a future caller reaches it some other way.
+  if (toons[idx].locked) return
   const [toon] = toons.splice(idx, 1)
   toons.push(toon)
+}
+
+// ── Toggle position lock (prevents drag/scale/reorder/delete) ─
+// A distinct concept from UserCtoon's own trade-lock (see CtoonInfoCard.vue's "Lock this
+// copy") — this is about a placement's position on the canvas, not the copy's trade
+// eligibility, and is plain per-placement JSON state in CZone.layoutData, same as sizeScale.
+function toggleToonLock(idx) {
+  const toon = currentZone.value.toons[idx]
+  if (!toon) return
+  toon.locked = !toon.locked
 }
 
 // ── Cycle toon display size (1× → 0.5× → 2× → 1× …) ─────────
 function cycleToonSize(idx) {
   const toon = currentZone.value.toons[idx]
-  if (!toon) return
+  if (!toon || toon.locked) return
   const cur = toon.sizeScale || 1
   const next = SIZE_CYCLE[(SIZE_CYCLE.indexOf(cur) + 1) % SIZE_CYCLE.length]
   toon.sizeScale = next
@@ -2508,6 +2594,18 @@ defineExpose({ save, clearZone })
   box-shadow: 0 0 6px rgba(77, 163, 255, 0.8);
 }
 
+/* Briefly draws the eye to a placement jumped to from the "Displayed in cZones" list — see
+   applyHighlightFromQuery(). z-index lifts it above neighbors so the glow isn't clipped by
+   whatever's stacked on top. */
+.cz-item.is-highlighted {
+  z-index: 70;
+  animation: cz-highlight-pulse 1.3s ease-in-out 2;
+}
+@keyframes cz-highlight-pulse {
+  0%, 100% { outline: 3px solid rgba(250, 204, 21, 0); box-shadow: none; }
+  50% { outline: 3px solid #facc15; outline-offset: 3px; box-shadow: 0 0 16px 4px rgba(250, 204, 21, 0.85); }
+}
+
 .cz-selection-box {
   position: absolute;
   border: 1px dashed #4da3ff;
@@ -2559,7 +2657,8 @@ defineExpose({ save, clearZone })
 }
 
 .cz-bring-front-btn,
-.cz-size-cycle-btn {
+.cz-size-cycle-btn,
+.cz-lock-toggle-btn {
   width: 26px;
   height: 26px;
   border-radius: 50%;
@@ -2574,20 +2673,31 @@ defineExpose({ save, clearZone })
   flex-shrink: 0;
 }
 .cz-bring-front-btn:hover,
-.cz-size-cycle-btn:hover { background: white; }
+.cz-size-cycle-btn:hover,
+.cz-lock-toggle-btn:hover { background: white; }
 .cz-bring-front-btn svg,
-.cz-size-cycle-btn svg { width: 16px; height: 16px; color: black; }
+.cz-size-cycle-btn svg,
+.cz-lock-toggle-btn svg { width: 16px; height: 16px; color: black; }
+/* Locked state reads as "on" at a glance — amber, matching the trade-lock's own
+   CtoonInfoCard.vue treatment (.ctic-lock-row--on) rather than inventing a new color. */
+.cz-lock-toggle-btn--on {
+  background: #f59e0b;
+}
+.cz-lock-toggle-btn--on:hover { background: #d97706; }
+.cz-lock-toggle-btn--on svg { color: white; }
 
 @media (max-width: 768px) {
   .cz-item-btns { gap: 4px; }
   .cz-bring-front-btn,
-  .cz-size-cycle-btn {
+  .cz-size-cycle-btn,
+  .cz-lock-toggle-btn {
     width: 36px;
     height: 36px;
     padding: 6px;
   }
   .cz-bring-front-btn svg,
-  .cz-size-cycle-btn svg {
+  .cz-size-cycle-btn svg,
+  .cz-lock-toggle-btn svg {
     width: 20px;
     height: 20px;
   }
