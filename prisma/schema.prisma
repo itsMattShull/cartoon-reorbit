@@ -6266,6 +6266,25 @@ model CMoonEnemyRewardPity {
   @@unique([userId, enemyMemberId])
 }
 
+// One row every time the cMoon Enemy popup OFFERS a player a new enemy (consider.post.js, never
+// for a resumed battle). acceptedAt is stamped when that player actually engages it — "Fight!" for
+// a solo enemy (start.post.js) or "Start Raid!" for a raid boss (cmoonRaidSocket.js) — and stays
+// null for a declined/ignored offer. Read only by the admin cMoon Enemy Analytics page
+// (server/api/admin/cmoon-enemy-analytics.get.js) for the offer -> start rate. Plain scalar ids, no
+// relations: this is an analytics log, so deleting a user or enemy member must never be blocked
+// by it, and nothing navigates from it.
+model CMoonEnemyOffer {
+  id            String    @id @default(uuid())
+  userId        String
+  enemyMemberId String
+  isRaidBoss    Boolean   @default(false)
+  offeredAt     DateTime  @default(now())
+  acceptedAt    DateTime?
+
+  @@index([offeredAt])
+  @@index([userId, enemyMemberId, offeredAt])
+}
+
 // One row per NON-raid-boss battle a player actually STARTED (see start.post.js — never a
 // raid boss, which is exempt from the cap this exists to enforce, and never a merely-offered-
 // then-declined popup) — purely a rolling-window counter for
