@@ -8,6 +8,7 @@ import { getGlobalConfig, getPlayerCombatMaxHp } from '@/server/utils/cmoon'
 import { ABANDON_AFTER_MINUTES } from '@/server/utils/cmoonEnemyBattle'
 import { serializeBattleForClient } from '@/server/utils/cmoonEnemyBattle'
 import { countRecentSoloStarts } from '@/server/utils/cmoonEnemy'
+import { markEnemyOfferAccepted } from '@/server/utils/cmoonEnemyAnalytics'
 
 export default defineEventHandler(async (event) => {
   assertSameOrigin(event)
@@ -141,6 +142,8 @@ export default defineEventHandler(async (event) => {
       db.user.update({ where: { id: userId }, data: { lastCMoonBattlePopupAt: new Date() } }),
       db.cMoonEnemyPopupLog.create({ data: { userId } }),
     ])
+    // Admin analytics only (offer -> start rate); fire-and-forget, never blocks the fight.
+    markEnemyOfferAccepted(db, { userId, enemyMemberId: enemyMember.id })
   } catch (err) {
     // Lost a race against another concurrent /start call for this same user (activeUserId is
     // @unique) — hand back whichever one actually won rather than erroring.
