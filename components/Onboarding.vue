@@ -379,6 +379,23 @@ const fetchUnreadCount = async () => {
   }
 }
 
+// The panel lives in the layout, so it can stay open on the Events tab while the player fights
+// a cMoon enemy and keeps browsing. The watch below only refetches on open/tab switch, which left
+// the cMoon Enemies card showing its pre-fight "may appear now" for the rest of the session.
+// Refetch Events on every navigation and whenever the battle popup closes, but only while the
+// panel is actually open on Events, so a closed panel costs nothing.
+const cmoonBattleVisible = useState('cmoon-battle-visible', () => false)
+// Silent on purpose: no skeleton flash on every page change, and a failed background refresh
+// keeps the last good data rather than replacing the panel with an error.
+const refreshEventsIfShowing = async () => {
+  if (!isOpen.value || activeTab.value !== 'events') return
+  try {
+    eventsData.value = await $fetch('/api/onboarding/events', { credentials: 'include' })
+  } catch {}
+}
+watch(() => route.fullPath, refreshEventsIfShowing)
+watch(cmoonBattleVisible, (nowVisible) => { if (!nowVisible) refreshEventsIfShowing() })
+
 watch([isOpen, activeTab], ([nextOpen, nextTab]) => {
   if (!nextOpen) return
   if (nextTab === 'daily') {
