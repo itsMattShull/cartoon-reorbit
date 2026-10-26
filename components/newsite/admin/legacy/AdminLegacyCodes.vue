@@ -80,6 +80,7 @@
                     <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100"># cToons</th>
                     <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100"># of Backgrounds</th>
                     <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100">Points</th>
+                    <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100">Redeemed</th>
                     <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100">Actions</th>
                   </tr>
                 </thead>
@@ -101,6 +102,7 @@
                     <td class="px-2 py-1.5 text-right">{{ countCtoons(c) }}</td>
                     <td class="px-2 py-1.5 text-right">{{ countBackgrounds(c) }}</td>
                     <td class="px-2 py-1.5 text-right">{{ countPoints(c) }}</td>
+                    <td class="px-2 py-1.5 text-right">{{ redeemedCount(c) }} / {{ c.maxClaims }}</td>
                     <td class="px-2 py-1.5 text-right">
                       <NuxtLink
                         :to="`/newsite/admin/codes/edit?code=${encodeURIComponent(c.code)}`"
@@ -141,6 +143,7 @@
                   <p><strong># cToons:</strong> {{ countCtoons(c) }}</p>
                   <p><strong># Backgrounds:</strong> {{ countBackgrounds(c) }}</p>
                   <p><strong>Points:</strong> {{ countPoints(c) }}</p>
+                  <p><strong>Redeemed:</strong> {{ redeemedCount(c) }} / {{ c.maxClaims }}</p>
                 </div>
                 <NuxtLink
                   :to="`/newsite/admin/codes/edit?code=${encodeURIComponent(c.code)}`"
@@ -406,6 +409,12 @@ function countBackgrounds(code) {
 // Helper to sum up all points for a code
 function countPoints(code) {
   return (code.rewards || []).reduce((sum, r) => sum + (r.points || 0), 0)
+}
+
+// Total completed redemptions (server/api/admin/codes.get.js's `_count.claims`) — how many
+// distinct players have actually redeemed this code, out of its maxClaims limit.
+function redeemedCount(code) {
+  return code._count?.claims ?? 0
 }
 
 // Helper to sum up all cToon quantities

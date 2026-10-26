@@ -18,7 +18,15 @@ export function useCtoonModal() {
   // remember a separate clearContext() call beforehand) is what keeps a
   // stale source from a previous modal open (e.g. 'market') from silently
   // leaking into an unrelated one opened later from a different page.
-  async function open({ ctoonId, userCtoonId, assetPath, name, context: nextContext } = {}) {
+  // `mintNumber`: a display-only mint # the caller already knows (e.g. a placed cZone toon,
+  // which carries it on every placement regardless of viewer — see
+  // server/api/czone/[username].get.js's own comment on why non-owner placements get a synthetic
+  // `cz:` id instead of the real UserCtoonId). When the server legitimately can't resolve a real
+  // per-copy userCtoon from that id, this is merged in afterward as a minimal, owner-less
+  // `{ mintNumber, isOwner: false, mintOnly: true }` so the card can still show "Mint #X" without
+  // fabricating trade/auction stats we never actually fetched for someone else's copy. A real
+  // resolved userCtoon from the server always wins — this only fills the gap when there is none.
+  async function open({ ctoonId, userCtoonId, assetPath, name, mintNumber, context: nextContext } = {}) {
     if (!ctoonId && !userCtoonId) return
 
     context.value = { source: '', isOwner: false, username: '', ...(nextContext || {}) }
@@ -47,6 +55,9 @@ export function useCtoonModal() {
       })
       if (requestToken.value !== token) return
       data.value = res
+      if (!data.value.userCtoon && mintNumber != null) {
+        data.value.userCtoon = { mintNumber, isOwner: false, mintOnly: true }
+      }
     } catch (err) {
       if (requestToken.value !== token) return
       error.value = err
