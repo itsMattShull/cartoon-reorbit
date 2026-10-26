@@ -52,6 +52,7 @@
             <td>
               <div class="acc-actions">
                 <NuxtLink :to="`/czone-contest/${row.id}`" class="acc-link acc-link--green" target="_blank">View</NuxtLink>
+                <button class="acc-link acc-link--purple" @click="openSubmissions(row)">Submissions</button>
                 <button class="acc-link acc-link--blue" @click="openEdit(row)">Edit</button>
                 <button class="acc-link acc-link--red" @click="confirmDelete(row)">Delete</button>
                 <button
@@ -138,6 +139,48 @@
             <button class="acc-btn acc-btn--danger" :disabled="deleteSaving" @click="doDelete">
               {{ deleteSaving ? 'Deleting…' : 'Delete' }}
             </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- ── Submissions Modal ──────────────────────────────────────── -->
+    <Teleport to="body">
+      <div v-if="showSubmissionsModal" class="acc-overlay" @click.self="closeSubmissionsModal">
+        <div class="acc-modal acc-modal--lg">
+          <div class="acc-modal-head">
+            <span>Submissions — {{ submissionsContest?.name }}</span>
+            <button class="acc-modal-close" @click="closeSubmissionsModal">✕</button>
+          </div>
+          <div class="acc-modal-body">
+            <div v-if="submissionsLoading" class="acc-empty">Loading submissions…</div>
+            <div v-else-if="submissions.length === 0" class="acc-empty">No submissions yet.</div>
+            <template v-else>
+              <p v-if="!canRemoveSubmissions(submissionsContest)" class="acc-help acc-mb-2">
+                Submissions and voting have ended, so entries can no longer be removed.
+              </p>
+              <div class="acc-submissions">
+                <div v-for="sub in submissions" :key="sub.id" class="acc-submission-card">
+                  <a :href="sub.imageUrl" target="_blank" rel="noopener">
+                    <img :src="sub.imageUrl" class="acc-submission-img" :alt="`${sub.username}'s cZone`" />
+                  </a>
+                  <div class="acc-submission-info">
+                    <div class="acc-leaderboard-name">{{ sub.username }}</div>
+                    <div class="acc-leaderboard-meta">Zone {{ sub.zoneIndex + 1 }} · {{ sub.voteCount }} votes</div>
+                  </div>
+                  <button
+                    v-if="canRemoveSubmissions(submissionsContest)"
+                    class="acc-btn acc-btn--danger acc-btn--sm"
+                    :disabled="removingSubmissionId === sub.id"
+                    @click="removeSubmission(sub)"
+                  >{{ removingSubmissionId === sub.id ? 'Removing…' : 'Remove' }}</button>
+                </div>
+              </div>
+            </template>
+            <p v-if="submissionsError" class="acc-error acc-mt-2">{{ submissionsError }}</p>
+          </div>
+          <div class="acc-modal-foot">
+            <button class="acc-btn acc-btn--ghost" @click="closeSubmissionsModal">Close</button>
           </div>
         </div>
       </div>
@@ -368,6 +411,14 @@ const selectedWinnerId     = ref(null)
 const distributeSaving     = ref(false)
 const distributeError      = ref('')
 
+// ── Submissions ──────────────────────────────────────────────────────────────
+const showSubmissionsModal  = ref(false)
+const submissionsContest    = ref(null)
+const submissions           = ref([])
+const submissionsLoading    = ref(false)
+const submissionsError      = ref('')
+const removingSubmissionId  = ref(null)
+
 // ── Automation ───────────────────────────────────────────────────────────────
 const showAutomationModal = ref(false)
 const autoSaving          = ref(false)
@@ -409,6 +460,12 @@ function toDatetimeLocal(dt) {
 function isVotingOpen(row) {
   if (!row.endVotingDate) return false
   return new Date(row.endVotingDate) > new Date()
+}
+
+// Submissions can be removed until the contest closes (voting end, or submission end when there is no voting phase)
+function canRemoveSubmissions(row) {
+  if (!row || row.distributedAt) return false
+  return new Date(row.endVotingDate || row.endDate) > new Date()
 }
 
 function statusLabel(row) {
@@ -583,6 +640,43 @@ async function doDistribute() {
   }
 }
 
+async function openSubmissions(row) {
+  submissionsContest.value = row
+  submissions.value = []
+  submissionsError.value = ''
+  showSubmissionsModal.value = true
+  submissionsLoading.value = true
+  try {
+    const data = await $fetch(`/api/admin/czone-contest/${row.id}/leaderboard`)
+    submissions.value = data.submissions
+  } catch (e) {
+    submissionsError.value = e?.data?.statusMessage || 'Failed to load submissions'
+  } finally {
+    submissionsLoading.value = false
+  }
+}
+
+function closeSubmissionsModal() {
+  showSubmissionsModal.value = false
+  submissionsContest.value = null
+}
+
+async function removeSubmission(sub) {
+  if (!confirm(`Remove ${sub.username}'s submission? This also removes its votes.`)) return
+  submissionsError.value = ''
+  removingSubmissionId.value = sub.id
+  try {
+    await $fetch(`/api/admin/czone-contest/${submissionsContest.value.id}/submissions/${sub.id}`, { method: 'DELETE' })
+    submissions.value = submissions.value.filter(s => s.id !== sub.id)
+    showToast('Submission removed')
+    await fetchContests()
+  } catch (e) {
+    submissionsError.value = e?.data?.statusMessage || 'Failed to remove submission'
+  } finally {
+    removingSubmissionId.value = null
+  }
+}
+
 // ── API calls — automation ───────────────────────────────────────────────────
 async function fetchAutomation() {
   try {
@@ -722,6 +816,7 @@ onMounted(async () => {
 .acc-btn--danger:hover:not(:disabled) { background: #b91c1c; }
 .acc-btn--amber   { background: #d97706; color: #fff; }
 .acc-btn--amber:hover:not(:disabled) { background: #b45309; }
+.acc-btn--sm { padding: 3px 9px; font-size: 0.72rem; }
 .acc-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /* ── Badges ─────────────────────────────────────────────────────────────── */
@@ -797,6 +892,7 @@ onMounted(async () => {
 }
 .acc-link--green  { color: #16a34a; }
 .acc-link--blue   { color: #2563eb; }
+.acc-link--purple { color: #7c3aed; }
 .acc-link--red    { color: #dc2626; }
 .acc-link--amber  { color: #b45309; }
 .acc-link--disabled { color: #9ca3af; cursor: not-allowed; }
@@ -938,6 +1034,19 @@ onMounted(async () => {
 .acc-leaderboard-info { flex: 1; min-width: 0; }
 .acc-leaderboard-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .acc-leaderboard-meta { font-size: 0.7rem; color: #6b7280; }
+
+/* ── Submissions ────────────────────────────────────────────────────────── */
+.acc-submissions { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.acc-submission-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+}
+.acc-submission-img { width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 4px; display: block; background: #f3f4f6; }
+.acc-submission-info { min-width: 0; }
 
 /* ── Automation modal ───────────────────────────────────────────────────── */
 .acc-automation-enable {
