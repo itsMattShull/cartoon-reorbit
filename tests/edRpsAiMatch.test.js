@@ -9,8 +9,8 @@ import { COMBAT_POOL_GAME_NAMES } from '../server/utils/gamePoints.js'
 // "Play the Eds" — the server-authoritative bot opponent for Ed, Edd n Eddy RPS
 // (server/utils/edRpsAiMatch.js). These assertions exist because the design review that shaped
 // this module flagged specific, concrete ways it could regress into a farming hole: reusing
-// duelRuntime's room/join path, losing the single-shot resolve guard, or letting the cluster-cap
-// clamp get bypassed. Each test below pins down one of those.
+// duelRuntime's room/join path, losing the single-shot resolve guard, or paying outside the shared
+// combat-pool cap. Each test below pins down one of those.
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = join(here, '..')
@@ -103,14 +103,12 @@ test('the award claim is a compare-and-set, same idempotency guard as PvP', () =
   assert.ok(src.includes('claim.count !== 1'), 'the award claim no longer checks it won the race')
 })
 
-test('the device-cluster cap is computed and applied before the award, not after', () => {
+test('the AI award uses only the shared combat-pool cap, with no extra per-device clamp', () => {
   const src = code(MODULE)
-  const clusterIdx = src.indexOf('clusterPointsUsed(tx')
-  const awardIdx = src.indexOf('awardCappedGamePoints(tx')
-  assert.notEqual(clusterIdx, -1, 'the cluster-cap lookup is gone')
-  assert.notEqual(awardIdx, -1, 'the award call is gone')
-  assert.ok(clusterIdx < awardIdx, 'the cluster cap is no longer computed before the award')
-  assert.ok(src.includes('effectivePointsPerWin'), 'the award no longer uses a cluster-clamped pointsPerWin')
+  assert.ok(src.includes('awardCappedGamePoints(tx'), 'the award call is gone')
+  assert.ok(src.includes('pointsPerWin: cfg.pointsPerWin'), 'the award no longer pays the configured pointsPerWin')
+  assert.ok(src.includes('cap: cfg.dailyCap'), 'the award no longer uses the shared daily cap')
+  assert.ok(!src.includes('clusterPointsUsed'), 'a per-IP/device cluster clamp crept back in; TKO and Clash have none')
 })
 
 test('every edrps:ai:* handler goes through auth() before touching match state', () => {
