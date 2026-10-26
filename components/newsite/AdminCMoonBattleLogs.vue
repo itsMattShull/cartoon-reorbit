@@ -84,7 +84,7 @@
                     <span v-else>—</span>
                   </td>
                   <td class="px-1.5 py-1">
-                    <span v-if="log.factionName" class="text-gray-500">{{ log.factionName }} — </span>{{ log.enemyName }}
+                    <span v-if="log.isRaid" class="mr-1 rounded bg-purple-100 px-1 text-[10px] font-semibold uppercase text-purple-700" title="Raid participation — not a solo start, never counts toward the spawn cap">Raid</span><span v-if="log.factionName" class="text-gray-500">{{ log.factionName }} — </span>{{ log.enemyName }}
                   </td>
                   <td class="px-1.5 py-1">
                     <span :class="resultClass(log)">{{ resultLabel(log) }}</span>

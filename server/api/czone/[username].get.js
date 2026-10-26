@@ -317,7 +317,11 @@ export default defineEventHandler(async (event) => {
     cZone: {
       id: chosenZone.id,
       zones: enrichedZones,
-      isPublic: chosenZone.isPublic ?? true
+      isPublic: chosenZone.isPublic ?? true,
+      // Clamped here (not just at set-time) since targetCount can shrink after the owner last
+      // chose a main zone — e.g. an admin lowering GlobalGameConfig.czoneCount. See
+      // User.mainZoneIndex's own schema comment; MyCzone.vue uses this as the zone it opens on.
+      mainZoneIndex: Math.min(Math.max(0, Number(user.mainZoneIndex ?? 0)), enrichedZones.length - 1)
     }
   }
 })

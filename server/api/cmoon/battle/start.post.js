@@ -7,6 +7,7 @@ import { assertSameOrigin } from '@/server/utils/requireAdmin'
 import { getGlobalConfig, getPlayerCombatMaxHp } from '@/server/utils/cmoon'
 import { ABANDON_AFTER_MINUTES } from '@/server/utils/cmoonEnemyBattle'
 import { serializeBattleForClient } from '@/server/utils/cmoonEnemyBattle'
+import { countRecentSoloStarts } from '@/server/utils/cmoonEnemy'
 
 export default defineEventHandler(async (event) => {
   assertSameOrigin(event)
@@ -89,6 +90,18 @@ export default defineEventHandler(async (event) => {
     const personalWinCount = await db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN' } })
     if (personalWinCount < enemyMember.minPriorDefeats) {
       throw createError({ statusCode: 403, statusMessage: 'You have not defeated enough enemies to face this one yet' })
+    }
+  }
+
+  // Authoritative spawn-cap check. consider.post.js only applies the cap when it OFFERS an
+  // enemy, and this endpoint is reachable directly (or from an offer left on screen in a second
+  // tab), so without this a player could start more solo battles than the cap allows. Raid
+  // bosses never reach this point (rejected above), matching the cap's raid exemption.
+  const spawnCapCount = config?.cMoonEnemySpawnCapCount ?? 0
+  if (spawnCapCount > 0) {
+    const recent = await countRecentSoloStarts(db, userId, config?.cMoonEnemySpawnCapWindowHours ?? 4)
+    if (recent >= spawnCapCount) {
+      throw createError({ statusCode: 429, statusMessage: "You've reached the battle limit for now — try again later." })
     }
   }
 

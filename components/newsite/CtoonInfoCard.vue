@@ -133,7 +133,12 @@
               </div>
               <div class="ctic-tile">
                 <div class="ctic-label">Displayed in cZones</div>
-                <div class="ctic-value">{{ formatValue(ctoon.czoneDisplayCount) }}</div>
+                <button
+                  type="button"
+                  class="ctic-value ctic-value--link ctic-value--btn"
+                  :aria-label="`See who's displaying ${ctoon.name || 'this cToon'} in their cZone`"
+                  @click="openDisplayedIn"
+                >{{ formatValue(ctoon.czoneDisplayCount) }}</button>
                 <div class="ctic-sub">out of {{ formatValue(totalCzoneCount) }} total cZones</div>
               </div>
               <div class="ctic-tile">
@@ -211,43 +216,53 @@
                    lock is a fact about THIS mint, and .ctic-foot already
                    carries up to three controls that wrap onto their own row
                    below 480px. The state is carried in words, not just the
-                   icon's colour. -->
-              <button
-                v-if="userCtoon.isOwner && userCtoon.userCtoonId"
-                class="ctic-lock-row"
-                :class="{ 'ctic-lock-row--on': userCtoon.isLocked }"
-                :aria-pressed="userCtoon.isLocked ? 'true' : 'false'"
-                :disabled="lockPending"
-                @click="toggleLock"
-              >
-                <span class="ctic-lock-glyph"><LockIcon :locked="userCtoon.isLocked" :filled="userCtoon.isLocked" /></span>
-                <span class="ctic-lock-text">
-                  {{ lockPending
-                    ? 'Saving…'
-                    : userCtoon.isLocked
-                      ? 'Locked — other players can’t request this cToon in a trade'
-                      : 'Lock this copy' }}
-                </span>
-              </button>
-              <p v-if="lockError" class="ctic-lock-error" role="alert">{{ lockError }}</p>
-              <div class="ctic-grid">
-                <div class="ctic-tile">
-                  <div class="ctic-label">Times Traded</div>
-                  <div class="ctic-value">{{ formatValue(userCtoon.tradedCount) }}</div>
+                   icon's colour.
+
+                   Only rendered for a REAL resolved copy (never userCtoon.mintOnly — see
+                   useCtoonModal's own comment): this section's stats/lock come from an actual
+                   per-copy DB lookup, which never happens for a non-owner's cZone placement
+                   (synthetic `cz:` id, by design — see [username].get.js). Showing zeroed-out
+                   stats or a lock control for data we never fetched would be actively
+                   misleading, so the whole block is skipped and only the "Mint #X" heading
+                   above (which IS public, placement-carried data) renders. -->
+              <template v-if="!userCtoon.mintOnly">
+                <button
+                  v-if="userCtoon.isOwner && userCtoon.userCtoonId"
+                  class="ctic-lock-row"
+                  :class="{ 'ctic-lock-row--on': userCtoon.isLocked }"
+                  :aria-pressed="userCtoon.isLocked ? 'true' : 'false'"
+                  :disabled="lockPending"
+                  @click="toggleLock"
+                >
+                  <span class="ctic-lock-glyph"><LockIcon :locked="userCtoon.isLocked" :filled="userCtoon.isLocked" /></span>
+                  <span class="ctic-lock-text">
+                    {{ lockPending
+                      ? 'Saving…'
+                      : userCtoon.isLocked
+                        ? 'Locked — other players can’t request this cToon in a trade'
+                        : 'Lock this copy' }}
+                  </span>
+                </button>
+                <p v-if="lockError" class="ctic-lock-error" role="alert">{{ lockError }}</p>
+                <div class="ctic-grid">
+                  <div class="ctic-tile">
+                    <div class="ctic-label">Times Traded</div>
+                    <div class="ctic-value">{{ formatValue(userCtoon.tradedCount) }}</div>
+                  </div>
+                  <div class="ctic-tile">
+                    <div class="ctic-label">Successful Auctions</div>
+                    <div class="ctic-value">{{ formatValue(userCtoon.successfulAuctions) }}</div>
+                  </div>
+                  <div class="ctic-tile">
+                    <div class="ctic-label">Avg Sale</div>
+                    <div class="ctic-value">{{ formatValue(userCtoon.avgSale, ' pts') }}</div>
+                  </div>
+                  <div class="ctic-tile">
+                    <div class="ctic-label">Median Sale</div>
+                    <div class="ctic-value">{{ formatValue(userCtoon.medianSale, ' pts') }}</div>
+                  </div>
                 </div>
-                <div class="ctic-tile">
-                  <div class="ctic-label">Successful Auctions</div>
-                  <div class="ctic-value">{{ formatValue(userCtoon.successfulAuctions) }}</div>
-                </div>
-                <div class="ctic-tile">
-                  <div class="ctic-label">Avg Sale</div>
-                  <div class="ctic-value">{{ formatValue(userCtoon.avgSale, ' pts') }}</div>
-                </div>
-                <div class="ctic-tile">
-                  <div class="ctic-label">Median Sale</div>
-                  <div class="ctic-value">{{ formatValue(userCtoon.medianSale, ' pts') }}</div>
-                </div>
-              </div>
+              </template>
             </div>
           </div>
         </template>
@@ -427,6 +442,47 @@
             <AddToWishlist v-if="ctoon.id" :ctoon-id="ctoon.id" />
           </div>
         </template>
+      </div>
+
+      <!-- ── "Displayed in cZones" overlay ──────────────────────────────────
+           Layered on top of the already-open card rather than a separate tab: the ask was
+           specifically "click the number, a list/modal pops up". Only usernames + zone/item
+           indices ever reach the client (server/api/ctoon/[id]/displayed-in.get.js) — never a
+           UserCtoonId, same boundary [username].get.js already draws for non-owner viewers. -->
+      <div v-if="showDisplayedIn" class="ctic-displayed-in-overlay" @click.self="closeDisplayedIn">
+        <div class="ctic-displayed-in-panel">
+          <div class="ctic-displayed-in-head">
+            <span>Displayed in cZones</span>
+            <button class="ctic-close-x" aria-label="Close" @click="closeDisplayedIn">✕</button>
+          </div>
+          <div class="ctic-displayed-in-body">
+            <div v-if="displayedInLoading" class="ctic-owners-list">
+              <div v-for="i in 5" :key="`di-skel-${i}`" class="ctic-owner-row ctic-skel-tile">
+                <div class="ctic-skel-line" style="width:120px;height:11px"></div>
+              </div>
+            </div>
+            <div v-else-if="displayedInError" class="ctic-error">{{ displayedInError }}</div>
+            <div v-else-if="!displayedInItems.length" class="ctic-empty">Not displayed in any cZone yet.</div>
+            <template v-else>
+              <ul class="ctic-owners-list">
+                <li
+                  v-for="(item, i) in displayedInItems"
+                  :key="`${item.username}-${item.zoneIdx}-${item.itemIdx}-${i}`"
+                  class="ctic-displayed-in-row"
+                >
+                  <NuxtLink
+                    :to="{ path: `/newsite/czone/${item.username}`, query: { highlightZone: item.zoneIdx, highlightItem: item.itemIdx } }"
+                    class="ctic-owner-link"
+                    @click="close"
+                  >
+                    {{ item.username }}
+                  </NuxtLink>
+                </li>
+              </ul>
+              <p v-if="displayedInHasMore" class="ctic-sub">Showing the first {{ displayedInItems.length }} — there are more.</p>
+            </template>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -805,6 +861,11 @@ watch(isOpen, (open) => {
     ownersList.value = []
     lastOwnersCtoonId.value = null
     valuationsMap.value = {}
+    showDisplayedIn.value = false
+    displayedInLoading.value = false
+    displayedInError.value = ''
+    displayedInItems.value = []
+    displayedInHasMore.value = false
     if (audioEl.value) { audioEl.value.pause(); audioEl.value.currentTime = 0 }
     return
   }
@@ -948,6 +1009,47 @@ async function loadOwners(ctoonId) {
     ownersLoading.value = false
   }
 }
+
+// ── "Displayed in cZones" overlay (server/api/ctoon/[id]/displayed-in.get.js) ──────────────
+const showDisplayedIn = ref(false)
+const displayedInLoading = ref(false)
+const displayedInError = ref('')
+const displayedInItems = ref([])
+const displayedInHasMore = ref(false)
+
+async function openDisplayedIn() {
+  if (!ctoon.value?.id) return
+  showDisplayedIn.value = true
+  displayedInLoading.value = true
+  displayedInError.value = ''
+  try {
+    const res = await $fetch(`/api/ctoon/${ctoon.value.id}/displayed-in`)
+    displayedInItems.value = Array.isArray(res?.items) ? res.items : []
+    displayedInHasMore.value = !!res?.hasMore
+  } catch {
+    displayedInError.value = 'Failed to load.'
+    displayedInItems.value = []
+  } finally {
+    displayedInLoading.value = false
+  }
+}
+
+function closeDisplayedIn() {
+  showDisplayedIn.value = false
+}
+
+// The card can switch to a DIFFERENT cToon without ever closing (isOpen stays true) — e.g. the
+// "View 1st/2nd Edition" link just calls open({ ctoonId }) again. Without this, a list fetched
+// for the old cToon would keep showing, now mislabeled as belonging to whatever cToon is
+// currently on screen. Mirrors the existing ctoon-id watchers elsewhere in this file (e.g. the
+// holiday-event one above) rather than only resetting on close like the plain isOpen watcher.
+watch(() => ctoon.value?.id, () => {
+  showDisplayedIn.value = false
+  displayedInLoading.value = false
+  displayedInError.value = ''
+  displayedInItems.value = []
+  displayedInHasMore.value = false
+})
 
 /**
  * Applies a mint-number premium to the base average sale price,
@@ -1271,6 +1373,17 @@ function formatDate(value) {
   outline: 2px solid var(--OrbitLightBlue);
   outline-offset: 1px;
 }
+/* Resets native <button> chrome so it reads identically to the NuxtLink variants above. */
+.ctic-value--btn {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
 /* A cMoon name has no length limit, so this variant wraps as normal text
    instead of staying on one inline-flex line — the trailing "›" is real text
    content (not a positioned ::after) precisely so it flows with the wrap
@@ -1368,6 +1481,47 @@ function formatDate(value) {
   white-space: nowrap;
 }
 .ctic-owner-link:hover { color: #bfdbfe; text-decoration: underline; }
+
+/* ── "Displayed in cZones" overlay ── */
+.ctic-displayed-in-row {
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 0.8rem;
+}
+.ctic-displayed-in-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(13, 42, 77, 0.97);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  padding: 12px;
+  box-sizing: border-box;
+}
+.ctic-displayed-in-panel {
+  width: 100%;
+  max-height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.ctic-displayed-in-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 4px 32px 10px 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  margin-bottom: 10px;
+}
+.ctic-displayed-in-body {
+  overflow-y: auto;
+  min-height: 0;
+}
 
 .ctic-tradeable-badge {
   background: #d1fae5;

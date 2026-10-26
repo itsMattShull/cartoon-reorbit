@@ -2,6 +2,7 @@ export const useNewSiteCzoneState = () => useState('newSiteCzoneState', () => ({
   buildMode:          false,
   zones:              [{ background: '', toons: [] }],
   activeZone:         0,
+  mainZoneIndex:      0,
   saving:             false,
   collection:         [],
   loadingCollection:  false,

@@ -215,6 +215,9 @@ export default defineEventHandler(async (event) => {
       if (item.sizeScale === 0.5 || item.sizeScale === 2) entry.sizeScale = item.sizeScale
       if (typeof item.width  === 'number' && item.width  > 0) entry.width  = Math.round(item.width)
       if (typeof item.height === 'number' && item.height > 0) entry.height = Math.round(item.height)
+      // Position lock (prevents drag/scale/reorder/delete while building) — a distinct concept
+      // from UserCtoon's own trade-lock, same allowlisted-boolean pattern as sizeScale above.
+      if (item.locked === true) entry.locked = true
       enrichedToons.push(entry)
     }
 
