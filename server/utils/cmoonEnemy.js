@@ -568,6 +568,19 @@ export async function countRecentSoloStarts(db, userId, windowHours) {
   return db.cMoonEnemyBattle.count({ where: { userId, raidId: null, startedAt: { gte: windowStart } } })
 }
 
+// When a player at the non-raid spawn cap gets their next solo slot back. `startTimes` are the
+// startedAt values of their solo battles inside the current window (any order). Returns null when
+// the cap is off or they're still under it; otherwise the moment enough of those starts age out of
+// the window to drop the count below the cap. Pure so the onboarding countdown can be unit-tested
+// against the same rule consider.post.js enforces via countRecentSoloStarts.
+export function nextSoloSlotAt(startTimes, capCount, windowHours) {
+  if (!capCount || capCount <= 0) return null
+  const times = startTimes.map(t => new Date(t).getTime()).sort((a, b) => a - b)
+  if (times.length < capCount) return null
+  const hours = Number(windowHours) > 0 ? Number(windowHours) : 4
+  return new Date(times[times.length - capCount] + hours * 60 * 60 * 1000)
+}
+
 // Narrows the candidate pool to raid bosses only once a player has hit GlobalGameConfig's
 // cMoonEnemySpawnCapCount within the last cMoonEnemySpawnCapWindowHours — see that field's own
 // schema comment for why raid bosses are exempt. `capCount <= 0` means "no cap," a no-op; so does

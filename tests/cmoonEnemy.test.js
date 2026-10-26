@@ -5,7 +5,7 @@ import {
   CRIT_CHANCE_MIN, CRIT_CHANCE_MAX, POINTS_REWARD_MIN, POINTS_REWARD_MAX, ENEMY_RANKS, RANK_DEFAULT,
   MIN_PRIOR_DEFEATS_MIN, MIN_PRIOR_DEFEATS_MAX, MIN_PRIOR_DEFEATS_DEFAULT,
   isValidOccurrencePercent, OCCURRENCE_PERCENT_MIN, OCCURRENCE_PERCENT_MAX, OCCURRENCE_PERCENT_DEFAULT,
-  filterToHighestRank, pickWeightedEnemy, filterCappedNonRaidCandidates, countRecentSoloStarts, resolveMemberSoundPaths,
+  filterToHighestRank, pickWeightedEnemy, filterCappedNonRaidCandidates, countRecentSoloStarts, nextSoloSlotAt, resolveMemberSoundPaths,
   MEMBER_SOUND_SLOTS, FACTION_DEFAULT_SOUND_SLOTS,
   parseSpecialAttackBody, isValidSpecialAttackName, isValidSpecialAttackEffectType, isValidSpecialAttackAmount,
   SPECIAL_ATTACK_EFFECT_TYPES, SPECIAL_ATTACK_NAME_MAX_LENGTH, SPECIAL_ATTACK_AMOUNT_MIN, SPECIAL_ATTACK_AMOUNT_MAX,
@@ -556,4 +556,22 @@ test('countRecentSoloStarts: a missing or invalid window falls back to 4 hours',
   const before = Date.now()
   await countRecentSoloStarts(db, 'u1', 0)
   assert.ok(Math.abs(db.calls[0].where.startedAt.gte.getTime() - (before - 4 * 60 * 60 * 1000)) < 1000)
+})
+
+// ── nextSoloSlotAt ────────────────────────────────────────────────────────
+
+test('nextSoloSlotAt: null when the cap is off or the player is under it', () => {
+  const t = [new Date('2026-10-26T10:00:00Z')]
+  assert.equal(nextSoloSlotAt(t, 0, 12), null)
+  assert.equal(nextSoloSlotAt(t, 4, 12), null)
+})
+
+test('nextSoloSlotAt: at the cap, the slot frees when the oldest start leaves the window', () => {
+  const t = ['2026-10-26T13:00:00Z', '2026-10-26T10:00:00Z', '2026-10-26T12:00:00Z', '2026-10-26T11:00:00Z']
+  assert.equal(nextSoloSlotAt(t, 4, 12).toISOString(), '2026-10-26T22:00:00.000Z')
+})
+
+test('nextSoloSlotAt: over the cap, waits until enough starts age out to drop below it', () => {
+  const t = ['2026-10-26T09:00:00Z', '2026-10-26T10:00:00Z', '2026-10-26T11:00:00Z', '2026-10-26T12:00:00Z', '2026-10-26T13:00:00Z']
+  assert.equal(nextSoloSlotAt(t, 4, 12).toISOString(), '2026-10-26T22:00:00.000Z')
 })

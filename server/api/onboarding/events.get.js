@@ -1,6 +1,7 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { getGlobalConfig } from '@/server/utils/cmoon'
+import { nextSoloSlotAt } from '@/server/utils/cmoonEnemy'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -92,6 +93,23 @@ export default defineEventHandler(async (event) => {
       if (cooldownMinutes > 0 && cmoonUser?.lastCMoonBattlePopupAt) {
         const nextAllowed = new Date(cmoonUser.lastCMoonBattlePopupAt.getTime() + cooldownMinutes * 60 * 1000)
         if (nextAllowed > now) nextAvailableAt = nextAllowed.toISOString()
+      }
+      // Spawn cap too, not just the cooldown — otherwise a capped player sees "may appear now"
+      // while consider.post.js won't offer them a solo enemy. Same window and same rows
+      // (non-raid CMoonEnemyBattle) that countRecentSoloStarts counts. Only queried when the cap
+      // is on. Raid bosses are exempt from the cap and can still appear during this countdown.
+      const capCount = config?.cMoonEnemySpawnCapCount ?? 0
+      if (capCount > 0) {
+        const windowHours = config?.cMoonEnemySpawnCapWindowHours ?? 4
+        const windowStart = new Date(now.getTime() - windowHours * 60 * 60 * 1000)
+        const starts = await db.cMoonEnemyBattle.findMany({
+          where: { userId, raidId: null, startedAt: { gte: windowStart } },
+          select: { startedAt: true },
+        })
+        const capFreesAt = nextSoloSlotAt(starts.map(b => b.startedAt), capCount, windowHours)
+        if (capFreesAt && capFreesAt > now && (!nextAvailableAt || capFreesAt.toISOString() > nextAvailableAt)) {
+          nextAvailableAt = capFreesAt.toISOString()
+        }
       }
       cMoonEnemyCountdown = { enabled: true, optedOut: false, nextAvailableAt }
     }
