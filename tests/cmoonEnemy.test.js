@@ -5,7 +5,7 @@ import {
   CRIT_CHANCE_MIN, CRIT_CHANCE_MAX, POINTS_REWARD_MIN, POINTS_REWARD_MAX, ENEMY_RANKS, RANK_DEFAULT,
   MIN_PRIOR_DEFEATS_MIN, MIN_PRIOR_DEFEATS_MAX, MIN_PRIOR_DEFEATS_DEFAULT,
   isValidOccurrencePercent, OCCURRENCE_PERCENT_MIN, OCCURRENCE_PERCENT_MAX, OCCURRENCE_PERCENT_DEFAULT,
-  filterToHighestRank, pickWeightedEnemy, filterCappedNonRaidCandidates, resolveMemberSoundPaths,
+  filterToHighestRank, pickWeightedEnemy, filterCappedNonRaidCandidates, countRecentSoloStarts, resolveMemberSoundPaths,
   MEMBER_SOUND_SLOTS, FACTION_DEFAULT_SOUND_SLOTS,
   parseSpecialAttackBody, isValidSpecialAttackName, isValidSpecialAttackEffectType, isValidSpecialAttackAmount,
   SPECIAL_ATTACK_EFFECT_TYPES, SPECIAL_ATTACK_NAME_MAX_LENGTH, SPECIAL_ATTACK_AMOUNT_MIN, SPECIAL_ATTACK_AMOUNT_MAX,
@@ -531,4 +531,29 @@ test('parseTauntBody: on update, an omitted field falls back to the existing row
 test('parseTauntBody: rejects a non-boolean active and an out-of-range sortOrder', () => {
   assert.equal(parseTauntBody({ trigger: 'APPEAR', text: 'Hi', active: 'yes' }, undefined).ok, false)
   assert.equal(parseTauntBody({ trigger: 'APPEAR', text: 'Hi', sortOrder: 99999 }, undefined).ok, false)
+})
+
+// ── countRecentSoloStarts ─────────────────────────────────────────────────
+
+function fakeDb() {
+  const calls = []
+  return { calls, cMoonEnemyBattle: { count: async (args) => { calls.push(args); return 7 } } }
+}
+
+test('countRecentSoloStarts: counts only this player\'s non-raid battles started inside the window', async () => {
+  const db = fakeDb()
+  const before = Date.now()
+  assert.equal(await countRecentSoloStarts(db, 'u1', 12), 7)
+  const { where } = db.calls[0]
+  assert.equal(where.userId, 'u1')
+  assert.equal(where.raidId, null)
+  const expected = before - 12 * 60 * 60 * 1000
+  assert.ok(Math.abs(where.startedAt.gte.getTime() - expected) < 1000)
+})
+
+test('countRecentSoloStarts: a missing or invalid window falls back to 4 hours', async () => {
+  const db = fakeDb()
+  const before = Date.now()
+  await countRecentSoloStarts(db, 'u1', 0)
+  assert.ok(Math.abs(db.calls[0].where.startedAt.gte.getTime() - (before - 4 * 60 * 60 * 1000)) < 1000)
 })

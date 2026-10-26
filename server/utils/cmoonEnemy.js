@@ -556,6 +556,18 @@ export function pickWeightedEnemy(candidates) {
   return candidates[candidates.length - 1]
 }
 
+// How many NON-raid solo battles this player has actually started within the last `windowHours`
+// — the number GlobalGameConfig.cMoonEnemySpawnCapCount is measured against. Counted straight
+// from CMoonEnemyBattle (the real battle rows, raid synthetic rows excluded via raidId: null)
+// rather than the separate CMoonEnemyPopupLog side table, so the cap can never under-count if that
+// log and the battles ever drift apart. Shared by consider.post.js (narrows the offer pool) and
+// start.post.js (authoritative backstop at "Fight!" time) so both measure it identically.
+export async function countRecentSoloStarts(db, userId, windowHours) {
+  const hours = Number(windowHours) > 0 ? Number(windowHours) : 4
+  const windowStart = new Date(Date.now() - hours * 60 * 60 * 1000)
+  return db.cMoonEnemyBattle.count({ where: { userId, raidId: null, startedAt: { gte: windowStart } } })
+}
+
 // Narrows the candidate pool to raid bosses only once a player has hit GlobalGameConfig's
 // cMoonEnemySpawnCapCount within the last cMoonEnemySpawnCapWindowHours — see that field's own
 // schema comment for why raid bosses are exempt. `capCount <= 0` means "no cap," a no-op; so does
