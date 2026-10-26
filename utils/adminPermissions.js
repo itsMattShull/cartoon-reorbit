@@ -13,7 +13,7 @@
 // (default: its key in utils/adminSections.js). Track Touch Trades is intentionally absent:
 // it is super-admin only and cannot be granted.
 export const ADMIN_PERMISSION_KEYS = [
-  'analytics', 'collectionAnalytics', 'setAnalytics', 'packAnalytics', 'checkUserMints', 'retention',
+  'analytics', 'collectionAnalytics', 'setAnalytics', 'packAnalytics', 'cMoonEnemyAnalytics', 'checkUserMints', 'retention',
   'manageUsers', 'manageCollection', 'cheatFinder', 'checkCheating', 'cheatingTool',
   'suspiciousActivity', 'deviceFingerprints', 'vpn-queue', 'initiateTrade',
   'ctoons', 'ctoonsBulkUpload', 'submittedCtoons', 'ctoonSuggestions', 'starterSets', 'packs',
@@ -98,6 +98,7 @@ export const ADMIN_API_SEGMENT_PERMS = {
   'cmoon-affinity': ['cMoon'],
   'cmoon-change-requests': ['cmoonChangeRequests'],
   'cmoon-dispersal-offers': ['cMoon'],
+  'cmoon-enemy-analytics': ['cMoonEnemyAnalytics'],
   'cmoon-enemy-battle-logs': ['cMoonBattleLogs'],
   'cmoon-enemy-factions': ['cMoonEnemies'],
   'cmoon-enemy-members': ['cMoonEnemies'],
@@ -363,7 +364,7 @@ export const ADMIN_PERMISSION_PRESETS = [
     perms: ['games', 'cMoon', 'cMoonJoinEffects', 'czoneEffects', 'cmoonChangeRequests', 'manageNavigation',
       'cMoonEnemies', 'cMoonRiddles', 'cMoonHunts', 'lotto', 'clashTournaments', 'ogGtoonTournaments', 'scavenger',
       'achievements', 'holidayEvents', 'achievementLogs', 'lottoLogs', 'winWheelLogs', 'scavengerLogs',
-      'cMoonBattleLogs']
+      'cMoonBattleLogs', 'cMoonEnemyAnalytics']
   },
   {
     id: 'logs',

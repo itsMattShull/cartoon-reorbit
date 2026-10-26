@@ -14,6 +14,7 @@ import { serializeEnemyForClient, serializeBattleForClient } from '@/server/util
 import { checkRaidBossAvailability } from '@/server/utils/cmoonEnemyRaid'
 import { filterToHighestRank, pickWeightedEnemy, filterCappedNonRaidCandidates, countRecentSoloStarts } from '@/server/utils/cmoonEnemy'
 import { pingFinalBossAppeared } from '@/server/utils/cmoonDiscordEvents'
+import { logEnemyOffer } from '@/server/utils/cmoonEnemyAnalytics'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -124,6 +125,10 @@ export default defineEventHandler(async (event) => {
   // schema comment) rather than the old plain uniform pick.
   const tierFiltered = filterToHighestRank(candidates, !!config?.cMoonEnemyHigherTierFirst)
   const chosen = pickWeightedEnemy(tierFiltered)
+  // Admin analytics only (offer -> start rate); fire-and-forget, never delays the popup. Logged
+  // here, at the one place a NEW offer is made — a resumed battle (early return above) is not an
+  // offer.
+  logEnemyOffer(db, { userId, enemyMemberId: chosen.id, isRaidBoss: chosen.isRaidBoss })
 
   // Deliberately NOT stamping lastCMoonBattlePopupAt / logging to CMoonEnemyPopupLog here — see
   // those columns' own schema comments. Both only record an ACTUAL engagement now (start.post.js

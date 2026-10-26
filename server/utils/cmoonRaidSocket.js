@@ -81,6 +81,7 @@ import {
   SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD,
 } from './cmoonEnemyBattle.js'
 import { resolveMemberSoundPaths } from './cmoonEnemy.js'
+import { markEnemyOfferAccepted } from './cmoonEnemyAnalytics.js'
 import { announceTeamEnemiesMilestone, checkAndAnnounceSeasonGoalReached } from './cmoonDiscordEvents.js'
 import {
   resolveRaidRound, JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE, RAID_MAX_ROUNDS_SAFETY,
@@ -846,6 +847,8 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       socket.join(raidRoom(raidId))
       fireSync(raidId, raid)
       socket.emit(EV('created'), publicRaidView(raid))
+      // Admin analytics only (offer -> start rate); fire-and-forget, never blocks the raid.
+      markEnemyOfferAccepted(db, { userId: me.id, enemyMemberId })
 
       announceCMoonRaidBoss(discordChannelId, {
         cMoonName: cMoon.name, enemyName: enemyMember.name,
