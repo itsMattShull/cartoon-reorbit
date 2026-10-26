@@ -23,21 +23,17 @@
 // Keeping this entirely separate from joinRoom removes that path structurally rather than by
 // convention.
 //
-// ── Anti-abuse, since an AI opponent removes the one throttle PvP always had for free ─────────
-// A human opponent has to show up, so PvP farming needs a second real, differently-fingerprinted
-// account. A bot always says yes, so nothing here stops one account grinding it all day — that's
-// bounded by the daily combat-pool cap alone. What the cap does NOT bound is a *cluster* of
-// alt accounts sharing one device each hitting that cap once: PvP's same-device check suppresses
-// exactly that when the two colluding accounts play each other, but there's no "other player" in
-// an AI match to compare against. Instead, persistAndAwardAiMatch sums points already paid to AI
-// matches from the same IP or device fingerprint within the daily window and clamps THIS award to
-// whatever headroom remains under one player's normal cap — so a five-alt cluster earns what one
-// honest player would, not five times that. See clusterPointsUsed() below and the two partial
-// indexes the migration adds for it.
+// ── Points cap ────────────────────────────────────────────────────────────────────────────────
+// Paid through awardCappedGamePoints against the shared combat pool (TKO + gToons Clash + Ed Edd
+// n Eddy RPS), exactly like TKO and Clash's PvE paths: once a player has been paid the daily cap
+// across those games they earn nothing more from any of them until the daily window resets. There
+// is deliberately no extra per-IP / per-device clamp on top of that. It counted every account
+// sharing an IP or fingerprint (households, schools, carrier NAT) against one budget, which told
+// players they had hit their cap while their own pool was unspent — behavior TKO and Clash never
+// had.
 import { randomInt, randomUUID } from 'crypto'
 import { prisma as db } from '../prisma.js'
 import { encryptIp } from './ip-encrypt.js'
-import { getDailyWindowStart } from './centralTime.js'
 import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
 import { hasLiveEdRpsMatch } from './edRpsRuntime.js'
 // `#lib/...` (package.json "imports", not a relative path) — same Nitro
@@ -299,27 +295,6 @@ function resolveRound(io, match, roundNumber) {
 }
 
 /**
- * Sums points already paid to AI matches sharing this IP or device fingerprint, in the current
- * daily window. Runs inside the award transaction, against the two partial indexes the migration
- * adds — see the module header for why this exists instead of a same-device suppression.
- */
-async function clusterPointsUsed(tx, { ip, visitorId, windowStart }) {
-  const conds = []
-  const params = [windowStart]
-  if (ip) { params.push(ip); conds.push(`"player1Ip" = $${params.length}`) }
-  if (visitorId) { params.push(visitorId); conds.push(`"player1VisitorId" = $${params.length}`) }
-  if (!conds.length) return 0
-  const sql = `
-    SELECT COALESCE(SUM("pointsAwarded"), 0)::int AS used
-      FROM "EdRpsMatch"
-     WHERE "player2IsAi" = true
-       AND "pointsAwardedAt" >= $1
-       AND (${conds.join(' OR ')})`
-  const rows = await tx.$queryRawUnsafe(sql, ...params)
-  return Number(rows?.[0]?.used || 0)
-}
-
-/**
  * Writes the match row and, if the human won naturally, awards them — in one transaction, same
  * shape as duelRuntime.js's persistAndAward. A loss, forfeit, or bot win is never a "won but
  * suppressed" case (there was no win to suppress), so those persist with suppressReason left
@@ -362,7 +337,6 @@ async function persistAndAwardAiMatch(match, { endReason, humanWon }) {
     return { awarded: 0, suppressReason: 'cap_exhausted' }
   }
 
-  const windowStart = getDailyWindowStart()
   let awarded = 0
   let suppressReason = null
 
@@ -379,13 +353,6 @@ async function persistAndAwardAiMatch(match, { endReason, humanWon }) {
       return
     }
 
-    let effectivePointsPerWin = cfg.pointsPerWin
-    if (match.ip || match.visitorId) {
-      const clusterUsed = await clusterPointsUsed(tx, { ip: match.ip, visitorId: match.visitorId, windowStart })
-      const clusterRemaining = Math.max(0, cfg.dailyCap - clusterUsed)
-      effectivePointsPerWin = Math.min(effectivePointsPerWin, clusterRemaining)
-    }
-
     // Compare-and-set claim, same idempotency guard duelRuntime.js uses: GamePointLog has no
     // unique constraint, so this is what stops a race paying the same match twice.
     const claim = await tx.edRpsMatch.updateMany({
@@ -398,7 +365,7 @@ async function persistAndAwardAiMatch(match, { endReason, humanWon }) {
       userId: match.userId,
       gameName: 'EdRps',
       poolGameNames: COMBAT_POOL_GAME_NAMES,
-      pointsPerWin: effectivePointsPerWin,
+      pointsPerWin: cfg.pointsPerWin,
       cap: cfg.dailyCap,
       method: 'Game - Ed, Edd n Eddy RPS (AI)'
     })

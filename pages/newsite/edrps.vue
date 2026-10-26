@@ -261,7 +261,7 @@ clearSidebarMiddle()
 const runtime = useRuntimeConfig()
 
 const SUPPRESS_COPY = {
-  cap_exhausted: "You've hit today's PvP points cap. Still counts as a win!",
+  cap_exhausted: "You've hit today's points cap for TKO, gToons Clash and Ed, Edd n Eddy RPS. Still counts as a win!",
   pair_limit: "You've already traded points with this player today.",
   same_device: 'No points: you and your opponent look like the same device.',
   abandoned: 'No points — the match was abandoned.',
