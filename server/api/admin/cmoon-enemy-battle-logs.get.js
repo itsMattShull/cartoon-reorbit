@@ -89,6 +89,7 @@ export default defineEventHandler(async (event) => {
     roundLog: r.roundLog,
     startedAt: r.startedAt,
     endedAt: r.endedAt,
+    isRaid: !!r.raidId,
   }))
 
   return {

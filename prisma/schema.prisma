@@ -6421,6 +6421,8 @@ model CMoonEnemyBattle {
 
   @@index([enemyMemberId, status])
   @@index([cMoonId, outcome])
+  // Spawn-cap count (countRecentSoloStarts in server/utils/cmoonEnemy.js): per-player starts in a window.
+  @@index([userId, startedAt])
   @@index([raidId])
 }
 

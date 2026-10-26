@@ -12,7 +12,7 @@ import { prisma as db } from '@/server/prisma'
 import { getGlobalConfig } from '@/server/utils/cmoon'
 import { serializeEnemyForClient, serializeBattleForClient } from '@/server/utils/cmoonEnemyBattle'
 import { checkRaidBossAvailability } from '@/server/utils/cmoonEnemyRaid'
-import { filterToHighestRank, pickWeightedEnemy, filterCappedNonRaidCandidates } from '@/server/utils/cmoonEnemy'
+import { filterToHighestRank, pickWeightedEnemy, filterCappedNonRaidCandidates, countRecentSoloStarts } from '@/server/utils/cmoonEnemy'
 import { pingFinalBossAppeared } from '@/server/utils/cmoonDiscordEvents'
 
 export default defineEventHandler(async (event) => {
@@ -111,9 +111,7 @@ export default defineEventHandler(async (event) => {
   // above. Raid bosses stay offerable either way (filterCappedNonRaidCandidates never removes them).
   const spawnCapCount = config?.cMoonEnemySpawnCapCount ?? 0
   if (spawnCapCount > 0) {
-    const windowHours = config?.cMoonEnemySpawnCapWindowHours ?? 4
-    const windowStart = new Date(Date.now() - windowHours * 60 * 60 * 1000)
-    const recentNonRaidCount = await db.cMoonEnemyPopupLog.count({ where: { userId, shownAt: { gte: windowStart } } })
+    const recentNonRaidCount = await countRecentSoloStarts(db, userId, config?.cMoonEnemySpawnCapWindowHours ?? 4)
     candidates = filterCappedNonRaidCandidates(candidates, recentNonRaidCount, spawnCapCount)
     if (!candidates.length) return { offered: false }
   }
