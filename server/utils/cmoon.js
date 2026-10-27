@@ -333,16 +333,6 @@ export async function recordDailyTaskCompletions({
   const config = await getGlobalConfig({ fresh: true })
   if (!config?.cMoonEnabled) return { recorded: 0, awardedUserIds: [] }
 
-  if (writeHeartbeat) {
-    // Heartbeat: stamped every tick this cron actually runs, regardless of whether anyone
-    // qualified — see the schema comment on cMoonDailyTaskCronLastRanAt. Fire-and-forget: this
-    // must never slow down or fail the real work below over a heartbeat write.
-    prisma.globalGameConfig
-      .update({ where: { id: 'singleton' }, data: { cMoonDailyTaskCronLastRanAt: new Date() } })
-      .then(() => invalidateGlobalConfigCache())
-      .catch(() => {})
-  }
-
   const [globalConfig, winwheelConfig, lottoSettings] = await Promise.all([
     prisma.globalGameConfig.findUnique({
       where: { id: 'singleton' },
@@ -427,6 +417,14 @@ export async function recordDailyTaskCompletions({
           AND "userId" IN (SELECT id FROM eligible)`
     : inert
 
+  // The ::timestamp(3) casts on the two boundary params below are REQUIRED. Since the Prisma 7
+  // upgrade (pg driver adapter), raw-query parameters reach Postgres untyped, and an untyped
+  // parameter in a UNION arm's SELECT list resolves to text, so the INSERT failed every run with
+  // 'column "date" is of type timestamp without time zone but expression is of type text'. That
+  // silently stopped every live DAILY_TASK award from Oct 24, 2026 until this fix. Casting to
+  // timestamp (not timestamptz) keeps the stored value the UTC instant regardless of session
+  // timezone, matching how Prisma stores DateTime. See tests/cmoonDailyTaskSql.test.js.
+  //
   // Two separate qualifying groups, each recorded under ITS OWN boundary as the completion
   // "date" — login/czone/gamepts/tkopts reset at 8pm (dailyBoundary), wheel/lotto reset
   // at 8am (morningBoundary). Recording every group under one shared date used to let the two
@@ -467,9 +465,9 @@ export async function recordDailyTaskCompletions({
       UNION SELECT "userId" FROM lotto
     )
     INSERT INTO "UserDailyTaskCompletion" (id, "userId", "date")
-    SELECT gen_random_uuid()::text, "userId", ${dailyBoundary} FROM eveningQualifying
+    SELECT gen_random_uuid()::text, "userId", ${dailyBoundary}::timestamp(3) FROM eveningQualifying
     UNION ALL
-    SELECT gen_random_uuid()::text, "userId", ${morningBoundary} FROM morningQualifying
+    SELECT gen_random_uuid()::text, "userId", ${morningBoundary}::timestamp(3) FROM morningQualifying
     ON CONFLICT ("userId", "date") DO NOTHING
     RETURNING id, "userId", "date"
   `
@@ -489,6 +487,18 @@ export async function recordDailyTaskCompletions({
   // matters for a user who switched teams (or joined/left) in the narrow gap between the missed
   // day and the backfill running, and the live cron carries the exact same limitation for its own
   // (much smaller, minutes-wide) gap between an activity and the cron tick that records it.
+  if (writeHeartbeat) {
+    // Heartbeat: stamped every tick the completion query actually SUCCEEDS, regardless of whether
+    // anyone qualified — see the schema comment on cMoonDailyTaskCronLastRanAt. This used to be
+    // written before the query, so when that query started throwing on every run (see the
+    // ::timestamp(3) comment above) the admin heartbeat kept looking healthy for days while no
+    // points were awarded. Fire-and-forget: a heartbeat write must never slow or fail the awards.
+    prisma.globalGameConfig
+      .update({ where: { id: 'singleton' }, data: { cMoonDailyTaskCronLastRanAt: new Date() } })
+      .then(() => invalidateGlobalConfigCache())
+      .catch(() => {})
+  }
+
   let awardedUserIds = []
   if (dailyTaskPoints > 0 && rows.length) {
     const newUserIds = rows.map(r => r.userId)

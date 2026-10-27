@@ -432,16 +432,25 @@
               <p v-if="runScoringNowResult" class="text-[11px] text-gray-600 mt-1">{{ runScoringNowResult }}</p>
               <p v-if="runScoringNowError" class="text-[11px] text-red-600 mt-1">{{ runScoringNowError }}</p>
             </div>
-            <div class="mt-2">
+            <div class="mt-2 flex flex-wrap items-center gap-2">
+              <label class="text-[11px] text-gray-600" for="backfillDailyTasksDays">Days</label>
+              <select
+                id="backfillDailyTasksDays"
+                v-model.number="backfillDailyTasksDays"
+                class="border border-gray-300 rounded px-1.5 py-0.5 text-xs"
+                :disabled="backfillDailyTasksLoading"
+              >
+                <option v-for="d in 14" :key="d" :value="d">{{ d }}</option>
+              </select>
               <button
                 type="button"
                 class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                 :disabled="backfillDailyTasksLoading"
-                title="Re-checks the last 3 days' daily-task completions (login, cZone, game points, TKO points, wheel spins) and awards anything the live cron missed while it wasn't running. Safe to click any time — already-recorded completions are skipped, so this only ever fills in gaps, never double-awards. Lotto and monster-scan completions can't be recovered this way once their day has passed — only this run's own live data reflects those."
+                title="Re-checks the chosen number of days' daily-task completions (login, cZone, game points, TKO points, wheel spins) and awards anything the live cron missed while it wasn't running. Safe to click any time — already-recorded completions are skipped, so this only ever fills in gaps, never double-awards. Lotto and monster-scan completions can't be recovered this way once their day has passed — only this run's own live data reflects those."
                 @click="backfillDailyTasks"
-              >{{ backfillDailyTasksLoading ? 'Backfilling…' : 'Backfill Missed Daily Tasks (last 3 days)' }}</button>
-              <p v-if="backfillDailyTasksResult" class="text-[11px] text-gray-600 mt-1">{{ backfillDailyTasksResult }}</p>
-              <p v-if="backfillDailyTasksError" class="text-[11px] text-red-600 mt-1">{{ backfillDailyTasksError }}</p>
+              >{{ backfillDailyTasksLoading ? 'Backfilling…' : `Backfill Missed Daily Tasks (last ${backfillDailyTasksDays} day${backfillDailyTasksDays === 1 ? '' : 's'})` }}</button>
+              <p v-if="backfillDailyTasksResult" class="w-full text-[11px] text-gray-600">{{ backfillDailyTasksResult }}</p>
+              <p v-if="backfillDailyTasksError" class="w-full text-[11px] text-red-600">{{ backfillDailyTasksError }}</p>
             </div>
           </div>
 
@@ -2682,6 +2691,9 @@ const runScoringNowLoading = ref(false)
 const runScoringNowResult = ref('')
 const runScoringNowError = ref('')
 const backfillDailyTasksLoading = ref(false)
+// 1-14, the backfill endpoint's own DAYS_MIN..DAYS_MAX. Default 3 covers a short outage; a longer
+// one (e.g. the Oct 24-27, 2026 DAILY_TASK outage) needs enough days to reach its first missed boundary.
+const backfillDailyTasksDays = ref(3)
 const backfillDailyTasksResult = ref('')
 const backfillDailyTasksError = ref('')
 const scoringError = ref('')
@@ -2774,7 +2786,7 @@ async function backfillDailyTasks() {
   backfillDailyTasksError.value = ''
   backfillDailyTasksLoading.value = true
   try {
-    const res = await $fetch('/api/admin/cmoons/backfill-daily-tasks', { method: 'POST', body: { days: 3 } })
+    const res = await $fetch('/api/admin/cmoons/backfill-daily-tasks', { method: 'POST', body: { days: backfillDailyTasksDays.value } })
     backfillDailyTasksResult.value = `Done — ${res.recorded} missed completion(s) recorded across the last ${res.days} day(s).`
     await loadScoring()
   } catch (e) {
