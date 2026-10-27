@@ -284,6 +284,11 @@ import ChartDataLabels from 'chartjs-plugin-datalabels'
 import 'chartjs-adapter-date-fns'
 import annotationPlugin from 'chartjs-plugin-annotation'
 
+// Every on-chart number label on this page is black: white labels were unreadable on the
+// lighter bars and invisible wherever a label sits outside its bar. Set explicitly on every
+// datalabels config (chart- AND dataset-level, since a dataset's own setting overrides the chart's).
+const LABEL_COLOR = '#000000'
+
 // register controllers, scales & plugins
 Chart.register(
   LineController, LineElement, PointElement,
@@ -527,7 +532,7 @@ const percentFromDecimalTick = makeUniqueTickFormatter(v => Math.round(v * 100),
 const commonLineOptions = {
   responsive: true,
   maintainAspectRatio: false,
-  plugins: { legend: { display: false } }
+  plugins: { legend: { display: false }, datalabels: { color: LABEL_COLOR } }
 }
 
 const pctOptions = {
@@ -554,6 +559,7 @@ const ratioOptions = {
   },
   plugins: {
     legend: { display: false },
+    datalabels: { color: LABEL_COLOR },
     annotation: {
       annotations: {
         bandLow:  { type: 'line', yMin: 0.9, yMax: 0.9, scaleID: 'y', borderColor: 'rgba(0,0,0,0.25)', borderWidth: 1, label:{enabled:true, content:'0.9'} },
@@ -570,6 +576,7 @@ const uniqueOptions = {
   plugins: {
     legend: { display: false },
     datalabels: {
+      color: LABEL_COLOR,
       anchor: 'center',
       align:  'top',
       offset: 4,
@@ -621,6 +628,7 @@ const netOptions = {
         ci.update()
       }
     },
+    datalabels: { color: LABEL_COLOR },
     annotation: {
       annotations: {
         zero: { type: 'line', yMin: 0, yMax: 0, scaleID: 'yLeft', borderColor: 'green', borderWidth: 2, label: { enabled: true, content: 'Zero' } }
@@ -640,7 +648,7 @@ function makeCategoryStackOptions (yTitle) {
     plugins: {
       legend: { display: true, position: 'top' },
       tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${Math.round(ctx.parsed.y ?? 0).toLocaleString()}` } },
-      datalabels: { color: '#ffffff', font: { size: 9 }, formatter: (v) => Math.round(v).toLocaleString() }
+      datalabels: { color: LABEL_COLOR, font: { size: 9 }, formatter: (v) => Math.round(v).toLocaleString() }
     }
   }
 }
@@ -656,7 +664,7 @@ const clashOptions = {
     y:  { title: { color: '#000', display: true, text: 'Games Played' }, beginAtZero: true, ticks: { color: '#000', callback: wholeTick }, grace: '20%' },
     y1: { position: 'right', title: { color: '#000', display: true, text: '% Finished' }, grid: { drawOnChartArea: false }, ticks: { callback: percentTick, color: '#000' }, min: 0, suggestedMax: 100, grace: '20%' }
   },
-  plugins: { legend: { position: 'top' } }
+  plugins: { legend: { position: 'top' }, datalabels: { color: LABEL_COLOR } }
 }
 
 const socketMetricsOptions = {
@@ -677,6 +685,7 @@ const cumOptions = {
   plugins: {
     legend: { display: false },
     datalabels: {
+      color: LABEL_COLOR,
       anchor:  'center',
       align:   'bottom',
       offset:  4,
@@ -702,7 +711,7 @@ const barOptions = {
   maintainAspectRatio: false,
   plugins: {
     legend: { display: false },
-    datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { color: '#000', weight: 'bold' } },
+    datalabels: { anchor: 'center', align: 'center', color: LABEL_COLOR, font: { weight: 'bold' } },
   },
   scales: {
     x: { type: 'time', offset: true, time: { unit: 'day', tooltipFormat: 'PP', displayFormats: { day: 'MMM d', week: 'MMM d' } }, title: { color: '#000', display: true, text: 'Day' },
@@ -714,7 +723,7 @@ const barOptions = {
 const histOptions = {
   responsive: true,
   maintainAspectRatio: false,
-  plugins: { legend: { display: false }, datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } } },
+  plugins: { legend: { display: false }, datalabels: { anchor: 'center', align: 'center', color: LABEL_COLOR, font: { weight: 'bold' } } },
   scales: { x: { title: { color: '#000', display: true, text: 'Points Range' }, ticks: { color: '#000' } }, y: { title: { color: '#000', display: true, text: 'Users' }, beginAtZero: true, ticks: { color: '#000', callback: wholeTick }, grace: '20%' } },
   onClick: (_evt, elements) => {
     if (!elements?.length) return
@@ -1039,7 +1048,7 @@ async function fetchData() {
       borderColor: colors.clashBar,
       borderWidth: 1,
       order: 1,
-      datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } }
+      datalabels: { anchor: 'center', align: 'center', color: LABEL_COLOR, font: { weight: 'bold' } }
     },
     {
       type: 'line',
@@ -1052,7 +1061,7 @@ async function fetchData() {
       tension: 0.3,
       order: 0,
       pointBackgroundColor: '#FACC15',
-      datalabels: { anchor: 'end', align: 'top', color: '#222222', font: { weight: 'bold' } }
+      datalabels: { anchor: 'end', align: 'top', color: LABEL_COLOR, font: { weight: 'bold' } }
     }
   ]
   clashChart.update()
@@ -1223,8 +1232,8 @@ onMounted(async () => {
     data: {
       labels: [],
       datasets: [
-        { label: 'Per-period ratio', data: [], borderColor: '#6366F1', borderWidth: 2, fill: false, datalabels: { anchor: 'end', align: 'top' } },
-        { label: '7-period MA ratio', data: [], borderColor: colors.maLine, borderWidth: 2, borderDash: [5, 5], fill: false, datalabels: { anchor: 'start', align: 'bottom' } }
+        { label: 'Per-period ratio', data: [], borderColor: '#6366F1', borderWidth: 2, fill: false, datalabels: { anchor: 'end', align: 'top', color: LABEL_COLOR } },
+        { label: '7-period MA ratio', data: [], borderColor: colors.maLine, borderWidth: 2, borderDash: [5, 5], fill: false, datalabels: { anchor: 'start', align: 'bottom', color: LABEL_COLOR } }
       ]
     },
     options: {
@@ -1253,12 +1262,12 @@ onMounted(async () => {
       backgroundColor: [],
       borderColor:  [],
       borderWidth: 1,
-      datalabels: { anchor: 'end', align: 'top', formatter: v => (v * 100).toFixed(1) + '%' }
+      datalabels: { anchor: 'end', align: 'top', color: LABEL_COLOR, formatter: v => (v * 100).toFixed(1) + '%' }
     }]},
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      plugins: { legend: { display: false }, datalabels: {} },
+      plugins: { legend: { display: false }, datalabels: { color: LABEL_COLOR } },
       scales: {
         x: { title: { color: '#000', display: true, text: 'Rarity' } },
         y: {
@@ -1277,13 +1286,13 @@ onMounted(async () => {
       labels: [],
       datasets: [
         { type: 'bar',  label: 'Earned', data: [], backgroundColor: colors.earnedBar, borderColor: colors.earnedBar, yAxisID: 'yRight', stack: 'points', hidden: true,
-          datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } } },
+          datalabels: { anchor: 'center', align: 'center', color: LABEL_COLOR, font: { weight: 'bold' } } },
         { type: 'bar',  label: 'Spent',  data: [], backgroundColor: colors.spentBar,  borderColor: colors.spentBar,  yAxisID: 'yRight', stack: 'points', hidden: true,
-          datalabels: { anchor: 'center', align: 'center', color: '#ffffff', font: { weight: 'bold' } } },
+          datalabels: { anchor: 'center', align: 'center', color: LABEL_COLOR, font: { weight: 'bold' } } },
         { type: 'line', label: 'Net',    data: [], borderColor: colors.netLine, backgroundColor: colors.netLine, borderWidth: 2, fill: false, yAxisID: 'yLeft',
-          datalabels: { anchor: 'end', align: 'top' } },
+          datalabels: { anchor: 'end', align: 'top', color: LABEL_COLOR } },
         { type: 'line', label: '7-period MA (Net)', data: [], borderColor: colors.maLine, backgroundColor: colors.maLine, borderWidth: 2, fill: false, borderDash: [5,5], yAxisID: 'yLeft',
-          datalabels: { anchor: 'start', align: 'bottom' } }
+          datalabels: { anchor: 'start', align: 'bottom', color: LABEL_COLOR } }
       ]
     },
     options: netOptions
