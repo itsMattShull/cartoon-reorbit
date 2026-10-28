@@ -21,6 +21,15 @@
             </div>
           </div>
 
+          <!-- Every cMoon in this party, in its own colors — raids are cross-cMoon, so this is
+               the "who's representing" banner. Only shown once more than one team is in. -->
+          <div v-if="teams.length > 1" class="cr-teams" aria-label="cMoons in this raid">
+            <span class="cr-teams-lead">{{ teams.length }} cMoons united</span>
+            <span v-for="t in teams" :key="t.id" class="cr-team-chip" :style="cMoonPillStyle(t.color)">
+              {{ t.name }}<span v-if="t.count > 1" class="cr-team-count"> ×{{ t.count }}</span>
+            </span>
+          </div>
+
           <div class="space-y-1">
             <div class="flex items-center gap-2 text-xs relative">
               <span class="w-14 flex-shrink-0 text-gray-500">Boss HP</span>
@@ -38,14 +47,14 @@
           <!-- ── FORMING: roster + join countdown ────────────────────────── -->
           <div v-if="raid.status === 'FORMING'" class="space-y-3">
             <p class="text-sm text-gray-600">
-              Joining closes in <span class="font-semibold tabular-nums">{{ joinCountdown }}s</span> — up to 4 members
-              of your cMoon can fight this boss together.
+              Joining closes in <span class="font-semibold tabular-nums">{{ joinCountdown }}s</span> — up to 4 players
+              from any cMoon can fight this boss together, each earning points for their own cMoon.
             </p>
-            <ul class="space-y-1">
-              <li v-for="p in raid.participants" :key="p.userId" class="text-sm flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-green-500 flex-shrink-0"></span>
-                {{ p.username }} <span v-if="p.isInitiator" class="text-[10px] text-gray-400">(started this raid)</span>
+            <ul class="cr-roster">
+              <li v-for="p in raid.participants" :key="p.userId">
+                <CMoonRaidFighter :participant="p" :is-me="p.userId === user?.id" />
               </li>
+              <li v-for="n in Math.max(0, 4 - raid.participants.length)" :key="`open-${n}`" class="cr-roster-open">Open slot</li>
             </ul>
             <button
               v-if="!hasJoined" type="button"
@@ -58,26 +67,33 @@
           <!-- ── IN_PROGRESS: live combat ─────────────────────────────────── -->
           <div v-else-if="raid.status === 'IN_PROGRESS'" class="space-y-3">
             <p class="text-xs text-gray-500">Round {{ raid.roundNumber }}</p>
-            <ul class="space-y-1.5">
-              <li v-for="p in raid.participants" :key="p.userId" class="flex items-center gap-2 text-xs relative">
-                <span class="w-24 flex-shrink-0 truncate" :class="p.knockedOut ? 'text-gray-400 line-through' : ''">{{ p.username }}</span>
-                <div class="flex-1 h-2 bg-gray-200 rounded overflow-hidden">
-                  <div class="h-full transition-all" :class="participantHpFillClass(p)" :style="{ width: (p.hpRemaining / (p.maxHp || 1) * 100) + '%' }"></div>
+            <ul class="space-y-2">
+              <li v-for="p in raid.participants" :key="p.userId" class="cr-fighter-row text-xs relative">
+                <!-- Line 1: who (team colors + rank), their special charge, and their round status. -->
+                <div class="cr-fighter-line">
+                  <CMoonRaidFighter :participant="p" variant="compact" :is-me="p.userId === user?.id" :knocked-out="p.knockedOut" class="cr-fighter-badge" />
+                  <!-- Teammate charge meter — shown for everyone, not just myself. Each fighter
+                       charges THEIR OWN cMoon's special, so the meter only shows for players
+                       whose team has one. -->
+                  <span
+                    v-if="p.specialAttack && !p.knockedOut" class="text-[10px] flex-shrink-0" :title="p.specialAttack.name"
+                    :class="p.specialCharged ? 'cr-charge-ready' : 'text-gray-400'"
+                  >★{{ p.specialCharged ? '' : Math.min(p.hitStreak, 3) + '/3' }}</span>
+                  <span v-if="p.knockedOut" class="cr-fighter-status text-red-500">KO</span>
+                  <span v-else-if="p.hasActed" class="cr-fighter-status text-green-600">Ready</span>
+                  <span v-else class="cr-fighter-status text-gray-400">Deciding…</span>
                 </div>
-                <span class="w-10 flex-shrink-0 text-right tabular-nums">{{ p.hpRemaining }}/{{ p.maxHp }}</span>
-                <span
-                  v-for="d in (p.userId === user?.id ? myFloatingDamage : [])" :key="d.id"
-                  class="cr-dmg-float" :class="{ 'cr-dmg-float-crit': d.crit }"
-                >-{{ d.amount }}</span>
-                <!-- Teammate charge meter — shown for everyone, not just myself (see the raid
-                     page's own cMoonSpecialAttack v-if below for why this is co-op-visible). -->
-                <span
-                  v-if="raid.cMoonSpecialAttack && !p.knockedOut" class="text-[10px] flex-shrink-0"
-                  :class="p.specialCharged ? 'cr-charge-ready' : 'text-gray-400'"
-                >★{{ p.specialCharged ? '' : Math.min(p.hitStreak, 3) + '/3' }}</span>
-                <span v-if="p.knockedOut" class="text-[10px] text-red-500 flex-shrink-0">KO</span>
-                <span v-else-if="p.hasActed" class="text-[10px] text-green-600 flex-shrink-0">Ready</span>
-                <span v-else class="text-[10px] text-gray-400 flex-shrink-0">Deciding…</span>
+                <!-- Line 2: HP, full width so it never wraps unpredictably on a phone. -->
+                <div class="cr-hp-line">
+                  <div class="flex-1 h-2 bg-gray-200 rounded overflow-hidden">
+                    <div class="h-full transition-all" :class="participantHpFillClass(p)" :style="{ width: (p.hpRemaining / (p.maxHp || 1) * 100) + '%' }"></div>
+                  </div>
+                  <span class="w-10 flex-shrink-0 text-right tabular-nums">{{ p.hpRemaining }}/{{ p.maxHp }}</span>
+                  <span
+                    v-for="d in (p.userId === user?.id ? myFloatingDamage : [])" :key="d.id"
+                    class="cr-dmg-float" :class="{ 'cr-dmg-float-crit': d.crit }"
+                  >-{{ d.amount }}</span>
+                </div>
               </li>
             </ul>
 
@@ -133,14 +149,14 @@
                    grid-but-separate-row shape as components/CMoonBattlePopupHost.vue's solo
                    version — see that component for the fuller comment on the charge/fire/
                    tooltip mechanics this mirrors. ─────────────────────────────────────────── -->
-              <div v-if="raid.cMoonSpecialAttack && !myself.hasActed" class="cr-special-wrap">
+              <div v-if="myself.specialAttack && !myself.hasActed" class="cr-special-wrap">
                 <button
                   type="button" class="cr-special-btn" :class="{ 'cr-special-charged': myself.specialCharged && raid.partyParalyzedTurns === 0 }"
                   :disabled="!myself.specialCharged || raid.partyParalyzedTurns > 0" :style="specialFillStyle"
                   @click="act('SPECIAL_ATTACK')"
                 >
                   <span class="cr-special-glow" aria-hidden="true"></span>
-                  <span class="cr-special-label"><span class="cr-special-icon">★</span> {{ raid.cMoonSpecialAttack.name }}</span>
+                  <span class="cr-special-label"><span class="cr-special-icon">★</span> {{ myself.specialAttack.name }}</span>
                   <span class="cr-special-meter">{{ Math.min(myself.hitStreak, 3) }}/3</span>
                 </button>
                 <button
@@ -148,9 +164,9 @@
                   @click="showSpecialInfo = !showSpecialInfo" @mouseenter="showSpecialInfo = true" @mouseleave="showSpecialInfo = false"
                 >?</button>
                 <div v-if="showSpecialInfo" class="cr-special-tooltip" role="tooltip">
-                  <p class="cr-special-tooltip-title">{{ raid.cMoonSpecialAttack.name }}</p>
-                  <p v-if="raid.cMoonSpecialAttack.description">{{ raid.cMoonSpecialAttack.description }}</p>
-                  <p>{{ specialEffectDescription(raid.cMoonSpecialAttack) }}</p>
+                  <p class="cr-special-tooltip-title">{{ myself.specialAttack.name }}</p>
+                  <p v-if="myself.specialAttack.description">{{ myself.specialAttack.description }}</p>
+                  <p>{{ specialEffectDescription(myself.specialAttack) }}</p>
                   <p class="cr-special-tooltip-charge">Land 3 hits in a row to charge it up — it stays ready until you use it.</p>
                 </div>
               </div>
@@ -161,8 +177,10 @@
           <!-- ── RESOLVED: outcome + shared rewards ───────────────────────── -->
           <div v-else class="border rounded p-3 space-y-2" :class="raid.outcome === 'WIN' ? 'bg-green-50 border-green-200' : 'bg-gray-50'">
             <p class="font-semibold">{{ outcomeLabel }}</p>
-            <ul class="text-xs space-y-0.5">
-              <li v-for="p in raid.participants" :key="p.userId">{{ p.username }}{{ p.knockedOut ? ' (knocked out)' : '' }}</li>
+            <ul class="cr-roster">
+              <li v-for="p in raid.participants" :key="p.userId">
+                <CMoonRaidFighter :participant="p" :is-me="p.userId === user?.id" :knocked-out="p.knockedOut" />
+              </li>
             </ul>
             <p v-if="myself?.isFirstWinAgainstThisEnemy" class="cr-first-win">🏆 First victory over {{ raid.enemyName }}!</p>
             <p v-if="nearMissFlavor" class="cr-near-miss">{{ nearMissFlavor }}</p>
@@ -173,7 +191,7 @@
                   <li v-for="(r, i) in myRewardsList" :key="i" class="cr-reward-item" :style="{ animationDelay: (i * 150) + 'ms' }">{{ r }}</li>
                 </ul>
               </div>
-              <p class="text-xs text-gray-600">Everyone who joined received the same prize.</p>
+              <p class="text-xs text-gray-600">Everyone who joined received the same prize, and cMoon points went to each player's own cMoon.</p>
             </template>
             <NuxtLink to="/newsite" class="inline-block px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50">Back home</NuxtLink>
           </div>
@@ -184,6 +202,8 @@
 </template>
 
 <script setup>
+import { cMoonPillStyle } from '~/utils/cmoonColor'
+
 const ACTION_LABELS = { ATTACK_HIGH: 'attacked high', ATTACK_LOW: 'attacked low', BLOCK_HIGH: 'blocked high', BLOCK_LOW: 'blocked low' }
 
 const route = useRoute()
@@ -194,6 +214,17 @@ const raid = computed(() => raidSocket.raidState.value?.id === raidId.value ? ra
 
 const hasJoined = computed(() => !!raid.value?.participants.some(p => p.userId === user.value?.id))
 const myself = computed(() => raid.value?.participants.find(p => p.userId === user.value?.id) || null)
+// Each distinct cMoon in the party with how many members it brought, in join order.
+const teams = computed(() => {
+  const byId = new Map()
+  for (const p of raid.value?.participants || []) {
+    if (!p.cMoon?.id) continue
+    const t = byId.get(p.cMoon.id) || { id: p.cMoon.id, name: p.cMoon.name || 'cMoon', color: p.cMoon.color, count: 0 }
+    t.count += 1
+    byId.set(p.cMoon.id, t)
+  }
+  return [...byId.values()]
+})
 const lastRoundSummary = computed(() => raidSocket.lastRound.value ? { ...raidSocket.lastRound.value } : null)
 const lastRoundSummaryHadCrit = computed(() =>
   !!lastRoundSummary.value?.participants?.some(r => r.playerCrit || r.enemyCrit))
@@ -275,10 +306,10 @@ function specialEffectDescription(attack) {
   const n = attack?.amount
   switch (attack?.effectType) {
     case 'DAMAGE_OPPONENT': return `Deals ${n} guaranteed damage to the boss, bypassing block.`
-    case 'HEAL_SELF': return attack?.healsAllies ? `Heals you and the whole party for ${n} HP.` : `Heals you for ${n} HP.`
+    case 'HEAL_SELF': return attack?.healsAllies ? `Heals you and every raid ally, whatever their cMoon, for ${n} HP.` : `Heals you for ${n} HP.`
     case 'PARALYZE_OPPONENT': return `Stuns the boss for ${n} round${n === 1 ? '' : 's'} — it can't act.`
     case 'LOWER_OPPONENT_ATTACK': return `Lowers the boss's attack damage by ${n} for the rest of the fight.`
-    case 'RAISE_ALLY_ATTACK': return `Raises the whole party's attack damage by ${n} for the rest of the fight.`
+    case 'RAISE_ALLY_ATTACK': return `Raises every raid ally's attack damage by ${n} for the rest of the fight.`
     default: return ''
   }
 }
@@ -488,6 +519,21 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+/* ── Cross-cMoon party display (see components/newsite/CMoonRaidFighter.vue) ── */
+.cr-teams { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.cr-teams-lead { font-size: 12px; font-weight: 800; color: #1e3a8a; margin-right: 2px; }
+.cr-team-chip { font-size: 11px; font-weight: 800; border-radius: 999px; padding: 2px 10px; }
+.cr-team-count { font-weight: 700; opacity: 0.85; }
+.cr-roster { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
+.cr-roster-open {
+  display: flex; align-items: center; justify-content: center; min-height: 66px;
+  border: 2px dashed #cbd5e1; border-radius: 10px; color: #94a3b8; font-size: 12px; font-weight: 700;
+}
+.cr-fighter-row { display: flex; flex-direction: column; gap: 4px; }
+.cr-fighter-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cr-fighter-badge { flex: 0 1 auto; min-width: 0; }
+.cr-fighter-status { margin-left: auto; font-size: 10px; flex-shrink: 0; }
+.cr-hp-line { position: relative; display: flex; align-items: center; gap: 8px; padding-left: 4px; }
 /* Same impact-feedback shake components/CMoonBattlePopupHost.vue uses for a solo battle — see
    that component's own comment on the prefers-reduced-motion stance this mirrors. */
 @keyframes cr-shake-kf {

@@ -21,3 +21,18 @@ export function pushUserNotification(io, userId) {
     console.error('[realtimeNotify] pushUserNotification failed:', err?.message || err)
   }
 }
+
+// Same ping as pushUserNotification, for many recipients at once (the raid lobby broadcast can
+// reach every cMoon member). One emit per chunk of rooms instead of one per user; rooms with no
+// connected socket cost nothing.
+export function pushUserNotifications(io, userIds, chunkSize = 500) {
+  if (!io || !Array.isArray(userIds) || !userIds.length) return
+  try {
+    for (let i = 0; i < userIds.length; i += chunkSize) {
+      const rooms = userIds.slice(i, i + chunkSize).filter(Boolean).map(id => `user:${id}`)
+      if (rooms.length) io.local.to(rooms).emit('notification:new')
+    }
+  } catch (err) {
+    console.error('[realtimeNotify] pushUserNotifications failed:', err?.message || err)
+  }
+}

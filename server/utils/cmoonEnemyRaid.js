@@ -156,3 +156,167 @@ export function resolveRaidRound({ enemyAction, enemyMember, participants, party
 
   return { enemyAction, perParticipant, enemyDamageDealt }
 }
+
+// ── Cross-cMoon raids ──────────────────────────────────────────────────────────────────────────
+// A raid party can mix members of DIFFERENT cMoons (see the "Raid Boss Lobby" in
+// components/newsite/CMoonRaidLobbyModal.vue). Each participant carries their own snapshot, taken
+// once when they start or join (see loadParticipantProfile in cmoonRaidSocket.js):
+//   cMoonId/cMoonName/cMoonColor/cMoonAvatarPath  — the team they fight for and are credited to
+//   rankName/rankTierName/rankTierLevel/rankTierCount — shown off on the raid screen
+//   specialAttack — THEIR OWN cMoon's special (CMoonSpecialAttack shape) or null
+// raid.cMoonId stays the INITIATOR's cMoon (CMoonEnemyRaid.cMoonId is required and is where the
+// Discord call-to-arms thread lives); it is never assumed to be every participant's team.
+
+// Applies one fired special's effect in place against the raid's shared state — shared by the
+// player-cast branch (the caster's OWN cMoon special) and the boss's own auto-fire branch, since
+// both read the same five effectType branches off the same CMoonSpecialAttack shape, just from
+// opposite casters. `caster` is `{ side, userId? }` purely for the specialEvents entry pushed to the
+// room/roundLog/Discord; it has no bearing on targeting. Party-wide effects (a healsAllies heal,
+// RAISE_ALLY_ATTACK) deliberately reach EVERY alive participant regardless of which cMoon they
+// belong to: the whole point of a cross-cMoon raid is that the party is one team for the fight.
+// Knocked-out participants are never in `alive`, so a heal never revives anyone.
+export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvents) {
+  specialEvents.push({
+    side: caster.side, userId: caster.userId || null, name: attack.name,
+    effectType: attack.effectType, amount: attack.amount, soundPath: attack.soundPath || null,
+  })
+  if (attack.effectType === 'DAMAGE_OPPONENT') {
+    if (caster.side === 'PLAYER') {
+      raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - attack.amount)
+    } else {
+      for (const p of alive) {
+        p.hpRemaining = Math.max(0, p.hpRemaining - attack.amount)
+        if (p.hpRemaining <= 0 && !p.knockedOutAt) p.knockedOutAt = Date.now()
+      }
+    }
+  } else if (attack.effectType === 'HEAL_SELF') {
+    if (caster.side === 'PLAYER') {
+      const casterParticipant = raid.participants.get(caster.userId)
+      if (attack.healsAllies) {
+        for (const p of alive) p.hpRemaining = Math.min(p.maxHp, p.hpRemaining + attack.amount)
+      } else if (casterParticipant && !casterParticipant.knockedOutAt) {
+        casterParticipant.hpRemaining = Math.min(casterParticipant.maxHp, casterParticipant.hpRemaining + attack.amount)
+      }
+    } else {
+      raid.enemyHpRemaining = Math.min(raid.enemyStats.maxHp, raid.enemyHpRemaining + attack.amount)
+    }
+  } else if (attack.effectType === 'PARALYZE_OPPONENT') {
+    if (caster.side === 'PLAYER') raid.enemyParalyzedTurns += attack.amount
+    else raid.partyParalyzedTurns += attack.amount
+  } else if (attack.effectType === 'LOWER_OPPONENT_ATTACK') {
+    if (caster.side === 'PLAYER') raid.enemyAtkBonus -= attack.amount
+    else raid.partyAtkBonus -= attack.amount
+  } else if (attack.effectType === 'RAISE_ALLY_ATTACK') {
+    if (caster.side === 'PLAYER') raid.partyAtkBonus += attack.amount
+    else raid.enemyAtkBonus += attack.amount
+  }
+}
+
+// The cMoon a participant is credited to: their own snapshot, falling back to the raid's
+// (initiator's) cMoon only for a participant restored from a Redis snapshot taken before
+// cross-cMoon raids existed, when every participant was necessarily on that same cMoon.
+export function participantCMoonId(raid, p) {
+  return p?.cMoonId || raid.cMoonId
+}
+
+// Every distinct cMoon represented in the party, in join order (initiator first).
+export function raidCMoonIds(raid) {
+  const ids = []
+  for (const p of raid.participants.values()) {
+    const id = participantCMoonId(raid, p)
+    if (id && !ids.includes(id)) ids.push(id)
+  }
+  return ids
+}
+
+// Human label for the party in Discord posts: the one cMoon's name, or every team joined with
+// " + " once more than one cMoon is fighting together.
+export function raidPartyLabel(raid) {
+  const names = []
+  for (const p of raid.participants.values()) {
+    const name = p.cMoonName || (participantCMoonId(raid, p) === raid.cMoonId ? raid.cMoonName : null)
+    if (name && !names.includes(name)) names.push(name)
+  }
+  if (!names.length) return raid.cMoonName || 'The party'
+  return names.join(' + ')
+}
+
+// Splits a raid's cMoon point reward evenly across the party (see resolveCMoonRaidOutcome's own
+// comment for why it's split rather than multiplied). Each share is credited to that
+// participant's OWN cMoon, so in a cross-cMoon raid every team earns exactly its members' shares
+// and the total across all teams is still one win's worth. Remainder goes to the earliest joiners
+// so the shares always sum back to exactly `pointsAwarded`.
+export function splitRaidPoints(participantIds, pointsAwarded) {
+  const n = participantIds.length || 1
+  const total = Math.max(0, Math.floor(Number(pointsAwarded) || 0))
+  const base = Math.floor(total / n)
+  const remainder = total - base * participantIds.length
+  return new Map(participantIds.map((userId, i) => [userId, base + (i < remainder ? 1 : 0)]))
+}
+
+// Where a participant's rank sits on the global tier ladder (1-based), from the full tier list
+// ({ id, sortOrder }). Tiers are ordered by sortOrder, which need not be contiguous. Returns 0
+// when the tier isn't found (no rank yet, or a tier deleted since).
+export function rankTierLevel(tiers, tierId) {
+  if (!tierId || !Array.isArray(tiers)) return 0
+  const sorted = [...tiers].sort((a, b) => a.sortOrder - b.sortOrder)
+  return sorted.findIndex(t => t.id === tierId) + 1
+}
+
+// Public, per-participant team/rank badge data for the raid screen and lobby — never anything
+// combat-sensitive. `fallbackCMoon` covers a legacy participant with no snapshot of their own.
+export function publicParticipantTeam(raid, p) {
+  // A reservation made without a team snapshot (shouldn't happen since joins snapshot before
+  // reserving, but never guess) shows no team rather than borrowing the initiator's.
+  if (p.pendingJoin && !p.cMoonId) return { cMoon: null, rank: null }
+  const legacy = !p.cMoonId && participantCMoonId(raid, p) === raid.cMoonId
+  return {
+    cMoon: {
+      id: participantCMoonId(raid, p) || null,
+      name: p.cMoonName || (legacy ? raid.cMoonName : null) || null,
+      color: p.cMoonColor || null,
+      avatarPath: p.cMoonAvatarPath || null,
+    },
+    rank: p.rankName
+      ? { name: p.rankName, tierName: p.rankTierName || null, tierLevel: p.rankTierLevel || 0, tierCount: p.rankTierCount || 0 }
+      : null,
+  }
+}
+
+// One open raid as the Raid Boss Lobby shows it — named after whoever started it. Only public
+// display data: no pending actions, no enemy kit, no HP beyond what the raid page already shows.
+export function buildRaidLobbyEntry(raid) {
+  const participants = Array.from(raid.participants.values())
+  const initiator = participants.find(p => p.isInitiator) || participants[0] || null
+  return {
+    id: raid.id,
+    status: raid.status,
+    name: `${raid.initiatorUsername || initiator?.username || 'Someone'}'s Raid`,
+    initiatorUsername: raid.initiatorUsername || initiator?.username || null,
+    enemyName: raid.enemyName,
+    enemyImagePath: raid.enemyImagePath || null,
+    enemyMaxHp: raid.enemyStats?.maxHp ?? null,
+    minPriorDefeats: raid.enemyStats?.minPriorDefeats || 0,
+    joinDeadlineAt: raid.joinDeadlineAt,
+    roundNumber: raid.roundNumber,
+    partySize: participants.length,
+    maxPartySize: MAX_PARTY_SIZE,
+    participants: participants.map(p => ({
+      userId: p.userId,
+      username: p.username,
+      isInitiator: !!p.isInitiator,
+      ...publicParticipantTeam(raid, p),
+    })),
+  }
+}
+
+// The lobby list: FORMING raids with an open slot first (soonest-closing first, so the one about
+// to start is on top), then raids already in combat as non-joinable context.
+export function buildRaidLobby(raids) {
+  const list = Array.from(raids).filter(r => r.status === 'FORMING' || r.status === 'IN_PROGRESS')
+  const joinable = list.filter(r => r.status === 'FORMING' && r.participants.size < MAX_PARTY_SIZE)
+    .sort((a, b) => a.joinDeadlineAt - b.joinDeadlineAt)
+  const rest = list.filter(r => !joinable.includes(r))
+    .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))
+  return [...joinable, ...rest].map(buildRaidLobbyEntry)
+}

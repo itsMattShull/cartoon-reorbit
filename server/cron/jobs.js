@@ -39,6 +39,8 @@ export const CRON_JOBS = [
     description: 'Posts due announcements to Discord' },
   { name: 'startDueAuctions', tier: TIER_CRITICAL, pattern: '2-59/5 * * * *', intervalSec: 300, quiet: true,
     description: 'Activates AuctionOnly rows whose start time has passed' },
+  { name: 'requeueOverdueDissolveLaunches', tier: TIER_CRITICAL, pattern: '7-59/10 * * * *', intervalSec: 600, quiet: true,
+    description: 'Safety-net sweep: relaunches past-due dissolve-queue auctions whose delayed job was lost or failed (exact timing comes from delayed jobs)' },
   { name: 'reconcileHolidayRedemptions', tier: TIER_CRITICAL, pattern: '3-59/5 * * * *', intervalSec: 300, quiet: true,
     description: 'Reconciles Holiday Item redemptions' },
   { name: 'cmoonDailyScoreCheck', tier: TIER_CRITICAL, pattern: '4-59/5 * * * *', tz: CHI, intervalSec: 300, quiet: true,
