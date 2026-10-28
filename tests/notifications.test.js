@@ -225,3 +225,52 @@ test('raid preview notifications carry the preview raid id as contextId and no c
   assert.match(values.join(' | '), /Grim Sentinel/)
   assert.match(values.join(' | '), /admin_bob/)
 })
+
+// ── Raid Boss Lobby broadcast (cross-cMoon raids) ──────────────────────────────────────────────
+import { notifyCMoonRaidLobbyOpened, RAID_LOBBY_CONTEXT_ID } from '../server/utils/notifications.js'
+
+function batchDb ({ throwOnQuery = false } = {}) {
+  const calls = []
+  return {
+    calls,
+    async $queryRaw (strings, ...values) {
+      if (throwOnQuery) throw new Error('db exploded')
+      calls.push({ sql: strings.join('?'), values })
+      const userIds = values.find(v => Array.isArray(v) && v.some(x => String(x).startsWith('u')))
+      return (userIds || []).map(userId => ({ userId }))
+    }
+  }
+}
+
+test('raid lobby broadcast is one batched upsert on a fixed collapse key, deduped', async () => {
+  const db = batchDb()
+  const written = await notifyCMoonRaidLobbyOpened(db, {
+    userIds: ['u1', 'u2', 'u1', '', null], enemyName: 'Grim Sentinel', initiatorUsername: 'JanGloopManx', cMoonName: 'Cartoon Netmoon'
+  })
+  assert.equal(db.calls.length, 1)
+  assert.deepEqual(written, ['u1', 'u2'])
+  const { sql, values } = db.calls[0]
+  assert.ok(values.includes(RAID_LOBBY_CONTEXT_ID))
+  assert.ok(values.includes('CMOON_RAID_BOSS_STARTED'))
+  assert.match(values.join(' | '), /Grim Sentinel/)
+  assert.match(values.join(' | '), /JanGloopManx \(Cartoon Netmoon\)/)
+  assert.match(sql, /ON CONFLICT/)
+  // Banned users and the official account are filtered in SQL, like isNotifiable.
+  assert.match(sql, /banned/)
+  assert.ok(values.includes('CartoonReOrbitOfficial'))
+  // Prisma 7 sends raw params untyped: every one in the SELECT list is cast.
+  assert.match(sql, /\?::text\[\], \?::text\[\]/)
+})
+
+test('raid lobby broadcast does nothing for no recipients and never throws', async () => {
+  const db = batchDb()
+  assert.deepEqual(await notifyCMoonRaidLobbyOpened(db, { userIds: [] }), [])
+  assert.equal(db.calls.length, 0)
+  const orig = console.error
+  console.error = () => {}
+  try {
+    assert.deepEqual(await notifyCMoonRaidLobbyOpened(batchDb({ throwOnQuery: true }), { userIds: ['u1'] }), [])
+  } finally {
+    console.error = orig
+  }
+})

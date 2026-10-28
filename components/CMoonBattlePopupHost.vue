@@ -46,8 +46,8 @@
           <p v-if="currentTaunt" class="cbp-taunt">&ldquo;{{ currentTaunt }}&rdquo;</p>
           <p v-if="error" class="cbp-error">{{ error }}</p>
           <p v-if="enemy?.isRaidBoss" class="cbp-flavor">
-            This is a raid boss — up to 3 other eligible members of your cMoon can join for 60 seconds before it
-            auto-starts, and a party win grants everyone who joined the same prize.
+            This is a raid boss — up to 3 other players from any cMoon can join from the Raid Boss Lobby for 60 seconds
+            before it auto-starts, and a party win grants everyone who joined the same prize.
           </p>
           <div class="cbp-actions">
             <GreenButton type="button" class="cbp-btn-wide" :disabled="busy" @click="onFight">

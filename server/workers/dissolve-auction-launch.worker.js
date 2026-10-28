@@ -2,8 +2,8 @@ import { Worker } from 'bullmq'
 import { prisma } from '../prisma.js'
 import { scheduleAuctionClose, scheduleDissolveAuctionLaunch } from '../utils/queues.js'
 import { isStaleDissolveLaunchJob } from '../utils/dissolveAuctionLaunchStaleness.js'
-import { rarityFloor } from '../utils/auctionPriceSuggestion.js'
-import { isAutoAuctionEligibleRarity } from '../utils/autoAuctionEligibility.js'
+import { dissolveStartingBid } from '../utils/dissolveListing.js'
+import { getDissolveScheduleConfig } from '../utils/dissolveSchedule.js'
 import { logDissolveAuctionError } from '../utils/dissolveAuctionErrorLog.js'
 import { recordPreventedMisfire } from '../utils/dissolveMisfire.js'
 
@@ -53,20 +53,23 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
     // do nothing else this run. scheduledForMs is undefined for jobs enqueued
     // before this check existed — those fall through to the old behavior.
     if (isStaleDissolveLaunchJob(scheduledForMs, entry.scheduledFor)) {
-      if (entry.scheduledFor) {
-        await scheduleDissolveAuctionLaunch(entry.id, entry.scheduledFor)
-      }
-      return
+      // Re-adding from INSIDE this job is a no-op: scheduleDissolveAuctionLaunch won't touch a
+      // job id that's currently active, and this job's id IS the entry id. Hand the new time to
+      // the 'completed' handler below, which re-adds once this job is no longer active.
+      return entry.scheduledFor ? { rescheduleTo: new Date(entry.scheduledFor).toISOString() } : undefined
     }
 
-    // Not auto-listable (Auction/Prize/Code Only, Crazy Rare, or an
-    // unrecognized rarity with no explicit floor). Clear scheduledFor instead
-    // of leaving the entry stranded with no job: the next applyDissolveSchedule
-    // run picks up any entry with scheduledFor: null and re-queues it.
-    if (!isAutoAuctionEligibleRarity(entry.userCtoon?.ctoon?.rarity)) {
+    // Starting bid: the rarity floor, or for Auction/Prize/Code Only and Crazy Rare the bid an
+    // admin set on the Dissolve Queue page (see server/utils/dissolveListing.js). Read fresh per
+    // job so a bid set or cleared after scheduling is respected. No bid = held: clear scheduledFor
+    // and stop. applyDissolveSchedule never gives a held entry a slot, so this no longer feeds the
+    // old loop where these entries took the earliest slots, launched nothing, and repeated.
+    const { startBids } = await getDissolveScheduleConfig()
+    const startingBid = dissolveStartingBid(entry.userCtoon?.ctoon?.rarity, startBids)
+    if (startingBid === null) {
       await prisma.dissolveAuctionQueue.update({
         where: { id: entry.id },
-        data: { scheduledFor: null }
+        data: { scheduledFor: null, pinnedAt: null }
       })
       return
     }
@@ -79,9 +82,17 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
         select: { id: true }
       })
 
+      // A copy an admin already put up through the Auction Only page (the old workaround for
+      // these rarities, from before that page refused dissolve-queued copies) keeps that listing
+      // and its hand-set price. Drop it from the dissolve queue instead of listing it a second time.
+      const pendingAuctionOnly = await tx.auctionOnly.findFirst({
+        where: { userCtoonId: entry.userCtoonId, isStarted: false },
+        select: { id: true }
+      })
+
       await tx.dissolveAuctionQueue.delete({ where: { id: entry.id } })
 
-      if (existing) return null
+      if (existing || pendingAuctionOnly) return null
 
       // This entry's own queued-at-dissolve-time ownership can go stale: an admin trade, a
       // second AuctionOnly listing, or any other path that moves the item out of the official
@@ -101,7 +112,7 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
       const created = await tx.auction.create({
         data: {
           userCtoonId: entry.userCtoonId,
-          initialBet:  rarityFloor(entry.userCtoon?.ctoon?.rarity),
+          initialBet:  startingBid,
           duration:    1,
           durationMinutes: 1440,
           endAt,
@@ -147,6 +158,14 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
     throw err
   }
 }, { connection })
+
+// Stale-job deferral (see the processor above): now that this job is no longer active, the
+// entry's new time can be queued under the same job id.
+worker.on('completed', (job, result) => {
+  if (!result?.rescheduleTo) return
+  scheduleDissolveAuctionLaunch(job.data.queueEntryId, result.rescheduleTo)
+    .catch(err => console.error(`[dissolve-auction-launch] re-queue after stale job ${job?.id} failed:`, err?.message || err))
+})
 
 worker.on('failed', (job, err) => {
   console.error(`[dissolve-auction-launch] job ${job?.id} failed:`, err?.message || err)

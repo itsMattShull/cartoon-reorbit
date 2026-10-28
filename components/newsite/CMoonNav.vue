@@ -8,7 +8,16 @@
         Join a cMoon
       </button>
       <p v-else-if="cooldownText" class="cmn-cooldown">{{ cooldownText }}</p>
+      <button type="button" class="cmn-raid-btn" @click="openRaidLobby">
+        <span aria-hidden="true">⚔️</span> Raid boss lobby
+        <span v-if="openRaidCount" class="cmn-raid-count">{{ openRaidCount }} open</span>
+      </button>
     </div>
+
+    <!-- Client-only: the lobby lives on a Socket.IO connection, which must never be opened during SSR. -->
+    <ClientOnly>
+      <CMoonRaidLobbyModal :open="raidLobbyOpen" @close="closeRaidLobby" />
+    </ClientOnly>
 
     <div class="cmn-console">
       <div class="cmn-screen">
@@ -166,6 +175,32 @@ function goBack() {
   router.push('/newsite/MycWorld')
 }
 
+// ── Raid Boss Lobby (cross-cMoon raids) ──────────────────────────────────────────────────────
+// Opened by the header button, or by ?raidLobby=1 — where raid-boss notifications link (see
+// notificationRoute in components/Onboarding.vue). The query flag is cleared on close so a
+// refresh or back navigation doesn't reopen it. This page also holds its own lobby subscription
+// (ref-counted with the modal's, see useCMoonRaidSocket) so the button can show a live count.
+const route = useRoute()
+// Set in onMounted, never during setup: useCMoonRaidSocket opens a socket on first use, and setup
+// also runs during SSR.
+const raidSocket = shallowRef(null)
+const raidLobbyOpen = ref(false)
+const openRaidCount = computed(() => (raidSocket.value?.lobbyRaids.value || []).filter(r =>
+  r.status === 'FORMING' && r.partySize < r.maxPartySize).length)
+function openRaidLobby() {
+  raidLobbyOpen.value = true
+}
+function closeRaidLobby(opts) {
+  raidLobbyOpen.value = false
+  // The modal is navigating to a raid itself; a query-clearing replace here would cancel it.
+  if (opts?.navigating) return
+  if (route.query.raidLobby) {
+    const { raidLobby, ...rest } = route.query
+    router.replace({ query: rest })
+  }
+}
+watch(() => route.query.raidLobby, (flag) => { if (flag) raidLobbyOpen.value = true })
+
 // ── Seasonal updates (bottom half, admin-customizable via Manage Navigation) ─────────────────
 const seasonLoaded = ref(false)
 const seasonData = ref({ active: false, season: null, leaderboard: [], nextSeasonStartAt: null, pastSeasons: [] })
@@ -221,6 +256,11 @@ async function loadSeason() {
 }
 
 onMounted(async () => {
+  // Before any await, so an unmount mid-load can't run onBeforeUnmount before this subscribes.
+  raidSocket.value = useCMoonRaidSocket()
+  raidSocket.value.subscribeLobby()
+  if (route.query.raidLobby) raidLobbyOpen.value = true
+
   const [listResult] = await Promise.allSettled([
     $fetch('/api/cmoons', { params: { view: 'nav' } }),
     refreshJoinEligibility(),
@@ -238,6 +278,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   if (nowTimer) clearInterval(nowTimer)
+  raidSocket.value?.unsubscribeLobby()
 })
 
 // ── Swirl background ────────────────────────────────────────────────────
@@ -336,6 +377,38 @@ const spiralStrokeWidth = (spiral.pitch * 0.52).toFixed(2)
 .cmn-roster-link:focus-visible {
   outline: 3px solid #ffd75e;
   outline-offset: 2px;
+}
+
+.cmn-raid-btn {
+  margin-top: 10px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 18px;
+  border-radius: 999px;
+  border: 3px solid #bcdcf5;
+  background: linear-gradient(180deg, #7f1d1d 0%, #b91c1c 55%, #7f1d1d 100%);
+  color: #fff;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 4px 0 #04211f;
+}
+.cmn-raid-btn:hover { filter: brightness(1.12); }
+.cmn-raid-btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #04211f; }
+.cmn-raid-btn:focus-visible { outline: 3px solid #ffd75e; outline-offset: 2px; }
+.cmn-raid-count {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #04211f;
+  background: #ffd75e;
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cmn-raid-btn:active { transform: none; }
 }
 
 .cmn-title {

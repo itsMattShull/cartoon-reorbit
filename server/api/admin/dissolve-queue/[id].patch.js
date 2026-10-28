@@ -5,6 +5,8 @@ import { defineEventHandler, getRequestHeader, readBody, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { scheduleDissolveAuctionLaunch } from '@/server/utils/queues'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { getDissolveScheduleConfig } from '@/server/utils/dissolveSchedule'
+import { dissolveStartingBid, isSpecialDissolveRarity } from '@/server/utils/dissolveListing'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -25,7 +27,10 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event) || {}
   const { scheduledForUtc, unpin } = body
 
-  const entry = await prisma.dissolveAuctionQueue.findUnique({ where: { id } })
+  const entry = await prisma.dissolveAuctionQueue.findUnique({
+    where: { id },
+    include: { userCtoon: { select: { ctoon: { select: { rarity: true } } } } }
+  })
   if (!entry) throw createError({ statusCode: 404, statusMessage: 'Queue entry not found' })
 
   if (unpin === true) {
@@ -58,6 +63,19 @@ export default defineEventHandler(async (event) => {
     throw createError({
       statusCode: 400,
       statusMessage: 'scheduledFor must be at least 1 minute in the future'
+    })
+  }
+
+  // A held entry would just be skipped at launch time — say so now instead of scheduling a
+  // launch that silently does nothing.
+  const { startBids } = await getDissolveScheduleConfig()
+  const rarity = entry.userCtoon?.ctoon?.rarity
+  if (dissolveStartingBid(rarity, startBids) === null) {
+    throw createError({
+      statusCode: 400,
+      statusMessage: isSpecialDissolveRarity(rarity)
+        ? `${rarity} cToons are held. Set a ${rarity} starting bid on this page first, then schedule it.`
+        : `This cToon's rarity (${rarity || 'none'}) has no starting price, so it can't be auctioned from the dissolve queue.`
     })
   }
 

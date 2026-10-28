@@ -1,8 +1,12 @@
 // server/utils/cmoonRaidSocket.js
 //
-// Real-time runtime for cMoon Enemy Battles "raid boss" co-op fights: up to 4 members of ONE
-// cMoon fighting a single CMoonEnemyMember (isRaidBoss = true) together, live, all facing the
-// same rolled enemy action every round. Registered per-connection from socket-server.js exactly
+// Real-time runtime for cMoon Enemy Battles "raid boss" co-op fights: up to 4 cMoon members —
+// from ANY cMoons, not just the initiator's — fighting a single CMoonEnemyMember (isRaidBoss =
+// true) together, live, all facing the same rolled enemy action every round. Open raids are
+// listed in the Raid Boss Lobby (cmoonraid:lobbySubscribe below; UI in
+// components/newsite/CMoonRaidLobbyModal.vue on the cMoons nav page), and every cMoon member is
+// notified when one opens. Each participant fights for, and is credited to, their OWN cMoon —
+// see "Cross-cMoon raids" in cmoonEnemyRaid.js for the per-participant snapshot this relies on. Registered per-connection from socket-server.js exactly
 // like registerOgGtoons/registerPokemonBattle:
 //
 //   import { registerCMoonRaid, startCMoonRaidSweep, restoreCMoonRaids } from './utils/cmoonRaidSocket.js'
@@ -45,7 +49,7 @@
 // ── Security ────────────────────────────────────────────────────────────────────────────────
 // Every handler resolves the acting user via resolveSocketUser(socket) — the same helper every
 // other socket feature in this codebase uses — never a client-supplied userId. Eligibility
-// (same cMoon, active, not banned, no other active raid or solo battle, personal win count
+// (in a cMoon, active, not banned, no other active raid or solo battle, personal win count
 // against this member's minPriorDefeats) is re-checked fresh against the database on EVERY
 // raid:start/raid:join, never trusted from a stale client-held snapshot. The enemy's own action
 // and every OTHER participant's chosen action for the round in progress are never sent to a
@@ -74,8 +78,8 @@ import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from '.
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 import { announceCMoonRaidBoss, resolveCMoonRaidDiscordChannelId, sendCMoonTeamUpdate, startThreadFromMessage } from './discord.js'
 import { getActiveBossLoreRiddle } from './cmoonRiddle.js'
-import { notifyCMoonRaidBossStarted } from './notifications.js'
-import { pushUserNotification } from './realtimeNotify.js'
+import { notifyCMoonRaidLobbyOpened } from './notifications.js'
+import { pushUserNotifications } from './realtimeNotify.js'
 import {
   buildGrantableReward, isValidPlayerSubmittedAction, rollEnemyAction, rollEnemyRewards, PLAYER_MAX_HP,
   SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD,
@@ -85,13 +89,17 @@ import { markEnemyOfferAccepted } from './cmoonEnemyAnalytics.js'
 import { announceTeamEnemiesMilestone, checkAndAnnounceSeasonGoalReached } from './cmoonDiscordEvents.js'
 import {
   resolveRaidRound, JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE, RAID_MAX_ROUNDS_SAFETY,
-  checkRaidBossAvailability,
+  checkRaidBossAvailability, applyRaidSpecialAttack, participantCMoonId, raidCMoonIds, raidPartyLabel,
+  splitRaidPoints, rankTierLevel, publicParticipantTeam, buildRaidLobby,
 } from './cmoonEnemyRaid.js'
 import * as raidRedis from './cmoonRaidRedisState.js'
 
 const SWEEP_INTERVAL_MS = 2000
 const EV = (name) => `cmoonraid:${name}`
 const raidRoom = (raidId) => `cmoonraid:room:${raidId}`
+// Every socket with the Raid Boss Lobby open (see cmoonraid:lobbySubscribe) — gets the full open
+// raid list pushed whenever it changes.
+const LOBBY_ROOM = 'cmoonraid:lobby'
 const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
 
 /* ── In-memory state (single-process — see header) ──────────────────────────────────────────
@@ -109,15 +117,21 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *   enemyStats: { maxHp, critChanceAgainstPercent, critChanceFromPercent, cMoonPointsReward },
  *   enemyHpRemaining, roundNumber, currentEnemyAction, roundDeadlineAt, joinDeadlineAt,
  *   participants: Map<userId, { userId, username, hpRemaining, maxHp, knockedOutAt, isInitiator,
- *                                pendingAction, joinedAt, hitStreak, specialCharged }>,
+ *                                pendingAction, joinedAt, hitStreak, specialCharged,
+ *                                // per-participant snapshot taken at start/join — see
+ *                                // "Cross-cMoon raids" in cmoonEnemyRaid.js:
+ *                                cMoonId, cMoonName, cMoonColor, cMoonAvatarPath,
+ *                                rankName, rankTierName, rankTierLevel, rankTierCount,
+ *                                specialAttack }>,
  *   roundLog: [], startedAt, combatStartedAt, endedAt, outcome, resolving,
  *
  *   // ── Special attacks (see CMoonSpecialAttack's own schema comment and this file's sibling
  *   // cmoonEnemyRaid.js header comment for the full party-wide-vs-per-participant design) ────
- *   cMoonSpecialAttack,   // { id, name, description, effectType, amount, soundPath, healsAllies }
- *                         // or null — snapshotted ONCE at raid creation from the party's shared
- *                         // cMoon (every participant is necessarily the same cMoon by raid design,
- *                         // so this is correct for the whole party, not just the initiator).
+ *   cMoonSpecialAttack,   // the INITIATOR's cMoon special, kept only so a participant restored
+ *                         // from a pre-cross-cMoon Redis snapshot (no own `specialAttack` field)
+ *                         // can still fire theirs — see restoreCMoonRaids. Live code reads each
+ *                         // participant's OWN p.specialAttack instead: in a cross-cMoon party
+ *                         // every member fires their own cMoon's special.
  *   enemySpecialAttack,   // same shape, from enemyMember.faction.specialAttack, or null — NEVER
  *                         // sent to a client in advance (see publicRaidView), same "don't spoil
  *                         // the enemy's kit" stance the solo battle already takes.
@@ -156,6 +170,28 @@ function destroyRaid(raidId) {
   }
   raids.delete(raidId)
   fireDelete(raidId)
+  broadcastLobby()
+}
+
+/* ── Raid Boss Lobby ──────────────────────────────────────────────────────────────────────────
+ * The `io` the lobby pushes through — set by registerCMoonRaid/startCMoonRaidSweep (both run with
+ * the one socket-server io), so lifecycle helpers without an io parameter (destroyRaid) can still
+ * refresh the lobby. Coalesced to one push per tick: a burst of joins/leaves/starts in the same
+ * tick sends the list once, not once per change.
+ */
+let lobbyIo = null
+let lobbyPushQueued = false
+function broadcastLobby() {
+  if (!lobbyIo || lobbyPushQueued) return
+  lobbyPushQueued = true
+  setImmediate(() => {
+    lobbyPushQueued = false
+    try {
+      lobbyIo.local.to(LOBBY_ROOM).emit(EV('lobby'), { raids: buildRaidLobby(raids.values()), serverNow: Date.now() })
+    } catch (err) {
+      console.error('[cmoonRaidSocket] lobby broadcast failed:', err?.message || err)
+    }
+  })
 }
 
 /* ── Serialization ────────────────────────────────────────────────────────────────────────── */
@@ -192,12 +228,10 @@ function publicRaidView(raid) {
     joinDeadlineAt: raid.joinDeadlineAt,
     roundDeadlineAt: raid.roundDeadlineAt,
     outcome: raid.outcome || null,
-    // The party's own special attack (see CMoonSpecialAttack's own schema comment) — every
-    // participant shares the same one, since a raid is scoped to one cMoon. Never
-    // enemySpecialAttack here: the boss's own kit stays unrevealed until it actually fires (see
-    // each round's own `specials`, broadcast via cmoonraid:roundResolved), same as the solo
-    // battle never telling the player what the enemy's special does in advance.
-    cMoonSpecialAttack: raid.cMoonSpecialAttack || null,
+    // No party-wide special here any more: each participant carries their OWN cMoon's special
+    // (participants[].specialAttack below), since a cross-cMoon party has one per team. Never
+    // enemySpecialAttack: the boss's own kit stays unrevealed until it actually fires (see each
+    // round's own `specials`, broadcast via cmoonraid:roundResolved), same as the solo battle.
     // The boss's own charge progress toward auto-firing its special — intentionally shown (unlike
     // its actual identity/effect) so the party gets some "it's about to do something" tension, the
     // same way a lot of boss fights telegraph an incoming attack without naming it outright.
@@ -221,6 +255,11 @@ function publicRaidView(raid) {
       // balance-sensitive secret here to protect).
       hitStreak: p.hitStreak || 0,
       specialCharged: !!p.specialCharged,
+      // This participant's OWN cMoon special (their team's, not the initiator's) — public on
+      // purpose: it's that team's kit, shown on their charge meter and their own fire button.
+      specialAttack: p.specialAttack || null,
+      // Team colors + rank to show off on the raid screen — see publicParticipantTeam.
+      ...publicParticipantTeam(raid, p),
       // Both null/false until the raid actually resolves (see resolveCMoonRaidOutcome, which
       // mutates these directly onto this same in-memory participant object) — a reward
       // breakdown and first-victory flag for the RESOLVED screen, same shape/intent as the solo
@@ -237,11 +276,9 @@ function broadcast(io, raid, event, extra) {
 
 /* ── Eligibility (re-checked fresh on every start/join — never trusted from a client) ───────── */
 
-// `reservedForRaidId`: the join handler reserves this user's slot in `raid.participants`/
-// `raidByUser` SYNCHRONOUSLY, before this function's own awaits, to close a join-race window
-// (see cmoonraid:join's own comment) — so by the time this runs, raidByUser.has(userId) is
-// always true for their OWN reservation. Passing the raid id being joined lets this only reject
-// a genuinely different active raid, not the one currently being confirmed.
+// `reservedForRaidId`: lets a caller that has already reserved this user's slot skip the
+// "already in a raid" rejection for that one raid. cmoonraid:join no longer needs it — it now runs
+// this BEFORE reserving (see its own comment) and re-checks raidByUser synchronously after.
 async function loadEligibility({ userId, enemyMember, reservedForRaidId = null }) {
   const user = await db.user.findUnique({
     where: { id: userId },
@@ -262,15 +299,63 @@ async function loadEligibility({ userId, enemyMember, reservedForRaidId = null }
   return { ok: true, user }
 }
 
-/* ── Notifying/announcing the rest of the cMoon at raid:start ────────────────────────────────
- * Fire-and-forget from the caller's point of view — a failed Discord post or notification write
- * must never fail or roll back the raid itself, same stance server/utils/discord.js's own
- * announce* functions already take (they never throw).
+/* ── Per-participant team/rank/special snapshot ──────────────────────────────────────────────
+ * Taken once when a player starts or joins (see "Cross-cMoon raids" in cmoonEnemyRaid.js), never
+ * re-read mid-fight: the raid credits and displays the team they joined as, even if they switch
+ * cMoons before it resolves. Returns null if the cMoon no longer exists.
  */
-async function notifyEligibleCMoonMembers(io, { cMoonId, initiatorUserId, enemyMember, raidId, cMoonName }) {
+let tierCache = { at: 0, tiers: [] }
+const TIER_CACHE_MS = 5 * 60 * 1000
+async function loadRankTiers() {
+  if (Date.now() - tierCache.at < TIER_CACHE_MS) return tierCache.tiers
+  const tiers = await db.cMoonRankTier.findMany({ select: { id: true, sortOrder: true } })
+  tierCache = { at: Date.now(), tiers }
+  return tiers
+}
+
+async function loadParticipantProfile(userId, cMoonId) {
+  const [cMoon, user, tiers] = await Promise.all([
+    db.cMoon.findUnique({
+      where: { id: cMoonId },
+      select: { id: true, name: true, color: true, avatarPath: true, specialAttack: true },
+    }),
+    db.user.findUnique({
+      where: { id: userId },
+      select: { currentCMoonRank: { select: { name: true, cMoonId: true, tierId: true, tier: { select: { name: true } } } } },
+    }),
+    loadRankTiers().catch(() => []),
+  ])
+  if (!cMoon) return null
+  // A rank belongs to one cMoon; a leftover rank from a team they've since left isn't shown.
+  const rank = user?.currentCMoonRank && user.currentCMoonRank.cMoonId === cMoon.id ? user.currentCMoonRank : null
+  return {
+    cMoonId: cMoon.id,
+    cMoonName: cMoon.name,
+    cMoonColor: cMoon.color || null,
+    cMoonAvatarPath: cMoon.avatarPath || null,
+    rankName: rank?.name || null,
+    rankTierName: rank?.tier?.name || null,
+    rankTierLevel: rank ? rankTierLevel(tiers, rank.tierId) : 0,
+    rankTierCount: tiers.length,
+    specialAttack: cMoon.specialAttack || null,
+  }
+}
+
+/* ── Calling every cMoon to the Raid Boss Lobby at raid:start ─────────────────────────────────
+ * Raids are cross-cMoon, so every eligible cMoon member hears about it, not just the
+ * initiator's team: in a cMoon, active, not banned, not opted out of cMoon enemy popups (a player
+ * who turned those off doesn't want raid interruptions either), and with enough personal wins for
+ * this boss's minPriorDefeats. One batched write (notifyCMoonRaidLobbyOpened), collapsed into a
+ * single unread "×N" alert per player. Fire-and-forget: a failed notification must never fail
+ * or roll back the raid, same stance server/utils/discord.js's announce* functions take.
+ */
+async function notifyRaidLobbyOpened(io, { initiatorUserId, initiatorUsername, enemyMember, cMoonName }) {
   try {
     const candidates = await db.user.findMany({
-      where: { cMoonId, id: { not: initiatorUserId }, active: true, banned: false },
+      where: {
+        cMoonId: { not: null }, id: { not: initiatorUserId },
+        active: true, banned: false, allowCMoonEnemyPopups: true,
+      },
       select: { id: true },
     })
     if (!candidates.length) return
@@ -282,35 +367,48 @@ async function notifyEligibleCMoonMembers(io, { cMoonId, initiatorUserId, enemyM
       const winsById = new Map(winCounts.map(w => [w.userId, w._count._all]))
       eligibleIds = eligibleIds.filter(id => (winsById.get(id) || 0) >= enemyMember.minPriorDefeats)
     }
-    await Promise.all(eligibleIds.map(async userId => {
-      const wrote = await notifyCMoonRaidBossStarted(db, { userId, raidId, enemyName: enemyMember.name, cMoonName })
-      // Live push on top of the DB write, not instead of it — see pushUserNotification's own
-      // comment on why this is a bare "go refetch" ping. Only pushed when the write actually
-      // happened (skipped for a banned/opted-out recipient, same gate notifyCMoonRaidBossStarted
-      // itself already applies via isNotifiable), and only matters for whoever has a tab open
-      // right now; everyone else still gets it from their next ordinary poll.
-      if (wrote) pushUserNotification(io, userId)
-    }))
+    const written = await notifyCMoonRaidLobbyOpened(db, {
+      userIds: eligibleIds, enemyName: enemyMember.name, initiatorUsername, cMoonName,
+    })
+    // Live "go refetch" ping for whoever has a tab open; everyone else gets it on their next poll.
+    pushUserNotifications(io, written)
   } catch (err) {
-    console.error('[cmoonRaidSocket] notifyEligibleCMoonMembers failed:', err?.message || err)
+    console.error('[cmoonRaidSocket] notifyRaidLobbyOpened failed:', err?.message || err)
   }
 }
 
 /* ── Lifecycle ────────────────────────────────────────────────────────────────────────────── */
 
-function addParticipant(raid, { userId, username, isInitiator, maxHp }) {
+function addParticipant(raid, { userId, username, isInitiator, maxHp, profile = null, pendingJoin = false }) {
   raid.participants.set(userId, {
     userId, username, hpRemaining: maxHp, maxHp, knockedOutAt: null,
+    // True only between cmoonraid:join's synchronous slot reservation and its DB confirmation —
+    // no team snapshot yet, so publicParticipantTeam shows no team rather than guessing one.
+    pendingJoin: !!pendingJoin,
     isInitiator: !!isInitiator, pendingAction: null, joinedAt: Date.now(),
     hitStreak: 0, specialCharged: false,
+    cMoonId: null, cMoonName: null, cMoonColor: null, cMoonAvatarPath: null,
+    rankName: null, rankTierName: null, rankTierLevel: 0, rankTierCount: 0,
+    specialAttack: null,
+    ...(profile || {}),
   })
   raidByUser.set(userId, raid.id)
+}
+
+// Undo a join reservation for THIS raid only. Never clears raidByUser if it points at a
+// different raid — that's the player's real raid, and erasing it would switch off the
+// "already in a raid" guard for them.
+function releaseReservation(raid, userId) {
+  if (raid.participants.get(userId)?.pendingJoin) raid.participants.delete(userId)
+  if (raidByUser.get(userId) === raid.id) raidByUser.delete(userId)
+  broadcastLobby()
 }
 
 function startCombat(io, raid) {
   raid.status = 'IN_PROGRESS'
   raid.combatStartedAt = Date.now()
   openRound(io, raid)
+  broadcastLobby() // no longer joinable — the lobby moves it to "battle underway"
 }
 
 function openRound(io, raid) {
@@ -364,7 +462,7 @@ function describeRaidSpecialEvent(raid, s) {
 // One short Discord message per round for team spectators — see this session's "separate
 // message per round" decision (no message-editing support exists to update one in place).
 function formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant, specialEvents }) {
-  const header = `⚔️ **Round ${raid.roundNumber}** — ${raid.cMoonName} vs ${raid.enemyName}`
+  const header = `⚔️ **Round ${raid.roundNumber}** — ${raidPartyLabel(raid)} vs ${raid.enemyName}`
   const hpLine = `${raid.enemyName} HP: ${raid.enemyHpRemaining}/${raid.enemyStats.maxHp} (-${enemyDamageDealt})`
   const specialLines = (specialEvents || []).map(s => describeRaidSpecialEvent(raid, s))
   const lines = perParticipant.map(r => describeRaidParticipantResult(raid, r))
@@ -372,8 +470,8 @@ function formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant, specia
 }
 
 const RAID_RECAP_HEADLINES = {
-  WIN: raid => `🏆 **Victory!** ${raid.cMoonName} defeated ${raid.enemyName} in ${raid.roundNumber} round${raid.roundNumber === 1 ? '' : 's'}!`,
-  LOSS: raid => `💀 **Defeat.** ${raid.enemyName} was too much for ${raid.cMoonName} (${raid.enemyHpRemaining}/${raid.enemyStats.maxHp} HP left).`,
+  WIN: raid => `🏆 **Victory!** ${raidPartyLabel(raid)} defeated ${raid.enemyName} in ${raid.roundNumber} round${raid.roundNumber === 1 ? '' : 's'}!`,
+  LOSS: raid => `💀 **Defeat.** ${raid.enemyName} was too much for ${raidPartyLabel(raid)} (${raid.enemyHpRemaining}/${raid.enemyStats.maxHp} HP left).`,
   ABANDONED: raid => `⌛ The raid against ${raid.enemyName} ran out of rounds and was abandoned.`,
 }
 
@@ -382,56 +480,21 @@ const RAID_RECAP_HEADLINES = {
 function formatRaidRecapMessage(raid, { pointsAwarded }) {
   const headline = (RAID_RECAP_HEADLINES[raid.outcome] || (r => `The raid against ${r.enemyName} has ended.`))(raid)
   const lines = [headline]
-  if (pointsAwarded > 0) lines.push(`+${pointsAwarded} cMoon points earned`)
+  if (pointsAwarded > 0) {
+    lines.push(raidCMoonIds(raid).length > 1
+      ? `+${pointsAwarded} cMoon points earned, shared across every team`
+      : `+${pointsAwarded} cMoon points earned`)
+  }
+  // Each fighter's team tag only when teams are mixed — a one-cMoon raid reads exactly as before.
+  const mixed = raidCMoonIds(raid).length > 1
   lines.push(Array.from(raid.participants.values())
-    .map(p => `${p.username}: ${p.knockedOutAt ? 'knocked out' : `survived (${p.hpRemaining}/${p.maxHp} HP)`}`)
+    .map(p => `${p.username}${mixed && p.cMoonName ? ` [${p.cMoonName}]` : ''}: ${p.knockedOutAt ? 'knocked out' : `survived (${p.hpRemaining}/${p.maxHp} HP)`}`)
     .join(' • '))
   return lines.join('\n')
 }
 
-// Applies one fired special's effect in place against the raid's own shared state (and, for a
-// party-wide heal, every alive participant's HP) — shared by both the player-cast branch and the
-// boss's own auto-fire branch below, since both ultimately read the same five effectType branches
-// off the same CMoonSpecialAttack shape, just from opposite casters. `caster` is `{ side, userId?
-// }` purely for the specialEvents entry pushed to the room/roundLog/Discord — it has no bearing on
-// who the effect targets (see this file's own header comment: every effect here targets whichever
-// side is already shared, never a hand-picked player).
-function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvents) {
-  specialEvents.push({
-    side: caster.side, userId: caster.userId || null, name: attack.name,
-    effectType: attack.effectType, amount: attack.amount, soundPath: attack.soundPath || null,
-  })
-  if (attack.effectType === 'DAMAGE_OPPONENT') {
-    if (caster.side === 'PLAYER') {
-      raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - attack.amount)
-    } else {
-      for (const p of alive) {
-        p.hpRemaining = Math.max(0, p.hpRemaining - attack.amount)
-        if (p.hpRemaining <= 0 && !p.knockedOutAt) p.knockedOutAt = Date.now()
-      }
-    }
-  } else if (attack.effectType === 'HEAL_SELF') {
-    if (caster.side === 'PLAYER') {
-      const casterParticipant = raid.participants.get(caster.userId)
-      if (attack.healsAllies) {
-        for (const p of alive) p.hpRemaining = Math.min(p.maxHp, p.hpRemaining + attack.amount)
-      } else if (casterParticipant && !casterParticipant.knockedOutAt) {
-        casterParticipant.hpRemaining = Math.min(casterParticipant.maxHp, casterParticipant.hpRemaining + attack.amount)
-      }
-    } else {
-      raid.enemyHpRemaining = Math.min(raid.enemyStats.maxHp, raid.enemyHpRemaining + attack.amount)
-    }
-  } else if (attack.effectType === 'PARALYZE_OPPONENT') {
-    if (caster.side === 'PLAYER') raid.enemyParalyzedTurns += attack.amount
-    else raid.partyParalyzedTurns += attack.amount
-  } else if (attack.effectType === 'LOWER_OPPONENT_ATTACK') {
-    if (caster.side === 'PLAYER') raid.enemyAtkBonus -= attack.amount
-    else raid.partyAtkBonus -= attack.amount
-  } else if (attack.effectType === 'RAISE_ALLY_ATTACK') {
-    if (caster.side === 'PLAYER') raid.partyAtkBonus += attack.amount
-    else raid.enemyAtkBonus += attack.amount
-  }
-}
+// applyRaidSpecialAttack now lives in cmoonEnemyRaid.js (pure, unit-tested) — see its comment
+// there for the cross-cMoon targeting rules.
 
 async function closeRound(io, raid) {
   if (raid.status !== 'IN_PROGRESS' || raid.resolving) return
@@ -448,15 +511,17 @@ async function closeRound(io, raid) {
     // ── 1. Any PLAYER specials chosen this round fire FIRST, in participant join order — same
     // ordering the solo battle uses (apply the special, THEN resolve the round's lane exchange),
     // so e.g. a freshly-cast PARALYZE_OPPONENT also stops the boss's action THIS round, not just
-    // future ones. Re-checks specialCharged/cMoonSpecialAttack defensively (already validated at
-    // submission time in the cmoonraid:action handler below; nothing can change either between
-    // then and here since both only ever change inside this same synchronous function). ────────
+    // future ones. Each caster fires THEIR OWN cMoon's special (p.specialAttack) — in a
+    // cross-cMoon party, teammates from different cMoons bring different kits. Re-checks
+    // specialCharged/specialAttack defensively (already validated at submission time in the
+    // cmoonraid:action handler below). A special that knocks the boss out early doesn't stop
+    // later casters' specials or the lane exchange this round — same as before cross-cMoon. ────
     for (const p of alive) {
       if (p.pendingAction !== SPECIAL_ACTION) continue
-      if (!p.specialCharged || !raid.cMoonSpecialAttack) continue
+      if (!p.specialCharged || !p.specialAttack) continue
       p.hitStreak = 0
       p.specialCharged = false
-      applyRaidSpecialAttack(raid, alive, raid.cMoonSpecialAttack, { side: 'PLAYER', userId: p.userId }, specialEvents)
+      applyRaidSpecialAttack(raid, alive, p.specialAttack, { side: 'PLAYER', userId: p.userId }, specialEvents)
     }
 
     // ── 2. This round's lane exchange — every alive participant's OWN action (SPECIAL_ACTION
@@ -540,6 +605,27 @@ async function closeRound(io, raid) {
   }
 }
 
+// The recap goes to the call-to-arms thread (initiator's team) AND to every other participating
+// team's own raid channel, so each cMoon sees how its members did. Deduped: teams without their
+// own channel all fall back to the same global raid channel, which should only get it once.
+async function postRaidRecap(raid, { pointsAwarded }) {
+  const message = formatRaidRecapMessage(raid, { pointsAwarded })
+  const targets = new Set()
+  const primary = raidDiscordPostTarget(raid)
+  if (primary) targets.add(primary)
+  const otherTeamIds = raidCMoonIds(raid).filter(id => id !== raid.cMoonId)
+  if (otherTeamIds.length) {
+    const teams = await db.cMoon.findMany({ where: { id: { in: otherTeamIds } }, select: { discordChannelId: true } })
+    for (const t of teams) {
+      const channelId = await resolveCMoonRaidDiscordChannelId(db, t.discordChannelId)
+      // The initiator's thread lives inside its parent channel — don't post the recap to that
+      // parent too when another team shares it.
+      if (channelId && channelId !== raid.discordChannelId) targets.add(channelId)
+    }
+  }
+  for (const target of targets) sendCMoonTeamUpdate(target, message)
+}
+
 /* ── Resolution: the one place a raid touches Postgres beyond its own create/resolve rows ───── */
 
 async function resolveCMoonRaidOutcome(io, raid, outcome) {
@@ -547,6 +633,10 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
   raid.outcome = outcome
   raid.endedAt = Date.now()
 
+  // A joiner whose participant row is still being written (pendingJoin) has nothing to update yet;
+  // including them would fail the transaction and roll back EVERY participant's rewards. Their own
+  // join handler sees the raid is gone and releases the lock it just wrote.
+  for (const [uid, p] of raid.participants) if (p.pendingJoin) raid.participants.delete(uid)
   const participantIds = Array.from(raid.participants.keys())
   let grantable = null
   let rewardsGranted = null
@@ -559,7 +649,10 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
     grantable = buildGrantableReward(hitRewards)
   }
   const pointsAwarded = outcome === 'WIN' ? Math.max(0, Number(raid.enemyStats.cMoonPointsReward) || 0) : 0
-  // Split evenly across the party rather than crediting each participant the full amount — every
+  // Split evenly across the party (splitRaidPoints), each share credited to that participant's
+  // OWN cMoon — so in a cross-cMoon raid every team earns its members' shares and the total
+  // across all teams is still one win's worth. Rather than crediting each participant the full
+  // amount — every
   // OTHER CMoonScoreLog writer in this codebase (solo battles, HIGH_SCORE, DAILY_TASK, TOP10)
   // attributes to one real user, and CMoon.teamScore is simply the SUM of every row for that
   // cMoon (see recomputeCMoonTeamScores) with no per-user dedup — crediting each participant the
@@ -571,17 +664,18 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
   // participant's own rank/leaderboard/achievement progress. The remainder (if it doesn't divide
   // evenly) goes to the first few participants in join order so the split always sums back to
   // exactly pointsAwarded.
-  const baseShare = Math.floor(pointsAwarded / (participantIds.length || 1))
-  const remainder = pointsAwarded - baseShare * participantIds.length
-  const pointsShareByUser = new Map(participantIds.map((userId, i) =>
-    [userId, baseShare + (i < remainder ? 1 : 0)]))
+  const pointsShareByUser = splitRaidPoints(participantIds, pointsAwarded)
 
-  // Pre-increment value for the team enemies-defeated milestone diff below — only fetched on a
-  // WIN, same "don't query for nothing" stance the rest of this file takes.
-  const cMoonBeforeWin = outcome === 'WIN'
-    ? await db.cMoon.findUnique({ where: { id: raid.cMoonId }, select: { battleWins: true } })
-    : null
-  let cMoonAfterWin = null
+  // Every team in the party (initiator's first). Only cMoons that still exist get credited: a
+  // cMoon an admin deleted mid-raid would otherwise fail its CMoonScoreLog/cMoon.update FK and
+  // roll back the WHOLE transaction — every other participant's rewards with it. A participant
+  // whose team is gone still gets their prizes and battle record (cMoonId null), just no team
+  // credit. One query also gives the pre-increment battleWins for each team's milestone diff.
+  const teamIds = raidCMoonIds(raid)
+  const existingTeams = await db.cMoon.findMany({ where: { id: { in: teamIds } }, select: { id: true, battleWins: true } })
+  const winsBeforeByTeam = new Map(existingTeams.map(c => [c.id, c.battleWins]))
+  const creditedTeamIds = teamIds.filter(id => winsBeforeByTeam.has(id))
+  const winsAfterByTeam = new Map()
 
   const ctoonJobsByUser = new Map()
   try {
@@ -636,9 +730,11 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
         // achievement criteria count a raid win/loss with zero changes to either system.
         // pointsAwarded is 0 here too — this row's own points are logged via CMoonScoreLog below,
         // same as every other CMoonEnemyBattle-adjacent write in this file.
+        const teamId = participantCMoonId(raid, p)
+        const teamExists = winsBeforeByTeam.has(teamId)
         await tx.cMoonEnemyBattle.create({
           data: {
-            userId, enemyMemberId: raid.enemyMemberId, cMoonId: raid.cMoonId,
+            userId, enemyMemberId: raid.enemyMemberId, cMoonId: teamExists ? teamId : null,
             status: 'RESOLVED', outcome, roundNumber: raid.roundNumber,
             playerHpRemaining: p.hpRemaining, enemyHpRemaining: raid.enemyHpRemaining,
             roundLog: [], pointsAwarded: 0, rewardsGranted: granted,
@@ -647,23 +743,30 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
         })
 
         const share = pointsShareByUser.get(userId) || 0
-        if (share > 0) {
+        if (share > 0 && teamExists) {
           await tx.cMoonScoreLog.create({
             data: {
-              cMoonId: raid.cMoonId, userId, category: 'ENEMY_RAID_WIN',
+              cMoonId: teamId, userId, category: 'ENEMY_RAID_WIN',
               detail: raid.id, points: share, weekStart: new Date(),
             },
           })
         }
       }
 
+      // Every team that fought gets the win/loss — once per cMoon, never once per participant,
+      // so a 3-member team in one raid still counts one victory.
       if (outcome === 'WIN') {
-        cMoonAfterWin = await tx.cMoon.update({ where: { id: raid.cMoonId }, data: { battleWins: { increment: 1 } } })
+        for (const teamId of creditedTeamIds) {
+          const after = await tx.cMoon.update({ where: { id: teamId }, data: { battleWins: { increment: 1 } } })
+          winsAfterByTeam.set(teamId, after.battleWins)
+        }
         // Drives checkRaidBossAvailability's raidOneTime/raidCooldownMinutes gate for the NEXT
         // encounter — never set on a LOSS/ABANDONED, since the boss wasn't actually defeated.
         await tx.cMoonEnemyMember.update({ where: { id: raid.enemyMemberId }, data: { raidDefeatedAt: new Date() } })
       } else if (outcome === 'LOSS') {
-        await tx.cMoon.update({ where: { id: raid.cMoonId }, data: { battleLosses: { increment: 1 } } })
+        for (const teamId of creditedTeamIds) {
+          await tx.cMoon.update({ where: { id: teamId }, data: { battleLosses: { increment: 1 } } })
+        }
       }
 
       return raidRow
@@ -677,11 +780,11 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
   }
   if (pointsAwarded > 0) recomputeCMoonPointsForUsers(participantIds).catch(() => {})
   for (const userId of participantIds) processAchievementsForUser(userId).catch(() => {})
-  sendCMoonTeamUpdate(raidDiscordPostTarget(raid), formatRaidRecapMessage(raid, { pointsAwarded }))
-  if (cMoonAfterWin) {
-    announceTeamEnemiesMilestone(raid.cMoonId, cMoonBeforeWin?.battleWins, cMoonAfterWin.battleWins).catch(() => {})
-    checkAndAnnounceSeasonGoalReached().catch(() => {})
+  postRaidRecap(raid, { pointsAwarded }).catch(() => {})
+  for (const [teamId, after] of winsAfterByTeam.entries()) {
+    announceTeamEnemiesMilestone(teamId, winsBeforeByTeam.get(teamId), after).catch(() => {})
   }
+  if (winsAfterByTeam.size) checkAndAnnounceSeasonGoalReached().catch(() => {})
 
   broadcast(io, raid, EV('ended'))
   destroyRaid(raid.id)
@@ -702,6 +805,7 @@ function sweep(io) {
 
 let sweepTimer = null
 export function startCMoonRaidSweep(io) {
+  lobbyIo = io
   if (sweepTimer) return
   sweepTimer = setInterval(() => {
     try { sweep(io) } catch (err) { console.error('[cmoonRaidSocket] sweep failed:', err) }
@@ -714,9 +818,21 @@ export async function restoreCMoonRaids() {
   const restored = await raidRedis.scanCMoonRaids()
   for (const [raidId, raid] of restored.entries()) {
     raid.participants = new Map(raid.participants.map(p => ([
-      p.userId, { hitStreak: 0, specialCharged: false, ...p },
+      p.userId, {
+        hitStreak: 0, specialCharged: false, ...p,
+        // A snapshot from before cross-cMoon raids has no per-participant special; every member
+        // was then on the initiator's cMoon, so theirs IS raid.cMoonSpecialAttack.
+        specialAttack: 'specialAttack' in p ? p.specialAttack : (raid.cMoonSpecialAttack ?? null),
+      },
     ])))
     raid.resolving = false
+    // A join that was mid-write when the process went down: its row may or may not exist, and
+    // nobody is waiting on it any more. Drop it, and release any lock row it managed to write.
+    for (const [uid, p] of raid.participants) {
+      if (!p.pendingJoin) continue
+      raid.participants.delete(uid)
+      db.cMoonEnemyRaidParticipant.updateMany({ where: { raidId, userId: uid }, data: { activeUserId: null } }).catch(() => {})
+    }
     // Backfills a raid whose Redis snapshot predates special attacks (created on an older deploy,
     // restored after a restart mid-fight — a narrow window, but a missing numeric field here would
     // otherwise feed NaN straight into resolveRaidRound's arithmetic, silently corrupting combat
@@ -737,7 +853,28 @@ export async function restoreCMoonRaids() {
 /* ── Registration ─────────────────────────────────────────────────────────────────────────── */
 
 export function registerCMoonRaid(io, socket, resolveSocketUser) {
-  socket.on(EV('start'), async ({ enemyMemberId }) => {
+  lobbyIo = io
+
+  // ── Raid Boss Lobby: live list of open raids, any cMoon (see buildRaidLobby) ──
+  socket.on(EV('lobbySubscribe'), async () => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
+    socket.join(LOBBY_ROOM)
+    // serverNow lets the client count down joinDeadlineAt against the server's clock, not its own.
+    socket.emit(EV('lobby'), { raids: buildRaidLobby(raids.values()), serverNow: Date.now() })
+    // Per-viewer context the shared list can't carry: whether they can join at all (raids need
+    // a cMoon to credit) and which raid, if any, they're already in. Display-only — join re-checks
+    // everything against the database.
+    try {
+      const u = await db.user.findUnique({ where: { id: me.id }, select: { cMoonId: true } })
+      socket.emit(EV('lobbyViewer'), { inCMoon: !!u?.cMoonId, currentRaidId: raidByUser.get(me.id) || null })
+    } catch {
+      socket.emit(EV('lobbyViewer'), { inCMoon: true, currentRaidId: raidByUser.get(me.id) || null })
+    }
+  })
+  socket.on(EV('lobbyUnsubscribe'), () => { socket.leave(LOBBY_ROOM) })
+
+  socket.on(EV('start'), async ({ enemyMemberId } = {}) => {
     const me = await resolveSocketUser(socket)
     if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
     try {
@@ -768,20 +905,24 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       const elig = await loadEligibility({ userId: me.id, enemyMember })
       if (!elig.ok) return socket.emit(EV('error'), { message: elig.message })
 
-      // Every participant in this raid is necessarily this SAME cMoon (see raid.cMoonId's own
-      // scoping), so its specialAttack — if any — is snapshotted once here for the whole party,
-      // not re-fetched per joiner (see the raid object's own shape comment on cMoonSpecialAttack).
+      // raid.cMoonId is the INITIATOR's cMoon — where the Discord call-to-arms lives. Joiners
+      // from other cMoons bring their own team/special snapshot (loadParticipantProfile).
       const cMoon = await db.cMoon.findUnique({
         where: { id: elig.user.cMoonId },
         select: { id: true, name: true, discordChannelId: true, specialAttack: true },
       })
       if (!cMoon) return socket.emit(EV('error'), { message: 'Your cMoon could not be found' })
+      const initiatorProfile = await loadParticipantProfile(me.id, cMoon.id)
+      if (!initiatorProfile) return socket.emit(EV('error'), { message: 'Your cMoon could not be found' })
 
       const initiatorMaxHp = await getPlayerCombatMaxHp(me.id, config)
       const discordChannelId = await resolveCMoonRaidDiscordChannelId(db, cMoon.discordChannelId)
       const raidId = randomUUID()
       const raid = {
         id: raidId, enemyMemberId, cMoonId: cMoon.id, cMoonName: cMoon.name, discordChannelId, discordThreadId: null,
+        // The lobby names a raid after whoever started it — kept on the raid itself so the name
+        // doesn't change if they leave during FORMING (see buildRaidLobbyEntry).
+        initiatorUsername: elig.user.username,
         enemyName: enemyMember.name, enemyImagePath: enemyMember.imagePath || null,
         enemySounds: resolveMemberSoundPaths(enemyMember, enemyMember.faction),
         battleMusicPath: enemyMember.faction?.battleMusicPath || null,
@@ -797,6 +938,9 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
           critChanceFromPercent: enemyMember.critChanceFromPercent,
           cMoonPointsReward: enemyMember.cMoonPointsReward,
           attackChancePercent: enemyMember.attackChancePercent,
+          // Display-only for the lobby ("requires N prior wins"); the real gate is re-checked
+          // against the database in loadEligibility on every join.
+          minPriorDefeats: enemyMember.minPriorDefeats || 0,
         },
         status: 'FORMING', enemyHpRemaining: enemyMember.maxHp, roundNumber: 1,
         currentEnemyAction: null, roundDeadlineAt: null,
@@ -810,7 +954,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         enemyHitStreak: 0, partyAtkBonus: 0, enemyAtkBonus: 0,
         enemyParalyzedTurns: 0, partyParalyzedTurns: 0,
       }
-      addParticipant(raid, { userId: me.id, username: me.username, isInitiator: true, maxHp: initiatorMaxHp })
+      addParticipant(raid, { userId: me.id, username: elig.user.username, isInitiator: true, maxHp: initiatorMaxHp, profile: initiatorProfile })
       raids.set(raidId, raid)
 
       try {
@@ -847,6 +991,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       socket.join(raidRoom(raidId))
       fireSync(raidId, raid)
       socket.emit(EV('created'), publicRaidView(raid))
+      broadcastLobby()
       // Admin analytics only (offer -> start rate); fire-and-forget, never blocks the raid.
       markEnemyOfferAccepted(db, { userId: me.id, enemyMemberId })
 
@@ -864,8 +1009,8 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
           fireSync(raidId, raid)
         }
       }).catch(() => {})
-      notifyEligibleCMoonMembers(io, {
-        cMoonId: cMoon.id, initiatorUserId: me.id, enemyMember, raidId, cMoonName: cMoon.name,
+      notifyRaidLobbyOpened(io, {
+        initiatorUserId: me.id, initiatorUsername: elig.user.username, enemyMember, cMoonName: cMoon.name,
       }).catch(() => {})
     } catch (err) {
       console.error('[cmoonraid:start] failed:', err)
@@ -873,7 +1018,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     }
   })
 
-  socket.on(EV('join'), async ({ raidId }) => {
+  socket.on(EV('join'), async ({ raidId } = {}) => {
     const me = await resolveSocketUser(socket)
     if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
     const raid = raids.get(raidId)
@@ -882,47 +1027,77 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       socket.join(raidRoom(raidId))
       return socket.emit(EV('created'), publicRaidView(raid))
     }
-    // Reserve a slot SYNCHRONOUSLY, before any await, so a second concurrent join for the last
-    // open slot sees this one already counted rather than both passing the size check and both
-    // proceeding (which could over-fill the party past MAX_PARTY_SIZE and double-fire
-    // startCombat). Everything from here to this call runs in one uninterrupted tick. Rolled
-    // back in the catch block below if anything after this fails.
     if (raid.participants.size >= MAX_PARTY_SIZE) return socket.emit(EV('error'), { message: 'This raid is full' })
-    // Placeholder maxHp here — this reservation must stay fully synchronous (see the comment
-    // above), so the real value (which needs a DB lookup) is filled in below once the
-    // post-reservation checks pass, same as `username` already is.
-    addParticipant(raid, { userId: me.id, username: me.username, isInitiator: false, maxHp: PLAYER_MAX_HP })
+
+    // ── 1. Every eligibility check and lookup BEFORE taking a slot. Raids are listed site-wide in
+    // the lobby now, so anyone can try any raid: an ineligible player (no cMoon, too few wins,
+    // already fighting elsewhere) must never hold a slot, even briefly — a held slot turns real
+    // players away as "full", or counts toward MAX_PARTY_SIZE and starts combat early. ──────────
+    let elig, profile, joinerMaxHp
     try {
       const enemyMember = await db.cMoonEnemyMember.findUnique({
         where: { id: raid.enemyMemberId }, include: { faction: true },
       })
       if (!enemyMember || !enemyMember.active || !enemyMember.faction.active) {
-        throw { userMessage: 'That enemy is no longer available' }
+        return socket.emit(EV('error'), { message: 'That enemy is no longer available' })
       }
-      const elig = await loadEligibility({ userId: me.id, enemyMember, reservedForRaidId: raidId })
-      if (!elig.ok) throw { userMessage: elig.message }
-      if (elig.user.cMoonId !== raid.cMoonId) throw { userMessage: 'This raid is for a different cMoon' }
+      elig = await loadEligibility({ userId: me.id, enemyMember })
+      if (!elig.ok) return socket.emit(EV('error'), { message: elig.message })
+      // No same-cMoon check: raids are cross-cMoon. The joiner fights for (and is credited to)
+      // their OWN cMoon, snapshotted here.
+      profile = await loadParticipantProfile(me.id, elig.user.cMoonId)
+      if (!profile) return socket.emit(EV('error'), { message: 'Your cMoon could not be found' })
+      joinerMaxHp = await getPlayerCombatMaxHp(me.id)
+    } catch (err) {
+      console.error('[cmoonraid:join] eligibility failed:', err)
+      return socket.emit(EV('error'), { message: 'Could not join this raid' })
+    }
 
-      const joinerMaxHp = await getPlayerCombatMaxHp(me.id)
+    // ── 2. Re-check and reserve SYNCHRONOUSLY — the awaits above may have let the window close,
+    // the party fill, the raid end, or this same player get into another raid (a double click,
+    // a second tab). Everything from here to addParticipant runs in one uninterrupted tick, so
+    // two concurrent joins for the last slot can't both pass. ─────────────────────────────────
+    if (raids.get(raidId) !== raid || raid.status !== 'FORMING') {
+      return socket.emit(EV('error'), { message: 'This raid is no longer accepting joins' })
+    }
+    if (raid.participants.has(me.id)) {
+      socket.join(raidRoom(raidId))
+      return socket.emit(EV('created'), publicRaidView(raid))
+    }
+    const otherRaidId = raidByUser.get(me.id)
+    if (otherRaidId && otherRaidId !== raidId) return socket.emit(EV('error'), { message: 'You are already in a raid' })
+    if (raid.participants.size >= MAX_PARTY_SIZE) return socket.emit(EV('error'), { message: 'This raid is full' })
+    addParticipant(raid, { userId: me.id, username: elig.user.username, isInitiator: false, maxHp: joinerMaxHp, profile, pendingJoin: true })
+
+    // ── 3. The one write. Only a DB failure (e.g. P2002: an active raid/solo row the in-memory
+    // maps didn't know about) can still turn this away, and the reservation is rolled back then.
+    try {
       await db.cMoonEnemyRaidParticipant.create({
         data: { raidId, userId: me.id, hpRemaining: joinerMaxHp, isInitiator: false, activeUserId: me.id },
       })
-      const p = raid.participants.get(me.id)
-      p.username = elig.user.username
-      p.maxHp = joinerMaxHp
-      p.hpRemaining = joinerMaxHp
-      socket.join(raidRoom(raidId))
-      fireSync(raidId, raid)
-      broadcast(io, raid, EV('participantJoined'))
-      if (raid.participants.size >= MAX_PARTY_SIZE && raid.status === 'FORMING') startCombat(io, raid)
     } catch (err) {
-      raid.participants.delete(me.id)
-      raidByUser.delete(me.id)
-      if (err?.userMessage) return socket.emit(EV('error'), { message: err.userMessage })
+      releaseReservation(raid, me.id)
       if (err?.code === 'P2002') return socket.emit(EV('error'), { message: 'You are already in a raid' })
       console.error('[cmoonraid:join] failed:', err)
-      socket.emit(EV('error'), { message: 'Could not join this raid' })
+      return socket.emit(EV('error'), { message: 'Could not join this raid' })
     }
+
+    // The raid can't resolve while still FORMING, but it can be torn down (every other member
+    // left) during that write. Then the row just written would hold this player's active-raid
+    // lock with nothing left to ever release it — release it now.
+    if (raids.get(raidId) !== raid || raid.status === 'RESOLVED' || !raid.participants.has(me.id)) {
+      releaseReservation(raid, me.id)
+      await db.cMoonEnemyRaidParticipant.updateMany({ where: { raidId, userId: me.id }, data: { activeUserId: null } }).catch(() => {})
+      return socket.emit(EV('error'), { message: 'This raid is no longer accepting joins' })
+    }
+    // (If the join window closed during the write, the reserved player is already in round 1 —
+    // same as before cross-cMoon — and finishing the join is right.)
+    raid.participants.get(me.id).pendingJoin = false
+    socket.join(raidRoom(raidId))
+    fireSync(raidId, raid)
+    broadcast(io, raid, EV('participantJoined'))
+    broadcastLobby()
+    if (raid.participants.size >= MAX_PARTY_SIZE && raid.status === 'FORMING') startCombat(io, raid)
   })
 
   socket.on(EV('leave'), async ({ raidId }) => {
@@ -937,6 +1112,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     if (!raid.participants.size) { destroyRaid(raidId); return }
     fireSync(raidId, raid)
     broadcast(io, raid, EV('participantLeft'))
+    broadcastLobby()
   })
 
   socket.on(EV('getState'), async ({ raidId }) => {
@@ -954,9 +1130,18 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       include: {
         enemyMember: { include: { faction: true } },
         participants: { include: { user: { select: { username: true } } } },
+        // The per-participant synthetic battle rows carry the cMoon each fighter was credited
+        // to — the accurate team for a resolved cross-cMoon raid, even if they've switched since.
+        battles: { select: { userId: true, cMoonId: true } },
       },
     })
     if (!row) return socket.emit(EV('error'), { message: 'Raid not found' })
+    const teamByUser = new Map(row.battles.map(b => [b.userId, b.cMoonId]))
+    const teamIds = [...new Set([...teamByUser.values()].filter(Boolean))]
+    const teams = teamIds.length
+      ? await db.cMoon.findMany({ where: { id: { in: teamIds } }, select: { id: true, name: true, color: true, avatarPath: true } })
+      : []
+    const teamById = new Map(teams.map(t => [t.id, t]))
     socket.emit(EV('state'), {
       id: row.id, enemyMemberId: row.enemyMemberId, cMoonId: row.cMoonId, status: row.status,
       enemyName: row.enemyMember.name, enemyImagePath: row.enemyMember.imagePath || null,
@@ -969,6 +1154,12 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         userId: p.userId, username: p.user?.username || null, hpRemaining: p.hpRemaining,
         knockedOut: !!p.knockedOutAt, isInitiator: p.isInitiator, hasActed: false,
         rewardsGranted: p.rewardsGranted || null,
+        // Rank isn't kept historically, so a resolved raid shows team colors only.
+        cMoon: (() => {
+          const t = teamById.get(teamByUser.get(p.userId))
+          return t ? { id: t.id, name: t.name, color: t.color, avatarPath: t.avatarPath || null } : null
+        })(),
+        rank: null,
       })),
     })
   })
@@ -986,7 +1177,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     if (p.pendingAction) return // already locked in this round — a duplicate click is a no-op, not an error
     if (action === SPECIAL_ACTION) {
       if (!p.specialCharged) return socket.emit(EV('error'), { message: 'Your special attack is not charged yet' })
-      if (!raid.cMoonSpecialAttack) return socket.emit(EV('error'), { message: 'Your cMoon has no special attack assigned' })
+      if (!p.specialAttack) return socket.emit(EV('error'), { message: 'Your cMoon has no special attack assigned' })
       // The whole party can't act at all this round (see raid.partyParalyzedTurns's own shape
       // comment) — including firing an already-charged special, same guard the solo battle has
       // for its own paralyzed player. The charge itself is untouched so it's still there once

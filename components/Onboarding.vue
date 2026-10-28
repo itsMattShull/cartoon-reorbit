@@ -403,8 +403,10 @@ const notificationRoute = (n) => {
     return '/newsite/trade'
   }
   if (n.type === 'CMOON_RAID_BOSS_STARTED') {
-    if (!n.contextId) return null
-    return `/newsite/cmoon-raid/${encodeURIComponent(n.contextId)}`
+    // Raids are cross-cMoon now: every raid alert opens the Raid Boss Lobby on the cMoons page,
+    // which lists every open raid from any team (including older per-raid alerts, whose raid has
+    // long since closed anyway). See components/newsite/CMoonRaidLobbyModal.vue.
+    return '/newsite/cmoon-nav?raidLobby=1'
   }
   if (n.type === 'CMOON_RAID_PREVIEW_STARTED') {
     if (!n.contextId) return null
