@@ -210,10 +210,10 @@ export async function notifyTradeOfferAccepted (db, { userId, offerId, byUsernam
 }
 
 /**
- * A raid boss was started against a member of your own cMoon and you're eligible to join.
- * `contextId` is the CMoonEnemyRaid id — notificationRoute() (components/Onboarding.vue) opens
- * /newsite/cmoon-raid/{contextId}. No `contextType` — that enum is AUCTION/TRADE-specific (see
- * LockedContextType) and routing here is driven entirely by `type`, same as the TRADE branch.
+ * Single-recipient raid alert, kept for compatibility. Live raid starts now use
+ * notifyCMoonRaidLobbyOpened below (cross-cMoon, batched, one collapsing alert). Either way,
+ * notificationRoute() (components/Onboarding.vue) sends this type to the Raid Boss Lobby, not a
+ * specific raid. No `contextType`: that enum is AUCTION/TRADE-specific (see LockedContextType).
  */
 export async function notifyCMoonRaidBossStarted (db, { userId, raidId, enemyName, cMoonName }) {
   if (!(await isNotifiable(db, userId))) return false
@@ -224,6 +224,64 @@ export async function notifyCMoonRaidBossStarted (db, { userId, raidId, enemyNam
     body: `Join up to 3 other ${cMoonName || 'cMoon'} members before the 60-second window closes.`,
     contextId: raidId
   })
+}
+
+// Fixed collapse key for raid-lobby broadcasts. Every raid start writes to the SAME
+// (userId, CMOON_RAID_BOSS_STARTED, contextId) slot, so while a recipient hasn't read it, new raids
+// bump one notification's count (×N) and refresh its title instead of stacking a separate alert
+// per raid — raid bosses can start many times a day, and every cMoon member now hears about each
+// one. The click target is the Raid Boss Lobby (notificationRoute in components/Onboarding.vue),
+// never a specific raid, so the key doesn't need to identify one.
+export const RAID_LOBBY_CONTEXT_ID = 'raid-lobby'
+// Rows per INSERT for notifyCMoonRaidLobbyOpened — keeps any one statement's parameter arrays
+// bounded however many cMoon members there are.
+const LOBBY_BATCH_SIZE = 1000
+
+/**
+ * A raid boss lobby just opened and any cMoon member may join it (cross-cMoon raids, see
+ * server/utils/cmoonRaidSocket.js). One set-based upsert per batch instead of one
+ * lookup + insert per recipient, so notifying every cMoon member doesn't flood the connection
+ * pool. Banned users and the official account are filtered in SQL, same rules as isNotifiable.
+ * Returns the userIds actually written (for the live push), or [] on failure — never throws.
+ */
+export async function notifyCMoonRaidLobbyOpened (db, { userIds, enemyName, initiatorUsername, cMoonName }) {
+  const unique = [...new Set((Array.isArray(userIds) ? userIds : []).filter(id => typeof id === 'string' && id))]
+  if (!db || !unique.length) return []
+  const title = `Raid boss: ${enemyName || 'a cMoon enemy'} — join the lobby!`
+  const who = initiatorUsername ? `${initiatorUsername}${cMoonName ? ` (${cMoonName})` : ''}` : 'Someone'
+  const body = `${who} started a raid. Any cMoon can join — open the Raid Boss Lobby before the 60-second window closes.`
+  const written = []
+  for (let i = 0; i < unique.length; i += LOBBY_BATCH_SIZE) {
+    const batch = unique.slice(i, i + LOBBY_BATCH_SIZE)
+    const ids = batch.map(() => randomUUID())
+    try {
+      // Every parameter is cast explicitly: with Prisma 7's pg adapter raw parameters reach
+      // Postgres untyped (see the ::timestamp(3) comment in server/utils/cmoon.js).
+      const rows = await db.$queryRaw`
+        INSERT INTO "Notification" (
+          "id", "userId", "type", "title", "body", "contextType", "contextId",
+          "count", "createdAt", "updatedAt"
+        )
+        SELECT t."id", t."userId", ${NOTIFICATION_TYPES.CMOON_RAID_BOSS_STARTED}::"NotificationType",
+               ${title}::text, ${body}::text, NULL, ${RAID_LOBBY_CONTEXT_ID}::text, 1, NOW(), NOW()
+        FROM unnest(${ids}::text[], ${batch}::text[]) AS t("id", "userId")
+        JOIN "User" u ON u."id" = t."userId"
+        WHERE COALESCE(u."banned", false) = false AND u."username" <> ${OFFICIAL_USERNAME}::text
+        ON CONFLICT ("userId", "type", "contextId") WHERE "readAt" IS NULL
+        DO UPDATE SET
+          "count"     = "Notification"."count" + 1,
+          "title"     = EXCLUDED."title",
+          "body"      = EXCLUDED."body",
+          "createdAt" = NOW(),
+          "updatedAt" = NOW()
+        RETURNING "userId"
+      `
+      for (const r of rows || []) written.push(r.userId)
+    } catch (err) {
+      console.error('[notifications] raid lobby broadcast failed:', err?.message || err)
+    }
+  }
+  return written
 }
 
 /**

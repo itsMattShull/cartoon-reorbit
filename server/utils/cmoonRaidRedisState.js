@@ -42,6 +42,9 @@ function serializeRaid(raid) {
     enemyMemberId: raid.enemyMemberId,
     cMoonId: raid.cMoonId,
     cMoonName: raid.cMoonName,
+    initiatorUsername: raid.initiatorUsername,
+    // Was missing before, so a restart dropped the boss's taunt lines for the rest of the raid.
+    enemyTaunts: raid.enemyTaunts,
     discordChannelId: raid.discordChannelId,
     discordThreadId: raid.discordThreadId,
     status: raid.status,

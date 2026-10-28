@@ -11,6 +11,11 @@ const lastRound = ref(null)   // the most recent cmoonraid:roundResolved's `roun
 const lastError = ref('')
 const isConnected = ref(false)
 const currentRaidId = ref(null)
+// Raid Boss Lobby (cross-cMoon raids) — the live open-raid list while the lobby modal is open.
+const lobbyRaids = ref([])
+const lobbyLoaded = ref(false)
+const lobbyViewer = ref({ inCMoon: true, currentRaidId: null })
+let lobbySubscribers = 0
 let socket
 
 export function useCMoonRaidSocket() {
@@ -24,6 +29,8 @@ export function useCMoonRaidSocket() {
     socket.on('connect', () => {
       isConnected.value = true
       if (currentRaidId.value) socket.emit('cmoonraid:getState', { raidId: currentRaidId.value })
+      // A reconnect drops server-side room membership — rejoin the lobby if it's still open.
+      if (lobbySubscribers > 0) socket.emit('cmoonraid:lobbySubscribe')
     })
     socket.on('disconnect', () => { isConnected.value = false })
 
@@ -37,6 +44,13 @@ export function useCMoonRaidSocket() {
     socket.on('cmoonraid:roundResolved', (state) => { lastRound.value = state.round || null; applyState(state) })
     socket.on('cmoonraid:ended', applyState)
     socket.on('cmoonraid:error', (payload) => { lastError.value = payload?.message || 'Something went wrong' })
+    socket.on('cmoonraid:lobby', (payload) => {
+      lobbyRaids.value = Array.isArray(payload?.raids) ? payload.raids : []
+      lobbyLoaded.value = true
+    })
+    socket.on('cmoonraid:lobbyViewer', (payload) => {
+      lobbyViewer.value = { inCMoon: payload?.inCMoon !== false, currentRaidId: payload?.currentRaidId || null }
+    })
   }
 
   function startRaid(enemyMemberId) {
@@ -60,8 +74,22 @@ export function useCMoonRaidSocket() {
     socket.emit('cmoonraid:action', { raidId, action, roundNumber })
   }
 
+  // Ref-counted so two open lobby views don't unsubscribe each other.
+  function subscribeLobby() {
+    lobbySubscribers += 1
+    if (lobbySubscribers === 1) {
+      lobbyLoaded.value = false
+      socket.emit('cmoonraid:lobbySubscribe')
+    }
+  }
+  function unsubscribeLobby() {
+    lobbySubscribers = Math.max(0, lobbySubscribers - 1)
+    if (lobbySubscribers === 0) socket.emit('cmoonraid:lobbyUnsubscribe')
+  }
+
   return {
     socket, raidState, lastRound, lastError, isConnected, currentRaidId,
-    startRaid, joinRaid, leaveRaid, getState, submitAction,
+    lobbyRaids, lobbyLoaded, lobbyViewer,
+    startRaid, joinRaid, leaveRaid, getState, submitAction, subscribeLobby, unsubscribeLobby,
   }
 }
