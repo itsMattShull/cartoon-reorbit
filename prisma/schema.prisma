@@ -1736,6 +1736,13 @@ model GlobalGameConfig {
   dissolveScheduleCadenceDays        Int       @default(7)
   dissolveScheduleFeaturedPerCadence Int       @default(2)
   dissolveScheduleOtherPerCadence    Int       @default(10)
+  // Starting bid for dissolve-queue auctions of each rarity that has no rarity floor of its own
+  // (see server/utils/dissolveListing.js). Null = hold that rarity in the queue: it never takes a
+  // schedule slot or auto-lists until an admin sets a bid on the Dissolve Queue page.
+  dissolveStartBidAuctionOnly Int?
+  dissolveStartBidPrizeOnly   Int?
+  dissolveStartBidCodeOnly    Int?
+  dissolveStartBidCrazyRare   Int?
   // Site favicon / meta-icon set, uploaded from Admin > Manage Homepage > Favicon.
   // faviconVersion is bumped on every upload and appended as a cache-busting
   // query string to every icon URL rendered in pages/index.vue's useHead.

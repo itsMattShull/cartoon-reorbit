@@ -2,8 +2,8 @@ import { Worker } from 'bullmq'
 import { prisma } from '../prisma.js'
 import { scheduleAuctionClose, scheduleDissolveAuctionLaunch } from '../utils/queues.js'
 import { isStaleDissolveLaunchJob } from '../utils/dissolveAuctionLaunchStaleness.js'
-import { rarityFloor } from '../utils/auctionPriceSuggestion.js'
-import { isAutoAuctionEligibleRarity } from '../utils/autoAuctionEligibility.js'
+import { dissolveStartingBid } from '../utils/dissolveListing.js'
+import { getDissolveScheduleConfig } from '../utils/dissolveSchedule.js'
 import { logDissolveAuctionError } from '../utils/dissolveAuctionErrorLog.js'
 import { recordPreventedMisfire } from '../utils/dissolveMisfire.js'
 
@@ -59,14 +59,17 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
       return
     }
 
-    // Not auto-listable (Auction/Prize/Code Only, Crazy Rare, or an
-    // unrecognized rarity with no explicit floor). Clear scheduledFor instead
-    // of leaving the entry stranded with no job: the next applyDissolveSchedule
-    // run picks up any entry with scheduledFor: null and re-queues it.
-    if (!isAutoAuctionEligibleRarity(entry.userCtoon?.ctoon?.rarity)) {
+    // Starting bid: the rarity floor, or for Auction/Prize/Code Only and Crazy Rare the bid an
+    // admin set on the Dissolve Queue page (see server/utils/dissolveListing.js). Read fresh per
+    // job so a bid set or cleared after scheduling is respected. No bid = held: clear scheduledFor
+    // and stop. applyDissolveSchedule never gives a held entry a slot, so this no longer feeds the
+    // old loop where these entries took the earliest slots, launched nothing, and repeated.
+    const { startBids } = await getDissolveScheduleConfig()
+    const startingBid = dissolveStartingBid(entry.userCtoon?.ctoon?.rarity, startBids)
+    if (startingBid === null) {
       await prisma.dissolveAuctionQueue.update({
         where: { id: entry.id },
-        data: { scheduledFor: null }
+        data: { scheduledFor: null, pinnedAt: null }
       })
       return
     }
@@ -101,7 +104,7 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
       const created = await tx.auction.create({
         data: {
           userCtoonId: entry.userCtoonId,
-          initialBet:  rarityFloor(entry.userCtoon?.ctoon?.rarity),
+          initialBet:  startingBid,
           duration:    1,
           durationMinutes: 1440,
           endAt,

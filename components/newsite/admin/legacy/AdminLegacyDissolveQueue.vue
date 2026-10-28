@@ -22,8 +22,40 @@
             <span class="text-emerald-600">{{ stats.byCategory[cat.key]?.scheduled ?? 0 }} scheduled</span>
             <span class="mx-1">·</span>
             <span class="text-orange-500">{{ stats.byCategory[cat.key]?.unscheduled ?? 0 }} unscheduled</span>
+            <template v-if="stats.byCategory[cat.key]?.held">
+              <span class="mx-1">·</span>
+              <span class="text-purple-700">{{ stats.byCategory[cat.key].held }} held</span>
+            </template>
           </div>
         </div>
+      </div>
+
+      <!-- Starting bids for rarities with no rarity floor. Without a bid, these entries are held:
+           they stay in the queue but never take a schedule slot, so they can't block the rest. -->
+      <div class="bg-white rounded-lg shadow border p-3">
+        <h2 class="text-sm font-semibold">Starting bids for special rarities</h2>
+        <p class="text-[11px] text-gray-500 mt-0.5 mb-2">
+          These rarities have no price floor, so the queue only auctions them once you set a starting bid.
+          Until then they're held: they stay in the queue but don't use up schedule slots.
+          Leave a rarity blank to keep holding it. After saving, run Apply Schedule to schedule the newly listable ones.
+        </p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <label v-for="r in specialRarities" :key="r.field" class="flex items-center gap-2">
+            <span class="w-28 shrink-0 text-xs text-gray-700">{{ r.label }}</span>
+            <input
+              v-model="startBidForm[r.field]" type="number" inputmode="numeric" :min="r.min" step="1"
+              :placeholder="`Held (min ${r.min})`"
+              class="w-full sm:w-32 border rounded-md px-2 py-1.5 text-sm"
+            />
+            <span v-if="heldCountFor(r.label)" class="text-[10px] text-purple-700 whitespace-nowrap">{{ heldCountFor(r.label) }} held</span>
+          </label>
+        </div>
+        <div v-if="startBidError" class="mt-2 text-xs text-red-600">{{ startBidError }}</div>
+        <div v-if="startBidSuccess" class="mt-2 text-xs text-emerald-600">{{ startBidSuccess }}</div>
+        <button
+          @click="saveStartBids" :disabled="savingStartBids"
+          class="mt-2 w-full sm:w-auto px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
+        >{{ savingStartBids ? 'Saving…' : 'Save starting bids' }}</button>
       </div>
 
       <!-- Upcoming scheduled auctions -->
@@ -53,6 +85,8 @@
                   <span v-if="entry.isFeatured" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-yellow-100 text-yellow-700">Featured</span>
                   <span v-if="entry.fromInactive" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-red-100 text-red-700">From Inactive</span>
                   <span v-if="entry.pinned" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-blue-100 text-blue-700">📌 Pinned</span>
+                  <span v-if="entry.held" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-purple-100 text-purple-700" title="Set a starting bid for this rarity above to auction it">Held, needs a starting bid</span>
+                  <span v-else-if="entry.startingBid != null" class="ml-1 text-[10px] text-gray-500">Starts at {{ entry.startingBid.toLocaleString() }} pts</span>
                 </div>
                 <div v-if="entry.sourceUsername" class="text-[10px] text-gray-400 mt-0.5">From: {{ entry.sourceUsername }}</div>
                 <div class="text-[10px] text-gray-500 mt-1 sm:hidden">{{ fmtCST(entry.scheduledFor) }}</div>
@@ -200,10 +234,12 @@
                   <span v-if="entry.isFeatured" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-yellow-100 text-yellow-700">Featured</span>
                   <span v-if="entry.fromInactive" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-red-100 text-red-700">From Inactive</span>
                   <span v-if="entry.pinned" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-blue-100 text-blue-700">📌 Pinned</span>
+                  <span v-if="entry.held" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-purple-100 text-purple-700" title="Set a starting bid for this rarity above to auction it">Held, needs a starting bid</span>
+                  <span v-else-if="entry.startingBid != null" class="ml-1 text-[10px] text-gray-500">Starts at {{ entry.startingBid.toLocaleString() }} pts</span>
                 </div>
                 <div v-if="entry.sourceUsername" class="text-[10px] text-gray-400 mt-0.5">From: {{ entry.sourceUsername }}</div>
                 <div class="text-[10px] text-gray-500 mt-1">
-                  {{ entry.scheduledFor ? fmtCST(entry.scheduledFor) : 'Not scheduled' }}
+                  {{ entry.scheduledFor ? fmtCST(entry.scheduledFor) : (entry.held ? 'Held' : 'Not scheduled') }}
                 </div>
               </div>
               <div class="shrink-0 flex flex-col items-end gap-1">
@@ -265,6 +301,7 @@
         <h2 class="text-sm font-semibold mb-1">Reschedule All</h2>
         <p class="text-[11px] text-gray-500 mb-3">
           Set a new schedule for all unscheduled entries. Toggle "Reschedule all" to also reset existing scheduled entries.
+          Held entries are skipped. These values are saved and also used for inactive-account dissolves.
         </p>
 
         <div class="space-y-2">
@@ -839,12 +876,64 @@ const unpinningId     = ref(null)
 const showRescheduleConfirm = ref(false)
 const pinnedCount = computed(() => allEntries.value.filter(e => e.pinned).length)
 
+// ── Special-rarity starting bids (see server/utils/dissolveListing.js) ──
+const RARITY_MIN = { 'Auction Only': 50, 'Prize Only': 50, 'Code Only': 50, 'Crazy Rare': 312 }
+const specialRarities = [
+  { label: 'Auction Only', field: 'dissolveStartBidAuctionOnly' },
+  { label: 'Prize Only',   field: 'dissolveStartBidPrizeOnly' },
+  { label: 'Code Only',    field: 'dissolveStartBidCodeOnly' },
+  { label: 'Crazy Rare',   field: 'dissolveStartBidCrazyRare' },
+].map(r => ({ ...r, min: RARITY_MIN[r.label] }))
+const startBidForm    = ref(Object.fromEntries(specialRarities.map(r => [r.field, ''])))
+const savingStartBids = ref(false)
+const startBidError   = ref('')
+const startBidSuccess = ref('')
+// Held counts arrive keyed by the cToon's stored rarity; match case-insensitively.
+function heldCountFor(label) {
+  const held = stats.value?.heldByRarity || {}
+  return Object.entries(held).reduce((n, [r, c]) => n + (r.trim().toLowerCase() === label.toLowerCase() ? c : 0), 0)
+}
+function fillStartBidForm(startBids) {
+  startBidForm.value = Object.fromEntries(specialRarities.map(r => [r.field, startBids?.[r.field] ?? '']))
+}
+
+async function saveStartBids() {
+  savingStartBids.value = true
+  startBidError.value = ''
+  startBidSuccess.value = ''
+  try {
+    const body = { startBids: Object.fromEntries(specialRarities.map(r => {
+      const v = startBidForm.value[r.field]
+      return [r.field, v === '' || v === null ? null : Number(v)]
+    })) }
+    const res = await $fetch('/api/admin/dissolve-queue/start-bids', { method: 'POST', body })
+    fillStartBidForm(res.startBids)
+    startBidSuccess.value = 'Starting bids saved. Run Apply Schedule to schedule the newly listable entries.'
+    await loadData()
+  } catch (e) {
+    startBidError.value = e?.data?.statusMessage || 'Failed to save starting bids.'
+  } finally {
+    savingStartBids.value = false
+  }
+}
+
+// The form shows the SAVED cadence (what the inactivity sweep also uses) the first time data
+// loads, instead of hardcoded defaults that looked like the real settings. Later refreshes don't
+// overwrite what an admin is in the middle of editing.
+let formSeededFromConfig = false
 async function loadData() {
   try {
     const data = await $fetch('/api/admin/dissolve-queue', { headers })
     stats.value      = data
     upcoming.value   = data.upcoming || []
     allEntries.value = data.entries  || []
+    if (data.config && !formSeededFromConfig) {
+      formSeededFromConfig = true
+      form.value.cadenceDays        = data.config.cadenceDays
+      form.value.featuredPerCadence = data.config.featuredPerCadence
+      form.value.otherPerCadence    = data.config.otherPerCadence
+      fillStartBidForm(data.config.startBids)
+    }
   } catch (e) {
     console.error('Failed to load dissolve queue', e)
   }

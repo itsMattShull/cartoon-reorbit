@@ -23,7 +23,7 @@ import { checkAndPostWeeklyCMoonRecap } from './cmoon-weekly-recap.js'
 import { runEconomyAggregate } from './economy-aggregate.js'
 import { runCzoneDisplayCountAggregate } from './czone-display-count.js'
 import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
-import { applyDissolveSchedule, getDissolveScheduleConfig } from '../utils/dissolveSchedule.js'
+import { applyDissolveSchedule, getDissolveScheduleConfig, requeueOverdueDissolveLaunches } from '../utils/dissolveSchedule.js'
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
 import { logCronError } from '../utils/cronErrorLog.js'
@@ -1054,6 +1054,13 @@ async function pruneCronRunLogs() {
 // tests/cronJobsRegistry.test.js).
 export const JOB_HANDLERS = {
   startDueAuctions,
+  // See requeueOverdueDissolveLaunches in server/utils/dissolveSchedule.js.
+  // Returns nothing on a clean run (quiet), a short detail when it actually recovers launches so
+  // that shows up in Cron Run Logs.
+  requeueOverdueDissolveLaunches: async () => {
+    const n = await requeueOverdueDissolveLaunches()
+    return n ? `Requeued ${n} overdue dissolve launch${n === 1 ? '' : 'es'}` : undefined
+  },
   sendDueAnnouncements,
   markScheduledPacksInCmart,
   updateWinballGrandPrizeFromSchedule,
