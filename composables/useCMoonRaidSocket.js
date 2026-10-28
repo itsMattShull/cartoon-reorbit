@@ -15,6 +15,9 @@ const currentRaidId = ref(null)
 const lobbyRaids = ref([])
 const lobbyLoaded = ref(false)
 const lobbyViewer = ref({ inCMoon: true, currentRaidId: null })
+// serverNow - Date.now() at the last lobby push: join countdowns use the server's clock, so a
+// phone whose clock is off by a minute still sees the right seconds left.
+const lobbyClockOffsetMs = ref(0)
 let lobbySubscribers = 0
 let socket
 
@@ -46,6 +49,7 @@ export function useCMoonRaidSocket() {
     socket.on('cmoonraid:error', (payload) => { lastError.value = payload?.message || 'Something went wrong' })
     socket.on('cmoonraid:lobby', (payload) => {
       lobbyRaids.value = Array.isArray(payload?.raids) ? payload.raids : []
+      if (Number.isFinite(payload?.serverNow)) lobbyClockOffsetMs.value = payload.serverNow - Date.now()
       lobbyLoaded.value = true
     })
     socket.on('cmoonraid:lobbyViewer', (payload) => {
@@ -89,7 +93,7 @@ export function useCMoonRaidSocket() {
 
   return {
     socket, raidState, lastRound, lastError, isConnected, currentRaidId,
-    lobbyRaids, lobbyLoaded, lobbyViewer,
+    lobbyRaids, lobbyLoaded, lobbyViewer, lobbyClockOffsetMs,
     startRaid, joinRaid, leaveRaid, getState, submitAction, subscribeLobby, unsubscribeLobby,
   }
 }

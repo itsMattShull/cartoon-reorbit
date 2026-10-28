@@ -6485,8 +6485,10 @@ enum CMoonEnemyRaidOutcome {
 model CMoonEnemyRaid {
   id               String                  @id @default(uuid())
   enemyMemberId    String
-  // The cMoon whose roster this raid is scoped to — every eligible-to-join player is a member of
-  // THIS cMoon (the initiator's own cMoon at raid-start), never any other. Required (unlike
+  // The INITIATOR's cMoon at raid-start (where the Discord call-to-arms goes). Raids are
+  // cross-cMoon: joiners can be from any cMoon and are credited to their own (see "Cross-cMoon
+  // raids" in server/utils/cmoonEnemyRaid.js). Cascade-delete makes deleting this cMoon mid-raid
+  // destructive for every team, so the admin delete endpoint refuses while one is live. Required (unlike
   // CMoonEnemyBattle.cMoonId, which is nullable for a non-cMoon solo player) because a raid with
   // no cMoon to draw teammates from, announce for, or credit points to isn't a raid.
   cMoonId          String

@@ -3,7 +3,7 @@
     <div v-if="open" class="rl-overlay" @click.self="close">
       <div
         ref="modalRef" class="rl-modal" role="dialog" aria-modal="true" aria-labelledby="rl-title"
-        tabindex="-1" @keydown.esc="close"
+        tabindex="-1" @keydown.tab="trapFocus"
       >
         <div class="rl-header">
           <h2 id="rl-title" class="rl-title">Raid boss lobby</h2>
@@ -20,7 +20,10 @@
         <p v-if="joinError" class="rl-error" role="alert">{{ joinError }}</p>
         <p v-else-if="inAnyRaid" class="rl-note">You're already in a raid. Finish it before joining another.</p>
 
-        <div class="rl-list" aria-live="polite">
+        <!-- Live region on the status line only: the per-raid countdowns tick every half second
+             and would otherwise be read aloud continuously. -->
+        <p class="sr-only" aria-live="polite">{{ liveSummary }}</p>
+        <div class="rl-list">
           <p v-if="!raidSocket.lobbyLoaded.value" class="rl-empty">Looking for open raids…</p>
           <p v-else-if="!raidSocket.lobbyRaids.value.length" class="rl-empty">
             No raids are open right now. When anyone starts a raid boss fight you'll get a notification, and it will show up here.
@@ -42,7 +45,7 @@
               <span class="rl-raid-status">
                 <template v-if="r.status === 'IN_PROGRESS'">Fighting, round {{ r.roundNumber }}</template>
                 <template v-else-if="r.partySize >= r.maxPartySize">Full</template>
-                <template v-else><span class="rl-countdown">{{ secondsLeft(r) }}s</span> to join</template>
+                <template v-else><span class="rl-countdown" aria-hidden="true">{{ secondsLeft(r) }}s</span><span aria-hidden="true"> to join</span><span class="sr-only">Open to join</span></template>
               </span>
             </div>
 
@@ -56,7 +59,7 @@
 
             <div class="rl-raid-actions">
               <span v-if="r.minPriorDefeats > 0" class="rl-req">Needs {{ r.minPriorDefeats }} enemy {{ r.minPriorDefeats === 1 ? 'win' : 'wins' }}</span>
-              <NuxtLink v-if="isMine(r)" :to="`/newsite/cmoon-raid/${r.id}`" class="rl-btn rl-btn-go" @click="close">Back to your raid</NuxtLink>
+              <button v-if="isMine(r)" type="button" class="rl-btn rl-btn-go" @click="goToRaid(r.id)">Back to your raid</button>
               <button
                 v-else-if="isJoinable(r)" type="button" class="rl-btn rl-btn-join"
                 :disabled="!!joiningId || !raidSocket.lobbyViewer.value.inCMoon || inAnyRaid"
@@ -96,7 +99,7 @@ let stopJoinWatch = null
 let subscribed = false
 
 function secondsLeft(r) {
-  return Math.max(0, Math.ceil(((r.joinDeadlineAt || 0) - now.value) / 1000))
+  return Math.max(0, Math.ceil(((r.joinDeadlineAt || 0) - (now.value + raidSocket.lobbyClockOffsetMs.value)) / 1000))
 }
 function isMine(r) {
   return !!myId.value && (r.participants || []).some(p => p.userId === myId.value)
@@ -104,8 +107,16 @@ function isMine(r) {
 // The lobby lists every active raid (forming or fighting), so "am I already in one" is derived
 // live from it rather than from a snapshot that would go stale when that raid ends.
 const inAnyRaid = computed(() => raidSocket.lobbyRaids.value.some(isMine))
+// Changes only when the set of joinable raids changes — what a screen reader should hear.
+const liveSummary = computed(() => {
+  if (!raidSocket.lobbyLoaded.value) return ''
+  const n = raidSocket.lobbyRaids.value.filter(r => r.status === 'FORMING' && r.partySize < r.maxPartySize).length
+  return n ? `${n} raid${n === 1 ? '' : 's'} open to join` : 'No raids open right now'
+})
+// Not gated on the countdown: the server decides when the window closes (and pushes the raid to
+// "fighting" the moment it does), so a lagging countdown never hides a joinable raid.
 function isJoinable(r) {
-  return r.status === 'FORMING' && r.partySize < r.maxPartySize && secondsLeft(r) > 0
+  return r.status === 'FORMING' && r.partySize < r.maxPartySize
 }
 
 function clearJoinWatch() {
@@ -125,8 +136,7 @@ function join(r) {
     if (state?.id === r.id && state.participants?.some(p => p.userId === myId.value)) {
       clearJoinWatch()
       joiningId.value = null
-      close()
-      router.push(`/newsite/cmoon-raid/${r.id}`)
+      goToRaid(r.id)
     } else if (err) {
       clearJoinWatch()
       joiningId.value = null
@@ -136,9 +146,28 @@ function join(r) {
   raidSocket.joinRaid(r.id)
 }
 
+// Keyboard: Escape closes from anywhere (focus can land on <body> after a button disables
+// itself), Tab cycles inside the dialog, and focus returns to whatever opened it.
+let returnFocusTo = null
+function onDocKeydown(e) {
+  if (e.key === 'Escape') close()
+}
+function trapFocus(e) {
+  const root = modalRef.value
+  if (!root) return
+  const items = [...root.querySelectorAll('button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')]
+  if (!items.length) { e.preventDefault(); root.focus(); return }
+  const first = items[0]
+  const last = items[items.length - 1]
+  if (e.shiftKey && (document.activeElement === first || document.activeElement === root)) { e.preventDefault(); last.focus() }
+  else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus() }
+}
+
 function subscribe() {
   if (subscribed) return
   subscribed = true
+  returnFocusTo = document.activeElement
+  document.addEventListener('keydown', onDocKeydown)
   raidSocket.subscribeLobby()
   now.value = Date.now()
   tick = setInterval(() => { now.value = Date.now() }, 500)
@@ -147,6 +176,9 @@ function subscribe() {
 function unsubscribe() {
   if (!subscribed) return
   subscribed = false
+  document.removeEventListener('keydown', onDocKeydown)
+  if (returnFocusTo && typeof returnFocusTo.focus === 'function' && document.contains(returnFocusTo)) returnFocusTo.focus()
+  returnFocusTo = null
   raidSocket.unsubscribeLobby()
   if (tick) { clearInterval(tick); tick = null }
   clearJoinWatch()
@@ -156,6 +188,12 @@ function unsubscribe() {
 
 function close() {
   emit('close')
+}
+// Leaving for a raid: tell the parent we're navigating, so it doesn't also router.replace() to
+// clear ?raidLobby=1 — that second navigation would cancel this push (newest navigation wins).
+function goToRaid(id) {
+  emit('close', { navigating: true })
+  router.push(`/newsite/cmoon-raid/${id}`)
 }
 
 watch(() => props.open, (isOpen) => { isOpen ? subscribe() : unsubscribe() }, { immediate: true })
@@ -246,5 +284,9 @@ onBeforeUnmount(unsubscribe)
 
 @media (prefers-reduced-motion: reduce) {
   .rl-btn-join:active:not(:disabled) { transform: none; }
+}
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 </style>

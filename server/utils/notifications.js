@@ -266,7 +266,7 @@ export async function notifyCMoonRaidLobbyOpened (db, { userIds, enemyName, init
                ${title}::text, ${body}::text, NULL, ${RAID_LOBBY_CONTEXT_ID}::text, 1, NOW(), NOW()
         FROM unnest(${ids}::text[], ${batch}::text[]) AS t("id", "userId")
         JOIN "User" u ON u."id" = t."userId"
-        WHERE COALESCE(u."banned", false) = false AND u."username" <> ${OFFICIAL_USERNAME}::text
+        WHERE COALESCE(u."banned", false) = false AND u."username" IS DISTINCT FROM ${OFFICIAL_USERNAME}::text
         ON CONFLICT ("userId", "type", "contextId") WHERE "readAt" IS NULL
         DO UPDATE SET
           "count"     = "Notification"."count" + 1,

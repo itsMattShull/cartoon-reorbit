@@ -187,7 +187,7 @@ function broadcastLobby() {
   setImmediate(() => {
     lobbyPushQueued = false
     try {
-      lobbyIo.local.to(LOBBY_ROOM).emit(EV('lobby'), { raids: buildRaidLobby(raids.values()) })
+      lobbyIo.local.to(LOBBY_ROOM).emit(EV('lobby'), { raids: buildRaidLobby(raids.values()), serverNow: Date.now() })
     } catch (err) {
       console.error('[cmoonRaidSocket] lobby broadcast failed:', err?.message || err)
     }
@@ -276,11 +276,9 @@ function broadcast(io, raid, event, extra) {
 
 /* ── Eligibility (re-checked fresh on every start/join — never trusted from a client) ───────── */
 
-// `reservedForRaidId`: the join handler reserves this user's slot in `raid.participants`/
-// `raidByUser` SYNCHRONOUSLY, before this function's own awaits, to close a join-race window
-// (see cmoonraid:join's own comment) — so by the time this runs, raidByUser.has(userId) is
-// always true for their OWN reservation. Passing the raid id being joined lets this only reject
-// a genuinely different active raid, not the one currently being confirmed.
+// `reservedForRaidId`: lets a caller that has already reserved this user's slot skip the
+// "already in a raid" rejection for that one raid. cmoonraid:join no longer needs it — it now runs
+// this BEFORE reserving (see its own comment) and re-checks raidByUser synchronously after.
 async function loadEligibility({ userId, enemyMember, reservedForRaidId = null }) {
   const user = await db.user.findUnique({
     where: { id: userId },
@@ -395,6 +393,15 @@ function addParticipant(raid, { userId, username, isInitiator, maxHp, profile = 
     ...(profile || {}),
   })
   raidByUser.set(userId, raid.id)
+}
+
+// Undo a join reservation for THIS raid only. Never clears raidByUser if it points at a
+// different raid — that's the player's real raid, and erasing it would switch off the
+// "already in a raid" guard for them.
+function releaseReservation(raid, userId) {
+  if (raid.participants.get(userId)?.pendingJoin) raid.participants.delete(userId)
+  if (raidByUser.get(userId) === raid.id) raidByUser.delete(userId)
+  broadcastLobby()
 }
 
 function startCombat(io, raid) {
@@ -626,6 +633,10 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
   raid.outcome = outcome
   raid.endedAt = Date.now()
 
+  // A joiner whose participant row is still being written (pendingJoin) has nothing to update yet;
+  // including them would fail the transaction and roll back EVERY participant's rewards. Their own
+  // join handler sees the raid is gone and releases the lock it just wrote.
+  for (const [uid, p] of raid.participants) if (p.pendingJoin) raid.participants.delete(uid)
   const participantIds = Array.from(raid.participants.keys())
   let grantable = null
   let rewardsGranted = null
@@ -815,6 +826,13 @@ export async function restoreCMoonRaids() {
       },
     ])))
     raid.resolving = false
+    // A join that was mid-write when the process went down: its row may or may not exist, and
+    // nobody is waiting on it any more. Drop it, and release any lock row it managed to write.
+    for (const [uid, p] of raid.participants) {
+      if (!p.pendingJoin) continue
+      raid.participants.delete(uid)
+      db.cMoonEnemyRaidParticipant.updateMany({ where: { raidId, userId: uid }, data: { activeUserId: null } }).catch(() => {})
+    }
     // Backfills a raid whose Redis snapshot predates special attacks (created on an older deploy,
     // restored after a restart mid-fight — a narrow window, but a missing numeric field here would
     // otherwise feed NaN straight into resolveRaidRound's arithmetic, silently corrupting combat
@@ -842,7 +860,8 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     const me = await resolveSocketUser(socket)
     if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
     socket.join(LOBBY_ROOM)
-    socket.emit(EV('lobby'), { raids: buildRaidLobby(raids.values()) })
+    // serverNow lets the client count down joinDeadlineAt against the server's clock, not its own.
+    socket.emit(EV('lobby'), { raids: buildRaidLobby(raids.values()), serverNow: Date.now() })
     // Per-viewer context the shared list can't carry: whether they can join at all (raids need
     // a cMoon to credit) and which raid, if any, they're already in. Display-only — join re-checks
     // everything against the database.
@@ -1008,62 +1027,77 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       socket.join(raidRoom(raidId))
       return socket.emit(EV('created'), publicRaidView(raid))
     }
-    // Reserve a slot SYNCHRONOUSLY, before any await, so a second concurrent join for the last
-    // open slot sees this one already counted rather than both passing the size check and both
-    // proceeding (which could over-fill the party past MAX_PARTY_SIZE and double-fire
-    // startCombat). Everything from here to this call runs in one uninterrupted tick. Rolled
-    // back in the catch block below if anything after this fails.
     if (raid.participants.size >= MAX_PARTY_SIZE) return socket.emit(EV('error'), { message: 'This raid is full' })
-    // Placeholder maxHp here — this reservation must stay fully synchronous (see the comment
-    // above), so the real value (which needs a DB lookup) is filled in below once the
-    // post-reservation checks pass, same as `username` already is.
-    addParticipant(raid, { userId: me.id, username: me.username, isInitiator: false, maxHp: PLAYER_MAX_HP, pendingJoin: true })
+
+    // ── 1. Every eligibility check and lookup BEFORE taking a slot. Raids are listed site-wide in
+    // the lobby now, so anyone can try any raid: an ineligible player (no cMoon, too few wins,
+    // already fighting elsewhere) must never hold a slot, even briefly — a held slot turns real
+    // players away as "full", or counts toward MAX_PARTY_SIZE and starts combat early. ──────────
+    let elig, profile, joinerMaxHp
     try {
       const enemyMember = await db.cMoonEnemyMember.findUnique({
         where: { id: raid.enemyMemberId }, include: { faction: true },
       })
       if (!enemyMember || !enemyMember.active || !enemyMember.faction.active) {
-        throw { userMessage: 'That enemy is no longer available' }
+        return socket.emit(EV('error'), { message: 'That enemy is no longer available' })
       }
-      const elig = await loadEligibility({ userId: me.id, enemyMember, reservedForRaidId: raidId })
-      if (!elig.ok) throw { userMessage: elig.message }
+      elig = await loadEligibility({ userId: me.id, enemyMember })
+      if (!elig.ok) return socket.emit(EV('error'), { message: elig.message })
       // No same-cMoon check: raids are cross-cMoon. The joiner fights for (and is credited to)
       // their OWN cMoon, snapshotted here.
-      const profile = await loadParticipantProfile(me.id, elig.user.cMoonId)
-      if (!profile) throw { userMessage: 'Your cMoon could not be found' }
+      profile = await loadParticipantProfile(me.id, elig.user.cMoonId)
+      if (!profile) return socket.emit(EV('error'), { message: 'Your cMoon could not be found' })
+      joinerMaxHp = await getPlayerCombatMaxHp(me.id)
+    } catch (err) {
+      console.error('[cmoonraid:join] eligibility failed:', err)
+      return socket.emit(EV('error'), { message: 'Could not join this raid' })
+    }
 
-      const joinerMaxHp = await getPlayerCombatMaxHp(me.id)
-      // The raid can resolve or be torn down (every other member left) while the awaits above
-      // run; this reservation would then point at a dead raid. Bail before writing a participant
-      // row for it.
-      // (Status isn't re-checked: if the join window closed mid-confirmation, the reserved
-      // participant is already in round 1 — same as before cross-cMoon — and finishing the join
-      // is right.)
-      if (raids.get(raidId) !== raid || !raid.participants.has(me.id)) {
-        throw { userMessage: 'This raid is no longer accepting joins' }
-      }
+    // ── 2. Re-check and reserve SYNCHRONOUSLY — the awaits above may have let the window close,
+    // the party fill, the raid end, or this same player get into another raid (a double click,
+    // a second tab). Everything from here to addParticipant runs in one uninterrupted tick, so
+    // two concurrent joins for the last slot can't both pass. ─────────────────────────────────
+    if (raids.get(raidId) !== raid || raid.status !== 'FORMING') {
+      return socket.emit(EV('error'), { message: 'This raid is no longer accepting joins' })
+    }
+    if (raid.participants.has(me.id)) {
+      socket.join(raidRoom(raidId))
+      return socket.emit(EV('created'), publicRaidView(raid))
+    }
+    const otherRaidId = raidByUser.get(me.id)
+    if (otherRaidId && otherRaidId !== raidId) return socket.emit(EV('error'), { message: 'You are already in a raid' })
+    if (raid.participants.size >= MAX_PARTY_SIZE) return socket.emit(EV('error'), { message: 'This raid is full' })
+    addParticipant(raid, { userId: me.id, username: elig.user.username, isInitiator: false, maxHp: joinerMaxHp, profile, pendingJoin: true })
+
+    // ── 3. The one write. Only a DB failure (e.g. P2002: an active raid/solo row the in-memory
+    // maps didn't know about) can still turn this away, and the reservation is rolled back then.
+    try {
       await db.cMoonEnemyRaidParticipant.create({
         data: { raidId, userId: me.id, hpRemaining: joinerMaxHp, isInitiator: false, activeUserId: me.id },
       })
-      const p = raid.participants.get(me.id)
-      Object.assign(p, profile)
-      p.pendingJoin = false
-      p.username = elig.user.username
-      p.maxHp = joinerMaxHp
-      p.hpRemaining = joinerMaxHp
-      socket.join(raidRoom(raidId))
-      fireSync(raidId, raid)
-      broadcast(io, raid, EV('participantJoined'))
-      broadcastLobby()
-      if (raid.participants.size >= MAX_PARTY_SIZE && raid.status === 'FORMING') startCombat(io, raid)
     } catch (err) {
-      raid.participants.delete(me.id)
-      raidByUser.delete(me.id)
-      if (err?.userMessage) return socket.emit(EV('error'), { message: err.userMessage })
+      releaseReservation(raid, me.id)
       if (err?.code === 'P2002') return socket.emit(EV('error'), { message: 'You are already in a raid' })
       console.error('[cmoonraid:join] failed:', err)
-      socket.emit(EV('error'), { message: 'Could not join this raid' })
+      return socket.emit(EV('error'), { message: 'Could not join this raid' })
     }
+
+    // The raid can't resolve while still FORMING, but it can be torn down (every other member
+    // left) during that write. Then the row just written would hold this player's active-raid
+    // lock with nothing left to ever release it — release it now.
+    if (raids.get(raidId) !== raid || raid.status === 'RESOLVED' || !raid.participants.has(me.id)) {
+      releaseReservation(raid, me.id)
+      await db.cMoonEnemyRaidParticipant.updateMany({ where: { raidId, userId: me.id }, data: { activeUserId: null } }).catch(() => {})
+      return socket.emit(EV('error'), { message: 'This raid is no longer accepting joins' })
+    }
+    // (If the join window closed during the write, the reserved player is already in round 1 —
+    // same as before cross-cMoon — and finishing the join is right.)
+    raid.participants.get(me.id).pendingJoin = false
+    socket.join(raidRoom(raidId))
+    fireSync(raidId, raid)
+    broadcast(io, raid, EV('participantJoined'))
+    broadcastLobby()
+    if (raid.participants.size >= MAX_PARTY_SIZE && raid.status === 'FORMING') startCombat(io, raid)
   })
 
   socket.on(EV('leave'), async ({ raidId }) => {

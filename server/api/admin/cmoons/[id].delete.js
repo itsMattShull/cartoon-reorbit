@@ -19,6 +19,20 @@ export default defineEventHandler(async (event) => {
   if (cmoon.memberCount > 0) {
     throw createError({ statusCode: 409, statusMessage: 'Cannot delete a cMoon that still has members — reassign them first' })
   }
+
+  // A live raid boss fight started by one of this cMoon's (former) members: CMoonEnemyRaid.cMoon is
+  // onDelete: Cascade, so deleting now would also delete the raid's own row and every participant
+  // row — including players from OTHER cMoons, since raids are cross-cMoon — and their whole
+  // resolution (prizes, battle records, team wins) would then fail. A raid can't run longer than
+  // its join window plus RAID_MAX_ROUNDS_SAFETY rounds (well under an hour), so only recent
+  // unresolved rows block; an older one is a crash leftover that would otherwise block forever.
+  const liveRaid = await db.cMoonEnemyRaid.findFirst({
+    where: { cMoonId: id, status: { not: 'RESOLVED' }, startedAt: { gte: new Date(Date.now() - 2 * 60 * 60 * 1000) } },
+    select: { id: true },
+  })
+  if (liveRaid) {
+    throw createError({ statusCode: 409, statusMessage: 'Cannot delete — a raid boss fight started from this cMoon is still in progress. Try again once it ends.' })
+  }
   // Display-assigned cToons (Ctoon.cMoonId) are NOT a delete-blocker like
   // members are — that relation is `onDelete: SetNull`, so deleting a cMoon
   // here just reverts those cToons' modals to the default (unthemed) look,

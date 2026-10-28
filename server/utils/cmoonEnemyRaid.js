@@ -266,7 +266,9 @@ export function rankTierLevel(tiers, tierId) {
 // Public, per-participant team/rank badge data for the raid screen and lobby — never anything
 // combat-sensitive. `fallbackCMoon` covers a legacy participant with no snapshot of their own.
 export function publicParticipantTeam(raid, p) {
-  if (p.pendingJoin) return { cMoon: null, rank: null }
+  // A reservation made without a team snapshot (shouldn't happen since joins snapshot before
+  // reserving, but never guess) shows no team rather than borrowing the initiator's.
+  if (p.pendingJoin && !p.cMoonId) return { cMoon: null, rank: null }
   const legacy = !p.cMoonId && participantCMoonId(raid, p) === raid.cMoonId
   return {
     cMoon: {

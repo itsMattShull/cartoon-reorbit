@@ -190,8 +190,10 @@ const openRaidCount = computed(() => (raidSocket.value?.lobbyRaids.value || []).
 function openRaidLobby() {
   raidLobbyOpen.value = true
 }
-function closeRaidLobby() {
+function closeRaidLobby(opts) {
   raidLobbyOpen.value = false
+  // The modal is navigating to a raid itself; a query-clearing replace here would cancel it.
+  if (opts?.navigating) return
   if (route.query.raidLobby) {
     const { raidLobby, ...rest } = route.query
     router.replace({ query: rest })
