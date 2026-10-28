@@ -53,10 +53,10 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
     // do nothing else this run. scheduledForMs is undefined for jobs enqueued
     // before this check existed — those fall through to the old behavior.
     if (isStaleDissolveLaunchJob(scheduledForMs, entry.scheduledFor)) {
-      if (entry.scheduledFor) {
-        await scheduleDissolveAuctionLaunch(entry.id, entry.scheduledFor)
-      }
-      return
+      // Re-adding from INSIDE this job is a no-op: scheduleDissolveAuctionLaunch won't touch a
+      // job id that's currently active, and this job's id IS the entry id. Hand the new time to
+      // the 'completed' handler below, which re-adds once this job is no longer active.
+      return entry.scheduledFor ? { rescheduleTo: new Date(entry.scheduledFor).toISOString() } : undefined
     }
 
     // Starting bid: the rarity floor, or for Auction/Prize/Code Only and Crazy Rare the bid an
@@ -82,9 +82,17 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
         select: { id: true }
       })
 
+      // A copy an admin already put up through the Auction Only page (the old workaround for
+      // these rarities, from before that page refused dissolve-queued copies) keeps that listing
+      // and its hand-set price. Drop it from the dissolve queue instead of listing it a second time.
+      const pendingAuctionOnly = await tx.auctionOnly.findFirst({
+        where: { userCtoonId: entry.userCtoonId, isStarted: false },
+        select: { id: true }
+      })
+
       await tx.dissolveAuctionQueue.delete({ where: { id: entry.id } })
 
-      if (existing) return null
+      if (existing || pendingAuctionOnly) return null
 
       // This entry's own queued-at-dissolve-time ownership can go stale: an admin trade, a
       // second AuctionOnly listing, or any other path that moves the item out of the official
@@ -150,6 +158,14 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
     throw err
   }
 }, { connection })
+
+// Stale-job deferral (see the processor above): now that this job is no longer active, the
+// entry's new time can be queued under the same job id.
+worker.on('completed', (job, result) => {
+  if (!result?.rescheduleTo) return
+  scheduleDissolveAuctionLaunch(job.data.queueEntryId, result.rescheduleTo)
+    .catch(err => console.error(`[dissolve-auction-launch] re-queue after stale job ${job?.id} failed:`, err?.message || err))
+})
 
 worker.on('failed', (job, err) => {
   console.error(`[dissolve-auction-launch] job ${job?.id} failed:`, err?.message || err)

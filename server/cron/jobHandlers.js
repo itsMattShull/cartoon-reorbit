@@ -1052,15 +1052,18 @@ async function pruneCronRunLogs() {
 
 // job name -> handler. Names must match server/cron/jobs.js exactly (enforced by
 // tests/cronJobsRegistry.test.js).
+// Dissolve-queue recovery sweep — see requeueOverdueDissolveLaunches in server/utils/dissolveSchedule.js.
+// Returns nothing on a clean run (quiet job), a short detail when it actually recovers launches so
+// that shows up in Cron Run Logs. (Named, not inline: tests/cronJobsRegistry.test.js reads
+// JOB_HANDLERS one `name: fn,` line at a time.)
+async function runRequeueOverdueDissolveLaunches() {
+  const n = await requeueOverdueDissolveLaunches()
+  return n ? `Requeued ${n} overdue dissolve launch${n === 1 ? '' : 'es'}` : undefined
+}
+
 export const JOB_HANDLERS = {
   startDueAuctions,
-  // See requeueOverdueDissolveLaunches in server/utils/dissolveSchedule.js.
-  // Returns nothing on a clean run (quiet), a short detail when it actually recovers launches so
-  // that shows up in Cron Run Logs.
-  requeueOverdueDissolveLaunches: async () => {
-    const n = await requeueOverdueDissolveLaunches()
-    return n ? `Requeued ${n} overdue dissolve launch${n === 1 ? '' : 'es'}` : undefined
-  },
+  requeueOverdueDissolveLaunches: runRequeueOverdueDissolveLaunches,
   sendDueAnnouncements,
   markScheduledPacksInCmart,
   updateWinballGrandPrizeFromSchedule,

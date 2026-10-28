@@ -44,12 +44,14 @@ export default defineEventHandler(async (event) => {
   for (const e of allEntries) {
     const cat = byCategory[e.category] || byCategory.OTHER
     cat.total++
-    if (e.scheduledFor) cat.scheduled++
-    else if (startingBidOf(e) === null) {
+    // Held wins over scheduled: a held entry still carrying an old schedule (pinned, or scheduled
+    // before held existed) won't list when its time comes — the worker returns it to held.
+    if (startingBidOf(e) === null) {
       cat.held++
       const r = e.userCtoon?.ctoon?.rarity || 'Unknown'
       heldByRarity[r] = (heldByRarity[r] || 0) + 1
-    } else cat.unscheduled++
+    } else if (e.scheduledFor) cat.scheduled++
+    else cat.unscheduled++
     if (e.pinnedAt) pinnedCount++
   }
 

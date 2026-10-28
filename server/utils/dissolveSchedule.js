@@ -145,26 +145,49 @@ export async function applyDissolveSchedule({ startAtUtc, cadenceDays, featuredP
  * whose job is gone (Redis restart without persistence, a one-off failure, a stale-job deferral
  * that couldn't re-add itself) stays "scheduled" in the past forever otherwise — Apply Schedule
  * never touches already-scheduled entries. See pickOverdueLaunches in dissolveListing.js for the
- * per-job-state rules. Bounded per run so a large backlog drains over several runs.
+ * per-job-state rules. Bounded per run (maxScan / maxRequeue) so a large backlog drains over
+ * several runs.
  * @returns {Promise<number>} entries requeued
  */
-export async function requeueOverdueDissolveLaunches({ limit = 200 } = {}) {
+export async function requeueOverdueDissolveLaunches({ maxScan = 2000, maxRequeue = 200 } = {}) {
   const now = Date.now()
-  const entries = await prisma.dissolveAuctionQueue.findMany({
-    where: { scheduledFor: { not: null, lte: new Date(now - 5 * 60 * 1000) } },
-    orderBy: { scheduledFor: 'asc' },
-    take: limit,
-    select: { id: true, scheduledFor: true },
-  })
-  if (!entries.length) return 0
-  const jobs = new Map()
-  for (const e of entries) {
-    const job = await dissolveAuctionLaunchQueue.getJob(e.id)
-    if (job) jobs.set(e.id, { state: await job.getState(), finishedOn: job.finishedOn || null })
+  const cutoff = new Date(now - 5 * 60 * 1000)
+  const PAGE = 200
+  let requeued = 0
+  let scanned = 0
+  let cursor = null
+  // Page through EVERY past-due entry (bounded by maxScan), not just the oldest 200: if the oldest
+  // ones are legitimately waiting/delayed (worker down) or recently failed, later entries with a
+  // lost job must still be found.
+  while (scanned < maxScan && requeued < maxRequeue) {
+    const page = await prisma.dissolveAuctionQueue.findMany({
+      where: { scheduledFor: { not: null, lte: cutoff } },
+      orderBy: [{ scheduledFor: 'asc' }, { id: 'asc' }],
+      take: PAGE,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: { id: true, scheduledFor: true },
+    })
+    if (!page.length) break
+    scanned += page.length
+    cursor = page[page.length - 1].id
+
+    const jobs = new Map()
+    for (const e of page) {
+      const job = await dissolveAuctionLaunchQueue.getJob(e.id)
+      if (job) jobs.set(e.id, { state: await job.getState(), finishedOn: job.finishedOn || null })
+    }
+    // A persistently failing entry is retried every 6h, not every run (it's also in the Errors log).
+    for (const id of pickOverdueLaunches(page, jobs, { now, retryMs: 6 * 60 * 60 * 1000 })) {
+      if (requeued >= maxRequeue) break
+      // Re-read right before acting: an admin may have rescheduled it since the page was read.
+      // Requeueing with the stale time would replace their fresh job with an immediate one.
+      const fresh = await prisma.dissolveAuctionQueue.findUnique({ where: { id }, select: { scheduledFor: true } })
+      if (!fresh?.scheduledFor || new Date(fresh.scheduledFor).getTime() > cutoff.getTime()) continue
+      await scheduleDissolveAuctionLaunch(id, fresh.scheduledFor)
+      requeued++
+    }
+    if (page.length < PAGE) break
   }
-  const ids = pickOverdueLaunches(entries, jobs, { now })
-  const byId = new Map(entries.map(e => [e.id, e]))
-  for (const id of ids) await scheduleDissolveAuctionLaunch(id, byId.get(id).scheduledFor)
-  if (ids.length) console.log(`[requeueOverdueDissolveLaunches] requeued ${ids.length} overdue dissolve launch(es)`)
-  return ids.length
+  if (requeued) console.log(`[requeueOverdueDissolveLaunches] requeued ${requeued} overdue dissolve launch(es)`)
+  return requeued
 }

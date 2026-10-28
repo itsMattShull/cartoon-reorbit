@@ -50,10 +50,11 @@
             <span v-if="heldCountFor(r.label)" class="text-[10px] text-purple-700 whitespace-nowrap">{{ heldCountFor(r.label) }} held</span>
           </label>
         </div>
+        <div v-if="!formSeeded" class="mt-2 text-xs text-gray-500">Loading saved starting bids…</div>
         <div v-if="startBidError" class="mt-2 text-xs text-red-600">{{ startBidError }}</div>
         <div v-if="startBidSuccess" class="mt-2 text-xs text-emerald-600">{{ startBidSuccess }}</div>
         <button
-          @click="saveStartBids" :disabled="savingStartBids"
+          @click="saveStartBids" :disabled="savingStartBids || !formSeeded"
           class="mt-2 w-full sm:w-auto px-3 py-1.5 text-xs font-semibold rounded-md text-white bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300"
         >{{ savingStartBids ? 'Saving…' : 'Save starting bids' }}</button>
       </div>
@@ -85,7 +86,7 @@
                   <span v-if="entry.isFeatured" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-yellow-100 text-yellow-700">Featured</span>
                   <span v-if="entry.fromInactive" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-red-100 text-red-700">From Inactive</span>
                   <span v-if="entry.pinned" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-blue-100 text-blue-700">📌 Pinned</span>
-                  <span v-if="entry.held" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-purple-100 text-purple-700" title="Set a starting bid for this rarity above to auction it">Held, needs a starting bid</span>
+                  <span v-if="entry.held" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-purple-100 text-purple-700" :title="entry.specialRarity ? 'Set a starting bid for this rarity above to auction it' : 'This rarity has no starting price, so it can\'t be auctioned from the dissolve queue'">{{ entry.specialRarity ? 'Held, needs a starting bid' : 'Held, rarity has no price' }}</span>
                   <span v-else-if="entry.startingBid != null" class="ml-1 text-[10px] text-gray-500">Starts at {{ entry.startingBid.toLocaleString() }} pts</span>
                 </div>
                 <div v-if="entry.sourceUsername" class="text-[10px] text-gray-400 mt-0.5">From: {{ entry.sourceUsername }}</div>
@@ -234,7 +235,7 @@
                   <span v-if="entry.isFeatured" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-yellow-100 text-yellow-700">Featured</span>
                   <span v-if="entry.fromInactive" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-red-100 text-red-700">From Inactive</span>
                   <span v-if="entry.pinned" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-blue-100 text-blue-700">📌 Pinned</span>
-                  <span v-if="entry.held" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-purple-100 text-purple-700" title="Set a starting bid for this rarity above to auction it">Held, needs a starting bid</span>
+                  <span v-if="entry.held" class="ml-1 px-1.5 py-0 rounded text-[10px] font-medium bg-purple-100 text-purple-700" :title="entry.specialRarity ? 'Set a starting bid for this rarity above to auction it' : 'This rarity has no starting price, so it can\'t be auctioned from the dissolve queue'">{{ entry.specialRarity ? 'Held, needs a starting bid' : 'Held, rarity has no price' }}</span>
                   <span v-else-if="entry.startingBid != null" class="ml-1 text-[10px] text-gray-500">Starts at {{ entry.startingBid.toLocaleString() }} pts</span>
                 </div>
                 <div v-if="entry.sourceUsername" class="text-[10px] text-gray-400 mt-0.5">From: {{ entry.sourceUsername }}</div>
@@ -898,6 +899,9 @@ function fillStartBidForm(startBids) {
 }
 
 async function saveStartBids() {
+  // Never save before the saved values are on screen: blank fields mean "hold", so saving an
+  // unloaded form would silently clear every bid.
+  if (!formSeeded.value) return
   savingStartBids.value = true
   startBidError.value = ''
   startBidSuccess.value = ''
@@ -920,15 +924,15 @@ async function saveStartBids() {
 // The form shows the SAVED cadence (what the inactivity sweep also uses) the first time data
 // loads, instead of hardcoded defaults that looked like the real settings. Later refreshes don't
 // overwrite what an admin is in the middle of editing.
-let formSeededFromConfig = false
+const formSeeded = ref(false)
 async function loadData() {
   try {
     const data = await $fetch('/api/admin/dissolve-queue', { headers })
     stats.value      = data
     upcoming.value   = data.upcoming || []
     allEntries.value = data.entries  || []
-    if (data.config && !formSeededFromConfig) {
-      formSeededFromConfig = true
+    if (data.config && !formSeeded.value) {
+      formSeeded.value = true
       form.value.cadenceDays        = data.config.cadenceDays
       form.value.featuredPerCadence = data.config.featuredPerCadence
       form.value.otherPerCadence    = data.config.otherPerCadence
