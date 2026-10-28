@@ -218,6 +218,41 @@
             announcements channel.
           </p>
           <p v-if="raidBossChannelError" class="text-[11px] text-red-600 mt-1">{{ raidBossChannelError }}</p>
+
+          <label class="block text-xs font-medium mb-1 mt-3">Raid join window, in seconds (15-120)</label>
+          <div class="flex items-center gap-2">
+            <input
+              v-model.number="raidJoinWindowSeconds" type="number" min="15" max="120" inputmode="numeric"
+              class="cm-field w-20 border rounded px-2 py-1" style="font-size:16px"
+            />
+            <button
+              class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              :disabled="raidJoinWindowSaving" @click="saveRaidJoinWindow"
+            >{{ raidJoinWindowSaving ? 'Saving…' : 'Save' }}</button>
+          </div>
+          <p class="text-[11px] text-gray-600 mt-1">
+            How long a FORMING raid's join window stays open by default before it auto-starts. A raid leader
+            can also keep their own lobby open past this (or vote to cut it to 5 seconds) from the raid page.
+          </p>
+          <p v-if="raidJoinWindowError" class="text-[11px] text-red-600 mt-1">{{ raidJoinWindowError }}</p>
+
+          <label class="block text-xs font-medium mb-1 mt-3">Solo raid reward multiplier, % (100-500)</label>
+          <div class="flex items-center gap-2">
+            <input
+              v-model.number="raidSoloRewardMultiplierPercent" type="number" min="100" max="500" inputmode="numeric"
+              class="cm-field w-20 border rounded px-2 py-1" style="font-size:16px"
+            />
+            <button
+              class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              :disabled="raidSoloRewardSaving" @click="saveRaidSoloRewardMultiplier"
+            >{{ raidSoloRewardSaving ? 'Saving…' : 'Save' }}</button>
+          </div>
+          <p class="text-[11px] text-gray-600 mt-1">
+            Multiplies the cMoon points a raid awards when it resolves with exactly one participant (fought
+            alone, by choice or because nobody else joined in time). 100 = no bonus. Points only — item/cToon
+            drop chances are unaffected.
+          </p>
+          <p v-if="raidSoloRewardError" class="text-[11px] text-red-600 mt-1">{{ raidSoloRewardError }}</p>
         </div>
       </div>
 
@@ -1561,6 +1596,12 @@ const spawnCapError = ref('')
 const raidBossDiscordChannelId = ref('')
 const raidBossChannelSaving = ref(false)
 const raidBossChannelError = ref('')
+const raidJoinWindowSeconds = ref(60)
+const raidJoinWindowSaving = ref(false)
+const raidJoinWindowError = ref('')
+const raidSoloRewardMultiplierPercent = ref(100)
+const raidSoloRewardSaving = ref(false)
+const raidSoloRewardError = ref('')
 const enemyBattleDefaultHp = ref(5)
 const defaultHpSaving = ref(false)
 const defaultHpError = ref('')
@@ -2635,6 +2676,8 @@ async function load() {
     spawnCapCount.value = Number.isInteger(data.cMoonEnemySpawnCapCount) ? data.cMoonEnemySpawnCapCount : 0
     spawnCapWindowHours.value = Number.isInteger(data.cMoonEnemySpawnCapWindowHours) ? data.cMoonEnemySpawnCapWindowHours : 4
     raidBossDiscordChannelId.value = data.cMoonRaidBossDiscordChannelId || ''
+    raidJoinWindowSeconds.value = data.cMoonRaidJoinWindowSeconds ?? 60
+    raidSoloRewardMultiplierPercent.value = data.cMoonRaidSoloRewardMultiplierPercent ?? 100
     enemyBattleDefaultHp.value = Number.isInteger(data.cMoonEnemyBattleDefaultHp) ? data.cMoonEnemyBattleDefaultHp : 5
     enemyBattleStartingStamina.value = Number.isInteger(data.cMoonEnemyBattleStartingStamina) ? data.cMoonEnemyBattleStartingStamina : 3
     enemyBattleBlockCounterDamage.value = Number.isInteger(data.cMoonEnemyBattleBlockCounterDamage) ? data.cMoonEnemyBattleBlockCounterDamage : 1
@@ -2953,6 +2996,38 @@ async function saveRaidBossDiscordChannel() {
     raidBossChannelError.value = e?.data?.statusMessage || 'Failed to save raid boss Discord channel'
   } finally {
     raidBossChannelSaving.value = false
+  }
+}
+
+async function saveRaidJoinWindow() {
+  raidJoinWindowSaving.value = true
+  raidJoinWindowError.value = ''
+  try {
+    const res = await $fetch('/api/admin/cmoon-settings', {
+      method: 'POST',
+      body: { cMoonRaidJoinWindowSeconds: raidJoinWindowSeconds.value },
+    })
+    raidJoinWindowSeconds.value = res.cMoonRaidJoinWindowSeconds
+  } catch (e) {
+    raidJoinWindowError.value = e?.data?.statusMessage || 'Failed to save raid join window'
+  } finally {
+    raidJoinWindowSaving.value = false
+  }
+}
+
+async function saveRaidSoloRewardMultiplier() {
+  raidSoloRewardSaving.value = true
+  raidSoloRewardError.value = ''
+  try {
+    const res = await $fetch('/api/admin/cmoon-settings', {
+      method: 'POST',
+      body: { cMoonRaidSoloRewardMultiplierPercent: raidSoloRewardMultiplierPercent.value },
+    })
+    raidSoloRewardMultiplierPercent.value = res.cMoonRaidSoloRewardMultiplierPercent
+  } catch (e) {
+    raidSoloRewardError.value = e?.data?.statusMessage || 'Failed to save solo raid reward multiplier'
+  } finally {
+    raidSoloRewardSaving.value = false
   }
 }
 

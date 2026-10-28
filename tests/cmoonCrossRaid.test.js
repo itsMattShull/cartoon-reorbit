@@ -6,6 +6,7 @@ import assert from 'node:assert/strict'
 import {
   applyRaidSpecialAttack, participantCMoonId, raidCMoonIds, raidPartyLabel, splitRaidPoints,
   rankTierLevel, publicParticipantTeam, buildRaidLobbyEntry, buildRaidLobby, MAX_PARTY_SIZE,
+  rollWindUpMove,
 } from '../server/utils/cmoonEnemyRaid.js'
 
 function participant(userId, extra = {}) {
@@ -167,4 +168,53 @@ test('buildRaidLobby lists joinable raids first (closing soonest first), then fu
   const fighting = raidWith([participant('z')], { id: 'fighting', status: 'IN_PROGRESS', startedAt: 9 })
   const done = raidWith([participant('q')], { id: 'done', status: 'RESOLVED' })
   assert.deepEqual(buildRaidLobby([full, late, soon, fighting, done]).map(r => r.id), ['soon', 'late', 'fighting', 'full'])
+})
+
+// ── Up-to-8 parties (CMoonEnemyMember.maxParticipants) ──────────────────────────────────────
+
+test('buildRaidLobbyEntry/buildRaidLobby honor a raid-specific maxParticipants over the MAX_PARTY_SIZE fallback', () => {
+  const eight = raidWith(['1', '2', '3', '4', '5'].map(id => participant(id)), { id: 'eight', maxParticipants: 8, joinDeadlineAt: 50 })
+  assert.equal(buildRaidLobbyEntry(eight).maxPartySize, 8)
+  // 5/8 isn't full, so it's still joinable even though it exceeds the old MAX_PARTY_SIZE of 4.
+  assert.deepEqual(buildRaidLobby([eight]).map(r => r.id), ['eight'])
+})
+
+// ── Private lobbies (CMoonEnemyRaid.isPrivate) ───────────────────────────────────────────────
+
+test('buildRaidLobby never lists a private raid, even when it would otherwise be joinable', () => {
+  const pub = raidWith([participant('a')], { id: 'pub', joinDeadlineAt: 10 })
+  const priv = raidWith([participant('b')], { id: 'priv', joinDeadlineAt: 10, isPrivate: true })
+  assert.deepEqual(buildRaidLobby([pub, priv]).map(r => r.id), ['pub'])
+})
+
+// ── Leader keep-open / speed vote (surfaced on the lobby entry, see cmoonRaidSocket.js) ──────
+
+test('buildRaidLobbyEntry surfaces leaderKeepOpen for display', () => {
+  const kept = raidWith([participant('a')], { leaderKeepOpen: true })
+  const notKept = raidWith([participant('a')])
+  assert.equal(buildRaidLobbyEntry(kept).leaderKeepOpen, true)
+  assert.equal(buildRaidLobbyEntry(notKept).leaderKeepOpen, false)
+})
+
+// ── Wind-up/telegraph moves ───────────────────────────────────────────────────────────────────
+
+test('rollWindUpMove returns null for an empty/missing move list', () => {
+  assert.equal(rollWindUpMove([]), null)
+  assert.equal(rollWindUpMove(undefined), null)
+})
+
+test('rollWindUpMove always fires a 100%-chance move', () => {
+  const move = { telegraphMessage: 'Incoming!', direction: 'HIGH', occurrencePercent: 100, bonusType: 'HEAL_PARTY', bonusAmount: 2 }
+  for (let i = 0; i < 20; i++) assert.equal(rollWindUpMove([move]), move)
+})
+
+test('rollWindUpMove never fires a 0%-chance move', () => {
+  const move = { telegraphMessage: 'Never!', direction: 'LOW', occurrencePercent: 0, bonusType: 'DAMAGE_ENEMY', bonusAmount: 2 }
+  for (let i = 0; i < 20; i++) assert.equal(rollWindUpMove([move]), null)
+})
+
+test('rollWindUpMove checks moves in order and stops at the first hit', () => {
+  const first = { telegraphMessage: 'First', direction: 'HIGH', occurrencePercent: 100, bonusType: 'HEAL_PARTY', bonusAmount: 1 }
+  const second = { telegraphMessage: 'Second', direction: 'LOW', occurrencePercent: 100, bonusType: 'DAMAGE_ENEMY', bonusAmount: 1 }
+  assert.equal(rollWindUpMove([first, second]), first)
 })

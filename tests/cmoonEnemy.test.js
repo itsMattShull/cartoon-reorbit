@@ -11,6 +11,8 @@ import {
   SPECIAL_ATTACK_EFFECT_TYPES, SPECIAL_ATTACK_NAME_MAX_LENGTH, SPECIAL_ATTACK_AMOUNT_MIN, SPECIAL_ATTACK_AMOUNT_MAX,
   parseTauntBody, isValidTauntText, isValidTauntTrigger, TAUNT_TRIGGERS, TAUNT_TEXT_MAX_LENGTH,
   ATTACK_CHANCE_DEFAULT, PITY_THRESHOLD_DEFAULT, FIRST_WIN_BONUS_POINTS_DEFAULT,
+  MAX_PARTICIPANTS_DEFAULT, MAX_PARTICIPANTS_MIN, MAX_PARTICIPANTS_MAX,
+  parseWindUpMoveBody, WIND_UP_OCCURRENCE_PERCENT_DEFAULT, WIND_UP_DIRECTIONS, WIND_UP_BONUS_TYPES,
 } from '../server/utils/cmoonEnemy.js'
 
 const baseMemberBody = {
@@ -18,6 +20,7 @@ const baseMemberBody = {
   occurrencePercent: OCCURRENCE_PERCENT_DEFAULT,
   isRaidBoss: false, raidAnnouncementText: null, raidOneTime: false, raidCooldownMinutes: 0,
   attackChancePercent: ATTACK_CHANCE_DEFAULT, pityThreshold: PITY_THRESHOLD_DEFAULT, firstWinBonusPoints: FIRST_WIN_BONUS_POINTS_DEFAULT,
+  maxParticipants: MAX_PARTICIPANTS_DEFAULT, windUpEnabled: false,
 }
 
 test('isValidRank accepts every declared rank and rejects anything else', () => {
@@ -435,7 +438,7 @@ test('isValidSpecialAttackAmount: whole numbers within [MIN, MAX], rejects out-o
 test('parseSpecialAttackBody: a valid create body parses with trimmed name and the given fields', () => {
   const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, name: '  Toxic Bite  ' })
   assert.equal(result.ok, true)
-  assert.deepEqual(result.data, { name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10, healsAllies: false })
+  assert.deepEqual(result.data, { name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10, healsAllies: false, playerChoice: false })
 })
 
 test('parseSpecialAttackBody: rejects a missing/blank name', () => {
@@ -456,10 +459,10 @@ test('parseSpecialAttackBody: a blank/null description normalizes to null, a rea
 })
 
 test('parseSpecialAttackBody: on update, an omitted field falls back to the existing row, not a bare default', () => {
-  const existing = { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7, healsAllies: true }
+  const existing = { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7, healsAllies: true, playerChoice: true }
   const result = parseSpecialAttackBody({ amount: 20 }, existing)
   assert.equal(result.ok, true)
-  assert.deepEqual(result.data, { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 20, healsAllies: true })
+  assert.deepEqual(result.data, { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 20, healsAllies: true, playerChoice: true })
 })
 
 test('parseSpecialAttackBody: healsAllies is only ever stored true when effectType is HEAL_SELF', () => {
@@ -574,4 +577,72 @@ test('nextSoloSlotAt: at the cap, the slot frees when the oldest start leaves th
 test('nextSoloSlotAt: over the cap, waits until enough starts age out to drop below it', () => {
   const t = ['2026-10-26T09:00:00Z', '2026-10-26T10:00:00Z', '2026-10-26T11:00:00Z', '2026-10-26T12:00:00Z', '2026-10-26T13:00:00Z']
   assert.equal(nextSoloSlotAt(t, 4, 12).toISOString(), '2026-10-26T22:00:00.000Z')
+})
+
+// ── maxParticipants (up-to-8 raid parties) ───────────────────────────────
+
+test('parseMemberBody: maxParticipants defaults to MAX_PARTICIPANTS_DEFAULT on create when omitted', () => {
+  const result = parseMemberBody(baseMemberBody, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.maxParticipants, MAX_PARTICIPANTS_DEFAULT)
+})
+
+test('parseMemberBody: accepts the full maxParticipants range and rejects outside it', () => {
+  assert.equal(parseMemberBody({ ...baseMemberBody, maxParticipants: MAX_PARTICIPANTS_MIN }, undefined).ok, true)
+  assert.equal(parseMemberBody({ ...baseMemberBody, maxParticipants: MAX_PARTICIPANTS_MAX }, undefined).ok, true)
+  assert.equal(parseMemberBody({ ...baseMemberBody, maxParticipants: MAX_PARTICIPANTS_MIN - 1 }, undefined).ok, false)
+  assert.equal(parseMemberBody({ ...baseMemberBody, maxParticipants: MAX_PARTICIPANTS_MAX + 1 }, undefined).ok, false)
+  assert.equal(parseMemberBody({ ...baseMemberBody, maxParticipants: 4.5 }, undefined).ok, false)
+})
+
+test('parseMemberBody: an update with no maxParticipants/windUpEnabled fields keeps the existing values', () => {
+  const existing = {
+    ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0,
+    maxParticipants: 8, windUpEnabled: true,
+  }
+  const result = parseMemberBody({ name: 'Renamed' }, existing)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.maxParticipants, 8)
+  assert.equal(result.data.windUpEnabled, true)
+})
+
+// ── Wind-up/telegraph moves ───────────────────────────────────────────────
+
+const baseWindUpBody = {
+  telegraphMessage: 'The boss rears back!', direction: 'HIGH', occurrencePercent: WIND_UP_OCCURRENCE_PERCENT_DEFAULT,
+  bonusType: 'HEAL_PARTY', bonusAmount: 2,
+}
+
+test('parseWindUpMoveBody: a valid body parses with every field intact', () => {
+  const result = parseWindUpMoveBody(baseWindUpBody)
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.data, baseWindUpBody)
+})
+
+test('parseWindUpMoveBody: rejects a missing/blank/too-long telegraph message', () => {
+  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, telegraphMessage: '' }).ok, false)
+  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, telegraphMessage: 'x'.repeat(301) }).ok, false)
+})
+
+test('parseWindUpMoveBody: direction must be one of WIND_UP_DIRECTIONS', () => {
+  for (const d of WIND_UP_DIRECTIONS) assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, direction: d }).ok, true)
+  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, direction: 'SIDEWAYS' }).ok, false)
+})
+
+test('parseWindUpMoveBody: bonusType must be one of WIND_UP_BONUS_TYPES', () => {
+  for (const b of WIND_UP_BONUS_TYPES) assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, bonusType: b }).ok, true)
+  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, bonusType: 'CONFUSE' }).ok, false)
+})
+
+test('parseWindUpMoveBody: occurrencePercent accepts the full 0-100 range (a flat per-round chance, not a weight) and rejects outside it', () => {
+  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, occurrencePercent: 0 }).ok, true)
+  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, occurrencePercent: 100 }).ok, true)
+  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, occurrencePercent: -1 }).ok, false)
+  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, occurrencePercent: 101 }).ok, false)
+})
+
+test('parseWindUpMoveBody: rejects a non-integer or out-of-range bonusAmount', () => {
+  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, bonusAmount: 0 }).ok, false)
+  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, bonusAmount: 1000 }).ok, false)
+  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, bonusAmount: 2.5 }).ok, false)
 })

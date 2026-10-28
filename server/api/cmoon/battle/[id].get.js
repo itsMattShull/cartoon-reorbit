@@ -3,7 +3,7 @@
 // a page reload without losing progress.
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
-import { serializeBattleForClient } from '@/server/utils/cmoonEnemyBattle'
+import { serializeBattleForClient, SPECIAL_ATTACK_SELECT } from '@/server/utils/cmoonEnemyBattle'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -12,7 +12,11 @@ export default defineEventHandler(async (event) => {
   const battleId = event.context.params?.id
   const battle = await db.cMoonEnemyBattle.findUnique({
     where: { id: battleId },
-    include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
+    include: {
+      enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } },
+      cMoon: { include: { specialAttack: true } },
+      user: { select: { chosenSpecialAttack: { select: SPECIAL_ATTACK_SELECT } } },
+    },
   })
   if (!battle || battle.userId !== userId) throw createError({ statusCode: 404, statusMessage: 'Battle not found' })
 

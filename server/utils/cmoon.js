@@ -11,7 +11,7 @@ import { EXCLUDED_SYSTEM_USER_ID } from './economyValuation.js'
 import { grantGuildRole, revokeGuildRole } from './discord.js'
 import { CMOON_EFFECT_TYPES } from '../../utils/cmoonEffectTypes.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
-import { PLAYER_MAX_HP, combinePlayerMaxHp } from './cmoonEnemyBattle.js'
+import { PLAYER_MAX_HP, combinePlayerMaxHp, pickEffectiveSpecialAttack, SPECIAL_ATTACK_SELECT } from './cmoonEnemyBattle.js'
 import { announceTeamPointsMilestones, announceCMoonWelcome } from './cmoonDiscordEvents.js'
 
 // ── Daily cMoon team leaderboard scoring ──────────────────────────────────────
@@ -915,6 +915,24 @@ export async function getPlayerCombatMaxHp(userId, config = null) {
   })
   const bonus = clearedTiers.reduce((sum, t) => sum + (Number(t.cMoonEnemyBattleHpBonus) || 0), 0)
   return combinePlayerMaxHp(defaultHp, bonus)
+}
+
+// (pickEffectiveSpecialAttack/SPECIAL_ATTACK_SELECT live in cmoonEnemyBattle.js, imported above —
+// kept there rather than here so that pure/DB-free file stays the single source of truth for this
+// decision, and this async wrapper is the only piece that actually needs Prisma.)
+
+// Same decision as pickEffectiveSpecialAttack (see that function's own comment in
+// cmoonEnemyBattle.js), for a caller that does NOT already have the player's own
+// chosenSpecialAttack loaded (e.g. cmoonRaidSocket.js's loadParticipantProfile, which only loads
+// cMoon/rank data) — fetches it fresh, then defers to the same pure logic so the two callers can
+// never disagree on what "effective" means.
+export async function resolveEffectiveSpecialAttack(userId, cMoonSpecialAttack) {
+  if (!userId) return cMoonSpecialAttack || null
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { chosenSpecialAttack: { select: SPECIAL_ATTACK_SELECT } },
+  })
+  return pickEffectiveSpecialAttack(user?.chosenSpecialAttack, cMoonSpecialAttack)
 }
 
 export const CMOON_SELECT_ERRORS = {

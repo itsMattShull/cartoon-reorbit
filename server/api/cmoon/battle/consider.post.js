@@ -10,7 +10,7 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { getGlobalConfig } from '@/server/utils/cmoon'
-import { serializeEnemyForClient, serializeBattleForClient } from '@/server/utils/cmoonEnemyBattle'
+import { serializeEnemyForClient, serializeBattleForClient, SPECIAL_ATTACK_SELECT } from '@/server/utils/cmoonEnemyBattle'
 import { checkRaidBossAvailability } from '@/server/utils/cmoonEnemyRaid'
 import { filterToHighestRank, pickWeightedEnemy, filterCappedNonRaidCandidates, countRecentSoloStarts } from '@/server/utils/cmoonEnemy'
 import { pingFinalBossAppeared } from '@/server/utils/cmoonDiscordEvents'
@@ -33,6 +33,7 @@ export default defineEventHandler(async (event) => {
     include: {
       enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } },
       cMoon: { include: { specialAttack: true } },
+      user: { select: { chosenSpecialAttack: { select: SPECIAL_ATTACK_SELECT } } },
     },
   })
   if (inProgress) {

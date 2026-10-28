@@ -74,6 +74,16 @@ function serializeRaid(raid) {
     enemyAtkBonus: raid.enemyAtkBonus,
     enemyParalyzedTurns: raid.enemyParalyzedTurns,
     partyParalyzedTurns: raid.partyParalyzedTurns,
+    // Lobby controls, up-to-8 parties, private lobbies, wind-up telegraphs — see
+    // cmoonRaidSocket.js's own raid-shape comment for what each means. speedVotes is a Set
+    // in-memory (JSON can't carry one); stored as a plain array, rebuilt into a Set on restore
+    // (see restoreCMoonRaids).
+    maxParticipants: raid.maxParticipants,
+    isPrivate: raid.isPrivate,
+    leaderKeepOpen: raid.leaderKeepOpen,
+    speedVotes: Array.from(raid.speedVotes || []),
+    windUpMoves: raid.windUpMoves,
+    currentWindUp: raid.currentWindUp,
   }
 }
 

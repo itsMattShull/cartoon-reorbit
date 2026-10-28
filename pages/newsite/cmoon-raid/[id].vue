@@ -8,7 +8,7 @@
       <template v-else>
         <div
           class="cr-card bg-white rounded border p-4 space-y-3"
-          :class="{ 'cr-shake': shaking, 'cr-shake-crit': shaking && shakeCrit, 'cr-result-flash-win': resultFlash === 'win', 'cr-result-flash-loss': resultFlash === 'loss' }"
+          :class="{ 'cr-result-flash-win': resultFlash === 'win', 'cr-result-flash-loss': resultFlash === 'loss' }"
         >
           <div class="flex items-center gap-3">
             <div class="w-16 h-16 rounded border flex-shrink-0 overflow-hidden bg-gray-100 flex items-center justify-center">
@@ -17,8 +17,16 @@
             </div>
             <div class="min-w-0">
               <h1 class="font-bold text-lg break-words">{{ raid.enemyName }}</h1>
-              <p class="text-xs text-gray-500">Raid boss · {{ raid.participants.length }}/4 joined</p>
+              <p class="text-xs text-gray-500">
+                Raid boss · {{ raid.participants.length }}/{{ raid.maxParticipants }} joined
+                <span v-if="raid.isPrivate"> · 🔒 Private</span>
+              </p>
             </div>
+          </div>
+
+          <div v-if="raid.isPrivate" class="cr-private-row">
+            <span>🔒 Private raid — only reachable via this page's own link.</span>
+            <button type="button" class="cr-link-btn" @click="copyInviteLink">{{ inviteLinkCopied ? 'Copied!' : 'Copy invite link' }}</button>
           </div>
 
           <!-- Every cMoon in this party, in its own colors — raids are cross-cMoon, so this is
@@ -44,29 +52,58 @@
           <p v-if="currentTaunt" class="cr-taunt">&ldquo;{{ currentTaunt }}&rdquo;</p>
           <p v-if="raidSocket.lastError.value" class="text-sm text-red-600">{{ raidSocket.lastError.value }}</p>
 
-          <!-- ── FORMING: roster + join countdown ────────────────────────── -->
+          <!-- ── FORMING: roster + join countdown + lobby controls ───────────── -->
           <div v-if="raid.status === 'FORMING'" class="space-y-3">
             <p class="text-sm text-gray-600">
-              Joining closes in <span class="font-semibold tabular-nums">{{ joinCountdown }}s</span> — up to 4 players
-              from any cMoon can fight this boss together, each earning points for their own cMoon.
+              <template v-if="raid.leaderKeepOpen">The raid leader is keeping the lobby open.</template>
+              <template v-else>Joining closes in <span class="font-semibold tabular-nums">{{ joinCountdown }}s</span></template>
+              — up to {{ raid.maxParticipants }} players from any cMoon can fight this boss together, each earning
+              points for their own cMoon.
             </p>
             <ul class="cr-roster">
               <li v-for="p in raid.participants" :key="p.userId">
                 <CMoonRaidFighter :participant="p" :is-me="p.userId === user?.id" />
               </li>
-              <li v-for="n in Math.max(0, 4 - raid.participants.length)" :key="`open-${n}`" class="cr-roster-open">Open slot</li>
+              <li v-for="n in Math.max(0, raid.maxParticipants - raid.participants.length)" :key="`open-${n}`" class="cr-roster-open">Open slot</li>
             </ul>
             <button
               v-if="!hasJoined" type="button"
               class="px-4 py-2 text-sm font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-              :disabled="raid.participants.length >= 4" @click="raidSocket.joinRaid(raidId)"
+              :disabled="raid.participants.length >= raid.maxParticipants" @click="raidSocket.joinRaid(raidId)"
             >Join raid</button>
             <p v-else class="text-sm text-green-700 font-medium">You're in — waiting for the fight to start…</p>
+
+            <!-- Leader-only lobby controls. -->
+            <div v-if="isInitiator" class="cr-lobby-controls">
+              <label class="cr-keepopen-toggle">
+                <input type="checkbox" :checked="raid.leaderKeepOpen" @change="raidSocket.toggleKeepOpen(raidId, $event.target.checked)" />
+                Keep lobby open past the usual window
+              </label>
+              <button type="button" class="cr-link-btn" @click="raidSocket.forceStartRaid(raidId)">Start now</button>
+            </div>
+
+            <!-- Any non-leader participant can vote to cut the countdown to 5s, once everyone
+                 currently in agrees — see maybeApplySpeedVote in cmoonRaidSocket.js. -->
+            <button
+              v-if="!isInitiator && hasJoined && raid.participants.length < raid.maxParticipants"
+              type="button" class="cr-link-btn" @click="raidSocket.voteSpeedUp(raidId)"
+            >Vote to start in 5s ({{ raid.speedVoteCount }}/{{ raid.participants.length }})</button>
           </div>
 
           <!-- ── IN_PROGRESS: live combat ─────────────────────────────────── -->
           <div v-else-if="raid.status === 'IN_PROGRESS'" class="space-y-3">
-            <p class="text-xs text-gray-500">Round {{ raid.roundNumber }}</p>
+            <p class="text-xs text-gray-500">
+              Round {{ raid.roundNumber }} · acting in <span class="font-semibold tabular-nums">{{ roundCountdown }}s</span>
+            </p>
+
+            <!-- Wind-up telegraph — a deliberate, narrow exception to the usual "enemy action
+                 stays hidden until it resolves" rule (see raid.currentWindUp's own comment in
+                 cmoonRaidSocket.js): the whole party sees this coming and can react. -->
+            <p v-if="raid.currentWindUp" class="cr-windup-banner">
+              ⚠️ {{ raid.currentWindUp.message }}
+              <span class="cr-windup-hint">Block {{ raid.currentWindUp.direction === 'HIGH' ? 'high' : 'low' }} to counter it!</span>
+            </p>
+
             <ul class="space-y-2">
               <li v-for="p in raid.participants" :key="p.userId" class="cr-fighter-row text-xs relative">
                 <!-- Line 1: who (team colors + rank), their special charge, and their round status. -->
@@ -129,6 +166,11 @@
                 <p v-if="lastRoundSummary.enemyDamageDealt > 0" class="cr-reveal-dealt">The party dealt {{ lastRoundSummary.enemyDamageDealt }} damage this round.</p>
                 <p v-for="(s, i) in (lastRoundSummary.specials || [])" :key="i" class="cr-special-flash" :class="s.side === 'PLAYER' ? 'cr-special-flash-player' : 'cr-special-flash-enemy'">
                   ✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} unleashed <strong>{{ s.name }}</strong>!
+                </p>
+                <p v-if="lastRoundSummary.windUpBonus" class="cr-windup-bonus">
+                  🛡️ Perfect block! {{ lastRoundSummary.windUpBonus.bonusType === 'HEAL_PARTY'
+                    ? `The party heals ${lastRoundSummary.windUpBonus.bonusAmount} HP.`
+                    : `+${lastRoundSummary.windUpBonus.bonusAmount} bonus damage to the boss.` }}
                 </p>
               </div>
             </Transition>
@@ -193,7 +235,7 @@
               </div>
               <p class="text-xs text-gray-600">Everyone who joined received the same prize, and cMoon points went to each player's own cMoon.</p>
             </template>
-            <NuxtLink to="/newsite" class="inline-block px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50">Back home</NuxtLink>
+            <NuxtLink to="/newsite/home" class="inline-block px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50">Back home</NuxtLink>
           </div>
         </div>
       </template>
@@ -331,6 +373,30 @@ function tickCountdown() {
   joinCountdown.value = Math.max(0, Math.ceil((raid.value.joinDeadlineAt - Date.now()) / 1000))
 }
 
+// IN_PROGRESS's per-round move countdown — same plain client-side ticker shape as joinCountdown
+// above, against roundDeadlineAt instead: the server's sweep is still the real authority on when
+// a round auto-acts, this just gives a stalling player (and everyone watching) something to see
+// counting down, per this feature's own "stop people from stalling fights" goal.
+const roundCountdown = ref(0)
+let roundCountdownTimer = null
+function tickRoundCountdown() {
+  if (!raid.value?.roundDeadlineAt) { roundCountdown.value = 0; return }
+  roundCountdown.value = Math.max(0, Math.ceil((raid.value.roundDeadlineAt - Date.now()) / 1000))
+}
+
+// Whether I'M the raid leader — the only one who can toggle keep-open or force-start the lobby.
+const isInitiator = computed(() => !!raid.value?.participants.find(p => p.userId === user.value?.id)?.isInitiator)
+
+const inviteLinkCopied = ref(false)
+async function copyInviteLink() {
+  if (typeof window === 'undefined') return
+  try {
+    await navigator.clipboard.writeText(window.location.href)
+    inviteLinkCopied.value = true
+    setTimeout(() => { inviteLinkCopied.value = false }, 2000)
+  } catch {}
+}
+
 // One random pick from an enemy's admin-authored taunt pool — mirrors
 // composables/useCMoonBattlePopup.js's own pickRandomTaunt exactly (no shared import path between
 // a composable and this page, so duplicated client-side the same way ACTION_LABELS already is).
@@ -370,24 +436,11 @@ watch(() => raid.value?.status, (status) => {
 
 // ── Impact feedback + sound/music — same "juice" components/CMoonBattlePopupHost.vue gives a
 // solo battle (see that component's own comments for the full rationale), adapted to a raid's
-// shared screen: a shake/crit badge triggers off the WHOLE PARTY's round (anyone landing or
-// taking a hit), since everyone here is watching the same fight together, while the per-round
-// SOUND effects below play only off MY OWN participant row — four simultaneous players' sounds
-// all firing at once would be noise, not epic.
-const shaking = ref(false)
-const shakeCrit = ref(false)
-let shakeTimer = null
-function triggerShake(isCrit) {
-  if (shakeTimer) clearTimeout(shakeTimer)
-  shaking.value = false
-  shakeCrit.value = false
-  requestAnimationFrame(() => {
-    shakeCrit.value = !!isCrit
-    shaking.value = true
-    shakeTimer = setTimeout(() => { shaking.value = false }, 450)
-  })
-}
-
+// shared screen. Screenshake is deliberately NOT replicated here (unlike the solo popup) — up to
+// 8 players sharing one screen made misclicks from the shake common enough that this feature
+// removes it from raids specifically, while leaving the solo popup's own shake untouched. The
+// per-round SOUND effects below still play only off MY OWN participant row — several simultaneous
+// players' sounds all firing at once would be noise, not epic.
 function playSound(path) {
   if (!path || typeof window === 'undefined') return
   try {
@@ -408,11 +461,6 @@ function playMyRoundSounds(myRow, sounds) {
 
 watch(() => raidSocket.lastRound.value, (round) => {
   if (!round?.participants?.length) return
-  const anyHit = round.participants.some(r => r.playerHit || r.enemyHit)
-  if (anyHit) {
-    const anyCrit = round.participants.some(r => r.playerCrit || r.enemyCrit)
-    triggerShake(anyCrit)
-  }
   const myRow = round.participants.find(r => r.userId === user.value?.id)
   playMyRoundSounds(myRow, raid.value?.enemySounds)
   // Special-attack sounds play for the whole room, not just "my own" — a special firing is a
@@ -508,10 +556,11 @@ watch(() => raid.value?.outcome, (outcome) => {
 onMounted(() => {
   raidSocket.getState(raidId.value)
   countdownTimer = setInterval(tickCountdown, 250)
+  roundCountdownTimer = setInterval(tickRoundCountdown, 250)
 })
 onUnmounted(() => {
   if (countdownTimer) clearInterval(countdownTimer)
-  if (shakeTimer) clearTimeout(shakeTimer)
+  if (roundCountdownTimer) clearInterval(roundCountdownTimer)
   if (comboTimer) clearTimeout(comboTimer)
   if (resultFlashTimer) clearTimeout(resultFlashTimer)
   stopBattleMusic()
@@ -534,25 +583,6 @@ onUnmounted(() => {
 .cr-fighter-badge { flex: 0 1 auto; min-width: 0; }
 .cr-fighter-status { margin-left: auto; font-size: 10px; flex-shrink: 0; }
 .cr-hp-line { position: relative; display: flex; align-items: center; gap: 8px; padding-left: 4px; }
-/* Same impact-feedback shake components/CMoonBattlePopupHost.vue uses for a solo battle — see
-   that component's own comment on the prefers-reduced-motion stance this mirrors. */
-@keyframes cr-shake-kf {
-  10%, 90% { transform: translateX(-1px); }
-  20%, 80% { transform: translateX(2px); }
-  30%, 50%, 70% { transform: translateX(-4px); }
-  40%, 60% { transform: translateX(4px); }
-}
-@keyframes cr-shake-crit-kf {
-  10%, 90% { transform: translateX(-2px); }
-  20%, 80% { transform: translateX(4px); }
-  30%, 50%, 70% { transform: translateX(-8px); }
-  40%, 60% { transform: translateX(8px); }
-}
-.cr-shake { animation: cr-shake-kf 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
-.cr-shake-crit { animation: cr-shake-crit-kf 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
-@media (prefers-reduced-motion: reduce) {
-  .cr-shake, .cr-shake-crit { animation: none; }
-}
 
 /* Result-screen flash — mirrors components/CMoonBattlePopupHost.vue's cbp-result-flash, applied
    to this page's own light card (.cr-card, the root element resultFlash binds onto) instead of a
@@ -725,6 +755,30 @@ onUnmounted(() => {
 }
 .cr-status-good { background: #dcfce7; color: #166534; }
 .cr-status-bad { background: #fee2e2; color: #991b1b; }
+
+/* ── Private-raid row + generic small link-style button (lobby controls, copy-link) ──────── */
+.cr-private-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+  font-size: 11.5px; color: #78350f; background: rgba(250, 204, 21, 0.15);
+  border: 1px solid rgba(250, 204, 21, 0.4); border-radius: 6px; padding: 5px 9px;
+}
+.cr-link-btn {
+  font-size: 11.5px; font-weight: 700; color: #1e3a8a; background: none; border: 1px solid #c7d2fe;
+  border-radius: 6px; padding: 4px 10px; cursor: pointer;
+}
+.cr-link-btn:hover { background: #eef2ff; }
+
+.cr-lobby-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.cr-keepopen-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #374151; cursor: pointer; }
+
+/* ── Wind-up telegraph (see raid.currentWindUp) ──────────────────────────────────────────── */
+.cr-windup-banner {
+  font-size: 12px; font-weight: 700; color: #92400e; background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; padding: 6px 9px; margin: 0;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.cr-windup-hint { font-size: 11px; font-weight: 600; color: #b45309; }
+.cr-windup-bonus { font-size: 12px; font-weight: 700; color: #166534; margin: 4px 0 0; }
 
 /* ── Teammate charge indicator in the participant list ──────────────────────────────────── */
 .cr-charge-ready {

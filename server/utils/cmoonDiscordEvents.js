@@ -296,7 +296,12 @@ export async function announceSharedPoolBossDefeated(enemyName) {
 async function topSlayerForCMoon(cMoonId, rangeStart, rangeEnd) {
   const rows = await prisma.cMoonEnemyBattle.groupBy({
     by: ['userId'],
-    where: { cMoonId, outcome: 'WIN', endedAt: { gte: rangeStart, ...(rangeEnd ? { lt: rangeEnd } : {}) } },
+    // raidId: null — a "top slayer" recap is a solo-kill-style callout; a raid win is a shared
+    // party result (every participant gets a synthetic row, see CMoonEnemyBattle.raidId's own
+    // schema comment), so counting it here would let one raid inflate several players' tallies
+    // off a single kill. The Leaderboards page (server/api/leaderboard/cmoon-enemies.get.js)
+    // already draws this same raid/solo line explicitly; this brings this recap in line with it.
+    where: { cMoonId, outcome: 'WIN', raidId: null, endedAt: { gte: rangeStart, ...(rangeEnd ? { lt: rangeEnd } : {}) } },
     _count: { _all: true },
     // Bug fix: `orderBy: { _count: { _all: 'desc' } }` is rejected by this Prisma client version
     // ("Unknown argument `_all`"), which meant this query threw on every single call — silently

@@ -108,6 +108,27 @@ export default defineEventHandler(async (event) => {
     data.cMoonRaidBossDiscordChannelId = raw || null
   }
 
+  // How long a raid's FORMING join window stays open by default — see
+  // GlobalGameConfig.cMoonRaidJoinWindowSeconds' own schema comment. 15-120s; a raid leader's own
+  // keep-open/speed-vote controls (cmoonRaidSocket.js) operate independently on top of this.
+  if (body?.cMoonRaidJoinWindowSeconds !== undefined) {
+    const seconds = Number(body.cMoonRaidJoinWindowSeconds)
+    if (!Number.isInteger(seconds) || seconds < 15 || seconds > 120) {
+      throw createError({ statusCode: 400, statusMessage: 'Raid join window must be a whole number of seconds between 15 and 120' })
+    }
+    data.cMoonRaidJoinWindowSeconds = seconds
+  }
+
+  // Solo-raid points multiplier — see GlobalGameConfig.cMoonRaidSoloRewardMultiplierPercent's own
+  // schema comment. 100 = no bonus (the default), up to 500.
+  if (body?.cMoonRaidSoloRewardMultiplierPercent !== undefined) {
+    const pct = Number(body.cMoonRaidSoloRewardMultiplierPercent)
+    if (!Number.isInteger(pct) || pct < 100 || pct > 500) {
+      throw createError({ statusCode: 400, statusMessage: 'Solo raid reward multiplier must be a whole number between 100 and 500' })
+    }
+    data.cMoonRaidSoloRewardMultiplierPercent = pct
+  }
+
   // Every player's starting/max HP for a cMoon Enemy Battle (solo or raid) — see
   // getPlayerCombatMaxHp() in server/utils/cmoon.js, the only reader. Bounded the same way
   // CMoonEnemyMember's own maxHp is (server/utils/cmoonEnemy.js's MAX_HP_MIN/MAX_HP_MAX): each
@@ -303,6 +324,8 @@ export default defineEventHandler(async (event) => {
       cMoonEnemySpawnCapCount: existing?.cMoonEnemySpawnCapCount,
       cMoonEnemySpawnCapWindowHours: existing?.cMoonEnemySpawnCapWindowHours,
       cMoonRaidBossDiscordChannelId: existing?.cMoonRaidBossDiscordChannelId,
+      cMoonRaidJoinWindowSeconds: existing?.cMoonRaidJoinWindowSeconds,
+      cMoonRaidSoloRewardMultiplierPercent: existing?.cMoonRaidSoloRewardMultiplierPercent,
       cMoonEnemyBattleDefaultHp: existing?.cMoonEnemyBattleDefaultHp,
       cMoonEnemyBattleStartingStamina: existing?.cMoonEnemyBattleStartingStamina,
       cMoonEnemyBattleBlockCounterDamage: existing?.cMoonEnemyBattleBlockCounterDamage,
@@ -338,6 +361,8 @@ export default defineEventHandler(async (event) => {
       cMoonEnemySpawnCapCount: updated.cMoonEnemySpawnCapCount,
       cMoonEnemySpawnCapWindowHours: updated.cMoonEnemySpawnCapWindowHours,
       cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
+      cMoonRaidJoinWindowSeconds: updated.cMoonRaidJoinWindowSeconds,
+      cMoonRaidSoloRewardMultiplierPercent: updated.cMoonRaidSoloRewardMultiplierPercent,
       cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
       cMoonEnemyBattleStartingStamina: updated.cMoonEnemyBattleStartingStamina,
       cMoonEnemyBattleBlockCounterDamage: updated.cMoonEnemyBattleBlockCounterDamage,
@@ -375,6 +400,8 @@ export default defineEventHandler(async (event) => {
     cMoonEnemySpawnCapCount: updated.cMoonEnemySpawnCapCount,
     cMoonEnemySpawnCapWindowHours: updated.cMoonEnemySpawnCapWindowHours,
     cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
+    cMoonRaidJoinWindowSeconds: updated.cMoonRaidJoinWindowSeconds,
+    cMoonRaidSoloRewardMultiplierPercent: updated.cMoonRaidSoloRewardMultiplierPercent,
     cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
     cMoonEnemyBattleStartingStamina: updated.cMoonEnemyBattleStartingStamina,
     cMoonEnemyBattleBlockCounterDamage: updated.cMoonEnemyBattleBlockCounterDamage,

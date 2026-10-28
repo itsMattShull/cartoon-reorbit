@@ -317,15 +317,15 @@ model Ctoon {
   // `characters` (below); gtoonType1/2/3 and gtoonGroup are the archive card set's own
   // classification/team-membership tags (Type 1/2/3 and Group columns), needed so powers like
   // "+2 to all Heroes" or "each Justice League member in play" can be evaluated by the engine.
-  isOgGtoon   Boolean        @default(false)
-  gtoonColor  GtoonColor?
-  gtoonValue  Int?
-  gtoonType1  GtoonCardType?
-  gtoonType2  GtoonCardType?
-  gtoonType3  GtoonCardType?
-  gtoonGroup  GtoonGroup?
-  isSlamGtoon Boolean        @default(false)
-  gtoonEffect Json? // array of OgGtoonEffect definitions; see server/utils/ogGtoonEffects.js
+  isOgGtoon      Boolean        @default(false)
+  gtoonColor     GtoonColor?
+  gtoonValue     Int?
+  gtoonType1     GtoonCardType?
+  gtoonType2     GtoonCardType?
+  gtoonType3     GtoonCardType?
+  gtoonGroup     GtoonGroup?
+  isSlamGtoon    Boolean        @default(false)
+  gtoonEffect    Json? // array of OgGtoonEffect definitions; see server/utils/ogGtoonEffects.js
   // Cosmetic "round card" look (rotation, theme, effects); see server/utils/ogGtoonDisplay.js.
   gtoonCardStyle Json?
 
@@ -632,64 +632,74 @@ model User {
   equippedGlowCMoonId String?
   equippedGlow        CMoon?  @relation("CMoon_GlowEquippedBy", fields: [equippedGlowCMoonId], references: [id], onDelete: SetNull)
 
-  cZones                    CZone[]
-  clashDecks                ClashDeck[]
-  logins                    LoginLog[]
-  deviceFingerprintLogs     DeviceFingerprintLog[]
-  cheatFinderConfirmations  CheatFinderConfirmation[]
-  gamePointLogs             GamePointLog[]
-  pointsLogs                PointsLog[]
-  lockedPoints              LockedPoints[]
-  notifications             Notification[]
-  claims                    Claim[]
-  visits                    Visit[]
-  points                    UserPoints?
-  ctoons                    UserCtoon[]
-  friends                   Friend[]                      @relation("UserFriends")
-  friendedBy                Friend[]                      @relation("UserFriendOf")
-  favoriteCzones            FavoriteCzone[]               @relation("CzoneFavoritedBy")
-  favoritedByCzones         FavoriteCzone[]               @relation("CzoneFavoritedOf")
-  traderARooms              TradeRoom[]                   @relation("TraderA")
-  traderBRooms              TradeRoom[]                   @relation("TraderB")
-  trades                    Trade[]
-  tradeSpectators           TradeSpectator[]
-  ips                       UserIP[]
-  packs                     UserPack[]
-  wishlistItems             WishlistItem[]
-  tradeListItems            UserTradeListItem[]
-  tradeOffersInitiated      TradeOffer[]                  @relation("OfferInitiator")
-  tradeOffersReceived       TradeOffer[]                  @relation("OfferRecipient")
-  tradeOffersAccepted       TradeOffer[]                  @relation("OfferAcceptedBy")
-  touchTradeConfirmations   TouchTradeConfirmation[]      @relation("TouchTradeConfirmedBy")
-  auctionsAsHighestBid      Auction[]                     @relation("HighestBidder")
-  auctionsAsWinner          Auction[]                     @relation("AuctionWinner")
-  bids                      Bid[]
-  autoBids                  AuctionAutoBid[]
-  auctionsCreated           Auction[]                     @relation("AuctionsCreated")
-  clashGamesAsPlayer1       ClashGame[]                   @relation("ClashGamePlayer1")
-  clashGamesAsPlayer2       ClashGame[]                   @relation("ClashGamePlayer2")
-  clashGamesWhoLeft         ClashGame[]                   @relation("ClashGameWhoLeft")
-  clashGamesAsWinner        ClashGame[]                   @relation("ClashGameWinner")
-  ogGtoonDecks              OgGtoonDeck[]
-  ogGtoonMatchesAsPlayer1   OgGtoonMatch[]                @relation("OgGtoonMatchPlayer1")
-  ogGtoonMatchesAsPlayer2   OgGtoonMatch[]                @relation("OgGtoonMatchPlayer2")
-  ogGtoonMatchesWhoLeft     OgGtoonMatch[]                @relation("OgGtoonMatchWhoLeft")
-  ogGtoonMatchesAsWinner    OgGtoonMatch[]                @relation("OgGtoonMatchWinner")
-  ogGtoonPracticeMatches    OgGtoonPracticeMatch[]
-  edRpsMatchesAsPlayer1     EdRpsMatch[]                  @relation("EdRpsMatchPlayer1")
-  edRpsMatchesAsPlayer2     EdRpsMatch[]                  @relation("EdRpsMatchPlayer2")
-  edRpsMatchesAsWinner      EdRpsMatch[]                  @relation("EdRpsMatchWinner")
-  edRpsMatchesWhoLeft       EdRpsMatch[]                  @relation("EdRpsMatchWhoLeft")
-  pokemonBattleAsPlayer1    PokemonBattleMatch[]          @relation("PokemonBattleMatchPlayer1")
-  pokemonBattleAsPlayer2    PokemonBattleMatch[]          @relation("PokemonBattleMatchPlayer2")
-  pokemonBattleAsWinner     PokemonBattleMatch[]          @relation("PokemonBattleMatchWinner")
-  pokemonBattleWhoLeft      PokemonBattleMatch[]          @relation("PokemonBattleMatchWhoLeft")
-  gtoonTournamentsWon       GtoonTournament[]             @relation("GtoonTournamentWinner")
-  gtoonTournamentOptIns     GtoonTournamentOptIn[]
-  gtoonTournamentMatchesAsA GtoonTournamentMatch[]        @relation("GtoonTournamentMatchPlayerA")
-  gtoonTournamentMatchesAsB GtoonTournamentMatch[]        @relation("GtoonTournamentMatchPlayerB")
-  gtoonTournamentMatchesWon GtoonTournamentMatch[]        @relation("GtoonTournamentMatchWinner")
-  gtoonTournamentRecords    GtoonTournamentPlayerRecord[]
+  // This player's own pick of special attack, overriding their cMoon's assigned one — only takes
+  // effect while the target attack still has CMoonSpecialAttack.playerChoice = true (re-checked
+  // live at resolution, never trusted from this stale FK alone — see resolveEffectiveSpecialAttack
+  // in server/utils/cmoon.js); falls back to the cMoon's own special attack otherwise, same as
+  // before this column existed. onDelete: SetNull rather than Restrict: this is a cosmetic/
+  // gameplay preference, not an economically consequential grant like a border/glow, so an admin
+  // deleting the attack should just clear the player's choice, not be blocked by it.
+  chosenSpecialAttackId String?
+  chosenSpecialAttack   CMoonSpecialAttack? @relation(fields: [chosenSpecialAttackId], references: [id], onDelete: SetNull)
+
+  cZones                      CZone[]
+  clashDecks                  ClashDeck[]
+  logins                      LoginLog[]
+  deviceFingerprintLogs       DeviceFingerprintLog[]
+  cheatFinderConfirmations    CheatFinderConfirmation[]
+  gamePointLogs               GamePointLog[]
+  pointsLogs                  PointsLog[]
+  lockedPoints                LockedPoints[]
+  notifications               Notification[]
+  claims                      Claim[]
+  visits                      Visit[]
+  points                      UserPoints?
+  ctoons                      UserCtoon[]
+  friends                     Friend[]                        @relation("UserFriends")
+  friendedBy                  Friend[]                        @relation("UserFriendOf")
+  favoriteCzones              FavoriteCzone[]                 @relation("CzoneFavoritedBy")
+  favoritedByCzones           FavoriteCzone[]                 @relation("CzoneFavoritedOf")
+  traderARooms                TradeRoom[]                     @relation("TraderA")
+  traderBRooms                TradeRoom[]                     @relation("TraderB")
+  trades                      Trade[]
+  tradeSpectators             TradeSpectator[]
+  ips                         UserIP[]
+  packs                       UserPack[]
+  wishlistItems               WishlistItem[]
+  tradeListItems              UserTradeListItem[]
+  tradeOffersInitiated        TradeOffer[]                    @relation("OfferInitiator")
+  tradeOffersReceived         TradeOffer[]                    @relation("OfferRecipient")
+  tradeOffersAccepted         TradeOffer[]                    @relation("OfferAcceptedBy")
+  touchTradeConfirmations     TouchTradeConfirmation[]        @relation("TouchTradeConfirmedBy")
+  auctionsAsHighestBid        Auction[]                       @relation("HighestBidder")
+  auctionsAsWinner            Auction[]                       @relation("AuctionWinner")
+  bids                        Bid[]
+  autoBids                    AuctionAutoBid[]
+  auctionsCreated             Auction[]                       @relation("AuctionsCreated")
+  clashGamesAsPlayer1         ClashGame[]                     @relation("ClashGamePlayer1")
+  clashGamesAsPlayer2         ClashGame[]                     @relation("ClashGamePlayer2")
+  clashGamesWhoLeft           ClashGame[]                     @relation("ClashGameWhoLeft")
+  clashGamesAsWinner          ClashGame[]                     @relation("ClashGameWinner")
+  ogGtoonDecks                OgGtoonDeck[]
+  ogGtoonMatchesAsPlayer1     OgGtoonMatch[]                  @relation("OgGtoonMatchPlayer1")
+  ogGtoonMatchesAsPlayer2     OgGtoonMatch[]                  @relation("OgGtoonMatchPlayer2")
+  ogGtoonMatchesWhoLeft       OgGtoonMatch[]                  @relation("OgGtoonMatchWhoLeft")
+  ogGtoonMatchesAsWinner      OgGtoonMatch[]                  @relation("OgGtoonMatchWinner")
+  ogGtoonPracticeMatches      OgGtoonPracticeMatch[]
+  edRpsMatchesAsPlayer1       EdRpsMatch[]                    @relation("EdRpsMatchPlayer1")
+  edRpsMatchesAsPlayer2       EdRpsMatch[]                    @relation("EdRpsMatchPlayer2")
+  edRpsMatchesAsWinner        EdRpsMatch[]                    @relation("EdRpsMatchWinner")
+  edRpsMatchesWhoLeft         EdRpsMatch[]                    @relation("EdRpsMatchWhoLeft")
+  pokemonBattleAsPlayer1      PokemonBattleMatch[]            @relation("PokemonBattleMatchPlayer1")
+  pokemonBattleAsPlayer2      PokemonBattleMatch[]            @relation("PokemonBattleMatchPlayer2")
+  pokemonBattleAsWinner       PokemonBattleMatch[]            @relation("PokemonBattleMatchWinner")
+  pokemonBattleWhoLeft        PokemonBattleMatch[]            @relation("PokemonBattleMatchWhoLeft")
+  gtoonTournamentsWon         GtoonTournament[]               @relation("GtoonTournamentWinner")
+  gtoonTournamentOptIns       GtoonTournamentOptIn[]
+  gtoonTournamentMatchesAsA   GtoonTournamentMatch[]          @relation("GtoonTournamentMatchPlayerA")
+  gtoonTournamentMatchesAsB   GtoonTournamentMatch[]          @relation("GtoonTournamentMatchPlayerB")
+  gtoonTournamentMatchesWon   GtoonTournamentMatch[]          @relation("GtoonTournamentMatchWinner")
+  gtoonTournamentRecords      GtoonTournamentPlayerRecord[]
   ogGtoonTournamentsWon       OgGtoonTournament[]             @relation("OgGtoonTournamentWinner")
   ogGtoonTournamentOptIns     OgGtoonTournamentOptIn[]
   ogGtoonTournamentMatchesAsA OgGtoonTournamentMatch[]        @relation("OgGtoonTournamentMatchPlayerA")
@@ -697,29 +707,29 @@ model User {
   ogGtoonTournamentMatchesWon OgGtoonTournamentMatch[]        @relation("OgGtoonTournamentMatchWinner")
   ogGtoonTournamentRecords    OgGtoonTournamentPlayerRecord[]
   ogGtoonTournamentPrizes     OgGtoonTournamentPrizeGrant[]
-  monsterBattlesAsPlayer1   MonsterBattle[]               @relation("MonsterBattlePlayer1")
-  monsterBattlesAsPlayer2   MonsterBattle[]               @relation("MonsterBattlePlayer2")
-  monsterBattlesAsWinner    MonsterBattle[]               @relation("MonsterBattleWinner")
-  wheelSpinLogs             WheelSpinLog[]                @relation("WheelSpinLogToUser")
-  backgroundsCreated        Background[]                  @relation("BackgroundCreatedBy")
-  ownedBackgrounds          UserBackground[]              @relation("User_UserBackgrounds")
-  avatarsCreated            Avatar[]                      @relation("AvatarCreatedBy")
-  ownedAvatars              UserAvatar[]                  @relation("User_UserAvatars")
-  cMoonAffinities           CMoonAffinity[]
-  cMoonBorders              UserCMoonBorder[]             @relation("User_UserCMoonBorders")
-  cMoonGlows                UserCMoonGlow[]               @relation("User_UserCMoonGlows")
-  ownerLogs                 CtoonOwnerLog[]
-  ownerLogsAsCounterparty   CtoonOwnerLog[]               @relation("CtoonOwnerLogCounterparty")
-  holidayRedemptions        HolidayRedemption[]
-  auctionsOnlyCreated       AuctionOnly[]                 @relation("AuctionOnlyCreatedBy")
-  adImagesCreated           AdImage[]                     @relation("AdImagesCreatedBy")
-  winballGrandPrizeCreated  WinballGrandPrizeSchedule[]   @relation("WinballGrandPrizeCreatedBy")
-  announcementsCreated      Announcement[]                @relation("AnnouncementsCreatedBy")
-  salesCreated              Sale[]                        @relation("SaleCreatedBy")
-  saleDailyPurchases        SaleDailyPurchase[]
+  monsterBattlesAsPlayer1     MonsterBattle[]                 @relation("MonsterBattlePlayer1")
+  monsterBattlesAsPlayer2     MonsterBattle[]                 @relation("MonsterBattlePlayer2")
+  monsterBattlesAsWinner      MonsterBattle[]                 @relation("MonsterBattleWinner")
+  wheelSpinLogs               WheelSpinLog[]                  @relation("WheelSpinLogToUser")
+  backgroundsCreated          Background[]                    @relation("BackgroundCreatedBy")
+  ownedBackgrounds            UserBackground[]                @relation("User_UserBackgrounds")
+  avatarsCreated              Avatar[]                        @relation("AvatarCreatedBy")
+  ownedAvatars                UserAvatar[]                    @relation("User_UserAvatars")
+  cMoonAffinities             CMoonAffinity[]
+  cMoonBorders                UserCMoonBorder[]               @relation("User_UserCMoonBorders")
+  cMoonGlows                  UserCMoonGlow[]                 @relation("User_UserCMoonGlows")
+  ownerLogs                   CtoonOwnerLog[]
+  ownerLogsAsCounterparty     CtoonOwnerLog[]                 @relation("CtoonOwnerLogCounterparty")
+  holidayRedemptions          HolidayRedemption[]
+  auctionsOnlyCreated         AuctionOnly[]                   @relation("AuctionOnlyCreatedBy")
+  adImagesCreated             AdImage[]                       @relation("AdImagesCreatedBy")
+  winballGrandPrizeCreated    WinballGrandPrizeSchedule[]     @relation("WinballGrandPrizeCreatedBy")
+  announcementsCreated        Announcement[]                  @relation("AnnouncementsCreatedBy")
+  salesCreated                Sale[]                          @relation("SaleCreatedBy")
+  saleDailyPurchases          SaleDailyPurchase[]
   // Ban notes relations
-  banNotes                  UserBanNote[]                 @relation("BanNoteUser")
-  banNotesAuthored          UserBanNote[]                 @relation("BanNoteAdmin")
+  banNotes                    UserBanNote[]                   @relation("BanNoteUser")
+  banNotesAuthored            UserBanNote[]                   @relation("BanNoteAdmin")
 
   // Scavenger Hunt relations
   scavengerSessions    ScavengerSession[]
@@ -804,21 +814,21 @@ model User {
   fruitSamuraiPlays  FruitSamuraiPlay[]
 
   // cMoon (faction) relations
-  cMoonCaptainOf           CMoonCaptain[]
-  achievementClaims        AchievementClaim[]
+  cMoonCaptainOf                 CMoonCaptain[]
+  achievementClaims              AchievementClaim[]
   achievementTierClaimDismissals AchievementTierClaimDismissal[]
-  dailyTaskCompletions     UserDailyTaskCompletion[]
-  initiatedDispersalOffers CMoonDispersalOffer[]     @relation("CMoonDispersalOfferInitiatedBy")
-  closedDispersalOffers    CMoonDispersalOffer[]     @relation("CMoonDispersalOfferClosedBy")
-  dispersalClaims          CMoonDispersalClaim[]
-  cMoonChangeRequests      CMoonChangeRequest[]
+  dailyTaskCompletions           UserDailyTaskCompletion[]
+  initiatedDispersalOffers       CMoonDispersalOffer[]           @relation("CMoonDispersalOfferInitiatedBy")
+  closedDispersalOffers          CMoonDispersalOffer[]           @relation("CMoonDispersalOfferClosedBy")
+  dispersalClaims                CMoonDispersalClaim[]
+  cMoonChangeRequests            CMoonChangeRequest[]
 
   // cMoon Enemy Battles
-  cMoonEnemyBattles CMoonEnemyBattle[]
+  cMoonEnemyBattles            CMoonEnemyBattle[]
   cMoonEnemyRaidParticipations CMoonEnemyRaidParticipant[]
-  cMoonEnemyRewardPity CMoonEnemyRewardPity[]
-  cMoonEnemyPopupLogs CMoonEnemyPopupLog[]
-  cMoonHuntAssignments CMoonHuntAssignment[]
+  cMoonEnemyRewardPity         CMoonEnemyRewardPity[]
+  cMoonEnemyPopupLogs          CMoonEnemyPopupLog[]
+  cMoonHuntAssignments         CMoonHuntAssignment[]
 
   @@unique([discordId, active]) // at most one active user per Discord ID
   @@index([cMoonId])
@@ -1374,17 +1384,17 @@ model GameConfig {
   winballPeg12Z      Float? @default(4)
 
   // — Win Wheel settings —
-  spinCost             Int              @default(100)
-  pointsWon            Int              @default(250)
-  maxDailySpins        Int              @default(2)
-  exclusiveCtoons      WinWheelOption[] @relation("WinWheelOptions")
-  winWheelImagePath    String?
-  winWheelSoundPath    String?
-  winWheelSoundMode    String?
+  spinCost               Int              @default(100)
+  pointsWon              Int              @default(250)
+  maxDailySpins          Int              @default(2)
+  exclusiveCtoons        WinWheelOption[] @relation("WinWheelOptions")
+  winWheelImagePath      String?
+  winWheelSoundPath      String?
+  winWheelSoundMode      String?
   winWheelNothingGifPath String?
   winWheelNothingText    String?
-  tripleNothingCtoonId String?
-  tripleNothingCtoon   Ctoon?           @relation("TripleNothingPrize", fields: [tripleNothingCtoonId], references: [id])
+  tripleNothingCtoonId   String?
+  tripleNothingCtoon     Ctoon?           @relation("TripleNothingPrize", fields: [tripleNothingCtoonId], references: [id])
 
   // — ReOrbit Match settings —
   reorbitPlaysPerPeriod Int      @default(3)
@@ -1717,44 +1727,44 @@ model GlobalGameConfig {
   gameTileGuessctoonImagePath    String?
   gameTileAsteroidImagePath      String?
 
-  gameTileFlappyImagePath            String?
-  gameTileBlackjackImagePath         String?
-  gameTileEdrpsImagePath             String?
-  gameTileFruitsamuraiImagePath      String?
-  gameTilePokemonbattleImagePath     String?
+  gameTileFlappyImagePath              String?
+  gameTileBlackjackImagePath           String?
+  gameTileEdrpsImagePath               String?
+  gameTileFruitsamuraiImagePath        String?
+  gameTilePokemonbattleImagePath       String?
   // Account-dissolve "featured auction" rules: cToons matching any of these
   // rarities/series/sets are marked isFeatured when an account is dissolved.
   // Each is a JSON array of strings, edited via the "Edit Featured" modal on
   // /admin/dissolve-queue.
-  featuredDissolveRarities           Json      @default("[]")
-  featuredDissolveSeries             Json      @default("[]")
-  featuredDissolveSets               Json      @default("[]")
+  featuredDissolveRarities             Json      @default("[]")
+  featuredDissolveSeries               Json      @default("[]")
+  featuredDissolveSets                 Json      @default("[]")
   // Default cadence for scheduling DissolveAuctionQueue entries, set via the
   // "Reschedule All" form on /admin/dissolve-queue and reused automatically by
   // the 9-month inactivity dissolve cron so newly-queued priority entries get
   // scheduledFor set without needing an admin to visit the page.
-  dissolveScheduleCadenceDays        Int       @default(7)
-  dissolveScheduleFeaturedPerCadence Int       @default(2)
-  dissolveScheduleOtherPerCadence    Int       @default(10)
+  dissolveScheduleCadenceDays          Int       @default(7)
+  dissolveScheduleFeaturedPerCadence   Int       @default(2)
+  dissolveScheduleOtherPerCadence      Int       @default(10)
   // Starting bid for dissolve-queue auctions of each rarity that has no rarity floor of its own
   // (see server/utils/dissolveListing.js). Null = hold that rarity in the queue: it never takes a
   // schedule slot or auto-lists until an admin sets a bid on the Dissolve Queue page.
-  dissolveStartBidAuctionOnly Int?
-  dissolveStartBidPrizeOnly   Int?
-  dissolveStartBidCodeOnly    Int?
-  dissolveStartBidCrazyRare   Int?
+  dissolveStartBidAuctionOnly          Int?
+  dissolveStartBidPrizeOnly            Int?
+  dissolveStartBidCodeOnly             Int?
+  dissolveStartBidCrazyRare            Int?
   // Site favicon / meta-icon set, uploaded from Admin > Manage Homepage > Favicon.
   // faviconVersion is bumped on every upload and appended as a cache-busting
   // query string to every icon URL rendered in pages/index.vue's useHead.
-  faviconVersion                     BigInt?
-  faviconSourcePath                  String? // original master upload, retained for re-generation/audit
+  faviconVersion                       BigInt?
+  faviconSourcePath                    String? // original master upload, retained for re-generation/audit
   // Logo shown at the bottom of the player membership certificate (Settings > Generate
   // Certificate), uploaded from Admin > Manage Certificate. Deployed static files under public/
   // are never actually served in production/dev — /images/* is served from the sibling
   // cartoon-reorbit-images/ directory instead (see server/utils/uploadStorage.js) — so this
   // logo has to go through an admin upload like every other site-wide image, not a git commit.
   // Null falls back to /images/logo-reorbit.png (the original static asset).
-  certificateLogoPath                String?
+  certificateLogoPath                  String?
   // Site-wide UI "haptic sound" (click blip) played on every button click, and the per-nav-item
   // overrides below it — assigned from Admin > Manage Homepage > Sounds, always resolved from
   // the UiSound library, below (never a raw upload — see server/api/admin/global-config/nav-sounds.post.js).
@@ -1762,11 +1772,11 @@ model GlobalGameConfig {
   // Both fields hold server-generated relative paths, never client input, but
   // server/api/global-config.get.js still re-validates their shape before handing them to every
   // visitor, since these are read on literally every page.
-  uiClickSoundPath                   String?
+  uiClickSoundPath                     String?
   // { [navSoundSlotKey]: assetPath } — see utils/navSoundSlots.js for the fixed set of valid
   // keys (one per main-nav button) and server/api/admin/global-config/nav-sounds.post.js for how
   // entries are written. A key with no entry (or an invalid one) falls back to uiClickSoundPath.
-  uiNavButtonSounds                  Json?
+  uiNavButtonSounds                    Json?
   // Which UiSoundPreset (below) is currently "loaded" into the two live fields above — purely
   // informational/bookkeeping for the admin UI (Manage Homepage > Sounds), which still reads and
   // writes uiClickSoundPath/uiNavButtonSounds exactly as before; activating a preset just copies
@@ -1774,43 +1784,43 @@ model GlobalGameConfig {
   // edit back into that same preset row so switching away and back never loses it. Loose scalar,
   // no FK — a preset can be deleted (except the currently-active one, guarded at the API layer)
   // without needing to touch this column's own constraint.
-  activeUiSoundPresetId               String?
+  activeUiSoundPresetId                String?
   // Site-wide color theme — see SiteTheme's own comment below. True (the default) means the
   // hardcoded brand colors (--OrbitDarkBlue/--OrbitLightBlue/--OrbitGreen/bg/text in
   // layouts/newsite-template.vue) are always used, regardless of any saved SiteTheme rows —
   // flipping it off is what lets activeSiteThemeId's colors actually apply.
-  useDefaultSiteTheme                 Boolean  @default(true)
+  useDefaultSiteTheme                  Boolean   @default(true)
   // Which SiteTheme applies when useDefaultSiteTheme is false. Loose scalar, no FK — same
   // reasoning as activeUiSoundPresetId above (delete-guarded at the API layer instead).
-  activeSiteThemeId                   String?
+  activeSiteThemeId                    String?
   // cMoon (faction) feature — off by default, easy to disable without losing data.
   // When flipped false -> true, cMoonEnabledAt is set to now (purely informational, shown in the
   // admin panel as "Launched X"). cMoonSelectionDeadlineAt predates the opt-out flow and is no
   // longer read by anything — left in place rather than migrated away since it's harmless.
-  cMoonEnabled                       Boolean   @default(false)
-  cMoonEnabledAt                     DateTime?
-  cMoonSelectionDeadlineAt           DateTime?
+  cMoonEnabled                         Boolean   @default(false)
+  cMoonEnabledAt                       DateTime?
+  cMoonSelectionDeadlineAt             DateTime?
   // How many days a player who opted out of (or hasn't yet picked) a cMoon must wait before they
   // can join one again from the cMoons navigation page's "Join a cMoon" button — see
   // computeCMoonRejoinAvailableAt in server/utils/cmoon.js. 0 = no cooldown. Independent of, and
   // applied together with, each CMoon's own allowOptOutJoin toggle below.
-  cMoonOptOutCooldownDays            Int       @default(14)
+  cMoonOptOutCooldownDays              Int       @default(14)
   // Weekly cMoon team-leaderboard scoring rules (see server/utils/cmoon.js
   // runDailyCMoonScoring / recordDailyTaskCompletions). Admin-editable via
   // Admin > cMoons > Scoring Rules; changes apply forward-only to future cron
   // runs, never retroactively rewriting CMoonScoreLog/CMoon.teamScore.
-  cMoonHighScorePoints               Int       @default(100) // per-player award for holding rank #1 on an eligible game
-  cMoonTop10Points                   Int       @default(50) // per-player award for a top-N finish on an eligible board
-  cMoonDailyTaskPoints               Int       @default(10) // per-player-per-day award for completing >=1 daily task
-  cMoonScoringMinAccountAgeDays      Int       @default(3) // anti-abuse: account must be this old to qualify for any award
-  cMoonTop10RankCutoff               Int       @default(10) // how many ranks count as "top 10" on eligible boards
-  cMoonTop10PointsBoardEnabled       Boolean   @default(true) // whether the "Total Points" board counts toward TOP10
-  cMoonTop10CtoonsBoardEnabled       Boolean   @default(true) // whether the "Total cToons" board counts toward TOP10
+  cMoonHighScorePoints                 Int       @default(100) // per-player award for holding rank #1 on an eligible game
+  cMoonTop10Points                     Int       @default(50) // per-player award for a top-N finish on an eligible board
+  cMoonDailyTaskPoints                 Int       @default(10) // per-player-per-day award for completing >=1 daily task
+  cMoonScoringMinAccountAgeDays        Int       @default(3) // anti-abuse: account must be this old to qualify for any award
+  cMoonTop10RankCutoff                 Int       @default(10) // how many ranks count as "top 10" on eligible boards
+  cMoonTop10PointsBoardEnabled         Boolean   @default(true) // whether the "Total Points" board counts toward TOP10
+  cMoonTop10CtoonsBoardEnabled         Boolean   @default(true) // whether the "Total cToons" board counts toward TOP10
   // Game keys (SCORE_GAMES[].name / WIN_GAMES[].name in server/utils/cmoon.js)
   // excluded from HIGH_SCORE eligibility. JSON string[] to match the
   // featuredAuctionHours/featuredDissolve* array-field convention above.
-  cMoonDisabledScoreGames            Json      @default("[]")
-  cMoonDisabledWinGames              Json      @default("[]")
+  cMoonDisabledScoreGames              Json      @default("[]")
+  cMoonDisabledWinGames                Json      @default("[]")
   // What time of day (America/Chicago wall clock) the cMoon team-leaderboard scoring job fires,
   // admin-adjustable via Admin > cMoons instead of the fixed weekly cron it used to be — see
   // runDailyCMoonScoring / checkAndRunCMoonDailyScoring in server/utils/cmoon.js and
@@ -1819,9 +1829,9 @@ model GlobalGameConfig {
   // it already awarded per-day). cMoonScoringLastRunDate is a "yyyy-mm-dd" (Chicago) idempotency
   // stamp, checked-and-set under the same advisory lock the run itself uses, so the frequent
   // checker cron can never double-fire a given day even across overlapping ticks.
-  cMoonScoringRunHour                Int       @default(0) // 0-23 CST
-  cMoonScoringRunMinute              Int       @default(0) // 0-59
-  cMoonScoringLastRunDate            String?
+  cMoonScoringRunHour                  Int       @default(0) // 0-23 CST
+  cMoonScoringRunMinute                Int       @default(0) // 0-59
+  cMoonScoringLastRunDate              String?
   // Heartbeat for the SEPARATE, every-30-minutes live daily-task cron (recordDailyTaskCompletions,
   // see server/cron/record-daily-task-completions.js) — unlike cMoonScoringLastRunDate above
   // (which only advances once a calendar day, for the HIGH_SCORE/TOP10 job), this is stamped on
@@ -1829,7 +1839,7 @@ model GlobalGameConfig {
   // so a stale value is a direct signal the cron process itself has stopped running — there is
   // otherwise no admin-visible way to tell "no one's completed a task in a while" apart from "the
   // cron died." Surfaced on Admin > cMoons > Scoring Rules.
-  cMoonDailyTaskCronLastRanAt        DateTime?
+  cMoonDailyTaskCronLastRanAt          DateTime?
   // Mutual-exclusion lease for the same daily-task cron, replacing a Postgres session-scoped
   // advisory lock (pg_try_advisory_lock/pg_advisory_unlock) that this job used to take out and
   // release as two SEPARATE non-transactional queries — under Prisma's pooled client, those two
@@ -1848,13 +1858,13 @@ model GlobalGameConfig {
   // cMoonDailyTaskCronClaimToken below, deliberately NOT by comparing this timestamp back
   // (a value round-tripped out through Prisma and back into a fresh query is exactly the kind of
   // comparison a session timezone OTHER than UTC could silently break).
-  cMoonDailyTaskCronClaimedAt        DateTime?
+  cMoonDailyTaskCronClaimedAt          DateTime?
   // Opaque per-claim token (see cMoonDailyTaskCronClaimedAt above): a run captures a fresh random
   // value on every successful claim and clears both columns together only if this still matches
   // what it wrote, so a run whose lease already expired and was re-claimed by someone else can
   // never clobber that newer claim by releasing late. Plain string equality — no timestamp
   // precision or timezone round-trip involved at all.
-  cMoonDailyTaskCronClaimToken       String?
+  cMoonDailyTaskCronClaimToken         String?
   // Shrinkage constant for the average-points-per-player TEAM ranking (Admin > Leaderboards'
   // cMoons tab, and each cMoon's own "Team Rank" badge — see server/api/leaderboard/cmoons.get.js
   // and server/api/cmoon/[id].get.js). Purely a display/ranking-presentation knob, NOT part of
@@ -1866,7 +1876,7 @@ model GlobalGameConfig {
   // k is "how many members before a team's own average is trusted over the site average" — a
   // 1-member team is almost entirely pulled toward siteAvg, a team with memberCount >> k is
   // barely shrunk at all. 0 disables shrinkage (falls back to the plain average).
-  cMoonAvgShrinkageK                 Int       @default(10)
+  cMoonAvgShrinkageK                   Int       @default(10)
   // cMoon Enemy Battles: site-wide "random encounter" popup settings (see CMoonEnemyFaction/
   // CMoonEnemyMember near the end of this file, and server/api/cmoon/battle/consider.post.js).
   // Same chance-roll + per-user cooldown shape as the Scavenger Hunt settings above, but rolled
@@ -1876,12 +1886,12 @@ model GlobalGameConfig {
   // without losing data" stance as cMoonEnabled above) — checked BEFORE the chance roll in
   // consider.post.js and again in start.post.js as a backstop, so disabling it can never be
   // bypassed by a client that already has a stale "battle available" prompt on screen.
-  cMoonEnemyBattlesEnabled           Boolean   @default(false)
-  cMoonBattlePopupChancePercent      Int       @default(3) // 0-100; rolled on each route navigation; 0 disables
+  cMoonEnemyBattlesEnabled             Boolean   @default(false)
+  cMoonBattlePopupChancePercent        Int       @default(3) // 0-100; rolled on each route navigation; 0 disables
   // Minimum time between a player actually ENGAGING a battle popup (fighting solo or starting a
   // raid — see User.lastCMoonBattlePopupAt's own schema comment) and being offered another;
   // declining ("Not now") is free and never starts this clock.
-  cMoonBattlePopupCooldownMinutes    Int       @default(20)
+  cMoonBattlePopupCooldownMinutes      Int       @default(20)
   // Caps how many NON-raid-boss battles a single player can actually START within a rolling
   // window of cMoonEnemySpawnCapWindowHours — e.g. "4 per 4 hours" (declining an offer never
   // counts against this, same as the cooldown above). A raid boss is NEVER subject to this cap
@@ -1892,18 +1902,30 @@ model GlobalGameConfig {
   // "0 disables" convention as cMoonBattlePopupChancePercent above. See
   // filterCappedNonRaidCandidates in server/utils/cmoonEnemy.js, the only reader besides the admin
   // settings endpoint.
-  cMoonEnemySpawnCapCount            Int       @default(0)
-  cMoonEnemySpawnCapWindowHours      Int       @default(4) // only meaningful while the cap above is > 0
+  cMoonEnemySpawnCapCount              Int       @default(0)
+  cMoonEnemySpawnCapWindowHours        Int       @default(4) // only meaningful while the cap above is > 0
   // Discord channel a raid-boss announcement posts to (see announceCMoonRaidBoss in
   // server/utils/discord.js) — same admin-configurable-with-env-fallback shape as
   // achievementDiscordChannelId/czoneContestDiscordChannelId above.
-  cMoonRaidBossDiscordChannelId      String?
+  cMoonRaidBossDiscordChannelId        String?
+  // How long a raid's FORMING join window stays open by default — see JOIN_WINDOW_SECONDS in
+  // server/utils/cmoonEnemyRaid.js, which this now overrides (that constant is only the
+  // hardcoded fallback if this row is ever unexpectedly missing). 15-120 seconds: a raid leader
+  // can additionally keep the window open past this via the in-memory leaderKeepOpen flag (see
+  // cmoonRaidSocket.js), but the admin-configured default is what a fresh raid starts with.
+  cMoonRaidJoinWindowSeconds           Int       @default(60)
+  // Multiplies the cMoon points a raid awards when it resolves with exactly ONE participant (a
+  // player who started a raid boss and fought it alone, whether by choice or because nobody else
+  // joined in time) — 100 means no bonus (the default, unchanged behavior), 100-500. Applied only
+  // to points, never to item/cToon drop chances (CMoonEnemyReward.dropChancePercent), in
+  // resolveCMoonRaidOutcome.
+  cMoonRaidSoloRewardMultiplierPercent Int       @default(100)
   // Every player's starting/max HP for a cMoon Enemy Battle (solo or raid), before any per-rank
   // bonus below — admin-editable here (Manage cMoons) instead of the server/utils/cmoonEnemyBattle.js
   // PLAYER_MAX_HP constant it replaces as the live source of truth; that constant now only serves
   // as the hardcoded fallback getPlayerCombatMaxHp() uses if this row is ever unexpectedly missing.
   // See CMoonRankTier.cMoonEnemyBattleHpBonus below for the per-rank addition on top of this.
-  cMoonEnemyBattleDefaultHp          Int       @default(5)
+  cMoonEnemyBattleDefaultHp            Int       @default(5)
   // Every SOLO player's starting/max stamina for a cMoon Enemy Battle — see
   // CMoonEnemyBattle.playerMaxStamina's own schema comment for the exact cost/regen rules this
   // drives (attacking costs 1, choosing to block refills 1, capped back at this same value).
@@ -1919,7 +1941,7 @@ model GlobalGameConfig {
   // already-in-progress battle keeps whatever pool (or lack of one) it was snapshotted with.
   // Raid combat is a separate, Redis-backed engine (see cmoonRaidSocket.js) and does not read
   // this column — stamina is solo-only for now.
-  cMoonEnemyBattleStartingStamina    Int       @default(3)
+  cMoonEnemyBattleStartingStamina      Int       @default(3)
   // Guaranteed bonus damage dealt to the enemy on a player's own SUCCESSFUL block (see
   // CMoonEnemyBattle.playerBlocked's own schema comment on what counts) — on top of the existing
   // 1-HP self-heal, which by itself gives blocking no way to contribute to actually winning.
@@ -1928,50 +1950,50 @@ model GlobalGameConfig {
   // damageDealt-credit/floating-damage-number code path with no separate plumbing. 0 disables it
   // (block stays pure defense + heal, the pre-this-feature behavior) — solo-only, same scope as
   // the stamina mechanic above.
-  cMoonEnemyBattleBlockCounterDamage Int       @default(1)
+  cMoonEnemyBattleBlockCounterDamage   Int       @default(1)
   // When true, consider.post.js's candidate roll restricts itself to only the highest
   // CMoonEnemyRank tier actually present among this player's eligible candidates (active,
   // not-defeated, minPriorDefeats already met, raid-availability already checked) before applying
   // occurrencePercent weighting among just that tier — see ENEMY_RANKS in
   // server/utils/cmoonEnemy.js for the tier ordering. False (the default) leaves every eligible
   // rank in the same weighted pool together, the original behavior before this toggle existed.
-  cMoonEnemyHigherTierFirst          Boolean   @default(false)
+  cMoonEnemyHigherTierFirst            Boolean   @default(false)
   // cMoon points awarded to the first solver's team for ANY CMoonRiddle (weekly or boss-lore) —
   // see claimCMoonRiddleSolve in server/utils/cmoonRiddle.js, which writes a CMoonScoreLog row of
   // this many points under category 'RIDDLE_SOLVE'. One shared value for both riddle kinds rather
   // than a separate column each, since nothing about the reward differs between them.
-  cMoonRiddlePoints                  Int       @default(50)
+  cMoonRiddlePoints                    Int       @default(50)
   // Weekly riddle auto-posting (server/cron/cmoon-riddle-rotation.js), same enabled+day/hour/
   // minute shape as cZoneContestAutomationConfig — checked every minute; when the admin-chosen
   // day/hour/minute (America/Chicago) hits, posts the oldest unposted active WEEKLY CMoonRiddle
   // to every cMoon's own Discord channel (deduped so cMoons sharing the fallback channel only
   // get one copy) and deactivates whichever WEEKLY riddle was open before it, solved or not.
-  cMoonRiddleRotationEnabled         Boolean   @default(false)
-  cMoonRiddleRotationDayOfWeek       Int       @default(1) // 0=Sunday..6=Saturday; default Monday
-  cMoonRiddleRotationHour            Int       @default(9) // 0-23, America/Chicago
-  cMoonRiddleRotationMinute          Int       @default(0) // 0-59
+  cMoonRiddleRotationEnabled           Boolean   @default(false)
+  cMoonRiddleRotationDayOfWeek         Int       @default(1) // 0=Sunday..6=Saturday; default Monday
+  cMoonRiddleRotationHour              Int       @default(9) // 0-23, America/Chicago
+  cMoonRiddleRotationMinute            Int       @default(0) // 0-59
   // Idempotency key (YYYY-MM-DD, America/Chicago) — same role as
   // CZoneContestAutomationConfig.lastCreatedFor: guards against posting twice if this process
   // restarts within the same triggering minute.
-  cMoonRiddleLastPostedFor           String?
+  cMoonRiddleLastPostedFor             String?
   // cMoon points awarded to EACH cMoon that completes a CMoonHunt (see claimCMoonHuntCompletion
   // in server/utils/cmoonHunt.js) — every team that solves the same hunt earns this, not just the
   // first, unlike cMoonRiddlePoints above. Separate column (not the riddle one reused) since the
   // two features are independent and may warrant different values — a cooperative multi-person
   // hunt is intentionally worth more by default.
-  cMoonHuntPoints                    Int       @default(75)
+  cMoonHuntPoints                      Int       @default(75)
   // Team milestone posts (see postCMoonTeamMilestones in server/utils/cmoonDiscordEvents.js) —
   // fires a sendCMoonTeamUpdate() to a cMoon's own Discord channel whenever that team's
   // CMoon.battleWins (enemies defeated) or recomputed CMoon.teamScore (points) crosses a round-
   // number multiple of the interval below. Both share one enabled switch since they're the same
   // feature (which stat to celebrate), just two different intervals.
-  cMoonTeamMilestoneEnabled          Boolean   @default(false)
-  cMoonTeamMilestoneEnemiesInterval  Int       @default(100)
-  cMoonTeamMilestonePointsInterval   Int       @default(1000)
+  cMoonTeamMilestoneEnabled            Boolean   @default(false)
+  cMoonTeamMilestoneEnemiesInterval    Int       @default(100)
+  cMoonTeamMilestonePointsInterval     Int       @default(1000)
   // Posts a cMoon's own Discord channel a line whenever one of its members genuinely ranks up
   // (see grantCMoonRank in server/utils/achievements.js, and the admin bulk-recalc's `upgraded`
   // classification in cmoon-rank-recalc.worker.js) — never fires on a downgrade from either path.
-  cMoonRankUpAnnounceEnabled         Boolean   @default(false)
+  cMoonRankUpAnnounceEnabled           Boolean   @default(false)
   // Floor on the above: only a rank-up REACHING a rank at or above this CMoonRank.sortOrder
   // actually posts — 0 (the default) announces every rank-up, same as before this field existed.
   // Exists so a server with many active members climbing the ladder (every GOON->ENFORCER bump,
@@ -1981,32 +2003,32 @@ model GlobalGameConfig {
   // CMoonRankTier) uses its own cMoonId-scoped sortOrder same as any other, so this floor's exact
   // meaning is only consistent across cMoons for tier-mirrored ranks, which share one universal
   // sortOrder by construction (see CMoonRank.tierId's own comment).
-  cMoonRankUpAnnounceMinSortOrder    Int       @default(0)
+  cMoonRankUpAnnounceMinSortOrder      Int       @default(0)
   // Pings a cMoon's own Discord channel when a solo (non-raid) FINAL_BOSS-rank enemy appears for
   // one of its members (see consider.post.js) — cooldown guards against spamming the channel if
   // the same team's members keep rolling the boss in quick succession; see
   // CMoonEnemyMember.lastFinalBossPingAt for the per-enemy atomic claim this uses.
-  cMoonFinalBossPingEnabled          Boolean   @default(false)
-  cMoonFinalBossPingCooldownMinutes  Int       @default(60)
+  cMoonFinalBossPingEnabled            Boolean   @default(false)
+  cMoonFinalBossPingCooldownMinutes    Int       @default(60)
   // Posts a one-line welcome to a cMoon's own Discord channel when a player genuinely joins via
   // the random-assignment flow (selectCMoonForUser in server/utils/cmoon.js) — never fires for an
   // admin reassignment, captain-align, Balance Teams, or an accepted team-change request, since
   // those all go through the separate reassignCMoonForUser path instead.
-  cMoonWelcomePostEnabled            Boolean   @default(false)
+  cMoonWelcomePostEnabled              Boolean   @default(false)
   // Weekly top-slayer recap (server/cron/cmoon-weekly-recap.js) — same enabled+day/hour/minute
   // shape as cMoonRiddleRotation above; when the admin-chosen day/hour/minute (America/Chicago)
   // hits, posts each cMoon's own top enemies-defeated member over the past 7 days to that cMoon's
   // Discord channel.
-  cMoonWeeklyRecapEnabled            Boolean   @default(false)
-  cMoonWeeklyRecapDayOfWeek          Int       @default(0) // 0=Sunday..6=Saturday; default Sunday
-  cMoonWeeklyRecapHour               Int       @default(9) // 0-23, America/Chicago
-  cMoonWeeklyRecapMinute             Int       @default(0) // 0-59
+  cMoonWeeklyRecapEnabled              Boolean   @default(false)
+  cMoonWeeklyRecapDayOfWeek            Int       @default(0) // 0=Sunday..6=Saturday; default Sunday
+  cMoonWeeklyRecapHour                 Int       @default(9) // 0-23, America/Chicago
+  cMoonWeeklyRecapMinute               Int       @default(0) // 0-59
   // Idempotency key (YYYY-MM-DD, America/Chicago), same role as cMoonRiddleLastPostedFor above.
-  cMoonWeeklyRecapLastPostedFor      String?
+  cMoonWeeklyRecapLastPostedFor        String?
   // End-of-season MVP recap — posted per-cMoon by server/api/admin/cmoon-season/start-new.post.js
   // itself (computed over the just-ended season's [startedAt, now) range) at the moment an admin
   // triggers the rollover, rather than on any cron.
-  cMoonSeasonMvpRecapEnabled         Boolean   @default(false)
+  cMoonSeasonMvpRecapEnabled           Boolean   @default(false)
   // Server-wide (not per-cMoon) announcement the moment a SHARED_POOL enemy's community-shared HP
   // pool is actually brought to 0 by SOME player's hit — see action.post.js's atomic
   // currentHp-GREATEST-clamped UPDATE, which already distinguishes "my own hit caused this
@@ -2015,9 +2037,9 @@ model GlobalGameConfig {
   // same shared fallback channel resolveCMoonChannelId(null, config) already uses for the
   // server-wide season-goal announcement, since there's no single "team" to credit a community
   // kill to.
-  cMoonSharedBossDefeatAnnounceEnabled Boolean @default(false)
-  createdAt                          DateTime  @default(now())
-  updatedAt                          DateTime  @updatedAt
+  cMoonSharedBossDefeatAnnounceEnabled Boolean   @default(false)
+  createdAt                            DateTime  @default(now())
+  updatedAt                            DateTime  @updatedAt
 }
 
 // A small reusable library of uploaded "haptic sound" clips (see composables/useClickSoundEffects.js).
@@ -2114,17 +2136,17 @@ model FavoriteCzone {
 
 /// A pending trade between two users
 model TradeOffer {
-  id            String   @id @default(uuid())
-  initiatorId   String // who is making the offer
-  recipientId   String // who will receive the offer
-  pointsOffered Int      @default(0)
+  id              String   @id @default(uuid())
+  initiatorId     String // who is making the offer
+  recipientId     String // who will receive the offer
+  pointsOffered   Int      @default(0)
   /// Points the initiator asks of the recipient. Only ever non-zero on a counter
   /// offer (counter.post.js is the sole writer); transferred recipient → initiator
   /// on accept. Not locked at creation — availability is checked on accept.
-  pointsRequested Int    @default(0)
-  status        String   @default("PENDING") // e.g. PENDING, ACCEPTED, REJECTED, WITHDRAWN, COUNTERED
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  pointsRequested Int      @default(0)
+  status          String   @default("PENDING") // e.g. PENDING, ACCEPTED, REJECTED, WITHDRAWN, COUNTERED
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
 
   /// Set when this offer was created as a counter to another offer. The
   /// countered offer is closed out as COUNTERED in the same transaction that
@@ -2466,13 +2488,13 @@ enum OgGtoonPracticeOutcome {
 // records nothing); the practice match uuid is the primary key so a retry cannot double-count.
 // Read by the Practice Matches leaderboard.
 model OgGtoonPracticeMatch {
-  id         String                     @id // the practice match's uuid
+  id         String                    @id // the practice match's uuid
   userId     String
   difficulty OgGtoonPracticeDifficulty
   outcome    OgGtoonPracticeOutcome
   winReason  OgGtoonWinReason? // see the enum: null for a tie or a game finished before this was recorded
   startedAt  DateTime
-  endedAt    DateTime                   @default(now())
+  endedAt    DateTime                  @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -2514,10 +2536,10 @@ model OgGtoonMatch {
   // migration), which Prisma's schema language cannot express.
   tournamentMatchId String?
 
-  player1 User  @relation("OgGtoonMatchPlayer1", fields: [player1UserId], references: [id])
-  player2 User  @relation("OgGtoonMatchPlayer2", fields: [player2UserId], references: [id])
-  winner  User? @relation("OgGtoonMatchWinner", fields: [winnerUserId], references: [id])
-  whoLeft User? @relation("OgGtoonMatchWhoLeft", fields: [whoLeftUserId], references: [id])
+  player1         User                    @relation("OgGtoonMatchPlayer1", fields: [player1UserId], references: [id])
+  player2         User                    @relation("OgGtoonMatchPlayer2", fields: [player2UserId], references: [id])
+  winner          User?                   @relation("OgGtoonMatchWinner", fields: [winnerUserId], references: [id])
+  whoLeft         User?                   @relation("OgGtoonMatchWhoLeft", fields: [whoLeftUserId], references: [id])
   tournamentMatch OgGtoonTournamentMatch? @relation(fields: [tournamentMatchId], references: [id])
 
   @@index([player1UserId, startedAt])
@@ -3024,10 +3046,10 @@ model OgGtoonTournamentMatch {
 
   // Ready-up is stored here (not only in socket memory) so it survives a restart and so the
   // deadline rules can see who actually showed up.
-  readyAAt     DateTime?
-  readyBAt     DateTime?
-  firstReadyAt DateTime?
-  liveMatchId  String? // the in-flight OgGtoonMatch id while a game of this series is being played
+  readyAAt      DateTime?
+  readyBAt      DateTime?
+  firstReadyAt  DateTime?
+  liveMatchId   String? // the in-flight OgGtoonMatch id while a game of this series is being played
   liveStartedAt DateTime? // when that game started; a marker older than a match can last is stale and is cleared
 
   voidedGames       Int       @default(0)
@@ -3581,35 +3603,35 @@ model DissolveAuctionErrorLog {
 //   HISTORICAL_RESOLVED — found by the audit scan; the bogus auction already closed with a winner
 //                          who is not the rightful owner — the case that actually needs undoing.
 model DissolveMisfireLog {
-  id          String  @id @default(uuid())
-  userCtoonId String?
-  ctoonId     String?
-  ctoonName   String?
-  mintNumber  Int?
+  id                      String    @id @default(uuid())
+  userCtoonId             String?
+  ctoonId                 String?
+  ctoonName               String?
+  mintNumber              Int?
   // Who actually, legitimately owned this item at the moment of the misfire, per the most recent
   // CtoonOwnerLog row for it before the bogus event — the person an admin needs to make whole.
-  rightfulOwnerUserId   String?
-  rightfulOwnerUsername String?
-  rightfulOwnerSince    DateTime? // that CtoonOwnerLog row's own createdAt
-  rightfulOwnerMethod   String?   // that row's own method (TRADE/AUCTION/ADMIN_GRANT/...)
-  source         String // PREVENTED | HISTORICAL_ACTIVE | HISTORICAL_RESOLVED
-  releaseMethod  String? // how the official account got the item before releasing it (DISSOLVE / DISSOLVE_INACTIVE / ADMIN_GRANT / ADMIN_CORRECTION / ...); null for older rows and PREVENTED
-  queueEntryId   String? // best-effort reference, same caveat as DissolveAuctionErrorLog's own field
-  bogusAuctionId String? // null for PREVENTED (no auction was ever created)
+  rightfulOwnerUserId     String?
+  rightfulOwnerUsername   String?
+  rightfulOwnerSince      DateTime? // that CtoonOwnerLog row's own createdAt
+  rightfulOwnerMethod     String? // that row's own method (TRADE/AUCTION/ADMIN_GRANT/...)
+  source                  String // PREVENTED | HISTORICAL_ACTIVE | HISTORICAL_RESOLVED
+  releaseMethod           String? // how the official account got the item before releasing it (DISSOLVE / DISSOLVE_INACTIVE / ADMIN_GRANT / ADMIN_CORRECTION / ...); null for older rows and PREVENTED
+  queueEntryId            String? // best-effort reference, same caveat as DissolveAuctionErrorLog's own field
+  bogusAuctionId          String? // null for PREVENTED (no auction was ever created)
   // Only set for HISTORICAL_RESOLVED — who the bogus auction actually paid out to, and what they
   // paid, so an admin can see both sides of what needs reversing.
-  wrongWinnerUserId     String?
-  wrongWinnerUsername   String?
-  wrongWinnerPaidPoints Int?
-  detectedAt         DateTime  @default(now())
-  reviewedAt         DateTime?
-  reviewedByUserId   String?
-  reviewedByUsername String?
-  reviewNote         String?
+  wrongWinnerUserId       String?
+  wrongWinnerUsername     String?
+  wrongWinnerPaidPoints   Int?
+  detectedAt              DateTime  @default(now())
+  reviewedAt              DateTime?
+  reviewedByUserId        String?
+  reviewedByUsername      String?
+  reviewNote              String?
   resolvedAt              DateTime?
   resolvedByUserId        String?
   resolvedByUsername      String?
-  resolutionSummary       Json?   // the executed plan: originalWinner, each compensation {userId, username, points, reason, basis}, totalCompensationPoints
+  resolutionSummary       Json? // the executed plan: originalWinner, each compensation {userId, username, points, reason, basis}, totalCompensationPoints
   resolutionBlockedReason String? // set (reviewedAt left null) when the remediation algorithm can't auto-resolve it — distinct from "not yet attempted"
 
   @@unique([bogusAuctionId]) // lets the audit scan be re-run safely (upsert, no duplicate rows) — multiple PREVENTED rows with a null bogusAuctionId are unaffected, Postgres allows multiple NULLs in a unique index
@@ -3915,14 +3937,14 @@ model Achievement {
   tkoWinsGte                  Int?
   // Lifetime count of CMoonEnemyBattle rows this user WON — see evaluateUserAgainstAchievement,
   // same `db.<table>.count({ where: { userId, ... } })` shape as tkoWinsGte above.
-  cmoonMonstersDefeatedGte     Int?
+  cmoonMonstersDefeatedGte    Int?
   // Same lifetime WIN-count shape as cmoonMonstersDefeatedGte, each additionally scoped to wins
   // against a CMoonEnemyMember of that one CMoonEnemyRank tier — lets an admin build e.g. "defeat
   // 10 Underbosses" separately from the any-rank total above.
-  cmoonGoonsDefeatedGte        Int?
-  cmoonEnforcersDefeatedGte    Int?
-  cmoonUnderbossesDefeatedGte  Int?
-  cmoonFinalBossesDefeatedGte  Int?
+  cmoonGoonsDefeatedGte       Int?
+  cmoonEnforcersDefeatedGte   Int?
+  cmoonUnderbossesDefeatedGte Int?
+  cmoonFinalBossesDefeatedGte Int?
   wordleWinsGte               Int? // total lifetime crown wins in Wordle
   wordleCurrentStreakGte      Int? // current consecutive-day crown streak
   flappyBestScoreGte          Int? // best Flappy Powerpuff score on a ranked run
@@ -3954,13 +3976,13 @@ model Achievement {
   createdAt                   DateTime  @default(now())
   updatedAt                   DateTime  @updatedAt
 
-  cMoonRank      CMoonRank?                 @relation(fields: [cMoonRankId], references: [id], onDelete: Restrict)
-  cMoonRankTier  CMoonRankTier?             @relation(fields: [cMoonRankTierId], references: [id], onDelete: SetNull)
-  rewards        AchievementReward[]
-  users          AchievementUser[]
-  requiredCtoons AchievementRequiredCtoon[]
-  claimOptions   AchievementClaimOption[]
-  claims         AchievementClaim[]
+  cMoonRank           CMoonRank?                      @relation(fields: [cMoonRankId], references: [id], onDelete: Restrict)
+  cMoonRankTier       CMoonRankTier?                  @relation(fields: [cMoonRankTierId], references: [id], onDelete: SetNull)
+  rewards             AchievementReward[]
+  users               AchievementUser[]
+  requiredCtoons      AchievementRequiredCtoon[]
+  claimOptions        AchievementClaimOption[]
+  claims              AchievementClaim[]
   tierClaimDismissals AchievementTierClaimDismissal[]
 
   @@index([cMoonRankTierId])
@@ -4268,17 +4290,17 @@ model CMoon {
   // so unlike teamScore (which must exclude points from members who've since left) there's no
   // membership-retroactivity concern to guard against by recomputing from CMoonEnemyBattle later.
   // Shown on the cMoons leaderboard tab — see server/api/leaderboard/cmoons.get.js.
-  battleWins       Int                  @default(0)
-  battleLosses     Int                  @default(0)
-  enemyBattles     CMoonEnemyBattle[]
-  enemyRaids       CMoonEnemyRaid[]
+  battleWins      Int                 @default(0)
+  battleLosses    Int                 @default(0)
+  enemyBattles    CMoonEnemyBattle[]
+  enemyRaids      CMoonEnemyRaid[]
   // This team's own special attack in cMoon Enemy Battles — any of ITS members fighting solo can
   // charge and fire it after landing 3 consecutive hits on an enemy (see
   // CMoonEnemyBattle.playerHitStreak/playerSpecialCharged and CMoonSpecialAttack's own header
   // comment). Optional: a cMoon with none assigned simply never offers the special-attack button
   // at all. onDelete: Restrict, same reassign-before-delete shape as customJoinEffectId above.
-  specialAttackId  String?
-  specialAttack    CMoonSpecialAttack?  @relation(fields: [specialAttackId], references: [id], onDelete: Restrict)
+  specialAttackId String?
+  specialAttack   CMoonSpecialAttack? @relation(fields: [specialAttackId], references: [id], onDelete: Restrict)
 
   @@index([memberCount])
   @@index([teamScore])
@@ -5795,7 +5817,6 @@ model BlackjackSession {
   @@index([status, windowStart])
 }
 
-
 // ── Encyclopedia feature ────────────────────────────────────────────────
 // Admin-authored wiki-style reference pages, reachable from the top nav (Encyclopedia) and
 // searchable by title. Body content is sanitized HTML — see server/utils/sanitizeEncyclopediaHtml.js
@@ -5828,7 +5849,6 @@ model EncyclopediaEntry {
 
   @@index([active, sortOrder])
 }
-
 
 // ── cMoon Enemy Battles feature ─────────────────────────────────────────
 // Site-wide PvE mini-game: admin-authored NPC "enemy" factions appear as a random popup while
@@ -5946,17 +5966,17 @@ enum CMoonSpecialAttackEffectType {
 }
 
 model CMoonSpecialAttack {
-  id          String                       @id @default(uuid())
-  name        String                       @unique
-  description String? // shown in the player-facing "?" tooltip alongside the effect/charge copy below
-  effectType  CMoonSpecialAttackEffectType
+  id           String                       @id @default(uuid())
+  name         String                       @unique
+  description  String? // shown in the player-facing "?" tooltip alongside the effect/charge copy below
+  effectType   CMoonSpecialAttackEffectType
   // Meaning depends on effectType — damage points / heal points / paralyze-turns / attack-stat
   // delta. Always a positive whole number; which one it is is just effectType's own label.
-  amount      Int
+  amount       Int
   // Optional sound (MP3/OGG/WAV, uploaded via cmoon-special-attacks/[id]/sound.post.js — same
   // magic-byte-sniffed discipline as every other audio upload in this codebase), played the
   // moment this attack actually fires, by whichever side cast it.
-  soundPath   String?
+  soundPath    String?
   // Only meaningful when effectType = HEAL_SELF (false/ignored otherwise — enforced in
   // parseSpecialAttackBody, never just left to the client). In a SOLO battle this changes
   // nothing — there are no allies to heal either way, so the caster is always the only one
@@ -5964,43 +5984,51 @@ model CMoonSpecialAttack {
   // exact same amount to every other alive participant too (the caster included, not instead of
   // them) — an admin-authored choice per attack, not an automatic raid-vs-solo behavior switch,
   // per this feature's own "self and/or allies" request.
-  healsAllies Boolean                      @default(false)
-  createdAt   DateTime                     @default(now())
-  updatedAt   DateTime                     @updatedAt
+  healsAllies  Boolean                      @default(false)
+  // Lets a player pick THIS attack for themselves (see User.chosenSpecialAttackId) instead of
+  // always using their cMoon's admin-assigned one — an admin toggle per attack, off by default so
+  // shipping this column changes nothing until an admin opts an attack in. A player's choice is
+  // re-validated against this flag live every time it's resolved (solo or raid), so turning it off
+  // here immediately falls everyone who had chosen it back to their cMoon's own special, with no
+  // separate cleanup needed.
+  playerChoice Boolean                      @default(false)
+  createdAt    DateTime                     @default(now())
+  updatedAt    DateTime                     @updatedAt
 
   cmoons        CMoon[]
   enemyFactions CMoonEnemyFaction[]
+  chosenByUsers User[]
 }
 
 // The themed group an admin creates in "Manage cMoon Enemies" — mostly organizational (name,
 // banner art, an on/off switch for the whole group at once); the actual things a player fights
 // are its members below.
 model CMoonEnemyFaction {
-  id              String   @id @default(uuid())
-  name            String   @unique
-  description     String?
+  id                            String              @id @default(uuid())
+  name                          String              @unique
+  description                   String?
   // Faction banner — shown in the admin list and, if set, behind the member's own portrait in
   // the battle popup. Optional: a faction can rely purely on its members' own images.
-  bannerImagePath String?
+  bannerImagePath               String?
   // Master on/off switch for every member below at once — an inactive faction (or an inactive
   // member, see below) is never offered by the popup-consider roll, but any already in-progress
   // CMoonEnemyBattle rows against it are left to finish normally rather than being force-ended.
-  active          Boolean  @default(true)
-  sortOrder       Int      @default(0)
+  active                        Boolean             @default(true)
+  sortOrder                     Int                 @default(0)
   // Optional full-screen effect played the moment the popup first offers a member of this
   // faction (never on a resumed in-progress battle) — reuses the same admin-authored
   // CMoonJoinEffect content type a cMoon's own join effect uses (see CMoon.customJoinEffect),
   // rather than a second bespoke effect-authoring system. onDelete: Restrict matches that same
   // field: an admin must reassign every faction using an effect before it can be deleted (see
   // that pre-check in cmoon-join-effects/[id].delete.js).
-  appearEffectId  String?
-  appearEffect    CMoonJoinEffect? @relation(fields: [appearEffectId], references: [id], onDelete: Restrict)
+  appearEffectId                String?
+  appearEffect                  CMoonJoinEffect?    @relation(fields: [appearEffectId], references: [id], onDelete: Restrict)
   // Optional looping battle music (MP3/OGG/WAV, uploaded via cmoon-enemy-factions/[id]/
   // music.post.js — same magic-byte sniffing discipline as every other audio upload in this
   // codebase). Starts client-side the moment a battle actually begins (Fight! pressed, entering
   // the FIGHT phase — not on the OFFER popup) and loops for as long as that faction's member is
   // being fought; stops on battle end/close. Null means silent, not an error.
-  battleMusicPath String?
+  battleMusicPath               String?
   // Six optional default battle sounds (MP3/OGG/WAV, uploaded via cmoon-enemy-factions/[id]/
   // sound.post.js — same slot-selected, magic-byte-sniffed endpoint shape as the per-member
   // version) — same six moments as CMoonEnemyMember's own sound columns below, named identically
@@ -6021,10 +6049,10 @@ model CMoonEnemyFaction {
   // a faction with none assigned simply never fires one, same as today. onDelete: Restrict,
   // same reasoning/UX as appearEffectId above — reassign every faction using an attack before an
   // admin can delete it (enforced in cmoon-special-attacks/[id].delete.js's own pre-check).
-  specialAttackId String?
-  specialAttack   CMoonSpecialAttack? @relation(fields: [specialAttackId], references: [id], onDelete: Restrict)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  specialAttackId               String?
+  specialAttack                 CMoonSpecialAttack? @relation(fields: [specialAttackId], references: [id], onDelete: Restrict)
+  createdAt                     DateTime            @default(now())
+  updatedAt                     DateTime            @updatedAt
 
   members CMoonEnemyMember[]
   taunts  CMoonEnemyTaunt[]
@@ -6036,15 +6064,15 @@ model CMoonEnemyFaction {
 // battle mode, rewards, and points are all configured per-member, not per-faction, since one
 // faction can have members of very different difficulty.
 model CMoonEnemyMember {
-  id                String               @id @default(uuid())
-  factionId         String
-  name              String
-  imagePath         String?
-  maxHp             Int                  @default(5)
-  battleMode        CMoonEnemyBattleMode @default(PER_PLAYER)
+  id                       String               @id @default(uuid())
+  factionId                String
+  name                     String
+  imagePath                String?
+  maxHp                    Int                  @default(5)
+  battleMode               CMoonEnemyBattleMode @default(PER_PLAYER)
   // Cosmetic tier badge — see the enum's own comment. Independent of maxHp/battleMode/rewards, so
   // an admin is free to make a low-HP "Final Boss" or a tanky "Goon" if that fits a faction's story.
-  rank              CMoonEnemyRank       @default(GOON)
+  rank                     CMoonEnemyRank       @default(GOON)
   // Gates whether this member can be OFFERED to a given player at all (checked in
   // consider.post.js's candidate query and re-checked in start.post.js against a direct call) —
   // 0 (the default) means no requirement. Scoped to that ONE player's own lifetime cMoon Enemy
@@ -6053,7 +6081,7 @@ model CMoonEnemyMember {
   // players can be at completely different points in the same faction's roster. Free to change at
   // any time (raising or lowering it only affects future offers, never rewrites history), unlike
   // rank/battleMode above.
-  minPriorDefeats   Int                  @default(0)
+  minPriorDefeats          Int                  @default(0)
   // Relative weight in the popup-consider roll's weighted random pick (server/utils/cmoonEnemy.js's
   // pickWeightedEnemy, used by consider.post.js) among whichever OTHER already-eligible candidates
   // are offered alongside this one — NOT a probability out of 100 and never required to sum to 100
@@ -6064,7 +6092,7 @@ model CMoonEnemyMember {
   // touches it — the roll stays exactly as uniform as it was before this field existed. Ignored
   // entirely for whichever candidates GlobalGameConfig.cMoonEnemyHigherTierFirst's rank pre-filter
   // (when enabled) has already excluded before weighting even runs.
-  occurrencePercent Int                  @default(50)
+  occurrencePercent        Int                  @default(50)
   // 0-100: the chance this enemy's own rolled move is an attack rather than a block, each half
   // then split evenly between the HIGH/LOW lane (see rollEnemyAction in cmoonEnemyBattle.js) —
   // an admin-tunable "aggression" knob on top of the plain uniform roll every enemy used before
@@ -6074,7 +6102,7 @@ model CMoonEnemyMember {
   // own auto-filled action (see cmoonRaidSocket.js's closeRound) — that reuse of
   // rollEnemyAction() is deliberately left at its unbiased default; only an enemy's OWN move
   // (solo or raid boss) ever reads this column.
-  attackChancePercent Int                @default(50)
+  attackChancePercent      Int                  @default(50)
   // 0 disables (same "0 disables" convention as cMoonEnemySpawnCapCount) — otherwise, the Nth
   // consecutive WIN against this member that rolled ZERO of its configured CMoonEnemyReward rows
   // force-grants exactly one of them (picked uniformly, ignoring dropChancePercent) instead of
@@ -6083,7 +6111,7 @@ model CMoonEnemyMember {
   // (user, member) in CMoonEnemyRewardPity — see that model's own comment — and SOLO BATTLES
   // ONLY: a raid's reward is one roll shared by the whole party, which doesn't compose with a
   // per-user streak the same way, so this column is simply never read there.
-  pityThreshold     Int                  @default(0)
+  pityThreshold            Int                  @default(0)
   // Extra cMoonPoints (on top of cMoonPointsReward, same cMoon-required gate) awarded ONLY the
   // very first time a given player ever beats THIS specific member — see
   // action.post.js's resolveWin, which already computes isFirstWinAgainstThisEnemy for the
@@ -6091,7 +6119,7 @@ model CMoonEnemyMember {
   // same reasoning as pityThreshold above: a raid's "first win" is ambiguous per-party-member and
   // its points are already split as one shared pool, which a per-user bonus doesn't compose with
   // cleanly — out of scope for this first pass.
-  firstWinBonusPoints Int                @default(0)
+  firstWinBonusPoints      Int                  @default(0)
   // Only meaningful (and only ever written to) when battleMode = SHARED_POOL — the live running
   // total every fighting player's damage comes out of together. Decremented via an atomic
   // conditional UPDATE (see resolveBattleRound) so two players landing a hit at the same instant
@@ -6099,25 +6127,25 @@ model CMoonEnemyMember {
   // an admin flips battleMode to SHARED_POOL or edits maxHp on a SHARED_POOL member (see that
   // endpoint's own comment) — ignored entirely for PER_PLAYER members, whose HP lives per-battle
   // on CMoonEnemyBattle.enemyHpRemaining instead.
-  currentHp         Int                  @default(5)
+  currentHp                Int                  @default(5)
   // Awarded to User.cMoonPoints on a WIN via the existing grantRewardInTx path.
-  cMoonPointsReward Int                  @default(10)
+  cMoonPointsReward        Int                  @default(10)
   // 0-100. A landed hit rolls against the RELEVANT side's own chance below and, on a hit, deals
   // 2 damage instead of 1 — see server/api/cmoon/battle/[id]/action.post.js. Named from the
   // enemy's own perspective, matching the sound-path columns above: "Against" is the player's
   // own attacks landing critically against this enemy; "From" is this enemy's attacks landing
   // critically against the player.
-  critChanceAgainstPercent Int @default(0)
-  critChanceFromPercent    Int @default(0)
-  active            Boolean              @default(true)
+  critChanceAgainstPercent Int                  @default(0)
+  critChanceFromPercent    Int                  @default(0)
+  active                   Boolean              @default(true)
   // Set the moment a SHARED_POOL member's currentHp reaches 0 — once set, the popup-consider
   // roll skips this member (it stays visible/browsable in the admin page and battle logs, just
   // no longer offered as an encounter) until an admin resets it. Always null for PER_PLAYER
   // members, which never run out in a way that affects other players.
-  defeatedAt        DateTime?
-  sortOrder         Int                  @default(0)
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  defeatedAt               DateTime?
+  sortOrder                Int                  @default(0)
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
 
   // Six optional battle sound effects (MP3/OGG/WAV, uploaded via cmoon-enemy-members/[id]/
   // sound.post.js — sniffed by magic bytes, never trusted from the client, same discipline as
@@ -6141,7 +6169,7 @@ model CMoonEnemyMember {
   // battle math itself reads rank, so this is enforced at the API layer, not the database.
   // Deliberately NOT locked once fought (unlike rank/battleMode) — flipping it only changes
   // whether FUTURE encounters offer the raid option, it never reinterprets a raid already logged.
-  isRaidBoss        Boolean              @default(false)
+  isRaidBoss           Boolean   @default(false)
   // Admin-authored Discord announcement template, posted (via announceCMoonRaidBoss in
   // server/utils/discord.js) the moment a raid is started. Supports two placeholders, substituted
   // literally (no HTML/markdown escaping beyond what Discord itself does): {cmoon} → the
@@ -6157,14 +6185,27 @@ model CMoonEnemyMember {
   // respawn. Meaningless unless isRaidBoss is also true, but not force-cleared when isRaidBoss is
   // toggled off, matching raidAnnouncementText's own "settings persist independent of the on/off
   // switch" stance.
-  raidOneTime          Boolean  @default(false)
+  raidOneTime          Boolean   @default(false)
   // Minutes after a raid WIN before this boss can be raided again — checked in cmoonraid:start
   // (server/utils/cmoonRaidSocket.js) against raidDefeatedAt, and in consider.post.js's candidate
   // filter so the popup doesn't even offer it mid-cooldown. 0 (the default) means no cooldown —
   // immediately raidable again, the original behavior before this column existed. Ignored while
   // raidOneTime is true (that's a permanent block, not a timed one); the two are mutually
   // exclusive admin choices, not combined.
-  raidCooldownMinutes  Int      @default(0)
+  raidCooldownMinutes  Int       @default(0)
+  // How many players this raid boss's party can hold, 1-8 (the original hardcoded MAX_PARTY_SIZE
+  // was 4 — see that constant's own comment in server/utils/cmoonEnemyRaid.js, now only the
+  // fallback/default here). Snapshotted onto the in-memory raid at creation (raid.maxParticipants),
+  // so changing this never affects a raid already FORMING/IN_PROGRESS. Meaningless unless
+  // isRaidBoss is also true, but — matching raidAnnouncementText/raidOneTime/raidCooldownMinutes'
+  // own "persists independent of the on/off switch" stance — not force-reset when isRaidBoss is
+  // toggled off.
+  maxParticipants      Int       @default(4)
+  // Master on/off switch for this boss's wind-up/telegraph moves (see CMoonEnemyWindUpMove) — a
+  // boss with this on and at least one configured move rolls, each round, whether one of its
+  // moves telegraphs instead of a normal round. Off by default so shipping this column changes
+  // nothing for an existing raid boss with no moves configured yet.
+  windUpEnabled        Boolean   @default(false)
   // Set the instant a raid against this member resolves as a WIN (never on a LOSS/ABANDONED) —
   // the one column both raidOneTime and raidCooldownMinutes above key off of. Independent of the
   // SHARED_POOL-only `defeatedAt` column above: a member can in principle be both a SHARED_POOL
@@ -6179,12 +6220,13 @@ model CMoonEnemyMember {
   // raidDefeatedAt/defeatedAt — this only ever gates a chat message, never battle eligibility.
   lastFinalBossPingAt  DateTime?
 
-  faction CMoonEnemyFaction  @relation(fields: [factionId], references: [id], onDelete: Cascade)
-  rewards CMoonEnemyReward[]
-  battles CMoonEnemyBattle[]
-  raids   CMoonEnemyRaid[]
-  riddles CMoonRiddle[]
-  rewardPity CMoonEnemyRewardPity[]
+  faction     CMoonEnemyFaction      @relation(fields: [factionId], references: [id], onDelete: Cascade)
+  rewards     CMoonEnemyReward[]
+  battles     CMoonEnemyBattle[]
+  raids       CMoonEnemyRaid[]
+  riddles     CMoonRiddle[]
+  rewardPity  CMoonEnemyRewardPity[]
+  windUpMoves CMoonEnemyWindUpMove[]
 
   @@index([active, defeatedAt, sortOrder])
 }
@@ -6255,17 +6297,60 @@ model CMoonEnemyReward {
   @@index([enemyMemberId])
 }
 
+enum CMoonWindUpDirection {
+  HIGH
+  LOW
+}
+
+enum CMoonWindUpBonusType {
+  // Heals every alive raid participant's hpRemaining, capped at their own maxHp.
+  HEAL_PARTY
+  // Bonus damage straight to the raid's shared enemyHpRemaining.
+  DAMAGE_ENEMY
+}
+
+// One admin-configured "wind-up"/telegraph a raid boss can use (see
+// CMoonEnemyMember.windUpEnabled) — a round where, instead of a normal hidden-until-resolved
+// enemy action, the boss visibly telegraphs which lane (HIGH/LOW) it's about to attack, via
+// raid.currentWindUp (a deliberate, narrow exception to publicRaidView's usual
+// "never reveal the enemy's action in advance" rule — see cmoonRaidSocket.js). If every alive
+// participant blocks the telegraphed lane, the party gets this move's bonus; the round still
+// resolves through the ordinary hit/block math otherwise (a wrong guess just takes the normal
+// hit). A boss can have several of these with different lanes/messages/occurrence rates.
+model CMoonEnemyWindUpMove {
+  id                String               @id @default(uuid())
+  enemyMemberId     String
+  // Shown to the whole party the instant this move's round opens — e.g. "The boss rears back for
+  // a devastating high strike!"
+  telegraphMessage  String
+  direction         CMoonWindUpDirection
+  // 0-100: the INDEPENDENT chance THIS move fires on a given round (checked separately per
+  // configured move each round, first match wins, otherwise an ordinary round proceeds) — NOT
+  // the same meaning as CMoonEnemyMember.occurrencePercent (a RELATIVE WEIGHT among candidates in
+  // the popup-consider roll); this is a flat, standalone per-round probability, unrelated to that
+  // other roll entirely.
+  occurrencePercent Int                  @default(25)
+  bonusType         CMoonWindUpBonusType
+  bonusAmount       Int
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  enemyMember CMoonEnemyMember @relation(fields: [enemyMemberId], references: [id], onDelete: Cascade)
+
+  @@index([enemyMemberId])
+}
+
 // Tracks one (user, member) pair's current consecutive-empty-win streak toward
 // CMoonEnemyMember.pityThreshold — see that column's own comment for the full pity rule. Reset
 // to 0 (not deleted) the moment a win rolls a real reward on its own, pity or not, so the row
 // just sits at 0 between pity triggers rather than churning rows via delete+recreate. SOLO
 // BATTLES ONLY, same scope note as pityThreshold itself.
 model CMoonEnemyRewardPity {
-  id              String   @id @default(uuid())
-  userId          String
-  enemyMemberId   String
-  emptyWinStreak  Int      @default(0)
-  updatedAt       DateTime @updatedAt
+  id             String   @id @default(uuid())
+  userId         String
+  enemyMemberId  String
+  emptyWinStreak Int      @default(0)
+  updatedAt      DateTime @updatedAt
 
   user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   enemyMember CMoonEnemyMember @relation(fields: [enemyMemberId], references: [id], onDelete: Cascade)
@@ -6323,14 +6408,14 @@ model CMoonEnemyPopupLog {
 // action.post.js's resolveWin) — there's no team to credit, and every other reward type
 // (cToon/avatar/background/plain points/achievements) still applies normally.
 model CMoonEnemyBattle {
-  id                String                   @id @default(uuid())
-  userId            String
-  enemyMemberId     String
-  cMoonId           String?
-  status            CMoonEnemyBattleStatus   @default(IN_PROGRESS)
-  outcome           CMoonEnemyBattleOutcome?
-  roundNumber       Int                      @default(1) // the round currently awaiting the player's action
-  playerHpRemaining Int
+  id                   String                   @id @default(uuid())
+  userId               String
+  enemyMemberId        String
+  cMoonId              String?
+  status               CMoonEnemyBattleStatus   @default(IN_PROGRESS)
+  outcome              CMoonEnemyBattleOutcome?
+  roundNumber          Int                      @default(1) // the round currently awaiting the player's action
+  playerHpRemaining    Int
   // This player's max HP for THIS battle — computed once at start.post.js via getPlayerCombatMaxHp()
   // (GlobalGameConfig.cMoonEnemyBattleDefaultHp + this player's CURRENT cMoon rank tier's own
   // cMoonEnemyBattleHpBonus, see CMoonRankTier) and snapshotted here rather than re-read every
@@ -6338,13 +6423,13 @@ model CMoonEnemyBattle {
   // snapshot is what keeps an in-progress battle's own heal-cap (action.post.js's resolveRound
   // call) stable instead of shifting under a player's feet mid-combat. Defaults to the pre-feature
   // hardcoded PLAYER_MAX_HP (5) so every already-resolved historical row reads correctly.
-  playerMaxHp       Int                      @default(5)
+  playerMaxHp          Int                      @default(5)
   // Snapshot of the enemy's HP for THIS battle — for a PER_PLAYER member this is the sole source
   // of truth (starts at maxHp, decremented directly); for a SHARED_POOL member this mirrors
   // CMoonEnemyMember.currentHp as of the last round resolved here (that column is the real
   // source of truth, this is a per-battle display copy) so the log/UI never needs a live join to
   // show what the fight looked like at the time.
-  enemyHpRemaining  Int
+  enemyHpRemaining     Int
   // ── Special attacks (see CMoonSpecialAttack's own header comment) ──────────────────────────
   // Consecutive landed hits, tracked independently per side, reset to 0 the instant that side
   // fails to land one (a miss, a blocked attack, a round spent blocking/using-the-special/
@@ -6356,19 +6441,19 @@ model CMoonEnemyBattle {
   // "charged" flag: an NPC has no choice to make, so the moment enemyHitStreak itself reaches the
   // threshold its faction's special (if any) fires immediately as a bonus on that same round —
   // see action.post.js.
-  playerHitStreak       Int     @default(0)
-  playerSpecialCharged  Boolean @default(false)
-  enemyHitStreak        Int     @default(0)
+  playerHitStreak      Int                      @default(0)
+  playerSpecialCharged Boolean                  @default(false)
+  enemyHitStreak       Int                      @default(0)
   // Net landed-hit damage modifier for each side, for the REST of the battle — increased by that
   // side's own RAISE_ALLY_ATTACK special, decreased by the opposing side's LOWER_OPPONENT_ATTACK
   // special (never reset mid-battle; final damage is still floored at 0, never negative).
-  playerAtkBonus        Int     @default(0)
-  enemyAtkBonus         Int     @default(0)
+  playerAtkBonus       Int                      @default(0)
+  enemyAtkBonus        Int                      @default(0)
   // Rounds remaining where that side's action is forced to whiff (can't land a hit, can't
   // block), set by the OPPOSING side's PARALYZE_OPPONENT special — decremented by 1 every round
   // it's > 0 (see resolveRound's own newPlayerParalyzedTurns/newEnemyParalyzedTurns).
-  playerParalyzedTurns  Int     @default(0)
-  enemyParalyzedTurns   Int     @default(0)
+  playerParalyzedTurns Int                      @default(0)
+  enemyParalyzedTurns  Int                      @default(0)
   // ── Player stamina (see GlobalGameConfig.cMoonEnemyBattleStartingStamina's own schema comment
   // for why this exists) — SOLO BATTLES ONLY, same scope note as that config column. `playerStamina`
   // is the live current pool: an ATTACK_HIGH/LOW action costs 1 (floored at 0), a BLOCK_HIGH/LOW
@@ -6384,16 +6469,16 @@ model CMoonEnemyBattle {
   // (default 0 — intentionally NOT defaulting to the config's own starting value, so every
   // already-resolved historical row reads as "stamina wasn't a factor in this fight", which is
   // the truth).
-  playerStamina         Int     @default(0)
-  playerMaxStamina      Int     @default(0)
+  playerStamina        Int                      @default(0)
+  playerMaxStamina     Int                      @default(0)
   // [{ round, playerAction, enemyAction, playerHit, enemyHit, specials? }, ...] — audit trail for
   // the admin battle-logs page and for debugging a disputed result; never read back to resolve
   // anything. `specials`, when present, is [{ side, name, effectType, amount }] for whichever
   // special attack(s) fired that round (player's own choice and/or the enemy's automatic one can
   // both fire in the same round).
-  roundLog          Json                     @default("[]")
-  pointsAwarded     Int                      @default(0)
-  rewardsGranted    Json? // [{ type, name, quantity }] — display-only summary for the log
+  roundLog             Json                     @default("[]")
+  pointsAwarded        Int                      @default(0)
+  rewardsGranted       Json? // [{ type, name, quantity }] — display-only summary for the log
   // Total damage THIS battle's own player actually dealt to the enemy — every landed lane hit's
   // enemyDamage plus the player's own DAMAGE_OPPONENT special, summed across every round (never
   // the enemy's own healing/attacks, never another player's hits on a shared pool). Exists
@@ -6407,14 +6492,14 @@ model CMoonEnemyBattle {
   // elsewhere correct for free, with no changes needed at any of those call sites. Always > 0 by
   // construction for a real PER_PLAYER win (nothing else can move that mode's HP), so this is a
   // complete no-op for every pre-existing battle shape.
-  damageDealt       Int                      @default(0)
-  startedAt         DateTime                 @default(now())
+  damageDealt          Int                      @default(0)
+  startedAt            DateTime                 @default(now())
   // Bumped on every round resolved (and at creation) — the idle-timeout clock for reclaiming an
   // ABANDONED battle. NOT bumped by merely viewing/polling the battle, only by actually
   // submitting a round, so a player who just leaves the popup open without acting still times
   // out on schedule.
-  lastActionAt      DateTime                 @default(now())
-  endedAt           DateTime?
+  lastActionAt         DateTime                 @default(now())
+  endedAt              DateTime?
 
   user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   // Restrict, NOT Cascade: this table is the permanent battle-log audit trail (see the admin
@@ -6477,8 +6562,9 @@ enum CMoonEnemyRaidOutcome {
   ABANDONED
 }
 
-// One co-op "raid" attempt against a CMoonEnemyMember with isRaidBoss = true — up to 4 members of
-// ONE cMoon (see CMoonEnemyRaidParticipant) fighting the same boss together in real time, all
+// One co-op "raid" attempt against a CMoonEnemyMember with isRaidBoss = true — up to
+// enemyMember.maxParticipants members, from any cMoon (see "Cross-cMoon raids" in
+// cmoonEnemyRaid.js and CMoonEnemyRaidParticipant), fighting the same boss together in real time, all
 // facing the identical rolled enemy action each round (server/utils/cmoonEnemyRaid.js's
 // resolveRaidRound), with their landed hits summing against the one shared enemyHpRemaining
 // below. Owned end-to-end by server/utils/cmoonRaidSocket.js (registered into
@@ -6490,7 +6576,7 @@ enum CMoonEnemyRaidOutcome {
 // once more at RESOLVED, the same "write the permanent log, not a live journal" tradeoff
 // server/utils/ogGtoonsSocket.js already makes for its own live matches.
 model CMoonEnemyRaid {
-  id               String                  @id @default(uuid())
+  id               String                 @id @default(uuid())
   enemyMemberId    String
   // The INITIATOR's cMoon at raid-start (where the Discord call-to-arms goes). Raids are
   // cross-cMoon: joiners can be from any cMoon and are credited to their own (see "Cross-cMoon
@@ -6499,20 +6585,26 @@ model CMoonEnemyRaid {
   // CMoonEnemyBattle.cMoonId, which is nullable for a non-cMoon solo player) because a raid with
   // no cMoon to draw teammates from, announce for, or credit points to isn't a raid.
   cMoonId          String
-  status           CMoonEnemyRaidStatus    @default(FORMING)
+  status           CMoonEnemyRaidStatus   @default(FORMING)
   outcome          CMoonEnemyRaidOutcome?
   // The party's shared boss HP — starts at enemyMember.maxHp, decremented by the SUM of every
   // alive participant's landed hit each round (see resolveRaidRound), floored at 0.
   enemyHpRemaining Int
-  roundNumber      Int                     @default(1)
+  roundNumber      Int                    @default(1)
   joinDeadlineAt   DateTime
   combatStartedAt  DateTime?
   // [{ round, enemyAction, participants: [{ userId, action, hit, blocked, crit, damageTaken }],
   //   enemyDamageDealt, enemyHpRemaining }, ...] — written once, at resolution, from the in-memory
   // log accumulated over the fight (see this model's own header comment on why not per-round).
-  roundLog         Json                    @default("[]")
-  startedAt        DateTime                @default(now())
+  roundLog         Json                   @default("[]")
+  startedAt        DateTime               @default(now())
   endedAt          DateTime?
+  // When true, this raid is never listed in the site-wide Raid Boss Lobby (buildRaidLobby skips
+  // it) and never triggers notifyRaidLobbyOpened/announceCMoonRaidBoss — it only reaches other
+  // players via its own URL (/newsite/cmoon-raid/<id>), shared by whoever started it. Joining is
+  // otherwise unchanged: any eligible player who has the link can still join, from any cMoon,
+  // same as a public raid — this only controls DISCOVERABILITY, not who may join.
+  isPrivate        Boolean                @default(false)
 
   enemyMember  CMoonEnemyMember            @relation(fields: [enemyMemberId], references: [id], onDelete: Restrict)
   cMoon        CMoon                       @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
@@ -6570,12 +6662,12 @@ enum CMoonRiddleKind {
 }
 
 model CMoonRiddle {
-  id       String          @id @default(uuid())
-  kind     CMoonRiddleKind
-  question String
+  id                  String          @id @default(uuid())
+  kind                CMoonRiddleKind
+  question            String
   // Compared case/whitespace-insensitively (see normalizeRiddleAnswer in
   // server/utils/cmoonRiddle.js) — admins type a natural answer, not a regex.
-  answer   String
+  answer              String
   // BOSS_LORE only: which raid boss this riddle gates (null for WEEKLY). Solving it is checked
   // alongside raidOneTime/raidCooldownMinutes in checkRaidBossAvailability (see that function's
   // own comment in server/utils/cmoonEnemyRaid.js) — unsolved blocks the raid the same way an
@@ -6586,22 +6678,22 @@ model CMoonRiddle {
   encyclopediaEntryId String?
   // Admin on/off switch, same convention as CMoonEnemyMember.active — an inactive riddle is never
   // posted/offered and never gates anything, but stays visible/editable in the admin list.
-  active   Boolean  @default(true)
+  active              Boolean         @default(true)
   // WEEKLY only: when this week's riddle was broadcast to every cMoon's Discord channel. Null
   // until the rotation job actually posts it, so an admin can author next week's riddle well
   // ahead of time without it going out early. Always null for BOSS_LORE (posted as part of the
   // boss's own gate copy instead, not broadcast on a schedule).
-  postedAt DateTime?
+  postedAt            DateTime?
   // Set ONCE, via a single atomic conditional UPDATE ... WHERE solvedAt IS NULL (see
   // claimCMoonRiddleSolve in server/utils/cmoonRiddle.js) — the "first solver wins" guarantee two
   // concurrent /riddle submissions can never both win. Null means still open.
-  solvedAt       DateTime?
-  solvedByUserId String?
+  solvedAt            DateTime?
+  solvedByUserId      String?
   // Snapshot of the solver's cMoon AT solve time, not a live lookup — crediting stays correct
   // even if the solver later switches teams.
-  solvedByCMoonId String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  solvedByCMoonId     String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
   enemyMember       CMoonEnemyMember?  @relation(fields: [enemyMemberId], references: [id], onDelete: Cascade)
   encyclopediaEntry EncyclopediaEntry? @relation(fields: [encyclopediaEntryId], references: [id], onDelete: SetNull)
@@ -6722,19 +6814,19 @@ model CMoonHuntCompletion {
 // re-derivable, computed live rather than cached/persisted (see server/utils/cmoonSeason.js) —
 // cheap at this scale (cMoon count in the tens, a handful of seasons).
 model CMoonSeason {
-  id           String   @id @default(uuid())
+  id                             String    @id @default(uuid())
   // Display-only sequence ("Season N"), assigned once at creation as
   // (highest existing seasonNumber) + 1 — never recomputed or renumbered later, so a deleted
   // future season (see the admin delete endpoint's own future-only restriction) never shifts an
   // already-shown past season's number.
-  seasonNumber Int      @unique
-  header       String   @default("")
+  seasonNumber                   Int       @unique
+  header                         String    @default("")
   // Sanitized HTML — see server/utils/sanitizeEncyclopediaHtml.js (reused as-is; this blurb has
   // the exact same "short admin-authored prose, styled like the Tutorial page" shape as an
   // Encyclopedia entry's body, so a second sanitizer would just be the same allowlist twice).
-  blurb        String   @default("")
-  startAt      DateTime
-  endAt        DateTime
+  blurb                          String    @default("")
+  startAt                        DateTime
+  endAt                          DateTime
   // One shared, server-wide progress bar toward a total "cMoon enemies defeated" goal for THIS
   // season — distinct from the per-cMoon CMoonSeasonTracker rows below, which render one bar PER
   // TEAM so teams can be compared against each other; this is a single combined bar for the whole
@@ -6752,8 +6844,8 @@ model CMoonSeason {
   // fresh row (and so its own null announcedAt), so no "reset on rollover" step is needed the way
   // the old singleton design required.
   enemiesDefeatedGoalAnnouncedAt DateTime?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt                      DateTime  @default(now())
+  updatedAt                      DateTime  @updatedAt
 
   trackers CMoonSeasonTracker[]
 

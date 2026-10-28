@@ -104,6 +104,7 @@ export const ADMIN_API_SEGMENT_PERMS = {
   'cmoon-enemy-members': ['cMoonEnemies'],
   'cmoon-enemy-rewards': ['cMoonEnemies'],
   'cmoon-enemy-taunts': ['cMoonEnemies'],
+  'cmoon-enemy-wind-up-moves': ['cMoonEnemies'],
   'cmoon-hunts': ['cMoonHunts'],
   'cmoon-join-effects': ['cMoon', 'cMoonJoinEffects', 'cMoonEnemies'],
   'cmoon-points-log': ['cmoonPointLogs'],

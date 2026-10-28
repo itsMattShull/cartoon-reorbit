@@ -43,6 +43,29 @@ export const PARALYZED_ACTION = 'PARALYZED'
 // CMoonEnemyBattle.playerHitStreak/enemyHitStreak's own schema comment.
 export const HIT_STREAK_THRESHOLD = 3
 
+// Fields needed off a CMoonSpecialAttack to decide/serialize "which one applies" — shared by every
+// Prisma `select`/`include` that loads a chosenSpecialAttack relation (action.post.js,
+// cmoonRaidSocket.js's resolveEffectiveSpecialAttack) so they can't drift from
+// pickEffectiveSpecialAttack's own expectations below.
+export const SPECIAL_ATTACK_SELECT = {
+  id: true, name: true, description: true, effectType: true, amount: true, soundPath: true, healsAllies: true, playerChoice: true,
+}
+
+// A player's EFFECTIVE special attack for a cMoon Enemy Battle (solo or raid): `chosenSpecialAttack`
+// (their own User.chosenSpecialAttack, already loaded by the caller) if it still has
+// CMoonSpecialAttack.playerChoice = true — re-checked HERE, never trusted from a stale FK alone,
+// since an admin can flip playerChoice off (or delete/reassign the attack) at any time after a
+// player chose it — else `cMoonSpecialAttack` (the team's own assigned special), same as before
+// player-choice existed. Pure/synchronous and DB-free, matching this whole file's own discipline:
+// both special attacks must already be loaded by the caller (one Prisma query with both relations
+// included), so resolving this never costs an extra round-trip on a hot path like a solo battle's
+// own serializeBattleForClient. server/utils/cmoon.js's resolveEffectiveSpecialAttack is the
+// async wrapper for a caller that doesn't already have chosenSpecialAttack loaded.
+export function pickEffectiveSpecialAttack(chosenSpecialAttack, cMoonSpecialAttack) {
+  if (chosenSpecialAttack?.playerChoice) return chosenSpecialAttack
+  return cMoonSpecialAttack || null
+}
+
 export function isValidBattleAction(action) {
   return BATTLE_ACTIONS.includes(action)
 }
@@ -365,11 +388,14 @@ export function serializeEnemyForClient(member, pityEmptyWinStreak = null) {
 
 // Shape sent to the client for an in-progress or just-resolved battle. `battle` must have its
 // `enemyMember` (with `enemyMember.faction`) relation included by the caller, and — to surface
-// the player's own special-attack button at all — its `cMoon` (with `cMoon.specialAttack`)
-// relation too (both nullable: a battle with no cMoon, or whose cMoon has no attack assigned,
-// simply never offers the button; see CMoonBattlePopupHost.vue's own v-if on this field).
+// the player's own special-attack button at all — its `cMoon` (with `cMoon.specialAttack`) AND
+// `user` (with `user.chosenSpecialAttack`, using SPECIAL_ATTACK_SELECT) relations too (all
+// nullable: a battle with no cMoon, whose cMoon has no attack assigned, and/or whose player has
+// made no choice of their own, simply falls through to whichever of those still applies — see
+// pickEffectiveSpecialAttack above — or offers no button at all if neither does; see
+// CMoonBattlePopupHost.vue's own v-if on this field).
 export function serializeBattleForClient(battle) {
-  const specialAttack = battle.cMoon?.specialAttack
+  const specialAttack = pickEffectiveSpecialAttack(battle.user?.chosenSpecialAttack, battle.cMoon?.specialAttack)
   return {
     id: battle.id,
     status: battle.status,

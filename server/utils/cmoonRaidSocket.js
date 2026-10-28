@@ -73,7 +73,7 @@
 
 import { randomUUID } from 'crypto'
 import { prisma as db } from '../prisma.js'
-import { getGlobalConfig, getPlayerCombatMaxHp } from './cmoon.js'
+import { getGlobalConfig, getPlayerCombatMaxHp, resolveEffectiveSpecialAttack } from './cmoon.js'
 import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from './achievements.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 import { announceCMoonRaidBoss, resolveCMoonRaidDiscordChannelId, sendCMoonTeamUpdate, startThreadFromMessage } from './discord.js'
@@ -90,7 +90,7 @@ import { announceTeamEnemiesMilestone, checkAndAnnounceSeasonGoalReached } from 
 import {
   resolveRaidRound, JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE, RAID_MAX_ROUNDS_SAFETY,
   checkRaidBossAvailability, applyRaidSpecialAttack, participantCMoonId, raidCMoonIds, raidPartyLabel,
-  splitRaidPoints, rankTierLevel, publicParticipantTeam, buildRaidLobby,
+  splitRaidPoints, rankTierLevel, publicParticipantTeam, buildRaidLobby, rollWindUpMove,
 } from './cmoonEnemyRaid.js'
 import * as raidRedis from './cmoonRaidRedisState.js'
 
@@ -150,6 +150,21 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *                         // PARALYZE_OPPONENT (see this feature's "whole party" boss-target
  *                         // decision). Both decrement by 1 every round they're used, same
  *                         // "elapses the round it's consulted in" semantics as the solo battle.
+ *
+ *   // ── Lobby controls / up to 8 players / private lobbies / wind-up telegraphs ──────────────
+ *   maxParticipants,      // this party's own cap, 1-8, snapshotted from
+ *                         // CMoonEnemyMember.maxParticipants at creation (see cmoonraid:start).
+ *   isPrivate,            // never listed in the site-wide lobby / notified / announced when true
+ *                         // (see CMoonEnemyRaid.isPrivate) — still joinable by anyone with the URL.
+ *   leaderKeepOpen,       // the initiator has paused sweep()'s join-window auto-start.
+ *   speedVotes,           // Set<userId> of current participants who voted to cut the join window
+ *                         // down to 5s (see maybeApplySpeedVote) — NOT JSON-serializable, stored
+ *                         // as a plain array in Redis and rebuilt into a Set on restore.
+ *   windUpMoves,          // this boss's own CMoonEnemyWindUpMove rows, snapshotted at creation —
+ *                         // empty unless CMoonEnemyMember.windUpEnabled was true then.
+ *   currentWindUp,        // { message, direction, bonusType, bonusAmount } for the round in
+ *                         // progress if one of windUpMoves just fired (see openRound), else null —
+ *                         // only message/direction are ever sent to a client (see publicRaidView).
  * }
  */
 const raids = new Map()       // raidId -> raid
@@ -238,6 +253,26 @@ function publicRaidView(raid) {
     enemyHitStreak: raid.enemyHitStreak || 0,
     enemyParalyzedTurns: raid.enemyParalyzedTurns || 0,
     partyParalyzedTurns: raid.partyParalyzedTurns || 0,
+    // How many players this raid's party can hold — snapshotted from
+    // CMoonEnemyMember.maxParticipants at creation (1-8); the client reads this instead of a
+    // hardcoded "4" for slot counts/labels.
+    maxParticipants: raid.maxParticipants || MAX_PARTY_SIZE,
+    // Lobby controls (see cmoonraid:toggleKeepOpen/forceStart/voteSpeedUp below) — whether the
+    // leader has paused the join-window countdown, and how many current participants have voted
+    // to speed the countdown up to 5 seconds.
+    leaderKeepOpen: !!raid.leaderKeepOpen,
+    speedVoteCount: raid.speedVotes ? raid.speedVotes.size : 0,
+    // Whether this raid is invite-only (see CMoonEnemyRaid.isPrivate) — display-only; the actual
+    // discoverability/eligibility enforcement happens server-side (buildRaidLobby, the join
+    // handler's notify/announce gating).
+    isPrivate: !!raid.isPrivate,
+    // The boss's current wind-up telegraph, if one fired this round — a DELIBERATE, narrow
+    // exception to this function's usual "never reveal the enemy's action in advance" rule (see
+    // this function's own header comment): a telegraph is SUPPOSED to be visible before it
+    // resolves, so players can react. Only the public message/lane are ever exposed here — the
+    // configured bonus amount/type stay server-side only (see raid.currentWindUp's own shape,
+    // set in openRound) until it actually applies and shows up in a round's own broadcast.
+    currentWindUp: raid.currentWindUp ? { message: raid.currentWindUp.message, direction: raid.currentWindUp.direction } : null,
     participants: Array.from(raid.participants.values()).map(p => ({
       userId: p.userId,
       username: p.username,
@@ -328,6 +363,11 @@ async function loadParticipantProfile(userId, cMoonId) {
   if (!cMoon) return null
   // A rank belongs to one cMoon; a leftover rank from a team they've since left isn't shown.
   const rank = user?.currentCMoonRank && user.currentCMoonRank.cMoonId === cMoon.id ? user.currentCMoonRank : null
+  // This participant's EFFECTIVE special attack — their own chosen one (see
+  // User.chosenSpecialAttackId) if it's still playerChoice-enabled, else their cMoon's own
+  // assigned special, exactly like the solo battle now resolves it (see resolveEffectiveSpecialAttack
+  // in server/utils/cmoon.js). Snapshotted once here, same as the rest of this profile.
+  const specialAttack = await resolveEffectiveSpecialAttack(userId, cMoon.specialAttack)
   return {
     cMoonId: cMoon.id,
     cMoonName: cMoon.name,
@@ -337,7 +377,7 @@ async function loadParticipantProfile(userId, cMoonId) {
     rankTierName: rank?.tier?.name || null,
     rankTierLevel: rank ? rankTierLevel(tiers, rank.tierId) : 0,
     rankTierCount: tiers.length,
-    specialAttack: cMoon.specialAttack || null,
+    specialAttack: specialAttack || null,
   }
 }
 
@@ -411,14 +451,47 @@ function startCombat(io, raid) {
   broadcastLobby() // no longer joinable — the lobby moves it to "battle underway"
 }
 
+// ── Wind-up/telegraph moves (see CMoonEnemyWindUpMove's own schema comment) ───────────────────
+// When a raid boss has any configured, each round independently rolls whether one fires INSTEAD
+// of an ordinary rolled action (rollWindUpMove in cmoonEnemyRaid.js) — if one does, this round's
+// enemy action is FORCED to the telegraphed lane (not rolled) so the party can see it coming and
+// react, and raid.currentWindUp carries the full move (message/direction/bonus) for closeRound to
+// check and apply once the round resolves. Cleared every round regardless, so a round that didn't
+// roll one never carries a stale telegraph into the next.
 function openRound(io, raid) {
-  raid.currentEnemyAction = rollEnemyAction(raid.enemyStats.attackChancePercent)
+  const windUp = rollWindUpMove(raid.windUpMoves)
+  if (windUp) {
+    raid.currentEnemyAction = windUp.direction === 'HIGH' ? 'ATTACK_HIGH' : 'ATTACK_LOW'
+    raid.currentWindUp = {
+      message: windUp.telegraphMessage, direction: windUp.direction,
+      bonusType: windUp.bonusType, bonusAmount: windUp.bonusAmount,
+    }
+  } else {
+    raid.currentEnemyAction = rollEnemyAction(raid.enemyStats.attackChancePercent)
+    raid.currentWindUp = null
+  }
   raid.roundDeadlineAt = Date.now() + ROUND_TIMEOUT_SECONDS * 1000
   for (const p of raid.participants.values()) {
     if (!p.knockedOutAt) p.pendingAction = null
   }
   fireSync(raid.id, raid)
   broadcast(io, raid, EV('roundOpened'))
+}
+
+// ── Lobby controls (see cmoonraid:toggleKeepOpen/forceStart/voteSpeedUp below) ─────────────────
+// Re-evaluated after every vote AND after every join/leave (the denominator — current participant
+// count — changes then too). Once every CURRENT participant has voted and the party isn't already
+// full (a full party starts on its own via the join handler, with nothing left to "speed up"),
+// clamps the join window down to 5 seconds from now and clears any leaderKeepOpen pause — a leader
+// keeping the lobby open can still be overridden by a unanimous party vote.
+function maybeApplySpeedVote(raid) {
+  if (raid.status !== 'FORMING') return
+  const size = raid.participants.size
+  const maxParticipants = raid.maxParticipants || MAX_PARTY_SIZE
+  if (size === 0 || size >= maxParticipants) return
+  if (raid.speedVotes.size < size) return
+  raid.joinDeadlineAt = Math.min(raid.joinDeadlineAt, Date.now() + 5000)
+  raid.leaderKeepOpen = false
 }
 
 function aliveParticipants(raid) {
@@ -574,19 +647,42 @@ async function closeRound(io, raid) {
       applyRaidSpecialAttack(raid, aliveParticipants(raid), raid.enemySpecialAttack, { side: 'ENEMY' }, specialEvents)
     }
 
+    // ── 4. Wind-up telegraph payoff — if this round telegraphed a lane (see openRound), check
+    // whether EVERY participant who was alive when it opened blocked exactly that lane. `action`
+    // on each perParticipant row is already whatever they actually resolved with this round
+    // (PARALYZED_ACTION if the party was stunned, so a paralyzed party can never accidentally
+    // "earn" this), so no separate re-check against pendingAction is needed. Cleared either way —
+    // a telegraph only ever pays off for the one round it was shown on. ───────────────────────
+    let windUpBonus = null
+    if (raid.currentWindUp) {
+      const requiredBlock = raid.currentWindUp.direction === 'HIGH' ? 'BLOCK_HIGH' : 'BLOCK_LOW'
+      const everyoneBlocked = perParticipant.length > 0 && perParticipant.every(r => r.action === requiredBlock)
+      if (everyoneBlocked) {
+        const { bonusType, bonusAmount } = raid.currentWindUp
+        if (bonusType === 'HEAL_PARTY') {
+          for (const p of aliveParticipants(raid)) p.hpRemaining = Math.min(p.maxHp, p.hpRemaining + bonusAmount)
+        } else if (bonusType === 'DAMAGE_ENEMY') {
+          raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - bonusAmount)
+        }
+        windUpBonus = { bonusType, bonusAmount }
+      }
+      raid.currentWindUp = null
+    }
+
     raid.roundLog.push({
       round: raid.roundNumber, enemyAction, enemyDamageDealt,
       enemyHpRemaining: raid.enemyHpRemaining,
       participants: perParticipant.map(({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit }) =>
         ({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit })),
       ...(specialEvents.length ? { specials: specialEvents } : {}),
+      ...(windUpBonus ? { windUpBonus } : {}),
     })
 
     const everyoneDown = Array.from(raid.participants.values()).every(p => !!p.knockedOutAt)
     const nextRoundNumber = raid.roundNumber + 1
 
     broadcast(io, raid, EV('roundResolved'), {
-      round: { roundNumber: raid.roundNumber, enemyAction, enemyDamageDealt, participants: perParticipant, specials: specialEvents },
+      round: { roundNumber: raid.roundNumber, enemyAction, enemyDamageDealt, participants: perParticipant, specials: specialEvents, windUpBonus },
     })
     sendCMoonTeamUpdate(raidDiscordPostTarget(raid), formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant, specialEvents }))
 
@@ -648,7 +744,19 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
     const hitRewards = rollEnemyRewards(rewardRows)
     grantable = buildGrantableReward(hitRewards)
   }
-  const pointsAwarded = outcome === 'WIN' ? Math.max(0, Number(raid.enemyStats.cMoonPointsReward) || 0) : 0
+  let pointsAwarded = outcome === 'WIN' ? Math.max(0, Number(raid.enemyStats.cMoonPointsReward) || 0) : 0
+  // A raid that resolved with exactly ONE participant (started solo and nobody joined in time, or
+  // the leader force-started alone — see cmoonraid:forceStart) earns the admin-configured solo
+  // bonus — see GlobalGameConfig.cMoonRaidSoloRewardMultiplierPercent's own schema comment. Points
+  // only, computed here at resolution so it applies identically regardless of HOW the raid ended
+  // up solo; item/cToon drop chances (rollEnemyRewards above) are untouched.
+  if (pointsAwarded > 0 && participantIds.length === 1) {
+    const config = await getGlobalConfig().catch(() => null)
+    const multiplierPercent = Number.isInteger(config?.cMoonRaidSoloRewardMultiplierPercent) && config.cMoonRaidSoloRewardMultiplierPercent > 0
+      ? config.cMoonRaidSoloRewardMultiplierPercent
+      : 100
+    pointsAwarded = Math.round(pointsAwarded * multiplierPercent / 100)
+  }
   // Split evenly across the party (splitRaidPoints), each share credited to that participant's
   // OWN cMoon — so in a cross-cMoon raid every team earns its members' shares and the total
   // across all teams is still one win's worth. Rather than crediting each participant the full
@@ -795,7 +903,10 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
 function sweep(io) {
   const now = Date.now()
   for (const raid of Array.from(raids.values())) {
-    if (raid.status === 'FORMING' && now >= raid.joinDeadlineAt) {
+    // A leader keeping the lobby open (see cmoonraid:toggleKeepOpen) pauses this clock entirely —
+    // the raid only starts via an explicit cmoonraid:forceStart, filling the party, or the leader
+    // turning keepOpen back off (which re-arms a fresh full window rather than expiring instantly).
+    if (raid.status === 'FORMING' && !raid.leaderKeepOpen && now >= raid.joinDeadlineAt) {
       startCombat(io, raid)
     } else if (raid.status === 'IN_PROGRESS' && now >= raid.roundDeadlineAt) {
       closeRound(io, raid).catch(err => console.error('[cmoonRaidSocket] sweep closeRound failed:', err))
@@ -844,6 +955,16 @@ export async function restoreCMoonRaids() {
     raid.enemyAtkBonus ??= 0
     raid.enemyParalyzedTurns ??= 0
     raid.partyParalyzedTurns ??= 0
+    // Lobby controls / up-to-8 / wind-up / private — all added after this feature shipped, so a
+    // snapshot from before any of them existed needs every one backfilled, same reasoning as the
+    // special-attack fields above (a missing numeric/Set field here would otherwise feed
+    // undefined straight into this round's own arithmetic/comparisons).
+    raid.maxParticipants ??= MAX_PARTY_SIZE
+    raid.isPrivate ??= false
+    raid.leaderKeepOpen ??= false
+    raid.speedVotes = new Set(Array.isArray(raid.speedVotes) ? raid.speedVotes : [])
+    raid.windUpMoves ??= []
+    raid.currentWindUp ??= null
     raids.set(raidId, raid)
     for (const uid of raid.participants.keys()) raidByUser.set(uid, raidId)
   }
@@ -874,7 +995,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
   })
   socket.on(EV('lobbyUnsubscribe'), () => { socket.leave(LOBBY_ROOM) })
 
-  socket.on(EV('start'), async ({ enemyMemberId } = {}) => {
+  socket.on(EV('start'), async ({ enemyMemberId, isPrivate } = {}) => {
     const me = await resolveSocketUser(socket)
     if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
     try {
@@ -891,6 +1012,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
               taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
             },
           },
+          windUpMoves: true,
         },
       })
       if (!enemyMember || !enemyMember.active || !enemyMember.faction.active) {
@@ -944,7 +1066,11 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         },
         status: 'FORMING', enemyHpRemaining: enemyMember.maxHp, roundNumber: 1,
         currentEnemyAction: null, roundDeadlineAt: null,
-        joinDeadlineAt: Date.now() + JOIN_WINDOW_SECONDS * 1000,
+        joinDeadlineAt: Date.now() + (
+          Number.isInteger(config?.cMoonRaidJoinWindowSeconds) && config.cMoonRaidJoinWindowSeconds > 0
+            ? config.cMoonRaidJoinWindowSeconds
+            : JOIN_WINDOW_SECONDS
+        ) * 1000,
         participants: new Map(), roundLog: [],
         startedAt: Date.now(), combatStartedAt: null, endedAt: null, outcome: null, resolving: false,
         // Special attacks — see the raid object's own shape comment up top for what each field
@@ -953,6 +1079,25 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         enemySpecialAttack: enemyMember.faction?.specialAttack || null,
         enemyHitStreak: 0, partyAtkBonus: 0, enemyAtkBonus: 0,
         enemyParalyzedTurns: 0, partyParalyzedTurns: 0,
+        // How many players this party can hold — snapshotted now (1-8) so an admin edit mid-raid
+        // never affects one already FORMING/IN_PROGRESS. See CMoonEnemyMember.maxParticipants.
+        maxParticipants: Number.isInteger(enemyMember.maxParticipants) && enemyMember.maxParticipants >= 1 && enemyMember.maxParticipants <= 8
+          ? enemyMember.maxParticipants
+          : MAX_PARTY_SIZE,
+        // Invite-only: never listed in the site-wide lobby, never notified/announced — see
+        // CMoonEnemyRaid.isPrivate's own schema comment. Still joinable, cross-cMoon, by anyone
+        // with the raid's own URL.
+        isPrivate: !!isPrivate,
+        // Lobby controls (see cmoonraid:toggleKeepOpen/forceStart/voteSpeedUp below) — nobody has
+        // paused or voted yet on a freshly-created raid.
+        leaderKeepOpen: false,
+        speedVotes: new Set(),
+        // Wind-up/telegraph moves — only snapshotted when the boss has them actually enabled, so
+        // an inactive toggle costs nothing extra at runtime (openRound's roll is a no-op on an
+        // empty list either way, but this also keeps the Redis snapshot smaller for every other
+        // raid boss that doesn't use this mechanic).
+        windUpMoves: enemyMember.windUpEnabled ? (enemyMember.windUpMoves || []) : [],
+        currentWindUp: null,
       }
       addParticipant(raid, { userId: me.id, username: elig.user.username, isInitiator: true, maxHp: initiatorMaxHp, profile: initiatorProfile })
       raids.set(raidId, raid)
@@ -966,6 +1111,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
             data: {
               id: raidId, enemyMemberId, cMoonId: cMoon.id, status: 'FORMING',
               enemyHpRemaining: enemyMember.maxHp, joinDeadlineAt: new Date(raid.joinDeadlineAt),
+              isPrivate: raid.isPrivate,
             },
           }),
           db.cMoonEnemyRaidParticipant.create({
@@ -995,23 +1141,29 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       // Admin analytics only (offer -> start rate); fire-and-forget, never blocks the raid.
       markEnemyOfferAccepted(db, { userId: me.id, enemyMemberId })
 
-      announceCMoonRaidBoss(discordChannelId, {
-        cMoonName: cMoon.name, enemyName: enemyMember.name,
-        announcementTemplate: enemyMember.raidAnnouncementText,
-      }).then(async messageId => {
-        if (!messageId) return
-        const threadId = await startThreadFromMessage(discordChannelId, messageId, `⚔️ ${enemyMember.name} raid`)
-        // The raid may have already resolved and been destroyed by the time this round trip
-        // finishes (two round-trip Discord calls, vs. a raid that can close in ~20s) — only
-        // mutate/persist it if it's still the live instance for this id, never a stale one.
-        if (threadId && raids.get(raidId) === raid) {
-          raid.discordThreadId = threadId
-          fireSync(raidId, raid)
-        }
-      }).catch(() => {})
-      notifyRaidLobbyOpened(io, {
-        initiatorUserId: me.id, initiatorUsername: elig.user.username, enemyMember, cMoonName: cMoon.name,
-      }).catch(() => {})
+      // Both the Discord call-to-arms and the site-wide in-app notification are skipped for a
+      // PRIVATE raid (see CMoonEnemyRaid.isPrivate's own schema comment) — it only reaches other
+      // players via its own URL, shared by whoever started it. Everything else (join, cross-cMoon
+      // eligibility, rewards) is unchanged either way.
+      if (!raid.isPrivate) {
+        announceCMoonRaidBoss(discordChannelId, {
+          cMoonName: cMoon.name, enemyName: enemyMember.name,
+          announcementTemplate: enemyMember.raidAnnouncementText,
+        }).then(async messageId => {
+          if (!messageId) return
+          const threadId = await startThreadFromMessage(discordChannelId, messageId, `⚔️ ${enemyMember.name} raid`)
+          // The raid may have already resolved and been destroyed by the time this round trip
+          // finishes (two round-trip Discord calls, vs. a raid that can close in ~20s) — only
+          // mutate/persist it if it's still the live instance for this id, never a stale one.
+          if (threadId && raids.get(raidId) === raid) {
+            raid.discordThreadId = threadId
+            fireSync(raidId, raid)
+          }
+        }).catch(() => {})
+        notifyRaidLobbyOpened(io, {
+          initiatorUserId: me.id, initiatorUsername: elig.user.username, enemyMember, cMoonName: cMoon.name,
+        }).catch(() => {})
+      }
     } catch (err) {
       console.error('[cmoonraid:start] failed:', err)
       socket.emit(EV('error'), { message: 'Could not start a raid right now' })
@@ -1027,12 +1179,12 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       socket.join(raidRoom(raidId))
       return socket.emit(EV('created'), publicRaidView(raid))
     }
-    if (raid.participants.size >= MAX_PARTY_SIZE) return socket.emit(EV('error'), { message: 'This raid is full' })
+    if (raid.participants.size >= (raid.maxParticipants || MAX_PARTY_SIZE)) return socket.emit(EV('error'), { message: 'This raid is full' })
 
     // ── 1. Every eligibility check and lookup BEFORE taking a slot. Raids are listed site-wide in
     // the lobby now, so anyone can try any raid: an ineligible player (no cMoon, too few wins,
     // already fighting elsewhere) must never hold a slot, even briefly — a held slot turns real
-    // players away as "full", or counts toward MAX_PARTY_SIZE and starts combat early. ──────────
+    // players away as "full", or counts toward maxParticipants and starts combat early. ─────────
     let elig, profile, joinerMaxHp
     try {
       const enemyMember = await db.cMoonEnemyMember.findUnique({
@@ -1066,7 +1218,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     }
     const otherRaidId = raidByUser.get(me.id)
     if (otherRaidId && otherRaidId !== raidId) return socket.emit(EV('error'), { message: 'You are already in a raid' })
-    if (raid.participants.size >= MAX_PARTY_SIZE) return socket.emit(EV('error'), { message: 'This raid is full' })
+    if (raid.participants.size >= (raid.maxParticipants || MAX_PARTY_SIZE)) return socket.emit(EV('error'), { message: 'This raid is full' })
     addParticipant(raid, { userId: me.id, username: elig.user.username, isInitiator: false, maxHp: joinerMaxHp, profile, pendingJoin: true })
 
     // ── 3. The one write. Only a DB failure (e.g. P2002: an active raid/solo row the in-memory
@@ -1094,10 +1246,13 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     // same as before cross-cMoon — and finishing the join is right.)
     raid.participants.get(me.id).pendingJoin = false
     socket.join(raidRoom(raidId))
+    // A join changes the speed-vote denominator (one more current participant) — re-check in case
+    // this join itself completes a unanimous vote.
+    maybeApplySpeedVote(raid)
     fireSync(raidId, raid)
     broadcast(io, raid, EV('participantJoined'))
     broadcastLobby()
-    if (raid.participants.size >= MAX_PARTY_SIZE && raid.status === 'FORMING') startCombat(io, raid)
+    if (raid.participants.size >= (raid.maxParticipants || MAX_PARTY_SIZE) && raid.status === 'FORMING') startCombat(io, raid)
   })
 
   socket.on(EV('leave'), async ({ raidId }) => {
@@ -1106,12 +1261,69 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     const raid = raids.get(raidId)
     if (!raid || raid.status !== 'FORMING' || !raid.participants.has(me.id)) return
     raid.participants.delete(me.id)
+    raid.speedVotes.delete(me.id)
     raidByUser.delete(me.id)
     socket.leave(raidRoom(raidId))
     await db.cMoonEnemyRaidParticipant.updateMany({ where: { raidId, userId: me.id }, data: { activeUserId: null } }).catch(() => {})
     if (!raid.participants.size) { destroyRaid(raidId); return }
+    // A leave shrinks the speed-vote denominator too — re-check for the same reason as a join.
+    maybeApplySpeedVote(raid)
     fireSync(raidId, raid)
     broadcast(io, raid, EV('participantLeft'))
+    broadcastLobby()
+  })
+
+  // ── Lobby controls (see maybeApplySpeedVote above and sweep's own leaderKeepOpen check) ──────
+  // Initiator-only: pause/resume the join-window countdown. Turning it back OFF re-arms a FRESH
+  // full window (the admin-configured default) rather than letting whatever time has silently
+  // passed take effect instantly — a leader resuming the clock expects the full window back, not
+  // an immediate close.
+  socket.on(EV('toggleKeepOpen'), async ({ raidId, keepOpen } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
+    const raid = raids.get(raidId)
+    if (!raid || raid.status !== 'FORMING') return socket.emit(EV('error'), { message: 'This raid is not open for joining' })
+    const p = raid.participants.get(me.id)
+    if (!p?.isInitiator) return socket.emit(EV('error'), { message: 'Only the raid leader can do that' })
+    raid.leaderKeepOpen = !!keepOpen
+    if (!raid.leaderKeepOpen) {
+      const config = await getGlobalConfig().catch(() => null)
+      const seconds = Number.isInteger(config?.cMoonRaidJoinWindowSeconds) && config.cMoonRaidJoinWindowSeconds > 0
+        ? config.cMoonRaidJoinWindowSeconds
+        : JOIN_WINDOW_SECONDS
+      raid.joinDeadlineAt = Date.now() + seconds * 1000
+    }
+    fireSync(raidId, raid)
+    broadcast(io, raid, EV('state'))
+    broadcastLobby()
+  })
+
+  // Initiator-only: start combat immediately with whoever has joined so far (including just
+  // themselves — the solo-queue entry point, see GlobalGameConfig.cMoonRaidSoloRewardMultiplierPercent).
+  socket.on(EV('forceStart'), async ({ raidId } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
+    const raid = raids.get(raidId)
+    if (!raid || raid.status !== 'FORMING') return socket.emit(EV('error'), { message: 'This raid is not open for joining' })
+    const p = raid.participants.get(me.id)
+    if (!p?.isInitiator) return socket.emit(EV('error'), { message: 'Only the raid leader can do that' })
+    startCombat(io, raid)
+  })
+
+  // Any current participant: vote to cut the join window down to 5 seconds. Re-votable (idempotent
+  // — voting again while already counted is a no-op) but not revocable; resolves automatically via
+  // maybeApplySpeedVote once every current participant has voted.
+  socket.on(EV('voteSpeedUp'), async ({ raidId } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
+    const raid = raids.get(raidId)
+    if (!raid || raid.status !== 'FORMING' || !raid.participants.has(me.id)) {
+      return socket.emit(EV('error'), { message: 'You are not in this raid' })
+    }
+    raid.speedVotes.add(me.id)
+    maybeApplySpeedVote(raid)
+    fireSync(raidId, raid)
+    broadcast(io, raid, EV('state'))
     broadcastLobby()
   })
 

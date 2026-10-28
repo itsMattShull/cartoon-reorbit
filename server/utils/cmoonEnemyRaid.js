@@ -52,9 +52,19 @@ import {
   resolveBattleRound, rollHitDamage, isKnownAction, PLAYER_MAX_HP, HEAL_ON_SUCCESSFUL_BLOCK,
 } from './cmoonEnemyBattle.js'
 
-export const JOIN_WINDOW_SECONDS = 60 // FORMING -> auto-starts combat, whoever has joined by then
-export const ROUND_TIMEOUT_SECONDS = 20 // an alive participant who hasn't acted by this auto-acts
-export const MAX_PARTY_SIZE = 4 // initiator + up to 3 joiners
+// FORMING -> auto-starts combat, whoever has joined by then. Only the hardcoded fallback now —
+// live code reads GlobalGameConfig.cMoonRaidJoinWindowSeconds instead (see cmoonraid:start),
+// admin-configurable 15-120s; this constant is used only if that config row is ever unexpectedly
+// missing.
+export const JOIN_WINDOW_SECONDS = 60
+// An alive participant who hasn't acted by this auto-acts. Lowered from 20 to 15 so a stalling
+// player can't drag a round out as long — see the visible round countdown in
+// pages/newsite/cmoon-raid/[id].vue, which now actually shows this ticking down.
+export const ROUND_TIMEOUT_SECONDS = 15
+// Only the hardcoded fallback/default now — live code reads each raid's own
+// raid.maxParticipants (snapshotted from CMoonEnemyMember.maxParticipants, 1-8, at raid creation)
+// instead. Kept exported since it's still this file's own "if nothing else says otherwise" value.
+export const MAX_PARTY_SIZE = 4
 export const RAID_MAX_ROUNDS_SAFETY = 100 // same runaway-RNG safety valve as a solo battle
 
 // Whether a raid boss can be started right now, given its own admin-configured
@@ -300,7 +310,11 @@ export function buildRaidLobbyEntry(raid) {
     joinDeadlineAt: raid.joinDeadlineAt,
     roundNumber: raid.roundNumber,
     partySize: participants.length,
-    maxPartySize: MAX_PARTY_SIZE,
+    maxPartySize: raid.maxParticipants || MAX_PARTY_SIZE,
+    // The leader's "keep lobby open" choice, display-only here — see leaderKeepOpen's own shape
+    // comment in cmoonRaidSocket.js. A lobby card shows it so a browsing player isn't misled by a
+    // soon-looking countdown that the leader has actually paused.
+    leaderKeepOpen: !!raid.leaderKeepOpen,
     participants: participants.map(p => ({
       userId: p.userId,
       username: p.username,
@@ -311,12 +325,30 @@ export function buildRaidLobbyEntry(raid) {
 }
 
 // The lobby list: FORMING raids with an open slot first (soonest-closing first, so the one about
-// to start is on top), then raids already in combat as non-joinable context.
+// to start is on top), then raids already in combat as non-joinable context. A PRIVATE raid is
+// never listed here at all — it only reaches players via its own URL (see CMoonEnemyRaid.isPrivate
+// and this file's "Cross-cMoon raids" header comment's sibling, the private-raid comment in
+// cmoonRaidSocket.js).
 export function buildRaidLobby(raids) {
-  const list = Array.from(raids).filter(r => r.status === 'FORMING' || r.status === 'IN_PROGRESS')
-  const joinable = list.filter(r => r.status === 'FORMING' && r.participants.size < MAX_PARTY_SIZE)
+  const list = Array.from(raids).filter(r => !r.isPrivate && (r.status === 'FORMING' || r.status === 'IN_PROGRESS'))
+  const joinable = list.filter(r => r.status === 'FORMING' && r.participants.size < (r.maxParticipants || MAX_PARTY_SIZE))
     .sort((a, b) => a.joinDeadlineAt - b.joinDeadlineAt)
   const rest = list.filter(r => !joinable.includes(r))
     .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))
   return [...joinable, ...rest].map(buildRaidLobbyEntry)
+}
+
+// Rolls which (if any) of a raid boss's configured wind-up moves fires THIS round — each move's
+// own occurrencePercent is an INDEPENDENT per-round chance (a different convention from
+// CMoonEnemyMember.occurrencePercent's relative weight — see CMoonEnemyWindUpMove's own schema
+// comment), checked in list order, first match wins, so overlapping percentages never need to sum
+// to 100 and a later move's own roll never runs once an earlier one already hit. Returns null if
+// none fire, meaning an ordinary round proceeds.
+export function rollWindUpMove(moves) {
+  if (!Array.isArray(moves) || !moves.length) return null
+  for (const move of moves) {
+    const chance = Math.max(0, Math.min(100, Number(move.occurrencePercent) || 0))
+    if (chance > 0 && Math.random() * 100 < chance) return move
+  }
+  return null
 }

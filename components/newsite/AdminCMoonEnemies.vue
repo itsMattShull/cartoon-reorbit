@@ -48,6 +48,7 @@
               <div class="text-[11px] text-gray-600">
                 {{ SPECIAL_ATTACK_EFFECT_LABELS[a.effectType] }} ({{ a.amount }})
                 <span v-if="a.effectType === 'HEAL_SELF' && a.healsAllies"> · heals the whole party in raids</span>
+                <span v-if="a.playerChoice"> · player choice</span>
                 <span v-if="a.cmoonUsageCount || a.enemyFactionUsageCount">
                   · used by {{ a.cmoonUsageCount }} cMoon(s), {{ a.enemyFactionUsageCount }} faction(s)
                 </span>
@@ -99,6 +100,18 @@
               <p class="text-[10px] text-gray-500 mt-0.5">
                 In a solo fight this changes nothing — the caster is always the only one healed either way. In a raid,
                 off means only the caster is healed; on extends the same amount to every other alive party member too.
+              </p>
+            </span>
+          </label>
+
+          <label class="flex items-start gap-2">
+            <input type="checkbox" v-model="specialAttackForm.playerChoice" class="mt-0.5" />
+            <span>
+              <span class="text-xs font-medium">Player Choice</span>
+              <p class="text-[10px] text-gray-500 mt-0.5">
+                Lets a player pick this attack for themselves (in their own settings page), overriding whichever
+                special attack their cMoon has assigned — the "choose cMoon special attack" button there only
+                offers attacks with this on.
               </p>
             </span>
           </label>
@@ -460,9 +473,10 @@
               <span class="text-xs font-medium">Group raid boss</span>
             </label>
             <p class="text-[11px] text-gray-500">
-              The first eligible player to encounter this boss can start a raid instead of fighting solo: up to 3 more
-              eligible members of their own cMoon get a 60-second window to join before it auto-starts, everyone sees
-              each other's moves live, and a party win grants the same shared prize to everyone who joined.
+              The first eligible player to encounter this boss can start a raid instead of fighting solo: other eligible
+              players from any cMoon get a join window to join before it auto-starts (configurable below and in the
+              cMoons page's Raid Settings), everyone sees each other's moves live, and a party win grants the same
+              shared prize to everyone who joined.
             </p>
             <div v-if="memberForm.isRaidBoss">
               <label class="block text-[11px] font-medium mb-1">Discord announcement (optional)</label>
@@ -487,6 +501,21 @@
               <label class="block text-[11px] font-medium mb-1">Raid cooldown after a win, in minutes (0-43200)</label>
               <input v-model.number="memberForm.raidCooldownMinutes" type="number" min="0" max="43200" class="w-full border rounded px-2 py-1 text-xs" />
               <p class="text-[10px] text-gray-500 mt-1">0 means it can be raided again immediately. Automatically becomes raidable again once the cooldown passes — no admin action needed.</p>
+            </div>
+            <div v-if="memberForm.isRaidBoss">
+              <label class="block text-[11px] font-medium mb-1">Max participants (1-8)</label>
+              <input v-model.number="memberForm.maxParticipants" type="number" min="1" max="8" class="w-full border rounded px-2 py-1 text-xs" />
+              <p class="text-[10px] text-gray-500 mt-1">How many players this raid's party can hold. Changing this only affects raids started after you save.</p>
+            </div>
+            <div v-if="memberForm.isRaidBoss" class="pt-1">
+              <label class="flex items-center gap-2">
+                <input type="checkbox" v-model="memberForm.windUpEnabled" />
+                <span class="text-[11px] font-medium">Wind-up / telegraph moves</span>
+              </label>
+              <p class="text-[10px] text-gray-500 mt-1">
+                When on, this boss can telegraph an incoming high/low attack (configured below) that the whole
+                party can block for a bonus. Requires at least one move configured below to actually fire.
+              </p>
             </div>
           </div>
           <p v-else-if="memberForm.isRaidBoss" class="text-[11px] text-amber-600">This member is marked as a raid boss but is no longer Final Boss rank — switch it back to Final Boss to keep raid mode, or it will be turned off on save.</p>
@@ -712,6 +741,63 @@
               :disabled="rewardSaving" @click="addReward"
             >{{ rewardSaving ? 'Adding…' : 'Add prize' }}</button>
           </div>
+
+          <!-- Wind-up/telegraph moves — only for a raid boss that's already been created, same
+               "add one, remove one, no in-place edit" shape as the prizes block above. -->
+          <div v-if="memberForm.id && memberForm.isRaidBoss" class="pt-2 border-t space-y-2">
+            <h4 class="font-semibold text-xs">Wind-up / telegraph moves</h4>
+            <div v-if="editingMemberWindUpMoves.length" class="space-y-1">
+              <div v-for="w in editingMemberWindUpMoves" :key="w.id" class="flex items-center gap-2 text-[11px] bg-gray-50 rounded px-2 py-1">
+                <span class="flex-1 min-w-0 break-words">{{ windUpMoveLabel(w) }}</span>
+                <button type="button" class="text-red-600 hover:underline flex-shrink-0" :disabled="deletingWindUpMoveId === w.id" @click="removeWindUpMove(w)">
+                  {{ deletingWindUpMoveId === w.id ? 'Removing…' : 'Remove' }}
+                </button>
+              </div>
+            </div>
+            <p v-else class="text-gray-500">No wind-up moves configured yet — this boss never telegraphs.</p>
+
+            <p v-if="windUpMoveFormError" class="text-red-600">{{ windUpMoveFormError }}</p>
+            <div>
+              <label class="block text-[11px] font-medium mb-1">Telegraph message (shown to the whole party)</label>
+              <input
+                v-model="windUpMoveForm.telegraphMessage" maxlength="300" class="w-full border rounded px-2 py-1"
+                placeholder="The boss rears back for a devastating high strike!"
+              />
+            </div>
+            <div class="flex gap-2 flex-wrap items-end">
+              <div class="w-28 flex-shrink-0">
+                <label class="block text-[11px] font-medium mb-1">Direction</label>
+                <select v-model="windUpMoveForm.direction" class="w-full border rounded px-2 py-1">
+                  <option value="HIGH">High</option>
+                  <option value="LOW">Low</option>
+                </select>
+              </div>
+              <div class="w-32 flex-shrink-0">
+                <label class="block text-[11px] font-medium mb-1">Occurrence % (0-100)</label>
+                <input v-model.number="windUpMoveForm.occurrencePercent" type="number" min="0" max="100" class="w-full border rounded px-2 py-1" />
+              </div>
+              <div class="w-36 flex-shrink-0">
+                <label class="block text-[11px] font-medium mb-1">Bonus on perfect block</label>
+                <select v-model="windUpMoveForm.bonusType" class="w-full border rounded px-2 py-1">
+                  <option value="HEAL_PARTY">Heal party</option>
+                  <option value="DAMAGE_ENEMY">Damage boss</option>
+                </select>
+              </div>
+              <div class="w-24 flex-shrink-0">
+                <label class="block text-[11px] font-medium mb-1">Amount (1-999)</label>
+                <input v-model.number="windUpMoveForm.bonusAmount" type="number" min="1" max="999" class="w-full border rounded px-2 py-1" />
+              </div>
+            </div>
+            <p class="text-[10px] text-gray-500">
+              This chance is an INDEPENDENT per-round roll for this one move — not a relative weight like the
+              occurrence weight field above. If every alive party member blocks the telegraphed direction, the
+              bonus applies.
+            </p>
+            <button
+              type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              :disabled="windUpMoveSaving" @click="addWindUpMove"
+            >{{ windUpMoveSaving ? 'Adding…' : 'Add wind-up move' }}</button>
+          </div>
         </div>
       </section>
     </div>
@@ -815,7 +901,7 @@ const specialAttackUploadingSound = ref(false)
 const specialAttackSoundError = ref('')
 const specialAttackSavedSoundPath = ref('')
 
-const emptySpecialAttackForm = () => ({ id: '', name: '', description: '', effectType: 'DAMAGE_OPPONENT', amount: 10, healsAllies: false })
+const emptySpecialAttackForm = () => ({ id: '', name: '', description: '', effectType: 'DAMAGE_OPPONENT', amount: 10, healsAllies: false, playerChoice: false })
 const specialAttackForm = reactive(emptySpecialAttackForm())
 
 function resetSpecialAttackForm() {
@@ -835,6 +921,7 @@ function startEditSpecialAttack(a) {
   specialAttackForm.effectType = a.effectType
   specialAttackForm.amount = a.amount
   specialAttackForm.healsAllies = !!a.healsAllies
+  specialAttackForm.playerChoice = !!a.playerChoice
   specialAttackSavedSoundPath.value = a.soundPath || ''
 }
 
@@ -894,6 +981,7 @@ async function saveSpecialAttack() {
       effectType: specialAttackForm.effectType,
       amount,
       healsAllies: specialAttackForm.effectType === 'HEAL_SELF' ? specialAttackForm.healsAllies : false,
+      playerChoice: specialAttackForm.playerChoice,
     }
     if (specialAttackForm.id) {
       await $fetch(`/api/admin/cmoon-special-attacks/${specialAttackForm.id}`, { method: 'PUT', body })
@@ -1316,6 +1404,7 @@ const previewMemberId = ref(null)
 const startingRaidPreviewId = ref('')
 const editingMemberHasBattles = ref(false)
 const editingMemberRewards = ref([])
+const editingMemberWindUpMoves = ref([])
 const memberPendingFile = ref(null)
 const memberPendingFilePreviewUrl = ref(null)
 const memberUploadingImage = ref(false)
@@ -1404,6 +1493,7 @@ const emptyMemberForm = () => ({
   attackChancePercent: 50, pityThreshold: 0, firstWinBonusPoints: 0,
   active: true, sortOrder: 0,
   isRaidBoss: false, raidAnnouncementText: '', raidOneTime: false, raidCooldownMinutes: 0,
+  maxParticipants: 4, windUpEnabled: false,
 })
 const memberForm = reactive(emptyMemberForm())
 const memberPreviewImageSrc = computed(() => memberPendingFilePreviewUrl.value || memberSavedImagePath.value || '')
@@ -1422,7 +1512,9 @@ function resetMemberForm() {
   resetMemberSoundState()
   editingMemberHasBattles.value = false
   editingMemberRewards.value = []
+  editingMemberWindUpMoves.value = []
   resetRewardForm()
+  resetWindUpMoveForm()
   Object.assign(memberForm, emptyMemberForm())
   if (memberFactionFilter.value) memberForm.factionId = memberFactionFilter.value
 }
@@ -1464,11 +1556,13 @@ function startEditMember(m) {
     active: !!m.active, sortOrder: m.sortOrder,
     isRaidBoss: !!m.isRaidBoss, raidAnnouncementText: m.raidAnnouncementText || '',
     raidOneTime: !!m.raidOneTime, raidCooldownMinutes: m.raidCooldownMinutes ?? 0,
+    maxParticipants: m.maxParticipants ?? 4, windUpEnabled: !!m.windUpEnabled,
   })
   memberSavedImagePath.value = m.imagePath || ''
   for (const s of SOUND_SLOTS) memberSoundState[s.key].savedPath = m[s.field] || ''
   editingMemberHasBattles.value = !!m.hasBattles
   editingMemberRewards.value = m.rewards || []
+  editingMemberWindUpMoves.value = m.windUpMoves || []
 }
 
 function onMemberFile(ev) {
@@ -1571,6 +1665,11 @@ async function saveMember() {
     memberFormError.value = 'Raid cooldown must be between 0 and 43200 minutes.'
     return
   }
+  const maxParticipants = Math.trunc(Number(memberForm.maxParticipants)) || 4
+  if (!Number.isInteger(maxParticipants) || maxParticipants < 1 || maxParticipants > 8) {
+    memberFormError.value = 'Max participants must be between 1 and 8.'
+    return
+  }
 
   memberSaving.value = true
   try {
@@ -1598,6 +1697,8 @@ async function saveMember() {
       // on later doesn't silently reset it.
       raidOneTime: memberForm.raidOneTime,
       raidCooldownMinutes,
+      maxParticipants,
+      windUpEnabled: memberForm.windUpEnabled,
     }
     let id = memberForm.id
     if (id) {
@@ -1776,6 +1877,76 @@ async function removeReward(r) {
     loadError.value = e?.data?.statusMessage || 'Failed to remove prize'
   } finally {
     deletingRewardId.value = ''
+  }
+}
+
+// ── Wind-up/telegraph moves (per-member, add/remove one row at a time) — same shape as the
+// rewards block above, see its own header comment for why editing a row is "remove and re-add". ──
+const windUpMoveSaving = ref(false)
+const windUpMoveFormError = ref('')
+const deletingWindUpMoveId = ref('')
+
+const emptyWindUpMoveForm = () => ({ telegraphMessage: '', direction: 'HIGH', occurrencePercent: 25, bonusType: 'HEAL_PARTY', bonusAmount: 1 })
+const windUpMoveForm = reactive(emptyWindUpMoveForm())
+
+function resetWindUpMoveForm() {
+  windUpMoveFormError.value = ''
+  Object.assign(windUpMoveForm, emptyWindUpMoveForm())
+}
+
+function windUpMoveLabel(w) {
+  const bonus = w.bonusType === 'HEAL_PARTY' ? `heal party ${w.bonusAmount} HP` : `+${w.bonusAmount} dmg to boss`
+  return `${w.direction} — "${w.telegraphMessage}" (${w.occurrencePercent}% chance, ${bonus} on a perfect block)`
+}
+
+async function addWindUpMove() {
+  windUpMoveFormError.value = ''
+  if (!memberForm.id) return
+  const telegraphMessage = windUpMoveForm.telegraphMessage.trim()
+  if (!telegraphMessage || telegraphMessage.length > 300) {
+    windUpMoveFormError.value = 'Telegraph message is required (max 300 characters).'
+    return
+  }
+  const occurrencePercent = Math.trunc(Number(windUpMoveForm.occurrencePercent))
+  if (!Number.isInteger(occurrencePercent) || occurrencePercent < 0 || occurrencePercent > 100) {
+    windUpMoveFormError.value = 'Occurrence chance must be between 0 and 100.'
+    return
+  }
+  const bonusAmount = Math.trunc(Number(windUpMoveForm.bonusAmount))
+  if (!Number.isInteger(bonusAmount) || bonusAmount < 1 || bonusAmount > 999) {
+    windUpMoveFormError.value = 'Bonus amount must be between 1 and 999.'
+    return
+  }
+
+  windUpMoveSaving.value = true
+  try {
+    await $fetch(`/api/admin/cmoon-enemy-members/${memberForm.id}/wind-up-moves`, {
+      method: 'POST',
+      body: { telegraphMessage, direction: windUpMoveForm.direction, occurrencePercent, bonusType: windUpMoveForm.bonusType, bonusAmount },
+    })
+    resetWindUpMoveForm()
+    await load()
+    const fresh = members.value.find(m => m.id === memberForm.id)
+    if (fresh) editingMemberWindUpMoves.value = fresh.windUpMoves || []
+  } catch (e) {
+    windUpMoveFormError.value = e?.data?.statusMessage || 'Failed to add wind-up move'
+  } finally {
+    windUpMoveSaving.value = false
+  }
+}
+
+async function removeWindUpMove(w) {
+  if (!confirm('Remove this wind-up move?')) return
+  deletingWindUpMoveId.value = w.id
+  try {
+    await $fetch(`/api/admin/cmoon-enemy-wind-up-moves/${w.id}`, { method: 'DELETE' })
+    await load()
+    const fresh = members.value.find(m => m.id === memberForm.id)
+    if (fresh) editingMemberWindUpMoves.value = fresh.windUpMoves || []
+  } catch (e) {
+    loadError.value = e?.data?.statusMessage || 'Failed to remove wind-up move'
+  } finally {
+    deletingWindUpMoveId.value = ''
   }
 }
 
