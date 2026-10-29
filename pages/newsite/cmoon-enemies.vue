@@ -14,6 +14,10 @@
       <div class="enroster-stats-strip">
         <div class="enroster-stat"><span class="enroster-stat-value">{{ personalWinCount }}</span><span class="enroster-stat-label">Wins</span></div>
         <div class="enroster-stat"><span class="enroster-stat-value">{{ personalLossCount }}</span><span class="enroster-stat-label">Losses</span></div>
+        <!-- A fully independent count from the two above — a raid win credits every participant
+             for one shared kill, so it's never folded into your own personal Wins/Losses tally. -->
+        <div class="enroster-stat"><span class="enroster-stat-value">{{ personalRaidWinCount }}</span><span class="enroster-stat-label">Raid Wins</span></div>
+        <div class="enroster-stat"><span class="enroster-stat-value">{{ personalRaidLossCount }}</span><span class="enroster-stat-label">Raid Losses</span></div>
         <div v-if="favoriteEnemy" class="enroster-stat">
           <span class="enroster-stat-value">{{ favoriteEnemy.wins }}x</span>
           <span class="enroster-stat-label">vs. {{ favoriteEnemy.name }}</span>
@@ -89,6 +93,8 @@ const loading = ref(true)
 const loadError = ref('')
 const personalWinCount = ref(0)
 const personalLossCount = ref(0)
+const personalRaidWinCount = ref(0)
+const personalRaidLossCount = ref(0)
 const favoriteEnemy = ref(null)
 const recentCommunityKills = ref([])
 
@@ -99,6 +105,8 @@ if (error.value) {
   factions.value = data.value?.factions || []
   personalWinCount.value = data.value?.personalWinCount || 0
   personalLossCount.value = data.value?.personalLossCount || 0
+  personalRaidWinCount.value = data.value?.personalRaidWinCount || 0
+  personalRaidLossCount.value = data.value?.personalRaidLossCount || 0
   favoriteEnemy.value = data.value?.favoriteEnemy || null
   recentCommunityKills.value = data.value?.recentCommunityKills || []
 }
