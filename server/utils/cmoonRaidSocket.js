@@ -117,7 +117,12 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *   enemyStats: { maxHp, critChanceAgainstPercent, critChanceFromPercent, cMoonPointsReward },
  *   enemyHpRemaining, roundNumber, currentEnemyAction, roundDeadlineAt, joinDeadlineAt,
  *   participants: Map<userId, { userId, username, hpRemaining, maxHp, knockedOutAt, isInitiator,
- *                                pendingAction, joinedAt, hitStreak, specialCharged,
+ *                                pendingAction, joinedAt,
+ *                                hitStreak,       // consecutive-landed-hit counter; firing a
+ *                                specialCharged,  // charged special BANKS any amount over
+ *                                                 // HIT_STREAK_THRESHOLD rather than zeroing it
+ *                                                 // (5 hits, fire at 3 -> 2 banked toward the
+ *                                                 // next charge) — see closeRound's own comment.
  *                                // per-participant snapshot taken at start/join — see
  *                                // "Cross-cMoon raids" in cmoonEnemyRaid.js:
  *                                cMoonId, cMoonName, cMoonColor, cMoonAvatarPath,
@@ -630,11 +635,14 @@ async function closeRound(io, raid) {
     // specialCharged/specialAttack defensively (already validated at submission time in the
     // cmoonraid:action handler below). A special that knocks the boss out early doesn't stop
     // later casters' specials or the lane exchange this round — same as before cross-cMoon. ────
+    // Tracked here, applied in step 2 below — the streak itself isn't touched in this loop
+    // (see that step's own comment for why: it's the one place that owns hitStreak/specialCharged
+    // for the round, and it needs to know who fired to bank correctly rather than just zeroing).
+    const firedSpecialUserIds = new Set()
     for (const p of alive) {
       if (p.pendingAction !== SPECIAL_ACTION) continue
       if (!p.specialCharged || !p.specialAttack) continue
-      p.hitStreak = 0
-      p.specialCharged = false
+      firedSpecialUserIds.add(p.userId)
       applyRaidSpecialAttack(raid, alive, p.specialAttack, { side: 'PLAYER', userId: p.userId }, specialEvents)
     }
 
@@ -672,8 +680,18 @@ async function closeRound(io, raid) {
       if (result.knockedOut && !p.knockedOutAt) p.knockedOutAt = Date.now()
       // This participant's OWN streak — see CMoonEnemyRaidParticipant's in-memory shape comment
       // above for why this stays per-player even though every other new field here is shared.
-      p.hitStreak = result.enemyHit ? p.hitStreak + 1 : 0
-      if (p.hitStreak >= HIT_STREAK_THRESHOLD) p.specialCharged = true
+      if (firedSpecialUserIds.has(result.userId)) {
+        // Banks whatever they stacked past the 3 needed instead of discarding it — a player who
+        // deliberately holds off firing while still landing hits (e.g. reaching 5/3 before using
+        // it) keeps the leftover 2 toward their NEXT charge, rather than starting back at 0. The
+        // same >= HIT_STREAK_THRESHOLD rule below re-applies here too, so hoarding enough for two
+        // charges before firing once correctly leaves this player already charged again.
+        p.hitStreak = Math.max(0, p.hitStreak - HIT_STREAK_THRESHOLD)
+        p.specialCharged = p.hitStreak >= HIT_STREAK_THRESHOLD
+      } else {
+        p.hitStreak = result.enemyHit ? p.hitStreak + 1 : 0
+        if (p.hitStreak >= HIT_STREAK_THRESHOLD) p.specialCharged = true
+      }
     }
     raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - enemyDamageDealt)
     if (raid.enemyParalyzedTurns > 0) raid.enemyParalyzedTurns -= 1
