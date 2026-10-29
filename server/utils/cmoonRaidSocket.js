@@ -82,7 +82,7 @@ import { notifyCMoonRaidLobbyOpened } from './notifications.js'
 import { pushUserNotifications } from './realtimeNotify.js'
 import {
   buildGrantableReward, isValidPlayerSubmittedAction, rollEnemyAction, rollEnemyRewards, PLAYER_MAX_HP,
-  SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD,
+  SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, mergeTauntPools,
 } from './cmoonEnemyBattle.js'
 import { resolveMemberSoundPaths } from './cmoonEnemy.js'
 import { markEnemyOfferAccepted } from './cmoonEnemyAnalytics.js'
@@ -1013,6 +1013,9 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
             },
           },
           windUpMoves: true,
+          // This member's OWN unique taunts (see CMoonEnemyMemberTaunt) — merged with the
+          // faction's shared pool above by mergeTauntPools.
+          taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
         },
       })
       if (!enemyMember || !enemyMember.active || !enemyMember.faction.active) {
@@ -1049,11 +1052,9 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         enemySounds: resolveMemberSoundPaths(enemyMember, enemyMember.faction),
         battleMusicPath: enemyMember.faction?.battleMusicPath || null,
         // Same shape useCMoonBattlePopup.js's solo flow already sends the client — see
-        // publicRaidView's own comment on why this is a pool, not one pre-picked line.
-        enemyTaunts: {
-          appear: (enemyMember.faction?.taunts || []).filter(t => t.trigger === 'APPEAR').map(t => ({ text: t.text, soundPath: t.soundPath })),
-          crit: (enemyMember.faction?.taunts || []).filter(t => t.trigger === 'CRIT').map(t => ({ text: t.text, soundPath: t.soundPath })),
-        },
+        // publicRaidView's own comment on why this is a pool, not one pre-picked line. Merges
+        // this member's own unique taunts with its faction's shared pool (see mergeTauntPools).
+        enemyTaunts: mergeTauntPools(enemyMember.taunts, enemyMember.faction?.taunts),
         enemyStats: {
           maxHp: enemyMember.maxHp,
           critChanceAgainstPercent: enemyMember.critChanceAgainstPercent,

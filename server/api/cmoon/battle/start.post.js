@@ -13,7 +13,14 @@ import { markEnemyOfferAccepted } from '@/server/utils/cmoonEnemyAnalytics'
 // `user: { chosenSpecialAttack }` — see action.post.js's own BATTLE_INCLUDE comment; the same
 // relation is needed everywhere a battle is serialized back to the client.
 const BATTLE_INCLUDE = {
-  enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } },
+  enemyMember: {
+    include: {
+      faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } },
+      // This member's OWN unique taunts (see CMoonEnemyMemberTaunt) — merged with the faction's
+      // shared pool above by mergeTauntPools in cmoonEnemyBattle.js.
+      taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+    },
+  },
   cMoon: { include: { specialAttack: true } },
   user: { select: { chosenSpecialAttack: { select: SPECIAL_ATTACK_SELECT } } },
 }

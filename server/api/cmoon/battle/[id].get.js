@@ -13,7 +13,12 @@ export default defineEventHandler(async (event) => {
   const battle = await db.cMoonEnemyBattle.findUnique({
     where: { id: battleId },
     include: {
-      enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } },
+      enemyMember: {
+        include: {
+          faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } },
+          taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+        },
+      },
       cMoon: { include: { specialAttack: true } },
       user: { select: { chosenSpecialAttack: { select: SPECIAL_ATTACK_SELECT } } },
     },

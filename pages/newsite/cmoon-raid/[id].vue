@@ -92,91 +92,109 @@
 
           <!-- ── IN_PROGRESS: live combat ─────────────────────────────────── -->
           <div v-else-if="raid.status === 'IN_PROGRESS'" class="space-y-3">
-            <p class="text-xs text-gray-500">
-              Round {{ raid.roundNumber }} · acting in <span class="font-semibold tabular-nums">{{ roundCountdown }}s</span>
-            </p>
+            <!-- ── Shake zone: everything that's allowed to jolt on a landed hit. The action
+                 buttons below are rendered OUTSIDE this element (a sibling, not a descendant),
+                 so the shake transform never moves them even by a few px. The round-reveal panel,
+                 hit-streak combo callout, and special-use callout are all rendered inside the
+                 .cr-announce-overlay absolutely-positioned layer below, so their popping in and
+                 out never changes this zone's rendered height either — between the two, nothing
+                 that happens in here can ever shift where the buttons sit on screen. -->
+            <div class="cr-shake-zone" :class="{ 'cr-shake': shaking, 'cr-shake-crit': shaking && shakeCrit }">
+              <p class="text-xs text-gray-500">
+                Round {{ raid.roundNumber }} · acting in <span class="font-semibold tabular-nums">{{ roundCountdown }}s</span>
+              </p>
 
-            <!-- Wind-up telegraph — a deliberate, narrow exception to the usual "enemy action
-                 stays hidden until it resolves" rule (see raid.currentWindUp's own comment in
-                 cmoonRaidSocket.js): the whole party sees this coming and can react. -->
-            <p v-if="raid.currentWindUp" class="cr-windup-banner">
-              ⚠️ {{ raid.currentWindUp.message }}
-              <span class="cr-windup-hint">Block {{ raid.currentWindUp.direction === 'HIGH' ? 'high' : 'low' }} to counter it!</span>
-            </p>
+              <!-- Wind-up telegraph — a deliberate, narrow exception to the usual "enemy action
+                   stays hidden until it resolves" rule (see raid.currentWindUp's own comment in
+                   cmoonRaidSocket.js): the whole party sees this coming and can react. -->
+              <p v-if="raid.currentWindUp" class="cr-windup-banner">
+                ⚠️ {{ raid.currentWindUp.message }}
+                <span class="cr-windup-hint">Block {{ raid.currentWindUp.direction === 'HIGH' ? 'high' : 'low' }} to counter it!</span>
+              </p>
 
-            <ul class="space-y-2">
-              <li v-for="p in raid.participants" :key="p.userId" class="cr-fighter-row text-xs relative">
-                <!-- Line 1: who (team colors + rank), their special charge, and their round status. -->
-                <div class="cr-fighter-line">
-                  <CMoonRaidFighter :participant="p" variant="compact" :is-me="p.userId === user?.id" :knocked-out="p.knockedOut" class="cr-fighter-badge" />
-                  <!-- Teammate charge meter — shown for everyone, not just myself. Each fighter
-                       charges THEIR OWN cMoon's special, so the meter only shows for players
-                       whose team has one. -->
-                  <span
-                    v-if="p.specialAttack && !p.knockedOut" class="text-[10px] flex-shrink-0" :title="p.specialAttack.name"
-                    :class="p.specialCharged ? 'cr-charge-ready' : 'text-gray-400'"
-                  >★{{ p.specialCharged ? '' : Math.min(p.hitStreak, 3) + '/3' }}</span>
-                  <span v-if="p.knockedOut" class="cr-fighter-status text-red-500">KO</span>
-                  <span v-else-if="p.hasActed" class="cr-fighter-status text-green-600">Ready</span>
-                  <span v-else class="cr-fighter-status text-gray-400">Deciding…</span>
-                </div>
-                <!-- Line 2: HP, full width so it never wraps unpredictably on a phone. -->
-                <div class="cr-hp-line">
-                  <div class="flex-1 h-2 bg-gray-200 rounded overflow-hidden">
-                    <div class="h-full transition-all" :class="participantHpFillClass(p)" :style="{ width: (p.hpRemaining / (p.maxHp || 1) * 100) + '%' }"></div>
+              <ul class="space-y-2">
+                <li v-for="p in raid.participants" :key="p.userId" class="cr-fighter-row text-xs relative">
+                  <!-- Line 1: who (team colors + rank), their special charge, and their round status. -->
+                  <div class="cr-fighter-line">
+                    <CMoonRaidFighter :participant="p" variant="compact" :is-me="p.userId === user?.id" :knocked-out="p.knockedOut" class="cr-fighter-badge" />
+                    <!-- Teammate charge meter — shown for everyone, not just myself. Each fighter
+                         charges THEIR OWN cMoon's special, so the meter only shows for players
+                         whose team has one. -->
+                    <span
+                      v-if="p.specialAttack && !p.knockedOut" class="text-[10px] flex-shrink-0" :title="p.specialAttack.name"
+                      :class="p.specialCharged ? 'cr-charge-ready' : 'text-gray-400'"
+                    >★{{ p.specialCharged ? '' : Math.min(p.hitStreak, 3) + '/3' }}</span>
+                    <span v-if="p.knockedOut" class="cr-fighter-status text-red-500">KO</span>
+                    <span v-else-if="p.hasActed" class="cr-fighter-status text-green-600">Ready</span>
+                    <span v-else class="cr-fighter-status text-gray-400">Deciding…</span>
                   </div>
-                  <span class="w-10 flex-shrink-0 text-right tabular-nums">{{ p.hpRemaining }}/{{ p.maxHp }}</span>
-                  <span
-                    v-for="d in (p.userId === user?.id ? myFloatingDamage : [])" :key="d.id"
-                    class="cr-dmg-float" :class="{ 'cr-dmg-float-crit': d.crit }"
-                  >-{{ d.amount }}</span>
-                </div>
-              </li>
-            </ul>
+                  <!-- Line 2: HP, full width so it never wraps unpredictably on a phone. -->
+                  <div class="cr-hp-line">
+                    <div class="flex-1 h-2 bg-gray-200 rounded overflow-hidden">
+                      <div class="h-full transition-all" :class="participantHpFillClass(p)" :style="{ width: (p.hpRemaining / (p.maxHp || 1) * 100) + '%' }"></div>
+                    </div>
+                    <span class="w-10 flex-shrink-0 text-right tabular-nums">{{ p.hpRemaining }}/{{ p.maxHp }}</span>
+                    <span
+                      v-for="d in (p.userId === user?.id ? myFloatingDamage : [])" :key="d.id"
+                      class="cr-dmg-float" :class="{ 'cr-dmg-float-crit': d.crit }"
+                    >-{{ d.amount }}</span>
+                  </div>
+                </li>
+              </ul>
 
-            <!-- ── Shared status: paralysis either direction, boss charge tension ──── -->
-            <p v-if="raid.enemyParalyzedTurns > 0" class="cr-status-badge cr-status-good">
-              ⚡ {{ raid.enemyName }} is paralyzed — {{ raid.enemyParalyzedTurns }} more round{{ raid.enemyParalyzedTurns === 1 ? '' : 's' }}
-            </p>
-            <p v-if="raid.partyParalyzedTurns > 0" class="cr-status-badge cr-status-bad">
-              ⚡ The party is paralyzed — can't act for {{ raid.partyParalyzedTurns }} more round{{ raid.partyParalyzedTurns === 1 ? '' : 's' }}
-            </p>
+              <!-- ── Shared status: paralysis either direction, boss charge tension ──── -->
+              <p v-if="raid.enemyParalyzedTurns > 0" class="cr-status-badge cr-status-good">
+                ⚡ {{ raid.enemyName }} is paralyzed — {{ raid.enemyParalyzedTurns }} more round{{ raid.enemyParalyzedTurns === 1 ? '' : 's' }}
+              </p>
+              <p v-if="raid.partyParalyzedTurns > 0" class="cr-status-badge cr-status-bad">
+                ⚡ The party is paralyzed — can't act for {{ raid.partyParalyzedTurns }} more round{{ raid.partyParalyzedTurns === 1 ? '' : 's' }}
+              </p>
 
-            <!-- ── Round reveal: what just happened, per party member ─────── -->
-            <Transition name="cr-reveal">
-              <div v-if="lastRoundSummary" :key="lastRoundSummary.roundNumber" class="cr-reveal-panel" :class="{ 'cr-reveal-crit': lastRoundSummaryHadCrit }">
-                <p class="cr-reveal-headline">
-                  Round {{ lastRoundSummary.roundNumber }} — the boss used <strong>{{ ACTION_LABELS[lastRoundSummary.enemyAction] }}</strong>
-                  <span v-if="lastRoundSummaryHadCrit" class="cr-crit-badge">CRITICAL!</span>
-                </p>
-                <ul class="cr-reveal-list">
-                  <li v-for="r in lastRoundSummary.participants" :key="r.userId" class="cr-reveal-row" :class="revealRowClass(r)">
-                    <span class="cr-reveal-name">{{ usernameFor(r.userId) }}</span>
-                    <span class="cr-reveal-action">{{ ACTION_LABELS[r.action] }}</span>
-                    <span class="cr-reveal-outcome">
-                      <template v-if="r.playerHit && r.enemyHit">traded hits!<span v-if="r.playerCrit || r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
-                      <template v-else-if="r.enemyHit">landed a hit!<span v-if="r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
-                      <template v-else-if="r.playerHit">took a hit<span v-if="r.playerCrit" class="cr-crit-badge">CRIT!</span></template>
-                      <template v-else-if="r.playerBlocked">blocked it — healed 1 HP</template>
-                      <template v-else-if="r.enemyBlocked">boss blocked it</template>
-                      <template v-else>no hit landed</template>
-                    </span>
-                  </li>
-                </ul>
-                <p v-if="lastRoundSummary.enemyDamageDealt > 0" class="cr-reveal-dealt">The party dealt {{ lastRoundSummary.enemyDamageDealt }} damage this round.</p>
-                <p v-for="(s, i) in (lastRoundSummary.specials || [])" :key="i" class="cr-special-flash" :class="s.side === 'PLAYER' ? 'cr-special-flash-player' : 'cr-special-flash-enemy'">
-                  ✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} unleashed <strong>{{ s.name }}</strong>!
-                </p>
-                <p v-if="lastRoundSummary.windUpBonus" class="cr-windup-bonus">
-                  🛡️ Perfect block! {{ lastRoundSummary.windUpBonus.bonusType === 'HEAL_PARTY'
-                    ? `The party heals ${lastRoundSummary.windUpBonus.bonusAmount} HP.`
-                    : `+${lastRoundSummary.windUpBonus.bonusAmount} bonus damage to the boss.` }}
-                </p>
+              <!-- ── Announcements overlay — round reveal, hit-streak combo, and special-use
+                   callouts. Absolutely positioned and pointer-events:none, so appearing/
+                   disappearing here never resizes .cr-shake-zone and never blocks a tap on
+                   anything underneath (there's nothing clickable under it anyway). -->
+              <div class="cr-announce-overlay" aria-live="polite">
+                <Transition name="cr-reveal">
+                  <div v-if="lastRoundSummary" :key="lastRoundSummary.roundNumber" class="cr-reveal-panel" :class="{ 'cr-reveal-crit': lastRoundSummaryHadCrit }">
+                    <p class="cr-reveal-headline">
+                      Round {{ lastRoundSummary.roundNumber }} — the boss used <strong>{{ ACTION_LABELS[lastRoundSummary.enemyAction] }}</strong>
+                      <span v-if="lastRoundSummaryHadCrit" class="cr-crit-badge">CRITICAL!</span>
+                    </p>
+                    <ul class="cr-reveal-list">
+                      <li v-for="r in lastRoundSummary.participants" :key="r.userId" class="cr-reveal-row" :class="revealRowClass(r)">
+                        <span class="cr-reveal-name">{{ usernameFor(r.userId) }}</span>
+                        <span class="cr-reveal-action">{{ ACTION_LABELS[r.action] }}</span>
+                        <span class="cr-reveal-outcome">
+                          <template v-if="r.playerHit && r.enemyHit">traded hits!<span v-if="r.playerCrit || r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
+                          <template v-else-if="r.enemyHit">landed a hit!<span v-if="r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
+                          <template v-else-if="r.playerHit">took a hit<span v-if="r.playerCrit" class="cr-crit-badge">CRIT!</span></template>
+                          <template v-else-if="r.playerBlocked">blocked it — healed 1 HP</template>
+                          <template v-else-if="r.enemyBlocked">boss blocked it</template>
+                          <template v-else>no hit landed</template>
+                        </span>
+                      </li>
+                    </ul>
+                    <p v-if="lastRoundSummary.enemyDamageDealt > 0" class="cr-reveal-dealt">The party dealt {{ lastRoundSummary.enemyDamageDealt }} damage this round.</p>
+                    <p v-for="(s, i) in (lastRoundSummary.specials || [])" :key="i" class="cr-special-flash" :class="s.side === 'PLAYER' ? 'cr-special-flash-player' : 'cr-special-flash-enemy'">
+                      ✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} unleashed <strong>{{ s.name }}</strong>!
+                    </p>
+                    <p v-if="lastRoundSummary.windUpBonus" class="cr-windup-bonus">
+                      🛡️ Perfect block! {{ lastRoundSummary.windUpBonus.bonusType === 'HEAL_PARTY'
+                        ? `The party heals ${lastRoundSummary.windUpBonus.bonusAmount} HP.`
+                        : `+${lastRoundSummary.windUpBonus.bonusAmount} bonus damage to the boss.` }}
+                    </p>
+                  </div>
+                </Transition>
+
+                <p v-if="comboCallout" class="cr-combo-callout">{{ comboCallout }}</p>
+                <!-- Special-attack use — announced to the WHOLE party, not just whoever fired it,
+                     with the same prominent treatment as the hit-streak combo callout above. -->
+                <p v-if="specialUseCallout" class="cr-combo-callout cr-special-use-callout">{{ specialUseCallout }}</p>
               </div>
-            </Transition>
+            </div>
 
             <p v-if="raidSocket.lastError.value" class="text-sm text-red-600">{{ raidSocket.lastError.value }}</p>
-            <p v-if="comboCallout" class="cr-combo-callout">{{ comboCallout }}</p>
 
             <template v-if="myself && !myself.knockedOut">
               <p v-if="myself.hasActed" class="text-sm text-gray-500">Locked in — waiting on the rest of the party…</p>
@@ -422,6 +440,15 @@ const FLOATING_DAMAGE_LIFETIME_MS = 900
 const comboCallout = ref('')
 let comboTimer = null
 
+// ── Special-use callout — a transient, party-wide announcement whenever ANY participant fires
+// their special attack this round (see the lastRound watch below), reusing the hit-streak combo
+// callout's own visual treatment per the feature request. Unlike comboCallout (which only reacts
+// to MY OWN streak), this reads round.specials — the same shared, every-viewer-sees-the-same-thing
+// data the round-reveal panel's own special-flash lines already read — so it's broadcast to the
+// whole party, not just the player who used it.
+const specialUseCallout = ref('')
+let specialUseTimer = null
+
 // ── Result-screen flash — a brief full-bleed tint the instant the raid resolves, driven off the
 // status transition itself (mirrors the solo popup's own phase-transition-based resultFlash).
 const resultFlash = ref('')
@@ -436,11 +463,28 @@ watch(() => raid.value?.status, (status) => {
 
 // ── Impact feedback + sound/music — same "juice" components/CMoonBattlePopupHost.vue gives a
 // solo battle (see that component's own comments for the full rationale), adapted to a raid's
-// shared screen. Screenshake is deliberately NOT replicated here (unlike the solo popup) — up to
-// 8 players sharing one screen made misclicks from the shake common enough that this feature
-// removes it from raids specifically, while leaving the solo popup's own shake untouched. The
-// per-round SOUND effects below still play only off MY OWN participant row — several simultaneous
-// players' sounds all firing at once would be noise, not epic.
+// shared screen. Screenshake IS replicated here (mirrors that component's shaking/shakeCrit/
+// triggerShake below almost exactly), but scoped to .cr-shake-zone in the template rather than the
+// whole card — up to 8 players sharing one screen made misclicks from the shake common when it
+// also reached the action buttons, so the shake class only ever applies to the round/roster zone,
+// never to the buttons themselves (a sibling element outside it). The per-round SOUND effects below
+// still play only off MY OWN participant row — several simultaneous players' sounds all firing at
+// once would be noise, not epic.
+const shaking = ref(false)
+const shakeCrit = ref(false)
+let shakeTimer = null
+function triggerShake(isCrit) {
+  if (shakeTimer) clearTimeout(shakeTimer)
+  shaking.value = false
+  shakeCrit.value = false
+  // Re-triggering the CSS animation needs a fresh frame between removing and re-adding the class
+  // (setting `shaking` true again on an already-true value is a no-op to Vue/the DOM either way).
+  requestAnimationFrame(() => {
+    shakeCrit.value = !!isCrit
+    shaking.value = true
+    shakeTimer = setTimeout(() => { shaking.value = false }, 450)
+  })
+}
 function playSound(path) {
   if (!path || typeof window === 'undefined') return
   try {
@@ -466,6 +510,23 @@ watch(() => raidSocket.lastRound.value, (round) => {
   // Special-attack sounds play for the whole room, not just "my own" — a special firing is a
   // shared moment (same as appear/victory/defeat), unlike the routine per-hit sounds above.
   for (const s of (round.specials || [])) playSound(s.soundPath)
+
+  // ── Screen shake — any landed hit either direction, bigger on a crit. Mirrors
+  // components/CMoonBattlePopupHost.vue's own trigger condition exactly (round.playerHit ||
+  // round.enemyHit there), just checked across every participant's row since a raid round has
+  // several instead of one.
+  const anyHit = round.participants.some(r => r.playerHit || r.enemyHit)
+  if (anyHit) triggerShake(round.participants.some(r => r.playerCrit || r.enemyCrit))
+
+  // ── Special-use callout — broadcast to the WHOLE party the instant any player fires a special
+  // this round (round.specials is shared data, not per-viewer). Multiple players firing in the
+  // same round (possible with up to 8 in a party) are combined into one line rather than queued.
+  const playerSpecials = (round.specials || []).filter(s => s.side === 'PLAYER')
+  if (playerSpecials.length) {
+    specialUseCallout.value = playerSpecials.map(s => `${usernameFor(s.userId)} used ${s.name}!`).join('  ')
+    if (specialUseTimer) clearTimeout(specialUseTimer)
+    specialUseTimer = setTimeout(() => { specialUseCallout.value = '' }, 1600)
+  }
 
   // ── Floating damage — one aggregate "-N" over the shared boss bar (round.enemyDamageDealt is
   // already the party's combined total, matching the single shared HP pool it comes out of), plus
@@ -562,6 +623,8 @@ onUnmounted(() => {
   if (countdownTimer) clearInterval(countdownTimer)
   if (roundCountdownTimer) clearInterval(roundCountdownTimer)
   if (comboTimer) clearTimeout(comboTimer)
+  if (specialUseTimer) clearTimeout(specialUseTimer)
+  if (shakeTimer) clearTimeout(shakeTimer)
   if (resultFlashTimer) clearTimeout(resultFlashTimer)
   stopBattleMusic()
 })
@@ -583,6 +646,44 @@ onUnmounted(() => {
 .cr-fighter-badge { flex: 0 1 auto; min-width: 0; }
 .cr-fighter-status { margin-left: auto; font-size: 10px; flex-shrink: 0; }
 .cr-hp-line { position: relative; display: flex; align-items: center; gap: 8px; padding-left: 4px; }
+
+/* ── Shake zone (round counter, wind-up banner, roster, status badges) + its announcements
+   overlay — see the template's own comment for why the action buttons are deliberately kept
+   OUTSIDE this element, and why the overlay below is absolutely positioned rather than flowed. */
+.cr-shake-zone { position: relative; display: flex; flex-direction: column; gap: 12px; }
+.cr-announce-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 4px;
+  pointer-events: none;
+  z-index: 5;
+}
+/* Impact feedback on a landed hit — a quick horizontal shake, bigger for a critical. Scoped to
+   .cr-shake-zone only (never the action buttons below it) — mirrors
+   components/CMoonBattlePopupHost.vue's own cbp-shake/cbp-shake-crit keyframes exactly. Disabled
+   under prefers-reduced-motion, same accessibility stance that component already takes. */
+@keyframes cr-shake-kf {
+  10%, 90% { transform: translateX(-1px); }
+  20%, 80% { transform: translateX(2px); }
+  30%, 50%, 70% { transform: translateX(-4px); }
+  40%, 60% { transform: translateX(4px); }
+}
+@keyframes cr-shake-crit-kf {
+  10%, 90% { transform: translateX(-2px); }
+  20%, 80% { transform: translateX(4px); }
+  30%, 50%, 70% { transform: translateX(-8px); }
+  40%, 60% { transform: translateX(8px); }
+}
+.cr-shake { animation: cr-shake-kf 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+.cr-shake-crit { animation: cr-shake-crit-kf 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
+@media (prefers-reduced-motion: reduce) {
+  .cr-shake, .cr-shake-crit { animation: none; }
+}
 
 /* Result-screen flash — mirrors components/CMoonBattlePopupHost.vue's cbp-result-flash, applied
    to this page's own light card (.cr-card, the root element resultFlash binds onto) instead of a
@@ -657,6 +758,17 @@ onUnmounted(() => {
 }
 @media (prefers-reduced-motion: reduce) {
   .cr-combo-callout { animation: none; }
+}
+
+/* Special-use callout — same pop/shape as .cr-combo-callout above (per the feature request:
+   "announce it the same way the 2x or 3x hits are announced"), just violet instead of gold so a
+   special-attack moment reads as visually distinct from a hit-streak one when both can appear in
+   the same overlay. */
+.cr-special-use-callout {
+  color: #7e22ce;
+  background: rgba(168, 85, 247, 0.12);
+  border-radius: 6px;
+  padding: 4px 10px;
 }
 
 /* Taunt line — re-colored for the light card, same shape as components/CMoonBattlePopupHost.vue's

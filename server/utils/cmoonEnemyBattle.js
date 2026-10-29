@@ -308,6 +308,20 @@ export function grantSummaryIsEmpty(summary) {
   return !summary?.points && !summary?.backgrounds && !summary?.avatars && !summary?.ctoonJobs?.length
 }
 
+// Merges a member's own unique taunts (CMoonEnemyMemberTaunt) with its faction's shared pool
+// (CMoonEnemyTaunt) into one { appear, crit } shape — see CMoonEnemyMemberTaunt's own schema
+// comment for why a member can have both a personal pool AND still draw from its faction's shared
+// one; nothing forces an admin to pick one or the other. Member-specific lines are listed first,
+// though the actual pick is uniform random either way (see useCMoonBattlePopup.js's own
+// pickRandomTaunt), so the ordering has no gameplay effect — only display-list grouping.
+export function mergeTauntPools(memberTaunts, factionTaunts) {
+  const pool = (trigger) => [
+    ...(memberTaunts || []).filter(t => t.trigger === trigger),
+    ...(factionTaunts || []).filter(t => t.trigger === trigger),
+  ].map(t => ({ text: t.text, soundPath: t.soundPath }))
+  return { appear: pool('APPEAR'), crit: pool('CRIT') }
+}
+
 // Turns the rolled reward rows above into the `reward` bundle grantRewardInTx expects (plus a
 // `points` field the caller sets separately, since that comes from the enemy member's own
 // cMoonPointsReward, not a CMoonEnemyReward row). Kept as a pure mapping, separate from the
@@ -332,16 +346,15 @@ export function serializeEnemyForClient(member, pityEmptyWinStreak = null) {
   // A member's own null sound slot falls back to its faction's matching default — see
   // CMoonEnemyFaction's default*SoundPath columns and resolveMemberSoundPaths' own comment.
   const sounds = resolveMemberSoundPaths(member, member.faction)
-  // The full active taunt pool for each trigger moment (see CMoonEnemyTaunt's own schema
-  // comment) — the caller must have included `faction.taunts` filtered to active rows (every
-  // query that reaches here already does, see consider.post.js/start.post.js/action.post.js/
-  // [id].get.js/preview.post.js). Sent as a full small list rather than one pre-picked line: the
-  // client (CMoonBattlePopupHost.vue) does the random pick itself at the actual moment, so a
-  // resumed battle or a re-fetch doesn't lock in whichever line happened to be rolled first.
-  const taunts = {
-    appear: (member.faction?.taunts || []).filter(t => t.trigger === 'APPEAR').map(t => ({ text: t.text, soundPath: t.soundPath })),
-    crit: (member.faction?.taunts || []).filter(t => t.trigger === 'CRIT').map(t => ({ text: t.text, soundPath: t.soundPath })),
-  }
+  // The full active taunt pool for each trigger moment, merging this member's OWN unique lines
+  // (CMoonEnemyMemberTaunt) with its faction's shared pool (CMoonEnemyTaunt) — see
+  // mergeTauntPools' own comment. The caller must have included both `taunts` (on the member) and
+  // `faction.taunts` filtered to active rows (every query that reaches here already does, see
+  // consider.post.js/start.post.js/action.post.js/[id].get.js/preview.post.js). Sent as a full
+  // small list rather than one pre-picked line: the client (CMoonBattlePopupHost.vue) does the
+  // random pick itself at the actual moment, so a resumed battle or a re-fetch doesn't lock in
+  // whichever line happened to be rolled first.
+  const taunts = mergeTauntPools(member.taunts, member.faction?.taunts)
   return {
     id: member.id,
     name: member.name,

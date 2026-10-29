@@ -31,7 +31,12 @@ export default defineEventHandler(async (event) => {
   const inProgress = await db.cMoonEnemyBattle.findFirst({
     where: { userId, status: 'IN_PROGRESS' },
     include: {
-      enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } },
+      enemyMember: {
+        include: {
+          faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } },
+          taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+        },
+      },
       cMoon: { include: { specialAttack: true } },
       user: { select: { chosenSpecialAttack: { select: SPECIAL_ATTACK_SELECT } } },
     },
@@ -87,7 +92,10 @@ export default defineEventHandler(async (event) => {
       // player with no cMoon has no way to engage one at all, so it must never be offered to them.
       ...(user.cMoonId ? {} : { isRaidBoss: false }),
     },
-    include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } },
+    include: {
+      faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } },
+      taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+    },
   })
   // raidOneTime/raidCooldownMinutes can't be expressed as a single Prisma `where` filter (the
   // cooldown cutoff is a per-row computation against each member's own raidCooldownMinutes) — see

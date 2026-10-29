@@ -29,6 +29,9 @@ export default defineEventHandler(async (event) => {
       // shape as rewards above, since the only way to remove one is its own DELETE endpoint and
       // the admin UI needs the row ids.
       windUpMoves: { orderBy: { createdAt: 'asc' } },
+      // This member's own unique taunts (CMoonEnemyMemberTaunt) — same shape as the faction's own
+      // shared taunt pool (factions.get.js's own `taunts` include), just scoped to one member.
+      taunts: { orderBy: [{ trigger: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }] },
     },
   })
 
@@ -92,6 +95,9 @@ export default defineEventHandler(async (event) => {
         occurrencePercent: w.occurrencePercent,
         bonusType: w.bonusType,
         bonusAmount: w.bonusAmount,
+      })),
+      taunts: m.taunts.map(t => ({
+        id: t.id, trigger: t.trigger, text: t.text, soundPath: t.soundPath, active: t.active, sortOrder: t.sortOrder,
       })),
     })),
   }

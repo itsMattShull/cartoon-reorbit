@@ -798,6 +798,83 @@
               :disabled="windUpMoveSaving" @click="addWindUpMove"
             >{{ windUpMoveSaving ? 'Adding…' : 'Add wind-up move' }}</button>
           </div>
+
+          <!-- Member taunts (CMoonEnemyMemberTaunt) — this member's own unique taunt pool, merged
+               with its faction's shared pool at battle time (see mergeTauntPools). Only for an
+               already-created member, same shape as the faction taunts block above. -->
+          <div v-if="memberForm.id" class="pt-2 border-t space-y-3">
+            <h4 class="font-semibold text-xs">Unique taunts (this member only)</h4>
+            <p class="text-[10px] text-gray-500">
+              These are added to this member's faction taunts, not a replacement for them — both pools are
+              combined and picked from at random during battles and raids featuring this member.
+            </p>
+            <div v-for="group in TAUNT_TRIGGER_GROUPS" :key="group.key">
+              <h5 class="font-semibold text-xs">{{ group.label }}</h5>
+              <p class="text-[10px] text-gray-500 mb-1">{{ group.help }}</p>
+              <div v-if="memberTauntsByTrigger[group.key].length" class="space-y-1">
+                <div v-for="t in memberTauntsByTrigger[group.key]" :key="t.id" class="border rounded p-2 space-y-1">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <label class="flex items-center gap-1 flex-shrink-0">
+                      <input type="checkbox" :checked="t.active" @change="toggleMemberTauntActive(t, $event.target.checked)" />
+                      <span class="text-[10px]">Active</span>
+                    </label>
+                    <template v-if="memberTauntRowState[t.id]?.editingText">
+                      <input
+                        v-model="memberTauntRowState[t.id].textDraft" maxlength="200"
+                        class="flex-1 min-w-[120px] border rounded px-1.5 py-0.5 text-[11px]"
+                      />
+                      <button
+                        type="button" class="text-indigo-600 hover:underline text-[11px] flex-shrink-0"
+                        :disabled="memberTauntRowState[t.id].savingEdit" @click="saveMemberTauntText(t)"
+                      >{{ memberTauntRowState[t.id].savingEdit ? 'Saving…' : 'Save' }}</button>
+                      <button type="button" class="text-gray-500 hover:underline text-[11px] flex-shrink-0" @click="cancelMemberTauntTextEdit(t)">Cancel</button>
+                    </template>
+                    <template v-else>
+                      <span class="flex-1 min-w-0 break-words text-[11px]">{{ t.text }}</span>
+                      <button type="button" class="text-indigo-600 hover:underline text-[11px] flex-shrink-0" @click="startMemberTauntTextEdit(t)">Edit</button>
+                    </template>
+                    <button
+                      type="button" class="text-red-600 hover:underline text-[11px] flex-shrink-0"
+                      :disabled="memberTauntRowState[t.id]?.deleting" @click="removeMemberTaunt(t)"
+                    >{{ memberTauntRowState[t.id]?.deleting ? 'Removing…' : 'Remove' }}</button>
+                  </div>
+                  <div class="flex items-center gap-2 flex-wrap pl-5">
+                    <audio v-if="t.soundPath" :src="t.soundPath" controls class="h-7 flex-shrink-0" style="max-width: 200px;" />
+                    <span v-else class="text-[10px] text-gray-400 flex-shrink-0">No sound</span>
+                    <input
+                      type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav"
+                      class="text-[10px] flex-1 min-w-[140px]" @change="onMemberTauntSoundFile(t.id, $event)"
+                    />
+                    <button
+                      type="button" class="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                      :disabled="!memberTauntRowState[t.id]?.pendingSoundFile || memberTauntRowState[t.id]?.uploadingSound"
+                      @click="uploadMemberTauntSound(t.id)"
+                    >{{ memberTauntRowState[t.id]?.uploadingSound ? 'Uploading…' : 'Upload' }}</button>
+                  </div>
+                  <p v-if="memberTauntRowState[t.id]?.error" class="text-red-600 text-[10px] pl-5">{{ memberTauntRowState[t.id].error }}</p>
+                </div>
+              </div>
+              <p v-else class="text-gray-500 text-[11px]">None yet.</p>
+            </div>
+
+            <div class="border rounded p-2 space-y-2 bg-gray-50">
+              <h5 class="font-semibold text-[11px]">New unique taunt</h5>
+              <p v-if="memberTauntFormError" class="text-red-600 text-[11px]">{{ memberTauntFormError }}</p>
+              <div class="flex gap-2">
+                <select v-model="memberTauntForm.trigger" class="border rounded px-2 py-1 text-[11px] w-28 flex-shrink-0">
+                  <option v-for="group in TAUNT_TRIGGER_GROUPS" :key="group.key" :value="group.key">{{ group.label }}</option>
+                </select>
+                <input
+                  v-model="memberTauntForm.text" maxlength="200" class="flex-1 border rounded px-2 py-1 text-[11px]"
+                  placeholder="e.g. You call that a punch?"
+                />
+              </div>
+              <button
+                type="button" class="px-2 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                :disabled="memberTauntSaving" @click="addMemberTaunt"
+              >{{ memberTauntSaving ? 'Adding…' : 'Add taunt' }}</button>
+            </div>
+          </div>
         </div>
       </section>
     </div>
@@ -1892,6 +1969,139 @@ const windUpMoveForm = reactive(emptyWindUpMoveForm())
 function resetWindUpMoveForm() {
   windUpMoveFormError.value = ''
   Object.assign(windUpMoveForm, emptyWindUpMoveForm())
+}
+
+// ── Member taunts (CMoonEnemyMemberTaunt) — this member's own unique taunt pool, merged with its
+// faction's shared pool server-side at battle/raid-start time (mergeTauntPools in
+// cmoonEnemyBattle.js). Deliberately mirrors the faction taunts block above function-for-function
+// (computed-off-the-list, add-one/remove-one, trigger locked after create) rather than sharing code
+// with it, since the two pools hang off different parent records and different endpoints. ────────
+const memberTauntsByTrigger = computed(() => {
+  const all = members.value.find(m => m.id === memberForm.id)?.taunts || []
+  return {
+    APPEAR: all.filter(t => t.trigger === 'APPEAR'),
+    CRIT: all.filter(t => t.trigger === 'CRIT'),
+  }
+})
+
+const emptyMemberTauntForm = () => ({ trigger: 'APPEAR', text: '' })
+const memberTauntForm = reactive(emptyMemberTauntForm())
+const memberTauntFormError = ref('')
+const memberTauntSaving = ref(false)
+const memberTauntRowState = reactive({})
+function ensureMemberTauntRowState(id) {
+  if (!memberTauntRowState[id]) {
+    memberTauntRowState[id] = {
+      editingText: false, textDraft: '', savingEdit: false,
+      pendingSoundFile: null, uploadingSound: false,
+      deleting: false, error: '',
+    }
+  }
+  return memberTauntRowState[id]
+}
+
+async function addMemberTaunt() {
+  memberTauntFormError.value = ''
+  if (!memberForm.id) return
+  if (!memberTauntForm.text.trim()) { memberTauntFormError.value = 'Text is required.'; return }
+  memberTauntSaving.value = true
+  try {
+    await $fetch(`/api/admin/cmoon-enemy-members/${memberForm.id}/taunts`, {
+      method: 'POST', body: { trigger: memberTauntForm.trigger, text: memberTauntForm.text.trim() },
+    })
+    Object.assign(memberTauntForm, emptyMemberTauntForm())
+    await load()
+  } catch (e) {
+    memberTauntFormError.value = e?.data?.statusMessage || 'Failed to add taunt'
+  } finally {
+    memberTauntSaving.value = false
+  }
+}
+
+function startMemberTauntTextEdit(t) {
+  const state = ensureMemberTauntRowState(t.id)
+  state.textDraft = t.text
+  state.editingText = true
+  state.error = ''
+}
+function cancelMemberTauntTextEdit(t) {
+  const state = ensureMemberTauntRowState(t.id)
+  state.editingText = false
+}
+async function saveMemberTauntText(t) {
+  const state = ensureMemberTauntRowState(t.id)
+  if (!state.textDraft.trim()) { state.error = 'Text is required.'; return }
+  state.savingEdit = true
+  state.error = ''
+  try {
+    await $fetch(`/api/admin/cmoon-enemy-member-taunts/${t.id}`, { method: 'PUT', body: { text: state.textDraft.trim() } })
+    state.editingText = false
+    await load()
+  } catch (e) {
+    state.error = e?.data?.statusMessage || 'Failed to save'
+  } finally {
+    state.savingEdit = false
+  }
+}
+
+async function toggleMemberTauntActive(t, active) {
+  const state = ensureMemberTauntRowState(t.id)
+  state.error = ''
+  try {
+    await $fetch(`/api/admin/cmoon-enemy-member-taunts/${t.id}`, { method: 'PUT', body: { active } })
+    await load()
+  } catch (e) {
+    state.error = e?.data?.statusMessage || 'Failed to save'
+  }
+}
+
+function onMemberTauntSoundFile(id, ev) {
+  const state = ensureMemberTauntRowState(id)
+  state.error = ''
+  const f = ev.target.files?.[0] || null
+  if (f && !['audio/mpeg', 'audio/ogg', 'audio/wav'].includes(f.type)) {
+    state.error = 'MP3, OGG, or WAV only.'
+    ev.target.value = ''
+    return
+  }
+  if (f && f.size > 3 * 1024 * 1024) {
+    state.error = 'Audio must be 3MB or smaller.'
+    ev.target.value = ''
+    return
+  }
+  state.pendingSoundFile = f
+}
+
+async function uploadMemberTauntSound(id) {
+  const state = ensureMemberTauntRowState(id)
+  if (!state.pendingSoundFile) return
+  state.uploadingSound = true
+  state.error = ''
+  try {
+    const fd = new FormData()
+    fd.append('audio', state.pendingSoundFile)
+    await $fetch(`/api/admin/cmoon-enemy-member-taunts/${id}/sound`, { method: 'POST', body: fd })
+    state.pendingSoundFile = null
+    await load()
+  } catch (e) {
+    state.error = e?.data?.statusMessage || 'Upload failed.'
+  } finally {
+    state.uploadingSound = false
+  }
+}
+
+async function removeMemberTaunt(t) {
+  if (!confirm('Remove this taunt?')) return
+  const state = ensureMemberTauntRowState(t.id)
+  state.deleting = true
+  try {
+    await $fetch(`/api/admin/cmoon-enemy-member-taunts/${t.id}`, { method: 'DELETE' })
+    delete memberTauntRowState[t.id]
+    await load()
+  } catch (e) {
+    state.error = e?.data?.statusMessage || 'Failed to remove taunt'
+    state.deleting = false
+  }
 }
 
 function windUpMoveLabel(w) {

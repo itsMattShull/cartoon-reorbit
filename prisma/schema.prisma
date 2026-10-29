@@ -6220,13 +6220,14 @@ model CMoonEnemyMember {
   // raidDefeatedAt/defeatedAt — this only ever gates a chat message, never battle eligibility.
   lastFinalBossPingAt  DateTime?
 
-  faction     CMoonEnemyFaction      @relation(fields: [factionId], references: [id], onDelete: Cascade)
+  faction     CMoonEnemyFaction       @relation(fields: [factionId], references: [id], onDelete: Cascade)
   rewards     CMoonEnemyReward[]
   battles     CMoonEnemyBattle[]
   raids       CMoonEnemyRaid[]
   riddles     CMoonRiddle[]
   rewardPity  CMoonEnemyRewardPity[]
   windUpMoves CMoonEnemyWindUpMove[]
+  taunts      CMoonEnemyMemberTaunt[]
 
   @@index([active, defeatedAt, sortOrder])
 }
@@ -6270,6 +6271,31 @@ model CMoonEnemyTaunt {
   faction CMoonEnemyFaction @relation(fields: [factionId], references: [id], onDelete: Cascade)
 
   @@index([factionId, trigger, active])
+}
+
+// Same shape/trigger semantics as CMoonEnemyTaunt above, scoped to ONE enemy member instead of
+// its whole faction — lets an admin give a specific member its own unique line without it also
+// being said by every other member of that faction. An admin isn't forced to choose one or the
+// other: mergeTauntPools in server/utils/cmoonEnemyBattle.js MERGES a member's own rows here with
+// its faction's shared CMoonEnemyTaunt pool into one combined per-trigger list
+// — a member with none configured here simply draws only from its faction's pool, same as before
+// this model existed.
+model CMoonEnemyMemberTaunt {
+  id            String                 @id @default(uuid())
+  enemyMemberId String
+  trigger       CMoonEnemyTauntTrigger
+  text          String
+  // Optional MP3/OGG/WAV (uploaded via cmoon-enemy-member-taunts/[id]/sound.post.js — same
+  // magic-byte sniffing discipline as every other audio upload in this codebase).
+  soundPath     String?
+  active        Boolean                @default(true)
+  sortOrder     Int                    @default(0)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  enemyMember CMoonEnemyMember @relation(fields: [enemyMemberId], references: [id], onDelete: Cascade)
+
+  @@index([enemyMemberId, trigger, active])
 }
 
 // One admin-configured possible prize for defeating a CMoonEnemyMember. Each row's chance is
