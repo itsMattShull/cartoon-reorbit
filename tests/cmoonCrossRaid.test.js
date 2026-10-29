@@ -22,6 +22,7 @@ function raidWith(parts, extra = {}) {
     enemyImagePath: '/g.png', enemyStats: { maxHp: 30, minPriorDefeats: 2 }, enemyHpRemaining: 30,
     joinDeadlineAt: 1000, startedAt: 1, roundNumber: 1,
     enemyParalyzedTurns: 0, partyParalyzedTurns: 0, partyAtkBonus: 0, enemyAtkBonus: 0,
+    partyAtkRaiseAmount: 0, partyAtkRaiseTurnsRemaining: 0, enemyAtkRaiseAmount: 0, enemyAtkRaiseTurnsRemaining: 0,
     participants: new Map(parts.map(p => [p.userId, p])),
     ...extra,
   }
@@ -63,10 +64,70 @@ test('a self-only heal heals just the caster, not teammates from other cMoons', 
 
 test('raise-ally-attack from any team boosts the whole party; a player damage special hits the boss', () => {
   const raid = raidWith([participant('a'), participant('b')])
-  applyRaidSpecialAttack(raid, [], { name: 'Rally', effectType: 'RAISE_ALLY_ATTACK', amount: 1 }, { side: 'PLAYER', userId: 'b' }, [])
-  assert.equal(raid.partyAtkBonus, 1)
+  applyRaidSpecialAttack(raid, [], { name: 'Rally', effectType: 'RAISE_ALLY_ATTACK', amount: 1, raiseDurationRounds: 5 }, { side: 'PLAYER', userId: 'b' }, [])
+  assert.equal(raid.partyAtkRaiseAmount, 1)
+  assert.equal(raid.partyAtkRaiseTurnsRemaining, 5)
+  assert.equal(raid.partyAtkBonus, 0) // the permanent field is untouched by a raise — see its own shape comment
   applyRaidSpecialAttack(raid, [], { name: 'Zap', effectType: 'DAMAGE_OPPONENT', amount: 4 }, { side: 'PLAYER', userId: 'a' }, [])
   assert.equal(raid.enemyHpRemaining, 26)
+})
+
+// ── Non-stacking paralyze/attack-raise (see applyRaidSpecialAttack's own comment) ────────────
+
+test('a second PARALYZE_OPPONENT cast while the target is already paralyzed has no effect', () => {
+  const raid = raidWith([participant('a'), participant('b')])
+  applyRaidSpecialAttack(raid, [], { name: 'Stun', effectType: 'PARALYZE_OPPONENT', amount: 3 }, { side: 'PLAYER', userId: 'a' }, [])
+  assert.equal(raid.enemyParalyzedTurns, 3)
+  applyRaidSpecialAttack(raid, [], { name: 'Stun2', effectType: 'PARALYZE_OPPONENT', amount: 5 }, { side: 'PLAYER', userId: 'b' }, [])
+  assert.equal(raid.enemyParalyzedTurns, 3) // not extended/replaced by the bigger amount
+})
+
+test('PARALYZE_OPPONENT can fire again once the active one has fully elapsed (turns at 0)', () => {
+  const raid = raidWith([participant('a')])
+  raid.enemyParalyzedTurns = 0
+  applyRaidSpecialAttack(raid, [], { name: 'Stun', effectType: 'PARALYZE_OPPONENT', amount: 2 }, { side: 'PLAYER', userId: 'a' }, [])
+  assert.equal(raid.enemyParalyzedTurns, 2)
+})
+
+test('the party and the boss paralyze independently — one being active does not block the other', () => {
+  const raid = raidWith([participant('a')])
+  applyRaidSpecialAttack(raid, [], { name: 'Stun', effectType: 'PARALYZE_OPPONENT', amount: 3 }, { side: 'PLAYER', userId: 'a' }, [])
+  applyRaidSpecialAttack(raid, [], { name: 'Counter-stun', effectType: 'PARALYZE_OPPONENT', amount: 2 }, { side: 'ENEMY' }, [])
+  assert.equal(raid.enemyParalyzedTurns, 3)
+  assert.equal(raid.partyParalyzedTurns, 2)
+})
+
+test('a second RAISE_ALLY_ATTACK cast while one is already active has no effect', () => {
+  const raid = raidWith([participant('a'), participant('b')])
+  applyRaidSpecialAttack(raid, [], { name: 'Rally', effectType: 'RAISE_ALLY_ATTACK', amount: 2, raiseDurationRounds: 10 }, { side: 'PLAYER', userId: 'a' }, [])
+  applyRaidSpecialAttack(raid, [], { name: 'Rally2', effectType: 'RAISE_ALLY_ATTACK', amount: 9, raiseDurationRounds: 300 }, { side: 'PLAYER', userId: 'b' }, [])
+  assert.equal(raid.partyAtkRaiseAmount, 2)
+  assert.equal(raid.partyAtkRaiseTurnsRemaining, 10)
+})
+
+test('RAISE_ALLY_ATTACK can fire again once the active raise has fully elapsed (turnsRemaining at 0)', () => {
+  const raid = raidWith([participant('a')])
+  raid.partyAtkRaiseTurnsRemaining = 0
+  applyRaidSpecialAttack(raid, [], { name: 'Rally', effectType: 'RAISE_ALLY_ATTACK', amount: 4, raiseDurationRounds: 7 }, { side: 'PLAYER', userId: 'a' }, [])
+  assert.equal(raid.partyAtkRaiseAmount, 4)
+  assert.equal(raid.partyAtkRaiseTurnsRemaining, 7)
+})
+
+test('the party raise and the boss\'s own self-raise are tracked independently', () => {
+  const raid = raidWith([participant('a')])
+  applyRaidSpecialAttack(raid, [], { name: 'Rally', effectType: 'RAISE_ALLY_ATTACK', amount: 2, raiseDurationRounds: 5 }, { side: 'PLAYER', userId: 'a' }, [])
+  applyRaidSpecialAttack(raid, [], { name: 'Enrage', effectType: 'RAISE_ALLY_ATTACK', amount: 3, raiseDurationRounds: 8 }, { side: 'ENEMY' }, [])
+  assert.equal(raid.partyAtkRaiseAmount, 2)
+  assert.equal(raid.partyAtkRaiseTurnsRemaining, 5)
+  assert.equal(raid.enemyAtkRaiseAmount, 3)
+  assert.equal(raid.enemyAtkRaiseTurnsRemaining, 8)
+})
+
+test('LOWER_OPPONENT_ATTACK is unaffected by the anti-stacking rule — still cumulative/permanent', () => {
+  const raid = raidWith([participant('a')])
+  applyRaidSpecialAttack(raid, [], { name: 'Weaken', effectType: 'LOWER_OPPONENT_ATTACK', amount: 2 }, { side: 'PLAYER', userId: 'a' }, [])
+  applyRaidSpecialAttack(raid, [], { name: 'Weaken2', effectType: 'LOWER_OPPONENT_ATTACK', amount: 3 }, { side: 'PLAYER', userId: 'a' }, [])
+  assert.equal(raid.enemyAtkBonus, -5) // stacks, unlike paralyze/raise
 })
 
 test('the boss\'s own damage special still hits every alive participant across teams', () => {

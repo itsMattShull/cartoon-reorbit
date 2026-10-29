@@ -675,6 +675,14 @@ export const SPECIAL_ATTACK_EFFECT_TYPES = [
 export const SPECIAL_ATTACK_AMOUNT_MIN = 1
 export const SPECIAL_ATTACK_AMOUNT_MAX = 999
 
+// Only meaningful for RAISE_ALLY_ATTACK — how many rounds its attack-stat raise lasts in a RAID
+// (see CMoonSpecialAttack.raiseDurationRounds' own schema comment; a solo battle ignores this
+// entirely). 300 stays the default so an existing RAISE_ALLY_ATTACK attack's behavior doesn't
+// meaningfully change until an admin explicitly lowers it.
+export const SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN = 1
+export const SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX = 300
+export const SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT = 300
+
 export function isValidSpecialAttackName(value) {
   return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= SPECIAL_ATTACK_NAME_MAX_LENGTH
 }
@@ -685,6 +693,10 @@ export function isValidSpecialAttackEffectType(value) {
 
 export function isValidSpecialAttackAmount(value) {
   return Number.isInteger(value) && value >= SPECIAL_ATTACK_AMOUNT_MIN && value <= SPECIAL_ATTACK_AMOUNT_MAX
+}
+
+export function isValidSpecialAttackRaiseDurationRounds(value) {
+  return Number.isInteger(value) && value >= SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN && value <= SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX
 }
 
 // Shared by the special-attack create/update endpoints — same `existing`-means-"leave unchanged
@@ -711,6 +723,12 @@ export function parseSpecialAttackBody(body, existing) {
   const amount = body?.amount === undefined
     ? (existing ? existing.amount : undefined)
     : toNumber(body.amount)
+  // Only meaningful for RAISE_ALLY_ATTACK (see that column's own schema comment) — validated
+  // below only for that effectType, same "ignore a stale value from switching the dropdown away
+  // and back" stance healsAllies takes just below.
+  const raiseDurationRoundsRaw = body?.raiseDurationRounds === undefined
+    ? (existing ? existing.raiseDurationRounds : SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT)
+    : toNumber(body.raiseDurationRounds)
   // Only meaningful for HEAL_SELF (see that column's own schema comment) — a truthy value sent
   // alongside any other effectType is silently normalized to false below rather than stored, so a
   // stale client payload (or a leftover value from switching the dropdown away from HEAL_SELF and
@@ -732,6 +750,9 @@ export function parseSpecialAttackBody(body, existing) {
   if (!isValidSpecialAttackAmount(amount)) {
     return { ok: false, message: `Amount must be a whole number between ${SPECIAL_ATTACK_AMOUNT_MIN} and ${SPECIAL_ATTACK_AMOUNT_MAX}` }
   }
+  if (effectType === 'RAISE_ALLY_ATTACK' && !isValidSpecialAttackRaiseDurationRounds(raiseDurationRoundsRaw)) {
+    return { ok: false, message: `Raise duration must be a whole number of rounds between ${SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN} and ${SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX}` }
+  }
   if (healsAlliesRaw === null) {
     return { ok: false, message: 'healsAllies must be true or false' }
   }
@@ -739,8 +760,9 @@ export function parseSpecialAttackBody(body, existing) {
     return { ok: false, message: 'playerChoice must be true or false' }
   }
   const healsAllies = effectType === 'HEAL_SELF' ? healsAlliesRaw : false
+  const raiseDurationRounds = effectType === 'RAISE_ALLY_ATTACK' ? raiseDurationRoundsRaw : SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT
 
-  return { ok: true, data: { name, description, effectType, amount, healsAllies, playerChoice } }
+  return { ok: true, data: { name, description, effectType, amount, healsAllies, playerChoice, raiseDurationRounds } }
 }
 
 // Resolves a member's six battle sound paths, falling back to its faction's own default for

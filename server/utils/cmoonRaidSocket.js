@@ -137,19 +137,34 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *                         // the enemy's kit" stance the solo battle already takes.
  *   enemyHitStreak,       // the boss's own SHARED streak — advances the instant its one rolled
  *                         // action lands on at least one alive participant, resets otherwise.
- *   partyAtkBonus,        // net damage modifier EVERY participant's own landed hit gets, for the
- *   enemyAtkBonus,        // rest of the fight — raised by a player's RAISE_ALLY_ATTACK/lowered by
- *                         // the boss's own LOWER_OPPONENT_ATTACK (partyAtkBonus), and the mirror
- *                         // for enemyAtkBonus (raised by the boss's own RAISE_ALLY_ATTACK —
- *                         // meaningless unless assigned, since a solo boss has no "allies" either
- *                         // — lowered by a player's LOWER_OPPONENT_ATTACK).
+ *   partyAtkBonus,        // PERMANENT net damage modifier EVERY participant's own landed hit gets,
+ *   enemyAtkBonus,        // for the rest of the fight — driven ONLY by LOWER_OPPONENT_ATTACK
+ *                         // (lowered by the boss's own cast against the party -> partyAtkBonus;
+ *                         // lowered by a player's cast against the boss -> enemyAtkBonus), and
+ *                         // cumulative/stacking across casts, same as a solo battle. The OTHER
+ *                         // contributor to each side's effective attack bonus is the time-limited,
+ *                         // non-stacking raise pair just below — resolveRaidRound is always
+ *                         // called with the SUM of this permanent value and whichever raise is
+ *                         // currently active (see closeRound), never this field alone.
+ *   partyAtkRaiseAmount,          // RAISE_ALLY_ATTACK's own non-stacking, time-limited pair — at
+ *   partyAtkRaiseTurnsRemaining,  // most ONE attack-raise can be active for the party at once (a
+ *   enemyAtkRaiseAmount,          // cast while turnsRemaining > 0 is a no-op, see
+ *   enemyAtkRaiseTurnsRemaining,  // applyRaidSpecialAttack), amount/turnsRemaining set together
+ *                                 // when one fires (from attack.amount/raiseDurationRounds) and
+ *                                 // turnsRemaining decremented by 1 every round it's active — the
+ *                                 // instant it hits 0, amount is zeroed too and a fresh raise can
+ *                                 // fire again. The enemy pair is its own self-raise (meaningless
+ *                                 // unless the faction's special is itself RAISE_ALLY_ATTACK,
+ *                                 // since a solo boss has no real "allies" either).
  *   enemyParalyzedTurns,  // rounds left where the boss's one shared action whiffs for everyone —
  *   partyParalyzedTurns,  // set by a PLAYER's PARALYZE_OPPONENT. Rounds left where EVERY alive
  *                         // participant's own action whiffs that round regardless of what they
  *                         // chose/were auto-filled with — set by the boss's own auto-fired
  *                         // PARALYZE_OPPONENT (see this feature's "whole party" boss-target
  *                         // decision). Both decrement by 1 every round they're used, same
- *                         // "elapses the round it's consulted in" semantics as the solo battle.
+ *                         // "elapses the round it's consulted in" semantics as the solo battle —
+ *                         // and, like the raise pair above, non-stacking: a cast while already
+ *                         // > 0 is a no-op rather than adding to the remaining turns.
  *
  *   // ── Lobby controls / up to 8 players / private lobbies / wind-up telegraphs ──────────────
  *   maxParticipants,      // this party's own cap, 1-8, snapshotted from
@@ -256,6 +271,12 @@ function publicRaidView(raid) {
     enemyHitStreak: raid.enemyHitStreak || 0,
     enemyParalyzedTurns: raid.enemyParalyzedTurns || 0,
     partyParalyzedTurns: raid.partyParalyzedTurns || 0,
+    // Whether the party's one-at-a-time attack-raise buff is currently active, and for how many
+    // more rounds — surfaced so the client can show why a second RAISE_ALLY_ATTACK cast had no
+    // effect (see applyRaidSpecialAttack's own non-stacking comment), same spirit as the paralyze
+    // counters just above. The enemy's own mirror is never sent, matching enemySpecialAttack's own
+    // "don't reveal the boss's kit in advance" stance.
+    partyAtkRaiseTurnsRemaining: raid.partyAtkRaiseTurnsRemaining || 0,
     // How many players this raid's party can hold — snapshotted from
     // CMoonEnemyMember.maxParticipants at creation (1-8); the client reads this instead of a
     // hardcoded "4" for slot counts/labels.
@@ -618,7 +639,13 @@ async function closeRound(io, raid) {
         action: partyParalyzedThisRound ? PARALYZED_ACTION : p.pendingAction,
         hpRemaining: p.hpRemaining, maxHp: p.maxHp,
       })),
-      partyAtkBonus: raid.partyAtkBonus, enemyAtkBonus: raid.enemyAtkBonus,
+      // Effective bonus = the permanent component (LOWER_OPPONENT_ATTACK only, stacking) plus
+      // whichever attack-raise buff is currently active (RAISE_ALLY_ATTACK, non-stacking, cleared
+      // once its own turns-remaining counter below hits 0) — see raid.partyAtkRaiseAmount's own
+      // shape comment for why these are tracked separately rather than folded into
+      // partyAtkBonus/enemyAtkBonus directly.
+      partyAtkBonus: raid.partyAtkBonus + (raid.partyAtkRaiseTurnsRemaining > 0 ? raid.partyAtkRaiseAmount : 0),
+      enemyAtkBonus: raid.enemyAtkBonus + (raid.enemyAtkRaiseTurnsRemaining > 0 ? raid.enemyAtkRaiseAmount : 0),
     })
 
     for (const result of perParticipant) {
@@ -634,6 +661,18 @@ async function closeRound(io, raid) {
     raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - enemyDamageDealt)
     if (raid.enemyParalyzedTurns > 0) raid.enemyParalyzedTurns -= 1
     if (raid.partyParalyzedTurns > 0) raid.partyParalyzedTurns -= 1
+    // Same "decrements the round it was just consulted in" semantics as the paralyze counters
+    // just above — clearing the amount alongside turnsRemaining hitting 0 is cosmetic (every read
+    // site already gates on turnsRemaining > 0 first) but keeps a stale nonzero amount from
+    // lingering in Redis snapshots/debugging.
+    if (raid.partyAtkRaiseTurnsRemaining > 0) {
+      raid.partyAtkRaiseTurnsRemaining -= 1
+      if (raid.partyAtkRaiseTurnsRemaining <= 0) raid.partyAtkRaiseAmount = 0
+    }
+    if (raid.enemyAtkRaiseTurnsRemaining > 0) {
+      raid.enemyAtkRaiseTurnsRemaining -= 1
+      if (raid.enemyAtkRaiseTurnsRemaining <= 0) raid.enemyAtkRaiseAmount = 0
+    }
 
     // ── 3. The boss's own SHARED streak — advances the instant its one rolled action lands on at
     // least one alive participant this round (see this file's own header comment on why this is
@@ -956,6 +995,10 @@ export async function restoreCMoonRaids() {
     raid.enemyHitStreak ??= 0
     raid.partyAtkBonus ??= 0
     raid.enemyAtkBonus ??= 0
+    raid.partyAtkRaiseAmount ??= 0
+    raid.partyAtkRaiseTurnsRemaining ??= 0
+    raid.enemyAtkRaiseAmount ??= 0
+    raid.enemyAtkRaiseTurnsRemaining ??= 0
     raid.enemyParalyzedTurns ??= 0
     raid.partyParalyzedTurns ??= 0
     // Lobby controls / up-to-8 / wind-up / private — all added after this feature shipped, so a
@@ -1083,6 +1126,8 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         cMoonSpecialAttack: cMoon.specialAttack || null,
         enemySpecialAttack: enemyMember.faction?.specialAttack || null,
         enemyHitStreak: 0, partyAtkBonus: 0, enemyAtkBonus: 0,
+        partyAtkRaiseAmount: 0, partyAtkRaiseTurnsRemaining: 0,
+        enemyAtkRaiseAmount: 0, enemyAtkRaiseTurnsRemaining: 0,
         enemyParalyzedTurns: 0, partyParalyzedTurns: 0,
         // How many players this party can hold — snapshotted now (1-8) so an admin edit mid-raid
         // never affects one already FORMING/IN_PROGRESS. See CMoonEnemyMember.maxParticipants.

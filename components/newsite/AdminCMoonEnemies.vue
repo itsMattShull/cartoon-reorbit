@@ -93,6 +93,16 @@
           </div>
           <p class="text-[11px] text-gray-500">{{ SPECIAL_ATTACK_EFFECT_HELP[specialAttackForm.effectType] }}</p>
 
+          <div v-if="specialAttackForm.effectType === 'RAISE_ALLY_ATTACK'" class="w-40">
+            <label class="block text-xs font-medium mb-1">Raise duration in a raid, rounds (1-300)</label>
+            <input v-model.number="specialAttackForm.raiseDurationRounds" type="number" min="1" max="300" class="w-full border rounded px-2 py-1" />
+            <p class="text-[10px] text-gray-500 mt-1">
+              In a co-op raid, this attack's raise lasts this many rounds and can't stack with itself or another
+              attack-raise — only one can be active for the party at a time. In a solo fight this is ignored; the
+              raise still lasts the rest of the battle there.
+            </p>
+          </div>
+
           <label v-if="specialAttackForm.effectType === 'HEAL_SELF'" class="flex items-start gap-2">
             <input type="checkbox" v-model="specialAttackForm.healsAllies" class="mt-0.5" />
             <span>
@@ -986,7 +996,7 @@ const specialAttackUploadingSound = ref(false)
 const specialAttackSoundError = ref('')
 const specialAttackSavedSoundPath = ref('')
 
-const emptySpecialAttackForm = () => ({ id: '', name: '', description: '', effectType: 'DAMAGE_OPPONENT', amount: 10, healsAllies: false, playerChoice: false })
+const emptySpecialAttackForm = () => ({ id: '', name: '', description: '', effectType: 'DAMAGE_OPPONENT', amount: 10, raiseDurationRounds: 300, healsAllies: false, playerChoice: false })
 const specialAttackForm = reactive(emptySpecialAttackForm())
 
 function resetSpecialAttackForm() {
@@ -1005,6 +1015,7 @@ function startEditSpecialAttack(a) {
   specialAttackForm.description = a.description || ''
   specialAttackForm.effectType = a.effectType
   specialAttackForm.amount = a.amount
+  specialAttackForm.raiseDurationRounds = a.raiseDurationRounds ?? 300
   specialAttackForm.healsAllies = !!a.healsAllies
   specialAttackForm.playerChoice = !!a.playerChoice
   specialAttackSavedSoundPath.value = a.soundPath || ''
@@ -1057,6 +1068,11 @@ async function saveSpecialAttack() {
     specialAttackFormError.value = 'Amount must be between 1 and 999.'
     return
   }
+  const raiseDurationRounds = Math.trunc(Number(specialAttackForm.raiseDurationRounds)) || 300
+  if (specialAttackForm.effectType === 'RAISE_ALLY_ATTACK' && (!Number.isInteger(raiseDurationRounds) || raiseDurationRounds < 1 || raiseDurationRounds > 300)) {
+    specialAttackFormError.value = 'Raise duration must be between 1 and 300 rounds.'
+    return
+  }
 
   specialAttackSaving.value = true
   try {
@@ -1065,6 +1081,7 @@ async function saveSpecialAttack() {
       description: specialAttackForm.description.trim() || null,
       effectType: specialAttackForm.effectType,
       amount,
+      raiseDurationRounds,
       healsAllies: specialAttackForm.effectType === 'HEAL_SELF' ? specialAttackForm.healsAllies : false,
       playerChoice: specialAttackForm.playerChoice,
     }

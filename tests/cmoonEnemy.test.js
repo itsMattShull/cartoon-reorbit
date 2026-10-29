@@ -9,6 +9,8 @@ import {
   MEMBER_SOUND_SLOTS, FACTION_DEFAULT_SOUND_SLOTS,
   parseSpecialAttackBody, isValidSpecialAttackName, isValidSpecialAttackEffectType, isValidSpecialAttackAmount,
   SPECIAL_ATTACK_EFFECT_TYPES, SPECIAL_ATTACK_NAME_MAX_LENGTH, SPECIAL_ATTACK_AMOUNT_MIN, SPECIAL_ATTACK_AMOUNT_MAX,
+  isValidSpecialAttackRaiseDurationRounds, SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN,
+  SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX, SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
   parseTauntBody, isValidTauntText, isValidTauntTrigger, TAUNT_TRIGGERS, TAUNT_TEXT_MAX_LENGTH,
   ATTACK_CHANCE_DEFAULT, PITY_THRESHOLD_DEFAULT, FIRST_WIN_BONUS_POINTS_DEFAULT,
   MAX_PARTICIPANTS_DEFAULT, MAX_PARTICIPANTS_MIN, MAX_PARTICIPANTS_MAX,
@@ -439,7 +441,10 @@ test('isValidSpecialAttackAmount: whole numbers within [MIN, MAX], rejects out-o
 test('parseSpecialAttackBody: a valid create body parses with trimmed name and the given fields', () => {
   const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, name: '  Toxic Bite  ' })
   assert.equal(result.ok, true)
-  assert.deepEqual(result.data, { name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10, healsAllies: false, playerChoice: false })
+  assert.deepEqual(result.data, {
+    name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10,
+    healsAllies: false, playerChoice: false, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
+  })
 })
 
 test('parseSpecialAttackBody: rejects a missing/blank name', () => {
@@ -460,10 +465,45 @@ test('parseSpecialAttackBody: a blank/null description normalizes to null, a rea
 })
 
 test('parseSpecialAttackBody: on update, an omitted field falls back to the existing row, not a bare default', () => {
-  const existing = { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7, healsAllies: true, playerChoice: true }
+  const existing = {
+    name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7,
+    healsAllies: true, playerChoice: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
+  }
   const result = parseSpecialAttackBody({ amount: 20 }, existing)
   assert.equal(result.ok, true)
-  assert.deepEqual(result.data, { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 20, healsAllies: true, playerChoice: true })
+  assert.deepEqual(result.data, {
+    name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 20,
+    healsAllies: true, playerChoice: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
+  })
+})
+
+// ── raiseDurationRounds (RAISE_ALLY_ATTACK's own non-stacking duration, see its schema comment) ──
+
+test('parseSpecialAttackBody: raiseDurationRounds defaults to the DEFAULT constant on create when omitted', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'RAISE_ALLY_ATTACK' })
+  assert.equal(result.ok, true)
+  assert.equal(result.data.raiseDurationRounds, SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT)
+})
+
+test('parseSpecialAttackBody: accepts the full raiseDurationRounds range and rejects outside it, only for RAISE_ALLY_ATTACK', () => {
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'RAISE_ALLY_ATTACK', raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'RAISE_ALLY_ATTACK', raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'RAISE_ALLY_ATTACK', raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN - 1 }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'RAISE_ALLY_ATTACK', raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX + 1 }).ok, false)
+  // An out-of-range value is only rejected for RAISE_ALLY_ATTACK — for any other effectType it's
+  // silently normalized to the default rather than validated, same stance healsAllies/HEAL_SELF
+  // takes (see that field's own test below).
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', raiseDurationRounds: 9999 }).ok, true)
+})
+
+test('parseSpecialAttackBody: raiseDurationRounds is only ever stored when effectType is RAISE_ALLY_ATTACK', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', raiseDurationRounds: 250 })
+  assert.equal(result.ok, true)
+  assert.equal(result.data.raiseDurationRounds, SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT)
+
+  const raiseResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'RAISE_ALLY_ATTACK', raiseDurationRounds: 250 })
+  assert.equal(raiseResult.ok, true)
+  assert.equal(raiseResult.data.raiseDurationRounds, 250)
 })
 
 test('parseSpecialAttackBody: healsAllies is only ever stored true when effectType is HEAL_SELF', () => {

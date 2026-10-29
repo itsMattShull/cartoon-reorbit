@@ -5954,9 +5954,18 @@ enum CMoonEnemyRewardType {
 //   LOWER_OPPONENT_ATTACK — the opposing side's own landed-hit damage is reduced by `amount` for
 //                           the REST of the battle (floored so it can never go negative).
 //   RAISE_ALLY_ATTACK     — the caster's own side's landed-hit damage is increased by `amount`
-//                           for the rest of the battle.
-// All five are cumulative/stacking if the same attack (or several different ones) fire more than
-// once in one battle — there's no cap beyond what a battle's own HP/round limits naturally impose.
+//                           for `raiseDurationRounds` rounds in a RAID (see that column's own
+//                           comment), or for the rest of the battle in a SOLO fight (unchanged).
+// All five are cumulative/stacking in a SOLO battle if the same attack (or several different ones)
+// fire more than once — there's no cap beyond what a battle's own HP/round limits naturally
+// impose. In a co-op RAID specifically, PARALYZE_OPPONENT and RAISE_ALLY_ATTACK do NOT stack: only
+// one paralyze effect and one attack-raise can be active against/for a given side at a time (see
+// applyRaidSpecialAttack in cmoonEnemyRaid.js) — a cast that lands while one is already active has
+// no additional effect, rather than extending its duration or adding to its amount. Once the
+// active one expires, a later cast (by the same player or another) can trigger a fresh one.
+// DAMAGE_OPPONENT, HEAL_SELF, and LOWER_OPPONENT_ATTACK are unaffected by this and still stack in
+// raids exactly as they do solo — only the two duration-based effects above are capped to one at a
+// time, per that feature's own anti-stacking request.
 enum CMoonSpecialAttackEffectType {
   DAMAGE_OPPONENT
   HEAL_SELF
@@ -5966,17 +5975,26 @@ enum CMoonSpecialAttackEffectType {
 }
 
 model CMoonSpecialAttack {
-  id           String                       @id @default(uuid())
-  name         String                       @unique
-  description  String? // shown in the player-facing "?" tooltip alongside the effect/charge copy below
-  effectType   CMoonSpecialAttackEffectType
+  id                  String                       @id @default(uuid())
+  name                String                       @unique
+  description         String? // shown in the player-facing "?" tooltip alongside the effect/charge copy below
+  effectType          CMoonSpecialAttackEffectType
   // Meaning depends on effectType — damage points / heal points / paralyze-turns / attack-stat
   // delta. Always a positive whole number; which one it is is just effectType's own label.
-  amount       Int
+  amount              Int
+  // Only meaningful when effectType = RAISE_ALLY_ATTACK (ignored otherwise — enforced in
+  // parseSpecialAttackBody, same "normalized rather than stored" stance healsAllies below takes).
+  // How many ROUNDS this attack's attack-stat raise lasts once it fires in a RAID — 1-300, default
+  // 300 (near-permanent for a typical raid, matching this effect's pre-existing "rest of the
+  // battle" behavior as closely as a bounded duration can). A SOLO battle ignores this column
+  // entirely and keeps the old permanent-for-the-fight behavior — see the enum's own comment on
+  // why only raids need a duration at all (raids can run far longer, up to raidRoundLimit rounds,
+  // so an un-timed buff there would trivially outlast the whole fight once applied).
+  raiseDurationRounds Int                          @default(300)
   // Optional sound (MP3/OGG/WAV, uploaded via cmoon-special-attacks/[id]/sound.post.js — same
   // magic-byte-sniffed discipline as every other audio upload in this codebase), played the
   // moment this attack actually fires, by whichever side cast it.
-  soundPath    String?
+  soundPath           String?
   // Only meaningful when effectType = HEAL_SELF (false/ignored otherwise — enforced in
   // parseSpecialAttackBody, never just left to the client). In a SOLO battle this changes
   // nothing — there are no allies to heal either way, so the caster is always the only one
@@ -5984,16 +6002,16 @@ model CMoonSpecialAttack {
   // exact same amount to every other alive participant too (the caster included, not instead of
   // them) — an admin-authored choice per attack, not an automatic raid-vs-solo behavior switch,
   // per this feature's own "self and/or allies" request.
-  healsAllies  Boolean                      @default(false)
+  healsAllies         Boolean                      @default(false)
   // Lets a player pick THIS attack for themselves (see User.chosenSpecialAttackId) instead of
   // always using their cMoon's admin-assigned one — an admin toggle per attack, off by default so
   // shipping this column changes nothing until an admin opts an attack in. A player's choice is
   // re-validated against this flag live every time it's resolved (solo or raid), so turning it off
   // here immediately falls everyone who had chosen it back to their cMoon's own special, with no
   // separate cleanup needed.
-  playerChoice Boolean                      @default(false)
-  createdAt    DateTime                     @default(now())
-  updatedAt    DateTime                     @updatedAt
+  playerChoice        Boolean                      @default(false)
+  createdAt           DateTime                     @default(now())
+  updatedAt           DateTime                     @updatedAt
 
   cmoons        CMoon[]
   enemyFactions CMoonEnemyFaction[]

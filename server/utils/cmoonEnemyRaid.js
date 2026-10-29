@@ -188,6 +188,12 @@ export function resolveRaidRound({ enemyAction, enemyMember, participants, party
 // RAISE_ALLY_ATTACK) deliberately reach EVERY alive participant regardless of which cMoon they
 // belong to: the whole point of a cross-cMoon raid is that the party is one team for the fight.
 // Knocked-out participants are never in `alive`, so a heal never revives anyone.
+//
+// PARALYZE_OPPONENT and RAISE_ALLY_ATTACK do NOT stack in a raid (unlike every other effect type,
+// and unlike a solo battle's own identically-named effects in action.post.js/cmoonEnemyBattle.js,
+// which are untouched by this): at most one paralyze and one attack-raise can be active against/
+// for a given side at once. A cast of either while one is already active is a complete no-op —
+// pushed to specialEvents (so the UI/Discord still announce the attempt) but changes no state.
 export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvents) {
   specialEvents.push({
     side: caster.side, userId: caster.userId || null, name: attack.name,
@@ -214,14 +220,36 @@ export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvent
       raid.enemyHpRemaining = Math.min(raid.enemyStats.maxHp, raid.enemyHpRemaining + attack.amount)
     }
   } else if (attack.effectType === 'PARALYZE_OPPONENT') {
-    if (caster.side === 'PLAYER') raid.enemyParalyzedTurns += attack.amount
-    else raid.partyParalyzedTurns += attack.amount
+    // Non-stacking in a raid (unlike solo, see this function's own callers' comments): a cast
+    // that lands while the target side is ALREADY paralyzed has no additional effect — it never
+    // extends the remaining turns or layers a second paralysis on top. Once the active one
+    // decrements to 0 (see closeRound in cmoonRaidSocket.js), a later cast can trigger a fresh one.
+    if (caster.side === 'PLAYER') {
+      if (raid.enemyParalyzedTurns <= 0) raid.enemyParalyzedTurns = attack.amount
+    } else if (raid.partyParalyzedTurns <= 0) {
+      raid.partyParalyzedTurns = attack.amount
+    }
   } else if (attack.effectType === 'LOWER_OPPONENT_ATTACK') {
+    // Unaffected by the anti-stacking request — still permanent-for-the-fight and cumulative
+    // across casts, same as every other non-duration effect type.
     if (caster.side === 'PLAYER') raid.enemyAtkBonus -= attack.amount
     else raid.partyAtkBonus -= attack.amount
   } else if (attack.effectType === 'RAISE_ALLY_ATTACK') {
-    if (caster.side === 'PLAYER') raid.partyAtkBonus += attack.amount
-    else raid.enemyAtkBonus += attack.amount
+    // Non-stacking and now time-limited in a raid, same "no-op while one is already active" shape
+    // as PARALYZE_OPPONENT just above — tracked in a pair of fields SEPARATE from
+    // partyAtkBonus/enemyAtkBonus (which stay LOWER_OPPONENT_ATTACK's own permanent, stacking
+    // accumulator) so closeRound can let this raise expire on its own schedule without touching
+    // any permanent debuff already banked on that side. See raid.partyAtkRaiseAmount/
+    // partyAtkRaiseTurnsRemaining's own shape comment in cmoonRaidSocket.js.
+    if (caster.side === 'PLAYER') {
+      if (raid.partyAtkRaiseTurnsRemaining <= 0) {
+        raid.partyAtkRaiseAmount = attack.amount
+        raid.partyAtkRaiseTurnsRemaining = attack.raiseDurationRounds
+      }
+    } else if (raid.enemyAtkRaiseTurnsRemaining <= 0) {
+      raid.enemyAtkRaiseAmount = attack.amount
+      raid.enemyAtkRaiseTurnsRemaining = attack.raiseDurationRounds
+    }
   }
 }
 

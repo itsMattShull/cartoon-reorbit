@@ -149,6 +149,12 @@
               <p v-if="raid.partyParalyzedTurns > 0" class="cr-status-badge cr-status-bad">
                 ⚡ The party is paralyzed — can't act for {{ raid.partyParalyzedTurns }} more round{{ raid.partyParalyzedTurns === 1 ? '' : 's' }}
               </p>
+              <!-- Only one attack-raise can be active for the party at a time (see
+                   applyRaidSpecialAttack's own non-stacking comment) — shown so a second
+                   RAISE_ALLY_ATTACK cast having no extra effect isn't a silent mystery. -->
+              <p v-if="raid.partyAtkRaiseTurnsRemaining > 0" class="cr-status-badge cr-status-good">
+                💪 The party's attack is raised — {{ raid.partyAtkRaiseTurnsRemaining }} more round{{ raid.partyAtkRaiseTurnsRemaining === 1 ? '' : 's' }}
+              </p>
 
               <!-- ── Announcements overlay — round reveal, hit-streak combo, and special-use
                    callouts. Absolutely positioned and pointer-events:none, so appearing/
