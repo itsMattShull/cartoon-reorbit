@@ -23,7 +23,7 @@ export const FACTION_DESCRIPTION_MAX_LENGTH = 500
 // high end of this range exists for SHARED_POOL raid-style enemies, whose HP is chipped away by
 // many players together.
 export const MAX_HP_MIN = 1
-export const MAX_HP_MAX = 200
+export const MAX_HP_MAX = 500
 
 export const CMOON_POINTS_REWARD_MIN = 0
 export const CMOON_POINTS_REWARD_MAX = 5000

@@ -65,7 +65,7 @@ export const ROUND_TIMEOUT_SECONDS = 15
 // raid.maxParticipants (snapshotted from CMoonEnemyMember.maxParticipants, 1-8, at raid creation)
 // instead. Kept exported since it's still this file's own "if nothing else says otherwise" value.
 export const MAX_PARTY_SIZE = 4
-export const RAID_MAX_ROUNDS_SAFETY = 100 // same runaway-RNG safety valve as a solo battle
+export const RAID_MAX_ROUNDS_SAFETY = 150 // same runaway-RNG safety valve as a solo battle
 
 // Whether a raid boss can be started right now, given its own admin-configured
 // raidOneTime/raidCooldownMinutes and the raidDefeatedAt timestamp its last WIN set (see those

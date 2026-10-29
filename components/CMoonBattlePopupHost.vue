@@ -309,7 +309,7 @@ const rewardsList = computed(() => {
 // A won-by-a-hair or lost-while-nearly-finishing-them-off flavor line — purely narrative, reads
 // straight off numbers the result screen already has. "Nearly" for a loss is read off the
 // enemy's OWN maxHp (not a fixed HP amount) since enemies span a huge HP range (see
-// CMoonEnemyMember.maxHp's own schema comment, 1-200) — a flat "enemy had <=1 HP left" would
+// CMoonEnemyMember.maxHp's own schema comment, 1-500) — a flat "enemy had <=1 HP left" would
 // almost never fire for a high-HP boss.
 const nearMissFlavor = computed(() => {
   if (!battle.value) return ''

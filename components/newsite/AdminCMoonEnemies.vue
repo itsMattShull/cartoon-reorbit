@@ -539,8 +539,8 @@
 
           <div class="flex gap-2">
             <div class="flex-1 min-w-0">
-              <label class="block text-xs font-medium mb-1">Max HP (1-200)</label>
-              <input v-model.number="memberForm.maxHp" type="number" min="1" max="200" class="w-full border rounded px-2 py-1" />
+              <label class="block text-xs font-medium mb-1">Max HP (1-500)</label>
+              <input v-model.number="memberForm.maxHp" type="number" min="1" max="500" class="w-full border rounded px-2 py-1" />
             </div>
             <div class="flex-1 min-w-0">
               <label class="block text-xs font-medium mb-1">cMoon points on win (0-5000)</label>
@@ -1688,7 +1688,7 @@ async function saveMember() {
   if (!memberForm.factionId) { memberFormError.value = 'Pick a faction.'; return }
   if (!memberForm.name.trim()) { memberFormError.value = 'Name is required.'; return }
   const maxHp = Math.trunc(Number(memberForm.maxHp))
-  if (!Number.isInteger(maxHp) || maxHp < 1 || maxHp > 200) { memberFormError.value = 'Max HP must be between 1 and 200.'; return }
+  if (!Number.isInteger(maxHp) || maxHp < 1 || maxHp > 500) { memberFormError.value = 'Max HP must be between 1 and 500.'; return }
   const cMoonPointsReward = Math.trunc(Number(memberForm.cMoonPointsReward))
   if (!Number.isInteger(cMoonPointsReward) || cMoonPointsReward < 0 || cMoonPointsReward > 5000) {
     memberFormError.value = 'cMoon points reward must be between 0 and 5000.'
