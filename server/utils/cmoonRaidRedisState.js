@@ -72,6 +72,15 @@ function serializeRaid(raid) {
     enemyHitStreak: raid.enemyHitStreak,
     partyAtkBonus: raid.partyAtkBonus,
     enemyAtkBonus: raid.enemyAtkBonus,
+    // The non-stacking, time-limited attack-raise pair (RAISE_ALLY_ATTACK) — see raid's own shape
+    // comment in cmoonRaidSocket.js. Same "a field missing here silently drops it on restart" trap
+    // as cMoonSpecialAttack/enemySpecialAttack above; these four were missing until caught in
+    // adversarial review, which would have reset an active raise buff to inactive (and its own
+    // amount to the restoreCMoonRaids fallback of 0) on every server restart.
+    partyAtkRaiseAmount: raid.partyAtkRaiseAmount,
+    partyAtkRaiseTurnsRemaining: raid.partyAtkRaiseTurnsRemaining,
+    enemyAtkRaiseAmount: raid.enemyAtkRaiseAmount,
+    enemyAtkRaiseTurnsRemaining: raid.enemyAtkRaiseTurnsRemaining,
     enemyParalyzedTurns: raid.enemyParalyzedTurns,
     partyParalyzedTurns: raid.partyParalyzedTurns,
     // Lobby controls, up-to-8 parties, private lobbies, wind-up telegraphs — see
@@ -79,7 +88,15 @@ function serializeRaid(raid) {
     // in-memory (JSON can't carry one); stored as a plain array, rebuilt into a Set on restore
     // (see restoreCMoonRaids).
     maxParticipants: raid.maxParticipants,
+    // This raid boss's own round-count safety valve (50-400) — same missing-field trap as above;
+    // without this, a restart would silently fall back to RAID_MAX_ROUNDS_SAFETY regardless of
+    // what the boss was actually configured with.
+    roundLimit: raid.roundLimit,
     isPrivate: raid.isPrivate,
+    // Snapshotted admin toggle for the captain boost effect (see GlobalGameConfig.
+    // cMoonCaptainBoostEnabled) — same missing-field trap as above; without this, a restart would
+    // silently turn the effect off for the rest of an in-flight raid that had it on.
+    captainBoostEnabled: raid.captainBoostEnabled,
     leaderKeepOpen: raid.leaderKeepOpen,
     speedVotes: Array.from(raid.speedVotes || []),
     windUpMoves: raid.windUpMoves,
