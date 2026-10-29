@@ -1,9 +1,10 @@
 <template>
   <div
     class="rf"
-    :class="[`rf-${variant}`, { 'rf-ko': knockedOut, 'rf-me': isMe, 'rf-no-team': !team }]"
+    :class="[`rf-${variant}`, { 'rf-ko': knockedOut, 'rf-me': isMe, 'rf-no-team': !team, 'rf-captain': isCaptain }]"
     :style="teamVars"
   >
+    <span v-if="isCaptain" class="rf-captain-glow" aria-hidden="true"></span>
     <span class="rf-sash" aria-hidden="true"></span>
     <span class="rf-crest">
       <CMoonAvatar v-if="team" :avatar-path="team.avatarPath || ''" :color="team.color || ''" :name="team.name || ''" />
@@ -12,6 +13,7 @@
     <span class="rf-body">
       <span class="rf-name-row">
         <span class="rf-name">{{ participant.username || 'Player' }}</span>
+        <span v-if="isCaptain" class="rf-captain-badge" title="cMoon Captain — their presence inspires the whole party">🎖️<span class="rf-captain-text"> Captain</span></span>
         <span v-if="participant.isInitiator" class="rf-leader" title="Started this raid">👑<span class="rf-leader-text"> Raid leader</span></span>
         <span v-if="isMe" class="rf-you">you</span>
       </span>
@@ -41,7 +43,7 @@ import { computed } from 'vue'
 import { isSafeCMoonColor, lightenHex, contrastTextColor } from '~/utils/cmoonColor'
 
 const props = defineProps({
-  // { username, isInitiator, cMoon: { name, color, avatarPath } | null, rank: { name, tierName, tierLevel, tierCount } | null }
+  // { username, isInitiator, isCaptain, cMoon: { name, color, avatarPath } | null, rank: { name, tierName, tierLevel, tierCount } | null }
   participant: { type: Object, required: true },
   variant: { type: String, default: 'card' }, // 'card' (roster/lobby) | 'compact' (combat rows)
   isMe: { type: Boolean, default: false },
@@ -53,6 +55,12 @@ const MAX_CHEVRONS = 8
 
 const team = computed(() => props.participant?.cMoon || null)
 const rank = computed(() => props.participant?.rank || null)
+// Whether THIS fighter is a cMoon captain (see CMoonCaptain's own schema comment) — purely
+// cosmetic (the glow ring + medal badge below), never a gameplay effect. rank.name is already
+// server-overridden to "Captain" for them too (displayRankName in server/utils/cmoon.js), same
+// label swap every other surface a captain is shown on already applies; this component layers
+// the extra "epic" visual treatment the raid feature specifically asked for on top of that.
+const isCaptain = computed(() => !!props.participant?.isCaptain)
 
 const teamVars = computed(() => {
   const color = isSafeCMoonColor(team.value?.color) ? team.value.color : FALLBACK
@@ -150,6 +158,39 @@ const rankTitle = computed(() => {
 .rf-compact .rf-you { display: none; }
 .rf-leader { font-size: 11px; color: #92400e; white-space: nowrap; }
 .rf-compact .rf-leader-text { display: none; }
+
+/* ── cMoon captain: purely cosmetic "epic" treatment — a gold badge plus a pulsing halo around
+   the whole card, meant to be felt by everyone else in the raid, not just the captain. No
+   gameplay effect lives here or anywhere this flows from (see isCaptain's own comment above). */
+.rf-captain-badge {
+  font-size: 11px;
+  font-weight: 800;
+  color: #92400e;
+  text-shadow: 0 0 6px rgba(250, 204, 21, 0.8);
+  white-space: nowrap;
+  animation: rf-captain-shimmer 1.8s ease-in-out infinite;
+}
+.rf-compact .rf-captain-text { display: none; }
+.rf-captain-glow {
+  position: absolute;
+  inset: -8px;
+  z-index: -3;
+  border-radius: inherit;
+  background: radial-gradient(circle, rgba(250, 204, 21, 0.45), transparent 70%);
+  animation: rf-captain-pulse 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes rf-captain-pulse {
+  0%, 100% { opacity: 0.55; transform: scale(0.97); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+@keyframes rf-captain-shimmer {
+  0%, 100% { text-shadow: 0 0 4px rgba(250, 204, 21, 0.5); }
+  50% { text-shadow: 0 0 10px rgba(250, 204, 21, 1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rf-captain-glow, .rf-captain-badge { animation: none; }
+}
 .rf-you {
   font-size: 10px;
   font-weight: 700;
@@ -194,6 +235,15 @@ const rankTitle = computed(() => {
 .rf-ko { filter: grayscale(0.85); opacity: 0.65; }
 .rf-ko .rf-name { text-decoration: line-through; }
 .rf-no-team { border-color: #cbd5e1; box-shadow: none; }
+
+/* After rf-me/rf-ko/rf-no-team in source order so the captain glow always wins when stacked
+   with any of them (e.g. viewing your own card as the captain) — the most "epic" treatment on
+   the card should never lose to a plainer one. */
+.rf-captain {
+  border-color: #d97706;
+  box-shadow: 0 2px 0 #d97706, 0 0 0 2px #facc15, 0 0 16px rgba(250, 204, 21, 0.55);
+}
+.rf-compact.rf-captain { box-shadow: 0 0 0 2px #facc15, 0 0 10px rgba(250, 204, 21, 0.6); }
 
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;

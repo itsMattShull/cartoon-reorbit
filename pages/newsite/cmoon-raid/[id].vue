@@ -24,6 +24,13 @@
             </div>
           </div>
 
+          <!-- One-time, purely cosmetic "epic" moment when a cMoon captain is in the party — see
+               the watch(raid, ...) below for the trigger and CMoonRaidFighter.vue for the
+               persistent glow/badge treatment this banner announces. No gameplay effect. -->
+          <Transition name="cr-reveal">
+            <p v-if="captainEntranceBanner" class="cr-captain-banner">{{ captainEntranceBanner }}</p>
+          </Transition>
+
           <div v-if="raid.isPrivate" class="cr-private-row">
             <span>🔒 Private raid — only reachable via this page's own link.</span>
             <button type="button" class="cr-link-btn" @click="copyInviteLink">{{ inviteLinkCopied ? 'Copied!' : 'Copy invite link' }}</button>
@@ -598,6 +605,19 @@ watch(() => raid.value?.status, (status) => {
   else stopBattleMusic()
 })
 
+// ── Captain entrance banner — a one-time, purely cosmetic "epic" moment naming every cMoon
+// captain in the party (see CMoonCaptain's own schema comment), meant to pump up everyone else in
+// the raid. Fires on the same "first time this page has raid data" trigger as the appear sound/
+// taunt below, never re-announced on later state pushes. No gameplay effect — CMoonRaidFighter.vue
+// carries the persistent glow/badge for the rest of the fight.
+const captainEntranceBanner = ref('')
+let captainEntranceTimer = null
+function joinWithAnd(names) {
+  if (names.length <= 1) return names[0] || ''
+  if (names.length === 2) return `${names[0]} and ${names[1]}`
+  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`
+}
+
 // Appear sound — once, the first time this page actually has raid data to show (covers both
 // "just started/joined a FORMING raid" and "opened a link to one already in progress"); never
 // re-fires on every subsequent state push for the same raid.
@@ -610,6 +630,15 @@ watch(raid, (r) => {
   if (taunt) {
     currentTaunt.value = taunt.text
     playSound(taunt.soundPath)
+  }
+
+  const captains = (r.participants || []).filter(p => p.isCaptain)
+  if (captains.length) {
+    const names = captains.map(p => p.username || 'Someone')
+    const plural = names.length > 1
+    captainEntranceBanner.value = `🎖️ ${joinWithAnd(names)} ${plural ? 'have' : 'has'} entered the battle as ${plural ? 'cMoon Captains' : 'a cMoon Captain'} — fight with honor!`
+    if (captainEntranceTimer) clearTimeout(captainEntranceTimer)
+    captainEntranceTimer = setTimeout(() => { captainEntranceBanner.value = '' }, 4000)
   }
 })
 
@@ -631,6 +660,7 @@ onUnmounted(() => {
   if (comboTimer) clearTimeout(comboTimer)
   if (specialUseTimer) clearTimeout(specialUseTimer)
   if (shakeTimer) clearTimeout(shakeTimer)
+  if (captainEntranceTimer) clearTimeout(captainEntranceTimer)
   if (resultFlashTimer) clearTimeout(resultFlashTimer)
   stopBattleMusic()
 })
@@ -796,6 +826,31 @@ onUnmounted(() => {
 }
 @media (prefers-reduced-motion: reduce) {
   .cr-taunt { animation: none; }
+}
+
+/* Captain entrance banner — a one-time, purely cosmetic "epic" moment (see the watch(raid, ...)
+   that sets captainEntranceBanner). Bigger and bolder than every other callout on this page on
+   purpose: it's meant to read as a big deal the instant the page loads. */
+.cr-captain-banner {
+  font-size: 13.5px;
+  font-weight: 800;
+  text-align: center;
+  color: #78350f;
+  background: linear-gradient(90deg, rgba(250, 204, 21, 0.25), rgba(250, 204, 21, 0.5), rgba(250, 204, 21, 0.25));
+  border: 1px solid #d97706;
+  border-radius: 8px;
+  padding: 7px 12px;
+  margin: 0;
+  box-shadow: 0 0 16px rgba(250, 204, 21, 0.5);
+  animation: cr-captain-banner-pop 0.5s ease-out;
+}
+@keyframes cr-captain-banner-pop {
+  0% { transform: scale(0.9); opacity: 0; }
+  60% { transform: scale(1.03); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cr-captain-banner { animation: none; }
 }
 
 .cr-first-win {

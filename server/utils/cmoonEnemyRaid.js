@@ -309,7 +309,7 @@ export function rankTierLevel(tiers, tierId) {
 export function publicParticipantTeam(raid, p) {
   // A reservation made without a team snapshot (shouldn't happen since joins snapshot before
   // reserving, but never guess) shows no team rather than borrowing the initiator's.
-  if (p.pendingJoin && !p.cMoonId) return { cMoon: null, rank: null }
+  if (p.pendingJoin && !p.cMoonId) return { cMoon: null, rank: null, isCaptain: false }
   const legacy = !p.cMoonId && participantCMoonId(raid, p) === raid.cMoonId
   return {
     cMoon: {
@@ -321,6 +321,15 @@ export function publicParticipantTeam(raid, p) {
     rank: p.rankName
       ? { name: p.rankName, tierName: p.rankTierName || null, tierLevel: p.rankTierLevel || 0, tierCount: p.rankTierCount || 0 }
       : null,
+    // Snapshotted once at join, same as every other field here — see loadParticipantProfile in
+    // cmoonRaidSocket.js. Purely cosmetic (CMoonRaidFighter.vue's own captain glow/badge, and the
+    // one-time "a captain has entered the battle" banner on the raid page) — no gameplay effect,
+    // same "a leadership title overriding the shown label only" stance CAPTAIN_DISPLAY_RANK_NAME
+    // already takes everywhere else a cMoon captain is surfaced (cZone, standings, leaderboard).
+    // Sent to both the in-raid roster AND the Raid Boss Lobby listing (buildRaidLobbyEntry also
+    // spreads this) — a captain in the party is exactly the kind of thing that should make a
+    // browsing player want to join, not just something shown once they're already in.
+    isCaptain: !!p.isCaptain,
   }
 }
 

@@ -195,11 +195,23 @@ test('publicParticipantTeam exposes team colors and rank, and nothing for a pend
   assert.deepEqual(publicParticipantTeam(raid, p), {
     cMoon: { id: 'moonB', name: 'Moon B', color: '#ff0000', avatarPath: '/b.png' },
     rank: { name: 'Captain', tierName: 'Gold', tierLevel: 3, tierCount: 5 },
+    isCaptain: false,
   })
-  assert.deepEqual(publicParticipantTeam(raid, participant('x', { pendingJoin: true })), { cMoon: null, rank: null })
+  assert.deepEqual(publicParticipantTeam(raid, participant('x', { pendingJoin: true })), { cMoon: null, rank: null, isCaptain: false })
   const legacy = publicParticipantTeam(raid, participant('old'))
   assert.equal(legacy.cMoon.name, 'Moon A')
   assert.equal(legacy.rank, null)
+  assert.equal(legacy.isCaptain, false)
+})
+
+test('publicParticipantTeam exposes isCaptain (a cMoon captain\'s own cosmetic flag)', () => {
+  const raid = raidWith([])
+  const captainParticipant = participant('cap', { cMoonId: 'moonC', cMoonName: 'Moon C', isCaptain: true })
+  const result = publicParticipantTeam(raid, captainParticipant)
+  assert.equal(result.isCaptain, true)
+
+  const regularParticipant = participant('reg', { cMoonId: 'moonC', cMoonName: 'Moon C', isCaptain: false })
+  assert.equal(publicParticipantTeam(raid, regularParticipant).isCaptain, false)
 })
 
 // ── Lobby ───────────────────────────────────────────────────────────────────────────────────

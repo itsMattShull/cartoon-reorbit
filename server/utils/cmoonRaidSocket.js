@@ -73,7 +73,7 @@
 
 import { randomUUID } from 'crypto'
 import { prisma as db } from '../prisma.js'
-import { getGlobalConfig, getPlayerCombatMaxHp, resolveEffectiveSpecialAttack } from './cmoon.js'
+import { getGlobalConfig, getPlayerCombatMaxHp, resolveEffectiveSpecialAttack, isCMoonCaptain, displayRankName } from './cmoon.js'
 import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from './achievements.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 import { announceCMoonRaidBoss, resolveCMoonRaidDiscordChannelId, sendCMoonTeamUpdate, startThreadFromMessage } from './discord.js'
@@ -122,7 +122,15 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *                                // "Cross-cMoon raids" in cmoonEnemyRaid.js:
  *                                cMoonId, cMoonName, cMoonColor, cMoonAvatarPath,
  *                                rankName, rankTierName, rankTierLevel, rankTierCount,
- *                                specialAttack }>,
+ *                                specialAttack,
+ *                                isCaptain }>,   // whether THEY were a captain of THEIR OWN
+ *                                                // cMoon at join time (CMoonCaptain — see
+ *                                                // server/utils/cmoon.js's own comment) — purely
+ *                                                // cosmetic (CMoonRaidFighter.vue's glow/badge,
+ *                                                // the raid page's one-time entrance banner),
+ *                                                // never a gameplay effect. A raid can have zero,
+ *                                                // one, or several captains at once, from the
+ *                                                // same or different cMoons.
  *   roundLog: [], startedAt, combatStartedAt, endedAt, outcome, resolving,
  *
  *   // ── Special attacks (see CMoonSpecialAttack's own schema comment and this file's sibling
@@ -373,7 +381,7 @@ async function loadRankTiers() {
 }
 
 async function loadParticipantProfile(userId, cMoonId) {
-  const [cMoon, user, tiers] = await Promise.all([
+  const [cMoon, user, tiers, isCaptain] = await Promise.all([
     db.cMoon.findUnique({
       where: { id: cMoonId },
       select: { id: true, name: true, color: true, avatarPath: true, specialAttack: true },
@@ -383,6 +391,10 @@ async function loadParticipantProfile(userId, cMoonId) {
       select: { currentCMoonRank: { select: { name: true, cMoonId: true, tierId: true, tier: { select: { name: true } } } } },
     }),
     loadRankTiers().catch(() => []),
+    // Snapshotted once here, same as every other field in this profile — a captain demoted
+    // mid-raid keeps the cosmetic treatment for that raid, same "settings persist independent of
+    // live changes" stance the rest of this snapshot already takes (team colors, rank, special).
+    isCMoonCaptain(cMoonId, userId),
   ])
   if (!cMoon) return null
   // A rank belongs to one cMoon; a leftover rank from a team they've since left isn't shown.
@@ -397,7 +409,12 @@ async function loadParticipantProfile(userId, cMoonId) {
     cMoonName: cMoon.name,
     cMoonColor: cMoon.color || null,
     cMoonAvatarPath: cMoon.avatarPath || null,
-    rankName: rank?.name || null,
+    isCaptain,
+    // Overrides the DISPLAYED rank name only, same "Captain" label swap every other surface
+    // (cZone, standings, leaderboard) already applies — see displayRankName's own comment.
+    // rankTierLevel/rankTierCount below are untouched, so the chevron insignia still reflects
+    // their real earned tier underneath the label.
+    rankName: displayRankName(rank?.name || null, isCaptain),
     rankTierName: rank?.tier?.name || null,
     rankTierLevel: rank ? rankTierLevel(tiers, rank.tierId) : 0,
     rankTierCount: tiers.length,
@@ -451,7 +468,7 @@ function addParticipant(raid, { userId, username, isInitiator, maxHp, profile = 
     pendingJoin: !!pendingJoin,
     isInitiator: !!isInitiator, pendingAction: null, joinedAt: Date.now(),
     hitStreak: 0, specialCharged: false,
-    cMoonId: null, cMoonName: null, cMoonColor: null, cMoonAvatarPath: null,
+    cMoonId: null, cMoonName: null, cMoonColor: null, cMoonAvatarPath: null, isCaptain: false,
     rankName: null, rankTierName: null, rankTierLevel: 0, rankTierCount: 0,
     specialAttack: null,
     ...(profile || {}),
@@ -972,7 +989,7 @@ export async function restoreCMoonRaids() {
   for (const [raidId, raid] of restored.entries()) {
     raid.participants = new Map(raid.participants.map(p => ([
       p.userId, {
-        hitStreak: 0, specialCharged: false, ...p,
+        hitStreak: 0, specialCharged: false, isCaptain: false, ...p,
         // A snapshot from before cross-cMoon raids has no per-participant special; every member
         // was then on the initiator's cMoon, so theirs IS raid.cMoonSpecialAttack.
         specialAttack: 'specialAttack' in p ? p.specialAttack : (raid.cMoonSpecialAttack ?? null),
