@@ -507,6 +507,14 @@
               <input v-model.number="memberForm.maxParticipants" type="number" min="1" max="8" class="w-full border rounded px-2 py-1 text-xs" />
               <p class="text-[10px] text-gray-500 mt-1">How many players this raid's party can hold. Changing this only affects raids started after you save.</p>
             </div>
+            <div v-if="memberForm.isRaidBoss">
+              <label class="block text-[11px] font-medium mb-1">Round limit (50-400)</label>
+              <input v-model.number="memberForm.raidRoundLimit" type="number" min="50" max="400" class="w-full border rounded px-2 py-1 text-xs" />
+              <p class="text-[10px] text-gray-500 mt-1">
+                If the raid reaches this many rounds with neither side defeated, it ends with no clear winner.
+                Changing this only affects raids started after you save.
+              </p>
+            </div>
             <div v-if="memberForm.isRaidBoss" class="pt-1">
               <label class="flex items-center gap-2">
                 <input type="checkbox" v-model="memberForm.windUpEnabled" />
@@ -1570,7 +1578,7 @@ const emptyMemberForm = () => ({
   attackChancePercent: 50, pityThreshold: 0, firstWinBonusPoints: 0,
   active: true, sortOrder: 0,
   isRaidBoss: false, raidAnnouncementText: '', raidOneTime: false, raidCooldownMinutes: 0,
-  maxParticipants: 4, windUpEnabled: false,
+  maxParticipants: 4, raidRoundLimit: 300, windUpEnabled: false,
 })
 const memberForm = reactive(emptyMemberForm())
 const memberPreviewImageSrc = computed(() => memberPendingFilePreviewUrl.value || memberSavedImagePath.value || '')
@@ -1633,7 +1641,7 @@ function startEditMember(m) {
     active: !!m.active, sortOrder: m.sortOrder,
     isRaidBoss: !!m.isRaidBoss, raidAnnouncementText: m.raidAnnouncementText || '',
     raidOneTime: !!m.raidOneTime, raidCooldownMinutes: m.raidCooldownMinutes ?? 0,
-    maxParticipants: m.maxParticipants ?? 4, windUpEnabled: !!m.windUpEnabled,
+    maxParticipants: m.maxParticipants ?? 4, raidRoundLimit: m.raidRoundLimit ?? 300, windUpEnabled: !!m.windUpEnabled,
   })
   memberSavedImagePath.value = m.imagePath || ''
   for (const s of SOUND_SLOTS) memberSoundState[s.key].savedPath = m[s.field] || ''
@@ -1747,6 +1755,11 @@ async function saveMember() {
     memberFormError.value = 'Max participants must be between 1 and 8.'
     return
   }
+  const raidRoundLimit = Math.trunc(Number(memberForm.raidRoundLimit)) || 300
+  if (!Number.isInteger(raidRoundLimit) || raidRoundLimit < 50 || raidRoundLimit > 400) {
+    memberFormError.value = 'Round limit must be between 50 and 400.'
+    return
+  }
 
   memberSaving.value = true
   try {
@@ -1775,6 +1788,7 @@ async function saveMember() {
       raidOneTime: memberForm.raidOneTime,
       raidCooldownMinutes,
       maxParticipants,
+      raidRoundLimit,
       windUpEnabled: memberForm.windUpEnabled,
     }
     let id = memberForm.id

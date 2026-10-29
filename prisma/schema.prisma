@@ -6201,6 +6201,15 @@ model CMoonEnemyMember {
   // own "persists independent of the on/off switch" stance — not force-reset when isRaidBoss is
   // toggled off.
   maxParticipants      Int       @default(4)
+  // Round-count safety valve for THIS raid boss, 50-400 (the original hardcoded
+  // RAID_MAX_ROUNDS_SAFETY was 100, then 150 — see that constant's own comment in
+  // server/utils/cmoonEnemyRaid.js, now only the fallback/default here). A raid that reaches this
+  // many rounds with neither side at 0 resolves ABANDONED ("no clear finish") rather than running
+  // forever. Snapshotted onto the in-memory raid at creation (raid.roundLimit), so changing this
+  // never affects a raid already FORMING/IN_PROGRESS. Meaningless unless isRaidBoss is also true,
+  // but — matching maxParticipants' own "persists independent of the on/off switch" stance — not
+  // force-reset when isRaidBoss is toggled off.
+  raidRoundLimit       Int       @default(300)
   // Master on/off switch for this boss's wind-up/telegraph moves (see CMoonEnemyWindUpMove) — a
   // boss with this on and at least one configured move rolls, each round, whether one of its
   // moves telegraphs instead of a normal round. Off by default so shipping this column changes

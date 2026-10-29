@@ -84,7 +84,7 @@ import {
   buildGrantableReward, isValidPlayerSubmittedAction, rollEnemyAction, rollEnemyRewards, PLAYER_MAX_HP,
   SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, mergeTauntPools,
 } from './cmoonEnemyBattle.js'
-import { resolveMemberSoundPaths } from './cmoonEnemy.js'
+import { resolveMemberSoundPaths, RAID_ROUND_LIMIT_MIN, RAID_ROUND_LIMIT_MAX } from './cmoonEnemy.js'
 import { markEnemyOfferAccepted } from './cmoonEnemyAnalytics.js'
 import { announceTeamEnemiesMilestone, checkAndAnnounceSeasonGoalReached } from './cmoonDiscordEvents.js'
 import {
@@ -154,6 +154,9 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *   // ── Lobby controls / up to 8 players / private lobbies / wind-up telegraphs ──────────────
  *   maxParticipants,      // this party's own cap, 1-8, snapshotted from
  *                         // CMoonEnemyMember.maxParticipants at creation (see cmoonraid:start).
+ *   roundLimit,           // this raid's own round-count safety valve, 50-400, snapshotted from
+ *                         // CMoonEnemyMember.raidRoundLimit at creation — see closeRound's own
+ *                         // ABANDONED branch.
  *   isPrivate,            // never listed in the site-wide lobby / notified / announced when true
  *                         // (see CMoonEnemyRaid.isPrivate) — still joinable by anyone with the URL.
  *   leaderKeepOpen,       // the initiator has paused sweep()'s join-window auto-start.
@@ -690,7 +693,7 @@ async function closeRound(io, raid) {
       await resolveCMoonRaidOutcome(io, raid, 'WIN')
     } else if (everyoneDown) {
       await resolveCMoonRaidOutcome(io, raid, 'LOSS')
-    } else if (nextRoundNumber >= RAID_MAX_ROUNDS_SAFETY) {
+    } else if (nextRoundNumber >= (raid.roundLimit || RAID_MAX_ROUNDS_SAFETY)) {
       await resolveCMoonRaidOutcome(io, raid, 'ABANDONED')
     } else {
       raid.roundNumber = nextRoundNumber
@@ -960,6 +963,7 @@ export async function restoreCMoonRaids() {
     // special-attack fields above (a missing numeric/Set field here would otherwise feed
     // undefined straight into this round's own arithmetic/comparisons).
     raid.maxParticipants ??= MAX_PARTY_SIZE
+    raid.roundLimit ??= RAID_MAX_ROUNDS_SAFETY
     raid.isPrivate ??= false
     raid.leaderKeepOpen ??= false
     raid.speedVotes = new Set(Array.isArray(raid.speedVotes) ? raid.speedVotes : [])
@@ -1085,6 +1089,11 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         maxParticipants: Number.isInteger(enemyMember.maxParticipants) && enemyMember.maxParticipants >= 1 && enemyMember.maxParticipants <= 8
           ? enemyMember.maxParticipants
           : MAX_PARTY_SIZE,
+        // Round-count safety valve, same "validate then snapshot, else fall back" shape as
+        // maxParticipants just above — see CMoonEnemyMember.raidRoundLimit's own schema comment.
+        roundLimit: Number.isInteger(enemyMember.raidRoundLimit) && enemyMember.raidRoundLimit >= RAID_ROUND_LIMIT_MIN && enemyMember.raidRoundLimit <= RAID_ROUND_LIMIT_MAX
+          ? enemyMember.raidRoundLimit
+          : RAID_MAX_ROUNDS_SAFETY,
         // Invite-only: never listed in the site-wide lobby, never notified/announced — see
         // CMoonEnemyRaid.isPrivate's own schema comment. Still joinable, cross-cMoon, by anyone
         // with the raid's own URL.

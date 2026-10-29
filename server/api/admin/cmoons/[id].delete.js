@@ -24,10 +24,13 @@ export default defineEventHandler(async (event) => {
   // onDelete: Cascade, so deleting now would also delete the raid's own row and every participant
   // row — including players from OTHER cMoons, since raids are cross-cMoon — and their whole
   // resolution (prizes, battle records, team wins) would then fail. A raid can't run longer than
-  // its join window plus RAID_MAX_ROUNDS_SAFETY rounds (well under an hour), so only recent
-  // unresolved rows block; an older one is a crash leftover that would otherwise block forever.
+  // its join window (up to 120s) plus its own CMoonEnemyMember.raidRoundLimit rounds at
+  // ROUND_TIMEOUT_SECONDS each — up to 400 rounds * 15s = 100 minutes at the admin-configurable
+  // ceiling, ~102 minutes worst case including the join window — so a 3-hour cutoff keeps a
+  // comfortable margin for restart/Redis-restore lag; only recent unresolved rows block, an older
+  // one is a crash leftover that would otherwise block forever.
   const liveRaid = await db.cMoonEnemyRaid.findFirst({
-    where: { cMoonId: id, status: { not: 'RESOLVED' }, startedAt: { gte: new Date(Date.now() - 2 * 60 * 60 * 1000) } },
+    where: { cMoonId: id, status: { not: 'RESOLVED' }, startedAt: { gte: new Date(Date.now() - 3 * 60 * 60 * 1000) } },
     select: { id: true },
   })
   if (liveRaid) {

@@ -12,6 +12,7 @@ import {
   parseTauntBody, isValidTauntText, isValidTauntTrigger, TAUNT_TRIGGERS, TAUNT_TEXT_MAX_LENGTH,
   ATTACK_CHANCE_DEFAULT, PITY_THRESHOLD_DEFAULT, FIRST_WIN_BONUS_POINTS_DEFAULT,
   MAX_PARTICIPANTS_DEFAULT, MAX_PARTICIPANTS_MIN, MAX_PARTICIPANTS_MAX,
+  RAID_ROUND_LIMIT_DEFAULT, RAID_ROUND_LIMIT_MIN, RAID_ROUND_LIMIT_MAX,
   parseWindUpMoveBody, WIND_UP_OCCURRENCE_PERCENT_DEFAULT, WIND_UP_DIRECTIONS, WIND_UP_BONUS_TYPES,
 } from '../server/utils/cmoonEnemy.js'
 
@@ -20,7 +21,7 @@ const baseMemberBody = {
   occurrencePercent: OCCURRENCE_PERCENT_DEFAULT,
   isRaidBoss: false, raidAnnouncementText: null, raidOneTime: false, raidCooldownMinutes: 0,
   attackChancePercent: ATTACK_CHANCE_DEFAULT, pityThreshold: PITY_THRESHOLD_DEFAULT, firstWinBonusPoints: FIRST_WIN_BONUS_POINTS_DEFAULT,
-  maxParticipants: MAX_PARTICIPANTS_DEFAULT, windUpEnabled: false,
+  maxParticipants: MAX_PARTICIPANTS_DEFAULT, raidRoundLimit: RAID_ROUND_LIMIT_DEFAULT, windUpEnabled: false,
 }
 
 test('isValidRank accepts every declared rank and rejects anything else', () => {
@@ -604,6 +605,32 @@ test('parseMemberBody: an update with no maxParticipants/windUpEnabled fields ke
   assert.equal(result.ok, true)
   assert.equal(result.data.maxParticipants, 8)
   assert.equal(result.data.windUpEnabled, true)
+})
+
+// ── raidRoundLimit (raid round-count safety valve, default 300, up to 400) ──────────────
+
+test('parseMemberBody: raidRoundLimit defaults to RAID_ROUND_LIMIT_DEFAULT on create when omitted', () => {
+  const result = parseMemberBody(baseMemberBody, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.raidRoundLimit, RAID_ROUND_LIMIT_DEFAULT)
+})
+
+test('parseMemberBody: accepts the full raidRoundLimit range and rejects outside it', () => {
+  assert.equal(parseMemberBody({ ...baseMemberBody, raidRoundLimit: RAID_ROUND_LIMIT_MIN }, undefined).ok, true)
+  assert.equal(parseMemberBody({ ...baseMemberBody, raidRoundLimit: RAID_ROUND_LIMIT_MAX }, undefined).ok, true)
+  assert.equal(parseMemberBody({ ...baseMemberBody, raidRoundLimit: RAID_ROUND_LIMIT_MIN - 1 }, undefined).ok, false)
+  assert.equal(parseMemberBody({ ...baseMemberBody, raidRoundLimit: RAID_ROUND_LIMIT_MAX + 1 }, undefined).ok, false)
+  assert.equal(parseMemberBody({ ...baseMemberBody, raidRoundLimit: 300.5 }, undefined).ok, false)
+})
+
+test('parseMemberBody: an update with no raidRoundLimit field in the body keeps the existing value', () => {
+  const existing = {
+    ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0,
+    raidRoundLimit: 400,
+  }
+  const result = parseMemberBody({ name: 'Renamed' }, existing)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.raidRoundLimit, 400)
 })
 
 // ── Wind-up/telegraph moves ───────────────────────────────────────────────

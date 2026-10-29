@@ -106,6 +106,15 @@ export const MAX_PARTICIPANTS_MIN = 1
 export const MAX_PARTICIPANTS_MAX = 8
 export const MAX_PARTICIPANTS_DEFAULT = 4
 
+// Round-count safety valve for a raid boss — see CMoonEnemyMember.raidRoundLimit's own schema
+// comment. 300 is the new default (the original hardcoded RAID_MAX_ROUNDS_SAFETY went 100 -> 150
+// -> this per-member override), with a floor high enough that no admin can accidentally make a
+// raid boss unwinnable-in-time (a raid that hits this cap with neither side at 0 resolves
+// ABANDONED) and a ceiling the feature request asked for explicitly.
+export const RAID_ROUND_LIMIT_MIN = 50
+export const RAID_ROUND_LIMIT_MAX = 400
+export const RAID_ROUND_LIMIT_DEFAULT = 300
+
 // Wind-up/telegraph moves (see CMoonEnemyWindUpMove's own schema comment) — same 0-100 "flat,
 // independent per-round chance" range as the admin form explains, deliberately a different
 // convention from OCCURRENCE_PERCENT_MIN/MAX above (that one's a relative weight, this one isn't).
@@ -372,6 +381,9 @@ export function parseMemberBody(body, existing) {
   const maxParticipants = body?.maxParticipants === undefined
     ? (existing ? existing.maxParticipants : MAX_PARTICIPANTS_DEFAULT)
     : toNumber(body.maxParticipants)
+  const raidRoundLimit = body?.raidRoundLimit === undefined
+    ? (existing ? existing.raidRoundLimit : RAID_ROUND_LIMIT_DEFAULT)
+    : toNumber(body.raidRoundLimit)
   const windUpEnabled = toBoolean(body?.windUpEnabled, existing ? !!existing.windUpEnabled : false)
 
   if (!factionId) {
@@ -454,6 +466,9 @@ export function parseMemberBody(body, existing) {
   if (!Number.isInteger(maxParticipants) || maxParticipants < MAX_PARTICIPANTS_MIN || maxParticipants > MAX_PARTICIPANTS_MAX) {
     return { ok: false, message: `Max participants must be a whole number between ${MAX_PARTICIPANTS_MIN} and ${MAX_PARTICIPANTS_MAX}` }
   }
+  if (!Number.isInteger(raidRoundLimit) || raidRoundLimit < RAID_ROUND_LIMIT_MIN || raidRoundLimit > RAID_ROUND_LIMIT_MAX) {
+    return { ok: false, message: `Raid round limit must be a whole number between ${RAID_ROUND_LIMIT_MIN} and ${RAID_ROUND_LIMIT_MAX}` }
+  }
   if (windUpEnabled === null) {
     return { ok: false, message: 'windUpEnabled must be true or false' }
   }
@@ -464,7 +479,7 @@ export function parseMemberBody(body, existing) {
       factionId, name, maxHp, battleMode, rank, minPriorDefeats, occurrencePercent, cMoonPointsReward,
       critChanceAgainstPercent, critChanceFromPercent, attackChancePercent, pityThreshold, firstWinBonusPoints,
       active, sortOrder,
-      isRaidBoss, raidAnnouncementText, raidOneTime, raidCooldownMinutes, maxParticipants, windUpEnabled,
+      isRaidBoss, raidAnnouncementText, raidOneTime, raidCooldownMinutes, maxParticipants, raidRoundLimit, windUpEnabled,
     },
   }
 }

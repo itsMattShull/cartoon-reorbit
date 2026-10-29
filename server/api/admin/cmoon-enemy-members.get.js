@@ -66,6 +66,7 @@ export default defineEventHandler(async (event) => {
       raidOneTime: m.raidOneTime,
       raidCooldownMinutes: m.raidCooldownMinutes,
       maxParticipants: m.maxParticipants,
+      raidRoundLimit: m.raidRoundLimit,
       windUpEnabled: m.windUpEnabled,
       raidDefeatedAt: m.raidDefeatedAt,
       defeatedAt: m.defeatedAt,
