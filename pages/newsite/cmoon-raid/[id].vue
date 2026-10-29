@@ -31,6 +31,15 @@
             <p v-if="captainEntranceBanner" class="cr-captain-banner">{{ captainEntranceBanner }}</p>
           </Transition>
 
+          <!-- Captain boost overlay — distinct from the one-time entrance banner above: this stays
+               up for the WHOLE lobby (not just a few seconds) and only fades once the raid actually
+               starts (see showCaptainBoostOverlay's own comment), rather than on a fixed timer. The
+               lowered hit-streak threshold itself keeps applying for the rest of the raid — only
+               this overlay is lobby-scoped. -->
+          <Transition name="cr-boost-fade">
+            <p v-if="showCaptainBoostOverlay" class="cr-boost-overlay">Captain present! Players boosted!</p>
+          </Transition>
+
           <div v-if="raid.isPrivate" class="cr-private-row">
             <span>🔒 Private raid — only reachable via this page's own link.</span>
             <button type="button" class="cr-link-btn" @click="copyInviteLink">{{ inviteLinkCopied ? 'Copied!' : 'Copy invite link' }}</button>
@@ -130,7 +139,7 @@
                     <span
                       v-if="p.specialAttack && !p.knockedOut" class="text-[10px] flex-shrink-0" :title="p.specialAttack.name"
                       :class="p.specialCharged ? 'cr-charge-ready' : 'text-gray-400'"
-                    >★{{ p.specialCharged ? '' : Math.min(p.hitStreak, 3) + '/3' }}</span>
+                    >★{{ p.specialCharged ? '' : Math.min(p.hitStreak, hitStreakThreshold) + '/' + hitStreakThreshold }}</span>
                     <span v-if="p.knockedOut" class="cr-fighter-status text-red-500">KO</span>
                     <span v-else-if="p.hasActed" class="cr-fighter-status text-green-600">Ready</span>
                     <span v-else class="cr-fighter-status text-gray-400">Deciding…</span>
@@ -230,7 +239,7 @@
                 >
                   <span class="cr-special-glow" aria-hidden="true"></span>
                   <span class="cr-special-label"><span class="cr-special-icon">★</span> {{ myself.specialAttack.name }}</span>
-                  <span class="cr-special-meter">{{ Math.min(myself.hitStreak, 3) }}/3</span>
+                  <span class="cr-special-meter">{{ Math.min(myself.hitStreak, hitStreakThreshold) }}/{{ hitStreakThreshold }}</span>
                 </button>
                 <button
                   type="button" class="cr-special-help" aria-label="What does this special attack do?"
@@ -387,12 +396,22 @@ function specialEffectDescription(attack) {
   }
 }
 const showSpecialInfo = ref(false)
-// 0/1/2/3 hits -> 0/33/66/100% fill, read by .cr-special-btn below via this CSS variable — stays
-// at 100% once charged even if hitStreak itself later resets (charge latches, same as solo's).
+// How many consecutive landed hits a special actually needs right now — 3 normally, or 2 whenever
+// a captain's boosting the party (see raid.hitStreakThreshold's own comment in cmoonRaidSocket.js).
+// Read everywhere this page used to hardcode "3", so the UI always matches the server's own math.
+const hitStreakThreshold = computed(() => raid.value?.hitStreakThreshold || 3)
+// 0..hitStreakThreshold hits -> 0-100% fill, read by .cr-special-btn below via this CSS variable —
+// stays at 100% once charged even if hitStreak itself later resets (charge latches, same as solo's).
 const specialFillStyle = computed(() => {
-  const pct = myself.value?.specialCharged ? 100 : Math.min(100, Math.round(((myself.value?.hitStreak || 0) / 3) * 100))
+  const pct = myself.value?.specialCharged ? 100 : Math.min(100, Math.round(((myself.value?.hitStreak || 0) / hitStreakThreshold.value) * 100))
   return { '--cr-special-fill': pct + '%' }
 })
+// Persistent-during-lobby "Captain boost" overlay — unlike the one-time entrance banner above,
+// this stays up for the WHOLE FORMING phase and fades specifically when the raid transitions to
+// IN_PROGRESS (the Transition below fires on this going false), not on a fixed timer. The
+// underlying gameplay effect (the lowered threshold itself) persists for the whole raid — only
+// this overlay is lobby-scoped.
+const showCaptainBoostOverlay = computed(() => raid.value?.status === 'FORMING' && hitStreakThreshold.value < 3)
 
 // FORMING's join-window countdown — a plain client-side ticker against joinDeadlineAt, not a
 // second source of truth: the server's sweep (see cmoonRaidSocket.js) is what actually closes
@@ -851,6 +870,36 @@ onUnmounted(() => {
 }
 @media (prefers-reduced-motion: reduce) {
   .cr-captain-banner { animation: none; }
+}
+
+/* Captain boost overlay — GlobalGameConfig.cMoonCaptainBoostEnabled's own epic callout (see
+   showCaptainBoostOverlay). Same gold "big deal" family as .cr-captain-banner above, but it's
+   meant to feel like it's hovering over the lobby for the whole wait rather than popping once, so
+   it gets a slow pulsing glow instead of a one-shot entrance animation, and a longer, graceful
+   fade (via .cr-boost-fade below) instead of .cr-reveal's quick opacity snap. */
+.cr-boost-overlay {
+  font-size: 14px;
+  font-weight: 800;
+  text-align: center;
+  letter-spacing: 0.01em;
+  color: #fff;
+  background: linear-gradient(90deg, #92400e, #d97706, #92400e);
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin: 0;
+  box-shadow: 0 0 20px rgba(250, 204, 21, 0.6);
+  animation: cr-boost-pulse 1.8s ease-in-out infinite;
+}
+@keyframes cr-boost-pulse {
+  0%, 100% { box-shadow: 0 0 14px rgba(250, 204, 21, 0.45); }
+  50% { box-shadow: 0 0 26px rgba(250, 204, 21, 0.85); }
+}
+.cr-boost-fade-enter-active { transition: opacity 0.4s ease; }
+.cr-boost-fade-leave-active { transition: opacity 0.9s ease; }
+.cr-boost-fade-enter-from, .cr-boost-fade-leave-to { opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .cr-boost-overlay { animation: none; }
 }
 
 .cr-first-win {

@@ -91,6 +91,7 @@ import {
   resolveRaidRound, JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE, RAID_MAX_ROUNDS_SAFETY,
   checkRaidBossAvailability, applyRaidSpecialAttack, participantCMoonId, raidCMoonIds, raidPartyLabel,
   splitRaidPoints, rankTierLevel, publicParticipantTeam, buildRaidLobby, rollWindUpMove,
+  effectiveHitStreakThreshold,
 } from './cmoonEnemyRaid.js'
 import * as raidRedis from './cmoonRaidRedisState.js'
 
@@ -187,6 +188,14 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *                         // ABANDONED branch.
  *   isPrivate,            // never listed in the site-wide lobby / notified / announced when true
  *                         // (see CMoonEnemyRaid.isPrivate) — still joinable by anyone with the URL.
+ *   captainBoostEnabled,  // GlobalGameConfig.cMoonCaptainBoostEnabled, snapshotted once at
+ *                         // creation (an admin flipping it mid-raid never retroactively changes
+ *                         // an in-flight raid, same snapshot discipline as maxParticipants/
+ *                         // roundLimit above). Whether it's actually IN EFFECT right now also
+ *                         // depends on whether a captain is currently in the party — that part is
+ *                         // recomputed live every time (see anyCaptainPresent/
+ *                         // effectiveHitStreakThreshold), never snapshotted, since a captain can
+ *                         // join a still-FORMING raid after someone else started it.
  *   leaderKeepOpen,       // the initiator has paused sweep()'s join-window auto-start.
  *   speedVotes,           // Set<userId> of current participants who voted to cut the join window
  *                         // down to 5s (see maybeApplySpeedVote) — NOT JSON-serializable, stored
@@ -240,6 +249,14 @@ function broadcastLobby() {
   })
 }
 
+// Recomputed fresh every time (never snapshotted) — a captain can join a still-FORMING raid after
+// someone else started it, so "is anyone a captain right now" can change over a raid's lifetime
+// even though raid.captainBoostEnabled itself (the admin toggle) is fixed at creation. Cheap: at
+// most 8 participants.
+function anyCaptainPresent(raid) {
+  return Array.from(raid.participants.values()).some(p => p.isCaptain)
+}
+
 /* ── Serialization ────────────────────────────────────────────────────────────────────────── */
 
 // Never includes currentEnemyAction (hidden until the round resolves) or any participant's
@@ -290,6 +307,13 @@ function publicRaidView(raid) {
     // counters just above. The enemy's own mirror is never sent, matching enemySpecialAttack's own
     // "don't reveal the boss's kit in advance" stance.
     partyAtkRaiseTurnsRemaining: raid.partyAtkRaiseTurnsRemaining || 0,
+    // The player-side hit-streak a special actually needs right now — 3 normally, or 2 when
+    // GlobalGameConfig.cMoonCaptainBoostEnabled was on at creation AND a captain is currently in
+    // the party (see effectiveHitStreakThreshold in cmoonEnemyRaid.js). Computed fresh on every
+    // view, never stored on `raid` itself, since captain presence can change while a raid is
+    // still FORMING. The client reads this instead of a hardcoded "3" for charge-meter labels/
+    // percentages, and derives "boosted" as hitStreakThreshold < 3.
+    hitStreakThreshold: effectiveHitStreakThreshold(!!raid.captainBoostEnabled, anyCaptainPresent(raid)),
     // How many players this raid's party can hold — snapshotted from
     // CMoonEnemyMember.maxParticipants at creation (1-8); the client reads this instead of a
     // hardcoded "4" for slot counts/labels.
@@ -673,6 +697,12 @@ async function closeRound(io, raid) {
       enemyAtkBonus: raid.enemyAtkBonus + (raid.enemyAtkRaiseTurnsRemaining > 0 ? raid.enemyAtkRaiseAmount : 0),
     })
 
+    // The threshold this round's banking math actually uses — 3 normally, or 2 for the whole
+    // party when GlobalGameConfig.cMoonCaptainBoostEnabled was on at creation AND a captain is
+    // currently in the raid (recomputed live, see anyCaptainPresent's own comment). Computed once
+    // here, not per-participant, since it's the same value for everyone this round — subtracting
+    // 3 while comparing against 2 (or vice versa) would silently corrupt the banking math below.
+    const hitStreakThreshold = effectiveHitStreakThreshold(!!raid.captainBoostEnabled, anyCaptainPresent(raid))
     for (const result of perParticipant) {
       const p = raid.participants.get(result.userId)
       p.hpRemaining = result.hpRemaining
@@ -681,16 +711,17 @@ async function closeRound(io, raid) {
       // This participant's OWN streak — see CMoonEnemyRaidParticipant's in-memory shape comment
       // above for why this stays per-player even though every other new field here is shared.
       if (firedSpecialUserIds.has(result.userId)) {
-        // Banks whatever they stacked past the 3 needed instead of discarding it — a player who
-        // deliberately holds off firing while still landing hits (e.g. reaching 5/3 before using
-        // it) keeps the leftover 2 toward their NEXT charge, rather than starting back at 0. The
-        // same >= HIT_STREAK_THRESHOLD rule below re-applies here too, so hoarding enough for two
-        // charges before firing once correctly leaves this player already charged again.
-        p.hitStreak = Math.max(0, p.hitStreak - HIT_STREAK_THRESHOLD)
-        p.specialCharged = p.hitStreak >= HIT_STREAK_THRESHOLD
+        // Banks whatever they stacked past the threshold needed instead of discarding it — a
+        // player who deliberately holds off firing while still landing hits (e.g. reaching 5/3
+        // before using it) keeps the leftover 2 toward their NEXT charge, rather than starting
+        // back at 0. The same >= hitStreakThreshold rule below re-applies here too, so hoarding
+        // enough for two charges before firing once correctly leaves this player already charged
+        // again.
+        p.hitStreak = Math.max(0, p.hitStreak - hitStreakThreshold)
+        p.specialCharged = p.hitStreak >= hitStreakThreshold
       } else {
         p.hitStreak = result.enemyHit ? p.hitStreak + 1 : 0
-        if (p.hitStreak >= HIT_STREAK_THRESHOLD) p.specialCharged = true
+        if (p.hitStreak >= hitStreakThreshold) p.specialCharged = true
       }
     }
     raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - enemyDamageDealt)
@@ -1047,6 +1078,7 @@ export async function restoreCMoonRaids() {
     raid.speedVotes = new Set(Array.isArray(raid.speedVotes) ? raid.speedVotes : [])
     raid.windUpMoves ??= []
     raid.currentWindUp ??= null
+    raid.captainBoostEnabled ??= false
     raids.set(raidId, raid)
     for (const uid of raid.participants.keys()) raidByUser.set(uid, raidId)
   }
@@ -1178,6 +1210,12 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         // CMoonEnemyRaid.isPrivate's own schema comment. Still joinable, cross-cMoon, by anyone
         // with the raid's own URL.
         isPrivate: !!isPrivate,
+        // GlobalGameConfig.cMoonCaptainBoostEnabled, snapshotted now so an admin flipping it
+        // mid-raid never retroactively changes an in-flight raid — same "validate then snapshot"
+        // discipline as maxParticipants/roundLimit above. Whether it's actually in effect right
+        // now additionally depends on whether a captain is currently in the party, which is
+        // recomputed live every time instead (see anyCaptainPresent/effectiveHitStreakThreshold).
+        captainBoostEnabled: !!config?.cMoonCaptainBoostEnabled,
         // Lobby controls (see cmoonraid:toggleKeepOpen/forceStart/voteSpeedUp below) — nobody has
         // paused or voted yet on a freshly-created raid.
         leaderKeepOpen: false,

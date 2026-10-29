@@ -50,6 +50,7 @@
 
 import {
   resolveBattleRound, rollHitDamage, isKnownAction, PLAYER_MAX_HP, HEAL_ON_SUCCESSFUL_BLOCK,
+  HIT_STREAK_THRESHOLD,
 } from './cmoonEnemyBattle.js'
 
 // FORMING -> auto-starts combat, whoever has joined by then. Only the hardcoded fallback now —
@@ -69,6 +70,24 @@ export const MAX_PARTY_SIZE = 4
 // a given raid boss's round cap now, same "constant stays only as the if-nothing-else-says-
 // otherwise value" role MAX_PARTY_SIZE plays above for maxParticipants.
 export const RAID_MAX_ROUNDS_SAFETY = 300
+
+// The player-side hit-streak threshold a raid actually uses once GlobalGameConfig.
+// cMoonCaptainBoostEnabled is on AND at least one captain (CMoonCaptain, see that model's own
+// comment) is present among the raid's current participants — see effectiveHitStreakThreshold
+// below. Lower than the normal HIT_STREAK_THRESHOLD (3, cmoonEnemyBattle.js) so a captain's
+// presence genuinely speeds up everyone's specials, not just a cosmetic callout. Never applied to
+// the boss's own separate enemyHitStreak counter (cmoonRaidSocket.js) — that's the enemy's own
+// auto-fire pacing, unrelated to this player-side boost.
+export const CAPTAIN_BOOST_HIT_STREAK_THRESHOLD = 2
+
+// `anyCaptainPresent` must be recomputed live each time this is called (participants can change
+// while a raid is still FORMING — a captain could join the lobby after someone else started it),
+// never snapshotted once like `captainBoostEnabled` itself is at raid creation. Returns the
+// ordinary HIT_STREAK_THRESHOLD whenever the toggle is off or no captain is in the party, so a
+// raid with the feature off behaves exactly as it did before this feature existed.
+export function effectiveHitStreakThreshold(captainBoostEnabled, anyCaptainPresent) {
+  return (captainBoostEnabled && anyCaptainPresent) ? CAPTAIN_BOOST_HIT_STREAK_THRESHOLD : HIT_STREAK_THRESHOLD
+}
 
 // Whether a raid boss can be started right now, given its own admin-configured
 // raidOneTime/raidCooldownMinutes and the raidDefeatedAt timestamp its last WIN set (see those

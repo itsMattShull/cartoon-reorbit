@@ -166,6 +166,13 @@ export default defineEventHandler(async (event) => {
     data.cMoonEnemyHigherTierFirst = !!body.cMoonEnemyHigherTierFirst
   }
 
+  // "Captain boost effect" — see GlobalGameConfig.cMoonCaptainBoostEnabled's own schema comment.
+  // Read live (never snapshotted onto an in-flight raid except the toggle itself) by
+  // effectiveHitStreakThreshold in server/utils/cmoonEnemyRaid.js.
+  if (body?.cMoonCaptainBoostEnabled !== undefined) {
+    data.cMoonCaptainBoostEnabled = !!body.cMoonCaptainBoostEnabled
+  }
+
   // cMoon points awarded for solving a riddle (either kind) — see claimCMoonRiddleSolve in
   // server/utils/cmoonRiddle.js, the only reader.
   if (body?.cMoonRiddlePoints !== undefined) {
@@ -330,6 +337,7 @@ export default defineEventHandler(async (event) => {
       cMoonEnemyBattleStartingStamina: existing?.cMoonEnemyBattleStartingStamina,
       cMoonEnemyBattleBlockCounterDamage: existing?.cMoonEnemyBattleBlockCounterDamage,
       cMoonEnemyHigherTierFirst: existing?.cMoonEnemyHigherTierFirst,
+      cMoonCaptainBoostEnabled: existing?.cMoonCaptainBoostEnabled,
       cMoonRiddlePoints: existing?.cMoonRiddlePoints,
       cMoonRiddleRotationEnabled: existing?.cMoonRiddleRotationEnabled,
       cMoonRiddleRotationDayOfWeek: existing?.cMoonRiddleRotationDayOfWeek,
@@ -367,6 +375,7 @@ export default defineEventHandler(async (event) => {
       cMoonEnemyBattleStartingStamina: updated.cMoonEnemyBattleStartingStamina,
       cMoonEnemyBattleBlockCounterDamage: updated.cMoonEnemyBattleBlockCounterDamage,
       cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,
+      cMoonCaptainBoostEnabled: updated.cMoonCaptainBoostEnabled,
       cMoonRiddlePoints: updated.cMoonRiddlePoints,
       cMoonRiddleRotationEnabled: updated.cMoonRiddleRotationEnabled,
       cMoonRiddleRotationDayOfWeek: updated.cMoonRiddleRotationDayOfWeek,
@@ -406,6 +415,7 @@ export default defineEventHandler(async (event) => {
     cMoonEnemyBattleStartingStamina: updated.cMoonEnemyBattleStartingStamina,
     cMoonEnemyBattleBlockCounterDamage: updated.cMoonEnemyBattleBlockCounterDamage,
     cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,
+    cMoonCaptainBoostEnabled: updated.cMoonCaptainBoostEnabled,
     cMoonRiddlePoints: updated.cMoonRiddlePoints,
     cMoonRiddleRotationEnabled: updated.cMoonRiddleRotationEnabled,
     cMoonRiddleRotationDayOfWeek: updated.cMoonRiddleRotationDayOfWeek,

@@ -30,6 +30,20 @@
           </span>
         </label>
         <p v-if="higherTierFirstError" class="text-red-600">{{ higherTierFirstError }}</p>
+
+        <label class="flex items-start gap-2">
+          <input type="checkbox" v-model="captainBoostEnabled" class="mt-0.5" @change="saveCaptainBoostEnabled" :disabled="savingCaptainBoostEnabled" />
+          <span>
+            <span class="font-medium">Captain boost effect</span>
+            <p class="text-[11px] text-gray-500 mt-0.5">
+              When on, any raid with a cMoon captain in the party shows an epic "Captain present!"
+              overlay during the lobby and lowers the special-attack hit-streak needed to 2 (instead
+              of 3) for every participant, for the whole raid. Off (default) leaves every raid
+              unaffected — raid boss fights only; solo battles never change.
+            </p>
+          </span>
+        </label>
+        <p v-if="captainBoostEnabledError" class="text-red-600">{{ captainBoostEnabledError }}</p>
       </section>
 
       <!-- ── Special attacks ──────────────────────────────────────── -->
@@ -958,6 +972,25 @@ async function saveHigherTierFirst() {
   }
 }
 
+// GlobalGameConfig.cMoonCaptainBoostEnabled — same shape/row/pattern as higherTierFirst above.
+const captainBoostEnabled = ref(false)
+const savingCaptainBoostEnabled = ref(false)
+const captainBoostEnabledError = ref('')
+
+async function saveCaptainBoostEnabled() {
+  captainBoostEnabledError.value = ''
+  const next = captainBoostEnabled.value
+  savingCaptainBoostEnabled.value = true
+  try {
+    await $fetch('/api/admin/cmoon-settings', { method: 'POST', body: { cMoonCaptainBoostEnabled: next } })
+  } catch (e) {
+    captainBoostEnabled.value = !next // revert the optimistic checkbox toggle on failure
+    captainBoostEnabledError.value = e?.data?.statusMessage || 'Failed to save'
+  } finally {
+    savingCaptainBoostEnabled.value = false
+  }
+}
+
 async function load() {
   loading.value = true
   loadError.value = ''
@@ -979,6 +1012,7 @@ async function load() {
     ctoonsCatalog.value = ctoonsData || []
     joinEffects.value = joinEffectsData?.effects || []
     higherTierFirst.value = !!cmoonsData?.cMoonEnemyHigherTierFirst
+    captainBoostEnabled.value = !!cmoonsData?.cMoonCaptainBoostEnabled
     specialAttacks.value = specialAttacksData?.attacks || []
   } catch (e) {
     loadError.value = e?.data?.statusMessage || 'Failed to load cMoon enemies'
