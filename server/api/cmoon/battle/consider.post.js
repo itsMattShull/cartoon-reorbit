@@ -10,7 +10,7 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { getGlobalConfig } from '@/server/utils/cmoon'
-import { serializeEnemyForClient, serializeBattleForClient } from '@/server/utils/cmoonEnemyBattle'
+import { serializeEnemyForClient, serializeBattleForClient, SPECIAL_ATTACK_SELECT } from '@/server/utils/cmoonEnemyBattle'
 import { checkRaidBossAvailability } from '@/server/utils/cmoonEnemyRaid'
 import { filterToHighestRank, pickWeightedEnemy, filterCappedNonRaidCandidates, countRecentSoloStarts } from '@/server/utils/cmoonEnemy'
 import { pingFinalBossAppeared } from '@/server/utils/cmoonDiscordEvents'
@@ -31,8 +31,14 @@ export default defineEventHandler(async (event) => {
   const inProgress = await db.cMoonEnemyBattle.findFirst({
     where: { userId, status: 'IN_PROGRESS' },
     include: {
-      enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } },
+      enemyMember: {
+        include: {
+          faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } },
+          taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+        },
+      },
       cMoon: { include: { specialAttack: true } },
+      user: { select: { chosenSpecialAttack: { select: SPECIAL_ATTACK_SELECT } } },
     },
   })
   if (inProgress) {
@@ -86,7 +92,10 @@ export default defineEventHandler(async (event) => {
       // player with no cMoon has no way to engage one at all, so it must never be offered to them.
       ...(user.cMoonId ? {} : { isRaidBoss: false }),
     },
-    include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } },
+    include: {
+      faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } },
+      taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+    },
   })
   // raidOneTime/raidCooldownMinutes can't be expressed as a single Prisma `where` filter (the
   // cooldown cutoff is a per-row computation against each member's own raidCooldownMinutes) — see
@@ -156,5 +165,15 @@ export default defineEventHandler(async (event) => {
     : null
   const pityEmptyWinStreak = chosen.pityThreshold > 0 ? (pityRow?.emptyWinStreak || 0) : null
 
-  return { offered: true, resumed: false, enemy: serializeEnemyForClient(chosen, pityEmptyWinStreak), inCMoon: !!user.cMoonId }
+  return {
+    offered: true, resumed: false, enemy: serializeEnemyForClient(chosen, pityEmptyWinStreak), inCMoon: !!user.cMoonId,
+    // Display-only hints for the OFFER screen's "Make this a private raid" checkbox and solo-fight
+    // flavor text (see CMoonBattlePopupHost.vue) — never the real gate, which cmoonraid:start/
+    // cmoonraid:forceStart enforce server-side regardless of what a stale client sends. Only
+    // meaningful for a raid boss; omitted entirely for a non-raid offer since neither applies.
+    ...(chosen.isRaidBoss ? {
+      raidPrivateLobbiesEnabled: config?.cMoonRaidPrivateLobbiesEnabled !== false,
+      raidSoloQueueEnabled: config?.cMoonRaidSoloQueueEnabled !== false,
+    } : {}),
+  }
 })

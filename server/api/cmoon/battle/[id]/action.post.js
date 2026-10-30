@@ -24,9 +24,12 @@ import {
   isValidPlayerSubmittedAction, resolveRound, rollEnemyRewards, buildGrantableReward,
   serializeBattleForClient, MAX_ROUNDS_SAFETY, HEAL_ON_SUCCESSFUL_BLOCK,
   SPECIAL_ACTION, HIT_STREAK_THRESHOLD, shouldForcePityReward, forcePickOneReward, grantSummaryIsEmpty,
-  isAttack,
+  isAttack, pickEffectiveSpecialAttack, SPECIAL_ATTACK_SELECT,
 } from '@/server/utils/cmoonEnemyBattle'
 
+// `user: { chosenSpecialAttack }` — this player's own special-attack choice (see
+// User.chosenSpecialAttackId), re-validated against CMoonSpecialAttack.playerChoice by
+// pickEffectiveSpecialAttack below rather than ever trusted on its own.
 const BATTLE_INCLUDE = {
   enemyMember: {
     include: {
@@ -37,9 +40,13 @@ const BATTLE_INCLUDE = {
           taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
         },
       },
+      // This member's OWN unique taunts (see CMoonEnemyMemberTaunt) — merged with the faction's
+      // shared pool above by mergeTauntPools in cmoonEnemyBattle.js.
+      taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
     },
   },
   cMoon: { include: { specialAttack: true } },
+  user: { select: { chosenSpecialAttack: { select: SPECIAL_ATTACK_SELECT } } },
 }
 
 export default defineEventHandler(async (event) => {
@@ -75,7 +82,7 @@ export default defineEventHandler(async (event) => {
   if (isSpecial && !battle.playerSpecialCharged) {
     throw createError({ statusCode: 409, statusMessage: 'Your special attack is not charged yet' })
   }
-  const playerSpecialAttack = battle.cMoon?.specialAttack || null
+  const playerSpecialAttack = pickEffectiveSpecialAttack(battle.user?.chosenSpecialAttack, battle.cMoon?.specialAttack)
   if (isSpecial && !playerSpecialAttack) {
     throw createError({ statusCode: 409, statusMessage: 'Your cMoon has no special attack assigned' })
   }
@@ -442,7 +449,7 @@ async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining, d
         playerHpRemaining, enemyHpRemaining: 0, damageDealt, playerStamina,
         roundLog, pointsAwarded, rewardsGranted, endedAt: new Date(), activeUserId: null,
       },
-      include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
+      include: BATTLE_INCLUDE,
     })
 
     return { updated, ctoonJobs: summary.ctoonJobs, updatedCMoon }
@@ -480,7 +487,7 @@ async function resolveLoss(battle, roundLog, submittedRound, enemyHpRemaining, d
         playerHpRemaining: 0, enemyHpRemaining, damageDealt, playerStamina,
         roundLog, endedAt: new Date(), activeUserId: null,
       },
-      include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
+      include: BATTLE_INCLUDE,
     })
   })
 }
@@ -496,7 +503,7 @@ async function resolveAbandoned(battle, roundLog, submittedRound, playerHpRemain
       playerHpRemaining, enemyHpRemaining, damageDealt, playerStamina,
       roundLog, endedAt: new Date(), activeUserId: null,
     },
-    include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
+    include: BATTLE_INCLUDE,
   })
 }
 
@@ -519,6 +526,6 @@ async function resolveUncredited(battle, roundLog, submittedRound, playerHpRemai
       playerHpRemaining, enemyHpRemaining: 0, damageDealt: 0, playerStamina,
       roundLog, endedAt: new Date(), activeUserId: null,
     },
-    include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
+    include: BATTLE_INCLUDE,
   })
 }

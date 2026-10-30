@@ -23,7 +23,7 @@ export const FACTION_DESCRIPTION_MAX_LENGTH = 500
 // high end of this range exists for SHARED_POOL raid-style enemies, whose HP is chipped away by
 // many players together.
 export const MAX_HP_MIN = 1
-export const MAX_HP_MAX = 200
+export const MAX_HP_MAX = 500
 
 export const CMOON_POINTS_REWARD_MIN = 0
 export const CMOON_POINTS_REWARD_MAX = 5000
@@ -98,6 +98,34 @@ export const RAID_ANNOUNCEMENT_MAX_LENGTH = 500
 export const RAID_COOLDOWN_MINUTES_MIN = 0
 export const RAID_COOLDOWN_MINUTES_MAX = 43200
 export const RAID_COOLDOWN_MINUTES_DEFAULT = 0
+
+// How many players a raid boss's party can hold — see CMoonEnemyMember.maxParticipants' own
+// schema comment. 4 (the original hardcoded MAX_PARTY_SIZE) stays the default so an existing raid
+// boss's behavior doesn't change until an admin explicitly raises it.
+export const MAX_PARTICIPANTS_MIN = 1
+export const MAX_PARTICIPANTS_MAX = 8
+export const MAX_PARTICIPANTS_DEFAULT = 4
+
+// Round-count safety valve for a raid boss — see CMoonEnemyMember.raidRoundLimit's own schema
+// comment. 300 is the new default (the original hardcoded RAID_MAX_ROUNDS_SAFETY went 100 -> 150
+// -> this per-member override), with a floor high enough that no admin can accidentally make a
+// raid boss unwinnable-in-time (a raid that hits this cap with neither side at 0 resolves
+// ABANDONED) and a ceiling the feature request asked for explicitly.
+export const RAID_ROUND_LIMIT_MIN = 50
+export const RAID_ROUND_LIMIT_MAX = 400
+export const RAID_ROUND_LIMIT_DEFAULT = 300
+
+// Wind-up/telegraph moves (see CMoonEnemyWindUpMove's own schema comment) — same 0-100 "flat,
+// independent per-round chance" range as the admin form explains, deliberately a different
+// convention from OCCURRENCE_PERCENT_MIN/MAX above (that one's a relative weight, this one isn't).
+export const WIND_UP_OCCURRENCE_PERCENT_MIN = 0
+export const WIND_UP_OCCURRENCE_PERCENT_MAX = 100
+export const WIND_UP_OCCURRENCE_PERCENT_DEFAULT = 25
+export const WIND_UP_BONUS_AMOUNT_MIN = 1
+export const WIND_UP_BONUS_AMOUNT_MAX = 999
+export const WIND_UP_TELEGRAPH_MESSAGE_MAX_LENGTH = 300
+export const WIND_UP_DIRECTIONS = ['HIGH', 'LOW']
+export const WIND_UP_BONUS_TYPES = ['HEAL_PARTY', 'DAMAGE_ENEMY']
 
 // The only CMoonEnemyMember columns a battle-sound upload may target — shared between
 // cmoon-enemy-members/[id]/sound.post.js (which validates the client-sent `slot` field against
@@ -350,6 +378,13 @@ export function parseMemberBody(body, existing) {
   const raidCooldownMinutes = body?.raidCooldownMinutes === undefined
     ? (existing ? existing.raidCooldownMinutes : RAID_COOLDOWN_MINUTES_DEFAULT)
     : toNumber(body.raidCooldownMinutes)
+  const maxParticipants = body?.maxParticipants === undefined
+    ? (existing ? existing.maxParticipants : MAX_PARTICIPANTS_DEFAULT)
+    : toNumber(body.maxParticipants)
+  const raidRoundLimit = body?.raidRoundLimit === undefined
+    ? (existing ? existing.raidRoundLimit : RAID_ROUND_LIMIT_DEFAULT)
+    : toNumber(body.raidRoundLimit)
+  const windUpEnabled = toBoolean(body?.windUpEnabled, existing ? !!existing.windUpEnabled : false)
 
   if (!factionId) {
     return { ok: false, message: 'Faction is required' }
@@ -428,6 +463,15 @@ export function parseMemberBody(body, existing) {
   if (!Number.isInteger(raidCooldownMinutes) || raidCooldownMinutes < RAID_COOLDOWN_MINUTES_MIN || raidCooldownMinutes > RAID_COOLDOWN_MINUTES_MAX) {
     return { ok: false, message: `Raid cooldown must be a whole number of minutes between ${RAID_COOLDOWN_MINUTES_MIN} and ${RAID_COOLDOWN_MINUTES_MAX}` }
   }
+  if (!Number.isInteger(maxParticipants) || maxParticipants < MAX_PARTICIPANTS_MIN || maxParticipants > MAX_PARTICIPANTS_MAX) {
+    return { ok: false, message: `Max participants must be a whole number between ${MAX_PARTICIPANTS_MIN} and ${MAX_PARTICIPANTS_MAX}` }
+  }
+  if (!Number.isInteger(raidRoundLimit) || raidRoundLimit < RAID_ROUND_LIMIT_MIN || raidRoundLimit > RAID_ROUND_LIMIT_MAX) {
+    return { ok: false, message: `Raid round limit must be a whole number between ${RAID_ROUND_LIMIT_MIN} and ${RAID_ROUND_LIMIT_MAX}` }
+  }
+  if (windUpEnabled === null) {
+    return { ok: false, message: 'windUpEnabled must be true or false' }
+  }
 
   return {
     ok: true,
@@ -435,9 +479,36 @@ export function parseMemberBody(body, existing) {
       factionId, name, maxHp, battleMode, rank, minPriorDefeats, occurrencePercent, cMoonPointsReward,
       critChanceAgainstPercent, critChanceFromPercent, attackChancePercent, pityThreshold, firstWinBonusPoints,
       active, sortOrder,
-      isRaidBoss, raidAnnouncementText, raidOneTime, raidCooldownMinutes,
+      isRaidBoss, raidAnnouncementText, raidOneTime, raidCooldownMinutes, maxParticipants, raidRoundLimit, windUpEnabled,
     },
   }
+}
+
+// Create-only, same shape/convention as parseRewardBody above (add-row/remove-row, no in-place
+// edit) — see CMoonEnemyWindUpMove's own schema comment for the occurrencePercent/bonus fields.
+export function parseWindUpMoveBody(body) {
+  const telegraphMessage = typeof body?.telegraphMessage === 'string' ? body.telegraphMessage.trim() : ''
+  if (!telegraphMessage || telegraphMessage.length > WIND_UP_TELEGRAPH_MESSAGE_MAX_LENGTH) {
+    return { ok: false, message: `Telegraph message is required (max ${WIND_UP_TELEGRAPH_MESSAGE_MAX_LENGTH} characters)` }
+  }
+  const direction = typeof body?.direction === 'string' ? body.direction.trim() : ''
+  if (!WIND_UP_DIRECTIONS.includes(direction)) {
+    return { ok: false, message: `Direction must be one of ${WIND_UP_DIRECTIONS.join(', ')}` }
+  }
+  const occurrencePercent = toNumber(body?.occurrencePercent)
+  if (!Number.isInteger(occurrencePercent) || occurrencePercent < WIND_UP_OCCURRENCE_PERCENT_MIN || occurrencePercent > WIND_UP_OCCURRENCE_PERCENT_MAX) {
+    return { ok: false, message: `Occurrence chance must be a whole number between ${WIND_UP_OCCURRENCE_PERCENT_MIN} and ${WIND_UP_OCCURRENCE_PERCENT_MAX}` }
+  }
+  const bonusType = typeof body?.bonusType === 'string' ? body.bonusType.trim() : ''
+  if (!WIND_UP_BONUS_TYPES.includes(bonusType)) {
+    return { ok: false, message: `Bonus type must be one of ${WIND_UP_BONUS_TYPES.join(', ')}` }
+  }
+  const bonusAmount = toNumber(body?.bonusAmount)
+  if (!Number.isInteger(bonusAmount) || bonusAmount < WIND_UP_BONUS_AMOUNT_MIN || bonusAmount > WIND_UP_BONUS_AMOUNT_MAX) {
+    return { ok: false, message: `Bonus amount must be a whole number between ${WIND_UP_BONUS_AMOUNT_MIN} and ${WIND_UP_BONUS_AMOUNT_MAX}` }
+  }
+
+  return { ok: true, data: { telegraphMessage, direction, occurrencePercent, bonusType, bonusAmount } }
 }
 
 // Create-only (reward rows are added/removed whole, never partially patched — see
@@ -604,6 +675,14 @@ export const SPECIAL_ATTACK_EFFECT_TYPES = [
 export const SPECIAL_ATTACK_AMOUNT_MIN = 1
 export const SPECIAL_ATTACK_AMOUNT_MAX = 999
 
+// Only meaningful for RAISE_ALLY_ATTACK — how many rounds its attack-stat raise lasts in a RAID
+// (see CMoonSpecialAttack.raiseDurationRounds' own schema comment; a solo battle ignores this
+// entirely). 300 stays the default so an existing RAISE_ALLY_ATTACK attack's behavior doesn't
+// meaningfully change until an admin explicitly lowers it.
+export const SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN = 1
+export const SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX = 300
+export const SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT = 300
+
 export function isValidSpecialAttackName(value) {
   return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= SPECIAL_ATTACK_NAME_MAX_LENGTH
 }
@@ -614,6 +693,10 @@ export function isValidSpecialAttackEffectType(value) {
 
 export function isValidSpecialAttackAmount(value) {
   return Number.isInteger(value) && value >= SPECIAL_ATTACK_AMOUNT_MIN && value <= SPECIAL_ATTACK_AMOUNT_MAX
+}
+
+export function isValidSpecialAttackRaiseDurationRounds(value) {
+  return Number.isInteger(value) && value >= SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN && value <= SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX
 }
 
 // Shared by the special-attack create/update endpoints — same `existing`-means-"leave unchanged
@@ -640,11 +723,20 @@ export function parseSpecialAttackBody(body, existing) {
   const amount = body?.amount === undefined
     ? (existing ? existing.amount : undefined)
     : toNumber(body.amount)
+  // Only meaningful for RAISE_ALLY_ATTACK (see that column's own schema comment) — validated
+  // below only for that effectType, same "ignore a stale value from switching the dropdown away
+  // and back" stance healsAllies takes just below.
+  const raiseDurationRoundsRaw = body?.raiseDurationRounds === undefined
+    ? (existing ? existing.raiseDurationRounds : SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT)
+    : toNumber(body.raiseDurationRounds)
   // Only meaningful for HEAL_SELF (see that column's own schema comment) — a truthy value sent
   // alongside any other effectType is silently normalized to false below rather than stored, so a
   // stale client payload (or a leftover value from switching the dropdown away from HEAL_SELF and
   // back) can never leave a meaningless flag set on a DAMAGE_OPPONENT/PARALYZE_OPPONENT/etc row.
   const healsAlliesRaw = toBoolean(body?.healsAllies, existing ? !!existing.healsAllies : false)
+  // Whether a player can choose this attack for themselves — see CMoonSpecialAttack.playerChoice's
+  // own schema comment. Independent of effectType, unlike healsAllies above.
+  const playerChoice = toBoolean(body?.playerChoice, existing ? !!existing.playerChoice : false)
 
   if (!isValidSpecialAttackName(name)) {
     return { ok: false, message: `Name is required (max ${SPECIAL_ATTACK_NAME_MAX_LENGTH} characters)` }
@@ -658,12 +750,19 @@ export function parseSpecialAttackBody(body, existing) {
   if (!isValidSpecialAttackAmount(amount)) {
     return { ok: false, message: `Amount must be a whole number between ${SPECIAL_ATTACK_AMOUNT_MIN} and ${SPECIAL_ATTACK_AMOUNT_MAX}` }
   }
+  if (effectType === 'RAISE_ALLY_ATTACK' && !isValidSpecialAttackRaiseDurationRounds(raiseDurationRoundsRaw)) {
+    return { ok: false, message: `Raise duration must be a whole number of rounds between ${SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN} and ${SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX}` }
+  }
   if (healsAlliesRaw === null) {
     return { ok: false, message: 'healsAllies must be true or false' }
   }
+  if (playerChoice === null) {
+    return { ok: false, message: 'playerChoice must be true or false' }
+  }
   const healsAllies = effectType === 'HEAL_SELF' ? healsAlliesRaw : false
+  const raiseDurationRounds = effectType === 'RAISE_ALLY_ATTACK' ? raiseDurationRoundsRaw : SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT
 
-  return { ok: true, data: { name, description, effectType, amount, healsAllies } }
+  return { ok: true, data: { name, description, effectType, amount, healsAllies, playerChoice, raiseDurationRounds } }
 }
 
 // Resolves a member's six battle sound paths, falling back to its faction's own default for
