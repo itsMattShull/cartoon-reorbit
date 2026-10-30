@@ -218,6 +218,41 @@
             announcements channel.
           </p>
           <p v-if="raidBossChannelError" class="text-[11px] text-red-600 mt-1">{{ raidBossChannelError }}</p>
+
+          <label class="block text-xs font-medium mb-1 mt-3">Raid join window, in seconds (15-120)</label>
+          <div class="flex items-center gap-2">
+            <input
+              v-model.number="raidJoinWindowSeconds" type="number" min="15" max="120" inputmode="numeric"
+              class="cm-field w-20 border rounded px-2 py-1" style="font-size:16px"
+            />
+            <button
+              class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              :disabled="raidJoinWindowSaving" @click="saveRaidJoinWindow"
+            >{{ raidJoinWindowSaving ? 'Saving…' : 'Save' }}</button>
+          </div>
+          <p class="text-[11px] text-gray-600 mt-1">
+            How long a FORMING raid's join window stays open by default before it auto-starts. A raid leader
+            can also keep their own lobby open past this (or vote to cut it to 5 seconds) from the raid page.
+          </p>
+          <p v-if="raidJoinWindowError" class="text-[11px] text-red-600 mt-1">{{ raidJoinWindowError }}</p>
+
+          <label class="block text-xs font-medium mb-1 mt-3">Solo raid reward multiplier, % (100-500)</label>
+          <div class="flex items-center gap-2">
+            <input
+              v-model.number="raidSoloRewardMultiplierPercent" type="number" min="100" max="500" inputmode="numeric"
+              class="cm-field w-20 border rounded px-2 py-1" style="font-size:16px"
+            />
+            <button
+              class="cm-tap px-3 text-xs font-semibold rounded-md border bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              :disabled="raidSoloRewardSaving" @click="saveRaidSoloRewardMultiplier"
+            >{{ raidSoloRewardSaving ? 'Saving…' : 'Save' }}</button>
+          </div>
+          <p class="text-[11px] text-gray-600 mt-1">
+            Multiplies the cMoon points a raid awards when it resolves with exactly one participant (fought
+            alone, by choice or because nobody else joined in time). 100 = no bonus. Points only — item/cToon
+            drop chances are unaffected.
+          </p>
+          <p v-if="raidSoloRewardError" class="text-[11px] text-red-600 mt-1">{{ raidSoloRewardError }}</p>
         </div>
       </div>
 
@@ -510,6 +545,40 @@
             <p v-if="!scoring.top10PointsBoardEnabled && !scoring.top10CtoonsBoardEnabled" class="text-[11px] text-amber-600 font-medium mt-1">
               Both site-wide boards are off — Top 10 points can still come from per-game leaderboards below.
             </p>
+          </div>
+
+          <!-- Solo Enemy Slayer leaderboard: scored the SAME two-tier way an eligible arcade game
+               is (see "High Score / Top 10 eligible games" below) — #1 earns a dedicated "first
+               place" bonus, and everyone in the top-N (rank cutoff above), #1 included, earns a
+               dedicated "top 10" bonus. Deliberately its own point amounts, independent of the
+               High Score/Top 10 points above — see GlobalGameConfig.cMoonEnemySlayerFirstPlacePoints's
+               own schema comment. Counts SOLO cMoon Enemy Battles victories only — a raid boss's
+               shared, per-participant win rows never count here, same as the public "Top Enemy
+               Slayers" leaderboard. -->
+          <div class="border-t pt-3 mt-3">
+            <div class="text-xs font-medium mb-1.5">Solo Enemy Slayer leaderboard</div>
+            <label class="cm-tap flex items-center gap-2 mb-2">
+              <input type="checkbox" v-model="scoring.enemySlayerBoardEnabled" />
+              <span class="text-xs">Award points for the all-time Solo Enemy Slayers leaderboard</span>
+            </label>
+            <div v-if="scoring.enemySlayerBoardEnabled" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium mb-1">First place points (weekly total)</label>
+                <input v-model.number="scoring.enemySlayerFirstPlacePoints" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
+                <p class="text-[11px] text-gray-500 mt-1">
+                  Per player, for holding rank #1 (all-time, solo victories only) — ÷7/day ≈
+                  {{ Math.round((scoring.enemySlayerFirstPlacePoints || 0) / 7) }} pts/day. Stacks with the top-10 bonus below.
+                </p>
+              </div>
+              <div>
+                <label class="block text-xs font-medium mb-1">Top 10 points (weekly total)</label>
+                <input v-model.number="scoring.enemySlayerTop10Points" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
+                <p class="text-[11px] text-gray-500 mt-1">
+                  Per player, for a top-{{ scoring.top10RankCutoff || 10 }} finish (rank cutoff
+                  above) on solo victories only — ÷7/day ≈ {{ Math.round((scoring.enemySlayerTop10Points || 0) / 7) }} pts/day.
+                </p>
+              </div>
+            </div>
           </div>
 
           <div class="border-t pt-3 mt-3">
@@ -1561,6 +1630,12 @@ const spawnCapError = ref('')
 const raidBossDiscordChannelId = ref('')
 const raidBossChannelSaving = ref(false)
 const raidBossChannelError = ref('')
+const raidJoinWindowSeconds = ref(60)
+const raidJoinWindowSaving = ref(false)
+const raidJoinWindowError = ref('')
+const raidSoloRewardMultiplierPercent = ref(100)
+const raidSoloRewardSaving = ref(false)
+const raidSoloRewardError = ref('')
 const enemyBattleDefaultHp = ref(5)
 const defaultHpSaving = ref(false)
 const defaultHpError = ref('')
@@ -2635,6 +2710,8 @@ async function load() {
     spawnCapCount.value = Number.isInteger(data.cMoonEnemySpawnCapCount) ? data.cMoonEnemySpawnCapCount : 0
     spawnCapWindowHours.value = Number.isInteger(data.cMoonEnemySpawnCapWindowHours) ? data.cMoonEnemySpawnCapWindowHours : 4
     raidBossDiscordChannelId.value = data.cMoonRaidBossDiscordChannelId || ''
+    raidJoinWindowSeconds.value = data.cMoonRaidJoinWindowSeconds ?? 60
+    raidSoloRewardMultiplierPercent.value = data.cMoonRaidSoloRewardMultiplierPercent ?? 100
     enemyBattleDefaultHp.value = Number.isInteger(data.cMoonEnemyBattleDefaultHp) ? data.cMoonEnemyBattleDefaultHp : 5
     enemyBattleStartingStamina.value = Number.isInteger(data.cMoonEnemyBattleStartingStamina) ? data.cMoonEnemyBattleStartingStamina : 3
     enemyBattleBlockCounterDamage.value = Number.isInteger(data.cMoonEnemyBattleBlockCounterDamage) ? data.cMoonEnemyBattleBlockCounterDamage : 1
@@ -2674,6 +2751,9 @@ const scoring = reactive({
   top10RankCutoff: 10,
   top10PointsBoardEnabled: true,
   top10CtoonsBoardEnabled: true,
+  enemySlayerBoardEnabled: true,
+  enemySlayerFirstPlacePoints: 100,
+  enemySlayerTop10Points: 50,
   disabledScoreGames: [],
   disabledWinGames: [],
   runHour: 0,
@@ -2741,6 +2821,9 @@ async function loadScoring() {
       top10RankCutoff: data.top10RankCutoff,
       top10PointsBoardEnabled: data.top10PointsBoardEnabled,
       top10CtoonsBoardEnabled: data.top10CtoonsBoardEnabled,
+      enemySlayerBoardEnabled: data.enemySlayerBoardEnabled,
+      enemySlayerFirstPlacePoints: data.enemySlayerFirstPlacePoints,
+      enemySlayerTop10Points: data.enemySlayerTop10Points,
       disabledScoreGames: data.disabledScoreGames || [],
       disabledWinGames: data.disabledWinGames || [],
       runHour: data.runHour ?? 0,
@@ -2809,6 +2892,9 @@ function scoringRiskWarnings() {
     warnings.push('the Top 10 bonus will be effectively disabled (no boards enabled)')
   }
   if (enabledGameCount.value === 0) warnings.push('the High Score bonus will be effectively disabled (no games selected)')
+  if (scoring.enemySlayerBoardEnabled && scoring.enemySlayerFirstPlacePoints === 0 && scoring.enemySlayerTop10Points === 0) {
+    warnings.push('the Solo Enemy Slayer bonus will award 0 points')
+  }
   return warnings
 }
 
@@ -2828,6 +2914,9 @@ async function saveScoring() {
       top10RankCutoff: scoring.top10RankCutoff,
       top10PointsBoardEnabled: scoring.top10PointsBoardEnabled,
       top10CtoonsBoardEnabled: scoring.top10CtoonsBoardEnabled,
+      enemySlayerBoardEnabled: scoring.enemySlayerBoardEnabled,
+      enemySlayerFirstPlacePoints: scoring.enemySlayerFirstPlacePoints,
+      enemySlayerTop10Points: scoring.enemySlayerTop10Points,
       disabledScoreGames: scoring.disabledScoreGames,
       disabledWinGames: scoring.disabledWinGames,
       runHour: scoring.runHour,
@@ -2843,6 +2932,9 @@ async function saveScoring() {
       top10RankCutoff: res.top10RankCutoff,
       top10PointsBoardEnabled: res.top10PointsBoardEnabled,
       top10CtoonsBoardEnabled: res.top10CtoonsBoardEnabled,
+      enemySlayerBoardEnabled: res.enemySlayerBoardEnabled,
+      enemySlayerFirstPlacePoints: res.enemySlayerFirstPlacePoints,
+      enemySlayerTop10Points: res.enemySlayerTop10Points,
       disabledScoreGames: res.disabledScoreGames || [],
       disabledWinGames: res.disabledWinGames || [],
       runHour: res.runHour ?? 0,
@@ -2953,6 +3045,38 @@ async function saveRaidBossDiscordChannel() {
     raidBossChannelError.value = e?.data?.statusMessage || 'Failed to save raid boss Discord channel'
   } finally {
     raidBossChannelSaving.value = false
+  }
+}
+
+async function saveRaidJoinWindow() {
+  raidJoinWindowSaving.value = true
+  raidJoinWindowError.value = ''
+  try {
+    const res = await $fetch('/api/admin/cmoon-settings', {
+      method: 'POST',
+      body: { cMoonRaidJoinWindowSeconds: raidJoinWindowSeconds.value },
+    })
+    raidJoinWindowSeconds.value = res.cMoonRaidJoinWindowSeconds
+  } catch (e) {
+    raidJoinWindowError.value = e?.data?.statusMessage || 'Failed to save raid join window'
+  } finally {
+    raidJoinWindowSaving.value = false
+  }
+}
+
+async function saveRaidSoloRewardMultiplier() {
+  raidSoloRewardSaving.value = true
+  raidSoloRewardError.value = ''
+  try {
+    const res = await $fetch('/api/admin/cmoon-settings', {
+      method: 'POST',
+      body: { cMoonRaidSoloRewardMultiplierPercent: raidSoloRewardMultiplierPercent.value },
+    })
+    raidSoloRewardMultiplierPercent.value = res.cMoonRaidSoloRewardMultiplierPercent
+  } catch (e) {
+    raidSoloRewardError.value = e?.data?.statusMessage || 'Failed to save solo raid reward multiplier'
+  } finally {
+    raidSoloRewardSaving.value = false
   }
 }
 

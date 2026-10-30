@@ -5,10 +5,25 @@ import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { assertSameOrigin } from '@/server/utils/requireAdmin'
 import { getGlobalConfig, getPlayerCombatMaxHp } from '@/server/utils/cmoon'
-import { ABANDON_AFTER_MINUTES } from '@/server/utils/cmoonEnemyBattle'
+import { ABANDON_AFTER_MINUTES, SPECIAL_ATTACK_SELECT } from '@/server/utils/cmoonEnemyBattle'
 import { serializeBattleForClient } from '@/server/utils/cmoonEnemyBattle'
 import { countRecentSoloStarts } from '@/server/utils/cmoonEnemy'
 import { markEnemyOfferAccepted } from '@/server/utils/cmoonEnemyAnalytics'
+
+// `user: { chosenSpecialAttack }` — see action.post.js's own BATTLE_INCLUDE comment; the same
+// relation is needed everywhere a battle is serialized back to the client.
+const BATTLE_INCLUDE = {
+  enemyMember: {
+    include: {
+      faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } },
+      // This member's OWN unique taunts (see CMoonEnemyMemberTaunt) — merged with the faction's
+      // shared pool above by mergeTauntPools in cmoonEnemyBattle.js.
+      taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+    },
+  },
+  cMoon: { include: { specialAttack: true } },
+  user: { select: { chosenSpecialAttack: { select: SPECIAL_ATTACK_SELECT } } },
+}
 
 export default defineEventHandler(async (event) => {
   assertSameOrigin(event)
@@ -32,7 +47,7 @@ export default defineEventHandler(async (event) => {
   // while) instead of leaving the player permanently soft-locked out of ever fighting again.
   const existing = await db.cMoonEnemyBattle.findFirst({
     where: { userId, status: 'IN_PROGRESS' },
-    include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
+    include: BATTLE_INCLUDE,
   })
   if (existing) {
     const idleMs = Date.now() - existing.lastActionAt.getTime()
@@ -129,7 +144,7 @@ export default defineEventHandler(async (event) => {
         playerMaxStamina,
         activeUserId: userId,
       },
-      include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
+      include: BATTLE_INCLUDE,
     })
     // Engagement signal for the popup cooldown/spawn-cap — see User.lastCMoonBattlePopupAt and
     // CMoonEnemyPopupLog's own schema comments on why this moved here from consider.post.js's own
@@ -150,7 +165,7 @@ export default defineEventHandler(async (event) => {
     if (err?.code === 'P2002') {
       const winner = await db.cMoonEnemyBattle.findFirst({
         where: { userId, status: 'IN_PROGRESS' },
-        include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
+        include: BATTLE_INCLUDE,
       })
       if (winner) return { battle: serializeBattleForClient(winner) }
     }

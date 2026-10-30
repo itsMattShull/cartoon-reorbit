@@ -10,8 +10,8 @@
           <button type="button" class="rl-close" aria-label="Close raid boss lobby" @click="close">✕</button>
         </div>
         <p class="rl-sub">
-          Team up with players from any cMoon. Each raid opens for 60 seconds, then the fight starts with whoever joined.
-          Everyone earns points for their own cMoon.
+          Team up with players from any cMoon. Each raid's join window stays open for a bit (the leader can extend or
+          speed it up), then the fight starts with whoever joined. Everyone earns points for their own cMoon.
         </p>
 
         <p v-if="!raidSocket.lobbyViewer.value.inCMoon" class="rl-note">
