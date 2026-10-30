@@ -13,13 +13,13 @@ export default defineEventHandler(async () => {
   const config = await getGlobalConfig()
   if (!config?.cMoonEnabled) return []
 
-  const [cmoons, currentMemberTotals] = await Promise.all([
+  const [cmoons, currentMemberTotals, battleCounts] = await Promise.all([
     db.cMoon.findMany({
       // Locked cMoons don't appear on the team-standings leaderboard at all — this is a separate
       // concern from the general per-user cMoon badge lookup (leaderboard/cmoon-badges.post.js),
       // which stays unfiltered so locked-cMoon members keep their badge on non-cMoon boards.
       where: { joinLocked: false },
-      select: { id: true, name: true, color: true, memberCount: true, teamScore: true, battleWins: true, battleLosses: true },
+      select: { id: true, name: true, color: true, memberCount: true, teamScore: true },
     }),
     // Sum of CMoonScoreLog points actually earned FOR each team, not teamScore (which sums every
     // point the team has EVER earned, including from members who've since left — see
@@ -50,9 +50,30 @@ export default defineEventHandler(async () => {
         AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
       GROUP BY u."cMoonId"
     `,
+    // Live-computed, NOT the stored CMoon.battleWins/battleLosses counter: that counter has
+    // already mixed raid + solo wins together since before this PR (one increment per solo win,
+    // one per CREDITED TEAM per raid win — see cmoonRaidSocket.js's resolveCMoonRaidOutcome and
+    // action.post.js's own increment), so it can't be un-mixed retroactively. This board shows
+    // solo wins/losses as the headline "vs enemies" stat and raid wins/losses as their own fully
+    // independent count — same raidId-is-null-vs-set discriminator leaderboard/cmoon-enemies.get.js
+    // already uses, and for the same reason: a raid's synthetic rows are one per PARTICIPANT, so
+    // folding them into one number would let raid turnout outweigh solo performance.
+    db.$queryRaw`
+      SELECT
+        b."cMoonId",
+        COUNT(*) FILTER (WHERE b."raidId" IS NULL AND b."outcome" = 'WIN')::int AS "soloWins",
+        COUNT(*) FILTER (WHERE b."raidId" IS NULL AND b."outcome" = 'LOSS')::int AS "soloLosses",
+        COUNT(*) FILTER (WHERE b."raidId" IS NOT NULL AND b."outcome" = 'WIN')::int AS "raidWins",
+        COUNT(*) FILTER (WHERE b."raidId" IS NOT NULL AND b."outcome" = 'LOSS')::int AS "raidLosses"
+      FROM "CMoonEnemyBattle" b
+      WHERE b."cMoonId" IS NOT NULL
+      GROUP BY b."cMoonId"
+    `,
   ])
 
   const currentMemberTotalById = new Map(currentMemberTotals.map(r => [r.cMoonId, r.total]))
+  const battleCountsById = new Map(battleCounts.map(r => [r.cMoonId, r]))
+  const emptyBattleCounts = { soloWins: 0, soloLosses: 0, raidWins: 0, raidLosses: 0 }
 
   // Site-wide average (across every unlocked cMoon being ranked here) that small teams' averages
   // get shrunk toward below — computed from the same totals already fetched above, no extra query.
@@ -85,7 +106,7 @@ export default defineEventHandler(async () => {
       const avgScore = c.memberCount > 0
         ? (c.memberCount / (c.memberCount + shrinkageK)) * ownAvg + (shrinkageK / (c.memberCount + shrinkageK)) * siteAvg
         : 0
-      return { ...c, avgScore }
+      return { ...c, avgScore, ...(battleCountsById.get(c.id) || emptyBattleCounts) }
     })
     .sort((a, b) => b.avgScore - a.avgScore || a.name.localeCompare(b.name))
 

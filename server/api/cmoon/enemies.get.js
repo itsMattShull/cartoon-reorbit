@@ -14,7 +14,12 @@ export default defineEventHandler(async (event) => {
   if (!userId) throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
 
   // Same lifetime-win-count gate consider.post.js reads minPriorDefeats against — see that
-  // column's own schema comment for why this is global, not per-faction/per-member.
+  // column's own schema comment for why this is global, not per-faction/per-member. A raid boss
+  // member is gated on personalSoloWinCount instead (see the `locked` check below) — same reason
+  // loadEligibility/consider.post.js scope a raid boss's own gate to solo wins: a shared raid win
+  // (one synthetic row per participant off a single kill) must not unlock a harder raid boss
+  // faster than someone's own solo record would. Every other (non-raid-boss) member keeps this
+  // combined count.
   const personalWinCount = await db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN' } })
 
   const factions = await db.cMoonEnemyFaction.findMany({
@@ -39,7 +44,18 @@ export default defineEventHandler(async (event) => {
   // new tables and nothing cached between requests. favoriteEnemyId is just winTallies' own max
   // entry; the matching name is filled in below once the faction/member list is built, since
   // that's the one place this handler already has every member's name in hand.
-  const personalLossCount = await db.cMoonEnemyBattle.count({ where: { userId, outcome: 'LOSS' } })
+  //
+  // The headline Wins/Losses tiles are solo-only (raidId: null), with raid wins/losses shown as
+  // their own fully independent tiles — NOT folded into one number. A raid credits one synthetic
+  // row per PARTICIPANT for a single shared kill (see CMoonEnemyBattle.raidId's own schema
+  // comment), so blending it into "your personal win count" would let how many raids you joined,
+  // not how many fights you actually won, dominate your own stat strip.
+  const [personalSoloWinCount, personalSoloLossCount, personalRaidWinCount, personalRaidLossCount] = await Promise.all([
+    db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN', raidId: null } }),
+    db.cMoonEnemyBattle.count({ where: { userId, outcome: 'LOSS', raidId: null } }),
+    db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN', raidId: { not: null } } }),
+    db.cMoonEnemyBattle.count({ where: { userId, outcome: 'LOSS', raidId: { not: null } } }),
+  ])
   const favoriteTally = winTallies.length
     ? winTallies.reduce((best, t) => (t._count._all > best._count._all ? t : best))
     : null
@@ -63,8 +79,10 @@ export default defineEventHandler(async (event) => {
   })
 
   return {
-    personalWinCount,
-    personalLossCount,
+    personalWinCount: personalSoloWinCount,
+    personalLossCount: personalSoloLossCount,
+    personalRaidWinCount,
+    personalRaidLossCount,
     favoriteEnemy: favoriteEnemyName ? { name: favoriteEnemyName, wins: favoriteTally._count._all } : null,
     recentCommunityKills: recentCommunityKills.map(k => ({
       username: k.user?.username || 'Someone',
@@ -77,9 +95,12 @@ export default defineEventHandler(async (event) => {
       description: f.description,
       bannerImagePath: f.bannerImagePath,
       members: f.members.map(m => {
-        const locked = personalWinCount < m.minPriorDefeats
+        // A raid boss's own gate is solo-only (see personalWinCount's own comment above) — every
+        // other member keeps the combined count.
+        const myWinCount = m.isRaidBoss ? personalSoloWinCount : personalWinCount
+        const locked = myWinCount < m.minPriorDefeats
         if (locked) {
-          const remaining = m.minPriorDefeats - personalWinCount
+          const remaining = m.minPriorDefeats - myWinCount
           return {
             id: m.id,
             locked: true,

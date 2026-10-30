@@ -73,17 +73,22 @@ export async function nextSeasonNumber() {
   return (top?.seasonNumber || 0) + 1
 }
 
+// raidId: null on both — same reasoning as topSlayerOverall's own comment just below: these feed
+// the season win/loss leaderboard, the "Enemies Defeated" season goal bar, and the admin
+// BATTLE_WINS/BATTLE_LOSSES trackers, all of which must count a raid win as its own fully
+// independent thing rather than let a shared raid kill (one synthetic row per participant) inflate
+// a total/ranking the way it legitimately should for minPriorDefeats/achievements elsewhere.
 async function battleCountsBounded(startAt, endAt, outcome) {
   const rows = await prisma.cMoonEnemyBattle.groupBy({
     by: ['cMoonId'],
-    where: { outcome, endedAt: { gte: startAt, lt: endAt } },
+    where: { outcome, raidId: null, endedAt: { gte: startAt, lt: endAt } },
     _count: { _all: true },
   })
   return new Map(rows.map(r => [r.cMoonId, r._count._all]))
 }
 
 async function totalEnemiesDefeatedBounded(startAt, endAt) {
-  return prisma.cMoonEnemyBattle.count({ where: { outcome: 'WIN', endedAt: { gte: startAt, lt: endAt } } })
+  return prisma.cMoonEnemyBattle.count({ where: { outcome: 'WIN', raidId: null, endedAt: { gte: startAt, lt: endAt } } })
 }
 
 async function seasonPointTotalsBounded(startAt, endAt) {
@@ -130,7 +135,11 @@ export async function seasonLeaderboard(season) {
 export async function topSlayerOverall(startAt, endAt) {
   const rows = await prisma.cMoonEnemyBattle.groupBy({
     by: ['userId'],
-    where: { outcome: 'WIN', endedAt: { gte: startAt, lt: endAt } },
+    // raidId: null — same reasoning as topSlayerForCMoon's own comment in cmoonDiscordEvents.js:
+    // this is a solo-kill-style callout ("Season's top slayer"), so a shared raid win (one
+    // synthetic row per participant off a single kill) must not inflate it the way it legitimately
+    // should for progression gates/achievements/team goals elsewhere.
+    where: { outcome: 'WIN', raidId: null, endedAt: { gte: startAt, lt: endAt } },
     _count: { _all: true },
     // `orderBy: { _count: { _all: 'desc' } }` is rejected by this Prisma client version ("Unknown
     // argument `_all`") — order by a specific grouped field's count instead, same row-count value
