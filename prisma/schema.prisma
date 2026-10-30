@@ -1918,9 +1918,14 @@ model GlobalGameConfig {
   // settings endpoint.
   cMoonEnemySpawnCapCount              Int       @default(0)
   cMoonEnemySpawnCapWindowHours        Int       @default(4) // only meaningful while the cap above is > 0
-  // Discord channel a raid-boss announcement posts to (see announceCMoonRaidBoss in
-  // server/utils/discord.js) — same admin-configurable-with-env-fallback shape as
-  // achievementDiscordChannelId/czoneContestDiscordChannelId above.
+  // The SOLE Discord channel every raid boss's announcement/round-feed/recap posts into (see
+  // resolveCMoonRaidDiscordChannelId in server/utils/discord.js, called with no per-cMoon channel
+  // for raid purposes) — same admin-configurable-with-env-fallback shape as
+  // achievementDiscordChannelId/czoneContestDiscordChannelId above. Deliberately never a per-cMoon
+  // channel for raids any more: every raid boss gets its own single persistent thread inside this
+  // one channel (CMoonEnemyMember.discordThreadId) instead of flooding each team's own channel
+  // with a fresh thread per raid attempt. CMoon.discordChannelId is still used for a cMoon's other
+  // own content (see that column's own comment) — just no longer for raids.
   cMoonRaidBossDiscordChannelId        String?
   // How long a raid's FORMING join window stays open by default — see JOIN_WINDOW_SECONDS in
   // server/utils/cmoonEnemyRaid.js, which this now overrides (that constant is only the
@@ -4201,13 +4206,14 @@ model CMoon {
   textColor          String? // overrides primary text (auto: text)
   cardBgColor        String? // overrides tile/card backgrounds, incl. featured cToon cards (auto: tileBg)
   discordRoleId      String? // Discord role snowflake granted to members (add-only sync)
-  // Discord channel snowflake this team's own content posts to: raid-boss announcements/live
-  // round-by-round updates/recap (server/utils/cmoonRaidSocket.js), and anything else that's
-  // genuinely this ONE team's activity rather than a site-wide broadcast. Distinct from
-  // GlobalGameConfig.cMoonRaidBossDiscordChannelId, which remains the fallback for a cMoon that
-  // hasn't set this — so turning this on is opt-in per team, not a breaking change for any cMoon
-  // an admin hasn't gotten to yet. Same admin-configurable-with-fallback shape as every other
-  // Discord channel setting in this codebase (see cmoon-settings.post.js's own fields).
+  // Discord channel snowflake this team's own content posts to: milestone/rank-up announcements
+  // (cmoonDiscordEvents.js), riddle-solved pings (cmoonRiddle.js), cMoon hunt events
+  // (cmoonHunt.js) — anything that's genuinely this ONE team's activity rather than a site-wide
+  // broadcast. NOT raid-boss activity any more (announcement/round-feed/recap) — those always
+  // post to the single shared GlobalGameConfig.cMoonRaidBossDiscordChannelId now, regardless of
+  // this field, so every team's own channel isn't flooded by other teams' (or its own) raids; see
+  // that column's own comment. Same admin-configurable-with-fallback shape as every other Discord
+  // channel setting in this codebase (see cmoon-settings.post.js's own fields).
   discordChannelId   String?
   // Optional full-screen animation played on cMoon-select and achievement-claim (see enum above).
   // Null = no effect, proceed immediately. Mutually exclusive with customJoinEffectId below.
@@ -6237,6 +6243,19 @@ model CMoonEnemyMember {
   // built-in default (see DEFAULT_RAID_ANNOUNCEMENT_TEXT) rather than every admin having to type
   // the same boilerplate — only set this to override the wording for a specific boss.
   raidAnnouncementText String?
+  // This boss's OWN persistent Discord thread id — created the first time ANY raid is ever
+  // started against this member (see postRaidStartToBossThread in cmoonRaidSocket.js) and reused
+  // by every later raid against it forever after, rather than opening a fresh thread per raid
+  // attempt. The whole point is to stop every raid's own call-to-arms/round-feed/recap messages
+  // from flooding into a cMoon's team channel or multiplying one-off threads there — they all
+  // land in this one thread, inside the single shared channel
+  // GlobalGameConfig.cMoonRaidBossDiscordChannelId resolves to (CMoon.discordChannelId is no
+  // longer consulted for raid posts at all, only for other, unrelated team content). Posting into
+  // an archived thread auto-unarchives it on Discord's side, so staying null between a boss's
+  // raids for weeks is harmless. Null until the first raid; never cleared by raidOneTime/
+  // raidCooldownMinutes/reset.post.js reviving this boss, since the thread itself should keep
+  // accumulating history across every revival rather than fragmenting into a new one each time.
+  discordThreadId      String?
   // Once true, a WIN against this raid boss (raidDefeatedAt gets set — see that column) blocks it
   // from ever being offered/started again until an admin manually revives it (reset.post.js),
   // same "stays dead until an admin says otherwise" shape as a SHARED_POOL solo member's own

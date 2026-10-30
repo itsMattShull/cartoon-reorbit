@@ -213,9 +213,10 @@
             >{{ raidBossChannelSaving ? 'Saving…' : 'Save' }}</button>
           </div>
           <p class="text-[11px] text-gray-600 mt-1">
-            Where a "raid boss started" announcement posts (see the raid boss checkbox on a Final
-            Boss member in Manage cMoon Enemies). Blank falls back to the site's default
-            announcements channel.
+            Every raid boss's announcement, round-by-round feed, and recap now posts here — one
+            shared channel for all teams, with each raid boss getting its own single ongoing
+            Discord thread (reused across every raid against it) instead of flooding individual
+            cMoon team channels. Blank falls back to the site's default announcements channel.
           </p>
           <p v-if="raidBossChannelError" class="text-[11px] text-red-600 mt-1">{{ raidBossChannelError }}</p>
 

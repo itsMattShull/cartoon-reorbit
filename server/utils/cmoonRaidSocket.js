@@ -108,10 +108,14 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  * raid: {
  *   id, enemyMemberId, cMoonId, cMoonName, status: 'FORMING'|'IN_PROGRESS'|'RESOLVED',
  *   discordChannelId,                        // resolved once at creation, see resolveCMoonRaidDiscordChannelId
- *   discordThreadId,                         // set once the "call to arms" thread is created (may lag
- *                                             // the raid's own creation by a round trip) — null until
- *                                             // then, and forever if thread creation failed; see
- *                                             // raidDiscordPostTarget below for the fallback this implies
+ *                                             // — always the single shared raid-boss channel now, never
+ *                                             // a per-cMoon one; see postRaidStartToBossThread below
+ *   discordThreadId,                         // this BOSS's own persistent thread (CMoonEnemyMember.
+ *                                             // discordThreadId), copied onto the raid once resolved (may
+ *                                             // lag the raid's own creation by a round trip the first time
+ *                                             // a boss is ever raided) — null until then, and forever if
+ *                                             // thread creation failed; see raidDiscordPostTarget below
+ *                                             // for the fallback this implies
  *   enemyName, enemyImagePath,               // display snapshot, taken once at creation
  *   enemySounds: { appearSoundPath, damageTakenSoundPath, damageAvoidedSoundPath,
  *                  attackingSoundPath, victorySoundPath, defeatSoundPath },  // ditto
@@ -624,6 +628,39 @@ function raidDiscordPostTarget(raid) {
   return raid.discordThreadId || raid.discordChannelId
 }
 
+// Every raid against the SAME boss shares one persistent Discord thread (CMoonEnemyMember.
+// discordThreadId) instead of each raid opening its own — that one-thread-per-raid-instance
+// design was exactly what was flooding cMoon team channels with a fresh thread every time
+// anyone raided a popular boss. The first-ever raid against a given boss still posts the usual
+// call-to-arms message (so there's something to anchor a new thread to) and persists the
+// resulting thread id onto the boss itself; every later raid against that same boss just posts a
+// fresh "a new raid is starting" line straight into the existing thread — Discord auto-unarchives
+// a thread on a new message, so it doesn't matter how long it's been since the last one. Returns
+// the thread id to snapshot onto the raid (or null if nothing could be posted/created).
+async function postRaidStartToBossThread(enemyMember, channelId, { cMoonName }) {
+  if (enemyMember.discordThreadId) {
+    await sendCMoonTeamUpdate(enemyMember.discordThreadId, `🚨 ${cMoonName} is starting a new raid against **${enemyMember.name}**!`)
+    return enemyMember.discordThreadId
+  }
+  const messageId = await announceCMoonRaidBoss(channelId, {
+    cMoonName, enemyName: enemyMember.name, announcementTemplate: enemyMember.raidAnnouncementText,
+  })
+  if (!messageId) return null
+  const threadId = await startThreadFromMessage(channelId, messageId, `⚔️ ${enemyMember.name} raid`)
+  if (threadId) {
+    // Conditioned on still being null: if two players raided this same, previously-never-raided
+    // boss at almost the same moment, both branches above race to create a thread — this makes
+    // sure only the FIRST one to finish becomes the boss's permanent thread, rather than every
+    // later raid flip-flopping onto whichever write happened to land last. The loser's own
+    // thread still works fine for its own raid; it just won't be reused afterward.
+    await db.cMoonEnemyMember.updateMany({
+      where: { id: enemyMember.id, discordThreadId: null },
+      data: { discordThreadId: threadId },
+    }).catch(() => {})
+  }
+  return threadId
+}
+
 // `enemyHit`/`playerHit` here are named from resolveBattleRound's perspective (see that
 // function's own comment): enemyHit = this participant's attack landed ON the enemy,
 // playerHit = the enemy's attack landed ON this participant. Checked in priority order so a
@@ -853,25 +890,14 @@ async function closeRound(io, raid) {
   }
 }
 
-// The recap goes to the call-to-arms thread (initiator's team) AND to every other participating
-// team's own raid channel, so each cMoon sees how its members did. Deduped: teams without their
-// own channel all fall back to the same global raid channel, which should only get it once.
+// Every raid against this same boss already shares one persistent thread (see
+// postRaidStartToBossThread) — every cMoon that fought in a cross-cMoon raid already sees the
+// same recap there, so there's no more need to also fan it out to each participating team's own
+// channel the way this used to (back when each team had its own raid channel/thread).
 async function postRaidRecap(raid, { pointsAwarded }) {
   const message = formatRaidRecapMessage(raid, { pointsAwarded })
-  const targets = new Set()
-  const primary = raidDiscordPostTarget(raid)
-  if (primary) targets.add(primary)
-  const otherTeamIds = raidCMoonIds(raid).filter(id => id !== raid.cMoonId)
-  if (otherTeamIds.length) {
-    const teams = await db.cMoon.findMany({ where: { id: { in: otherTeamIds } }, select: { discordChannelId: true } })
-    for (const t of teams) {
-      const channelId = await resolveCMoonRaidDiscordChannelId(db, t.discordChannelId)
-      // The initiator's thread lives inside its parent channel — don't post the recap to that
-      // parent too when another team shares it.
-      if (channelId && channelId !== raid.discordChannelId) targets.add(channelId)
-    }
-  }
-  for (const target of targets) sendCMoonTeamUpdate(target, message)
+  const target = raidDiscordPostTarget(raid)
+  if (target) sendCMoonTeamUpdate(target, message)
 }
 
 /* ── Resolution: the one place a raid touches Postgres beyond its own create/resolve rows ───── */
@@ -1210,18 +1236,23 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       const elig = await loadEligibility({ userId: me.id, enemyMember })
       if (!elig.ok) return socket.emit(EV('error'), { message: elig.message })
 
-      // raid.cMoonId is the INITIATOR's cMoon — where the Discord call-to-arms lives. Joiners
-      // from other cMoons bring their own team/special snapshot (loadParticipantProfile).
+      // raid.cMoonId is the INITIATOR's cMoon. Joiners from other cMoons bring their own
+      // team/special snapshot (loadParticipantProfile) — Discord-wise there's nothing per-cMoon
+      // left to resolve any more, see discordChannelId below.
       const cMoon = await db.cMoon.findUnique({
         where: { id: elig.user.cMoonId },
-        select: { id: true, name: true, discordChannelId: true, specialAttack: true },
+        select: { id: true, name: true, specialAttack: true },
       })
       if (!cMoon) return socket.emit(EV('error'), { message: 'Your cMoon could not be found' })
       const initiatorProfile = await loadParticipantProfile(me.id, cMoon.id)
       if (!initiatorProfile) return socket.emit(EV('error'), { message: 'Your cMoon could not be found' })
 
       const initiatorMaxHp = await getPlayerCombatMaxHp(me.id, config)
-      const discordChannelId = await resolveCMoonRaidDiscordChannelId(db, cMoon.discordChannelId)
+      // Always the single shared raid-boss channel (GlobalGameConfig.cMoonRaidBossDiscordChannelId,
+      // env fallback) — passing null rather than a cMoon's own discordChannelId is what keeps every
+      // raid's announcement/round-feed/recap out of individual cMoon team channels, see this
+      // member's own discordThreadId comment in schema.prisma for the thread half of that.
+      const discordChannelId = await resolveCMoonRaidDiscordChannelId(db, null)
       const raidId = randomUUID()
       const raidJoinWindowMs = (
         Number.isInteger(config?.cMoonRaidJoinWindowSeconds) && config.cMoonRaidJoinWindowSeconds > 0
@@ -1355,15 +1386,10 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       // players via its own URL, shared by whoever started it. Everything else (join, cross-cMoon
       // eligibility, rewards) is unchanged either way.
       if (!raid.isPrivate) {
-        announceCMoonRaidBoss(discordChannelId, {
-          cMoonName: cMoon.name, enemyName: enemyMember.name,
-          announcementTemplate: enemyMember.raidAnnouncementText,
-        }).then(async messageId => {
-          if (!messageId) return
-          const threadId = await startThreadFromMessage(discordChannelId, messageId, `⚔️ ${enemyMember.name} raid`)
+        postRaidStartToBossThread(enemyMember, discordChannelId, { cMoonName: cMoon.name }).then(threadId => {
           // The raid may have already resolved and been destroyed by the time this round trip
-          // finishes (two round-trip Discord calls, vs. a raid that can close in ~20s) — only
-          // mutate/persist it if it's still the live instance for this id, never a stale one.
+          // finishes (one or two round-trip Discord calls, vs. a raid that can close in ~20s) —
+          // only mutate/persist it if it's still the live instance for this id, never a stale one.
           if (threadId && raids.get(raidId) === raid) {
             raid.discordThreadId = threadId
             fireSync(raidId, raid)
