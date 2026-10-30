@@ -73,7 +73,7 @@
 
 import { randomUUID } from 'crypto'
 import { prisma as db } from '../prisma.js'
-import { getGlobalConfig, getPlayerCombatMaxHp, resolveEffectiveSpecialAttack, isCMoonCaptain, displayRankName } from './cmoon.js'
+import { getGlobalConfig, getPlayerCombatMaxHp, isCMoonCaptain, displayRankName } from './cmoon.js'
 import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from './achievements.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 import { announceCMoonRaidBoss, resolveCMoonRaidDiscordChannelId, sendCMoonTeamUpdate, startThreadFromMessage } from './discord.js'
@@ -83,6 +83,7 @@ import { pushUserNotifications } from './realtimeNotify.js'
 import {
   buildGrantableReward, isValidPlayerSubmittedAction, rollEnemyAction, rollEnemyRewards, PLAYER_MAX_HP,
   SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, mergeTauntPools,
+  pickEffectiveSpecialAttack, SPECIAL_ATTACK_SELECT,
 } from './cmoonEnemyBattle.js'
 import { resolveMemberSoundPaths, RAID_ROUND_LIMIT_MIN, RAID_ROUND_LIMIT_MAX } from './cmoonEnemy.js'
 import { markEnemyOfferAccepted } from './cmoonEnemyAnalytics.js'
@@ -432,9 +433,15 @@ async function loadParticipantProfile(userId, cMoonId) {
       where: { id: cMoonId },
       select: { id: true, name: true, color: true, avatarPath: true, specialAttack: true },
     }),
+    // Also selects chosenSpecialAttack here (merged into the SAME User row lookup rather than a
+    // second findUnique via resolveEffectiveSpecialAttack in cmoon.js) — one query per
+    // participant on every raid join/start instead of two.
     db.user.findUnique({
       where: { id: userId },
-      select: { currentCMoonRank: { select: { name: true, cMoonId: true, tierId: true, tier: { select: { name: true } } } } },
+      select: {
+        currentCMoonRank: { select: { name: true, cMoonId: true, tierId: true, tier: { select: { name: true } } } },
+        chosenSpecialAttack: { select: SPECIAL_ATTACK_SELECT },
+      },
     }),
     loadRankTiers().catch(() => []),
     // Snapshotted once here, same as every other field in this profile — a captain demoted
@@ -447,9 +454,9 @@ async function loadParticipantProfile(userId, cMoonId) {
   const rank = user?.currentCMoonRank && user.currentCMoonRank.cMoonId === cMoon.id ? user.currentCMoonRank : null
   // This participant's EFFECTIVE special attack — their own chosen one (see
   // User.chosenSpecialAttackId) if it's still playerChoice-enabled, else their cMoon's own
-  // assigned special, exactly like the solo battle now resolves it (see resolveEffectiveSpecialAttack
-  // in server/utils/cmoon.js). Snapshotted once here, same as the rest of this profile.
-  const specialAttack = await resolveEffectiveSpecialAttack(userId, cMoon.specialAttack)
+  // assigned special, exactly like the solo battle now resolves it (see pickEffectiveSpecialAttack
+  // in server/utils/cmoonEnemyBattle.js). Snapshotted once here, same as the rest of this profile.
+  const specialAttack = pickEffectiveSpecialAttack(user?.chosenSpecialAttack, cMoon.specialAttack)
   return {
     cMoonId: cMoon.id,
     cMoonName: cMoon.name,
@@ -546,7 +553,12 @@ function startCombat(io, raid) {
 // check and apply once the round resolves. Cleared every round regardless, so a round that didn't
 // roll one never carries a stale telegraph into the next.
 function openRound(io, raid) {
-  const windUp = rollWindUpMove(raid.windUpMoves)
+  // Never roll a wind-up while the boss is paralyzed (raid.enemyParalyzedTurns > 0, see
+  // closeRound's effectiveEnemyAction override) — a paralyzed boss deals no damage THIS round
+  // regardless of what the party does, so a telegraphed lane would be both misleading (warning of
+  // an attack that was never coming) and free (the party could "perfectly block" it with zero
+  // actual risk, earning the configured bonus for nothing).
+  const windUp = raid.enemyParalyzedTurns > 0 ? null : rollWindUpMove(raid.windUpMoves)
   if (windUp) {
     raid.currentEnemyAction = windUp.direction === 'HIGH' ? 'ATTACK_HIGH' : 'ATTACK_LOW'
     raid.currentWindUp = {
@@ -567,16 +579,24 @@ function openRound(io, raid) {
 
 // ── Lobby controls (see cmoonraid:toggleKeepOpen/forceStart/voteSpeedUp below) ─────────────────
 // Re-evaluated after every vote AND after every join/leave (the denominator — current participant
-// count — changes then too). Once every CURRENT participant has voted and the party isn't already
-// full (a full party starts on its own via the join handler, with nothing left to "speed up"),
-// clamps the join window down to 5 seconds from now and clears any leaderKeepOpen pause — a leader
-// keeping the lobby open can still be overridden by a unanimous party vote.
+// count — changes then too). Once every CURRENT non-leader participant has voted and the party
+// isn't already full (a full party starts on its own via the join handler, with nothing left to
+// "speed up"), clamps the join window down to 5 seconds from now and clears any leaderKeepOpen
+// pause — a leader keeping the lobby open can still be overridden by a unanimous party vote.
+//
+// The leader is deliberately EXCLUDED from both the numerator and the denominator — they already
+// have strictly more direct control (cmoonraid:forceStart starts instantly, no 5s wait), and the
+// client never shows them a vote button at all (see pages/newsite/cmoon-raid/[id].vue's own
+// `v-if="!isInitiator && ..."` on that button). Counting them in the denominator without any way
+// for them to actually cast a vote would make "unanimous" unreachable for any raid with more than
+// one participant — exactly the bug this comment is here to prevent reintroducing.
 function maybeApplySpeedVote(raid) {
   if (raid.status !== 'FORMING') return
   const size = raid.participants.size
   const maxParticipants = raid.maxParticipants || MAX_PARTY_SIZE
   if (size === 0 || size >= maxParticipants) return
-  if (raid.speedVotes.size < size) return
+  const voterCount = size - 1 // every participant except the one-and-only leader
+  if (voterCount <= 0 || raid.speedVotes.size < voterCount) return
   raid.joinDeadlineAt = Math.min(raid.joinDeadlineAt, Date.now() + 5000)
   raid.leaderKeepOpen = false
 }

@@ -107,12 +107,14 @@
               </p>
             </div>
 
-            <!-- Any non-leader participant can vote to cut the countdown to 5s, once everyone
-                 currently in agrees — see maybeApplySpeedVote in cmoonRaidSocket.js. -->
+            <!-- Any non-leader participant can vote to cut the countdown to 5s, once every OTHER
+                 non-leader participant agrees too — see maybeApplySpeedVote in cmoonRaidSocket.js,
+                 whose denominator deliberately excludes the leader (they already have "Start now"
+                 for an instant start, and never get a vote button here). -->
             <button
               v-if="!isInitiator && hasJoined && raid.participants.length < raid.maxParticipants"
               type="button" class="cr-link-btn" @click="raidSocket.voteSpeedUp(raidId)"
-            >Vote to start in 5s ({{ raid.speedVoteCount }}/{{ raid.participants.length }})</button>
+            >Vote to start in 5s ({{ raid.speedVoteCount }}/{{ raid.participants.length - 1 }})</button>
           </div>
 
           <!-- ── IN_PROGRESS: live combat ─────────────────────────────────── -->
