@@ -108,27 +108,6 @@ export default defineEventHandler(async (event) => {
     data.cMoonRaidBossDiscordChannelId = raw || null
   }
 
-  // How long a raid's FORMING join window stays open by default — see
-  // GlobalGameConfig.cMoonRaidJoinWindowSeconds' own schema comment. 15-120s; a raid leader's own
-  // keep-open/speed-vote controls (cmoonRaidSocket.js) operate independently on top of this.
-  if (body?.cMoonRaidJoinWindowSeconds !== undefined) {
-    const seconds = Number(body.cMoonRaidJoinWindowSeconds)
-    if (!Number.isInteger(seconds) || seconds < 15 || seconds > 120) {
-      throw createError({ statusCode: 400, statusMessage: 'Raid join window must be a whole number of seconds between 15 and 120' })
-    }
-    data.cMoonRaidJoinWindowSeconds = seconds
-  }
-
-  // Solo-raid points multiplier — see GlobalGameConfig.cMoonRaidSoloRewardMultiplierPercent's own
-  // schema comment. 100 = no bonus (the default), up to 500.
-  if (body?.cMoonRaidSoloRewardMultiplierPercent !== undefined) {
-    const pct = Number(body.cMoonRaidSoloRewardMultiplierPercent)
-    if (!Number.isInteger(pct) || pct < 100 || pct > 500) {
-      throw createError({ statusCode: 400, statusMessage: 'Solo raid reward multiplier must be a whole number between 100 and 500' })
-    }
-    data.cMoonRaidSoloRewardMultiplierPercent = pct
-  }
-
   // Every player's starting/max HP for a cMoon Enemy Battle (solo or raid) — see
   // getPlayerCombatMaxHp() in server/utils/cmoon.js, the only reader. Bounded the same way
   // CMoonEnemyMember's own maxHp is (server/utils/cmoonEnemy.js's MAX_HP_MIN/MAX_HP_MAX): each
@@ -164,24 +143,6 @@ export default defineEventHandler(async (event) => {
   // comment. Read by consider.post.js's candidate roll, nowhere else.
   if (body?.cMoonEnemyHigherTierFirst !== undefined) {
     data.cMoonEnemyHigherTierFirst = !!body.cMoonEnemyHigherTierFirst
-  }
-
-  // "Captain boost effect" — see GlobalGameConfig.cMoonCaptainBoostEnabled's own schema comment.
-  // Read live (never snapshotted onto an in-flight raid except the toggle itself) by
-  // effectiveHitStreakThreshold in server/utils/cmoonEnemyRaid.js.
-  if (body?.cMoonCaptainBoostEnabled !== undefined) {
-    data.cMoonCaptainBoostEnabled = !!body.cMoonCaptainBoostEnabled
-  }
-
-  // Solo raid queueing / private raid lobbies — see GlobalGameConfig.cMoonRaidSoloQueueEnabled/
-  // cMoonRaidPrivateLobbiesEnabled's own schema comments. Snapshotted onto each raid at creation
-  // (cmoonraid:start) same as every other raid-wide toggle, so flipping either here never
-  // retroactively changes a raid already in flight.
-  if (body?.cMoonRaidSoloQueueEnabled !== undefined) {
-    data.cMoonRaidSoloQueueEnabled = !!body.cMoonRaidSoloQueueEnabled
-  }
-  if (body?.cMoonRaidPrivateLobbiesEnabled !== undefined) {
-    data.cMoonRaidPrivateLobbiesEnabled = !!body.cMoonRaidPrivateLobbiesEnabled
   }
 
   // cMoon points awarded for solving a riddle (either kind) — see claimCMoonRiddleSolve in
@@ -342,15 +303,10 @@ export default defineEventHandler(async (event) => {
       cMoonEnemySpawnCapCount: existing?.cMoonEnemySpawnCapCount,
       cMoonEnemySpawnCapWindowHours: existing?.cMoonEnemySpawnCapWindowHours,
       cMoonRaidBossDiscordChannelId: existing?.cMoonRaidBossDiscordChannelId,
-      cMoonRaidJoinWindowSeconds: existing?.cMoonRaidJoinWindowSeconds,
-      cMoonRaidSoloRewardMultiplierPercent: existing?.cMoonRaidSoloRewardMultiplierPercent,
       cMoonEnemyBattleDefaultHp: existing?.cMoonEnemyBattleDefaultHp,
       cMoonEnemyBattleStartingStamina: existing?.cMoonEnemyBattleStartingStamina,
       cMoonEnemyBattleBlockCounterDamage: existing?.cMoonEnemyBattleBlockCounterDamage,
       cMoonEnemyHigherTierFirst: existing?.cMoonEnemyHigherTierFirst,
-      cMoonCaptainBoostEnabled: existing?.cMoonCaptainBoostEnabled,
-      cMoonRaidSoloQueueEnabled: existing?.cMoonRaidSoloQueueEnabled,
-      cMoonRaidPrivateLobbiesEnabled: existing?.cMoonRaidPrivateLobbiesEnabled,
       cMoonRiddlePoints: existing?.cMoonRiddlePoints,
       cMoonRiddleRotationEnabled: existing?.cMoonRiddleRotationEnabled,
       cMoonRiddleRotationDayOfWeek: existing?.cMoonRiddleRotationDayOfWeek,
@@ -382,15 +338,10 @@ export default defineEventHandler(async (event) => {
       cMoonEnemySpawnCapCount: updated.cMoonEnemySpawnCapCount,
       cMoonEnemySpawnCapWindowHours: updated.cMoonEnemySpawnCapWindowHours,
       cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
-      cMoonRaidJoinWindowSeconds: updated.cMoonRaidJoinWindowSeconds,
-      cMoonRaidSoloRewardMultiplierPercent: updated.cMoonRaidSoloRewardMultiplierPercent,
       cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
       cMoonEnemyBattleStartingStamina: updated.cMoonEnemyBattleStartingStamina,
       cMoonEnemyBattleBlockCounterDamage: updated.cMoonEnemyBattleBlockCounterDamage,
       cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,
-      cMoonCaptainBoostEnabled: updated.cMoonCaptainBoostEnabled,
-      cMoonRaidSoloQueueEnabled: updated.cMoonRaidSoloQueueEnabled,
-      cMoonRaidPrivateLobbiesEnabled: updated.cMoonRaidPrivateLobbiesEnabled,
       cMoonRiddlePoints: updated.cMoonRiddlePoints,
       cMoonRiddleRotationEnabled: updated.cMoonRiddleRotationEnabled,
       cMoonRiddleRotationDayOfWeek: updated.cMoonRiddleRotationDayOfWeek,
@@ -424,15 +375,10 @@ export default defineEventHandler(async (event) => {
     cMoonEnemySpawnCapCount: updated.cMoonEnemySpawnCapCount,
     cMoonEnemySpawnCapWindowHours: updated.cMoonEnemySpawnCapWindowHours,
     cMoonRaidBossDiscordChannelId: updated.cMoonRaidBossDiscordChannelId,
-    cMoonRaidJoinWindowSeconds: updated.cMoonRaidJoinWindowSeconds,
-    cMoonRaidSoloRewardMultiplierPercent: updated.cMoonRaidSoloRewardMultiplierPercent,
     cMoonEnemyBattleDefaultHp: updated.cMoonEnemyBattleDefaultHp,
     cMoonEnemyBattleStartingStamina: updated.cMoonEnemyBattleStartingStamina,
     cMoonEnemyBattleBlockCounterDamage: updated.cMoonEnemyBattleBlockCounterDamage,
     cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,
-    cMoonCaptainBoostEnabled: updated.cMoonCaptainBoostEnabled,
-    cMoonRaidSoloQueueEnabled: updated.cMoonRaidSoloQueueEnabled,
-    cMoonRaidPrivateLobbiesEnabled: updated.cMoonRaidPrivateLobbiesEnabled,
     cMoonRiddlePoints: updated.cMoonRiddlePoints,
     cMoonRiddleRotationEnabled: updated.cMoonRiddleRotationEnabled,
     cMoonRiddleRotationDayOfWeek: updated.cMoonRiddleRotationDayOfWeek,

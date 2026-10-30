@@ -29,7 +29,7 @@
               <NuxtLink :to="`/newsite/cmoon/${row.id}`" class="lb-username">{{ row.name }}</NuxtLink>
               <span class="lb-cmoon-members">
                 {{ row.memberCount }} member{{ row.memberCount === 1 ? '' : 's' }}
-                <span class="lb-cmoon-battles">· {{ row.soloWins || 0 }}-{{ row.soloLosses || 0 }} vs enemies · {{ row.raidWins || 0 }}-{{ row.raidLosses || 0 }} vs raid bosses</span>
+                <span class="lb-cmoon-battles">· {{ row.battleWins || 0 }}-{{ row.battleLosses || 0 }} vs enemies</span>
               </span>
             </div>
             <span class="lb-value">{{ Math.round(row.avgScore).toLocaleString() }}<span class="lb-cmoon-avg-unit"> wtd avg</span></span>
@@ -47,9 +47,9 @@
             <span class="lb-cmoon-swatch" :style="{ background: safeCMoonColor(row.color) }"></span>
             <div class="lb-user-col">
               <NuxtLink :to="`/newsite/cmoon/${row.id}`" class="lb-username">{{ row.name }}</NuxtLink>
-              <span class="lb-cmoon-members">{{ row.raidBossesDefeated }} raid bosses (separate count)</span>
+              <span class="lb-cmoon-members">{{ row.enemiesDefeated }} enemies · {{ row.raidBossesDefeated }} raid bosses</span>
             </div>
-            <span class="lb-value">{{ row.enemiesDefeated.toLocaleString() }}</span>
+            <span class="lb-value">{{ row.total.toLocaleString() }}</span>
           </li>
           <li v-if="!cmoonEnemiesData.cmoons?.length" class="lb-empty">No cMoons yet</li>
         </ul>
@@ -65,11 +65,11 @@
             <div class="lb-user-col">
               <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
               <span class="lb-cmoon-members">
-                {{ row.raidBossesDefeated }} raid bosses (separate count)
+                {{ row.enemiesDefeated }} enemies · {{ row.raidBossesDefeated }} raid bosses
                 <span v-if="cMoonForRow(row)" class="lb-cmoon" :style="cMoonPillStyle(cMoonForRow(row).color)">{{ cMoonForRow(row).name }}</span>
               </span>
             </div>
-            <span class="lb-value">{{ row.enemiesDefeated.toLocaleString() }}</span>
+            <span class="lb-value">{{ row.total.toLocaleString() }}</span>
           </li>
           <li v-if="!cmoonEnemiesData.players?.length" class="lb-empty">No enemies defeated yet</li>
         </ul>

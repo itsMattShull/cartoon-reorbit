@@ -14,11 +14,7 @@ export default defineEventHandler(async (event) => {
   if (!userId) throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
 
   // Same lifetime-win-count gate consider.post.js reads minPriorDefeats against — see that
-  // column's own schema comment for why this is global, not per-faction/per-member, and why it
-  // deliberately counts a raid win same as a solo one (a raid's synthetic per-participant rows
-  // are designed to feed this). NOT the number shown in the summary strip below — that one
-  // (personalSoloWinCount) is a different, intentionally solo-only total; this variable is used
-  // ONLY for the `locked` gate further down.
+  // column's own schema comment for why this is global, not per-faction/per-member.
   const personalWinCount = await db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN' } })
 
   const factions = await db.cMoonEnemyFaction.findMany({
@@ -43,18 +39,7 @@ export default defineEventHandler(async (event) => {
   // new tables and nothing cached between requests. favoriteEnemyId is just winTallies' own max
   // entry; the matching name is filled in below once the faction/member list is built, since
   // that's the one place this handler already has every member's name in hand.
-  //
-  // The headline Wins/Losses tiles are solo-only (raidId: null), with raid wins/losses shown as
-  // their own fully independent tiles — NOT folded into one number. A raid credits one synthetic
-  // row per PARTICIPANT for a single shared kill (see CMoonEnemyBattle.raidId's own schema
-  // comment), so blending it into "your personal win count" would let how many raids you joined,
-  // not how many fights you actually won, dominate your own stat strip.
-  const [personalSoloWinCount, personalSoloLossCount, personalRaidWinCount, personalRaidLossCount] = await Promise.all([
-    db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN', raidId: null } }),
-    db.cMoonEnemyBattle.count({ where: { userId, outcome: 'LOSS', raidId: null } }),
-    db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN', raidId: { not: null } } }),
-    db.cMoonEnemyBattle.count({ where: { userId, outcome: 'LOSS', raidId: { not: null } } }),
-  ])
+  const personalLossCount = await db.cMoonEnemyBattle.count({ where: { userId, outcome: 'LOSS' } })
   const favoriteTally = winTallies.length
     ? winTallies.reduce((best, t) => (t._count._all > best._count._all ? t : best))
     : null
@@ -78,10 +63,8 @@ export default defineEventHandler(async (event) => {
   })
 
   return {
-    personalWinCount: personalSoloWinCount,
-    personalLossCount: personalSoloLossCount,
-    personalRaidWinCount,
-    personalRaidLossCount,
+    personalWinCount,
+    personalLossCount,
     favoriteEnemy: favoriteEnemyName ? { name: favoriteEnemyName, wins: favoriteTally._count._all } : null,
     recentCommunityKills: recentCommunityKills.map(k => ({
       username: k.user?.username || 'Someone',

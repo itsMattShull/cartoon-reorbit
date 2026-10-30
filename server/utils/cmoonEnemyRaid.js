@@ -50,44 +50,12 @@
 
 import {
   resolveBattleRound, rollHitDamage, isKnownAction, PLAYER_MAX_HP, HEAL_ON_SUCCESSFUL_BLOCK,
-  HIT_STREAK_THRESHOLD,
 } from './cmoonEnemyBattle.js'
 
-// FORMING -> auto-starts combat, whoever has joined by then. Only the hardcoded fallback now —
-// live code reads GlobalGameConfig.cMoonRaidJoinWindowSeconds instead (see cmoonraid:start),
-// admin-configurable 15-120s; this constant is used only if that config row is ever unexpectedly
-// missing.
-export const JOIN_WINDOW_SECONDS = 60
-// An alive participant who hasn't acted by this auto-acts. Lowered from 20 to 15 so a stalling
-// player can't drag a round out as long — see the visible round countdown in
-// pages/newsite/cmoon-raid/[id].vue, which now actually shows this ticking down.
-export const ROUND_TIMEOUT_SECONDS = 15
-// Only the hardcoded fallback/default now — live code reads each raid's own
-// raid.maxParticipants (snapshotted from CMoonEnemyMember.maxParticipants, 1-8, at raid creation)
-// instead. Kept exported since it's still this file's own "if nothing else says otherwise" value.
-export const MAX_PARTY_SIZE = 4
-// Fallback only — CMoonEnemyMember.raidRoundLimit (50-400, default 300) is what actually governs
-// a given raid boss's round cap now, same "constant stays only as the if-nothing-else-says-
-// otherwise value" role MAX_PARTY_SIZE plays above for maxParticipants.
-export const RAID_MAX_ROUNDS_SAFETY = 300
-
-// The player-side hit-streak threshold a raid actually uses once GlobalGameConfig.
-// cMoonCaptainBoostEnabled is on AND at least one captain (CMoonCaptain, see that model's own
-// comment) is present among the raid's current participants — see effectiveHitStreakThreshold
-// below. Lower than the normal HIT_STREAK_THRESHOLD (3, cmoonEnemyBattle.js) so a captain's
-// presence genuinely speeds up everyone's specials, not just a cosmetic callout. Never applied to
-// the boss's own separate enemyHitStreak counter (cmoonRaidSocket.js) — that's the enemy's own
-// auto-fire pacing, unrelated to this player-side boost.
-export const CAPTAIN_BOOST_HIT_STREAK_THRESHOLD = 2
-
-// `anyCaptainPresent` must be recomputed live each time this is called (participants can change
-// while a raid is still FORMING — a captain could join the lobby after someone else started it),
-// never snapshotted once like `captainBoostEnabled` itself is at raid creation. Returns the
-// ordinary HIT_STREAK_THRESHOLD whenever the toggle is off or no captain is in the party, so a
-// raid with the feature off behaves exactly as it did before this feature existed.
-export function effectiveHitStreakThreshold(captainBoostEnabled, anyCaptainPresent) {
-  return (captainBoostEnabled && anyCaptainPresent) ? CAPTAIN_BOOST_HIT_STREAK_THRESHOLD : HIT_STREAK_THRESHOLD
-}
+export const JOIN_WINDOW_SECONDS = 60 // FORMING -> auto-starts combat, whoever has joined by then
+export const ROUND_TIMEOUT_SECONDS = 20 // an alive participant who hasn't acted by this auto-acts
+export const MAX_PARTY_SIZE = 4 // initiator + up to 3 joiners
+export const RAID_MAX_ROUNDS_SAFETY = 100 // same runaway-RNG safety valve as a solo battle
 
 // Whether a raid boss can be started right now, given its own admin-configured
 // raidOneTime/raidCooldownMinutes and the raidDefeatedAt timestamp its last WIN set (see those
@@ -207,12 +175,6 @@ export function resolveRaidRound({ enemyAction, enemyMember, participants, party
 // RAISE_ALLY_ATTACK) deliberately reach EVERY alive participant regardless of which cMoon they
 // belong to: the whole point of a cross-cMoon raid is that the party is one team for the fight.
 // Knocked-out participants are never in `alive`, so a heal never revives anyone.
-//
-// PARALYZE_OPPONENT and RAISE_ALLY_ATTACK do NOT stack in a raid (unlike every other effect type,
-// and unlike a solo battle's own identically-named effects in action.post.js/cmoonEnemyBattle.js,
-// which are untouched by this): at most one paralyze and one attack-raise can be active against/
-// for a given side at once. A cast of either while one is already active is a complete no-op —
-// pushed to specialEvents (so the UI/Discord still announce the attempt) but changes no state.
 export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvents) {
   specialEvents.push({
     side: caster.side, userId: caster.userId || null, name: attack.name,
@@ -239,36 +201,14 @@ export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvent
       raid.enemyHpRemaining = Math.min(raid.enemyStats.maxHp, raid.enemyHpRemaining + attack.amount)
     }
   } else if (attack.effectType === 'PARALYZE_OPPONENT') {
-    // Non-stacking in a raid (unlike solo, see this function's own callers' comments): a cast
-    // that lands while the target side is ALREADY paralyzed has no additional effect — it never
-    // extends the remaining turns or layers a second paralysis on top. Once the active one
-    // decrements to 0 (see closeRound in cmoonRaidSocket.js), a later cast can trigger a fresh one.
-    if (caster.side === 'PLAYER') {
-      if (raid.enemyParalyzedTurns <= 0) raid.enemyParalyzedTurns = attack.amount
-    } else if (raid.partyParalyzedTurns <= 0) {
-      raid.partyParalyzedTurns = attack.amount
-    }
+    if (caster.side === 'PLAYER') raid.enemyParalyzedTurns += attack.amount
+    else raid.partyParalyzedTurns += attack.amount
   } else if (attack.effectType === 'LOWER_OPPONENT_ATTACK') {
-    // Unaffected by the anti-stacking request — still permanent-for-the-fight and cumulative
-    // across casts, same as every other non-duration effect type.
     if (caster.side === 'PLAYER') raid.enemyAtkBonus -= attack.amount
     else raid.partyAtkBonus -= attack.amount
   } else if (attack.effectType === 'RAISE_ALLY_ATTACK') {
-    // Non-stacking and now time-limited in a raid, same "no-op while one is already active" shape
-    // as PARALYZE_OPPONENT just above — tracked in a pair of fields SEPARATE from
-    // partyAtkBonus/enemyAtkBonus (which stay LOWER_OPPONENT_ATTACK's own permanent, stacking
-    // accumulator) so closeRound can let this raise expire on its own schedule without touching
-    // any permanent debuff already banked on that side. See raid.partyAtkRaiseAmount/
-    // partyAtkRaiseTurnsRemaining's own shape comment in cmoonRaidSocket.js.
-    if (caster.side === 'PLAYER') {
-      if (raid.partyAtkRaiseTurnsRemaining <= 0) {
-        raid.partyAtkRaiseAmount = attack.amount
-        raid.partyAtkRaiseTurnsRemaining = attack.raiseDurationRounds
-      }
-    } else if (raid.enemyAtkRaiseTurnsRemaining <= 0) {
-      raid.enemyAtkRaiseAmount = attack.amount
-      raid.enemyAtkRaiseTurnsRemaining = attack.raiseDurationRounds
-    }
+    if (caster.side === 'PLAYER') raid.partyAtkBonus += attack.amount
+    else raid.enemyAtkBonus += attack.amount
   }
 }
 
@@ -328,7 +268,7 @@ export function rankTierLevel(tiers, tierId) {
 export function publicParticipantTeam(raid, p) {
   // A reservation made without a team snapshot (shouldn't happen since joins snapshot before
   // reserving, but never guess) shows no team rather than borrowing the initiator's.
-  if (p.pendingJoin && !p.cMoonId) return { cMoon: null, rank: null, isCaptain: false }
+  if (p.pendingJoin && !p.cMoonId) return { cMoon: null, rank: null }
   const legacy = !p.cMoonId && participantCMoonId(raid, p) === raid.cMoonId
   return {
     cMoon: {
@@ -340,15 +280,6 @@ export function publicParticipantTeam(raid, p) {
     rank: p.rankName
       ? { name: p.rankName, tierName: p.rankTierName || null, tierLevel: p.rankTierLevel || 0, tierCount: p.rankTierCount || 0 }
       : null,
-    // Snapshotted once at join, same as every other field here — see loadParticipantProfile in
-    // cmoonRaidSocket.js. Purely cosmetic (CMoonRaidFighter.vue's own captain glow/badge, and the
-    // one-time "a captain has entered the battle" banner on the raid page) — no gameplay effect,
-    // same "a leadership title overriding the shown label only" stance CAPTAIN_DISPLAY_RANK_NAME
-    // already takes everywhere else a cMoon captain is surfaced (cZone, standings, leaderboard).
-    // Sent to both the in-raid roster AND the Raid Boss Lobby listing (buildRaidLobbyEntry also
-    // spreads this) — a captain in the party is exactly the kind of thing that should make a
-    // browsing player want to join, not just something shown once they're already in.
-    isCaptain: !!p.isCaptain,
   }
 }
 
@@ -369,11 +300,7 @@ export function buildRaidLobbyEntry(raid) {
     joinDeadlineAt: raid.joinDeadlineAt,
     roundNumber: raid.roundNumber,
     partySize: participants.length,
-    maxPartySize: raid.maxParticipants || MAX_PARTY_SIZE,
-    // The leader's "keep lobby open" choice, display-only here — see leaderKeepOpen's own shape
-    // comment in cmoonRaidSocket.js. A lobby card shows it so a browsing player isn't misled by a
-    // soon-looking countdown that the leader has actually paused.
-    leaderKeepOpen: !!raid.leaderKeepOpen,
+    maxPartySize: MAX_PARTY_SIZE,
     participants: participants.map(p => ({
       userId: p.userId,
       username: p.username,
@@ -384,30 +311,12 @@ export function buildRaidLobbyEntry(raid) {
 }
 
 // The lobby list: FORMING raids with an open slot first (soonest-closing first, so the one about
-// to start is on top), then raids already in combat as non-joinable context. A PRIVATE raid is
-// never listed here at all — it only reaches players via its own URL (see CMoonEnemyRaid.isPrivate
-// and this file's "Cross-cMoon raids" header comment's sibling, the private-raid comment in
-// cmoonRaidSocket.js).
+// to start is on top), then raids already in combat as non-joinable context.
 export function buildRaidLobby(raids) {
-  const list = Array.from(raids).filter(r => !r.isPrivate && (r.status === 'FORMING' || r.status === 'IN_PROGRESS'))
-  const joinable = list.filter(r => r.status === 'FORMING' && r.participants.size < (r.maxParticipants || MAX_PARTY_SIZE))
+  const list = Array.from(raids).filter(r => r.status === 'FORMING' || r.status === 'IN_PROGRESS')
+  const joinable = list.filter(r => r.status === 'FORMING' && r.participants.size < MAX_PARTY_SIZE)
     .sort((a, b) => a.joinDeadlineAt - b.joinDeadlineAt)
   const rest = list.filter(r => !joinable.includes(r))
     .sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))
   return [...joinable, ...rest].map(buildRaidLobbyEntry)
-}
-
-// Rolls which (if any) of a raid boss's configured wind-up moves fires THIS round — each move's
-// own occurrencePercent is an INDEPENDENT per-round chance (a different convention from
-// CMoonEnemyMember.occurrencePercent's relative weight — see CMoonEnemyWindUpMove's own schema
-// comment), checked in list order, first match wins, so overlapping percentages never need to sum
-// to 100 and a later move's own roll never runs once an earlier one already hit. Returns null if
-// none fire, meaning an ordinary round proceeds.
-export function rollWindUpMove(moves) {
-  if (!Array.isArray(moves) || !moves.length) return null
-  for (const move of moves) {
-    const chance = Math.max(0, Math.min(100, Number(move.occurrencePercent) || 0))
-    if (chance > 0 && Math.random() * 100 < chance) return move
-  }
-  return null
 }

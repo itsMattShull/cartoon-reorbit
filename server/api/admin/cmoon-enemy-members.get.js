@@ -25,13 +25,6 @@ export default defineEventHandler(async (event) => {
           background: { select: { id: true, label: true, imagePath: true } },
         },
       },
-      // Each member's wind-up/telegraph moves — same "include the full rows, not just a count"
-      // shape as rewards above, since the only way to remove one is its own DELETE endpoint and
-      // the admin UI needs the row ids.
-      windUpMoves: { orderBy: { createdAt: 'asc' } },
-      // This member's own unique taunts (CMoonEnemyMemberTaunt) — same shape as the faction's own
-      // shared taunt pool (factions.get.js's own `taunts` include), just scoped to one member.
-      taunts: { orderBy: [{ trigger: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }] },
     },
   })
 
@@ -65,9 +58,6 @@ export default defineEventHandler(async (event) => {
       raidAnnouncementText: m.raidAnnouncementText,
       raidOneTime: m.raidOneTime,
       raidCooldownMinutes: m.raidCooldownMinutes,
-      maxParticipants: m.maxParticipants,
-      raidRoundLimit: m.raidRoundLimit,
-      windUpEnabled: m.windUpEnabled,
       raidDefeatedAt: m.raidDefeatedAt,
       defeatedAt: m.defeatedAt,
       sortOrder: m.sortOrder,
@@ -88,17 +78,6 @@ export default defineEventHandler(async (event) => {
         ctoon: r.ctoon,
         avatar: r.avatar,
         background: r.background,
-      })),
-      windUpMoves: m.windUpMoves.map(w => ({
-        id: w.id,
-        telegraphMessage: w.telegraphMessage,
-        direction: w.direction,
-        occurrencePercent: w.occurrencePercent,
-        bonusType: w.bonusType,
-        bonusAmount: w.bonusAmount,
-      })),
-      taunts: m.taunts.map(t => ({
-        id: t.id, trigger: t.trigger, text: t.text, soundPath: t.soundPath, active: t.active, sortOrder: t.sortOrder,
       })),
     })),
   }
