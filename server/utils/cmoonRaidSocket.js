@@ -635,12 +635,16 @@ function raidDiscordPostTarget(raid) {
 // call-to-arms message (so there's something to anchor a new thread to) and persists the
 // resulting thread id onto the boss itself; every later raid against that same boss just posts a
 // fresh "a new raid is starting" line straight into the existing thread — Discord auto-unarchives
-// a thread on a new message, so it doesn't matter how long it's been since the last one. Returns
-// the thread id to snapshot onto the raid (or null if nothing could be posted/created).
+// a thread on a new message, so it doesn't matter how long it's been since the last one. If that
+// post FAILS (sendCMoonTeamUpdate returns falsy — most likely someone deleted the thread on
+// Discord's own side), falls through to minting this boss a brand new thread exactly like it
+// never had one, rather than leaving it permanently silent forever after. Returns the thread id
+// to snapshot onto the raid (or null if nothing could be posted/created).
 async function postRaidStartToBossThread(enemyMember, channelId, { cMoonName }) {
-  if (enemyMember.discordThreadId) {
-    await sendCMoonTeamUpdate(enemyMember.discordThreadId, `🚨 ${cMoonName} is starting a new raid against **${enemyMember.name}**!`)
-    return enemyMember.discordThreadId
+  const hadExistingThread = !!enemyMember.discordThreadId
+  if (hadExistingThread) {
+    const posted = await sendCMoonTeamUpdate(enemyMember.discordThreadId, `🚨 ${cMoonName} is starting a new raid against **${enemyMember.name}**!`)
+    if (posted) return enemyMember.discordThreadId
   }
   const messageId = await announceCMoonRaidBoss(channelId, {
     cMoonName, enemyName: enemyMember.name, announcementTemplate: enemyMember.raidAnnouncementText,
@@ -648,13 +652,15 @@ async function postRaidStartToBossThread(enemyMember, channelId, { cMoonName }) 
   if (!messageId) return null
   const threadId = await startThreadFromMessage(channelId, messageId, `⚔️ ${enemyMember.name} raid`)
   if (threadId) {
-    // Conditioned on still being null: if two players raided this same, previously-never-raided
-    // boss at almost the same moment, both branches above race to create a thread — this makes
-    // sure only the FIRST one to finish becomes the boss's permanent thread, rather than every
-    // later raid flip-flopping onto whichever write happened to land last. The loser's own
-    // thread still works fine for its own raid; it just won't be reused afterward.
     await db.cMoonEnemyMember.updateMany({
-      where: { id: enemyMember.id, discordThreadId: null },
+      // A first-ever thread is conditioned on still being null: if two players raided this same,
+      // previously-never-raided boss at almost the same moment, both branches above race to
+      // create a thread — this makes sure only the FIRST one to finish becomes the boss's
+      // permanent thread, rather than every later raid flip-flopping onto whichever write happened
+      // to land last. The loser's own thread still works fine for its own raid; it just won't be
+      // reused afterward. A RECOVERY from a dead thread (hadExistingThread) is unconditional
+      // instead — there's an old, known-dead id to replace, not a null to race against.
+      where: hadExistingThread ? { id: enemyMember.id } : { id: enemyMember.id, discordThreadId: null },
       data: { discordThreadId: threadId },
     }).catch(() => {})
   }

@@ -566,14 +566,18 @@ export async function announceCMoonRaidBoss(channelId, { cMoonName, enemyName, a
 // how that channelId is resolved) and by the riddle system's "your team just solved it" ping
 // (cmoonRiddle.js). A fresh message per call, never an edit (Discord message editing isn't wired
 // up elsewhere in this codebase). Fire-and-forget: never throws — a missed update must not
-// interrupt whatever triggered it.
+// interrupt whatever triggered it. Returns whether the post actually succeeded (truthy) so a
+// caller that persists this channelId for reuse (postRaidStartToBossThread, for a boss's own
+// long-lived thread) can tell a dead/deleted target apart from a healthy one and recover —
+// every existing caller already ignores this function's return value, so adding it is safe.
 export async function sendCMoonTeamUpdate(channelId, text) {
   try {
     const botToken = getAnnouncementsBotToken()
-    if (!channelId || !botToken) return
-    await sendGuildChannelMessageById(channelId, text, botToken)
+    if (!channelId || !botToken) return false
+    return await sendGuildChannelMessageById(channelId, text, botToken)
   } catch (e) {
     console.error('sendCMoonTeamUpdate failed:', e?.message || e)
+    return false
   }
 }
 

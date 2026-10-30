@@ -724,7 +724,7 @@
               Prize cToons: {{ c.prizeCtoons.map(p => `${p.name} ×${p.quantity}`).join(', ') || 'none' }}
             </div>
             <div class="text-[11px] text-gray-600 break-words">Discord role ID: {{ c.discordRoleId || 'none' }}</div>
-            <div class="text-[11px] text-gray-600 break-words">Discord channel ID: {{ c.discordChannelId || 'none (uses shared channel)' }}</div>
+            <div class="text-[11px] text-gray-600 break-words">Discord channel ID: {{ c.discordChannelId || 'none (uses shared channel)' }} (milestones/riddles/hunt only — raids always use the shared raid channel)</div>
             <div class="text-[11px] text-gray-600 break-words">
               Effect: {{ c.effectType ? effectLabel(c.effectType) : (c.customJoinEffect ? `${c.customJoinEffect.name} (custom)` : 'none') }}
             </div>
@@ -951,7 +951,7 @@
             <div>
               <label class="block text-xs font-medium mb-1">Discord Channel ID (optional)</label>
               <input v-model="form.discordChannelId" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" inputmode="numeric" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="123456789012345678" />
-              <p class="text-[11px] text-gray-500 mt-1">This team's own Discord channel — raid-boss announcements and live updates post here instead of the shared channel set in Global Settings.</p>
+              <p class="text-[11px] text-gray-500 mt-1">This team's own Discord channel — milestone/rank-up announcements, riddle pings, and cMoon hunt events post here instead of the shared channel set in Global Settings. Raid bosses always post to the shared raid channel below regardless of this setting.</p>
             </div>
             <div>
               <label class="block text-xs font-medium mb-1">Special attack (cMoon Enemy Battles, optional)</label>
