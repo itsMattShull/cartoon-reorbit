@@ -44,6 +44,34 @@
           </span>
         </label>
         <p v-if="captainBoostEnabledError" class="text-red-600">{{ captainBoostEnabledError }}</p>
+
+        <label class="flex items-start gap-2">
+          <input type="checkbox" v-model="soloQueueEnabled" class="mt-0.5" @change="saveSoloQueueEnabled" :disabled="savingSoloQueueEnabled" />
+          <span>
+            <span class="font-medium">Allow solo raid queueing</span>
+            <p class="text-[11px] text-gray-500 mt-0.5">
+              On (default) lets a raid leader start combat alone — via "Start now" or the join
+              window simply expiring — and earn the solo reward bonus. Off requires at least one
+              more player before a raid can start: "Start now" is rejected while solo, and an
+              expiring join window just re-opens instead of starting the fight.
+            </p>
+          </span>
+        </label>
+        <p v-if="soloQueueEnabledError" class="text-red-600">{{ soloQueueEnabledError }}</p>
+
+        <label class="flex items-start gap-2">
+          <input type="checkbox" v-model="privateLobbiesEnabled" class="mt-0.5" @change="savePrivateLobbiesEnabled" :disabled="savingPrivateLobbiesEnabled" />
+          <span>
+            <span class="font-medium">Allow private raid lobbies</span>
+            <p class="text-[11px] text-gray-500 mt-0.5">
+              On (default) lets a player mark a new raid as private/invite-only (not listed in the
+              Raid Boss Lobby, reachable only via its link). Off forces every new raid public
+              regardless of what a player requests — raids already created as private keep
+              working as they were.
+            </p>
+          </span>
+        </label>
+        <p v-if="privateLobbiesEnabledError" class="text-red-600">{{ privateLobbiesEnabledError }}</p>
       </section>
 
       <!-- ── Special attacks ──────────────────────────────────────── -->
@@ -991,6 +1019,45 @@ async function saveCaptainBoostEnabled() {
   }
 }
 
+// GlobalGameConfig.cMoonRaidSoloQueueEnabled / cMoonRaidPrivateLobbiesEnabled — same shape/row/
+// pattern as captainBoostEnabled above, just default TRUE (an opt-OUT toggle for pre-existing
+// behavior, not an opt-in new feature).
+const soloQueueEnabled = ref(true)
+const savingSoloQueueEnabled = ref(false)
+const soloQueueEnabledError = ref('')
+
+async function saveSoloQueueEnabled() {
+  soloQueueEnabledError.value = ''
+  const next = soloQueueEnabled.value
+  savingSoloQueueEnabled.value = true
+  try {
+    await $fetch('/api/admin/cmoon-settings', { method: 'POST', body: { cMoonRaidSoloQueueEnabled: next } })
+  } catch (e) {
+    soloQueueEnabled.value = !next
+    soloQueueEnabledError.value = e?.data?.statusMessage || 'Failed to save'
+  } finally {
+    savingSoloQueueEnabled.value = false
+  }
+}
+
+const privateLobbiesEnabled = ref(true)
+const savingPrivateLobbiesEnabled = ref(false)
+const privateLobbiesEnabledError = ref('')
+
+async function savePrivateLobbiesEnabled() {
+  privateLobbiesEnabledError.value = ''
+  const next = privateLobbiesEnabled.value
+  savingPrivateLobbiesEnabled.value = true
+  try {
+    await $fetch('/api/admin/cmoon-settings', { method: 'POST', body: { cMoonRaidPrivateLobbiesEnabled: next } })
+  } catch (e) {
+    privateLobbiesEnabled.value = !next
+    privateLobbiesEnabledError.value = e?.data?.statusMessage || 'Failed to save'
+  } finally {
+    savingPrivateLobbiesEnabled.value = false
+  }
+}
+
 async function load() {
   loading.value = true
   loadError.value = ''
@@ -1013,6 +1080,10 @@ async function load() {
     joinEffects.value = joinEffectsData?.effects || []
     higherTierFirst.value = !!cmoonsData?.cMoonEnemyHigherTierFirst
     captainBoostEnabled.value = !!cmoonsData?.cMoonCaptainBoostEnabled
+    // Default true (not false) if somehow absent — these are opt-OUT toggles, same reasoning as
+    // their own ref initializers above.
+    soloQueueEnabled.value = cmoonsData?.cMoonRaidSoloQueueEnabled !== false
+    privateLobbiesEnabled.value = cmoonsData?.cMoonRaidPrivateLobbiesEnabled !== false
     specialAttacks.value = specialAttacksData?.attacks || []
   } catch (e) {
     loadError.value = e?.data?.statusMessage || 'Failed to load cMoon enemies'

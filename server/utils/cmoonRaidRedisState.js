@@ -97,6 +97,12 @@ function serializeRaid(raid) {
     // cMoonCaptainBoostEnabled) — same missing-field trap as above; without this, a restart would
     // silently turn the effect off for the rest of an in-flight raid that had it on.
     captainBoostEnabled: raid.captainBoostEnabled,
+    // Snapshotted admin toggle for solo queueing (see GlobalGameConfig.cMoonRaidSoloQueueEnabled)
+    // plus the join-window length it needs to re-arm a fresh countdown with — same missing-field
+    // trap as above; without these, a restart would silently re-allow solo-starting a raid whose
+    // admin had disabled it, and would have no window length to re-arm with if needed.
+    soloQueueEnabled: raid.soloQueueEnabled,
+    joinWindowMs: raid.joinWindowMs,
     leaderKeepOpen: raid.leaderKeepOpen,
     speedVotes: Array.from(raid.speedVotes || []),
     windUpMoves: raid.windUpMoves,

@@ -188,6 +188,18 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *                         // ABANDONED branch.
  *   isPrivate,            // never listed in the site-wide lobby / notified / announced when true
  *                         // (see CMoonEnemyRaid.isPrivate) — still joinable by anyone with the URL.
+ *                         // Forced false at creation if GlobalGameConfig.
+ *                         // cMoonRaidPrivateLobbiesEnabled was off then, regardless of what the
+ *                         // client requested.
+ *   soloQueueEnabled,     // GlobalGameConfig.cMoonRaidSoloQueueEnabled, snapshotted once at
+ *                         // creation. False means this raid may never START (forceStart or
+ *                         // sweep()'s auto-start) while fewer than 2 players have joined — see
+ *                         // cmoonraid:forceStart and sweep()'s own comments. Never affects an
+ *                         // already-IN_PROGRESS raid.
+ *   joinWindowMs,         // the exact join-window length (ms) this raid was created with —
+ *                         // snapshotted so sweep() (synchronous, can't await a fresh config
+ *                         // fetch) can re-arm an identical fresh window when it declines to
+ *                         // auto-start a still-solo raid (see soloQueueEnabled above).
  *   captainBoostEnabled,  // GlobalGameConfig.cMoonCaptainBoostEnabled, snapshotted once at
  *                         // creation (an admin flipping it mid-raid never retroactively changes
  *                         // an in-flight raid, same snapshot discipline as maxParticipants/
@@ -327,6 +339,11 @@ function publicRaidView(raid) {
     // discoverability/eligibility enforcement happens server-side (buildRaidLobby, the join
     // handler's notify/announce gating).
     isPrivate: !!raid.isPrivate,
+    // Whether this raid is allowed to start with just the leader in it (see GlobalGameConfig.
+    // cMoonRaidSoloQueueEnabled) — display-only, same as isPrivate above; the actual enforcement
+    // is cmoonraid:forceStart/sweep() reading raid.soloQueueEnabled directly. Lets the client hide/
+    // explain the "Start now" button rather than let a leader click it only to see an error.
+    soloQueueEnabled: raid.soloQueueEnabled !== false,
     // The boss's current wind-up telegraph, if one fired this round — a DELIBERATE, narrow
     // exception to this function's usual "never reveal the enemy's action in advance" rule (see
     // this function's own header comment): a telegraph is SUPPOSED to be visible before it
@@ -1015,6 +1032,23 @@ function sweep(io) {
     // the raid only starts via an explicit cmoonraid:forceStart, filling the party, or the leader
     // turning keepOpen back off (which re-arms a fresh full window rather than expiring instantly).
     if (raid.status === 'FORMING' && !raid.leaderKeepOpen && now >= raid.joinDeadlineAt) {
+      // Solo queueing disabled and still nobody but the leader — never auto-start a solo fight
+      // (same gate cmoonraid:forceStart enforces explicitly). sweep() is synchronous and can't
+      // await a fresh GlobalGameConfig fetch per tick, so this re-arms an identical fresh window
+      // using raid.joinWindowMs (snapshotted at creation) rather than re-resolving config —
+      // mirrors cmoonraid:toggleKeepOpen's own "re-arm a fresh full window" behavior, just
+      // automatic instead of leader-triggered. Re-arms on every sweep tick the window is still
+      // solo at — the very next tick after a second player joins naturally falls through to the
+      // ordinary startCombat call below instead (the `participants.size < 2` check above is now
+      // false), and the leader leaving while still alone destroys the raid entirely (see
+      // cmoonraid:leave), so this never spins forever once either happens.
+      if (!raid.soloQueueEnabled && raid.participants.size < 2) {
+        raid.joinDeadlineAt = now + (raid.joinWindowMs || JOIN_WINDOW_SECONDS * 1000)
+        fireSync(raid.id, raid)
+        broadcast(io, raid, EV('state'))
+        broadcastLobby() // the public lobby list's own countdown reads joinDeadlineAt too
+        continue
+      }
       startCombat(io, raid)
     } else if (raid.status === 'IN_PROGRESS' && now >= raid.roundDeadlineAt) {
       closeRound(io, raid).catch(err => console.error('[cmoonRaidSocket] sweep closeRound failed:', err))
@@ -1079,6 +1113,11 @@ export async function restoreCMoonRaids() {
     raid.windUpMoves ??= []
     raid.currentWindUp ??= null
     raid.captainBoostEnabled ??= false
+    // Predates this toggle -> solo queueing was unconditionally allowed back then, so true (not
+    // false) is the correct backfill, same "preserve old behavior" reasoning as isPrivate ??= false
+    // above preserving "never private" for an old snapshot.
+    raid.soloQueueEnabled ??= true
+    raid.joinWindowMs ??= JOIN_WINDOW_SECONDS * 1000
     raids.set(raidId, raid)
     for (const uid of raid.participants.keys()) raidByUser.set(uid, raidId)
   }
@@ -1157,6 +1196,11 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       const initiatorMaxHp = await getPlayerCombatMaxHp(me.id, config)
       const discordChannelId = await resolveCMoonRaidDiscordChannelId(db, cMoon.discordChannelId)
       const raidId = randomUUID()
+      const raidJoinWindowMs = (
+        Number.isInteger(config?.cMoonRaidJoinWindowSeconds) && config.cMoonRaidJoinWindowSeconds > 0
+          ? config.cMoonRaidJoinWindowSeconds
+          : JOIN_WINDOW_SECONDS
+      ) * 1000
       const raid = {
         id: raidId, enemyMemberId, cMoonId: cMoon.id, cMoonName: cMoon.name, discordChannelId, discordThreadId: null,
         // The lobby names a raid after whoever started it — kept on the raid itself so the name
@@ -1181,11 +1225,12 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         },
         status: 'FORMING', enemyHpRemaining: enemyMember.maxHp, roundNumber: 1,
         currentEnemyAction: null, roundDeadlineAt: null,
-        joinDeadlineAt: Date.now() + (
-          Number.isInteger(config?.cMoonRaidJoinWindowSeconds) && config.cMoonRaidJoinWindowSeconds > 0
-            ? config.cMoonRaidJoinWindowSeconds
-            : JOIN_WINDOW_SECONDS
-        ) * 1000,
+        joinDeadlineAt: Date.now() + raidJoinWindowMs,
+        // The exact window length just used above, kept around so sweep() — which runs
+        // synchronously on a timer and can't await a fresh config fetch per tick — can re-arm an
+        // identical fresh window later (see its own comment on why it sometimes needs to, once
+        // solo queueing is disabled) without needing to re-resolve GlobalGameConfig.
+        joinWindowMs: raidJoinWindowMs,
         participants: new Map(), roundLog: [],
         startedAt: Date.now(), combatStartedAt: null, endedAt: null, outcome: null, resolving: false,
         // Special attacks — see the raid object's own shape comment up top for what each field
@@ -1208,8 +1253,17 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
           : RAID_MAX_ROUNDS_SAFETY,
         // Invite-only: never listed in the site-wide lobby, never notified/announced — see
         // CMoonEnemyRaid.isPrivate's own schema comment. Still joinable, cross-cMoon, by anyone
-        // with the raid's own URL.
-        isPrivate: !!isPrivate,
+        // with the raid's own URL. Forced false regardless of what the client requested when an
+        // admin has turned private lobbies off (GlobalGameConfig.cMoonRaidPrivateLobbiesEnabled) —
+        // a stale client that still shows the checkbox simply has its request silently overridden
+        // rather than rejected outright, since a public raid is always a safe fallback.
+        isPrivate: config?.cMoonRaidPrivateLobbiesEnabled !== false ? !!isPrivate : false,
+        // GlobalGameConfig.cMoonRaidSoloQueueEnabled, snapshotted now (same "validate then
+        // snapshot" discipline as maxParticipants/roundLimit above) — read by cmoonraid:forceStart
+        // (rejects starting alone while false) and sweep() (re-arms a fresh window instead of
+        // auto-starting alone while false, using joinWindowMs below rather than re-resolving
+        // config synchronously).
+        soloQueueEnabled: config?.cMoonRaidSoloQueueEnabled !== false,
         // GlobalGameConfig.cMoonCaptainBoostEnabled, snapshotted now so an admin flipping it
         // mid-raid never retroactively changes an in-flight raid — same "validate then snapshot"
         // discipline as maxParticipants/roundLimit above. Whether it's actually in effect right
@@ -1427,7 +1481,8 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
   })
 
   // Initiator-only: start combat immediately with whoever has joined so far (including just
-  // themselves — the solo-queue entry point, see GlobalGameConfig.cMoonRaidSoloRewardMultiplierPercent).
+  // themselves — the solo-queue entry point, see GlobalGameConfig.cMoonRaidSoloRewardMultiplierPercent
+  // — unless raid.soloQueueEnabled is false, see below).
   socket.on(EV('forceStart'), async ({ raidId } = {}) => {
     const me = await resolveSocketUser(socket)
     if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
@@ -1435,6 +1490,13 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     if (!raid || raid.status !== 'FORMING') return socket.emit(EV('error'), { message: 'This raid is not open for joining' })
     const p = raid.participants.get(me.id)
     if (!p?.isInitiator) return socket.emit(EV('error'), { message: 'Only the raid leader can do that' })
+    // Solo queueing disabled (GlobalGameConfig.cMoonRaidSoloQueueEnabled, snapshotted at creation
+    // — see raid.soloQueueEnabled's own comment) means this raid may never start with just the
+    // leader in it, whether via this explicit button or the join window simply expiring (see
+    // sweep() below) — the leader needs at least one more player first.
+    if (!raid.soloQueueEnabled && raid.participants.size < 2) {
+      return socket.emit(EV('error'), { message: 'Solo raid queueing is disabled — you need at least one more player to start' })
+    }
     startCombat(io, raid)
   })
 

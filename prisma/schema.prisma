@@ -1934,6 +1934,20 @@ model GlobalGameConfig {
   // to points, never to item/cToon drop chances (CMoonEnemyReward.dropChancePercent), in
   // resolveCMoonRaidOutcome.
   cMoonRaidSoloRewardMultiplierPercent Int       @default(100)
+  // Whether a raid is allowed to resolve with just the leader in it — true (the default) preserves
+  // the existing behavior (the solo-reward bonus above exists specifically for this). When an
+  // admin turns this off: cmoonraid:forceStart is rejected while fewer than 2 players have joined
+  // ("you need at least one more player"), and sweep()'s own join-window auto-start re-arms a
+  // fresh window instead of silently starting a 1-player fight once the countdown runs out — see
+  // raid.soloQueueEnabled/raid.joinWindowMs's own comments in cmoonRaidSocket.js. Never affects an
+  // already-IN_PROGRESS raid (only gates how one STARTS).
+  cMoonRaidSoloQueueEnabled            Boolean   @default(true)
+  // Whether a player can create a raid as private/invite-only (see CMoonEnemyRaid.isPrivate's own
+  // schema comment) — true (the default) preserves the existing behavior. When an admin turns this
+  // off, a raid is always created public regardless of what the client requests (cmoonraid:start
+  // silently forces isPrivate to false rather than erroring, so a stale client doesn't need special
+  // handling) — every already-private raid already in flight keeps working exactly as before.
+  cMoonRaidPrivateLobbiesEnabled       Boolean   @default(true)
   // Every player's starting/max HP for a cMoon Enemy Battle (solo or raid), before any per-rank
   // bonus below — admin-editable here (Manage cMoons) instead of the server/utils/cmoonEnemyBattle.js
   // PLAYER_MAX_HP constant it replaces as the live source of truth; that constant now only serves

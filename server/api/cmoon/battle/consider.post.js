@@ -165,5 +165,15 @@ export default defineEventHandler(async (event) => {
     : null
   const pityEmptyWinStreak = chosen.pityThreshold > 0 ? (pityRow?.emptyWinStreak || 0) : null
 
-  return { offered: true, resumed: false, enemy: serializeEnemyForClient(chosen, pityEmptyWinStreak), inCMoon: !!user.cMoonId }
+  return {
+    offered: true, resumed: false, enemy: serializeEnemyForClient(chosen, pityEmptyWinStreak), inCMoon: !!user.cMoonId,
+    // Display-only hints for the OFFER screen's "Make this a private raid" checkbox and solo-fight
+    // flavor text (see CMoonBattlePopupHost.vue) — never the real gate, which cmoonraid:start/
+    // cmoonraid:forceStart enforce server-side regardless of what a stale client sends. Only
+    // meaningful for a raid boss; omitted entirely for a non-raid offer since neither applies.
+    ...(chosen.isRaidBoss ? {
+      raidPrivateLobbiesEnabled: config?.cMoonRaidPrivateLobbiesEnabled !== false,
+      raidSoloQueueEnabled: config?.cMoonRaidSoloQueueEnabled !== false,
+    } : {}),
+  }
 })

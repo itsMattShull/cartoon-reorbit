@@ -95,7 +95,16 @@
                 <input type="checkbox" :checked="raid.leaderKeepOpen" @change="raidSocket.toggleKeepOpen(raidId, $event.target.checked)" />
                 Keep lobby open past the usual window
               </label>
-              <button type="button" class="cr-link-btn" @click="raidSocket.forceStartRaid(raidId)">Start now</button>
+              <!-- Disabled rather than hidden while solo (see raid.soloQueueEnabled's own
+                   comment) — same reasoning as a disabled button elsewhere on this page, so the
+                   leader sees WHY it's unavailable instead of wondering where it went. -->
+              <button
+                type="button" class="cr-link-btn" :disabled="!raid.soloQueueEnabled && raid.participants.length < 2"
+                @click="raidSocket.forceStartRaid(raidId)"
+              >Start now</button>
+              <p v-if="!raid.soloQueueEnabled && raid.participants.length < 2" class="cr-solo-disabled-note">
+                Solo queueing is disabled — at least one more player must join before you can start.
+              </p>
             </div>
 
             <!-- Any non-leader participant can vote to cut the countdown to 5s, once everyone
@@ -989,6 +998,9 @@ onUnmounted(() => {
   border-radius: 6px; padding: 4px 10px; cursor: pointer;
 }
 .cr-link-btn:hover { background: #eef2ff; }
+.cr-link-btn:disabled { color: #9ca3af; border-color: #e5e7eb; cursor: not-allowed; }
+.cr-link-btn:disabled:hover { background: none; }
+.cr-solo-disabled-note { font-size: 11px; color: #6b7280; font-style: italic; width: 100%; margin: 0; }
 
 .cr-lobby-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .cr-keepopen-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #374151; cursor: pointer; }

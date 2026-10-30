@@ -47,10 +47,11 @@
           <p v-if="error" class="cbp-error">{{ error }}</p>
           <p v-if="enemy?.isRaidBoss" class="cbp-flavor">
             This is a raid boss — other players from any cMoon can join from the Raid Boss Lobby before it
-            auto-starts, and a party win grants everyone who joined the same prize. You can also fight it
-            solo for a bonus, or keep the lobby open past the usual window once it's started.
+            auto-starts, and a party win grants everyone who joined the same prize.
+            <template v-if="raidSoloQueueEnabled">You can also fight it solo for a bonus, or </template>
+            <template v-else>You can </template>keep the lobby open past the usual window once it's started.
           </p>
-          <label v-if="enemy?.isRaidBoss" class="cbp-private-raid-check">
+          <label v-if="enemy?.isRaidBoss && raidPrivateLobbiesEnabled" class="cbp-private-raid-check">
             <input type="checkbox" v-model="isPrivateRaid" />
             Make this a private, invite-only raid (not listed in the Raid Boss Lobby — share its link instead)
           </label>
@@ -175,6 +176,7 @@ const isAdminRoute = computed(() => route.path.startsWith('/newsite/admin'))
 
 const {
   visible, phase, enemy, battle, inCMoon, busy, error, lastRound, currentTaunt, isFirstWinAgainstThisEnemy,
+  raidPrivateLobbiesEnabled, raidSoloQueueEnabled,
   checkOnNavigate, startBattle, submitAction, decline, close,
 } = useCMoonBattlePopup()
 

@@ -40,6 +40,7 @@ export default defineEventHandler(async (event) => {
         cMoonEnemyBattleDefaultHp: true,
         cMoonEnemyBattleStartingStamina: true, cMoonEnemyBattleBlockCounterDamage: true,
         cMoonEnemyHigherTierFirst: true, cMoonCaptainBoostEnabled: true,
+        cMoonRaidSoloQueueEnabled: true, cMoonRaidPrivateLobbiesEnabled: true,
         cMoonTeamMilestoneEnabled: true, cMoonTeamMilestoneEnemiesInterval: true, cMoonTeamMilestonePointsInterval: true,
         cMoonRankUpAnnounceEnabled: true, cMoonRankUpAnnounceMinSortOrder: true,
         cMoonFinalBossPingEnabled: true, cMoonFinalBossPingCooldownMinutes: true,
@@ -68,6 +69,11 @@ export default defineEventHandler(async (event) => {
     cMoonEnemyBattleBlockCounterDamage: config?.cMoonEnemyBattleBlockCounterDamage ?? 1,
     cMoonEnemyHigherTierFirst: !!config?.cMoonEnemyHigherTierFirst,
     cMoonCaptainBoostEnabled: !!config?.cMoonCaptainBoostEnabled,
+    // Both default true (the existing behavior) — !== false so a row that somehow lacks the
+    // column still reads as enabled, same defensive style as resolveScoringConfig's own
+    // top10PointsBoardEnabled/top10CtoonsBoardEnabled checks.
+    cMoonRaidSoloQueueEnabled: config?.cMoonRaidSoloQueueEnabled !== false,
+    cMoonRaidPrivateLobbiesEnabled: config?.cMoonRaidPrivateLobbiesEnabled !== false,
     cMoonTeamMilestoneEnabled: !!config?.cMoonTeamMilestoneEnabled,
     cMoonTeamMilestoneEnemiesInterval: config?.cMoonTeamMilestoneEnemiesInterval ?? 100,
     cMoonTeamMilestonePointsInterval: config?.cMoonTeamMilestonePointsInterval ?? 1000,

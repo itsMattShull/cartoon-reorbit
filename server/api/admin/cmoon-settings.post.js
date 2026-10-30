@@ -173,6 +173,17 @@ export default defineEventHandler(async (event) => {
     data.cMoonCaptainBoostEnabled = !!body.cMoonCaptainBoostEnabled
   }
 
+  // Solo raid queueing / private raid lobbies — see GlobalGameConfig.cMoonRaidSoloQueueEnabled/
+  // cMoonRaidPrivateLobbiesEnabled's own schema comments. Snapshotted onto each raid at creation
+  // (cmoonraid:start) same as every other raid-wide toggle, so flipping either here never
+  // retroactively changes a raid already in flight.
+  if (body?.cMoonRaidSoloQueueEnabled !== undefined) {
+    data.cMoonRaidSoloQueueEnabled = !!body.cMoonRaidSoloQueueEnabled
+  }
+  if (body?.cMoonRaidPrivateLobbiesEnabled !== undefined) {
+    data.cMoonRaidPrivateLobbiesEnabled = !!body.cMoonRaidPrivateLobbiesEnabled
+  }
+
   // cMoon points awarded for solving a riddle (either kind) — see claimCMoonRiddleSolve in
   // server/utils/cmoonRiddle.js, the only reader.
   if (body?.cMoonRiddlePoints !== undefined) {
@@ -338,6 +349,8 @@ export default defineEventHandler(async (event) => {
       cMoonEnemyBattleBlockCounterDamage: existing?.cMoonEnemyBattleBlockCounterDamage,
       cMoonEnemyHigherTierFirst: existing?.cMoonEnemyHigherTierFirst,
       cMoonCaptainBoostEnabled: existing?.cMoonCaptainBoostEnabled,
+      cMoonRaidSoloQueueEnabled: existing?.cMoonRaidSoloQueueEnabled,
+      cMoonRaidPrivateLobbiesEnabled: existing?.cMoonRaidPrivateLobbiesEnabled,
       cMoonRiddlePoints: existing?.cMoonRiddlePoints,
       cMoonRiddleRotationEnabled: existing?.cMoonRiddleRotationEnabled,
       cMoonRiddleRotationDayOfWeek: existing?.cMoonRiddleRotationDayOfWeek,
@@ -376,6 +389,8 @@ export default defineEventHandler(async (event) => {
       cMoonEnemyBattleBlockCounterDamage: updated.cMoonEnemyBattleBlockCounterDamage,
       cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,
       cMoonCaptainBoostEnabled: updated.cMoonCaptainBoostEnabled,
+      cMoonRaidSoloQueueEnabled: updated.cMoonRaidSoloQueueEnabled,
+      cMoonRaidPrivateLobbiesEnabled: updated.cMoonRaidPrivateLobbiesEnabled,
       cMoonRiddlePoints: updated.cMoonRiddlePoints,
       cMoonRiddleRotationEnabled: updated.cMoonRiddleRotationEnabled,
       cMoonRiddleRotationDayOfWeek: updated.cMoonRiddleRotationDayOfWeek,
@@ -416,6 +431,8 @@ export default defineEventHandler(async (event) => {
     cMoonEnemyBattleBlockCounterDamage: updated.cMoonEnemyBattleBlockCounterDamage,
     cMoonEnemyHigherTierFirst: updated.cMoonEnemyHigherTierFirst,
     cMoonCaptainBoostEnabled: updated.cMoonCaptainBoostEnabled,
+    cMoonRaidSoloQueueEnabled: updated.cMoonRaidSoloQueueEnabled,
+    cMoonRaidPrivateLobbiesEnabled: updated.cMoonRaidPrivateLobbiesEnabled,
     cMoonRiddlePoints: updated.cMoonRiddlePoints,
     cMoonRiddleRotationEnabled: updated.cMoonRiddleRotationEnabled,
     cMoonRiddleRotationDayOfWeek: updated.cMoonRiddleRotationDayOfWeek,
