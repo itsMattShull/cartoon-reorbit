@@ -6582,6 +6582,16 @@ model CMoonEnemyBattle {
   // source of truth, this is a per-battle display copy) so the log/UI never needs a live join to
   // show what the fight looked like at the time.
   enemyHpRemaining     Int
+  // Snapshot of the enemy's STARTING maxHp for THIS battle — same snapshot-at-creation discipline
+  // as playerMaxHp above, taken so the "total enemy HP defeated" leaderboard metric (see
+  // server/api/leaderboard/cmoon-enemies.get.js and cmoon.js's getTopNEnemySlayerHolders) stays
+  // stable for an already-resolved fight even if an admin later edits this enemy's maxHp — a live
+  // join to CMoonEnemyMember.maxHp would silently rewrite history. That metric exists specifically
+  // to reward taking on tougher enemies over "goon farming" lots of cheap, low-HP ones, which a
+  // plain kill COUNT can't tell apart. Backfilled for pre-existing rows from the enemy's current
+  // maxHp at migration time (the best available approximation of what it was); @default(0) is
+  // just a safety net for any future row that somehow skips setting it explicitly.
+  enemyMaxHp           Int                      @default(0)
   // ── Special attacks (see CMoonSpecialAttack's own header comment) ──────────────────────────
   // Consecutive landed hits, tracked independently per side, reset to 0 the instant that side
   // fails to land one (a miss, a blocked attack, a round spent blocking/using-the-special/

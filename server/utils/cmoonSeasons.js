@@ -130,8 +130,14 @@ export async function seasonLeaderboard(season) {
 }
 
 // Server-wide (not per-cMoon) top enemy-slayer for a season — adapted from the per-cMoon
-// topSlayerForCMoon in server/utils/cmoonDiscordEvents.js (same WIN-count-by-userId shape, just
-// without the cMoonId filter) for the season recap's "Season's top slayer" line.
+// topSlayerForCMoon in server/utils/cmoonDiscordEvents.js (same shape, just without the cMoonId
+// filter) for the season recap's "Season's top slayer" line.
+//
+// Ranked by SUM(enemyMaxHp), NOT a plain win COUNT — see topSlayerForCMoon's own comment in
+// cmoonDiscordEvents.js and CMoonEnemyBattle.enemyMaxHp's schema comment for why: a raw kill count
+// rewards "goon farming" the cheapest enemy available just as much as taking on tougher fights.
+// `wins` is still returned alongside for display (an honest win count, just no longer what decides
+// the ranking).
 export async function topSlayerOverall(startAt, endAt) {
   const rows = await prisma.cMoonEnemyBattle.groupBy({
     by: ['userId'],
@@ -141,15 +147,15 @@ export async function topSlayerOverall(startAt, endAt) {
     // should for progression gates/achievements/team goals elsewhere.
     where: { outcome: 'WIN', raidId: null, endedAt: { gte: startAt, lt: endAt } },
     _count: { _all: true },
+    _sum: { enemyMaxHp: true },
     // `orderBy: { _count: { _all: 'desc' } }` is rejected by this Prisma client version ("Unknown
-    // argument `_all`") — order by a specific grouped field's count instead, same row-count value
-    // since `by: ['userId']` with no null userId possible.
-    orderBy: { _count: { userId: 'desc' } },
+    // argument `_all`") — order by the grouped field's sum directly instead.
+    orderBy: { _sum: { enemyMaxHp: 'desc' } },
     take: 1,
   })
   if (!rows.length || !rows[0]._count._all) return null
   const user = await prisma.user.findUnique({ where: { id: rows[0].userId }, select: { username: true } })
-  return { username: user?.username || 'Someone', wins: rows[0]._count._all }
+  return { username: user?.username || 'Someone', wins: rows[0]._count._all, hpDefeated: rows[0]._sum.enemyMaxHp || 0 }
 }
 
 // Full recap for one completed season: the winning cMoon (by this season's own win-rate

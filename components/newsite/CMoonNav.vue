@@ -141,7 +141,7 @@
           </div>
           <div class="cmn-season-recap-line">
             <strong>Season's top slayer:</strong>
-            {{ r.topSlayer ? `${r.topSlayer.username} (${r.topSlayer.wins} defeats)` : 'No battles recorded' }}
+            {{ r.topSlayer ? `${r.topSlayer.username} (${(r.topSlayer.hpDefeated || 0).toLocaleString()} HP defeated, ${r.topSlayer.wins} win${r.topSlayer.wins === 1 ? '' : 's'})` : 'No battles recorded' }}
           </div>
         </div>
       </div>

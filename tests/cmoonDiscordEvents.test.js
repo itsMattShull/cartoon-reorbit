@@ -55,6 +55,14 @@ test('message builders: tolerate missing names and never throw', () => {
 test('buildWeeklyRecapMessage/buildSeasonMvpMessage: null slayer means no post at all', () => {
   assert.equal(buildWeeklyRecapMessage('The Foxes', null), null)
   assert.equal(buildSeasonMvpMessage('The Foxes', null), null)
-  assert.match(buildWeeklyRecapMessage('The Foxes', { username: 'alice', wins: 3 }), /alice.*3/)
-  assert.match(buildSeasonMvpMessage('The Foxes', { username: 'alice', wins: 1 }), /alice.*1.*enemy defeat\b/)
+  assert.match(buildWeeklyRecapMessage('The Foxes', { username: 'alice', wins: 3, hpDefeated: 420 }), /alice.*420 HP.*3 win/)
+  assert.match(buildSeasonMvpMessage('The Foxes', { username: 'alice', wins: 1, hpDefeated: 50 }), /alice.*50 HP.*1 win\b/)
+})
+
+// Regression test for the "goon farming" fix: the headline number is now the enemy HP total
+// (hpDefeated), not the raw win count -- a missing hpDefeated (shouldn't happen once
+// topSlayerForCMoon/topSlayerOverall always set it) still renders safely as 0 rather than throwing.
+test('buildWeeklyRecapMessage/buildSeasonMvpMessage: missing hpDefeated renders as 0, never throws', () => {
+  assert.match(buildWeeklyRecapMessage('The Foxes', { username: 'alice', wins: 3 }), /0 HP/)
+  assert.match(buildSeasonMvpMessage('The Foxes', { username: 'alice', wins: 1 }), /0 HP/)
 })
