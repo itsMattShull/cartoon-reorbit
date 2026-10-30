@@ -383,7 +383,14 @@ export function applySiphonHealth(raid, alive, attack, caster, roundInfo) {
     if (heal <= 0) return
     const casterParticipant = raid.participants.get(caster.userId)
     if (attack.healsAllies) {
-      for (const p of alive) p.hpRemaining = Math.min(p.maxHp, p.hpRemaining + heal)
+      // `alive` here is the snapshot closeRound captured at the TOP of the round, before this
+      // round's lane exchange could knock anyone out — unlike HEAL_SELF's own healsAllies branch
+      // above (which only ever fires in step 1, before any of this round's knockouts happen),
+      // this one resolves in step 2.5, AFTER them. Without this guard, a party member knocked out
+      // earlier this very round would get healed back to a positive hpRemaining while
+      // knockedOutAt stays set — alive everywhere else in the engine, dead on the HP bar. Same
+      // defensive check the boss-cast AoE branch below already uses.
+      for (const p of alive) { if (!p.knockedOutAt) p.hpRemaining = Math.min(p.maxHp, p.hpRemaining + heal) }
     } else if (casterParticipant && !casterParticipant.knockedOutAt) {
       casterParticipant.hpRemaining = Math.min(casterParticipant.maxHp, casterParticipant.hpRemaining + heal)
     }

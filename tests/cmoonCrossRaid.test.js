@@ -271,6 +271,23 @@ test('a deferred player-cast SIPHON_HEALTH heal survives resolveRaidRound\'s own
   assert.equal(a.hpRemaining, 4, 'the heal (1 + 6*50%=3) must survive, not be wiped out by the earlier overwrite loop')
 })
 
+// Regression test for a real bug an adversarial review caught: a player-cast SIPHON_HEALTH with
+// healsAllies: true looped over the raw `alive` array closeRound passes in, which is captured at
+// the TOP of the round — before this round's own lane exchange could knock anyone out. Since the
+// heal resolves in step 2.5 (AFTER that exchange), a teammate knocked out earlier the SAME round
+// would get healed back to a positive hpRemaining while knockedOutAt stayed set: "dead" everywhere
+// else in the engine, alive on their own HP bar.
+test('a party-wide SIPHON_HEALTH heal never revives a participant knocked out earlier the same round', () => {
+  const a = participant('a', { hpRemaining: 5, maxHp: 10 })
+  const down = participant('down', { hpRemaining: 0, maxHp: 10, knockedOutAt: Date.now() }) // knocked out THIS round, before step 2.5
+  const raid = raidWith([a, down])
+  const roundInfo = { enemyAction: 'ATTACK_HIGH', perParticipant: [], enemyDamageDealt: 0 }
+  applySiphonHealth(raid, [a, down], { name: 'Drain', effectType: 'SIPHON_HEALTH', amount: 6, siphonPercent: 50, healsAllies: true }, { side: 'PLAYER', userId: 'a' }, roundInfo)
+  assert.equal(a.hpRemaining, 8) // 5 + 3
+  assert.equal(down.hpRemaining, 0, 'a knocked-out participant must not be healed back to a positive HP')
+  assert.ok(down.knockedOutAt, 'knockedOutAt must stay set')
+})
+
 test('REFLECT_DAMAGE and SIPHON_HEALTH track their non-stacking slots independently of each other', () => {
   const raid = raidWith([participant('a'), participant('b')])
   const roundGuards = { reflectUsed: false, siphonUsed: false, pendingReflect: null, pendingSiphon: null }
