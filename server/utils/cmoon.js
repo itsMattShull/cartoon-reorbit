@@ -107,10 +107,12 @@ const GAME_LABEL_BY_KEY = new Map([...SCORE_GAMES, ...WIN_GAMES].map(g => [g.nam
 export function describeCMoonScoreLogSource(category, detail) {
   switch (category) {
     case 'HIGH_SCORE':
+      if (detail === 'enemySlayer') return 'High Score — Top Solo Enemy Slayer'
       return `High Score — ${GAME_LABEL_BY_KEY.get(detail) || detail || 'unknown game'}`
     case 'TOP10':
       if (detail === 'points') return 'Top 10 — Total Points board'
       if (detail === 'totalCtoons') return 'Top 10 — Total cToons board'
+      if (detail === 'enemySlayer') return 'Top 10 — Solo Enemy Slayers leaderboard'
       if (typeof detail === 'string' && detail.startsWith('game:')) {
         const key = detail.slice('game:'.length)
         return `Top 10 — ${GAME_LABEL_BY_KEY.get(key) || key}`
@@ -148,6 +150,9 @@ export const CMOON_SCORING_DEFAULTS = {
   top10RankCutoff: 10,
   top10PointsBoardEnabled: true,
   top10CtoonsBoardEnabled: true,
+  enemySlayerBoardEnabled: true,
+  enemySlayerFirstPlacePoints: 100,
+  enemySlayerTop10Points: 50,
 }
 
 // How many of the 7 days in a week a player is expected to complete a qualifying daily task —
@@ -189,6 +194,9 @@ export function resolveScoringConfig(config) {
     top10RankCutoff: int(config?.cMoonTop10RankCutoff, CMOON_SCORING_DEFAULTS.top10RankCutoff, 1),
     top10PointsBoardEnabled: config?.cMoonTop10PointsBoardEnabled !== false,
     top10CtoonsBoardEnabled: config?.cMoonTop10CtoonsBoardEnabled !== false,
+    enemySlayerBoardEnabled: config?.cMoonEnemySlayerBoardEnabled !== false,
+    enemySlayerFirstPlacePoints: int(config?.cMoonEnemySlayerFirstPlacePoints, CMOON_SCORING_DEFAULTS.enemySlayerFirstPlacePoints, 0),
+    enemySlayerTop10Points: int(config?.cMoonEnemySlayerTop10Points, CMOON_SCORING_DEFAULTS.enemySlayerTop10Points, 0),
     activeScoreGames: SCORE_GAMES.filter(g => !disabledScoreGames.includes(g.name)),
     activeWinGames: WIN_GAMES.filter(g => !disabledWinGames.includes(g.name)),
   }
@@ -291,6 +299,29 @@ async function getTop10TotalCtoonsHolders(rankCutoff) {
       AND uc."burnedAt" IS NULL
     GROUP BY u."id", u."cMoonId", u."createdAt"
     ORDER BY COUNT(uc."id") DESC, u."username" ASC
+    LIMIT ${rankCutoff}
+  `
+}
+
+// All-time top N for the "Top Enemy Slayers" board (server/api/leaderboard/cmoon-enemies.get.js),
+// SOLO victories only — `raidId IS NULL` excludes a raid boss's synthetic per-participant win
+// rows (one credited row per participant off a single shared kill), same reasoning that
+// leaderboard's own query already documents: letting raid participation inflate this ranking
+// would stop it from measuring what it says it measures. Backs both the #1-holder HIGH_SCORE-
+// equivalent award and the top-N TOP10-equivalent award below, same "fetch once, reuse for both
+// categories" shape as getTopNScoreHolders/getTopNWinsHolders.
+async function getTopNEnemySlayerHolders(rankCutoff) {
+  return prisma.$queryRaw`
+    SELECT u."id" AS "userId", u."cMoonId" AS "cMoonId", u."createdAt" AS "createdAt"
+    FROM "CMoonEnemyBattle" b
+    JOIN "User" u ON u."id" = b."userId"
+    WHERE b."outcome" = 'WIN'
+      AND b."raidId" IS NULL
+      AND u."active" = true
+      AND COALESCE(u."banned", false) = false
+      AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
+    GROUP BY u."id", u."cMoonId", u."createdAt"
+    ORDER BY COUNT(*) DESC, u."username" ASC
     LIMIT ${rankCutoff}
   `
 }
@@ -589,10 +620,13 @@ export async function runDailyCMoonScoring() {
   const {
     highScorePoints, top10Points, dailyTaskPoints, minAccountAgeDays, top10RankCutoff,
     top10PointsBoardEnabled, top10CtoonsBoardEnabled, activeScoreGames, activeWinGames,
+    enemySlayerBoardEnabled, enemySlayerFirstPlacePoints, enemySlayerTop10Points,
   } = resolveScoringConfig(config)
   const dailyHighScorePoints = perRunAward(highScorePoints)
   const dailyTop10Points = perRunAward(top10Points)
   const dailyTaskAwardPoints = dailyTaskAward(dailyTaskPoints)
+  const dailyEnemySlayerFirstPlacePoints = perRunAward(enemySlayerFirstPlacePoints)
+  const dailyEnemySlayerTop10Points = perRunAward(enemySlayerTop10Points)
 
   // Chicago-midnight, NOT getChicagoDailyBoundary's hardcoded 8pm — see getChicagoCalendarDayStart's
   // own comment for why: that function is pinned to the DAILY_TASK reset clock, unrelated to (and
@@ -610,11 +644,12 @@ export async function runDailyCMoonScoring() {
   // (activeScoreGames/activeWinGames, admin-editable via the existing per-game disable toggles)
   // as HIGH_SCORE, just a deeper cut. #1 naturally earns both categories for the same game,
   // same as it already could for, say, HIGH_SCORE plus a Top Points board finish.
-  const [scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders] = await Promise.all([
+  const [scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders, enemySlayerTopN] = await Promise.all([
     Promise.all(activeScoreGames.map(g => getTopNScoreHolders(g, top10RankCutoff))),
     Promise.all(activeWinGames.map(g => getTopNWinsHolders(g, top10RankCutoff))),
     top10PointsBoardEnabled ? getTop10PointsHolders(top10RankCutoff) : Promise.resolve([]),
     top10CtoonsBoardEnabled ? getTop10TotalCtoonsHolders(top10RankCutoff) : Promise.resolve([]),
+    enemySlayerBoardEnabled ? getTopNEnemySlayerHolders(top10RankCutoff) : Promise.resolve([]),
   ])
 
   activeScoreGames.forEach((g, i) => {
@@ -642,6 +677,17 @@ export async function runDailyCMoonScoring() {
   }
   for (const row of eligibleHolders(top10CtoonsHolders, minAccountAgeCutoff)) {
     candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'totalCtoons', points: dailyTop10Points, weekStart })
+  }
+  // Solo Enemy Slayers board — same two-tier shape as a SCORE_GAMES/WIN_GAMES entry above (#1
+  // earns HIGH_SCORE, every top-`top10RankCutoff` row including #1 earns TOP10, so #1 stacks
+  // both), just its own dedicated point amounts instead of highScorePoints/top10Points. See
+  // getTopNEnemySlayerHolders's own comment for why this is solo-only.
+  const enemySlayerHolder = enemySlayerTopN[0] || null
+  if (isEligibleHolder(enemySlayerHolder, minAccountAgeCutoff)) {
+    candidates.push({ cMoonId: enemySlayerHolder.cMoonId, userId: enemySlayerHolder.userId, category: 'HIGH_SCORE', detail: 'enemySlayer', points: dailyEnemySlayerFirstPlacePoints, weekStart })
+  }
+  for (const row of eligibleHolders(enemySlayerTopN, minAccountAgeCutoff)) {
+    candidates.push({ cMoonId: row.cMoonId, userId: row.userId, category: 'TOP10', detail: 'enemySlayer', points: dailyEnemySlayerTop10Points, weekStart })
   }
 
   // Extra guard on top of the (cMoonId, userId, category, weekStart, detail) unique constraint,
@@ -726,16 +772,20 @@ async function getHolderSnapshot() {
   }
 
   const resolvedConfig = resolveScoringConfig(config)
-  const { activeScoreGames, activeWinGames, top10PointsBoardEnabled, top10CtoonsBoardEnabled, top10RankCutoff } = resolvedConfig
+  const {
+    activeScoreGames, activeWinGames, top10PointsBoardEnabled, top10CtoonsBoardEnabled, top10RankCutoff,
+    enemySlayerBoardEnabled,
+  } = resolvedConfig
 
-  const [scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders] = await Promise.all([
+  const [scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders, enemySlayerTopN] = await Promise.all([
     Promise.all(activeScoreGames.map(g => getTopNScoreHolders(g, top10RankCutoff))),
     Promise.all(activeWinGames.map(g => getTopNWinsHolders(g, top10RankCutoff))),
     top10PointsBoardEnabled ? getTop10PointsHolders(top10RankCutoff) : Promise.resolve([]),
     top10CtoonsBoardEnabled ? getTop10TotalCtoonsHolders(top10RankCutoff) : Promise.resolve([]),
+    enemySlayerBoardEnabled ? getTopNEnemySlayerHolders(top10RankCutoff) : Promise.resolve([]),
   ])
 
-  cachedHolderSnapshot = { resolvedConfig, activeScoreGames, activeWinGames, scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders }
+  cachedHolderSnapshot = { resolvedConfig, activeScoreGames, activeWinGames, scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders, enemySlayerTopN }
   cachedHolderSnapshotAt = now
   return cachedHolderSnapshot
 }
@@ -753,12 +803,17 @@ export async function getPendingScoringPreview(userId, cMoonId, userCreatedAt) {
   const snapshot = await getHolderSnapshot()
   if (!snapshot.resolvedConfig) return empty
 
-  const { highScorePoints, top10Points, minAccountAgeDays } = snapshot.resolvedConfig
+  const {
+    highScorePoints, top10Points, minAccountAgeDays,
+    enemySlayerFirstPlacePoints, enemySlayerTop10Points,
+  } = snapshot.resolvedConfig
   const minAccountAgeCutoff = new Date(Date.now() - minAccountAgeDays * 24 * 60 * 60 * 1000)
   if (new Date(userCreatedAt) > minAccountAgeCutoff) return empty // same anti-abuse gate as the real job
 
   const dailyHighScorePoints = perRunAward(highScorePoints)
   const dailyTop10Points = perRunAward(top10Points)
+  const dailyEnemySlayerFirstPlacePoints = perRunAward(enemySlayerFirstPlacePoints)
+  const dailyEnemySlayerTop10Points = perRunAward(enemySlayerTop10Points)
   // `detail` mirrors exactly what runDailyCMoonScoring would write for the same holder (see its
   // own candidates.push(...) calls) — needed below to check what's already been credited today,
   // stripped from the returned breakdown afterward since callers only ever cared about label.
@@ -781,6 +836,14 @@ export async function getPendingScoringPreview(userId, cMoonId, userCreatedAt) {
   }
   if (snapshot.top10CtoonsHolders.some(isThisUser)) {
     breakdown.push({ category: 'TOP10', detail: 'totalCtoons', label: 'Total cToons board', points: dailyTop10Points })
+  }
+  if (snapshot.enemySlayerTopN) {
+    if (isThisUser(snapshot.enemySlayerTopN[0])) {
+      breakdown.push({ category: 'HIGH_SCORE', detail: 'enemySlayer', label: 'Top Solo Enemy Slayer', points: dailyEnemySlayerFirstPlacePoints })
+    }
+    if (snapshot.enemySlayerTopN.some(isThisUser)) {
+      breakdown.push({ category: 'TOP10', detail: 'enemySlayer', label: 'Solo Enemy Slayers leaderboard', points: dailyEnemySlayerTop10Points })
+    }
   }
 
   // Drop anything already credited TODAY — otherwise this preview keeps claiming a spot is

@@ -1816,6 +1816,20 @@ model GlobalGameConfig {
   cMoonTop10RankCutoff                 Int       @default(10) // how many ranks count as "top 10" on eligible boards
   cMoonTop10PointsBoardEnabled         Boolean   @default(true) // whether the "Total Points" board counts toward TOP10
   cMoonTop10CtoonsBoardEnabled         Boolean   @default(true) // whether the "Total cToons" board counts toward TOP10
+  // Solo cMoon Enemy Battles kill-count leaderboard, scored the SAME two-tier way an eligible
+  // arcade game already is (see SCORE_GAMES/WIN_GAMES above): the all-time #1 holder earns
+  // cMoonEnemySlayerFirstPlacePoints (HIGH_SCORE-equivalent, detail 'enemySlayer'), and every
+  // player in the top cMoonTop10RankCutoff ranks (including #1 — stacks, same as a game) earns
+  // cMoonEnemySlayerTop10Points (TOP10-equivalent) — see getTopNEnemySlayerHolders in
+  // server/utils/cmoon.js. Deliberately its OWN dedicated point amounts, not a reuse of
+  // cMoonHighScorePoints/cMoonTop10Points, so tuning arcade-game payouts never moves this board's
+  // and vice versa. Entered/divided-down the same "weekly total, ÷7/day" way as every other
+  // HIGH_SCORE/TOP10 amount — see perRunAward. Ranks ONLY solo victories (CMoonEnemyBattle rows
+  // with raidId IS NULL) — a raid boss's synthetic per-participant win rows never count here,
+  // same reasoning as the Leaderboards page's own "Top Enemy Slayers" board.
+  cMoonEnemySlayerBoardEnabled         Boolean   @default(true) // whether this board counts toward HIGH_SCORE/TOP10
+  cMoonEnemySlayerFirstPlacePoints     Int       @default(100) // per-player weekly total for holding rank #1 (solo kills only)
+  cMoonEnemySlayerTop10Points          Int       @default(50) // per-player weekly total for a top-N finish (solo kills only)
   // Game keys (SCORE_GAMES[].name / WIN_GAMES[].name in server/utils/cmoon.js)
   // excluded from HIGH_SCORE eligibility. JSON string[] to match the
   // featuredAuctionHours/featuredDissolve* array-field convention above.

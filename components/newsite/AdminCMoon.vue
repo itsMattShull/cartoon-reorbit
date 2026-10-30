@@ -547,6 +547,40 @@
             </p>
           </div>
 
+          <!-- Solo Enemy Slayer leaderboard: scored the SAME two-tier way an eligible arcade game
+               is (see "High Score / Top 10 eligible games" below) — #1 earns a dedicated "first
+               place" bonus, and everyone in the top-N (rank cutoff above), #1 included, earns a
+               dedicated "top 10" bonus. Deliberately its own point amounts, independent of the
+               High Score/Top 10 points above — see GlobalGameConfig.cMoonEnemySlayerFirstPlacePoints's
+               own schema comment. Counts SOLO cMoon Enemy Battles victories only — a raid boss's
+               shared, per-participant win rows never count here, same as the public "Top Enemy
+               Slayers" leaderboard. -->
+          <div class="border-t pt-3 mt-3">
+            <div class="text-xs font-medium mb-1.5">Solo Enemy Slayer leaderboard</div>
+            <label class="cm-tap flex items-center gap-2 mb-2">
+              <input type="checkbox" v-model="scoring.enemySlayerBoardEnabled" />
+              <span class="text-xs">Award points for the all-time Solo Enemy Slayers leaderboard</span>
+            </label>
+            <div v-if="scoring.enemySlayerBoardEnabled" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs font-medium mb-1">First place points (weekly total)</label>
+                <input v-model.number="scoring.enemySlayerFirstPlacePoints" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
+                <p class="text-[11px] text-gray-500 mt-1">
+                  Per player, for holding rank #1 (all-time, solo victories only) — ÷7/day ≈
+                  {{ Math.round((scoring.enemySlayerFirstPlacePoints || 0) / 7) }} pts/day. Stacks with the top-10 bonus below.
+                </p>
+              </div>
+              <div>
+                <label class="block text-xs font-medium mb-1">Top 10 points (weekly total)</label>
+                <input v-model.number="scoring.enemySlayerTop10Points" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
+                <p class="text-[11px] text-gray-500 mt-1">
+                  Per player, for a top-{{ scoring.top10RankCutoff || 10 }} finish (rank cutoff
+                  above) on solo victories only — ÷7/day ≈ {{ Math.round((scoring.enemySlayerTop10Points || 0) / 7) }} pts/day.
+                </p>
+              </div>
+            </div>
+          </div>
+
           <div class="border-t pt-3 mt-3">
             <div class="text-xs font-medium mb-1">High Score / Top 10 eligible games</div>
             <p class="text-[11px] text-gray-500 mb-2">
@@ -2717,6 +2751,9 @@ const scoring = reactive({
   top10RankCutoff: 10,
   top10PointsBoardEnabled: true,
   top10CtoonsBoardEnabled: true,
+  enemySlayerBoardEnabled: true,
+  enemySlayerFirstPlacePoints: 100,
+  enemySlayerTop10Points: 50,
   disabledScoreGames: [],
   disabledWinGames: [],
   runHour: 0,
@@ -2784,6 +2821,9 @@ async function loadScoring() {
       top10RankCutoff: data.top10RankCutoff,
       top10PointsBoardEnabled: data.top10PointsBoardEnabled,
       top10CtoonsBoardEnabled: data.top10CtoonsBoardEnabled,
+      enemySlayerBoardEnabled: data.enemySlayerBoardEnabled,
+      enemySlayerFirstPlacePoints: data.enemySlayerFirstPlacePoints,
+      enemySlayerTop10Points: data.enemySlayerTop10Points,
       disabledScoreGames: data.disabledScoreGames || [],
       disabledWinGames: data.disabledWinGames || [],
       runHour: data.runHour ?? 0,
@@ -2852,6 +2892,9 @@ function scoringRiskWarnings() {
     warnings.push('the Top 10 bonus will be effectively disabled (no boards enabled)')
   }
   if (enabledGameCount.value === 0) warnings.push('the High Score bonus will be effectively disabled (no games selected)')
+  if (scoring.enemySlayerBoardEnabled && scoring.enemySlayerFirstPlacePoints === 0 && scoring.enemySlayerTop10Points === 0) {
+    warnings.push('the Solo Enemy Slayer bonus will award 0 points')
+  }
   return warnings
 }
 
@@ -2871,6 +2914,9 @@ async function saveScoring() {
       top10RankCutoff: scoring.top10RankCutoff,
       top10PointsBoardEnabled: scoring.top10PointsBoardEnabled,
       top10CtoonsBoardEnabled: scoring.top10CtoonsBoardEnabled,
+      enemySlayerBoardEnabled: scoring.enemySlayerBoardEnabled,
+      enemySlayerFirstPlacePoints: scoring.enemySlayerFirstPlacePoints,
+      enemySlayerTop10Points: scoring.enemySlayerTop10Points,
       disabledScoreGames: scoring.disabledScoreGames,
       disabledWinGames: scoring.disabledWinGames,
       runHour: scoring.runHour,
@@ -2886,6 +2932,9 @@ async function saveScoring() {
       top10RankCutoff: res.top10RankCutoff,
       top10PointsBoardEnabled: res.top10PointsBoardEnabled,
       top10CtoonsBoardEnabled: res.top10CtoonsBoardEnabled,
+      enemySlayerBoardEnabled: res.enemySlayerBoardEnabled,
+      enemySlayerFirstPlacePoints: res.enemySlayerFirstPlacePoints,
+      enemySlayerTop10Points: res.enemySlayerTop10Points,
       disabledScoreGames: res.disabledScoreGames || [],
       disabledWinGames: res.disabledWinGames || [],
       runHour: res.runHour ?? 0,
