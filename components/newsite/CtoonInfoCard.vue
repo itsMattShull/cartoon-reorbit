@@ -142,6 +142,15 @@
                 <div class="ctic-sub">out of {{ formatValue(totalCzoneCount) }} total cZones</div>
               </div>
               <div class="ctic-tile">
+                <div class="ctic-label">Wishlist</div>
+                <button
+                  type="button"
+                  class="ctic-value ctic-value--link ctic-value--btn"
+                  :aria-label="`See who has ${ctoon.name || 'this cToon'} on their wishlist`"
+                  @click="openWishlistedBy"
+                >On {{ formatValue(ctoon.wishlistCount) }} wishlists</button>
+              </div>
+              <div class="ctic-tile">
                 <div class="ctic-label">Set</div>
                 <NuxtLink
                   v-if="ctoon.set"
@@ -480,6 +489,49 @@
                 </li>
               </ul>
               <p v-if="displayedInHasMore" class="ctic-sub">Showing the first {{ displayedInItems.length }} — there are more.</p>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── "Wishlisted by" overlay — same shape as "Displayed in cZones" above (layered on
+           top rather than a separate tab, same click-the-number-to-pop-a-list ask). Clicking a
+           username here closes the infocard and opens a new trade with that player pre-selected,
+           same /newsite/trade?username= deep link the Owners tab already uses elsewhere in this
+           file. Only usernames ever reach the client (server/api/ctoon/[id]/wishlisted-by.get.js)
+           — never a WishlistItem id or that player's own offeredPoints figure. -->
+      <div v-if="showWishlistedBy" class="ctic-displayed-in-overlay" @click.self="closeWishlistedBy">
+        <div class="ctic-displayed-in-panel">
+          <div class="ctic-displayed-in-head">
+            <span>Wishlisted by</span>
+            <button class="ctic-close-x" aria-label="Close" @click="closeWishlistedBy">✕</button>
+          </div>
+          <div class="ctic-displayed-in-body">
+            <div v-if="wishlistedByLoading" class="ctic-owners-list">
+              <div v-for="i in 5" :key="`wb-skel-${i}`" class="ctic-owner-row ctic-skel-tile">
+                <div class="ctic-skel-line" style="width:120px;height:11px"></div>
+              </div>
+            </div>
+            <div v-else-if="wishlistedByError" class="ctic-error">{{ wishlistedByError }}</div>
+            <div v-else-if="!wishlistedByItems.length" class="ctic-empty">Not on anyone's wishlist yet.</div>
+            <template v-else>
+              <ul class="ctic-owners-list">
+                <li
+                  v-for="(item, i) in wishlistedByItems"
+                  :key="`${item.username}-${i}`"
+                  class="ctic-displayed-in-row"
+                >
+                  <NuxtLink
+                    :to="{ path: '/newsite/trade', query: { username: item.username } }"
+                    class="ctic-owner-link"
+                    :aria-label="`Start a trade with ${item.username}`"
+                    @click="close"
+                  >
+                    {{ item.username }}
+                  </NuxtLink>
+                </li>
+              </ul>
+              <p v-if="wishlistedByHasMore" class="ctic-sub">Showing the first {{ wishlistedByItems.length }} — there are more.</p>
             </template>
           </div>
         </div>
@@ -866,6 +918,11 @@ watch(isOpen, (open) => {
     displayedInError.value = ''
     displayedInItems.value = []
     displayedInHasMore.value = false
+    showWishlistedBy.value = false
+    wishlistedByLoading.value = false
+    wishlistedByError.value = ''
+    wishlistedByItems.value = []
+    wishlistedByHasMore.value = false
     if (audioEl.value) { audioEl.value.pause(); audioEl.value.currentTime = 0 }
     return
   }
@@ -1038,6 +1095,35 @@ function closeDisplayedIn() {
   showDisplayedIn.value = false
 }
 
+// ── "Wishlisted by" overlay (server/api/ctoon/[id]/wishlisted-by.get.js) — same shape as the
+// "Displayed in cZones" state/functions directly above, just a different list/endpoint. ──────
+const showWishlistedBy = ref(false)
+const wishlistedByLoading = ref(false)
+const wishlistedByError = ref('')
+const wishlistedByItems = ref([])
+const wishlistedByHasMore = ref(false)
+
+async function openWishlistedBy() {
+  if (!ctoon.value?.id) return
+  showWishlistedBy.value = true
+  wishlistedByLoading.value = true
+  wishlistedByError.value = ''
+  try {
+    const res = await $fetch(`/api/ctoon/${ctoon.value.id}/wishlisted-by`)
+    wishlistedByItems.value = Array.isArray(res?.items) ? res.items : []
+    wishlistedByHasMore.value = !!res?.hasMore
+  } catch {
+    wishlistedByError.value = 'Failed to load.'
+    wishlistedByItems.value = []
+  } finally {
+    wishlistedByLoading.value = false
+  }
+}
+
+function closeWishlistedBy() {
+  showWishlistedBy.value = false
+}
+
 // The card can switch to a DIFFERENT cToon without ever closing (isOpen stays true) — e.g. the
 // "View 1st/2nd Edition" link just calls open({ ctoonId }) again. Without this, a list fetched
 // for the old cToon would keep showing, now mislabeled as belonging to whatever cToon is
@@ -1049,6 +1135,11 @@ watch(() => ctoon.value?.id, () => {
   displayedInError.value = ''
   displayedInItems.value = []
   displayedInHasMore.value = false
+  showWishlistedBy.value = false
+  wishlistedByLoading.value = false
+  wishlistedByError.value = ''
+  wishlistedByItems.value = []
+  wishlistedByHasMore.value = false
 })
 
 /**

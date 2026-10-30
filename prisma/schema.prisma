@@ -2143,6 +2143,12 @@ model WishlistItem {
   ctoon Ctoon @relation(fields: [ctoonId], references: [id])
 
   @@unique([userId, ctoonId])
+  // Backs two "who wants this cToon" lookups by ctoonId alone (no userId in the filter): the
+  // live wishlistCount shown on the cToon info card (server/api/ctoon/modal.get.js) and the full
+  // list server/api/ctoon/[id]/wishlisted-by.get.js returns when that count is clicked. Without
+  // this, either query falls back to a full-table scan as the table grows — the @@unique index
+  // above leads with userId, so it can't serve a ctoonId-only lookup.
+  @@index([ctoonId])
 }
 
 model UserTradeListItem {
