@@ -147,6 +147,27 @@ test('applyReflectDamage: if the boss blocked (dealt 0 real damage), nothing ref
   assert.equal(raid.enemyHpRemaining, 30)
 })
 
+// Regression test: the reported "heal spec may not heal or inflict self damage" bug turned out to
+// be a missing-feedback gap, not a mechanics bug -- REFLECT_DAMAGE/SIPHON_HEALTH fizzling on a
+// block is correct and intentional, but nothing told the player it happened. These flag it on the
+// SAME event object the client/Discord render (see applyRaidSpecialAttack), so the UI can show a
+// distinct "blocked and had no effect" message instead of implying a normal successful cast.
+test('applyReflectDamage: flags the passed event as fizzled when there is nothing to reflect', () => {
+  const raid = raidWith([participant('a')])
+  const roundInfo = { enemyAction: 'BLOCK_HIGH', perParticipant: [{ userId: 'a', playerDamage: 0 }], enemyDamageDealt: 0 }
+  const event = {}
+  applyReflectDamage(raid, [], { name: 'Mirror', effectType: 'REFLECT_DAMAGE', reflectPercent: 500 }, { side: 'PLAYER', userId: 'a' }, roundInfo, event)
+  assert.equal(event.fizzled, true)
+})
+
+test('applyReflectDamage: does not flag the event as fizzled when it actually reflects damage', () => {
+  const raid = raidWith([participant('a'), participant('b')])
+  const roundInfo = { enemyAction: 'ATTACK_HIGH', perParticipant: [{ userId: 'a', playerDamage: 2 }, { userId: 'b', playerDamage: 3 }], enemyDamageDealt: 0 }
+  const event = {}
+  applyReflectDamage(raid, [], { name: 'Mirror', effectType: 'REFLECT_DAMAGE', reflectPercent: 100 }, { side: 'PLAYER', userId: 'a' }, roundInfo, event)
+  assert.equal(event.fizzled, false)
+})
+
 test('applyReflectDamage: reflectPercent can exceed 100%, and a boss cast is AoE at full amount per participant', () => {
   const a = participant('a', { hpRemaining: 10, maxHp: 10 })
   const b = participant('b', { hpRemaining: 10, maxHp: 10 })
@@ -203,6 +224,24 @@ test('applySiphonHealth: a player cast fizzles entirely (no damage, no heal) if 
   assert.equal(a.hpRemaining, 2)
 })
 
+test('applySiphonHealth: flags the passed event as fizzled when a player cast is blocked outright', () => {
+  const a = participant('a', { hpRemaining: 2, maxHp: 10 })
+  const raid = raidWith([a])
+  const roundInfo = { enemyAction: 'BLOCK_LOW', perParticipant: [], enemyDamageDealt: 0 }
+  const event = {}
+  applySiphonHealth(raid, [a], { name: 'Drain', effectType: 'SIPHON_HEALTH', amount: 6, siphonPercent: 50, healsAllies: false }, { side: 'PLAYER', userId: 'a' }, roundInfo, event)
+  assert.equal(event.fizzled, true)
+})
+
+test('applySiphonHealth: does not flag the event as fizzled when a player cast actually lands', () => {
+  const a = participant('a', { hpRemaining: 2, maxHp: 10 })
+  const raid = raidWith([a])
+  const roundInfo = { enemyAction: 'ATTACK_HIGH', perParticipant: [], enemyDamageDealt: 0 }
+  const event = {}
+  applySiphonHealth(raid, [a], { name: 'Drain', effectType: 'SIPHON_HEALTH', amount: 6, siphonPercent: 50, healsAllies: false }, { side: 'PLAYER', userId: 'a' }, roundInfo, event)
+  assert.equal(event.fizzled, false)
+})
+
 test('applySiphonHealth: player cast with healsAllies heals the whole party, not just the caster', () => {
   const a = participant('a', { hpRemaining: 2, maxHp: 10 })
   const b = participant('b', { hpRemaining: 3, maxHp: 10 })
@@ -225,6 +264,29 @@ test('applySiphonHealth: boss cast is AoE, but each alive participant who person
   assert.equal(a.hpRemaining, 6) // hit
   assert.equal(b.hpRemaining, 10) // blocked, immune
   assert.equal(raid.enemyHpRemaining, 22) // 20 + (4 * 50%) from the one landed hit
+})
+
+test('applySiphonHealth: a boss cast only flags the event as fizzled when EVERY alive participant blocked it', () => {
+  const a = participant('a', { hpRemaining: 10, maxHp: 10 })
+  const b = participant('b', { hpRemaining: 10, maxHp: 10 })
+  const raid = raidWith([a, b], { enemyHpRemaining: 20 })
+  const allBlocked = {
+    enemyAction: 'ATTACK_HIGH',
+    perParticipant: [{ userId: 'a', action: 'BLOCK_HIGH' }, { userId: 'b', action: 'BLOCK_LOW' }],
+    enemyDamageDealt: 0,
+  }
+  const fizzledEvent = {}
+  applySiphonHealth(raid, [a, b], { name: 'Drain', effectType: 'SIPHON_HEALTH', amount: 4, siphonPercent: 50, healsAllies: false }, { side: 'ENEMY' }, allBlocked, fizzledEvent)
+  assert.equal(fizzledEvent.fizzled, true)
+
+  const oneLanded = {
+    enemyAction: 'ATTACK_HIGH',
+    perParticipant: [{ userId: 'a', action: 'ATTACK_HIGH' }, { userId: 'b', action: 'BLOCK_HIGH' }],
+    enemyDamageDealt: 0,
+  }
+  const landedEvent = {}
+  applySiphonHealth(raid, [a, b], { name: 'Drain', effectType: 'SIPHON_HEALTH', amount: 4, siphonPercent: 50, healsAllies: false }, { side: 'ENEMY' }, oneLanded, landedEvent)
+  assert.equal(landedEvent.fizzled, false)
 })
 
 test('applyRaidSpecialAttack: a second same-round player SIPHON_HEALTH cast is a silent no-op (non-stacking)', () => {

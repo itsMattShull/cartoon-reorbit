@@ -210,7 +210,8 @@
                     </ul>
                     <p v-if="lastRoundSummary.enemyDamageDealt > 0" class="cr-reveal-dealt">The party dealt {{ lastRoundSummary.enemyDamageDealt }} damage this round.</p>
                     <p v-for="(s, i) in (lastRoundSummary.specials || [])" :key="i" class="cr-special-flash" :class="s.side === 'PLAYER' ? 'cr-special-flash-player' : 'cr-special-flash-enemy'">
-                      ✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} unleashed <strong>{{ s.name }}</strong>!
+                      <template v-if="s.fizzled">✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} tried to unleash <strong>{{ s.name }}</strong>, but it was blocked and had no effect!</template>
+                      <template v-else>✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} unleashed <strong>{{ s.name }}</strong>!</template>
                     </p>
                     <p v-if="lastRoundSummary.windUpBonus" class="cr-windup-bonus">
                       🛡️ Perfect block! {{ lastRoundSummary.windUpBonus.bonusType === 'HEAL_PARTY'

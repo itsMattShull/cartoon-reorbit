@@ -683,9 +683,13 @@ function describeRaidParticipantResult(raid, result) {
 
 // A special firing, player-cast or the boss's own auto-fire — see this file's own `specialEvents`
 // (built in closeRound) for the shape. Named generically ("unleashed", not "attacked/healed/...")
-// since one line has to read naturally for all five effect types.
+// since one line has to read naturally for all five original effect types. REFLECT_DAMAGE/
+// SIPHON_HEALTH alone can legitimately do nothing (the opponent's action that round was a block —
+// see applyReflectDamage/applySiphonHealth's own comments) and get `s.fizzled` set by those
+// functions; without this branch that was indistinguishable from a normal successful cast.
 function describeRaidSpecialEvent(raid, s) {
   const who = s.side === 'PLAYER' ? (raid.participants.get(s.userId)?.username || 'A player') : raid.enemyName
+  if (s.fizzled) return `✨ ${who} tried to unleash **${s.name}**, but it was blocked and had no effect!`
   return `✨ ${who} unleashed **${s.name}**!`
 }
 
@@ -845,10 +849,12 @@ async function closeRound(io, raid) {
     // the specialEvents entry for this cast was already pushed back in step 1, the instant it was
     // cast; re-entering that function here would announce the same cast twice. ─────────────────
     if (roundGuards.pendingReflect) {
-      applyReflectDamage(raid, alive, roundGuards.pendingReflect.attack, roundGuards.pendingReflect.caster, roundInfo)
+      const { attack, caster, event } = roundGuards.pendingReflect
+      applyReflectDamage(raid, alive, attack, caster, roundInfo, event)
     }
     if (roundGuards.pendingSiphon) {
-      applySiphonHealth(raid, alive, roundGuards.pendingSiphon.attack, roundGuards.pendingSiphon.caster, roundInfo)
+      const { attack, caster, event } = roundGuards.pendingSiphon
+      applySiphonHealth(raid, alive, attack, caster, roundInfo, event)
     }
 
     // ── 3. The boss's own SHARED streak — advances the instant its one rolled action lands on at

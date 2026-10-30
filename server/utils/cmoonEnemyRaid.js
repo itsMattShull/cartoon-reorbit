@@ -261,10 +261,15 @@ export function resolveRaidRound({ enemyAction, enemyMember, participants, party
 // Every other effect type ignores `context` entirely; it costs them nothing.
 export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvents, context = {}) {
   const { roundGuards = null, roundInfo = null } = context
-  specialEvents.push({
+  // Retained by reference below for REFLECT_DAMAGE/SIPHON_HEALTH so a later fizzle (the opponent's
+  // block made it do nothing — a normal, frequent outcome for these two effect types alone, see
+  // applyReflectDamage/applySiphonHealth) can be flagged on this SAME event object the client/
+  // Discord already render, rather than silently landing as a no-op announcement.
+  const event = {
     side: caster.side, userId: caster.userId || null, name: attack.name,
     effectType: attack.effectType, amount: attack.amount, soundPath: attack.soundPath || null,
-  })
+  }
+  specialEvents.push(event)
   if (attack.effectType === 'DAMAGE_OPPONENT') {
     if (caster.side === 'PLAYER') {
       raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - attack.amount)
@@ -325,17 +330,17 @@ export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvent
       // yet at step 1) — closeRound re-invokes applyReflectDamage directly, not this function,
       // once the real round outcome is known, so the specialEvent above is never pushed twice.
       if (roundGuards?.reflectUsed) return
-      if (roundGuards) { roundGuards.reflectUsed = true; roundGuards.pendingReflect = { attack, caster } }
+      if (roundGuards) { roundGuards.reflectUsed = true; roundGuards.pendingReflect = { attack, caster, event } }
       return
     }
-    applyReflectDamage(raid, alive, attack, caster, roundInfo)
+    applyReflectDamage(raid, alive, attack, caster, roundInfo, event)
   } else if (attack.effectType === 'SIPHON_HEALTH') {
     if (caster.side === 'PLAYER') {
       if (roundGuards?.siphonUsed) return
-      if (roundGuards) { roundGuards.siphonUsed = true; roundGuards.pendingSiphon = { attack, caster } }
+      if (roundGuards) { roundGuards.siphonUsed = true; roundGuards.pendingSiphon = { attack, caster, event } }
       return
     }
-    applySiphonHealth(raid, alive, attack, caster, roundInfo)
+    applySiphonHealth(raid, alive, attack, caster, roundInfo, event)
   }
 }
 
@@ -344,7 +349,7 @@ export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvent
 // run). Exported separately from applyRaidSpecialAttack (rather than folded back into it) so
 // closeRound's deferred "step 2.5" can apply a queued player cast WITHOUT re-pushing its
 // specialEvent a second time — that already happened in step 1, the instant it was cast.
-export function applyReflectDamage(raid, alive, attack, caster, roundInfo) {
+export function applyReflectDamage(raid, alive, attack, caster, roundInfo, event = null) {
   const incoming = caster.side === 'PLAYER'
     // Total damage the boss's one shared action actually dealt across the whole party this
     // round — not raid.enemyHpRemaining-adjacent at all, purely "how much did the party just get
@@ -354,6 +359,10 @@ export function applyReflectDamage(raid, alive, attack, caster, roundInfo) {
     // participant missed/was blocked).
     : roundInfo.enemyDamageDealt
   const reflected = Math.round(incoming * attack.reflectPercent / 100)
+  // Flags the SAME specialEvents entry the cast already announced (see applyRaidSpecialAttack)
+  // so describeRaidSpecialEvent/the client can say it fizzled instead of implying it did
+  // something — there was simply no incoming/outgoing damage this round to reflect.
+  if (event) event.fizzled = reflected <= 0
   if (reflected <= 0) return
   if (caster.side === 'PLAYER') {
     raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - reflected)
@@ -375,9 +384,15 @@ export function applyReflectDamage(raid, alive, attack, caster, roundInfo) {
 // `roundInfo.perParticipant[].action` independently — some can block it while others can't, same
 // "no shared lane, no shared fate" AoE shape SIPHON_HEALTH shares with DAMAGE_OPPONENT's own
 // boss-cast branch, just with the added per-target block check neither of those needs.
-export function applySiphonHealth(raid, alive, attack, caster, roundInfo) {
+export function applySiphonHealth(raid, alive, attack, caster, roundInfo, event = null) {
   if (caster.side === 'PLAYER') {
-    if (isBlock(roundInfo.enemyAction)) return
+    // Flags the SAME specialEvents entry the cast already announced (see
+    // applyRaidSpecialAttack) so describeRaidSpecialEvent/the client can say it was blocked
+    // instead of implying it landed — this is the one outcome, by design, where casting this
+    // effect does nothing at all.
+    const blockedOutright = isBlock(roundInfo.enemyAction)
+    if (event) event.fizzled = blockedOutright
+    if (blockedOutright) return
     raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - attack.amount)
     const heal = Math.round(attack.amount * attack.siphonPercent / 100)
     if (heal <= 0) return
@@ -404,6 +419,10 @@ export function applySiphonHealth(raid, alive, attack, caster, roundInfo) {
       if (p.hpRemaining <= 0 && !p.knockedOutAt) p.knockedOutAt = Date.now()
       totalDealt += attack.amount
     }
+    // AoE, not single-lane: "fizzled" here means EVERY alive participant blocked it, not that one
+    // of several did — unlike the player-cast branch above, which has only one shared boss action
+    // to check against.
+    if (event) event.fizzled = totalDealt <= 0
     if (totalDealt > 0) {
       raid.enemyHpRemaining = Math.min(raid.enemyStats.maxHp, raid.enemyHpRemaining + Math.round(totalDealt * attack.siphonPercent / 100))
     }
