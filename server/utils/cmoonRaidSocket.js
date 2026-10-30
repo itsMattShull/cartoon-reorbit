@@ -1059,6 +1059,7 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
             userId, enemyMemberId: raid.enemyMemberId, cMoonId: teamExists ? teamId : null,
             status: 'RESOLVED', outcome, roundNumber: raid.roundNumber,
             playerHpRemaining: p.hpRemaining, enemyHpRemaining: raid.enemyHpRemaining,
+            enemyMaxHp: raid.enemyStats.maxHp,
             roundLog: [], pointsAwarded: 0, rewardsGranted: granted,
             startedAt: new Date(raid.startedAt), endedAt: new Date(raid.endedAt), raidId: raid.id,
           },

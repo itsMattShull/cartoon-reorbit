@@ -310,6 +310,12 @@ async function getTop10TotalCtoonsHolders(rankCutoff) {
 // would stop it from measuring what it says it measures. Backs both the #1-holder HIGH_SCORE-
 // equivalent award and the top-N TOP10-equivalent award below, same "fetch once, reuse for both
 // categories" shape as getTopNScoreHolders/getTopNWinsHolders.
+//
+// Ranked by SUM(enemyMaxHp), NOT COUNT(*) — a plain kill count rewards "goon farming" (repeatedly
+// beating the cheapest, lowest-HP enemy available) just as much as taking on a cMoon's toughest
+// fights, which defeats the point of a "slayer" ranking. See CMoonEnemyBattle.enemyMaxHp's own
+// schema comment. Matches the ranking metric server/api/leaderboard/cmoon-enemies.get.js's own
+// public "Top Enemy Slayers" board uses, for the same reason.
 async function getTopNEnemySlayerHolders(rankCutoff) {
   return prisma.$queryRaw`
     SELECT u."id" AS "userId", u."cMoonId" AS "cMoonId", u."createdAt" AS "createdAt"
@@ -321,7 +327,7 @@ async function getTopNEnemySlayerHolders(rankCutoff) {
       AND COALESCE(u."banned", false) = false
       AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
     GROUP BY u."id", u."cMoonId", u."createdAt"
-    ORDER BY COUNT(*) DESC, u."username" ASC
+    ORDER BY SUM(b."enemyMaxHp") DESC, u."username" ASC
     LIMIT ${rankCutoff}
   `
 }
