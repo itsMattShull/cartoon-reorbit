@@ -791,19 +791,7 @@ async function closeRound(io, raid) {
       enemyAtkBonus: raid.enemyAtkBonus + (raid.enemyAtkRaiseTurnsRemaining > 0 ? raid.enemyAtkRaiseAmount : 0),
     })
 
-    // ── 2.5. Resolve any player-cast Reflect Damage / Siphon Health queued in step 1 — now that
-    // this round's real outcome (`enemyAction`/`perParticipant`/`enemyDamageDealt`, exactly the
-    // shape these two effects need) is known. Calls applyReflectDamage/applySiphonHealth
-    // DIRECTLY, never applyRaidSpecialAttack again — the specialEvents entry for this cast was
-    // already pushed back in step 1, the instant it was cast; re-entering that function here
-    // would announce the same cast twice. ─────────────────────────────────────────────────────
     const roundInfo = { enemyAction, perParticipant, enemyDamageDealt }
-    if (roundGuards.pendingReflect) {
-      applyReflectDamage(raid, alive, roundGuards.pendingReflect.attack, roundGuards.pendingReflect.caster, roundInfo)
-    }
-    if (roundGuards.pendingSiphon) {
-      applySiphonHealth(raid, alive, roundGuards.pendingSiphon.attack, roundGuards.pendingSiphon.caster, roundInfo)
-    }
 
     // The threshold this round's banking math actually uses — 3 normally, or 2 for the whole
     // party when GlobalGameConfig.cMoonCaptainBoostEnabled was on at creation AND a captain is
@@ -846,6 +834,21 @@ async function closeRound(io, raid) {
     if (raid.enemyAtkRaiseTurnsRemaining > 0) {
       raid.enemyAtkRaiseTurnsRemaining -= 1
       if (raid.enemyAtkRaiseTurnsRemaining <= 0) raid.enemyAtkRaiseAmount = 0
+    }
+
+    // ── 2.5. Resolve any player-cast Reflect Damage / Siphon Health queued in step 1 — now that
+    // this round's real outcome (`roundInfo`, built above right after step 2) is known. Must run
+    // AFTER the per-participant overwrite loop just above: that loop unconditionally sets
+    // `p.hpRemaining = result.hpRemaining` from resolveRaidRound's PRE-heal snapshot, so applying
+    // a siphon's heal before that loop runs would get silently wiped out the instant it does.
+    // Calls applyReflectDamage/applySiphonHealth DIRECTLY, never applyRaidSpecialAttack again —
+    // the specialEvents entry for this cast was already pushed back in step 1, the instant it was
+    // cast; re-entering that function here would announce the same cast twice. ─────────────────
+    if (roundGuards.pendingReflect) {
+      applyReflectDamage(raid, alive, roundGuards.pendingReflect.attack, roundGuards.pendingReflect.caster, roundInfo)
+    }
+    if (roundGuards.pendingSiphon) {
+      applySiphonHealth(raid, alive, roundGuards.pendingSiphon.attack, roundGuards.pendingSiphon.caster, roundInfo)
     }
 
     // ── 3. The boss's own SHARED streak — advances the instant its one rolled action lands on at

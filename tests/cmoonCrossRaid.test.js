@@ -4,10 +4,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  applyRaidSpecialAttack, applyReflectDamage, applySiphonHealth, participantCMoonId, raidCMoonIds,
-  raidPartyLabel, splitRaidPoints, rankTierLevel, publicParticipantTeam, buildRaidLobbyEntry,
-  buildRaidLobby, MAX_PARTY_SIZE, rollWindUpMove,
+  applyRaidSpecialAttack, applyReflectDamage, applySiphonHealth, resolveRaidRound, participantCMoonId,
+  raidCMoonIds, raidPartyLabel, splitRaidPoints, rankTierLevel, publicParticipantTeam,
+  buildRaidLobbyEntry, buildRaidLobby, MAX_PARTY_SIZE, rollWindUpMove,
 } from '../server/utils/cmoonEnemyRaid.js'
+import { SPECIAL_ACTION } from '../server/utils/cmoonEnemyBattle.js'
 
 function participant(userId, extra = {}) {
   return {
@@ -235,6 +236,39 @@ test('applyRaidSpecialAttack: a second same-round player SIPHON_HEALTH cast is a
   applyRaidSpecialAttack(raid, [a], { name: 'Drain2', effectType: 'SIPHON_HEALTH', amount: 999, siphonPercent: 100 }, { side: 'PLAYER', userId: 'a' }, events, { roundGuards })
   assert.equal(roundGuards.pendingSiphon.attack.name, 'Drain') // first caster wins
   assert.equal(raid.enemyHpRemaining, 30) // still deferred -- neither applied yet
+})
+
+// Regression test for a real bug an adversarial review caught: cmoonRaidSocket.js's closeRound
+// applies resolveRaidRound's per-participant HP OVERWRITE loop (`p.hpRemaining =
+// result.hpRemaining`, from a snapshot taken BEFORE any heal) — a deferred siphon/reflect
+// resolved before that loop runs would have its heal silently wiped out the instant it does.
+// This reproduces closeRound's actual step order end-to-end (step 2's resolveRaidRound, the
+// per-participant overwrite loop, THEN step 2.5's deferred resolution) to prove the fix holds.
+test('a deferred player-cast SIPHON_HEALTH heal survives resolveRaidRound\'s own per-participant HP overwrite', () => {
+  const a = participant('a', { hpRemaining: 2, maxHp: 10, pendingAction: SPECIAL_ACTION })
+  const raid = raidWith([a])
+
+  // Step 2: the normal lane exchange (the caster's own action is SPECIAL_ACTION, so it neither
+  // attacks nor blocks). The boss's own action is an ATTACK here — not a block, since a blocking
+  // boss would correctly make the siphon itself fizzle (that's SIPHON_HEALTH's own rule, a
+  // different behavior than the one this test is isolating).
+  const { enemyAction, perParticipant, enemyDamageDealt } = resolveRaidRound({
+    enemyAction: 'ATTACK_HIGH', enemyMember: { attackChancePercent: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0 },
+    participants: [{ userId: 'a', action: SPECIAL_ACTION, hpRemaining: a.hpRemaining, maxHp: a.maxHp }],
+  })
+  const roundInfo = { enemyAction, perParticipant, enemyDamageDealt }
+
+  // closeRound's own per-participant overwrite loop, reproduced exactly — the boss's attack lands
+  // on 'a' (SPECIAL_ACTION blocks nothing), so this overwrites her to 2 - 1 = 1 HP, still pre-heal.
+  for (const result of perParticipant) {
+    const p = raid.participants.get(result.userId)
+    p.hpRemaining = result.hpRemaining
+  }
+  assert.equal(a.hpRemaining, 1)
+
+  // Step 2.5: the deferred siphon resolves AFTER the overwrite loop above, per the fix.
+  applySiphonHealth(raid, [a], { name: 'Drain', effectType: 'SIPHON_HEALTH', amount: 6, siphonPercent: 50, healsAllies: false }, { side: 'PLAYER', userId: 'a' }, roundInfo)
+  assert.equal(a.hpRemaining, 4, 'the heal (1 + 6*50%=3) must survive, not be wiped out by the earlier overwrite loop')
 })
 
 test('REFLECT_DAMAGE and SIPHON_HEALTH track their non-stacking slots independently of each other', () => {

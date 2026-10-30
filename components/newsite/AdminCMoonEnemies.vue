@@ -1208,12 +1208,16 @@ async function saveSpecialAttack() {
     specialAttackFormError.value = 'Raise duration must be between 1 and 300 rounds.'
     return
   }
-  const reflectPercent = Math.trunc(Number(specialAttackForm.reflectPercent)) || 100
+  // Deliberately NOT `|| 100`/`|| 50` here — that would silently coerce an admin-typed 0 into
+  // the valid default BEFORE the range check below ever saw it, masking exactly the input the
+  // check exists to reject. When this effectType isn't selected the value is irrelevant anyway
+  // (the server normalizes it away regardless of what's sent), so there's nothing to fall back to.
+  const reflectPercent = Math.trunc(Number(specialAttackForm.reflectPercent))
   if (specialAttackForm.effectType === 'REFLECT_DAMAGE' && (!Number.isInteger(reflectPercent) || reflectPercent < 1 || reflectPercent > 500)) {
     specialAttackFormError.value = 'Reflect percent must be between 1 and 500.'
     return
   }
-  const siphonPercent = Math.trunc(Number(specialAttackForm.siphonPercent)) || 50
+  const siphonPercent = Math.trunc(Number(specialAttackForm.siphonPercent))
   if (specialAttackForm.effectType === 'SIPHON_HEALTH' && (!Number.isInteger(siphonPercent) || siphonPercent < 1 || siphonPercent > 100)) {
     specialAttackFormError.value = 'Siphon percent must be between 1 and 100.'
     return
