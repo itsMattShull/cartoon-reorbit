@@ -77,16 +77,24 @@ export default defineEventHandler(async (event) => {
   // This player's own lifetime win count — gates minPriorDefeats below (see that column's own
   // schema comment). Only queried once the chance roll above already passed, since that roll
   // fails far more often than not (default 3%) and this query would otherwise run on every
-  // navigation for nothing.
-  const personalWinCount = await db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN' } })
+  // navigation for nothing. Two separate counts: a RAID BOSS candidate's minPriorDefeats is
+  // gated on SOLO wins only (raidId: null — a shared raid win, credited to every participant off
+  // one kill, must not unlock harder raid bosses faster than someone's own solo record would),
+  // while every other (non-raid-boss) candidate keeps the original combined count.
+  const [personalWinCount, personalSoloWinCount] = await Promise.all([
+    db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN' } }),
+    db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN', raidId: null } }),
+  ])
 
   // Pick one random active, undefeated, unlocked-for-this-player enemy member (any faction).
   // Excludes SHARED_POOL members already at 0 HP (defeatedAt set) — a PER_PLAYER member's own
   // currentHp is irrelevant here, since every player's encounter with it starts fresh regardless
-  // of anyone else's history.
+  // of anyone else's history. minPriorDefeats itself can't be expressed as a single `where` filter
+  // here any more (it now needs a DIFFERENT win count depending on isRaidBoss, which Prisma can't
+  // compare per-row) — see the per-candidate filter just below instead.
   const rawCandidates = await db.cMoonEnemyMember.findMany({
     where: {
-      active: true, defeatedAt: null, faction: { active: true }, minPriorDefeats: { lte: personalWinCount },
+      active: true, defeatedAt: null, faction: { active: true },
       // A raid boss can only ever be fought through the raid flow (server/utils/cmoonRaidSocket.js),
       // which requires a cMoon (to draw teammates from, announce for, and credit points to) — a
       // player with no cMoon has no way to engage one at all, so it must never be offered to them.
@@ -96,7 +104,7 @@ export default defineEventHandler(async (event) => {
       faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } },
       taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
     },
-  })
+  }).then(rows => rows.filter(m => m.minPriorDefeats <= (m.isRaidBoss ? personalSoloWinCount : personalWinCount)))
   // raidOneTime/raidCooldownMinutes can't be expressed as a single Prisma `where` filter (the
   // cooldown cutoff is a per-row computation against each member's own raidCooldownMinutes) — see
   // checkRaidBossAvailability's own comment for why this is shared with cmoonraid:start's

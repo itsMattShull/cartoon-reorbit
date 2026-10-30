@@ -14,11 +14,12 @@ export default defineEventHandler(async (event) => {
   if (!userId) throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
 
   // Same lifetime-win-count gate consider.post.js reads minPriorDefeats against — see that
-  // column's own schema comment for why this is global, not per-faction/per-member, and why it
-  // deliberately counts a raid win same as a solo one (a raid's synthetic per-participant rows
-  // are designed to feed this). NOT the number shown in the summary strip below — that one
-  // (personalSoloWinCount) is a different, intentionally solo-only total; this variable is used
-  // ONLY for the `locked` gate further down.
+  // column's own schema comment for why this is global, not per-faction/per-member. A raid boss
+  // member is gated on personalSoloWinCount instead (see the `locked` check below) — same reason
+  // loadEligibility/consider.post.js scope a raid boss's own gate to solo wins: a shared raid win
+  // (one synthetic row per participant off a single kill) must not unlock a harder raid boss
+  // faster than someone's own solo record would. Every other (non-raid-boss) member keeps this
+  // combined count.
   const personalWinCount = await db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN' } })
 
   const factions = await db.cMoonEnemyFaction.findMany({
@@ -94,9 +95,12 @@ export default defineEventHandler(async (event) => {
       description: f.description,
       bannerImagePath: f.bannerImagePath,
       members: f.members.map(m => {
-        const locked = personalWinCount < m.minPriorDefeats
+        // A raid boss's own gate is solo-only (see personalWinCount's own comment above) — every
+        // other member keeps the combined count.
+        const myWinCount = m.isRaidBoss ? personalSoloWinCount : personalWinCount
+        const locked = myWinCount < m.minPriorDefeats
         if (locked) {
-          const remaining = m.minPriorDefeats - personalWinCount
+          const remaining = m.minPriorDefeats - myWinCount
           return {
             id: m.id,
             locked: true,

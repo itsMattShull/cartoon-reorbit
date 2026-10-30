@@ -405,7 +405,12 @@ async function loadEligibility({ userId, enemyMember, reservedForRaidId = null }
   const activeSolo = await db.cMoonEnemyBattle.findFirst({ where: { userId, status: 'IN_PROGRESS' }, select: { id: true } })
   if (activeSolo) return { ok: false, message: 'Finish your current battle before joining a raid' }
   if (enemyMember.minPriorDefeats > 0) {
-    const wins = await db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN' } })
+    // SOLO wins only (raidId: null) — a shared raid win, credited to every participant off one
+    // kill, must not unlock a harder raid boss faster than someone's own solo record would. Every
+    // other minPriorDefeats check on the non-raid side (start.post.js, consider.post.js's
+    // non-raid-boss candidates, achievements) deliberately keeps counting raid wins — this is the
+    // one gate that's specifically about raid bosses themselves, so it's the one scoped to solo.
+    const wins = await db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN', raidId: null } })
     if (wins < enemyMember.minPriorDefeats) {
       return { ok: false, message: 'You have not defeated enough enemies to face this one yet' }
     }
@@ -495,8 +500,10 @@ async function notifyRaidLobbyOpened(io, { initiatorUserId, initiatorUsername, e
     if (!candidates.length) return
     let eligibleIds = candidates.map(c => c.id)
     if (enemyMember.minPriorDefeats > 0) {
+      // Solo wins only, matching loadEligibility's own gate for actually joining this raid boss —
+      // otherwise a player could be notified about a raid their real win count doesn't clear yet.
       const winCounts = await db.cMoonEnemyBattle.groupBy({
-        by: ['userId'], where: { userId: { in: eligibleIds }, outcome: 'WIN' }, _count: { _all: true },
+        by: ['userId'], where: { userId: { in: eligibleIds }, outcome: 'WIN', raidId: null }, _count: { _all: true },
       })
       const winsById = new Map(winCounts.map(w => [w.userId, w._count._all]))
       eligibleIds = eligibleIds.filter(id => (winsById.get(id) || 0) >= enemyMember.minPriorDefeats)

@@ -6129,13 +6129,18 @@ model CMoonEnemyMember {
   // an admin is free to make a low-HP "Final Boss" or a tanky "Goon" if that fits a faction's story.
   rank                     CMoonEnemyRank       @default(GOON)
   // Gates whether this member can be OFFERED to a given player at all (checked in
-  // consider.post.js's candidate query and re-checked in start.post.js against a direct call) —
-  // 0 (the default) means no requirement. Scoped to that ONE player's own lifetime cMoon Enemy
-  // Battle win count (db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN' } }), the same
-  // query cmoonMonstersDefeatedGte's achievement check uses), never a team or global total — two
-  // players can be at completely different points in the same faction's roster. Free to change at
-  // any time (raising or lowering it only affects future offers, never rewrites history), unlike
-  // rank/battleMode above.
+  // consider.post.js's candidate query, re-checked in start.post.js against a direct call for a
+  // non-raid-boss member, and in cmoonRaidSocket.js's loadEligibility for a raid boss) — 0 (the
+  // default) means no requirement. Scoped to that ONE player's own lifetime win count, never a
+  // team or global total — two players can be at completely different points in the same
+  // faction's roster. For a non-raid-boss member this is the combined cMoon Enemy Battle win
+  // count (db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN' } }), the same query
+  // cmoonMonstersDefeatedGte's achievement check uses). For a RAID BOSS member (isRaidBoss) it's
+  // SOLO wins only (raidId: null) instead — a shared raid win, credited to every participant off
+  // one kill, must not unlock a harder raid boss faster than someone's own solo record would; see
+  // loadEligibility/notifyRaidLobbyOpened in cmoonRaidSocket.js and consider.post.js/
+  // enemies.get.js's own per-candidate win-count selection. Free to change at any time (raising or
+  // lowering it only affects future offers, never rewrites history), unlike rank/battleMode above.
   minPriorDefeats          Int                  @default(0)
   // Relative weight in the popup-consider roll's weighted random pick (server/utils/cmoonEnemy.js's
   // pickWeightedEnemy, used by consider.post.js) among whichever OTHER already-eligible candidates
