@@ -17,10 +17,7 @@ export default defineEventHandler(async (event) => {
   const id = event.context.params?.id
   const member = await db.cMoonEnemyMember.findUnique({
     where: { id },
-    include: {
-      faction: { include: { appearEffect: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } },
-      taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
-    },
+    include: { faction: { include: { appearEffect: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } },
   })
   if (!member) throw createError({ statusCode: 404, statusMessage: 'Enemy member not found' })
 

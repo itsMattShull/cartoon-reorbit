@@ -30,48 +30,6 @@
           </span>
         </label>
         <p v-if="higherTierFirstError" class="text-red-600">{{ higherTierFirstError }}</p>
-
-        <label class="flex items-start gap-2">
-          <input type="checkbox" v-model="captainBoostEnabled" class="mt-0.5" @change="saveCaptainBoostEnabled" :disabled="savingCaptainBoostEnabled" />
-          <span>
-            <span class="font-medium">Captain boost effect</span>
-            <p class="text-[11px] text-gray-500 mt-0.5">
-              When on, any raid with a cMoon captain in the party shows an epic "Captain present!"
-              overlay during the lobby and lowers the special-attack hit-streak needed to 2 (instead
-              of 3) for every participant, for the whole raid. Off (default) leaves every raid
-              unaffected — raid boss fights only; solo battles never change.
-            </p>
-          </span>
-        </label>
-        <p v-if="captainBoostEnabledError" class="text-red-600">{{ captainBoostEnabledError }}</p>
-
-        <label class="flex items-start gap-2">
-          <input type="checkbox" v-model="soloQueueEnabled" class="mt-0.5" @change="saveSoloQueueEnabled" :disabled="savingSoloQueueEnabled" />
-          <span>
-            <span class="font-medium">Allow solo raid queueing</span>
-            <p class="text-[11px] text-gray-500 mt-0.5">
-              On (default) lets a raid leader start combat alone — via "Start now" or the join
-              window simply expiring — and earn the solo reward bonus. Off requires at least one
-              more player before a raid can start: "Start now" is rejected while solo, and an
-              expiring join window just re-opens instead of starting the fight.
-            </p>
-          </span>
-        </label>
-        <p v-if="soloQueueEnabledError" class="text-red-600">{{ soloQueueEnabledError }}</p>
-
-        <label class="flex items-start gap-2">
-          <input type="checkbox" v-model="privateLobbiesEnabled" class="mt-0.5" @change="savePrivateLobbiesEnabled" :disabled="savingPrivateLobbiesEnabled" />
-          <span>
-            <span class="font-medium">Allow private raid lobbies</span>
-            <p class="text-[11px] text-gray-500 mt-0.5">
-              On (default) lets a player mark a new raid as private/invite-only (not listed in the
-              Raid Boss Lobby, reachable only via its link). Off forces every new raid public
-              regardless of what a player requests — raids already created as private keep
-              working as they were.
-            </p>
-          </span>
-        </label>
-        <p v-if="privateLobbiesEnabledError" class="text-red-600">{{ privateLobbiesEnabledError }}</p>
       </section>
 
       <!-- ── Special attacks ──────────────────────────────────────── -->
@@ -90,7 +48,6 @@
               <div class="text-[11px] text-gray-600">
                 {{ SPECIAL_ATTACK_EFFECT_LABELS[a.effectType] }} ({{ a.amount }})
                 <span v-if="a.effectType === 'HEAL_SELF' && a.healsAllies"> · heals the whole party in raids</span>
-                <span v-if="a.playerChoice"> · player choice</span>
                 <span v-if="a.cmoonUsageCount || a.enemyFactionUsageCount">
                   · used by {{ a.cmoonUsageCount }} cMoon(s), {{ a.enemyFactionUsageCount }} faction(s)
                 </span>
@@ -135,16 +92,6 @@
           </div>
           <p class="text-[11px] text-gray-500">{{ SPECIAL_ATTACK_EFFECT_HELP[specialAttackForm.effectType] }}</p>
 
-          <div v-if="specialAttackForm.effectType === 'RAISE_ALLY_ATTACK'" class="w-40">
-            <label class="block text-xs font-medium mb-1">Raise duration in a raid, rounds (1-300)</label>
-            <input v-model.number="specialAttackForm.raiseDurationRounds" type="number" min="1" max="300" class="w-full border rounded px-2 py-1" />
-            <p class="text-[10px] text-gray-500 mt-1">
-              In a co-op raid, this attack's raise lasts this many rounds and can't stack with itself or another
-              attack-raise — only one can be active for the party at a time. In a solo fight this is ignored; the
-              raise still lasts the rest of the battle there.
-            </p>
-          </div>
-
           <label v-if="specialAttackForm.effectType === 'HEAL_SELF'" class="flex items-start gap-2">
             <input type="checkbox" v-model="specialAttackForm.healsAllies" class="mt-0.5" />
             <span>
@@ -152,18 +99,6 @@
               <p class="text-[10px] text-gray-500 mt-0.5">
                 In a solo fight this changes nothing — the caster is always the only one healed either way. In a raid,
                 off means only the caster is healed; on extends the same amount to every other alive party member too.
-              </p>
-            </span>
-          </label>
-
-          <label class="flex items-start gap-2">
-            <input type="checkbox" v-model="specialAttackForm.playerChoice" class="mt-0.5" />
-            <span>
-              <span class="text-xs font-medium">Player Choice</span>
-              <p class="text-[10px] text-gray-500 mt-0.5">
-                Lets a player pick this attack for themselves (in their own settings page), overriding whichever
-                special attack their cMoon has assigned — the "choose cMoon special attack" button there only
-                offers attacks with this on.
               </p>
             </span>
           </label>
@@ -525,10 +460,9 @@
               <span class="text-xs font-medium">Group raid boss</span>
             </label>
             <p class="text-[11px] text-gray-500">
-              The first eligible player to encounter this boss can start a raid instead of fighting solo: other eligible
-              players from any cMoon get a join window to join before it auto-starts (configurable below and in the
-              cMoons page's Raid Settings), everyone sees each other's moves live, and a party win grants the same
-              shared prize to everyone who joined.
+              The first eligible player to encounter this boss can start a raid instead of fighting solo: up to 3 more
+              eligible members of their own cMoon get a 60-second window to join before it auto-starts, everyone sees
+              each other's moves live, and a party win grants the same shared prize to everyone who joined.
             </p>
             <div v-if="memberForm.isRaidBoss">
               <label class="block text-[11px] font-medium mb-1">Discord announcement (optional)</label>
@@ -554,29 +488,6 @@
               <input v-model.number="memberForm.raidCooldownMinutes" type="number" min="0" max="43200" class="w-full border rounded px-2 py-1 text-xs" />
               <p class="text-[10px] text-gray-500 mt-1">0 means it can be raided again immediately. Automatically becomes raidable again once the cooldown passes — no admin action needed.</p>
             </div>
-            <div v-if="memberForm.isRaidBoss">
-              <label class="block text-[11px] font-medium mb-1">Max participants (1-8)</label>
-              <input v-model.number="memberForm.maxParticipants" type="number" min="1" max="8" class="w-full border rounded px-2 py-1 text-xs" />
-              <p class="text-[10px] text-gray-500 mt-1">How many players this raid's party can hold. Changing this only affects raids started after you save.</p>
-            </div>
-            <div v-if="memberForm.isRaidBoss">
-              <label class="block text-[11px] font-medium mb-1">Round limit (50-400)</label>
-              <input v-model.number="memberForm.raidRoundLimit" type="number" min="50" max="400" class="w-full border rounded px-2 py-1 text-xs" />
-              <p class="text-[10px] text-gray-500 mt-1">
-                If the raid reaches this many rounds with neither side defeated, it ends with no clear winner.
-                Changing this only affects raids started after you save.
-              </p>
-            </div>
-            <div v-if="memberForm.isRaidBoss" class="pt-1">
-              <label class="flex items-center gap-2">
-                <input type="checkbox" v-model="memberForm.windUpEnabled" />
-                <span class="text-[11px] font-medium">Wind-up / telegraph moves</span>
-              </label>
-              <p class="text-[10px] text-gray-500 mt-1">
-                When on, this boss can telegraph an incoming high/low attack (configured below) that the whole
-                party can block for a bonus. Requires at least one move configured below to actually fire.
-              </p>
-            </div>
           </div>
           <p v-else-if="memberForm.isRaidBoss" class="text-[11px] text-amber-600">This member is marked as a raid boss but is no longer Final Boss rank — switch it back to Final Boss to keep raid mode, or it will be turned off on save.</p>
 
@@ -599,8 +510,8 @@
 
           <div class="flex gap-2">
             <div class="flex-1 min-w-0">
-              <label class="block text-xs font-medium mb-1">Max HP (1-500)</label>
-              <input v-model.number="memberForm.maxHp" type="number" min="1" max="500" class="w-full border rounded px-2 py-1" />
+              <label class="block text-xs font-medium mb-1">Max HP (1-200)</label>
+              <input v-model.number="memberForm.maxHp" type="number" min="1" max="200" class="w-full border rounded px-2 py-1" />
             </div>
             <div class="flex-1 min-w-0">
               <label class="block text-xs font-medium mb-1">cMoon points on win (0-5000)</label>
@@ -801,140 +712,6 @@
               :disabled="rewardSaving" @click="addReward"
             >{{ rewardSaving ? 'Adding…' : 'Add prize' }}</button>
           </div>
-
-          <!-- Wind-up/telegraph moves — only for a raid boss that's already been created, same
-               "add one, remove one, no in-place edit" shape as the prizes block above. -->
-          <div v-if="memberForm.id && memberForm.isRaidBoss" class="pt-2 border-t space-y-2">
-            <h4 class="font-semibold text-xs">Wind-up / telegraph moves</h4>
-            <div v-if="editingMemberWindUpMoves.length" class="space-y-1">
-              <div v-for="w in editingMemberWindUpMoves" :key="w.id" class="flex items-center gap-2 text-[11px] bg-gray-50 rounded px-2 py-1">
-                <span class="flex-1 min-w-0 break-words">{{ windUpMoveLabel(w) }}</span>
-                <button type="button" class="text-red-600 hover:underline flex-shrink-0" :disabled="deletingWindUpMoveId === w.id" @click="removeWindUpMove(w)">
-                  {{ deletingWindUpMoveId === w.id ? 'Removing…' : 'Remove' }}
-                </button>
-              </div>
-            </div>
-            <p v-else class="text-gray-500">No wind-up moves configured yet — this boss never telegraphs.</p>
-
-            <p v-if="windUpMoveFormError" class="text-red-600">{{ windUpMoveFormError }}</p>
-            <div>
-              <label class="block text-[11px] font-medium mb-1">Telegraph message (shown to the whole party)</label>
-              <input
-                v-model="windUpMoveForm.telegraphMessage" maxlength="300" class="w-full border rounded px-2 py-1"
-                placeholder="The boss rears back for a devastating high strike!"
-              />
-            </div>
-            <div class="flex gap-2 flex-wrap items-end">
-              <div class="w-28 flex-shrink-0">
-                <label class="block text-[11px] font-medium mb-1">Direction</label>
-                <select v-model="windUpMoveForm.direction" class="w-full border rounded px-2 py-1">
-                  <option value="HIGH">High</option>
-                  <option value="LOW">Low</option>
-                </select>
-              </div>
-              <div class="w-32 flex-shrink-0">
-                <label class="block text-[11px] font-medium mb-1">Occurrence % (0-100)</label>
-                <input v-model.number="windUpMoveForm.occurrencePercent" type="number" min="0" max="100" class="w-full border rounded px-2 py-1" />
-              </div>
-              <div class="w-36 flex-shrink-0">
-                <label class="block text-[11px] font-medium mb-1">Bonus on perfect block</label>
-                <select v-model="windUpMoveForm.bonusType" class="w-full border rounded px-2 py-1">
-                  <option value="HEAL_PARTY">Heal party</option>
-                  <option value="DAMAGE_ENEMY">Damage boss</option>
-                </select>
-              </div>
-              <div class="w-24 flex-shrink-0">
-                <label class="block text-[11px] font-medium mb-1">Amount (1-999)</label>
-                <input v-model.number="windUpMoveForm.bonusAmount" type="number" min="1" max="999" class="w-full border rounded px-2 py-1" />
-              </div>
-            </div>
-            <p class="text-[10px] text-gray-500">
-              This chance is an INDEPENDENT per-round roll for this one move — not a relative weight like the
-              occurrence weight field above. If every alive party member blocks the telegraphed direction, the
-              bonus applies.
-            </p>
-            <button
-              type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-              :disabled="windUpMoveSaving" @click="addWindUpMove"
-            >{{ windUpMoveSaving ? 'Adding…' : 'Add wind-up move' }}</button>
-          </div>
-
-          <!-- Member taunts (CMoonEnemyMemberTaunt) — this member's own unique taunt pool, merged
-               with its faction's shared pool at battle time (see mergeTauntPools). Only for an
-               already-created member, same shape as the faction taunts block above. -->
-          <div v-if="memberForm.id" class="pt-2 border-t space-y-3">
-            <h4 class="font-semibold text-xs">Unique taunts (this member only)</h4>
-            <p class="text-[10px] text-gray-500">
-              These are added to this member's faction taunts, not a replacement for them — both pools are
-              combined and picked from at random during battles and raids featuring this member.
-            </p>
-            <div v-for="group in TAUNT_TRIGGER_GROUPS" :key="group.key">
-              <h5 class="font-semibold text-xs">{{ group.label }}</h5>
-              <p class="text-[10px] text-gray-500 mb-1">{{ group.help }}</p>
-              <div v-if="memberTauntsByTrigger[group.key].length" class="space-y-1">
-                <div v-for="t in memberTauntsByTrigger[group.key]" :key="t.id" class="border rounded p-2 space-y-1">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <label class="flex items-center gap-1 flex-shrink-0">
-                      <input type="checkbox" :checked="t.active" @change="toggleMemberTauntActive(t, $event.target.checked)" />
-                      <span class="text-[10px]">Active</span>
-                    </label>
-                    <template v-if="memberTauntRowState[t.id]?.editingText">
-                      <input
-                        v-model="memberTauntRowState[t.id].textDraft" maxlength="200"
-                        class="flex-1 min-w-[120px] border rounded px-1.5 py-0.5 text-[11px]"
-                      />
-                      <button
-                        type="button" class="text-indigo-600 hover:underline text-[11px] flex-shrink-0"
-                        :disabled="memberTauntRowState[t.id].savingEdit" @click="saveMemberTauntText(t)"
-                      >{{ memberTauntRowState[t.id].savingEdit ? 'Saving…' : 'Save' }}</button>
-                      <button type="button" class="text-gray-500 hover:underline text-[11px] flex-shrink-0" @click="cancelMemberTauntTextEdit(t)">Cancel</button>
-                    </template>
-                    <template v-else>
-                      <span class="flex-1 min-w-0 break-words text-[11px]">{{ t.text }}</span>
-                      <button type="button" class="text-indigo-600 hover:underline text-[11px] flex-shrink-0" @click="startMemberTauntTextEdit(t)">Edit</button>
-                    </template>
-                    <button
-                      type="button" class="text-red-600 hover:underline text-[11px] flex-shrink-0"
-                      :disabled="memberTauntRowState[t.id]?.deleting" @click="removeMemberTaunt(t)"
-                    >{{ memberTauntRowState[t.id]?.deleting ? 'Removing…' : 'Remove' }}</button>
-                  </div>
-                  <div class="flex items-center gap-2 flex-wrap pl-5">
-                    <audio v-if="t.soundPath" :src="t.soundPath" controls class="h-7 flex-shrink-0" style="max-width: 200px;" />
-                    <span v-else class="text-[10px] text-gray-400 flex-shrink-0">No sound</span>
-                    <input
-                      type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav"
-                      class="text-[10px] flex-1 min-w-[140px]" @change="onMemberTauntSoundFile(t.id, $event)"
-                    />
-                    <button
-                      type="button" class="px-2 py-0.5 text-[10px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                      :disabled="!memberTauntRowState[t.id]?.pendingSoundFile || memberTauntRowState[t.id]?.uploadingSound"
-                      @click="uploadMemberTauntSound(t.id)"
-                    >{{ memberTauntRowState[t.id]?.uploadingSound ? 'Uploading…' : 'Upload' }}</button>
-                  </div>
-                  <p v-if="memberTauntRowState[t.id]?.error" class="text-red-600 text-[10px] pl-5">{{ memberTauntRowState[t.id].error }}</p>
-                </div>
-              </div>
-              <p v-else class="text-gray-500 text-[11px]">None yet.</p>
-            </div>
-
-            <div class="border rounded p-2 space-y-2 bg-gray-50">
-              <h5 class="font-semibold text-[11px]">New unique taunt</h5>
-              <p v-if="memberTauntFormError" class="text-red-600 text-[11px]">{{ memberTauntFormError }}</p>
-              <div class="flex gap-2">
-                <select v-model="memberTauntForm.trigger" class="border rounded px-2 py-1 text-[11px] w-28 flex-shrink-0">
-                  <option v-for="group in TAUNT_TRIGGER_GROUPS" :key="group.key" :value="group.key">{{ group.label }}</option>
-                </select>
-                <input
-                  v-model="memberTauntForm.text" maxlength="200" class="flex-1 border rounded px-2 py-1 text-[11px]"
-                  placeholder="e.g. You call that a punch?"
-                />
-              </div>
-              <button
-                type="button" class="px-2 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                :disabled="memberTauntSaving" @click="addMemberTaunt"
-              >{{ memberTauntSaving ? 'Adding…' : 'Add taunt' }}</button>
-            </div>
-          </div>
         </div>
       </section>
     </div>
@@ -1000,64 +777,6 @@ async function saveHigherTierFirst() {
   }
 }
 
-// GlobalGameConfig.cMoonCaptainBoostEnabled — same shape/row/pattern as higherTierFirst above.
-const captainBoostEnabled = ref(false)
-const savingCaptainBoostEnabled = ref(false)
-const captainBoostEnabledError = ref('')
-
-async function saveCaptainBoostEnabled() {
-  captainBoostEnabledError.value = ''
-  const next = captainBoostEnabled.value
-  savingCaptainBoostEnabled.value = true
-  try {
-    await $fetch('/api/admin/cmoon-settings', { method: 'POST', body: { cMoonCaptainBoostEnabled: next } })
-  } catch (e) {
-    captainBoostEnabled.value = !next // revert the optimistic checkbox toggle on failure
-    captainBoostEnabledError.value = e?.data?.statusMessage || 'Failed to save'
-  } finally {
-    savingCaptainBoostEnabled.value = false
-  }
-}
-
-// GlobalGameConfig.cMoonRaidSoloQueueEnabled / cMoonRaidPrivateLobbiesEnabled — same shape/row/
-// pattern as captainBoostEnabled above, just default TRUE (an opt-OUT toggle for pre-existing
-// behavior, not an opt-in new feature).
-const soloQueueEnabled = ref(true)
-const savingSoloQueueEnabled = ref(false)
-const soloQueueEnabledError = ref('')
-
-async function saveSoloQueueEnabled() {
-  soloQueueEnabledError.value = ''
-  const next = soloQueueEnabled.value
-  savingSoloQueueEnabled.value = true
-  try {
-    await $fetch('/api/admin/cmoon-settings', { method: 'POST', body: { cMoonRaidSoloQueueEnabled: next } })
-  } catch (e) {
-    soloQueueEnabled.value = !next
-    soloQueueEnabledError.value = e?.data?.statusMessage || 'Failed to save'
-  } finally {
-    savingSoloQueueEnabled.value = false
-  }
-}
-
-const privateLobbiesEnabled = ref(true)
-const savingPrivateLobbiesEnabled = ref(false)
-const privateLobbiesEnabledError = ref('')
-
-async function savePrivateLobbiesEnabled() {
-  privateLobbiesEnabledError.value = ''
-  const next = privateLobbiesEnabled.value
-  savingPrivateLobbiesEnabled.value = true
-  try {
-    await $fetch('/api/admin/cmoon-settings', { method: 'POST', body: { cMoonRaidPrivateLobbiesEnabled: next } })
-  } catch (e) {
-    privateLobbiesEnabled.value = !next
-    privateLobbiesEnabledError.value = e?.data?.statusMessage || 'Failed to save'
-  } finally {
-    savingPrivateLobbiesEnabled.value = false
-  }
-}
-
 async function load() {
   loading.value = true
   loadError.value = ''
@@ -1079,11 +798,6 @@ async function load() {
     ctoonsCatalog.value = ctoonsData || []
     joinEffects.value = joinEffectsData?.effects || []
     higherTierFirst.value = !!cmoonsData?.cMoonEnemyHigherTierFirst
-    captainBoostEnabled.value = !!cmoonsData?.cMoonCaptainBoostEnabled
-    // Default true (not false) if somehow absent — these are opt-OUT toggles, same reasoning as
-    // their own ref initializers above.
-    soloQueueEnabled.value = cmoonsData?.cMoonRaidSoloQueueEnabled !== false
-    privateLobbiesEnabled.value = cmoonsData?.cMoonRaidPrivateLobbiesEnabled !== false
     specialAttacks.value = specialAttacksData?.attacks || []
   } catch (e) {
     loadError.value = e?.data?.statusMessage || 'Failed to load cMoon enemies'
@@ -1101,7 +815,7 @@ const specialAttackUploadingSound = ref(false)
 const specialAttackSoundError = ref('')
 const specialAttackSavedSoundPath = ref('')
 
-const emptySpecialAttackForm = () => ({ id: '', name: '', description: '', effectType: 'DAMAGE_OPPONENT', amount: 10, raiseDurationRounds: 300, healsAllies: false, playerChoice: false })
+const emptySpecialAttackForm = () => ({ id: '', name: '', description: '', effectType: 'DAMAGE_OPPONENT', amount: 10, healsAllies: false })
 const specialAttackForm = reactive(emptySpecialAttackForm())
 
 function resetSpecialAttackForm() {
@@ -1120,9 +834,7 @@ function startEditSpecialAttack(a) {
   specialAttackForm.description = a.description || ''
   specialAttackForm.effectType = a.effectType
   specialAttackForm.amount = a.amount
-  specialAttackForm.raiseDurationRounds = a.raiseDurationRounds ?? 300
   specialAttackForm.healsAllies = !!a.healsAllies
-  specialAttackForm.playerChoice = !!a.playerChoice
   specialAttackSavedSoundPath.value = a.soundPath || ''
 }
 
@@ -1173,11 +885,6 @@ async function saveSpecialAttack() {
     specialAttackFormError.value = 'Amount must be between 1 and 999.'
     return
   }
-  const raiseDurationRounds = Math.trunc(Number(specialAttackForm.raiseDurationRounds)) || 300
-  if (specialAttackForm.effectType === 'RAISE_ALLY_ATTACK' && (!Number.isInteger(raiseDurationRounds) || raiseDurationRounds < 1 || raiseDurationRounds > 300)) {
-    specialAttackFormError.value = 'Raise duration must be between 1 and 300 rounds.'
-    return
-  }
 
   specialAttackSaving.value = true
   try {
@@ -1186,9 +893,7 @@ async function saveSpecialAttack() {
       description: specialAttackForm.description.trim() || null,
       effectType: specialAttackForm.effectType,
       amount,
-      raiseDurationRounds,
       healsAllies: specialAttackForm.effectType === 'HEAL_SELF' ? specialAttackForm.healsAllies : false,
-      playerChoice: specialAttackForm.playerChoice,
     }
     if (specialAttackForm.id) {
       await $fetch(`/api/admin/cmoon-special-attacks/${specialAttackForm.id}`, { method: 'PUT', body })
@@ -1611,7 +1316,6 @@ const previewMemberId = ref(null)
 const startingRaidPreviewId = ref('')
 const editingMemberHasBattles = ref(false)
 const editingMemberRewards = ref([])
-const editingMemberWindUpMoves = ref([])
 const memberPendingFile = ref(null)
 const memberPendingFilePreviewUrl = ref(null)
 const memberUploadingImage = ref(false)
@@ -1700,7 +1404,6 @@ const emptyMemberForm = () => ({
   attackChancePercent: 50, pityThreshold: 0, firstWinBonusPoints: 0,
   active: true, sortOrder: 0,
   isRaidBoss: false, raidAnnouncementText: '', raidOneTime: false, raidCooldownMinutes: 0,
-  maxParticipants: 4, raidRoundLimit: 300, windUpEnabled: false,
 })
 const memberForm = reactive(emptyMemberForm())
 const memberPreviewImageSrc = computed(() => memberPendingFilePreviewUrl.value || memberSavedImagePath.value || '')
@@ -1719,9 +1422,7 @@ function resetMemberForm() {
   resetMemberSoundState()
   editingMemberHasBattles.value = false
   editingMemberRewards.value = []
-  editingMemberWindUpMoves.value = []
   resetRewardForm()
-  resetWindUpMoveForm()
   Object.assign(memberForm, emptyMemberForm())
   if (memberFactionFilter.value) memberForm.factionId = memberFactionFilter.value
 }
@@ -1763,13 +1464,11 @@ function startEditMember(m) {
     active: !!m.active, sortOrder: m.sortOrder,
     isRaidBoss: !!m.isRaidBoss, raidAnnouncementText: m.raidAnnouncementText || '',
     raidOneTime: !!m.raidOneTime, raidCooldownMinutes: m.raidCooldownMinutes ?? 0,
-    maxParticipants: m.maxParticipants ?? 4, raidRoundLimit: m.raidRoundLimit ?? 300, windUpEnabled: !!m.windUpEnabled,
   })
   memberSavedImagePath.value = m.imagePath || ''
   for (const s of SOUND_SLOTS) memberSoundState[s.key].savedPath = m[s.field] || ''
   editingMemberHasBattles.value = !!m.hasBattles
   editingMemberRewards.value = m.rewards || []
-  editingMemberWindUpMoves.value = m.windUpMoves || []
 }
 
 function onMemberFile(ev) {
@@ -1818,7 +1517,7 @@ async function saveMember() {
   if (!memberForm.factionId) { memberFormError.value = 'Pick a faction.'; return }
   if (!memberForm.name.trim()) { memberFormError.value = 'Name is required.'; return }
   const maxHp = Math.trunc(Number(memberForm.maxHp))
-  if (!Number.isInteger(maxHp) || maxHp < 1 || maxHp > 500) { memberFormError.value = 'Max HP must be between 1 and 500.'; return }
+  if (!Number.isInteger(maxHp) || maxHp < 1 || maxHp > 200) { memberFormError.value = 'Max HP must be between 1 and 200.'; return }
   const cMoonPointsReward = Math.trunc(Number(memberForm.cMoonPointsReward))
   if (!Number.isInteger(cMoonPointsReward) || cMoonPointsReward < 0 || cMoonPointsReward > 5000) {
     memberFormError.value = 'cMoon points reward must be between 0 and 5000.'
@@ -1872,16 +1571,6 @@ async function saveMember() {
     memberFormError.value = 'Raid cooldown must be between 0 and 43200 minutes.'
     return
   }
-  const maxParticipants = Math.trunc(Number(memberForm.maxParticipants)) || 4
-  if (!Number.isInteger(maxParticipants) || maxParticipants < 1 || maxParticipants > 8) {
-    memberFormError.value = 'Max participants must be between 1 and 8.'
-    return
-  }
-  const raidRoundLimit = Math.trunc(Number(memberForm.raidRoundLimit)) || 300
-  if (!Number.isInteger(raidRoundLimit) || raidRoundLimit < 50 || raidRoundLimit > 400) {
-    memberFormError.value = 'Round limit must be between 50 and 400.'
-    return
-  }
 
   memberSaving.value = true
   try {
@@ -1909,9 +1598,6 @@ async function saveMember() {
       // on later doesn't silently reset it.
       raidOneTime: memberForm.raidOneTime,
       raidCooldownMinutes,
-      maxParticipants,
-      raidRoundLimit,
-      windUpEnabled: memberForm.windUpEnabled,
     }
     let id = memberForm.id
     if (id) {
@@ -2090,209 +1776,6 @@ async function removeReward(r) {
     loadError.value = e?.data?.statusMessage || 'Failed to remove prize'
   } finally {
     deletingRewardId.value = ''
-  }
-}
-
-// ── Wind-up/telegraph moves (per-member, add/remove one row at a time) — same shape as the
-// rewards block above, see its own header comment for why editing a row is "remove and re-add". ──
-const windUpMoveSaving = ref(false)
-const windUpMoveFormError = ref('')
-const deletingWindUpMoveId = ref('')
-
-const emptyWindUpMoveForm = () => ({ telegraphMessage: '', direction: 'HIGH', occurrencePercent: 25, bonusType: 'HEAL_PARTY', bonusAmount: 1 })
-const windUpMoveForm = reactive(emptyWindUpMoveForm())
-
-function resetWindUpMoveForm() {
-  windUpMoveFormError.value = ''
-  Object.assign(windUpMoveForm, emptyWindUpMoveForm())
-}
-
-// ── Member taunts (CMoonEnemyMemberTaunt) — this member's own unique taunt pool, merged with its
-// faction's shared pool server-side at battle/raid-start time (mergeTauntPools in
-// cmoonEnemyBattle.js). Deliberately mirrors the faction taunts block above function-for-function
-// (computed-off-the-list, add-one/remove-one, trigger locked after create) rather than sharing code
-// with it, since the two pools hang off different parent records and different endpoints. ────────
-const memberTauntsByTrigger = computed(() => {
-  const all = members.value.find(m => m.id === memberForm.id)?.taunts || []
-  return {
-    APPEAR: all.filter(t => t.trigger === 'APPEAR'),
-    CRIT: all.filter(t => t.trigger === 'CRIT'),
-  }
-})
-
-const emptyMemberTauntForm = () => ({ trigger: 'APPEAR', text: '' })
-const memberTauntForm = reactive(emptyMemberTauntForm())
-const memberTauntFormError = ref('')
-const memberTauntSaving = ref(false)
-const memberTauntRowState = reactive({})
-function ensureMemberTauntRowState(id) {
-  if (!memberTauntRowState[id]) {
-    memberTauntRowState[id] = {
-      editingText: false, textDraft: '', savingEdit: false,
-      pendingSoundFile: null, uploadingSound: false,
-      deleting: false, error: '',
-    }
-  }
-  return memberTauntRowState[id]
-}
-
-async function addMemberTaunt() {
-  memberTauntFormError.value = ''
-  if (!memberForm.id) return
-  if (!memberTauntForm.text.trim()) { memberTauntFormError.value = 'Text is required.'; return }
-  memberTauntSaving.value = true
-  try {
-    await $fetch(`/api/admin/cmoon-enemy-members/${memberForm.id}/taunts`, {
-      method: 'POST', body: { trigger: memberTauntForm.trigger, text: memberTauntForm.text.trim() },
-    })
-    Object.assign(memberTauntForm, emptyMemberTauntForm())
-    await load()
-  } catch (e) {
-    memberTauntFormError.value = e?.data?.statusMessage || 'Failed to add taunt'
-  } finally {
-    memberTauntSaving.value = false
-  }
-}
-
-function startMemberTauntTextEdit(t) {
-  const state = ensureMemberTauntRowState(t.id)
-  state.textDraft = t.text
-  state.editingText = true
-  state.error = ''
-}
-function cancelMemberTauntTextEdit(t) {
-  const state = ensureMemberTauntRowState(t.id)
-  state.editingText = false
-}
-async function saveMemberTauntText(t) {
-  const state = ensureMemberTauntRowState(t.id)
-  if (!state.textDraft.trim()) { state.error = 'Text is required.'; return }
-  state.savingEdit = true
-  state.error = ''
-  try {
-    await $fetch(`/api/admin/cmoon-enemy-member-taunts/${t.id}`, { method: 'PUT', body: { text: state.textDraft.trim() } })
-    state.editingText = false
-    await load()
-  } catch (e) {
-    state.error = e?.data?.statusMessage || 'Failed to save'
-  } finally {
-    state.savingEdit = false
-  }
-}
-
-async function toggleMemberTauntActive(t, active) {
-  const state = ensureMemberTauntRowState(t.id)
-  state.error = ''
-  try {
-    await $fetch(`/api/admin/cmoon-enemy-member-taunts/${t.id}`, { method: 'PUT', body: { active } })
-    await load()
-  } catch (e) {
-    state.error = e?.data?.statusMessage || 'Failed to save'
-  }
-}
-
-function onMemberTauntSoundFile(id, ev) {
-  const state = ensureMemberTauntRowState(id)
-  state.error = ''
-  const f = ev.target.files?.[0] || null
-  if (f && !['audio/mpeg', 'audio/ogg', 'audio/wav'].includes(f.type)) {
-    state.error = 'MP3, OGG, or WAV only.'
-    ev.target.value = ''
-    return
-  }
-  if (f && f.size > 3 * 1024 * 1024) {
-    state.error = 'Audio must be 3MB or smaller.'
-    ev.target.value = ''
-    return
-  }
-  state.pendingSoundFile = f
-}
-
-async function uploadMemberTauntSound(id) {
-  const state = ensureMemberTauntRowState(id)
-  if (!state.pendingSoundFile) return
-  state.uploadingSound = true
-  state.error = ''
-  try {
-    const fd = new FormData()
-    fd.append('audio', state.pendingSoundFile)
-    await $fetch(`/api/admin/cmoon-enemy-member-taunts/${id}/sound`, { method: 'POST', body: fd })
-    state.pendingSoundFile = null
-    await load()
-  } catch (e) {
-    state.error = e?.data?.statusMessage || 'Upload failed.'
-  } finally {
-    state.uploadingSound = false
-  }
-}
-
-async function removeMemberTaunt(t) {
-  if (!confirm('Remove this taunt?')) return
-  const state = ensureMemberTauntRowState(t.id)
-  state.deleting = true
-  try {
-    await $fetch(`/api/admin/cmoon-enemy-member-taunts/${t.id}`, { method: 'DELETE' })
-    delete memberTauntRowState[t.id]
-    await load()
-  } catch (e) {
-    state.error = e?.data?.statusMessage || 'Failed to remove taunt'
-    state.deleting = false
-  }
-}
-
-function windUpMoveLabel(w) {
-  const bonus = w.bonusType === 'HEAL_PARTY' ? `heal party ${w.bonusAmount} HP` : `+${w.bonusAmount} dmg to boss`
-  return `${w.direction} — "${w.telegraphMessage}" (${w.occurrencePercent}% chance, ${bonus} on a perfect block)`
-}
-
-async function addWindUpMove() {
-  windUpMoveFormError.value = ''
-  if (!memberForm.id) return
-  const telegraphMessage = windUpMoveForm.telegraphMessage.trim()
-  if (!telegraphMessage || telegraphMessage.length > 300) {
-    windUpMoveFormError.value = 'Telegraph message is required (max 300 characters).'
-    return
-  }
-  const occurrencePercent = Math.trunc(Number(windUpMoveForm.occurrencePercent))
-  if (!Number.isInteger(occurrencePercent) || occurrencePercent < 0 || occurrencePercent > 100) {
-    windUpMoveFormError.value = 'Occurrence chance must be between 0 and 100.'
-    return
-  }
-  const bonusAmount = Math.trunc(Number(windUpMoveForm.bonusAmount))
-  if (!Number.isInteger(bonusAmount) || bonusAmount < 1 || bonusAmount > 999) {
-    windUpMoveFormError.value = 'Bonus amount must be between 1 and 999.'
-    return
-  }
-
-  windUpMoveSaving.value = true
-  try {
-    await $fetch(`/api/admin/cmoon-enemy-members/${memberForm.id}/wind-up-moves`, {
-      method: 'POST',
-      body: { telegraphMessage, direction: windUpMoveForm.direction, occurrencePercent, bonusType: windUpMoveForm.bonusType, bonusAmount },
-    })
-    resetWindUpMoveForm()
-    await load()
-    const fresh = members.value.find(m => m.id === memberForm.id)
-    if (fresh) editingMemberWindUpMoves.value = fresh.windUpMoves || []
-  } catch (e) {
-    windUpMoveFormError.value = e?.data?.statusMessage || 'Failed to add wind-up move'
-  } finally {
-    windUpMoveSaving.value = false
-  }
-}
-
-async function removeWindUpMove(w) {
-  if (!confirm('Remove this wind-up move?')) return
-  deletingWindUpMoveId.value = w.id
-  try {
-    await $fetch(`/api/admin/cmoon-enemy-wind-up-moves/${w.id}`, { method: 'DELETE' })
-    await load()
-    const fresh = members.value.find(m => m.id === memberForm.id)
-    if (fresh) editingMemberWindUpMoves.value = fresh.windUpMoves || []
-  } catch (e) {
-    loadError.value = e?.data?.statusMessage || 'Failed to remove wind-up move'
-  } finally {
-    deletingWindUpMoveId.value = ''
   }
 }
 
