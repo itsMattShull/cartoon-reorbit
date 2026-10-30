@@ -48,7 +48,8 @@ export const HIT_STREAK_THRESHOLD = 3
 // cmoonRaidSocket.js's resolveEffectiveSpecialAttack) so they can't drift from
 // pickEffectiveSpecialAttack's own expectations below.
 export const SPECIAL_ATTACK_SELECT = {
-  id: true, name: true, description: true, effectType: true, amount: true, raiseDurationRounds: true, soundPath: true, healsAllies: true, playerChoice: true,
+  id: true, name: true, description: true, effectType: true, amount: true, raiseDurationRounds: true,
+  reflectPercent: true, siphonPercent: true, soundPath: true, healsAllies: true, playerChoice: true,
 }
 
 // A player's EFFECTIVE special attack for a cMoon Enemy Battle (solo or raid): `chosenSpecialAttack`

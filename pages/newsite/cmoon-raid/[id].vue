@@ -403,6 +403,10 @@ function specialEffectDescription(attack) {
     case 'PARALYZE_OPPONENT': return `Stuns the boss for ${n} round${n === 1 ? '' : 's'} — it can't act.`
     case 'LOWER_OPPONENT_ATTACK': return `Lowers the boss's attack damage by ${n} for the rest of the fight.`
     case 'RAISE_ALLY_ATTACK': return `Raises every raid ally's attack damage by ${n} for the rest of the fight.`
+    case 'REFLECT_DAMAGE': return `Reflects ${attack?.reflectPercent}% of whatever the boss hits the party for this round back at it — nothing reflects if it blocks. Can't stack with another reflect cast the same round.`
+    case 'SIPHON_HEALTH': return attack?.healsAllies
+      ? `Deals ${n} damage and heals you and every raid ally for ${attack?.siphonPercent}% of it — unless the boss blocks, in which case it does nothing.`
+      : `Deals ${n} damage and heals you for ${attack?.siphonPercent}% of it — unless the boss blocks, in which case it does nothing.`
     default: return ''
   }
 }

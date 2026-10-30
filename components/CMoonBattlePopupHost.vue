@@ -241,6 +241,8 @@ function specialEffectDescription(attack) {
     case 'PARALYZE_OPPONENT': return `Stuns the enemy for ${n} round${n === 1 ? '' : 's'} — they can't attack or block.`
     case 'LOWER_OPPONENT_ATTACK': return `Lowers the enemy's attack damage by ${n} for the rest of the fight.`
     case 'RAISE_ALLY_ATTACK': return `Raises your own attack damage by ${n} for the rest of the fight.`
+    case 'REFLECT_DAMAGE': return `Reflects ${attack?.reflectPercent}% of whatever the enemy hits you for this round back at them — nothing reflects if they block.`
+    case 'SIPHON_HEALTH': return `Deals ${n} damage and heals you for ${attack?.siphonPercent}% of it — unless the enemy blocks, in which case it does nothing.`
     default: return ''
   }
 }

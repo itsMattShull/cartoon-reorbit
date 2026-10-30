@@ -667,6 +667,7 @@ export const SPECIAL_ATTACK_NAME_MAX_LENGTH = 60
 export const SPECIAL_ATTACK_DESCRIPTION_MAX_LENGTH = 300
 export const SPECIAL_ATTACK_EFFECT_TYPES = [
   'DAMAGE_OPPONENT', 'HEAL_SELF', 'PARALYZE_OPPONENT', 'LOWER_OPPONENT_ATTACK', 'RAISE_ALLY_ATTACK',
+  'REFLECT_DAMAGE', 'SIPHON_HEALTH',
 ]
 // Same bound for every effect type, even though they mean different units (damage/heal points,
 // paralyze turns, attack-stat delta) — simplest shared cap that comfortably covers each one;
@@ -683,6 +684,17 @@ export const SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN = 1
 export const SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX = 300
 export const SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT = 300
 
+// Only meaningful for REFLECT_DAMAGE — see CMoonSpecialAttack.reflectPercent's own schema
+// comment for why this goes above 100 (up to 500%), unlike siphonPercent below.
+export const SPECIAL_ATTACK_REFLECT_PERCENT_MIN = 1
+export const SPECIAL_ATTACK_REFLECT_PERCENT_MAX = 500
+export const SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT = 100
+
+// Only meaningful for SIPHON_HEALTH — see CMoonSpecialAttack.siphonPercent's own schema comment.
+export const SPECIAL_ATTACK_SIPHON_PERCENT_MIN = 1
+export const SPECIAL_ATTACK_SIPHON_PERCENT_MAX = 100
+export const SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT = 50
+
 export function isValidSpecialAttackName(value) {
   return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= SPECIAL_ATTACK_NAME_MAX_LENGTH
 }
@@ -697,6 +709,14 @@ export function isValidSpecialAttackAmount(value) {
 
 export function isValidSpecialAttackRaiseDurationRounds(value) {
   return Number.isInteger(value) && value >= SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN && value <= SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX
+}
+
+export function isValidSpecialAttackReflectPercent(value) {
+  return Number.isInteger(value) && value >= SPECIAL_ATTACK_REFLECT_PERCENT_MIN && value <= SPECIAL_ATTACK_REFLECT_PERCENT_MAX
+}
+
+export function isValidSpecialAttackSiphonPercent(value) {
+  return Number.isInteger(value) && value >= SPECIAL_ATTACK_SIPHON_PERCENT_MIN && value <= SPECIAL_ATTACK_SIPHON_PERCENT_MAX
 }
 
 // Shared by the special-attack create/update endpoints — same `existing`-means-"leave unchanged
@@ -729,10 +749,20 @@ export function parseSpecialAttackBody(body, existing) {
   const raiseDurationRoundsRaw = body?.raiseDurationRounds === undefined
     ? (existing ? existing.raiseDurationRounds : SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT)
     : toNumber(body.raiseDurationRounds)
-  // Only meaningful for HEAL_SELF (see that column's own schema comment) — a truthy value sent
-  // alongside any other effectType is silently normalized to false below rather than stored, so a
-  // stale client payload (or a leftover value from switching the dropdown away from HEAL_SELF and
-  // back) can never leave a meaningless flag set on a DAMAGE_OPPONENT/PARALYZE_OPPONENT/etc row.
+  // Only meaningful for REFLECT_DAMAGE/SIPHON_HEALTH respectively (see those columns' own schema
+  // comments) — same "ignore a stale value from switching the dropdown away and back" stance
+  // raiseDurationRounds/healsAllies already take above/below.
+  const reflectPercentRaw = body?.reflectPercent === undefined
+    ? (existing ? existing.reflectPercent : SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT)
+    : toNumber(body.reflectPercent)
+  const siphonPercentRaw = body?.siphonPercent === undefined
+    ? (existing ? existing.siphonPercent : SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT)
+    : toNumber(body.siphonPercent)
+  // Only meaningful for HEAL_SELF/SIPHON_HEALTH (see that column's own schema comment) — a truthy
+  // value sent alongside any other effectType is silently normalized to false below rather than
+  // stored, so a stale client payload (or a leftover value from switching the dropdown away from
+  // HEAL_SELF/SIPHON_HEALTH and back) can never leave a meaningless flag set on a
+  // DAMAGE_OPPONENT/PARALYZE_OPPONENT/etc row.
   const healsAlliesRaw = toBoolean(body?.healsAllies, existing ? !!existing.healsAllies : false)
   // Whether a player can choose this attack for themselves — see CMoonSpecialAttack.playerChoice's
   // own schema comment. Independent of effectType, unlike healsAllies above.
@@ -753,16 +783,24 @@ export function parseSpecialAttackBody(body, existing) {
   if (effectType === 'RAISE_ALLY_ATTACK' && !isValidSpecialAttackRaiseDurationRounds(raiseDurationRoundsRaw)) {
     return { ok: false, message: `Raise duration must be a whole number of rounds between ${SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN} and ${SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX}` }
   }
+  if (effectType === 'REFLECT_DAMAGE' && !isValidSpecialAttackReflectPercent(reflectPercentRaw)) {
+    return { ok: false, message: `Reflect percent must be a whole number between ${SPECIAL_ATTACK_REFLECT_PERCENT_MIN} and ${SPECIAL_ATTACK_REFLECT_PERCENT_MAX}` }
+  }
+  if (effectType === 'SIPHON_HEALTH' && !isValidSpecialAttackSiphonPercent(siphonPercentRaw)) {
+    return { ok: false, message: `Siphon percent must be a whole number between ${SPECIAL_ATTACK_SIPHON_PERCENT_MIN} and ${SPECIAL_ATTACK_SIPHON_PERCENT_MAX}` }
+  }
   if (healsAlliesRaw === null) {
     return { ok: false, message: 'healsAllies must be true or false' }
   }
   if (playerChoice === null) {
     return { ok: false, message: 'playerChoice must be true or false' }
   }
-  const healsAllies = effectType === 'HEAL_SELF' ? healsAlliesRaw : false
+  const healsAllies = (effectType === 'HEAL_SELF' || effectType === 'SIPHON_HEALTH') ? healsAlliesRaw : false
   const raiseDurationRounds = effectType === 'RAISE_ALLY_ATTACK' ? raiseDurationRoundsRaw : SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT
+  const reflectPercent = effectType === 'REFLECT_DAMAGE' ? reflectPercentRaw : SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT
+  const siphonPercent = effectType === 'SIPHON_HEALTH' ? siphonPercentRaw : SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT
 
-  return { ok: true, data: { name, description, effectType, amount, healsAllies, playerChoice, raiseDurationRounds } }
+  return { ok: true, data: { name, description, effectType, amount, healsAllies, playerChoice, raiseDurationRounds, reflectPercent, siphonPercent } }
 }
 
 // Resolves a member's six battle sound paths, falling back to its faction's own default for

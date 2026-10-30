@@ -4,9 +4,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  applyRaidSpecialAttack, participantCMoonId, raidCMoonIds, raidPartyLabel, splitRaidPoints,
-  rankTierLevel, publicParticipantTeam, buildRaidLobbyEntry, buildRaidLobby, MAX_PARTY_SIZE,
-  rollWindUpMove,
+  applyRaidSpecialAttack, applyReflectDamage, applySiphonHealth, participantCMoonId, raidCMoonIds,
+  raidPartyLabel, splitRaidPoints, rankTierLevel, publicParticipantTeam, buildRaidLobbyEntry,
+  buildRaidLobby, MAX_PARTY_SIZE, rollWindUpMove,
 } from '../server/utils/cmoonEnemyRaid.js'
 
 function participant(userId, extra = {}) {
@@ -128,6 +128,122 @@ test('LOWER_OPPONENT_ATTACK is unaffected by the anti-stacking rule — still cu
   applyRaidSpecialAttack(raid, [], { name: 'Weaken', effectType: 'LOWER_OPPONENT_ATTACK', amount: 2 }, { side: 'PLAYER', userId: 'a' }, [])
   applyRaidSpecialAttack(raid, [], { name: 'Weaken2', effectType: 'LOWER_OPPONENT_ATTACK', amount: 3 }, { side: 'PLAYER', userId: 'a' }, [])
   assert.equal(raid.enemyAtkBonus, -5) // stacks, unlike paralyze/raise
+})
+
+// ── REFLECT_DAMAGE / SIPHON_HEALTH (see applyRaidSpecialAttack's own comment) ────────────────
+
+test('applyReflectDamage: a player cast reflects a percent of the REAL damage the boss dealt the party this round', () => {
+  const raid = raidWith([participant('a'), participant('b')])
+  const roundInfo = { enemyAction: 'ATTACK_HIGH', perParticipant: [{ userId: 'a', playerDamage: 2 }, { userId: 'b', playerDamage: 3 }], enemyDamageDealt: 0 }
+  applyReflectDamage(raid, [], { name: 'Mirror', effectType: 'REFLECT_DAMAGE', reflectPercent: 100 }, { side: 'PLAYER', userId: 'a' }, roundInfo)
+  assert.equal(raid.enemyHpRemaining, 30 - 5) // 2 + 3 = 5 total damage dealt to the party, reflected 100%
+})
+
+test('applyReflectDamage: if the boss blocked (dealt 0 real damage), nothing reflects', () => {
+  const raid = raidWith([participant('a')])
+  const roundInfo = { enemyAction: 'BLOCK_HIGH', perParticipant: [{ userId: 'a', playerDamage: 0 }], enemyDamageDealt: 0 }
+  applyReflectDamage(raid, [], { name: 'Mirror', effectType: 'REFLECT_DAMAGE', reflectPercent: 500 }, { side: 'PLAYER', userId: 'a' }, roundInfo)
+  assert.equal(raid.enemyHpRemaining, 30)
+})
+
+test('applyReflectDamage: reflectPercent can exceed 100%, and a boss cast is AoE at full amount per participant', () => {
+  const a = participant('a', { hpRemaining: 10, maxHp: 10 })
+  const b = participant('b', { hpRemaining: 10, maxHp: 10 })
+  const raid = raidWith([a, b])
+  const roundInfo = { enemyAction: 'ATTACK_HIGH', perParticipant: [], enemyDamageDealt: 4 }
+  applyReflectDamage(raid, [a, b], { name: 'Counter', effectType: 'REFLECT_DAMAGE', reflectPercent: 200 }, { side: 'ENEMY' }, roundInfo)
+  assert.deepEqual([a.hpRemaining, b.hpRemaining], [2, 2]) // 4 * 200% = 8 damage to EACH, not divided
+})
+
+test('applyRaidSpecialAttack: a player-cast REFLECT_DAMAGE is deferred (queued), not applied immediately', () => {
+  const raid = raidWith([participant('a')])
+  const roundGuards = { reflectUsed: false, siphonUsed: false, pendingReflect: null, pendingSiphon: null }
+  const events = []
+  applyRaidSpecialAttack(raid, [], { name: 'Mirror', effectType: 'REFLECT_DAMAGE', reflectPercent: 100 }, { side: 'PLAYER', userId: 'a' }, events, { roundGuards })
+  assert.equal(raid.enemyHpRemaining, 30) // untouched -- nothing to reflect yet
+  assert.equal(roundGuards.reflectUsed, true)
+  assert.equal(roundGuards.pendingReflect.caster.userId, 'a')
+  assert.equal(events.length, 1) // the cast is still announced immediately
+})
+
+test('applyRaidSpecialAttack: a second same-round player REFLECT_DAMAGE cast is a silent no-op (non-stacking)', () => {
+  const raid = raidWith([participant('a'), participant('b')])
+  const roundGuards = { reflectUsed: false, siphonUsed: false, pendingReflect: null, pendingSiphon: null }
+  const events = []
+  applyRaidSpecialAttack(raid, [], { name: 'Mirror', effectType: 'REFLECT_DAMAGE', reflectPercent: 100 }, { side: 'PLAYER', userId: 'a' }, events, { roundGuards })
+  applyRaidSpecialAttack(raid, [], { name: 'Mirror2', effectType: 'REFLECT_DAMAGE', reflectPercent: 500 }, { side: 'PLAYER', userId: 'b' }, events, { roundGuards })
+  assert.equal(roundGuards.pendingReflect.caster.userId, 'a') // first caster wins, second never overwrites it
+  assert.equal(events.length, 2) // both casts are still announced
+})
+
+test('applyRaidSpecialAttack: a boss-cast REFLECT_DAMAGE applies immediately given roundInfo (no deferral)', () => {
+  const a = participant('a', { hpRemaining: 10, maxHp: 10 })
+  const raid = raidWith([a])
+  const roundInfo = { enemyAction: 'ATTACK_HIGH', perParticipant: [], enemyDamageDealt: 3 }
+  applyRaidSpecialAttack(raid, [a], { name: 'Counter', effectType: 'REFLECT_DAMAGE', reflectPercent: 100 }, { side: 'ENEMY' }, [], { roundInfo })
+  assert.equal(a.hpRemaining, 7)
+})
+
+test('applySiphonHealth: a player cast deals Amount damage and heals the caster by siphonPercent% of it', () => {
+  const a = participant('a', { hpRemaining: 2, maxHp: 10 })
+  const raid = raidWith([a])
+  const roundInfo = { enemyAction: 'ATTACK_HIGH', perParticipant: [], enemyDamageDealt: 0 }
+  applySiphonHealth(raid, [a], { name: 'Drain', effectType: 'SIPHON_HEALTH', amount: 6, siphonPercent: 50, healsAllies: false }, { side: 'PLAYER', userId: 'a' }, roundInfo)
+  assert.equal(raid.enemyHpRemaining, 24) // 30 - 6
+  assert.equal(a.hpRemaining, 5) // 2 + (6 * 50%) = 5
+})
+
+test('applySiphonHealth: a player cast fizzles entirely (no damage, no heal) if the boss blocked', () => {
+  const a = participant('a', { hpRemaining: 2, maxHp: 10 })
+  const raid = raidWith([a])
+  const roundInfo = { enemyAction: 'BLOCK_LOW', perParticipant: [], enemyDamageDealt: 0 }
+  applySiphonHealth(raid, [a], { name: 'Drain', effectType: 'SIPHON_HEALTH', amount: 6, siphonPercent: 50, healsAllies: false }, { side: 'PLAYER', userId: 'a' }, roundInfo)
+  assert.equal(raid.enemyHpRemaining, 30)
+  assert.equal(a.hpRemaining, 2)
+})
+
+test('applySiphonHealth: player cast with healsAllies heals the whole party, not just the caster', () => {
+  const a = participant('a', { hpRemaining: 2, maxHp: 10 })
+  const b = participant('b', { hpRemaining: 3, maxHp: 10 })
+  const raid = raidWith([a, b])
+  const roundInfo = { enemyAction: 'ATTACK_HIGH', perParticipant: [], enemyDamageDealt: 0 }
+  applySiphonHealth(raid, [a, b], { name: 'Drain', effectType: 'SIPHON_HEALTH', amount: 10, siphonPercent: 50, healsAllies: true }, { side: 'PLAYER', userId: 'a' }, roundInfo)
+  assert.deepEqual([a.hpRemaining, b.hpRemaining], [7, 8]) // both +5
+})
+
+test('applySiphonHealth: boss cast is AoE, but each alive participant who personally blocked is immune', () => {
+  const a = participant('a', { hpRemaining: 10, maxHp: 10 })
+  const b = participant('b', { hpRemaining: 10, maxHp: 10 })
+  const raid = raidWith([a, b], { enemyHpRemaining: 20 }) // not already at max, so the heal is observable
+  const roundInfo = {
+    enemyAction: 'ATTACK_HIGH',
+    perParticipant: [{ userId: 'a', action: 'ATTACK_HIGH' }, { userId: 'b', action: 'BLOCK_HIGH' }],
+    enemyDamageDealt: 0,
+  }
+  applySiphonHealth(raid, [a, b], { name: 'Drain', effectType: 'SIPHON_HEALTH', amount: 4, siphonPercent: 50, healsAllies: false }, { side: 'ENEMY' }, roundInfo)
+  assert.equal(a.hpRemaining, 6) // hit
+  assert.equal(b.hpRemaining, 10) // blocked, immune
+  assert.equal(raid.enemyHpRemaining, 22) // 20 + (4 * 50%) from the one landed hit
+})
+
+test('applyRaidSpecialAttack: a second same-round player SIPHON_HEALTH cast is a silent no-op (non-stacking)', () => {
+  const a = participant('a', { hpRemaining: 2, maxHp: 10 })
+  const raid = raidWith([a])
+  const roundGuards = { reflectUsed: false, siphonUsed: false, pendingReflect: null, pendingSiphon: null }
+  const events = []
+  applyRaidSpecialAttack(raid, [a], { name: 'Drain', effectType: 'SIPHON_HEALTH', amount: 6, siphonPercent: 50 }, { side: 'PLAYER', userId: 'a' }, events, { roundGuards })
+  applyRaidSpecialAttack(raid, [a], { name: 'Drain2', effectType: 'SIPHON_HEALTH', amount: 999, siphonPercent: 100 }, { side: 'PLAYER', userId: 'a' }, events, { roundGuards })
+  assert.equal(roundGuards.pendingSiphon.attack.name, 'Drain') // first caster wins
+  assert.equal(raid.enemyHpRemaining, 30) // still deferred -- neither applied yet
+})
+
+test('REFLECT_DAMAGE and SIPHON_HEALTH track their non-stacking slots independently of each other', () => {
+  const raid = raidWith([participant('a'), participant('b')])
+  const roundGuards = { reflectUsed: false, siphonUsed: false, pendingReflect: null, pendingSiphon: null }
+  applyRaidSpecialAttack(raid, [], { name: 'Mirror', effectType: 'REFLECT_DAMAGE', reflectPercent: 100 }, { side: 'PLAYER', userId: 'a' }, [], { roundGuards })
+  applyRaidSpecialAttack(raid, [], { name: 'Drain', effectType: 'SIPHON_HEALTH', amount: 5, siphonPercent: 50 }, { side: 'PLAYER', userId: 'b' }, [], { roundGuards })
+  assert.ok(roundGuards.pendingReflect)
+  assert.ok(roundGuards.pendingSiphon)
 })
 
 test('the boss\'s own damage special still hits every alive participant across teams', () => {

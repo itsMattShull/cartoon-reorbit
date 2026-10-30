@@ -90,7 +90,7 @@ import { markEnemyOfferAccepted } from './cmoonEnemyAnalytics.js'
 import { announceTeamEnemiesMilestone, checkAndAnnounceSeasonGoalReached } from './cmoonDiscordEvents.js'
 import {
   resolveRaidRound, JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE, RAID_MAX_ROUNDS_SAFETY,
-  checkRaidBossAvailability, applyRaidSpecialAttack, participantCMoonId, raidCMoonIds, raidPartyLabel,
+  checkRaidBossAvailability, applyRaidSpecialAttack, applyReflectDamage, applySiphonHealth, participantCMoonId, raidCMoonIds, raidPartyLabel,
   splitRaidPoints, rankTierLevel, publicParticipantTeam, buildRaidLobby, rollWindUpMove,
   effectiveHitStreakThreshold,
 } from './cmoonEnemyRaid.js'
@@ -737,6 +737,13 @@ async function closeRound(io, raid) {
     for (const p of alive) if (!p.pendingAction) p.pendingAction = rollEnemyAction()
 
     const specialEvents = []
+    // REFLECT_DAMAGE/SIPHON_HEALTH bookkeeping for THIS round only — a player cast of either
+    // always queues here in step 1 (neither can resolve until the lane exchange below produces
+    // this round's real outcome), and `reflectUsed`/`siphonUsed` keep a second same-round caster
+    // on the player side from stacking the effect (see cmoonEnemyRaid.js's header comment). Never
+    // stored on `raid`/serialized to Redis — these are instant, one-shot effects with nothing to
+    // persist past the single closeRound call that creates and consumes this object.
+    const roundGuards = { reflectUsed: false, siphonUsed: false, pendingReflect: null, pendingSiphon: null }
 
     // ── 1. Any PLAYER specials chosen this round fire FIRST, in participant join order — same
     // ordering the solo battle uses (apply the special, THEN resolve the round's lane exchange),
@@ -754,7 +761,7 @@ async function closeRound(io, raid) {
       if (p.pendingAction !== SPECIAL_ACTION) continue
       if (!p.specialCharged || !p.specialAttack) continue
       firedSpecialUserIds.add(p.userId)
-      applyRaidSpecialAttack(raid, alive, p.specialAttack, { side: 'PLAYER', userId: p.userId }, specialEvents)
+      applyRaidSpecialAttack(raid, alive, p.specialAttack, { side: 'PLAYER', userId: p.userId }, specialEvents, { roundGuards })
     }
 
     // ── 2. This round's lane exchange — every alive participant's OWN action (SPECIAL_ACTION
@@ -783,6 +790,20 @@ async function closeRound(io, raid) {
       partyAtkBonus: raid.partyAtkBonus + (raid.partyAtkRaiseTurnsRemaining > 0 ? raid.partyAtkRaiseAmount : 0),
       enemyAtkBonus: raid.enemyAtkBonus + (raid.enemyAtkRaiseTurnsRemaining > 0 ? raid.enemyAtkRaiseAmount : 0),
     })
+
+    // ── 2.5. Resolve any player-cast Reflect Damage / Siphon Health queued in step 1 — now that
+    // this round's real outcome (`enemyAction`/`perParticipant`/`enemyDamageDealt`, exactly the
+    // shape these two effects need) is known. Calls applyReflectDamage/applySiphonHealth
+    // DIRECTLY, never applyRaidSpecialAttack again — the specialEvents entry for this cast was
+    // already pushed back in step 1, the instant it was cast; re-entering that function here
+    // would announce the same cast twice. ─────────────────────────────────────────────────────
+    const roundInfo = { enemyAction, perParticipant, enemyDamageDealt }
+    if (roundGuards.pendingReflect) {
+      applyReflectDamage(raid, alive, roundGuards.pendingReflect.attack, roundGuards.pendingReflect.caster, roundInfo)
+    }
+    if (roundGuards.pendingSiphon) {
+      applySiphonHealth(raid, alive, roundGuards.pendingSiphon.attack, roundGuards.pendingSiphon.caster, roundInfo)
+    }
 
     // The threshold this round's banking math actually uses — 3 normally, or 2 for the whole
     // party when GlobalGameConfig.cMoonCaptainBoostEnabled was on at creation AND a captain is
@@ -839,7 +860,7 @@ async function closeRound(io, raid) {
       // Re-reads `alive` from the Map rather than the stale array captured above — a participant
       // this round's own DAMAGE_OPPONENT/lane exchange just knocked out must not also be hit by
       // the boss's bonus effect this same round (they're already down).
-      applyRaidSpecialAttack(raid, aliveParticipants(raid), raid.enemySpecialAttack, { side: 'ENEMY' }, specialEvents)
+      applyRaidSpecialAttack(raid, aliveParticipants(raid), raid.enemySpecialAttack, { side: 'ENEMY' }, specialEvents, { roundInfo })
     }
 
     // ── 4. Wind-up telegraph payoff — if this round telegraphed a lane (see openRound), check

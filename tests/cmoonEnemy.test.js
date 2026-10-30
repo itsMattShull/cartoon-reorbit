@@ -11,6 +11,10 @@ import {
   SPECIAL_ATTACK_EFFECT_TYPES, SPECIAL_ATTACK_NAME_MAX_LENGTH, SPECIAL_ATTACK_AMOUNT_MIN, SPECIAL_ATTACK_AMOUNT_MAX,
   isValidSpecialAttackRaiseDurationRounds, SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN,
   SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX, SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
+  isValidSpecialAttackReflectPercent, SPECIAL_ATTACK_REFLECT_PERCENT_MIN,
+  SPECIAL_ATTACK_REFLECT_PERCENT_MAX, SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT,
+  isValidSpecialAttackSiphonPercent, SPECIAL_ATTACK_SIPHON_PERCENT_MIN,
+  SPECIAL_ATTACK_SIPHON_PERCENT_MAX, SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
   parseTauntBody, isValidTauntText, isValidTauntTrigger, TAUNT_TRIGGERS, TAUNT_TEXT_MAX_LENGTH,
   ATTACK_CHANCE_DEFAULT, PITY_THRESHOLD_DEFAULT, FIRST_WIN_BONUS_POINTS_DEFAULT,
   MAX_PARTICIPANTS_DEFAULT, MAX_PARTICIPANTS_MIN, MAX_PARTICIPANTS_MAX,
@@ -444,6 +448,7 @@ test('parseSpecialAttackBody: a valid create body parses with trimmed name and t
   assert.deepEqual(result.data, {
     name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10,
     healsAllies: false, playerChoice: false, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
+    reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
   })
 })
 
@@ -468,12 +473,14 @@ test('parseSpecialAttackBody: on update, an omitted field falls back to the exis
   const existing = {
     name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7,
     healsAllies: true, playerChoice: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
+    reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
   }
   const result = parseSpecialAttackBody({ amount: 20 }, existing)
   assert.equal(result.ok, true)
   assert.deepEqual(result.data, {
     name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 20,
     healsAllies: true, playerChoice: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
+    reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
   })
 })
 
@@ -506,7 +513,7 @@ test('parseSpecialAttackBody: raiseDurationRounds is only ever stored when effec
   assert.equal(raiseResult.data.raiseDurationRounds, 250)
 })
 
-test('parseSpecialAttackBody: healsAllies is only ever stored true when effectType is HEAL_SELF', () => {
+test('parseSpecialAttackBody: healsAllies is only ever stored true when effectType is HEAL_SELF or SIPHON_HEALTH', () => {
   // A truthy healsAllies sent alongside any other effectType is silently normalized to false —
   // see that field's own schema comment on why this is never trusted to the client/admin UI alone.
   const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', healsAllies: true })
@@ -516,12 +523,82 @@ test('parseSpecialAttackBody: healsAllies is only ever stored true when effectTy
   const healResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'HEAL_SELF', healsAllies: true })
   assert.equal(healResult.ok, true)
   assert.equal(healResult.data.healsAllies, true)
+
+  const siphonResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', healsAllies: true })
+  assert.equal(siphonResult.ok, true)
+  assert.equal(siphonResult.data.healsAllies, true)
 })
 
 test('parseSpecialAttackBody: an omitted healsAllies defaults to false on create', () => {
   const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'HEAL_SELF' })
   assert.equal(result.ok, true)
   assert.equal(result.data.healsAllies, false)
+})
+
+// ── reflectPercent (REFLECT_DAMAGE's own reflect scale, see its schema comment) ──────────────
+
+test('parseSpecialAttackBody: reflectPercent defaults to the DEFAULT constant on create when omitted', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'REFLECT_DAMAGE' })
+  assert.equal(result.ok, true)
+  assert.equal(result.data.reflectPercent, SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT)
+})
+
+test('parseSpecialAttackBody: accepts the full reflectPercent range (1-500) and rejects outside it, only for REFLECT_DAMAGE', () => {
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'REFLECT_DAMAGE', reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_MIN }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'REFLECT_DAMAGE', reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_MAX }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'REFLECT_DAMAGE', reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_MIN - 1 }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'REFLECT_DAMAGE', reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_MAX + 1 }).ok, false)
+  // An out-of-range value is only rejected for REFLECT_DAMAGE — for any other effectType it's
+  // silently normalized to the default rather than validated, same stance raiseDurationRounds takes.
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', reflectPercent: 9999 }).ok, true)
+})
+
+test('parseSpecialAttackBody: reflectPercent is only ever stored when effectType is REFLECT_DAMAGE', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', reflectPercent: 250 })
+  assert.equal(result.ok, true)
+  assert.equal(result.data.reflectPercent, SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT)
+
+  const reflectResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'REFLECT_DAMAGE', reflectPercent: 250 })
+  assert.equal(reflectResult.ok, true)
+  assert.equal(reflectResult.data.reflectPercent, 250)
+})
+
+// ── siphonPercent (SIPHON_HEALTH's own heal-conversion scale, see its schema comment) ─────────
+
+test('parseSpecialAttackBody: siphonPercent defaults to the DEFAULT constant on create when omitted', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH' })
+  assert.equal(result.ok, true)
+  assert.equal(result.data.siphonPercent, SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT)
+})
+
+test('parseSpecialAttackBody: accepts the full siphonPercent range (1-100) and rejects outside it, only for SIPHON_HEALTH', () => {
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_MIN }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_MAX }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_MIN - 1 }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_MAX + 1 }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', siphonPercent: 9999 }).ok, true)
+})
+
+test('parseSpecialAttackBody: siphonPercent is only ever stored when effectType is SIPHON_HEALTH', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', siphonPercent: 75 })
+  assert.equal(result.ok, true)
+  assert.equal(result.data.siphonPercent, SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT)
+
+  const siphonResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', siphonPercent: 75 })
+  assert.equal(siphonResult.ok, true)
+  assert.equal(siphonResult.data.siphonPercent, 75)
+})
+
+test('isValidSpecialAttackReflectPercent/isValidSpecialAttackSiphonPercent reject non-integers and out-of-range values', () => {
+  assert.equal(isValidSpecialAttackReflectPercent(100), true)
+  assert.equal(isValidSpecialAttackReflectPercent(500), true)
+  assert.equal(isValidSpecialAttackReflectPercent(0), false)
+  assert.equal(isValidSpecialAttackReflectPercent(501), false)
+  assert.equal(isValidSpecialAttackReflectPercent(50.5), false)
+  assert.equal(isValidSpecialAttackSiphonPercent(50), true)
+  assert.equal(isValidSpecialAttackSiphonPercent(100), true)
+  assert.equal(isValidSpecialAttackSiphonPercent(0), false)
+  assert.equal(isValidSpecialAttackSiphonPercent(101), false)
 })
 
 // ── Enemy taunts (CMoonEnemyTaunt) ──────────────────────────────────────────────────────────

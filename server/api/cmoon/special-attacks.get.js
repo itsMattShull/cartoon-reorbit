@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
   const attacks = await db.cMoonSpecialAttack.findMany({
     where: { playerChoice: true },
     orderBy: { name: 'asc' },
-    select: { id: true, name: true, description: true, effectType: true, amount: true, raiseDurationRounds: true, soundPath: true, healsAllies: true },
+    select: { id: true, name: true, description: true, effectType: true, amount: true, raiseDurationRounds: true, reflectPercent: true, siphonPercent: true, soundPath: true, healsAllies: true },
   })
 
   return { attacks }

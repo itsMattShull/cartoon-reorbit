@@ -6005,22 +6005,41 @@ enum CMoonEnemyRewardType {
 //   RAISE_ALLY_ATTACK     — the caster's own side's landed-hit damage is increased by `amount`
 //                           for `raiseDurationRounds` rounds in a RAID (see that column's own
 //                           comment), or for the rest of the battle in a SOLO fight (unchanged).
-// All five are cumulative/stacking in a SOLO battle if the same attack (or several different ones)
-// fire more than once — there's no cap beyond what a battle's own HP/round limits naturally
-// impose. In a co-op RAID specifically, PARALYZE_OPPONENT and RAISE_ALLY_ATTACK do NOT stack: only
-// one paralyze effect and one attack-raise can be active against/for a given side at a time (see
-// applyRaidSpecialAttack in cmoonEnemyRaid.js) — a cast that lands while one is already active has
-// no additional effect, rather than extending its duration or adding to its amount. Once the
-// active one expires, a later cast (by the same player or another) can trigger a fresh one.
-// DAMAGE_OPPONENT, HEAL_SELF, and LOWER_OPPONENT_ATTACK are unaffected by this and still stack in
-// raids exactly as they do solo — only the two duration-based effects above are capped to one at a
-// time, per that feature's own anti-stacking request.
+//   REFLECT_DAMAGE        — reflects `reflectPercent`% of whatever REAL damage the opposing side
+//                           deals to the caster's side THIS round back onto that opponent. If the
+//                           opponent's own action that round was a block (or it simply missed),
+//                           the real damage dealt is already 0, so nothing reflects — no separate
+//                           "was it blocked" check needed, unlike SIPHON_HEALTH below.
+//   SIPHON_HEALTH         — unlike every other effect here (all of which bypass block entirely,
+//                           guaranteed to land once cast), this one CAN be blocked: deals its own
+//                           flat `amount` (same convention as DAMAGE_OPPONENT) and heals the
+//                           caster's side by `siphonPercent`% of it, UNLESS the intended target's
+//                           own action that round was a block, in which case it fizzles outright
+//                           — no damage, no heal. `healsAllies` governs the heal exactly like
+//                           HEAL_SELF's own field (see that column's comment).
+// All five of the original effects are cumulative/stacking in a SOLO battle if the same attack (or
+// several different ones) fire more than once — there's no cap beyond what a battle's own HP/round
+// limits naturally impose. In a co-op RAID specifically, PARALYZE_OPPONENT and RAISE_ALLY_ATTACK do
+// NOT stack: only one paralyze effect and one attack-raise can be active against/for a given side
+// at a time (see applyRaidSpecialAttack in cmoonEnemyRaid.js) — a cast that lands while one is
+// already active has no additional effect, rather than extending its duration or adding to its
+// amount. Once the active one expires, a later cast (by the same player or another) can trigger a
+// fresh one. DAMAGE_OPPONENT, HEAL_SELF, and LOWER_OPPONENT_ATTACK are unaffected by this and still
+// stack in raids exactly as they do solo. REFLECT_DAMAGE and SIPHON_HEALTH ALSO do not stack in a
+// raid — but unlike paralyze/raise there's no multi-round duration to track, since both are
+// instant, one-shot effects: at most one of each can take effect PER SIDE PER ROUND, so if several
+// party members all cast the same one in the same round, only the first processed actually lands;
+// the rest are silent no-ops (still announced, exactly like paralyze/raise's own no-op casts).
+// Solo never needs this guard for anything (never has multiple simultaneous casters per side), and
+// a raid boss never needs it either (one shared NPC action/caster, nothing to stack against itself).
 enum CMoonSpecialAttackEffectType {
   DAMAGE_OPPONENT
   HEAL_SELF
   PARALYZE_OPPONENT
   LOWER_OPPONENT_ATTACK
   RAISE_ALLY_ATTACK
+  REFLECT_DAMAGE
+  SIPHON_HEALTH
 }
 
 model CMoonSpecialAttack {
@@ -6040,17 +6059,30 @@ model CMoonSpecialAttack {
   // why only raids need a duration at all (raids can run far longer, up to raidRoundLimit rounds,
   // so an un-timed buff there would trivially outlast the whole fight once applied).
   raiseDurationRounds Int                          @default(300)
+  // Only meaningful when effectType = REFLECT_DAMAGE (ignored otherwise, same "normalized rather
+  // than stored" stance raiseDurationRounds/healsAllies take for their own effect type) — what
+  // percent of the real damage dealt to the caster's side this round reflects back onto the
+  // opponent. 1-500: capped above 100 so a well-built reflect attack can genuinely punish an
+  // opponent harder than they hit, not just cancel the hit out, matching this feature's own
+  // request for up to 500%.
+  reflectPercent      Int                          @default(100)
+  // Only meaningful when effectType = SIPHON_HEALTH (ignored otherwise). What percent of this
+  // attack's own flat `amount` (the damage it deals once it lands, see that column's comment)
+  // converts into healing for the caster's side. 1-100 — unlike reflectPercent above, this one is
+  // capped at 100 since it's converting a fixed, already-dealt amount into healing, not
+  // amplifying an opponent's own hit.
+  siphonPercent       Int                          @default(50)
   // Optional sound (MP3/OGG/WAV, uploaded via cmoon-special-attacks/[id]/sound.post.js — same
   // magic-byte-sniffed discipline as every other audio upload in this codebase), played the
   // moment this attack actually fires, by whichever side cast it.
   soundPath           String?
-  // Only meaningful when effectType = HEAL_SELF (false/ignored otherwise — enforced in
-  // parseSpecialAttackBody, never just left to the client). In a SOLO battle this changes
-  // nothing — there are no allies to heal either way, so the caster is always the only one
-  // healed. In a co-op RAID, false keeps the heal personal (just the caster); true extends the
-  // exact same amount to every other alive participant too (the caster included, not instead of
-  // them) — an admin-authored choice per attack, not an automatic raid-vs-solo behavior switch,
-  // per this feature's own "self and/or allies" request.
+  // Only meaningful when effectType = HEAL_SELF or SIPHON_HEALTH (false/ignored for every other
+  // effectType — enforced in parseSpecialAttackBody, never just left to the client). In a SOLO
+  // battle this changes nothing — there are no allies to heal either way, so the caster is always
+  // the only one healed. In a co-op RAID, false keeps the heal personal (just the caster); true
+  // extends the exact same amount to every other alive participant too (the caster included, not
+  // instead of them) — an admin-authored choice per attack, not an automatic raid-vs-solo
+  // behavior switch, per this feature's own "self and/or allies" request.
   healsAllies         Boolean                      @default(false)
   // Lets a player pick THIS attack for themselves (see User.chosenSpecialAttackId) instead of
   // always using their cMoon's admin-assigned one — an admin toggle per attack, off by default so

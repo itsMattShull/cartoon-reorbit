@@ -19,6 +19,8 @@ export default defineEventHandler(async (event) => {
       effectType: a.effectType,
       amount: a.amount,
       raiseDurationRounds: a.raiseDurationRounds,
+      reflectPercent: a.reflectPercent,
+      siphonPercent: a.siphonPercent,
       soundPath: a.soundPath,
       healsAllies: a.healsAllies,
       playerChoice: a.playerChoice,

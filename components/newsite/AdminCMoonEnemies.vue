@@ -89,7 +89,9 @@
               <div v-if="a.description" class="text-[11px] text-gray-600 break-words">{{ a.description }}</div>
               <div class="text-[11px] text-gray-600">
                 {{ SPECIAL_ATTACK_EFFECT_LABELS[a.effectType] }} ({{ a.amount }})
-                <span v-if="a.effectType === 'HEAL_SELF' && a.healsAllies"> · heals the whole party in raids</span>
+                <span v-if="a.effectType === 'REFLECT_DAMAGE'"> · {{ a.reflectPercent }}% reflected</span>
+                <span v-if="a.effectType === 'SIPHON_HEALTH'"> · heals caster {{ a.siphonPercent }}% of damage dealt</span>
+                <span v-if="(a.effectType === 'HEAL_SELF' || a.effectType === 'SIPHON_HEALTH') && a.healsAllies"> · heals the whole party in raids</span>
                 <span v-if="a.playerChoice"> · player choice</span>
                 <span v-if="a.cmoonUsageCount || a.enemyFactionUsageCount">
                   · used by {{ a.cmoonUsageCount }} cMoon(s), {{ a.enemyFactionUsageCount }} faction(s)
@@ -145,7 +147,26 @@
             </p>
           </div>
 
-          <label v-if="specialAttackForm.effectType === 'HEAL_SELF'" class="flex items-start gap-2">
+          <div v-if="specialAttackForm.effectType === 'REFLECT_DAMAGE'" class="w-40">
+            <label class="block text-xs font-medium mb-1">Reflect percent (1-500)</label>
+            <input v-model.number="specialAttackForm.reflectPercent" type="number" min="1" max="500" class="w-full border rounded px-2 py-1" />
+            <p class="text-[10px] text-gray-500 mt-1">
+              What percent of the real damage the enemy deals this round reflects back onto them. Can go above
+              100% to hit back harder than they hit. In a raid this can't stack within the same round — if several
+              party members all cast it at once, only the first to resolve takes effect.
+            </p>
+          </div>
+
+          <div v-if="specialAttackForm.effectType === 'SIPHON_HEALTH'" class="w-40">
+            <label class="block text-xs font-medium mb-1">Siphon heal percent (1-100)</label>
+            <input v-model.number="specialAttackForm.siphonPercent" type="number" min="1" max="100" class="w-full border rounded px-2 py-1" />
+            <p class="text-[10px] text-gray-500 mt-1">
+              What percent of Amount (the damage this attack deals once it lands) converts into healing for the
+              caster. Same raid non-stacking rule as Reflect Damage above.
+            </p>
+          </div>
+
+          <label v-if="specialAttackForm.effectType === 'HEAL_SELF' || specialAttackForm.effectType === 'SIPHON_HEALTH'" class="flex items-start gap-2">
             <input type="checkbox" v-model="specialAttackForm.healsAllies" class="mt-0.5" />
             <span>
               <span class="text-xs font-medium">Also heals allies in co-op raids</span>
@@ -956,13 +977,18 @@ const loadError = ref('')
 
 // Mirrors server/utils/cmoonEnemy.js's SPECIAL_ATTACK_EFFECT_TYPES — duplicated client-side
 // since that file is server-only, same as RANKS/RANK_LABELS below.
-const SPECIAL_ATTACK_EFFECT_TYPES = ['DAMAGE_OPPONENT', 'HEAL_SELF', 'PARALYZE_OPPONENT', 'LOWER_OPPONENT_ATTACK', 'RAISE_ALLY_ATTACK']
+const SPECIAL_ATTACK_EFFECT_TYPES = [
+  'DAMAGE_OPPONENT', 'HEAL_SELF', 'PARALYZE_OPPONENT', 'LOWER_OPPONENT_ATTACK', 'RAISE_ALLY_ATTACK',
+  'REFLECT_DAMAGE', 'SIPHON_HEALTH',
+]
 const SPECIAL_ATTACK_EFFECT_LABELS = {
   DAMAGE_OPPONENT: 'Damage opponent',
   HEAL_SELF: 'Heal self',
   PARALYZE_OPPONENT: 'Paralyze opponent',
   LOWER_OPPONENT_ATTACK: "Lower opponent's attack",
   RAISE_ALLY_ATTACK: 'Raise own attack',
+  REFLECT_DAMAGE: 'Reflect damage',
+  SIPHON_HEALTH: 'Siphon health',
 }
 const SPECIAL_ATTACK_EFFECT_HELP = {
   DAMAGE_OPPONENT: 'Deals Amount flat damage to the enemy, bypassing block entirely.',
@@ -970,6 +996,8 @@ const SPECIAL_ATTACK_EFFECT_HELP = {
   PARALYZE_OPPONENT: 'The enemy cannot attack or block for Amount upcoming rounds.',
   LOWER_OPPONENT_ATTACK: "Reduces the enemy's own landed-hit damage by Amount for the rest of the fight.",
   RAISE_ALLY_ATTACK: "Increases the caster's own landed-hit damage by Amount for the rest of the fight.",
+  REFLECT_DAMAGE: "Reflects a percent of whatever REAL damage the enemy deals to the caster's side this round back onto the enemy — if the enemy blocks instead of attacking, nothing reflects. Amount is unused for this effect.",
+  SIPHON_HEALTH: 'Deals Amount flat damage to the enemy and heals the caster by a percent of it — UNLIKE every other effect above, this one fails outright (no damage, no heal) if the enemy blocks.',
 }
 
 const memberFactionFilter = ref('')
@@ -1101,7 +1129,7 @@ const specialAttackUploadingSound = ref(false)
 const specialAttackSoundError = ref('')
 const specialAttackSavedSoundPath = ref('')
 
-const emptySpecialAttackForm = () => ({ id: '', name: '', description: '', effectType: 'DAMAGE_OPPONENT', amount: 10, raiseDurationRounds: 300, healsAllies: false, playerChoice: false })
+const emptySpecialAttackForm = () => ({ id: '', name: '', description: '', effectType: 'DAMAGE_OPPONENT', amount: 10, raiseDurationRounds: 300, reflectPercent: 100, siphonPercent: 50, healsAllies: false, playerChoice: false })
 const specialAttackForm = reactive(emptySpecialAttackForm())
 
 function resetSpecialAttackForm() {
@@ -1121,6 +1149,8 @@ function startEditSpecialAttack(a) {
   specialAttackForm.effectType = a.effectType
   specialAttackForm.amount = a.amount
   specialAttackForm.raiseDurationRounds = a.raiseDurationRounds ?? 300
+  specialAttackForm.reflectPercent = a.reflectPercent ?? 100
+  specialAttackForm.siphonPercent = a.siphonPercent ?? 50
   specialAttackForm.healsAllies = !!a.healsAllies
   specialAttackForm.playerChoice = !!a.playerChoice
   specialAttackSavedSoundPath.value = a.soundPath || ''
@@ -1178,6 +1208,16 @@ async function saveSpecialAttack() {
     specialAttackFormError.value = 'Raise duration must be between 1 and 300 rounds.'
     return
   }
+  const reflectPercent = Math.trunc(Number(specialAttackForm.reflectPercent)) || 100
+  if (specialAttackForm.effectType === 'REFLECT_DAMAGE' && (!Number.isInteger(reflectPercent) || reflectPercent < 1 || reflectPercent > 500)) {
+    specialAttackFormError.value = 'Reflect percent must be between 1 and 500.'
+    return
+  }
+  const siphonPercent = Math.trunc(Number(specialAttackForm.siphonPercent)) || 50
+  if (specialAttackForm.effectType === 'SIPHON_HEALTH' && (!Number.isInteger(siphonPercent) || siphonPercent < 1 || siphonPercent > 100)) {
+    specialAttackFormError.value = 'Siphon percent must be between 1 and 100.'
+    return
+  }
 
   specialAttackSaving.value = true
   try {
@@ -1187,7 +1227,9 @@ async function saveSpecialAttack() {
       effectType: specialAttackForm.effectType,
       amount,
       raiseDurationRounds,
-      healsAllies: specialAttackForm.effectType === 'HEAL_SELF' ? specialAttackForm.healsAllies : false,
+      reflectPercent,
+      siphonPercent,
+      healsAllies: (specialAttackForm.effectType === 'HEAL_SELF' || specialAttackForm.effectType === 'SIPHON_HEALTH') ? specialAttackForm.healsAllies : false,
       playerChoice: specialAttackForm.playerChoice,
     }
     if (specialAttackForm.id) {

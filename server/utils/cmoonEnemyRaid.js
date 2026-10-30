@@ -41,6 +41,44 @@
 //       LOWER_OPPONENT_ATTACK/RAISE_ALLY_ATTACK -> raid.enemyAtkBonus/raid.partyAtkBonus, fed
 //                                          into resolveRaidRound below exactly like the solo
 //                                          battle's own playerAtkBonus/enemyAtkBonus
+//       REFLECT_DAMAGE (either side)   -> reflects reflectPercent% of whatever REAL damage the
+//                                          opposing side dealt to the caster's side THIS round
+//                                          back onto that opponent (player-cast -> raid.
+//                                          enemyHpRemaining; boss-cast -> AoE on every alive
+//                                          participant, same "full amount each" convention
+//                                          DAMAGE_OPPONENT already uses). "If the enemy blocks,
+//                                          nothing is reflected" falls out for free: the real
+//                                          damage dealt is already 0 whenever the opponent's own
+//                                          round action was a block rather than an attack — no
+//                                          extra rule needed. A boss-cast reflect already fires
+//                                          AFTER the round resolves (same timing as every other
+//                                          boss auto-fire effect) so it applies immediately; a
+//                                          PLAYER cast fires in step 1, BEFORE that round's real
+//                                          outcome exists, so it's queued and applied in a new
+//                                          "step 2.5" in closeRound, right after the lane
+//                                          exchange resolves — see applyReflectDamage below.
+//       SIPHON_HEALTH (either side)    -> unlike every other special, this one CAN be blocked:
+//                                          deals its own flat `amount` (same convention as
+//                                          DAMAGE_OPPONENT) and heals the caster's side by
+//                                          siphonPercent% of it, UNLESS the intended target's own
+//                                          action that round was a block, in which case it fizzles
+//                                          entirely (no damage, no heal). Boss-cast is AoE, each
+//                                          alive participant checked independently against their
+//                                          OWN action — some can block it while others can't.
+//                                          Player-cast targets the boss's one shared action. Same
+//                                          deferred-to-step-2.5 timing as REFLECT_DAMAGE for a
+//                                          player cast, for the same reason (the action being
+//                                          checked, post-paralysis-override, isn't settled as
+//                                          this round's EFFECTIVE action until resolveRaidRound
+//                                          runs) — see applySiphonHealth below. `healsAllies`
+//                                          governs the heal exactly like HEAL_SELF's own field.
+//   - REFLECT_DAMAGE and SIPHON_HEALTH do NOT stack within the same round on the PLAYER side
+//     either (see roundGuards in closeRound) — if several party members all cast the same one in
+//     one round, only the FIRST to be processed takes effect; the rest are no-ops (still announce
+//     via specialEvents, same "silent no-op, not an error" shape PARALYZE_OPPONENT/
+//     RAISE_ALLY_ATTACK already use). Unlike those two, there's no multi-round "already active"
+//     state to track — these are instant, one-shot effects — so the guard is a plain object
+//     closeRound creates fresh every round, never persisted on `raid` or serialized to Redis.
 //   - Each participant's own hitStreak/specialCharged stays genuinely per-participant (see
 //     CMoonEnemyRaidParticipant's own in-memory shape in cmoonRaidSocket.js) — "if a player lands
 //     3 hits in a row" is unambiguous per-player, unlike anything above. The boss's own hit
@@ -49,7 +87,7 @@
 //     pool/shared action this engine already treats the boss as having.
 
 import {
-  resolveBattleRound, rollHitDamage, isKnownAction, PLAYER_MAX_HP, HEAL_ON_SUCCESSFUL_BLOCK,
+  resolveBattleRound, rollHitDamage, isKnownAction, isBlock, PLAYER_MAX_HP, HEAL_ON_SUCCESSFUL_BLOCK,
   HIT_STREAK_THRESHOLD,
 } from './cmoonEnemyBattle.js'
 
@@ -213,7 +251,16 @@ export function resolveRaidRound({ enemyAction, enemyMember, participants, party
 // which are untouched by this): at most one paralyze and one attack-raise can be active against/
 // for a given side at once. A cast of either while one is already active is a complete no-op —
 // pushed to specialEvents (so the UI/Discord still announce the attempt) but changes no state.
-export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvents) {
+//
+// `context` is only ever populated by closeRound, for the two newest effect types:
+//   - `roundGuards` (step 1 only): `{ reflectUsed, siphonUsed, pendingReflect, pendingSiphon }` —
+//     see this file's header comment on why a PLAYER cast of either effect always defers here.
+//   - `roundInfo` (step 2.5's deferred re-resolution, and step 3's boss auto-fire, which already
+//     has it the first time): `{ enemyAction, perParticipant, enemyDamageDealt }`, the exact
+//     shape resolveRaidRound returns — the real outcome either effect needs.
+// Every other effect type ignores `context` entirely; it costs them nothing.
+export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvents, context = {}) {
+  const { roundGuards = null, roundInfo = null } = context
   specialEvents.push({
     side: caster.side, userId: caster.userId || null, name: attack.name,
     effectType: attack.effectType, amount: attack.amount, soundPath: attack.soundPath || null,
@@ -268,6 +315,90 @@ export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvent
     } else if (raid.enemyAtkRaiseTurnsRemaining <= 0) {
       raid.enemyAtkRaiseAmount = attack.amount
       raid.enemyAtkRaiseTurnsRemaining = attack.raiseDurationRounds
+    }
+  } else if (attack.effectType === 'REFLECT_DAMAGE') {
+    if (caster.side === 'PLAYER') {
+      // Non-stacking within the round, same spirit as PARALYZE_OPPONENT/RAISE_ALLY_ATTACK above
+      // but scoped to ONE round rather than a multi-round duration (see this file's header
+      // comment) — the first player-side cast to reach here each round claims the slot; later
+      // ones this same round are silent no-ops. Always deferred for a player cast (no roundInfo
+      // yet at step 1) — closeRound re-invokes applyReflectDamage directly, not this function,
+      // once the real round outcome is known, so the specialEvent above is never pushed twice.
+      if (roundGuards?.reflectUsed) return
+      if (roundGuards) { roundGuards.reflectUsed = true; roundGuards.pendingReflect = { attack, caster } }
+      return
+    }
+    applyReflectDamage(raid, alive, attack, caster, roundInfo)
+  } else if (attack.effectType === 'SIPHON_HEALTH') {
+    if (caster.side === 'PLAYER') {
+      if (roundGuards?.siphonUsed) return
+      if (roundGuards) { roundGuards.siphonUsed = true; roundGuards.pendingSiphon = { attack, caster } }
+      return
+    }
+    applySiphonHealth(raid, alive, attack, caster, roundInfo)
+  }
+}
+
+// Applies one already-cast REFLECT_DAMAGE's numeric effect, given this round's REAL outcome
+// (`roundInfo`, the exact shape resolveRaidRound returns — never available until that call has
+// run). Exported separately from applyRaidSpecialAttack (rather than folded back into it) so
+// closeRound's deferred "step 2.5" can apply a queued player cast WITHOUT re-pushing its
+// specialEvent a second time — that already happened in step 1, the instant it was cast.
+export function applyReflectDamage(raid, alive, attack, caster, roundInfo) {
+  const incoming = caster.side === 'PLAYER'
+    // Total damage the boss's one shared action actually dealt across the whole party this
+    // round — not raid.enemyHpRemaining-adjacent at all, purely "how much did the party just get
+    // hit for," which is already 0 whenever the boss's own action that round was a block.
+    ? roundInfo.perParticipant.reduce((sum, r) => sum + (r.playerDamage || 0), 0)
+    // Total damage the party actually dealt to the boss this round (already 0 if every
+    // participant missed/was blocked).
+    : roundInfo.enemyDamageDealt
+  const reflected = Math.round(incoming * attack.reflectPercent / 100)
+  if (reflected <= 0) return
+  if (caster.side === 'PLAYER') {
+    raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - reflected)
+  } else {
+    // Same "full amount to every alive participant" AoE convention DAMAGE_OPPONENT's own
+    // boss-cast branch already uses above — not divided among the party.
+    for (const p of alive) {
+      p.hpRemaining = Math.max(0, p.hpRemaining - reflected)
+      if (p.hpRemaining <= 0 && !p.knockedOutAt) p.knockedOutAt = Date.now()
+    }
+  }
+}
+
+// Applies one already-cast SIPHON_HEALTH's numeric effect. `roundInfo.enemyAction` is this
+// round's EFFECTIVE boss action (post-paralysis-override, exactly as resolveRaidRound used it) —
+// a player-cast siphon fizzles outright if that was a block, the one way this effect (and
+// REFLECT_DAMAGE) differs from every flat-amount effect above, which always lands regardless of
+// what the opponent chose. A boss-cast siphon instead checks EACH alive participant's own
+// `roundInfo.perParticipant[].action` independently — some can block it while others can't, same
+// "no shared lane, no shared fate" AoE shape SIPHON_HEALTH shares with DAMAGE_OPPONENT's own
+// boss-cast branch, just with the added per-target block check neither of those needs.
+export function applySiphonHealth(raid, alive, attack, caster, roundInfo) {
+  if (caster.side === 'PLAYER') {
+    if (isBlock(roundInfo.enemyAction)) return
+    raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - attack.amount)
+    const heal = Math.round(attack.amount * attack.siphonPercent / 100)
+    if (heal <= 0) return
+    const casterParticipant = raid.participants.get(caster.userId)
+    if (attack.healsAllies) {
+      for (const p of alive) p.hpRemaining = Math.min(p.maxHp, p.hpRemaining + heal)
+    } else if (casterParticipant && !casterParticipant.knockedOutAt) {
+      casterParticipant.hpRemaining = Math.min(casterParticipant.maxHp, casterParticipant.hpRemaining + heal)
+    }
+  } else {
+    let totalDealt = 0
+    for (const row of roundInfo.perParticipant) {
+      if (isBlock(row.action)) continue // this participant personally blocked -- immune
+      const p = raid.participants.get(row.userId)
+      if (!p || p.knockedOutAt) continue
+      p.hpRemaining = Math.max(0, p.hpRemaining - attack.amount)
+      if (p.hpRemaining <= 0 && !p.knockedOutAt) p.knockedOutAt = Date.now()
+      totalDealt += attack.amount
+    }
+    if (totalDealt > 0) {
+      raid.enemyHpRemaining = Math.min(raid.enemyStats.maxHp, raid.enemyHpRemaining + Math.round(totalDealt * attack.siphonPercent / 100))
     }
   }
 }
