@@ -8,7 +8,7 @@
       <template v-else>
         <div
           class="cr-card bg-white rounded border p-4 space-y-3"
-          :class="{ 'cr-result-flash-win': resultFlash === 'win', 'cr-result-flash-loss': resultFlash === 'loss' }"
+          :class="{ 'cr-shake': shaking, 'cr-shake-crit': shaking && shakeCrit, 'cr-result-flash-win': resultFlash === 'win', 'cr-result-flash-loss': resultFlash === 'loss' }"
         >
           <div class="flex items-center gap-3">
             <div class="w-16 h-16 rounded border flex-shrink-0 overflow-hidden bg-gray-100 flex items-center justify-center">
@@ -17,32 +17,8 @@
             </div>
             <div class="min-w-0">
               <h1 class="font-bold text-lg break-words">{{ raid.enemyName }}</h1>
-              <p class="text-xs text-gray-500">
-                Raid boss · {{ raid.participants.length }}/{{ raid.maxParticipants }} joined
-                <span v-if="raid.isPrivate"> · 🔒 Private</span>
-              </p>
+              <p class="text-xs text-gray-500">Raid boss · {{ raid.participants.length }}/4 joined</p>
             </div>
-          </div>
-
-          <!-- One-time, purely cosmetic "epic" moment when a cMoon captain is in the party — see
-               the watch(raid, ...) below for the trigger and CMoonRaidFighter.vue for the
-               persistent glow/badge treatment this banner announces. No gameplay effect. -->
-          <Transition name="cr-reveal">
-            <p v-if="captainEntranceBanner" class="cr-captain-banner">{{ captainEntranceBanner }}</p>
-          </Transition>
-
-          <!-- Captain boost overlay — distinct from the one-time entrance banner above: this stays
-               up for the WHOLE lobby (not just a few seconds) and only fades once the raid actually
-               starts (see showCaptainBoostOverlay's own comment), rather than on a fixed timer. The
-               lowered hit-streak threshold itself keeps applying for the rest of the raid — only
-               this overlay is lobby-scoped. -->
-          <Transition name="cr-boost-fade">
-            <p v-if="showCaptainBoostOverlay" class="cr-boost-overlay">Captain present! Players boosted!</p>
-          </Transition>
-
-          <div v-if="raid.isPrivate" class="cr-private-row">
-            <span>🔒 Private raid — only reachable via this page's own link.</span>
-            <button type="button" class="cr-link-btn" @click="copyInviteLink">{{ inviteLinkCopied ? 'Copied!' : 'Copy invite link' }}</button>
           </div>
 
           <!-- Every cMoon in this party, in its own colors — raids are cross-cMoon, so this is
@@ -68,167 +44,97 @@
           <p v-if="currentTaunt" class="cr-taunt">&ldquo;{{ currentTaunt }}&rdquo;</p>
           <p v-if="raidSocket.lastError.value" class="text-sm text-red-600">{{ raidSocket.lastError.value }}</p>
 
-          <!-- ── FORMING: roster + join countdown + lobby controls ───────────── -->
+          <!-- ── FORMING: roster + join countdown ────────────────────────── -->
           <div v-if="raid.status === 'FORMING'" class="space-y-3">
             <p class="text-sm text-gray-600">
-              <template v-if="raid.leaderKeepOpen">The raid leader is keeping the lobby open.</template>
-              <template v-else>Joining closes in <span class="font-semibold tabular-nums">{{ joinCountdown }}s</span></template>
-              — up to {{ raid.maxParticipants }} players from any cMoon can fight this boss together, each earning
-              points for their own cMoon.
+              Joining closes in <span class="font-semibold tabular-nums">{{ joinCountdown }}s</span> — up to 4 players
+              from any cMoon can fight this boss together, each earning points for their own cMoon.
             </p>
             <ul class="cr-roster">
               <li v-for="p in raid.participants" :key="p.userId">
                 <CMoonRaidFighter :participant="p" :is-me="p.userId === user?.id" />
               </li>
-              <li v-for="n in Math.max(0, raid.maxParticipants - raid.participants.length)" :key="`open-${n}`" class="cr-roster-open">Open slot</li>
+              <li v-for="n in Math.max(0, 4 - raid.participants.length)" :key="`open-${n}`" class="cr-roster-open">Open slot</li>
             </ul>
             <button
               v-if="!hasJoined" type="button"
               class="px-4 py-2 text-sm font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
-              :disabled="raid.participants.length >= raid.maxParticipants" @click="raidSocket.joinRaid(raidId)"
+              :disabled="raid.participants.length >= 4" @click="raidSocket.joinRaid(raidId)"
             >Join raid</button>
             <p v-else class="text-sm text-green-700 font-medium">You're in — waiting for the fight to start…</p>
-
-            <!-- Leader-only lobby controls. -->
-            <div v-if="isInitiator" class="cr-lobby-controls">
-              <label class="cr-keepopen-toggle">
-                <input type="checkbox" :checked="raid.leaderKeepOpen" @change="raidSocket.toggleKeepOpen(raidId, $event.target.checked)" />
-                Keep lobby open past the usual window
-              </label>
-              <!-- Disabled rather than hidden while solo (see raid.soloQueueEnabled's own
-                   comment) — same reasoning as a disabled button elsewhere on this page, so the
-                   leader sees WHY it's unavailable instead of wondering where it went. -->
-              <button
-                type="button" class="cr-link-btn" :disabled="!raid.soloQueueEnabled && raid.participants.length < 2"
-                @click="raidSocket.forceStartRaid(raidId)"
-              >Start now</button>
-              <p v-if="!raid.soloQueueEnabled && raid.participants.length < 2" class="cr-solo-disabled-note">
-                Solo queueing is disabled — at least one more player must join before you can start.
-              </p>
-            </div>
-
-            <!-- Any non-leader participant can vote to cut the countdown to 5s, once every OTHER
-                 non-leader participant agrees too — see maybeApplySpeedVote in cmoonRaidSocket.js,
-                 whose denominator deliberately excludes the leader (they already have "Start now"
-                 for an instant start, and never get a vote button here). -->
-            <button
-              v-if="!isInitiator && hasJoined && raid.participants.length < raid.maxParticipants"
-              type="button" class="cr-link-btn" @click="raidSocket.voteSpeedUp(raidId)"
-            >Vote to start in 5s ({{ raid.speedVoteCount }}/{{ raid.participants.length - 1 }})</button>
           </div>
 
           <!-- ── IN_PROGRESS: live combat ─────────────────────────────────── -->
           <div v-else-if="raid.status === 'IN_PROGRESS'" class="space-y-3">
-            <!-- ── Shake zone: everything that's allowed to jolt on a landed hit. The action
-                 buttons below are rendered OUTSIDE this element (a sibling, not a descendant),
-                 so the shake transform never moves them even by a few px. The round-reveal panel,
-                 hit-streak combo callout, and special-use callout are all rendered inside the
-                 .cr-announce-overlay absolutely-positioned layer below, so their popping in and
-                 out never changes this zone's rendered height either — between the two, nothing
-                 that happens in here can ever shift where the buttons sit on screen. -->
-            <div class="cr-shake-zone" :class="{ 'cr-shake': shaking, 'cr-shake-crit': shaking && shakeCrit }">
-              <p class="text-xs text-gray-500">
-                Round {{ raid.roundNumber }} · acting in <span class="font-semibold tabular-nums">{{ roundCountdown }}s</span>
-              </p>
-
-              <!-- Wind-up telegraph — a deliberate, narrow exception to the usual "enemy action
-                   stays hidden until it resolves" rule (see raid.currentWindUp's own comment in
-                   cmoonRaidSocket.js): the whole party sees this coming and can react. -->
-              <p v-if="raid.currentWindUp" class="cr-windup-banner">
-                ⚠️ {{ raid.currentWindUp.message }}
-                <span class="cr-windup-hint">Block {{ raid.currentWindUp.direction === 'HIGH' ? 'high' : 'low' }} to counter it!</span>
-              </p>
-
-              <ul class="space-y-2">
-                <li v-for="p in raid.participants" :key="p.userId" class="cr-fighter-row text-xs relative">
-                  <!-- Line 1: who (team colors + rank), their special charge, and their round status. -->
-                  <div class="cr-fighter-line">
-                    <CMoonRaidFighter :participant="p" variant="compact" :is-me="p.userId === user?.id" :knocked-out="p.knockedOut" class="cr-fighter-badge" />
-                    <!-- Teammate charge meter — shown for everyone, not just myself. Each fighter
-                         charges THEIR OWN cMoon's special, so the meter only shows for players
-                         whose team has one. -->
-                    <span
-                      v-if="p.specialAttack && !p.knockedOut" class="text-[10px] flex-shrink-0" :title="p.specialAttack.name"
-                      :class="p.specialCharged ? 'cr-charge-ready' : 'text-gray-400'"
-                    >★{{ p.specialCharged ? '' : Math.min(p.hitStreak, hitStreakThreshold) + '/' + hitStreakThreshold }}</span>
-                    <span v-if="p.knockedOut" class="cr-fighter-status text-red-500">KO</span>
-                    <span v-else-if="p.hasActed" class="cr-fighter-status text-green-600">Ready</span>
-                    <span v-else class="cr-fighter-status text-gray-400">Deciding…</span>
+            <p class="text-xs text-gray-500">Round {{ raid.roundNumber }}</p>
+            <ul class="space-y-2">
+              <li v-for="p in raid.participants" :key="p.userId" class="cr-fighter-row text-xs relative">
+                <!-- Line 1: who (team colors + rank), their special charge, and their round status. -->
+                <div class="cr-fighter-line">
+                  <CMoonRaidFighter :participant="p" variant="compact" :is-me="p.userId === user?.id" :knocked-out="p.knockedOut" class="cr-fighter-badge" />
+                  <!-- Teammate charge meter — shown for everyone, not just myself. Each fighter
+                       charges THEIR OWN cMoon's special, so the meter only shows for players
+                       whose team has one. -->
+                  <span
+                    v-if="p.specialAttack && !p.knockedOut" class="text-[10px] flex-shrink-0" :title="p.specialAttack.name"
+                    :class="p.specialCharged ? 'cr-charge-ready' : 'text-gray-400'"
+                  >★{{ p.specialCharged ? '' : Math.min(p.hitStreak, 3) + '/3' }}</span>
+                  <span v-if="p.knockedOut" class="cr-fighter-status text-red-500">KO</span>
+                  <span v-else-if="p.hasActed" class="cr-fighter-status text-green-600">Ready</span>
+                  <span v-else class="cr-fighter-status text-gray-400">Deciding…</span>
+                </div>
+                <!-- Line 2: HP, full width so it never wraps unpredictably on a phone. -->
+                <div class="cr-hp-line">
+                  <div class="flex-1 h-2 bg-gray-200 rounded overflow-hidden">
+                    <div class="h-full transition-all" :class="participantHpFillClass(p)" :style="{ width: (p.hpRemaining / (p.maxHp || 1) * 100) + '%' }"></div>
                   </div>
-                  <!-- Line 2: HP, full width so it never wraps unpredictably on a phone. -->
-                  <div class="cr-hp-line">
-                    <div class="flex-1 h-2 bg-gray-200 rounded overflow-hidden">
-                      <div class="h-full transition-all" :class="participantHpFillClass(p)" :style="{ width: (p.hpRemaining / (p.maxHp || 1) * 100) + '%' }"></div>
-                    </div>
-                    <span class="w-10 flex-shrink-0 text-right tabular-nums">{{ p.hpRemaining }}/{{ p.maxHp }}</span>
-                    <span
-                      v-for="d in (p.userId === user?.id ? myFloatingDamage : [])" :key="d.id"
-                      class="cr-dmg-float" :class="{ 'cr-dmg-float-crit': d.crit }"
-                    >-{{ d.amount }}</span>
-                  </div>
-                </li>
-              </ul>
+                  <span class="w-10 flex-shrink-0 text-right tabular-nums">{{ p.hpRemaining }}/{{ p.maxHp }}</span>
+                  <span
+                    v-for="d in (p.userId === user?.id ? myFloatingDamage : [])" :key="d.id"
+                    class="cr-dmg-float" :class="{ 'cr-dmg-float-crit': d.crit }"
+                  >-{{ d.amount }}</span>
+                </div>
+              </li>
+            </ul>
 
-              <!-- ── Shared status: paralysis either direction, boss charge tension ──── -->
-              <p v-if="raid.enemyParalyzedTurns > 0" class="cr-status-badge cr-status-good">
-                ⚡ {{ raid.enemyName }} is paralyzed — {{ raid.enemyParalyzedTurns }} more round{{ raid.enemyParalyzedTurns === 1 ? '' : 's' }}
-              </p>
-              <p v-if="raid.partyParalyzedTurns > 0" class="cr-status-badge cr-status-bad">
-                ⚡ The party is paralyzed — can't act for {{ raid.partyParalyzedTurns }} more round{{ raid.partyParalyzedTurns === 1 ? '' : 's' }}
-              </p>
-              <!-- Only one attack-raise can be active for the party at a time (see
-                   applyRaidSpecialAttack's own non-stacking comment) — shown so a second
-                   RAISE_ALLY_ATTACK cast having no extra effect isn't a silent mystery. -->
-              <p v-if="raid.partyAtkRaiseTurnsRemaining > 0" class="cr-status-badge cr-status-good">
-                💪 The party's attack is raised — {{ raid.partyAtkRaiseTurnsRemaining }} more round{{ raid.partyAtkRaiseTurnsRemaining === 1 ? '' : 's' }}
-              </p>
+            <!-- ── Shared status: paralysis either direction, boss charge tension ──── -->
+            <p v-if="raid.enemyParalyzedTurns > 0" class="cr-status-badge cr-status-good">
+              ⚡ {{ raid.enemyName }} is paralyzed — {{ raid.enemyParalyzedTurns }} more round{{ raid.enemyParalyzedTurns === 1 ? '' : 's' }}
+            </p>
+            <p v-if="raid.partyParalyzedTurns > 0" class="cr-status-badge cr-status-bad">
+              ⚡ The party is paralyzed — can't act for {{ raid.partyParalyzedTurns }} more round{{ raid.partyParalyzedTurns === 1 ? '' : 's' }}
+            </p>
 
-              <!-- ── Announcements overlay — round reveal, hit-streak combo, and special-use
-                   callouts. Absolutely positioned and pointer-events:none, so appearing/
-                   disappearing here never resizes .cr-shake-zone and never blocks a tap on
-                   anything underneath (there's nothing clickable under it anyway). -->
-              <div class="cr-announce-overlay" aria-live="polite">
-                <Transition name="cr-reveal">
-                  <div v-if="lastRoundSummary" :key="lastRoundSummary.roundNumber" class="cr-reveal-panel" :class="{ 'cr-reveal-crit': lastRoundSummaryHadCrit }">
-                    <p class="cr-reveal-headline">
-                      Round {{ lastRoundSummary.roundNumber }} — the boss used <strong>{{ ACTION_LABELS[lastRoundSummary.enemyAction] }}</strong>
-                      <span v-if="lastRoundSummaryHadCrit" class="cr-crit-badge">CRITICAL!</span>
-                    </p>
-                    <ul class="cr-reveal-list">
-                      <li v-for="r in lastRoundSummary.participants" :key="r.userId" class="cr-reveal-row" :class="revealRowClass(r)">
-                        <span class="cr-reveal-name">{{ usernameFor(r.userId) }}</span>
-                        <span class="cr-reveal-action">{{ ACTION_LABELS[r.action] }}</span>
-                        <span class="cr-reveal-outcome">
-                          <template v-if="r.playerHit && r.enemyHit">traded hits!<span v-if="r.playerCrit || r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
-                          <template v-else-if="r.enemyHit">landed a hit!<span v-if="r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
-                          <template v-else-if="r.playerHit">took a hit<span v-if="r.playerCrit" class="cr-crit-badge">CRIT!</span></template>
-                          <template v-else-if="r.playerBlocked">blocked it — healed 1 HP</template>
-                          <template v-else-if="r.enemyBlocked">boss blocked it</template>
-                          <template v-else>no hit landed</template>
-                        </span>
-                      </li>
-                    </ul>
-                    <p v-if="lastRoundSummary.enemyDamageDealt > 0" class="cr-reveal-dealt">The party dealt {{ lastRoundSummary.enemyDamageDealt }} damage this round.</p>
-                    <p v-for="(s, i) in (lastRoundSummary.specials || [])" :key="i" class="cr-special-flash" :class="s.side === 'PLAYER' ? 'cr-special-flash-player' : 'cr-special-flash-enemy'">
-                      <template v-if="s.fizzled">✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} tried to unleash <strong>{{ s.name }}</strong>, but it was blocked and had no effect!</template>
-                      <template v-else>✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} unleashed <strong>{{ s.name }}</strong>!</template>
-                    </p>
-                    <p v-if="lastRoundSummary.windUpBonus" class="cr-windup-bonus">
-                      🛡️ Perfect block! {{ lastRoundSummary.windUpBonus.bonusType === 'HEAL_PARTY'
-                        ? `The party heals ${lastRoundSummary.windUpBonus.bonusAmount} HP.`
-                        : `+${lastRoundSummary.windUpBonus.bonusAmount} bonus damage to the boss.` }}
-                    </p>
-                  </div>
-                </Transition>
-
-                <p v-if="comboCallout" class="cr-combo-callout">{{ comboCallout }}</p>
-                <!-- Special-attack use — announced to the WHOLE party, not just whoever fired it,
-                     with the same prominent treatment as the hit-streak combo callout above. -->
-                <p v-if="specialUseCallout" class="cr-combo-callout cr-special-use-callout">{{ specialUseCallout }}</p>
+            <!-- ── Round reveal: what just happened, per party member ─────── -->
+            <Transition name="cr-reveal">
+              <div v-if="lastRoundSummary" :key="lastRoundSummary.roundNumber" class="cr-reveal-panel" :class="{ 'cr-reveal-crit': lastRoundSummaryHadCrit }">
+                <p class="cr-reveal-headline">
+                  Round {{ lastRoundSummary.roundNumber }} — the boss used <strong>{{ ACTION_LABELS[lastRoundSummary.enemyAction] }}</strong>
+                  <span v-if="lastRoundSummaryHadCrit" class="cr-crit-badge">CRITICAL!</span>
+                </p>
+                <ul class="cr-reveal-list">
+                  <li v-for="r in lastRoundSummary.participants" :key="r.userId" class="cr-reveal-row" :class="revealRowClass(r)">
+                    <span class="cr-reveal-name">{{ usernameFor(r.userId) }}</span>
+                    <span class="cr-reveal-action">{{ ACTION_LABELS[r.action] }}</span>
+                    <span class="cr-reveal-outcome">
+                      <template v-if="r.playerHit && r.enemyHit">traded hits!<span v-if="r.playerCrit || r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
+                      <template v-else-if="r.enemyHit">landed a hit!<span v-if="r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
+                      <template v-else-if="r.playerHit">took a hit<span v-if="r.playerCrit" class="cr-crit-badge">CRIT!</span></template>
+                      <template v-else-if="r.playerBlocked">blocked it — healed 1 HP</template>
+                      <template v-else-if="r.enemyBlocked">boss blocked it</template>
+                      <template v-else>no hit landed</template>
+                    </span>
+                  </li>
+                </ul>
+                <p v-if="lastRoundSummary.enemyDamageDealt > 0" class="cr-reveal-dealt">The party dealt {{ lastRoundSummary.enemyDamageDealt }} damage this round.</p>
+                <p v-for="(s, i) in (lastRoundSummary.specials || [])" :key="i" class="cr-special-flash" :class="s.side === 'PLAYER' ? 'cr-special-flash-player' : 'cr-special-flash-enemy'">
+                  ✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} unleashed <strong>{{ s.name }}</strong>!
+                </p>
               </div>
-            </div>
+            </Transition>
 
             <p v-if="raidSocket.lastError.value" class="text-sm text-red-600">{{ raidSocket.lastError.value }}</p>
+            <p v-if="comboCallout" class="cr-combo-callout">{{ comboCallout }}</p>
 
             <template v-if="myself && !myself.knockedOut">
               <p v-if="myself.hasActed" class="text-sm text-gray-500">Locked in — waiting on the rest of the party…</p>
@@ -251,7 +157,7 @@
                 >
                   <span class="cr-special-glow" aria-hidden="true"></span>
                   <span class="cr-special-label"><span class="cr-special-icon">★</span> {{ myself.specialAttack.name }}</span>
-                  <span class="cr-special-meter">{{ Math.min(myself.hitStreak, hitStreakThreshold) }}/{{ hitStreakThreshold }}</span>
+                  <span class="cr-special-meter">{{ Math.min(myself.hitStreak, 3) }}/3</span>
                 </button>
                 <button
                   type="button" class="cr-special-help" aria-label="What does this special attack do?"
@@ -287,7 +193,7 @@
               </div>
               <p class="text-xs text-gray-600">Everyone who joined received the same prize, and cMoon points went to each player's own cMoon.</p>
             </template>
-            <NuxtLink to="/newsite/home" class="inline-block px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50">Back home</NuxtLink>
+            <NuxtLink to="/newsite" class="inline-block px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50">Back home</NuxtLink>
           </div>
         </div>
       </template>
@@ -404,30 +310,16 @@ function specialEffectDescription(attack) {
     case 'PARALYZE_OPPONENT': return `Stuns the boss for ${n} round${n === 1 ? '' : 's'} — it can't act.`
     case 'LOWER_OPPONENT_ATTACK': return `Lowers the boss's attack damage by ${n} for the rest of the fight.`
     case 'RAISE_ALLY_ATTACK': return `Raises every raid ally's attack damage by ${n} for the rest of the fight.`
-    case 'REFLECT_DAMAGE': return `Reflects ${attack?.reflectPercent}% of whatever the boss hits the party for this round back at it — nothing reflects if it blocks. Can't stack with another reflect cast the same round.`
-    case 'SIPHON_HEALTH': return attack?.healsAllies
-      ? `Deals ${n} damage and heals you and every raid ally for ${attack?.siphonPercent}% of it — unless the boss blocks, in which case it does nothing.`
-      : `Deals ${n} damage and heals you for ${attack?.siphonPercent}% of it — unless the boss blocks, in which case it does nothing.`
     default: return ''
   }
 }
 const showSpecialInfo = ref(false)
-// How many consecutive landed hits a special actually needs right now — 3 normally, or 2 whenever
-// a captain's boosting the party (see raid.hitStreakThreshold's own comment in cmoonRaidSocket.js).
-// Read everywhere this page used to hardcode "3", so the UI always matches the server's own math.
-const hitStreakThreshold = computed(() => raid.value?.hitStreakThreshold || 3)
-// 0..hitStreakThreshold hits -> 0-100% fill, read by .cr-special-btn below via this CSS variable —
-// stays at 100% once charged even if hitStreak itself later resets (charge latches, same as solo's).
+// 0/1/2/3 hits -> 0/33/66/100% fill, read by .cr-special-btn below via this CSS variable — stays
+// at 100% once charged even if hitStreak itself later resets (charge latches, same as solo's).
 const specialFillStyle = computed(() => {
-  const pct = myself.value?.specialCharged ? 100 : Math.min(100, Math.round(((myself.value?.hitStreak || 0) / hitStreakThreshold.value) * 100))
+  const pct = myself.value?.specialCharged ? 100 : Math.min(100, Math.round(((myself.value?.hitStreak || 0) / 3) * 100))
   return { '--cr-special-fill': pct + '%' }
 })
-// Persistent-during-lobby "Captain boost" overlay — unlike the one-time entrance banner above,
-// this stays up for the WHOLE FORMING phase and fades specifically when the raid transitions to
-// IN_PROGRESS (the Transition below fires on this going false), not on a fixed timer. The
-// underlying gameplay effect (the lowered threshold itself) persists for the whole raid — only
-// this overlay is lobby-scoped.
-const showCaptainBoostOverlay = computed(() => raid.value?.status === 'FORMING' && hitStreakThreshold.value < 3)
 
 // FORMING's join-window countdown — a plain client-side ticker against joinDeadlineAt, not a
 // second source of truth: the server's sweep (see cmoonRaidSocket.js) is what actually closes
@@ -437,30 +329,6 @@ let countdownTimer = null
 function tickCountdown() {
   if (!raid.value?.joinDeadlineAt) { joinCountdown.value = 0; return }
   joinCountdown.value = Math.max(0, Math.ceil((raid.value.joinDeadlineAt - Date.now()) / 1000))
-}
-
-// IN_PROGRESS's per-round move countdown — same plain client-side ticker shape as joinCountdown
-// above, against roundDeadlineAt instead: the server's sweep is still the real authority on when
-// a round auto-acts, this just gives a stalling player (and everyone watching) something to see
-// counting down, per this feature's own "stop people from stalling fights" goal.
-const roundCountdown = ref(0)
-let roundCountdownTimer = null
-function tickRoundCountdown() {
-  if (!raid.value?.roundDeadlineAt) { roundCountdown.value = 0; return }
-  roundCountdown.value = Math.max(0, Math.ceil((raid.value.roundDeadlineAt - Date.now()) / 1000))
-}
-
-// Whether I'M the raid leader — the only one who can toggle keep-open or force-start the lobby.
-const isInitiator = computed(() => !!raid.value?.participants.find(p => p.userId === user.value?.id)?.isInitiator)
-
-const inviteLinkCopied = ref(false)
-async function copyInviteLink() {
-  if (typeof window === 'undefined') return
-  try {
-    await navigator.clipboard.writeText(window.location.href)
-    inviteLinkCopied.value = true
-    setTimeout(() => { inviteLinkCopied.value = false }, 2000)
-  } catch {}
 }
 
 // One random pick from an enemy's admin-authored taunt pool — mirrors
@@ -488,15 +356,6 @@ const FLOATING_DAMAGE_LIFETIME_MS = 900
 const comboCallout = ref('')
 let comboTimer = null
 
-// ── Special-use callout — a transient, party-wide announcement whenever ANY participant fires
-// their special attack this round (see the lastRound watch below), reusing the hit-streak combo
-// callout's own visual treatment per the feature request. Unlike comboCallout (which only reacts
-// to MY OWN streak), this reads round.specials — the same shared, every-viewer-sees-the-same-thing
-// data the round-reveal panel's own special-flash lines already read — so it's broadcast to the
-// whole party, not just the player who used it.
-const specialUseCallout = ref('')
-let specialUseTimer = null
-
 // ── Result-screen flash — a brief full-bleed tint the instant the raid resolves, driven off the
 // status transition itself (mirrors the solo popup's own phase-transition-based resultFlash).
 const resultFlash = ref('')
@@ -511,13 +370,10 @@ watch(() => raid.value?.status, (status) => {
 
 // ── Impact feedback + sound/music — same "juice" components/CMoonBattlePopupHost.vue gives a
 // solo battle (see that component's own comments for the full rationale), adapted to a raid's
-// shared screen. Screenshake IS replicated here (mirrors that component's shaking/shakeCrit/
-// triggerShake below almost exactly), but scoped to .cr-shake-zone in the template rather than the
-// whole card — up to 8 players sharing one screen made misclicks from the shake common when it
-// also reached the action buttons, so the shake class only ever applies to the round/roster zone,
-// never to the buttons themselves (a sibling element outside it). The per-round SOUND effects below
-// still play only off MY OWN participant row — several simultaneous players' sounds all firing at
-// once would be noise, not epic.
+// shared screen: a shake/crit badge triggers off the WHOLE PARTY's round (anyone landing or
+// taking a hit), since everyone here is watching the same fight together, while the per-round
+// SOUND effects below play only off MY OWN participant row — four simultaneous players' sounds
+// all firing at once would be noise, not epic.
 const shaking = ref(false)
 const shakeCrit = ref(false)
 let shakeTimer = null
@@ -525,14 +381,13 @@ function triggerShake(isCrit) {
   if (shakeTimer) clearTimeout(shakeTimer)
   shaking.value = false
   shakeCrit.value = false
-  // Re-triggering the CSS animation needs a fresh frame between removing and re-adding the class
-  // (setting `shaking` true again on an already-true value is a no-op to Vue/the DOM either way).
   requestAnimationFrame(() => {
     shakeCrit.value = !!isCrit
     shaking.value = true
     shakeTimer = setTimeout(() => { shaking.value = false }, 450)
   })
 }
+
 function playSound(path) {
   if (!path || typeof window === 'undefined') return
   try {
@@ -553,28 +408,16 @@ function playMyRoundSounds(myRow, sounds) {
 
 watch(() => raidSocket.lastRound.value, (round) => {
   if (!round?.participants?.length) return
+  const anyHit = round.participants.some(r => r.playerHit || r.enemyHit)
+  if (anyHit) {
+    const anyCrit = round.participants.some(r => r.playerCrit || r.enemyCrit)
+    triggerShake(anyCrit)
+  }
   const myRow = round.participants.find(r => r.userId === user.value?.id)
   playMyRoundSounds(myRow, raid.value?.enemySounds)
   // Special-attack sounds play for the whole room, not just "my own" — a special firing is a
   // shared moment (same as appear/victory/defeat), unlike the routine per-hit sounds above.
   for (const s of (round.specials || [])) playSound(s.soundPath)
-
-  // ── Screen shake — any landed hit either direction, bigger on a crit. Mirrors
-  // components/CMoonBattlePopupHost.vue's own trigger condition exactly (round.playerHit ||
-  // round.enemyHit there), just checked across every participant's row since a raid round has
-  // several instead of one.
-  const anyHit = round.participants.some(r => r.playerHit || r.enemyHit)
-  if (anyHit) triggerShake(round.participants.some(r => r.playerCrit || r.enemyCrit))
-
-  // ── Special-use callout — broadcast to the WHOLE party the instant any player fires a special
-  // this round (round.specials is shared data, not per-viewer). Multiple players firing in the
-  // same round (possible with up to 8 in a party) are combined into one line rather than queued.
-  const playerSpecials = (round.specials || []).filter(s => s.side === 'PLAYER')
-  if (playerSpecials.length) {
-    specialUseCallout.value = playerSpecials.map(s => `${usernameFor(s.userId)} used ${s.name}!`).join('  ')
-    if (specialUseTimer) clearTimeout(specialUseTimer)
-    specialUseTimer = setTimeout(() => { specialUseCallout.value = '' }, 1600)
-  }
 
   // ── Floating damage — one aggregate "-N" over the shared boss bar (round.enemyDamageDealt is
   // already the party's combined total, matching the single shared HP pool it comes out of), plus
@@ -640,19 +483,6 @@ watch(() => raid.value?.status, (status) => {
   else stopBattleMusic()
 })
 
-// ── Captain entrance banner — a one-time, purely cosmetic "epic" moment naming every cMoon
-// captain in the party (see CMoonCaptain's own schema comment), meant to pump up everyone else in
-// the raid. Fires on the same "first time this page has raid data" trigger as the appear sound/
-// taunt below, never re-announced on later state pushes. No gameplay effect — CMoonRaidFighter.vue
-// carries the persistent glow/badge for the rest of the fight.
-const captainEntranceBanner = ref('')
-let captainEntranceTimer = null
-function joinWithAnd(names) {
-  if (names.length <= 1) return names[0] || ''
-  if (names.length === 2) return `${names[0]} and ${names[1]}`
-  return `${names.slice(0, -1).join(', ')}, and ${names[names.length - 1]}`
-}
-
 // Appear sound — once, the first time this page actually has raid data to show (covers both
 // "just started/joined a FORMING raid" and "opened a link to one already in progress"); never
 // re-fires on every subsequent state push for the same raid.
@@ -666,15 +496,6 @@ watch(raid, (r) => {
     currentTaunt.value = taunt.text
     playSound(taunt.soundPath)
   }
-
-  const captains = (r.participants || []).filter(p => p.isCaptain)
-  if (captains.length) {
-    const names = captains.map(p => p.username || 'Someone')
-    const plural = names.length > 1
-    captainEntranceBanner.value = `🎖️ ${joinWithAnd(names)} ${plural ? 'have' : 'has'} entered the battle as ${plural ? 'cMoon Captains' : 'a cMoon Captain'} — fight with honor!`
-    if (captainEntranceTimer) clearTimeout(captainEntranceTimer)
-    captainEntranceTimer = setTimeout(() => { captainEntranceBanner.value = '' }, 4000)
-  }
 })
 
 // Victory/defeat sound — once, the instant the raid actually resolves (never on ABANDONED, same
@@ -687,15 +508,11 @@ watch(() => raid.value?.outcome, (outcome) => {
 onMounted(() => {
   raidSocket.getState(raidId.value)
   countdownTimer = setInterval(tickCountdown, 250)
-  roundCountdownTimer = setInterval(tickRoundCountdown, 250)
 })
 onUnmounted(() => {
   if (countdownTimer) clearInterval(countdownTimer)
-  if (roundCountdownTimer) clearInterval(roundCountdownTimer)
-  if (comboTimer) clearTimeout(comboTimer)
-  if (specialUseTimer) clearTimeout(specialUseTimer)
   if (shakeTimer) clearTimeout(shakeTimer)
-  if (captainEntranceTimer) clearTimeout(captainEntranceTimer)
+  if (comboTimer) clearTimeout(comboTimer)
   if (resultFlashTimer) clearTimeout(resultFlashTimer)
   stopBattleMusic()
 })
@@ -717,27 +534,8 @@ onUnmounted(() => {
 .cr-fighter-badge { flex: 0 1 auto; min-width: 0; }
 .cr-fighter-status { margin-left: auto; font-size: 10px; flex-shrink: 0; }
 .cr-hp-line { position: relative; display: flex; align-items: center; gap: 8px; padding-left: 4px; }
-
-/* ── Shake zone (round counter, wind-up banner, roster, status badges) + its announcements
-   overlay — see the template's own comment for why the action buttons are deliberately kept
-   OUTSIDE this element, and why the overlay below is absolutely positioned rather than flowed. */
-.cr-shake-zone { position: relative; display: flex; flex-direction: column; gap: 12px; }
-.cr-announce-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 0 4px;
-  pointer-events: none;
-  z-index: 5;
-}
-/* Impact feedback on a landed hit — a quick horizontal shake, bigger for a critical. Scoped to
-   .cr-shake-zone only (never the action buttons below it) — mirrors
-   components/CMoonBattlePopupHost.vue's own cbp-shake/cbp-shake-crit keyframes exactly. Disabled
-   under prefers-reduced-motion, same accessibility stance that component already takes. */
+/* Same impact-feedback shake components/CMoonBattlePopupHost.vue uses for a solo battle — see
+   that component's own comment on the prefers-reduced-motion stance this mirrors. */
 @keyframes cr-shake-kf {
   10%, 90% { transform: translateX(-1px); }
   20%, 80% { transform: translateX(2px); }
@@ -831,17 +629,6 @@ onUnmounted(() => {
   .cr-combo-callout { animation: none; }
 }
 
-/* Special-use callout — same pop/shape as .cr-combo-callout above (per the feature request:
-   "announce it the same way the 2x or 3x hits are announced"), just violet instead of gold so a
-   special-attack moment reads as visually distinct from a hit-streak one when both can appear in
-   the same overlay. */
-.cr-special-use-callout {
-  color: #7e22ce;
-  background: rgba(168, 85, 247, 0.12);
-  border-radius: 6px;
-  padding: 4px 10px;
-}
-
 /* Taunt line — re-colored for the light card, same shape as components/CMoonBattlePopupHost.vue's
    cbp-taunt. */
 .cr-taunt {
@@ -861,61 +648,6 @@ onUnmounted(() => {
 }
 @media (prefers-reduced-motion: reduce) {
   .cr-taunt { animation: none; }
-}
-
-/* Captain entrance banner — a one-time, purely cosmetic "epic" moment (see the watch(raid, ...)
-   that sets captainEntranceBanner). Bigger and bolder than every other callout on this page on
-   purpose: it's meant to read as a big deal the instant the page loads. */
-.cr-captain-banner {
-  font-size: 13.5px;
-  font-weight: 800;
-  text-align: center;
-  color: #78350f;
-  background: linear-gradient(90deg, rgba(250, 204, 21, 0.25), rgba(250, 204, 21, 0.5), rgba(250, 204, 21, 0.25));
-  border: 1px solid #d97706;
-  border-radius: 8px;
-  padding: 7px 12px;
-  margin: 0;
-  box-shadow: 0 0 16px rgba(250, 204, 21, 0.5);
-  animation: cr-captain-banner-pop 0.5s ease-out;
-}
-@keyframes cr-captain-banner-pop {
-  0% { transform: scale(0.9); opacity: 0; }
-  60% { transform: scale(1.03); opacity: 1; }
-  100% { transform: scale(1); opacity: 1; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .cr-captain-banner { animation: none; }
-}
-
-/* Captain boost overlay — GlobalGameConfig.cMoonCaptainBoostEnabled's own epic callout (see
-   showCaptainBoostOverlay). Same gold "big deal" family as .cr-captain-banner above, but it's
-   meant to feel like it's hovering over the lobby for the whole wait rather than popping once, so
-   it gets a slow pulsing glow instead of a one-shot entrance animation, and a longer, graceful
-   fade (via .cr-boost-fade below) instead of .cr-reveal's quick opacity snap. */
-.cr-boost-overlay {
-  font-size: 14px;
-  font-weight: 800;
-  text-align: center;
-  letter-spacing: 0.01em;
-  color: #fff;
-  background: linear-gradient(90deg, #92400e, #d97706, #92400e);
-  border: 1px solid #fcd34d;
-  border-radius: 8px;
-  padding: 9px 12px;
-  margin: 0;
-  box-shadow: 0 0 20px rgba(250, 204, 21, 0.6);
-  animation: cr-boost-pulse 1.8s ease-in-out infinite;
-}
-@keyframes cr-boost-pulse {
-  0%, 100% { box-shadow: 0 0 14px rgba(250, 204, 21, 0.45); }
-  50% { box-shadow: 0 0 26px rgba(250, 204, 21, 0.85); }
-}
-.cr-boost-fade-enter-active { transition: opacity 0.4s ease; }
-.cr-boost-fade-leave-active { transition: opacity 0.9s ease; }
-.cr-boost-fade-enter-from, .cr-boost-fade-leave-to { opacity: 0; }
-@media (prefers-reduced-motion: reduce) {
-  .cr-boost-overlay { animation: none; }
 }
 
 .cr-first-win {
@@ -993,33 +725,6 @@ onUnmounted(() => {
 }
 .cr-status-good { background: #dcfce7; color: #166534; }
 .cr-status-bad { background: #fee2e2; color: #991b1b; }
-
-/* ── Private-raid row + generic small link-style button (lobby controls, copy-link) ──────── */
-.cr-private-row {
-  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
-  font-size: 11.5px; color: #78350f; background: rgba(250, 204, 21, 0.15);
-  border: 1px solid rgba(250, 204, 21, 0.4); border-radius: 6px; padding: 5px 9px;
-}
-.cr-link-btn {
-  font-size: 11.5px; font-weight: 700; color: #1e3a8a; background: none; border: 1px solid #c7d2fe;
-  border-radius: 6px; padding: 4px 10px; cursor: pointer;
-}
-.cr-link-btn:hover { background: #eef2ff; }
-.cr-link-btn:disabled { color: #9ca3af; border-color: #e5e7eb; cursor: not-allowed; }
-.cr-link-btn:disabled:hover { background: none; }
-.cr-solo-disabled-note { font-size: 11px; color: #6b7280; font-style: italic; width: 100%; margin: 0; }
-
-.cr-lobby-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-.cr-keepopen-toggle { display: flex; align-items: center; gap: 6px; font-size: 12px; color: #374151; cursor: pointer; }
-
-/* ── Wind-up telegraph (see raid.currentWindUp) ──────────────────────────────────────────── */
-.cr-windup-banner {
-  font-size: 12px; font-weight: 700; color: #92400e; background: rgba(245, 158, 11, 0.15);
-  border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 6px; padding: 6px 9px; margin: 0;
-  display: flex; flex-direction: column; gap: 2px;
-}
-.cr-windup-hint { font-size: 11px; font-weight: 600; color: #b45309; }
-.cr-windup-bonus { font-size: 12px; font-weight: 700; color: #166534; margin: 4px 0 0; }
 
 /* ── Teammate charge indicator in the participant list ──────────────────────────────────── */
 .cr-charge-ready {

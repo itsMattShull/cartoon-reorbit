@@ -515,19 +515,11 @@ export async function announceCZoneContestWinner(prisma, {
 // the same default wording regardless of which admin set up the boss.
 const DEFAULT_RAID_ANNOUNCEMENT_TEXT = '🚨 A raid boss ({enemy}) is being fought in {cmoon}! Up to 4 members can join the fight.'
 
-// Generic resolver, shared by several unrelated features: given a caller-supplied
-// `cMoonDiscordChannelId` (a team's own CMoon.discordChannelId), returns it if set, else the
-// shared GlobalGameConfig.cMoonRaidBossDiscordChannelId every caller falls back to, else the env
-// default. cmoonRiddle.js and cmoonHunt.js both pass their caller's real per-cMoon channel id, so
-// their own content still lands on that team's own channel when one is configured.
-//
-// Raid-boss activity (boss announcement, per-round spectator updates, recap) is the one caller
-// that now ALWAYS passes null here (see cmoonRaidSocket.js's cmoonraid:start handler) — raids
-// deliberately never consult a cMoon's own discordChannelId any more, always resolving to the
-// single shared channel instead, so one boss's thread (CMoonEnemyMember.discordThreadId) isn't
-// fragmented across every team's own channel. Called once per raid (at raid start) rather than
-// per-message — the result can't change mid-raid, so every later post reuses the id the caller
-// stored on the raid object instead of re-querying.
+// Resolves which Discord channel a cMoon's raid activity (boss announcement, per-round spectator
+// updates, recap) posts to: that team's own CMoon.discordChannelId if set, else the shared
+// GlobalGameConfig.cMoonRaidBossDiscordChannelId every cMoon falls back to, else the env default.
+// Called once per raid (at raid start) rather than per-message — the result can't change mid-raid,
+// so every later post reuses the id the caller stored on the raid object instead of re-querying.
 export async function resolveCMoonRaidDiscordChannelId(prisma, cMoonDiscordChannelId) {
   try {
     const config = await prisma.globalGameConfig.findUnique({
@@ -574,18 +566,14 @@ export async function announceCMoonRaidBoss(channelId, { cMoonName, enemyName, a
 // how that channelId is resolved) and by the riddle system's "your team just solved it" ping
 // (cmoonRiddle.js). A fresh message per call, never an edit (Discord message editing isn't wired
 // up elsewhere in this codebase). Fire-and-forget: never throws — a missed update must not
-// interrupt whatever triggered it. Returns whether the post actually succeeded (truthy) so a
-// caller that persists this channelId for reuse (postRaidStartToBossThread, for a boss's own
-// long-lived thread) can tell a dead/deleted target apart from a healthy one and recover —
-// every existing caller already ignores this function's return value, so adding it is safe.
+// interrupt whatever triggered it.
 export async function sendCMoonTeamUpdate(channelId, text) {
   try {
     const botToken = getAnnouncementsBotToken()
-    if (!channelId || !botToken) return false
-    return await sendGuildChannelMessageById(channelId, text, botToken)
+    if (!channelId || !botToken) return
+    await sendGuildChannelMessageById(channelId, text, botToken)
   } catch (e) {
     console.error('sendCMoonTeamUpdate failed:', e?.message || e)
-    return false
   }
 }
 
