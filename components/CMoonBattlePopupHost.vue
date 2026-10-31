@@ -46,15 +46,9 @@
           <p v-if="currentTaunt" class="cbp-taunt">&ldquo;{{ currentTaunt }}&rdquo;</p>
           <p v-if="error" class="cbp-error">{{ error }}</p>
           <p v-if="enemy?.isRaidBoss" class="cbp-flavor">
-            This is a raid boss — other players from any cMoon can join from the Raid Boss Lobby before it
-            auto-starts, and a party win grants everyone who joined the same prize.
-            <template v-if="raidSoloQueueEnabled">You can also fight it solo for a bonus, or </template>
-            <template v-else>You can </template>keep the lobby open past the usual window once it's started.
+            This is a raid boss — up to 3 other players from any cMoon can join from the Raid Boss Lobby for 60 seconds
+            before it auto-starts, and a party win grants everyone who joined the same prize.
           </p>
-          <label v-if="enemy?.isRaidBoss && raidPrivateLobbiesEnabled" class="cbp-private-raid-check">
-            <input type="checkbox" v-model="isPrivateRaid" />
-            Make this a private, invite-only raid (not listed in the Raid Boss Lobby — share its link instead)
-          </label>
           <div class="cbp-actions">
             <GreenButton type="button" class="cbp-btn-wide" :disabled="busy" @click="onFight">
               {{ busy ? 'Starting…' : (enemy?.isRaidBoss ? 'Start Raid!' : 'Fight!') }}
@@ -176,15 +170,8 @@ const isAdminRoute = computed(() => route.path.startsWith('/newsite/admin'))
 
 const {
   visible, phase, enemy, battle, inCMoon, busy, error, lastRound, currentTaunt, isFirstWinAgainstThisEnemy,
-  raidPrivateLobbiesEnabled, raidSoloQueueEnabled,
   checkOnNavigate, startBattle, submitAction, decline, close,
 } = useCMoonBattlePopup()
-
-// Raid-boss "Make private" checkbox (see CMoonEnemyRaid.isPrivate's own schema comment) — reset
-// every time a fresh OFFER shows, so a leftover choice from a previous raid boss never carries
-// over to this one.
-const isPrivateRaid = ref(false)
-watch(() => enemy.value?.id, () => { isPrivateRaid.value = false })
 
 const bannerStyle = computed(() => {
   const path = phase.value === 'OFFER' ? enemy.value?.faction?.bannerImagePath : battle.value?.enemy?.faction?.bannerImagePath
@@ -241,8 +228,6 @@ function specialEffectDescription(attack) {
     case 'PARALYZE_OPPONENT': return `Stuns the enemy for ${n} round${n === 1 ? '' : 's'} — they can't attack or block.`
     case 'LOWER_OPPONENT_ATTACK': return `Lowers the enemy's attack damage by ${n} for the rest of the fight.`
     case 'RAISE_ALLY_ATTACK': return `Raises your own attack damage by ${n} for the rest of the fight.`
-    case 'REFLECT_DAMAGE': return `Reflects ${attack?.reflectPercent}% of whatever the enemy hits you for this round back at them — nothing reflects if they block.`
-    case 'SIPHON_HEALTH': return `Deals ${n} damage and heals you for ${attack?.siphonPercent}% of it — unless the enemy blocks, in which case it does nothing.`
     default: return ''
   }
 }
@@ -313,7 +298,7 @@ const rewardsList = computed(() => {
 // A won-by-a-hair or lost-while-nearly-finishing-them-off flavor line — purely narrative, reads
 // straight off numbers the result screen already has. "Nearly" for a loss is read off the
 // enemy's OWN maxHp (not a fixed HP amount) since enemies span a huge HP range (see
-// CMoonEnemyMember.maxHp's own schema comment, 1-500) — a flat "enemy had <=1 HP left" would
+// CMoonEnemyMember.maxHp's own schema comment, 1-200) — a flat "enemy had <=1 HP left" would
 // almost never fire for a high-HP boss.
 const nearMissFlavor = computed(() => {
   if (!battle.value) return ''
@@ -527,7 +512,7 @@ async function onFight() {
     const raidSocket = useCMoonRaidSocket()
     raidSocket.lastError.value = ''
     raidSocket.raidState.value = null // clear any stale raid from a previous visit before watching
-    raidSocket.startRaid(enemy.value.id, { isPrivate: isPrivateRaid.value })
+    raidSocket.startRaid(enemy.value.id)
     decline() // the raid page takes over from here
     const router = useRouter()
     const stopWatching = watch([raidSocket.raidState, raidSocket.lastError], ([state, err]) => {
@@ -764,17 +749,6 @@ watch(() => route.path, maybeCheck)
 .cbp-title { font-size: 1.1rem; font-weight: 600; margin: 4px 0 2px; color: #fff; }
 .cbp-sub { font-size: 0.78rem; color: rgba(255, 255, 255, 0.6); margin-bottom: 8px; }
 .cbp-flavor { font-size: 12px; color: rgba(255, 255, 255, 0.75); margin-bottom: 12px; line-height: 1.4; }
-.cbp-private-raid-check {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  font-size: 11.5px;
-  color: rgba(255, 255, 255, 0.75);
-  margin-bottom: 12px;
-  line-height: 1.4;
-  cursor: pointer;
-}
-.cbp-private-raid-check input { margin-top: 2px; flex-shrink: 0; }
 /* Reward-pity progress — a quiet gold-tinted aside on the OFFER screen only, same family as the
    result screen's own cbp-first-win/cbp-near-miss asides but intentionally less loud (this is a
    helpful hint, not a celebration). */

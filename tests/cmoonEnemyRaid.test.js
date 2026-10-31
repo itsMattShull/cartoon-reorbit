@@ -3,7 +3,6 @@ import assert from 'node:assert/strict'
 import {
   resolveRaidRound, checkRaidBossAvailability,
   JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE,
-  CAPTAIN_BOOST_HIT_STREAK_THRESHOLD, effectiveHitStreakThreshold,
 } from '../server/utils/cmoonEnemyRaid.js'
 import { SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE, HEAL_ON_SUCCESSFUL_BLOCK } from '../server/utils/cmoonEnemyBattle.js'
 
@@ -191,15 +190,6 @@ test('re-exports the solo battle\'s special-attack constants unchanged', () => {
   assert.equal(SPECIAL_ACTION, 'SPECIAL_ATTACK')
   assert.equal(PARALYZED_ACTION, 'PARALYZED')
   assert.equal(HIT_STREAK_THRESHOLD, 3)
-})
-
-// ── Captain boost effect (GlobalGameConfig.cMoonCaptainBoostEnabled) ────────────────────────────
-test('effectiveHitStreakThreshold: only lowers the threshold when BOTH the toggle is on AND a captain is present', () => {
-  assert.equal(CAPTAIN_BOOST_HIT_STREAK_THRESHOLD, 2)
-  assert.equal(effectiveHitStreakThreshold(false, false), HIT_STREAK_THRESHOLD)
-  assert.equal(effectiveHitStreakThreshold(false, true), HIT_STREAK_THRESHOLD)
-  assert.equal(effectiveHitStreakThreshold(true, false), HIT_STREAK_THRESHOLD)
-  assert.equal(effectiveHitStreakThreshold(true, true), CAPTAIN_BOOST_HIT_STREAK_THRESHOLD)
 })
 
 test('resolveRaidRound: partyAtkBonus increases every participant\'s own landed-hit damage on the enemy', () => {

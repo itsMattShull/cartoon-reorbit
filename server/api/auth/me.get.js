@@ -56,7 +56,6 @@ export default defineEventHandler(async (event) => {
       surveyAnswers: { select: { userId: true } },
       equippedBorderCMoonId: true,
       equippedGlowCMoonId: true,
-      chosenSpecialAttackId: true,
     }
   })
 
@@ -160,10 +159,5 @@ export default defineEventHandler(async (event) => {
     ownedBorders: ownedBorders.map(resolveBorderStyle),
     equippedGlowCMoonId: user.equippedGlowCMoonId || null,
     ownedGlows: ownedGlows.map(resolveGlowStyle),
-    // This player's own cMoon special-attack choice (see User.chosenSpecialAttackId) — the
-    // settings page's picker uses this to pre-select the current choice; whether it's still
-    // actually in effect (CMoonSpecialAttack.playerChoice may have since been toggled off) is
-    // re-checked live at battle time, never assumed here.
-    chosenSpecialAttackId: user.chosenSpecialAttackId || null,
   }
 })
