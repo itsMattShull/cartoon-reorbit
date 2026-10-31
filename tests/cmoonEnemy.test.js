@@ -9,17 +9,8 @@ import {
   MEMBER_SOUND_SLOTS, FACTION_DEFAULT_SOUND_SLOTS,
   parseSpecialAttackBody, isValidSpecialAttackName, isValidSpecialAttackEffectType, isValidSpecialAttackAmount,
   SPECIAL_ATTACK_EFFECT_TYPES, SPECIAL_ATTACK_NAME_MAX_LENGTH, SPECIAL_ATTACK_AMOUNT_MIN, SPECIAL_ATTACK_AMOUNT_MAX,
-  isValidSpecialAttackRaiseDurationRounds, SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN,
-  SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX, SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
-  isValidSpecialAttackReflectPercent, SPECIAL_ATTACK_REFLECT_PERCENT_MIN,
-  SPECIAL_ATTACK_REFLECT_PERCENT_MAX, SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT,
-  isValidSpecialAttackSiphonPercent, SPECIAL_ATTACK_SIPHON_PERCENT_MIN,
-  SPECIAL_ATTACK_SIPHON_PERCENT_MAX, SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
   parseTauntBody, isValidTauntText, isValidTauntTrigger, TAUNT_TRIGGERS, TAUNT_TEXT_MAX_LENGTH,
   ATTACK_CHANCE_DEFAULT, PITY_THRESHOLD_DEFAULT, FIRST_WIN_BONUS_POINTS_DEFAULT,
-  MAX_PARTICIPANTS_DEFAULT, MAX_PARTICIPANTS_MIN, MAX_PARTICIPANTS_MAX,
-  RAID_ROUND_LIMIT_DEFAULT, RAID_ROUND_LIMIT_MIN, RAID_ROUND_LIMIT_MAX,
-  parseWindUpMoveBody, WIND_UP_OCCURRENCE_PERCENT_DEFAULT, WIND_UP_DIRECTIONS, WIND_UP_BONUS_TYPES,
 } from '../server/utils/cmoonEnemy.js'
 
 const baseMemberBody = {
@@ -27,7 +18,6 @@ const baseMemberBody = {
   occurrencePercent: OCCURRENCE_PERCENT_DEFAULT,
   isRaidBoss: false, raidAnnouncementText: null, raidOneTime: false, raidCooldownMinutes: 0,
   attackChancePercent: ATTACK_CHANCE_DEFAULT, pityThreshold: PITY_THRESHOLD_DEFAULT, firstWinBonusPoints: FIRST_WIN_BONUS_POINTS_DEFAULT,
-  maxParticipants: MAX_PARTICIPANTS_DEFAULT, raidRoundLimit: RAID_ROUND_LIMIT_DEFAULT, windUpEnabled: false,
 }
 
 test('isValidRank accepts every declared rank and rejects anything else', () => {
@@ -445,11 +435,7 @@ test('isValidSpecialAttackAmount: whole numbers within [MIN, MAX], rejects out-o
 test('parseSpecialAttackBody: a valid create body parses with trimmed name and the given fields', () => {
   const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, name: '  Toxic Bite  ' })
   assert.equal(result.ok, true)
-  assert.deepEqual(result.data, {
-    name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10,
-    healsAllies: false, playerChoice: false, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
-    reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
-  })
+  assert.deepEqual(result.data, { name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10, healsAllies: false })
 })
 
 test('parseSpecialAttackBody: rejects a missing/blank name', () => {
@@ -470,50 +456,13 @@ test('parseSpecialAttackBody: a blank/null description normalizes to null, a rea
 })
 
 test('parseSpecialAttackBody: on update, an omitted field falls back to the existing row, not a bare default', () => {
-  const existing = {
-    name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7,
-    healsAllies: true, playerChoice: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
-    reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
-  }
+  const existing = { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7, healsAllies: true }
   const result = parseSpecialAttackBody({ amount: 20 }, existing)
   assert.equal(result.ok, true)
-  assert.deepEqual(result.data, {
-    name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 20,
-    healsAllies: true, playerChoice: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
-    reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
-  })
+  assert.deepEqual(result.data, { name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 20, healsAllies: true })
 })
 
-// ── raiseDurationRounds (RAISE_ALLY_ATTACK's own non-stacking duration, see its schema comment) ──
-
-test('parseSpecialAttackBody: raiseDurationRounds defaults to the DEFAULT constant on create when omitted', () => {
-  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'RAISE_ALLY_ATTACK' })
-  assert.equal(result.ok, true)
-  assert.equal(result.data.raiseDurationRounds, SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT)
-})
-
-test('parseSpecialAttackBody: accepts the full raiseDurationRounds range and rejects outside it, only for RAISE_ALLY_ATTACK', () => {
-  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'RAISE_ALLY_ATTACK', raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN }).ok, true)
-  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'RAISE_ALLY_ATTACK', raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX }).ok, true)
-  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'RAISE_ALLY_ATTACK', raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MIN - 1 }).ok, false)
-  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'RAISE_ALLY_ATTACK', raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_MAX + 1 }).ok, false)
-  // An out-of-range value is only rejected for RAISE_ALLY_ATTACK — for any other effectType it's
-  // silently normalized to the default rather than validated, same stance healsAllies/HEAL_SELF
-  // takes (see that field's own test below).
-  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', raiseDurationRounds: 9999 }).ok, true)
-})
-
-test('parseSpecialAttackBody: raiseDurationRounds is only ever stored when effectType is RAISE_ALLY_ATTACK', () => {
-  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', raiseDurationRounds: 250 })
-  assert.equal(result.ok, true)
-  assert.equal(result.data.raiseDurationRounds, SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT)
-
-  const raiseResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'RAISE_ALLY_ATTACK', raiseDurationRounds: 250 })
-  assert.equal(raiseResult.ok, true)
-  assert.equal(raiseResult.data.raiseDurationRounds, 250)
-})
-
-test('parseSpecialAttackBody: healsAllies is only ever stored true when effectType is HEAL_SELF or SIPHON_HEALTH', () => {
+test('parseSpecialAttackBody: healsAllies is only ever stored true when effectType is HEAL_SELF', () => {
   // A truthy healsAllies sent alongside any other effectType is silently normalized to false —
   // see that field's own schema comment on why this is never trusted to the client/admin UI alone.
   const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', healsAllies: true })
@@ -523,82 +472,12 @@ test('parseSpecialAttackBody: healsAllies is only ever stored true when effectTy
   const healResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'HEAL_SELF', healsAllies: true })
   assert.equal(healResult.ok, true)
   assert.equal(healResult.data.healsAllies, true)
-
-  const siphonResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', healsAllies: true })
-  assert.equal(siphonResult.ok, true)
-  assert.equal(siphonResult.data.healsAllies, true)
 })
 
 test('parseSpecialAttackBody: an omitted healsAllies defaults to false on create', () => {
   const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'HEAL_SELF' })
   assert.equal(result.ok, true)
   assert.equal(result.data.healsAllies, false)
-})
-
-// ── reflectPercent (REFLECT_DAMAGE's own reflect scale, see its schema comment) ──────────────
-
-test('parseSpecialAttackBody: reflectPercent defaults to the DEFAULT constant on create when omitted', () => {
-  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'REFLECT_DAMAGE' })
-  assert.equal(result.ok, true)
-  assert.equal(result.data.reflectPercent, SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT)
-})
-
-test('parseSpecialAttackBody: accepts the full reflectPercent range (1-500) and rejects outside it, only for REFLECT_DAMAGE', () => {
-  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'REFLECT_DAMAGE', reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_MIN }).ok, true)
-  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'REFLECT_DAMAGE', reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_MAX }).ok, true)
-  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'REFLECT_DAMAGE', reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_MIN - 1 }).ok, false)
-  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'REFLECT_DAMAGE', reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_MAX + 1 }).ok, false)
-  // An out-of-range value is only rejected for REFLECT_DAMAGE — for any other effectType it's
-  // silently normalized to the default rather than validated, same stance raiseDurationRounds takes.
-  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', reflectPercent: 9999 }).ok, true)
-})
-
-test('parseSpecialAttackBody: reflectPercent is only ever stored when effectType is REFLECT_DAMAGE', () => {
-  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', reflectPercent: 250 })
-  assert.equal(result.ok, true)
-  assert.equal(result.data.reflectPercent, SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT)
-
-  const reflectResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'REFLECT_DAMAGE', reflectPercent: 250 })
-  assert.equal(reflectResult.ok, true)
-  assert.equal(reflectResult.data.reflectPercent, 250)
-})
-
-// ── siphonPercent (SIPHON_HEALTH's own heal-conversion scale, see its schema comment) ─────────
-
-test('parseSpecialAttackBody: siphonPercent defaults to the DEFAULT constant on create when omitted', () => {
-  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH' })
-  assert.equal(result.ok, true)
-  assert.equal(result.data.siphonPercent, SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT)
-})
-
-test('parseSpecialAttackBody: accepts the full siphonPercent range (1-100) and rejects outside it, only for SIPHON_HEALTH', () => {
-  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_MIN }).ok, true)
-  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_MAX }).ok, true)
-  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_MIN - 1 }).ok, false)
-  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_MAX + 1 }).ok, false)
-  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', siphonPercent: 9999 }).ok, true)
-})
-
-test('parseSpecialAttackBody: siphonPercent is only ever stored when effectType is SIPHON_HEALTH', () => {
-  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', siphonPercent: 75 })
-  assert.equal(result.ok, true)
-  assert.equal(result.data.siphonPercent, SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT)
-
-  const siphonResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', siphonPercent: 75 })
-  assert.equal(siphonResult.ok, true)
-  assert.equal(siphonResult.data.siphonPercent, 75)
-})
-
-test('isValidSpecialAttackReflectPercent/isValidSpecialAttackSiphonPercent reject non-integers and out-of-range values', () => {
-  assert.equal(isValidSpecialAttackReflectPercent(100), true)
-  assert.equal(isValidSpecialAttackReflectPercent(500), true)
-  assert.equal(isValidSpecialAttackReflectPercent(0), false)
-  assert.equal(isValidSpecialAttackReflectPercent(501), false)
-  assert.equal(isValidSpecialAttackReflectPercent(50.5), false)
-  assert.equal(isValidSpecialAttackSiphonPercent(50), true)
-  assert.equal(isValidSpecialAttackSiphonPercent(100), true)
-  assert.equal(isValidSpecialAttackSiphonPercent(0), false)
-  assert.equal(isValidSpecialAttackSiphonPercent(101), false)
 })
 
 // ── Enemy taunts (CMoonEnemyTaunt) ──────────────────────────────────────────────────────────
@@ -695,98 +574,4 @@ test('nextSoloSlotAt: at the cap, the slot frees when the oldest start leaves th
 test('nextSoloSlotAt: over the cap, waits until enough starts age out to drop below it', () => {
   const t = ['2026-10-26T09:00:00Z', '2026-10-26T10:00:00Z', '2026-10-26T11:00:00Z', '2026-10-26T12:00:00Z', '2026-10-26T13:00:00Z']
   assert.equal(nextSoloSlotAt(t, 4, 12).toISOString(), '2026-10-26T22:00:00.000Z')
-})
-
-// ── maxParticipants (up-to-8 raid parties) ───────────────────────────────
-
-test('parseMemberBody: maxParticipants defaults to MAX_PARTICIPANTS_DEFAULT on create when omitted', () => {
-  const result = parseMemberBody(baseMemberBody, undefined)
-  assert.equal(result.ok, true)
-  assert.equal(result.data.maxParticipants, MAX_PARTICIPANTS_DEFAULT)
-})
-
-test('parseMemberBody: accepts the full maxParticipants range and rejects outside it', () => {
-  assert.equal(parseMemberBody({ ...baseMemberBody, maxParticipants: MAX_PARTICIPANTS_MIN }, undefined).ok, true)
-  assert.equal(parseMemberBody({ ...baseMemberBody, maxParticipants: MAX_PARTICIPANTS_MAX }, undefined).ok, true)
-  assert.equal(parseMemberBody({ ...baseMemberBody, maxParticipants: MAX_PARTICIPANTS_MIN - 1 }, undefined).ok, false)
-  assert.equal(parseMemberBody({ ...baseMemberBody, maxParticipants: MAX_PARTICIPANTS_MAX + 1 }, undefined).ok, false)
-  assert.equal(parseMemberBody({ ...baseMemberBody, maxParticipants: 4.5 }, undefined).ok, false)
-})
-
-test('parseMemberBody: an update with no maxParticipants/windUpEnabled fields keeps the existing values', () => {
-  const existing = {
-    ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0,
-    maxParticipants: 8, windUpEnabled: true,
-  }
-  const result = parseMemberBody({ name: 'Renamed' }, existing)
-  assert.equal(result.ok, true)
-  assert.equal(result.data.maxParticipants, 8)
-  assert.equal(result.data.windUpEnabled, true)
-})
-
-// ── raidRoundLimit (raid round-count safety valve, default 300, up to 400) ──────────────
-
-test('parseMemberBody: raidRoundLimit defaults to RAID_ROUND_LIMIT_DEFAULT on create when omitted', () => {
-  const result = parseMemberBody(baseMemberBody, undefined)
-  assert.equal(result.ok, true)
-  assert.equal(result.data.raidRoundLimit, RAID_ROUND_LIMIT_DEFAULT)
-})
-
-test('parseMemberBody: accepts the full raidRoundLimit range and rejects outside it', () => {
-  assert.equal(parseMemberBody({ ...baseMemberBody, raidRoundLimit: RAID_ROUND_LIMIT_MIN }, undefined).ok, true)
-  assert.equal(parseMemberBody({ ...baseMemberBody, raidRoundLimit: RAID_ROUND_LIMIT_MAX }, undefined).ok, true)
-  assert.equal(parseMemberBody({ ...baseMemberBody, raidRoundLimit: RAID_ROUND_LIMIT_MIN - 1 }, undefined).ok, false)
-  assert.equal(parseMemberBody({ ...baseMemberBody, raidRoundLimit: RAID_ROUND_LIMIT_MAX + 1 }, undefined).ok, false)
-  assert.equal(parseMemberBody({ ...baseMemberBody, raidRoundLimit: 300.5 }, undefined).ok, false)
-})
-
-test('parseMemberBody: an update with no raidRoundLimit field in the body keeps the existing value', () => {
-  const existing = {
-    ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0,
-    raidRoundLimit: 400,
-  }
-  const result = parseMemberBody({ name: 'Renamed' }, existing)
-  assert.equal(result.ok, true)
-  assert.equal(result.data.raidRoundLimit, 400)
-})
-
-// ── Wind-up/telegraph moves ───────────────────────────────────────────────
-
-const baseWindUpBody = {
-  telegraphMessage: 'The boss rears back!', direction: 'HIGH', occurrencePercent: WIND_UP_OCCURRENCE_PERCENT_DEFAULT,
-  bonusType: 'HEAL_PARTY', bonusAmount: 2,
-}
-
-test('parseWindUpMoveBody: a valid body parses with every field intact', () => {
-  const result = parseWindUpMoveBody(baseWindUpBody)
-  assert.equal(result.ok, true)
-  assert.deepEqual(result.data, baseWindUpBody)
-})
-
-test('parseWindUpMoveBody: rejects a missing/blank/too-long telegraph message', () => {
-  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, telegraphMessage: '' }).ok, false)
-  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, telegraphMessage: 'x'.repeat(301) }).ok, false)
-})
-
-test('parseWindUpMoveBody: direction must be one of WIND_UP_DIRECTIONS', () => {
-  for (const d of WIND_UP_DIRECTIONS) assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, direction: d }).ok, true)
-  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, direction: 'SIDEWAYS' }).ok, false)
-})
-
-test('parseWindUpMoveBody: bonusType must be one of WIND_UP_BONUS_TYPES', () => {
-  for (const b of WIND_UP_BONUS_TYPES) assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, bonusType: b }).ok, true)
-  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, bonusType: 'CONFUSE' }).ok, false)
-})
-
-test('parseWindUpMoveBody: occurrencePercent accepts the full 0-100 range (a flat per-round chance, not a weight) and rejects outside it', () => {
-  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, occurrencePercent: 0 }).ok, true)
-  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, occurrencePercent: 100 }).ok, true)
-  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, occurrencePercent: -1 }).ok, false)
-  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, occurrencePercent: 101 }).ok, false)
-})
-
-test('parseWindUpMoveBody: rejects a non-integer or out-of-range bonusAmount', () => {
-  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, bonusAmount: 0 }).ok, false)
-  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, bonusAmount: 1000 }).ok, false)
-  assert.equal(parseWindUpMoveBody({ ...baseWindUpBody, bonusAmount: 2.5 }).ok, false)
 })

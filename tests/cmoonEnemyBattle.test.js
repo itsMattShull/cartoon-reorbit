@@ -5,7 +5,7 @@ import {
   isValidBattleAction, BATTLE_ACTIONS, PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE,
   HEAL_ON_SUCCESSFUL_BLOCK, resolveRound, combinePlayerMaxHp,
   SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, isValidPlayerSubmittedAction,
-  isAttack, isBlock, STARTING_STAMINA, pickEffectiveSpecialAttack,
+  isAttack, isBlock, STARTING_STAMINA,
 } from '../server/utils/cmoonEnemyBattle.js'
 
 const baseEnemyMember = { critChanceAgainstPercent: 0, critChanceFromPercent: 0, maxHp: 5 }
@@ -545,28 +545,4 @@ test('isAttack/isBlock correctly classify the 4 lane moves and never misclassify
     assert.equal(isAttack(sentinel), false)
     assert.equal(isBlock(sentinel), false)
   }
-})
-
-// ── pickEffectiveSpecialAttack (player-chosen special attacks) ───────────
-
-const teamAttack = { id: 'team1', name: 'Team Special', playerChoice: false }
-const chosenAttack = { id: 'chosen1', name: 'My Pick', playerChoice: true }
-const toggledOffAttack = { id: 'chosen2', name: 'Toggled off', playerChoice: false }
-
-test('pickEffectiveSpecialAttack: a valid player choice overrides the team default', () => {
-  assert.equal(pickEffectiveSpecialAttack(chosenAttack, teamAttack), chosenAttack)
-})
-
-test('pickEffectiveSpecialAttack: falls back to the team default when nothing is chosen', () => {
-  assert.equal(pickEffectiveSpecialAttack(null, teamAttack), teamAttack)
-  assert.equal(pickEffectiveSpecialAttack(undefined, teamAttack), teamAttack)
-})
-
-test('pickEffectiveSpecialAttack: a chosen attack whose playerChoice was toggled off falls back to the team default, never trusted off a stale FK', () => {
-  assert.equal(pickEffectiveSpecialAttack(toggledOffAttack, teamAttack), teamAttack)
-})
-
-test('pickEffectiveSpecialAttack: returns null when neither a valid choice nor a team default exists', () => {
-  assert.equal(pickEffectiveSpecialAttack(null, null), null)
-  assert.equal(pickEffectiveSpecialAttack(toggledOffAttack, null), null)
 })
