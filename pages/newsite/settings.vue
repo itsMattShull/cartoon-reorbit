@@ -91,6 +91,17 @@
               </div>
             </div>
             <p class="settings-status">Saved on this device only.</p>
+
+            <div class="settings-row">
+              <div>
+                <h2 class="settings-row-title">cMoon Special Attack</h2>
+                <p class="settings-row-desc">
+                  Pick a special attack to use for yourself in cMoon Enemy Battles (solo or raid), instead of
+                  your cMoon's own default. Only attacks an admin has opted into player choice are offered.
+                </p>
+              </div>
+              <button class="btn-team" @click="openSpecialAttackModal">Choose cMoon Special Attack</button>
+            </div>
           </div>
         </div>
       </div>
@@ -161,6 +172,47 @@
               <button class="btn-cancel" @click="closeUsernameModal">Cancel</button>
               <button class="btn-save-purple" :disabled="savingUsername" @click="saveUsername">
                 {{ savingUsername ? 'Saving...' : 'Save' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
+
+      <!-- cMoon Special Attack picker — same Teleport/modal-overlay/modal-box shape as the
+           Avatar/Username modals above. "Use my cMoon's default" clears the choice (null body),
+           falling back to whatever the player's cMoon has assigned — same as before this feature
+           existed. -->
+      <Teleport to="body">
+        <div v-if="showSpecialAttackModal" class="modal-overlay" @click.self="closeSpecialAttackModal">
+          <div class="modal-box">
+            <h2 class="modal-title">Choose cMoon Special Attack</h2>
+            <p class="modal-desc">Pick one for yourself, or use your cMoon's own default.</p>
+
+            <div class="special-attack-list">
+              <label class="special-attack-row">
+                <input type="radio" class="sr-only" :value="null" v-model="specialAttackDraft" />
+                <span class="special-attack-name" :class="{ 'special-attack-selected': specialAttackDraft === null }">
+                  Use my cMoon's default
+                </span>
+              </label>
+              <label v-for="a in specialAttackOptions" :key="a.id" class="special-attack-row">
+                <input type="radio" class="sr-only" :value="a.id" v-model="specialAttackDraft" />
+                <span class="special-attack-name" :class="{ 'special-attack-selected': specialAttackDraft === a.id }">
+                  {{ a.name }}
+                </span>
+                <span v-if="a.description" class="special-attack-desc">{{ a.description }}</span>
+              </label>
+              <p v-if="!specialAttackLoading && !specialAttackOptions.length" class="modal-desc">
+                No player-choosable special attacks are available right now.
+              </p>
+            </div>
+
+            <p v-if="specialAttackError" class="modal-error">{{ specialAttackError }}</p>
+
+            <div class="modal-actions">
+              <button class="btn-cancel" @click="closeSpecialAttackModal">Cancel</button>
+              <button class="btn-save-blue" :disabled="specialAttackSaving" @click="saveSpecialAttack">
+                {{ specialAttackSaving ? 'Saving...' : 'Save' }}
               </button>
             </div>
           </div>
@@ -266,6 +318,13 @@ const avatarError       = ref('')
 
 const savingUsername = ref(false)
 const usernameError  = ref('')
+
+const showSpecialAttackModal = ref(false)
+const specialAttackOptions   = ref([])
+const specialAttackLoading   = ref(false)
+const specialAttackDraft     = ref(null)
+const specialAttackSaving    = ref(false)
+const specialAttackError     = ref('')
 
 const part1 = ref('')
 const part2 = ref('')
@@ -399,6 +458,39 @@ async function openAvatarModal() {
 }
 
 function closeAvatarModal() { showAvatarModal.value = false }
+
+async function openSpecialAttackModal() {
+  specialAttackError.value = ''
+  specialAttackDraft.value = user.value?.chosenSpecialAttackId || null
+  showSpecialAttackModal.value = true
+  specialAttackLoading.value = true
+  try {
+    const data = await $fetch('/api/cmoon/special-attacks', { credentials: 'include' })
+    specialAttackOptions.value = Array.isArray(data?.attacks) ? data.attacks : []
+  } catch (e) {
+    specialAttackError.value = e?.data?.statusMessage || 'Could not load special attacks.'
+  } finally {
+    specialAttackLoading.value = false
+  }
+}
+
+function closeSpecialAttackModal() { showSpecialAttackModal.value = false }
+
+async function saveSpecialAttack() {
+  specialAttackError.value = ''
+  specialAttackSaving.value = true
+  try {
+    await $fetch('/api/cmoon/choose-special-attack', {
+      method: 'POST', body: { specialAttackId: specialAttackDraft.value }, credentials: 'include',
+    })
+    await fetchSelf({ force: true })
+    closeSpecialAttackModal()
+  } catch (e) {
+    specialAttackError.value = e?.data?.statusMessage || 'Could not save your special attack choice.'
+  } finally {
+    specialAttackSaving.value = false
+  }
+}
 
 async function saveAvatar() {
   avatarError.value = ''
@@ -829,6 +921,28 @@ body.page-newsite-settings .main-content { overflow-y: auto !important; scrollba
 }
 
 .avatar-selected { border-color: var(--OrbitDarkBlue, #336699); }
+
+.special-attack-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 260px;
+  overflow-y: auto;
+  margin-bottom: 8px;
+}
+.special-attack-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 2px solid #e2e2e2;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.special-attack-name { font-size: 0.85rem; font-weight: 700; color: #1a1a2e; }
+.special-attack-selected { color: var(--OrbitDarkBlue, #336699); }
+.special-attack-row:has(.special-attack-selected) { border-color: var(--OrbitDarkBlue, #336699); }
+.special-attack-desc { font-size: 0.75rem; color: #666; }
 
 .username-selects {
   display: grid;

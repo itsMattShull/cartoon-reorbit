@@ -24,9 +24,12 @@ import {
   isValidPlayerSubmittedAction, resolveRound, rollEnemyRewards, buildGrantableReward,
   serializeBattleForClient, MAX_ROUNDS_SAFETY, HEAL_ON_SUCCESSFUL_BLOCK,
   SPECIAL_ACTION, HIT_STREAK_THRESHOLD, shouldForcePityReward, forcePickOneReward, grantSummaryIsEmpty,
-  isAttack,
+  isAttack, isBlock, pickEffectiveSpecialAttack, SPECIAL_ATTACK_SELECT,
 } from '@/server/utils/cmoonEnemyBattle'
 
+// `user: { chosenSpecialAttack }` — this player's own special-attack choice (see
+// User.chosenSpecialAttackId), re-validated against CMoonSpecialAttack.playerChoice by
+// pickEffectiveSpecialAttack below rather than ever trusted on its own.
 const BATTLE_INCLUDE = {
   enemyMember: {
     include: {
@@ -37,9 +40,13 @@ const BATTLE_INCLUDE = {
           taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
         },
       },
+      // This member's OWN unique taunts (see CMoonEnemyMemberTaunt) — merged with the faction's
+      // shared pool above by mergeTauntPools in cmoonEnemyBattle.js.
+      taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
     },
   },
   cMoon: { include: { specialAttack: true } },
+  user: { select: { chosenSpecialAttack: { select: SPECIAL_ATTACK_SELECT } } },
 }
 
 export default defineEventHandler(async (event) => {
@@ -75,7 +82,7 @@ export default defineEventHandler(async (event) => {
   if (isSpecial && !battle.playerSpecialCharged) {
     throw createError({ statusCode: 409, statusMessage: 'Your special attack is not charged yet' })
   }
-  const playerSpecialAttack = battle.cMoon?.specialAttack || null
+  const playerSpecialAttack = pickEffectiveSpecialAttack(battle.user?.chosenSpecialAttack, battle.cMoon?.specialAttack)
   if (isSpecial && !playerSpecialAttack) {
     throw createError({ statusCode: 409, statusMessage: 'Your cMoon has no special attack assigned' })
   }
@@ -127,6 +134,13 @@ export default defineEventHandler(async (event) => {
   // else's hit) contributes nothing here, exactly as it should.
   let totalDamageDealt = battle.damageDealt || 0
   const specialEvents = []
+  // REFLECT_DAMAGE/SIPHON_HEALTH cast by the PLAYER can't resolve in step 1 below — both need
+  // this round's REAL outcome (actual damage dealt, or whether the enemy's own rolled action this
+  // round was a block), which doesn't exist until resolveRound (step 2) runs. Queued here, applied
+  // in step "2.5" right after that call. The enemy's own auto-fire (step 4) already happens AFTER
+  // step 2, so it needs no such deferral.
+  let pendingPlayerReflect = null
+  let pendingPlayerSiphon = null
   // Set true only by THIS request's own decrement actually bringing the shared pool from >0 to
   // 0 — see damageEnemy's own comment below for why a simultaneous other caller who merely
   // observes an already-0 pool can never also set this, so the Discord announcement after the
@@ -199,6 +213,9 @@ export default defineEventHandler(async (event) => {
     else if (playerSpecialAttack.effectType === 'PARALYZE_OPPONENT') enemyParalyzedTurns += playerSpecialAttack.amount
     else if (playerSpecialAttack.effectType === 'LOWER_OPPONENT_ATTACK') enemyAtkBonus -= playerSpecialAttack.amount
     else if (playerSpecialAttack.effectType === 'RAISE_ALLY_ATTACK') playerAtkBonus += playerSpecialAttack.amount
+    // See pendingPlayerReflect/pendingPlayerSiphon's own comment above — resolved in step 2.5.
+    else if (playerSpecialAttack.effectType === 'REFLECT_DAMAGE') pendingPlayerReflect = playerSpecialAttack
+    else if (playerSpecialAttack.effectType === 'SIPHON_HEALTH') pendingPlayerSiphon = playerSpecialAttack
   }
 
   // ── 2. This round's lane exchange — unchanged mechanics, now paralysis/attack-bonus aware.
@@ -229,6 +246,22 @@ export default defineEventHandler(async (event) => {
   if (enemyDamage > 0) totalDamageDealt += await damageEnemy(enemyDamage)
   else if (enemyBlocked) await healEnemy(HEAL_ON_SUCCESSFUL_BLOCK)
 
+  // ── 2.5. Resolve any player-cast Reflect Damage / Siphon Health queued in step 1 — now that
+  // this round's real outcome is known. "If the enemy blocks, nothing is reflected" falls out
+  // naturally: roundCore.playerDamage is already 0 whenever the enemy's attack didn't land
+  // (including when its own rolled action this round was a block). Siphon instead checks the
+  // enemy's own chosen action directly (roundCore.enemyAction) — unlike every other special, it's
+  // the one effect an opponent's own block can stop outright. ──────────────────────────────────
+  if (pendingPlayerReflect) {
+    const reflected = Math.round(roundCore.playerDamage * pendingPlayerReflect.reflectPercent / 100)
+    if (reflected > 0) totalDamageDealt += await damageEnemy(reflected)
+  }
+  if (pendingPlayerSiphon && !isBlock(roundCore.enemyAction)) {
+    totalDamageDealt += await damageEnemy(pendingPlayerSiphon.amount)
+    const siphonHeal = Math.round(pendingPlayerSiphon.amount * pendingPlayerSiphon.siphonPercent / 100)
+    if (siphonHeal > 0) playerHp = Math.min(battle.playerMaxHp, playerHp + siphonHeal)
+  }
+
   // ── 3. Hit-streak bookkeeping, both sides — see CMoonEnemyBattle.playerHitStreak/
   // enemyHitStreak's own schema comment for the reset/latch rules. ───────────────────────────
   if (!isSpecial) {
@@ -252,6 +285,16 @@ export default defineEventHandler(async (event) => {
     else if (enemySpecialAttack.effectType === 'PARALYZE_OPPONENT') playerParalyzedTurns += enemySpecialAttack.amount
     else if (enemySpecialAttack.effectType === 'LOWER_OPPONENT_ATTACK') playerAtkBonus -= enemySpecialAttack.amount
     else if (enemySpecialAttack.effectType === 'RAISE_ALLY_ATTACK') enemyAtkBonus += enemySpecialAttack.amount
+    // This bonus already happens AFTER the round's real outcome is known (unlike the player's own
+    // cast, see step 2.5 above) — no deferral needed, `enemyDamage`/`roundCore.playerAction` are
+    // already in scope from step 2's resolveRound call.
+    else if (enemySpecialAttack.effectType === 'REFLECT_DAMAGE') {
+      const reflected = Math.round(enemyDamage * enemySpecialAttack.reflectPercent / 100)
+      if (reflected > 0) playerHp = Math.max(0, playerHp - reflected)
+    } else if (enemySpecialAttack.effectType === 'SIPHON_HEALTH' && !isBlock(roundCore.playerAction)) {
+      playerHp = Math.max(0, playerHp - enemySpecialAttack.amount)
+      await healEnemy(Math.round(enemySpecialAttack.amount * enemySpecialAttack.siphonPercent / 100))
+    }
   }
 
   const newEnemyHp = enemyHp
@@ -442,7 +485,7 @@ async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining, d
         playerHpRemaining, enemyHpRemaining: 0, damageDealt, playerStamina,
         roundLog, pointsAwarded, rewardsGranted, endedAt: new Date(), activeUserId: null,
       },
-      include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
+      include: BATTLE_INCLUDE,
     })
 
     return { updated, ctoonJobs: summary.ctoonJobs, updatedCMoon }
@@ -480,7 +523,7 @@ async function resolveLoss(battle, roundLog, submittedRound, enemyHpRemaining, d
         playerHpRemaining: 0, enemyHpRemaining, damageDealt, playerStamina,
         roundLog, endedAt: new Date(), activeUserId: null,
       },
-      include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
+      include: BATTLE_INCLUDE,
     })
   })
 }
@@ -496,7 +539,7 @@ async function resolveAbandoned(battle, roundLog, submittedRound, playerHpRemain
       playerHpRemaining, enemyHpRemaining, damageDealt, playerStamina,
       roundLog, endedAt: new Date(), activeUserId: null,
     },
-    include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
+    include: BATTLE_INCLUDE,
   })
 }
 
@@ -519,6 +562,6 @@ async function resolveUncredited(battle, roundLog, submittedRound, playerHpRemai
       playerHpRemaining, enemyHpRemaining: 0, damageDealt: 0, playerStamina,
       roundLog, endedAt: new Date(), activeUserId: null,
     },
-    include: { enemyMember: { include: { faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } } } }, cMoon: { include: { specialAttack: true } } },
+    include: BATTLE_INCLUDE,
   })
 }

@@ -43,6 +43,30 @@ export const PARALYZED_ACTION = 'PARALYZED'
 // CMoonEnemyBattle.playerHitStreak/enemyHitStreak's own schema comment.
 export const HIT_STREAK_THRESHOLD = 3
 
+// Fields needed off a CMoonSpecialAttack to decide/serialize "which one applies" — shared by every
+// Prisma `select`/`include` that loads a chosenSpecialAttack relation (action.post.js,
+// cmoonRaidSocket.js's resolveEffectiveSpecialAttack) so they can't drift from
+// pickEffectiveSpecialAttack's own expectations below.
+export const SPECIAL_ATTACK_SELECT = {
+  id: true, name: true, description: true, effectType: true, amount: true, raiseDurationRounds: true,
+  reflectPercent: true, siphonPercent: true, soundPath: true, healsAllies: true, playerChoice: true,
+}
+
+// A player's EFFECTIVE special attack for a cMoon Enemy Battle (solo or raid): `chosenSpecialAttack`
+// (their own User.chosenSpecialAttack, already loaded by the caller) if it still has
+// CMoonSpecialAttack.playerChoice = true — re-checked HERE, never trusted from a stale FK alone,
+// since an admin can flip playerChoice off (or delete/reassign the attack) at any time after a
+// player chose it — else `cMoonSpecialAttack` (the team's own assigned special), same as before
+// player-choice existed. Pure/synchronous and DB-free, matching this whole file's own discipline:
+// both special attacks must already be loaded by the caller (one Prisma query with both relations
+// included), so resolving this never costs an extra round-trip on a hot path like a solo battle's
+// own serializeBattleForClient. server/utils/cmoon.js's resolveEffectiveSpecialAttack is the
+// async wrapper for a caller that doesn't already have chosenSpecialAttack loaded.
+export function pickEffectiveSpecialAttack(chosenSpecialAttack, cMoonSpecialAttack) {
+  if (chosenSpecialAttack?.playerChoice) return chosenSpecialAttack
+  return cMoonSpecialAttack || null
+}
+
 export function isValidBattleAction(action) {
   return BATTLE_ACTIONS.includes(action)
 }
@@ -285,6 +309,20 @@ export function grantSummaryIsEmpty(summary) {
   return !summary?.points && !summary?.backgrounds && !summary?.avatars && !summary?.ctoonJobs?.length
 }
 
+// Merges a member's own unique taunts (CMoonEnemyMemberTaunt) with its faction's shared pool
+// (CMoonEnemyTaunt) into one { appear, crit } shape — see CMoonEnemyMemberTaunt's own schema
+// comment for why a member can have both a personal pool AND still draw from its faction's shared
+// one; nothing forces an admin to pick one or the other. Member-specific lines are listed first,
+// though the actual pick is uniform random either way (see useCMoonBattlePopup.js's own
+// pickRandomTaunt), so the ordering has no gameplay effect — only display-list grouping.
+export function mergeTauntPools(memberTaunts, factionTaunts) {
+  const pool = (trigger) => [
+    ...(memberTaunts || []).filter(t => t.trigger === trigger),
+    ...(factionTaunts || []).filter(t => t.trigger === trigger),
+  ].map(t => ({ text: t.text, soundPath: t.soundPath }))
+  return { appear: pool('APPEAR'), crit: pool('CRIT') }
+}
+
 // Turns the rolled reward rows above into the `reward` bundle grantRewardInTx expects (plus a
 // `points` field the caller sets separately, since that comes from the enemy member's own
 // cMoonPointsReward, not a CMoonEnemyReward row). Kept as a pure mapping, separate from the
@@ -309,16 +347,15 @@ export function serializeEnemyForClient(member, pityEmptyWinStreak = null) {
   // A member's own null sound slot falls back to its faction's matching default — see
   // CMoonEnemyFaction's default*SoundPath columns and resolveMemberSoundPaths' own comment.
   const sounds = resolveMemberSoundPaths(member, member.faction)
-  // The full active taunt pool for each trigger moment (see CMoonEnemyTaunt's own schema
-  // comment) — the caller must have included `faction.taunts` filtered to active rows (every
-  // query that reaches here already does, see consider.post.js/start.post.js/action.post.js/
-  // [id].get.js/preview.post.js). Sent as a full small list rather than one pre-picked line: the
-  // client (CMoonBattlePopupHost.vue) does the random pick itself at the actual moment, so a
-  // resumed battle or a re-fetch doesn't lock in whichever line happened to be rolled first.
-  const taunts = {
-    appear: (member.faction?.taunts || []).filter(t => t.trigger === 'APPEAR').map(t => ({ text: t.text, soundPath: t.soundPath })),
-    crit: (member.faction?.taunts || []).filter(t => t.trigger === 'CRIT').map(t => ({ text: t.text, soundPath: t.soundPath })),
-  }
+  // The full active taunt pool for each trigger moment, merging this member's OWN unique lines
+  // (CMoonEnemyMemberTaunt) with its faction's shared pool (CMoonEnemyTaunt) — see
+  // mergeTauntPools' own comment. The caller must have included both `taunts` (on the member) and
+  // `faction.taunts` filtered to active rows (every query that reaches here already does, see
+  // consider.post.js/start.post.js/action.post.js/[id].get.js/preview.post.js). Sent as a full
+  // small list rather than one pre-picked line: the client (CMoonBattlePopupHost.vue) does the
+  // random pick itself at the actual moment, so a resumed battle or a re-fetch doesn't lock in
+  // whichever line happened to be rolled first.
+  const taunts = mergeTauntPools(member.taunts, member.faction?.taunts)
   return {
     id: member.id,
     name: member.name,
@@ -365,11 +402,14 @@ export function serializeEnemyForClient(member, pityEmptyWinStreak = null) {
 
 // Shape sent to the client for an in-progress or just-resolved battle. `battle` must have its
 // `enemyMember` (with `enemyMember.faction`) relation included by the caller, and — to surface
-// the player's own special-attack button at all — its `cMoon` (with `cMoon.specialAttack`)
-// relation too (both nullable: a battle with no cMoon, or whose cMoon has no attack assigned,
-// simply never offers the button; see CMoonBattlePopupHost.vue's own v-if on this field).
+// the player's own special-attack button at all — its `cMoon` (with `cMoon.specialAttack`) AND
+// `user` (with `user.chosenSpecialAttack`, using SPECIAL_ATTACK_SELECT) relations too (all
+// nullable: a battle with no cMoon, whose cMoon has no attack assigned, and/or whose player has
+// made no choice of their own, simply falls through to whichever of those still applies — see
+// pickEffectiveSpecialAttack above — or offers no button at all if neither does; see
+// CMoonBattlePopupHost.vue's own v-if on this field).
 export function serializeBattleForClient(battle) {
-  const specialAttack = battle.cMoon?.specialAttack
+  const specialAttack = pickEffectiveSpecialAttack(battle.user?.chosenSpecialAttack, battle.cMoon?.specialAttack)
   return {
     id: battle.id,
     status: battle.status,
