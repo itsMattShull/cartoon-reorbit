@@ -108,9 +108,9 @@ jobs:
                 # app was holding for the memory-hungry build step (the production deploy has
                 # been reliably OOM-killed, exit 137, during Nitro server bundling). BullMQ jobs
                 # are Redis-backed, so anything queued during this window just waits and is
-                # processed once pm2 comes back up at the end — nothing is lost, the site is
-                # simply offline for the length of the build. `|| true` so a from-scratch box
-                # with nothing running yet (or pm2 not already started) can't abort the deploy.
+                # processed once pm2 comes back up at the end - nothing is lost, the site is
+                # simply offline for the length of the build. The || true means a from-scratch box
+                # with nothing running yet (or pm2 not already started) will not abort the deploy.
                 pm2 stop all || true
 
                 git fetch origin master
