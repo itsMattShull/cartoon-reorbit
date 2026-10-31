@@ -78,6 +78,16 @@ export function useCMoonBattlePopup() {
   // one-time toast on the RESULT screen, never read back to resolve anything. Always false for a
   // LOSS/ABANDONED outcome, since the server only computes/sends it on a WIN.
   const isFirstWinAgainstThisEnemy = useState('cmoon-battle-first-win', () => false)
+  // Whether a player can currently create a private/invite-only raid, as of the /consider call
+  // that offered this encounter (see GlobalGameConfig.cMoonRaidPrivateLobbiesEnabled) — only
+  // meaningful for a raid-boss OFFER, default true (the normal/allowed state) so the checkbox
+  // shows by default and only hides once a real "disabled" answer comes back. The server stays
+  // the real authority either way (cmoonraid:start silently forces isPrivate false when this is
+  // off) — this is purely so the player isn't shown an option that will silently do nothing.
+  const raidPrivateLobbiesEnabled = useState('cmoon-battle-raid-private-lobbies-enabled', () => true)
+  // Same shape as raidPrivateLobbiesEnabled above, for GlobalGameConfig.cMoonRaidSoloQueueEnabled
+  // — drives whether the OFFER screen's flavor text mentions fighting a raid boss solo at all.
+  const raidSoloQueueEnabled = useState('cmoon-battle-raid-solo-queue-enabled', () => true)
 
   // Plain module-level flag, not useState: this only ever needs to prevent two concurrent
   // in-flight /consider calls from the same client tick, never anything serialized across SSR.
@@ -107,6 +117,11 @@ export function useCMoonBattlePopup() {
       enemy.value = res.enemy
       battle.value = null
       phase.value = 'OFFER'
+      // Only meaningful (and only sent) for a raid-boss offer — see consider.post.js's own
+      // comment. Defaults true for any other offer so a stale non-raid value never hides the
+      // checkbox/flavor text it doesn't even apply to.
+      raidPrivateLobbiesEnabled.value = res.raidPrivateLobbiesEnabled !== false
+      raidSoloQueueEnabled.value = res.raidSoloQueueEnabled !== false
 
       const reveal = () => {
         visible.value = true
@@ -256,6 +271,7 @@ export function useCMoonBattlePopup() {
 
   return {
     visible, phase, enemy, battle, inCMoon, busy, error, lastRound, currentTaunt, isFirstWinAgainstThisEnemy,
+    raidPrivateLobbiesEnabled, raidSoloQueueEnabled,
     checkOnNavigate, startBattle, submitAction, decline, close,
   }
 }

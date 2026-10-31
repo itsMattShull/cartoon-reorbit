@@ -238,14 +238,17 @@ export async function announceCMoonWelcome(cMoonDiscordChannelId, username) {
 
 // Called after every WIN (solo and raid) — cheap even when the feature is off (one row read, no
 // writes) and claims the announcement atomically so concurrent wins racing across the threshold
-// can only ever post once. Reset by start-new.post.js on every season rollover.
+// can only ever post once. Reset by start-new.post.js on every season rollover. raidId: null —
+// same reasoning as cmoonSeasons.js's own totalEnemiesDefeatedBounded (this goal's season-scoped
+// sibling): a raid win mints one synthetic row per participant, so counting it here would let
+// raid turnout, not real distinct kills, decide when this server-wide total is reached.
 export async function checkAndAnnounceSeasonGoalReached() {
   try {
     const season = await prisma.cMoonSeasonConfig.findUnique({ where: { id: 'singleton' } })
     if (!season?.enemiesDefeatedGoalEnabled || season.enemiesDefeatedGoalAnnouncedAt) return
     const target = Number(season.enemiesDefeatedGoalTarget) || 0
     if (target <= 0) return
-    const current = await prisma.cMoonEnemyBattle.count({ where: { outcome: 'WIN', endedAt: { gte: season.startedAt } } })
+    const current = await prisma.cMoonEnemyBattle.count({ where: { outcome: 'WIN', raidId: null, endedAt: { gte: season.startedAt } } })
     if (current < target) return
 
     const claim = await prisma.cMoonSeasonConfig.updateMany({
@@ -296,7 +299,12 @@ export async function announceSharedPoolBossDefeated(enemyName) {
 async function topSlayerForCMoon(cMoonId, rangeStart, rangeEnd) {
   const rows = await prisma.cMoonEnemyBattle.groupBy({
     by: ['userId'],
-    where: { cMoonId, outcome: 'WIN', endedAt: { gte: rangeStart, ...(rangeEnd ? { lt: rangeEnd } : {}) } },
+    // raidId: null — a "top slayer" recap is a solo-kill-style callout; a raid win is a shared
+    // party result (every participant gets a synthetic row, see CMoonEnemyBattle.raidId's own
+    // schema comment), so counting it here would let one raid inflate several players' tallies
+    // off a single kill. The Leaderboards page (server/api/leaderboard/cmoon-enemies.get.js)
+    // already draws this same raid/solo line explicitly; this brings this recap in line with it.
+    where: { cMoonId, outcome: 'WIN', raidId: null, endedAt: { gte: rangeStart, ...(rangeEnd ? { lt: rangeEnd } : {}) } },
     _count: { _all: true },
     // Bug fix: `orderBy: { _count: { _all: 'desc' } }` is rejected by this Prisma client version
     // ("Unknown argument `_all`"), which meant this query threw on every single call — silently
@@ -375,16 +383,25 @@ export async function buildCMoonStatsReply(discordId) {
     select: {
       id: true, username: true, cMoonPoints: true,
       currentCMoonRank: { select: { name: true } },
-      cMoon: { select: { id: true, name: true, teamScore: true, battleWins: true } },
+      cMoon: { select: { id: true, name: true, teamScore: true } },
     },
   })
   if (!user) return "You need a Cartoon ReOrbit account linked to this Discord account first."
   if (!user.cMoon) return "You're not on a cMoon team yet — pick one on the site!"
 
-  const personalWins = await prisma.cMoonEnemyBattle.count({ where: { outcome: 'WIN', cMoonId: user.cMoon.id, userId: user.id } })
+  // Live-computed, NOT CMoon.battleWins — that stored counter has already mixed raid + solo wins
+  // together (one raid win credits every participating team, one per participant on their own
+  // side, vs. one per solo win), so it can't be un-mixed retroactively. Same raidId-is-null-vs-set
+  // split the Leaderboards page uses, kept fully independent rather than summed into one number.
+  const [teamSoloWins, teamRaidWins, personalSoloWins, personalRaidWins] = await Promise.all([
+    prisma.cMoonEnemyBattle.count({ where: { outcome: 'WIN', cMoonId: user.cMoon.id, raidId: null } }),
+    prisma.cMoonEnemyBattle.count({ where: { outcome: 'WIN', cMoonId: user.cMoon.id, raidId: { not: null } } }),
+    prisma.cMoonEnemyBattle.count({ where: { outcome: 'WIN', cMoonId: user.cMoon.id, userId: user.id, raidId: null } }),
+    prisma.cMoonEnemyBattle.count({ where: { outcome: 'WIN', cMoonId: user.cMoon.id, userId: user.id, raidId: { not: null } } }),
+  ])
   const rankLine = user.currentCMoonRank?.name ? ` (${user.currentCMoonRank.name})` : ''
   return [
-    `**${user.cMoon.name}**: ${user.cMoon.teamScore.toLocaleString()} points, ${user.cMoon.battleWins.toLocaleString()} enemies defeated`,
-    `**You**: ${user.cMoonPoints.toLocaleString()} points${rankLine}, ${personalWins.toLocaleString()} enemy defeat${personalWins === 1 ? '' : 's'}`,
+    `**${user.cMoon.name}**: ${user.cMoon.teamScore.toLocaleString()} points, ${teamSoloWins.toLocaleString()} enemies defeated, ${teamRaidWins.toLocaleString()} raid bosses defeated`,
+    `**You**: ${user.cMoonPoints.toLocaleString()} points${rankLine}, ${personalSoloWins.toLocaleString()} enemy defeat${personalSoloWins === 1 ? '' : 's'}, ${personalRaidWins.toLocaleString()} raid boss defeat${personalRaidWins === 1 ? '' : 's'}`,
   ].join('\n')
 }

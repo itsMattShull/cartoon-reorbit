@@ -57,9 +57,9 @@ export function useCMoonRaidSocket() {
     })
   }
 
-  function startRaid(enemyMemberId) {
+  function startRaid(enemyMemberId, { isPrivate = false } = {}) {
     lastError.value = ''
-    socket.emit('cmoonraid:start', { enemyMemberId })
+    socket.emit('cmoonraid:start', { enemyMemberId, isPrivate })
   }
   function joinRaid(raidId) {
     lastError.value = ''
@@ -76,6 +76,20 @@ export function useCMoonRaidSocket() {
   function submitAction(raidId, action, roundNumber) {
     lastError.value = ''
     socket.emit('cmoonraid:action', { raidId, action, roundNumber })
+  }
+  // Lobby controls (see cmoonRaidSocket.js's own registerCMoonRaid comment for what each does
+  // server-side) — initiator-only toggleKeepOpen/forceStart, any-participant voteSpeedUp.
+  function toggleKeepOpen(raidId, keepOpen) {
+    lastError.value = ''
+    socket.emit('cmoonraid:toggleKeepOpen', { raidId, keepOpen })
+  }
+  function forceStartRaid(raidId) {
+    lastError.value = ''
+    socket.emit('cmoonraid:forceStart', { raidId })
+  }
+  function voteSpeedUp(raidId) {
+    lastError.value = ''
+    socket.emit('cmoonraid:voteSpeedUp', { raidId })
   }
 
   // Ref-counted so two open lobby views don't unsubscribe each other.
@@ -95,5 +109,6 @@ export function useCMoonRaidSocket() {
     socket, raidState, lastRound, lastError, isConnected, currentRaidId,
     lobbyRaids, lobbyLoaded, lobbyViewer, lobbyClockOffsetMs,
     startRaid, joinRaid, leaveRaid, getState, submitAction, subscribeLobby, unsubscribeLobby,
+    toggleKeepOpen, forceStartRaid, voteSpeedUp,
   }
 }
