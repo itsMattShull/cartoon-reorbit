@@ -140,6 +140,9 @@ export default defineEventHandler(async (event) => {
         playerHpRemaining: playerMaxHp,
         playerMaxHp,
         enemyHpRemaining,
+        // See CMoonEnemyBattle.enemyMaxHp's own schema comment -- snapshotted once here, same
+        // timing as playerMaxHp above.
+        enemyMaxHp: enemyMember.maxHp,
         playerStamina: playerMaxStamina,
         playerMaxStamina,
         activeUserId: userId,

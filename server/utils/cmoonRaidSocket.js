@@ -814,13 +814,22 @@ async function closeRound(io, raid) {
         // Banks whatever they stacked past the threshold needed instead of discarding it — a
         // player who deliberately holds off firing while still landing hits (e.g. reaching 5/3
         // before using it) keeps the leftover 2 toward their NEXT charge, rather than starting
-        // back at 0. The same >= hitStreakThreshold rule below re-applies here too, so hoarding
-        // enough for two charges before firing once correctly leaves this player already charged
-        // again.
+        // back at 0. The accumulate branch below caps hitStreak at (2 * hitStreakThreshold - 1),
+        // so the leftover here is NEVER itself >= hitStreakThreshold — this fire always ends with
+        // specialCharged false, requiring a fresh hitStreakThreshold more landed hits before the
+        // next one. Without that cap, an unbroken hit streak (nothing stops hitStreak from
+        // climbing indefinitely while a player simply never fires) could bank arbitrarily many
+        // charges and then fire every single round with no further hits needed until they ran
+        // out — a real bug reported as "infinite special attacks", not the intended "don't lose
+        // your streak by firing a little early" convenience.
         p.hitStreak = Math.max(0, p.hitStreak - hitStreakThreshold)
         p.specialCharged = p.hitStreak >= hitStreakThreshold
       } else {
-        p.hitStreak = result.enemyHit ? p.hitStreak + 1 : 0
+        // Capped at one hit short of a second full threshold — see the fired-branch comment above
+        // for why: this is what guarantees firing once can bank at most a partial head start
+        // toward the NEXT charge, never a second charge outright.
+        const maxBankedStreak = hitStreakThreshold * 2 - 1
+        p.hitStreak = result.enemyHit ? Math.min(p.hitStreak + 1, maxBankedStreak) : 0
         if (p.hitStreak >= hitStreakThreshold) p.specialCharged = true
       }
     }
@@ -1059,6 +1068,7 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
             userId, enemyMemberId: raid.enemyMemberId, cMoonId: teamExists ? teamId : null,
             status: 'RESOLVED', outcome, roundNumber: raid.roundNumber,
             playerHpRemaining: p.hpRemaining, enemyHpRemaining: raid.enemyHpRemaining,
+            enemyMaxHp: raid.enemyStats.maxHp,
             roundLog: [], pointsAwarded: 0, rewardsGranted: granted,
             startedAt: new Date(raid.startedAt), endedAt: new Date(raid.endedAt), raidId: raid.id,
           },

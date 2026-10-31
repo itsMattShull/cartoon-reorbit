@@ -56,22 +56,46 @@
       </div>
 
       <div class="lb-card lb-cmoons-card">
-        <div class="lb-card-header lb-card-header--cmoons">Top Enemy Slayers</div>
+        <div class="lb-card-header lb-card-header--cmoons">Top Enemy Slayers (All-Time)</div>
         <div v-if="cmoonEnemiesPending" class="lb-loading">Loading…</div>
         <ul v-else class="lb-list">
-          <li v-for="row in cmoonEnemiesData.players" :key="row.userId" class="lb-row">
+          <li v-for="row in cmoonEnemiesData.players.allTime" :key="row.userId" class="lb-row">
             <span class="lb-rank">{{ row.rank }}</span>
             <img class="lb-avatar" :src="`/avatars/${row.avatar || 'default.png'}`" alt="" />
             <div class="lb-user-col">
               <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
               <span class="lb-cmoon-members">
-                {{ row.raidBossesDefeated }} raid bosses (separate count)
+                {{ row.enemiesDefeated }} solo win{{ row.enemiesDefeated === 1 ? '' : 's' }} · {{ row.raidBossesDefeated }} raid bosses (separate count)
                 <span v-if="cMoonForRow(row)" class="lb-cmoon" :style="cMoonPillStyle(cMoonForRow(row).color)">{{ cMoonForRow(row).name }}</span>
               </span>
             </div>
-            <span class="lb-value">{{ row.enemiesDefeated.toLocaleString() }}</span>
+            <span class="lb-value">{{ row.enemyHpDefeated.toLocaleString() }}<span class="lb-cmoon-avg-unit"> HP</span></span>
           </li>
-          <li v-if="!cmoonEnemiesData.players?.length" class="lb-empty">No enemies defeated yet</li>
+          <li v-if="!cmoonEnemiesData.players.allTime?.length" class="lb-empty">No enemies defeated yet</li>
+        </ul>
+      </div>
+
+      <!-- Ranked by total enemy HP defeated (solo only), NOT a plain kill count -- see
+           server/api/leaderboard/cmoon-enemies.get.js's own header comment: a raw count rewards
+           repeatedly beating the cheapest enemy available ("goon farming") just as much as taking
+           on tougher fights. Weekly is a rolling trailing 7 days, same as the per-game boards. -->
+      <div class="lb-card lb-cmoons-card">
+        <div class="lb-card-header lb-card-header--cmoons">Top Enemy Slayers (This Week)</div>
+        <div v-if="cmoonEnemiesPending" class="lb-loading">Loading…</div>
+        <ul v-else class="lb-list">
+          <li v-for="row in cmoonEnemiesData.players.weekly" :key="row.userId" class="lb-row">
+            <span class="lb-rank">{{ row.rank }}</span>
+            <img class="lb-avatar" :src="`/avatars/${row.avatar || 'default.png'}`" alt="" />
+            <div class="lb-user-col">
+              <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
+              <span class="lb-cmoon-members">
+                {{ row.enemiesDefeated }} solo win{{ row.enemiesDefeated === 1 ? '' : 's' }} · {{ row.raidBossesDefeated }} raid bosses (separate count)
+                <span v-if="cMoonForRow(row)" class="lb-cmoon" :style="cMoonPillStyle(cMoonForRow(row).color)">{{ cMoonForRow(row).name }}</span>
+              </span>
+            </div>
+            <span class="lb-value">{{ row.enemyHpDefeated.toLocaleString() }}<span class="lb-cmoon-avg-unit"> HP</span></span>
+          </li>
+          <li v-if="!cmoonEnemiesData.players.weekly?.length" class="lb-empty">No enemies defeated this week</li>
         </ul>
       </div>
 

@@ -202,6 +202,68 @@ test('effectiveHitStreakThreshold: only lowers the threshold when BOTH the toggl
   assert.equal(effectiveHitStreakThreshold(true, true), CAPTAIN_BOOST_HIT_STREAK_THRESHOLD)
 })
 
+// ── Raid special-attack charge banking (closeRound in cmoonRaidSocket.js) ──────────────────────
+// Regression test for a real "infinite special attacks" bug: closeRound's own banking math
+// (`p.hitStreak = Math.max(0, p.hitStreak - hitStreakThreshold)`, done once per round, in the
+// branch for whoever just fired) only ever discharges ONE threshold's worth per fire. Before this
+// fix, the accumulate branch (`p.hitStreak = result.enemyHit ? p.hitStreak + 1 : 0`) never capped
+// how high hitStreak could climb while a player simply held off firing — so an unbroken hit
+// streak could bank arbitrarily many charges (hitStreak=30 at threshold=3 discharges to 27, still
+// >= 3, so specialCharged stays true and the SAME charge can fire again next round, and again,
+// ~9 more times from one streak). The fix caps accumulation at (2 * threshold - 1), so firing
+// once always leaves a leftover strictly below threshold -- banking at most a partial head start
+// toward the NEXT charge, never a second charge outright. These tests replicate closeRound's own
+// two-branch formula exactly (mirroring this session's established pattern for testing logic
+// embedded in that function, which isn't itself exported/unit-testable directly).
+function replicateBankingRound({ hitStreak, specialCharged, threshold, fired, enemyHit }) {
+  if (fired) {
+    const newStreak = Math.max(0, hitStreak - threshold)
+    return { hitStreak: newStreak, specialCharged: newStreak >= threshold }
+  }
+  const maxBankedStreak = threshold * 2 - 1
+  const newStreak = enemyHit ? Math.min(hitStreak + 1, maxBankedStreak) : 0
+  return { hitStreak: newStreak, specialCharged: specialCharged || newStreak >= threshold }
+}
+
+test('special-attack banking: firing at exactly the threshold discharges fully (3/3 -> 0/3, not charged)', () => {
+  const result = replicateBankingRound({ hitStreak: 3, specialCharged: true, threshold: 3, fired: true })
+  assert.deepEqual(result, { hitStreak: 0, specialCharged: false })
+})
+
+test('special-attack banking: firing with one extra landed hit banks that one hit, per the original "5/3 -> 2/3" design', () => {
+  const result = replicateBankingRound({ hitStreak: 5, specialCharged: true, threshold: 3, fired: true })
+  assert.deepEqual(result, { hitStreak: 2, specialCharged: false }) // 2 < 3 -- NOT immediately re-charged
+})
+
+test('special-attack banking: an unbroken hit streak is capped, never climbing past one hit short of a second charge', () => {
+  let state = { hitStreak: 0, specialCharged: false }
+  // 20 consecutive landed hits with no firing in between -- would reach hitStreak=20 uncapped.
+  for (let i = 0; i < 20; i++) {
+    state = replicateBankingRound({ ...state, threshold: 3, fired: false, enemyHit: true })
+  }
+  assert.equal(state.hitStreak, 5) // capped at 2*3 - 1 = 5, never 20
+  assert.equal(state.specialCharged, true)
+})
+
+test('special-attack banking: firing from the capped streak always ends charged=false -- no free second fire', () => {
+  // The exploit this regression guards against: before the fix, discharging from a long banked
+  // streak could land ABOVE threshold again, letting the SAME banked streak fire for free on
+  // several consecutive rounds with zero new hits landed in between.
+  const state = replicateBankingRound({ hitStreak: 5, specialCharged: true, threshold: 3, fired: true }) // 5 = the cap
+  assert.equal(state.specialCharged, false) // immediately dischargeable to false, not stuck >= threshold
+  assert.equal(state.hitStreak < 3, true)
+})
+
+test('special-attack banking: the cap scales with a lowered captain-boost threshold too (2 -> max banked 3)', () => {
+  let state = { hitStreak: 0, specialCharged: false }
+  for (let i = 0; i < 10; i++) {
+    state = replicateBankingRound({ ...state, threshold: 2, fired: false, enemyHit: true })
+  }
+  assert.equal(state.hitStreak, 3) // capped at 2*2 - 1 = 3, never 10
+  state = replicateBankingRound({ ...state, threshold: 2, fired: true })
+  assert.deepEqual(state, { hitStreak: 1, specialCharged: false }) // 1 < 2, not re-charged
+})
+
 test('resolveRaidRound: partyAtkBonus increases every participant\'s own landed-hit damage on the enemy', () => {
   let sawAHit = false
   for (let i = 0; i < 200; i++) {
