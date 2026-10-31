@@ -86,12 +86,12 @@ export function buildSharedPoolBossDefeatedMessage(enemyName) {
 
 export function buildWeeklyRecapMessage(cMoonName, topSlayer) {
   if (!topSlayer) return null
-  return `📊 **Weekly Recap for ${cMoonName || 'your cMoon'}**: **${topSlayer.username}** led the team with **${topSlayer.wins}** enemy defeat${topSlayer.wins === 1 ? '' : 's'} this week!`
+  return `📊 **Weekly Recap for ${cMoonName || 'your cMoon'}**: **${topSlayer.username}** led the team, defeating **${(topSlayer.hpDefeated || 0).toLocaleString()} HP** worth of enemies (${topSlayer.wins} win${topSlayer.wins === 1 ? '' : 's'}) this week!`
 }
 
 export function buildSeasonMvpMessage(cMoonName, mvp) {
   if (!mvp) return null
-  return `🏆 **Season MVP for ${cMoonName || 'your cMoon'}**: **${mvp.username}** with **${mvp.wins}** enemy defeat${mvp.wins === 1 ? '' : 's'} this season! A new season starts now.`
+  return `🏆 **Season MVP for ${cMoonName || 'your cMoon'}**: **${mvp.username}**, defeating **${(mvp.hpDefeated || 0).toLocaleString()} HP** worth of enemies (${mvp.wins} win${mvp.wins === 1 ? '' : 's'}) this season! A new season starts now.`
 }
 
 /* ── Team milestones (enemies defeated / team score) ─────────────────────────────────────────── */
@@ -293,9 +293,15 @@ export async function announceSharedPoolBossDefeated(enemyName) {
 
 /* ── Weekly top-slayer recap + end-of-season MVP recap ───────────────────────────────────────── */
 
-// The member with the most enemy-defeat WINs for one cMoon within [rangeStart, rangeEnd) — shared
+// The member with the most enemy-HP defeated for one cMoon within [rangeStart, rangeEnd) — shared
 // by both the weekly recap cron and the season-end MVP recap below, just with a different range.
 // Returns null if nobody on that team won anything in the window (no recap posted for an idle team).
+//
+// Ranked by SUM(enemyMaxHp), NOT a plain win COUNT — same "goon farming" concern as
+// getTopNEnemySlayerHolders in server/utils/cmoon.js: counting wins rewards repeatedly beating the
+// cheapest enemy available just as much as taking on tougher fights. See
+// CMoonEnemyBattle.enemyMaxHp's own schema comment. `wins` is still returned alongside for display
+// (an honest win count, just no longer what decides the ranking).
 async function topSlayerForCMoon(cMoonId, rangeStart, rangeEnd) {
   const rows = await prisma.cMoonEnemyBattle.groupBy({
     by: ['userId'],
@@ -306,18 +312,16 @@ async function topSlayerForCMoon(cMoonId, rangeStart, rangeEnd) {
     // already draws this same raid/solo line explicitly; this brings this recap in line with it.
     where: { cMoonId, outcome: 'WIN', raidId: null, endedAt: { gte: rangeStart, ...(rangeEnd ? { lt: rangeEnd } : {}) } },
     _count: { _all: true },
-    // Bug fix: `orderBy: { _count: { _all: 'desc' } }` is rejected by this Prisma client version
-    // ("Unknown argument `_all`"), which meant this query threw on every single call — silently
-    // swallowed by this function's callers' own try/catch (postWeeklyTopSlayerRecap/
-    // postSeasonMvpRecap), so the weekly and season-rollover top-slayer Discord recaps have never
-    // actually posted. Order by a specific grouped field's count instead — same row-count value
-    // since `by: ['userId']` with no null userId possible.
-    orderBy: { _count: { userId: 'desc' } },
+    _sum: { enemyMaxHp: true },
+    // Bug fix (kept from the original fix): `orderBy: { _count: { _all: 'desc' } }` is rejected by
+    // this Prisma client version ("Unknown argument `_all`"). Order by the grouped field's sum
+    // directly instead.
+    orderBy: { _sum: { enemyMaxHp: 'desc' } },
     take: 1,
   })
   if (!rows.length || !rows[0]._count._all) return null
   const user = await prisma.user.findUnique({ where: { id: rows[0].userId }, select: { username: true } })
-  return { username: user?.username || 'Someone', wins: rows[0]._count._all }
+  return { username: user?.username || 'Someone', wins: rows[0]._count._all, hpDefeated: rows[0]._sum.enemyMaxHp || 0 }
 }
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000

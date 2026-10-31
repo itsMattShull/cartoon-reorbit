@@ -298,6 +298,15 @@
 <script setup>
 import { cMoonPillStyle } from '~/utils/cmoonColor'
 
+// The fixed-chrome `.main-content` box is `overflow: hidden` by default
+// (layouts/newsite-template.vue) — a raid party can now be up to 8 players (was a hardcoded 4),
+// and the roster/fighter-row list that renders one entry per participant pushes this page past
+// that fixed height on some browsers/viewport scales, silently clipping the bottom of the page
+// (reported: the result screen and lower action buttons invisible with a full 8-player party).
+// Same fix as pages/newsite/cmoon-nav.vue/cmoon-enemies.vue for the same "variable-length list can
+// exceed the fixed box" reason — opt into an internal scrollbar instead of being clipped.
+definePageMeta({ mainContentScrollY: true })
+
 const ACTION_LABELS = { ATTACK_HIGH: 'attacked high', ATTACK_LOW: 'attacked low', BLOCK_HIGH: 'blocked high', BLOCK_LOW: 'blocked low' }
 
 const route = useRoute()
