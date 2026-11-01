@@ -22,45 +22,14 @@
 // of cause — prestiging is simply another hop through the same guard.
 import { prisma } from '../prisma.js'
 import { getGlobalConfig, reassignUserCMoon, grantCMoonPrizes } from './cmoon.js'
-
-// Admin-facing bounds for CMoonPrestigeLevel rows — shared by the create/edit admin endpoints
-// (server/api/admin/cmoon-prestige-levels.post.js and .../[id].put.js) so they can never drift
-// apart from each other.
-export const PRESTIGE_LEVEL_MIN = 1
-export const PRESTIGE_LEVEL_MAX = 100
-// Same ceiling CMoonRankTier.pointThreshold already uses (server/api/admin/cmoon-rank-tiers.post.js)
-// — this is the same kind of "cumulative cMoonPoints" number.
-export const PRESTIGE_THRESHOLD_MAX = 5_000_000
-
-export const CMOON_PRESTIGE_ERRORS = {
-  DISABLED: 'DISABLED',
-  NOT_FOUND: 'NOT_FOUND',
-  NO_CMOON: 'NO_CMOON',
-  BELOW_THRESHOLD: 'BELOW_THRESHOLD',
-  NO_LEVEL_CONFIGURED: 'NO_LEVEL_CONFIGURED',
-  TARGET_NOT_FOUND: 'TARGET_NOT_FOUND',
-  NOT_PRESTIGE_CMOON: 'NOT_PRESTIGE_CMOON',
-  LOCKED: 'LOCKED',
-  SAME_CMOON: 'SAME_CMOON',
-  ACTIVE_BATTLE: 'ACTIVE_BATTLE',
-  ACTIVE_RAID: 'ACTIVE_RAID',
-}
-
-export class CMoonPrestigeError extends Error {
-  constructor(code) {
-    super(code)
-    this.code = code
-  }
-}
-
-// Pure — given the full sorted list of configured levels and a player's CURRENT level, finds the
-// row that unlocks their NEXT one (level: currentLevel + 1). Returns null if an admin hasn't
-// configured that far yet, which is a normal, non-error state (see this module's own header
-// comment) — not every player can expect to keep prestiging forever.
-export function findNextPrestigeLevel(levels, currentLevel) {
-  const target = (currentLevel || 0) + 1
-  return levels.find(l => l.level === target) || null
-}
+// Pure helpers (bounds, error codes, findNextPrestigeLevel) live in their own import-free module
+// so they can be unit-tested directly without pulling in Prisma — see that file's own header
+// comment. Re-exported here so every existing call site can keep importing from this file.
+export {
+  PRESTIGE_LEVEL_MIN, PRESTIGE_LEVEL_MAX, PRESTIGE_THRESHOLD_MAX,
+  CMOON_PRESTIGE_ERRORS, CMoonPrestigeError, findNextPrestigeLevel,
+} from './cmoonPrestigeLevels.js'
+import { findNextPrestigeLevel, CMoonPrestigeError, CMOON_PRESTIGE_ERRORS } from './cmoonPrestigeLevels.js'
 
 // Read-only — never mutates anything, safe to call on every Settings-page load. Returns the full
 // picture the client needs to render the Prestige section: whether the feature is on at all,
