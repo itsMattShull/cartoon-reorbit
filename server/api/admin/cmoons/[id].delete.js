@@ -25,8 +25,8 @@ export default defineEventHandler(async (event) => {
   // row — including players from OTHER cMoons, since raids are cross-cMoon — and their whole
   // resolution (prizes, battle records, team wins) would then fail. A raid can't run longer than
   // its join window (up to 120s) plus its own CMoonEnemyMember.raidRoundLimit rounds at
-  // ROUND_TIMEOUT_SECONDS each — up to 400 rounds * 15s = 100 minutes at the admin-configurable
-  // ceiling, ~102 minutes worst case including the join window — so a 3-hour cutoff keeps a
+  // ROUND_TIMEOUT_SECONDS each — up to 500 rounds * 15s = 125 minutes at the admin-configurable
+  // ceiling, ~127 minutes worst case including the join window — so a 3-hour cutoff keeps a
   // comfortable margin for restart/Redis-restore lag; only recent unresolved rows block, an older
   // one is a crash leftover that would otherwise block forever.
   const liveRaid = await db.cMoonEnemyRaid.findFirst({

@@ -83,12 +83,29 @@ function serializeRaid(raid) {
     enemyAtkRaiseTurnsRemaining: raid.enemyAtkRaiseTurnsRemaining,
     enemyParalyzedTurns: raid.enemyParalyzedTurns,
     partyParalyzedTurns: raid.partyParalyzedTurns,
+    // The boss's own shared poison status (POISON_OPPONENT, player-cast) — same missing-field
+    // trap as every other raid-level status field above; without these, a restart would silently
+    // cure the boss of an active poison mid-raid.
+    enemyPoisonAmount: raid.enemyPoisonAmount,
+    enemyPoisonTurnsRemaining: raid.enemyPoisonTurnsRemaining,
+    // The initiator's pre-raid lastCMoonBattlePopupAt (see cmoonraid:leave's own restore comment
+    // in cmoonRaidSocket.js) and whether the one-time "extend lobby" window-reset has already been
+    // spent (see cmoonraid:toggleKeepOpen) — both raid-level, both silently reset to their
+    // "nothing's happened yet" default on a restart if left out here, same trap as every field
+    // above this comment already warns about.
+    initiatorPreviousPopupCooldownAt: raid.initiatorPreviousPopupCooldownAt,
+    // Who ACTUALLY started this raid — never reassigned on a leadership hand-off, unlike
+    // isInitiator (see cmoonRaidSocket.js's own raid-shape comment and cmoonraid:leave's successor
+    // promotion). Missing this would silently re-enable the cooldown-restore-corruption bug this
+    // field exists to prevent, for any raid that survives a restart.
+    originalInitiatorUserId: raid.originalInitiatorUserId,
+    keepOpenExtensionUsed: raid.keepOpenExtensionUsed,
     // Lobby controls, up-to-8 parties, private lobbies, wind-up telegraphs — see
     // cmoonRaidSocket.js's own raid-shape comment for what each means. speedVotes is a Set
     // in-memory (JSON can't carry one); stored as a plain array, rebuilt into a Set on restore
     // (see restoreCMoonRaids).
     maxParticipants: raid.maxParticipants,
-    // This raid boss's own round-count safety valve (50-400) — same missing-field trap as above;
+    // This raid boss's own round-count safety valve (50-500) — same missing-field trap as above;
     // without this, a restart would silently fall back to RAID_MAX_ROUNDS_SAFETY regardless of
     // what the boss was actually configured with.
     roundLimit: raid.roundLimit,

@@ -87,7 +87,14 @@
               class="px-4 py-2 text-sm font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
               :disabled="raid.participants.length >= raid.maxParticipants" @click="raidSocket.joinRaid(raidId)"
             >Join raid</button>
-            <p v-else class="text-sm text-green-700 font-medium">You're in — waiting for the fight to start…</p>
+            <template v-else>
+              <p class="text-sm text-green-700 font-medium">You're in — waiting for the fight to start…</p>
+              <!-- Leave before combat starts — works for anyone, including the initiator, without
+                   touching their raid cooldown (see cmoonraid:leave's own cooldown-restore comment
+                   in cmoonRaidSocket.js for the initiator's own case specifically). Lets someone
+                   bail on a lobby that's taking too long rather than sitting in it. -->
+              <button type="button" class="cr-link-btn text-red-600" @click="leaveRaidAndGoHome">Leave raid</button>
+            </template>
 
             <!-- Leader-only lobby controls. -->
             <div v-if="isInitiator" class="cr-lobby-controls">
@@ -105,6 +112,14 @@
               <p v-if="!raid.soloQueueEnabled && raid.participants.length < 2" class="cr-solo-disabled-note">
                 Solo queueing is disabled — at least one more player must join before you can start.
               </p>
+              <!-- Grayed out until the lobby's sat open 90s with still fewer than 3 raiders — see
+                   cancelRaidEnabled's own comment. A stalled lobby the leader can walk away from
+                   without waiting out the full join window. -->
+              <button
+                type="button" class="cr-link-btn text-red-600" :disabled="!cancelRaidEnabled"
+                :title="cancelRaidEnabled ? '' : 'Available once the lobby has been open 90s with fewer than 3 raiders'"
+                @click="cancelRaidAndGoHome"
+              >Cancel raid</button>
             </div>
 
             <!-- Any non-leader participant can vote to cut the countdown to 5s, once every OTHER
@@ -150,10 +165,11 @@
                     <span
                       v-if="p.specialAttack && !p.knockedOut" class="text-[10px] flex-shrink-0" :title="p.specialAttack.name"
                       :class="p.specialCharged ? 'cr-charge-ready' : 'text-gray-400'"
-                    >★{{ p.specialCharged ? '' : Math.min(p.hitStreak, hitStreakThreshold) + '/' + hitStreakThreshold }}</span>
+                    >★{{ p.specialCharged ? '' : Math.min(p.hitStreak, p.hitStreakThreshold || 3) + '/' + (p.hitStreakThreshold || 3) }}</span>
                     <span v-if="p.knockedOut" class="cr-fighter-status text-red-500">KO</span>
                     <span v-else-if="p.hasActed" class="cr-fighter-status text-green-600">Ready</span>
                     <span v-else class="cr-fighter-status text-gray-400">Deciding…</span>
+                    <span v-if="p.poisonTurnsRemaining > 0" class="cr-fighter-status cr-status-bad" :title="`${p.poisonAmount} damage/round for ${p.poisonTurnsRemaining} more round(s)`">☠️ {{ p.poisonTurnsRemaining }}</span>
                   </div>
                   <!-- Line 2: HP, full width so it never wraps unpredictably on a phone. -->
                   <div class="cr-hp-line">
@@ -169,12 +185,15 @@
                 </li>
               </ul>
 
-              <!-- ── Shared status: paralysis either direction, boss charge tension ──── -->
+              <!-- ── Shared status: paralysis either direction, poison, boss charge tension ──── -->
               <p v-if="raid.enemyParalyzedTurns > 0" class="cr-status-badge cr-status-good">
                 ⚡ {{ raid.enemyName }} is paralyzed — {{ raid.enemyParalyzedTurns }} more round{{ raid.enemyParalyzedTurns === 1 ? '' : 's' }}
               </p>
               <p v-if="raid.partyParalyzedTurns > 0" class="cr-status-badge cr-status-bad">
                 ⚡ The party is paralyzed — can't act for {{ raid.partyParalyzedTurns }} more round{{ raid.partyParalyzedTurns === 1 ? '' : 's' }}
+              </p>
+              <p v-if="raid.enemyPoisonTurnsRemaining > 0" class="cr-status-badge cr-status-good">
+                ☠️ {{ raid.enemyName }} is poisoned — {{ raid.enemyPoisonAmount }} damage/round for {{ raid.enemyPoisonTurnsRemaining }} more round{{ raid.enemyPoisonTurnsRemaining === 1 ? '' : 's' }}
               </p>
               <!-- Only one attack-raise can be active for the party at a time (see
                    applyRaidSpecialAttack's own non-stacking comment) — shown so a second
@@ -196,22 +215,35 @@
                     </p>
                     <ul class="cr-reveal-list">
                       <li v-for="r in lastRoundSummary.participants" :key="r.userId" class="cr-reveal-row" :class="revealRowClass(r)">
-                        <span class="cr-reveal-name">{{ usernameFor(r.userId) }}</span>
+                        <span class="cr-reveal-name">{{ usernameFor(r.userId, r.username) }}</span>
                         <span class="cr-reveal-action">{{ ACTION_LABELS[r.action] }}</span>
                         <span class="cr-reveal-outcome">
-                          <template v-if="r.playerHit && r.enemyHit">traded hits!<span v-if="r.playerCrit || r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
+                          <!-- `r.playerHit` alone isn't "the player actually took damage" — a
+                               SHIELD_PARTY cast (or an enemyAtkBonus debuff) can zero
+                               r.playerDamage while still rolling the hit true (see
+                               resolveRaidRound's own partyShielded comment), so these checks
+                               also require playerDamage > 0 before saying "took a hit". -->
+                          <template v-if="r.playerHit && r.playerDamage > 0 && r.enemyHit">traded hits!<span v-if="r.playerCrit || r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
                           <template v-else-if="r.enemyHit">landed a hit!<span v-if="r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
-                          <template v-else-if="r.playerHit">took a hit<span v-if="r.playerCrit" class="cr-crit-badge">CRIT!</span></template>
+                          <template v-else-if="r.playerHit && r.playerDamage > 0">took a hit<span v-if="r.playerCrit" class="cr-crit-badge">CRIT!</span></template>
+                          <template v-else-if="r.playerHit">hit absorbed — no damage taken!</template>
                           <template v-else-if="r.playerBlocked">blocked it — healed 1 HP</template>
                           <template v-else-if="r.enemyBlocked">boss blocked it</template>
+                          <!-- enemyMissed (see CMoonEnemyMember.attackAccuracyPercent's own schema
+                               comment) — the boss's attack would have landed on THIS participant
+                               but whiffed outright, rolled independently per participant, so one
+                               party member can see this while another sees "landed a hit!" the
+                               same round. -->
+                          <template v-else-if="r.enemyMissed">dodged it!<span class="cr-miss-badge">MISS!</span></template>
                           <template v-else>no hit landed</template>
                         </span>
                       </li>
                     </ul>
                     <p v-if="lastRoundSummary.enemyDamageDealt > 0" class="cr-reveal-dealt">The party dealt {{ lastRoundSummary.enemyDamageDealt }} damage this round.</p>
                     <p v-for="(s, i) in (lastRoundSummary.specials || [])" :key="i" class="cr-special-flash" :class="s.side === 'PLAYER' ? 'cr-special-flash-player' : 'cr-special-flash-enemy'">
-                      <template v-if="s.fizzled">✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} tried to unleash <strong>{{ s.name }}</strong>, but it was blocked and had no effect!</template>
-                      <template v-else>✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} unleashed <strong>{{ s.name }}</strong>!</template>
+                      <template v-if="s.missed">{{ s.side === 'PLAYER' ? usernameFor(s.userId, s.username) : raid.enemyName }} tried to unleash <strong>{{ s.name }}</strong><span class="cr-miss-badge">MISS!</span></template>
+                      <template v-else-if="s.fizzled">✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId, s.username) : raid.enemyName }} tried to unleash <strong>{{ s.name }}</strong>, but it was blocked and had no effect!</template>
+                      <template v-else>✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId, s.username) : raid.enemyName }} unleashed <strong>{{ s.name }}</strong>!</template>
                     </p>
                     <p v-if="lastRoundSummary.windUpBonus" class="cr-windup-bonus">
                       🛡️ Perfect block! {{ lastRoundSummary.windUpBonus.bonusType === 'HEAL_PARTY'
@@ -261,7 +293,8 @@
                   <p class="cr-special-tooltip-title">{{ myself.specialAttack.name }}</p>
                   <p v-if="myself.specialAttack.description">{{ myself.specialAttack.description }}</p>
                   <p>{{ specialEffectDescription(myself.specialAttack) }}</p>
-                  <p class="cr-special-tooltip-charge">Land 3 hits in a row to charge it up — it stays ready until you use it.</p>
+                  <p v-if="myself.specialAttack.accuracyPercent < 100" class="cr-special-tooltip-charge">{{ myself.specialAttack.accuracyPercent }}% chance to actually land once fired.</p>
+                  <p class="cr-special-tooltip-charge">Land {{ hitStreakThreshold }} hit{{ hitStreakThreshold === 1 ? '' : 's' }} in a row to charge it up — it stays ready until you use it.</p>
                 </div>
               </div>
             </template>
@@ -314,6 +347,14 @@ const raidId = computed(() => route.params.id)
 const { user } = useAuth()
 const raidSocket = useCMoonRaidSocket()
 const raid = computed(() => raidSocket.raidState.value?.id === raidId.value ? raidSocket.raidState.value : null)
+
+// Leaving clears raidState (see composable's own cmoonraid:leftRaid handler) and navigates away —
+// there's nothing left on this page worth showing once I've asked to leave my own still-FORMING
+// raid, whether it got destroyed (I was the only one in it) or just continues without me.
+function leaveRaidAndGoHome() {
+  raidSocket.leaveRaid(raidId.value)
+  navigateTo('/newsite/home')
+}
 
 const hasJoined = computed(() => !!raid.value?.participants.some(p => p.userId === user.value?.id))
 const myself = computed(() => raid.value?.participants.find(p => p.userId === user.value?.id) || null)
@@ -385,14 +426,22 @@ const nearMissFlavor = computed(() => {
   return ''
 })
 
-function usernameFor(userId) {
+// `embedded` is the username the server now sends directly on the round/special-event row itself
+// (see closeRound/applyRaidSpecialAttack in cmoonRaidSocket.js/cmoonEnemyRaid.js) — always
+// preferred when present, since it's authoritative for that exact event. The live lookup against
+// raid.value.participants is kept only as a fallback for any caller that doesn't have one handy.
+function usernameFor(userId, embedded) {
+  if (embedded) return embedded
   return raid.value?.participants.find(p => p.userId === userId)?.username || 'Someone'
 }
 
 function revealRowClass(r) {
-  if (r.enemyHit && !r.playerHit) return 'cr-row-good'
-  if (r.playerHit && !r.enemyHit) return 'cr-row-bad'
-  if (r.playerBlocked) return 'cr-row-good'
+  // See the round-reveal template's own comment: r.playerHit alone doesn't mean real damage got
+  // through (a shield/debuff can zero r.playerDamage while still rolling the hit true).
+  const tookDamage = r.playerHit && r.playerDamage > 0
+  if (r.enemyHit && !tookDamage) return 'cr-row-good'
+  if (tookDamage && !r.enemyHit) return 'cr-row-bad'
+  if (r.playerBlocked || r.enemyMissed || (r.playerHit && !tookDamage)) return 'cr-row-good'
   return 'cr-row-neutral'
 }
 
@@ -417,14 +466,20 @@ function specialEffectDescription(attack) {
     case 'SIPHON_HEALTH': return attack?.healsAllies
       ? `Deals ${n} damage and heals you and every raid ally for ${attack?.siphonPercent}% of it — unless the boss blocks, in which case it does nothing.`
       : `Deals ${n} damage and heals you for ${attack?.siphonPercent}% of it — unless the boss blocks, in which case it does nothing.`
+    case 'POISON_OPPONENT': return `Poisons the boss for ${n} damage at the end of each round, for ${attack?.poisonDurationRounds} round${attack?.poisonDurationRounds === 1 ? '' : 's'}. Re-casting refreshes it rather than stacking.`
+    case 'CLEANSE_SELF': return attack?.healsAllies
+      ? `Cures you and every raid ally of paralysis and poison${attack?.cleanseAlsoHeals ? `, healing ${n} HP too` : ''}.`
+      : `Cures you of paralysis and poison${attack?.cleanseAlsoHeals ? `, healing ${n} HP too` : ''}. Everyone else's party-wide paralysis is cured too — only poison is self-only here.`
+    case 'SHIELD_PARTY': return `Negates ALL damage the party would take this round, from the boss's normal attack and any special it casts.`
     default: return ''
   }
 }
 const showSpecialInfo = ref(false)
-// How many consecutive landed hits a special actually needs right now — 3 normally, or 2 whenever
-// a captain's boosting the party (see raid.hitStreakThreshold's own comment in cmoonRaidSocket.js).
-// Read everywhere this page used to hardcode "3", so the UI always matches the server's own math.
-const hitStreakThreshold = computed(() => raid.value?.hitStreakThreshold || 3)
+// How many consecutive landed hits MY OWN special needs right now — this attack's own
+// requiredHitStreak, minus 1 under captain boost (see myself.hitStreakThreshold's own comment in
+// cmoonRaidSocket.js) — now per-participant, since different party members' attacks can cost
+// different amounts. Falls back to the raid-level default for a moment before `myself` exists.
+const hitStreakThreshold = computed(() => myself.value?.hitStreakThreshold ?? raid.value?.hitStreakThreshold ?? 3)
 // 0..hitStreakThreshold hits -> 0-100% fill, read by .cr-special-btn below via this CSS variable —
 // stays at 100% once charged even if hitStreak itself later resets (charge latches, same as solo's).
 const specialFillStyle = computed(() => {
@@ -436,7 +491,7 @@ const specialFillStyle = computed(() => {
 // IN_PROGRESS (the Transition below fires on this going false), not on a fixed timer. The
 // underlying gameplay effect (the lowered threshold itself) persists for the whole raid — only
 // this overlay is lobby-scoped.
-const showCaptainBoostOverlay = computed(() => raid.value?.status === 'FORMING' && hitStreakThreshold.value < 3)
+const showCaptainBoostOverlay = computed(() => raid.value?.status === 'FORMING' && !!raid.value?.captainBoostActive)
 
 // FORMING's join-window countdown — a plain client-side ticker against joinDeadlineAt, not a
 // second source of truth: the server's sweep (see cmoonRaidSocket.js) is what actually closes
@@ -446,6 +501,26 @@ let countdownTimer = null
 function tickCountdown() {
   if (!raid.value?.joinDeadlineAt) { joinCountdown.value = 0; return }
   joinCountdown.value = Math.max(0, Math.ceil((raid.value.joinDeadlineAt - Date.now()) / 1000))
+}
+
+// How long this lobby has been open — ticked alongside joinCountdown above (same 250ms interval,
+// no second timer needed) purely to gate when the Cancel Raid button below lights up.
+const secondsSinceStart = ref(0)
+function tickSecondsSinceStart() {
+  if (!raid.value?.startedAt) { secondsSinceStart.value = 0; return }
+  secondsSinceStart.value = Math.max(0, Math.floor((Date.now() - raid.value.startedAt) / 1000))
+}
+// Grayed out until the lobby has sat open for 90s AND still has fewer than 3 raiders — a stalled
+// lobby the leader may want to bail on, not a button meant to cut short a healthy one that's
+// about to fill. Purely a client-side UX gate: the server's own cancelRaid handler (see
+// cmoonRaidSocket.js) gives the leader unconditional power to cancel any FORMING raid, same as
+// forceStart's own "no server-side time/headcount check" stance — this just decides when the
+// button LOOKS clickable.
+const cancelRaidEnabled = computed(() =>
+  isInitiator.value && secondsSinceStart.value >= 90 && (raid.value?.participants.length || 0) < 3)
+function cancelRaidAndGoHome() {
+  raidSocket.cancelRaid(raidId.value)
+  navigateTo('/newsite/home')
 }
 
 // IN_PROGRESS's per-round move countdown — same plain client-side ticker shape as joinCountdown
@@ -580,7 +655,7 @@ watch(() => raidSocket.lastRound.value, (round) => {
   // same round (possible with up to 8 in a party) are combined into one line rather than queued.
   const playerSpecials = (round.specials || []).filter(s => s.side === 'PLAYER')
   if (playerSpecials.length) {
-    specialUseCallout.value = playerSpecials.map(s => `${usernameFor(s.userId)} used ${s.name}!`).join('  ')
+    specialUseCallout.value = playerSpecials.map(s => `${usernameFor(s.userId, s.username)} used ${s.name}!`).join('  ')
     if (specialUseTimer) clearTimeout(specialUseTimer)
     specialUseTimer = setTimeout(() => { specialUseCallout.value = '' }, 1600)
   }
@@ -627,27 +702,26 @@ watch(myHitStreak, (streak, prevStreak) => {
 })
 
 // ── Battle music — loops for as long as combat is actually running, same FIGHT-phase-only
-// scoping the solo popup uses (never during FORMING/RESOLVED).
-let battleMusicEl = null
-function stopBattleMusic() {
-  if (!battleMusicEl) return
-  try { battleMusicEl.pause() } catch {}
-  battleMusicEl = null
-}
-function startBattleMusic(path) {
-  stopBattleMusic()
-  if (!path || typeof window === 'undefined') return
-  try {
-    battleMusicEl = new Audio(path)
-    battleMusicEl.loop = true
-    battleMusicEl.volume = 0.5
-    battleMusicEl.play().catch(() => {})
-  } catch {}
-}
+// scoping the solo popup uses (never during FORMING/RESOLVED). See useBattleMusic's own header
+// comment for why the start/stop/autoplay-retry logic itself lives in a shared composable rather
+// than duplicated here and in the solo popup.
+//
+// `raid` (above) reads off raidSocket.raidState, a MODULE-LEVEL singleton that outlives this
+// component — it is never reset just because this page unmounts. onUnmounted below always calls
+// battleMusic.stop(), so if a player navigates away mid-fight (another page, browser
+// back/forward, re-clicking the raid's own link) and comes back while the raid is STILL
+// IN_PROGRESS, a plain non-immediate watch here would never fire again: the watched status didn't
+// change, it was already 'IN_PROGRESS' before this fresh mount's watcher even started observing
+// it. That left the track silently dead for the rest of that fight even though combat was still
+// live — this was reported as "the music sometimes doesn't play." `{ immediate: true }` below
+// fixes it: on every (re)mount it reads the CURRENT status (computed `raid` already resolves to
+// null for a different/not-yet-loaded raid, so this is never a stale cross-raid false positive)
+// instead of only reacting to a future transition.
+const battleMusic = useBattleMusic()
 watch(() => raid.value?.status, (status) => {
-  if (status === 'IN_PROGRESS') startBattleMusic(raid.value?.battleMusicPath)
-  else stopBattleMusic()
-})
+  if (status === 'IN_PROGRESS') battleMusic.start(raid.value?.battleMusicPath)
+  else battleMusic.stop()
+}, { immediate: true })
 
 // ── Captain entrance banner — a one-time, purely cosmetic "epic" moment naming every cMoon
 // captain in the party (see CMoonCaptain's own schema comment), meant to pump up everyone else in
@@ -695,7 +769,7 @@ watch(() => raid.value?.outcome, (outcome) => {
 
 onMounted(() => {
   raidSocket.getState(raidId.value)
-  countdownTimer = setInterval(tickCountdown, 250)
+  countdownTimer = setInterval(() => { tickCountdown(); tickSecondsSinceStart() }, 250)
   roundCountdownTimer = setInterval(tickRoundCountdown, 250)
 })
 onUnmounted(() => {
@@ -706,7 +780,7 @@ onUnmounted(() => {
   if (shakeTimer) clearTimeout(shakeTimer)
   if (captainEntranceTimer) clearTimeout(captainEntranceTimer)
   if (resultFlashTimer) clearTimeout(resultFlashTimer)
-  stopBattleMusic()
+  battleMusic.stop()
 })
 </script>
 
@@ -987,6 +1061,22 @@ onUnmounted(() => {
   0% { transform: scale(0.4); opacity: 0; }
   60% { transform: scale(1.15); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
+}
+/* Same pop-in treatment as the crit badge above, in a cool blue so a miss (either an enemy's
+   normal attack whiffing — see CMoonEnemyMember.attackAccuracyPercent — or a special attack
+   missing, see CMoonSpecialAttack.accuracyPercent) reads as "nothing happened" rather than
+   competing visually with a crit's "big hit" gold. */
+.cr-miss-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #38bdf8;
+  color: #082f49;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  animation: cr-crit-pop 0.35s ease-out;
 }
 
 .cr-reveal-enter-active, .cr-reveal-leave-active { transition: opacity 0.2s ease; }

@@ -2,6 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   parseMemberBody, parseRewardBody, isValidCritChance, isValidPointsAmount, isValidRank, isValidMinPriorDefeats,
+  isValidAttackAccuracyPercent, ATTACK_ACCURACY_PERCENT_MIN, ATTACK_ACCURACY_PERCENT_MAX, ATTACK_ACCURACY_PERCENT_DEFAULT,
+  isValidBaseDamage, BASE_DAMAGE_MIN, BASE_DAMAGE_MAX, BASE_DAMAGE_DEFAULT,
   CRIT_CHANCE_MIN, CRIT_CHANCE_MAX, POINTS_REWARD_MIN, POINTS_REWARD_MAX, ENEMY_RANKS, RANK_DEFAULT,
   MIN_PRIOR_DEFEATS_MIN, MIN_PRIOR_DEFEATS_MAX, MIN_PRIOR_DEFEATS_DEFAULT,
   isValidOccurrencePercent, OCCURRENCE_PERCENT_MIN, OCCURRENCE_PERCENT_MAX, OCCURRENCE_PERCENT_DEFAULT,
@@ -15,6 +17,12 @@ import {
   SPECIAL_ATTACK_REFLECT_PERCENT_MAX, SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT,
   isValidSpecialAttackSiphonPercent, SPECIAL_ATTACK_SIPHON_PERCENT_MIN,
   SPECIAL_ATTACK_SIPHON_PERCENT_MAX, SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
+  isValidSpecialAttackPoisonDurationRounds, SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MIN,
+  SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MAX, SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT,
+  isValidSpecialAttackRequiredHitStreak, SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MIN,
+  SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MAX, SPECIAL_ATTACK_REQUIRED_HIT_STREAK_DEFAULT,
+  isValidSpecialAttackAccuracyPercent, SPECIAL_ATTACK_ACCURACY_PERCENT_MIN,
+  SPECIAL_ATTACK_ACCURACY_PERCENT_MAX, SPECIAL_ATTACK_ACCURACY_PERCENT_DEFAULT,
   parseTauntBody, isValidTauntText, isValidTauntTrigger, TAUNT_TRIGGERS, TAUNT_TEXT_MAX_LENGTH,
   ATTACK_CHANCE_DEFAULT, PITY_THRESHOLD_DEFAULT, FIRST_WIN_BONUS_POINTS_DEFAULT,
   MAX_PARTICIPANTS_DEFAULT, MAX_PARTICIPANTS_MIN, MAX_PARTICIPANTS_MAX,
@@ -55,28 +63,28 @@ test('parseMemberBody: rejects an invalid rank', () => {
 })
 
 test('parseMemberBody: an update with no rank field in the body keeps the existing rank', () => {
-  const existing = { ...baseMemberBody, rank: 'FINAL_BOSS', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0 }
+  const existing = { ...baseMemberBody, rank: 'FINAL_BOSS', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1 }
   const result = parseMemberBody({ name: 'Renamed' }, existing)
   assert.equal(result.ok, true)
   assert.equal(result.data.rank, 'FINAL_BOSS')
 })
 
 test('parseMemberBody: rejects a rank change once the member has battle history', () => {
-  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, hasBattles: true }
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, hasBattles: true }
   const result = parseMemberBody({ rank: 'FINAL_BOSS' }, existing)
   assert.equal(result.ok, false)
   assert.match(result.message, /rank cannot change/i)
 })
 
 test('parseMemberBody: allows a rank change on a member with no battle history yet', () => {
-  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, hasBattles: false }
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, hasBattles: false }
   const result = parseMemberBody({ rank: 'FINAL_BOSS' }, existing)
   assert.equal(result.ok, true)
   assert.equal(result.data.rank, 'FINAL_BOSS')
 })
 
 test('parseMemberBody: re-saving the SAME rank is allowed even with battle history', () => {
-  const existing = { ...baseMemberBody, rank: 'UNDERBOSS', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, hasBattles: true }
+  const existing = { ...baseMemberBody, rank: 'UNDERBOSS', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, hasBattles: true }
   const result = parseMemberBody({ rank: 'UNDERBOSS', name: 'Renamed' }, existing)
   assert.equal(result.ok, true)
   assert.equal(result.data.rank, 'UNDERBOSS')
@@ -110,7 +118,7 @@ test('parseMemberBody: rejects an out-of-range minPriorDefeats', () => {
 })
 
 test('parseMemberBody: minPriorDefeats can change freely even with battle history (no lock, unlike rank/battleMode)', () => {
-  const existing = { ...baseMemberBody, rank: 'GOON', minPriorDefeats: 3, active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, hasBattles: true }
+  const existing = { ...baseMemberBody, rank: 'GOON', minPriorDefeats: 3, active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, hasBattles: true }
   const result = parseMemberBody({ minPriorDefeats: 50 }, existing)
   assert.equal(result.ok, true)
   assert.equal(result.data.minPriorDefeats, 50)
@@ -147,11 +155,81 @@ test('parseMemberBody: rejects an out-of-range crit chance', () => {
 })
 
 test('parseMemberBody: an update with no crit chance fields in the body keeps the existing values', () => {
-  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 40, critChanceFromPercent: 15, hasBattles: false }
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 40, critChanceFromPercent: 15, attackAccuracyPercent: 100, baseDamage: 1, hasBattles: false }
   const result = parseMemberBody({}, existing)
   assert.equal(result.ok, true)
   assert.equal(result.data.critChanceAgainstPercent, 40)
   assert.equal(result.data.critChanceFromPercent, 15)
+})
+
+// ── attackAccuracyPercent (see CMoonEnemyMember.attackAccuracyPercent's own schema comment) ────
+test('isValidAttackAccuracyPercent accepts the full 0-100 range and rejects outside it', () => {
+  assert.equal(isValidAttackAccuracyPercent(ATTACK_ACCURACY_PERCENT_MIN), true)
+  assert.equal(isValidAttackAccuracyPercent(ATTACK_ACCURACY_PERCENT_MAX), true)
+  assert.equal(isValidAttackAccuracyPercent(50), true)
+  assert.equal(isValidAttackAccuracyPercent(-1), false)
+  assert.equal(isValidAttackAccuracyPercent(101), false)
+  assert.equal(isValidAttackAccuracyPercent(50.5), false)
+  assert.equal(isValidAttackAccuracyPercent(NaN), false)
+})
+
+test('parseMemberBody: attackAccuracyPercent defaults to 100 on create when omitted', () => {
+  const result = parseMemberBody(baseMemberBody, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.attackAccuracyPercent, ATTACK_ACCURACY_PERCENT_DEFAULT)
+})
+
+test('parseMemberBody: accepts an explicit attackAccuracyPercent within range', () => {
+  const result = parseMemberBody({ ...baseMemberBody, attackAccuracyPercent: 65 }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.attackAccuracyPercent, 65)
+})
+
+test('parseMemberBody: rejects an out-of-range attackAccuracyPercent', () => {
+  assert.equal(parseMemberBody({ ...baseMemberBody, attackAccuracyPercent: 101 }, undefined).ok, false)
+  assert.equal(parseMemberBody({ ...baseMemberBody, attackAccuracyPercent: -1 }, undefined).ok, false)
+})
+
+test('parseMemberBody: an update with no attackAccuracyPercent field in the body keeps the existing value', () => {
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 72, baseDamage: 1, hasBattles: false }
+  const result = parseMemberBody({}, existing)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.attackAccuracyPercent, 72)
+})
+
+// ── baseDamage (see CMoonEnemyMember.baseDamage's own schema comment) ──────────────────────────
+test('isValidBaseDamage accepts the full 1-100 range and rejects outside it', () => {
+  assert.equal(isValidBaseDamage(BASE_DAMAGE_MIN), true)
+  assert.equal(isValidBaseDamage(BASE_DAMAGE_MAX), true)
+  assert.equal(isValidBaseDamage(50), true)
+  assert.equal(isValidBaseDamage(0), false)
+  assert.equal(isValidBaseDamage(101), false)
+  assert.equal(isValidBaseDamage(50.5), false)
+  assert.equal(isValidBaseDamage(NaN), false)
+})
+
+test('parseMemberBody: baseDamage defaults to 1 on create when omitted', () => {
+  const result = parseMemberBody(baseMemberBody, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.baseDamage, BASE_DAMAGE_DEFAULT)
+})
+
+test('parseMemberBody: accepts an explicit baseDamage within range', () => {
+  const result = parseMemberBody({ ...baseMemberBody, baseDamage: 25 }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.baseDamage, 25)
+})
+
+test('parseMemberBody: rejects an out-of-range baseDamage', () => {
+  assert.equal(parseMemberBody({ ...baseMemberBody, baseDamage: 101 }, undefined).ok, false)
+  assert.equal(parseMemberBody({ ...baseMemberBody, baseDamage: 0 }, undefined).ok, false)
+})
+
+test('parseMemberBody: an update with no baseDamage field in the body keeps the existing value', () => {
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 40, hasBattles: false }
+  const result = parseMemberBody({}, existing)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.baseDamage, 40)
 })
 
 test('parseMemberBody: raidOneTime and raidCooldownMinutes default to false/0 on create when omitted', () => {
@@ -185,7 +263,7 @@ test('parseMemberBody: rejects a non-boolean raidOneTime', () => {
 test('parseMemberBody: an update with no raid fields in the body keeps the existing raidOneTime/raidCooldownMinutes', () => {
   const existing = {
     ...baseMemberBody, rank: 'FINAL_BOSS', isRaidBoss: true, active: true, sortOrder: 0,
-    critChanceAgainstPercent: 0, critChanceFromPercent: 0, hasBattles: false,
+    critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, hasBattles: false,
     raidOneTime: true, raidCooldownMinutes: 720,
   }
   const result = parseMemberBody({}, existing)
@@ -265,7 +343,7 @@ test('parseMemberBody: rejects an out-of-range occurrencePercent', () => {
 test('parseMemberBody: an update with no occurrencePercent field in the body keeps the existing value', () => {
   const existing = {
     ...baseMemberBody, id: 'm1', rank: 'GOON', active: true, sortOrder: 0,
-    critChanceAgainstPercent: 0, critChanceFromPercent: 0, occurrencePercent: 15, hasBattles: false,
+    critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, occurrencePercent: 15, hasBattles: false,
   }
   const result = parseMemberBody({}, existing)
   assert.equal(result.ok, true)
@@ -449,6 +527,8 @@ test('parseSpecialAttackBody: a valid create body parses with trimmed name and t
     name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10,
     healsAllies: false, playerChoice: false, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
     reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
+    poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT, cleanseAlsoHeals: false,
+    requiredHitStreak: SPECIAL_ATTACK_REQUIRED_HIT_STREAK_DEFAULT, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_DEFAULT,
   })
 })
 
@@ -474,6 +554,8 @@ test('parseSpecialAttackBody: on update, an omitted field falls back to the exis
     name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7,
     healsAllies: true, playerChoice: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
     reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
+    poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT, cleanseAlsoHeals: false,
+    requiredHitStreak: 5, accuracyPercent: 80,
   }
   const result = parseSpecialAttackBody({ amount: 20 }, existing)
   assert.equal(result.ok, true)
@@ -481,6 +563,8 @@ test('parseSpecialAttackBody: on update, an omitted field falls back to the exis
     name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 20,
     healsAllies: true, playerChoice: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
     reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
+    poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT, cleanseAlsoHeals: false,
+    requiredHitStreak: 5, accuracyPercent: 80,
   })
 })
 
@@ -587,6 +671,81 @@ test('parseSpecialAttackBody: siphonPercent is only ever stored when effectType 
   const siphonResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', siphonPercent: 75 })
   assert.equal(siphonResult.ok, true)
   assert.equal(siphonResult.data.siphonPercent, 75)
+})
+
+// ── poisonDurationRounds (POISON_OPPONENT's own tick count) ────────────────────────────────────
+test('parseSpecialAttackBody: poisonDurationRounds defaults to the DEFAULT constant on create when omitted', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'POISON_OPPONENT' })
+  assert.equal(result.ok, true)
+  assert.equal(result.data.poisonDurationRounds, SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT)
+})
+
+test('parseSpecialAttackBody: accepts the full poisonDurationRounds range (1-20) and rejects outside it, only for POISON_OPPONENT', () => {
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'POISON_OPPONENT', poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MIN }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'POISON_OPPONENT', poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MAX }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'POISON_OPPONENT', poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MIN - 1 }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'POISON_OPPONENT', poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MAX + 1 }).ok, false)
+  // Out of range but ignored for an unrelated effectType -- never rejected.
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', poisonDurationRounds: 9999 }).ok, true)
+})
+
+test('parseSpecialAttackBody: poisonDurationRounds is only ever stored when effectType is POISON_OPPONENT', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', poisonDurationRounds: 15 })
+  assert.equal(result.data.poisonDurationRounds, SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT)
+
+  const poisonResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'POISON_OPPONENT', poisonDurationRounds: 15 })
+  assert.equal(poisonResult.data.poisonDurationRounds, 15)
+})
+
+// ── cleanseAlsoHeals (CLEANSE_SELF's optional HP top-up) ────────────────────────────────────────
+test('parseSpecialAttackBody: cleanseAlsoHeals is only ever stored true when effectType is CLEANSE_SELF', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', cleanseAlsoHeals: true })
+  assert.equal(result.data.cleanseAlsoHeals, false)
+
+  const cleanseResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'CLEANSE_SELF', cleanseAlsoHeals: true })
+  assert.equal(cleanseResult.data.cleanseAlsoHeals, true)
+})
+
+// ── healsAllies now also applies to CLEANSE_SELF (self-vs-party poison cure) ────────────────────
+test('parseSpecialAttackBody: healsAllies is also storable for CLEANSE_SELF', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'CLEANSE_SELF', healsAllies: true })
+  assert.equal(result.ok, true)
+  assert.equal(result.data.healsAllies, true)
+})
+
+// ── requiredHitStreak/accuracyPercent (apply to EVERY effectType, unlike every field above) ────
+test('parseSpecialAttackBody: requiredHitStreak defaults to the DEFAULT constant and validates its full range for ANY effectType', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody })
+  assert.equal(result.data.requiredHitStreak, SPECIAL_ATTACK_REQUIRED_HIT_STREAK_DEFAULT)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, requiredHitStreak: SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MIN }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, requiredHitStreak: SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MAX }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, requiredHitStreak: SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MIN - 1 }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, requiredHitStreak: SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MAX + 1 }).ok, false)
+})
+
+test('parseSpecialAttackBody: accuracyPercent defaults to the DEFAULT constant and validates its full range for ANY effectType', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody })
+  assert.equal(result.data.accuracyPercent, SPECIAL_ATTACK_ACCURACY_PERCENT_DEFAULT)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_MIN }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_MAX }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_MIN - 1 }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_MAX + 1 }).ok, false)
+})
+
+test('isValidSpecialAttackPoisonDurationRounds/isValidSpecialAttackRequiredHitStreak/isValidSpecialAttackAccuracyPercent reject non-integers and out-of-range values', () => {
+  assert.equal(isValidSpecialAttackPoisonDurationRounds(3), true)
+  assert.equal(isValidSpecialAttackPoisonDurationRounds(0), false)
+  assert.equal(isValidSpecialAttackPoisonDurationRounds(21), false)
+  assert.equal(isValidSpecialAttackPoisonDurationRounds(2.5), false)
+
+  assert.equal(isValidSpecialAttackRequiredHitStreak(3), true)
+  assert.equal(isValidSpecialAttackRequiredHitStreak(0), false)
+  assert.equal(isValidSpecialAttackRequiredHitStreak(11), false)
+
+  assert.equal(isValidSpecialAttackAccuracyPercent(0), true) // 0 is a valid (if useless) accuracy
+  assert.equal(isValidSpecialAttackAccuracyPercent(100), true)
+  assert.equal(isValidSpecialAttackAccuracyPercent(-1), false)
+  assert.equal(isValidSpecialAttackAccuracyPercent(101), false)
 })
 
 test('isValidSpecialAttackReflectPercent/isValidSpecialAttackSiphonPercent reject non-integers and out-of-range values', () => {
@@ -715,7 +874,7 @@ test('parseMemberBody: accepts the full maxParticipants range and rejects outsid
 
 test('parseMemberBody: an update with no maxParticipants/windUpEnabled fields keeps the existing values', () => {
   const existing = {
-    ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0,
+    ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1,
     maxParticipants: 8, windUpEnabled: true,
   }
   const result = parseMemberBody({ name: 'Renamed' }, existing)
@@ -724,7 +883,7 @@ test('parseMemberBody: an update with no maxParticipants/windUpEnabled fields ke
   assert.equal(result.data.windUpEnabled, true)
 })
 
-// ── raidRoundLimit (raid round-count safety valve, default 300, up to 400) ──────────────
+// ── raidRoundLimit (raid round-count safety valve, default 300, up to 500) ──────────────
 
 test('parseMemberBody: raidRoundLimit defaults to RAID_ROUND_LIMIT_DEFAULT on create when omitted', () => {
   const result = parseMemberBody(baseMemberBody, undefined)
@@ -742,7 +901,7 @@ test('parseMemberBody: accepts the full raidRoundLimit range and rejects outside
 
 test('parseMemberBody: an update with no raidRoundLimit field in the body keeps the existing value', () => {
   const existing = {
-    ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0,
+    ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1,
     raidRoundLimit: 400,
   }
   const result = parseMemberBody({ name: 'Renamed' }, existing)

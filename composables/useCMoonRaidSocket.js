@@ -46,6 +46,31 @@ export function useCMoonRaidSocket() {
     socket.on('cmoonraid:participantActed', applyState)
     socket.on('cmoonraid:roundResolved', (state) => { lastRound.value = state.round || null; applyState(state) })
     socket.on('cmoonraid:ended', applyState)
+    // Sent directly to THIS socket only (never broadcast — see cmoonraid:leave's own comment in
+    // cmoonRaidSocket.js), since by the time it fires this socket already left the room and would
+    // never receive the room-wide participantLeft broadcast meant for everyone else. Clears local
+    // state so the raid page can tell "I left" apart from "still loading" and navigate away.
+    socket.on('cmoonraid:leftRaid', (payload) => {
+      if (!payload?.raidId || payload.raidId === currentRaidId.value) {
+        raidState.value = null
+        currentRaidId.value = null
+      }
+    })
+    // Broadcast to the WHOLE room (unlike cmoonraid:leftRaid above, which is targeted — a cancel
+    // kicks out every current participant, not just the caller) — see cmoonraid:cancelRaid's own
+    // comment in cmoonRaidSocket.js. Clears local state the same way leftRaid does, and surfaces
+    // the message through lastError so the page's existing "no raid loaded" branch shows it.
+    socket.on('cmoonraid:cancelled', (payload) => {
+      // Guarded the same way cmoonraid:leftRaid is just above (there by raidId, here by id —
+      // this event's payload is a plain publicRaidView spread, which names it `id`) rather than
+      // trusting that this socket can never still be a stale member of an old raid's room while
+      // genuinely in a different, newer one — defensive, not relied on by any known live path.
+      if (!payload?.id || payload.id === currentRaidId.value) {
+        lastError.value = payload?.message || 'This raid was cancelled.'
+        raidState.value = null
+        currentRaidId.value = null
+      }
+    })
     socket.on('cmoonraid:error', (payload) => { lastError.value = payload?.message || 'Something went wrong' })
     socket.on('cmoonraid:lobby', (payload) => {
       lobbyRaids.value = Array.isArray(payload?.raids) ? payload.raids : []
@@ -91,6 +116,12 @@ export function useCMoonRaidSocket() {
     lastError.value = ''
     socket.emit('cmoonraid:voteSpeedUp', { raidId })
   }
+  // Initiator-only: cancel the whole FORMING lobby, kicking out every other participant too —
+  // see cmoonraid:cancelRaid's own comment in cmoonRaidSocket.js.
+  function cancelRaid(raidId) {
+    lastError.value = ''
+    socket.emit('cmoonraid:cancelRaid', { raidId })
+  }
 
   // Ref-counted so two open lobby views don't unsubscribe each other.
   function subscribeLobby() {
@@ -109,6 +140,6 @@ export function useCMoonRaidSocket() {
     socket, raidState, lastRound, lastError, isConnected, currentRaidId,
     lobbyRaids, lobbyLoaded, lobbyViewer, lobbyClockOffsetMs,
     startRaid, joinRaid, leaveRaid, getState, submitAction, subscribeLobby, unsubscribeLobby,
-    toggleKeepOpen, forceStartRaid, voteSpeedUp,
+    toggleKeepOpen, forceStartRaid, voteSpeedUp, cancelRaid,
   }
 }

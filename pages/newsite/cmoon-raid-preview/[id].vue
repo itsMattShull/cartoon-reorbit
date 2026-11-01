@@ -79,7 +79,7 @@
               <div v-if="lastRoundSummary" class="border rounded p-2 bg-gray-50 text-xs space-y-1">
                 <p class="font-medium">Round {{ lastRoundSummary.roundNumber }} — the boss used {{ ACTION_LABELS[lastRoundSummary.enemyAction] }}</p>
                 <p v-for="r in lastRoundSummary.participants" :key="r.userId">
-                  {{ usernameFor(r.userId) }} {{ ACTION_LABELS[r.action] }} —
+                  {{ usernameFor(r.userId, r.username) }} {{ ACTION_LABELS[r.action] }} —
                   <template v-if="r.playerHit">took a hit{{ r.playerCrit ? ' (CRIT!)' : '' }}</template>
                   <template v-else-if="r.playerBlocked">blocked and healed 1 HP</template>
                   <template v-else>no hit landed</template>
@@ -150,7 +150,11 @@ const outcomeLabel = computed(() => {
   return 'The preview ended without a clear finish.'
 })
 
-function usernameFor(userId) {
+// `embedded` is the username the server now sends directly on the round row itself (see
+// closeRound in cmoonRaidPreviewSocket.js) — see cmoon-raid/[id].vue's own identical helper for
+// why this is preferred over the live participants-list lookup.
+function usernameFor(userId, embedded) {
+  if (embedded) return embedded
   return raid.value?.participants.find(p => p.userId === userId)?.username || 'Someone'
 }
 
