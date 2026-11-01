@@ -94,6 +94,11 @@ function serializeRaid(raid) {
     // "nothing's happened yet" default on a restart if left out here, same trap as every field
     // above this comment already warns about.
     initiatorPreviousPopupCooldownAt: raid.initiatorPreviousPopupCooldownAt,
+    // Who ACTUALLY started this raid — never reassigned on a leadership hand-off, unlike
+    // isInitiator (see cmoonRaidSocket.js's own raid-shape comment and cmoonraid:leave's successor
+    // promotion). Missing this would silently re-enable the cooldown-restore-corruption bug this
+    // field exists to prevent, for any raid that survives a restart.
+    originalInitiatorUserId: raid.originalInitiatorUserId,
     keepOpenExtensionUsed: raid.keepOpenExtensionUsed,
     // Lobby controls, up-to-8 parties, private lobbies, wind-up telegraphs — see
     // cmoonRaidSocket.js's own raid-shape comment for what each means. speedVotes is a Set

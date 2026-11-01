@@ -214,6 +214,15 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *                         // recomputed live every time (see anyCaptainPresent/
  *                         // effectiveHitStreakThreshold), never snapshotted, since a captain can
  *                         // join a still-FORMING raid after someone else started it.
+ *   originalInitiatorUserId, // whoever's cmoonraid:start actually created this raid — set once,
+ *                         // NEVER reassigned on a leadership hand-off (see cmoonraid:leave's own
+ *                         // successor-promotion comment). The CURRENT leader (isInitiator:true on
+ *                         // some participant) can change hands; this cannot. Exists specifically
+ *                         // so the pre-raid-popup-cooldown restore (initiatorPreviousPopupCooldownAt
+ *                         // below) is only ever applied to the ONE user it was actually snapshotted
+ *                         // from — a promoted successor's lastCMoonBattlePopupAt was never stamped
+ *                         // by this raid at all, so restoring to the original starter's snapshot
+ *                         // for THEM would silently corrupt their own, unrelated cooldown.
  *   leaderKeepOpen,       // the initiator has paused sweep()'s join-window auto-start.
  *   speedVotes,           // Set<userId> of current participants who voted to cut the join window
  *                         // down to 5s (see maybeApplySpeedVote) — NOT JSON-serializable, stored
@@ -281,6 +290,11 @@ function anyCaptainPresent(raid) {
 // pendingAction VALUE — only whether they've locked one in, so the room can see who's still
 // deciding without seeing what anyone chose.
 function publicRaidView(raid) {
+  // Hoisted once rather than re-scanning participants on every one of this function's several
+  // reads below (two top-level, plus once per participant in the map further down) — same
+  // "compute once per round, not per read" discipline closeRound's own `captainPresent` local
+  // already follows for the identical computation.
+  const captainPresent = anyCaptainPresent(raid)
   return {
     id: raid.id,
     enemyMemberId: raid.enemyMemberId,
@@ -338,12 +352,12 @@ function publicRaidView(raid) {
     // charge-meter math now reads participants[].hitStreakThreshold below instead, since each
     // participant's own special attack can set its own requiredHitStreak (1-10, default 3 — see
     // that column's own schema comment) and this is no longer one shared raid-level number.
-    hitStreakThreshold: effectiveHitStreakThreshold(HIT_STREAK_THRESHOLD, !!raid.captainBoostEnabled, anyCaptainPresent(raid)),
+    hitStreakThreshold: effectiveHitStreakThreshold(HIT_STREAK_THRESHOLD, !!raid.captainBoostEnabled, captainPresent),
     // Explicit boolean the client reads for its "Captain boost" overlay — replaces a client-side
     // heuristic that used to compare hitStreakThreshold against a hardcoded 3, which broke the
     // moment per-attack requiredHitStreak existed (an attack configured with its OWN threshold
     // below 3 would have shown the overlay even with the toggle off/no captain present).
-    captainBoostActive: !!raid.captainBoostEnabled && anyCaptainPresent(raid),
+    captainBoostActive: !!raid.captainBoostEnabled && captainPresent,
     // How many players this raid's party can hold — snapshotted from
     // CMoonEnemyMember.maxParticipants at creation (1-8); the client reads this instead of a
     // hardcoded "4" for slot counts/labels.
@@ -393,7 +407,7 @@ function publicRaidView(raid) {
       // members' attacks can now cost different amounts to charge. Falls back to the plain
       // HIT_STREAK_THRESHOLD for a participant with no special attack assigned at all (their own
       // charge meter is moot either way — see cmoonraid:action's own `!p.specialAttack` gate).
-      hitStreakThreshold: effectiveHitStreakThreshold(p.specialAttack?.requiredHitStreak, !!raid.captainBoostEnabled, anyCaptainPresent(raid)),
+      hitStreakThreshold: effectiveHitStreakThreshold(p.specialAttack?.requiredHitStreak, !!raid.captainBoostEnabled, captainPresent),
       // This participant's OWN cMoon special (their team's, not the initiator's) — public on
       // purpose: it's that team's kit, shown on their charge meter and their own fire button.
       specialAttack: p.specialAttack || null,
@@ -1298,6 +1312,12 @@ export async function restoreCMoonRaids() {
     // keeps whatever lastCMoonBattlePopupAt they already have, same as if this feature never
     // shipped).
     raid.initiatorPreviousPopupCooldownAt ??= null
+    // Predates the per-successor-leader-promotion fix -> fall back to whoever currently holds
+    // isInitiator (the only identity this raid's restore logic could distinguish before that fix
+    // existed), preserving this ONE in-flight raid's exact pre-fix behavior for the remainder of
+    // its own lifetime rather than silently disabling the restore it already had. A brand new raid
+    // always gets this stamped for real at creation (see cmoonraid:start).
+    raid.originalInitiatorUserId ??= Array.from(raid.participants.values()).find(p => p.isInitiator)?.userId ?? null
     raid.keepOpenExtensionUsed ??= false
     // Lobby controls / up-to-8 / wind-up / private — all added after this feature shipped, so a
     // snapshot from before any of them existed needs every one backfilled, same reasoning as the
@@ -1467,6 +1487,8 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         // cost them their next popup's worth of cooldown. Never touched again once combat starts:
         // from that point on, the stamp reflects a raid that genuinely happened.
         initiatorPreviousPopupCooldownAt,
+        // See this raid's own shape comment above — never reassigned on a leadership hand-off.
+        originalInitiatorUserId: me.id,
         // Whether the leader has already used their ONE allowed "turn keepOpen back off" window
         // reset (see cmoonraid:toggleKeepOpen's own comment) — toggling it on/off was previously
         // uncapped, letting a lobby's join window be refreshed to a brand new full window forever.
@@ -1679,26 +1701,37 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     // no UI entry point to leave from until this feature added one).
     socket.emit(EV('leftRaid'), { raidId })
     await db.cMoonEnemyRaidParticipant.updateMany({ where: { raidId, userId: me.id }, data: { activeUserId: null } }).catch(() => {})
-    // The initiator leaving their OWN still-FORMING raid (the status check above already
-    // guarantees combat never started) gets their pre-raid lastCMoonBattlePopupAt restored — see
-    // raid.initiatorPreviousPopupCooldownAt's own comment at creation. A lobby that took too long
-    // and never started shouldn't cost them their next popup's worth of cooldown just for bailing
-    // out. Fire-and-forget, same stance every other non-critical write in this handler takes —
-    // worst case the restore is lost on a crash, never the leave itself. A later JOINER leaving
-    // has no such restore: this is specifically "undo MY OWN stamp from starting this", not
-    // something every participant's leave triggers.
-    if (leavingParticipant?.isInitiator) {
+    // The ORIGINAL raid starter leaving their OWN still-FORMING raid (the status check above
+    // already guarantees combat never started) gets their pre-raid lastCMoonBattlePopupAt
+    // restored — see raid.initiatorPreviousPopupCooldownAt's own comment at creation. A lobby
+    // that took too long and never started shouldn't cost them their next popup's worth of
+    // cooldown just for bailing out. Gated on originalInitiatorUserId, NOT leavingParticipant's
+    // current isInitiator flag: a successor promoted below by an earlier leave never had their
+    // own lastCMoonBattlePopupAt touched by this raid at all (only cmoonraid:start stamps it), so
+    // restoring them to the ORIGINAL starter's unrelated snapshot would corrupt their own cooldown
+    // instead of leaving it alone. Fire-and-forget, same stance every other non-critical write in
+    // this handler takes — worst case the restore is lost on a crash, never the leave itself. A
+    // later JOINER leaving has no such restore either way: this is specifically "undo MY OWN stamp
+    // from starting this", not something every participant's leave triggers.
+    if (me.id === raid.originalInitiatorUserId) {
       db.user.update({ where: { id: me.id }, data: { lastCMoonBattlePopupAt: raid.initiatorPreviousPopupCooldownAt } }).catch(() => {})
     }
     if (!raid.participants.size) { destroyRaid(raidId); return }
-    // The initiator leaving (now possible via the UI, not just by never having started one) must
-    // hand off leadership — otherwise no remaining participant has isInitiator:true and the whole
-    // party silently loses Force start/Cancel raid/Keep lobby open for the rest of the join window.
-    // Earliest joiner among those still here, same "who's been here longest" tiebreak a fresh
-    // raid's own initiator naturally has.
+    // The CURRENT leader leaving (now possible via the UI, not just by never having started one)
+    // must hand off leadership — otherwise no remaining participant has isInitiator:true and the
+    // whole party silently loses Force start/Cancel raid/Keep lobby open for the rest of the join
+    // window. Earliest joiner among those still here, same "who's been here longest" tiebreak a
+    // fresh raid's own initiator naturally has.
     if (leavingParticipant?.isInitiator) {
       const successor = Array.from(raid.participants.values()).sort((a, b) => a.joinedAt - b.joinedAt)[0]
       successor.isInitiator = true
+      // Both stale otherwise: the lobby list would keep naming the ORIGINAL leader long after
+      // they've left (see buildRaidLobbyEntry's own raid.initiatorUsername read), and a vote the
+      // successor cast back when they were a plain participant would still count against
+      // maybeApplySpeedVote's "every non-leader has voted" denominator even though they're now
+      // exempt from voting at all (they can just force-start).
+      raid.initiatorUsername = successor.username
+      raid.speedVotes.delete(successor.userId)
     }
     // A leave shrinks the speed-vote denominator too — re-check for the same reason as a join.
     maybeApplySpeedVote(raid)
@@ -1785,10 +1818,15 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     await db.cMoonEnemyRaidParticipant.updateMany({
       where: { raidId, userId: { in: participantIds } }, data: { activeUserId: null },
     }).catch(() => {})
-    // Same cooldown restore a self-leave gives the initiator (see cmoonraid:leave's own comment)
-    // — cancelling your own still-FORMING lobby shouldn't cost you your next popup's worth of
-    // cooldown either.
-    db.user.update({ where: { id: me.id }, data: { lastCMoonBattlePopupAt: raid.initiatorPreviousPopupCooldownAt } }).catch(() => {})
+    // Same cooldown restore a self-leave gives the ORIGINAL starter (see cmoonraid:leave's own
+    // originalInitiatorUserId comment) — cancelling your own still-FORMING lobby shouldn't cost
+    // you your next popup's worth of cooldown either. Gated the same way: the caller here is
+    // definitionally the CURRENT leader (the isInitiator check above), but a promoted successor
+    // calling this is not the same person this snapshot was ever taken from, and their own
+    // lastCMoonBattlePopupAt was never touched by this raid at all.
+    if (me.id === raid.originalInitiatorUserId) {
+      db.user.update({ where: { id: me.id }, data: { lastCMoonBattlePopupAt: raid.initiatorPreviousPopupCooldownAt } }).catch(() => {})
+    }
     destroyRaid(raidId)
   })
 
