@@ -178,7 +178,7 @@
             <input
               v-model="searchQuery"
               type="text"
-              placeholder="Search by cToon name…"
+              placeholder="Search by cToon name or source account username…"
               class="w-full text-xs border rounded-md px-2 py-1.5 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-300"
               @focus="showSuggestions = searchQuery.trim().length >= 3"
               @keydown.escape="showSuggestions = false"
@@ -207,7 +207,10 @@
                 </div>
                 <div class="min-w-0 flex-1">
                   <div class="text-xs font-medium truncate">{{ suggestion.ctoonName || '—' }}</div>
-                  <div class="text-[10px] text-gray-500">Mint #{{ suggestion.mintNumber ?? '?' }}</div>
+                  <div class="text-[10px] text-gray-500">
+                    Mint #{{ suggestion.mintNumber ?? '?' }}
+                    <span v-if="suggestion.sourceUsername"> · From: {{ suggestion.sourceUsername }}</span>
+                  </div>
                 </div>
               </button>
             </div>
@@ -803,7 +806,10 @@ const filteredEntries = computed(() => {
   }
   if (!searchQuery.value.trim()) return result
   const q = searchQuery.value.trim().toLowerCase()
-  return result.filter(e => (e.ctoonName || '').toLowerCase().includes(q))
+  return result.filter(e =>
+    (e.ctoonName || '').toLowerCase().includes(q) ||
+    (e.sourceUsername || '').toLowerCase().includes(q)
+  )
 })
 
 // Autocomplete suggestions: up to 8 results, only shown at 3+ chars

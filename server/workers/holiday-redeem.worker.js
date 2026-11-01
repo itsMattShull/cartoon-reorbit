@@ -218,7 +218,7 @@ async function processHolidayRedeem(job) {
     orderBy: { startsAt: 'desc' },
     select: {
       id: true, name: true, minRevealAt: true,
-      poolEntries: { select: { ctoonId: true, probabilityPercent: true } }
+      poolEntries: { select: { ctoonId: true, probabilityPercent: true, ctoon: { select: { quantity: true, totalMinted: true } } } }
     }
   })
   if (!eventRec) throw new Error('This cToon is not a Holiday Item')
@@ -259,7 +259,17 @@ async function processHolidayRedeem(job) {
 
   if (!eventRec.poolEntries.length) throw new Error('Holiday event has no pool entries')
 
-  const weightedPool = eventRec.poolEntries.map(r => ({ value: r.ctoonId, weight: r.probabilityPercent || 0 }))
+  // Exclude any reward whose cToon is already sold out (quantity cap reached) BEFORE rolling —
+  // not after. Without this, a weighted roll could land on an exhausted reward, burn the mint job
+  // on a guaranteed 'cToon sold out' failure, and (before the retry fix in redeem.post.js) leave
+  // the player's box stuck forever; even with that fix, every retry still has the SAME chance of
+  // re-rolling the same dead option. Filtering up front means a sold-out prize just stops being
+  // offered, same as it running out in any other reward pool would.
+  const available = eventRec.poolEntries.filter(r => {
+    const qty = r.ctoon?.quantity
+    return qty === null || qty === undefined || Number(r.ctoon.totalMinted) < Number(qty)
+  })
+  const weightedPool = available.map(r => ({ value: r.ctoonId, weight: r.probabilityPercent || 0 }))
   const chosen = pickWeighted(weightedPool)
   if (!chosen) throw new Error('No redeemable rewards available')
   const resultCtoonId = chosen.value

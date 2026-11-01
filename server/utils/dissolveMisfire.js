@@ -8,6 +8,7 @@
 // server/workers/dissolve-auction-launch.worker.js (the fix) /
 // server/utils/dissolveMisfireAudit.js (the scan for cases that happened before that fix shipped).
 import { prisma } from '../prisma.js'
+import { cancelDissolveAuctionLaunch } from './queues.js'
 
 /**
  * The most recent CtoonOwnerLog row for a userCtoonId, strictly before a given time — "who
@@ -102,4 +103,72 @@ export async function recordPreventedMisfire(details) {
   } catch (e) {
     console.error('[dissolve-misfire] failed to record prevented misfire:', e?.message || e)
   }
+}
+
+/**
+ * Proactive daily sweep (cron: reconcileDissolveQueueOwnership) over every entry still SITTING in
+ * the dissolve queue (not yet launched) — not just the ones whose scheduledFor has already
+ * arrived. dissolve-auction-launch.worker.js already re-checks ownership and self-heals a stale
+ * entry, but only at the moment that entry's own job fires; this lets an admin (or this cron) spot
+ * and clear a stale entry — e.g. one already traded/granted away by some other path — well before
+ * its scheduled date, instead of it just sitting in the queue looking wrong until then.
+ *
+ * Same "PREVENTED" logging as the launch worker's own check, so a removal here shows up in the
+ * Dissolve Misfires admin page exactly like one caught at launch time would.
+ * @returns {Promise<{ scanned: number, removed: number }>}
+ */
+export async function reconcileDissolveQueueOwnership() {
+  const officialUsername = process.env.OFFICIAL_USERNAME || 'CartoonReOrbitOfficial'
+  const official = await prisma.user.findUnique({ where: { username: officialUsername }, select: { id: true } })
+  if (!official) {
+    console.error(`[reconcileDissolveQueueOwnership] Official account not found: ${officialUsername}`)
+    return { scanned: 0, removed: 0 }
+  }
+
+  const entries = await prisma.dissolveAuctionQueue.findMany({
+    select: {
+      id: true,
+      userCtoonId: true,
+      userCtoon: {
+        select: {
+          ctoonId: true,
+          mintNumber: true,
+          userId: true,
+          ctoon: { select: { name: true } }
+        }
+      }
+    }
+  })
+
+  let removed = 0
+  for (const entry of entries) {
+    const currentOwnerId = entry.userCtoon?.userId ?? null
+    if (currentOwnerId === official.id) continue // still correctly owned — nothing to do
+
+    try {
+      await prisma.dissolveAuctionQueue.delete({ where: { id: entry.id } })
+    } catch {
+      // Already gone — a concurrent process (most likely this same entry's own launch job
+      // firing at the same moment) beat this sweep to it, and already logged its own misfire
+      // if one applied. Nothing more to do here.
+      continue
+    }
+    await cancelDissolveAuctionLaunch(entry.id)
+    removed++
+
+    // No current owner at all (the UserCtoon row itself is gone) isn't a misfire to compensate —
+    // there's no rightful owner to log, same guard the launch worker's own check applies.
+    if (currentOwnerId) {
+      await recordPreventedMisfire({
+        userCtoonId: entry.userCtoonId,
+        queueEntryId: entry.id,
+        ctoonId: entry.userCtoon?.ctoonId ?? null,
+        ctoonName: entry.userCtoon?.ctoon?.name ?? null,
+        mintNumber: entry.userCtoon?.mintNumber ?? null,
+        rightfulOwnerUserId: currentOwnerId,
+      })
+    }
+  }
+
+  return { scanned: entries.length, removed }
 }
