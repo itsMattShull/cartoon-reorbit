@@ -130,7 +130,7 @@ export const MAX_PARTICIPANTS_DEFAULT = 4
 // raid boss unwinnable-in-time (a raid that hits this cap with neither side at 0 resolves
 // ABANDONED) and a ceiling the feature request asked for explicitly.
 export const RAID_ROUND_LIMIT_MIN = 50
-export const RAID_ROUND_LIMIT_MAX = 400
+export const RAID_ROUND_LIMIT_MAX = 500
 export const RAID_ROUND_LIMIT_DEFAULT = 300
 
 // Wind-up/telegraph moves (see CMoonEnemyWindUpMove's own schema comment) — same 0-100 "flat,

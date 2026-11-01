@@ -100,7 +100,7 @@ function serializeRaid(raid) {
     // in-memory (JSON can't carry one); stored as a plain array, rebuilt into a Set on restore
     // (see restoreCMoonRaids).
     maxParticipants: raid.maxParticipants,
-    // This raid boss's own round-count safety valve (50-400) — same missing-field trap as above;
+    // This raid boss's own round-count safety valve (50-500) — same missing-field trap as above;
     // without this, a restart would silently fall back to RAID_MAX_ROUNDS_SAFETY regardless of
     // what the boss was actually configured with.
     roundLimit: raid.roundLimit,

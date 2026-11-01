@@ -149,7 +149,7 @@ export const ROUND_TIMEOUT_SECONDS = 15
 // raid.maxParticipants (snapshotted from CMoonEnemyMember.maxParticipants, 1-8, at raid creation)
 // instead. Kept exported since it's still this file's own "if nothing else says otherwise" value.
 export const MAX_PARTY_SIZE = 4
-// Fallback only — CMoonEnemyMember.raidRoundLimit (50-400, default 300) is what actually governs
+// Fallback only — CMoonEnemyMember.raidRoundLimit (50-500, default 300) is what actually governs
 // a given raid boss's round cap now, same "constant stays only as the if-nothing-else-says-
 // otherwise value" role MAX_PARTY_SIZE plays above for maxParticipants.
 export const RAID_MAX_ROUNDS_SAFETY = 300

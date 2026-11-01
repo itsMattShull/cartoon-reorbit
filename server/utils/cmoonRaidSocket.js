@@ -189,7 +189,7 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *   // ── Lobby controls / up to 8 players / private lobbies / wind-up telegraphs ──────────────
  *   maxParticipants,      // this party's own cap, 1-8, snapshotted from
  *                         // CMoonEnemyMember.maxParticipants at creation (see cmoonraid:start).
- *   roundLimit,           // this raid's own round-count safety valve, 50-400, snapshotted from
+ *   roundLimit,           // this raid's own round-count safety valve, 50-500, snapshotted from
  *                         // CMoonEnemyMember.raidRoundLimit at creation — see closeRound's own
  *                         // ABANDONED branch.
  *   isPrivate,            // never listed in the site-wide lobby / notified / announced when true
