@@ -614,6 +614,18 @@ model User {
   cMoonRankRoleGrantedAt DateTime?
   cMoonPollVotes         CMoonPollVote[]
 
+  // ── cMoon Prestige ───────────────────────────────────────────────────────────────────────────
+  // How many times this player has prestiged — permanent, cumulative, NEVER reset by
+  // reassignUserCMoon (unlike cMoonPoints/currentCMoonRankId, which a prestige move resets
+  // exactly like any other team switch — see prestigeUser in server/utils/cmoonPrestige.js). 0
+  // means never prestiged. Drives: which CMoonPrestigeLevel threshold is next, the "✦ Prestige N"
+  // raid badge (CMoonRaidFighter.vue), and the one-time Prestiged profile badge.
+  prestigeLevel          Int             @default(0)
+  // When this player last prestiged — null until their first one. Display/audit only (shown next
+  // to their current level in Settings); CMoonPrestigeLog carries the full per-event history.
+  lastPrestigedAt        DateTime?
+  prestigeLogs           CMoonPrestigeLog[]
+
   // Which of this user's earned cMoon-affinity cZone borders (see UserCMoonBorder) is currently
   // displayed on their cZone — a player can outrank the border threshold for more than one cMoon
   // over time (affinity is permanent per-cMoon and survives leaving), so this is an explicit equip
@@ -1805,6 +1817,11 @@ model GlobalGameConfig {
   // computeCMoonRejoinAvailableAt in server/utils/cmoon.js. 0 = no cooldown. Independent of, and
   // applied together with, each CMoon's own allowOptOutJoin toggle below.
   cMoonOptOutCooldownDays              Int       @default(14)
+  // Master switch for cMoon Prestige (see server/utils/cmoonPrestige.js) — off by default, easy
+  // to disable without losing any CMoonPrestigeLevel/CMoonPrestigeLog data already configured or
+  // recorded. When off, the Settings-page prestige section and its endpoints simply report the
+  // feature as unavailable; nothing about a player's existing prestigeLevel is touched.
+  cMoonPrestigeEnabled                 Boolean   @default(false)
   // Weekly cMoon team-leaderboard scoring rules (see server/utils/cmoon.js
   // runDailyCMoonScoring / recordDailyTaskCompletions). Admin-editable via
   // Admin > cMoons > Scoring Rules; changes apply forward-only to future cron
@@ -4264,6 +4281,16 @@ model CMoon {
   // shipped — see prisma/migrations/20260826000000_add_cmoon_show_on_nav.
   showOnNav Boolean @default(true)
 
+  // Whether this cMoon is a valid PRESTIGE destination — see prestigeUser in
+  // server/utils/cmoonPrestige.js. A prestiging player can only pick from cMoons with this true
+  // (and joinLocked false — prestige respects joinLocked exactly like a normal join, it is never
+  // a bypass). Otherwise this cMoon works exactly like any other: its own /newsite/cmoon/[id]
+  // page, joinLocked/showOnNav, prize cToons, rank ladder — all unchanged by this flag, which only
+  // ever gates "can a prestiging player land here" and the epic shimmer treatment current members
+  // get in Raid Battles (CMoonRaidFighter.vue). Independent of joinLocked/showOnNav, same as every
+  // other display/eligibility toggle on this model.
+  isPrestigeCMoon Boolean @default(false)
+
   // Public "cMoon page" content (/newsite/cmoon/[id]) — a display/catalog feature, independent
   // of the cMoonEnabled faction-join flag above. pageImagePath is exactly 800x600, matching CZone.
   // No longer rendered on the redesigned cMoon page (superseded by pageBannerImagePath +
@@ -4351,8 +4378,66 @@ model CMoon {
   specialAttackId String?
   specialAttack   CMoonSpecialAttack? @relation(fields: [specialAttackId], references: [id], onDelete: Restrict)
 
+  // Prestige audit trail — see CMoonPrestigeLog's own comment. Named relations since a log row
+  // references two different cMoons (the one left, the one joined).
+  prestigeLogsFrom CMoonPrestigeLog[] @relation("CMoonPrestigeLog_From")
+  prestigeLogsTo   CMoonPrestigeLog[] @relation("CMoonPrestigeLog_To")
+
   @@index([memberCount])
   @@index([teamScore])
+}
+
+// One rung of the admin-defined prestige ladder — "Prestige 1 needs N points, Prestige 2 needs M
+// points, etc." (the user's own explicit choice over a flat threshold or a per-level multiplier).
+// level is the prestige level THIS row unlocks (1, 2, 3, ...) — a player currently at
+// User.prestigeLevel can prestige again once their cMoonPoints reach the row where
+// level = prestigeLevel + 1. No row for the next level means prestiging further simply isn't
+// configured yet (not an error — see cmoonPrestige.js's eligibility check), so an admin can add
+// higher levels later without anything breaking in the meantime.
+model CMoonPrestigeLevel {
+  id             String   @id @default(uuid())
+  level          Int      @unique
+  pointThreshold Int
+  // Optional display name shown alongside the plain "Prestige N" label (e.g. "Ascendant") on the
+  // raid badge and Settings page — purely cosmetic, never required.
+  title          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([level])
+}
+
+// One completed prestige event — audit trail only, never read by any gameplay/eligibility logic
+// (User.prestigeLevel/lastPrestigedAt are the live state; this is history), same role
+// CMoonChangeRequest/CMoonPointLog already play for their own event kinds. fromCMoonId is
+// nullable (a user can reach the point threshold with no current cMoon in an edge case — see
+// cmoonPrestige.js's own guard — though in practice prestigeUser requires one); toCMoonId is
+// always the destination. onDelete: SetNull on both cMoon FKs — a deleted cMoon shouldn't block
+// deleting itself, and this row's historical value (name snapshotted below) stays meaningful
+// either way.
+model CMoonPrestigeLog {
+  id            String   @id @default(uuid())
+  userId        String
+  fromCMoonId   String?
+  // Nullable (not the logical "always has a destination" it reads as) purely so onDelete:
+  // SetNull is valid here — a deleted cMoon must never be blocked from deletion just because old
+  // prestige history points at it. toCMoonName below is what actually keeps this row meaningful.
+  toCMoonId     String?
+  level         Int // the NEW level reached by this event (matches User.prestigeLevel right after)
+  // Snapshots, not live lookups — this row must still read sensibly after either cMoon is
+  // renamed or deleted, same "freeze the facts at the moment it happened" stance every other
+  // audit log in this codebase already takes (e.g. CMoonChangeRequest.currentCMoonId's comment).
+  fromCMoonName String?
+  toCMoonName   String
+  pointsAtPrestige Int // the player's cMoonPoints right before the reset, for admin/support visibility
+  createdAt     DateTime @default(now())
+
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromCMoon   CMoon? @relation("CMoonPrestigeLog_From", fields: [fromCMoonId], references: [id], onDelete: SetNull)
+  toCMoon     CMoon? @relation("CMoonPrestigeLog_To", fields: [toCMoonId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
 }
 
 // Admin-authored full-screen join effect: a simple generic template (background color fade-in,
