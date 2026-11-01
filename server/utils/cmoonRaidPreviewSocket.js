@@ -165,6 +165,9 @@ async function closeRound(io, raid) {
 
     for (const result of perParticipant) {
       const p = raid.participants.get(result.userId)
+      // See cmoonRaidSocket.js's own closeRound for why this is embedded here rather than left
+      // for the client to re-derive from a separately-updating participants list.
+      result.username = p.username
       p.hpRemaining = result.hpRemaining
       p.pendingAction = null
       if (result.knockedOut && !p.knockedOutAt) p.knockedOutAt = Date.now()

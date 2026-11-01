@@ -328,6 +328,12 @@ export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvent
   const event = {
     side: caster.side, userId: caster.userId || null, name: attack.name,
     effectType: attack.effectType, amount: attack.amount, soundPath: attack.soundPath || null,
+    // Embedded here, from the authoritative raid.participants Map, same reasoning as
+    // perParticipant's own `username` in closeRound — a PLAYER-side cast carries the caster's
+    // name directly on the event instead of making the client re-derive it later against a
+    // separately-updating participants list. Always null for an ENEMY-side cast (the client
+    // already uses raid.enemyName for those).
+    username: caster.side === 'PLAYER' ? (raid.participants.get(caster.userId)?.username || null) : null,
   }
   specialEvents.push(event)
   // Accuracy roll (see CMoonSpecialAttack.accuracyPercent's own schema comment) — runs FIRST,

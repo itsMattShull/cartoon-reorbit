@@ -215,7 +215,7 @@
                     </p>
                     <ul class="cr-reveal-list">
                       <li v-for="r in lastRoundSummary.participants" :key="r.userId" class="cr-reveal-row" :class="revealRowClass(r)">
-                        <span class="cr-reveal-name">{{ usernameFor(r.userId) }}</span>
+                        <span class="cr-reveal-name">{{ usernameFor(r.userId, r.username) }}</span>
                         <span class="cr-reveal-action">{{ ACTION_LABELS[r.action] }}</span>
                         <span class="cr-reveal-outcome">
                           <template v-if="r.playerHit && r.enemyHit">traded hits!<span v-if="r.playerCrit || r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
@@ -235,9 +235,9 @@
                     </ul>
                     <p v-if="lastRoundSummary.enemyDamageDealt > 0" class="cr-reveal-dealt">The party dealt {{ lastRoundSummary.enemyDamageDealt }} damage this round.</p>
                     <p v-for="(s, i) in (lastRoundSummary.specials || [])" :key="i" class="cr-special-flash" :class="s.side === 'PLAYER' ? 'cr-special-flash-player' : 'cr-special-flash-enemy'">
-                      <template v-if="s.missed">{{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} tried to unleash <strong>{{ s.name }}</strong><span class="cr-miss-badge">MISS!</span></template>
-                      <template v-else-if="s.fizzled">✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} tried to unleash <strong>{{ s.name }}</strong>, but it was blocked and had no effect!</template>
-                      <template v-else>✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} unleashed <strong>{{ s.name }}</strong>!</template>
+                      <template v-if="s.missed">{{ s.side === 'PLAYER' ? usernameFor(s.userId, s.username) : raid.enemyName }} tried to unleash <strong>{{ s.name }}</strong><span class="cr-miss-badge">MISS!</span></template>
+                      <template v-else-if="s.fizzled">✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId, s.username) : raid.enemyName }} tried to unleash <strong>{{ s.name }}</strong>, but it was blocked and had no effect!</template>
+                      <template v-else>✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId, s.username) : raid.enemyName }} unleashed <strong>{{ s.name }}</strong>!</template>
                     </p>
                     <p v-if="lastRoundSummary.windUpBonus" class="cr-windup-bonus">
                       🛡️ Perfect block! {{ lastRoundSummary.windUpBonus.bonusType === 'HEAL_PARTY'
@@ -420,7 +420,12 @@ const nearMissFlavor = computed(() => {
   return ''
 })
 
-function usernameFor(userId) {
+// `embedded` is the username the server now sends directly on the round/special-event row itself
+// (see closeRound/applyRaidSpecialAttack in cmoonRaidSocket.js/cmoonEnemyRaid.js) — always
+// preferred when present, since it's authoritative for that exact event. The live lookup against
+// raid.value.participants is kept only as a fallback for any caller that doesn't have one handy.
+function usernameFor(userId, embedded) {
+  if (embedded) return embedded
   return raid.value?.participants.find(p => p.userId === userId)?.username || 'Someone'
 }
 
@@ -641,7 +646,7 @@ watch(() => raidSocket.lastRound.value, (round) => {
   // same round (possible with up to 8 in a party) are combined into one line rather than queued.
   const playerSpecials = (round.specials || []).filter(s => s.side === 'PLAYER')
   if (playerSpecials.length) {
-    specialUseCallout.value = playerSpecials.map(s => `${usernameFor(s.userId)} used ${s.name}!`).join('  ')
+    specialUseCallout.value = playerSpecials.map(s => `${usernameFor(s.userId, s.username)} used ${s.name}!`).join('  ')
     if (specialUseTimer) clearTimeout(specialUseTimer)
     specialUseTimer = setTimeout(() => { specialUseCallout.value = '' }, 1600)
   }

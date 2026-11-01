@@ -846,6 +846,14 @@ async function closeRound(io, raid) {
     const captainPresent = anyCaptainPresent(raid)
     for (const result of perParticipant) {
       const p = raid.participants.get(result.userId)
+      // Embedded directly on the round row itself, read from the authoritative raid.participants
+      // Map at this exact instant — the client used to re-derive this by looking `result.userId`
+      // back up against its OWN separately-updating participants list (raid.value.participants on
+      // the raid page), which could show "Someone" for a real, correctly-tracked participant if
+      // that lookup ever ran against a stale/out-of-sync copy (e.g. around a reconnect or a rapid
+      // round-to-round transition). Sending the name in the same payload as everything else about
+      // this round removes that whole class of client-side cross-reference race.
+      result.username = p.username
       p.hpRemaining = result.hpRemaining
       p.pendingAction = null
       if (result.knockedOut && !p.knockedOutAt) p.knockedOutAt = Date.now()
