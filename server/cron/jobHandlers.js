@@ -596,6 +596,7 @@ async function enforceDormantAccounts() {
 
   const featuredConfig = await getFeaturedDissolveConfig()
   let anyQueued = false
+  let failed = 0
 
   for (const u of batch) {
     // DM best-effort
@@ -606,75 +607,87 @@ async function enforceDormantAccounts() {
       )
     }
 
-    // transactional enforcement per user
-    await prisma.$transaction(async (tx) => {
-      // 3.1 zero points
-      const up = await tx.userPoints.findUnique({ where: { userId: u.id } })
-      if (up?.points && up.points !== 0) {
-        await tx.pointsLog.create({
-          data: {
-            userId: u.id,
-            direction: 'decrease',
-            points: up.points,
-            total: 0,
-            method: 'inactive_270d'
-          }
-        })
-        await tx.userPoints.update({
-          where: { userId: u.id },
-          data: { points: 0, updatedAt: new Date() }
-        })
-      }
-
-      // 3.2 transfer UserCtoons to the official account and queue for dissolve auction
-      const userCtoons = await tx.userCtoon.findMany({
-        where: { userId: u.id, burnedAt: null },
-        select: { id: true, mintNumber: true, ctoon: { select: { id: true, rarity: true, series: true, set: true } } }
-      })
-
-      for (const uc of userCtoons) {
-        const activeAuction = await tx.auction.findFirst({
-          where: { userCtoonId: uc.id, status: 'ACTIVE' },
-          select: { id: true }
-        })
-
-        if (activeAuction) {
-          await tx.auction.updateMany({
-            where: { userCtoonId: uc.id, status: 'ACTIVE' },
-            data: { creatorId: official.id }
+    // transactional enforcement per user — isolated in its own try/catch so one user's
+    // failure (bad data, a constraint hit, anything) can't silently abort the whole batch.
+    // Before this, an unhandled throw here propagated out of the entire function, leaving
+    // every user AFTER the failing one in `batch` un-enforced that day — and every day after,
+    // since the same crash recurs against the same user at the same point in the (unordered)
+    // batch on every subsequent run, permanently blocking everyone behind them.
+    try {
+      await prisma.$transaction(async (tx) => {
+        // 3.1 zero points
+        const up = await tx.userPoints.findUnique({ where: { userId: u.id } })
+        if (up?.points && up.points !== 0) {
+          await tx.pointsLog.create({
+            data: {
+              userId: u.id,
+              direction: 'decrease',
+              points: up.points,
+              total: 0,
+              method: 'inactive_270d'
+            }
           })
-          await tx.userCtoon.update({ where: { id: uc.id }, data: { isTradeable: false } })
-          continue
+          await tx.userPoints.update({
+            where: { userId: u.id },
+            data: { points: 0, updatedAt: new Date() }
+          })
         }
 
-        await tx.userCtoon.update({ where: { id: uc.id }, data: { userId: official.id, isTradeable: false } })
-        await tx.userTradeListItem.deleteMany({ where: { userCtoonId: uc.id, userId: { not: official.id } } })
-        await tx.ctoonOwnerLog.create({
-          data: {
-            userId: official.id,
-            userCtoonId: uc.id,
-            ctoonId: uc.ctoon?.id ?? null,
-            mintNumber: uc.mintNumber ?? null,
-            method: 'DISSOLVE_INACTIVE'
+        // 3.2 transfer UserCtoons to the official account and queue for dissolve auction
+        const userCtoons = await tx.userCtoon.findMany({
+          where: { userId: u.id, burnedAt: null },
+          select: { id: true, mintNumber: true, ctoon: { select: { id: true, rarity: true, series: true, set: true } } }
+        })
+
+        for (const uc of userCtoons) {
+          const activeAuction = await tx.auction.findFirst({
+            where: { userCtoonId: uc.id, status: 'ACTIVE' },
+            select: { id: true }
+          })
+
+          if (activeAuction) {
+            await tx.auction.updateMany({
+              where: { userCtoonId: uc.id, status: 'ACTIVE' },
+              data: { creatorId: official.id }
+            })
+            await tx.userCtoon.update({ where: { id: uc.id }, data: { isTradeable: false } })
+            continue
           }
-        })
 
-        const isFeatured = isCtoonFeatured(uc.ctoon, featuredConfig)
-        const category   = isFeatured ? 'FEATURED' : 'OTHER'
+          await tx.userCtoon.update({ where: { id: uc.id }, data: { userId: official.id, isTradeable: false } })
+          await tx.userTradeListItem.deleteMany({ where: { userCtoonId: uc.id, userId: { not: official.id } } })
+          await tx.ctoonOwnerLog.create({
+            data: {
+              userId: official.id,
+              userCtoonId: uc.id,
+              ctoonId: uc.ctoon?.id ?? null,
+              mintNumber: uc.mintNumber ?? null,
+              method: 'DISSOLVE_INACTIVE'
+            }
+          })
 
-        // priority: true jumps these cToons to the front of the dissolve
-        // auction queue, ahead of admin-initiated (non-priority) dissolves
-        await tx.dissolveAuctionQueue.upsert({
-          where:  { userCtoonId: uc.id },
-          update: { priority: true, fromInactive: true, sourceUsername: u.username },
-          create: { userCtoonId: uc.id, category, isFeatured, priority: true, fromInactive: true, sourceUsername: u.username }
-        })
-        anyQueued = true
-      }
+          const isFeatured = isCtoonFeatured(uc.ctoon, featuredConfig)
+          const category   = isFeatured ? 'FEATURED' : 'OTHER'
 
-      // 3.3 disable account
-      await tx.user.update({ where: { id: u.id }, data: { active: false } })
-    })
+          // priority: true jumps these cToons to the front of the dissolve
+          // auction queue, ahead of admin-initiated (non-priority) dissolves
+          await tx.dissolveAuctionQueue.upsert({
+            where:  { userCtoonId: uc.id },
+            update: { priority: true, fromInactive: true, sourceUsername: u.username },
+            create: { userCtoonId: uc.id, category, isFeatured, priority: true, fromInactive: true, sourceUsername: u.username }
+          })
+          anyQueued = true
+        }
+
+        // 3.3 disable account
+        await tx.user.update({ where: { id: u.id }, data: { active: false } })
+      })
+    } catch (err) {
+      failed++
+      const detail = `user ${u.username || u.id}: ${err?.message || err}`
+      console.error(`[enforceDormantAccounts] Failed to enforce dormant account — ${detail}`)
+      await logCronError('enforceDormantAccounts', new Error(detail))
+    }
   }
 
   // 3.4 auto-schedule the queue so these priority entries actually launch
@@ -698,6 +711,12 @@ async function enforceDormantAccounts() {
       console.error('[enforceDormantAccounts] Failed to auto-schedule dissolve queue:', err)
     }
   }
+
+  if (!batch.length) return undefined
+  const enforced = batch.length - failed
+  return failed
+    ? `Enforced ${enforced}/${batch.length} dormant account${batch.length === 1 ? '' : 's'} (${failed} failed — see Error Logs)`
+    : `Enforced ${enforced} dormant account${enforced === 1 ? '' : 's'}`
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
