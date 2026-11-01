@@ -120,7 +120,8 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *   enemySounds: { appearSoundPath, damageTakenSoundPath, damageAvoidedSoundPath,
  *                  attackingSoundPath, victorySoundPath, defeatSoundPath },  // ditto
  *   battleMusicPath,                         // ditto — the faction's own looping battle music
- *   enemyStats: { maxHp, critChanceAgainstPercent, critChanceFromPercent, cMoonPointsReward },
+ *   enemyStats: { maxHp, critChanceAgainstPercent, critChanceFromPercent, cMoonPointsReward,
+ *                 attackAccuracyPercent },
  *   enemyHpRemaining, roundNumber, currentEnemyAction, roundDeadlineAt, joinDeadlineAt,
  *   participants: Map<userId, { userId, username, hpRemaining, maxHp, knockedOutAt, isInitiator,
  *                                pendingAction, joinedAt,
@@ -975,8 +976,8 @@ async function closeRound(io, raid) {
     raid.roundLog.push({
       round: raid.roundNumber, enemyAction, enemyDamageDealt,
       enemyHpRemaining: raid.enemyHpRemaining,
-      participants: perParticipant.map(({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit }) =>
-        ({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit })),
+      participants: perParticipant.map(({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit, enemyMissed }) =>
+        ({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit, enemyMissed })),
       ...(specialEvents.length ? { specials: specialEvents } : {}),
       ...(windUpBonus ? { windUpBonus } : {}),
     })
@@ -1406,6 +1407,10 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
           critChanceFromPercent: enemyMember.critChanceFromPercent,
           cMoonPointsReward: enemyMember.cMoonPointsReward,
           attackChancePercent: enemyMember.attackChancePercent,
+          // See that column's own schema comment — resolveRaidRound's own per-participant miss
+          // roll reads this off raid.enemyStats, same snapshot-at-creation discipline every other
+          // field here already follows.
+          attackAccuracyPercent: enemyMember.attackAccuracyPercent,
           // Display-only for the lobby ("requires N prior wins"); the real gate is re-checked
           // against the database in loadEligibility on every join.
           minPriorDefeats: enemyMember.minPriorDefeats || 0,

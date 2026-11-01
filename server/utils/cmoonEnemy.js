@@ -38,6 +38,16 @@ export const CRIT_CHANCE_MIN = 0
 export const CRIT_CHANCE_MAX = 100
 export const CRIT_CHANCE_DEFAULT = 0
 
+// 0-100 chance THIS enemy's own normal attack (not its special — see CMoonSpecialAttack's own
+// accuracyPercent) actually connects once it would otherwise land (the player chose the wrong
+// lane/didn't block it) — see CMoonEnemyMember.attackAccuracyPercent's own schema comment. 100 is
+// the admin default so an existing enemy's behavior never changes until an admin dials it down,
+// same "default reproduces pre-feature behavior exactly" stance every accuracy-style field this
+// session has already taken (CMoonSpecialAttack.accuracyPercent).
+export const ATTACK_ACCURACY_PERCENT_MIN = 0
+export const ATTACK_ACCURACY_PERCENT_MAX = 100
+export const ATTACK_ACCURACY_PERCENT_DEFAULT = 100
+
 // 0-100 chance this enemy's own rolled move is an attack rather than a block — see
 // CMoonEnemyMember.attackChancePercent's own schema comment. 50 is the admin default AND the
 // value that reproduces the original plain-uniform roll exactly.
@@ -213,6 +223,10 @@ export function isValidCritChance(value) {
   return Number.isInteger(value) && value >= CRIT_CHANCE_MIN && value <= CRIT_CHANCE_MAX
 }
 
+export function isValidAttackAccuracyPercent(value) {
+  return Number.isInteger(value) && value >= ATTACK_ACCURACY_PERCENT_MIN && value <= ATTACK_ACCURACY_PERCENT_MAX
+}
+
 export function isValidAttackChance(value) {
   return Number.isInteger(value) && value >= ATTACK_CHANCE_MIN && value <= ATTACK_CHANCE_MAX
 }
@@ -356,6 +370,9 @@ export function parseMemberBody(body, existing) {
   const critChanceFromPercent = body?.critChanceFromPercent === undefined
     ? (existing ? existing.critChanceFromPercent : CRIT_CHANCE_DEFAULT)
     : toNumber(body.critChanceFromPercent)
+  const attackAccuracyPercent = body?.attackAccuracyPercent === undefined
+    ? (existing ? existing.attackAccuracyPercent : ATTACK_ACCURACY_PERCENT_DEFAULT)
+    : toNumber(body.attackAccuracyPercent)
   const attackChancePercent = body?.attackChancePercent === undefined
     ? (existing ? existing.attackChancePercent : ATTACK_CHANCE_DEFAULT)
     : toNumber(body.attackChancePercent)
@@ -431,6 +448,9 @@ export function parseMemberBody(body, existing) {
   if (!isValidCritChance(critChanceFromPercent)) {
     return { ok: false, message: `Critical hit chance from this enemy must be a whole number between ${CRIT_CHANCE_MIN} and ${CRIT_CHANCE_MAX}` }
   }
+  if (!isValidAttackAccuracyPercent(attackAccuracyPercent)) {
+    return { ok: false, message: `Attack accuracy must be a whole number between ${ATTACK_ACCURACY_PERCENT_MIN} and ${ATTACK_ACCURACY_PERCENT_MAX}` }
+  }
   if (!isValidAttackChance(attackChancePercent)) {
     return { ok: false, message: `Attack chance must be a whole number between ${ATTACK_CHANCE_MIN} and ${ATTACK_CHANCE_MAX}` }
   }
@@ -477,7 +497,7 @@ export function parseMemberBody(body, existing) {
     ok: true,
     data: {
       factionId, name, maxHp, battleMode, rank, minPriorDefeats, occurrencePercent, cMoonPointsReward,
-      critChanceAgainstPercent, critChanceFromPercent, attackChancePercent, pityThreshold, firstWinBonusPoints,
+      critChanceAgainstPercent, critChanceFromPercent, attackAccuracyPercent, attackChancePercent, pityThreshold, firstWinBonusPoints,
       active, sortOrder,
       isRaidBoss, raidAnnouncementText, raidOneTime, raidCooldownMinutes, maxParticipants, raidRoundLimit, windUpEnabled,
     },

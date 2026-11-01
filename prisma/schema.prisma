@@ -6287,6 +6287,16 @@ model CMoonEnemyMember {
   // critically against the player.
   critChanceAgainstPercent Int                  @default(0)
   critChanceFromPercent    Int                  @default(0)
+  // 0-100 chance THIS enemy's own normal attack (solo or raid — this one model covers both, see
+  // isRaidBoss below) actually connects once it would otherwise land, i.e. the player chose the
+  // wrong lane or didn't block at all (see resolveBattleRound in cmoonEnemyBattle.js, which rolls
+  // this AFTER the lane match, never instead of it — a correct block still always stops the
+  // attack regardless of this value). 100 (always hits) reproduces every pre-this-column battle's
+  // exact behavior. Distinct from CMoonSpecialAttack.accuracyPercent, which governs a SPECIAL
+  // attack's own cast separately — this field only ever gates the plain ATTACK_HIGH/ATTACK_LOW
+  // move. A miss is surfaced to the client as `enemyMissed` on the round result, shown with the
+  // same "MISS!" badge treatment the client already gives a landed critical hit.
+  attackAccuracyPercent    Int                  @default(100)
   active                   Boolean              @default(true)
   // Set the moment a SHARED_POOL member's currentHp reaches 0 — once set, the popup-consider
   // roll skips this member (it stays visible/browsable in the admin page and battle logs, just

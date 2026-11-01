@@ -215,13 +215,19 @@
                           <template v-else-if="r.playerHit">took a hit<span v-if="r.playerCrit" class="cr-crit-badge">CRIT!</span></template>
                           <template v-else-if="r.playerBlocked">blocked it — healed 1 HP</template>
                           <template v-else-if="r.enemyBlocked">boss blocked it</template>
+                          <!-- enemyMissed (see CMoonEnemyMember.attackAccuracyPercent's own schema
+                               comment) — the boss's attack would have landed on THIS participant
+                               but whiffed outright, rolled independently per participant, so one
+                               party member can see this while another sees "landed a hit!" the
+                               same round. -->
+                          <template v-else-if="r.enemyMissed">dodged it!<span class="cr-miss-badge">MISS!</span></template>
                           <template v-else>no hit landed</template>
                         </span>
                       </li>
                     </ul>
                     <p v-if="lastRoundSummary.enemyDamageDealt > 0" class="cr-reveal-dealt">The party dealt {{ lastRoundSummary.enemyDamageDealt }} damage this round.</p>
                     <p v-for="(s, i) in (lastRoundSummary.specials || [])" :key="i" class="cr-special-flash" :class="s.side === 'PLAYER' ? 'cr-special-flash-player' : 'cr-special-flash-enemy'">
-                      <template v-if="s.missed">💨 {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} tried to unleash <strong>{{ s.name }}</strong>, but it missed!</template>
+                      <template v-if="s.missed">{{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} tried to unleash <strong>{{ s.name }}</strong><span class="cr-miss-badge">MISS!</span></template>
                       <template v-else-if="s.fizzled">✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} tried to unleash <strong>{{ s.name }}</strong>, but it was blocked and had no effect!</template>
                       <template v-else>✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} unleashed <strong>{{ s.name }}</strong>!</template>
                     </p>
@@ -413,7 +419,7 @@ function usernameFor(userId) {
 function revealRowClass(r) {
   if (r.enemyHit && !r.playerHit) return 'cr-row-good'
   if (r.playerHit && !r.enemyHit) return 'cr-row-bad'
-  if (r.playerBlocked) return 'cr-row-good'
+  if (r.playerBlocked || r.enemyMissed) return 'cr-row-good'
   return 'cr-row-neutral'
 }
 
@@ -1014,6 +1020,22 @@ onUnmounted(() => {
   0% { transform: scale(0.4); opacity: 0; }
   60% { transform: scale(1.15); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
+}
+/* Same pop-in treatment as the crit badge above, in a cool blue so a miss (either an enemy's
+   normal attack whiffing — see CMoonEnemyMember.attackAccuracyPercent — or a special attack
+   missing, see CMoonSpecialAttack.accuracyPercent) reads as "nothing happened" rather than
+   competing visually with a crit's "big hit" gold. */
+.cr-miss-badge {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #38bdf8;
+  color: #082f49;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  animation: cr-crit-pop 0.35s ease-out;
 }
 
 .cr-reveal-enter-active, .cr-reveal-leave-active { transition: opacity 0.2s ease; }

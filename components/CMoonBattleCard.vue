@@ -36,6 +36,7 @@
     <p v-if="lastRoundLabel" class="cbc-round-summary" :class="lastRoundClass">
       {{ lastRoundLabel }}
       <span v-if="critBadge" class="cbc-crit-badge">CRITICAL!</span>
+      <span v-if="missBadge" class="cbc-miss-badge">MISS!</span>
     </p>
     <p v-if="error" class="cbc-error">{{ error }}</p>
 
@@ -56,6 +57,7 @@
     <h2 :id="titleId" class="cbc-title" :class="resultTitleClass">
       {{ resultTitle }}
       <span v-if="critBadge" class="cbc-crit-badge">CRITICAL!</span>
+      <span v-if="missBadge" class="cbc-miss-badge">MISS!</span>
     </h2>
     <p class="cbc-sub">{{ enemyName }}</p>
     <slot name="result-extra" />
@@ -119,6 +121,7 @@ const props = defineProps({
   lastRoundLabel: { type: String, default: '' },
   lastRoundClass: { type: String, default: '' },
   critBadge: { type: Boolean, default: false },
+  missBadge: { type: Boolean, default: false },
   portraitWarning: { type: Boolean, default: false },
   outcome: { type: String, default: null },
   resultTitle: { type: String, default: '' },
@@ -260,6 +263,20 @@ const isOutOfStamina = computed(() => props.playerMaxStamina > 0 && props.player
   0% { transform: scale(0.4); opacity: 0; }
   60% { transform: scale(1.15); opacity: 1; }
   100% { transform: scale(1); opacity: 1; }
+}
+/* Same pop-in treatment as the crit badge above, in a cool blue so a miss reads as "nothing
+   happened" rather than competing visually with a crit's "big hit" gold. */
+.cbc-miss-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #38bdf8;
+  color: #082f49;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  animation: cbc-crit-pop 0.35s ease-out;
 }
 
 .cbc-move-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }

@@ -51,6 +51,7 @@ export default defineEventHandler(async (event) => {
       cMoonPointsReward: m.cMoonPointsReward,
       critChanceAgainstPercent: m.critChanceAgainstPercent,
       critChanceFromPercent: m.critChanceFromPercent,
+      attackAccuracyPercent: m.attackAccuracyPercent,
       attackChancePercent: m.attackChancePercent,
       pityThreshold: m.pityThreshold,
       firstWinBonusPoints: m.firstWinBonusPoints,

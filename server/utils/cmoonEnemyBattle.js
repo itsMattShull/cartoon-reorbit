@@ -129,16 +129,30 @@ function attackLands(attackerAction, defenderAction) {
 // either way", which mutual-block already covers via both being false). This is the trigger for
 // the heal-on-successful-block mechanic (see action.post.js) — a side only heals for stopping a
 // real attack, never for a round where neither side threw one.
-export function resolveBattleRound(playerAction, enemyAction) {
+// `enemyAccuracyPercent` (0-100, default 100 — see CMoonEnemyMember.attackAccuracyPercent's own
+// schema comment) rolls AFTER the lane match above decides the enemy's attack WOULD land — a
+// correct block always stops it regardless of this value, same as before this parameter existed.
+// Only the enemy's own NORMAL attack gets this miss chance; the player's own attacks landing on
+// the enemy are ungated here (no equivalent "player accuracy" stat exists — a special attack's
+// own miss chance is a separate mechanic entirely, see CMoonSpecialAttack.accuracyPercent). A
+// miss is a different reason for "no damage" than a block: `enemyMissed` is its own flag so the
+// caller/UI can tell "they missed outright" apart from "you blocked it" — `playerBlocked` is
+// deliberately `false` on a miss (the player didn't block the right lane, the attack just whiffed
+// on its own), so it never credits an undeserved block-heal.
+export function resolveBattleRound(playerAction, enemyAction, enemyAccuracyPercent = 100) {
   if (!isKnownAction(playerAction)) throw new Error(`Invalid player action: ${playerAction}`)
   if (!isKnownAction(enemyAction)) throw new Error(`Invalid enemy action: ${enemyAction}`)
-  const playerHit = attackLands(enemyAction, playerAction)
+  const enemyWouldHit = attackLands(enemyAction, playerAction)
+  const accuracy = Math.max(0, Math.min(100, Number(enemyAccuracyPercent ?? 100)))
+  const enemyMissed = enemyWouldHit && Math.random() * 100 >= accuracy
+  const playerHit = enemyWouldHit && !enemyMissed
   const enemyHit = attackLands(playerAction, enemyAction)
   return {
     playerHit,
     enemyHit,
-    playerBlocked: isAttack(enemyAction) && !playerHit,
+    playerBlocked: isAttack(enemyAction) && !playerHit && !enemyMissed,
     enemyBlocked: isAttack(playerAction) && !enemyHit,
+    enemyMissed,
   }
 }
 
@@ -187,7 +201,7 @@ export function resolveRound({
   const rolledEnemyAction = rollEnemyAction(enemyMember.attackChancePercent)
   const effectivePlayerAction = playerParalyzedTurns > 0 ? PARALYZED_ACTION : playerAction
   const effectiveEnemyAction = enemyParalyzedTurns > 0 ? PARALYZED_ACTION : rolledEnemyAction
-  const { playerHit, enemyHit, playerBlocked, enemyBlocked } = resolveBattleRound(effectivePlayerAction, effectiveEnemyAction)
+  const { playerHit, enemyHit, playerBlocked, enemyBlocked, enemyMissed } = resolveBattleRound(effectivePlayerAction, effectiveEnemyAction, enemyMember.attackAccuracyPercent)
   // critChanceFromPercent is this enemy's own attacks landing critically against the player;
   // critChanceAgainstPercent is the player's attacks landing critically against this enemy — see
   // those columns' own schema comments.
@@ -239,6 +253,11 @@ export function resolveRound({
       // normal hit for N" — both already fold into the same enemyDamage above, this is purely so
       // the client's round-summary copy (CMoonBattlePopupHost.vue) can tell which happened.
       counterHit: counterDamage > 0,
+      // True when the enemy's own attack would have landed (the player didn't block the right
+      // lane) but missed outright due to CMoonEnemyMember.attackAccuracyPercent — see
+      // resolveBattleRound's own comment. The client shows this with the same "MISS!" badge
+      // treatment a landed critical hit already gets.
+      enemyMissed,
     },
     newPlayerHp,
     enemyDamage,

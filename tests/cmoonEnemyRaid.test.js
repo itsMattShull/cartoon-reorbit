@@ -347,6 +347,49 @@ test('resolveRaidRound: partyShielded negates incoming HP loss even when the bos
   assert.equal(sawAHit, true)
 })
 
+// ── enemyMember.attackAccuracyPercent (see that column's own schema comment) ───────────────────
+test('resolveRaidRound: attackAccuracyPercent 0 means the boss\'s attack always misses a participant it would otherwise hit', () => {
+  const participants = [{ userId: 'a', action: 'BLOCK_LOW', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP }] // wrong lane -- would land
+  for (let i = 0; i < 20; i++) {
+    const result = resolveRaidRound({
+      enemyAction: 'ATTACK_HIGH', enemyMember: { ...baseEnemyMember, attackAccuracyPercent: 0 }, participants,
+    })
+    const [p] = result.perParticipant
+    assert.equal(p.playerHit, false)
+    assert.equal(p.enemyMissed, true)
+    assert.equal(p.hpRemaining, PLAYER_MAX_HP)
+  }
+})
+
+test('resolveRaidRound: attackAccuracyPercent is rolled INDEPENDENTLY per participant (not one shared outcome for the round)', () => {
+  const participants = [
+    { userId: 'a', action: 'BLOCK_LOW', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
+    { userId: 'b', action: 'BLOCK_LOW', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
+    { userId: 'c', action: 'BLOCK_LOW', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
+  ]
+  let sawMixedOutcomeInOneRound = false
+  for (let i = 0; i < 200 && !sawMixedOutcomeInOneRound; i++) {
+    const result = resolveRaidRound({
+      enemyAction: 'ATTACK_HIGH', enemyMember: { ...baseEnemyMember, attackAccuracyPercent: 50 }, participants,
+    })
+    const missedCount = result.perParticipant.filter(p => p.enemyMissed).length
+    if (missedCount > 0 && missedCount < result.perParticipant.length) sawMixedOutcomeInOneRound = true
+  }
+  assert.equal(sawMixedOutcomeInOneRound, true)
+})
+
+test('resolveRaidRound: a participant\'s own correct block still stops the attack regardless of accuracy', () => {
+  const participants = [{ userId: 'a', action: 'BLOCK_HIGH', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP }]
+  for (let i = 0; i < 20; i++) {
+    const result = resolveRaidRound({
+      enemyAction: 'ATTACK_HIGH', enemyMember: { ...baseEnemyMember, attackAccuracyPercent: 0 }, participants,
+    })
+    const [p] = result.perParticipant
+    assert.equal(p.playerBlocked, true)
+    assert.equal(p.enemyMissed, false)
+  }
+})
+
 // ── New raid-only tactical effects (applyRaidSpecialAttack in cmoonEnemyRaid.js) ────────────────
 // Minimal raid/alive fixtures — only the fields each effect branch actually touches.
 function makeRaid(overrides = {}) {

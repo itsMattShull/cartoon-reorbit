@@ -234,13 +234,21 @@ export function checkRaidBossAvailability({ raidOneTime, raidCooldownMinutes, ra
 // plain miss) but `playerDamage` and the resulting `newHp` are left untouched. A successful BLOCK
 // still heals normally even while shielded — the two are unrelated (shield protects against a HIT,
 // a block is a separate action the player themselves chose) and stacking them is harmless.
+// `enemyMember.attackAccuracyPercent` (see that column's own schema comment) can also make the
+// boss's one shared action whiff against a given participant even when they didn't block it —
+// see resolveBattleRound's own comment for why that's distinct from a block (`playerBlocked`
+// stays false on a miss) and each participant's own independent roll.
 export function resolveRaidRound({ enemyAction, enemyMember, participants, partyAtkBonus = 0, enemyAtkBonus = 0, partyShielded = false }) {
   if (!isKnownAction(enemyAction)) throw new Error(`Invalid enemy action: ${enemyAction}`)
 
   let enemyDamageDealt = 0
   const perParticipant = participants.map(({ userId, action, hpRemaining, maxHp }) => {
     if (!isKnownAction(action)) throw new Error(`Invalid action for ${userId}: ${action}`)
-    const { playerHit, enemyHit, playerBlocked, enemyBlocked } = resolveBattleRound(action, enemyAction)
+    // enemyMember.attackAccuracyPercent (see that column's own schema comment) is rolled
+    // INDEPENDENTLY per participant here — the boss's one shared action this round can land on
+    // some party members and whiff on others, rather than one shared hit/miss outcome for the
+    // whole party.
+    const { playerHit, enemyHit, playerBlocked, enemyBlocked, enemyMissed } = resolveBattleRound(action, enemyAction, enemyMember.attackAccuracyPercent)
     // critChanceFromPercent is the enemy's own attack landing critically against A player;
     // critChanceAgainstPercent is a player's attack landing critically against the enemy — same
     // naming as the solo battle, see CMoonEnemyMember's own schema comment on these columns.
@@ -264,6 +272,9 @@ export function resolveRaidRound({ enemyAction, enemyMember, participants, party
     return {
       userId, action, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked,
       playerCrit, enemyCrit, hpRemaining: newHp, knockedOut: newHp <= 0,
+      // True when the boss's own attack would have landed on THIS participant but missed
+      // outright (see CMoonEnemyMember.attackAccuracyPercent/resolveBattleRound's own comment).
+      enemyMissed,
       // Display-only, same reasoning/shape as the solo battle's own roundEntry.playerDamage/
       // enemyDamage (see resolveRound's own comment) — the floating damage-number UI reads
       // these directly instead of re-deriving "1, or 2 on a crit" client-side. playerDamage is

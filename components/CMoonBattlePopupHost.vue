@@ -83,6 +83,7 @@
             :last-round-label="lastRoundLabel"
             :last-round-class="lastRoundClass"
             :crit-badge="!!(lastRound?.playerCrit || lastRound?.enemyCrit)"
+            :miss-badge="!!lastRound?.enemyMissed"
             :portrait-warning="enemySpecialWarning"
             :outcome="battle?.outcome"
             :result-title="resultTitle"
@@ -110,7 +111,12 @@
                 ⚡ Paralyzed — can't act for {{ battle.playerParalyzedTurns }} more round{{ battle.playerParalyzedTurns === 1 ? '' : 's' }}
               </p>
               <p v-for="(s, i) in (lastRound?.specials || [])" :key="i" class="cbp-special-flash" :class="s.side === 'PLAYER' ? 'cbp-special-flash-player' : 'cbp-special-flash-enemy'">
-                {{ s.side === 'PLAYER' ? 'You' : battle?.enemy?.name || 'The enemy' }} unleashed <strong>{{ s.name }}</strong>!
+                <template v-if="s.missed">
+                  {{ s.side === 'PLAYER' ? 'You' : battle?.enemy?.name || 'The enemy' }} tried to unleash <strong>{{ s.name }}</strong><span class="cbp-miss-badge">MISS!</span>
+                </template>
+                <template v-else>
+                  {{ s.side === 'PLAYER' ? 'You' : battle?.enemy?.name || 'The enemy' }} unleashed <strong>{{ s.name }}</strong>!
+                </template>
               </p>
               <p v-if="comboCallout" class="cbp-combo-callout">{{ comboCallout }}</p>
               <p v-if="currentTaunt" class="cbp-taunt">&ldquo;{{ currentTaunt }}&rdquo;</p>
@@ -273,7 +279,7 @@ const specialFillStyle = computed(() => {
 // by construction, not just in practice.
 const lastRoundLabel = computed(() => {
   if (!lastRound.value) return ''
-  const { playerAction, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked, counterHit } = lastRound.value
+  const { playerAction, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked, counterHit, enemyMissed } = lastRound.value
   const actions = `You ${actionLabel(playerAction)}, they ${actionLabel(enemyAction)} — `
   if (playerHit && enemyHit) return `${actions}you both landed a hit!`
   if (playerHit) return `${actions}you took a hit!`
@@ -284,15 +290,20 @@ const lastRoundLabel = computed(() => {
   if (playerBlocked && counterHit) return `${actions}you blocked it, healed 1 HP, and countered for damage!`
   if (playerBlocked) return `${actions}you blocked it and healed 1 HP!`
   if (enemyBlocked) return `${actions}they blocked it and healed 1 HP!`
+  // enemyMissed (see CMoonEnemyMember.attackAccuracyPercent's own schema comment) — the enemy's
+  // attack would have landed (you didn't block the right lane) but whiffed outright, a different
+  // reason for "no damage" than a genuine block, so it gets its own line rather than falling into
+  // the generic "no hits landed" below.
+  if (enemyMissed) return `${actions}their attack missed!`
   return `${actions}no hits landed.`
 })
 const lastRoundClass = computed(() => {
   if (!lastRound.value) return ''
-  const { playerHit, enemyHit, playerBlocked } = lastRound.value
+  const { playerHit, enemyHit, playerBlocked, enemyMissed } = lastRound.value
   // cbc- (not cbp-) — these classes are applied inside CMoonBattleCard.vue, which owns them.
   if (enemyHit && !playerHit) return 'cbc-round-good'
   if (playerHit && !enemyHit) return 'cbc-round-bad'
-  if (playerBlocked) return 'cbc-round-good'
+  if (playerBlocked || enemyMissed) return 'cbc-round-good'
   return 'cbc-round-neutral'
 })
 
@@ -1045,6 +1056,19 @@ watch(() => route.path, maybeCheck)
 }
 @media (prefers-reduced-motion: reduce) {
   .cbp-special-flash { animation: none; }
+}
+/* Same badge-pop treatment as the crit badge (CMoonBattleCard.vue's own .cbc-crit-badge) — see
+   that component's .cbc-miss-badge for the matching enemy-attack-miss styling this mirrors. */
+.cbp-miss-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #38bdf8;
+  color: #082f49;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
 }
 
 .cbp-first-win {

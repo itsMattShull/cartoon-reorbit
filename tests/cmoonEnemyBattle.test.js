@@ -89,33 +89,33 @@ test('resolveRound: the heal-on-block cap follows the passed-in playerMaxHp, not
 })
 
 test('resolveBattleRound: matching block cancels the matching-lane attack, and counts as a successful block', () => {
-  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'BLOCK_HIGH'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: true })
-  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'BLOCK_LOW'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: true })
-  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'ATTACK_HIGH'), { playerHit: false, enemyHit: false, playerBlocked: true, enemyBlocked: false })
-  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'ATTACK_LOW'), { playerHit: false, enemyHit: false, playerBlocked: true, enemyBlocked: false })
+  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'BLOCK_HIGH'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: true, enemyMissed: false })
+  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'BLOCK_LOW'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: true, enemyMissed: false })
+  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'ATTACK_HIGH'), { playerHit: false, enemyHit: false, playerBlocked: true, enemyBlocked: false, enemyMissed: false })
+  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'ATTACK_LOW'), { playerHit: false, enemyHit: false, playerBlocked: true, enemyBlocked: false, enemyMissed: false })
 })
 
 test('resolveBattleRound: wrong-lane block does not cancel the attack, and is not a successful block', () => {
   // player attacks high, enemy blocks low -> enemy still gets hit, enemy's block failed
-  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'BLOCK_LOW'), { playerHit: false, enemyHit: true, playerBlocked: false, enemyBlocked: false })
-  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'BLOCK_HIGH'), { playerHit: false, enemyHit: true, playerBlocked: false, enemyBlocked: false })
+  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'BLOCK_LOW'), { playerHit: false, enemyHit: true, playerBlocked: false, enemyBlocked: false, enemyMissed: false })
+  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'BLOCK_HIGH'), { playerHit: false, enemyHit: true, playerBlocked: false, enemyBlocked: false, enemyMissed: false })
   // player blocks low, enemy attacks high -> player still gets hit, player's block failed
-  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'ATTACK_HIGH'), { playerHit: true, enemyHit: false, playerBlocked: false, enemyBlocked: false })
-  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'ATTACK_LOW'), { playerHit: true, enemyHit: false, playerBlocked: false, enemyBlocked: false })
+  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'ATTACK_HIGH'), { playerHit: true, enemyHit: false, playerBlocked: false, enemyBlocked: false, enemyMissed: false })
+  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'ATTACK_LOW'), { playerHit: true, enemyHit: false, playerBlocked: false, enemyBlocked: false, enemyMissed: false })
 })
 
 test('resolveBattleRound: mutual attack lands on both sides and neither counts as a block', () => {
-  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'ATTACK_HIGH'), { playerHit: true, enemyHit: true, playerBlocked: false, enemyBlocked: false })
-  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'ATTACK_LOW'), { playerHit: true, enemyHit: true, playerBlocked: false, enemyBlocked: false })
-  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'ATTACK_HIGH'), { playerHit: true, enemyHit: true, playerBlocked: false, enemyBlocked: false })
-  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'ATTACK_LOW'), { playerHit: true, enemyHit: true, playerBlocked: false, enemyBlocked: false })
+  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'ATTACK_HIGH'), { playerHit: true, enemyHit: true, playerBlocked: false, enemyBlocked: false, enemyMissed: false })
+  assert.deepEqual(resolveBattleRound('ATTACK_HIGH', 'ATTACK_LOW'), { playerHit: true, enemyHit: true, playerBlocked: false, enemyBlocked: false, enemyMissed: false })
+  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'ATTACK_HIGH'), { playerHit: true, enemyHit: true, playerBlocked: false, enemyBlocked: false, enemyMissed: false })
+  assert.deepEqual(resolveBattleRound('ATTACK_LOW', 'ATTACK_LOW'), { playerHit: true, enemyHit: true, playerBlocked: false, enemyBlocked: false, enemyMissed: false })
 })
 
 test('resolveBattleRound: mutual block is a no-op AND not a "successful" block for either side (nothing was thrown to stop)', () => {
-  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'BLOCK_HIGH'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false })
-  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'BLOCK_LOW'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false })
-  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'BLOCK_HIGH'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false })
-  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'BLOCK_LOW'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false })
+  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'BLOCK_HIGH'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false, enemyMissed: false })
+  assert.deepEqual(resolveBattleRound('BLOCK_HIGH', 'BLOCK_LOW'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false, enemyMissed: false })
+  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'BLOCK_HIGH'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false, enemyMissed: false })
+  assert.deepEqual(resolveBattleRound('BLOCK_LOW', 'BLOCK_LOW'), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false, enemyMissed: false })
 })
 
 test('resolveBattleRound: exhaustively covers every 4x4 combination with no exceptions', () => {
@@ -126,10 +126,43 @@ test('resolveBattleRound: exhaustively covers every 4x4 combination with no exce
       assert.equal(typeof result.enemyHit, 'boolean')
       assert.equal(typeof result.playerBlocked, 'boolean')
       assert.equal(typeof result.enemyBlocked, 'boolean')
+      assert.equal(typeof result.enemyMissed, 'boolean')
       // A side can never be simultaneously hit and credited with a successful block.
       assert.ok(!(result.playerHit && result.playerBlocked))
       assert.ok(!(result.enemyHit && result.enemyBlocked))
+      // Default accuracy (no 3rd arg) is always 100 -- never a miss.
+      assert.equal(result.enemyMissed, false)
     }
+  }
+})
+
+// ── enemyAccuracyPercent (see CMoonEnemyMember.attackAccuracyPercent's own schema comment) ─────
+test('resolveBattleRound: enemyAccuracyPercent 0 always misses an attack that would otherwise land, and never credits a block', () => {
+  for (let i = 0; i < 20; i++) {
+    const result = resolveBattleRound('BLOCK_LOW', 'ATTACK_HIGH', 0) // wrong-lane block -- would land
+    assert.deepEqual(result, { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false, enemyMissed: true })
+  }
+})
+
+test('resolveBattleRound: enemyAccuracyPercent 100 (default) never misses', () => {
+  for (let i = 0; i < 20; i++) {
+    const result = resolveBattleRound('BLOCK_LOW', 'ATTACK_HIGH', 100)
+    assert.equal(result.playerHit, true)
+    assert.equal(result.enemyMissed, false)
+  }
+})
+
+test('resolveBattleRound: a correct block still stops the attack regardless of accuracy -- nothing to miss', () => {
+  for (let i = 0; i < 20; i++) {
+    const result = resolveBattleRound('BLOCK_HIGH', 'ATTACK_HIGH', 0)
+    assert.deepEqual(result, { playerHit: false, enemyHit: false, playerBlocked: true, enemyBlocked: false, enemyMissed: false })
+  }
+})
+
+test('resolveBattleRound: enemyAccuracyPercent never affects the PLAYER\'s own attack landing on the enemy', () => {
+  for (let i = 0; i < 20; i++) {
+    const result = resolveBattleRound('ATTACK_HIGH', 'BLOCK_LOW', 0) // enemy's own wrong-lane block
+    assert.equal(result.enemyHit, true) // the player's attack still lands -- unaffected
   }
 })
 
@@ -310,10 +343,10 @@ test('isValidPlayerSubmittedAction accepts the 4 lane moves plus SPECIAL_ACTION,
 test('resolveBattleRound: SPECIAL_ACTION and PARALYZED_ACTION both count as neither attacking nor blocking', () => {
   for (const sentinel of [SPECIAL_ACTION, PARALYZED_ACTION]) {
     // A real attack still lands on a side using one of these sentinels — not blocking it.
-    assert.deepEqual(resolveBattleRound(sentinel, 'ATTACK_HIGH'), { playerHit: true, enemyHit: false, playerBlocked: false, enemyBlocked: false })
-    assert.deepEqual(resolveBattleRound('ATTACK_LOW', sentinel), { playerHit: false, enemyHit: true, playerBlocked: false, enemyBlocked: false })
+    assert.deepEqual(resolveBattleRound(sentinel, 'ATTACK_HIGH'), { playerHit: true, enemyHit: false, playerBlocked: false, enemyBlocked: false, enemyMissed: false })
+    assert.deepEqual(resolveBattleRound('ATTACK_LOW', sentinel), { playerHit: false, enemyHit: true, playerBlocked: false, enemyBlocked: false, enemyMissed: false })
     // Two sentinels together: nobody attacked, so nothing lands and nobody "successfully blocked" either.
-    assert.deepEqual(resolveBattleRound(sentinel, sentinel), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false })
+    assert.deepEqual(resolveBattleRound(sentinel, sentinel), { playerHit: false, enemyHit: false, playerBlocked: false, enemyBlocked: false, enemyMissed: false })
   }
 })
 

@@ -689,6 +689,20 @@
 
           <div class="flex gap-2">
             <div class="flex-1 min-w-0">
+              <label class="block text-xs font-medium mb-1">Attack accuracy (0-100%)</label>
+              <input v-model.number="memberForm.attackAccuracyPercent" type="number" min="0" max="100" class="w-full border rounded px-2 py-1" />
+              <p class="text-[10px] text-gray-500 mt-1">
+                Chance this enemy's own NORMAL attack actually connects once it would otherwise land (the
+                player chose the wrong lane) — a correct block always stops it regardless. 100 (default)
+                always lands, same as before this existed. Shown to players as a "MISS!" the same way a
+                critical hit gets its own badge. Doesn't affect a special attack's own accuracy, set
+                separately on that attack.
+              </p>
+            </div>
+          </div>
+
+          <div class="flex gap-2">
+            <div class="flex-1 min-w-0">
               <label class="block text-xs font-medium mb-1">Attack chance (0-100%)</label>
               <input v-model.number="memberForm.attackChancePercent" type="number" min="0" max="100" class="w-full border rounded px-2 py-1" />
               <p class="text-[10px] text-gray-500 mt-1">
@@ -1823,6 +1837,7 @@ const emptyMemberForm = () => ({
   id: '', factionId: '', name: '', maxHp: 5, battleMode: 'PER_PLAYER', rank: 'GOON', minPriorDefeats: 0,
   occurrencePercent: 50,
   cMoonPointsReward: 10, critChanceAgainstPercent: 0, critChanceFromPercent: 0,
+  attackAccuracyPercent: 100,
   attackChancePercent: 50, pityThreshold: 0, firstWinBonusPoints: 0,
   active: true, sortOrder: 0,
   isRaidBoss: false, raidAnnouncementText: '', raidOneTime: false, raidCooldownMinutes: 0,
@@ -1884,6 +1899,7 @@ function startEditMember(m) {
     minPriorDefeats: m.minPriorDefeats ?? 0, occurrencePercent: m.occurrencePercent ?? 50,
     cMoonPointsReward: m.cMoonPointsReward, critChanceAgainstPercent: m.critChanceAgainstPercent ?? 0,
     critChanceFromPercent: m.critChanceFromPercent ?? 0,
+    attackAccuracyPercent: m.attackAccuracyPercent ?? 100,
     attackChancePercent: m.attackChancePercent ?? 50, pityThreshold: m.pityThreshold ?? 0,
     firstWinBonusPoints: m.firstWinBonusPoints ?? 0,
     active: !!m.active, sortOrder: m.sortOrder,
@@ -1960,6 +1976,11 @@ async function saveMember() {
     memberFormError.value = 'Crit chance from this enemy must be between 0 and 100.'
     return
   }
+  const attackAccuracyPercent = Math.trunc(Number(memberForm.attackAccuracyPercent))
+  if (!Number.isInteger(attackAccuracyPercent) || attackAccuracyPercent < 0 || attackAccuracyPercent > 100) {
+    memberFormError.value = 'Attack accuracy must be between 0 and 100.'
+    return
+  }
   const attackChancePercent = Math.trunc(Number(memberForm.attackChancePercent))
   if (!Number.isInteger(attackChancePercent) || attackChancePercent < 0 || attackChancePercent > 100) {
     memberFormError.value = 'Attack chance must be between 0 and 100.'
@@ -2022,6 +2043,7 @@ async function saveMember() {
       cMoonPointsReward,
       critChanceAgainstPercent,
       critChanceFromPercent,
+      attackAccuracyPercent,
       attackChancePercent,
       pityThreshold,
       firstWinBonusPoints,
