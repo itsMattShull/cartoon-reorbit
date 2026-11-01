@@ -79,7 +79,9 @@
     <!-- The epic moment itself — deliberately its own full-screen beat, separate from (and before)
          the destination cMoon's own join effect, so prestiging always feels like a bigger occasion
          than an ordinary team join even when the chosen cMoon has no custom join effect configured. -->
-    <div v-else class="cpm-ascend-overlay" @click="continueAfterAscend">
+    <!-- .self: the Continue button below has its own @click — without .self here, that click would
+         bubble up and fire continueAfterAscend a second time (double navigate/emit/reward-modal). -->
+    <div v-else class="cpm-ascend-overlay" @click.self="continueAfterAscend">
       <div class="cpm-ascend-glow" aria-hidden="true"></div>
       <div class="cpm-ascend-content">
         <p class="cpm-ascend-eyebrow">✦ Prestige Unlocked ✦</p>
