@@ -30,11 +30,13 @@
         </select>
       </div>
 
-      <div class="czew-grid">
-        <div v-if="cz.loadingCollection" class="czew-empty" style="grid-column:1/-1">Loading…</div>
+      <div class="czew-grid" ref="gridEl">
+        <template v-if="cz.loadingCollection">
+          <div v-for="n in 12" :key="n" class="czew-skel czew-skel-toon" aria-hidden="true"></div>
+        </template>
         <template v-else>
           <div
-            v-for="c in filteredCollection" :key="c.id"
+            v-for="c in visibleCollection" :key="c.id"
             class="czew-toon-wrap"
             @mousedown.prevent="startDrag(c, $event)"
             @touchstart="onToonTouchStart(c, $event)"
@@ -44,6 +46,9 @@
             <SecondEditionOverlay :ctoon="c" />
           </div>
           <div v-if="!filteredCollection.length" class="czew-empty" style="grid-column:1/-1">No cToons found.</div>
+          <!-- Progressive rendering: the grid shows PAGE_SIZE tiles at a time; this sentinel scrolling
+               into view (see the IntersectionObserver below) renders the next page. -->
+          <div v-if="hasMore" ref="sentinelEl" class="czew-sentinel" aria-hidden="true"></div>
         </template>
       </div>
     </div>
@@ -92,7 +97,9 @@
       </div>
 
       <div class="czew-bg-grid">
-        <div v-if="cz.loadingBackgrounds" class="czew-empty" style="grid-column:1/-1">Loading…</div>
+        <template v-if="cz.loadingBackgrounds">
+          <div v-for="n in 6" :key="n" class="czew-skel czew-skel-bg" aria-hidden="true"></div>
+        </template>
         <template v-else>
           <CtoonImage
             v-for="bg in cz.backgrounds" :key="bg.id"
@@ -190,6 +197,26 @@ const search          = ref('')
 const activeRarities  = ref([])
 const selectedSeries  = ref('')
 
+// ── Backgrounds: fetched the first time the Background tab is opened (not on entering build
+// mode) so the cToons tab isn't competing with a download the user may never look at. This
+// component only exists while build mode is on, so each build session re-fetches fresh.
+let bgRequested = false
+async function loadBackgrounds() {
+  if (bgRequested) return
+  bgRequested = true
+  cz.value.loadingBackgrounds = true
+  try {
+    const data = await $fetch('/api/czone/backgrounds-available')
+    cz.value.backgrounds = Array.isArray(data) ? data : []
+  } catch (e) {
+    console.error('CzoneEdit: failed to load backgrounds', e)
+    bgRequested = false // let reopening the tab retry
+  } finally {
+    cz.value.loadingBackgrounds = false
+  }
+}
+watch(activeTab, (tab) => { if (tab === 'bg') loadBackgrounds() })
+
 const currentZoneBg = computed(() => cz.value.zones?.[cz.value.activeZone]?.background ?? '')
 
 // Stable identity for a cToon shared between the collection payload and the
@@ -228,6 +255,43 @@ const filteredCollection = computed(() => {
   })
 })
 
+// ── Progressive rendering of the cToon grid ───────────────────
+// Mounting a tile (image + SecondEditionOverlay observers, or a GtoonCard for OG gToons) for an
+// entire collection is what makes this sidebar slow on phones, so only render PAGE_SIZE at a time
+// and add the next page as the user scrolls near the bottom. Filtering still runs over the whole
+// collection; only the rendered slice is capped.
+const PAGE_SIZE = 60
+const hasIO = typeof IntersectionObserver !== 'undefined'
+const visibleCount = ref(hasIO ? PAGE_SIZE : Infinity) // no IntersectionObserver → render everything
+const gridEl = ref(null)
+const sentinelEl = ref(null)
+let io = null
+
+const visibleCollection = computed(() => filteredCollection.value.slice(0, visibleCount.value))
+const hasMore = computed(() => visibleCount.value < filteredCollection.value.length)
+
+function loadMore() {
+  if (!hasMore.value) return
+  visibleCount.value += PAGE_SIZE
+  // The sentinel keeps its "intersecting" state if it's still within range after the new page
+  // renders, which would never re-fire — so re-observe it to force a fresh check.
+  nextTick(() => {
+    if (io && sentinelEl.value) { io.unobserve(sentinelEl.value); io.observe(sentinelEl.value) }
+  })
+}
+
+watch(sentinelEl, (el, prev) => {
+  if (!io) return
+  if (prev) io.unobserve(prev)
+  if (el) io.observe(el)
+})
+
+// A changed filter is a new list: start again from the first page, scrolled to the top.
+watch([search, activeRarities, selectedSeries], () => {
+  visibleCount.value = hasIO ? PAGE_SIZE : Infinity
+  if (gridEl.value) gridEl.value.scrollTop = 0
+}, { deep: true })
+
 function toggleRarity(val) {
   const idx = activeRarities.value.indexOf(val)
   if (idx === -1) activeRarities.value.push(val)
@@ -252,10 +316,19 @@ function updateMobile() {
 onMounted(() => {
   updateMobile()
   window.addEventListener('resize', updateMobile)
+  if (hasIO) {
+    io = new IntersectionObserver(
+      (entries) => { if (entries.some(e => e.isIntersecting)) loadMore() },
+      { root: gridEl.value, rootMargin: '300px' }
+    )
+    if (sentinelEl.value) io.observe(sentinelEl.value)
+  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', updateMobile)
+  io?.disconnect()
+  io = null
 })
 
 function onToonTouchStart(c, e) {
@@ -476,6 +549,24 @@ function selectBg(bg) {
   font-size: 0.65rem;
   color: #ffb4a8;
   margin: 2px 0 0;
+}
+
+.czew-sentinel { grid-column: 1 / -1; height: 1px; }
+
+/* ── Loading skeletons ── */
+.czew-skel {
+  background: rgba(255,255,255,0.08);
+  border-radius: 4px;
+  animation: czew-pulse 1.2s ease-in-out infinite;
+}
+.czew-skel-toon { aspect-ratio: 1; }
+.czew-skel-bg   { aspect-ratio: 4/3; }
+@keyframes czew-pulse {
+  0%, 100% { opacity: 0.5; }
+  50%      { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .czew-skel { animation: none; }
 }
 
 /* ── Background grid ── */
