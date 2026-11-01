@@ -93,10 +93,12 @@ export async function getPrestigeStatus(userId) {
 
 // The mutating action. Re-validates everything from getPrestigeStatus server-side (never trusts
 // a client that already saw eligible:true moments ago) plus the chosen destination itself, then
-// performs the move via reassignUserCMoon, bumps prestigeLevel, grants the destination's prize
-// cToons (same "a voluntary team join earns its welcome prizes" stance selectCMoonForUser
+// performs the move via reassignUserCMoon, bumps prestigeLevel, writes one CMoonPrestigeLog row,
+// and — ONLY the first time this player ever prestiges into this specific cMoon — grants its
+// prize cToons (same "a voluntary team join earns its welcome prizes" stance selectCMoonForUser
 // already takes — reassignUserCMoon itself never grants prizes, since every OTHER caller of it
-// is an admin-driven move, not a player's own choice), and writes one CMoonPrestigeLog row.
+// is an admin-driven move, not a player's own choice). The first-visit gate stops a player from
+// farming duplicates by repeatedly hopping back and forth between the same two prestige cMoons.
 export async function prestigeUser(userId, newCMoonId) {
   const config = await getGlobalConfig({ fresh: true })
   if (!config?.cMoonPrestigeEnabled) throw new CMoonPrestigeError(CMOON_PRESTIGE_ERRORS.DISABLED)
@@ -138,26 +140,49 @@ export async function prestigeUser(userId, newCMoonId) {
   // nothing below it (the level bump, the log row) ever runs.
   const moveResult = await reassignUserCMoon(userId, newCMoonId)
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: { prestigeLevel: newLevel, lastPrestigedAt: new Date() },
-  })
+  // Bumped together so a failure here can never leave one without the other (e.g. a level bump
+  // with no log row to show for it, invisible to support trying to reconcile a discrepancy).
+  // Deliberately NOT caught/swallowed: reassignUserCMoon above already committed its own move
+  // (points reset, new cMoon), so a failure here would otherwise let this function return a
+  // false "success" — prizes granted, a prestigeLevel the response claims but never actually
+  // wrote — instead of surfacing the real error. A player who hits this rare failure is left
+  // moved-but-not-leveled-up, the same gap every other reassignUserCMoon caller already accepts
+  // (its own transaction boundary is separate from callers' follow-up work); worth a support
+  // look if it ever shows up in the server logs, not a silent false-positive to the player.
+  const [, prestigeLog] = await prisma.$transaction([
+    prisma.user.update({
+      where: { id: userId },
+      data: { prestigeLevel: newLevel, lastPrestigedAt: new Date() },
+    }),
+    prisma.cMoonPrestigeLog.create({
+      data: {
+        userId,
+        fromCMoonId: fromCMoon?.id || null,
+        fromCMoonName: fromCMoon?.name || null,
+        toCMoonId: toCMoon.id,
+        toCMoonName: toCMoon.name,
+        level: newLevel,
+        pointsAtPrestige,
+      },
+    }),
+  ])
 
-  await prisma.cMoonPrestigeLog.create({
-    data: {
-      userId,
-      fromCMoonId: fromCMoon?.id || null,
-      fromCMoonName: fromCMoon?.name || null,
-      toCMoonId: toCMoon.id,
-      toCMoonName: toCMoon.name,
-      level: newLevel,
-      pointsAtPrestige,
-    },
-  }).catch((e) => console.error('[cmoonPrestige] CMoonPrestigeLog write failed:', e?.message || e))
+  // Only a player's FIRST time ever prestiging into this specific cMoon earns its join prizes —
+  // without this, a player could grind back and forth between just two prestige cMoons forever,
+  // re-collecting the same fixed prize set on every hop (prestige levels only ever increase, so
+  // nothing stops a return visit at a higher level). Mirrors the "only a genuine first-time
+  // self-select may grant a prize" invariant selectCMoonForUser's own callers already enforce
+  // (see tests/cmoonBalanceNoPrizeGrant.test.js) — this is prestige's equivalent check, scoped to
+  // "have I ever prestiged INTO this cMoon before," since reassignUserCMoon (unlike
+  // selectCMoonForUser) never grants prizes on its own.
+  const priorVisit = await prisma.cMoonPrestigeLog.findFirst({
+    where: { userId, toCMoonId: toCMoon.id, id: { not: prestigeLog.id } },
+    select: { id: true },
+  })
 
   // Mint jobs are not transactional (same reasoning selectCMoonForUser's own call documents) —
   // run after every DB write above has safely committed.
-  const prizes = await grantCMoonPrizes(userId, toCMoon.id)
+  const prizes = priorVisit ? [] : await grantCMoonPrizes(userId, toCMoon.id)
 
   return {
     cMoonId: toCMoon.id,

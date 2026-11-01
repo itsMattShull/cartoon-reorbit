@@ -5,7 +5,38 @@
 // mock of Prisma re-asserting its own mock.
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 import { findNextPrestigeLevel } from '../server/utils/cmoonPrestigeLevels.js'
+
+// Text-scan regression test (same technique as tests/cmoonBalanceNoPrizeGrant.test.js, which this
+// file is cross-referenced from) protecting the first-visit-only prize-grant gate in
+// server/utils/cmoonPrestige.js's prestigeUser: without it, a player could ping-pong between two
+// prestige cMoons and re-collect the same fixed prize set on every hop. Scanning source text rather
+// than importing — prestigeUser pulls in cmoon.js, which eagerly constructs BullMQ Queue instances
+// on import (see tests/cmoonEffectTypes.test.js's comment) — keeps this test DB/Redis-free.
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const prestigeSrc = readFileSync(join(__dirname, '../server/utils/cmoonPrestige.js'), 'utf8')
+
+test('prestigeUser only grants prizes on a player\'s first-ever visit to a given cMoon', () => {
+  assert.match(
+    prestigeSrc,
+    /priorVisit\s*=\s*await\s+prisma\.cMoonPrestigeLog\.findFirst\(/,
+    'prestigeUser must look up whether this player has ever prestiged into the destination cMoon before, to gate repeat prize grants',
+  )
+  assert.match(
+    prestigeSrc,
+    /grantCMoonPrizes\(userId,\s*toCMoon\.id\)/,
+    'prestigeUser must still call grantCMoonPrizes for a genuine first visit — has the call been removed or renamed?',
+  )
+  const grantLine = prestigeSrc.split('\n').find(l => l.includes('grantCMoonPrizes(userId, toCMoon.id)'))
+  assert.ok(
+    grantLine && /priorVisit\s*\?\s*\[\]\s*:/.test(grantLine),
+    'the grantCMoonPrizes(userId, toCMoon.id) call must be gated on priorVisit (e.g. `priorVisit ? [] : await grantCMoonPrizes(...)`) — ' +
+    'without this gate a player can farm duplicate prizes by repeatedly hopping back and forth between the same two prestige cMoons',
+  )
+})
 
 test('findNextPrestigeLevel finds the row for currentLevel + 1', () => {
   const levels = [
