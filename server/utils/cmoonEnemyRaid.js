@@ -485,7 +485,7 @@ export function rankTierLevel(tiers, tierId) {
 export function publicParticipantTeam(raid, p) {
   // A reservation made without a team snapshot (shouldn't happen since joins snapshot before
   // reserving, but never guess) shows no team rather than borrowing the initiator's.
-  if (p.pendingJoin && !p.cMoonId) return { cMoon: null, rank: null, isCaptain: false }
+  if (p.pendingJoin && !p.cMoonId) return { cMoon: null, rank: null, isCaptain: false, prestigeLevel: 0 }
   const legacy = !p.cMoonId && participantCMoonId(raid, p) === raid.cMoonId
   return {
     cMoon: {
@@ -493,6 +493,9 @@ export function publicParticipantTeam(raid, p) {
       name: p.cMoonName || (legacy ? raid.cMoonName : null) || null,
       color: p.cMoonColor || null,
       avatarPath: p.cMoonAvatarPath || null,
+      // Whether the TEAM itself is a prestige cMoon — drives CMoonRaidFighter.vue's holographic
+      // shimmer treatment. Snapshotted once at join, same as every other field here.
+      isPrestigeCMoon: !!p.cMoonIsPrestige,
     },
     rank: p.rankName
       ? { name: p.rankName, tierName: p.rankTierName || null, tierLevel: p.rankTierLevel || 0, tierCount: p.rankTierCount || 0 }
@@ -506,6 +509,9 @@ export function publicParticipantTeam(raid, p) {
     // spreads this) — a captain in the party is exactly the kind of thing that should make a
     // browsing player want to join, not just something shown once they're already in.
     isCaptain: !!p.isCaptain,
+    // This PLAYER's own prestige level (not the team's) — the "✦ Prestige N" badge. Also sent to
+    // the lobby listing for the same "worth joining" reasoning as isCaptain above.
+    prestigeLevel: p.prestigeLevel || 0,
   }
 }
 

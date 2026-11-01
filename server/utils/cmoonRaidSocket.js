@@ -132,6 +132,12 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *                                // per-participant snapshot taken at start/join — see
  *                                // "Cross-cMoon raids" in cmoonEnemyRaid.js:
  *                                cMoonId, cMoonName, cMoonColor, cMoonAvatarPath,
+ *                                cMoonIsPrestige, prestigeLevel,  // whether the TEAM they joined
+ *                                                 // as is a prestige cMoon, and their own
+ *                                                 // prestige level — purely cosmetic (see
+ *                                                 // CMoonRaidFighter.vue's holographic shimmer +
+ *                                                 // "Prestige N" badge), snapshotted once here
+ *                                                 // exactly like every other field in this list.
  *                                rankName, rankTierName, rankTierLevel, rankTierCount,
  *                                specialAttack,
  *                                isCaptain }>,   // whether THEY were a captain of THEIR OWN
@@ -440,7 +446,7 @@ async function loadParticipantProfile(userId, cMoonId) {
   const [cMoon, user, tiers, isCaptain] = await Promise.all([
     db.cMoon.findUnique({
       where: { id: cMoonId },
-      select: { id: true, name: true, color: true, avatarPath: true, specialAttack: true },
+      select: { id: true, name: true, color: true, avatarPath: true, specialAttack: true, isPrestigeCMoon: true },
     }),
     // Also selects chosenSpecialAttack here (merged into the SAME User row lookup rather than a
     // second findUnique via resolveEffectiveSpecialAttack in cmoon.js) — one query per
@@ -450,6 +456,7 @@ async function loadParticipantProfile(userId, cMoonId) {
       select: {
         currentCMoonRank: { select: { name: true, cMoonId: true, tierId: true, tier: { select: { name: true } } } },
         chosenSpecialAttack: { select: SPECIAL_ATTACK_SELECT },
+        prestigeLevel: true,
       },
     }),
     loadRankTiers().catch(() => []),
@@ -471,6 +478,11 @@ async function loadParticipantProfile(userId, cMoonId) {
     cMoonName: cMoon.name,
     cMoonColor: cMoon.color || null,
     cMoonAvatarPath: cMoon.avatarPath || null,
+    // Whether the TEAM they joined as is itself a prestige cMoon, plus their own prestige level —
+    // both purely cosmetic (CMoonRaidFighter.vue's holographic shimmer + "Prestige N" badge), same
+    // snapshot-once-never-re-read stance as every other field here.
+    cMoonIsPrestige: !!cMoon.isPrestigeCMoon,
+    prestigeLevel: user?.prestigeLevel || 0,
     isCaptain,
     // Overrides the DISPLAYED rank name only, same "Captain" label swap every other surface
     // (cZone, standings, leaderboard) already applies — see displayRankName's own comment.
@@ -533,6 +545,7 @@ function addParticipant(raid, { userId, username, isInitiator, maxHp, profile = 
     isInitiator: !!isInitiator, pendingAction: null, joinedAt: Date.now(),
     hitStreak: 0, specialCharged: false,
     cMoonId: null, cMoonName: null, cMoonColor: null, cMoonAvatarPath: null, isCaptain: false,
+    cMoonIsPrestige: false, prestigeLevel: 0,
     rankName: null, rankTierName: null, rankTierLevel: 0, rankTierCount: 0,
     specialAttack: null,
     ...(profile || {}),
