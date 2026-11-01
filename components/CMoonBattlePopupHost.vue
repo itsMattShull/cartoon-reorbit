@@ -516,7 +516,12 @@ watch(phase, (p) => {
 // uses: this is one long-running loop, not many short overlapping one-shots, so there's nothing
 // to gain from pre-decoding into a reusable AudioBuffer.
 let battleMusicEl = null
+let battleMusicRetryCleanup = null
+function clearBattleMusicRetry() {
+  if (battleMusicRetryCleanup) { battleMusicRetryCleanup(); battleMusicRetryCleanup = null }
+}
 function stopBattleMusic() {
+  clearBattleMusicRetry()
   if (!battleMusicEl) return
   try { battleMusicEl.pause() } catch {}
   battleMusicEl = null
@@ -525,10 +530,18 @@ function startBattleMusic(path) {
   stopBattleMusic()
   if (!path || typeof window === 'undefined') return
   try {
-    battleMusicEl = new Audio(path)
-    battleMusicEl.loop = true
-    battleMusicEl.volume = 0.5
-    battleMusicEl.play().catch(() => {})
+    const el = new Audio(path)
+    el.loop = true
+    el.volume = 0.5
+    battleMusicEl = el
+    el.play().catch(() => {
+      // See the raid page's own identical comment — a browser autoplay-policy rejection here
+      // otherwise leaves the track silently dead for the rest of the fight with zero recovery.
+      if (battleMusicEl !== el || typeof document === 'undefined') return
+      const retry = () => { if (battleMusicEl === el) el.play().catch(() => {}) }
+      document.addEventListener('pointerdown', retry, { once: true })
+      battleMusicRetryCleanup = () => document.removeEventListener('pointerdown', retry)
+    })
   } catch {}
 }
 watch(phase, (p) => {
