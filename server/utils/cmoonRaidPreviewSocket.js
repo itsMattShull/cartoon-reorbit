@@ -165,6 +165,9 @@ async function closeRound(io, raid) {
 
     for (const result of perParticipant) {
       const p = raid.participants.get(result.userId)
+      // See cmoonRaidSocket.js's own closeRound for why this is embedded here rather than left
+      // for the client to re-derive from a separately-updating participants list.
+      result.username = p.username
       p.hpRemaining = result.hpRemaining
       p.pendingAction = null
       if (result.knockedOut && !p.knockedOutAt) p.knockedOutAt = Date.now()
@@ -280,6 +283,13 @@ export function registerCMoonRaidPreview(io, socket, resolveSocketUser) {
           critChanceFromPercent: enemyMember.critChanceFromPercent,
           cMoonPointsReward: enemyMember.cMoonPointsReward,
           attackChancePercent: enemyMember.attackChancePercent,
+          // See CMoonEnemyMember.baseDamage's own schema comment — resolveRaidRound's
+          // rollHitDamage call reads this off raid.enemyStats, same as the real raid socket.
+          baseDamage: enemyMember.baseDamage,
+          // Without this, resolveBattleRound's own `enemyAccuracyPercent = 100` default silently
+          // took over here and the preview always showed a 100%-accurate boss regardless of what
+          // the admin configured — see CMoonEnemyMember.attackAccuracyPercent's own schema comment.
+          attackAccuracyPercent: enemyMember.attackAccuracyPercent,
         },
         defaultMaxHp,
         status: 'FORMING', enemyHpRemaining: enemyMember.maxHp, roundNumber: 1,

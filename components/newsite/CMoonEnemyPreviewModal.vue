@@ -35,6 +35,7 @@
           :last-round-label="lastRoundLabel"
           :last-round-class="lastRoundClass"
           :crit-badge="!!(lastRound?.playerCrit || lastRound?.enemyCrit)"
+          :miss-badge="!!lastRound?.enemyMissed"
           :outcome="outcome"
           :result-title="resultTitle"
           :result-title-class="resultTitleClass"
@@ -96,7 +97,7 @@ const ACTION_LABELS = { ATTACK_HIGH: 'attacked high', ATTACK_LOW: 'attacked low'
 // own header comment), so every round here is always one of the plain 4 lane moves.
 const lastRoundLabel = computed(() => {
   if (!lastRound.value) return ''
-  const { playerAction, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked, counterHit } = lastRound.value
+  const { playerAction, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked, counterHit, enemyMissed } = lastRound.value
   const actions = `You ${ACTION_LABELS[playerAction]}, they ${ACTION_LABELS[enemyAction]} — `
   if (playerHit && enemyHit) return `${actions}you both landed a hit!`
   if (playerHit) return `${actions}you took a hit!`
@@ -104,14 +105,17 @@ const lastRoundLabel = computed(() => {
   if (playerBlocked && counterHit) return `${actions}you blocked it, healed 1 HP, and countered for damage!`
   if (playerBlocked) return `${actions}you blocked it and healed 1 HP!`
   if (enemyBlocked) return `${actions}they blocked it and healed 1 HP!`
+  // enemyMissed (see CMoonEnemyMember.attackAccuracyPercent's own schema comment) — mirrors
+  // CMoonBattlePopupHost.vue's own lastRoundLabel.
+  if (enemyMissed) return `${actions}their attack missed!`
   return `${actions}no hits landed.`
 })
 const lastRoundClass = computed(() => {
   if (!lastRound.value) return ''
-  const { playerHit, enemyHit, playerBlocked } = lastRound.value
+  const { playerHit, enemyHit, playerBlocked, enemyMissed } = lastRound.value
   if (enemyHit && !playerHit) return 'cbc-round-good'
   if (playerHit && !enemyHit) return 'cbc-round-bad'
-  if (playerBlocked) return 'cbc-round-good'
+  if (playerBlocked || enemyMissed) return 'cbc-round-good'
   return 'cbc-round-neutral'
 })
 const resultTitle = computed(() => {

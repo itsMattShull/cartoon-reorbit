@@ -252,6 +252,28 @@
                   </template>
                 </div>
               </div>
+              <div v-if="cMoonRaidCountdown">
+                <p class="text-[11px] uppercase tracking-widest text-white/50">cMoon Raid Bosses</p>
+                <div class="mt-1 text-[11px] text-white/40 leading-snug">Team up with players from any cMoon to take down a shared raid boss.</div>
+                <div class="mt-2 ob-event-card rounded-lg border border-white/10 px-3 py-2">
+                  <p v-if="cMoonRaidCountdown.optedOut" class="text-xs text-white/55">
+                    You've opted out of cMoon Enemy pop-ups in Settings.
+                  </p>
+                  <p v-else-if="cMoonRaidCountdown.needsCMoon" class="text-xs text-white/55">
+                    Join a cMoon to take on raid bosses.
+                  </p>
+                  <p v-else-if="cMoonRaidCountdown.noneAvailable" class="text-xs text-white/55">
+                    No raid bosses are currently available.
+                  </p>
+                  <p v-else-if="cMoonRaidAvailableNow" class="text-sm font-semibold text-emerald-300">
+                    A raid boss may appear now!
+                  </p>
+                  <template v-else>
+                    <p class="text-xs text-white/50">Next raid boss available in</p>
+                    <p class="text-sm font-semibold text-white/90 tabular-nums">{{ cMoonRaidCountdownText }}</p>
+                  </template>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -609,25 +631,46 @@ const cMoonEnemyAvailableNow = computed(() => {
   return !cMoonEnemyCountdownText.value
 })
 
+// Raid-boss counterpart of the solo cMoon Enemy countdown just above — see events.get.js's own
+// comment on why this needs its own (independent) availability gate on top of the shared popup
+// cooldown. Reuses the same countdownNow tick/formatCountdown rather than a second clock.
+const cMoonRaidCountdown = computed(() => (eventsData.value?.cMoonRaidCountdown || null))
+const cMoonRaidCountdownText = computed(() => {
+  const nextAt = cMoonRaidCountdown.value?.nextAvailableAt
+  if (!nextAt) return null
+  return formatCountdown(new Date(nextAt).getTime() - countdownNow.value)
+})
+const cMoonRaidAvailableNow = computed(() => {
+  const info = cMoonRaidCountdown.value
+  if (!info || info.optedOut || info.needsCMoon || info.noneAvailable) return false
+  if (!info.nextAvailableAt) return true
+  return !cMoonRaidCountdownText.value
+})
+
 // Only runs the per-second timer while the panel is open on the Events tab, the tab is
 // visible, and there's an active cooldown to count down — the same "no abandoned background
 // tab" discipline as startPolling/stopPolling above, just for a second, dedicated interval.
+// Shared by both the solo and raid-boss countdowns above — either one having something to count
+// down to is enough to keep it running.
 const syncCountdownTicking = () => {
   const shouldTick = isOpen.value
     && activeTab.value === 'events'
     && document.visibilityState === 'visible'
-    && !!cMoonEnemyCountdown.value?.nextAvailableAt
+    && (!!cMoonEnemyCountdown.value?.nextAvailableAt || !!cMoonRaidCountdown.value?.nextAvailableAt)
   if (shouldTick) {
     if (countdownTimer) return
     countdownNow.value = Date.now()
     countdownTimer = setInterval(() => {
       countdownNow.value = Date.now()
-      // Self-stop once the cooldown actually elapses, rather than ticking forever once the
-      // display has nothing left to count down — cMoonEnemyCountdown itself only changes on
-      // the next /api/onboarding/events refetch, which won't happen while the panel just sits
-      // open on this tab, so nothing else would ever clear this interval otherwise.
-      const nextAt = cMoonEnemyCountdown.value?.nextAvailableAt
-      if (!nextAt || new Date(nextAt).getTime() <= countdownNow.value) {
+      // Self-stop once BOTH cooldowns have actually elapsed, rather than ticking forever once
+      // neither display has anything left to count down — cMoonEnemyCountdown/cMoonRaidCountdown
+      // only change on the next /api/onboarding/events refetch, which won't happen while the
+      // panel just sits open on this tab, so nothing else would ever clear this interval otherwise.
+      const soloNextAt = cMoonEnemyCountdown.value?.nextAvailableAt
+      const raidNextAt = cMoonRaidCountdown.value?.nextAvailableAt
+      const soloDone = !soloNextAt || new Date(soloNextAt).getTime() <= countdownNow.value
+      const raidDone = !raidNextAt || new Date(raidNextAt).getTime() <= countdownNow.value
+      if (soloDone && raidDone) {
         clearInterval(countdownTimer)
         countdownTimer = null
       }
@@ -638,7 +681,7 @@ const syncCountdownTicking = () => {
   }
 }
 
-watch([isOpen, activeTab, cMoonEnemyCountdown], syncCountdownTicking)
+watch([isOpen, activeTab, cMoonEnemyCountdown, cMoonRaidCountdown], syncCountdownTicking)
 
 const handleOutsideClick = (event) => {
   if (!isOpen.value) return

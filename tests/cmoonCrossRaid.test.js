@@ -177,6 +177,25 @@ test('applyReflectDamage: reflectPercent can exceed 100%, and a boss cast is AoE
   assert.deepEqual([a.hpRemaining, b.hpRemaining], [2, 2]) // 4 * 200% = 8 damage to EACH, not divided
 })
 
+// Regression test for a reported bug: the round-reveal UI sometimes showed "Someone" instead of
+// a real participant's name, even though they were genuinely tracked in the raid. The client used
+// to re-derive a special-event caster's name by looking their userId back up against its OWN
+// separately-updating participants list — this embeds the name directly on the event itself,
+// straight from the authoritative raid.participants Map, removing that cross-reference entirely.
+test('applyRaidSpecialAttack: a PLAYER-cast event carries the caster\'s own username, read from raid.participants', () => {
+  const raid = raidWith([participant('a', { username: 'GalaxyWizardSamurai' })])
+  const events = []
+  applyRaidSpecialAttack(raid, [], { name: 'Heal', effectType: 'HEAL_SELF', amount: 3 }, { side: 'PLAYER', userId: 'a' }, events, {})
+  assert.equal(events[0].username, 'GalaxyWizardSamurai')
+})
+
+test('applyRaidSpecialAttack: an ENEMY-cast event carries no username (the client already uses raid.enemyName for those)', () => {
+  const raid = raidWith([participant('a')])
+  const events = []
+  applyRaidSpecialAttack(raid, [], { name: 'Smash', effectType: 'HEAL_SELF', amount: 3 }, { side: 'ENEMY' }, events, {})
+  assert.equal(events[0].username, null)
+})
+
 test('applyRaidSpecialAttack: a player-cast REFLECT_DAMAGE is deferred (queued), not applied immediately', () => {
   const raid = raidWith([participant('a')])
   const roundGuards = { reflectUsed: false, siphonUsed: false, pendingReflect: null, pendingSiphon: null }

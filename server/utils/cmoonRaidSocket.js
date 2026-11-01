@@ -120,7 +120,8 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *   enemySounds: { appearSoundPath, damageTakenSoundPath, damageAvoidedSoundPath,
  *                  attackingSoundPath, victorySoundPath, defeatSoundPath },  // ditto
  *   battleMusicPath,                         // ditto — the faction's own looping battle music
- *   enemyStats: { maxHp, critChanceAgainstPercent, critChanceFromPercent, cMoonPointsReward },
+ *   enemyStats: { maxHp, critChanceAgainstPercent, critChanceFromPercent, cMoonPointsReward,
+ *                 attackAccuracyPercent },
  *   enemyHpRemaining, roundNumber, currentEnemyAction, roundDeadlineAt, joinDeadlineAt,
  *   participants: Map<userId, { userId, username, hpRemaining, maxHp, knockedOutAt, isInitiator,
  *                                pendingAction, joinedAt,
@@ -194,7 +195,7 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *   // ── Lobby controls / up to 8 players / private lobbies / wind-up telegraphs ──────────────
  *   maxParticipants,      // this party's own cap, 1-8, snapshotted from
  *                         // CMoonEnemyMember.maxParticipants at creation (see cmoonraid:start).
- *   roundLimit,           // this raid's own round-count safety valve, 50-400, snapshotted from
+ *   roundLimit,           // this raid's own round-count safety valve, 50-500, snapshotted from
  *                         // CMoonEnemyMember.raidRoundLimit at creation — see closeRound's own
  *                         // ABANDONED branch.
  *   isPrivate,            // never listed in the site-wide lobby / notified / announced when true
@@ -219,6 +220,15 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *                         // recomputed live every time (see anyCaptainPresent/
  *                         // effectiveHitStreakThreshold), never snapshotted, since a captain can
  *                         // join a still-FORMING raid after someone else started it.
+ *   originalInitiatorUserId, // whoever's cmoonraid:start actually created this raid — set once,
+ *                         // NEVER reassigned on a leadership hand-off (see cmoonraid:leave's own
+ *                         // successor-promotion comment). The CURRENT leader (isInitiator:true on
+ *                         // some participant) can change hands; this cannot. Exists specifically
+ *                         // so the pre-raid-popup-cooldown restore (initiatorPreviousPopupCooldownAt
+ *                         // below) is only ever applied to the ONE user it was actually snapshotted
+ *                         // from — a promoted successor's lastCMoonBattlePopupAt was never stamped
+ *                         // by this raid at all, so restoring to the original starter's snapshot
+ *                         // for THEM would silently corrupt their own, unrelated cooldown.
  *   leaderKeepOpen,       // the initiator has paused sweep()'s join-window auto-start.
  *   speedVotes,           // Set<userId> of current participants who voted to cut the join window
  *                         // down to 5s (see maybeApplySpeedVote) — NOT JSON-serializable, stored
@@ -286,11 +296,19 @@ function anyCaptainPresent(raid) {
 // pendingAction VALUE — only whether they've locked one in, so the room can see who's still
 // deciding without seeing what anyone chose.
 function publicRaidView(raid) {
+  // Hoisted once rather than re-scanning participants on every one of this function's several
+  // reads below (two top-level, plus once per participant in the map further down) — same
+  // "compute once per round, not per read" discipline closeRound's own `captainPresent` local
+  // already follows for the identical computation.
+  const captainPresent = anyCaptainPresent(raid)
   return {
     id: raid.id,
     enemyMemberId: raid.enemyMemberId,
     cMoonId: raid.cMoonId,
     status: raid.status,
+    // When this raid was created (ms epoch) — the client's own Cancel Raid button (FORMING only)
+    // reads this to gate when it lights up, see that button's own comment in cmoon-raid/[id].vue.
+    startedAt: raid.startedAt,
     enemyName: raid.enemyName,
     enemyImagePath: raid.enemyImagePath,
     // Snapshotted once at creation (see the `raid` object's own shape comment below) — six
@@ -324,19 +342,28 @@ function publicRaidView(raid) {
     enemyHitStreak: raid.enemyHitStreak || 0,
     enemyParalyzedTurns: raid.enemyParalyzedTurns || 0,
     partyParalyzedTurns: raid.partyParalyzedTurns || 0,
+    // The boss's own shared poison status, inflicted by a player's own POISON_OPPONENT cast —
+    // same "status inflicted ON the enemy, safe to reveal" reasoning enemyParalyzedTurns already
+    // gets just above (this is not the enemy's own kit, see enemySpecialAttack's own comment).
+    enemyPoisonAmount: raid.enemyPoisonTurnsRemaining > 0 ? raid.enemyPoisonAmount : 0,
+    enemyPoisonTurnsRemaining: raid.enemyPoisonTurnsRemaining || 0,
     // Whether the party's one-at-a-time attack-raise buff is currently active, and for how many
     // more rounds — surfaced so the client can show why a second RAISE_ALLY_ATTACK cast had no
     // effect (see applyRaidSpecialAttack's own non-stacking comment), same spirit as the paralyze
     // counters just above. The enemy's own mirror is never sent, matching enemySpecialAttack's own
     // "don't reveal the boss's kit in advance" stance.
     partyAtkRaiseTurnsRemaining: raid.partyAtkRaiseTurnsRemaining || 0,
-    // The player-side hit-streak a special actually needs right now — 3 normally, or 2 when
-    // GlobalGameConfig.cMoonCaptainBoostEnabled was on at creation AND a captain is currently in
-    // the party (see effectiveHitStreakThreshold in cmoonEnemyRaid.js). Computed fresh on every
-    // view, never stored on `raid` itself, since captain presence can change while a raid is
-    // still FORMING. The client reads this instead of a hardcoded "3" for charge-meter labels/
-    // percentages, and derives "boosted" as hitStreakThreshold < 3.
-    hitStreakThreshold: effectiveHitStreakThreshold(!!raid.captainBoostEnabled, anyCaptainPresent(raid)),
+    // Kept ONLY as a reasonable display default for a client moment that hasn't loaded any
+    // participant yet (e.g. the lobby screen before any charge meters exist) — real per-player
+    // charge-meter math now reads participants[].hitStreakThreshold below instead, since each
+    // participant's own special attack can set its own requiredHitStreak (1-10, default 3 — see
+    // that column's own schema comment) and this is no longer one shared raid-level number.
+    hitStreakThreshold: effectiveHitStreakThreshold(HIT_STREAK_THRESHOLD, !!raid.captainBoostEnabled, captainPresent),
+    // Explicit boolean the client reads for its "Captain boost" overlay — replaces a client-side
+    // heuristic that used to compare hitStreakThreshold against a hardcoded 3, which broke the
+    // moment per-attack requiredHitStreak existed (an attack configured with its OWN threshold
+    // below 3 would have shown the overlay even with the toggle off/no captain present).
+    captainBoostActive: !!raid.captainBoostEnabled && captainPresent,
     // How many players this raid's party can hold — snapshotted from
     // CMoonEnemyMember.maxParticipants at creation (1-8); the client reads this instead of a
     // hardcoded "4" for slot counts/labels.
@@ -379,9 +406,22 @@ function publicRaidView(raid) {
       // balance-sensitive secret here to protect).
       hitStreak: p.hitStreak || 0,
       specialCharged: !!p.specialCharged,
+      // This participant's OWN special-attack charge threshold — their own attack's
+      // requiredHitStreak (1-10, default 3), minus 1 under captain boost exactly like
+      // closeRound's own per-participant math (see effectiveHitStreakThreshold) — replacing the
+      // old single shared raid-level `hitStreakThreshold` field above, since different party
+      // members' attacks can now cost different amounts to charge. Falls back to the plain
+      // HIT_STREAK_THRESHOLD for a participant with no special attack assigned at all (their own
+      // charge meter is moot either way — see cmoonraid:action's own `!p.specialAttack` gate).
+      hitStreakThreshold: effectiveHitStreakThreshold(p.specialAttack?.requiredHitStreak, !!raid.captainBoostEnabled, captainPresent),
       // This participant's OWN cMoon special (their team's, not the initiator's) — public on
       // purpose: it's that team's kit, shown on their charge meter and their own fire button.
       specialAttack: p.specialAttack || null,
+      // Status effects currently afflicting THIS participant (see POISON_OPPONENT's own schema/
+      // cmoonEnemyRaid.js comment) — public on purpose, same as their own HP bar: seeing a
+      // teammate's poison tick is part of the co-op tension, nothing balance-sensitive to hide.
+      poisonAmount: p.poisonTurnsRemaining > 0 ? p.poisonAmount : 0,
+      poisonTurnsRemaining: p.poisonTurnsRemaining || 0,
       // Team colors + rank to show off on the raid screen — see publicParticipantTeam.
       ...publicParticipantTeam(raid, p),
       // Both null/false until the raid actually resolves (see resolveCMoonRaidOutcome, which
@@ -544,6 +584,7 @@ function addParticipant(raid, { userId, username, isInitiator, maxHp, profile = 
     pendingJoin: !!pendingJoin,
     isInitiator: !!isInitiator, pendingAction: null, joinedAt: Date.now(),
     hitStreak: 0, specialCharged: false,
+    poisonAmount: 0, poisonTurnsRemaining: 0,
     cMoonId: null, cMoonName: null, cMoonColor: null, cMoonAvatarPath: null, isCaptain: false,
     cMoonIsPrestige: false, prestigeLevel: 0,
     rankName: null, rankTierName: null, rankTierLevel: 0, rankTierCount: 0,
@@ -702,6 +743,10 @@ function describeRaidParticipantResult(raid, result) {
 // functions; without this branch that was indistinguishable from a normal successful cast.
 function describeRaidSpecialEvent(raid, s) {
   const who = s.side === 'PLAYER' ? (raid.participants.get(s.userId)?.username || 'A player') : raid.enemyName
+  // Accuracy miss (see CMoonSpecialAttack.accuracyPercent) — checked first since a missed cast
+  // never reaches the fizzle checks below at all (applyRaidSpecialAttack returns before any of
+  // them run).
+  if (s.missed) return `💨 ${who} tried to unleash **${s.name}**, but it missed!`
   if (s.fizzled) return `✨ ${who} tried to unleash **${s.name}**, but it was blocked and had no effect!`
   return `✨ ${who} unleashed **${s.name}**!`
 }
@@ -780,6 +825,12 @@ async function closeRound(io, raid) {
       firedSpecialUserIds.add(p.userId)
       applyRaidSpecialAttack(raid, alive, p.specialAttack, { side: 'PLAYER', userId: p.userId }, specialEvents, { roundGuards })
     }
+    // Whether SHIELD_PARTY is active THIS round — read back out of the events step 1 just pushed
+    // rather than a persisted raid field (see SHIELD_PARTY's own comment in cmoonEnemyRaid.js):
+    // there's no restart-survival concern since nothing awaits between here and the end of this
+    // same closeRound call, so a plain local is enough. Excludes a cast that missed its own
+    // accuracy roll (event.missed) — a shield that failed to go off protects nobody.
+    const partyShielded = specialEvents.some(s => s.effectType === 'SHIELD_PARTY' && s.side === 'PLAYER' && !s.missed)
 
     // ── 2. This round's lane exchange — every alive participant's OWN action (SPECIAL_ACTION
     // counts as neither attacking nor blocking, same as solo — see isAttack/isBlock in
@@ -806,21 +857,34 @@ async function closeRound(io, raid) {
       // partyAtkBonus/enemyAtkBonus directly.
       partyAtkBonus: raid.partyAtkBonus + (raid.partyAtkRaiseTurnsRemaining > 0 ? raid.partyAtkRaiseAmount : 0),
       enemyAtkBonus: raid.enemyAtkBonus + (raid.enemyAtkRaiseTurnsRemaining > 0 ? raid.enemyAtkRaiseAmount : 0),
+      partyShielded,
     })
 
     const roundInfo = { enemyAction, perParticipant, enemyDamageDealt }
 
-    // The threshold this round's banking math actually uses — 3 normally, or 2 for the whole
-    // party when GlobalGameConfig.cMoonCaptainBoostEnabled was on at creation AND a captain is
-    // currently in the raid (recomputed live, see anyCaptainPresent's own comment). Computed once
-    // here, not per-participant, since it's the same value for everyone this round — subtracting
-    // 3 while comparing against 2 (or vice versa) would silently corrupt the banking math below.
-    const hitStreakThreshold = effectiveHitStreakThreshold(!!raid.captainBoostEnabled, anyCaptainPresent(raid))
+    // The captain-boost presence check is the same for every participant this round (recomputed
+    // live, see anyCaptainPresent's own comment) — the per-attack BASE threshold passed into
+    // effectiveHitStreakThreshold below is what now varies per participant (each one's own
+    // p.specialAttack.requiredHitStreak, 1-10, default 3 — see that column's own schema comment),
+    // replacing the old single shared `const` this used to be. A participant with no special
+    // attack assigned at all gets the plain HIT_STREAK_THRESHOLD fallback — harmless, since they
+    // can never charge/fire one anyway (see this loop's own `firedSpecialUserIds` gate and the
+    // cmoonraid:action handler's own `!p.specialAttack` rejection).
+    const captainPresent = anyCaptainPresent(raid)
     for (const result of perParticipant) {
       const p = raid.participants.get(result.userId)
+      // Embedded directly on the round row itself, read from the authoritative raid.participants
+      // Map at this exact instant — the client used to re-derive this by looking `result.userId`
+      // back up against its OWN separately-updating participants list (raid.value.participants on
+      // the raid page), which could show "Someone" for a real, correctly-tracked participant if
+      // that lookup ever ran against a stale/out-of-sync copy (e.g. around a reconnect or a rapid
+      // round-to-round transition). Sending the name in the same payload as everything else about
+      // this round removes that whole class of client-side cross-reference race.
+      result.username = p.username
       p.hpRemaining = result.hpRemaining
       p.pendingAction = null
       if (result.knockedOut && !p.knockedOutAt) p.knockedOutAt = Date.now()
+      const hitStreakThreshold = effectiveHitStreakThreshold(p.specialAttack?.requiredHitStreak, !!raid.captainBoostEnabled, captainPresent)
       // This participant's OWN streak — see CMoonEnemyRaidParticipant's in-memory shape comment
       // above for why this stays per-player even though every other new field here is shared.
       if (firedSpecialUserIds.has(result.userId)) {
@@ -845,6 +909,36 @@ async function closeRound(io, raid) {
         p.hitStreak = result.enemyHit ? Math.min(p.hitStreak + 1, maxBankedStreak) : 0
         if (p.hitStreak >= hitStreakThreshold) p.specialCharged = true
       }
+    }
+    // Poison ticks (see POISON_OPPONENT's own schema/cmoonEnemyRaid.js comment) — once per round,
+    // at this exact point: AFTER the per-participant HP overwrite loop above (so a tick's damage
+    // is never silently clobbered by `p.hpRemaining = result.hpRemaining` the way an earlier
+    // placement would) and alongside the paralyze/raise counters just below, so a poison applied
+    // in step 1 (a player's own cast against the boss) ticks THIS round too — immediately,
+    // mirroring PARALYZE_OPPONENT's own "stops the boss THIS round, not just future ones"
+    // precedent — while one applied in step 3 (the boss's own auto-fire) only starts ticking NEXT
+    // round, since this block runs BEFORE step 3 every time. `partyShielded` blocks ONLY this
+    // round's own tick damage to the party (turnsRemaining still elapses on schedule — Shield
+    // isn't a free extra round of immunity, just one skipped hit) — the boss's own shared poison
+    // is never affected by the PARTY's shield.
+    for (const p of alive) {
+      // `alive` is a snapshot from the TOP of this round — re-checks knockedOutAt here (the same
+      // object reference the overwrite loop above may have just set it on) so a participant this
+      // round's own lane exchange just downed doesn't also get ticked for poison on the way out.
+      if (p.knockedOutAt) continue
+      if (p.poisonTurnsRemaining > 0) {
+        if (!partyShielded) {
+          p.hpRemaining = Math.max(0, p.hpRemaining - p.poisonAmount)
+          if (p.hpRemaining <= 0) p.knockedOutAt = Date.now()
+        }
+        p.poisonTurnsRemaining -= 1
+        if (p.poisonTurnsRemaining <= 0) p.poisonAmount = 0
+      }
+    }
+    if (raid.enemyPoisonTurnsRemaining > 0) {
+      raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - raid.enemyPoisonAmount)
+      raid.enemyPoisonTurnsRemaining -= 1
+      if (raid.enemyPoisonTurnsRemaining <= 0) raid.enemyPoisonAmount = 0
     }
     raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - enemyDamageDealt)
     if (raid.enemyParalyzedTurns > 0) raid.enemyParalyzedTurns -= 1
@@ -886,12 +980,13 @@ async function closeRound(io, raid) {
     // already uses for the enemy side. ─────────────────────────────────────────────────────────
     const bossLandedAHit = perParticipant.some(r => r.playerHit)
     raid.enemyHitStreak = bossLandedAHit ? raid.enemyHitStreak + 1 : 0
-    if (raid.enemyHitStreak >= HIT_STREAK_THRESHOLD && raid.enemySpecialAttack) {
+    const enemyRequiredHitStreak = raid.enemySpecialAttack?.requiredHitStreak ?? HIT_STREAK_THRESHOLD
+    if (raid.enemyHitStreak >= enemyRequiredHitStreak && raid.enemySpecialAttack) {
       raid.enemyHitStreak = 0
       // Re-reads `alive` from the Map rather than the stale array captured above — a participant
       // this round's own DAMAGE_OPPONENT/lane exchange just knocked out must not also be hit by
       // the boss's bonus effect this same round (they're already down).
-      applyRaidSpecialAttack(raid, aliveParticipants(raid), raid.enemySpecialAttack, { side: 'ENEMY' }, specialEvents, { roundInfo })
+      applyRaidSpecialAttack(raid, aliveParticipants(raid), raid.enemySpecialAttack, { side: 'ENEMY' }, specialEvents, { roundInfo, partyShielded })
     }
 
     // ── 4. Wind-up telegraph payoff — if this round telegraphed a lane (see openRound), check
@@ -919,8 +1014,8 @@ async function closeRound(io, raid) {
     raid.roundLog.push({
       round: raid.roundNumber, enemyAction, enemyDamageDealt,
       enemyHpRemaining: raid.enemyHpRemaining,
-      participants: perParticipant.map(({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit }) =>
-        ({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit })),
+      participants: perParticipant.map(({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit, enemyMissed }) =>
+        ({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit, enemyMissed })),
       ...(specialEvents.length ? { specials: specialEvents } : {}),
       ...(windUpBonus ? { windUpBonus } : {}),
     })
@@ -931,7 +1026,12 @@ async function closeRound(io, raid) {
     broadcast(io, raid, EV('roundResolved'), {
       round: { roundNumber: raid.roundNumber, enemyAction, enemyDamageDealt, participants: perParticipant, specials: specialEvents, windUpBonus },
     })
-    sendCMoonTeamUpdate(raidDiscordPostTarget(raid), formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant, specialEvents }))
+    // Skipped for a PRIVATE raid — see postRaidRecap's own comment; a live round-by-round feed to
+    // the cMoon's public Discord channel would defeat "never announced anywhere but its own URL"
+    // just as badly as the recap would.
+    if (!raid.isPrivate) {
+      sendCMoonTeamUpdate(raidDiscordPostTarget(raid), formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant, specialEvents }))
+    }
 
     if (raid.enemyHpRemaining <= 0) {
       await resolveCMoonRaidOutcome(io, raid, 'WIN')
@@ -953,6 +1053,11 @@ async function closeRound(io, raid) {
 // same recap there, so there's no more need to also fan it out to each participating team's own
 // channel the way this used to (back when each team had its own raid channel/thread).
 async function postRaidRecap(raid, { pointsAwarded }) {
+  // A PRIVATE raid's start announcement is already skipped (see cmoonraid:start's own isPrivate
+  // gate) — its recap must be too, or the "never announced anywhere but its own URL" guarantee is
+  // broken at the finish line: the outcome, every participant's username, and their final HP would
+  // still reach the cMoon's public Discord channel even though nobody was ever told the raid began.
+  if (raid.isPrivate) return
   const message = formatRaidRecapMessage(raid, { pointsAwarded })
   const target = raidDiscordPostTarget(raid)
   if (target) sendCMoonTeamUpdate(target, message)
@@ -1184,7 +1289,7 @@ export async function restoreCMoonRaids() {
   for (const [raidId, raid] of restored.entries()) {
     raid.participants = new Map(raid.participants.map(p => ([
       p.userId, {
-        hitStreak: 0, specialCharged: false, isCaptain: false, ...p,
+        hitStreak: 0, specialCharged: false, isCaptain: false, poisonAmount: 0, poisonTurnsRemaining: 0, ...p,
         // A snapshot from before cross-cMoon raids has no per-participant special; every member
         // was then on the initiator's cMoon, so theirs IS raid.cMoonSpecialAttack.
         specialAttack: 'specialAttack' in p ? p.specialAttack : (raid.cMoonSpecialAttack ?? null),
@@ -1213,6 +1318,20 @@ export async function restoreCMoonRaids() {
     raid.enemyAtkRaiseTurnsRemaining ??= 0
     raid.enemyParalyzedTurns ??= 0
     raid.partyParalyzedTurns ??= 0
+    raid.enemyPoisonAmount ??= 0
+    raid.enemyPoisonTurnsRemaining ??= 0
+    // Predates the leave-cooldown-restore feature -> null is the correct backfill (nothing to
+    // restore to; the initiator leaving a raid restored from one of these old snapshots simply
+    // keeps whatever lastCMoonBattlePopupAt they already have, same as if this feature never
+    // shipped).
+    raid.initiatorPreviousPopupCooldownAt ??= null
+    // Predates the per-successor-leader-promotion fix -> fall back to whoever currently holds
+    // isInitiator (the only identity this raid's restore logic could distinguish before that fix
+    // existed), preserving this ONE in-flight raid's exact pre-fix behavior for the remainder of
+    // its own lifetime rather than silently disabling the restore it already had. A brand new raid
+    // always gets this stamped for real at creation (see cmoonraid:start).
+    raid.originalInitiatorUserId ??= Array.from(raid.participants.values()).find(p => p.isInitiator)?.userId ?? null
+    raid.keepOpenExtensionUsed ??= false
     // Lobby controls / up-to-8 / wind-up / private — all added after this feature shipped, so a
     // snapshot from before any of them existed needs every one backfilled, same reasoning as the
     // special-attack fields above (a missing numeric/Set field here would otherwise feed
@@ -1307,6 +1426,12 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       if (!initiatorProfile) return socket.emit(EV('error'), { message: 'Your cMoon could not be found' })
 
       const initiatorMaxHp = await getPlayerCombatMaxHp(me.id, config)
+      // Snapshotted BEFORE the transaction below stamps a fresh lastCMoonBattlePopupAt — see
+      // cmoonraid:leave's own comment on why the initiator leaving their OWN still-FORMING raid
+      // restores this instead of leaving them newly cooled-down for a raid that never happened.
+      const initiatorPreviousPopupCooldownAt = (
+        await db.user.findUnique({ where: { id: me.id }, select: { lastCMoonBattlePopupAt: true } })
+      )?.lastCMoonBattlePopupAt || null
       // Always the single shared raid-boss channel (GlobalGameConfig.cMoonRaidBossDiscordChannelId,
       // env fallback) — passing null rather than a cMoon's own discordChannelId is what keeps every
       // raid's announcement/round-feed/recap out of individual cMoon team channels, see this
@@ -1336,6 +1461,14 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
           critChanceFromPercent: enemyMember.critChanceFromPercent,
           cMoonPointsReward: enemyMember.cMoonPointsReward,
           attackChancePercent: enemyMember.attackChancePercent,
+          // See that column's own schema comment — resolveRaidRound's own per-participant miss
+          // roll reads this off raid.enemyStats, same snapshot-at-creation discipline every other
+          // field here already follows.
+          attackAccuracyPercent: enemyMember.attackAccuracyPercent,
+          // See CMoonEnemyMember.baseDamage's own schema comment — resolveRaidRound's own
+          // rollHitDamage call reads this off raid.enemyStats, same snapshot-at-creation
+          // discipline every other field here already follows.
+          baseDamage: enemyMember.baseDamage,
           // Display-only for the lobby ("requires N prior wins"); the real gate is re-checked
           // against the database in loadEligibility on every join.
           minPriorDefeats: enemyMember.minPriorDefeats || 0,
@@ -1358,6 +1491,21 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         partyAtkRaiseAmount: 0, partyAtkRaiseTurnsRemaining: 0,
         enemyAtkRaiseAmount: 0, enemyAtkRaiseTurnsRemaining: 0,
         enemyParalyzedTurns: 0, partyParalyzedTurns: 0,
+        // The boss's own shared poison status (see POISON_OPPONENT's own schema comment),
+        // inflicted by a player's own cast — nobody's poisoned at creation.
+        enemyPoisonAmount: 0, enemyPoisonTurnsRemaining: 0,
+        // The initiator's OWN lastCMoonBattlePopupAt immediately before this raid stamped a fresh
+        // one (see the read just above) — restored verbatim if THEY leave their own still-FORMING
+        // raid (see cmoonraid:leave), so abandoning a lobby that never even started combat doesn't
+        // cost them their next popup's worth of cooldown. Never touched again once combat starts:
+        // from that point on, the stamp reflects a raid that genuinely happened.
+        initiatorPreviousPopupCooldownAt,
+        // See this raid's own shape comment above — never reassigned on a leadership hand-off.
+        originalInitiatorUserId: me.id,
+        // Whether the leader has already used their ONE allowed "turn keepOpen back off" window
+        // reset (see cmoonraid:toggleKeepOpen's own comment) — toggling it on/off was previously
+        // uncapped, letting a lobby's join window be refreshed to a brand new full window forever.
+        keepOpenExtensionUsed: false,
         // How many players this party can hold — snapshotted now (1-8) so an admin edit mid-raid
         // never affects one already FORMING/IN_PROGRESS. See CMoonEnemyMember.maxParticipants.
         maxParticipants: Number.isInteger(enemyMember.maxParticipants) && enemyMember.maxParticipants >= 1 && enemyMember.maxParticipants <= 8
@@ -1554,12 +1702,50 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     if (!me) return
     const raid = raids.get(raidId)
     if (!raid || raid.status !== 'FORMING' || !raid.participants.has(me.id)) return
+    const leavingParticipant = raid.participants.get(me.id)
     raid.participants.delete(me.id)
     raid.speedVotes.delete(me.id)
     raidByUser.delete(me.id)
     socket.leave(raidRoom(raidId))
+    // Direct to the leaving socket only — it already left the room above, so the room-wide
+    // participantLeft broadcast further down (for everyone ELSE still in the raid) would never
+    // reach it anyway. Without this, the leaver's own client had nothing telling it to stop
+    // showing a raid it just asked to leave (a pre-existing gap in this handler — it simply had
+    // no UI entry point to leave from until this feature added one).
+    socket.emit(EV('leftRaid'), { raidId })
     await db.cMoonEnemyRaidParticipant.updateMany({ where: { raidId, userId: me.id }, data: { activeUserId: null } }).catch(() => {})
+    // The ORIGINAL raid starter leaving their OWN still-FORMING raid (the status check above
+    // already guarantees combat never started) gets their pre-raid lastCMoonBattlePopupAt
+    // restored — see raid.initiatorPreviousPopupCooldownAt's own comment at creation. A lobby
+    // that took too long and never started shouldn't cost them their next popup's worth of
+    // cooldown just for bailing out. Gated on originalInitiatorUserId, NOT leavingParticipant's
+    // current isInitiator flag: a successor promoted below by an earlier leave never had their
+    // own lastCMoonBattlePopupAt touched by this raid at all (only cmoonraid:start stamps it), so
+    // restoring them to the ORIGINAL starter's unrelated snapshot would corrupt their own cooldown
+    // instead of leaving it alone. Fire-and-forget, same stance every other non-critical write in
+    // this handler takes — worst case the restore is lost on a crash, never the leave itself. A
+    // later JOINER leaving has no such restore either way: this is specifically "undo MY OWN stamp
+    // from starting this", not something every participant's leave triggers.
+    if (me.id === raid.originalInitiatorUserId) {
+      db.user.update({ where: { id: me.id }, data: { lastCMoonBattlePopupAt: raid.initiatorPreviousPopupCooldownAt } }).catch(() => {})
+    }
     if (!raid.participants.size) { destroyRaid(raidId); return }
+    // The CURRENT leader leaving (now possible via the UI, not just by never having started one)
+    // must hand off leadership — otherwise no remaining participant has isInitiator:true and the
+    // whole party silently loses Force start/Cancel raid/Keep lobby open for the rest of the join
+    // window. Earliest joiner among those still here, same "who's been here longest" tiebreak a
+    // fresh raid's own initiator naturally has.
+    if (leavingParticipant?.isInitiator) {
+      const successor = Array.from(raid.participants.values()).sort((a, b) => a.joinedAt - b.joinedAt)[0]
+      successor.isInitiator = true
+      // Both stale otherwise: the lobby list would keep naming the ORIGINAL leader long after
+      // they've left (see buildRaidLobbyEntry's own raid.initiatorUsername read), and a vote the
+      // successor cast back when they were a plain participant would still count against
+      // maybeApplySpeedVote's "every non-leader has voted" denominator even though they're now
+      // exempt from voting at all (they can just force-start).
+      raid.initiatorUsername = successor.username
+      raid.speedVotes.delete(successor.userId)
+    }
     // A leave shrinks the speed-vote denominator too — re-check for the same reason as a join.
     maybeApplySpeedVote(raid)
     fireSync(raidId, raid)
@@ -1571,7 +1757,11 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
   // Initiator-only: pause/resume the join-window countdown. Turning it back OFF re-arms a FRESH
   // full window (the admin-configured default) rather than letting whatever time has silently
   // passed take effect instantly — a leader resuming the clock expects the full window back, not
-  // an immediate close.
+  // an immediate close. That re-arm is capped at ONE use per raid (raid.keepOpenExtensionUsed) —
+  // toggling keepOpen on then off used to reset the join timer to a brand new full window every
+  // single time with no limit, letting a lobby stay open indefinitely. Turning keepOpen BACK ON
+  // (pausing again) never counts against the cap — only the re-arm on the way back off does — so
+  // a leader can still pause/resume freely, they just only get the fresh-window reset once.
   socket.on(EV('toggleKeepOpen'), async ({ raidId, keepOpen } = {}) => {
     const me = await resolveSocketUser(socket)
     if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
@@ -1581,11 +1771,20 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     if (!p?.isInitiator) return socket.emit(EV('error'), { message: 'Only the raid leader can do that' })
     raid.leaderKeepOpen = !!keepOpen
     if (!raid.leaderKeepOpen) {
-      const config = await getGlobalConfig().catch(() => null)
-      const seconds = Number.isInteger(config?.cMoonRaidJoinWindowSeconds) && config.cMoonRaidJoinWindowSeconds > 0
-        ? config.cMoonRaidJoinWindowSeconds
-        : JOIN_WINDOW_SECONDS
-      raid.joinDeadlineAt = Date.now() + seconds * 1000
+      if (!raid.keepOpenExtensionUsed) {
+        raid.keepOpenExtensionUsed = true
+        const config = await getGlobalConfig().catch(() => null)
+        const seconds = Number.isInteger(config?.cMoonRaidJoinWindowSeconds) && config.cMoonRaidJoinWindowSeconds > 0
+          ? config.cMoonRaidJoinWindowSeconds
+          : JOIN_WINDOW_SECONDS
+        raid.joinDeadlineAt = Date.now() + seconds * 1000
+      } else if (raid.joinDeadlineAt <= Date.now()) {
+        // The extension is already spent and the window has already elapsed while paused — give
+        // just enough runway (the next sweep tick) for the join window to close normally instead
+        // of it reading as already-expired the instant keepOpen comes off, which would otherwise
+        // look like a bug rather than "your one extension is used up."
+        raid.joinDeadlineAt = Date.now() + SWEEP_INTERVAL_MS
+      }
     }
     fireSync(raidId, raid)
     broadcast(io, raid, EV('state'))
@@ -1610,6 +1809,38 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       return socket.emit(EV('error'), { message: 'Solo raid queueing is disabled — you need at least one more player to start' })
     }
     startCombat(io, raid)
+  })
+
+  // Initiator-only, FORMING only: cancel the whole lobby, kicking out every other participant
+  // too — unlike cmoonraid:leave (which only ever removes the caller), this is a leader action
+  // that works even with other raiders already in it. No server-side time/headcount check, same
+  // "unconditional leader power" stance as forceStart above — the 90s/<3-raiders condition the
+  // client shows is purely a UX gate on when its OWN Cancel Raid button lights up (see that
+  // button's own comment in cmoon-raid/[id].vue), never re-enforced here.
+  socket.on(EV('cancelRaid'), async ({ raidId } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
+    const raid = raids.get(raidId)
+    if (!raid || raid.status !== 'FORMING') return socket.emit(EV('error'), { message: 'This raid can no longer be cancelled' })
+    const p = raid.participants.get(me.id)
+    if (!p?.isInitiator) return socket.emit(EV('error'), { message: 'Only the raid leader can do that' })
+    const participantIds = Array.from(raid.participants.keys())
+    // Broadcast BEFORE destroying — publicRaidView needs the live raid object, and every other
+    // participant's own socket is still in the room at this point.
+    broadcast(io, raid, EV('cancelled'), { message: 'The raid leader cancelled this raid.' })
+    await db.cMoonEnemyRaidParticipant.updateMany({
+      where: { raidId, userId: { in: participantIds } }, data: { activeUserId: null },
+    }).catch(() => {})
+    // Same cooldown restore a self-leave gives the ORIGINAL starter (see cmoonraid:leave's own
+    // originalInitiatorUserId comment) — cancelling your own still-FORMING lobby shouldn't cost
+    // you your next popup's worth of cooldown either. Gated the same way: the caller here is
+    // definitionally the CURRENT leader (the isInitiator check above), but a promoted successor
+    // calling this is not the same person this snapshot was ever taken from, and their own
+    // lastCMoonBattlePopupAt was never touched by this raid at all.
+    if (me.id === raid.originalInitiatorUserId) {
+      db.user.update({ where: { id: me.id }, data: { lastCMoonBattlePopupAt: raid.initiatorPreviousPopupCooldownAt } }).catch(() => {})
+    }
+    destroyRaid(raidId)
   })
 
   // Any current participant: vote to cut the join window down to 5 seconds. Re-votable (idempotent
