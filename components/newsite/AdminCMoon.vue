@@ -643,6 +643,75 @@
         </template>
       </div>
 
+      <!-- cMoon Prestige: once a player's current cMoonPoints reach the next configured level's
+           threshold, they can elect (from Settings) to reset to 0 and move into an admin-
+           designated "✦ Prestige cMoon" (see the isPrestigeCMoon checkbox on each cMoon below),
+           permanently bumping their own prestige level — see prisma/schema.prisma's
+           CMoonPrestigeLevel comment and server/utils/cmoonPrestige.js. -->
+      <div class="bg-white rounded border p-3 mb-4">
+        <label class="flex items-center gap-2">
+          <input type="checkbox" v-model="prestigeEnabled" :disabled="prestigeFlagSaving" @change="togglePrestigeFlag" />
+          <span class="font-medium">cMoon Prestige enabled</span>
+        </label>
+        <p class="text-[11px] text-gray-600 mt-1">
+          Off by default. When off, the Prestige section on the player Settings page reports the
+          feature as unavailable — no existing player's prestige level/history is touched.
+        </p>
+
+        <div class="border-t pt-3 mt-3">
+          <div class="flex items-center justify-between mb-1">
+            <h2 class="text-sm font-semibold">Prestige Levels</h2>
+            <button type="button" class="cm-tap px-3 text-[11px] font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700" @click="startAddPrestigeLevel">+ Add level</button>
+          </div>
+          <p class="text-[11px] text-gray-600 mb-2">
+            "Prestige 1 needs N points, Prestige 2 needs M points," etc. A player currently at
+            level 0 can prestige once they reach Level 1's threshold; at level 1, once they reach
+            Level 2's; and so on. No row for the next level simply means prestiging further isn't
+            configured yet — not an error.
+          </p>
+          <div v-if="prestigeLevelsLoading" class="text-[11px] text-gray-500">Loading…</div>
+          <div v-else-if="prestigeLevels.length" class="space-y-1">
+            <template v-for="l in prestigeLevels" :key="l.id">
+              <div v-if="prestigeLevelForm.id !== l.id" class="flex items-center gap-2 text-[11px]">
+                <span class="text-gray-500 w-20 flex-shrink-0">Prestige {{ l.level }}</span>
+                <span class="flex-1 min-w-0 break-words">{{ l.title || '—' }}</span>
+                <span class="text-gray-500 flex-shrink-0">{{ l.pointThreshold.toLocaleString() }} pts</span>
+                <button type="button" class="cm-tap text-indigo-600" @click="startEditPrestigeLevel(l)">Edit</button>
+                <button type="button" class="cm-tap text-red-600" @click="removePrestigeLevel(l)">Delete</button>
+              </div>
+              <div v-else class="flex items-center gap-2 text-[11px] flex-wrap bg-gray-50 rounded p-2">
+                <label class="flex items-center gap-1">Level
+                  <input v-model.number="prestigeLevelForm.level" type="number" min="1" max="100" inputmode="numeric" class="cm-field w-16 border rounded px-1" style="font-size:16px" />
+                </label>
+                <label class="flex items-center gap-1">Points
+                  <input v-model.number="prestigeLevelForm.pointThreshold" type="number" min="0" inputmode="numeric" class="cm-field w-28 border rounded px-1" style="font-size:16px" />
+                </label>
+                <label class="flex items-center gap-1 flex-1 min-w-[120px]">Title
+                  <input v-model="prestigeLevelForm.title" type="text" maxlength="60" placeholder="optional" class="cm-field flex-1 border rounded px-1" style="font-size:16px" />
+                </label>
+                <button type="button" class="cm-tap text-indigo-600 font-semibold" :disabled="prestigeLevelSaving" @click="savePrestigeLevelForm">{{ prestigeLevelSaving ? 'Saving…' : 'Save' }}</button>
+                <button type="button" class="cm-tap text-gray-600" @click="cancelPrestigeLevelForm">Cancel</button>
+              </div>
+            </template>
+          </div>
+          <div v-else-if="prestigeLevelForm.id !== 'new'" class="text-[11px] text-gray-500">No prestige levels configured yet.</div>
+          <div v-if="prestigeLevelForm.id === 'new'" class="flex items-center gap-2 text-[11px] flex-wrap bg-gray-50 rounded p-2 mt-1">
+            <label class="flex items-center gap-1">Level
+              <input v-model.number="prestigeLevelForm.level" type="number" min="1" max="100" inputmode="numeric" class="cm-field w-16 border rounded px-1" style="font-size:16px" />
+            </label>
+            <label class="flex items-center gap-1">Points
+              <input v-model.number="prestigeLevelForm.pointThreshold" type="number" min="0" inputmode="numeric" class="cm-field w-28 border rounded px-1" style="font-size:16px" />
+            </label>
+            <label class="flex items-center gap-1 flex-1 min-w-[120px]">Title
+              <input v-model="prestigeLevelForm.title" type="text" maxlength="60" placeholder="optional" class="cm-field flex-1 border rounded px-1" style="font-size:16px" />
+            </label>
+            <button type="button" class="cm-tap text-indigo-600 font-semibold" :disabled="prestigeLevelSaving" @click="savePrestigeLevelForm">{{ prestigeLevelSaving ? 'Saving…' : 'Save' }}</button>
+            <button type="button" class="cm-tap text-gray-600" @click="cancelPrestigeLevelForm">Cancel</button>
+          </div>
+          <p v-if="prestigeLevelsError" class="text-[11px] text-red-600 mt-1">{{ prestigeLevelsError }}</p>
+        </div>
+      </div>
+
       <!-- Rank Ladder: ONE shared list of ranks — same name, order, and point threshold in
            every cMoon (see prisma/schema.prisma's CMoonRankTier). Saving a tier here provisions/
            resyncs a matching rank + claimable achievement for every existing cMoon (see
@@ -689,6 +758,7 @@
               <span class="font-semibold break-words min-w-0">{{ c.name }}</span>
               <span v-if="c.joinLocked" class="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">Locked</span>
               <span v-if="!c.showOnNav" class="text-[10px] font-semibold text-gray-600 bg-gray-200 px-1.5 py-0.5 rounded">Off nav</span>
+              <span v-if="c.isPrestigeCMoon" class="text-[10px] font-semibold text-violet-700 bg-violet-100 px-1.5 py-0.5 rounded">✦ Prestige</span>
               <span v-if="c.allowOptOutJoin === false" class="text-[10px] font-semibold text-gray-600 bg-gray-200 px-1.5 py-0.5 rounded">No rejoin</span>
               <span class="text-[11px] text-gray-600">{{ c.memberCount }} member{{ c.memberCount === 1 ? '' : 's' }}</span>
               <!-- Kept together so they travel as a unit when the row wraps on narrow screens. -->
@@ -1015,6 +1085,18 @@
                 Shows this cMoon as a clickable circle on the public cMoons navigation page
                 (uses the cZone avatar below as its logo). Independent of Locked above — a
                 locked cMoon can still be shown here, it just still can't be joined.
+              </p>
+            </div>
+            <div>
+              <label class="flex items-center gap-2 cm-tap">
+                <input type="checkbox" v-model="form.isPrestigeCMoon" />
+                <span class="text-xs font-medium">✦ Prestige cMoon</span>
+              </label>
+              <p class="text-[11px] text-gray-600 mt-1">
+                A valid destination for players electing to cMoon Prestige (see the Prestige
+                Levels section in Global Settings) — their current members get an epic
+                holographic treatment in Raid Battles. Still respects Locked above: a locked
+                prestige cMoon can't be prestiged into either.
               </p>
             </div>
           </div>
@@ -1838,7 +1920,7 @@ function effectLabel(type) {
 
 const editId = ref('')
 const formOpen = ref(false)
-const emptyForm = () => ({ name: '', color: '', pageBgColor: '', accentColor: '', textColor: '', cardBgColor: '', discordRoleId: '', discordChannelId: '', pageDescription: '', effectType: '', customJoinEffectId: '', specialAttackId: '', joinLocked: false, showOnNav: true, showButtonOnPages: false, allowOptOutJoin: true, captainIds: [], prizeCtoons: [] })
+const emptyForm = () => ({ name: '', color: '', pageBgColor: '', accentColor: '', textColor: '', cardBgColor: '', discordRoleId: '', discordChannelId: '', pageDescription: '', effectType: '', customJoinEffectId: '', specialAttackId: '', joinLocked: false, showOnNav: true, showButtonOnPages: false, allowOptOutJoin: true, isPrestigeCMoon: false, captainIds: [], prizeCtoons: [] })
 const form = reactive(emptyForm())
 const prizeCtoonSearch = ref('')
 const prizeCtoonQty = ref(1)
@@ -2289,6 +2371,7 @@ function startEdit(c) {
     specialAttackId: c.specialAttackId || '',
     joinLocked: !!c.joinLocked,
     showOnNav: c.showOnNav !== false,
+    isPrestigeCMoon: !!c.isPrestigeCMoon,
     showButtonOnPages: !!c.showButtonOnPages,
     allowOptOutJoin: c.allowOptOutJoin !== false,
     captainIds: c.captains.map(cap => cap.userId),
@@ -2446,6 +2529,86 @@ async function loadRankTiers() {
     rankTiersError.value = e?.data?.statusMessage || 'Failed to load rank ladder'
   } finally {
     rankTiersLoading.value = false
+  }
+}
+
+// ── cMoon Prestige ladder ("Prestige 1 needs N points", etc.) — see this component's own
+// template comment and server/utils/cmoonPrestige.js. Simple inline add/edit rows rather than a
+// separate modal (only 3 fields): prestigeLevelForm.id is '' when no row is being edited/added,
+// 'new' while the add-row is open, or an existing level's own id while editing it in place.
+const prestigeEnabled = ref(false)
+const prestigeFlagSaving = ref(false)
+const prestigeLevels = ref([])
+const prestigeLevelsLoading = ref(false)
+const prestigeLevelsError = ref('')
+const emptyPrestigeLevelForm = () => ({ id: '', level: 1, pointThreshold: 0, title: '' })
+const prestigeLevelForm = reactive(emptyPrestigeLevelForm())
+const prestigeLevelSaving = ref(false)
+
+async function loadPrestigeLevels() {
+  prestigeLevelsLoading.value = true
+  prestigeLevelsError.value = ''
+  try {
+    const res = await $fetch('/api/admin/cmoon-prestige-levels')
+    prestigeLevels.value = res.levels || []
+  } catch (e) {
+    prestigeLevelsError.value = e?.data?.statusMessage || 'Failed to load prestige levels'
+  } finally {
+    prestigeLevelsLoading.value = false
+  }
+}
+
+async function togglePrestigeFlag() {
+  const next = prestigeEnabled.value
+  prestigeFlagSaving.value = true
+  try {
+    await $fetch('/api/admin/cmoon-settings', { method: 'POST', body: { cMoonPrestigeEnabled: next } })
+  } catch (e) {
+    prestigeEnabled.value = !next
+    prestigeLevelsError.value = e?.data?.statusMessage || 'Failed to update cMoon Prestige'
+  } finally {
+    prestigeFlagSaving.value = false
+  }
+}
+
+function startAddPrestigeLevel() {
+  const nextLevel = prestigeLevels.value.length
+    ? Math.max(...prestigeLevels.value.map(l => l.level)) + 1
+    : 1
+  Object.assign(prestigeLevelForm, emptyPrestigeLevelForm(), { id: 'new', level: nextLevel })
+}
+function startEditPrestigeLevel(l) {
+  Object.assign(prestigeLevelForm, { id: l.id, level: l.level, pointThreshold: l.pointThreshold, title: l.title || '' })
+}
+function cancelPrestigeLevelForm() {
+  Object.assign(prestigeLevelForm, emptyPrestigeLevelForm())
+}
+async function savePrestigeLevelForm() {
+  prestigeLevelSaving.value = true
+  prestigeLevelsError.value = ''
+  try {
+    const body = { level: prestigeLevelForm.level, pointThreshold: prestigeLevelForm.pointThreshold, title: prestigeLevelForm.title }
+    if (prestigeLevelForm.id === 'new') {
+      await $fetch('/api/admin/cmoon-prestige-levels', { method: 'POST', body })
+    } else {
+      await $fetch(`/api/admin/cmoon-prestige-levels/${prestigeLevelForm.id}`, { method: 'PUT', body })
+    }
+    cancelPrestigeLevelForm()
+    await loadPrestigeLevels()
+  } catch (e) {
+    prestigeLevelsError.value = e?.data?.statusMessage || 'Failed to save prestige level'
+  } finally {
+    prestigeLevelSaving.value = false
+  }
+}
+async function removePrestigeLevel(l) {
+  if (!confirm(`Delete Prestige ${l.level}? Players who already reached it keep their level — this only affects whether anyone can reach it in the future.`)) return
+  prestigeLevelsError.value = ''
+  try {
+    await $fetch(`/api/admin/cmoon-prestige-levels/${l.id}`, { method: 'DELETE' })
+    await loadPrestigeLevels()
+  } catch (e) {
+    prestigeLevelsError.value = e?.data?.statusMessage || 'Failed to delete prestige level'
   }
 }
 
@@ -2705,6 +2868,7 @@ async function load() {
     flagEnabled.value = !!data.cMoonEnabled
     cMoonEnabledAt.value = data.cMoonEnabledAt
     optOutCooldownDays.value = Number.isInteger(data.cMoonOptOutCooldownDays) ? data.cMoonOptOutCooldownDays : 14
+    prestigeEnabled.value = !!data.cMoonPrestigeEnabled
     enemyBattlesEnabled.value = !!data.cMoonEnemyBattlesEnabled
     battlePopupChancePercent.value = Number.isInteger(data.cMoonBattlePopupChancePercent) ? data.cMoonBattlePopupChancePercent : 3
     battlePopupCooldownMinutes.value = Number.isInteger(data.cMoonBattlePopupCooldownMinutes) ? data.cMoonBattlePopupCooldownMinutes : 20
@@ -3205,6 +3369,7 @@ async function save() {
       specialAttackId: form.specialAttackId || null,
       joinLocked: form.joinLocked,
       showOnNav: form.showOnNav,
+      isPrestigeCMoon: form.isPrestigeCMoon,
       showButtonOnPages: form.showButtonOnPages,
       allowOptOutJoin: form.allowOptOutJoin,
       captainIds: form.captainIds,
@@ -3286,6 +3451,7 @@ onMounted(() => {
   load()
   loadScoring()
   loadRankTiers()
+  loadPrestigeLevels()
 })
 </script>
 
