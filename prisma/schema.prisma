@@ -1993,12 +1993,13 @@ model GlobalGameConfig {
   cMoonEnemyHigherTierFirst            Boolean   @default(false)
   // When true, any raid participant whose cMoon captain status is set (CMoonCaptain — see that
   // model's own comment) lowers EVERY participant's special-attack hit-streak threshold for the
-  // whole raid from the normal HIT_STREAK_THRESHOLD (3, server/utils/cmoonEnemyBattle.js) down to
-  // 2 — see CAPTAIN_BOOST_HIT_STREAK_THRESHOLD/effectiveHitStreakThreshold in
-  // server/utils/cmoonEnemyRaid.js. Raid-only: solo battles (which have no captain concept) are
-  // never affected. False (the default) leaves every raid's threshold at the unboosted 3, the
-  // original behavior before this toggle existed — same "default off, admin opts in" convention
-  // as cMoonEnemyHigherTierFirst just above.
+  // whole raid by 1 (floored at 1) off THEIR OWN attack's configured requiredHitStreak (1-10,
+  // default 3 — see that column's own schema comment) rather than one fixed raid-wide number —
+  // see effectiveHitStreakThreshold in server/utils/cmoonEnemyRaid.js. Raid-only: solo battles
+  // (which have no captain concept) are never affected. False (the default) leaves every
+  // participant's threshold at their own attack's unboosted requiredHitStreak, the original
+  // behavior before this toggle existed — same "default off, admin opts in" convention as
+  // cMoonEnemyHigherTierFirst just above.
   cMoonCaptainBoostEnabled             Boolean   @default(false)
   // cMoon points awarded to the first solver's team for ANY CMoonRiddle (weekly or boss-lore) —
   // see claimCMoonRiddleSolve in server/utils/cmoonRiddle.js, which writes a CMoonScoreLog row of

@@ -702,53 +702,25 @@ watch(myHitStreak, (streak, prevStreak) => {
 })
 
 // ── Battle music — loops for as long as combat is actually running, same FIGHT-phase-only
-// scoping the solo popup uses (never during FORMING/RESOLVED).
+// scoping the solo popup uses (never during FORMING/RESOLVED). See useBattleMusic's own header
+// comment for why the start/stop/autoplay-retry logic itself lives in a shared composable rather
+// than duplicated here and in the solo popup.
 //
 // `raid` (above) reads off raidSocket.raidState, a MODULE-LEVEL singleton that outlives this
 // component — it is never reset just because this page unmounts. onUnmounted below always calls
-// stopBattleMusic(), so if a player navigates away mid-fight (another page, browser back/forward,
-// re-clicking the raid's own link) and comes back while the raid is STILL IN_PROGRESS, a plain
-// non-immediate watch here would never fire again: the watched status didn't change, it was
-// already 'IN_PROGRESS' before this fresh mount's watcher even started observing it. That left
-// the track silently dead for the rest of that fight even though combat was still live — this was
-// reported as "the music sometimes doesn't play." `{ immediate: true }` below fixes it: on every
-// (re)mount it reads the CURRENT status (computed `raid` already resolves to null for a
-// different/not-yet-loaded raid, so this is never a stale cross-raid false positive) instead of
-// only reacting to a future transition.
-let battleMusicEl = null
-let battleMusicRetryCleanup = null
-function clearBattleMusicRetry() {
-  if (battleMusicRetryCleanup) { battleMusicRetryCleanup(); battleMusicRetryCleanup = null }
-}
-function stopBattleMusic() {
-  clearBattleMusicRetry()
-  if (!battleMusicEl) return
-  try { battleMusicEl.pause() } catch {}
-  battleMusicEl = null
-}
-function startBattleMusic(path) {
-  stopBattleMusic()
-  if (!path || typeof window === 'undefined') return
-  try {
-    const el = new Audio(path)
-    el.loop = true
-    el.volume = 0.5
-    battleMusicEl = el
-    el.play().catch(() => {
-      // Browser autoplay policy can block sound with no recent-enough user gesture — rather than
-      // leaving the track silently dead for the rest of the fight, retry exactly once on the
-      // player's next real interaction with the page. Guarded against `el` having already been
-      // superseded (stopBattleMusic/a newer track) by the time that interaction happens.
-      if (battleMusicEl !== el || typeof document === 'undefined') return
-      const retry = () => { if (battleMusicEl === el) el.play().catch(() => {}) }
-      document.addEventListener('pointerdown', retry, { once: true })
-      battleMusicRetryCleanup = () => document.removeEventListener('pointerdown', retry)
-    })
-  } catch {}
-}
+// battleMusic.stop(), so if a player navigates away mid-fight (another page, browser
+// back/forward, re-clicking the raid's own link) and comes back while the raid is STILL
+// IN_PROGRESS, a plain non-immediate watch here would never fire again: the watched status didn't
+// change, it was already 'IN_PROGRESS' before this fresh mount's watcher even started observing
+// it. That left the track silently dead for the rest of that fight even though combat was still
+// live — this was reported as "the music sometimes doesn't play." `{ immediate: true }` below
+// fixes it: on every (re)mount it reads the CURRENT status (computed `raid` already resolves to
+// null for a different/not-yet-loaded raid, so this is never a stale cross-raid false positive)
+// instead of only reacting to a future transition.
+const battleMusic = useBattleMusic()
 watch(() => raid.value?.status, (status) => {
-  if (status === 'IN_PROGRESS') startBattleMusic(raid.value?.battleMusicPath)
-  else stopBattleMusic()
+  if (status === 'IN_PROGRESS') battleMusic.start(raid.value?.battleMusicPath)
+  else battleMusic.stop()
 }, { immediate: true })
 
 // ── Captain entrance banner — a one-time, purely cosmetic "epic" moment naming every cMoon
@@ -808,7 +780,7 @@ onUnmounted(() => {
   if (shakeTimer) clearTimeout(shakeTimer)
   if (captainEntranceTimer) clearTimeout(captainEntranceTimer)
   if (resultFlashTimer) clearTimeout(resultFlashTimer)
-  stopBattleMusic()
+  battleMusic.stop()
 })
 </script>
 

@@ -464,7 +464,12 @@ watch(() => battle.value?.playerHitStreak || 0, (streak, prevStreak) => {
 // for why that's a bare boolean, nothing more. ──
 const enemySpecialWarning = computed(() => {
   const threshold = battle.value?.enemyRequiredHitStreak || 3
-  return !!battle.value?.enemyHasSpecialAttack && (battle.value?.enemyHitStreak || 0) >= threshold - 1
+  // threshold can be as low as 1 (SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MIN) now that it's per-attack
+  // admin-configurable rather than always 3 — `threshold - 1` would then be 0, and
+  // enemyHitStreak >= 0 is true from the very first round, making this "warning" permanently on
+  // for the whole fight instead of telegraphing one hit ahead. A threshold of 1 fires on the
+  // first hit with nothing to telegraph in advance, so there's no "about to fire" state to show.
+  return !!battle.value?.enemyHasSpecialAttack && threshold > 1 && (battle.value?.enemyHitStreak || 0) >= threshold - 1
 })
 
 // ── FINAL_BOSS entrance punch — a one-shot full-bleed flash + a bigger modal "pop" exactly when a
@@ -512,44 +517,15 @@ watch(phase, (p) => {
 
 // ── Battle music: one faction-wide looping track, playing for as long as the FIGHT phase is
 // showing (never during OFFER/RESULT) — see CMoonEnemyFaction.battleMusicPath's own schema
-// comment. A plain HTMLAudioElement rather than the Web Audio API buffers useClickSoundEffects.js
-// uses: this is one long-running loop, not many short overlapping one-shots, so there's nothing
-// to gain from pre-decoding into a reusable AudioBuffer.
-let battleMusicEl = null
-let battleMusicRetryCleanup = null
-function clearBattleMusicRetry() {
-  if (battleMusicRetryCleanup) { battleMusicRetryCleanup(); battleMusicRetryCleanup = null }
-}
-function stopBattleMusic() {
-  clearBattleMusicRetry()
-  if (!battleMusicEl) return
-  try { battleMusicEl.pause() } catch {}
-  battleMusicEl = null
-}
-function startBattleMusic(path) {
-  stopBattleMusic()
-  if (!path || typeof window === 'undefined') return
-  try {
-    const el = new Audio(path)
-    el.loop = true
-    el.volume = 0.5
-    battleMusicEl = el
-    el.play().catch(() => {
-      // See the raid page's own identical comment — a browser autoplay-policy rejection here
-      // otherwise leaves the track silently dead for the rest of the fight with zero recovery.
-      if (battleMusicEl !== el || typeof document === 'undefined') return
-      const retry = () => { if (battleMusicEl === el) el.play().catch(() => {}) }
-      document.addEventListener('pointerdown', retry, { once: true })
-      battleMusicRetryCleanup = () => document.removeEventListener('pointerdown', retry)
-    })
-  } catch {}
-}
+// comment, and useBattleMusic's own header comment for why the start/stop/autoplay-retry logic
+// lives in a shared composable rather than duplicated here and on the raid page.
+const battleMusic = useBattleMusic()
 watch(phase, (p) => {
-  if (p === 'FIGHT') { startBattleMusic(battle.value?.enemy?.faction?.battleMusicPath); overkillAmount.value = 0 }
-  else { stopBattleMusic(); showSpecialInfo.value = false }
+  if (p === 'FIGHT') { battleMusic.start(battle.value?.enemy?.faction?.battleMusicPath); overkillAmount.value = 0 }
+  else { battleMusic.stop(); showSpecialInfo.value = false }
 })
 onBeforeUnmount(() => {
-  stopBattleMusic()
+  battleMusic.stop()
   if (shakeTimer) clearTimeout(shakeTimer)
   if (comboTimer) clearTimeout(comboTimer)
   if (resultFlashTimer) clearTimeout(resultFlashTimer)

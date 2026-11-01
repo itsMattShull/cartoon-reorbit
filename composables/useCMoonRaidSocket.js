@@ -61,9 +61,15 @@ export function useCMoonRaidSocket() {
     // comment in cmoonRaidSocket.js. Clears local state the same way leftRaid does, and surfaces
     // the message through lastError so the page's existing "no raid loaded" branch shows it.
     socket.on('cmoonraid:cancelled', (payload) => {
-      lastError.value = payload?.message || 'This raid was cancelled.'
-      raidState.value = null
-      currentRaidId.value = null
+      // Guarded the same way cmoonraid:leftRaid is just above (there by raidId, here by id —
+      // this event's payload is a plain publicRaidView spread, which names it `id`) rather than
+      // trusting that this socket can never still be a stale member of an old raid's room while
+      // genuinely in a different, newer one — defensive, not relied on by any known live path.
+      if (!payload?.id || payload.id === currentRaidId.value) {
+        lastError.value = payload?.message || 'This raid was cancelled.'
+        raidState.value = null
+        currentRaidId.value = null
+      }
     })
     socket.on('cmoonraid:error', (payload) => { lastError.value = payload?.message || 'Something went wrong' })
     socket.on('cmoonraid:lobby', (payload) => {
