@@ -6297,6 +6297,13 @@ model CMoonEnemyMember {
   // move. A miss is surfaced to the client as `enemyMissed` on the round result, shown with the
   // same "MISS!" badge treatment the client already gives a landed critical hit.
   attackAccuracyPercent    Int                  @default(100)
+  // 1-100. The flat damage THIS enemy's own landed normal attack deals to the player (see
+  // rollHitDamage in cmoonEnemyBattle.js) — a landed critical hit always deals exactly double this,
+  // same "crit = 2x normal" ratio every enemy has always had, just now scaled off a configurable
+  // base instead of the old hardcoded NORMAL_HIT_DAMAGE=1/CRITICAL_HIT_DAMAGE=2 pair. Only ever
+  // applies to THIS enemy's own attack landing on the player — never to the player's own damage
+  // against the enemy, which is unaffected and still flat 1/2.
+  baseDamage               Int                  @default(1)
   active                   Boolean              @default(true)
   // Set the moment a SHARED_POOL member's currentHp reaches 0 — once set, the popup-consider
   // roll skips this member (it stays visible/browsable in the admin page and battle logs, just

@@ -286,6 +286,9 @@ function publicRaidView(raid) {
     enemyMemberId: raid.enemyMemberId,
     cMoonId: raid.cMoonId,
     status: raid.status,
+    // When this raid was created (ms epoch) — the client's own Cancel Raid button (FORMING only)
+    // reads this to gate when it lights up, see that button's own comment in cmoon-raid/[id].vue.
+    startedAt: raid.startedAt,
     enemyName: raid.enemyName,
     enemyImagePath: raid.enemyImagePath,
     // Snapshotted once at creation (see the `raid` object's own shape comment below) — six
@@ -988,7 +991,12 @@ async function closeRound(io, raid) {
     broadcast(io, raid, EV('roundResolved'), {
       round: { roundNumber: raid.roundNumber, enemyAction, enemyDamageDealt, participants: perParticipant, specials: specialEvents, windUpBonus },
     })
-    sendCMoonTeamUpdate(raidDiscordPostTarget(raid), formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant, specialEvents }))
+    // Skipped for a PRIVATE raid — see postRaidRecap's own comment; a live round-by-round feed to
+    // the cMoon's public Discord channel would defeat "never announced anywhere but its own URL"
+    // just as badly as the recap would.
+    if (!raid.isPrivate) {
+      sendCMoonTeamUpdate(raidDiscordPostTarget(raid), formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant, specialEvents }))
+    }
 
     if (raid.enemyHpRemaining <= 0) {
       await resolveCMoonRaidOutcome(io, raid, 'WIN')
@@ -1010,6 +1018,11 @@ async function closeRound(io, raid) {
 // same recap there, so there's no more need to also fan it out to each participating team's own
 // channel the way this used to (back when each team had its own raid channel/thread).
 async function postRaidRecap(raid, { pointsAwarded }) {
+  // A PRIVATE raid's start announcement is already skipped (see cmoonraid:start's own isPrivate
+  // gate) — its recap must be too, or the "never announced anywhere but its own URL" guarantee is
+  // broken at the finish line: the outcome, every participant's username, and their final HP would
+  // still reach the cMoon's public Discord channel even though nobody was ever told the raid began.
+  if (raid.isPrivate) return
   const message = formatRaidRecapMessage(raid, { pointsAwarded })
   const target = raidDiscordPostTarget(raid)
   if (target) sendCMoonTeamUpdate(target, message)
@@ -1411,6 +1424,10 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
           // roll reads this off raid.enemyStats, same snapshot-at-creation discipline every other
           // field here already follows.
           attackAccuracyPercent: enemyMember.attackAccuracyPercent,
+          // See CMoonEnemyMember.baseDamage's own schema comment — resolveRaidRound's own
+          // rollHitDamage call reads this off raid.enemyStats, same snapshot-at-creation
+          // discipline every other field here already follows.
+          baseDamage: enemyMember.baseDamage,
           // Display-only for the lobby ("requires N prior wins"); the real gate is re-checked
           // against the database in loadEligibility on every join.
           minPriorDefeats: enemyMember.minPriorDefeats || 0,
@@ -1729,6 +1746,33 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       return socket.emit(EV('error'), { message: 'Solo raid queueing is disabled — you need at least one more player to start' })
     }
     startCombat(io, raid)
+  })
+
+  // Initiator-only, FORMING only: cancel the whole lobby, kicking out every other participant
+  // too — unlike cmoonraid:leave (which only ever removes the caller), this is a leader action
+  // that works even with other raiders already in it. No server-side time/headcount check, same
+  // "unconditional leader power" stance as forceStart above — the 90s/<3-raiders condition the
+  // client shows is purely a UX gate on when its OWN Cancel Raid button lights up (see that
+  // button's own comment in cmoon-raid/[id].vue), never re-enforced here.
+  socket.on(EV('cancelRaid'), async ({ raidId } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
+    const raid = raids.get(raidId)
+    if (!raid || raid.status !== 'FORMING') return socket.emit(EV('error'), { message: 'This raid can no longer be cancelled' })
+    const p = raid.participants.get(me.id)
+    if (!p?.isInitiator) return socket.emit(EV('error'), { message: 'Only the raid leader can do that' })
+    const participantIds = Array.from(raid.participants.keys())
+    // Broadcast BEFORE destroying — publicRaidView needs the live raid object, and every other
+    // participant's own socket is still in the room at this point.
+    broadcast(io, raid, EV('cancelled'), { message: 'The raid leader cancelled this raid.' })
+    await db.cMoonEnemyRaidParticipant.updateMany({
+      where: { raidId, userId: { in: participantIds } }, data: { activeUserId: null },
+    }).catch(() => {})
+    // Same cooldown restore a self-leave gives the initiator (see cmoonraid:leave's own comment)
+    // — cancelling your own still-FORMING lobby shouldn't cost you your next popup's worth of
+    // cooldown either.
+    db.user.update({ where: { id: me.id }, data: { lastCMoonBattlePopupAt: raid.initiatorPreviousPopupCooldownAt } }).catch(() => {})
+    destroyRaid(raidId)
   })
 
   // Any current participant: vote to cut the join window down to 5 seconds. Re-votable (idempotent

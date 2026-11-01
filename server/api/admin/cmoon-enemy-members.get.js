@@ -52,6 +52,7 @@ export default defineEventHandler(async (event) => {
       critChanceAgainstPercent: m.critChanceAgainstPercent,
       critChanceFromPercent: m.critChanceFromPercent,
       attackAccuracyPercent: m.attackAccuracyPercent,
+      baseDamage: m.baseDamage,
       attackChancePercent: m.attackChancePercent,
       pityThreshold: m.pityThreshold,
       firstWinBonusPoints: m.firstWinBonusPoints,

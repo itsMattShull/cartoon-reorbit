@@ -23,7 +23,7 @@ export const FACTION_DESCRIPTION_MAX_LENGTH = 500
 // high end of this range exists for SHARED_POOL raid-style enemies, whose HP is chipped away by
 // many players together.
 export const MAX_HP_MIN = 1
-export const MAX_HP_MAX = 500
+export const MAX_HP_MAX = 10000
 
 export const CMOON_POINTS_REWARD_MIN = 0
 export const CMOON_POINTS_REWARD_MAX = 5000
@@ -47,6 +47,14 @@ export const CRIT_CHANCE_DEFAULT = 0
 export const ATTACK_ACCURACY_PERCENT_MIN = 0
 export const ATTACK_ACCURACY_PERCENT_MAX = 100
 export const ATTACK_ACCURACY_PERCENT_DEFAULT = 100
+
+// 1-100. The flat damage THIS enemy's own landed normal attack deals to the player — see
+// CMoonEnemyMember.baseDamage's own schema comment. 1 is the admin default so an existing enemy's
+// damage output never changes until an admin dials it up, same "default reproduces pre-feature
+// behavior exactly" stance every field on this model takes.
+export const BASE_DAMAGE_MIN = 1
+export const BASE_DAMAGE_MAX = 100
+export const BASE_DAMAGE_DEFAULT = 1
 
 // 0-100 chance this enemy's own rolled move is an attack rather than a block — see
 // CMoonEnemyMember.attackChancePercent's own schema comment. 50 is the admin default AND the
@@ -227,6 +235,10 @@ export function isValidAttackAccuracyPercent(value) {
   return Number.isInteger(value) && value >= ATTACK_ACCURACY_PERCENT_MIN && value <= ATTACK_ACCURACY_PERCENT_MAX
 }
 
+export function isValidBaseDamage(value) {
+  return Number.isInteger(value) && value >= BASE_DAMAGE_MIN && value <= BASE_DAMAGE_MAX
+}
+
 export function isValidAttackChance(value) {
   return Number.isInteger(value) && value >= ATTACK_CHANCE_MIN && value <= ATTACK_CHANCE_MAX
 }
@@ -373,6 +385,9 @@ export function parseMemberBody(body, existing) {
   const attackAccuracyPercent = body?.attackAccuracyPercent === undefined
     ? (existing ? existing.attackAccuracyPercent : ATTACK_ACCURACY_PERCENT_DEFAULT)
     : toNumber(body.attackAccuracyPercent)
+  const baseDamage = body?.baseDamage === undefined
+    ? (existing ? existing.baseDamage : BASE_DAMAGE_DEFAULT)
+    : toNumber(body.baseDamage)
   const attackChancePercent = body?.attackChancePercent === undefined
     ? (existing ? existing.attackChancePercent : ATTACK_CHANCE_DEFAULT)
     : toNumber(body.attackChancePercent)
@@ -451,6 +466,9 @@ export function parseMemberBody(body, existing) {
   if (!isValidAttackAccuracyPercent(attackAccuracyPercent)) {
     return { ok: false, message: `Attack accuracy must be a whole number between ${ATTACK_ACCURACY_PERCENT_MIN} and ${ATTACK_ACCURACY_PERCENT_MAX}` }
   }
+  if (!isValidBaseDamage(baseDamage)) {
+    return { ok: false, message: `Base damage must be a whole number between ${BASE_DAMAGE_MIN} and ${BASE_DAMAGE_MAX}` }
+  }
   if (!isValidAttackChance(attackChancePercent)) {
     return { ok: false, message: `Attack chance must be a whole number between ${ATTACK_CHANCE_MIN} and ${ATTACK_CHANCE_MAX}` }
   }
@@ -497,7 +515,7 @@ export function parseMemberBody(body, existing) {
     ok: true,
     data: {
       factionId, name, maxHp, battleMode, rank, minPriorDefeats, occurrencePercent, cMoonPointsReward,
-      critChanceAgainstPercent, critChanceFromPercent, attackAccuracyPercent, attackChancePercent, pityThreshold, firstWinBonusPoints,
+      critChanceAgainstPercent, critChanceFromPercent, attackAccuracyPercent, baseDamage, attackChancePercent, pityThreshold, firstWinBonusPoints,
       active, sortOrder,
       isRaidBoss, raidAnnouncementText, raidOneTime, raidCooldownMinutes, maxParticipants, raidRoundLimit, windUpEnabled,
     },

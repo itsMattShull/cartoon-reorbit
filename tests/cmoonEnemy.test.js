@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import {
   parseMemberBody, parseRewardBody, isValidCritChance, isValidPointsAmount, isValidRank, isValidMinPriorDefeats,
   isValidAttackAccuracyPercent, ATTACK_ACCURACY_PERCENT_MIN, ATTACK_ACCURACY_PERCENT_MAX, ATTACK_ACCURACY_PERCENT_DEFAULT,
+  isValidBaseDamage, BASE_DAMAGE_MIN, BASE_DAMAGE_MAX, BASE_DAMAGE_DEFAULT,
   CRIT_CHANCE_MIN, CRIT_CHANCE_MAX, POINTS_REWARD_MIN, POINTS_REWARD_MAX, ENEMY_RANKS, RANK_DEFAULT,
   MIN_PRIOR_DEFEATS_MIN, MIN_PRIOR_DEFEATS_MAX, MIN_PRIOR_DEFEATS_DEFAULT,
   isValidOccurrencePercent, OCCURRENCE_PERCENT_MIN, OCCURRENCE_PERCENT_MAX, OCCURRENCE_PERCENT_DEFAULT,
@@ -62,28 +63,28 @@ test('parseMemberBody: rejects an invalid rank', () => {
 })
 
 test('parseMemberBody: an update with no rank field in the body keeps the existing rank', () => {
-  const existing = { ...baseMemberBody, rank: 'FINAL_BOSS', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100 }
+  const existing = { ...baseMemberBody, rank: 'FINAL_BOSS', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1 }
   const result = parseMemberBody({ name: 'Renamed' }, existing)
   assert.equal(result.ok, true)
   assert.equal(result.data.rank, 'FINAL_BOSS')
 })
 
 test('parseMemberBody: rejects a rank change once the member has battle history', () => {
-  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, hasBattles: true }
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, hasBattles: true }
   const result = parseMemberBody({ rank: 'FINAL_BOSS' }, existing)
   assert.equal(result.ok, false)
   assert.match(result.message, /rank cannot change/i)
 })
 
 test('parseMemberBody: allows a rank change on a member with no battle history yet', () => {
-  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, hasBattles: false }
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, hasBattles: false }
   const result = parseMemberBody({ rank: 'FINAL_BOSS' }, existing)
   assert.equal(result.ok, true)
   assert.equal(result.data.rank, 'FINAL_BOSS')
 })
 
 test('parseMemberBody: re-saving the SAME rank is allowed even with battle history', () => {
-  const existing = { ...baseMemberBody, rank: 'UNDERBOSS', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, hasBattles: true }
+  const existing = { ...baseMemberBody, rank: 'UNDERBOSS', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, hasBattles: true }
   const result = parseMemberBody({ rank: 'UNDERBOSS', name: 'Renamed' }, existing)
   assert.equal(result.ok, true)
   assert.equal(result.data.rank, 'UNDERBOSS')
@@ -117,7 +118,7 @@ test('parseMemberBody: rejects an out-of-range minPriorDefeats', () => {
 })
 
 test('parseMemberBody: minPriorDefeats can change freely even with battle history (no lock, unlike rank/battleMode)', () => {
-  const existing = { ...baseMemberBody, rank: 'GOON', minPriorDefeats: 3, active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, hasBattles: true }
+  const existing = { ...baseMemberBody, rank: 'GOON', minPriorDefeats: 3, active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, hasBattles: true }
   const result = parseMemberBody({ minPriorDefeats: 50 }, existing)
   assert.equal(result.ok, true)
   assert.equal(result.data.minPriorDefeats, 50)
@@ -154,7 +155,7 @@ test('parseMemberBody: rejects an out-of-range crit chance', () => {
 })
 
 test('parseMemberBody: an update with no crit chance fields in the body keeps the existing values', () => {
-  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 40, critChanceFromPercent: 15, attackAccuracyPercent: 100, hasBattles: false }
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 40, critChanceFromPercent: 15, attackAccuracyPercent: 100, baseDamage: 1, hasBattles: false }
   const result = parseMemberBody({}, existing)
   assert.equal(result.ok, true)
   assert.equal(result.data.critChanceAgainstPercent, 40)
@@ -190,10 +191,45 @@ test('parseMemberBody: rejects an out-of-range attackAccuracyPercent', () => {
 })
 
 test('parseMemberBody: an update with no attackAccuracyPercent field in the body keeps the existing value', () => {
-  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 72, hasBattles: false }
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 72, baseDamage: 1, hasBattles: false }
   const result = parseMemberBody({}, existing)
   assert.equal(result.ok, true)
   assert.equal(result.data.attackAccuracyPercent, 72)
+})
+
+// ── baseDamage (see CMoonEnemyMember.baseDamage's own schema comment) ──────────────────────────
+test('isValidBaseDamage accepts the full 1-100 range and rejects outside it', () => {
+  assert.equal(isValidBaseDamage(BASE_DAMAGE_MIN), true)
+  assert.equal(isValidBaseDamage(BASE_DAMAGE_MAX), true)
+  assert.equal(isValidBaseDamage(50), true)
+  assert.equal(isValidBaseDamage(0), false)
+  assert.equal(isValidBaseDamage(101), false)
+  assert.equal(isValidBaseDamage(50.5), false)
+  assert.equal(isValidBaseDamage(NaN), false)
+})
+
+test('parseMemberBody: baseDamage defaults to 1 on create when omitted', () => {
+  const result = parseMemberBody(baseMemberBody, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.baseDamage, BASE_DAMAGE_DEFAULT)
+})
+
+test('parseMemberBody: accepts an explicit baseDamage within range', () => {
+  const result = parseMemberBody({ ...baseMemberBody, baseDamage: 25 }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.baseDamage, 25)
+})
+
+test('parseMemberBody: rejects an out-of-range baseDamage', () => {
+  assert.equal(parseMemberBody({ ...baseMemberBody, baseDamage: 101 }, undefined).ok, false)
+  assert.equal(parseMemberBody({ ...baseMemberBody, baseDamage: 0 }, undefined).ok, false)
+})
+
+test('parseMemberBody: an update with no baseDamage field in the body keeps the existing value', () => {
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 40, hasBattles: false }
+  const result = parseMemberBody({}, existing)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.baseDamage, 40)
 })
 
 test('parseMemberBody: raidOneTime and raidCooldownMinutes default to false/0 on create when omitted', () => {
@@ -227,7 +263,7 @@ test('parseMemberBody: rejects a non-boolean raidOneTime', () => {
 test('parseMemberBody: an update with no raid fields in the body keeps the existing raidOneTime/raidCooldownMinutes', () => {
   const existing = {
     ...baseMemberBody, rank: 'FINAL_BOSS', isRaidBoss: true, active: true, sortOrder: 0,
-    critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, hasBattles: false,
+    critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, hasBattles: false,
     raidOneTime: true, raidCooldownMinutes: 720,
   }
   const result = parseMemberBody({}, existing)
@@ -307,7 +343,7 @@ test('parseMemberBody: rejects an out-of-range occurrencePercent', () => {
 test('parseMemberBody: an update with no occurrencePercent field in the body keeps the existing value', () => {
   const existing = {
     ...baseMemberBody, id: 'm1', rank: 'GOON', active: true, sortOrder: 0,
-    critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, occurrencePercent: 15, hasBattles: false,
+    critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, occurrencePercent: 15, hasBattles: false,
   }
   const result = parseMemberBody({}, existing)
   assert.equal(result.ok, true)
@@ -838,7 +874,7 @@ test('parseMemberBody: accepts the full maxParticipants range and rejects outsid
 
 test('parseMemberBody: an update with no maxParticipants/windUpEnabled fields keeps the existing values', () => {
   const existing = {
-    ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100,
+    ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1,
     maxParticipants: 8, windUpEnabled: true,
   }
   const result = parseMemberBody({ name: 'Renamed' }, existing)
@@ -865,7 +901,7 @@ test('parseMemberBody: accepts the full raidRoundLimit range and rejects outside
 
 test('parseMemberBody: an update with no raidRoundLimit field in the body keeps the existing value', () => {
   const existing = {
-    ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100,
+    ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1,
     raidRoundLimit: 400,
   }
   const result = parseMemberBody({ name: 'Renamed' }, existing)

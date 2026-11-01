@@ -74,6 +74,26 @@ test('resolveRaidRound: a 100% crit-from enemy deals CRITICAL_HIT_DAMAGE to ever
   }
 })
 
+test('resolveRaidRound: a custom enemyMember.baseDamage sets the enemy\'s landed-hit damage against every participant (crit deals double it), never affecting a participant\'s own damage against the enemy', () => {
+  const heavyEnemy = { ...baseEnemyMember, baseDamage: 40, critChanceFromPercent: 100 }
+  const bigHp = 1000
+  const participants = [
+    { userId: 'a', action: 'BLOCK_HIGH', hpRemaining: bigHp, maxHp: bigHp },
+    { userId: 'b', action: 'ATTACK_HIGH', hpRemaining: bigHp, maxHp: bigHp },
+  ]
+  // The enemy attacks LOW, so BLOCK_HIGH does not cancel it — both participants take the hit.
+  const result = resolveRaidRound({ enemyAction: 'ATTACK_LOW', enemyMember: heavyEnemy, participants })
+  for (const p of result.perParticipant) {
+    assert.equal(p.playerHit, true)
+    assert.equal(bigHp - p.hpRemaining, 80) // crit: 40 * 2
+  }
+  // Participant 'b' attacked HIGH against an enemy attacking LOW — their own attack lands on the
+  // enemy, and that damage is unaffected by the enemy's own baseDamage.
+  const b = result.perParticipant.find(p => p.userId === 'b')
+  assert.equal(b.enemyHit, true)
+  assert.equal(b.enemyDamage, NORMAL_HIT_DAMAGE)
+})
+
 test('resolveRaidRound: a knocked-out participant this round is flagged and floored at 0 HP', () => {
   const critEnemy = { ...baseEnemyMember, critChanceFromPercent: 100 }
   const participants = [{ userId: 'a', action: 'BLOCK_HIGH', hpRemaining: 1, maxHp: PLAYER_MAX_HP }]

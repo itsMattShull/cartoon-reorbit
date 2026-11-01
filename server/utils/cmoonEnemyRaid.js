@@ -252,7 +252,7 @@ export function resolveRaidRound({ enemyAction, enemyMember, participants, party
     // critChanceFromPercent is the enemy's own attack landing critically against A player;
     // critChanceAgainstPercent is a player's attack landing critically against the enemy — same
     // naming as the solo battle, see CMoonEnemyMember's own schema comment on these columns.
-    const { damage: playerDamageBase, isCrit: playerCrit } = rollHitDamage(playerHit, enemyMember.critChanceFromPercent)
+    const { damage: playerDamageBase, isCrit: playerCrit } = rollHitDamage(playerHit, enemyMember.critChanceFromPercent, enemyMember.baseDamage)
     const { damage: enemyDamageBase, isCrit: enemyCrit } = rollHitDamage(enemyHit, enemyMember.critChanceAgainstPercent)
     // Named from each side's own perspective, same convention as the solo battle: enemyAtkBonus
     // changes what the ENEMY deals (to this participant); partyAtkBonus changes what the PARTY

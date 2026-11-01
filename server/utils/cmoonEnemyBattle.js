@@ -161,11 +161,15 @@ export function resolveBattleRound(playerAction, enemyAction, enemyAccuracyPerce
 // actual damage to apply. `hit` must already be known true — this never rolls a hit itself, only
 // how hard an already-landed one strikes. Kept as a pure function (Math.random() aside) so the
 // crit roll and the hit roll stay two clearly separate steps, each independently testable.
-export function rollHitDamage(hit, critChancePercent) {
+// `baseDamage` defaults to NORMAL_HIT_DAMAGE (the player's own damage against the enemy is still
+// always flat 1/2 — only the enemy's own attack, via CMoonEnemyMember.baseDamage, is ever
+// configurable) — a crit always deals exactly double whatever base is passed in, preserving the
+// same "crit = 2x normal" ratio either way.
+export function rollHitDamage(hit, critChancePercent, baseDamage = NORMAL_HIT_DAMAGE) {
   if (!hit) return { damage: 0, isCrit: false }
   const chance = Number(critChancePercent) || 0
   const isCrit = chance > 0 && Math.random() * 100 < chance
-  return { damage: isCrit ? CRITICAL_HIT_DAMAGE : NORMAL_HIT_DAMAGE, isCrit }
+  return { damage: isCrit ? baseDamage * 2 : baseDamage, isCrit }
 }
 
 // Composes resolveBattleRound + rollHitDamage (x2) + the player's own HP transition into one
@@ -205,7 +209,7 @@ export function resolveRound({
   // critChanceFromPercent is this enemy's own attacks landing critically against the player;
   // critChanceAgainstPercent is the player's attacks landing critically against this enemy — see
   // those columns' own schema comments.
-  const { damage: playerDamageBase, isCrit: playerCrit } = rollHitDamage(playerHit, enemyMember.critChanceFromPercent)
+  const { damage: playerDamageBase, isCrit: playerCrit } = rollHitDamage(playerHit, enemyMember.critChanceFromPercent, enemyMember.baseDamage)
   const { damage: enemyDamageBase, isCrit: enemyCrit } = rollHitDamage(enemyHit, enemyMember.critChanceAgainstPercent)
   // The ENEMY's own attack bonus/penalty applies to damage it deals (landing on the player); the
   // PLAYER's own applies to damage the player deals (landing on the enemy) — named from each

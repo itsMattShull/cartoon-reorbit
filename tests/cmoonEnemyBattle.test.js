@@ -55,6 +55,22 @@ test('resolveRound: a 100% crit-from enemy always deals CRITICAL_HIT_DAMAGE to t
   assert.equal(sawAHit, true)
 })
 
+test('resolveRound: a custom enemyMember.baseDamage sets the enemy\'s landed-hit damage against the player (crit deals double it), never affecting the player\'s own damage against the enemy', () => {
+  const heavyEnemy = { ...baseEnemyMember, baseDamage: 40, critChanceFromPercent: 100 }
+  let sawAHit = false
+  for (let i = 0; i < 200; i++) {
+    const bigHp = 1000
+    const result = resolveRound({ playerAction: 'BLOCK_HIGH', enemyMember: heavyEnemy, playerHpRemaining: bigHp, playerMaxHp: bigHp })
+    if (result.newPlayerHp < bigHp) {
+      sawAHit = true
+      assert.equal(bigHp - result.newPlayerHp, 80) // crit: 40 * 2
+    }
+    // The player's own damage against the enemy is untouched by the enemy's baseDamage.
+    if (result.roundEntry.enemyHit) assert.equal(result.roundEntry.enemyDamage, NORMAL_HIT_DAMAGE)
+  }
+  assert.equal(sawAHit, true)
+})
+
 test('resolveRound: a successful player block heals 1 HP, capped at PLAYER_MAX_HP', () => {
   // BLOCK_HIGH cancels an ATTACK_HIGH from the enemy — run enough trials to see it happen at
   // least once (enemy action is 1-of-4 uniform random) and confirm the heal never overflows.
@@ -217,6 +233,15 @@ test('rollHitDamage: a 100% crit chance always deals critical (2x) damage', () =
 
 test('rollHitDamage: CRITICAL_HIT_DAMAGE is exactly double NORMAL_HIT_DAMAGE', () => {
   assert.equal(CRITICAL_HIT_DAMAGE, NORMAL_HIT_DAMAGE * 2)
+})
+
+test('rollHitDamage: a custom baseDamage is used for a normal hit, and doubled for a crit', () => {
+  assert.deepEqual(rollHitDamage(true, 0, 40), { damage: 40, isCrit: false })
+  assert.deepEqual(rollHitDamage(true, 100, 40), { damage: 80, isCrit: true })
+})
+
+test('rollHitDamage: a miss never deals damage regardless of baseDamage', () => {
+  assert.deepEqual(rollHitDamage(false, 100, 40), { damage: 0, isCrit: false })
 })
 
 test('rollEnemyRewards: a 100% chance row always hits, a 0% row never does', () => {

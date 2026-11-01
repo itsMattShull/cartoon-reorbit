@@ -665,8 +665,8 @@
 
           <div class="flex gap-2">
             <div class="flex-1 min-w-0">
-              <label class="block text-xs font-medium mb-1">Max HP (1-500)</label>
-              <input v-model.number="memberForm.maxHp" type="number" min="1" max="500" class="w-full border rounded px-2 py-1" />
+              <label class="block text-xs font-medium mb-1">Max HP (1-10000)</label>
+              <input v-model.number="memberForm.maxHp" type="number" min="1" max="10000" class="w-full border rounded px-2 py-1" />
             </div>
             <div class="flex-1 min-w-0">
               <label class="block text-xs font-medium mb-1">cMoon points on win (0-5000)</label>
@@ -697,6 +697,15 @@
                 always lands, same as before this existed. Shown to players as a "MISS!" the same way a
                 critical hit gets its own badge. Doesn't affect a special attack's own accuracy, set
                 separately on that attack.
+              </p>
+            </div>
+            <div class="flex-1 min-w-0">
+              <label class="block text-xs font-medium mb-1">Base damage (1-100)</label>
+              <input v-model.number="memberForm.baseDamage" type="number" min="1" max="100" class="w-full border rounded px-2 py-1" />
+              <p class="text-[10px] text-gray-500 mt-1">
+                Flat damage this enemy's own landed normal attack deals to the player — a critical hit always
+                deals exactly double this. 1 (default) matches every enemy's damage before this existed. Never
+                affects the player's own damage against this enemy, which stays fixed.
               </p>
             </div>
           </div>
@@ -1837,7 +1846,7 @@ const emptyMemberForm = () => ({
   id: '', factionId: '', name: '', maxHp: 5, battleMode: 'PER_PLAYER', rank: 'GOON', minPriorDefeats: 0,
   occurrencePercent: 50,
   cMoonPointsReward: 10, critChanceAgainstPercent: 0, critChanceFromPercent: 0,
-  attackAccuracyPercent: 100,
+  attackAccuracyPercent: 100, baseDamage: 1,
   attackChancePercent: 50, pityThreshold: 0, firstWinBonusPoints: 0,
   active: true, sortOrder: 0,
   isRaidBoss: false, raidAnnouncementText: '', raidOneTime: false, raidCooldownMinutes: 0,
@@ -1900,6 +1909,7 @@ function startEditMember(m) {
     cMoonPointsReward: m.cMoonPointsReward, critChanceAgainstPercent: m.critChanceAgainstPercent ?? 0,
     critChanceFromPercent: m.critChanceFromPercent ?? 0,
     attackAccuracyPercent: m.attackAccuracyPercent ?? 100,
+    baseDamage: m.baseDamage ?? 1,
     attackChancePercent: m.attackChancePercent ?? 50, pityThreshold: m.pityThreshold ?? 0,
     firstWinBonusPoints: m.firstWinBonusPoints ?? 0,
     active: !!m.active, sortOrder: m.sortOrder,
@@ -1960,7 +1970,7 @@ async function saveMember() {
   if (!memberForm.factionId) { memberFormError.value = 'Pick a faction.'; return }
   if (!memberForm.name.trim()) { memberFormError.value = 'Name is required.'; return }
   const maxHp = Math.trunc(Number(memberForm.maxHp))
-  if (!Number.isInteger(maxHp) || maxHp < 1 || maxHp > 500) { memberFormError.value = 'Max HP must be between 1 and 500.'; return }
+  if (!Number.isInteger(maxHp) || maxHp < 1 || maxHp > 10000) { memberFormError.value = 'Max HP must be between 1 and 10000.'; return }
   const cMoonPointsReward = Math.trunc(Number(memberForm.cMoonPointsReward))
   if (!Number.isInteger(cMoonPointsReward) || cMoonPointsReward < 0 || cMoonPointsReward > 5000) {
     memberFormError.value = 'cMoon points reward must be between 0 and 5000.'
@@ -1979,6 +1989,11 @@ async function saveMember() {
   const attackAccuracyPercent = Math.trunc(Number(memberForm.attackAccuracyPercent))
   if (!Number.isInteger(attackAccuracyPercent) || attackAccuracyPercent < 0 || attackAccuracyPercent > 100) {
     memberFormError.value = 'Attack accuracy must be between 0 and 100.'
+    return
+  }
+  const baseDamage = Math.trunc(Number(memberForm.baseDamage))
+  if (!Number.isInteger(baseDamage) || baseDamage < 1 || baseDamage > 100) {
+    memberFormError.value = 'Base damage must be between 1 and 100.'
     return
   }
   const attackChancePercent = Math.trunc(Number(memberForm.attackChancePercent))
@@ -2044,6 +2059,7 @@ async function saveMember() {
       critChanceAgainstPercent,
       critChanceFromPercent,
       attackAccuracyPercent,
+      baseDamage,
       attackChancePercent,
       pityThreshold,
       firstWinBonusPoints,

@@ -112,6 +112,14 @@
               <p v-if="!raid.soloQueueEnabled && raid.participants.length < 2" class="cr-solo-disabled-note">
                 Solo queueing is disabled — at least one more player must join before you can start.
               </p>
+              <!-- Grayed out until the lobby's sat open 90s with still fewer than 3 raiders — see
+                   cancelRaidEnabled's own comment. A stalled lobby the leader can walk away from
+                   without waiting out the full join window. -->
+              <button
+                type="button" class="cr-link-btn text-red-600" :disabled="!cancelRaidEnabled"
+                :title="cancelRaidEnabled ? '' : 'Available once the lobby has been open 90s with fewer than 3 raiders'"
+                @click="cancelRaidAndGoHome"
+              >Cancel raid</button>
             </div>
 
             <!-- Any non-leader participant can vote to cut the countdown to 5s, once every OTHER
@@ -481,6 +489,26 @@ function tickCountdown() {
   joinCountdown.value = Math.max(0, Math.ceil((raid.value.joinDeadlineAt - Date.now()) / 1000))
 }
 
+// How long this lobby has been open — ticked alongside joinCountdown above (same 250ms interval,
+// no second timer needed) purely to gate when the Cancel Raid button below lights up.
+const secondsSinceStart = ref(0)
+function tickSecondsSinceStart() {
+  if (!raid.value?.startedAt) { secondsSinceStart.value = 0; return }
+  secondsSinceStart.value = Math.max(0, Math.floor((Date.now() - raid.value.startedAt) / 1000))
+}
+// Grayed out until the lobby has sat open for 90s AND still has fewer than 3 raiders — a stalled
+// lobby the leader may want to bail on, not a button meant to cut short a healthy one that's
+// about to fill. Purely a client-side UX gate: the server's own cancelRaid handler (see
+// cmoonRaidSocket.js) gives the leader unconditional power to cancel any FORMING raid, same as
+// forceStart's own "no server-side time/headcount check" stance — this just decides when the
+// button LOOKS clickable.
+const cancelRaidEnabled = computed(() =>
+  isInitiator.value && secondsSinceStart.value >= 90 && (raid.value?.participants.length || 0) < 3)
+function cancelRaidAndGoHome() {
+  raidSocket.cancelRaid(raidId.value)
+  navigateTo('/newsite/home')
+}
+
 // IN_PROGRESS's per-round move countdown — same plain client-side ticker shape as joinCountdown
 // above, against roundDeadlineAt instead: the server's sweep is still the real authority on when
 // a round auto-acts, this just gives a stalling player (and everyone watching) something to see
@@ -728,7 +756,7 @@ watch(() => raid.value?.outcome, (outcome) => {
 
 onMounted(() => {
   raidSocket.getState(raidId.value)
-  countdownTimer = setInterval(tickCountdown, 250)
+  countdownTimer = setInterval(() => { tickCountdown(); tickSecondsSinceStart() }, 250)
   roundCountdownTimer = setInterval(tickRoundCountdown, 250)
 })
 onUnmounted(() => {

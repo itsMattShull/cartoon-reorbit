@@ -280,6 +280,9 @@ export function registerCMoonRaidPreview(io, socket, resolveSocketUser) {
           critChanceFromPercent: enemyMember.critChanceFromPercent,
           cMoonPointsReward: enemyMember.cMoonPointsReward,
           attackChancePercent: enemyMember.attackChancePercent,
+          // See CMoonEnemyMember.baseDamage's own schema comment — resolveRaidRound's
+          // rollHitDamage call reads this off raid.enemyStats, same as the real raid socket.
+          baseDamage: enemyMember.baseDamage,
         },
         defaultMaxHp,
         status: 'FORMING', enemyHpRemaining: enemyMember.maxHp, roundNumber: 1,
