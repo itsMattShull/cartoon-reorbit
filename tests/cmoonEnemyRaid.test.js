@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   resolveRaidRound, checkRaidBossAvailability,
   JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE,
-  CAPTAIN_BOOST_HIT_STREAK_THRESHOLD, effectiveHitStreakThreshold,
+  effectiveHitStreakThreshold, applyRaidSpecialAttack,
 } from '../server/utils/cmoonEnemyRaid.js'
 import { SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE, HEAL_ON_SUCCESSFUL_BLOCK } from '../server/utils/cmoonEnemyBattle.js'
 
@@ -194,12 +194,22 @@ test('re-exports the solo battle\'s special-attack constants unchanged', () => {
 })
 
 // ── Captain boost effect (GlobalGameConfig.cMoonCaptainBoostEnabled) ────────────────────────────
+// Signature is now (baseThreshold, captainBoostEnabled, anyCaptainPresent) — baseThreshold is each
+// attack's own requiredHitStreak (1-10, default 3) rather than a single hardcoded constant, so a
+// captain's presence lowers WHATEVER threshold was passed in by 1 (floored at 1), not to a fixed 2.
 test('effectiveHitStreakThreshold: only lowers the threshold when BOTH the toggle is on AND a captain is present', () => {
-  assert.equal(CAPTAIN_BOOST_HIT_STREAK_THRESHOLD, 2)
-  assert.equal(effectiveHitStreakThreshold(false, false), HIT_STREAK_THRESHOLD)
-  assert.equal(effectiveHitStreakThreshold(false, true), HIT_STREAK_THRESHOLD)
-  assert.equal(effectiveHitStreakThreshold(true, false), HIT_STREAK_THRESHOLD)
-  assert.equal(effectiveHitStreakThreshold(true, true), CAPTAIN_BOOST_HIT_STREAK_THRESHOLD)
+  assert.equal(effectiveHitStreakThreshold(HIT_STREAK_THRESHOLD, false, false), HIT_STREAK_THRESHOLD)
+  assert.equal(effectiveHitStreakThreshold(HIT_STREAK_THRESHOLD, false, true), HIT_STREAK_THRESHOLD)
+  assert.equal(effectiveHitStreakThreshold(HIT_STREAK_THRESHOLD, true, false), HIT_STREAK_THRESHOLD)
+  assert.equal(effectiveHitStreakThreshold(HIT_STREAK_THRESHOLD, true, true), HIT_STREAK_THRESHOLD - 1)
+})
+
+test('effectiveHitStreakThreshold: applies to any attack-specific base, floored at 1', () => {
+  assert.equal(effectiveHitStreakThreshold(4, true, true), 3)
+  assert.equal(effectiveHitStreakThreshold(1, true, true), 1) // floored, never 0
+  assert.equal(effectiveHitStreakThreshold(1, false, false), 1)
+  // Missing/invalid base falls back to the plain HIT_STREAK_THRESHOLD constant.
+  assert.equal(effectiveHitStreakThreshold(undefined, false, false), HIT_STREAK_THRESHOLD)
 })
 
 // ── Raid special-attack charge banking (closeRound in cmoonRaidSocket.js) ──────────────────────
@@ -323,4 +333,128 @@ test('resolveRaidRound: rejects an invalid participant action even with the new 
     enemyAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember,
     participants: [{ userId: 'a', action: 'NOT_REAL', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP }],
   }))
+})
+
+// ── SHIELD_PARTY (resolveRaidRound's own partyShielded param) ──────────────────────────────────
+test('resolveRaidRound: partyShielded negates incoming HP loss even when the boss lands a hit', () => {
+  const participants = [{ userId: 'a', action: 'BLOCK_LOW', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP }]
+  let sawAHit = false
+  for (let i = 0; i < 50; i++) {
+    const result = resolveRaidRound({ enemyAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember, participants, partyShielded: true })
+    const [p] = result.perParticipant
+    if (p.playerHit) { sawAHit = true; assert.equal(p.hpRemaining, PLAYER_MAX_HP) }
+  }
+  assert.equal(sawAHit, true)
+})
+
+// ── New raid-only tactical effects (applyRaidSpecialAttack in cmoonEnemyRaid.js) ────────────────
+// Minimal raid/alive fixtures — only the fields each effect branch actually touches.
+function makeRaid(overrides = {}) {
+  return {
+    enemyHpRemaining: 50, enemyStats: { maxHp: 50 },
+    enemyParalyzedTurns: 0, partyParalyzedTurns: 0,
+    enemyPoisonAmount: 0, enemyPoisonTurnsRemaining: 0,
+    participants: new Map(),
+    ...overrides,
+  }
+}
+function makeParticipant(userId, overrides = {}) {
+  return { userId, hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP, knockedOutAt: null, poisonAmount: 0, poisonTurnsRemaining: 0, ...overrides }
+}
+const baseAttack = { name: 'Test Attack', amount: 10, accuracyPercent: 100, soundPath: null }
+
+test('applyRaidSpecialAttack: accuracyPercent 0 always misses and changes no state', () => {
+  const raid = makeRaid()
+  const events = []
+  applyRaidSpecialAttack(raid, [], { ...baseAttack, effectType: 'DAMAGE_OPPONENT', accuracyPercent: 0 }, { side: 'PLAYER', userId: 'a' }, events, {})
+  assert.equal(events.length, 1)
+  assert.equal(events[0].missed, true)
+  assert.equal(raid.enemyHpRemaining, 50) // untouched
+})
+
+test('applyRaidSpecialAttack: accuracyPercent 100 always lands', () => {
+  for (let i = 0; i < 20; i++) {
+    const raid = makeRaid()
+    const events = []
+    applyRaidSpecialAttack(raid, [], { ...baseAttack, effectType: 'DAMAGE_OPPONENT' }, { side: 'PLAYER', userId: 'a' }, events, {})
+    assert.equal(events[0].missed, undefined)
+    assert.equal(raid.enemyHpRemaining, 40)
+  }
+})
+
+test('applyRaidSpecialAttack: POISON_OPPONENT player-cast sets the boss\'s shared poison state, refreshing (not stacking) on re-cast', () => {
+  const raid = makeRaid()
+  const attack = { ...baseAttack, effectType: 'POISON_OPPONENT', amount: 7, poisonDurationRounds: 3 }
+  applyRaidSpecialAttack(raid, [], attack, { side: 'PLAYER', userId: 'a' }, [], {})
+  assert.deepEqual([raid.enemyPoisonAmount, raid.enemyPoisonTurnsRemaining], [7, 3])
+  // Re-cast with different numbers replaces, never adds.
+  applyRaidSpecialAttack(raid, [], { ...attack, amount: 2, poisonDurationRounds: 1 }, { side: 'PLAYER', userId: 'a' }, [], {})
+  assert.deepEqual([raid.enemyPoisonAmount, raid.enemyPoisonTurnsRemaining], [2, 1])
+})
+
+test('applyRaidSpecialAttack: POISON_OPPONENT boss-cast afflicts every alive participant individually', () => {
+  const raid = makeRaid()
+  const a = makeParticipant('a'); const b = makeParticipant('b')
+  raid.participants.set('a', a); raid.participants.set('b', b)
+  const attack = { ...baseAttack, effectType: 'POISON_OPPONENT', amount: 5, poisonDurationRounds: 4 }
+  applyRaidSpecialAttack(raid, [a, b], attack, { side: 'ENEMY' }, [], {})
+  assert.deepEqual([a.poisonAmount, a.poisonTurnsRemaining], [5, 4])
+  assert.deepEqual([b.poisonAmount, b.poisonTurnsRemaining], [5, 4])
+})
+
+test('applyRaidSpecialAttack: POISON_OPPONENT boss-cast is fully negated (never applied) by partyShielded', () => {
+  const raid = makeRaid()
+  const a = makeParticipant('a')
+  raid.participants.set('a', a)
+  const attack = { ...baseAttack, effectType: 'POISON_OPPONENT', amount: 5, poisonDurationRounds: 4 }
+  const events = []
+  applyRaidSpecialAttack(raid, [a], attack, { side: 'ENEMY' }, events, { partyShielded: true })
+  assert.deepEqual([a.poisonAmount, a.poisonTurnsRemaining], [0, 0])
+  assert.equal(events[0].fizzled, true)
+})
+
+test('applyRaidSpecialAttack: SHIELD_PARTY player-cast only announces — no raid/participant state change', () => {
+  const raid = makeRaid()
+  const before = JSON.stringify(raid, (k, v) => (v instanceof Map ? Array.from(v.entries()) : v))
+  const events = []
+  applyRaidSpecialAttack(raid, [], { ...baseAttack, effectType: 'SHIELD_PARTY' }, { side: 'PLAYER', userId: 'a' }, events, {})
+  const after = JSON.stringify(raid, (k, v) => (v instanceof Map ? Array.from(v.entries()) : v))
+  assert.equal(events.length, 1)
+  assert.equal(events[0].missed, undefined)
+  assert.equal(before, after) // the real effect is read back out of specialEvents by closeRound, not applied here
+})
+
+test('applyRaidSpecialAttack: CLEANSE_SELF player-cast clears party paralysis (always) and the caster\'s own poison (self-only, healsAllies false)', () => {
+  const raid = makeRaid({ partyParalyzedTurns: 3 })
+  const caster = makeParticipant('a', { poisonAmount: 9, poisonTurnsRemaining: 2 })
+  const ally = makeParticipant('b', { poisonAmount: 9, poisonTurnsRemaining: 2 })
+  raid.participants.set('a', caster); raid.participants.set('b', ally)
+  const attack = { ...baseAttack, effectType: 'CLEANSE_SELF', healsAllies: false, cleanseAlsoHeals: false }
+  applyRaidSpecialAttack(raid, [caster, ally], attack, { side: 'PLAYER', userId: 'a' }, [], {})
+  assert.equal(raid.partyParalyzedTurns, 0) // whole party, unconditional
+  assert.deepEqual([caster.poisonAmount, caster.poisonTurnsRemaining], [0, 0]) // self cured
+  assert.deepEqual([ally.poisonAmount, ally.poisonTurnsRemaining], [9, 2]) // ally untouched -- healsAllies off
+})
+
+test('applyRaidSpecialAttack: CLEANSE_SELF player-cast with healsAllies cures poison party-wide and applies cleanseAlsoHeals', () => {
+  const raid = makeRaid({ partyParalyzedTurns: 1 })
+  const caster = makeParticipant('a', { hpRemaining: 50, maxHp: 100, poisonAmount: 9, poisonTurnsRemaining: 2 })
+  const ally = makeParticipant('b', { hpRemaining: 50, maxHp: 100, poisonAmount: 9, poisonTurnsRemaining: 2 })
+  raid.participants.set('a', caster); raid.participants.set('b', ally)
+  const attack = { ...baseAttack, effectType: 'CLEANSE_SELF', amount: 15, healsAllies: true, cleanseAlsoHeals: true }
+  applyRaidSpecialAttack(raid, [caster, ally], attack, { side: 'PLAYER', userId: 'a' }, [], {})
+  assert.deepEqual([caster.poisonAmount, caster.poisonTurnsRemaining], [0, 0])
+  assert.deepEqual([ally.poisonAmount, ally.poisonTurnsRemaining], [0, 0])
+  assert.equal(caster.hpRemaining, 65)
+  assert.equal(ally.hpRemaining, 65)
+})
+
+test('applyRaidSpecialAttack: CLEANSE_SELF boss-cast cures the boss\'s own paralyze and shared poison', () => {
+  const raid = makeRaid({ enemyParalyzedTurns: 2, enemyPoisonAmount: 8, enemyPoisonTurnsRemaining: 3, enemyHpRemaining: 20 })
+  const attack = { ...baseAttack, effectType: 'CLEANSE_SELF', amount: 5, cleanseAlsoHeals: true }
+  applyRaidSpecialAttack(raid, [], attack, { side: 'ENEMY' }, [], {})
+  assert.equal(raid.enemyParalyzedTurns, 0)
+  assert.equal(raid.enemyPoisonAmount, 0)
+  assert.equal(raid.enemyPoisonTurnsRemaining, 0)
+  assert.equal(raid.enemyHpRemaining, 25)
 })

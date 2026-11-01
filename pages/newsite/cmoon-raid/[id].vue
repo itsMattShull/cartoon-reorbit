@@ -87,7 +87,14 @@
               class="px-4 py-2 text-sm font-semibold rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50"
               :disabled="raid.participants.length >= raid.maxParticipants" @click="raidSocket.joinRaid(raidId)"
             >Join raid</button>
-            <p v-else class="text-sm text-green-700 font-medium">You're in — waiting for the fight to start…</p>
+            <template v-else>
+              <p class="text-sm text-green-700 font-medium">You're in — waiting for the fight to start…</p>
+              <!-- Leave before combat starts — works for anyone, including the initiator, without
+                   touching their raid cooldown (see cmoonraid:leave's own cooldown-restore comment
+                   in cmoonRaidSocket.js for the initiator's own case specifically). Lets someone
+                   bail on a lobby that's taking too long rather than sitting in it. -->
+              <button type="button" class="cr-link-btn text-red-600" @click="leaveRaidAndGoHome">Leave raid</button>
+            </template>
 
             <!-- Leader-only lobby controls. -->
             <div v-if="isInitiator" class="cr-lobby-controls">
@@ -150,10 +157,11 @@
                     <span
                       v-if="p.specialAttack && !p.knockedOut" class="text-[10px] flex-shrink-0" :title="p.specialAttack.name"
                       :class="p.specialCharged ? 'cr-charge-ready' : 'text-gray-400'"
-                    >★{{ p.specialCharged ? '' : Math.min(p.hitStreak, hitStreakThreshold) + '/' + hitStreakThreshold }}</span>
+                    >★{{ p.specialCharged ? '' : Math.min(p.hitStreak, p.hitStreakThreshold || 3) + '/' + (p.hitStreakThreshold || 3) }}</span>
                     <span v-if="p.knockedOut" class="cr-fighter-status text-red-500">KO</span>
                     <span v-else-if="p.hasActed" class="cr-fighter-status text-green-600">Ready</span>
                     <span v-else class="cr-fighter-status text-gray-400">Deciding…</span>
+                    <span v-if="p.poisonTurnsRemaining > 0" class="cr-fighter-status cr-status-bad" :title="`${p.poisonAmount} damage/round for ${p.poisonTurnsRemaining} more round(s)`">☠️ {{ p.poisonTurnsRemaining }}</span>
                   </div>
                   <!-- Line 2: HP, full width so it never wraps unpredictably on a phone. -->
                   <div class="cr-hp-line">
@@ -169,12 +177,15 @@
                 </li>
               </ul>
 
-              <!-- ── Shared status: paralysis either direction, boss charge tension ──── -->
+              <!-- ── Shared status: paralysis either direction, poison, boss charge tension ──── -->
               <p v-if="raid.enemyParalyzedTurns > 0" class="cr-status-badge cr-status-good">
                 ⚡ {{ raid.enemyName }} is paralyzed — {{ raid.enemyParalyzedTurns }} more round{{ raid.enemyParalyzedTurns === 1 ? '' : 's' }}
               </p>
               <p v-if="raid.partyParalyzedTurns > 0" class="cr-status-badge cr-status-bad">
                 ⚡ The party is paralyzed — can't act for {{ raid.partyParalyzedTurns }} more round{{ raid.partyParalyzedTurns === 1 ? '' : 's' }}
+              </p>
+              <p v-if="raid.enemyPoisonTurnsRemaining > 0" class="cr-status-badge cr-status-good">
+                ☠️ {{ raid.enemyName }} is poisoned — {{ raid.enemyPoisonAmount }} damage/round for {{ raid.enemyPoisonTurnsRemaining }} more round{{ raid.enemyPoisonTurnsRemaining === 1 ? '' : 's' }}
               </p>
               <!-- Only one attack-raise can be active for the party at a time (see
                    applyRaidSpecialAttack's own non-stacking comment) — shown so a second
@@ -210,7 +221,8 @@
                     </ul>
                     <p v-if="lastRoundSummary.enemyDamageDealt > 0" class="cr-reveal-dealt">The party dealt {{ lastRoundSummary.enemyDamageDealt }} damage this round.</p>
                     <p v-for="(s, i) in (lastRoundSummary.specials || [])" :key="i" class="cr-special-flash" :class="s.side === 'PLAYER' ? 'cr-special-flash-player' : 'cr-special-flash-enemy'">
-                      <template v-if="s.fizzled">✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} tried to unleash <strong>{{ s.name }}</strong>, but it was blocked and had no effect!</template>
+                      <template v-if="s.missed">💨 {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} tried to unleash <strong>{{ s.name }}</strong>, but it missed!</template>
+                      <template v-else-if="s.fizzled">✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} tried to unleash <strong>{{ s.name }}</strong>, but it was blocked and had no effect!</template>
                       <template v-else>✨ {{ s.side === 'PLAYER' ? usernameFor(s.userId) : raid.enemyName }} unleashed <strong>{{ s.name }}</strong>!</template>
                     </p>
                     <p v-if="lastRoundSummary.windUpBonus" class="cr-windup-bonus">
@@ -261,7 +273,8 @@
                   <p class="cr-special-tooltip-title">{{ myself.specialAttack.name }}</p>
                   <p v-if="myself.specialAttack.description">{{ myself.specialAttack.description }}</p>
                   <p>{{ specialEffectDescription(myself.specialAttack) }}</p>
-                  <p class="cr-special-tooltip-charge">Land 3 hits in a row to charge it up — it stays ready until you use it.</p>
+                  <p v-if="myself.specialAttack.accuracyPercent < 100" class="cr-special-tooltip-charge">{{ myself.specialAttack.accuracyPercent }}% chance to actually land once fired.</p>
+                  <p class="cr-special-tooltip-charge">Land {{ hitStreakThreshold }} hit{{ hitStreakThreshold === 1 ? '' : 's' }} in a row to charge it up — it stays ready until you use it.</p>
                 </div>
               </div>
             </template>
@@ -314,6 +327,14 @@ const raidId = computed(() => route.params.id)
 const { user } = useAuth()
 const raidSocket = useCMoonRaidSocket()
 const raid = computed(() => raidSocket.raidState.value?.id === raidId.value ? raidSocket.raidState.value : null)
+
+// Leaving clears raidState (see composable's own cmoonraid:leftRaid handler) and navigates away —
+// there's nothing left on this page worth showing once I've asked to leave my own still-FORMING
+// raid, whether it got destroyed (I was the only one in it) or just continues without me.
+function leaveRaidAndGoHome() {
+  raidSocket.leaveRaid(raidId.value)
+  navigateTo('/newsite/home')
+}
 
 const hasJoined = computed(() => !!raid.value?.participants.some(p => p.userId === user.value?.id))
 const myself = computed(() => raid.value?.participants.find(p => p.userId === user.value?.id) || null)
@@ -417,14 +438,20 @@ function specialEffectDescription(attack) {
     case 'SIPHON_HEALTH': return attack?.healsAllies
       ? `Deals ${n} damage and heals you and every raid ally for ${attack?.siphonPercent}% of it — unless the boss blocks, in which case it does nothing.`
       : `Deals ${n} damage and heals you for ${attack?.siphonPercent}% of it — unless the boss blocks, in which case it does nothing.`
+    case 'POISON_OPPONENT': return `Poisons the boss for ${n} damage at the end of each round, for ${attack?.poisonDurationRounds} round${attack?.poisonDurationRounds === 1 ? '' : 's'}. Re-casting refreshes it rather than stacking.`
+    case 'CLEANSE_SELF': return attack?.healsAllies
+      ? `Cures you and every raid ally of paralysis and poison${attack?.cleanseAlsoHeals ? `, healing ${n} HP too` : ''}.`
+      : `Cures you of paralysis and poison${attack?.cleanseAlsoHeals ? `, healing ${n} HP too` : ''}. Everyone else's party-wide paralysis is cured too — only poison is self-only here.`
+    case 'SHIELD_PARTY': return `Negates ALL damage the party would take this round, from the boss's normal attack and any special it casts.`
     default: return ''
   }
 }
 const showSpecialInfo = ref(false)
-// How many consecutive landed hits a special actually needs right now — 3 normally, or 2 whenever
-// a captain's boosting the party (see raid.hitStreakThreshold's own comment in cmoonRaidSocket.js).
-// Read everywhere this page used to hardcode "3", so the UI always matches the server's own math.
-const hitStreakThreshold = computed(() => raid.value?.hitStreakThreshold || 3)
+// How many consecutive landed hits MY OWN special needs right now — this attack's own
+// requiredHitStreak, minus 1 under captain boost (see myself.hitStreakThreshold's own comment in
+// cmoonRaidSocket.js) — now per-participant, since different party members' attacks can cost
+// different amounts. Falls back to the raid-level default for a moment before `myself` exists.
+const hitStreakThreshold = computed(() => myself.value?.hitStreakThreshold ?? raid.value?.hitStreakThreshold ?? 3)
 // 0..hitStreakThreshold hits -> 0-100% fill, read by .cr-special-btn below via this CSS variable —
 // stays at 100% once charged even if hitStreak itself later resets (charge latches, same as solo's).
 const specialFillStyle = computed(() => {
@@ -436,7 +463,7 @@ const specialFillStyle = computed(() => {
 // IN_PROGRESS (the Transition below fires on this going false), not on a fixed timer. The
 // underlying gameplay effect (the lowered threshold itself) persists for the whole raid — only
 // this overlay is lobby-scoped.
-const showCaptainBoostOverlay = computed(() => raid.value?.status === 'FORMING' && hitStreakThreshold.value < 3)
+const showCaptainBoostOverlay = computed(() => raid.value?.status === 'FORMING' && !!raid.value?.captainBoostActive)
 
 // FORMING's join-window countdown — a plain client-side ticker against joinDeadlineAt, not a
 // second source of truth: the server's sweep (see cmoonRaidSocket.js) is what actually closes

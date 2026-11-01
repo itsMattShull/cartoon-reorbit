@@ -79,6 +79,51 @@
 //     RAISE_ALLY_ATTACK already use). Unlike those two, there's no multi-round "already active"
 //     state to track — these are instant, one-shot effects — so the guard is a plain object
 //     closeRound creates fresh every round, never persisted on `raid` or serialized to Redis.
+//       POISON_OPPONENT (player-cast)   -> raid.enemyPoisonAmount/enemyPoisonTurnsRemaining: ONE
+//                                          shared DoT on the boss, same "shared enemy-side state"
+//                                          convention PARALYZE_OPPONENT's own player-cast branch
+//                                          already uses. Refreshes (never stacks) on a re-cast.
+//       POISON_OPPONENT (boss auto-fire)-> every alive participant gets their OWN
+//                                          p.poisonAmount/p.poisonTurnsRemaining (unlike every
+//                                          other boss-cast AoE above, the party's HP is genuinely
+//                                          per-participant, so there's no single shared pool to
+//                                          hang one DoT off of the way the boss's own HP allows).
+//                                          Also refreshes per-participant on a re-cast. Actually
+//                                          ticking (the damage itself) happens once per round in
+//                                          closeRound, at the same point the paralyze/raise
+//                                          counters already elapse — see that function's own
+//                                          poison-tick comment for the exact timing.
+//       CLEANSE_SELF                   -> cures the CASTER'S OWN SIDE's active paralyze (always
+//                                          the whole side at once — there's no per-player paralysis
+//                                          state to partially clear) and poison (self only, unless
+//                                          healsAllies, exactly like HEAL_SELF's own choice),
+//                                          with an optional HP top-up (cleanseAlsoHeals) on
+//                                          whoever's poison just got cleared. A player/boss cured
+//                                          of either condition can be re-paralyzed/re-poisoned
+//                                          again immediately after — this is a one-shot cure, not
+//                                          a temporary immunity.
+//       SHIELD_PARTY (player-cast only)-> negates ALL damage the party would otherwise take THIS
+//                                          round — the normal lane-exchange hit AND any same-round
+//                                          boss-cast damaging special (DAMAGE_OPPONENT/
+//                                          SIPHON_HEALTH/REFLECT_DAMAGE/POISON_OPPONENT's own
+//                                          application, not just that round's tick). Threaded
+//                                          through as a `partyShielded` context flag rather than a
+//                                          persisted raid field — see closeRound's own comment for
+//                                          why reading it back out of `specialEvents` after step 1
+//                                          is enough, with no new raid-level state needed at all.
+//                                          Non-stacking in the sense that matters: it's a boolean
+//                                          "is anyone's cast active this round," not a counter, so
+//                                          several party members casting it the same round changes
+//                                          nothing beyond extra announcements. A boss-cast
+//                                          SHIELD_PARTY is a documented no-op — see
+//                                          applyRaidSpecialAttack's own comment for why the boss's
+//                                          auto-fire timing (step 3) always comes too late to
+//                                          protect anything.
+//   - Every effect above (including the five original ones) now rolls CMoonSpecialAttack.
+//     accuracyPercent BEFORE doing anything else — see applyRaidSpecialAttack's own comment. A
+//     miss still announces the cast (so the party sees their special attack actually fire) but
+//     changes no state at all, including never queuing a REFLECT_DAMAGE/SIPHON_HEALTH player cast
+//     into roundGuards.
 //   - Each participant's own hitStreak/specialCharged stays genuinely per-participant (see
 //     CMoonEnemyRaidParticipant's own in-memory shape in cmoonRaidSocket.js) — "if a player lands
 //     3 hits in a row" is unambiguous per-player, unlike anything above. The boss's own hit
@@ -109,22 +154,20 @@ export const MAX_PARTY_SIZE = 4
 // otherwise value" role MAX_PARTY_SIZE plays above for maxParticipants.
 export const RAID_MAX_ROUNDS_SAFETY = 300
 
-// The player-side hit-streak threshold a raid actually uses once GlobalGameConfig.
-// cMoonCaptainBoostEnabled is on AND at least one captain (CMoonCaptain, see that model's own
-// comment) is present among the raid's current participants — see effectiveHitStreakThreshold
-// below. Lower than the normal HIT_STREAK_THRESHOLD (3, cmoonEnemyBattle.js) so a captain's
-// presence genuinely speeds up everyone's specials, not just a cosmetic callout. Never applied to
-// the boss's own separate enemyHitStreak counter (cmoonRaidSocket.js) — that's the enemy's own
-// auto-fire pacing, unrelated to this player-side boost.
-export const CAPTAIN_BOOST_HIT_STREAK_THRESHOLD = 2
-
 // `anyCaptainPresent` must be recomputed live each time this is called (participants can change
 // while a raid is still FORMING — a captain could join the lobby after someone else started it),
-// never snapshotted once like `captainBoostEnabled` itself is at raid creation. Returns the
-// ordinary HIT_STREAK_THRESHOLD whenever the toggle is off or no captain is in the party, so a
-// raid with the feature off behaves exactly as it did before this feature existed.
-export function effectiveHitStreakThreshold(captainBoostEnabled, anyCaptainPresent) {
-  return (captainBoostEnabled && anyCaptainPresent) ? CAPTAIN_BOOST_HIT_STREAK_THRESHOLD : HIT_STREAK_THRESHOLD
+// never snapshotted once like `captainBoostEnabled` itself is at raid creation. `baseThreshold` is
+// now each ATTACK's own CMoonSpecialAttack.requiredHitStreak (1-10, default 3 — see that column's
+// own schema comment) rather than the old one-size-fits-all HIT_STREAK_THRESHOLD constant, which
+// now only matters as the fallback a caller passes when an attack's own value can't be resolved
+// (e.g. no special assigned at all). A captain's presence still lowers whatever threshold was
+// passed in by exactly 1 (floored at 1) — the same relationship the old fixed 3->2 reduction had,
+// rather than a flat override that would make every attack equally cheap regardless of its own
+// configured cost. Returns `baseThreshold` unchanged whenever the toggle is off or no captain is
+// in the party.
+export function effectiveHitStreakThreshold(baseThreshold, captainBoostEnabled, anyCaptainPresent) {
+  const base = Number(baseThreshold) || HIT_STREAK_THRESHOLD
+  return (captainBoostEnabled && anyCaptainPresent) ? Math.max(1, base - 1) : base
 }
 
 // Whether a raid boss can be started right now, given its own admin-configured
@@ -185,7 +228,13 @@ export function checkRaidBossAvailability({ raidOneTime, raidCooldownMinutes, ra
 // in for whichever side(s) are currently stunned BEFORE calling this, exactly mirroring how the
 // solo battle's own resolveRound receives an already-paralysis-aware action; this function itself
 // has no concept of "turns remaining," only "what action is this round's, whatever decided it."
-export function resolveRaidRound({ enemyAction, enemyMember, participants, partyAtkBonus = 0, enemyAtkBonus = 0 }) {
+// `partyShielded` (see SHIELD_PARTY's own schema/applyRaidSpecialAttack comment) zeroes every
+// participant's INCOMING damage this round — `playerHit`/`playerCrit` stay exactly as rolled (so
+// the UI can still show "the enemy's attack connected, but your shield absorbed it" rather than a
+// plain miss) but `playerDamage` and the resulting `newHp` are left untouched. A successful BLOCK
+// still heals normally even while shielded — the two are unrelated (shield protects against a HIT,
+// a block is a separate action the player themselves chose) and stacking them is harmless.
+export function resolveRaidRound({ enemyAction, enemyMember, participants, partyAtkBonus = 0, enemyAtkBonus = 0, partyShielded = false }) {
   if (!isKnownAction(enemyAction)) throw new Error(`Invalid enemy action: ${enemyAction}`)
 
   let enemyDamageDealt = 0
@@ -200,11 +249,11 @@ export function resolveRaidRound({ enemyAction, enemyMember, participants, party
     // Named from each side's own perspective, same convention as the solo battle: enemyAtkBonus
     // changes what the ENEMY deals (to this participant); partyAtkBonus changes what the PARTY
     // (this participant included) deals back.
-    const playerDamage = playerHit ? Math.max(0, playerDamageBase + enemyAtkBonus) : 0
+    const playerDamage = (playerHit && !partyShielded) ? Math.max(0, playerDamageBase + enemyAtkBonus) : 0
     const enemyDamage = enemyHit ? Math.max(0, enemyDamageBase + partyAtkBonus) : 0
 
     let newHp = hpRemaining
-    if (playerHit) newHp = Math.max(0, newHp - playerDamage)
+    if (playerHit && !partyShielded) newHp = Math.max(0, newHp - playerDamage)
     // `maxHp || PLAYER_MAX_HP`: a defensive fallback only, never expected to trigger in normal
     // operation — a raid restored from Redis across a deploy boundary that predates this
     // participant field existing would otherwise clamp against `undefined` here and produce NaN.
@@ -260,7 +309,7 @@ export function resolveRaidRound({ enemyAction, enemyMember, participants, party
 //     shape resolveRaidRound returns — the real outcome either effect needs.
 // Every other effect type ignores `context` entirely; it costs them nothing.
 export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvents, context = {}) {
-  const { roundGuards = null, roundInfo = null } = context
+  const { roundGuards = null, roundInfo = null, partyShielded = false } = context
   // Retained by reference below for REFLECT_DAMAGE/SIPHON_HEALTH so a later fizzle (the opponent's
   // block made it do nothing — a normal, frequent outcome for these two effect types alone, see
   // applyReflectDamage/applySiphonHealth) can be flagged on this SAME event object the client/
@@ -270,9 +319,22 @@ export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvent
     effectType: attack.effectType, amount: attack.amount, soundPath: attack.soundPath || null,
   }
   specialEvents.push(event)
+  // Accuracy roll (see CMoonSpecialAttack.accuracyPercent's own schema comment) — runs FIRST,
+  // before any effect-specific branch or fizzle check below, so a miss is a miss regardless of
+  // what the opponent did that round. The cast still announces (the push above) with `missed`
+  // flagged on the SAME event, same "don't silently drop the attempt" stance fizzled already
+  // takes — describeRaidSpecialEvent/the client render this instead of implying the attack landed.
+  // A REFLECT_DAMAGE/SIPHON_HEALTH player cast that misses is never even deferred into roundGuards
+  // — there's nothing to resolve later once it's already failed here.
+  const accuracy = Math.max(0, Math.min(100, Number(attack.accuracyPercent ?? 100)))
+  if (Math.random() * 100 >= accuracy) { event.missed = true; return }
   if (attack.effectType === 'DAMAGE_OPPONENT') {
     if (caster.side === 'PLAYER') {
       raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - attack.amount)
+    } else if (partyShielded) {
+      // Negated by SHIELD_PARTY (see that effectType's own branch below) — same "blocked, no
+      // effect" announcement reflect/siphon already use for their own block-based fizzles.
+      event.fizzled = true
     } else {
       for (const p of alive) {
         p.hpRemaining = Math.max(0, p.hpRemaining - attack.amount)
@@ -333,15 +395,75 @@ export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvent
       if (roundGuards) { roundGuards.reflectUsed = true; roundGuards.pendingReflect = { attack, caster, event } }
       return
     }
-    applyReflectDamage(raid, alive, attack, caster, roundInfo, event)
+    applyReflectDamage(raid, alive, attack, caster, roundInfo, event, partyShielded)
   } else if (attack.effectType === 'SIPHON_HEALTH') {
     if (caster.side === 'PLAYER') {
       if (roundGuards?.siphonUsed) return
       if (roundGuards) { roundGuards.siphonUsed = true; roundGuards.pendingSiphon = { attack, caster, event } }
       return
     }
-    applySiphonHealth(raid, alive, attack, caster, roundInfo, event)
+    applySiphonHealth(raid, alive, attack, caster, roundInfo, event, partyShielded)
+  } else if (attack.effectType === 'POISON_OPPONENT') {
+    // Refresh, not stack (see poisonDurationRounds' own schema comment): a re-cast on an already-
+    // poisoned target replaces its amount/remaining-rounds with this cast's own values rather than
+    // layering a second independent tick on top. Player-cast targets the boss's ONE shared poison
+    // state (mirroring every other player-cast effect's shared-enemy-side target); boss-cast is
+    // AoE, individually onto every alive participant (closeRound's own per-round tick walks these
+    // the same way it already walks hitStreak) — unlike every flat-amount effect above, this one
+    // SETS UP future damage rather than dealing any right now; see closeRound's own poison-tick
+    // comment for when it actually ticks.
+    if (caster.side === 'PLAYER') {
+      raid.enemyPoisonAmount = attack.amount
+      raid.enemyPoisonTurnsRemaining = attack.poisonDurationRounds
+    } else if (partyShielded) {
+      // Shield blocks the APPLICATION itself, not just one round's tick — a boss-cast poison that
+      // lands while the party is shielded is wasted entirely, never queued to tick later once the
+      // shield itself has worn off; "negate all damage taken... for that turn" extends to a status
+      // whose entire purpose is future damage, same spirit as the DAMAGE_OPPONENT branch above.
+      event.fizzled = true
+    } else {
+      for (const p of alive) { p.poisonAmount = attack.amount; p.poisonTurnsRemaining = attack.poisonDurationRounds }
+    }
+  } else if (attack.effectType === 'CLEANSE_SELF') {
+    // Cures the CASTER'S OWN SIDE's active afflictions — paralyze (always the whole side, see
+    // healsAllies' own schema comment on why that can't be partial) and poison (self only, unless
+    // healsAllies, exactly like HEAL_SELF's own self-vs-party choice above), with an optional HP
+    // top-up (cleanseAlsoHeals) on whoever's poison just got cleared. Both sides get a symmetric
+    // cast here (unlike SHIELD_PARTY, this has no round-ordering quirk to work around — clearing a
+    // counter is instant and correct regardless of which step cast it).
+    if (caster.side === 'PLAYER') {
+      raid.partyParalyzedTurns = 0
+      if (attack.healsAllies) {
+        for (const p of alive) {
+          p.poisonAmount = 0; p.poisonTurnsRemaining = 0
+          if (attack.cleanseAlsoHeals) p.hpRemaining = Math.min(p.maxHp, p.hpRemaining + attack.amount)
+        }
+      } else {
+        const casterParticipant = raid.participants.get(caster.userId)
+        if (casterParticipant && !casterParticipant.knockedOutAt) {
+          casterParticipant.poisonAmount = 0; casterParticipant.poisonTurnsRemaining = 0
+          if (attack.cleanseAlsoHeals) casterParticipant.hpRemaining = Math.min(casterParticipant.maxHp, casterParticipant.hpRemaining + attack.amount)
+        }
+      }
+    } else {
+      raid.enemyParalyzedTurns = 0
+      raid.enemyPoisonAmount = 0
+      raid.enemyPoisonTurnsRemaining = 0
+      if (attack.cleanseAlsoHeals) raid.enemyHpRemaining = Math.min(raid.enemyStats.maxHp, raid.enemyHpRemaining + attack.amount)
+    }
   }
+  // SHIELD_PARTY has no branch here at all when caster.side === 'PLAYER' — the cast above already
+  // pushed/announced the event, and that's everything applyRaidSpecialAttack itself needs to do.
+  // The actual effect (negating this round's incoming damage) is read back out of `specialEvents`
+  // by closeRound itself (see its own `partyShielded` comment) — not applied here, because this
+  // function runs BEFORE resolveRaidRound's lane exchange (step 2) even for a step-1 player cast,
+  // so there's nothing yet to negate at the moment this function would otherwise act. A boss-cast
+  // SHIELD_PARTY (caster.side === 'ENEMY') is a deliberate no-op beyond its announcement: by the
+  // time the boss's own auto-fire runs (step 3), this round's lane-exchange damage TO the enemy
+  // already happened in step 2 — there's no sensible "shield the boss" moment left for it to
+  // protect, so assigning this effect to a faction's own special simply announces and does nothing
+  // further, the same "fires and announces, no mechanical effect" fallback this file's header
+  // comment already documents for solo battles.
 }
 
 // Applies one already-cast REFLECT_DAMAGE's numeric effect, given this round's REAL outcome
@@ -349,7 +471,7 @@ export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvent
 // run). Exported separately from applyRaidSpecialAttack (rather than folded back into it) so
 // closeRound's deferred "step 2.5" can apply a queued player cast WITHOUT re-pushing its
 // specialEvent a second time — that already happened in step 1, the instant it was cast.
-export function applyReflectDamage(raid, alive, attack, caster, roundInfo, event = null) {
+export function applyReflectDamage(raid, alive, attack, caster, roundInfo, event = null, partyShielded = false) {
   const incoming = caster.side === 'PLAYER'
     // Total damage the boss's one shared action actually dealt across the whole party this
     // round — not raid.enemyHpRemaining-adjacent at all, purely "how much did the party just get
@@ -361,7 +483,10 @@ export function applyReflectDamage(raid, alive, attack, caster, roundInfo, event
   const reflected = Math.round(incoming * attack.reflectPercent / 100)
   // Flags the SAME specialEvents entry the cast already announced (see applyRaidSpecialAttack)
   // so describeRaidSpecialEvent/the client can say it fizzled instead of implying it did
-  // something — there was simply no incoming/outgoing damage this round to reflect.
+  // something — there was simply no incoming/outgoing damage this round to reflect, OR (enemy-cast
+  // only) the party's own SHIELD_PARTY is up this round, same as every other boss-cast damaging
+  // effect's own partyShielded check.
+  if (caster.side !== 'PLAYER' && partyShielded) { if (event) event.fizzled = true; return }
   if (event) event.fizzled = reflected <= 0
   if (reflected <= 0) return
   if (caster.side === 'PLAYER') {
@@ -384,7 +509,14 @@ export function applyReflectDamage(raid, alive, attack, caster, roundInfo, event
 // `roundInfo.perParticipant[].action` independently — some can block it while others can't, same
 // "no shared lane, no shared fate" AoE shape SIPHON_HEALTH shares with DAMAGE_OPPONENT's own
 // boss-cast branch, just with the added per-target block check neither of those needs.
-export function applySiphonHealth(raid, alive, attack, caster, roundInfo, event = null) {
+export function applySiphonHealth(raid, alive, attack, caster, roundInfo, event = null, partyShielded = false) {
+  if (caster.side !== 'PLAYER' && partyShielded) {
+    // Same partyShielded short-circuit every other boss-cast damaging effect now has — checked
+    // before the per-target block check below so a shielded party never even gets asked whether
+    // they individually blocked; the shield already settled it for everyone this round.
+    if (event) event.fizzled = true
+    return
+  }
   if (caster.side === 'PLAYER') {
     // Flags the SAME specialEvents entry the cast already announced (see
     // applyRaidSpecialAttack) so describeRaidSpecialEvent/the client can say it was blocked

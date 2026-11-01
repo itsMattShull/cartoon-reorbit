@@ -83,6 +83,18 @@ function serializeRaid(raid) {
     enemyAtkRaiseTurnsRemaining: raid.enemyAtkRaiseTurnsRemaining,
     enemyParalyzedTurns: raid.enemyParalyzedTurns,
     partyParalyzedTurns: raid.partyParalyzedTurns,
+    // The boss's own shared poison status (POISON_OPPONENT, player-cast) — same missing-field
+    // trap as every other raid-level status field above; without these, a restart would silently
+    // cure the boss of an active poison mid-raid.
+    enemyPoisonAmount: raid.enemyPoisonAmount,
+    enemyPoisonTurnsRemaining: raid.enemyPoisonTurnsRemaining,
+    // The initiator's pre-raid lastCMoonBattlePopupAt (see cmoonraid:leave's own restore comment
+    // in cmoonRaidSocket.js) and whether the one-time "extend lobby" window-reset has already been
+    // spent (see cmoonraid:toggleKeepOpen) — both raid-level, both silently reset to their
+    // "nothing's happened yet" default on a restart if left out here, same trap as every field
+    // above this comment already warns about.
+    initiatorPreviousPopupCooldownAt: raid.initiatorPreviousPopupCooldownAt,
+    keepOpenExtensionUsed: raid.keepOpenExtensionUsed,
     // Lobby controls, up-to-8 parties, private lobbies, wind-up telegraphs — see
     // cmoonRaidSocket.js's own raid-shape comment for what each means. speedVotes is a Set
     // in-memory (JSON can't carry one); stored as a plain array, rebuilt into a Set on restore

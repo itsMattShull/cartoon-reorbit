@@ -203,12 +203,19 @@ export default defineEventHandler(async (event) => {
   if (isSpecial) {
     playerHitStreak = 0
     playerSpecialCharged = false
-    specialEvents.push({
+    const playerSpecialEvent = {
       side: 'PLAYER', name: playerSpecialAttack.name,
       effectType: playerSpecialAttack.effectType, amount: playerSpecialAttack.amount,
       soundPath: playerSpecialAttack.soundPath || null,
-    })
-    if (playerSpecialAttack.effectType === 'DAMAGE_OPPONENT') totalDamageDealt += await damageEnemy(playerSpecialAttack.amount)
+    }
+    specialEvents.push(playerSpecialEvent)
+    // Accuracy roll (see CMoonSpecialAttack.accuracyPercent's own schema comment, and
+    // applyRaidSpecialAttack's identical roll on the raid side) — runs FIRST, before any
+    // effect-specific branch, so a miss is a miss regardless of what the enemy does this round.
+    const playerAccuracy = Math.max(0, Math.min(100, Number(playerSpecialAttack.accuracyPercent ?? 100)))
+    if (Math.random() * 100 >= playerAccuracy) {
+      playerSpecialEvent.missed = true
+    } else if (playerSpecialAttack.effectType === 'DAMAGE_OPPONENT') totalDamageDealt += await damageEnemy(playerSpecialAttack.amount)
     else if (playerSpecialAttack.effectType === 'HEAL_SELF') playerHp = Math.min(battle.playerMaxHp, playerHp + playerSpecialAttack.amount)
     else if (playerSpecialAttack.effectType === 'PARALYZE_OPPONENT') enemyParalyzedTurns += playerSpecialAttack.amount
     else if (playerSpecialAttack.effectType === 'LOWER_OPPONENT_ATTACK') enemyAtkBonus -= playerSpecialAttack.amount
@@ -266,21 +273,31 @@ export default defineEventHandler(async (event) => {
   // enemyHitStreak's own schema comment for the reset/latch rules. ───────────────────────────
   if (!isSpecial) {
     playerHitStreak = roundCore.enemyHit ? playerHitStreak + 1 : 0
-    if (playerHitStreak >= HIT_STREAK_THRESHOLD) playerSpecialCharged = true
+    // This player's own effective special's requiredHitStreak (1-10, default 3) replaces the old
+    // one-size-fits-all HIT_STREAK_THRESHOLD — see that column's own schema comment. No captain
+    // boost here: that reduction is raid-only (see effectiveHitStreakThreshold in
+    // cmoonEnemyRaid.js), unrelated to this solo battle.
+    if (playerHitStreak >= (playerSpecialAttack?.requiredHitStreak ?? HIT_STREAK_THRESHOLD)) playerSpecialCharged = true
   }
   enemyHitStreak = roundCore.playerHit ? enemyHitStreak + 1 : 0
 
   // ── 4. The NPC has no choice to make — the instant ITS OWN streak caps out, its faction's
   // special (if any) fires automatically as a bonus on top of whatever this round already did.
   const enemySpecialAttack = battle.enemyMember.faction?.specialAttack || null
-  if (enemyHitStreak >= HIT_STREAK_THRESHOLD && enemySpecialAttack) {
+  if (enemySpecialAttack && enemyHitStreak >= (enemySpecialAttack.requiredHitStreak ?? HIT_STREAK_THRESHOLD)) {
     enemyHitStreak = 0
-    specialEvents.push({
+    const enemySpecialEvent = {
       side: 'ENEMY', name: enemySpecialAttack.name,
       effectType: enemySpecialAttack.effectType, amount: enemySpecialAttack.amount,
       soundPath: enemySpecialAttack.soundPath || null,
-    })
-    if (enemySpecialAttack.effectType === 'DAMAGE_OPPONENT') playerHp = Math.max(0, playerHp - enemySpecialAttack.amount)
+    }
+    specialEvents.push(enemySpecialEvent)
+    // Same accuracy roll as the player's own cast in step 1 above, applied here before any of
+    // this branch's effects — a miss still announces (the push above) but changes nothing else.
+    const enemyAccuracy = Math.max(0, Math.min(100, Number(enemySpecialAttack.accuracyPercent ?? 100)))
+    if (Math.random() * 100 >= enemyAccuracy) {
+      enemySpecialEvent.missed = true
+    } else if (enemySpecialAttack.effectType === 'DAMAGE_OPPONENT') playerHp = Math.max(0, playerHp - enemySpecialAttack.amount)
     else if (enemySpecialAttack.effectType === 'HEAL_SELF') await healEnemy(enemySpecialAttack.amount)
     else if (enemySpecialAttack.effectType === 'PARALYZE_OPPONENT') playerParalyzedTurns += enemySpecialAttack.amount
     else if (enemySpecialAttack.effectType === 'LOWER_OPPONENT_ATTACK') playerAtkBonus -= enemySpecialAttack.amount

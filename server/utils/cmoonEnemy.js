@@ -668,6 +668,10 @@ export const SPECIAL_ATTACK_DESCRIPTION_MAX_LENGTH = 300
 export const SPECIAL_ATTACK_EFFECT_TYPES = [
   'DAMAGE_OPPONENT', 'HEAL_SELF', 'PARALYZE_OPPONENT', 'LOWER_OPPONENT_ATTACK', 'RAISE_ALLY_ATTACK',
   'REFLECT_DAMAGE', 'SIPHON_HEALTH',
+  // Raid-only — see cmoonEnemyRaid.js's own header comment for why a solo battle's resolveRound
+  // has no case for any of these three (the attack still fires and announces, just no mechanical
+  // effect there).
+  'POISON_OPPONENT', 'CLEANSE_SELF', 'SHIELD_PARTY',
 ]
 // Same bound for every effect type, even though they mean different units (damage/heal points,
 // paralyze turns, attack-stat delta) — simplest shared cap that comfortably covers each one;
@@ -695,6 +699,24 @@ export const SPECIAL_ATTACK_SIPHON_PERCENT_MIN = 1
 export const SPECIAL_ATTACK_SIPHON_PERCENT_MAX = 100
 export const SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT = 50
 
+// Only meaningful for POISON_OPPONENT — see CMoonSpecialAttack.poisonDurationRounds' own schema
+// comment.
+export const SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MIN = 1
+export const SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MAX = 20
+export const SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT = 3
+
+// Applies to EVERY effectType, unlike every other field above — see
+// CMoonSpecialAttack.requiredHitStreak's own schema comment for the captain-boost interaction.
+export const SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MIN = 1
+export const SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MAX = 10
+export const SPECIAL_ATTACK_REQUIRED_HIT_STREAK_DEFAULT = 3
+
+// Applies to EVERY effectType, same as requiredHitStreak above — see
+// CMoonSpecialAttack.accuracyPercent's own schema comment.
+export const SPECIAL_ATTACK_ACCURACY_PERCENT_MIN = 0
+export const SPECIAL_ATTACK_ACCURACY_PERCENT_MAX = 100
+export const SPECIAL_ATTACK_ACCURACY_PERCENT_DEFAULT = 100
+
 export function isValidSpecialAttackName(value) {
   return typeof value === 'string' && value.trim().length > 0 && value.trim().length <= SPECIAL_ATTACK_NAME_MAX_LENGTH
 }
@@ -717,6 +739,18 @@ export function isValidSpecialAttackReflectPercent(value) {
 
 export function isValidSpecialAttackSiphonPercent(value) {
   return Number.isInteger(value) && value >= SPECIAL_ATTACK_SIPHON_PERCENT_MIN && value <= SPECIAL_ATTACK_SIPHON_PERCENT_MAX
+}
+
+export function isValidSpecialAttackPoisonDurationRounds(value) {
+  return Number.isInteger(value) && value >= SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MIN && value <= SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MAX
+}
+
+export function isValidSpecialAttackRequiredHitStreak(value) {
+  return Number.isInteger(value) && value >= SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MIN && value <= SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MAX
+}
+
+export function isValidSpecialAttackAccuracyPercent(value) {
+  return Number.isInteger(value) && value >= SPECIAL_ATTACK_ACCURACY_PERCENT_MIN && value <= SPECIAL_ATTACK_ACCURACY_PERCENT_MAX
 }
 
 // Shared by the special-attack create/update endpoints — same `existing`-means-"leave unchanged
@@ -758,15 +792,31 @@ export function parseSpecialAttackBody(body, existing) {
   const siphonPercentRaw = body?.siphonPercent === undefined
     ? (existing ? existing.siphonPercent : SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT)
     : toNumber(body.siphonPercent)
-  // Only meaningful for HEAL_SELF/SIPHON_HEALTH (see that column's own schema comment) — a truthy
-  // value sent alongside any other effectType is silently normalized to false below rather than
-  // stored, so a stale client payload (or a leftover value from switching the dropdown away from
-  // HEAL_SELF/SIPHON_HEALTH and back) can never leave a meaningless flag set on a
+  // Only meaningful for POISON_OPPONENT — same "ignore a stale value from switching the dropdown
+  // away and back" stance every other effect-specific field above already takes.
+  const poisonDurationRoundsRaw = body?.poisonDurationRounds === undefined
+    ? (existing ? existing.poisonDurationRounds : SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT)
+    : toNumber(body.poisonDurationRounds)
+  // Only meaningful for HEAL_SELF/SIPHON_HEALTH/CLEANSE_SELF (see that column's own schema
+  // comment) — a truthy value sent alongside any other effectType is silently normalized to false
+  // below rather than stored, so a stale client payload (or a leftover value from switching the
+  // dropdown away from one of these three and back) can never leave a meaningless flag set on a
   // DAMAGE_OPPONENT/PARALYZE_OPPONENT/etc row.
   const healsAlliesRaw = toBoolean(body?.healsAllies, existing ? !!existing.healsAllies : false)
+  // Only meaningful for CLEANSE_SELF — same "ignore/normalize a stale value" stance healsAllies
+  // itself just took above.
+  const cleanseAlsoHealsRaw = toBoolean(body?.cleanseAlsoHeals, existing ? !!existing.cleanseAlsoHeals : false)
   // Whether a player can choose this attack for themselves — see CMoonSpecialAttack.playerChoice's
   // own schema comment. Independent of effectType, unlike healsAllies above.
   const playerChoice = toBoolean(body?.playerChoice, existing ? !!existing.playerChoice : false)
+  // Applies to EVERY effectType, unlike every field above this point — see
+  // CMoonSpecialAttack.requiredHitStreak/accuracyPercent's own schema comments.
+  const requiredHitStreak = body?.requiredHitStreak === undefined
+    ? (existing ? existing.requiredHitStreak : SPECIAL_ATTACK_REQUIRED_HIT_STREAK_DEFAULT)
+    : toNumber(body.requiredHitStreak)
+  const accuracyPercent = body?.accuracyPercent === undefined
+    ? (existing ? existing.accuracyPercent : SPECIAL_ATTACK_ACCURACY_PERCENT_DEFAULT)
+    : toNumber(body.accuracyPercent)
 
   if (!isValidSpecialAttackName(name)) {
     return { ok: false, message: `Name is required (max ${SPECIAL_ATTACK_NAME_MAX_LENGTH} characters)` }
@@ -789,18 +839,38 @@ export function parseSpecialAttackBody(body, existing) {
   if (effectType === 'SIPHON_HEALTH' && !isValidSpecialAttackSiphonPercent(siphonPercentRaw)) {
     return { ok: false, message: `Siphon percent must be a whole number between ${SPECIAL_ATTACK_SIPHON_PERCENT_MIN} and ${SPECIAL_ATTACK_SIPHON_PERCENT_MAX}` }
   }
+  if (effectType === 'POISON_OPPONENT' && !isValidSpecialAttackPoisonDurationRounds(poisonDurationRoundsRaw)) {
+    return { ok: false, message: `Poison duration must be a whole number of rounds between ${SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MIN} and ${SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MAX}` }
+  }
   if (healsAlliesRaw === null) {
     return { ok: false, message: 'healsAllies must be true or false' }
+  }
+  if (cleanseAlsoHealsRaw === null) {
+    return { ok: false, message: 'cleanseAlsoHeals must be true or false' }
   }
   if (playerChoice === null) {
     return { ok: false, message: 'playerChoice must be true or false' }
   }
-  const healsAllies = (effectType === 'HEAL_SELF' || effectType === 'SIPHON_HEALTH') ? healsAlliesRaw : false
+  if (!isValidSpecialAttackRequiredHitStreak(requiredHitStreak)) {
+    return { ok: false, message: `Required hit streak must be a whole number between ${SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MIN} and ${SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MAX}` }
+  }
+  if (!isValidSpecialAttackAccuracyPercent(accuracyPercent)) {
+    return { ok: false, message: `Accuracy percent must be a whole number between ${SPECIAL_ATTACK_ACCURACY_PERCENT_MIN} and ${SPECIAL_ATTACK_ACCURACY_PERCENT_MAX}` }
+  }
+  const healsAllies = (effectType === 'HEAL_SELF' || effectType === 'SIPHON_HEALTH' || effectType === 'CLEANSE_SELF') ? healsAlliesRaw : false
+  const cleanseAlsoHeals = effectType === 'CLEANSE_SELF' ? cleanseAlsoHealsRaw : false
   const raiseDurationRounds = effectType === 'RAISE_ALLY_ATTACK' ? raiseDurationRoundsRaw : SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT
   const reflectPercent = effectType === 'REFLECT_DAMAGE' ? reflectPercentRaw : SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT
   const siphonPercent = effectType === 'SIPHON_HEALTH' ? siphonPercentRaw : SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT
+  const poisonDurationRounds = effectType === 'POISON_OPPONENT' ? poisonDurationRoundsRaw : SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT
 
-  return { ok: true, data: { name, description, effectType, amount, healsAllies, playerChoice, raiseDurationRounds, reflectPercent, siphonPercent } }
+  return {
+    ok: true,
+    data: {
+      name, description, effectType, amount, healsAllies, playerChoice, raiseDurationRounds, reflectPercent, siphonPercent,
+      poisonDurationRounds, cleanseAlsoHeals, requiredHitStreak, accuracyPercent,
+    },
+  }
 }
 
 // Resolves a member's six battle sound paths, falling back to its faction's own default for

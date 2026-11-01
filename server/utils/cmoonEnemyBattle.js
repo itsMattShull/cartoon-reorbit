@@ -50,6 +50,7 @@ export const HIT_STREAK_THRESHOLD = 3
 export const SPECIAL_ATTACK_SELECT = {
   id: true, name: true, description: true, effectType: true, amount: true, raiseDurationRounds: true,
   reflectPercent: true, siphonPercent: true, soundPath: true, healsAllies: true, playerChoice: true,
+  poisonDurationRounds: true, cleanseAlsoHeals: true, requiredHitStreak: true, accuracyPercent: true,
 }
 
 // A player's EFFECTIVE special attack for a cMoon Enemy Battle (solo or raid): `chosenSpecialAttack`
@@ -433,6 +434,12 @@ export function serializeBattleForClient(battle) {
     // `specials` round events), this is only enough for a "something's coming" warning pulse.
     enemyHitStreak: battle.enemyHitStreak || 0,
     enemyHasSpecialAttack: !!battle.enemyMember?.faction?.specialAttack,
+    // The enemy's own attack's requiredHitStreak (1-10, default 3) — safe to reveal despite
+    // enemyHasSpecialAttack hiding everything else about that attack: this is purely "how close is
+    // the telegraphed warning," the same spirit enemyHitStreak itself already has, never the
+    // attack's own identity/effect. Lets the UI's "about to fire" pulse trigger at the right point
+    // for THIS attack instead of a hardcoded 3.
+    enemyRequiredHitStreak: battle.enemyMember?.faction?.specialAttack?.requiredHitStreak ?? HIT_STREAK_THRESHOLD,
     // Rounds left where the player can't act at all (set by the enemy's own PARALYZE_OPPONENT
     // special) — surfaced so the UI can explain why their moves (including an already-charged
     // special) are about to whiff, rather than that just appearing to happen with no warning.
@@ -450,6 +457,11 @@ export function serializeBattleForClient(battle) {
           effectType: specialAttack.effectType,
           amount: specialAttack.amount,
           soundPath: specialAttack.soundPath || null,
+          // Replaces the client's old hardcoded "3" for the charge meter/tooltip — see that
+          // column's own schema comment. accuracyPercent is likewise surfaced so the tooltip can
+          // mention a miss chance instead of implying every cast always lands.
+          requiredHitStreak: specialAttack.requiredHitStreak ?? HIT_STREAK_THRESHOLD,
+          accuracyPercent: specialAttack.accuracyPercent ?? 100,
         }
       : null,
   }

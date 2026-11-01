@@ -6040,6 +6040,15 @@ enum CMoonSpecialAttackEffectType {
   RAISE_ALLY_ATTACK
   REFLECT_DAMAGE
   SIPHON_HEALTH
+  // ── RAID-ONLY effect types below — see each field's own comment below for why. A solo battle's
+  // own resolveRound (server/api/cmoon/battle/[id]/action.post.js) has no case for any of these
+  // three: the attack still fires and announces, it just has no mechanical effect there. Admins
+  // assigning one of these to a cMoon/faction whose players also fight solo should expect that —
+  // there's one shared special-attack pool per cMoon/faction, used in both contexts, with no
+  // separate "raid-only" assignment slot to keep a mismatched choice from ever being possible.
+  POISON_OPPONENT
+  CLEANSE_SELF
+  SHIELD_PARTY
 }
 
 model CMoonSpecialAttack {
@@ -6072,18 +6081,55 @@ model CMoonSpecialAttack {
   // capped at 100 since it's converting a fixed, already-dealt amount into healing, not
   // amplifying an opponent's own hit.
   siphonPercent       Int                          @default(50)
+  // Only meaningful when effectType = POISON_OPPONENT (ignored otherwise). How many ROUNDS the
+  // poison lasts once it lands — the target takes `amount` damage at the end of each of those
+  // rounds (see closeRound's own poison-tick comment). 1-20: short enough that an admin tuning
+  // this alongside amount can reason about total damage (amount × this) without the number
+  // getting silly. A re-cast on an already-poisoned target REFRESHES this (new amount, duration
+  // reset to the fresh value here) rather than stacking a second independent tick — the request
+  // this feature shipped from explicitly chose refresh-not-stack for how re-poisoning should work.
+  poisonDurationRounds Int                         @default(3)
+  // Only meaningful when effectType = CLEANSE_SELF (ignored otherwise). Whether this attack, on
+  // top of its always-on job (stripping active Poison/Paralyze from whoever it targets — see
+  // healsAllies just below for who that is), ALSO heals those same targets by `amount` HP. false
+  // (the default) makes this a pure status-cleanse with no HP change; an admin who wants both in
+  // one attack can flip this on rather than needing a separate Heal Self pick.
+  cleanseAlsoHeals    Boolean                      @default(false)
   // Optional sound (MP3/OGG/WAV, uploaded via cmoon-special-attacks/[id]/sound.post.js — same
   // magic-byte-sniffed discipline as every other audio upload in this codebase), played the
   // moment this attack actually fires, by whichever side cast it.
   soundPath           String?
-  // Only meaningful when effectType = HEAL_SELF or SIPHON_HEALTH (false/ignored for every other
-  // effectType — enforced in parseSpecialAttackBody, never just left to the client). In a SOLO
-  // battle this changes nothing — there are no allies to heal either way, so the caster is always
-  // the only one healed. In a co-op RAID, false keeps the heal personal (just the caster); true
-  // extends the exact same amount to every other alive participant too (the caster included, not
-  // instead of them) — an admin-authored choice per attack, not an automatic raid-vs-solo
-  // behavior switch, per this feature's own "self and/or allies" request.
+  // Only meaningful when effectType = HEAL_SELF, SIPHON_HEALTH, or CLEANSE_SELF (false/ignored
+  // for every other effectType — enforced in parseSpecialAttackBody, never just left to the
+  // client). In a SOLO battle this changes nothing — there are no allies to target either way, so
+  // the caster is always the only one affected. In a co-op RAID, false keeps the effect personal
+  // (just the caster); true extends it to every other alive participant too (the caster included,
+  // not instead of them) — an admin-authored choice per attack, not an automatic raid-vs-solo
+  // behavior switch, per this feature's own "self and/or allies" request. For CLEANSE_SELF this
+  // only governs the Poison side of the cure (Poison is tracked per-participant) — the Paralyze
+  // side always cures the WHOLE PARTY regardless of this flag, because CMoonEnemyRaid's own
+  // partyParalyzedTurns is one shared counter for the whole party, not something a per-player
+  // "self only" cure could even partially clear — see closeRound's own CLEANSE_SELF comment.
   healsAllies         Boolean                      @default(false)
+  // How many consecutive landed hits are needed to charge THIS attack, replacing the engine's old
+  // one-size-fits-all HIT_STREAK_THRESHOLD (cmoonEnemyBattle.js, still 3 — that constant now only
+  // matters as the fallback for historical rows/any code path that can't resolve an attack's own
+  // value). 1-10. Lets an admin make a stronger effect (Paralyze is the balancing example this
+  // feature shipped for) cost more hits to charge than a weaker one, instead of every attack
+  // costing the same. Applies in BOTH solo and raid (hit-streak charging exists in both); in a
+  // raid, GlobalGameConfig.cMoonCaptainBoostEnabled's own threshold reduction still applies on top
+  // — a captain's presence lowers THIS value by 1 (floored at the same minimum of 1), the same
+  // relationship the old fixed 3→2 reduction already had, rather than being a flat override that
+  // makes every attack equally cheap regardless of its own configured cost.
+  requiredHitStreak   Int                          @default(3)
+  // What percent of the time this attack actually lands once cast — 0-100, default 100 (every
+  // existing attack keeps today's "always lands" behavior unless an admin dials one down). Rolled
+  // independently of everything else that can already make an attack do nothing (REFLECT_DAMAGE/
+  // SIPHON_HEALTH's own block-based fizzle, SIPHON_HEALTH's per-target block check) — this check
+  // runs FIRST, before any of those, so a miss is a miss regardless of what the opponent did that
+  // round. The balancing case this shipped for: Paralyze is strong enough that an admin may want
+  // it to not reliably land even when charged and aimed correctly.
+  accuracyPercent     Int                          @default(100)
   // Lets a player pick THIS attack for themselves (see User.chosenSpecialAttackId) instead of
   // always using their cMoon's admin-assigned one — an admin toggle per attack, off by default so
   // shipping this column changes nothing until an admin opts an attack in. A player's choice is

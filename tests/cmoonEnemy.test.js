@@ -15,6 +15,12 @@ import {
   SPECIAL_ATTACK_REFLECT_PERCENT_MAX, SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT,
   isValidSpecialAttackSiphonPercent, SPECIAL_ATTACK_SIPHON_PERCENT_MIN,
   SPECIAL_ATTACK_SIPHON_PERCENT_MAX, SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
+  isValidSpecialAttackPoisonDurationRounds, SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MIN,
+  SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MAX, SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT,
+  isValidSpecialAttackRequiredHitStreak, SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MIN,
+  SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MAX, SPECIAL_ATTACK_REQUIRED_HIT_STREAK_DEFAULT,
+  isValidSpecialAttackAccuracyPercent, SPECIAL_ATTACK_ACCURACY_PERCENT_MIN,
+  SPECIAL_ATTACK_ACCURACY_PERCENT_MAX, SPECIAL_ATTACK_ACCURACY_PERCENT_DEFAULT,
   parseTauntBody, isValidTauntText, isValidTauntTrigger, TAUNT_TRIGGERS, TAUNT_TEXT_MAX_LENGTH,
   ATTACK_CHANCE_DEFAULT, PITY_THRESHOLD_DEFAULT, FIRST_WIN_BONUS_POINTS_DEFAULT,
   MAX_PARTICIPANTS_DEFAULT, MAX_PARTICIPANTS_MIN, MAX_PARTICIPANTS_MAX,
@@ -449,6 +455,8 @@ test('parseSpecialAttackBody: a valid create body parses with trimmed name and t
     name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10,
     healsAllies: false, playerChoice: false, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
     reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
+    poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT, cleanseAlsoHeals: false,
+    requiredHitStreak: SPECIAL_ATTACK_REQUIRED_HIT_STREAK_DEFAULT, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_DEFAULT,
   })
 })
 
@@ -474,6 +482,8 @@ test('parseSpecialAttackBody: on update, an omitted field falls back to the exis
     name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7,
     healsAllies: true, playerChoice: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
     reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
+    poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT, cleanseAlsoHeals: false,
+    requiredHitStreak: 5, accuracyPercent: 80,
   }
   const result = parseSpecialAttackBody({ amount: 20 }, existing)
   assert.equal(result.ok, true)
@@ -481,6 +491,8 @@ test('parseSpecialAttackBody: on update, an omitted field falls back to the exis
     name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 20,
     healsAllies: true, playerChoice: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
     reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
+    poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT, cleanseAlsoHeals: false,
+    requiredHitStreak: 5, accuracyPercent: 80,
   })
 })
 
@@ -587,6 +599,81 @@ test('parseSpecialAttackBody: siphonPercent is only ever stored when effectType 
   const siphonResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', siphonPercent: 75 })
   assert.equal(siphonResult.ok, true)
   assert.equal(siphonResult.data.siphonPercent, 75)
+})
+
+// ── poisonDurationRounds (POISON_OPPONENT's own tick count) ────────────────────────────────────
+test('parseSpecialAttackBody: poisonDurationRounds defaults to the DEFAULT constant on create when omitted', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'POISON_OPPONENT' })
+  assert.equal(result.ok, true)
+  assert.equal(result.data.poisonDurationRounds, SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT)
+})
+
+test('parseSpecialAttackBody: accepts the full poisonDurationRounds range (1-20) and rejects outside it, only for POISON_OPPONENT', () => {
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'POISON_OPPONENT', poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MIN }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'POISON_OPPONENT', poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MAX }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'POISON_OPPONENT', poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MIN - 1 }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'POISON_OPPONENT', poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_MAX + 1 }).ok, false)
+  // Out of range but ignored for an unrelated effectType -- never rejected.
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', poisonDurationRounds: 9999 }).ok, true)
+})
+
+test('parseSpecialAttackBody: poisonDurationRounds is only ever stored when effectType is POISON_OPPONENT', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', poisonDurationRounds: 15 })
+  assert.equal(result.data.poisonDurationRounds, SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT)
+
+  const poisonResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'POISON_OPPONENT', poisonDurationRounds: 15 })
+  assert.equal(poisonResult.data.poisonDurationRounds, 15)
+})
+
+// ── cleanseAlsoHeals (CLEANSE_SELF's optional HP top-up) ────────────────────────────────────────
+test('parseSpecialAttackBody: cleanseAlsoHeals is only ever stored true when effectType is CLEANSE_SELF', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', cleanseAlsoHeals: true })
+  assert.equal(result.data.cleanseAlsoHeals, false)
+
+  const cleanseResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'CLEANSE_SELF', cleanseAlsoHeals: true })
+  assert.equal(cleanseResult.data.cleanseAlsoHeals, true)
+})
+
+// ── healsAllies now also applies to CLEANSE_SELF (self-vs-party poison cure) ────────────────────
+test('parseSpecialAttackBody: healsAllies is also storable for CLEANSE_SELF', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'CLEANSE_SELF', healsAllies: true })
+  assert.equal(result.ok, true)
+  assert.equal(result.data.healsAllies, true)
+})
+
+// ── requiredHitStreak/accuracyPercent (apply to EVERY effectType, unlike every field above) ────
+test('parseSpecialAttackBody: requiredHitStreak defaults to the DEFAULT constant and validates its full range for ANY effectType', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody })
+  assert.equal(result.data.requiredHitStreak, SPECIAL_ATTACK_REQUIRED_HIT_STREAK_DEFAULT)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, requiredHitStreak: SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MIN }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, requiredHitStreak: SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MAX }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, requiredHitStreak: SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MIN - 1 }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, requiredHitStreak: SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MAX + 1 }).ok, false)
+})
+
+test('parseSpecialAttackBody: accuracyPercent defaults to the DEFAULT constant and validates its full range for ANY effectType', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody })
+  assert.equal(result.data.accuracyPercent, SPECIAL_ATTACK_ACCURACY_PERCENT_DEFAULT)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_MIN }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_MAX }).ok, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_MIN - 1 }).ok, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_MAX + 1 }).ok, false)
+})
+
+test('isValidSpecialAttackPoisonDurationRounds/isValidSpecialAttackRequiredHitStreak/isValidSpecialAttackAccuracyPercent reject non-integers and out-of-range values', () => {
+  assert.equal(isValidSpecialAttackPoisonDurationRounds(3), true)
+  assert.equal(isValidSpecialAttackPoisonDurationRounds(0), false)
+  assert.equal(isValidSpecialAttackPoisonDurationRounds(21), false)
+  assert.equal(isValidSpecialAttackPoisonDurationRounds(2.5), false)
+
+  assert.equal(isValidSpecialAttackRequiredHitStreak(3), true)
+  assert.equal(isValidSpecialAttackRequiredHitStreak(0), false)
+  assert.equal(isValidSpecialAttackRequiredHitStreak(11), false)
+
+  assert.equal(isValidSpecialAttackAccuracyPercent(0), true) // 0 is a valid (if useless) accuracy
+  assert.equal(isValidSpecialAttackAccuracyPercent(100), true)
+  assert.equal(isValidSpecialAttackAccuracyPercent(-1), false)
+  assert.equal(isValidSpecialAttackAccuracyPercent(101), false)
 })
 
 test('isValidSpecialAttackReflectPercent/isValidSpecialAttackSiphonPercent reject non-integers and out-of-range values', () => {

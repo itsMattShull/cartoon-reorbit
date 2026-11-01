@@ -130,7 +130,7 @@
                     <span class="cbp-special-icon">★</span>
                     {{ battle.playerSpecialAttack.name }}
                   </span>
-                  <span class="cbp-special-meter">{{ Math.min(battle.playerHitStreak, 3) }}/3</span>
+                  <span class="cbp-special-meter">{{ Math.min(battle.playerHitStreak, playerRequiredHitStreak) }}/{{ playerRequiredHitStreak }}</span>
                 </button>
                 <button
                   type="button" class="cbp-special-help" aria-label="What does this special attack do?"
@@ -140,7 +140,8 @@
                   <p class="cbp-special-tooltip-title">{{ battle.playerSpecialAttack.name }}</p>
                   <p v-if="battle.playerSpecialAttack.description">{{ battle.playerSpecialAttack.description }}</p>
                   <p>{{ specialEffectDescription(battle.playerSpecialAttack) }}</p>
-                  <p class="cbp-special-tooltip-charge">Land 3 hits in a row to charge it up — it stays ready until you use it.</p>
+                  <p v-if="battle.playerSpecialAttack.accuracyPercent < 100" class="cbp-special-tooltip-charge">{{ battle.playerSpecialAttack.accuracyPercent }}% chance to actually land once fired.</p>
+                  <p class="cbp-special-tooltip-charge">Land {{ playerRequiredHitStreak }} hit{{ playerRequiredHitStreak === 1 ? '' : 's' }} in a row to charge it up — it stays ready until you use it.</p>
                 </div>
               </div>
             </template>
@@ -243,15 +244,24 @@ function specialEffectDescription(attack) {
     case 'RAISE_ALLY_ATTACK': return `Raises your own attack damage by ${n} for the rest of the fight.`
     case 'REFLECT_DAMAGE': return `Reflects ${attack?.reflectPercent}% of whatever the enemy hits you for this round back at them — nothing reflects if they block.`
     case 'SIPHON_HEALTH': return `Deals ${n} damage and heals you for ${attack?.siphonPercent}% of it — unless the enemy blocks, in which case it does nothing.`
+    // POISON_OPPONENT/CLEANSE_SELF/SHIELD_PARTY are raid-only (see cmoonEnemyRaid.js's own header
+    // comment) — a cMoon/faction's special is one shared pool used in both contexts, so one of
+    // these CAN end up equipped here. It still fires and announces, just with no mechanical
+    // effect — this tooltip says so plainly rather than showing nothing.
+    case 'POISON_OPPONENT': case 'CLEANSE_SELF': case 'SHIELD_PARTY':
+      return 'This effect only works in a co-op raid — in a solo fight it fires and announces, but does nothing.'
     default: return ''
   }
 }
 const showSpecialInfo = ref(false)
-// 0/1/2/3 hits -> 0/33/66/100% fill, read by .cbp-special-fill below via this CSS variable —
+// This attack's own requiredHitStreak (1-10, default 3) — replaces a hardcoded "3" now that an
+// admin can configure a different cost per attack (see that column's own schema comment).
+const playerRequiredHitStreak = computed(() => battle.value?.playerSpecialAttack?.requiredHitStreak || 3)
+// 0..requiredHitStreak hits -> 0-100% fill, read by .cbp-special-fill below via this CSS variable —
 // stays at 100% once charged even if playerHitStreak itself later resets (see that column's own
 // schema comment on why the charge latches rather than mirroring the streak 1:1).
 const specialFillStyle = computed(() => {
-  const pct = battle.value?.playerSpecialCharged ? 100 : Math.min(100, Math.round(((battle.value?.playerHitStreak || 0) / 3) * 100))
+  const pct = battle.value?.playerSpecialCharged ? 100 : Math.min(100, Math.round(((battle.value?.playerHitStreak || 0) / playerRequiredHitStreak.value) * 100))
   return { '--cbp-special-fill': pct + '%' }
 })
 
@@ -435,14 +445,15 @@ watch(() => battle.value?.playerHitStreak || 0, (streak, prevStreak) => {
   }
 })
 
-// ── Enemy-special warning — a pulse on the enemy portrait once enemyHitStreak reaches 2/3 (one
-// hit away from HIT_STREAK_THRESHOLD firing their faction's special automatically, see
-// action.post.js's own enemyHitStreak bookkeeping), telegraphing it a round ahead rather than it
-// just happening. Only meaningful when this enemy actually HAS a special assigned at all — see
-// enemyHasSpecialAttack's own comment server-side for why that's a bare boolean, nothing more. ──
-const HIT_STREAK_THRESHOLD = 3
+// ── Enemy-special warning — a pulse on the enemy portrait once enemyHitStreak is one hit away
+// from the enemy's own requiredHitStreak firing their faction's special automatically (see
+// action.post.js's own enemyHitStreak bookkeeping and enemyRequiredHitStreak's schema comment),
+// telegraphing it a round ahead rather than it just happening. Only meaningful when this enemy
+// actually HAS a special assigned at all — see enemyHasSpecialAttack's own comment server-side
+// for why that's a bare boolean, nothing more. ──
 const enemySpecialWarning = computed(() => {
-  return !!battle.value?.enemyHasSpecialAttack && (battle.value?.enemyHitStreak || 0) >= HIT_STREAK_THRESHOLD - 1
+  const threshold = battle.value?.enemyRequiredHitStreak || 3
+  return !!battle.value?.enemyHasSpecialAttack && (battle.value?.enemyHitStreak || 0) >= threshold - 1
 })
 
 // ── FINAL_BOSS entrance punch — a one-shot full-bleed flash + a bigger modal "pop" exactly when a

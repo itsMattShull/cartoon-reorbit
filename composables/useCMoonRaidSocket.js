@@ -46,6 +46,16 @@ export function useCMoonRaidSocket() {
     socket.on('cmoonraid:participantActed', applyState)
     socket.on('cmoonraid:roundResolved', (state) => { lastRound.value = state.round || null; applyState(state) })
     socket.on('cmoonraid:ended', applyState)
+    // Sent directly to THIS socket only (never broadcast — see cmoonraid:leave's own comment in
+    // cmoonRaidSocket.js), since by the time it fires this socket already left the room and would
+    // never receive the room-wide participantLeft broadcast meant for everyone else. Clears local
+    // state so the raid page can tell "I left" apart from "still loading" and navigate away.
+    socket.on('cmoonraid:leftRaid', (payload) => {
+      if (!payload?.raidId || payload.raidId === currentRaidId.value) {
+        raidState.value = null
+        currentRaidId.value = null
+      }
+    })
     socket.on('cmoonraid:error', (payload) => { lastError.value = payload?.message || 'Something went wrong' })
     socket.on('cmoonraid:lobby', (payload) => {
       lobbyRaids.value = Array.isArray(payload?.raids) ? payload.raids : []
