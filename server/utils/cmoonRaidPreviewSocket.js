@@ -286,6 +286,10 @@ export function registerCMoonRaidPreview(io, socket, resolveSocketUser) {
           // See CMoonEnemyMember.baseDamage's own schema comment — resolveRaidRound's
           // rollHitDamage call reads this off raid.enemyStats, same as the real raid socket.
           baseDamage: enemyMember.baseDamage,
+          // Without this, resolveBattleRound's own `enemyAccuracyPercent = 100` default silently
+          // took over here and the preview always showed a 100%-accurate boss regardless of what
+          // the admin configured — see CMoonEnemyMember.attackAccuracyPercent's own schema comment.
+          attackAccuracyPercent: enemyMember.attackAccuracyPercent,
         },
         defaultMaxHp,
         status: 'FORMING', enemyHpRemaining: enemyMember.maxHp, roundNumber: 1,

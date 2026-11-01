@@ -1691,6 +1691,15 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       db.user.update({ where: { id: me.id }, data: { lastCMoonBattlePopupAt: raid.initiatorPreviousPopupCooldownAt } }).catch(() => {})
     }
     if (!raid.participants.size) { destroyRaid(raidId); return }
+    // The initiator leaving (now possible via the UI, not just by never having started one) must
+    // hand off leadership — otherwise no remaining participant has isInitiator:true and the whole
+    // party silently loses Force start/Cancel raid/Keep lobby open for the rest of the join window.
+    // Earliest joiner among those still here, same "who's been here longest" tiebreak a fresh
+    // raid's own initiator naturally has.
+    if (leavingParticipant?.isInitiator) {
+      const successor = Array.from(raid.participants.values()).sort((a, b) => a.joinedAt - b.joinedAt)[0]
+      successor.isInitiator = true
+    }
     // A leave shrinks the speed-vote denominator too — re-check for the same reason as a join.
     maybeApplySpeedVote(raid)
     fireSync(raidId, raid)

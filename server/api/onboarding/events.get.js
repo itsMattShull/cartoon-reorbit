@@ -139,7 +139,12 @@ export default defineEventHandler(async (event) => {
       }
 
       const raidBosses = await db.cMoonEnemyMember.findMany({
-        where: { active: true, isRaidBoss: true, faction: { active: true } },
+        // defeatedAt (SHARED_POOL-only "at 0 HP" flag, independent of raidDefeatedAt — see that
+        // column's own schema comment) must be excluded here too: a member can be BOTH
+        // isRaidBoss and SHARED_POOL, and consider.post.js's own candidate query already excludes
+        // a defeatedAt member from being offered at all, raid or not. Without this, this
+        // countdown could say "available now" for a boss the real popup would never offer.
+        where: { active: true, isRaidBoss: true, defeatedAt: null, faction: { active: true } },
         select: { id: true, minPriorDefeats: true, raidOneTime: true, raidCooldownMinutes: true, raidDefeatedAt: true },
       })
       // Same SOLO-win-only gate consider.post.js applies to a raid-boss candidate's

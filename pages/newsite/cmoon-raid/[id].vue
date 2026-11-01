@@ -218,9 +218,15 @@
                         <span class="cr-reveal-name">{{ usernameFor(r.userId, r.username) }}</span>
                         <span class="cr-reveal-action">{{ ACTION_LABELS[r.action] }}</span>
                         <span class="cr-reveal-outcome">
-                          <template v-if="r.playerHit && r.enemyHit">traded hits!<span v-if="r.playerCrit || r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
+                          <!-- `r.playerHit` alone isn't "the player actually took damage" — a
+                               SHIELD_PARTY cast (or an enemyAtkBonus debuff) can zero
+                               r.playerDamage while still rolling the hit true (see
+                               resolveRaidRound's own partyShielded comment), so these checks
+                               also require playerDamage > 0 before saying "took a hit". -->
+                          <template v-if="r.playerHit && r.playerDamage > 0 && r.enemyHit">traded hits!<span v-if="r.playerCrit || r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
                           <template v-else-if="r.enemyHit">landed a hit!<span v-if="r.enemyCrit" class="cr-crit-badge">CRIT!</span></template>
-                          <template v-else-if="r.playerHit">took a hit<span v-if="r.playerCrit" class="cr-crit-badge">CRIT!</span></template>
+                          <template v-else-if="r.playerHit && r.playerDamage > 0">took a hit<span v-if="r.playerCrit" class="cr-crit-badge">CRIT!</span></template>
+                          <template v-else-if="r.playerHit">hit absorbed — no damage taken!</template>
                           <template v-else-if="r.playerBlocked">blocked it — healed 1 HP</template>
                           <template v-else-if="r.enemyBlocked">boss blocked it</template>
                           <!-- enemyMissed (see CMoonEnemyMember.attackAccuracyPercent's own schema
@@ -430,9 +436,12 @@ function usernameFor(userId, embedded) {
 }
 
 function revealRowClass(r) {
-  if (r.enemyHit && !r.playerHit) return 'cr-row-good'
-  if (r.playerHit && !r.enemyHit) return 'cr-row-bad'
-  if (r.playerBlocked || r.enemyMissed) return 'cr-row-good'
+  // See the round-reveal template's own comment: r.playerHit alone doesn't mean real damage got
+  // through (a shield/debuff can zero r.playerDamage while still rolling the hit true).
+  const tookDamage = r.playerHit && r.playerDamage > 0
+  if (r.enemyHit && !tookDamage) return 'cr-row-good'
+  if (tookDamage && !r.enemyHit) return 'cr-row-bad'
+  if (r.playerBlocked || r.enemyMissed || (r.playerHit && !tookDamage)) return 'cr-row-good'
   return 'cr-row-neutral'
 }
 
