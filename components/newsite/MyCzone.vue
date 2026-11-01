@@ -1586,7 +1586,7 @@ watch(holidaySignal, async () => {
   if (holidayRedeem.value?.reward?.name) {
     showSearchToast(`Opened! You received ${holidayRedeem.value.reward.name} 🎉`, 'success')
   }
-  await loadZone(viewedUsername.value)
+  await loadZone(viewedUsername.value, { keepActiveZone: true })
 })
 
 const lastOnlineText = computed(() => {
@@ -1673,9 +1673,14 @@ onUnmounted(() => {
 })
 
 // ── Data loading ──────────────────────────────────────────────
-async function loadZone(username) {
+// `keepActiveZone`: refresh the zone data in place (e.g. after opening a holiday cToon from the
+// modal) without yanking the viewer back to the main zone. Falls back to the main zone if the
+// previously active index no longer exists in the reloaded data.
+async function loadZone(username, { keepActiveZone = false } = {}) {
   const target = username ?? user.value?.username
   if (!target) return
+  const previousZone = cz.value.activeZone
+  const sameZone = keepActiveZone && target === viewedUsername.value
   // Set viewedUsername immediately so the Trade/Build button stays visible
   // (and stable in place) while the zone data loads.
   viewedUsername.value = target
@@ -1685,8 +1690,10 @@ async function loadZone(username) {
     const data = await $fetch(`/api/czone/${target}`)
     cz.value.zones         = data.cZone.zones
     cz.value.mainZoneIndex = data.cZone.mainZoneIndex ?? 0
-    cz.value.activeZone    = cz.value.mainZoneIndex
-    viewedOwner.value      = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null, border: data.border ?? null, glow: data.glow ?? null }
+    cz.value.activeZone    = sameZone && cz.value.zones?.[previousZone]
+      ? previousZone
+      : cz.value.mainZoneIndex
+    viewedOwner.value     = { username: data.ownerName, avatar: data.avatar, lastActivity: data.lastActivity ?? null, cMoon: data.cMoon ?? null, cMoonRankName: data.cMoonRankName ?? null, border: data.border ?? null, glow: data.glow ?? null }
     applyHighlightFromQuery()
     isFavorited.value      = !!data.isFavorited
     loadCzoneSearchItems()
