@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  resolveRaidRound, checkRaidBossAvailability,
+  resolveRaidRound, checkRaidBossAvailability, nextRaidBossSlotAt,
   JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE,
   effectiveHitStreakThreshold, applyRaidSpecialAttack,
 } from '../server/utils/cmoonEnemyRaid.js'
@@ -204,6 +204,90 @@ test('checkRaidBossAvailability: a solved riddle gate falls through to the norma
   const result = checkRaidBossAvailability({ raidOneTime: true, raidCooldownMinutes: 0, raidDefeatedAt: new Date(), riddleGateSolved: true })
   assert.equal(result.available, false)
   assert.match(result.message, /revived by an admin/i)
+})
+
+// ── nextRaidBossSlotAt (the /api/onboarding/events.get.js raid-boss countdown's own combining
+// logic — never calls checkRaidBossAvailability's real-time Date.now() default so every case here
+// is deterministic) ──────────────────────────────────────────────────────────────────────────
+test('nextRaidBossSlotAt: no raid bosses at all -> noneAvailable', () => {
+  const result = nextRaidBossSlotAt({ bosses: [], personalSoloWinCount: 0 }, Date.now())
+  assert.deepEqual(result, { noneAvailable: true, availableNow: false, nextAvailableAt: null })
+})
+
+test('nextRaidBossSlotAt: a never-defeated boss and no popup cooldown -> available now', () => {
+  const bosses = [{ id: 'a', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 60, raidDefeatedAt: null }]
+  const result = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0 }, Date.now())
+  assert.equal(result.availableNow, true)
+  assert.equal(result.nextAvailableAt, null)
+})
+
+test('nextRaidBossSlotAt: boss off cooldown but the shared popup cooldown is still active -> waits on the popup cooldown', () => {
+  const bosses = [{ id: 'a', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 60, raidDefeatedAt: null }]
+  const popupNextAvailableAt = new Date('2026-01-01T02:00:00Z')
+  const result = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0, popupNextAvailableAt }, new Date('2026-01-01T00:00:00Z').getTime())
+  assert.equal(result.availableNow, false)
+  assert.equal(result.nextAvailableAt.getTime(), popupNextAvailableAt.getTime())
+})
+
+test('nextRaidBossSlotAt: boss still on its own cooldown with no popup cooldown -> waits on the boss', () => {
+  const defeatedAt = new Date('2026-01-01T00:00:00Z')
+  const bosses = [{ id: 'a', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 60, raidDefeatedAt: defeatedAt }]
+  const result = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0 }, new Date('2026-01-01T00:30:00Z').getTime())
+  assert.equal(result.availableNow, false)
+  assert.equal(result.nextAvailableAt.getTime(), new Date('2026-01-01T01:00:00Z').getTime())
+})
+
+test('nextRaidBossSlotAt: both gates active -> the LATER of the two wins, whichever that is', () => {
+  const defeatedAt = new Date('2026-01-01T00:00:00Z')
+  const bosses = [{ id: 'a', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 60, raidDefeatedAt: defeatedAt }]
+  const now = new Date('2026-01-01T00:30:00Z').getTime()
+  // Boss clears at 01:00; popup clears at 00:45 — boss is later, so boss wins.
+  const bossLater = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0, popupNextAvailableAt: new Date('2026-01-01T00:45:00Z') }, now)
+  assert.equal(bossLater.nextAvailableAt.getTime(), new Date('2026-01-01T01:00:00Z').getTime())
+  // Boss clears at 01:00; popup clears at 02:00 — popup is later, so popup wins.
+  const popupLater = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0, popupNextAvailableAt: new Date('2026-01-01T02:00:00Z') }, now)
+  assert.equal(popupLater.nextAvailableAt.getTime(), new Date('2026-01-01T02:00:00Z').getTime())
+})
+
+test('nextRaidBossSlotAt: a candidate whose minPriorDefeats this player has not met is never counted', () => {
+  const bosses = [{ id: 'a', minPriorDefeats: 10, raidOneTime: false, raidCooldownMinutes: 0, raidDefeatedAt: null }]
+  const result = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0 }, Date.now())
+  assert.deepEqual(result, { noneAvailable: true, availableNow: false, nextAvailableAt: null })
+})
+
+test('nextRaidBossSlotAt: a one-time boss already defeated contributes nothing (permanently locked, not a future slot)', () => {
+  const bosses = [{ id: 'a', minPriorDefeats: 0, raidOneTime: true, raidCooldownMinutes: 0, raidDefeatedAt: new Date() }]
+  const result = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0 }, Date.now())
+  assert.deepEqual(result, { noneAvailable: true, availableNow: false, nextAvailableAt: null })
+})
+
+test('nextRaidBossSlotAt: a riddle-locked boss contributes nothing until solved', () => {
+  const bosses = [{ id: 'a', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 0, raidDefeatedAt: null }]
+  const locked = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0, riddleSolvedByEnemyId: new Map([['a', false]]) }, Date.now())
+  assert.deepEqual(locked, { noneAvailable: true, availableNow: false, nextAvailableAt: null })
+  // A boss missing from the map defaults to solved/unlocked, same as consider.post.js's `?? true`.
+  const unmapped = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0, riddleSolvedByEnemyId: new Map() }, Date.now())
+  assert.equal(unmapped.availableNow, true)
+})
+
+test('nextRaidBossSlotAt: one permanently-locked boss plus one still-cooling-down boss -> the cooling-down one is the real answer, not noneAvailable', () => {
+  const bosses = [
+    { id: 'locked', minPriorDefeats: 0, raidOneTime: true, raidCooldownMinutes: 0, raidDefeatedAt: new Date('2020-01-01T00:00:00Z') },
+    { id: 'cooling', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 60, raidDefeatedAt: new Date('2026-01-01T00:00:00Z') },
+  ]
+  const result = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0 }, new Date('2026-01-01T00:30:00Z').getTime())
+  assert.equal(result.noneAvailable, false)
+  assert.equal(result.nextAvailableAt.getTime(), new Date('2026-01-01T01:00:00Z').getTime())
+})
+
+test('nextRaidBossSlotAt: any eligible candidate already available short-circuits the earliest-cooldown search', () => {
+  const bosses = [
+    { id: 'cooling', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 60, raidDefeatedAt: new Date() },
+    { id: 'free', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 0, raidDefeatedAt: null },
+  ]
+  const result = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0 }, Date.now())
+  assert.equal(result.availableNow, true)
+  assert.equal(result.nextAvailableAt, null)
 })
 
 // ── Special attacks in a raid (see cmoonEnemyRaid.js's own header comment) ─────────────────────

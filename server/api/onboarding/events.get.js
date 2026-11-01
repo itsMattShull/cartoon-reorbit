@@ -2,6 +2,7 @@ import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { getGlobalConfig } from '@/server/utils/cmoon'
 import { nextSoloSlotAt } from '@/server/utils/cmoonEnemy'
+import { nextRaidBossSlotAt } from '@/server/utils/cmoonEnemyRaid'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -77,7 +78,7 @@ export default defineEventHandler(async (event) => {
     getGlobalConfig(),
     db.user.findUnique({
       where: { id: userId },
-      select: { lastCMoonBattlePopupAt: true, allowCMoonEnemyPopups: true }
+      select: { cMoonId: true, lastCMoonBattlePopupAt: true, allowCMoonEnemyPopups: true }
     })
   ])
 
@@ -115,6 +116,55 @@ export default defineEventHandler(async (event) => {
     }
   }
 
+  // Raid bosses are offered through the exact same popup roll as a solo enemy (see
+  // consider.post.js) — same master switch/opt-out, same shared popup cooldown — but each raid
+  // boss ALSO has its own independent availability gate (CMoonEnemyMember.raidOneTime/
+  // raidCooldownMinutes/raidDefeatedAt, plus an optional BOSS_LORE riddle lock), reused here via
+  // checkRaidBossAvailability (the same function cmoonraid:start/consider.post.js use) so this can
+  // never drift from the real gate. Raid bosses need a cMoon to engage at all (no solo-queue-of-
+  // one workaround removes that requirement — see consider.post.js's own isRaidBoss:false filter
+  // for a cMoon-less player) and are exempt from the solo spawn cap.
+  let cMoonRaidCountdown = null
+  if (config?.cMoonEnemyBattlesEnabled) {
+    if (!cmoonUser?.allowCMoonEnemyPopups) {
+      cMoonRaidCountdown = { enabled: true, optedOut: true, needsCMoon: false, noneAvailable: false, nextAvailableAt: null }
+    } else if (!cmoonUser?.cMoonId) {
+      cMoonRaidCountdown = { enabled: true, optedOut: false, needsCMoon: true, noneAvailable: false, nextAvailableAt: null }
+    } else {
+      let nextAvailableAt = null
+      const cooldownMinutes = config?.cMoonBattlePopupCooldownMinutes ?? 0
+      if (cooldownMinutes > 0 && cmoonUser?.lastCMoonBattlePopupAt) {
+        const nextAllowed = new Date(cmoonUser.lastCMoonBattlePopupAt.getTime() + cooldownMinutes * 60 * 1000)
+        if (nextAllowed > now) nextAvailableAt = nextAllowed
+      }
+
+      const raidBosses = await db.cMoonEnemyMember.findMany({
+        where: { active: true, isRaidBoss: true, faction: { active: true } },
+        select: { id: true, minPriorDefeats: true, raidOneTime: true, raidCooldownMinutes: true, raidDefeatedAt: true },
+      })
+      // Same SOLO-win-only gate consider.post.js applies to a raid-boss candidate's
+      // minPriorDefeats — a shared raid win must not unlock a harder boss faster than someone's
+      // own solo record would.
+      const personalSoloWinCount = raidBosses.length
+        ? await db.cMoonEnemyBattle.count({ where: { userId, outcome: 'WIN', raidId: null } })
+        : 0
+      const eligibleIds = raidBosses.filter(m => m.minPriorDefeats <= personalSoloWinCount).map(m => m.id)
+      const riddles = eligibleIds.length
+        ? await db.cMoonRiddle.findMany({
+            where: { kind: 'BOSS_LORE', active: true, enemyMemberId: { in: eligibleIds } },
+            select: { enemyMemberId: true, solvedAt: true },
+          })
+        : []
+      const riddleSolvedByEnemyId = new Map(riddles.map(r => [r.enemyMemberId, !!r.solvedAt]))
+
+      const slot = nextRaidBossSlotAt({ bosses: raidBosses, personalSoloWinCount, riddleSolvedByEnemyId, popupNextAvailableAt: nextAvailableAt }, now.getTime())
+      cMoonRaidCountdown = {
+        enabled: true, optedOut: false, needsCMoon: false, noneAvailable: slot.noneAvailable,
+        nextAvailableAt: slot.nextAvailableAt ? slot.nextAvailableAt.toISOString() : null,
+      }
+    }
+  }
+
   return {
     holidayEvents: holidayEvents.map((row) => ({
       id: row.id,
@@ -149,6 +199,7 @@ export default defineEventHandler(async (event) => {
         status
       }
     }),
-    cMoonEnemyCountdown
+    cMoonEnemyCountdown,
+    cMoonRaidCountdown
   }
 })

@@ -203,6 +203,39 @@ export function checkRaidBossAvailability({ raidOneTime, raidCooldownMinutes, ra
   return { available: false, message: 'This raid boss is on cooldown', availableAt }
 }
 
+// Computes when the NEXT raid boss could plausibly become available to a given player — the
+// raid-boss counterpart of nextSoloSlotAt in cmoonEnemy.js, used by
+// /api/onboarding/events.get.js's own cMoonRaidCountdown so that display can never drift from the
+// real gate. Combines two independent gates, same as consider.post.js itself does: the shared
+// popup cooldown every offer (solo or raid) goes through, and each ELIGIBLE candidate's own
+// availability (see checkRaidBossAvailability) — "eligible" meaning this player's own SOLO win
+// count already clears that candidate's minPriorDefeats, same solo-only gate every other raid-boss
+// minPriorDefeats check uses.
+//   bosses: [{ id, minPriorDefeats, raidOneTime, raidCooldownMinutes, raidDefeatedAt }]
+//   personalSoloWinCount: this player's own solo (raidId: null) win count.
+//   riddleSolvedByEnemyId: Map<enemyMemberId, boolean> — BOSS_LORE riddle solved state; a boss
+//     missing from the map defaults to solved/unlocked, same as consider.post.js's own `?? true`.
+//   popupNextAvailableAt: Date|null — the shared popup cooldown's own next-available time, or null
+//     once that cooldown has already cleared.
+// Returns { noneAvailable, availableNow, nextAvailableAt }: `noneAvailable` when every eligible
+// candidate is permanently locked (one-time-defeated with no revival yet, or riddle-locked) with
+// nothing left to count down to; otherwise exactly one of `availableNow`/`nextAvailableAt` applies.
+export function nextRaidBossSlotAt({ bosses, personalSoloWinCount, riddleSolvedByEnemyId = new Map(), popupNextAvailableAt = null }, now = Date.now()) {
+  const eligible = bosses.filter(m => m.minPriorDefeats <= personalSoloWinCount)
+  let anyAvailableNow = false
+  let earliestAt = null
+  for (const m of eligible) {
+    const riddleGateSolved = riddleSolvedByEnemyId.get(m.id) ?? true
+    const result = checkRaidBossAvailability({ ...m, riddleGateSolved }, now)
+    if (result.available) { anyAvailableNow = true; break }
+    if (result.availableAt && (!earliestAt || result.availableAt < earliestAt)) earliestAt = result.availableAt
+  }
+  if (!anyAvailableNow && !earliestAt) return { noneAvailable: true, availableNow: false, nextAvailableAt: null }
+  if (anyAvailableNow) return { noneAvailable: false, availableNow: !popupNextAvailableAt, nextAvailableAt: popupNextAvailableAt }
+  const combined = (popupNextAvailableAt && popupNextAvailableAt > earliestAt) ? popupNextAvailableAt : earliestAt
+  return { noneAvailable: false, availableNow: false, nextAvailableAt: combined }
+}
+
 // One round, already collected. `participants` is the list of participants who were ALIVE when
 // this round opened, each `{ userId, action, hpRemaining, maxHp }` — a knocked-out participant is
 // never passed in at all (they stopped acting the moment they hit 0 HP, see cmoonRaidSocket.js).
