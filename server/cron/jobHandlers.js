@@ -24,6 +24,7 @@ import { runEconomyAggregate } from './economy-aggregate.js'
 import { runCzoneDisplayCountAggregate } from './czone-display-count.js'
 import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
 import { applyDissolveSchedule, getDissolveScheduleConfig, requeueOverdueDissolveLaunches } from '../utils/dissolveSchedule.js'
+import { reconcileDissolveQueueOwnership } from '../utils/dissolveMisfire.js'
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
 import { logCronError } from '../utils/cronErrorLog.js'
@@ -1061,9 +1062,18 @@ async function runRequeueOverdueDissolveLaunches() {
   return n ? `Requeued ${n} overdue dissolve launch${n === 1 ? '' : 'es'}` : undefined
 }
 
+// Daily dissolve-queue ownership sweep — see reconcileDissolveQueueOwnership in
+// server/utils/dissolveMisfire.js. Returns nothing on a clean run; a short detail when it
+// actually removes a stale entry so that shows up in Cron Run Logs.
+async function runReconcileDissolveQueueOwnership() {
+  const { removed } = await reconcileDissolveQueueOwnership()
+  return removed ? `Removed ${removed} stale dissolve-queue entr${removed === 1 ? 'y' : 'ies'} (cToon no longer owned by official)` : undefined
+}
+
 export const JOB_HANDLERS = {
   startDueAuctions,
   requeueOverdueDissolveLaunches: runRequeueOverdueDissolveLaunches,
+  reconcileDissolveQueueOwnership: runReconcileDissolveQueueOwnership,
   sendDueAnnouncements,
   markScheduledPacksInCmart,
   updateWinballGrandPrizeFromSchedule,

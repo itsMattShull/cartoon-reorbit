@@ -79,6 +79,8 @@ export const CRON_JOBS = [
     description: 'Recomputes User.lastActivity in batches' },
   { name: 'enforceDormantAccounts', tier: TIER_MAINTENANCE, pattern: '0 4 * * *', intervalSec: DAY,
     description: 'Disables 9-month-inactive accounts and queues their cToons for dissolve auctions' },
+  { name: 'reconcileDissolveQueueOwnership', tier: TIER_MAINTENANCE, pattern: '20 4 * * *', tz: CHI, intervalSec: DAY, catchUpAfterSec: 30 * 3600,
+    description: 'Removes dissolve-queue entries whose cToon no longer belongs to the official account' },
   { name: 'runEconomyAggregate', tier: TIER_MAINTENANCE, pattern: '10 4 * * *', tz: CHI, intervalSec: DAY, catchUpAfterSec: 30 * 3600,
     description: 'Economy page price/volume aggregation' },
   { name: 'runCzoneDisplayCountAggregate', tier: TIER_MAINTENANCE, pattern: '0 5 * * *', tz: CHI, intervalSec: DAY, catchUpAfterSec: 30 * 3600,
