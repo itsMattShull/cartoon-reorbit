@@ -1045,7 +1045,7 @@ class CMoonError extends Error {
 // "here's what's coming" reveal — this is the same config already shown publicly on the
 // cMoon's own page, not new information, and the mint jobs above are fire-and-forget, so
 // this list describes what was queued, not a confirmed-delivered receipt.
-async function grantCMoonPrizes(userId, cMoonId) {
+export async function grantCMoonPrizes(userId, cMoonId) {
   const prizes = await prisma.cMoonPrizeCtoon.findMany({
     where: { cMoonId },
     include: { ctoon: { select: { name: true, assetPath: true } } },

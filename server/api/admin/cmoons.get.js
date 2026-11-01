@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
     db.globalGameConfig.findUnique({
       where: { id: 'singleton' },
       select: {
-        cMoonEnabled: true, cMoonEnabledAt: true, cMoonOptOutCooldownDays: true,
+        cMoonEnabled: true, cMoonEnabledAt: true, cMoonOptOutCooldownDays: true, cMoonPrestigeEnabled: true,
         cMoonEnemyBattlesEnabled: true,
         cMoonBattlePopupChancePercent: true, cMoonBattlePopupCooldownMinutes: true,
         cMoonEnemySpawnCapCount: true, cMoonEnemySpawnCapWindowHours: true,
@@ -56,6 +56,7 @@ export default defineEventHandler(async (event) => {
     cMoonEnabled: !!config?.cMoonEnabled,
     cMoonEnabledAt: config?.cMoonEnabledAt || null,
     cMoonOptOutCooldownDays: config?.cMoonOptOutCooldownDays ?? 14,
+    cMoonPrestigeEnabled: !!config?.cMoonPrestigeEnabled,
     cMoonEnemyBattlesEnabled: !!config?.cMoonEnemyBattlesEnabled,
     cMoonBattlePopupChancePercent: config?.cMoonBattlePopupChancePercent ?? 3,
     cMoonBattlePopupCooldownMinutes: config?.cMoonBattlePopupCooldownMinutes ?? 20,
@@ -108,6 +109,7 @@ export default defineEventHandler(async (event) => {
       joinLocked: c.joinLocked,
       showOnNav: c.showOnNav,
       allowOptOutJoin: c.allowOptOutJoin,
+      isPrestigeCMoon: c.isPrestigeCMoon,
       memberCount: c.memberCount,
       pageImagePath: c.pageImagePath,
       pageDescription: c.pageDescription,

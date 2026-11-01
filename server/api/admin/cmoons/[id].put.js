@@ -47,6 +47,7 @@ export default defineEventHandler(async (event) => {
   const showOnNav = body?.showOnNav === undefined ? cmoon.showOnNav : !!body.showOnNav
   const showButtonOnPages = body?.showButtonOnPages === undefined ? cmoon.showButtonOnPages : !!body.showButtonOnPages
   const allowOptOutJoin = body?.allowOptOutJoin === undefined ? cmoon.allowOptOutJoin : !!body.allowOptOutJoin
+  const isPrestigeCMoon = body?.isPrestigeCMoon === undefined ? cmoon.isPrestigeCMoon : !!body.isPrestigeCMoon
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   if (!isValidHexColor(color)) throw createError({ statusCode: 400, statusMessage: 'Color must be a hex value like #3366ff' })
@@ -106,7 +107,7 @@ export default defineEventHandler(async (event) => {
   await db.$transaction(async (tx) => {
     await tx.cMoon.update({
       where: { id },
-      data: { name, color, pageBgColor, accentColor, textColor, cardBgColor, discordRoleId: discordRoleId || null, discordChannelId: discordChannelId || null, pageDescription, effectType, customJoinEffectId, specialAttackId, joinLocked, showOnNav, showButtonOnPages, allowOptOutJoin },
+      data: { name, color, pageBgColor, accentColor, textColor, cardBgColor, discordRoleId: discordRoleId || null, discordChannelId: discordChannelId || null, pageDescription, effectType, customJoinEffectId, specialAttackId, joinLocked, showOnNav, showButtonOnPages, allowOptOutJoin, isPrestigeCMoon },
     })
     if (captainIds) {
       await tx.cMoonCaptain.deleteMany({ where: { cMoonId: id } })
