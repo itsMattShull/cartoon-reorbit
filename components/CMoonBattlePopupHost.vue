@@ -83,6 +83,7 @@
             :last-round-label="lastRoundLabel"
             :last-round-class="lastRoundClass"
             :crit-badge="!!(lastRound?.playerCrit || lastRound?.enemyCrit)"
+            :miss-badge="!!lastRound?.enemyMissed"
             :portrait-warning="enemySpecialWarning"
             :outcome="battle?.outcome"
             :result-title="resultTitle"
@@ -110,7 +111,12 @@
                 ⚡ Paralyzed — can't act for {{ battle.playerParalyzedTurns }} more round{{ battle.playerParalyzedTurns === 1 ? '' : 's' }}
               </p>
               <p v-for="(s, i) in (lastRound?.specials || [])" :key="i" class="cbp-special-flash" :class="s.side === 'PLAYER' ? 'cbp-special-flash-player' : 'cbp-special-flash-enemy'">
-                {{ s.side === 'PLAYER' ? 'You' : battle?.enemy?.name || 'The enemy' }} unleashed <strong>{{ s.name }}</strong>!
+                <template v-if="s.missed">
+                  {{ s.side === 'PLAYER' ? 'You' : battle?.enemy?.name || 'The enemy' }} tried to unleash <strong>{{ s.name }}</strong><span class="cbp-miss-badge">MISS!</span>
+                </template>
+                <template v-else>
+                  {{ s.side === 'PLAYER' ? 'You' : battle?.enemy?.name || 'The enemy' }} unleashed <strong>{{ s.name }}</strong>!
+                </template>
               </p>
               <p v-if="comboCallout" class="cbp-combo-callout">{{ comboCallout }}</p>
               <p v-if="currentTaunt" class="cbp-taunt">&ldquo;{{ currentTaunt }}&rdquo;</p>
@@ -130,7 +136,7 @@
                     <span class="cbp-special-icon">★</span>
                     {{ battle.playerSpecialAttack.name }}
                   </span>
-                  <span class="cbp-special-meter">{{ Math.min(battle.playerHitStreak, 3) }}/3</span>
+                  <span class="cbp-special-meter">{{ Math.min(battle.playerHitStreak, playerRequiredHitStreak) }}/{{ playerRequiredHitStreak }}</span>
                 </button>
                 <button
                   type="button" class="cbp-special-help" aria-label="What does this special attack do?"
@@ -140,7 +146,8 @@
                   <p class="cbp-special-tooltip-title">{{ battle.playerSpecialAttack.name }}</p>
                   <p v-if="battle.playerSpecialAttack.description">{{ battle.playerSpecialAttack.description }}</p>
                   <p>{{ specialEffectDescription(battle.playerSpecialAttack) }}</p>
-                  <p class="cbp-special-tooltip-charge">Land 3 hits in a row to charge it up — it stays ready until you use it.</p>
+                  <p v-if="battle.playerSpecialAttack.accuracyPercent < 100" class="cbp-special-tooltip-charge">{{ battle.playerSpecialAttack.accuracyPercent }}% chance to actually land once fired.</p>
+                  <p class="cbp-special-tooltip-charge">Land {{ playerRequiredHitStreak }} hit{{ playerRequiredHitStreak === 1 ? '' : 's' }} in a row to charge it up — it stays ready until you use it.</p>
                 </div>
               </div>
             </template>
@@ -243,15 +250,24 @@ function specialEffectDescription(attack) {
     case 'RAISE_ALLY_ATTACK': return `Raises your own attack damage by ${n} for the rest of the fight.`
     case 'REFLECT_DAMAGE': return `Reflects ${attack?.reflectPercent}% of whatever the enemy hits you for this round back at them — nothing reflects if they block.`
     case 'SIPHON_HEALTH': return `Deals ${n} damage and heals you for ${attack?.siphonPercent}% of it — unless the enemy blocks, in which case it does nothing.`
+    // POISON_OPPONENT/CLEANSE_SELF/SHIELD_PARTY are raid-only (see cmoonEnemyRaid.js's own header
+    // comment) — a cMoon/faction's special is one shared pool used in both contexts, so one of
+    // these CAN end up equipped here. It still fires and announces, just with no mechanical
+    // effect — this tooltip says so plainly rather than showing nothing.
+    case 'POISON_OPPONENT': case 'CLEANSE_SELF': case 'SHIELD_PARTY':
+      return 'This effect only works in a co-op raid — in a solo fight it fires and announces, but does nothing.'
     default: return ''
   }
 }
 const showSpecialInfo = ref(false)
-// 0/1/2/3 hits -> 0/33/66/100% fill, read by .cbp-special-fill below via this CSS variable —
+// This attack's own requiredHitStreak (1-10, default 3) — replaces a hardcoded "3" now that an
+// admin can configure a different cost per attack (see that column's own schema comment).
+const playerRequiredHitStreak = computed(() => battle.value?.playerSpecialAttack?.requiredHitStreak || 3)
+// 0..requiredHitStreak hits -> 0-100% fill, read by .cbp-special-fill below via this CSS variable —
 // stays at 100% once charged even if playerHitStreak itself later resets (see that column's own
 // schema comment on why the charge latches rather than mirroring the streak 1:1).
 const specialFillStyle = computed(() => {
-  const pct = battle.value?.playerSpecialCharged ? 100 : Math.min(100, Math.round(((battle.value?.playerHitStreak || 0) / 3) * 100))
+  const pct = battle.value?.playerSpecialCharged ? 100 : Math.min(100, Math.round(((battle.value?.playerHitStreak || 0) / playerRequiredHitStreak.value) * 100))
   return { '--cbp-special-fill': pct + '%' }
 })
 
@@ -263,7 +279,7 @@ const specialFillStyle = computed(() => {
 // by construction, not just in practice.
 const lastRoundLabel = computed(() => {
   if (!lastRound.value) return ''
-  const { playerAction, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked, counterHit } = lastRound.value
+  const { playerAction, enemyAction, playerHit, enemyHit, playerBlocked, enemyBlocked, counterHit, enemyMissed } = lastRound.value
   const actions = `You ${actionLabel(playerAction)}, they ${actionLabel(enemyAction)} — `
   if (playerHit && enemyHit) return `${actions}you both landed a hit!`
   if (playerHit) return `${actions}you took a hit!`
@@ -274,15 +290,20 @@ const lastRoundLabel = computed(() => {
   if (playerBlocked && counterHit) return `${actions}you blocked it, healed 1 HP, and countered for damage!`
   if (playerBlocked) return `${actions}you blocked it and healed 1 HP!`
   if (enemyBlocked) return `${actions}they blocked it and healed 1 HP!`
+  // enemyMissed (see CMoonEnemyMember.attackAccuracyPercent's own schema comment) — the enemy's
+  // attack would have landed (you didn't block the right lane) but whiffed outright, a different
+  // reason for "no damage" than a genuine block, so it gets its own line rather than falling into
+  // the generic "no hits landed" below.
+  if (enemyMissed) return `${actions}their attack missed!`
   return `${actions}no hits landed.`
 })
 const lastRoundClass = computed(() => {
   if (!lastRound.value) return ''
-  const { playerHit, enemyHit, playerBlocked } = lastRound.value
+  const { playerHit, enemyHit, playerBlocked, enemyMissed } = lastRound.value
   // cbc- (not cbp-) — these classes are applied inside CMoonBattleCard.vue, which owns them.
   if (enemyHit && !playerHit) return 'cbc-round-good'
   if (playerHit && !enemyHit) return 'cbc-round-bad'
-  if (playerBlocked) return 'cbc-round-good'
+  if (playerBlocked || enemyMissed) return 'cbc-round-good'
   return 'cbc-round-neutral'
 })
 
@@ -435,14 +456,20 @@ watch(() => battle.value?.playerHitStreak || 0, (streak, prevStreak) => {
   }
 })
 
-// ── Enemy-special warning — a pulse on the enemy portrait once enemyHitStreak reaches 2/3 (one
-// hit away from HIT_STREAK_THRESHOLD firing their faction's special automatically, see
-// action.post.js's own enemyHitStreak bookkeeping), telegraphing it a round ahead rather than it
-// just happening. Only meaningful when this enemy actually HAS a special assigned at all — see
-// enemyHasSpecialAttack's own comment server-side for why that's a bare boolean, nothing more. ──
-const HIT_STREAK_THRESHOLD = 3
+// ── Enemy-special warning — a pulse on the enemy portrait once enemyHitStreak is one hit away
+// from the enemy's own requiredHitStreak firing their faction's special automatically (see
+// action.post.js's own enemyHitStreak bookkeeping and enemyRequiredHitStreak's schema comment),
+// telegraphing it a round ahead rather than it just happening. Only meaningful when this enemy
+// actually HAS a special assigned at all — see enemyHasSpecialAttack's own comment server-side
+// for why that's a bare boolean, nothing more. ──
 const enemySpecialWarning = computed(() => {
-  return !!battle.value?.enemyHasSpecialAttack && (battle.value?.enemyHitStreak || 0) >= HIT_STREAK_THRESHOLD - 1
+  const threshold = battle.value?.enemyRequiredHitStreak || 3
+  // threshold can be as low as 1 (SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MIN) now that it's per-attack
+  // admin-configurable rather than always 3 — `threshold - 1` would then be 0, and
+  // enemyHitStreak >= 0 is true from the very first round, making this "warning" permanently on
+  // for the whole fight instead of telegraphing one hit ahead. A threshold of 1 fires on the
+  // first hit with nothing to telegraph in advance, so there's no "about to fire" state to show.
+  return !!battle.value?.enemyHasSpecialAttack && threshold > 1 && (battle.value?.enemyHitStreak || 0) >= threshold - 1
 })
 
 // ── FINAL_BOSS entrance punch — a one-shot full-bleed flash + a bigger modal "pop" exactly when a
@@ -490,31 +517,15 @@ watch(phase, (p) => {
 
 // ── Battle music: one faction-wide looping track, playing for as long as the FIGHT phase is
 // showing (never during OFFER/RESULT) — see CMoonEnemyFaction.battleMusicPath's own schema
-// comment. A plain HTMLAudioElement rather than the Web Audio API buffers useClickSoundEffects.js
-// uses: this is one long-running loop, not many short overlapping one-shots, so there's nothing
-// to gain from pre-decoding into a reusable AudioBuffer.
-let battleMusicEl = null
-function stopBattleMusic() {
-  if (!battleMusicEl) return
-  try { battleMusicEl.pause() } catch {}
-  battleMusicEl = null
-}
-function startBattleMusic(path) {
-  stopBattleMusic()
-  if (!path || typeof window === 'undefined') return
-  try {
-    battleMusicEl = new Audio(path)
-    battleMusicEl.loop = true
-    battleMusicEl.volume = 0.5
-    battleMusicEl.play().catch(() => {})
-  } catch {}
-}
+// comment, and useBattleMusic's own header comment for why the start/stop/autoplay-retry logic
+// lives in a shared composable rather than duplicated here and on the raid page.
+const battleMusic = useBattleMusic()
 watch(phase, (p) => {
-  if (p === 'FIGHT') { startBattleMusic(battle.value?.enemy?.faction?.battleMusicPath); overkillAmount.value = 0 }
-  else { stopBattleMusic(); showSpecialInfo.value = false }
+  if (p === 'FIGHT') { battleMusic.start(battle.value?.enemy?.faction?.battleMusicPath); overkillAmount.value = 0 }
+  else { battleMusic.stop(); showSpecialInfo.value = false }
 })
 onBeforeUnmount(() => {
-  stopBattleMusic()
+  battleMusic.stop()
   if (shakeTimer) clearTimeout(shakeTimer)
   if (comboTimer) clearTimeout(comboTimer)
   if (resultFlashTimer) clearTimeout(resultFlashTimer)
@@ -1034,6 +1045,19 @@ watch(() => route.path, maybeCheck)
 }
 @media (prefers-reduced-motion: reduce) {
   .cbp-special-flash { animation: none; }
+}
+/* Same badge-pop treatment as the crit badge (CMoonBattleCard.vue's own .cbc-crit-badge) — see
+   that component's .cbc-miss-badge for the matching enemy-attack-miss styling this mirrors. */
+.cbp-miss-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: #38bdf8;
+  color: #082f49;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
 }
 
 .cbp-first-win {

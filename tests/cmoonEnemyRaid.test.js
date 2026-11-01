@@ -1,9 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  resolveRaidRound, checkRaidBossAvailability,
+  resolveRaidRound, checkRaidBossAvailability, nextRaidBossSlotAt,
   JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_PARTY_SIZE,
-  CAPTAIN_BOOST_HIT_STREAK_THRESHOLD, effectiveHitStreakThreshold,
+  effectiveHitStreakThreshold, applyRaidSpecialAttack,
 } from '../server/utils/cmoonEnemyRaid.js'
 import { SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE, HEAL_ON_SUCCESSFUL_BLOCK } from '../server/utils/cmoonEnemyBattle.js'
 
@@ -72,6 +72,26 @@ test('resolveRaidRound: a 100% crit-from enemy deals CRITICAL_HIT_DAMAGE to ever
     assert.equal(p.playerHit, true)
     assert.equal(PLAYER_MAX_HP - p.hpRemaining, CRITICAL_HIT_DAMAGE)
   }
+})
+
+test('resolveRaidRound: a custom enemyMember.baseDamage sets the enemy\'s landed-hit damage against every participant (crit deals double it), never affecting a participant\'s own damage against the enemy', () => {
+  const heavyEnemy = { ...baseEnemyMember, baseDamage: 40, critChanceFromPercent: 100 }
+  const bigHp = 1000
+  const participants = [
+    { userId: 'a', action: 'BLOCK_HIGH', hpRemaining: bigHp, maxHp: bigHp },
+    { userId: 'b', action: 'ATTACK_HIGH', hpRemaining: bigHp, maxHp: bigHp },
+  ]
+  // The enemy attacks LOW, so BLOCK_HIGH does not cancel it — both participants take the hit.
+  const result = resolveRaidRound({ enemyAction: 'ATTACK_LOW', enemyMember: heavyEnemy, participants })
+  for (const p of result.perParticipant) {
+    assert.equal(p.playerHit, true)
+    assert.equal(bigHp - p.hpRemaining, 80) // crit: 40 * 2
+  }
+  // Participant 'b' attacked HIGH against an enemy attacking LOW — their own attack lands on the
+  // enemy, and that damage is unaffected by the enemy's own baseDamage.
+  const b = result.perParticipant.find(p => p.userId === 'b')
+  assert.equal(b.enemyHit, true)
+  assert.equal(b.enemyDamage, NORMAL_HIT_DAMAGE)
 })
 
 test('resolveRaidRound: a knocked-out participant this round is flagged and floored at 0 HP', () => {
@@ -186,6 +206,90 @@ test('checkRaidBossAvailability: a solved riddle gate falls through to the norma
   assert.match(result.message, /revived by an admin/i)
 })
 
+// ── nextRaidBossSlotAt (the /api/onboarding/events.get.js raid-boss countdown's own combining
+// logic — never calls checkRaidBossAvailability's real-time Date.now() default so every case here
+// is deterministic) ──────────────────────────────────────────────────────────────────────────
+test('nextRaidBossSlotAt: no raid bosses at all -> noneAvailable', () => {
+  const result = nextRaidBossSlotAt({ bosses: [], personalSoloWinCount: 0 }, Date.now())
+  assert.deepEqual(result, { noneAvailable: true, availableNow: false, nextAvailableAt: null })
+})
+
+test('nextRaidBossSlotAt: a never-defeated boss and no popup cooldown -> available now', () => {
+  const bosses = [{ id: 'a', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 60, raidDefeatedAt: null }]
+  const result = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0 }, Date.now())
+  assert.equal(result.availableNow, true)
+  assert.equal(result.nextAvailableAt, null)
+})
+
+test('nextRaidBossSlotAt: boss off cooldown but the shared popup cooldown is still active -> waits on the popup cooldown', () => {
+  const bosses = [{ id: 'a', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 60, raidDefeatedAt: null }]
+  const popupNextAvailableAt = new Date('2026-01-01T02:00:00Z')
+  const result = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0, popupNextAvailableAt }, new Date('2026-01-01T00:00:00Z').getTime())
+  assert.equal(result.availableNow, false)
+  assert.equal(result.nextAvailableAt.getTime(), popupNextAvailableAt.getTime())
+})
+
+test('nextRaidBossSlotAt: boss still on its own cooldown with no popup cooldown -> waits on the boss', () => {
+  const defeatedAt = new Date('2026-01-01T00:00:00Z')
+  const bosses = [{ id: 'a', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 60, raidDefeatedAt: defeatedAt }]
+  const result = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0 }, new Date('2026-01-01T00:30:00Z').getTime())
+  assert.equal(result.availableNow, false)
+  assert.equal(result.nextAvailableAt.getTime(), new Date('2026-01-01T01:00:00Z').getTime())
+})
+
+test('nextRaidBossSlotAt: both gates active -> the LATER of the two wins, whichever that is', () => {
+  const defeatedAt = new Date('2026-01-01T00:00:00Z')
+  const bosses = [{ id: 'a', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 60, raidDefeatedAt: defeatedAt }]
+  const now = new Date('2026-01-01T00:30:00Z').getTime()
+  // Boss clears at 01:00; popup clears at 00:45 — boss is later, so boss wins.
+  const bossLater = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0, popupNextAvailableAt: new Date('2026-01-01T00:45:00Z') }, now)
+  assert.equal(bossLater.nextAvailableAt.getTime(), new Date('2026-01-01T01:00:00Z').getTime())
+  // Boss clears at 01:00; popup clears at 02:00 — popup is later, so popup wins.
+  const popupLater = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0, popupNextAvailableAt: new Date('2026-01-01T02:00:00Z') }, now)
+  assert.equal(popupLater.nextAvailableAt.getTime(), new Date('2026-01-01T02:00:00Z').getTime())
+})
+
+test('nextRaidBossSlotAt: a candidate whose minPriorDefeats this player has not met is never counted', () => {
+  const bosses = [{ id: 'a', minPriorDefeats: 10, raidOneTime: false, raidCooldownMinutes: 0, raidDefeatedAt: null }]
+  const result = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0 }, Date.now())
+  assert.deepEqual(result, { noneAvailable: true, availableNow: false, nextAvailableAt: null })
+})
+
+test('nextRaidBossSlotAt: a one-time boss already defeated contributes nothing (permanently locked, not a future slot)', () => {
+  const bosses = [{ id: 'a', minPriorDefeats: 0, raidOneTime: true, raidCooldownMinutes: 0, raidDefeatedAt: new Date() }]
+  const result = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0 }, Date.now())
+  assert.deepEqual(result, { noneAvailable: true, availableNow: false, nextAvailableAt: null })
+})
+
+test('nextRaidBossSlotAt: a riddle-locked boss contributes nothing until solved', () => {
+  const bosses = [{ id: 'a', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 0, raidDefeatedAt: null }]
+  const locked = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0, riddleSolvedByEnemyId: new Map([['a', false]]) }, Date.now())
+  assert.deepEqual(locked, { noneAvailable: true, availableNow: false, nextAvailableAt: null })
+  // A boss missing from the map defaults to solved/unlocked, same as consider.post.js's `?? true`.
+  const unmapped = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0, riddleSolvedByEnemyId: new Map() }, Date.now())
+  assert.equal(unmapped.availableNow, true)
+})
+
+test('nextRaidBossSlotAt: one permanently-locked boss plus one still-cooling-down boss -> the cooling-down one is the real answer, not noneAvailable', () => {
+  const bosses = [
+    { id: 'locked', minPriorDefeats: 0, raidOneTime: true, raidCooldownMinutes: 0, raidDefeatedAt: new Date('2020-01-01T00:00:00Z') },
+    { id: 'cooling', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 60, raidDefeatedAt: new Date('2026-01-01T00:00:00Z') },
+  ]
+  const result = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0 }, new Date('2026-01-01T00:30:00Z').getTime())
+  assert.equal(result.noneAvailable, false)
+  assert.equal(result.nextAvailableAt.getTime(), new Date('2026-01-01T01:00:00Z').getTime())
+})
+
+test('nextRaidBossSlotAt: any eligible candidate already available short-circuits the earliest-cooldown search', () => {
+  const bosses = [
+    { id: 'cooling', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 60, raidDefeatedAt: new Date() },
+    { id: 'free', minPriorDefeats: 0, raidOneTime: false, raidCooldownMinutes: 0, raidDefeatedAt: null },
+  ]
+  const result = nextRaidBossSlotAt({ bosses, personalSoloWinCount: 0 }, Date.now())
+  assert.equal(result.availableNow, true)
+  assert.equal(result.nextAvailableAt, null)
+})
+
 // ── Special attacks in a raid (see cmoonEnemyRaid.js's own header comment) ─────────────────────
 test('re-exports the solo battle\'s special-attack constants unchanged', () => {
   assert.equal(SPECIAL_ACTION, 'SPECIAL_ATTACK')
@@ -194,12 +298,22 @@ test('re-exports the solo battle\'s special-attack constants unchanged', () => {
 })
 
 // ── Captain boost effect (GlobalGameConfig.cMoonCaptainBoostEnabled) ────────────────────────────
+// Signature is now (baseThreshold, captainBoostEnabled, anyCaptainPresent) — baseThreshold is each
+// attack's own requiredHitStreak (1-10, default 3) rather than a single hardcoded constant, so a
+// captain's presence lowers WHATEVER threshold was passed in by 1 (floored at 1), not to a fixed 2.
 test('effectiveHitStreakThreshold: only lowers the threshold when BOTH the toggle is on AND a captain is present', () => {
-  assert.equal(CAPTAIN_BOOST_HIT_STREAK_THRESHOLD, 2)
-  assert.equal(effectiveHitStreakThreshold(false, false), HIT_STREAK_THRESHOLD)
-  assert.equal(effectiveHitStreakThreshold(false, true), HIT_STREAK_THRESHOLD)
-  assert.equal(effectiveHitStreakThreshold(true, false), HIT_STREAK_THRESHOLD)
-  assert.equal(effectiveHitStreakThreshold(true, true), CAPTAIN_BOOST_HIT_STREAK_THRESHOLD)
+  assert.equal(effectiveHitStreakThreshold(HIT_STREAK_THRESHOLD, false, false), HIT_STREAK_THRESHOLD)
+  assert.equal(effectiveHitStreakThreshold(HIT_STREAK_THRESHOLD, false, true), HIT_STREAK_THRESHOLD)
+  assert.equal(effectiveHitStreakThreshold(HIT_STREAK_THRESHOLD, true, false), HIT_STREAK_THRESHOLD)
+  assert.equal(effectiveHitStreakThreshold(HIT_STREAK_THRESHOLD, true, true), HIT_STREAK_THRESHOLD - 1)
+})
+
+test('effectiveHitStreakThreshold: applies to any attack-specific base, floored at 1', () => {
+  assert.equal(effectiveHitStreakThreshold(4, true, true), 3)
+  assert.equal(effectiveHitStreakThreshold(1, true, true), 1) // floored, never 0
+  assert.equal(effectiveHitStreakThreshold(1, false, false), 1)
+  // Missing/invalid base falls back to the plain HIT_STREAK_THRESHOLD constant.
+  assert.equal(effectiveHitStreakThreshold(undefined, false, false), HIT_STREAK_THRESHOLD)
 })
 
 // ── Raid special-attack charge banking (closeRound in cmoonRaidSocket.js) ──────────────────────
@@ -323,4 +437,171 @@ test('resolveRaidRound: rejects an invalid participant action even with the new 
     enemyAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember,
     participants: [{ userId: 'a', action: 'NOT_REAL', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP }],
   }))
+})
+
+// ── SHIELD_PARTY (resolveRaidRound's own partyShielded param) ──────────────────────────────────
+test('resolveRaidRound: partyShielded negates incoming HP loss even when the boss lands a hit', () => {
+  const participants = [{ userId: 'a', action: 'BLOCK_LOW', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP }]
+  let sawAHit = false
+  for (let i = 0; i < 50; i++) {
+    const result = resolveRaidRound({ enemyAction: 'ATTACK_HIGH', enemyMember: baseEnemyMember, participants, partyShielded: true })
+    const [p] = result.perParticipant
+    if (p.playerHit) { sawAHit = true; assert.equal(p.hpRemaining, PLAYER_MAX_HP) }
+  }
+  assert.equal(sawAHit, true)
+})
+
+// ── enemyMember.attackAccuracyPercent (see that column's own schema comment) ───────────────────
+test('resolveRaidRound: attackAccuracyPercent 0 means the boss\'s attack always misses a participant it would otherwise hit', () => {
+  const participants = [{ userId: 'a', action: 'BLOCK_LOW', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP }] // wrong lane -- would land
+  for (let i = 0; i < 20; i++) {
+    const result = resolveRaidRound({
+      enemyAction: 'ATTACK_HIGH', enemyMember: { ...baseEnemyMember, attackAccuracyPercent: 0 }, participants,
+    })
+    const [p] = result.perParticipant
+    assert.equal(p.playerHit, false)
+    assert.equal(p.enemyMissed, true)
+    assert.equal(p.hpRemaining, PLAYER_MAX_HP)
+  }
+})
+
+test('resolveRaidRound: attackAccuracyPercent is rolled INDEPENDENTLY per participant (not one shared outcome for the round)', () => {
+  const participants = [
+    { userId: 'a', action: 'BLOCK_LOW', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
+    { userId: 'b', action: 'BLOCK_LOW', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
+    { userId: 'c', action: 'BLOCK_LOW', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP },
+  ]
+  let sawMixedOutcomeInOneRound = false
+  for (let i = 0; i < 200 && !sawMixedOutcomeInOneRound; i++) {
+    const result = resolveRaidRound({
+      enemyAction: 'ATTACK_HIGH', enemyMember: { ...baseEnemyMember, attackAccuracyPercent: 50 }, participants,
+    })
+    const missedCount = result.perParticipant.filter(p => p.enemyMissed).length
+    if (missedCount > 0 && missedCount < result.perParticipant.length) sawMixedOutcomeInOneRound = true
+  }
+  assert.equal(sawMixedOutcomeInOneRound, true)
+})
+
+test('resolveRaidRound: a participant\'s own correct block still stops the attack regardless of accuracy', () => {
+  const participants = [{ userId: 'a', action: 'BLOCK_HIGH', hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP }]
+  for (let i = 0; i < 20; i++) {
+    const result = resolveRaidRound({
+      enemyAction: 'ATTACK_HIGH', enemyMember: { ...baseEnemyMember, attackAccuracyPercent: 0 }, participants,
+    })
+    const [p] = result.perParticipant
+    assert.equal(p.playerBlocked, true)
+    assert.equal(p.enemyMissed, false)
+  }
+})
+
+// ── New raid-only tactical effects (applyRaidSpecialAttack in cmoonEnemyRaid.js) ────────────────
+// Minimal raid/alive fixtures — only the fields each effect branch actually touches.
+function makeRaid(overrides = {}) {
+  return {
+    enemyHpRemaining: 50, enemyStats: { maxHp: 50 },
+    enemyParalyzedTurns: 0, partyParalyzedTurns: 0,
+    enemyPoisonAmount: 0, enemyPoisonTurnsRemaining: 0,
+    participants: new Map(),
+    ...overrides,
+  }
+}
+function makeParticipant(userId, overrides = {}) {
+  return { userId, hpRemaining: PLAYER_MAX_HP, maxHp: PLAYER_MAX_HP, knockedOutAt: null, poisonAmount: 0, poisonTurnsRemaining: 0, ...overrides }
+}
+const baseAttack = { name: 'Test Attack', amount: 10, accuracyPercent: 100, soundPath: null }
+
+test('applyRaidSpecialAttack: accuracyPercent 0 always misses and changes no state', () => {
+  const raid = makeRaid()
+  const events = []
+  applyRaidSpecialAttack(raid, [], { ...baseAttack, effectType: 'DAMAGE_OPPONENT', accuracyPercent: 0 }, { side: 'PLAYER', userId: 'a' }, events, {})
+  assert.equal(events.length, 1)
+  assert.equal(events[0].missed, true)
+  assert.equal(raid.enemyHpRemaining, 50) // untouched
+})
+
+test('applyRaidSpecialAttack: accuracyPercent 100 always lands', () => {
+  for (let i = 0; i < 20; i++) {
+    const raid = makeRaid()
+    const events = []
+    applyRaidSpecialAttack(raid, [], { ...baseAttack, effectType: 'DAMAGE_OPPONENT' }, { side: 'PLAYER', userId: 'a' }, events, {})
+    assert.equal(events[0].missed, undefined)
+    assert.equal(raid.enemyHpRemaining, 40)
+  }
+})
+
+test('applyRaidSpecialAttack: POISON_OPPONENT player-cast sets the boss\'s shared poison state, refreshing (not stacking) on re-cast', () => {
+  const raid = makeRaid()
+  const attack = { ...baseAttack, effectType: 'POISON_OPPONENT', amount: 7, poisonDurationRounds: 3 }
+  applyRaidSpecialAttack(raid, [], attack, { side: 'PLAYER', userId: 'a' }, [], {})
+  assert.deepEqual([raid.enemyPoisonAmount, raid.enemyPoisonTurnsRemaining], [7, 3])
+  // Re-cast with different numbers replaces, never adds.
+  applyRaidSpecialAttack(raid, [], { ...attack, amount: 2, poisonDurationRounds: 1 }, { side: 'PLAYER', userId: 'a' }, [], {})
+  assert.deepEqual([raid.enemyPoisonAmount, raid.enemyPoisonTurnsRemaining], [2, 1])
+})
+
+test('applyRaidSpecialAttack: POISON_OPPONENT boss-cast afflicts every alive participant individually', () => {
+  const raid = makeRaid()
+  const a = makeParticipant('a'); const b = makeParticipant('b')
+  raid.participants.set('a', a); raid.participants.set('b', b)
+  const attack = { ...baseAttack, effectType: 'POISON_OPPONENT', amount: 5, poisonDurationRounds: 4 }
+  applyRaidSpecialAttack(raid, [a, b], attack, { side: 'ENEMY' }, [], {})
+  assert.deepEqual([a.poisonAmount, a.poisonTurnsRemaining], [5, 4])
+  assert.deepEqual([b.poisonAmount, b.poisonTurnsRemaining], [5, 4])
+})
+
+test('applyRaidSpecialAttack: POISON_OPPONENT boss-cast is fully negated (never applied) by partyShielded', () => {
+  const raid = makeRaid()
+  const a = makeParticipant('a')
+  raid.participants.set('a', a)
+  const attack = { ...baseAttack, effectType: 'POISON_OPPONENT', amount: 5, poisonDurationRounds: 4 }
+  const events = []
+  applyRaidSpecialAttack(raid, [a], attack, { side: 'ENEMY' }, events, { partyShielded: true })
+  assert.deepEqual([a.poisonAmount, a.poisonTurnsRemaining], [0, 0])
+  assert.equal(events[0].fizzled, true)
+})
+
+test('applyRaidSpecialAttack: SHIELD_PARTY player-cast only announces — no raid/participant state change', () => {
+  const raid = makeRaid()
+  const before = JSON.stringify(raid, (k, v) => (v instanceof Map ? Array.from(v.entries()) : v))
+  const events = []
+  applyRaidSpecialAttack(raid, [], { ...baseAttack, effectType: 'SHIELD_PARTY' }, { side: 'PLAYER', userId: 'a' }, events, {})
+  const after = JSON.stringify(raid, (k, v) => (v instanceof Map ? Array.from(v.entries()) : v))
+  assert.equal(events.length, 1)
+  assert.equal(events[0].missed, undefined)
+  assert.equal(before, after) // the real effect is read back out of specialEvents by closeRound, not applied here
+})
+
+test('applyRaidSpecialAttack: CLEANSE_SELF player-cast clears party paralysis (always) and the caster\'s own poison (self-only, healsAllies false)', () => {
+  const raid = makeRaid({ partyParalyzedTurns: 3 })
+  const caster = makeParticipant('a', { poisonAmount: 9, poisonTurnsRemaining: 2 })
+  const ally = makeParticipant('b', { poisonAmount: 9, poisonTurnsRemaining: 2 })
+  raid.participants.set('a', caster); raid.participants.set('b', ally)
+  const attack = { ...baseAttack, effectType: 'CLEANSE_SELF', healsAllies: false, cleanseAlsoHeals: false }
+  applyRaidSpecialAttack(raid, [caster, ally], attack, { side: 'PLAYER', userId: 'a' }, [], {})
+  assert.equal(raid.partyParalyzedTurns, 0) // whole party, unconditional
+  assert.deepEqual([caster.poisonAmount, caster.poisonTurnsRemaining], [0, 0]) // self cured
+  assert.deepEqual([ally.poisonAmount, ally.poisonTurnsRemaining], [9, 2]) // ally untouched -- healsAllies off
+})
+
+test('applyRaidSpecialAttack: CLEANSE_SELF player-cast with healsAllies cures poison party-wide and applies cleanseAlsoHeals', () => {
+  const raid = makeRaid({ partyParalyzedTurns: 1 })
+  const caster = makeParticipant('a', { hpRemaining: 50, maxHp: 100, poisonAmount: 9, poisonTurnsRemaining: 2 })
+  const ally = makeParticipant('b', { hpRemaining: 50, maxHp: 100, poisonAmount: 9, poisonTurnsRemaining: 2 })
+  raid.participants.set('a', caster); raid.participants.set('b', ally)
+  const attack = { ...baseAttack, effectType: 'CLEANSE_SELF', amount: 15, healsAllies: true, cleanseAlsoHeals: true }
+  applyRaidSpecialAttack(raid, [caster, ally], attack, { side: 'PLAYER', userId: 'a' }, [], {})
+  assert.deepEqual([caster.poisonAmount, caster.poisonTurnsRemaining], [0, 0])
+  assert.deepEqual([ally.poisonAmount, ally.poisonTurnsRemaining], [0, 0])
+  assert.equal(caster.hpRemaining, 65)
+  assert.equal(ally.hpRemaining, 65)
+})
+
+test('applyRaidSpecialAttack: CLEANSE_SELF boss-cast cures the boss\'s own paralyze and shared poison', () => {
+  const raid = makeRaid({ enemyParalyzedTurns: 2, enemyPoisonAmount: 8, enemyPoisonTurnsRemaining: 3, enemyHpRemaining: 20 })
+  const attack = { ...baseAttack, effectType: 'CLEANSE_SELF', amount: 5, cleanseAlsoHeals: true }
+  applyRaidSpecialAttack(raid, [], attack, { side: 'ENEMY' }, [], {})
+  assert.equal(raid.enemyParalyzedTurns, 0)
+  assert.equal(raid.enemyPoisonAmount, 0)
+  assert.equal(raid.enemyPoisonTurnsRemaining, 0)
+  assert.equal(raid.enemyHpRemaining, 25)
 })

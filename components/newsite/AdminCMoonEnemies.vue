@@ -91,7 +91,11 @@
                 {{ SPECIAL_ATTACK_EFFECT_LABELS[a.effectType] }} ({{ a.amount }})
                 <span v-if="a.effectType === 'REFLECT_DAMAGE'"> · {{ a.reflectPercent }}% reflected</span>
                 <span v-if="a.effectType === 'SIPHON_HEALTH'"> · heals caster {{ a.siphonPercent }}% of damage dealt</span>
-                <span v-if="(a.effectType === 'HEAL_SELF' || a.effectType === 'SIPHON_HEALTH') && a.healsAllies"> · heals the whole party in raids</span>
+                <span v-if="a.effectType === 'POISON_OPPONENT'"> · {{ a.poisonDurationRounds }} round(s)</span>
+                <span v-if="a.effectType === 'CLEANSE_SELF' && a.cleanseAlsoHeals"> · also heals {{ a.amount }} HP</span>
+                <span v-if="(a.effectType === 'HEAL_SELF' || a.effectType === 'SIPHON_HEALTH' || a.effectType === 'CLEANSE_SELF') && a.healsAllies"> · heals the whole party in raids</span>
+                <span> · needs {{ a.requiredHitStreak }} hit streak</span>
+                <span v-if="a.accuracyPercent < 100"> · {{ a.accuracyPercent }}% accuracy</span>
                 <span v-if="a.playerChoice"> · player choice</span>
                 <span v-if="a.cmoonUsageCount || a.enemyFactionUsageCount">
                   · used by {{ a.cmoonUsageCount }} cMoon(s), {{ a.enemyFactionUsageCount }} faction(s)
@@ -166,13 +170,35 @@
             </p>
           </div>
 
-          <label v-if="specialAttackForm.effectType === 'HEAL_SELF' || specialAttackForm.effectType === 'SIPHON_HEALTH'" class="flex items-start gap-2">
+          <div v-if="specialAttackForm.effectType === 'POISON_OPPONENT'" class="w-40">
+            <label class="block text-xs font-medium mb-1">Poison duration, rounds (1-20)</label>
+            <input v-model.number="specialAttackForm.poisonDurationRounds" type="number" min="1" max="20" class="w-full border rounded px-2 py-1" />
+            <p class="text-[10px] text-gray-500 mt-1">
+              The target takes Amount damage at the end of each round for this many rounds. Re-casting on an
+              already-poisoned target refreshes it to this amount/duration rather than stacking a second tick.
+            </p>
+          </div>
+
+          <label v-if="specialAttackForm.effectType === 'HEAL_SELF' || specialAttackForm.effectType === 'SIPHON_HEALTH' || specialAttackForm.effectType === 'CLEANSE_SELF'" class="flex items-start gap-2">
             <input type="checkbox" v-model="specialAttackForm.healsAllies" class="mt-0.5" />
             <span>
               <span class="text-xs font-medium">Also heals allies in co-op raids</span>
               <p class="text-[10px] text-gray-500 mt-0.5">
-                In a solo fight this changes nothing — the caster is always the only one healed either way. In a raid,
-                off means only the caster is healed; on extends the same amount to every other alive party member too.
+                In a solo fight this changes nothing — the caster is always the only one healed/cleansed either way.
+                In a raid, off means only the caster is affected; on extends the same to every other alive party
+                member too. For Cleanse Self, this only governs the Poison side of the cure — the Paralyze side
+                always cures the whole party regardless of this toggle.
+              </p>
+            </span>
+          </label>
+
+          <label v-if="specialAttackForm.effectType === 'CLEANSE_SELF'" class="flex items-start gap-2">
+            <input type="checkbox" v-model="specialAttackForm.cleanseAlsoHeals" class="mt-0.5" />
+            <span>
+              <span class="text-xs font-medium">Also heals for Amount HP</span>
+              <p class="text-[10px] text-gray-500 mt-0.5">
+                Off (default) makes this a pure status cure with no HP change. On also heals whoever's poison just
+                got cleared (self, or the whole party if "Also heals allies" above is on) by Amount HP.
               </p>
             </span>
           </label>
@@ -188,6 +214,25 @@
               </p>
             </span>
           </label>
+
+          <div class="flex gap-2">
+            <div class="w-44 flex-shrink-0">
+              <label class="block text-xs font-medium mb-1">Required hit streak (1-10)</label>
+              <input v-model.number="specialAttackForm.requiredHitStreak" type="number" min="1" max="10" class="w-full border rounded px-2 py-1" />
+              <p class="text-[10px] text-gray-500 mt-1">
+                Consecutive landed hits needed to charge this attack (replaces the old fixed "3 hits"). A captain's
+                presence in a raid still lowers this by 1 on top, same as before.
+              </p>
+            </div>
+            <div class="w-40 flex-shrink-0">
+              <label class="block text-xs font-medium mb-1">Accuracy percent (0-100)</label>
+              <input v-model.number="specialAttackForm.accuracyPercent" type="number" min="0" max="100" class="w-full border rounded px-2 py-1" />
+              <p class="text-[10px] text-gray-500 mt-1">
+                Chance this attack actually lands once fired. 100 (default) always lands, same as every attack
+                before this existed.
+              </p>
+            </div>
+          </div>
 
           <div>
             <label class="block text-xs font-medium mb-1">Sound (optional, MP3/OGG/WAV, max 3MB)</label>
@@ -581,8 +626,8 @@
               <p class="text-[10px] text-gray-500 mt-1">How many players this raid's party can hold. Changing this only affects raids started after you save.</p>
             </div>
             <div v-if="memberForm.isRaidBoss">
-              <label class="block text-[11px] font-medium mb-1">Round limit (50-400)</label>
-              <input v-model.number="memberForm.raidRoundLimit" type="number" min="50" max="400" class="w-full border rounded px-2 py-1 text-xs" />
+              <label class="block text-[11px] font-medium mb-1">Round limit (50-500)</label>
+              <input v-model.number="memberForm.raidRoundLimit" type="number" min="50" max="500" class="w-full border rounded px-2 py-1 text-xs" />
               <p class="text-[10px] text-gray-500 mt-1">
                 If the raid reaches this many rounds with neither side defeated, it ends with no clear winner.
                 Changing this only affects raids started after you save.
@@ -620,8 +665,8 @@
 
           <div class="flex gap-2">
             <div class="flex-1 min-w-0">
-              <label class="block text-xs font-medium mb-1">Max HP (1-500)</label>
-              <input v-model.number="memberForm.maxHp" type="number" min="1" max="500" class="w-full border rounded px-2 py-1" />
+              <label class="block text-xs font-medium mb-1">Max HP (1-10000)</label>
+              <input v-model.number="memberForm.maxHp" type="number" min="1" max="10000" class="w-full border rounded px-2 py-1" />
             </div>
             <div class="flex-1 min-w-0">
               <label class="block text-xs font-medium mb-1">cMoon points on win (0-5000)</label>
@@ -639,6 +684,29 @@
               <label class="block text-xs font-medium mb-1">Crit chance from (0-100%)</label>
               <input v-model.number="memberForm.critChanceFromPercent" type="number" min="0" max="100" class="w-full border rounded px-2 py-1" />
               <p class="text-[10px] text-gray-500 mt-1">Chance this enemy's attack lands as a critical (2x damage) against the player.</p>
+            </div>
+          </div>
+
+          <div class="flex gap-2">
+            <div class="flex-1 min-w-0">
+              <label class="block text-xs font-medium mb-1">Attack accuracy (0-100%)</label>
+              <input v-model.number="memberForm.attackAccuracyPercent" type="number" min="0" max="100" class="w-full border rounded px-2 py-1" />
+              <p class="text-[10px] text-gray-500 mt-1">
+                Chance this enemy's own NORMAL attack actually connects once it would otherwise land (the
+                player chose the wrong lane) — a correct block always stops it regardless. 100 (default)
+                always lands, same as before this existed. Shown to players as a "MISS!" the same way a
+                critical hit gets its own badge. Doesn't affect a special attack's own accuracy, set
+                separately on that attack.
+              </p>
+            </div>
+            <div class="flex-1 min-w-0">
+              <label class="block text-xs font-medium mb-1">Base damage (1-100)</label>
+              <input v-model.number="memberForm.baseDamage" type="number" min="1" max="100" class="w-full border rounded px-2 py-1" />
+              <p class="text-[10px] text-gray-500 mt-1">
+                Flat damage this enemy's own landed normal attack deals to the player — a critical hit always
+                deals exactly double this. 1 (default) matches every enemy's damage before this existed. Never
+                affects the player's own damage against this enemy, which stays fixed.
+              </p>
             </div>
           </div>
 
@@ -979,7 +1047,7 @@ const loadError = ref('')
 // since that file is server-only, same as RANKS/RANK_LABELS below.
 const SPECIAL_ATTACK_EFFECT_TYPES = [
   'DAMAGE_OPPONENT', 'HEAL_SELF', 'PARALYZE_OPPONENT', 'LOWER_OPPONENT_ATTACK', 'RAISE_ALLY_ATTACK',
-  'REFLECT_DAMAGE', 'SIPHON_HEALTH',
+  'REFLECT_DAMAGE', 'SIPHON_HEALTH', 'POISON_OPPONENT', 'CLEANSE_SELF', 'SHIELD_PARTY',
 ]
 const SPECIAL_ATTACK_EFFECT_LABELS = {
   DAMAGE_OPPONENT: 'Damage opponent',
@@ -989,6 +1057,9 @@ const SPECIAL_ATTACK_EFFECT_LABELS = {
   RAISE_ALLY_ATTACK: 'Raise own attack',
   REFLECT_DAMAGE: 'Reflect damage',
   SIPHON_HEALTH: 'Siphon health',
+  POISON_OPPONENT: 'Poison opponent (raids only)',
+  CLEANSE_SELF: 'Cleanse self/allies (raids only)',
+  SHIELD_PARTY: 'Shield party (raids only)',
 }
 const SPECIAL_ATTACK_EFFECT_HELP = {
   DAMAGE_OPPONENT: 'Deals Amount flat damage to the enemy, bypassing block entirely.',
@@ -998,6 +1069,9 @@ const SPECIAL_ATTACK_EFFECT_HELP = {
   RAISE_ALLY_ATTACK: "Increases the caster's own landed-hit damage by Amount for the rest of the fight.",
   REFLECT_DAMAGE: "Reflects a percent of whatever REAL damage the enemy deals to the caster's side this round back onto the enemy — if the enemy blocks instead of attacking, nothing reflects. Amount is unused for this effect.",
   SIPHON_HEALTH: 'Deals Amount flat damage to the enemy and heals the caster by a percent of it — UNLIKE every other effect above, this one fails outright (no damage, no heal) if the enemy blocks.',
+  POISON_OPPONENT: 'Deals Amount damage at the end of each round for a configurable number of rounds. Re-casting on an already-poisoned target refreshes it (replaces amount/duration) rather than stacking a second tick. Only has an effect in a RAID — a solo fight has no case for it, the attack just fires and announces.',
+  CLEANSE_SELF: "Cures the caster's own side of active Paralyze (always the whole side) and Poison (self only, unless \"Also heals allies\" below is on). The player/boss can be paralyzed or poisoned again right after — this is a one-time cure, not temporary immunity. Only has an effect in a RAID.",
+  SHIELD_PARTY: "Negates ALL damage the party would otherwise take this round — the normal attack exchange AND any boss special that would deal damage, cast by any party member. Only works when cast by a PLAYER in a RAID; assigning this to an enemy faction's own special just makes it fire and announce with no effect, since by the time the boss could cast it the round's damage already happened.",
 }
 
 const memberFactionFilter = ref('')
@@ -1129,7 +1203,12 @@ const specialAttackUploadingSound = ref(false)
 const specialAttackSoundError = ref('')
 const specialAttackSavedSoundPath = ref('')
 
-const emptySpecialAttackForm = () => ({ id: '', name: '', description: '', effectType: 'DAMAGE_OPPONENT', amount: 10, raiseDurationRounds: 300, reflectPercent: 100, siphonPercent: 50, healsAllies: false, playerChoice: false })
+const emptySpecialAttackForm = () => ({
+  id: '', name: '', description: '', effectType: 'DAMAGE_OPPONENT', amount: 10,
+  raiseDurationRounds: 300, reflectPercent: 100, siphonPercent: 50, poisonDurationRounds: 3,
+  healsAllies: false, cleanseAlsoHeals: false, playerChoice: false,
+  requiredHitStreak: 3, accuracyPercent: 100,
+})
 const specialAttackForm = reactive(emptySpecialAttackForm())
 
 function resetSpecialAttackForm() {
@@ -1151,8 +1230,12 @@ function startEditSpecialAttack(a) {
   specialAttackForm.raiseDurationRounds = a.raiseDurationRounds ?? 300
   specialAttackForm.reflectPercent = a.reflectPercent ?? 100
   specialAttackForm.siphonPercent = a.siphonPercent ?? 50
+  specialAttackForm.poisonDurationRounds = a.poisonDurationRounds ?? 3
   specialAttackForm.healsAllies = !!a.healsAllies
+  specialAttackForm.cleanseAlsoHeals = !!a.cleanseAlsoHeals
   specialAttackForm.playerChoice = !!a.playerChoice
+  specialAttackForm.requiredHitStreak = a.requiredHitStreak ?? 3
+  specialAttackForm.accuracyPercent = a.accuracyPercent ?? 100
   specialAttackSavedSoundPath.value = a.soundPath || ''
 }
 
@@ -1222,6 +1305,22 @@ async function saveSpecialAttack() {
     specialAttackFormError.value = 'Siphon percent must be between 1 and 100.'
     return
   }
+  const poisonDurationRounds = Math.trunc(Number(specialAttackForm.poisonDurationRounds))
+  if (specialAttackForm.effectType === 'POISON_OPPONENT' && (!Number.isInteger(poisonDurationRounds) || poisonDurationRounds < 1 || poisonDurationRounds > 20)) {
+    specialAttackFormError.value = 'Poison duration must be between 1 and 20 rounds.'
+    return
+  }
+  // Applies to EVERY effectType, unlike every field above — see this field's own schema comment.
+  const requiredHitStreak = Math.trunc(Number(specialAttackForm.requiredHitStreak))
+  if (!Number.isInteger(requiredHitStreak) || requiredHitStreak < 1 || requiredHitStreak > 10) {
+    specialAttackFormError.value = 'Required hit streak must be between 1 and 10.'
+    return
+  }
+  const accuracyPercent = Math.trunc(Number(specialAttackForm.accuracyPercent))
+  if (!Number.isInteger(accuracyPercent) || accuracyPercent < 0 || accuracyPercent > 100) {
+    specialAttackFormError.value = 'Accuracy percent must be between 0 and 100.'
+    return
+  }
 
   specialAttackSaving.value = true
   try {
@@ -1233,8 +1332,12 @@ async function saveSpecialAttack() {
       raiseDurationRounds,
       reflectPercent,
       siphonPercent,
-      healsAllies: (specialAttackForm.effectType === 'HEAL_SELF' || specialAttackForm.effectType === 'SIPHON_HEALTH') ? specialAttackForm.healsAllies : false,
+      poisonDurationRounds,
+      healsAllies: ['HEAL_SELF', 'SIPHON_HEALTH', 'CLEANSE_SELF'].includes(specialAttackForm.effectType) ? specialAttackForm.healsAllies : false,
+      cleanseAlsoHeals: specialAttackForm.effectType === 'CLEANSE_SELF' ? specialAttackForm.cleanseAlsoHeals : false,
       playerChoice: specialAttackForm.playerChoice,
+      requiredHitStreak,
+      accuracyPercent,
     }
     if (specialAttackForm.id) {
       await $fetch(`/api/admin/cmoon-special-attacks/${specialAttackForm.id}`, { method: 'PUT', body })
@@ -1743,6 +1846,7 @@ const emptyMemberForm = () => ({
   id: '', factionId: '', name: '', maxHp: 5, battleMode: 'PER_PLAYER', rank: 'GOON', minPriorDefeats: 0,
   occurrencePercent: 50,
   cMoonPointsReward: 10, critChanceAgainstPercent: 0, critChanceFromPercent: 0,
+  attackAccuracyPercent: 100, baseDamage: 1,
   attackChancePercent: 50, pityThreshold: 0, firstWinBonusPoints: 0,
   active: true, sortOrder: 0,
   isRaidBoss: false, raidAnnouncementText: '', raidOneTime: false, raidCooldownMinutes: 0,
@@ -1804,6 +1908,8 @@ function startEditMember(m) {
     minPriorDefeats: m.minPriorDefeats ?? 0, occurrencePercent: m.occurrencePercent ?? 50,
     cMoonPointsReward: m.cMoonPointsReward, critChanceAgainstPercent: m.critChanceAgainstPercent ?? 0,
     critChanceFromPercent: m.critChanceFromPercent ?? 0,
+    attackAccuracyPercent: m.attackAccuracyPercent ?? 100,
+    baseDamage: m.baseDamage ?? 1,
     attackChancePercent: m.attackChancePercent ?? 50, pityThreshold: m.pityThreshold ?? 0,
     firstWinBonusPoints: m.firstWinBonusPoints ?? 0,
     active: !!m.active, sortOrder: m.sortOrder,
@@ -1864,7 +1970,7 @@ async function saveMember() {
   if (!memberForm.factionId) { memberFormError.value = 'Pick a faction.'; return }
   if (!memberForm.name.trim()) { memberFormError.value = 'Name is required.'; return }
   const maxHp = Math.trunc(Number(memberForm.maxHp))
-  if (!Number.isInteger(maxHp) || maxHp < 1 || maxHp > 500) { memberFormError.value = 'Max HP must be between 1 and 500.'; return }
+  if (!Number.isInteger(maxHp) || maxHp < 1 || maxHp > 10000) { memberFormError.value = 'Max HP must be between 1 and 10000.'; return }
   const cMoonPointsReward = Math.trunc(Number(memberForm.cMoonPointsReward))
   if (!Number.isInteger(cMoonPointsReward) || cMoonPointsReward < 0 || cMoonPointsReward > 5000) {
     memberFormError.value = 'cMoon points reward must be between 0 and 5000.'
@@ -1878,6 +1984,16 @@ async function saveMember() {
   const critChanceFromPercent = Math.trunc(Number(memberForm.critChanceFromPercent))
   if (!Number.isInteger(critChanceFromPercent) || critChanceFromPercent < 0 || critChanceFromPercent > 100) {
     memberFormError.value = 'Crit chance from this enemy must be between 0 and 100.'
+    return
+  }
+  const attackAccuracyPercent = Math.trunc(Number(memberForm.attackAccuracyPercent))
+  if (!Number.isInteger(attackAccuracyPercent) || attackAccuracyPercent < 0 || attackAccuracyPercent > 100) {
+    memberFormError.value = 'Attack accuracy must be between 0 and 100.'
+    return
+  }
+  const baseDamage = Math.trunc(Number(memberForm.baseDamage))
+  if (!Number.isInteger(baseDamage) || baseDamage < 1 || baseDamage > 100) {
+    memberFormError.value = 'Base damage must be between 1 and 100.'
     return
   }
   const attackChancePercent = Math.trunc(Number(memberForm.attackChancePercent))
@@ -1924,8 +2040,8 @@ async function saveMember() {
     return
   }
   const raidRoundLimit = Math.trunc(Number(memberForm.raidRoundLimit)) || 300
-  if (!Number.isInteger(raidRoundLimit) || raidRoundLimit < 50 || raidRoundLimit > 400) {
-    memberFormError.value = 'Round limit must be between 50 and 400.'
+  if (!Number.isInteger(raidRoundLimit) || raidRoundLimit < 50 || raidRoundLimit > 500) {
+    memberFormError.value = 'Round limit must be between 50 and 500.'
     return
   }
 
@@ -1942,6 +2058,8 @@ async function saveMember() {
       cMoonPointsReward,
       critChanceAgainstPercent,
       critChanceFromPercent,
+      attackAccuracyPercent,
+      baseDamage,
       attackChancePercent,
       pityThreshold,
       firstWinBonusPoints,

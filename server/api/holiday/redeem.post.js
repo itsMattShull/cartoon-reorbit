@@ -96,6 +96,19 @@ export default defineEventHandler(async (event) => {
     // of re-validating and enqueueing a duplicate.
     let job = await holidayRedeemQueue.getJob(userCtoonId)
 
+    // A job that already finished in FAILURE (a mint error, a DB hiccup, anything) is a dead end
+    // if reused as-is: waitUntilFinished on an already-terminal job settles instantly from its OLD
+    // outcome (see BullMQ's own isFinished fast-path), so every retry against it would reject
+    // again forever with no way forward — this is believed to be the actual cause of some Holiday
+    // Items (e.g. Halloween boxes) that silently never finish opening for a player. Drop it and
+    // fall through to the same re-validate-and-reenqueue recovery path already taken below when no
+    // job exists at all — the worker resumes safely from whatever already completed (burnedAt set,
+    // a redemption already recorded) rather than redoing it, exactly like a stalled-job redelivery.
+    if (job && (await job.getState()) === 'failed') {
+      await job.remove().catch(() => {})
+      job = null
+    }
+
     if (!job) {
       const source = await prisma.userCtoon.findUnique({
         where: { id: userCtoonId },

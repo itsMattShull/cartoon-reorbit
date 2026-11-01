@@ -30,8 +30,8 @@
     <!-- ── Top bar ─────────────────────────────────────────── -->
     <div class="cz-topbar" ref="topbarEl">
       <div class="cz-topbar-left">
-        <OrangeButton v-if="isOwnZone" @click="toggleBuild" :disabled="buildLoading">
-          {{ cz.buildMode ? 'Exit Build' : buildLoading ? 'Loading…' : 'Build' }}
+        <OrangeButton v-if="isOwnZone" @click="toggleBuild">
+          {{ cz.buildMode ? 'Exit Build' : 'Build' }}
         </OrangeButton>
         <NuxtLink v-else-if="viewedUsername" :to="`/newsite/trade?username=${encodeURIComponent(viewedUsername)}`" style="text-decoration:none;display:contents;">
           <OrangeButton>Trade</OrangeButton>
@@ -1015,8 +1015,9 @@ function handleOptionsOutsideClick(e) {
   if (!e.target.closest('.cz-options')) optionsOpen.value = false
 }
 
-// True while build-mode data is loading (prevents double-click and shows spinner on button)
-const buildLoading = ref(false)
+// Bumped on every build-mode entry/exit so a slow collection fetch from a previous entry can't
+// overwrite (or clear the loading flag of) a newer one.
+let buildSession = 0
 
 // True while a zone is being fetched – drives skeleton placeholders in the topbar
 const zoneLoading = ref(false)
@@ -1749,10 +1750,12 @@ function goToMyCzone() {
 }
 
 async function toggleBuild() {
-  if (!isOwnZone.value || buildLoading.value) return
+  if (!isOwnZone.value) return
+  buildSession++
   if (cz.value.buildMode) {
     // Exit build mode: save first, then switch
     cz.value.buildMode = false
+    cz.value.loadingCollection = false
     if (typeof window !== 'undefined' && window.innerWidth <= 768) {
       mobileSidebarCollapsed.value = true
     }
@@ -1764,25 +1767,23 @@ async function toggleBuild() {
       cz.value.activeZone = cz.value.mainZoneIndex
     }
   } else {
-    // Enter build mode: always fetch fresh data first so the sidebar is never blank.
-    buildLoading.value = true
-    try {
-      const username = user.value?.username
-      if (username) {
-        await Promise.all([
-          $fetch(`/api/collection/${username}`)
-            .then(data => { cz.value.collection = Array.isArray(data) ? data : [] })
-            .catch(e => { console.error('MyCzone: failed to load collection', e); if (!Array.isArray(cz.value.collection)) cz.value.collection = [] }),
-          $fetch('/api/czone/backgrounds-available')
-            .then(data => { cz.value.backgrounds = Array.isArray(data) ? data : [] })
-            .catch(e => { console.error('MyCzone: failed to load backgrounds', e); if (!Array.isArray(cz.value.backgrounds)) cz.value.backgrounds = [] }),
-        ])
-      }
-    } finally {
-      buildLoading.value = false
-    }
+    // Enter build mode immediately and let the sidebar show skeleton tiles while the collection
+    // loads, rather than blocking the click on the (heavy) collection request. The collection is
+    // always re-fetched fresh, so a stale copy from a previous session is cleared first. Backgrounds
+    // are NOT fetched here — CzoneEdit loads them the first time the Background tab is opened.
+    const session = buildSession
+    const username = user.value?.username
+    cz.value.collection = []
+    cz.value.backgrounds = []
+    cz.value.loadingCollection = !!username
     cz.value.buildMode = true
     mobileSidebarCollapsed.value = false
+    if (username) {
+      $fetch(`/api/collection/${username}`)
+        .then(data => { if (session === buildSession) cz.value.collection = Array.isArray(data) ? data : [] })
+        .catch(e => { console.error('MyCzone: failed to load collection', e) })
+        .finally(() => { if (session === buildSession) cz.value.loadingCollection = false })
+    }
   }
 }
 
