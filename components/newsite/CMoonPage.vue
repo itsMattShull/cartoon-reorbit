@@ -13,6 +13,7 @@
     <div v-else-if="error" class="cmp-status cmp-status--error">{{ error }}</div>
     <template v-else-if="cmoon">
       <div class="cmp-masthead-wrap">
+        <span v-if="cmoon.isPrestigeCMoon" class="cmp-prestige-badge">✦ Prestige cMoon</span>
         <img
           v-if="cmoon.pageBannerImagePath"
           :src="cmoon.pageBannerImagePath"
@@ -874,6 +875,35 @@ onBeforeUnmount(() => {
 
 .cmp-masthead-wrap {
   width: 100%;
+  position: relative;
+}
+
+/* "This is a prestige destination" — purely informational, same holographic/prismatic treatment
+   as a prestiged PLAYER's own badge (see CMoonRaidFighter.vue's rf-prestige-badge), just applied
+   to the team instead of a member. Works over either masthead variant (banner image or plain
+   text banner) since it's positioned relative to the shared wrapper, not either child. */
+.cmp-prestige-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+  color: #fff;
+  background: linear-gradient(90deg, #ff5ec0, #ffd75e, #4fd6ff, #8a5cf6, #ff5ec0);
+  background-size: 300% 100%;
+  animation: cmp-prestige-shimmer 3s linear infinite;
+  box-shadow: 0 0 14px rgba(138, 92, 246, 0.6);
+}
+@keyframes cmp-prestige-shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cmp-prestige-badge { animation: none; }
 }
 
 /* aspect-ratio is bound per-cMoon inline (bannerStyle) to the upload's real stored dimensions

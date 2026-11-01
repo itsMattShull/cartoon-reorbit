@@ -300,6 +300,9 @@ export default defineEventHandler(async (event) => {
     lastActivity: user.lastActivity ?? null,
     cMoon: (cMoonEnabled && user.cMoon) || null,
     cMoonRankName: (cMoonEnabled && user.cMoon) ? displayRankName(user.currentCMoonRank?.name, isCaptain) : null,
+    // Permanent personal achievement, independent of cMoonEnabled/membership — same "survives
+    // leaving the cMoon that granted it" stance as the border/glow cosmetics below.
+    prestigeLevel: user.prestigeLevel || 0,
     // Independent of cMoonEnabled/membership above — an earned border/glow is a permanent
     // personal cosmetic, visible even if the member later leaves the cMoon that granted it.
     // Mutually exclusive at equip time, so at most one of these two is ever non-null.

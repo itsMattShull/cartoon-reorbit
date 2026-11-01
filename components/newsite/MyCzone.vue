@@ -174,6 +174,11 @@
               <div>
                 <span class="cz-owner-prefix">Owner</span> {{ viewedOwner.username }}
                 <span v-if="viewedOwner.cMoonRankName" ref="ownerCMoonRankEl" class="cz-owner-cmoon-rank"> · {{ viewedOwner.cMoonRankName }}</span>
+                <span
+                  v-if="viewedOwner.prestigeLevel > 0"
+                  class="cz-owner-prestige-badge"
+                  :title="`Prestige ${viewedOwner.prestigeLevel} — has ascended ${viewedOwner.prestigeLevel} time${viewedOwner.prestigeLevel === 1 ? '' : 's'}`"
+                >✦ Prestige {{ viewedOwner.prestigeLevel }}</span>
               </div>
               <div v-if="lastOnlineText || viewedOwner.cMoon" class="cz-owner-lastseen">
                 <span v-if="lastOnlineText">{{ lastOnlineText }}</span>
@@ -2501,6 +2506,32 @@ defineExpose({ save, clearZone })
   font-size: calc(0.6rem * v-bind(cMoonRankScale) * v-bind(ownerLabelScale));
   font-weight: 600;
   color: #ffd75e;
+}
+
+/* A permanent "has prestiged" badge — holographic/prismatic shimmer, same treatment as
+   CMoonRaidFighter.vue's rf-prestige-badge in the raid screen and CMoonPage.vue's team-level
+   cmp-prestige-badge, just applied to this player's own cZone header. Only tier 2 (ownerLabelScale)
+   applies here, same as cz-owner-prefix above — this isn't the rank-text element tier 1 targets. */
+.cz-owner-prestige-badge {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: calc(0.6rem * v-bind(ownerLabelScale));
+  font-weight: 800;
+  white-space: nowrap;
+  background: linear-gradient(90deg, #ff5ec0, #ffd75e, #4fd6ff, #8a5cf6, #ff5ec0);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: cz-owner-prestige-shimmer 3s linear infinite;
+}
+@keyframes cz-owner-prestige-shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cz-owner-prestige-badge { animation: none; }
 }
 
 /* cMoon border/glow equip options — rendered inside the "cZone Options" panel above
