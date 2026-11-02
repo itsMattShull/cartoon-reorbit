@@ -3,6 +3,7 @@ import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 import { findConcurrentFeaturedLead } from '@/server/utils/featuredEligibility'
 import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { PACK_ITEM_OWNER_SELECT, packItemFields, packOwnerFlags } from '~/server/utils/auctionItem'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -22,14 +23,17 @@ export default defineEventHandler(async (event) => {
     where: { id },
     include: {
       userCtoon: { include: { ctoon: true } },
+      userPack: PACK_ITEM_OWNER_SELECT,
       winner: { select: { username: true } },
       highestBidder: { select: { username: true } }
     }
   })
   if (!auction) throw createError({ statusCode: 404, statusMessage: 'Auction not found' })
 
-  // Holiday flag for this cToon
-  const isHolidayItem = !!(await prisma.holidayEventItem.findFirst({
+  const isPack = auction.kind === 'PACK'
+
+  // Holiday flag for this cToon (a pack has no cToon identity — see server/utils/auctionItem.js)
+  const isHolidayItem = isPack ? false : !!(await prisma.holidayEventItem.findFirst({
     where: { ctoonId: auction.userCtoon.ctoonId },
     select: { id: true }
   }))
@@ -47,7 +51,7 @@ export default defineEventHandler(async (event) => {
   // Featured auctions: a user can't hold the lead on more than one active
   // featured auction for the same cToon (1st/2nd edition combined) at a time.
   let blockedByFeaturedLead = false
-  if (auction.isFeatured) {
+  if (auction.isFeatured && !isPack) {
     const conflict = await findConcurrentFeaturedLead(prisma, userId, {
       excludeAuctionId: auction.id,
       ctoon: {
@@ -64,7 +68,10 @@ export default defineEventHandler(async (event) => {
   // rather than auction.creatorId — an unsold cToon becomes tradeable again and
   // may have changed hands since it closed.
   let canRelist = false
-  if (auction.status === 'CLOSED' &&
+  if (isPack) {
+    // Same rule for a sealed pack: unsold, held by the viewer now, still sealed, in no other auction / pending trade.
+    canRelist = !!packOwnerFlags(auction, userId).canRelist
+  } else if (auction.status === 'CLOSED' &&
       auction.winnerId === null &&
       auction.userCtoon.userId === userId &&
       !auction.userCtoon.burnedAt) {
@@ -89,7 +96,9 @@ export default defineEventHandler(async (event) => {
     isFeatured: auction.isFeatured,
     blockedByFeaturedLead,
     myLockedHere,
-    ctoon: {
+    kind: auction.kind,
+    userPackId: auction.userPackId ?? null,
+    ctoon: isPack ? { ...packItemFields(auction), id: auction.userPack?.packId ?? null } : {
       id:         auction.userCtoon.ctoonId,
       userCtoonId: encodeUserCtoonId(auction.userCtoon.userId, auction.userCtoon.ctoonId, auction.userCtoon.mintNumber),
       assetPath:  auction.userCtoon.ctoon.assetPath,

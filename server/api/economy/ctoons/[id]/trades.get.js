@@ -40,7 +40,8 @@ function parseLimit(raw) {
 
 async function computePayload(ctoonId, limit) {
   const offerIdRows = await prisma.tradeOfferCtoon.findMany({
-    where: { userCtoon: { ctoonId }, tradeOffer: { status: 'ACCEPTED' } },
+    // Offers containing a sealed pack are excluded — see aggregateTrades in server/cron/economy-aggregate.js.
+    where: { userCtoon: { ctoonId }, tradeOffer: { status: 'ACCEPTED', packs: { none: {} } } },
     select: { tradeOfferId: true },
     distinct: ['tradeOfferId']
   })

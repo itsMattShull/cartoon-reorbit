@@ -71,8 +71,9 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
 
   // Auctions won (closed with winner)
   if (ach.auctionsWonGte != null) {
+    // cToon auctions only: a sealed-pack auction (trivially repeatable between two accounts) must not feed achievements.
     const won = await db.auction.count({
-      where: { winnerId: userId, status: 'CLOSED' }
+      where: { winnerId: userId, status: 'CLOSED', kind: 'CTOON' }
     })
     if (won < ach.auctionsWonGte) return false
   }
@@ -80,7 +81,7 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
   // Auctions created (closed with winner)
   if (ach.auctionsCreatedGte != null) {
     const created = await db.auction.count({
-      where: { creatorId: userId, status: 'CLOSED', winnerId: { not: null } }
+      where: { creatorId: userId, status: 'CLOSED', winnerId: { not: null }, kind: 'CTOON' }
     })
     if (created < ach.auctionsCreatedGte) return false
   }
@@ -346,7 +347,11 @@ export async function grantRewardInTx(tx, userId, reward, method) {
   // not queued: a pack has no mint/supply step of its own, so there's nothing to defer post-commit
   // the way mintQueue defers an actual cToon mint. Not dedup'd/ownership-capped like backgrounds/
   // avatars either — every hit grants real new sealed packs, same as several independent CTOON
-  // rows each mint their own copies.
+  // rows each mint their own copies. Tagged PackSource.CMOON_ENEMY_REWARD (never the PURCHASE
+  // default) so purchase-limit/analytics queries that key on UserPack.source never see these as a
+  // cMart buy — this function has no single natural "claim id" the way CODE/OG_GTOONS_PVP's own
+  // grant helpers do (it's shared across many unrelated callers), so sourceRef/sourceOrdinal are
+  // left null here, same as every other reward type this function already grants.
   const packRewards = reward.packs || []
   if (packRewards.length) {
     const packIds = [...new Set(packRewards.map(p => p.packId))]
@@ -355,7 +360,7 @@ export async function grantRewardInTx(tx, userId, reward, method) {
     for (const rp of packRewards) {
       const qty = Math.max(1, Number(rp.quantity || 1))
       for (let i = 0; i < qty; i++) {
-        await tx.userPack.create({ data: { userId, packId: rp.packId, opened: false, pricePaid: null } })
+        await tx.userPack.create({ data: { userId, packId: rp.packId, opened: false, pricePaid: null, source: 'CMOON_ENEMY_REWARD' } })
       }
       summary.packs += qty
       summary.packGrants.push({ packId: rp.packId, name: packNameById.get(rp.packId) || rp.packId, quantity: qty })

@@ -14,7 +14,8 @@
 // reveal is still animating), done(ctx) (action steps), button (info steps).
 //
 // `ctx` is what the board knows: { m: the player's match view, sel: the selected hand card's deck
-// index or null, tab: 'log' | 'info', swapSheetOpen, discardPick: [deck idx], flipping: a reveal is
+// index or null, tab: 'log' | 'info', swapSheetOpen, swapPick: the hand card chosen in the swap sheet (deck
+// index or null), discardPick: [deck idx], flipping: a reveal is
 // animating, ended: the match is over }.
 
 /** Coarse position in the match; steps from an earlier stage are skipped (e.g. after a refresh). */
@@ -55,7 +56,7 @@ export const TUTORIAL_STEPS = [
   {
     id: 'goal', stage: 0, kind: 'info', target: ['target', 'pbar-you'], button: 'Got it',
     title: 'Goal colors decide the game',
-    text: "Every player gets a goal color from a random card in their deck. Yours is Blue (from your card Dexter) and the bot's is Green. When two different colors are revealed, whoever holds the most cards of BOTH colors combined wins outright, no matter the points. Black and Silver are never goal colors."
+    text: "Every player gets a goal color from a random card in their deck. Yours is Blue (from your card Dexter) and the bot's is Green. When two different colors are revealed, whoever holds more cards of EACH color than the opponent wins outright, no matter the points; otherwise points decide. Black and Silver are never goal colors."
   },
   {
     id: 'goal-other', stage: 0, kind: 'info', target: ['target', 'pbar-you'], button: 'Next',
@@ -167,12 +168,12 @@ export const TUTORIAL_STEPS = [
   {
     id: 'swap-intro', stage: 3, kind: 'info', target: ['strip'], button: 'Next', ready: settled,
     title: 'Slot-7 swap',
-    text: 'Slot 7 is still face down. Now each player may swap their slot-7 card for a random card from the cards they have left. The old card goes back into the pile. It costs 10 points off your final score, once per match, and both players choose before slot 7 flips.'
+    text: 'Slot 7 is still face down. Now each player may swap their slot-7 card for any card in their hand. The old card goes back into your hand. It costs 10 points off your final score, once per match, and both players choose before slot 7 flips.'
   },
   {
     id: 'swap-why', stage: 3, kind: 'info', target: 'deck-box', button: 'Next', ready: settled,
     title: 'Is it worth it?',
-    text: 'Goat is a weak Red 2, and you still hold Blue cards you have not played. A Blue card would add to your color count, which is what wins this game. In a normal match you would press "Keep slot 7" if your card was already good. For the tutorial, you swap.'
+    text: 'Goat is a weak Red 2, and you still hold a Green 10 you have not played. With two goal colors you need MORE cards of each color than the bot to win outright, and another Green card gets you there. In a normal match you would press "Keep slot 7" if your card was already good. For the tutorial, you swap.'
   },
   {
     id: 'swap-btn', stage: 3, kind: 'action', target: 'swap-btn', ready: settled,
@@ -181,9 +182,15 @@ export const TUTORIAL_STEPS = [
     done: (c) => !!c.swapSheetOpen || !!c.m?.you?.swapReady || stageOf(c) > 3
   },
   {
+    id: 'swap-pick', stage: 3, kind: 'action', target: 'swap-card-10',
+    title: 'Choose your swap card',
+    text: 'You choose which card from your hand takes slot 7. Pick Daphne Celebrating, the Green 10.',
+    done: (c) => c.swapPick === 10 || !!c.m?.you?.swapReady || stageOf(c) > 3
+  },
+  {
     id: 'swap-confirm', stage: 3, kind: 'action', target: 'swap-confirm',
     title: 'Confirm the swap',
-    text: 'Goat goes back into your pile and a random card takes slot 7. Tap "Swap (-10 points)".',
+    text: 'Goat goes back into your hand and Daphne Celebrating takes slot 7. Tap "Swap (-10 points)".',
     done: (c) => !!c.m?.you?.swapReady || stageOf(c) > 3
   },
 
@@ -191,12 +198,12 @@ export const TUTORIAL_STEPS = [
   {
     id: 'reveal-3', stage: 4, kind: 'info', target: 'arena', button: 'Next', ready: settled,
     title: 'Slot 7 flips',
-    text: 'You drew Blossom Fighting, a Blue 10 (Pepe makes her a 12). The bot kept its Bloo.'
+    text: 'You swapped in Daphne Celebrating, a Green 10. The bot kept its Bloo.'
   },
   {
     id: 'silver-intro', stage: 4, kind: 'info', target: 'strip', button: 'Next', ready: settled,
     title: 'Silver cards pick a color',
-    text: 'TOM and Pepe are Silver. Before scoring, each player chooses the real color their Silver cards count as, and both choices are revealed together. Blue and Green both count for you, so pick your goal color.'
+    text: 'TOM and Pepe are Silver. Before scoring, each player chooses the real color their Silver cards count as, and both choices are revealed together. You already have more Green cards than the bot, but you need more Blue too, so pick Blue.'
   },
   {
     id: 'pick-blue', stage: 4, kind: 'action', target: 'color-BLUE', ready: settled,
@@ -209,7 +216,7 @@ export const TUTORIAL_STEPS = [
   {
     id: 'result', stage: 5, kind: 'info', target: null, button: 'Next', ready: settled,
     title: 'You win!',
-    text: "You finished behind on points (27 to 43, and that already includes the 10 you paid for the swap), but you won anyway: your goal colors are Blue and Green, and you hold 6 cards of those two colors against the bot's 4. Superman went Black, and its Bugs Teasin' and Captain Dodgers were cancelled. With two goal colors, color count beats points."
+    text: "You finished behind on points (25 to 43, and that already includes the 10 you paid for the swap), but you won anyway: your goal colors are Blue and Green, and you hold more cards of each: 4 Green to the bot's 3, and 2 Blue to its 1. Superman went Black, and its Bugs Teasin' and Captain Dodgers were cancelled. When you have more cards of each goal color, you win no matter the points."
   },
   {
     id: 'recap', stage: 5, kind: 'info', target: null, button: 'Finish tutorial', finish: true, ready: settled,

@@ -243,7 +243,8 @@ export default defineEventHandler(async (event) => {
     where: { creatorId: targetId, status: 'CLOSED', winnerId: { in: suspectIds } },
     select: {
       id: true, highestBid: true, winnerId: true,
-      userCtoon: { select: { ctoon: { select: { name: true } } } }
+      userCtoon: { select: { ctoon: { select: { name: true } } } },
+      userPack: { select: { pack: { select: { name: true } } } }
     }
   })
   const auctionPointsToTarget = suspectWonAuctions.reduce((sum, a) => sum + (a.highestBid ?? 0), 0)
@@ -287,7 +288,7 @@ export default defineEventHandler(async (event) => {
 
   // Auction breakdown for display
   const auctionBreakdown = suspectWonAuctions.map(a => ({
-    itemName: a.userCtoon?.ctoon?.name ?? '(unknown)',
+    itemName: a.userCtoon?.ctoon?.name ?? (a.userPack?.pack?.name ? `${a.userPack.pack.name} (sealed pack)` : '(unknown)'),
     winnerName: nameById.get(a.winnerId) ?? String(a.winnerId),
     highestBid: a.highestBid ?? 0,
   }))

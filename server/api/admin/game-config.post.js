@@ -7,6 +7,7 @@ import {
 } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { resolveWinPackSettings } from '@/server/utils/ogGtoonsPackReward'
 import { invalidateAssets } from '@/server/utils/pokemonBattleAssets'
 import { invalidateOgGtoonsConfigCache } from '@/server/utils/ogGtoonsConfig'
 import { invalidateClashConfigCache } from '@/server/utils/clashConfig'
@@ -682,6 +683,38 @@ export default defineEventHandler(async (event) => {
       where: { gameName },
       include: { exclusiveCtoons: true }
     })
+
+    // OG gToons PvP pack reward settings (pack + per-player limit per 8pm window). Validated here, against the database,
+    // BEFORE anything is written: the pack must exist and actually have something in it (otherwise winners would be handed
+    // a sealed pack that can never be opened — "Nothing is left to pull").
+    let winPack = { changed: false }
+    let winPackAudit = null
+    if (gameName === 'OgGtoons') {
+      winPack = resolveWinPackSettings(body, before)
+      if (winPack.error) throw createError({ statusCode: 400, statusMessage: winPack.error })
+      if (winPack.changed) {
+        const describe = async (id, limit) => {
+          if (!id) return 'off'
+          const p = await db.pack.findUnique({ where: { id }, select: { name: true } })
+          return `${p?.name ?? 'unknown pack'} (${id}) × ${limit}/player/window`
+        }
+        if (winPack.packId) {
+          const pack = await db.pack.findUnique({
+            where: { id: winPack.packId },
+            select: { id: true, rarityConfigs: { select: { id: true }, take: 1 }, ctoonOptions: { select: { id: true }, take: 1 } }
+          })
+          if (!pack) throw createError({ statusCode: 400, statusMessage: 'That reward pack does not exist.' })
+          if (!pack.rarityConfigs.length || !pack.ctoonOptions.length) {
+            throw createError({ statusCode: 400, statusMessage: 'That pack has no cToons configured, so winners could not open it. Pick a pack that has contents.' })
+          }
+        }
+        winPackAudit = {
+          prev: await describe(before?.ogGtoonsWinPackId ?? null, before?.ogGtoonsWinPackPerUserLimit ?? null),
+          next: await describe(winPack.packId, winPack.limit)
+        }
+      }
+    }
+
     const result = await db.$transaction(async tx => {
       let createData = { gameName }
       let updateData = { updatedAt: new Date() }
@@ -886,6 +919,11 @@ export default defineEventHandler(async (event) => {
         // Reveal pacing (ms). Blank/null resets a field to the built-in default.
         for (const key of Object.keys(OG_REVEAL_FIELDS)) {
           if (key in body) ogGtoonsData[key] = body[key] == null || body[key] === '' ? null : Number(body[key])
+        }
+        // PvP pack reward (validated above; only written when the form actually sent it).
+        if (winPack.changed) {
+          ogGtoonsData.ogGtoonsWinPackId = winPack.packId
+          ogGtoonsData.ogGtoonsWinPackPerUserLimit = winPack.limit
         }
         createData = { ...createData, ...ogGtoonsData }
         updateData = { ...updateData, ...ogGtoonsData }
@@ -1161,6 +1199,11 @@ export default defineEventHandler(async (event) => {
             if (next != null && prev !== next) {
               await logAdminChange(tx, { userId: me.id, area: 'GameConfig:EdRps', key, prevValue: prev, newValue: next })
             }
+          }
+        } else if (gameName === 'OgGtoons') {
+          // The reward gives out real items, so a change is audited with the pack's NAME, not just its id.
+          if (winPackAudit && winPackAudit.prev !== winPackAudit.next) {
+            await logAdminChange(tx, { userId: me.id, area: 'GameConfig:OgGtoons', key: 'pvpWinPackReward', prevValue: winPackAudit.prev, newValue: winPackAudit.next })
           }
         } else if (gameName === 'PokemonBattle') {
           if (before?.pointsPerWin !== pointsPerWin) {

@@ -26,6 +26,15 @@ export default defineEventHandler(async (event) => {
             include: { ctoon: true }
           }
         }
+      },
+      // Sealed packs in the offer. Rows are per physical pack; the page groups them by type for display.
+      packs: {
+        select: {
+          id: true,
+          role: true,
+          userPackId: true,
+          userPack: { select: { packId: true, pack: { select: { id: true, name: true, imagePath: true } } } }
+        }
       }
     }
   })

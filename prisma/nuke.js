@@ -20,6 +20,7 @@ async function nuke() {
     await del('Auction',        () => prisma.auction.deleteMany())
 
     await del('TradeOfferCtoon',() => prisma.tradeOfferCtoon.deleteMany())
+    await del('TradeOfferPack', () => prisma.tradeOfferPack.deleteMany())
     await del('TradeOffer',     () => prisma.tradeOffer.deleteMany())
 
     await del('TradeCtoon',     () => prisma.tradeCtoon.deleteMany())

@@ -10,6 +10,15 @@
           @click="switchTab(t.id)"
         >{{ t.label }}</button>
       </div>
+      <!-- What kind of item: lives up here (not in the sidebar, which is collapsed on phones) -->
+      <div class="ah-type" role="group" aria-label="Show">
+        <button
+          v-for="t in TYPES" :key="t.id" type="button"
+          class="ah-type-btn" :class="{ active: aFilters.itemType === t.id }"
+          :aria-pressed="aFilters.itemType === t.id ? 'true' : 'false'"
+          @click="aFilters.itemType = t.id"
+        >{{ t.label }}</button>
+      </div>
       <div class="ah-view-toggle">
         <button class="ah-vt-btn" :class="{ active: viewMode === 'list' }" @click="setView('list')">&#9776; List</button>
         <button class="ah-vt-btn" :class="{ active: viewMode === 'card' }" @click="setView('card')">&#8859; Cards</button>
@@ -49,7 +58,7 @@
             <CtoonImage class="ah-img" :ctoon="item" :alt="item.name" draggable="false" />
             <SecondEditionOverlay :ctoon="item" />
             <span
-              v-if="activeTab === 'current'"
+              v-if="activeTab === 'current' && item.kind !== 'PACK'"
               class="ah-own-badge"
               :class="item.isOwned ? 'ah-own-badge--owned' : 'ah-own-badge--unowned'"
             >{{ item.isOwned ? 'Owned' : 'Unowned' }}</span>
@@ -59,7 +68,8 @@
           <div class="ah-body">
             <div class="ah-name">{{ item.name }}</div>
             <div class="ah-meta">
-              <span class="ah-rarity" :class="`r-${rarityKey(item.rarity)}`">{{ rarityShort(item.rarity) }}</span>
+              <span v-if="item.kind === 'PACK'" class="ah-rarity ah-pack-tag">Pack</span>
+              <span v-else class="ah-rarity" :class="`r-${rarityKey(item.rarity)}`">{{ rarityShort(item.rarity) }}</span>
               <span v-if="!item.isHolidayItem && item.mintNumber" class="ah-dim">#{{ item.mintNumber }}</span>
               <span v-if="item.isFeatured" class="ah-feat">★</span>
               <!-- Tab-specific status badge -->
@@ -139,7 +149,7 @@
               </div>
               <span v-if="item.isFeatured" class="ah-card-featured-tag">Featured</span>
               <span
-                v-if="activeTab === 'current'"
+                v-if="activeTab === 'current' && item.kind !== 'PACK'"
                 class="ah-own-badge ah-card-own-badge"
                 :class="item.isOwned ? 'ah-own-badge--owned' : 'ah-own-badge--unowned'"
               >{{ item.isOwned ? 'Owned' : 'Unowned' }}</span>
@@ -158,7 +168,8 @@
           <template #middle>
             <div class="ah-card-middle">
               <span class="ah-card-name">{{ item.name }}</span>
-              <span class="ah-rarity ah-card-rarity" :class="`r-${rarityKey(item.rarity)}`">{{ rarityShort(item.rarity) }}</span>
+              <span v-if="item.kind === 'PACK'" class="ah-rarity ah-card-rarity ah-pack-tag">Pack</span>
+              <span v-else class="ah-rarity ah-card-rarity" :class="`r-${rarityKey(item.rarity)}`">{{ rarityShort(item.rarity) }}</span>
             </div>
           </template>
           <template #footer-left>
@@ -188,11 +199,15 @@
       <button class="ah-pg-btn" :disabled="activePage >= totalPages"  @click="nextPage">›</button>
     </div>
 
+    <!-- A pack's contents/odds (tapping a pack's picture opens this instead of the cToon info card) -->
+    <PackPreviewModal v-if="previewPack" :pack-id="previewPack.packId" :name="previewPack.name" @close="previewPack = null" />
+
   </div>
 </template>
 
 <script setup>
 import CtoonImage from '@/components/CtoonImage.vue'
+import PackPreviewModal from '@/components/PackPreviewModal.vue'
 import { formatRemainingShort } from '~/server/utils/auctionDuration'
 const filter   = useNewSiteCtoonFilter()
 const aFilters = useAuctionHouseFilters()
@@ -215,6 +230,13 @@ const TABS = [
   { id: 'mine',    label: 'My Auctions' },
   { id: 'all',     label: 'All'         },
 ]
+
+const TYPES = [
+  { id: 'all',   label: 'All'     },
+  { id: 'ctoon', label: 'cToons'  },
+  { id: 'pack',  label: 'Packs'   },
+]
+const previewPack = ref(null)
 
 const PAGE_SIZE = 100
 
@@ -320,6 +342,8 @@ function buildFilterParams() {
   if (aFilters.value.wishlistOnly)                params.set('wishlist', '1')
   if (aFilters.value.hasBidsOnly)                 params.set('hasBids',  '1')
   if (aFilters.value.gtoonsOnly)                  params.set('gtoon',    '1')
+  if (aFilters.value.itemType === 'pack')         params.set('type',     'PACK')
+  else if (aFilters.value.itemType === 'ctoon')   params.set('type',     'CTOON')
   return params
 }
 
@@ -447,6 +471,7 @@ watch(
     () => filter.value.priceMin, () => filter.value.priceMax,
     () => aFilters.value.featuredOnly, () => aFilters.value.wishlistOnly,
     () => aFilters.value.gtoonsOnly,   () => aFilters.value.selectedOwned,
+    () => aFilters.value.itemType,
   ],
   () => {
     currentPage.value = 1
@@ -465,8 +490,12 @@ function applyFilters(items) {
   const set      = filter.value.set
   const cMoon    = filter.value.cMoon
 
+  const itemType = aFilters.value.itemType
   return (Array.isArray(items) ? items : []).filter(item => {
     if (!item) return false
+    // Packs have no rarity/set/series/mint, so any of those filters drops them on its own; this is the explicit switch.
+    if (itemType === 'pack'  && item.kind !== 'PACK') return false
+    if (itemType === 'ctoon' && item.kind === 'PACK') return false
     if (term) {
       const chars = Array.isArray(item.characters) ? item.characters : []
       if (!(item.name || '').toLowerCase().includes(term) &&
@@ -557,7 +586,7 @@ const emptyMessage = computed(() => ({
 }[activeTab.value] ?? 'No auctions found.'))
 
 const hasActiveFilters = computed(() => !!(
-  filter.value.name || filter.value.rarities.length || filter.value.series || filter.value.set || filter.value.cMoon ||
+  aFilters.value.itemType !== 'all' || filter.value.name || filter.value.rarities.length || filter.value.series || filter.value.set || filter.value.cMoon ||
   aFilters.value.featuredOnly || aFilters.value.wishlistOnly || aFilters.value.hasBidsOnly ||
   aFilters.value.gtoonsOnly   || aFilters.value.selectedOwned !== 'all'
 ))
@@ -654,6 +683,7 @@ function nextPage() {
 }
 
 function openInfoModal(item) {
+  if (item.kind === 'PACK') { previewPack.value = { packId: item.packId, name: item.name }; return }
   openCtoonModal({
     ctoonId:     item.ctoonId    || null,
     userCtoonId: item.userCtoonId || null,
@@ -669,8 +699,12 @@ function openInfoModal(item) {
 function openRelist(item) {
   if (!item?.canRelist) return
   const duration = reconstructDurationPrefill(item.createdAt, item.endAt, item.durationMinutes)
+  // A sealed pack is re-listed through the same modal in its pack form (its `id` is the UserPack id).
+  const subject = item.kind === 'PACK'
+    ? { kind: 'PACK', id: item.userPackId, packId: item.packId, name: item.name, assetPath: item.assetPath }
+    : null
   openAuctionModal({
-    ctoon: {
+    ctoon: subject ?? {
       id:         item.userCtoonId,
       ctoonId:    item.ctoonId,
       name:       item.name,
@@ -766,6 +800,29 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
 }
 .ah-tab.active { background: var(--OrbitLightBlue); color: #fff; }
 .ah-tab:not(.active):hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.75); }
+
+/* ── Item type switch (All | cToons | Packs) ── */
+.ah-type {
+  display: flex;
+  border: 1px solid rgba(255,255,255,0.2);
+  border-radius: 6px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+.ah-type-btn {
+  border: none;
+  background: rgba(0,0,0,0.2);
+  color: rgba(255,255,255,0.55);
+  font-size: 0.6rem;
+  font-weight: bold;
+  padding: 3px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.ah-type-btn.active { background: var(--OrbitLightBlue); color: #fff; }
+.ah-type-btn:not(.active):hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.8); }
+.ah-type-btn:focus-visible { outline: 2px solid #fff; outline-offset: -2px; }
+.ah-pack-tag { background: #7c3aed; color: #fff; }
 
 /* ── View toggle ── */
 .ah-view-toggle {
@@ -1307,5 +1364,9 @@ function rarityKey(r)   { return (r || '').toLowerCase().replace(/\s+/g, '-') }
 
   /* Bare minimum tap targets — these buttons create a real auction. */
   .ah-view, .ah-relist { min-height: 32px; }
+
+  /* The type switch shares the second row with the view toggle; real tap targets for both. */
+  .ah-type { margin-right: auto; }
+  .ah-type-btn, .ah-vt-btn { min-height: 32px; padding: 4px 10px; font-size: 0.7rem; }
 }
 </style>

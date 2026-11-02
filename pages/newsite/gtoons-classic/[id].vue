@@ -21,7 +21,7 @@ definePageMeta({
 // The sidebar's middle section shows both players' name, points and goal-color counts during the match.
 const { setSidebarMiddle, clearSidebarMiddle } = useNewsiteLayout()
 setSidebarMiddle('OgGtoonSidebar')
-onBeforeUnmount(clearSidebarMiddle)
+onBeforeUnmount(() => clearSidebarMiddle('OgGtoonSidebar'))
 
 // The match id in the URL (route.params.id) is purely for navigation/bookmarking — the actual
 // match state is entirely server-held and reattached over the socket (see useOgGtoonsSocket /

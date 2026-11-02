@@ -137,10 +137,8 @@ function settleDiscardPhase(io, match) {
 
 function settleSwap(io, match) {
   if (match.ending) return
-  // The swap draws a RANDOM undealt card in a real match; here it is the scripted one.
-  const pool = [...match.hand[0], ...match.undealt[0]]
-  const at = Math.max(0, pool.indexOf(TUTORIAL_PLAN.swap.drawIdx))
-  const res = resolveSwapPhase(match, () => (at + 0.5) / pool.length)
+  // The player picks the hand card to bring in; the script requires the scripted one (see the swap handler).
+  const res = resolveSwapPhase(match)
   if (!res) return
   concludeStep(io, match, match.currentRound, res.entries, res.order, { steps: res.steps, before: res.before })
 }
@@ -304,12 +302,14 @@ export function registerOgGtoonsTutorial(io, socket, resolveSocketUser, deps = {
   })
 
   // Round-3 slot-7 swap: the script has the player pay for it. The bot keeps its card.
-  socket.on(EV('swap'), async () => {
+  socket.on(EV('swap'), async ({ cardIdx } = {}) => {
     const match = await liveMatch()
     if (!match) return
     const check = checkSwap(match, 0)
     if (!check.ok) return fail(check.code, check.message)
-    if (!settle(recordSwapChoice(match, 0, true), match)) return
+    // The player chooses a hand card to bring into slot 7; the script needs the one it names.
+    if (cardIdx !== TUTORIAL_PLAN.swap.drawIdx) return fail('offScript', OFF_SCRIPT)
+    if (!settle(recordSwapChoice(match, 0, true, cardIdx, { requireCard: true }), match)) return
     recordSwapChoice(match, 1, false)
     socket.emit(OUT('swapApplied'), { matchId: match.id })
     settleSwap(io, match)

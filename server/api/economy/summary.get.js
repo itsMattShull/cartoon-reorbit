@@ -16,7 +16,8 @@ async function computeSummary() {
   const [pointsStats, totalTradeVolume, totalAuctionVolume, netPointsAgg] = await Promise.all([
     getActivePlayerPointsStats(),
     prisma.tradeOffer.count({ where: { status: 'ACCEPTED' } }),
-    prisma.auction.count({ where: { status: 'CLOSED', winnerId: { not: null } } }),
+    // cToon auctions only: pack sales are kept out of the cToon economy stats.
+    prisma.auction.count({ where: { status: 'CLOSED', winnerId: { not: null }, kind: 'CTOON' } }),
     // Restricted to accounts that were actually active (completed at least one
     // daily task, per activeDailyTaskUsersFragment) sometime in the window —
     // otherwise this counts points issued to accounts that did nothing that

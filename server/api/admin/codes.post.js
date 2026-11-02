@@ -2,6 +2,7 @@
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { normalizeRewardPacks, assertRewardPackLimits, assertPacksExist } from '@/server/utils/codeRewardPacks'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -69,6 +70,12 @@ export default defineEventHandler(async (event) => {
     ...normalizeBackgroundIds(topLevelBackgroundIds, 'backgroundIds')
   ]
 
+  // Packs awarded by each reward batch (validated + merged per batch; limits and existence checked across the code).
+  const packBatches = rewards.map((r, i) => normalizeRewardPacks(r?.packs, `rewards[${i}].packs`))
+  assertRewardPackLimits(packBatches)
+  await assertPacksExist(prisma, packBatches)
+  const packCreatesFor = (i) => packBatches[i].length ? { packs: { create: packBatches[i] } } : {}
+
   const rewardCreates = rewards.map((r, i) => {
     const { points } = r || {}
     if (points != null && (typeof points !== 'number' || points < 0)) throw createError({ statusCode: 400, statusMessage: `Invalid points in rewards[${i}].` })
@@ -99,6 +106,7 @@ export default defineEventHandler(async (event) => {
         points: points ?? 0,
         pooledUniqueCount: r.pool.uniqueCount,
         poolCtoons: { create: poolCreates },
+        ...packCreatesFor(i),
         ...(backgroundCreates.length ? { backgrounds: { create: backgroundCreates } } : {})
       }
     }
@@ -114,6 +122,7 @@ export default defineEventHandler(async (event) => {
     return {
       points: points ?? 0,
       ctoons: { create: ctoonCreates },
+      ...packCreatesFor(i),
       ...(backgroundCreates.length ? { backgrounds: { create: backgroundCreates } } : {})
     }
   })
@@ -141,7 +150,7 @@ export default defineEventHandler(async (event) => {
       area: `ClaimCode:${created.code}`,
       key: 'create',
       prevValue: null,
-      newValue: { code: created.code, maxClaims: created.maxClaims, startsAt: created.startsAt, expiresAt: created.expiresAt }
+      newValue: { code: created.code, maxClaims: created.maxClaims, startsAt: created.startsAt, expiresAt: created.expiresAt, packs: packBatches.flat() }
     })
   } catch {}
   return created

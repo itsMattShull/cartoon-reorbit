@@ -44,6 +44,8 @@ async function main() {
         { highestBidderId: userId },
         { winnerId: userId },
         { userCtoon: { userId } },
+        // a sealed pack the user holds (Auction.userPackId is RESTRICT, so these must go before the UserPack rows below)
+        { userPack: { userId } },
       ],
     },
     select: { id: true },
@@ -122,6 +124,18 @@ async function main() {
 
   // --- Trade offers + trades + rooms ---------------------------------
 
+  // Pack rows in the user's offers, AND any row (even in someone else's already-settled offer) that still points at a
+  // pack the user holds now — TradeOfferPack.userPackId is RESTRICT, so it would block deleting the UserPack rows below.
+  result = await prisma.tradeOfferPack.deleteMany({
+    where: {
+      OR: [
+        tradeOfferIds.length ? { tradeOfferId: { in: tradeOfferIds } } : undefined,
+        { userPack: { userId } },
+      ].filter(Boolean),
+    },
+  })
+  console.log(`🗑 Deleted ${result.count} TradeOfferPack rows`)
+
   if (tradeOfferIds.length) {
     result = await prisma.tradeOfferCtoon.deleteMany({
       where: { tradeOfferId: { in: tradeOfferIds } },
@@ -199,6 +213,7 @@ async function main() {
   result = await prisma.wishlistItem.deleteMany({ where: { userId } })
   console.log(`🗑 Deleted ${result.count} WishlistItem rows`)
 
+  // PackOwnerLog and OgGtoonPackAward rows for these packs go with them (ON DELETE CASCADE).
   result = await prisma.userPack.deleteMany({ where: { userId } })
   console.log(`🗑 Deleted ${result.count} UserPack rows`)
 

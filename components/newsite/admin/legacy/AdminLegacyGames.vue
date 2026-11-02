@@ -914,8 +914,12 @@
           </p>
           <button type="button" @click="resetOgReveal" class="mb-4 px-2 py-1 text-[11px] rounded border bg-white hover:bg-gray-50">Reset pacing to defaults</button>
 
+          <hr class="my-4 border-gray-200" />
+
+          <OgPackRewardSettings ref="ogPackRewardEl" v-model="ogWinPack" class="mb-4" />
+
           <br />
-          <button @click="saveOgGtoonsConfig" :disabled="loadingOgGtoons || !!ogGtoonsConfigError" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+          <button @click="saveOgGtoonsConfig" :disabled="loadingOgGtoons || !!ogGtoonsConfigError || !!ogPackRewardEl?.problem" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
             <span v-if="!loadingOgGtoons">Save gToons Settings</span>
             <span v-else>Saving…</span>
           </button>
@@ -2227,6 +2231,9 @@ const ogGtoonsDeckBuildingEnabled = ref(false)
 const ogGtoonsLeaderboardEnabled  = ref(false)
 const ogGtoonsPracticeEnabled     = ref(false)
 const ogGtoonsTournamentsEnabled  = ref(false)
+// PvP winner-pack reward: { packId, limit } — both set, or both null (off). See OgPackRewardSettings.vue.
+const ogWinPack                   = ref({ packId: null, limit: null })
+const ogPackRewardEl              = ref(null)
 const ogGtoonsGamesPageVisible    = ref(true)
 const loadingOgGtoons             = ref(false)
 // Card-reveal pacing (ms). null/blank = use the built-in default; see utils/ogGtoonReveal.js.
@@ -2670,6 +2677,7 @@ async function loadSettings() {
     ogGtoonsPracticeEnabled.value     = og.ogGtoonsPracticeEnabled     === true
     ogGtoonsTournamentsEnabled.value  = og.ogGtoonsTournamentsEnabled  === true
     ogGtoonsGamesPageVisible.value    = og.ogGtoonsGamesPageVisible    !== false
+    ogWinPack.value = { packId: og.ogGtoonsWinPackId ?? null, limit: og.ogGtoonsWinPackPerUserLimit ?? null }
     for (const k of Object.keys(ogRevealMs)) ogRevealMs[k] = Number.isInteger(og[k]) ? og[k] : null
     ogGtoonsConfigError.value = ''
   } catch (e) {
@@ -3186,6 +3194,8 @@ async function saveOgGtoonsConfig() {
         ogGtoonsPracticeEnabled:     ogGtoonsPracticeEnabled.value,
         ogGtoonsTournamentsEnabled:  ogGtoonsTournamentsEnabled.value,
         ogGtoonsGamesPageVisible:    ogGtoonsGamesPageVisible.value,
+        ogGtoonsWinPackId:           ogWinPack.value.packId,
+        ogGtoonsWinPackPerUserLimit: ogWinPack.value.limit,
         // null/blank resets a field to its built-in default on the server
         ...Object.fromEntries(Object.keys(ogRevealMs).map(k => [k, ogRevealMs[k] === '' ? null : ogRevealMs[k]]))
       }

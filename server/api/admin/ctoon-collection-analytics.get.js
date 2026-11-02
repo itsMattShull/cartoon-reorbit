@@ -313,13 +313,17 @@ export default defineEventHandler(async (event) => {
     if (uc?.userPackId) packIdSet.add(uc.userPackId)
   }
   const packPriceMap = new Map() // userPackId → pricePaid
+  // userPackId → who BOUGHT it. A pack can now also come from a code, a PvP win, a trade or an auction; only the original
+  // buyer paid for it, so only they are charged its price (buyerId is backfilled to the owner for every pre-existing pack).
+  const packBuyerMap = new Map() // userPackId → { source, buyerId }
   if (packIdSet.size > 0) {
     const userPacks = await prisma.userPack.findMany({
       where: { id: { in: [...packIdSet] } },
-      select: { id: true, pricePaid: true }
+      select: { id: true, pricePaid: true, source: true, buyerId: true }
     })
     for (const up of userPacks) {
       packPriceMap.set(up.id, up.pricePaid)
+      packBuyerMap.set(up.id, { source: up.source, buyerId: up.buyerId })
     }
   }
 
@@ -363,6 +367,8 @@ export default defineEventHandler(async (event) => {
           packId: true,
           openedAt: true,
           pricePaid: true,
+          source: true,
+          buyerId: true,
           mintedCtoons: {
             where: { ctoonId: { in: allWeeklyCtoonIds } },
             select: { id: true, ctoonId: true }
@@ -436,7 +442,10 @@ export default defineEventHandler(async (event) => {
         if (!packsAccounted.has(uc.userPackId)) {
           packsAccounted.add(uc.userPackId)
           const packPricePaid = packPriceMap.get(uc.userPackId)
-          if (packPricePaid != null) {
+          const buyer = packBuyerMap.get(uc.userPackId)
+          if (buyer && !(buyer.source === 'PURCHASE' && buyer.buyerId === userId)) {
+            // Won, redeemed, traded for or bought at auction: opening it cost THIS player no cMart points.
+          } else if (packPricePaid != null) {
             points += packPricePaid
             packPoints += packPricePaid
           } else {
@@ -476,6 +485,8 @@ export default defineEventHandler(async (event) => {
         if (up.openedAt > cutoffTime) continue
         // Skip packs already counted in the successful-pack path
         if (packsAccounted.has(up.id)) continue
+        // A "failed pack" is points spent hunting; a pack this player did not buy cost them nothing.
+        if (!(up.source === 'PURCHASE' && up.buyerId === userId)) continue
 
         // A pack is "failed" for this set journey if none of its minted set cToons
         // were a first acquisition for this user

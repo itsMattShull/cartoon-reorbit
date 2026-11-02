@@ -1,5 +1,5 @@
 // Opening a pack must give the cToons to the person who owns the pack — once — and charge nothing.
-// Runs the real handler (server/api/cmart/open-pack.get.js) against a real Postgres and Redis, then plays the
+// Runs the real handler (server/api/packs/open.post.js) against a real Postgres and Redis, then plays the
 // mint jobs it queued through the real mint processor, which is what the BullMQ worker does in production.
 import { test, before, after, beforeEach } from 'node:test'
 import assert from 'node:assert/strict'
@@ -13,8 +13,8 @@ before(async () => {
   ;({ prisma } = await boot())
   ;({ mintQueue } = await import('../server/utils/queues.js'))
   ;({ processMintJob } = await import('../server/utils/mintCtoon.js'))
-  const openPack = (await import('../server/api/cmart/open-pack.get.js')).default
-  api = await startApi([{ method: 'get', path: '/api/cmart/open-pack', handler: openPack }])
+  const openPack = (await import('../server/api/packs/open.post.js')).default
+  api = await startApi([{ method: 'post', path: '/api/packs/open', handler: openPack }])
 })
 beforeEach(async () => { if (!skipUnlessDb) await mintQueue.obliterate({ force: true }) })
 after(async () => { await api?.close(); if (!skipUnlessDb) { await mintQueue.obliterate({ force: true }); await mintQueue.close() } })
@@ -29,7 +29,7 @@ async function mkPack(options, { count = 1, rarity = 'Common', sellOutBehavior }
     }
   })
 }
-const openIt = (userPackId, userId) => api.call('get', `/api/cmart/open-pack?id=${userPackId}`, { userId })
+const openIt = (userPackId, userId) => api.call('post', '/api/packs/open', { userId, body: { userPackId } })
 /** Runs every queued mint job, in order, the way the worker would. */
 async function runWorker() {
   const jobs = (await mintQueue.getJobs(['waiting', 'delayed', 'prioritized'])).sort((x, y) => x.timestamp - y.timestamp)
@@ -91,7 +91,7 @@ run("you can't open someone else's pack, or one that's already open", async () =
   const userPack = await prisma.userPack.create({ data: { userId: owner.id, packId: pack.id } })
 
   assert.equal((await openIt(userPack.id, stranger.id)).status, 404)
-  assert.equal((await api.call('get', `/api/cmart/open-pack?id=${userPack.id}`)).status, 401)
+  assert.equal((await api.call('post', '/api/packs/open', { body: { userPackId: userPack.id } })).status, 401)
   assert.equal((await mintQueue.getJobs(['waiting'])).length, 0, 'nothing was queued for the failed attempts')
   assert.equal((await prisma.userPack.findUnique({ where: { id: userPack.id } })).opened, false)
 

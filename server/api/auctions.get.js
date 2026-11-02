@@ -3,6 +3,7 @@ import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { PACK_ITEM_SELECT, packItemFields } from '~/server/utils/auctionItem'
 
 export default defineEventHandler(async (event) => {
   // 1) Auth
@@ -35,6 +36,8 @@ export default defineEventHandler(async (event) => {
           ctoon: { select: { name: true, series: true, set: true, rarity: true, isGtoon: true, cost: true, power: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT, characters: true, isSecondEdition: true, secondEditionOverlayX: true, secondEditionOverlayY: true, secondEditionOverlaySize: true, cMoon: { select: { id: true, name: true, color: true } } } }
         }
       },
+      // Pack auctions have no userCtoon (see server/utils/auctionItem.js).
+      userPack: PACK_ITEM_SELECT,
       bids: { select: { amount: true }, orderBy: { amount: 'desc' }, take: 1 },
       _count: { select: { bids: true } }
     },
@@ -46,7 +49,7 @@ export default defineEventHandler(async (event) => {
   if (auctions.length === 0) return []
 
   // 3) Sets for ownership and holiday membership
-  const ctoonIds = auctions.map(a => a.userCtoon.ctoonId)
+  const ctoonIds = auctions.map(a => a.userCtoon?.ctoonId).filter(Boolean)
 
   const [owned, holidayItems] = await Promise.all([
     prisma.userCtoon.findMany({
@@ -66,29 +69,30 @@ export default defineEventHandler(async (event) => {
   return auctions.map(a => ({
     id:           a.id,
     isFeatured:   a.isFeatured,
-    userCtoonId:  encodeUserCtoonId(a.userCtoon.userId, a.userCtoon.ctoonId, a.userCtoon.mintNumber),
-    ctoonId:      a.userCtoon.ctoonId,
-    name:         a.userCtoon.ctoon.name,
-    set:          a.userCtoon.ctoon.set,
-    cMoon:        a.userCtoon.ctoon.cMoon,
-    series:       a.userCtoon.ctoon.series,
-    rarity:       a.userCtoon.ctoon.rarity,
-    isGtoon:      a.userCtoon.ctoon.isGtoon,
-    cost:         a.userCtoon.ctoon.cost,
-    power:        a.userCtoon.ctoon.power,
-    characters:   a.userCtoon.ctoon.characters || [],
-    mintNumber:   a.userCtoon.mintNumber,
-    assetPath:    a.userCtoon.ctoon.assetPath,
-    ...ogGtoonDisplay(a.userCtoon.ctoon),
+    userCtoonId:  a.userCtoon ? encodeUserCtoonId(a.userCtoon.userId, a.userCtoon.ctoonId, a.userCtoon.mintNumber) : null,
+    ctoonId:      a.userCtoon?.ctoonId,
+    name:         a.userCtoon?.ctoon?.name,
+    set:          a.userCtoon?.ctoon?.set,
+    cMoon:        a.userCtoon?.ctoon?.cMoon,
+    series:       a.userCtoon?.ctoon?.series,
+    rarity:       a.userCtoon?.ctoon?.rarity,
+    isGtoon:      a.userCtoon?.ctoon?.isGtoon,
+    cost:         a.userCtoon?.ctoon?.cost,
+    power:        a.userCtoon?.ctoon?.power,
+    characters:   a.userCtoon?.ctoon?.characters || [],
+    mintNumber:   a.userCtoon?.mintNumber,
+    assetPath:    a.userCtoon?.ctoon?.assetPath,
+    ...ogGtoonDisplay(a.userCtoon?.ctoon),
     endAt:        a.endAt.toISOString(),
     initialBid:   a.initialBet,
     highestBid:   a.bids.length > 0 ? a.bids[0].amount : a.initialBet,
     bidCount:     a._count?.bids ?? 0,
-    isOwned:      ownedSet.has(a.userCtoon.ctoonId),
-    isHolidayItem: holidaySet.has(a.userCtoon.ctoonId),
-    isSecondEdition: a.userCtoon.ctoon.isSecondEdition,
-    secondEditionOverlayX: a.userCtoon.ctoon.secondEditionOverlayX,
-    secondEditionOverlayY: a.userCtoon.ctoon.secondEditionOverlayY,
-    secondEditionOverlaySize: a.userCtoon.ctoon.secondEditionOverlaySize
+    isOwned:      ownedSet.has(a.userCtoon?.ctoonId),
+    isHolidayItem: holidaySet.has(a.userCtoon?.ctoonId),
+    isSecondEdition: a.userCtoon?.ctoon?.isSecondEdition,
+    secondEditionOverlayX: a.userCtoon?.ctoon?.secondEditionOverlayX,
+    secondEditionOverlayY: a.userCtoon?.ctoon?.secondEditionOverlayY,
+    secondEditionOverlaySize: a.userCtoon?.ctoon?.secondEditionOverlaySize,
+    ...packItemFields(a)
   }))
 })

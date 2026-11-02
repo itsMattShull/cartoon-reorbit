@@ -2,6 +2,7 @@ import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { PACK_ITEM_SELECT, packItemFields } from '~/server/utils/auctionItem'
 
 function normalizeListParam(value) {
   if (Array.isArray(value)) {
@@ -93,6 +94,9 @@ export default defineEventHandler(async (event) => {
   const cMoonFilter = typeof query.cMoon === 'string' ? query.cMoon.trim() : ''
   const sort = typeof query.sort === 'string' ? query.sort : 'endAsc'
   const orderBy = buildSortOrder(sort)
+  // 'PACK' | 'CTOON' | '' (both). Any cToon-only filter (rarity, set, series, cMoon, owned, wishlist, gToons-only, …) can
+  // only ever match cToon auctions, so those naturally drop pack auctions; a plain name search also matches pack names.
+  const typeFilter = typeof query.type === 'string' ? query.type.trim().toUpperCase() : ''
   const seller = typeof query.seller === 'string' ? query.seller.trim() : ''
   const winner = typeof query.winner === 'string' ? query.winner.trim() : ''
 
@@ -160,7 +164,17 @@ export default defineEventHandler(async (event) => {
   const where = { status: 'CLOSED' }
   if (featuredOnly) where.isFeatured = true
   if (hasBidsOnly) where.bids = { some: {} }
-  if (Object.keys(ctoonWhere).length) where.userCtoon = { ctoon: ctoonWhere }
+  if (typeFilter === 'PACK' || typeFilter === 'CTOON') where.kind = typeFilter
+  // Only the name search is meaningful for a pack; if it is the ONLY cToon-side filter, match pack names too.
+  const onlySearch = search && Object.keys(ctoonWhere).length === 1 && ctoonWhere.OR
+  if (onlySearch && typeFilter !== 'CTOON') {
+    where.OR = [
+      { userCtoon: { ctoon: ctoonWhere } },
+      { userPack: { pack: { name: { contains: search, mode: 'insensitive' } } } }
+    ]
+  } else if (Object.keys(ctoonWhere).length) {
+    where.userCtoon = { ctoon: ctoonWhere }
+  }
   if (seller) where.creator = { username: { contains: seller, mode: 'insensitive' } }
 
   if (winner) {
@@ -242,6 +256,7 @@ export default defineEventHandler(async (event) => {
             },
           },
         },
+        userPack: PACK_ITEM_SELECT,
         creator: { select: { username: true } },
         bids: {
           orderBy: { amount: 'desc' },
@@ -279,7 +294,7 @@ export default defineEventHandler(async (event) => {
       id: a.id,
       status: a.status,
       isFeatured: a.isFeatured,
-      userCtoonId: encodeUserCtoonId(a.userCtoon?.userId, a.userCtoon?.ctoonId, a.userCtoon?.mintNumber),
+      userCtoonId: a.userCtoon ? encodeUserCtoonId(a.userCtoon.userId, a.userCtoon.ctoonId, a.userCtoon.mintNumber) : null,
       ctoonId: a.userCtoon?.ctoonId ?? null,
       assetPath: a.userCtoon?.ctoon?.assetPath ?? null,
       ...ogGtoonDisplay(a.userCtoon?.ctoon),
@@ -306,6 +321,7 @@ export default defineEventHandler(async (event) => {
       winningBidder: a.bids[0]?.user?.username ?? null,
       bidCount: a._count?.bids ?? 0,
       isOwned: ownedSet.has(a.userCtoon?.ctoonId),
+      ...packItemFields(a),
     })),
   }
 })
