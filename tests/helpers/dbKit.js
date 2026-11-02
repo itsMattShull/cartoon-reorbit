@@ -11,7 +11,7 @@
 import http from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { register } from 'node:module'
-import { createApp, createRouter, toNodeListener } from 'h3'
+import { createApp, createRouter, toNodeListener, defineEventHandler } from 'h3'
 
 export const DB_URL = process.env.OWNERSHIP_TEST_DB
 // `run` is test() when a database is configured, test.skip otherwise.
@@ -81,7 +81,12 @@ export const ownerOf = async (prisma, userCtoonId) =>
 export async function startApi(routes) {
   const router = createRouter()
   for (const { method, path, handler } of routes) router[method](path, handler)
-  const server = http.createServer(toNodeListener(createApp().use(router)))
+  // Production's server/middleware/auth.js sets event.context.userId from the session JWT; here the cookie is
+  // `testUser=<id>`. Handlers that read context.userId (rather than calling /api/auth/me) rely on this.
+  const app = createApp().use(defineEventHandler((event) => {
+    event.context.userId = /testUser=([^;]+)/.exec(event.node.req.headers.cookie || '')?.[1] || null
+  }))
+  const server = http.createServer(toNodeListener(app.use(router)))
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   const base = `http://127.0.0.1:${server.address().port}`
   return {

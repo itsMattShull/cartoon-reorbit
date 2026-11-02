@@ -4,6 +4,8 @@ import { mintQueue } from '../utils/queues'
 import { QueueEvents } from 'bullmq'
 import { prisma } from '@/server/prisma'
 import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { sumRewardPacks } from '@/server/utils/codeRewardPacks'
+import { grantCodePacks } from '@/server/utils/codePackGrant'
 
 const redisConnection = {
   host: process.env.REDIS_HOST,
@@ -58,9 +60,14 @@ export default defineEventHandler(async (event) => {
     include: {
       ctoons: { include: { ctoon: { select: { id: true, name: true, initialQuantity: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT, rarity: true, set: true } } } },
       poolCtoons: { include: { ctoon: { select: { id: true, name: true, initialQuantity: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT, rarity: true, set: true } } } },
-      backgrounds: { include: { background: { select: { id: true, label: true, imagePath: true, visibility: true } } } }
+      backgrounds: { include: { background: { select: { id: true, label: true, imagePath: true, visibility: true } } } },
+      packs: { include: { pack: { select: { id: true, name: true, imagePath: true } } } }
     }
   })
+
+  // Sealed packs awarded (the same pack in several reward batches is summed). Granted below — see the ordering note.
+  const packAwards = sumRewardPacks(rewardDefs)
+  const packInfo = new Map(rewardDefs.flatMap(r => (r.packs || []).map(rp => [rp.packId, rp.pack])))
 
   const pointsToAward = rewardDefs.reduce((s, r) => s + (r.points ?? 0), 0)
 
@@ -122,29 +129,51 @@ export default defineEventHandler(async (event) => {
   const seenBg = new Set(), backgroundRewards = []
   for (const b of backgroundRewardsRaw) if (!seenBg.has(b.id)) { seenBg.add(b.id); backgroundRewards.push(b) }
 
-  await prisma.$transaction(async (tx) => {
-    await tx.claim.create({ data: { userId, codeId: claimCode.id } })
-    if (pointsToAward > 0) {
-      const updated = await tx.userPoints.upsert({
-        where: { userId },
-        create: { userId, points: pointsToAward },
-        update: { points: { increment: pointsToAward } }
-      })
-      await tx.pointsLog.create({ data: { userId, points: pointsToAward, total: updated.points, method: 'Redeem Code', direction: 'increase' } })
-    }
-    if (backgroundRewards.length) {
-      await tx.userBackground.createMany({
-        data: backgroundRewards.map(b => ({ userId, backgroundId: b.id, sourceCodeId: claimCode.id })),
-        skipDuplicates: true
-      })
-    }
-  })
+  // A pack-only code (no cToon mints) has nothing that can fail after the claim, so its packs are created in the same
+  // transaction as the claim. A code that also mints cToons creates its packs only after every mint has succeeded.
+  const packsInClaimTx = ctoonAwards.length === 0
+  let claimId = null
+  let grantedPacks = []
+  try {
+    await prisma.$transaction(async (tx) => {
+      // Serialise redemptions of THIS code and recount inside the lock. The count above ran outside any transaction,
+      // so N parallel redeemers all saw "claims < maxClaims" and all got through — each one now also gets packs.
+      await tx.$queryRaw`SELECT "id" FROM "ClaimCode" WHERE "id" = ${claimCode.id} FOR UPDATE`
+      const claimsNow = await tx.claim.count({ where: { codeId: claimCode.id } })
+      if (claimsNow >= claimCode.maxClaims) throw createError({ statusCode: 400, statusMessage: 'Code fully redeemed' })
+
+      const claim = await tx.claim.create({ data: { userId, codeId: claimCode.id } })
+      claimId = claim.id
+      if (pointsToAward > 0) {
+        const updated = await tx.userPoints.upsert({
+          where: { userId },
+          create: { userId, points: pointsToAward },
+          update: { points: { increment: pointsToAward } }
+        })
+        await tx.pointsLog.create({ data: { userId, points: pointsToAward, total: updated.points, method: 'Redeem Code', direction: 'increase' } })
+      }
+      if (backgroundRewards.length) {
+        await tx.userBackground.createMany({
+          data: backgroundRewards.map(b => ({ userId, backgroundId: b.id, sourceCodeId: claimCode.id })),
+          skipDuplicates: true
+        })
+      }
+      if (packsInClaimTx) grantedPacks = await grantCodePacks(tx, { userId, claimId: claim.id, awards: packAwards })
+    })
+  } catch (e) {
+    // Two requests from the same user raced past the "already redeemed" check; the (userId, codeId) unique key decides.
+    if (e?.code === 'P2002') throw createError({ statusCode: 400, statusMessage: 'Code already redeemed' })
+    throw e
+  }
 
   const mintedRecords = []
   let qe
   try {
-    qe = new QueueEvents(mintQueue.name, { connection: redisConnection })
-    await qe.waitUntilReady()
+    // Pack-only / points-only codes never touch Redis: no queue, no QueueEvents, so a Redis outage can't fail them.
+    if (ctoonAwards.length) {
+      qe = new QueueEvents(mintQueue.name, { connection: redisConnection })
+      await qe.waitUntilReady()
+    }
     for (const award of ctoonAwards) {
       for (let i = 0; i < award.quantity; i++) {
         const { ctoonId, name } = award
@@ -167,10 +196,17 @@ export default defineEventHandler(async (event) => {
         })
       }
     }
+    // Every mint succeeded. Only now do this code's packs exist (see packsInClaimTx above) — so a failure above rolls
+    // the claim back with no pack ever having been visible, openable or tradable.
+    if (!packsInClaimTx) {
+      grantedPacks = await prisma.$transaction(tx => grantCodePacks(tx, { userId, claimId, awards: packAwards }))
+    }
   } catch (mintErr) {
     // Mint failed — best-effort rollback of the claim so the user can retry
     try {
       await prisma.$transaction(async (tx) => {
+        // No pack rows can exist here: packs are only created after every mint succeeded (or in the claim itself for a
+        // pack-only code, which never reaches this block). So there is nothing to unwind for packs.
         await tx.claim.delete({ where: { userId_codeId: { userId, codeId: claimCode.id } } })
         if (pointsToAward > 0) {
           const updated = await tx.userPoints.update({
@@ -191,5 +227,13 @@ export default defineEventHandler(async (event) => {
     await qe?.close()
   }
 
-  return { points: pointsToAward, ctoons: mintedRecords, backgrounds: backgroundRewards }
+  const packs = grantedPacks.map(g => ({
+    packId: g.packId,
+    name: packInfo.get(g.packId)?.name || 'Pack',
+    imagePath: packInfo.get(g.packId)?.imagePath || null,
+    quantity: g.userPackIds.length,
+    userPackIds: g.userPackIds
+  }))
+
+  return { points: pointsToAward, ctoons: mintedRecords, backgrounds: backgroundRewards, packs }
 })

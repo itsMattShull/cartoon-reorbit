@@ -59,6 +59,15 @@ export default defineEventHandler(async (event) => {
               }
             },
             {
+              rewards: {
+                some: {
+                  packs: {
+                    some: { pack: { name: { contains: searchTerm, mode: 'insensitive' } } }
+                  }
+                }
+              }
+            },
+            {
               prerequisites: {
                 some: { ctoon: { name: { contains: searchTerm, mode: 'insensitive' } } }
               }
@@ -109,6 +118,14 @@ export default defineEventHandler(async (event) => {
                 ctoonId: true,
                 weight: true,
                 ctoon: { select: { id: true, name: true } }
+              }
+            },
+            // sealed pack rewards
+            packs: {
+              select: {
+                packId: true,
+                quantity: true,
+                pack: { select: { id: true, name: true, imagePath: true } }
               }
             },
             // background rewards

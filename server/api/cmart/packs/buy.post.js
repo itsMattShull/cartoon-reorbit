@@ -8,8 +8,8 @@
 // • user must be logged-in
 // • pack must exist + be inCmart = true
 // • user must have ≥ pack.price points
-// • if pack.dailyPurchaseLimit is set, user must not have hit the limit
-//   for the current 8pm–7:59pm CST daily window
+// • if pack.dailyPurchaseLimit / maxBuysPerUser is set, the user must not have hit it (counted by
+//   ORIGINAL buyer, for the current 8pm–7:59pm CST daily window; enforced inside the transaction)
 // • deduct points, create a UserPack row (sealed)
 
 import {
@@ -22,6 +22,7 @@ import {
 import { prisma as db } from '@/server/prisma'
 import { checkPackDepletion } from '@/server/utils/packAvailability'
 import { getPackDailyWindowStart, resolveEffectiveWindowStart } from '@/server/utils/packDailyWindow'
+import { logPackOwners } from '@/server/utils/userPackState'
 
 export default defineEventHandler(async (event) => {
   /* 1.  authenticate user ------------------------------------------------ */
@@ -101,46 +102,49 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  /* 5a. total purchase limit check -------------------------------------- */
-  if (pack.maxBuysPerUser != null) {
-    const totalPurchased = await db.userPack.count({
-      where: { userId: me.id, packId: pack.id }
-    })
-    if (totalPurchased >= pack.maxBuysPerUser) {
-      throw createError({
-        statusCode: 429,
-        statusMessage: `Purchase limit reached — you can only buy this pack ${pack.maxBuysPerUser} time${pack.maxBuysPerUser === 1 ? '' : 's'}`
-      })
-    }
-  }
-
-  /* 5b. daily purchase limit check -------------------------------------- */
-  if (pack.dailyPurchaseLimit != null) {
-    const windowStart = getPackDailyWindowStart()
-    // An admin "Reset Pack Limit" moves the effective window start forward
-    // to the reset time, so purchases made earlier today stop counting.
-    const limitReset = await db.userPackLimitReset.findUnique({
-      where: { userId_packId: { userId: me.id, packId: pack.id } },
-      select: { resetAt: true }
-    })
-    const effectiveWindowStart = resolveEffectiveWindowStart(windowStart, limitReset?.resetAt)
-    const purchasedToday = await db.userPack.count({
-      where: {
-        userId:    me.id,
-        packId:    pack.id,
-        createdAt: { gte: effectiveWindowStart }
-      }
-    })
-    if (purchasedToday >= pack.dailyPurchaseLimit) {
-      throw createError({
-        statusCode: 429,
-        statusMessage: `Daily limit reached — you can buy ${pack.dailyPurchaseLimit} of this pack per day (resets at 8pm CST)`
-      })
-    }
-  }
-
-  /* 6.  transaction: deduct points + create sealed pack ----------------- */
+  /* 6.  transaction: enforce purchase limits, deduct points, create sealed pack ------------------- */
+  // The limit checks live INSIDE the transaction, behind a per-(user, pack) advisory lock. They used to run before it
+  // with nothing serialising them, so N parallel buy requests all counted the same N-1 purchases and all passed —
+  // which, now that packs can be traded and auctioned, is directly monetisable.
+  //
+  // Limits count PURCHASES by the ORIGINAL BUYER (UserPack.buyerId), never packs the user currently holds: a pack won
+  // from a code or a PvP match, or received in a trade, does not use up a buy slot, and trading a pack away does not
+  // free one. buyerId is set only for source = PURCHASE (see the owned-packs migration).
   const result = await db.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`packbuy:${me.id}:${pack.id}`}))`
+
+    // 5a. total purchase limit
+    if (pack.maxBuysPerUser != null) {
+      const totalPurchased = await tx.userPack.count({ where: { buyerId: me.id, packId: pack.id } })
+      if (totalPurchased >= pack.maxBuysPerUser) {
+        throw createError({
+          statusCode: 429,
+          statusMessage: `Purchase limit reached — you can only buy this pack ${pack.maxBuysPerUser} time${pack.maxBuysPerUser === 1 ? '' : 's'}`
+        })
+      }
+    }
+
+    // 5b. daily purchase limit
+    if (pack.dailyPurchaseLimit != null) {
+      const windowStart = getPackDailyWindowStart()
+      // An admin "Reset Pack Limit" moves the effective window start forward to the reset time, so purchases made
+      // earlier today stop counting.
+      const limitReset = await tx.userPackLimitReset.findUnique({
+        where: { userId_packId: { userId: me.id, packId: pack.id } },
+        select: { resetAt: true }
+      })
+      const effectiveWindowStart = resolveEffectiveWindowStart(windowStart, limitReset?.resetAt)
+      const purchasedToday = await tx.userPack.count({
+        where: { buyerId: me.id, packId: pack.id, createdAt: { gte: effectiveWindowStart } }
+      })
+      if (purchasedToday >= pack.dailyPurchaseLimit) {
+        throw createError({
+          statusCode: 429,
+          statusMessage: `Daily limit reached — you can buy ${pack.dailyPurchaseLimit} of this pack per day (resets at 8pm CST)`
+        })
+      }
+    }
+
     // 6-a  deduct points
     const updated = await tx.userPoints.update({
       where: { userId: me.id },
@@ -157,9 +161,12 @@ export default defineEventHandler(async (event) => {
         userId: me.id,
         packId: pack.id,
         opened: false,
-        pricePaid: effectivePackPrice
+        pricePaid: effectivePackPrice,
+        source: 'PURCHASE',
+        buyerId: me.id
       }
     })
+    await logPackOwners(tx, [{ userPackId: userPack.id, packId: pack.id, userId: me.id, method: 'PURCHASE' }])
 
     return userPack
   })

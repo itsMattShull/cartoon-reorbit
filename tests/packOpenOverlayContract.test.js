@@ -1,0 +1,99 @@
+// Source-level contracts for the shared pack UI (this repo has no component-test harness; its UI contracts are
+// enforced as source checks — see siteScale.test.js, shortCardVarContract.test.js). These pin the behaviours the
+// mobile / accessibility review required, so a later "tidy up" can't quietly regress them.
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
+
+const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
+// Comments explain what NOT to do ("not 100vh"), so contracts are checked against the code with comments stripped.
+const stripComments = (src) => src.replace(/<!--[\s\S]*?-->/g, '').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '')
+const overlay = stripComments(read('components/PackOpenOverlay.vue'))
+const preview = read('components/PackPreviewModal.vue')
+const packsTab = read('components/newsite/MyCollectionPacks.vue')
+const collection = read('components/newsite/MyCollection.vue')
+const cmart = read('components/newsite/Cmart.vue')
+
+test('overlay is a real dialog: role, aria-modal, labelled, focus managed, Esc handled', () => {
+  assert.match(overlay, /role="dialog"/)
+  assert.match(overlay, /aria-modal="true"/)
+  assert.match(overlay, /:aria-labelledby="titleId"/)
+  assert.match(overlay, /e\.key === 'Escape'/)
+  assert.match(overlay, /e\.key !== 'Tab'/) // focus trap
+  assert.match(overlay, /previouslyFocused/) // focus handed back on close
+  assert.match(overlay, /aria-live="polite"/)
+  assert.match(overlay, /role="alert"/) // errors are announced
+})
+
+test('overlay sizes with dvh and never relies on 100vh alone; scroll is locked while open', () => {
+  assert.match(overlay, /100dvh/)
+  assert.doesNotMatch(overlay, /100vh/)
+  assert.match(overlay, /pro-scroll-lock/)
+  assert.match(overlay, /overscroll-behavior: contain/)
+})
+
+test('overlay respects prefers-reduced-motion and always offers Skip', () => {
+  assert.match(overlay, /prefers-reduced-motion/)
+  assert.match(overlay, /@click="skip"/)
+  assert.doesNotMatch(overlay, /width: 300vw|height: 300vh/) // the old full-viewport white flash
+})
+
+test('overlay makes the request itself, to the POST endpoint, and shows an error instead of a blank reveal', () => {
+  assert.match(overlay, /\$fetch\('\/api\/packs\/open', \{ method: 'POST'/)
+  assert.doesNotMatch(overlay, /open-pack/)
+  assert.match(overlay, /phase\.value = 'error'/)
+  assert.match(overlay, /item\.isNew/) // "New!" is server-decided, not a client snapshot
+  assert.doesNotMatch(overlay, /originalOwnedSet|ownedCtoonIds/)
+})
+
+test('overlay caps animated gToon card effects (iOS GPU-layer crash, see gtoonCardPerformance.test.js)', () => {
+  assert.match(overlay, /FULL_EFFECT_CARDS = 4/)
+  assert.match(overlay, /i < FULL_EFFECT_CARDS \? 'full' : 'static'/)
+  assert.doesNotMatch(overlay, /will-change|preserve-3d/)
+})
+
+test('overlay surface is white, so every text colour on it is explicit (lightSurfaceContrast convention)', () => {
+  assert.match(overlay, /\.pro-dialog \{[^}]*background: #fff;[^}]*color: #1a2a40/)
+  assert.doesNotMatch(overlay, /text-white/)
+})
+
+test('nothing still calls the removed state-changing GET open endpoint', () => {
+  for (const [name, src] of [['cmart', cmart], ['packsTab', packsTab], ['preview', preview]]) {
+    assert.doesNotMatch(src, /cmart\/open-pack/, name)
+  }
+})
+
+test('cMart opens through the shared overlay and no longer carries its own copy', () => {
+  assert.match(cmart, /<PackOpenOverlay/)
+  assert.doesNotMatch(cmart, /pack-reveal-grid|expandGlow|setTimeout\(async \(\) => \{\s*try \{\s*packContents/)
+})
+
+test('Packs tab: tablist semantics, 44px phone targets, jump-to-page, status chip on the art', () => {
+  assert.match(collection, /role="tablist"/)
+  assert.match(collection, /role="tab"/)
+  assert.match(collection, /aria-selected/)
+  assert.match(collection, /role="tabpanel"/)
+  assert.match(collection, /ArrowRight|ArrowLeft/)
+  assert.match(packsTab, /min-height: 44px/)
+  assert.match(packsTab, /<select :value="page"/)
+  assert.match(packsTab, /class="mcp-chip-status"/)
+  assert.match(packsTab, /@media \(max-width: 768px\)/)
+  assert.match(packsTab, /prefers-reduced-motion/)
+})
+
+test('Packs tab: a blocked pack says WHY on its button instead of going silently dead', () => {
+  assert.match(packsTab, /blockReason\(it\) \|\| 'Open'/)
+  assert.match(packsTab, /'In Auction'/)
+  assert.match(packsTab, /'In Trade'/)
+})
+
+test('Packs tab removes the opened tile as soon as the server confirms, not on overlay close', () => {
+  assert.match(packsTab, /function onOpened/)
+  assert.match(packsTab, /items\.value = items\.value\.filter\(i => i\.id !== done\.id\)/)
+})
+
+test('pack preview reads the owner-scoped endpoint, not the cMart-only one', () => {
+  assert.match(preview, /\/api\/packs\/\$\{props\.packId\}\/preview/)
+  assert.doesNotMatch(preview, /cmart\/packs/)
+  assert.match(preview, /role="dialog"/)
+})

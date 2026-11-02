@@ -8,49 +8,15 @@
       </div>
     </Teleport>
 
-    <!-- ── Pack opening overlay ─────────────────────────────────── -->
-    <Teleport to="body">
-      <div v-if="overlayVisible" class="pack-overlay" @click.self="revealComplete && closeOverlay()">
-        <div class="pack-overlay-card">
-          <button v-if="revealComplete" class="pack-overlay-close" @click="closeOverlay">✕</button>
-
-          <!-- Pack image (during animation) -->
-          <template v-if="openingStep === 'pack'">
-            <CtoonImage :ctoon="openingPack" :src="openingPack.imagePath" class="pack-overlay-img" alt="Pack" />
-          </template>
-
-          <!-- Reveal grid -->
-          <template v-if="openingStep === 'reveal'">
-            <div class="pack-reveal-grid">
-              <div
-                v-for="item in packContents"
-                :key="item.id"
-                class="pack-reveal-card"
-                :class="{ 'pack-reveal-new': !originalOwnedSet.has(item.id) }"
-              >
-                <span v-if="!originalOwnedSet.has(item.id)" class="pack-new-badge">New!</span>
-                <span v-if="!item.inCmart" class="pack-exclusive-badge">Pack Exclusive</span>
-                <div class="pack-reveal-img-wrap">
-                  <CtoonImage
-                    v-if="item.assetPath"
-                    :ctoon="item"
-                    :alt="item.name"
-                    effects="full"
-                    :ambient="false"
-                    class="pack-reveal-img" />
-                  <SecondEditionOverlay :ctoon="item" />
-                </div>
-                <p class="pack-reveal-name">{{ item.name }}</p>
-                <p class="pack-reveal-rarity">{{ item.rarity }}</p>
-                <p class="pack-reveal-mint">Mint #{{ item.mintNumber }}</p>
-              </div>
-            </div>
-            <button v-if="revealComplete" class="pack-reveal-close-btn" @click="closeOverlay">Close</button>
-          </template>
-        </div>
-      </div>
-      <div v-if="showGlow" class="pack-glow" :class="glowStage" />
-    </Teleport>
+    <!-- ── Pack opening overlay (shared: components/PackOpenOverlay.vue) ───────── -->
+    <PackOpenOverlay
+      v-if="openingUserPackId"
+      :key="openingUserPackId"
+      :user-pack-id="openingUserPackId"
+      :pack="openingPack"
+      error-hint="Your pack is safe — open it any time from My Collection > Packs."
+      @close="closeOverlay"
+    />
 
     <!-- ── Pack preview modal ─────────────────────────────────────── -->
     <Teleport to="body">
@@ -402,6 +368,7 @@
 
 <script setup>
 import CtoonImage from '@/components/CtoonImage.vue'
+import PackOpenOverlay from '@/components/PackOpenOverlay.vue'
 const RARITY_ORDER = {
   'common': 0, 'uncommon': 1, 'rare': 2, 'very rare': 3,
   'crazy rare': 4, 'prize only': 5, 'code only': 6, 'auction only': 7,
@@ -518,14 +485,10 @@ const packsLoading   = ref(false)
 const buyingPackIds  = ref([])
 
 // ── Pack opening state ────────────────────────────────────────
-const overlayVisible  = ref(false)
-const showGlow        = ref(false)
-const openingStep     = ref('pack')
-const glowStage       = ref('hidden')
-const revealComplete  = ref(false)
-const openingPack     = ref(null)
-const packContents    = ref([])
-const ownedCtoonIds   = ref([])
+// The unwrap + reveal live in components/PackOpenOverlay.vue, which makes the open request itself.
+const openingUserPackId = ref(null)
+const openingPack       = ref(null)
+const ownedCtoonIds     = ref([])
 
 // ── Pack preview modal ────────────────────────────────────────
 const packPreviewVisible = ref(false)
@@ -941,14 +904,6 @@ async function buy(ctoon, priceOverride = null) {
 }
 
 // ── Pack buying ───────────────────────────────────────────────
-function resetPackSequence() {
-  openingStep.value   = 'pack'
-  glowStage.value     = 'hidden'
-  revealComplete.value = false
-  showGlow.value      = false
-  packContents.value  = []
-}
-
 async function buyPack(pack) {
   if (buyingPackIds.value.includes(pack.id)) return
   const price = displayPrice(packBasePrice(pack))
@@ -964,31 +919,10 @@ async function buyPack(pack) {
       body: { packId: pack.id },
     })
 
-    openingPack.value    = pack
-    resetPackSequence()
-    overlayVisible.value = true
-    showGlow.value       = true
-
-    setTimeout(() => { glowStage.value = 'expand' }, 2000)
-
-    setTimeout(async () => {
-      try {
-        packContents.value = await $fetch('/api/cmart/open-pack', {
-          query: { id: res.userPackId }
-        })
-      } catch (e) {
-        console.error('Failed to open pack', e)
-        showToast('Failed to open pack', 'error')
-      }
-      openingStep.value    = 'reveal'
-      revealComplete.value = true
-      glowStage.value      = 'fade'
-    }, 3000)
-
-    setTimeout(() => {
-      showGlow.value  = false
-      glowStage.value = 'hidden'
-    }, 6000)
+    // The purchase created a sealed pack; the overlay opens it (POST /api/packs/open). If that fails the pack simply
+    // stays sealed in My Collection > Packs — the player never loses it.
+    openingPack.value       = pack
+    openingUserPackId.value = res.userPackId
 
     await fetchSelf({ force: true })
     await loadOwnedCtoonIds()
@@ -1000,8 +934,8 @@ async function buyPack(pack) {
 }
 
 async function closeOverlay() {
-  overlayVisible.value = false
-  resetPackSequence()
+  openingUserPackId.value = null
+  openingPack.value       = null
   await fetchPacks()
   await loadOwnedCtoonIds()
 }
@@ -1405,86 +1339,20 @@ async function closeOverlay() {
   font-size: 0.8rem;
 }
 
-/* ── Pack opening overlay ────────────────────────────────────── */
-:global(.pack-overlay) {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  background: rgba(0, 0, 0, 0.75);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  overflow-y: auto;
-}
-
-:global(.pack-overlay-card) {
-  position: relative;
-  background: #fff;
-  border-radius: 12px;
-  padding: 24px;
-  width: 100%;
-  max-width: 640px;
-  max-height: 90vh;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-}
-
+/* The opening overlay's styles live in components/PackOpenOverlay.vue. These two badge rules stay: the pack PREVIEW
+   modal above still uses them. */
 :global(.pack-overlay-close) {
   position: absolute;
-  top: 12px;
-  right: 12px;
+  top: 6px;
+  right: 6px;
+  width: 44px;
+  height: 44px;
   background: none;
   border: none;
   font-size: 1.2rem;
   cursor: pointer;
   color: #555;
   line-height: 1;
-}
-
-:global(.pack-overlay-img) {
-  max-width: 100%;
-  max-height: 60vh;
-  object-fit: contain;
-}
-
-:global(.pack-reveal-grid) {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-  width: 100%;
-}
-
-:global(.pack-reveal-card) {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: #f5f8ff;
-  border: 2px solid #c7d8f0;
-  border-radius: 8px;
-  padding: 10px 8px;
-  gap: 4px;
-}
-
-:global(.pack-reveal-new) {
-  border-color: #16a34a;
-  animation: cardGlow 1.5s ease-in-out infinite alternate;
-}
-
-:global(.pack-new-badge) {
-  position: absolute;
-  top: 6px;
-  left: 6px;
-  background: #16a34a;
-  color: #fff;
-  font-size: 0.6rem;
-  font-weight: bold;
-  padding: 2px 5px;
-  border-radius: 10px;
 }
 
 :global(.pack-exclusive-badge) {
@@ -1505,96 +1373,6 @@ async function closeOverlay() {
   right: auto;
   left: 4px;
   text-align: left;
-}
-
-:global(.pack-reveal-img-wrap) {
-  position: relative;
-  display: inline-block;
-  margin-top: 16px;
-}
-
-:global(.pack-reveal-img) {
-  width: 80px;
-  height: 80px;
-  object-fit: contain;
-  display: block;
-}
-
-:global(.pack-reveal-name) {
-  font-size: 0.75rem;
-  font-weight: bold;
-  text-align: center;
-  color: #1a2a40;
-  margin: 0;
-}
-
-:global(.pack-reveal-rarity) {
-  font-size: 0.65rem;
-  color: #556;
-  margin: 0;
-  text-transform: capitalize;
-}
-
-:global(.pack-reveal-mint) {
-  font-size: 0.6rem;
-  color: #889;
-  margin: 0;
-}
-
-:global(.pack-reveal-close-btn) {
-  margin-top: 8px;
-  padding: 8px 24px;
-  background: var(--OrbitDarkBlue, #336699);
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-weight: bold;
-  cursor: pointer;
-  align-self: stretch;
-}
-
-:global(.pack-reveal-close-btn:hover) {
-  background: var(--OrbitLightBlue, #3399CC);
-}
-
-/* ── Glow effect ─────────────────────────────────────────────── */
-:global(.pack-glow) {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  width: 1vw;
-  height: 1vh;
-  background: white;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  pointer-events: none;
-  z-index: 1100;
-}
-
-:global(.pack-glow.expand) {
-  animation: expandGlow 2s ease-out forwards;
-}
-
-:global(.pack-glow.fade) {
-  animation:
-    expandGlow 2s ease-out forwards,
-    fadeGlow   1s ease-in 2s forwards;
-}
-
-@keyframes expandGlow {
-  from { width: 1vw; height: 1vh; opacity: 1; }
-  to   { width: 300vw; height: 300vh; opacity: 1; }
-}
-
-@keyframes fadeGlow {
-  from { opacity: 1; }
-  to   { opacity: 0; }
-}
-
-@keyframes cardGlow {
-  from { box-shadow: 0 0 4px #16a34a; }
-  to   { box-shadow: 0 0 16px #16a34a; }
 }
 
 /* ── Toast ───────────────────────────────────────────────────── */
@@ -1647,10 +1425,6 @@ async function closeOverlay() {
   }
 
   .upgrade-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  :global(.pack-reveal-grid) {
     grid-template-columns: repeat(2, 1fr);
   }
 

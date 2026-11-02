@@ -99,7 +99,7 @@ export function packBlockReason (pack, state, ownerId) {
 const SPECIFIC_MESSAGES = Object.freeze({
   [PACK_BLOCK.NOT_FOUND]: 'Pack not found.',
   [PACK_BLOCK.NOT_OWNER]: 'Pack not found.',
-  [PACK_BLOCK.OPENED]: 'This pack has already been opened.',
+  [PACK_BLOCK.OPENED]: 'Pack already opened',
   [PACK_BLOCK.IN_AUCTION]: 'This pack is in an active auction.',
   [PACK_BLOCK.IN_TRADE]: 'This pack is part of a pending trade. Resolve the trade first.'
 })
@@ -111,7 +111,9 @@ const SPECIFIC_MESSAGES = Object.freeze({
  */
 export function packBlockError (reason, { generic = false } = {}) {
   if (generic) return createError({ statusCode: 400, statusMessage: PACK_UNAVAILABLE_MESSAGE })
-  const statusCode = reason === PACK_BLOCK.NOT_FOUND || reason === PACK_BLOCK.NOT_OWNER ? 404 : 409
+  const statusCode = reason === PACK_BLOCK.NOT_FOUND || reason === PACK_BLOCK.NOT_OWNER ? 404
+    : reason === PACK_BLOCK.OPENED ? 400 // unchanged from the old open-pack endpoint
+    : 409
   return createError({ statusCode, statusMessage: SPECIFIC_MESSAGES[reason] || PACK_UNAVAILABLE_MESSAGE })
 }
 
