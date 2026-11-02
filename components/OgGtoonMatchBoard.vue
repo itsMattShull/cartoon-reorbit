@@ -517,8 +517,25 @@ function oppSlotFaceDown(slot) {
 }
 
 const scoreOf = (list, side) => list.filter(r => !stillHidden(r, side)).reduce((a, r) => a + (displayed(r, side)?.finalValue || 0), 0)
-const youScore = computed(() => scoreOf(youRevealed.value, youSide.value))
-const oppScore = computed(() => scoreOf(oppRevealed.value, oppSide.value))
+/* The score shown on the board matches the final score: face-up values, minus the slot-7 swap fee, plus the +15
+ * bonus for holding more cards of the single revealed goal color (same rules as determineWinner on the server). */
+const SWAP_FEE = 10
+const ONE_COLOR_BONUS = 15
+const oneColorLeader = computed(() => {
+  const colors = goalColors.value
+  if (colors.length !== 1) return null
+  const you = colorCounts(youRevealed.value, youSide.value)[colors[0]] ?? 0
+  const opp = colorCounts(oppRevealed.value, oppSide.value)[colors[0]] ?? 0
+  return you > opp ? 'you' : opp > you ? 'opp' : null
+})
+const youScore = computed(() =>
+  scoreOf(youRevealed.value, youSide.value)
+  - (matchState.value?.you?.swapUsed ? SWAP_FEE : 0)
+  + (oneColorLeader.value === 'you' ? ONE_COLOR_BONUS : 0))
+const oppScore = computed(() =>
+  scoreOf(oppRevealed.value, oppSide.value)
+  - (matchState.value?.opponent?.swapUsed ? SWAP_FEE : 0)
+  + (oneColorLeader.value === 'opp' ? ONE_COLOR_BONUS : 0))
 
 
 /* ── Hand: selecting, placing, discarding ────────────────────────────────────────────────── */
