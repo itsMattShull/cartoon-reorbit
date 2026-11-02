@@ -99,3 +99,18 @@ export async function startApi(routes) {
     close: () => new Promise(resolve => server.close(resolve))
   }
 }
+
+/** A pack definition with no contents — enough for anything that only needs a Pack row to point at. */
+export function mkBarePack(prisma, over = {}) {
+  return prisma.pack.create({ data: { name: `Pack ${tag()}`, inCmart: false, imagePath: `/test/pack-${tag()}.png`, ...over } })
+}
+
+/** A SEALED pack owned by `userId` (a new bare Pack unless `packId` is given). */
+export async function mkUserPack(prisma, userId, over = {}) {
+  const packId = over.packId ?? (await mkBarePack(prisma)).id
+  const { packId: _omit, ...rest } = over
+  return prisma.userPack.create({ data: { userId, packId, opened: false, source: 'CODE', ...rest } })
+}
+
+export const packOwnerOf = async (prisma, userPackId) =>
+  (await prisma.userPack.findUnique({ where: { id: userPackId }, select: { userId: true } }))?.userId
