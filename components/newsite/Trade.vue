@@ -263,7 +263,7 @@
             </button>
           </div>
 
-          <TradePackPicker v-model="requestedPacks" :username="tradeTargetUser.username" title="Packs to request" />
+          <TradePackPicker v-model="requestedPacks" :username="tradeTargetUser.username" :exclude-offer-id="tradeCounterSourceId" title="Packs to request" />
 
           <!-- Selected strip: the only place the full selection is visible at
                once, since the grid paginates at 50 and filters can hide picks. -->
@@ -383,7 +383,7 @@
             </div>
           </div>
 
-          <TradePackPicker v-model="offeredPacks" title="Packs to offer" />
+          <TradePackPicker v-model="offeredPacks" :exclude-offer-id="tradeCounterSourceId" title="Packs to offer" />
 
           <div v-if="selectedInitiatorCtoons.length" class="tr-chips">
             <span class="tr-chips-label">Offering {{ selectedInitiatorCtoons.length }} / {{ MAX_CTOONS_PER_SIDE }}:</span>

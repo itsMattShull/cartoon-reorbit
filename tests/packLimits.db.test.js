@@ -88,3 +88,16 @@ run('parallel buys cannot slip past the limit', async () => {
     assert.equal(await pointsOf(prisma, user.id), 100000 - 100 * limit, 'only successful purchases were charged')
   }
 })
+
+run('parallel buys cannot spend the same points twice (affordability is re-checked under a row lock)', async () => {
+  // 1000 points, 700-point packs, 6 parallel buys of DIFFERENT pack rows (so the per-(user,pack) advisory lock does not
+  // serialise them): exactly one may succeed and the balance must never go negative.
+  const packs = []
+  for (let i = 0; i < 6; i++) packs.push(await mkListedPack({ price: 700 }))
+  const user = await mkUser(prisma, { points: 1000 })
+  const results = await Promise.all(packs.map(p => buy(p.id, user.id)))
+  const ok = results.filter(r => r.status === 200).length
+  assert.equal(ok, 1, JSON.stringify(results.map(r => r.status)))
+  assert.equal(await pointsOf(prisma, user.id), 300)
+  assert.equal(await prisma.userPack.count({ where: { userId: user.id } }), 1)
+})

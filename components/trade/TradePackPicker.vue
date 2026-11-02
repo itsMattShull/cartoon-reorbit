@@ -55,6 +55,7 @@ import { MAX_PACKS_PER_SIDE } from '~/server/utils/tradeOfferLimits'
 const props = defineProps({
   modelValue: { type: Array, default: () => [] },
   username: { type: String, default: null }, // null = my own packs
+  excludeOfferId: { type: String, default: null }, // counter mode: the offer being replaced, whose packs stay available
   title: { type: String, default: 'Packs' }
 })
 const emit = defineEmits(['update:modelValue'])
@@ -80,14 +81,21 @@ function change (g, delta) {
 }
 
 let seq = 0
+let firstLoad = true
 async function load () {
   const mine = ++seq
   loading.value = true; error.value = ''
   try {
-    const q = props.username ? `?username=${encodeURIComponent(props.username)}` : ''
+    const qs = new URLSearchParams()
+    if (props.username) qs.set('username', props.username)
+    if (props.excludeOfferId) qs.set('excludeOfferId', props.excludeOfferId)
+    const q = qs.toString() ? `?${qs}` : ''
     const res = await $fetch(`/api/trade/user-packs${q}`)
     if (mine !== seq) return
     available.value = res.packs || []
+    // Nothing to pick from: start collapsed so an empty picker doesn't push the real offer builder down on a phone.
+    if (firstLoad && !available.value.length && !props.modelValue.length) open.value = false
+    firstLoad = false
     reconcile()
   } catch (err) {
     if (mine !== seq) return
@@ -115,7 +123,7 @@ function reconcile () {
 }
 
 onMounted(load)
-watch(() => props.username, () => { trimmedNote.value = ''; load() })
+watch(() => [props.username, props.excludeOfferId], () => { trimmedNote.value = ''; load() })
 </script>
 
 <style scoped>

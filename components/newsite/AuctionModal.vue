@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
     <div class="am-overlay" @mousedown.self="$emit('close')" @keydown.esc.stop="$emit('close')">
-      <div class="am-modal" role="dialog" aria-modal="true" aria-labelledby="am-title-text">
+      <div ref="dialogEl" class="am-modal" role="dialog" aria-modal="true" aria-labelledby="am-title-text" tabindex="-1">
 
         <!-- ── Header ── -->
         <div class="am-header">
@@ -69,7 +69,7 @@
                   Starting bids are usually set lower.
                 </div>
               </template>
-              <template v-else>
+              <template v-else-if="!(isPack && recentAuctions.length)">
                 <div class="am-guide-note">Not enough sales data yet.</div>
               </template>
             </div>
@@ -174,10 +174,17 @@ const sending        = ref(false)
 const recentAuctions = ref([])
 const suggestion     = ref(null)
 const loadingSuggestion = ref(true)
+const dialogEl       = ref(null)
+let previouslyFocused = null
 const inCzone        = ref(false)
 const toast          = reactive({ message: '', type: 'success' })
 
+onBeforeUnmount(() => { if (previouslyFocused?.isConnected) previouslyFocused.focus?.() })
+
 onMounted(async () => {
+  // Move focus into the dialog (and hand it back on close) so keyboard / screen-reader users aren't left behind it.
+  previouslyFocused = document.activeElement
+  nextTick(() => dialogEl.value?.focus?.())
   if (isPack.value) {
     // Recent sales of this pack TYPE; there is no price suggestion engine for packs.
     try {

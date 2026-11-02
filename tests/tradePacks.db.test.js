@@ -222,3 +222,18 @@ run('user-packs lists a player\'s tradable packs by type with counts only, and h
   const self = await api.call('get', '/api/trade/user-packs', { userId: a.id })
   assert.equal(self.body.packs.find(p => p.packId === pa.id).available, 2)
 })
+
+run('user-packs excludeOfferId frees the packs of the offer being countered — for its parties only', async () => {
+  const { a, b, pa } = await pair()
+  const [only] = await give(a.id, pa.id, 1)
+  const o = await offer(a.id, { recipientUsername: b.username, packsOffered: [{ packId: pa.id, quantity: 1 }] })
+  assert.equal(o.status, 200, JSON.stringify(o.body))
+  const avail = (userId, qs) => api.call('get', `/api/trade/user-packs?username=${a.username}${qs}`, { userId })
+    .then(r => r.body.packs.find(p => p.packId === pa.id)?.available || 0)
+  assert.equal(await avail(b.id, ''), 0, 'held by the pending offer')
+  assert.equal(await avail(b.id, `&excludeOfferId=${o.body.offer.id}`), 1, 'the recipient countering it sees the pack as available')
+  const stranger = await mkUser(prisma)
+  assert.equal(await avail(stranger.id, `&excludeOfferId=${o.body.offer.id}`), 0, 'a non-party gets the plain answer')
+  assert.equal(await avail(b.id, '&excludeOfferId=not-a-uuid'), 0, 'garbage is ignored')
+  void only
+})

@@ -115,13 +115,15 @@ function find (input) {
   return byName.length === 1 ? byName[0] : null
 }
 
-// Reflect an incoming value (the page's initial load) into the inputs.
-watch(() => props.modelValue, (m) => {
-  limitText.value = m.limit ?? null
-  const p = options.value.find(o => o.id === m.packId)
+// Reflect an incoming value (the page's initial load) into the inputs. The pack text is driven by `packId` ONLY: a deep
+// watch on the whole object also fired on every edit to the limit and, while no pack was chosen yet, wiped whatever the
+// admin had typed into the pack box.
+watch(() => props.modelValue.limit, (l) => { limitText.value = l ?? null }, { immediate: true })
+watch(() => props.modelValue.packId, (id) => {
+  const p = options.value.find(o => o.id === id)
   if (p) packText.value = label(p)
-  else if (!m.packId) packText.value = ''
-}, { immediate: true, deep: true })
+  else if (!id && !packText.value.trim()) packText.value = ''
+}, { immediate: true })
 
 const problem = computed(() => {
   const typed = packText.value.trim()

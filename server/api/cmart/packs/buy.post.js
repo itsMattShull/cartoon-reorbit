@@ -145,6 +145,19 @@ export default defineEventHandler(async (event) => {
       }
     }
 
+    // 6-0  re-check affordability UNDER a row lock. The pre-check above runs outside any transaction and the advisory lock
+    // above only serialises one (user, pack) pair, so N parallel buys of different packs (or of one with no limit) all
+    // passed it and all committed — spending the same points N times, with N directly-tradable packs to show for it.
+    await tx.$queryRaw`SELECT "points" FROM "UserPoints" WHERE "userId" = ${me.id} FOR UPDATE`
+    const [{ points: nowPoints } = { points: 0 }] = await tx.$queryRaw`SELECT "points" FROM "UserPoints" WHERE "userId" = ${me.id}`
+    const lockedNow = await tx.lockedPoints.aggregate({
+      where: { userId: me.id, status: 'ACTIVE' },
+      _sum: { amount: true }
+    })
+    if ((nowPoints || 0) - (lockedNow._sum.amount || 0) < effectivePackPrice) {
+      throw createError({ statusCode: 400, statusMessage: 'Not enough available points' })
+    }
+
     // 6-a  deduct points
     const updated = await tx.userPoints.update({
       where: { userId: me.id },

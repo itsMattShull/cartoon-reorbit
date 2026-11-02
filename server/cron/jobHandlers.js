@@ -26,7 +26,7 @@ import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDis
 import { applyDissolveSchedule, getDissolveScheduleConfig, requeueOverdueDissolveLaunches } from '../utils/dissolveSchedule.js'
 import { reconcileDissolveQueueOwnership } from '../utils/dissolveMisfire.js'
 import { reconcilePackRewards } from '../utils/ogGtoonsPackReward.js'
-import { lockPacksForUpdate } from '../utils/userPackState.js'
+import { moveSealedPacks } from '../utils/userPackTransfer.js'
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
 import { logCronError } from '../utils/cronErrorLog.js'
@@ -682,43 +682,8 @@ async function enforceDormantAccounts() {
         }
 
         // 3.2b sealed packs go to the official account too — otherwise they would sit on a disabled account forever (and a
-        // pack in a pending trade or an auction would stay locked there). Unopened packs only; opened ones are gone.
-        const heldPacks = await tx.userPack.findMany({ where: { userId: u.id, opened: false }, select: { id: true, packId: true } })
-        if (heldPacks.length) {
-          const packIds = heldPacks.map(p => p.id)
-          // Lock first (lock order: UserPack rows before anything that reads them), then act on what we locked.
-          await lockPacksForUpdate(tx, packIds)
-
-          // Pending offers holding any of these packs can never be honoured now: reject them and give the initiator
-          // their locked points back (same two writes as a manual reject).
-          const stuckOffers = await tx.tradeOffer.findMany({
-            where: { status: 'PENDING', packs: { some: { userPackId: { in: packIds } } } },
-            select: { id: true, initiatorId: true }
-          })
-          for (const o of stuckOffers) {
-            await tx.tradeOffer.updateMany({ where: { id: o.id, status: 'PENDING' }, data: { status: 'REJECTED', updatedAt: new Date() } })
-            await tx.lockedPoints.updateMany({
-              where: { userId: o.initiatorId, status: 'ACTIVE', contextType: 'TRADE', contextId: o.id },
-              data: { status: 'RELEASED' }
-            })
-          }
-
-          // A running pack auction keeps going, sold on the official account's behalf. For a cToon the seller is reassigned
-          // and the cToon stays put; a pack settles only if the seller still HOLDS it (server/utils/auctionSettle.js), so the
-          // pack moves with the seller.
-          await tx.auction.updateMany({
-            where: { kind: 'PACK', userPackId: { in: packIds }, status: 'ACTIVE' },
-            data: { creatorId: official.id }
-          })
-
-          await tx.userPack.updateMany({ where: { id: { in: packIds }, userId: u.id, opened: false }, data: { userId: official.id } })
-          await tx.packOwnerLog.createMany({
-            data: heldPacks.map(p => ({
-              userPackId: p.id, packId: p.packId, userId: official.id, method: 'DISSOLVE_INACTIVE',
-              counterpartyUserId: u.id, counterpartyUsername: u.username
-            }))
-          })
-        }
+        // pack in a pending trade or an auction would stay locked there). See server/utils/userPackTransfer.js.
+        await moveSealedPacks(tx, { fromUserId: u.id, toUserId: official.id, method: 'DISSOLVE_INACTIVE', fromUsername: u.username })
 
         // 3.3 disable account
         await tx.user.update({ where: { id: u.id }, data: { active: false } })

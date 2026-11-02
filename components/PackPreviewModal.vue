@@ -107,6 +107,12 @@ onBeforeUnmount(() => {
 })
 </script>
 
+<style>
+/* Unscoped: the scroll lock targets <html>. Declared here too because the Auction House pages mount this modal without
+   ever loading PackOpenOverlay. */
+html.pro-scroll-lock { overflow: hidden; }
+</style>
+
 <style scoped>
 .ppm-backdrop { position: fixed; inset: 0; z-index: 1000; background: rgba(0, 0, 0, 0.75); display: flex; align-items: center; justify-content: center; padding: 12px; overscroll-behavior: contain; }
 .ppm-dialog { display: flex; flex-direction: column; width: 100%; max-width: 680px; max-height: 90vh; max-height: calc(100dvh - 24px); background: #fff; color: #1a2a40; border-radius: 12px; overflow: hidden; outline: none; }

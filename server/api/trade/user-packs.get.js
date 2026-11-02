@@ -12,6 +12,7 @@
 import { defineEventHandler, getQuery, createError, setHeader } from 'h3'
 import { prisma } from '@/server/prisma'
 import { rateLimit } from '@/server/utils/rateLimit'
+import { isUuid } from '@/server/utils/tradeOfferRules'
 
 export default defineEventHandler(async (event) => {
   const me = event.context.userId
@@ -29,13 +30,26 @@ export default defineEventHandler(async (event) => {
     target = user
   }
 
+  // Counter-offer mode: the offer being countered is about to be replaced, so packs held by IT are still available to the
+  // counter. Honoured only when the caller is a party to that PENDING offer (anyone else gets the plain answer), and
+  // scoped by OFFER id — same rule the counter endpoint applies (server/utils/userPackState.js, excludeOfferIds).
+  const rawExclude = getQuery(event).excludeOfferId
+  let excludeOfferId = null
+  if (typeof rawExclude === 'string' && isUuid(rawExclude)) {
+    const src = await prisma.tradeOffer.findFirst({
+      where: { id: rawExclude, status: 'PENDING', OR: [{ initiatorId: me }, { recipientId: me }] },
+      select: { id: true }
+    })
+    excludeOfferId = src?.id ?? null
+  }
+
   const groups = await prisma.userPack.groupBy({
     by: ['packId'],
     where: {
       userId: target.id,
       opened: false,
       auctions: { none: { status: 'ACTIVE' } },
-      tradeOfferPacks: { none: { tradeOffer: { status: 'PENDING' } } }
+      tradeOfferPacks: { none: { tradeOffer: { status: 'PENDING', ...(excludeOfferId ? { id: { not: excludeOfferId } } : {}) } } }
     },
     _count: { _all: true }
   })

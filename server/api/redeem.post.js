@@ -167,6 +167,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const mintedRecords = []
+  let packGrantFailure = null
   let qe
   try {
     // Pack-only / points-only codes never touch Redis: no queue, no QueueEvents, so a Redis outage can't fail them.
@@ -198,8 +199,25 @@ export default defineEventHandler(async (event) => {
     }
     // Every mint succeeded. Only now do this code's packs exist (see packsInClaimTx above) — so a failure above rolls
     // the claim back with no pack ever having been visible, openable or tradable.
+    // The cToons are already minted at this point, so a failure HERE must not fall into the rollback below (it would
+    // delete the claim and let the player redeem — and be minted — the same cToons again). grantCodePacks is idempotent
+    // (unique sourceRef + ordinal), so retry it; if it still fails, keep the claim and report it.
     if (!packsInClaimTx) {
-      grantedPacks = await prisma.$transaction(tx => grantCodePacks(tx, { userId, claimId, awards: packAwards }))
+      let grantErr = null
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          grantedPacks = await prisma.$transaction(tx => grantCodePacks(tx, { userId, claimId, awards: packAwards }))
+          grantErr = null
+          break
+        } catch (e) {
+          grantErr = e
+          await new Promise(r => setTimeout(r, 150 * (attempt + 1)))
+        }
+      }
+      if (grantErr) {
+        console.error(`[redeem] pack grant failed after mint for claim ${claimId} (user ${userId}):`, grantErr)
+        packGrantFailure = grantErr
+      }
     }
   } catch (mintErr) {
     // Mint failed — best-effort rollback of the claim so the user can retry
@@ -225,6 +243,14 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 500, statusMessage: mintErr?.message || 'Failed to mint cToon. Please try again.' })
   } finally {
     await qe?.close()
+  }
+
+  if (packGrantFailure) {
+    // cToons delivered, claim kept (so nothing can be minted twice), packs not yet created.
+    throw createError({
+      statusCode: 500,
+      statusMessage: 'Your code was redeemed but the pack reward could not be added. Please contact support — do not try the code again.'
+    })
   }
 
   const packs = grantedPacks.map(g => ({

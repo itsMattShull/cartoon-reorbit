@@ -34,7 +34,7 @@
       >
         <header class="pro-head">
           <h2 :id="titleId" ref="titleEl" class="pro-title" tabindex="-1">{{ title }}</h2>
-          <button v-if="phase !== 'opening'" type="button" class="pro-x" aria-label="Close" @click="close">✕</button>
+          <button v-if="phase !== 'opening' || stuck" type="button" class="pro-x" aria-label="Close" @click="close">✕</button>
         </header>
 
         <div class="pro-body">
@@ -79,7 +79,10 @@
             </li>
           </ul>
 
-          <div v-if="glow" class="pro-glow" :class="{ 'pro-glow--fade': phase !== 'opening' }" aria-hidden="true" />
+          <!-- The glow is bigger than the body; clip it here so it can never create scrollbars inside .pro-body. -->
+          <div v-if="glow" class="pro-glow-clip" aria-hidden="true">
+            <div class="pro-glow" :class="{ 'pro-glow--fade': phase !== 'opening' }" />
+          </div>
         </div>
 
         <footer class="pro-foot">
@@ -120,12 +123,15 @@ const emit = defineEmits(['opened', 'open-next', 'close', 'failed'])
 const FULL_EFFECT_CARDS = 4
 const MIN_REVEAL_MS = 3000       // how long the unwrap plays before the cards are shown
 const REDUCED_REVEAL_MS = 300    // prefers-reduced-motion: a brief fade only
+const STUCK_AFTER_MS = 8000      // show ✕ while still opening
+const REQUEST_TIMEOUT_MS = 30000 // give up waiting on the server
 
 const phase = ref('opening')     // 'opening' | 'revealed' | 'error'
 const cards = ref([])
 const errorMessage = ref('')
 const glow = ref(false)
 const skipped = ref(false)
+const stuck = ref(false)         // the request is taking suspiciously long: let the player leave
 const reduceMotion = ref(false)
 const dialogEl = ref(null)
 const titleEl = ref(null)
@@ -158,7 +164,9 @@ function maybeReveal () {
   if (phase.value !== 'opening' || !responseReady) return
   if (!minElapsed && !skipped.value) return
   phase.value = 'revealed'
-  later(() => { glow.value = false }, 1100)
+  // Skipped before the glow peaked: drop it now rather than fading in a half-grown white disc (a flash).
+  if (skipped.value && !minElapsed) glow.value = false
+  else later(() => { glow.value = false }, 1100)
   nextTick(() => titleEl.value?.focus?.())
 }
 
@@ -176,13 +184,16 @@ async function run () {
   inFlight.add(props.userPackId)
   claimedFlight = true
   try {
-    const res = await $fetch('/api/packs/open', { method: 'POST', body: { userPackId: props.userPackId } })
+    const res = await $fetch('/api/packs/open', { method: 'POST', body: { userPackId: props.userPackId }, timeout: REQUEST_TIMEOUT_MS })
     cards.value = Array.isArray(res) ? res : []
     responseReady = true
     emit('opened', cards.value)
     maybeReveal()
   } catch (err) {
-    errorMessage.value = `${err?.data?.statusMessage || err?.statusMessage || 'Something went wrong.'} ${props.errorHint}`.trim()
+    const timedOut = !err?.data?.statusMessage && /timeout|aborted/i.test(`${err?.name} ${err?.message}`)
+    errorMessage.value = timedOut
+      ? 'This is taking longer than expected. The pack may already have opened — check My Collection before trying again.'
+      : `${err?.data?.statusMessage || err?.statusMessage || 'Something went wrong.'} ${props.errorHint}`.trim()
     phase.value = 'error'
     emit('failed', err) // lets the opener react (e.g. drop a pack that was already opened in another tab)
     glow.value = false
@@ -203,7 +214,7 @@ function focusables () {
 function onKeydown (e) {
   if (e.key === 'Escape') {
     e.stopPropagation()
-    if (phase.value === 'opening') skip()
+    if (phase.value === 'opening') { if (stuck.value) close(); else skip() }
     else close()
     return
   }
@@ -227,6 +238,7 @@ onMounted(() => {
     glow.value = true
     later(() => { minElapsed = true; maybeReveal() }, MIN_REVEAL_MS)
   }
+  later(() => { if (phase.value === 'opening') stuck.value = true }, STUCK_AFTER_MS)
   run()
 })
 
@@ -357,6 +369,7 @@ html.pro-scroll-lock { overflow: hidden; }
 .pro-btn--ghost { background: #fff; color: var(--OrbitDarkBlue, #336699); }
 
 /* Contained glow: scales and fades only (compositor-friendly), never a full-viewport flash. */
+.pro-glow-clip { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .pro-glow {
   position: absolute; left: 50%; top: 50%;
   width: 120%; aspect-ratio: 1 / 1;

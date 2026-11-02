@@ -141,7 +141,14 @@ async function load ({ silent = false } = {}) {
     items.value = res.items
     totalPages.value = res.totalPages
     summary.value = { total: res.total, byPack: res.byPack }
-    if (filterPackId.value && !res.byPack.some(g => g.packId === filterPackId.value)) filterPackId.value = null
+    if (filterPackId.value && !res.byPack.some(g => g.packId === filterPackId.value)) {
+      // The filtered type is gone (last copy opened/traded away). `items` above is the EMPTY filtered page — show the
+      // unfiltered list instead of a false "No packs yet".
+      filterPackId.value = null
+      page.value = 1
+      await load({ silent })
+      return
+    }
     // Fewer pages than before (we just opened the last pack on the last page): step back rather than show a blank page.
     if (page.value > res.totalPages) { page.value = res.totalPages; await load({ silent }) }
   } catch (err) {

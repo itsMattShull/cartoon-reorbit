@@ -109,7 +109,7 @@
         @opened="onPackOpened"
         @open-next="openNextPack"
         @failed="onPackFailed"
-        @close="opening = null"
+        @close="closeOverlay"
       />
 
       <Teleport to="body">
@@ -165,6 +165,14 @@ function onPackOpened () { if (opening.value) dropPack(opening.value.userPackId)
 function onPackFailed (err) {
   const status = err?.statusCode || err?.status || err?.response?.status
   if (opening.value && (status === 400 || status === 404)) dropPack(opening.value.userPackId)
+}
+function closeOverlay () {
+  opening.value = null
+  // The overlay hands focus back to the Open button that launched it — but that tile is gone once its last pack was opened.
+  nextTick(() => {
+    if (document.activeElement && document.activeElement !== document.body) return
+    document.querySelector('.rd-open-btn, .rd-link')?.focus?.()
+  })
 }
 function openNextPack () {
   const t = packTiles.value[0]
