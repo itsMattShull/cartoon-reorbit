@@ -338,7 +338,7 @@ html.newsite-active [role="button"]:not([aria-disabled="true"]) {
        the modals cover the pill correctly — so without this the behaviour flips
        at 768px, which is exactly the class of bug the note above warns about.
        A permanently-visible unread badge would make it obvious. -->
-  <Onboarding v-if="!ctoonModalIsOpen && !auctionModalIsOpen && !isAdminRoute" />
+  <Onboarding v-if="!ctoonModalIsOpen && !auctionModalIsOpen && !isAdminRoute && !isOgGtoonsRoute" />
   <CMoonSelectModal />
   <FullscreenEffectHost />
   <CMoonRewardModal />
@@ -355,6 +355,8 @@ const route = useRoute()
 // newsite admin console lives under /newsite/admin/* and shares this layout with the rest of
 // /newsite, so it needs its own check rather than inheriting default.vue's.
 const isAdminRoute = computed(() => route.path.startsWith('/newsite/admin'))
+// The OG gToons hub and match board don't show the floating "Daily" onboarding widget.
+const isOgGtoonsRoute = computed(() => route.path.startsWith('/newsite/gtoons-classic'))
 const { isOpen: ctoonModalIsOpen } = useCtoonModal()
 const {
   isOpen:  auctionModalIsOpen,

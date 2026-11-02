@@ -211,7 +211,9 @@
         <div v-if="swapSheetOpen" class="fixed inset-x-0 bottom-0 bg-gray-900 border-t border-white/20 rounded-t-xl z-50 p-4 max-h-[80vh] overflow-y-auto">
           <h3 class="font-bold mb-3">Swap your slot 7 card</h3>
           <div v-if="slotSevenCard" class="flex items-center gap-3 mb-3">
-            <div class="w-20 flex-shrink-0"><OgGtoonCardTile :card="slotSevenCard" size="board" tone="selected" :animate="false" :inspectable="false" /></div>
+            <!-- The board tile fills its parent and sizes itself from it (container-type: size), so the parent needs a
+                 definite height as well as a width — otherwise it collapses and the card renders oversized on some phones. -->
+            <div class="w-20 h-20 flex-shrink-0"><OgGtoonCardTile :card="slotSevenCard" size="board" tone="selected" :animate="false" :inspectable="false" /></div>
             <p class="text-xs text-gray-300">
               <strong>{{ slotSevenCard.name }}</strong> goes back into your hand, and the gToon you choose below takes slot 7.
             </p>
