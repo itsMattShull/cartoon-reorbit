@@ -35,6 +35,30 @@ export class CMoonPrestigeError extends Error {
   }
 }
 
+// Parses + validates a create/edit request body for one prestige-ladder rung into
+// { level, pointThreshold, title }, or { error: '<user-facing message>' } if invalid. Shared by
+// the create/edit admin endpoints below (server/api/admin/cmoon-prestige-levels.post.js and
+// .../[id].put.js) so the bounds-checking LOGIC — not just the constants above — can never drift
+// apart between the two forms. `existing` supplies the fallback for an edit's omitted fields;
+// omit it entirely for a create, where every field is required fresh.
+export function parsePrestigeLevelBody(body, existing = null) {
+  const level = body?.level === undefined && existing ? existing.level : Math.trunc(Number(body?.level))
+  const pointThreshold = body?.pointThreshold === undefined && existing
+    ? existing.pointThreshold
+    : Math.trunc(Number(body?.pointThreshold))
+  const title = body?.title === undefined && existing
+    ? existing.title
+    : (typeof body?.title === 'string' ? body.title.trim().slice(0, 60) || null : null)
+
+  if (!Number.isInteger(level) || level < PRESTIGE_LEVEL_MIN || level > PRESTIGE_LEVEL_MAX) {
+    return { error: `Level must be a whole number between ${PRESTIGE_LEVEL_MIN} and ${PRESTIGE_LEVEL_MAX}` }
+  }
+  if (!Number.isInteger(pointThreshold) || pointThreshold < 0 || pointThreshold > PRESTIGE_THRESHOLD_MAX) {
+    return { error: 'Point threshold must be a non-negative whole number' }
+  }
+  return { level, pointThreshold, title }
+}
+
 // Pure — given the full sorted list of configured levels and a player's CURRENT level, finds the
 // row that unlocks their NEXT one (level: currentLevel + 1). Returns null if an admin hasn't
 // configured that far yet, which is a normal, non-error state (see this module's own header

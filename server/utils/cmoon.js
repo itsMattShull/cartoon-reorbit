@@ -1045,7 +1045,26 @@ class CMoonError extends Error {
 // "here's what's coming" reveal — this is the same config already shown publicly on the
 // cMoon's own page, not new information, and the mint jobs above are fire-and-forget, so
 // this list describes what was queued, not a confirmed-delivered receipt.
+//
+// Idempotent PER (userId, cMoonId), FOREVER — enforced here, not left to each caller's own gate,
+// because each caller's gate only covers its OWN mechanism: selectCMoonForUser can only ever fire
+// once per account (requires cMoonId: null), and prestigeUser's gate only catches a repeat
+// PRESTIGE into the same destination. Neither alone catches a player who already collected this
+// cMoon's prizes as an ordinary member, was later moved elsewhere by an admin-driven path
+// (reassignUserCMoon/Balance Teams/an accepted CMoonChangeRequest — none of which grant, see
+// tests/cmoonBalanceNoPrizeGrant.test.js), and then prestiges back INTO this same cMoon — see
+// CMoonPrizeGrantLog's own schema comment. The log row is written BEFORE the mint jobs below are
+// queued, not after: on the rare crash in between, a player simply never gets this prize rather
+// than this function being safely re-callable and silently double-granting it later — the right
+// failure mode for a one-time reward.
 export async function grantCMoonPrizes(userId, cMoonId) {
+  try {
+    await prisma.cMoonPrizeGrantLog.create({ data: { userId, cMoonId } })
+  } catch (err) {
+    if (err?.code === 'P2002') return []
+    throw err
+  }
+
   const prizes = await prisma.cMoonPrizeCtoon.findMany({
     where: { cMoonId },
     include: { ctoon: { select: { name: true, assetPath: true } } },

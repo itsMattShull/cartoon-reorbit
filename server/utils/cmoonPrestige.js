@@ -27,7 +27,7 @@ import { getGlobalConfig, reassignUserCMoon, grantCMoonPrizes } from './cmoon.js
 // comment. Re-exported here so every existing call site can keep importing from this file.
 export {
   PRESTIGE_LEVEL_MIN, PRESTIGE_LEVEL_MAX, PRESTIGE_THRESHOLD_MAX,
-  CMOON_PRESTIGE_ERRORS, CMoonPrestigeError, findNextPrestigeLevel,
+  CMOON_PRESTIGE_ERRORS, CMoonPrestigeError, findNextPrestigeLevel, parsePrestigeLevelBody,
 } from './cmoonPrestigeLevels.js'
 import { findNextPrestigeLevel, CMoonPrestigeError, CMOON_PRESTIGE_ERRORS } from './cmoonPrestigeLevels.js'
 

@@ -676,8 +676,10 @@ export function publicParticipantTeam(raid, p) {
       color: p.cMoonColor || null,
       avatarPath: p.cMoonAvatarPath || null,
       // Whether the TEAM itself is a prestige cMoon — drives CMoonRaidFighter.vue's holographic
-      // shimmer treatment. Snapshotted once at join, same as every other field here.
-      isPrestigeCMoon: !!p.cMoonIsPrestige,
+      // shimmer treatment. Snapshotted once at join, same as every other field here; a legacy
+      // participant predates that snapshot field, so it falls back to the raid's own cMoon flag
+      // exactly like name above falls back to raid.cMoonName.
+      isPrestigeCMoon: !!(p.cMoonIsPrestige ?? (legacy ? raid.cMoonIsPrestige : false)),
     },
     rank: p.rankName
       ? { name: p.rankName, tierName: p.rankTierName || null, tierLevel: p.rankTierLevel || 0, tierCount: p.rankTierCount || 0 }

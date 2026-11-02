@@ -667,6 +667,7 @@ model User {
   // to their current level in Settings); CMoonPrestigeLog carries the full per-event history.
   lastPrestigedAt        DateTime?
   prestigeLogs           CMoonPrestigeLog[]
+  prizeGrantLogs         CMoonPrizeGrantLog[]
 
   // Which of this user's earned cMoon-affinity cZone borders (see UserCMoonBorder) is currently
   // displayed on their cZone — a player can outrank the border threshold for more than one cMoon
@@ -4549,6 +4550,7 @@ model CMoon {
   // references two different cMoons (the one left, the one joined).
   prestigeLogsFrom CMoonPrestigeLog[] @relation("CMoonPrestigeLog_From")
   prestigeLogsTo   CMoonPrestigeLog[] @relation("CMoonPrestigeLog_To")
+  prizeGrantLogs   CMoonPrizeGrantLog[]
 
   @@index([memberCount])
   @@index([teamScore])
@@ -4605,6 +4607,29 @@ model CMoonPrestigeLog {
 
   @@index([userId])
   @@index([createdAt])
+}
+
+// Durable "has this user EVER received this specific cMoon's join prizes" idempotency record —
+// checked and written inside grantCMoonPrizes itself (server/utils/cmoon.js), so it holds
+// regardless of WHICH caller granted them (selectCMoonForUser's genuine first-time self-select,
+// or prestigeUser's first-visit-into-this-destination grant). Needed because those two callers'
+// own gates are each scoped to their OWN mechanism only: selectCMoonForUser only ever fires once
+// per account (cMoonId must be null), and prestigeUser's own CMoonPrestigeLog-based gate only
+// catches a repeat PRESTIGE into the same destination — neither one, on its own, catches a player
+// who already collected cMoon X's prizes by ordinary membership, was later moved to a different
+// cMoon by an admin-driven path (reassignUserCMoon never grants — see CMoonPrestigeLog's own
+// neighbor test file, tests/cmoonBalanceNoPrizeGrant.test.js), and then prestiges back INTO X —
+// which would otherwise double-grant X's prize set. One row per (userId, cMoonId) pair, forever.
+model CMoonPrizeGrantLog {
+  id        String   @id @default(uuid())
+  userId    String
+  cMoonId   String
+  grantedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cMoon CMoon @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cMoonId])
 }
 
 // Admin-authored full-screen join effect: a simple generic template (background color fade-in,

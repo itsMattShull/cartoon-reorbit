@@ -1321,6 +1321,9 @@ export async function restoreCMoonRaids() {
     raid.partyParalyzedTurns ??= 0
     raid.enemyPoisonAmount ??= 0
     raid.enemyPoisonTurnsRemaining ??= 0
+    // Predates the prestige feature -> false is the correct backfill (an old snapshot's cMoon was
+    // never flagged isPrestigeCMoon in the first place).
+    raid.cMoonIsPrestige ??= false
     // Predates the leave-cooldown-restore feature -> null is the correct backfill (nothing to
     // restore to; the initiator leaving a raid restored from one of these old snapshots simply
     // keeps whatever lastCMoonBattlePopupAt they already have, same as if this feature never
@@ -1420,7 +1423,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       // left to resolve any more, see discordChannelId below.
       const cMoon = await db.cMoon.findUnique({
         where: { id: elig.user.cMoonId },
-        select: { id: true, name: true, specialAttack: true },
+        select: { id: true, name: true, specialAttack: true, isPrestigeCMoon: true },
       })
       if (!cMoon) return socket.emit(EV('error'), { message: 'Your cMoon could not be found' })
       const initiatorProfile = await loadParticipantProfile(me.id, cMoon.id)
@@ -1445,7 +1448,12 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
           : JOIN_WINDOW_SECONDS
       ) * 1000
       const raid = {
-        id: raidId, enemyMemberId, cMoonId: cMoon.id, cMoonName: cMoon.name, discordChannelId, discordThreadId: null,
+        id: raidId, enemyMemberId, cMoonId: cMoon.id, cMoonName: cMoon.name,
+        // The raid's OWN cMoon's prestige flag — needed as publicParticipantTeam's legacy-
+        // participant fallback (a pre-cross-raid-refactor snapshot with no cMoonIsPrestige of its
+        // own), same "legacy falls back to the raid's own cMoon fields" shape cMoonName already has.
+        cMoonIsPrestige: !!cMoon.isPrestigeCMoon,
+        discordChannelId, discordThreadId: null,
         // The lobby names a raid after whoever started it — kept on the raid itself so the name
         // doesn't change if they leave during FORMING (see buildRaidLobbyEntry).
         initiatorUsername: elig.user.username,
