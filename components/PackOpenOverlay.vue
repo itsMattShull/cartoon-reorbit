@@ -115,7 +115,7 @@ const props = defineProps({
   // Shown under the error. cMart passes a hint that the pack is safe in My Collection.
   errorHint: { type: String, default: 'Your pack is still sealed — you can try again from My Collection > Packs.' }
 })
-const emit = defineEmits(['opened', 'open-next', 'close'])
+const emit = defineEmits(['opened', 'open-next', 'close', 'failed'])
 
 const FULL_EFFECT_CARDS = 4
 const MIN_REVEAL_MS = 3000       // how long the unwrap plays before the cards are shown
@@ -184,6 +184,7 @@ async function run () {
   } catch (err) {
     errorMessage.value = `${err?.data?.statusMessage || err?.statusMessage || 'Something went wrong.'} ${props.errorHint}`.trim()
     phase.value = 'error'
+    emit('failed', err) // lets the opener react (e.g. drop a pack that was already opened in another tab)
     glow.value = false
     nextTick(() => titleEl.value?.focus?.())
   } finally {

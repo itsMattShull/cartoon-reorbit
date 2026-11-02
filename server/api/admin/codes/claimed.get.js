@@ -49,6 +49,17 @@ export default defineEventHandler(async (event) => {
           },
           {
             code: {
+              rewards: {
+                some: {
+                  packs: {
+                    some: { pack: { name: { contains: q, mode: 'insensitive' } } }
+                  }
+                }
+              }
+            }
+          },
+          {
+            code: {
               prerequisites: {
                 some: { ctoon: { name: { contains: q, mode: 'insensitive' } } }
               }
@@ -73,12 +84,24 @@ export default defineEventHandler(async (event) => {
     })
   ])
 
-  // 3. Shape for frontend
+  // 3. What each claim ACTUALLY granted. Editing a code later changes what future claimants get, so the current
+  // reward definition says nothing about earlier claims; the packs themselves (UserPack.sourceRef = claim id) do.
+  const grants = claims.length
+    ? await prisma.userPack.groupBy({
+        by: ['sourceRef'],
+        where: { source: 'CODE', sourceRef: { in: claims.map(c => c.id) } },
+        _count: { _all: true }
+      })
+    : []
+  const packsByClaim = new Map(grants.map(g => [g.sourceRef, g._count._all]))
+
+  // 4. Shape for frontend
   const items = claims.map(c => ({
     id: c.id,
     code: c.code.code,
     user: c.user,
-    claimedAt: c.claimedAt
+    claimedAt: c.claimedAt,
+    packsGranted: packsByClaim.get(c.id) || 0
   }))
 
   return { items, total, page, limit }

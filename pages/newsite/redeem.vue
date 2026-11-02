@@ -25,16 +25,39 @@
               class="rd-input"
               placeholder="e.g. SPRING2025"
             />
-            <button type="submit" class="rd-btn">Redeem</button>
+            <button type="submit" class="rd-btn" :disabled="submitting" :aria-busy="submitting ? 'true' : 'false'">{{ submitting ? 'Redeeming…' : 'Redeem' }}</button>
           </form>
 
           <!-- Success -->
           <div v-if="success" class="rd-success-wrap">
-            <p class="rd-success-heading">🎉 Success! You've been awarded:</p>
+            <p class="rd-success-heading" role="status">🎉 Success! You've been awarded:</p>
 
             <div v-if="rewards.points" class="rd-points-badge">
               {{ rewards.points.toLocaleString() }} points
             </div>
+
+            <!-- Sealed packs: open them right here (same reveal as cMart) or leave them in My Collection > Packs -->
+            <div v-if="packTiles.length" class="rd-packs">
+              <h3 class="rd-bgs-title">Sealed packs</h3>
+              <div class="rd-grid">
+                <div v-for="t in packTiles" :key="t.packId" class="rd-card rd-pack-card">
+                  <span class="rd-qty" :aria-label="`${t.userPackIds.length} pack${t.userPackIds.length === 1 ? '' : 's'}`">×{{ t.userPackIds.length }}</span>
+                  <h2 class="rd-card-name">{{ t.name }}</h2>
+                  <div class="rd-card-img-wrap">
+                    <CtoonImage v-if="t.imagePath" :ctoon="{}" :src="t.imagePath" :alt="t.name" class="rd-card-img" />
+                    <span v-else class="rd-pack-fallback" aria-hidden="true">🎁</span>
+                  </div>
+                  <button type="button" class="rd-open-btn" @click="startOpen(t)">
+                    Open<template v-if="t.userPackIds.length > 1"> ({{ t.userPackIds.length }} left)</template>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <p v-if="hadPacks" class="rd-packs-note">
+              <template v-if="!packTiles.length">All opened! </template>
+              Any sealed packs are kept in
+              <NuxtLink to="/newsite/MyCollection?tab=packs" class="rd-link">My Collection → Packs</NuxtLink>.
+            </p>
 
             <!-- cToon cards -->
             <div class="rd-grid">
@@ -77,9 +100,21 @@
         </div>
       </div>
 
+      <PackOpenOverlay
+        v-if="opening"
+        :key="opening.userPackId"
+        :user-pack-id="opening.userPackId"
+        :pack="opening"
+        :remaining="remainingPacks"
+        @opened="onPackOpened"
+        @open-next="openNextPack"
+        @failed="onPackFailed"
+        @close="opening = null"
+      />
+
       <Teleport to="body">
         <transition name="rd-toast-fade">
-          <div v-if="toast.visible" class="rd-toast" :class="toast.type">
+          <div v-if="toast.visible" class="rd-toast" :class="toast.type" :role="toast.type === 'error' ? 'alert' : 'status'">
             {{ toast.message }}
           </div>
         </transition>
@@ -88,6 +123,7 @@
 
 <script setup>
 import CtoonImage from '@/components/CtoonImage.vue'
+import PackOpenOverlay from '@/components/PackOpenOverlay.vue'
 definePageMeta({
   layout: 'newsite-template',
   middleware: 'newsite',
@@ -105,6 +141,35 @@ const rawHTML = '<!-- My special production comment for this page -->'
 const code = ref('')
 const success = ref(false)
 const rewards = ref({ points: 0, ctoons: [], backgrounds: [] })
+const submitting = ref(false)
+
+// ── Sealed packs awarded by the code ─────────────────────────────
+// One tile per pack TYPE with an ×N count; Open opens one at a time through the shared overlay (the same reveal as
+// cMart). Whatever isn't opened stays in My Collection > Packs.
+const packTiles = ref([])      // [{ packId, name, imagePath, userPackIds: [...] }]
+const hadPacks = ref(false)
+const opening = ref(null)       // { userPackId, packId, name, imagePath }
+const remainingPacks = computed(() => packTiles.value.reduce((n, t) => n + t.userPackIds.length, 0))
+
+function startOpen (t) {
+  if (opening.value || !t.userPackIds.length) return
+  opening.value = { userPackId: t.userPackIds[0], packId: t.packId, name: t.name, imagePath: t.imagePath }
+}
+function dropPack (userPackId) {
+  packTiles.value = packTiles.value
+    .map(t => ({ ...t, userPackIds: t.userPackIds.filter(id => id !== userPackId) }))
+    .filter(t => t.userPackIds.length)
+}
+function onPackOpened () { if (opening.value) dropPack(opening.value.userPackId) }
+// Already opened elsewhere (another tab) or not ours any more: forget it and carry on with the rest.
+function onPackFailed (err) {
+  const status = err?.statusCode || err?.status || err?.response?.status
+  if (opening.value && (status === 400 || status === 404)) dropPack(opening.value.userPackId)
+}
+function openNextPack () {
+  const t = packTiles.value[0]
+  opening.value = t ? { userPackId: t.userPackIds[0], packId: t.packId, name: t.name, imagePath: t.imagePath } : null
+}
 
 const toast = reactive({ visible: false, message: '', type: 'error' })
 let toastTimer = null
@@ -120,7 +185,11 @@ const showBalloons = ref(false)
 const balloons = ref([])
 
 async function submit() {
+  if (submitting.value) return
+  submitting.value = true
   success.value = false
+  packTiles.value = []
+  hadPacks.value = false
   rewards.value = { points: 0, ctoons: [], backgrounds: [] }
 
   try {
@@ -132,6 +201,8 @@ async function submit() {
     rewards.value.points = payload.points ?? 0
     rewards.value.ctoons = payload.ctoons ?? []
     rewards.value.backgrounds = payload.backgrounds ?? []
+    packTiles.value = (payload.packs ?? []).map(p => ({ packId: p.packId, name: p.name, imagePath: p.imagePath, userPackIds: [...p.userPackIds] }))
+    hadPacks.value = packTiles.value.length > 0
     success.value = true
     code.value = ''
 
@@ -145,6 +216,8 @@ async function submit() {
   } catch (err) {
     const msg = err?.data?.statusMessage || err?.message || 'An unexpected error occurred.'
     showToast(msg, 'error')
+  } finally {
+    submitting.value = false
   }
 }
 </script>
@@ -289,9 +362,9 @@ body {
   background: var(--OrbitDarkBlue, #003466);
   border: 1px solid var(--OrbitLightBlue, #3399cc);
   color: #fff;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 700;
-  padding: 2px 6px;
+  padding: 2px 7px;
   border-radius: 6px;
 }
 
@@ -325,6 +398,25 @@ body {
   text-align: center;
   color: rgba(255, 255, 255, 0.5);
 }
+
+.rd-packs { margin-bottom: 20px; }
+.rd-pack-fallback { font-size: 3rem; }
+.rd-open-btn {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #14532d;
+  border-radius: 8px;
+  background: #15803d;
+  color: #fff;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.rd-open-btn:hover { background: #166534; }
+.rd-open-btn:focus-visible, .rd-link:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+.rd-packs-note { margin: 12px 0 0; font-size: 0.8125rem; line-height: 1.5; color: rgba(255, 255, 255, 0.75); }
+.rd-link { color: #9fd1ff; font-weight: 600; text-decoration: underline; }
+.rd-btn:disabled { opacity: 0.6; cursor: progress; }
 
 .rd-bgs {
   margin-top: 20px;
@@ -406,6 +498,10 @@ body {
   bottom: -2rem;
   font-size: 2rem;
   animation: rd-rise 4s ease-in forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rd-balloons { display: none; }
 }
 
 @keyframes rd-rise {

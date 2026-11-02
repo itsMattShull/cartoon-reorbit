@@ -97,3 +97,25 @@ test('pack preview reads the owner-scoped endpoint, not the cMart-only one', () 
   assert.doesNotMatch(preview, /cmart\/packs/)
   assert.match(preview, /role="dialog"/)
 })
+
+const redeem = read('pages/newsite/redeem.vue')
+
+test('Redeem page: pack tiles show ×N, open through the shared overlay, and always point at My Collection > Packs', () => {
+  assert.match(redeem, /<PackOpenOverlay/)
+  assert.match(redeem, /×\{\{ t\.userPackIds\.length \}\}/)
+  assert.match(redeem, /aria-label="`\$\{t\.userPackIds\.length\} pack/)
+  assert.match(redeem, /MyCollection\?tab=packs/)
+  assert.match(redeem, /\.rd-open-btn \{[^}]*min-height: 44px/)
+  assert.match(redeem, /prefers-reduced-motion/)
+})
+
+test('Redeem page: submit is guarded against double-submits and results are announced', () => {
+  assert.match(redeem, /if \(submitting\.value\) return/)
+  assert.match(redeem, /:aria-busy="submitting/)
+  assert.match(redeem, /class="rd-success-heading" role="status"/)
+})
+
+test('Redeem page: a pack already opened in another tab is dropped, not retried', () => {
+  assert.match(redeem, /function onPackFailed/)
+  assert.match(redeem, /status === 400 \|\| status === 404/)
+})

@@ -4,7 +4,7 @@
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
-import { skipUnlessDb, boot, mkUser, mkBarePack, startApi } from './helpers/dbKit.js'
+import { skipUnlessDb, boot, mkUser, mkBarePack, mkUserPack, startApi } from './helpers/dbKit.js'
 
 const run = skipUnlessDb ? test.skip : test
 let prisma, api, admin, nobody
@@ -15,7 +15,9 @@ before(async () => {
   const post = (await import('../server/api/admin/codes.post.js')).default
   const put = (await import('../server/api/admin/codes.put.js')).default
   const get = (await import('../server/api/admin/codes.get.js')).default
+  const claimed = (await import('../server/api/admin/codes/claimed.get.js')).default
   api = await startApi([
+    { method: 'get', path: '/api/admin/codes/claimed', handler: claimed },
     { method: 'post', path: '/api/admin/codes', handler: post },
     { method: 'put', path: '/api/admin/codes', handler: put },
     { method: 'get', path: '/api/admin/codes', handler: get }
@@ -90,4 +92,18 @@ run('the code list returns each pack reward and can be searched by pack name', a
   assert.equal(res.body.items[0].rewards[0].packs[0].pack.name, p.name)
   const search = await api.call('get', `/api/admin/codes?q=${encodeURIComponent(p.name.slice(0, 6))}`, { userId: admin.id })
   assert.ok(search.body.items.some(i => i.code === code))
+})
+
+run('the claimed view reports what each claim ACTUALLY granted, not what the code awards today', async () => {
+  const p = await mkBarePack(prisma)
+  const code = `C${rand()}`
+  await create(body(code, [{ packId: p.id, quantity: 5 }]))
+  const codeRow = await prisma.claimCode.findUnique({ where: { code } })
+  const user = await mkUser(prisma)
+  const claim = await prisma.claim.create({ data: { userId: user.id, codeId: codeRow.id } })
+  // this claimant received 2 (an earlier definition of the code); the code now says 5
+  for (let i = 0; i < 2; i++) await mkUserPack(prisma, user.id, { packId: p.id, source: 'CODE', sourceRef: claim.id, sourceOrdinal: i })
+  const res = await api.call('get', `/api/admin/codes/claimed?q=${code}`, { userId: admin.id })
+  assert.equal(res.status, 200, JSON.stringify(res.body))
+  assert.equal(res.body.items.find(i => i.id === claim.id).packsGranted, 2)
 })
