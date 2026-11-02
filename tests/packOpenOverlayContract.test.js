@@ -193,3 +193,35 @@ test('My Collection > Packs offers Auction, in the pack form of the shared modal
   assert.match(packsTab, /kind: 'PACK', id: it\.id, packId: it\.packId/)
   assert.match(packsTab, /watch\(auctionCreatedSignal/)
 })
+
+const board = read('components/OgGtoonMatchBoard.vue')
+const ogSocket = read('composables/useOgGtoonsSocket.js')
+const ogAdmin = read('components/newsite/admin/legacy/OgPackRewardSettings.vue')
+const onboarding = read('components/Onboarding.vue')
+
+test('OG match-end card: pack banner is announced, tells the winner why there was no pack, and cannot push the buttons off a short screen', () => {
+  assert.match(ogSocket, /socket\.on\('oggtoons:packReward'/)
+  assert.match(ogSocket, /packReward\.value = null/) // cleared on next match / leave
+  assert.match(board, /role="status" aria-live="polite"/)
+  assert.match(board, /max-h-\[calc\(100dvh-1rem\)\] overflow-y-auto/)
+  assert.match(board, /max-h-24 sm:max-h-56/) // log collapses on short screens
+  for (const k of ['AWARDED', 'CAPPED', 'SAME_PAIR', 'IDLE_OPPONENT', 'FORFEIT']) assert.match(board, new RegExp(`case '${k}'`))
+  assert.match(board, /MyCollection\?tab=packs/)
+  assert.match(board, /min-h-\[44px\]/)
+})
+
+test('a PvP pack notification opens My Collection > Packs, not the auction fallback route', () => {
+  const route = onboarding.slice(onboarding.indexOf('const notificationRoute'))
+  assert.ok(route.indexOf("n.type === 'PVP_PACK_WON'") > -1)
+  assert.ok(route.indexOf("n.type === 'PVP_PACK_WON'") < route.indexOf('/newsite/AuctionHouse/'))
+  assert.match(route, /\/newsite\/MyCollection\?tab=packs/)
+})
+
+test('admin reward settings: pack + limit are all-or-nothing in the UI, inputs carry explicit text colours, and the Save button respects validation', () => {
+  assert.match(ogAdmin, /Set both a pack and a per-player limit/)
+  assert.match(ogAdmin, /text-gray-900 bg-white/)
+  const games = read('components/newsite/admin/legacy/AdminLegacyGames.vue')
+  assert.match(games, /<OgPackRewardSettings ref="ogPackRewardEl" v-model="ogWinPack"/)
+  assert.match(games, /ogGtoonsWinPackId: +ogWinPack\.value\.packId/)
+  assert.match(games, /!!ogPackRewardEl\?\.problem/)
+})

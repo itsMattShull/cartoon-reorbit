@@ -32,9 +32,9 @@
 import { createError } from 'h3'
 import { isUuid } from './tradeOfferRules.js'
 import { UNAVAILABLE_REQUEST_MESSAGE } from './lockRules.js'
+// Imported, NOT re-exported: Nitro auto-imports every export under server/utils, and a second export of the same name
+// (it lives in tradeOfferLimits.js) is a duplicate-auto-import warning that silently picks one.
 import { MAX_PACKS_PER_SIDE } from './tradeOfferLimits.js'
-
-export { MAX_PACKS_PER_SIDE }
 
 /** Most distinct pack TYPES on one side, so a request can't fan out into dozens of candidate queries. */
 export const MAX_PACK_TYPES_PER_SIDE = 20

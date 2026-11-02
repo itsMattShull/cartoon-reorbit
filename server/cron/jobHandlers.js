@@ -25,6 +25,7 @@ import { runCzoneDisplayCountAggregate } from './czone-display-count.js'
 import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
 import { applyDissolveSchedule, getDissolveScheduleConfig, requeueOverdueDissolveLaunches } from '../utils/dissolveSchedule.js'
 import { reconcileDissolveQueueOwnership } from '../utils/dissolveMisfire.js'
+import { reconcilePackRewards } from '../utils/ogGtoonsPackReward.js'
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
 import { logCronError } from '../utils/cronErrorLog.js'
@@ -1089,8 +1090,18 @@ async function runReconcileDissolveQueueOwnership() {
   return removed ? `Removed ${removed} stale dissolve-queue entr${removed === 1 ? 'y' : 'ies'} (cToon no longer owned by official)` : undefined
 }
 
+// OG gToons PvP pack reward safety net — see reconcilePackRewards in server/utils/ogGtoonsPackReward.js. The reward is
+// normally paid the moment a match ends; this catches a match that was saved but never evaluated (the process died in
+// between, or the award transaction failed). Returns nothing on a clean run (quiet job); a short detail when it actually
+// had to evaluate something. (Named, not inline: tests/cronJobsRegistry.test.js reads JOB_HANDLERS one `name: fn,` line at a time.)
+async function runReconcileOgGtoonsPackRewards() {
+  const { checked, counts } = await reconcilePackRewards(prisma)
+  return checked ? `Evaluated ${checked} unchecked match${checked === 1 ? '' : 'es'}: ${JSON.stringify(counts)}` : undefined
+}
+
 export const JOB_HANDLERS = {
   startDueAuctions,
+  reconcileOgGtoonsPackRewards: runReconcileOgGtoonsPackRewards,
   requeueOverdueDissolveLaunches: runRequeueOverdueDissolveLaunches,
   reconcileDissolveQueueOwnership: runReconcileDissolveQueueOwnership,
   sendDueAnnouncements,

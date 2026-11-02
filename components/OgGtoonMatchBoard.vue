@@ -250,14 +250,26 @@
       <!-- End-of-match result screen -->
       <transition name="fade">
         <div v-if="matchEnded && !flipping && resultOpen && !isTutorial && !isTournament" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50">
-          <div class="bg-gray-900 border border-white/20 rounded-xl p-6 w-[26rem] max-w-[95vw] text-center">
+          <!-- max-h + scroll: a pack banner on a short (landscape phone) screen must not push the buttons off it -->
+          <div class="bg-gray-900 border border-white/20 rounded-xl p-6 w-[26rem] max-w-[95vw] max-h-[calc(100dvh-1rem)] overflow-y-auto text-center">
             <h2 class="text-2xl font-bold mb-2" :class="matchEnded.won ? 'text-green-400' : (matchEnded.outcome === 'TIE' ? 'text-amber-300' : 'text-red-400')">
               {{ matchEnded.outcome === 'TIE' ? "It's a Tie!" : (matchEnded.won ? 'You Win!' : 'You Lose') }}
             </h2>
             <p class="text-sm text-gray-300 mb-1">Final Score: {{ matchEnded.player1Score }} - {{ matchEnded.player2Score }}</p>
             <p class="text-xs text-gray-400 mb-2">{{ endReasonLabel }}</p>
             <p v-if="isPractice" class="text-xs text-amber-300 mb-2">Practice match — no points were awarded or spent.</p>
-            <div class="text-left max-h-56 overflow-y-auto bg-black/30 rounded p-2 mb-3 text-xs">
+            <!-- PvP pack reward: its own event, so it can land just after the result card is up -->
+            <div v-if="rewardBanner" role="status" aria-live="polite" class="mb-3 rounded-lg border px-3 py-2 text-sm" :class="rewardBanner.won ? 'border-green-400/60 bg-green-900/30 text-green-100' : 'border-white/15 bg-black/30 text-gray-200'">
+              <template v-if="rewardBanner.won">
+                <div class="flex items-center justify-center gap-3">
+                  <img v-if="rewardBanner.image" :src="rewardBanner.image" :alt="rewardBanner.text" width="48" height="48" class="h-12 w-12 object-contain" />
+                  <span class="font-semibold">{{ rewardBanner.text }}</span>
+                </div>
+                <NuxtLink to="/newsite/MyCollection?tab=packs" class="mt-1 inline-block min-h-[44px] leading-[44px] text-green-300 underline">Open it in Collection → Packs</NuxtLink>
+              </template>
+              <template v-else>{{ rewardBanner.text }}</template>
+            </div>
+            <div class="text-left max-h-24 sm:max-h-56 overflow-y-auto bg-black/30 rounded p-2 mb-3 text-xs">
               <p class="text-[10px] text-gray-400 font-semibold uppercase tracking-wide mb-1">Game Log</p>
               <OgGtoonGameLog :entries="gameLog" />
             </div>
@@ -307,7 +319,7 @@ import { difficultyLabel as ogDifficultyLabel } from '@/utils/ogGtoonDifficulty'
 
 defineEmits(['exit'])
 
-const { matchState, lastReveal, matchEnded, lastError, commit, place, unplace, swap, swapSkip, chooseColor, discard } = useOgGtoonsSocket()
+const { matchState, lastReveal, matchEnded, packReward, lastError, commit, place, unplace, swap, swapSkip, chooseColor, discard } = useOgGtoonsSocket()
 
 const COLOR_HEX = {
   BLACK: '#cccccc', SILVER: '#c0c0c0', BLUE: '#60a5fa', RED: '#f87171',
@@ -673,6 +685,21 @@ function markerFor(side, slot, card, faceDown) {
   if (!card || faceDown) return null
   return markerMap.value.get(`${side}:${slot}`) || null
 }
+
+// What the PvP pack reward says on the result card (only for the winner, only for the match that just ended).
+const rewardBanner = computed(() => {
+  const r = packReward.value
+  if (!r || !matchEnded.value || !matchEnded.value.won) return null
+  if (matchEnded.value.matchId && r.matchId !== matchEnded.value.matchId) return null
+  switch (r.status) {
+    case 'AWARDED':       return { won: true, text: `You won a ${r.packName || 'pack'}!`, image: r.packImagePath || null }
+    case 'CAPPED':        return { won: false, text: 'No pack this time — you’ve reached today’s limit. It resets at 8pm CST.' }
+    case 'SAME_PAIR':     return { won: false, text: 'No pack this time — you already earned one today for beating this player.' }
+    case 'IDLE_OPPONENT': return { won: false, text: 'No pack this time — your opponent didn’t really play this match.' }
+    case 'FORFEIT':       return { won: false, text: 'No pack — your opponent left the match.' }
+    default:              return null
+  }
+})
 
 const endReasonLabel = computed(() => {
   const r = matchEnded.value?.endReason

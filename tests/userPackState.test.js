@@ -4,8 +4,9 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
   packBlockReason, packBlockError, normalizePackWants,
-  PACK_BLOCK, PACK_UNAVAILABLE_MESSAGE, MAX_PACKS_PER_SIDE, MAX_PACK_TYPES_PER_SIDE
+  PACK_BLOCK, PACK_UNAVAILABLE_MESSAGE, MAX_PACK_TYPES_PER_SIDE
 } from '../server/utils/userPackState.js'
+import { MAX_PACKS_PER_SIDE } from '../server/utils/tradeOfferLimits.js'
 
 const U = '11111111-1111-4111-8111-111111111111'
 const P = '22222222-2222-4222-8222-222222222222'
