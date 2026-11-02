@@ -52,6 +52,30 @@ test('solveForTargetWinRate reports targetReached: false rather than lying when 
   assert.equal(result.targetReached, false)
 })
 
+test('wind-up moves are rolled independently per round, not as one cumulative roll', () => {
+  // Two 50%-chance moves firing independently give P(any fires) = 1 - 0.5*0.5 = 75% per round —
+  // identical to a single 75%-chance move with the same bonus. A cumulative single-roll bug (two
+  // 50% moves summing to 100%) would make the two-move case ALWAYS telegraph, which would show up
+  // as a clearly different win rate from the single-75%-move case. Same params otherwise, so the
+  // two configs' win rates should land close together.
+  const params = { bossHp: 100, attackChancePercent: 50, critChanceFromPercent: 50, critChanceAgainstPercent: 50, playerHp: 7 }
+  const twoMoves = estimateWinRate({
+    ...params,
+    windUpMoves: [
+      { occurrencePercent: 50, bonusType: 'HEAL_PARTY', bonusAmount: 2 },
+      { occurrencePercent: 50, bonusType: 'HEAL_PARTY', bonusAmount: 2 },
+    ],
+  }, 20000)
+  const oneMove = estimateWinRate({
+    ...params,
+    windUpMoves: [{ occurrencePercent: 75, bonusType: 'HEAL_PARTY', bonusAmount: 2 }],
+  }, 20000)
+  assert.ok(
+    Math.abs(twoMoves - oneMove) <= 4,
+    `two 50% moves (${twoMoves}%) should behave like one 75% move (${oneMove}%), not like an always-fires telegraph`,
+  )
+})
+
 test('estimateWinRate is bounded between 0 and 100', () => {
   const wr = estimateWinRate({ bossHp: 50, attackChancePercent: 50, critChanceFromPercent: 50, critChanceAgainstPercent: 50, playerHp: 7 }, 500)
   assert.ok(wr >= 0 && wr <= 100)

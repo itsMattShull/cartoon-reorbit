@@ -63,11 +63,9 @@ export function simulateRaidTrial({ bossHp, attackChancePercent, critChanceFromP
 
     let telegraph = null
     if (paralyzedRoundsLeft === 0 && windUpMoves.length) {
-      let roll = rand() * 100
       for (const move of windUpMoves) {
-        const chance = Number(move.occurrencePercent) || 0
-        if (roll < chance) { telegraph = move; break }
-        roll -= chance
+        const chance = Math.max(0, Math.min(100, Number(move.occurrencePercent) || 0))
+        if (chance > 0 && rand() * 100 < chance) { telegraph = move; break }
       }
     }
     const isTelegraph = !!telegraph

@@ -213,6 +213,7 @@ async function resolvePreviewOutcome(io, raid, outcome) {
           ctoon: { select: { name: true } },
           avatar: { select: { label: true } },
           background: { select: { label: true } },
+          pack: { select: { name: true } },
         },
       })
       const hitRewards = rollEnemyRewards(rewardRows)
@@ -223,6 +224,7 @@ async function resolvePreviewOutcome(io, raid, outcome) {
         cMoonPointsPerParticipant: Math.floor(pointsAwarded / participantCount),
         items: hitRewards.map(r => {
           if (r.rewardType === 'CTOON') return { type: 'CTOON', label: r.ctoon?.name || 'cToon', quantity: r.quantity }
+          if (r.rewardType === 'PACK') return { type: 'PACK', label: r.pack?.name || 'Pack', quantity: r.quantity }
           if (r.rewardType === 'AVATAR') return { type: 'AVATAR', label: r.avatar?.label || 'Avatar' }
           if (r.rewardType === 'BACKGROUND') return { type: 'BACKGROUND', label: r.background?.label || 'Background' }
           if (r.rewardType === 'POINTS') return { type: 'POINTS', quantity: r.quantity }
