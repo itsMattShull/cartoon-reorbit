@@ -3,6 +3,7 @@
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
+import { PACK_ITEM_OWNER_SELECT, packItemFields, packOwnerFlags } from '~/server/utils/auctionItem'
 import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 function normalizeListParam(value) {
@@ -32,8 +33,13 @@ function applyAuctionFilters(items, filters) {
   // '__none__' means "cToons with no cMoon assigned"; any other non-empty value is a cMoon id.
   const cMoonFilter = filters.cMoon || ''
 
+  // 'PACK' | 'CTOON' | '' (both). Any cToon-only filter drops packs on its own (a pack has no rarity/set/series).
+  const typeFilter = filters.type || ''
+
   return items.filter(item => {
     if (!item) return false
+    if (typeFilter === 'PACK' && item.kind !== 'PACK') return false
+    if (typeFilter === 'CTOON' && item.kind === 'PACK') return false
     if (term) {
       const nameMatch = (item.name || '').toLowerCase().includes(term)
       const chars = Array.isArray(item.characters) ? item.characters : []
@@ -171,6 +177,8 @@ export default defineEventHandler(async (event) => {
           auctions: { where: { status: 'ACTIVE' }, select: { id: true } },
         },
       },
+      // Pack auctions have no userCtoon (see server/utils/auctionItem.js).
+      userPack: PACK_ITEM_OWNER_SELECT,
       bids: {
         orderBy: { amount: 'desc' },
         take: 1,
@@ -203,7 +211,7 @@ export default defineEventHandler(async (event) => {
     id:               a.id,
     status:           a.status,
     isFeatured:       a.isFeatured,
-    userCtoonId:      encodeUserCtoonId(a.userCtoon?.userId, a.userCtoon?.ctoonId, a.userCtoon?.mintNumber),
+    userCtoonId:      a.userCtoon ? encodeUserCtoonId(a.userCtoon.userId, a.userCtoon.ctoonId, a.userCtoon.mintNumber) : null,
     ctoonId:          a.userCtoon?.ctoonId ?? null,
     assetPath:        a.userCtoon?.ctoon?.assetPath ?? null,
     ...ogGtoonDisplay(a.userCtoon?.ctoon),
@@ -236,6 +244,8 @@ export default defineEventHandler(async (event) => {
     isOwner:          a.userCtoon?.userId === userId,
     hasActiveAuction: (a.userCtoon?.auctions?.length ?? 0) > 0,
     canRelist:        canRelistAuction(a),
+    ...packItemFields(a),
+    ...packOwnerFlags(a, userId),
   }))
 
   const filtered = applyAuctionFilters(items, {
@@ -248,7 +258,8 @@ export default defineEventHandler(async (event) => {
     wishlistSet,
     hasBidsOnly,
     gtoonsOnly,
-    cMoon: cMoonFilter
+    cMoon: cMoonFilter,
+    type: typeof query.type === 'string' ? query.type.trim().toUpperCase() : ''
   })
 
   const sorted = sortMyAuctions(filtered, sort)

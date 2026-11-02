@@ -12,6 +12,7 @@ import {
 import { prisma } from '@/server/prisma'
 import {
   resolveOfferCtoons,
+  resolveOfferPacks,
   validateTradeOfferInputs,
   createTradeOfferTx,
   assertOfferHasContent,
@@ -39,6 +40,9 @@ export default defineEventHandler(async (event) => {
     recipientUsername,
     ctoonIdsRequested = [],
     ctoonIdsOffered = [],
+    // Sealed packs, by TYPE and quantity: [{ packId, quantity }]. The server picks the actual copies.
+    packsOffered: packsOfferedRaw = [],
+    packsRequested: packsRequestedRaw = [],
     pointsOffered = 0
   } = await readBody(event)
 
@@ -50,7 +54,8 @@ export default defineEventHandler(async (event) => {
     ctoonIdsOffered,
     ctoonIdsRequested
   })
-  assertOfferHasContent({ resolvedOffered, resolvedRequested, pointsOffered })
+  const { packsOffered, packsRequested } = resolveOfferPacks({ packsOffered: packsOfferedRaw, packsRequested: packsRequestedRaw })
+  assertOfferHasContent({ resolvedOffered, resolvedRequested, pointsOffered, packsOffered, packsRequested })
 
   // 3) Lookup recipient
   const recipient = await prisma.user.findUnique({
@@ -78,6 +83,8 @@ export default defineEventHandler(async (event) => {
     pointsOffered,
     resolvedOffered,
     resolvedRequested,
+    packsOffered,
+    packsRequested,
     initiatorIp,
     initiatorUserAgent
   }))
@@ -90,6 +97,8 @@ export default defineEventHandler(async (event) => {
     pointsOffered,
     offeredCount: resolvedOffered.length,
     requestedCount: resolvedRequested.length,
+    offeredPackCount: offer.packsOffered,
+    requestedPackCount: offer.packsRequested,
     isCounter: false
   }).catch(() => {})
 

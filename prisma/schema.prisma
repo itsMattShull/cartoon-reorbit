@@ -34,6 +34,38 @@ enum NotificationType {
   // touching real players, rewards, or the boss's own one-time/cooldown state. contextId is the
   // in-memory preview raid id — never a CMoonEnemyRaid row, since a preview is never persisted.
   CMOON_RAID_PREVIEW_STARTED
+  // A sealed pack was awarded for winning an OG gToons PvP match (server/utils/ogGtoonsPackReward.js).
+  // Deliberately carries NO contextType/contextId: those columns are the AUCTION/TRADE enum, and the
+  // drawer routes any typed notification with a contextId to /newsite/AuctionHouse/<id>. The client
+  // maps this type straight to /newsite/MyCollection?tab=packs instead.
+  PVP_PACK_WON
+}
+
+/// Where a sealed UserPack came from. Pack purchase limits and purchase analytics count PURCHASE rows
+/// only (by buyerId, the ORIGINAL buyer), so gifted/won/traded packs never consume a buy slot and
+/// trading a pack away can never free one.
+enum PackSource {
+  PURCHASE
+  CODE
+  OG_GTOONS_PVP
+}
+
+/// What an Auction row is selling. Exactly one of Auction.userCtoonId / Auction.userPackId is set,
+/// matching `kind` (enforced by a CHECK constraint in the owned-packs migration).
+enum AuctionKind {
+  CTOON
+  PACK
+}
+
+/// Outcome recorded on an OgGtoonMatch once the PvP pack reward has been evaluated for it.
+enum OgGtoonRewardStatus {
+  AWARDED
+  CAPPED // winner already got the per-user limit this window
+  SAME_PAIR // winner already got a pack for beating this same opponent this window
+  IDLE_OPPONENT // loser made fewer than the required manual moves (auto-played)
+  BANNED // winner or loser banned / inactive
+  OFF // no reward pack (or no limit) configured
+  SKIPPED // not eligible: forfeit, tie, incomplete, tournament, legacy row
 }
 
 /// Current state of a lock
@@ -485,6 +517,8 @@ model UserCtoon {
   @@index([userId, burnedAt])
   @@index([userId, ctoonId])
   @@index([userId, isTradeable, burnedAt])
+  // Pack analytics and the ownership investigator join mintedCtoons on this; it had no index.
+  @@index([userPackId])
 }
 
 model UserPoints {
@@ -1099,6 +1133,8 @@ model Pack {
   userPacks     UserPack[]
   limitResets   UserPackLimitReset[]
   rewardPacks   RewardPack[]
+  ogGtoonsWinConfigs GameConfig[] @relation("OgGtoonsWinPack")
+  ogGtoonPackAwards  OgGtoonPackAward[]
 }
 
 model PackRarityConfig {
@@ -1134,9 +1170,52 @@ model UserPack {
   createdAt DateTime  @default(now())
   pricePaid Int? // Effective points charged at purchase time; null for legacy records
 
+  /// How this pack was obtained. See PackSource.
+  source        PackSource @default(PURCHASE)
+  /// The ORIGINAL buyer, set only for source = PURCHASE (backfilled to userId for every legacy row).
+  /// `userId` is the current owner and changes on trade/auction; purchase-limit queries and purchase
+  /// analytics key on this instead. Plain column (no FK) so account deletion needs no extra ordering.
+  buyerId       String?
+  /// Idempotency key for grants: ClaimCode claim id (CODE) or OgGtoonMatch id (OG_GTOONS_PVP), with a
+  /// per-grant ordinal. A repeated grant for the same (sourceRef, sourceOrdinal) hits the unique key.
+  sourceRef     String?
+  sourceOrdinal Int?
+
   user         User        @relation(fields: [userId], references: [id])
   pack         Pack        @relation(fields: [packId], references: [id])
   mintedCtoons UserCtoon[]
+
+  tradeOfferPacks TradeOfferPack[]
+  auctions        Auction[]
+  ownerLogs       PackOwnerLog[]
+  pvpAwards       OgGtoonPackAward[]
+
+  @@unique([sourceRef, sourceOrdinal])
+  // NOTE: partial indexes created only in migration 20261102000000_owned_packs (Prisma can't express
+  // them; they show up as drift in `prisma migrate dev` — do not drop them):
+  //   UserPack_unopened_idx      (userId, createdAt DESC, id) WHERE opened = false   — Packs tab + lock pre-checks
+  //   UserPack_buyer_idx         (buyerId, packId, createdAt) WHERE buyerId IS NOT NULL — buy-limit queries
+  //   UserPack_pack_opened_idx   (packId, openedAt) WHERE opened                      — pack analytics
+}
+
+/// Audit trail of who held a UserPack and how it changed hands — the pack counterpart of CtoonOwnerLog.
+/// Plain id columns (no User FKs): this is history, and must survive/ignore account deletion.
+model PackOwnerLog {
+  id                   String   @id @default(uuid())
+  userPackId           String
+  packId               String
+  userId               String? // the user who received (or opened) the pack
+  method               String // PURCHASE | CODE | OG_GTOONS_PVP | TRADE | AUCTION | OPEN | DISSOLVE_INACTIVE
+  counterpartyUserId   String?
+  counterpartyUsername String? // snapshot, survives counterparty account deletion
+  tradeOfferId         String?
+  auctionId            String?
+  createdAt            DateTime @default(now())
+
+  userPack UserPack @relation(fields: [userPackId], references: [id], onDelete: Cascade)
+
+  @@index([userPackId, createdAt])
+  @@index([userId, createdAt])
 }
 
 // An admin-issued watermark that exempts a user's already-made purchases of a
@@ -1663,6 +1742,14 @@ model GameConfig {
   // OG gToons tournaments (Tournaments tab + the server-side opt-in / play / forfeit actions).
   // Same explicit-true rule as the four switches above: a missing row leaves it off.
   ogGtoonsTournamentsEnabled Boolean? @default(false)
+
+  // PvP pack reward (server/utils/ogGtoonsPackReward.js). The winner of a played-out random-queue or
+  // direct-challenge match gets one sealed `ogGtoonsWinPackId` pack, up to `ogGtoonsWinPackPerUserLimit`
+  // per user per 8pm–7:59pm Central window (see server/utils/packDailyWindow.js). Either being null/0
+  // turns the reward OFF — a missing limit is never "unlimited".
+  ogGtoonsWinPackId           String?
+  ogGtoonsWinPackPerUserLimit Int?
+  ogGtoonsWinPack             Pack?   @relation("OgGtoonsWinPack", fields: [ogGtoonsWinPackId], references: [id], onDelete: SetNull)
 }
 
 model GlobalGameConfig {
@@ -2228,6 +2315,7 @@ model TradeOffer {
   counteredBy TradeOffer? @relation("TradeCounter")
 
   ctoons         TradeOfferCtoon[]
+  packs          TradeOfferPack[]
   ctoonOwnerLogs CtoonOwnerLog[]
 
   // incoming.get.js / outgoing.get.js filter on one party and sort by createdAt;
@@ -2252,6 +2340,23 @@ model TradeOfferCtoon {
   // load, filter on userCtoonId alone. The unique above leads with tradeOfferId
   // so it cannot serve those — they were sequential scans of the whole table.
   @@index([userCtoonId])
+}
+
+/// Join table tying a specific sealed UserPack to a TradeOffer, tagged OFFERED or REQUESTED.
+/// A pack is "in a pending trade" exactly while a row here points at a PENDING TradeOffer — there is
+/// no flag on UserPack to keep in sync. Every writer locks the UserPack rows first
+/// (server/utils/userPackState.js#lockPacksForUpdate) and re-checks that under the lock.
+model TradeOfferPack {
+  id           String              @id @default(uuid())
+  tradeOfferId String
+  userPackId   String
+  role         TradeOfferCtoonRole
+
+  tradeOffer TradeOffer @relation(fields: [tradeOfferId], references: [id])
+  userPack   UserPack   @relation(fields: [userPackId], references: [id])
+
+  @@unique([tradeOfferId, userPackId, role])
+  @@index([userPackId])
 }
 
 /// Are we offering this cToon, or requesting it?
@@ -2311,7 +2416,13 @@ enum GtoonTournamentResolutionPolicy {
 
 model Auction {
   id                 String        @id @default(uuid())
-  userCtoonId        String
+  // Exactly one of userCtoonId / userPackId is set, matching `kind` — see the CHECK constraint
+  // "Auction_kind_item_check" in migration 20261102000000_owned_packs. Read the item through
+  // server/utils/auctionItem.js (shapeAuctionItem), never `auction.userCtoon.` directly: a pack
+  // auction has no userCtoon, and tests/auctionItemAccess.test.js fails on direct reads.
+  kind               AuctionKind   @default(CTOON)
+  userCtoonId        String?
+  userPackId         String?
   initialBet         Int
   duration           Int // days; 0 for any sub-day listing. Kept for back-compat — read durationMinutes instead.
   // Exact listed length in minutes. Nullable because rows predating the column,
@@ -2337,7 +2448,8 @@ model Auction {
   // FK since the AuctionOnly row can later be deleted while this Auction lives on.
   auctionOnlyId      String?       @unique
 
-  userCtoon     UserCtoon @relation(fields: [userCtoonId], references: [id])
+  userCtoon     UserCtoon? @relation(fields: [userCtoonId], references: [id], onDelete: Restrict)
+  userPack      UserPack?  @relation(fields: [userPackId], references: [id], onDelete: Restrict)
   creator       User?     @relation("AuctionsCreated", fields: [creatorId], references: [id])
   highestBidder User?     @relation("HighestBidder", fields: [highestBidderId], references: [id])
   winner        User?     @relation("AuctionWinner", fields: [winnerId], references: [id])
@@ -2353,6 +2465,10 @@ model Auction {
   // 20260906130000_add_auction_active_highestbid_idx and shows up as drift in
   // `prisma migrate dev`. Do not drop it.
 
+  // NOTE: a partial unique index, "Auction_active_userPackId_key" ON ("userPackId") WHERE
+  // status = 'ACTIVE' (migration 20261102000000_owned_packs) is the pack twin of the one below, and
+  // is likewise invisible to Prisma. Do not drop it.
+  //
   // NOTE: a partial unique index, "Auction_active_userCtoonId_key" ON
   // ("userCtoonId") WHERE status = 'ACTIVE', also exists on this table. It stops
   // the same cToon being auctioned twice at once, which otherwise lets both
@@ -2585,6 +2701,23 @@ model OgGtoonMatch {
   // migration), which Prisma's schema language cannot express.
   tournamentMatchId String?
 
+  // PvP pack reward bookkeeping (server/utils/ogGtoonsPackReward.js). `rewardCheckedAt` is the
+  // compare-and-set idempotency key: the award runs in its own transaction after this row is written
+  // and does UPDATE ... WHERE rewardCheckedAt IS NULL, so a retry or the reconcile cron can never pay
+  // twice. Every finished match ends up with a rewardStatus (including OFF/SKIPPED), so enabling the
+  // reward later never pays retroactively; rows that predate this column are backfilled SKIPPED.
+  rewardStatus         OgGtoonRewardStatus?
+  rewardCheckedAt      DateTime?
+  rewardWindowStart    DateTime? // 8pm Central window the match ended in
+  // Moves each player actually committed themselves (not auto-played on a timer). The loser needs a
+  // minimum, otherwise an idle opponent who is auto-played "loses naturally" and feeds a farm.
+  player1ManualCommits Int      @default(0)
+  player2ManualCommits Int      @default(0)
+
+  packAward OgGtoonPackAward?
+  // NOTE: partial index "OgGtoonMatch_reward_unchecked_idx" (endedAt) WHERE rewardCheckedAt IS NULL
+  // AND endedAt IS NOT NULL (migration 20261102000000_owned_packs) serves the reconcile cron.
+
   player1         User                    @relation("OgGtoonMatchPlayer1", fields: [player1UserId], references: [id])
   player2         User                    @relation("OgGtoonMatchPlayer2", fields: [player2UserId], references: [id])
   winner          User?                   @relation("OgGtoonMatchWinner", fields: [winnerUserId], references: [id])
@@ -2595,6 +2728,28 @@ model OgGtoonMatch {
   @@index([player2UserId, startedAt])
   @@index([winnerUserId])
   @@index([outcome, startedAt])
+}
+
+/// One PvP pack reward actually paid. `matchId` @unique is the idempotency key; the (winner, loser,
+/// windowStart) unique makes the "one pack per opponent per window" rule a database fact, not an app
+/// check — it is directional on purpose (A beating B and B beating A may each earn one).
+model OgGtoonPackAward {
+  id           String   @id @default(uuid())
+  matchId      String   @unique
+  winnerUserId String
+  loserUserId  String
+  packId       String
+  userPackId   String
+  windowStart  DateTime
+  createdAt    DateTime @default(now())
+
+  match    OgGtoonMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  pack     Pack         @relation(fields: [packId], references: [id])
+  userPack UserPack     @relation(fields: [userPackId], references: [id], onDelete: Cascade)
+
+  @@unique([winnerUserId, loserUserId, windowStart])
+  @@index([winnerUserId, windowStart])
+  @@index([windowStart, createdAt])
 }
 
 // One completed Ed, Edd n Eddy RPS match.

@@ -25,6 +25,8 @@ export default defineEventHandler(async (event) => {
   const active = await prisma.auction.findMany({
     where: {
       status: 'ACTIVE',
+      // The trending strip is cToon-only: it renders cToon identity (rarity, mint #, set) a pack doesn't have.
+      kind: 'CTOON',
       ...(hasBidsOnly ? { bids: { some: {} } } : {})
     },
     select: { id: true, endAt: true }

@@ -9,6 +9,10 @@ import { useRuntimeConfig } from '#imports'
 const matchState = ref(null)
 const lastReveal = ref(null)
 const matchEnded = ref(null)
+// The PvP pack reward outcome for the match that just ended: { matchId, status, packName?, packImagePath? }. It arrives in a
+// SEPARATE event just after matchEnd (the server never delays the result screen for it), so it is held here and cleared
+// when the next match starts or the player leaves.
+const packReward = ref(null)
 const isConnected = ref(false)
 const currentMatchId = ref(null)
 const lastError = ref(null)
@@ -43,6 +47,7 @@ export function useOgGtoonsSocket() {
     socket.on('oggtoons:matchStart', state => {
       matchState.value = state
       matchEnded.value = null
+      packReward.value = null
       lastReveal.value = null
       currentMatchId.value = state.matchId
     })
@@ -75,6 +80,7 @@ export function useOgGtoonsSocket() {
       matchState.value = keepLog(state)
       matchEnded.value = matchState.value
     })
+    socket.on('oggtoons:packReward', p => { if (p?.matchId) packReward.value = p })
     socket.on('oggtoons:error', err => { lastError.value = err })
     socket.on('oggtoons:tournamentState', s => {
       if (s?.tournamentMatchId) tournamentStates.value = { ...tournamentStates.value, [s.tournamentMatchId]: s }
@@ -137,11 +143,12 @@ export function useOgGtoonsSocket() {
     else socket.emit('oggtoons:leave')
     matchState.value = null
     matchEnded.value = null
+    packReward.value = null
     currentMatchId.value = null
   }
 
   return {
-    socket, matchState, lastReveal, matchEnded, isConnected, currentMatchId, lastError,
+    socket, matchState, lastReveal, matchEnded, packReward, isConnected, currentMatchId, lastError,
     commit, place, unplace, swap, swapSkip, chooseColor, discard, leaveMatch, startPractice, startTutorial,
     tournamentStates, tournamentOpponentReady, tournamentReady, tournamentUnready, tournamentSync
   }

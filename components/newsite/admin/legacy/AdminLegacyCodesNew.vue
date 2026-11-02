@@ -275,6 +275,9 @@
             </button>
           </div>
 
+          <!-- Pack Rewards -->
+          <CodePackRewards ref="packRewardsEl" />
+
           <div class="flex flex-col gap-1">
             <label class="text-xs font-medium">Background Rewards (CODE_ONLY)</label>
             <datalist id="bg-list">
@@ -310,6 +313,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
 const router = useRouter()
+const packRewardsEl = ref(null)
 const { isoToCSTLocal, cstLocalToISO } = useCentralTime()
 
 // form state
@@ -535,9 +539,12 @@ async function submitForm() {
     }
   }
 
+  const packResult = packRewardsEl.value?.toPayload() || { ok: true, packs: [] }
+  if (!packResult.ok) { error.value = packResult.error; return }
+
   // build payload
   // build either fixed cToons or pooled
-  let rewardBlock = { points: points.value, backgrounds: backgroundsPayload }
+  let rewardBlock = { points: points.value, backgrounds: backgroundsPayload, packs: packResult.packs }
 
   if (pooledEnabled.value) {
     const validPool = []

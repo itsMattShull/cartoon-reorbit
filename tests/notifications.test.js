@@ -10,7 +10,8 @@ import {
   notifyTradeOfferReceived,
   notifyTradeOfferAccepted,
   notifyCMoonRaidBossStarted,
-  notifyCMoonRaidPreviewStarted
+  notifyCMoonRaidPreviewStarted,
+  notifyPvpPackWon
 } from '../server/utils/notifications.js'
 
 // A stand-in for the Prisma client that records what it was asked to do. The
@@ -43,7 +44,7 @@ function fakeDb ({ user = { username: 'alice', banned: false }, throwOnWrite = f
 test('every helper is exported and callable', () => {
   for (const fn of [createNotification, notifyOutbid, notifyAuctionBid,
     notifyAuctionWon, notifyTradeOfferReceived, notifyTradeOfferAccepted, notifyCMoonRaidBossStarted,
-    notifyCMoonRaidPreviewStarted]) {
+    notifyCMoonRaidPreviewStarted, notifyPvpPackWon]) {
     assert.equal(typeof fn, 'function')
   }
 })
@@ -56,6 +57,7 @@ test('the type set is closed and frozen', () => {
     'AUCTION_WON',
     'CMOON_RAID_BOSS_STARTED',
     'CMOON_RAID_PREVIEW_STARTED',
+    'PVP_PACK_WON',
     'TRADE_OFFER_ACCEPTED',
     'TRADE_OFFER_RECEIVED'
   ])

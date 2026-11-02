@@ -3,6 +3,7 @@ import { prisma } from '../prisma.js'
 import { logAdminChange, buildSeizureAuditPayload } from '../utils/adminChangeLog.js'
 import { scheduleDissolveAuctionLaunch } from '../utils/queues.js'
 import { getFeaturedDissolveConfig, isCtoonFeatured } from '../utils/featuredDissolveConfig.js'
+import { moveSealedPacks } from '../utils/userPackTransfer.js'
 
 const QUEUE_NAME = process.env.DISSOLVE_QUEUE_KEY || 'dissolveQueue'
 
@@ -143,6 +144,12 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
     // Progress from 10% to 70% across all cToons
     await progress(job, 10 + Math.floor(60 * (i + 1) / Math.max(total, 1)), `Processing cToons… (${i + 1}/${Math.max(total, 1)})`)
   }
+
+  // ── Step 2b: sealed packs → the official account (offers holding them rejected, running pack auctions go with them) ──
+  const packMove = await prisma.$transaction(tx => moveSealedPacks(tx, {
+    fromUserId: userId, toUserId: officialId, method: 'DISSOLVE', fromUsername: target.username
+  }), { timeout: 30000, maxWait: 10000 })
+  auctionsReassigned += packMove.auctionsReassigned
 
   await progress(job, 70, 'Reassigning auctions…')
 

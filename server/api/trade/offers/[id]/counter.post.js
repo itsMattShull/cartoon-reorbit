@@ -16,6 +16,7 @@ import {
 import { prisma } from '@/server/prisma'
 import {
   resolveOfferCtoons,
+  resolveOfferPacks,
   validateTradeOfferInputs,
   createTradeOfferTx,
   assertOfferHasContent,
@@ -57,6 +58,8 @@ export default defineEventHandler(async (event) => {
   const {
     ctoonIdsRequested = [],
     ctoonIdsOffered = [],
+    packsOffered: packsOfferedRaw = [],
+    packsRequested: packsRequestedRaw = [],
     pointsOffered = 0,
     // Only this route accepts it: asking the other party for points is a
     // counter-only feature, so offers.post.js deliberately has no such field.
@@ -100,7 +103,8 @@ export default defineEventHandler(async (event) => {
     ctoonIdsOffered,
     ctoonIdsRequested
   })
-  assertOfferHasContent({ resolvedOffered, resolvedRequested, pointsOffered, pointsRequested })
+  const { packsOffered, packsRequested } = resolveOfferPacks({ packsOffered: packsOfferedRaw, packsRequested: packsRequestedRaw })
+  assertOfferHasContent({ resolvedOffered, resolvedRequested, pointsOffered, pointsRequested, packsOffered, packsRequested })
 
   // 4) Ownership, availability and funding.
   //
@@ -156,6 +160,10 @@ export default defineEventHandler(async (event) => {
       pointsRequested,
       resolvedOffered,
       resolvedRequested,
+      // The original is already COUNTERED above (same transaction), so the packs it held are free again and are
+      // re-picked under lock here with NO exemption: nothing about pack availability is decided outside the lock.
+      packsOffered,
+      packsRequested,
       counteredOfferId: original.id,
       initiatorIp,
       initiatorUserAgent
@@ -172,6 +180,8 @@ export default defineEventHandler(async (event) => {
     pointsRequested,
     offeredCount: resolvedOffered.length,
     requestedCount: resolvedRequested.length,
+    offeredPackCount: offer.packsOffered,
+    requestedPackCount: offer.packsRequested,
     isCounter: true
   }).catch(() => {})
 

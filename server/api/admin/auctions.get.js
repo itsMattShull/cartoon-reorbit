@@ -105,9 +105,11 @@ export default defineEventHandler(async (event) => {
         duration: true,
         durationMinutes: true,
         highestBid: true,
+        kind: true,
         userCtoon: {
           select: { ctoon: { select: { id: true, name: true, assetPath: true } } }
         },
+        userPack: { select: { pack: { select: { id: true, name: true, imagePath: true } } } },
         creator: { select: { id: true, username: true } },
         highestBidder: { select: { id: true, username: true } },
         winner: { select: { id: true, username: true } },
@@ -128,7 +130,13 @@ export default defineEventHandler(async (event) => {
       duration: a.duration,
       durationMinutes: a.durationMinutes ?? null,
       highestBid: a.highestBid,
-      userCtoon: { ctoon: a.userCtoon?.ctoon ?? null },
+      kind: a.kind,
+      // The page reads `auc.userCtoon.ctoon` for whatever was sold; a sealed pack is presented in the same slot.
+      userCtoon: {
+        ctoon: a.userCtoon?.ctoon ?? (a.userPack?.pack
+          ? { id: a.userPack.pack.id, name: `${a.userPack.pack.name} (sealed pack)`, assetPath: a.userPack.pack.imagePath }
+          : null)
+      },
       creator: a.creator ?? null,
       highestBidder: a.highestBidder ?? null,
       winner: a.winner ?? null,

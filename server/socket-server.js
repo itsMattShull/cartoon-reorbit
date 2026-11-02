@@ -2447,6 +2447,10 @@ setInterval(async () => {
     },
     include: {
       userCtoon:     { include: { ctoon: true } },
+      // A pack auction has no userCtoon: reading `a.userCtoon.ctoonId` below used to throw OUTSIDE the per-auction
+      // try/catch, so ONE pack auction ending within 5 minutes would have broken this notifier every minute — silencing
+      // every cToon "ending soon" alert too (endingSoonNotified is never set, so it never recovers).
+      userPack:      { include: { pack: true } },
       creator:       true,
       highestBidder: true
     }
@@ -2454,7 +2458,7 @@ setInterval(async () => {
 
   // prefetch holiday flags for all involved ctoonIds
   const ctoonIds = Array.from(
-    new Set(soonAuctions.map(a => a.userCtoon.ctoonId))
+    new Set(soonAuctions.map(a => a.userCtoon?.ctoonId).filter(Boolean))
   )
   const holidayRows = ctoonIds.length
     ? await db.holidayEventItem.findMany({
@@ -2515,10 +2519,13 @@ setInterval(async () => {
         : 'http://localhost:3000'
       const auctionLink = `${baseUrl}/auction/${auc.id}`
 
-      // cToon details
-      const { name, rarity, assetPath } = auc.userCtoon.ctoon
-      const mintNumber = auc.userCtoon.mintNumber
-      const isHolidayItem = holidaySet.has(auc.userCtoon.ctoonId)
+      // What is being sold: a cToon, or a sealed pack (no rarity / mint number / holiday flag).
+      const isPack = auc.kind === 'PACK'
+      const { name, rarity, assetPath } = isPack
+        ? { name: auc.userPack?.pack?.name ?? 'Pack', rarity: 'Sealed pack', assetPath: auc.userPack?.pack?.imagePath }
+        : auc.userCtoon.ctoon
+      const mintNumber = isPack ? null : auc.userCtoon.mintNumber
+      const isHolidayItem = isPack ? true : holidaySet.has(auc.userCtoon.ctoonId) // true = omit the Mint # field
 
       // determine bid display: use initialBet if no bids
       const hasBidder       = Boolean(auc.highestBidder)

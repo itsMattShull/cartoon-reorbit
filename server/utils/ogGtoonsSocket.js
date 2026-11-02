@@ -51,6 +51,7 @@ import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
 import { isPracticing, registerPvpProbe, onPresenceChange } from './ogGtoonPresence.js'
 import * as ogRedis from './ogGtoonsRedisState.js'
 import { getOgGtoonsConfig, peekRevealTiming } from './ogGtoonsConfig.js'
+import { evaluatePackReward } from './ogGtoonsPackReward.js'
 import { clearLive, isPairingClosed, flagNeedsAdmin } from './ogGtoonTournamentLive.js'
 import { enqueueOgTournamentJob } from './queues.js'
 import { registerOgGtoonsTournament } from './ogGtoonsTournamentSocket.js'
@@ -206,6 +207,9 @@ async function startMatch(io, a, b, { isChallenge, tournament = null, matchId: f
     stake: [stake, stake],
     isChallenge: !!isChallenge,
     tournament: tournament || null,
+    // Rounds each player committed THEMSELVES (their own commit click), as opposed to being auto-filled by the round
+    // timer. The PvP pack reward needs the loser to have genuinely played (see server/utils/ogGtoonsPackReward.js).
+    manualCommits: [0, 0],
     ending: false,
     graceTimers: {},
     startedAt: Date.now(),
@@ -426,6 +430,8 @@ async function persistAndSettle(match, { outcome, winnerUserId, player1Score, pl
         player2Score: player2Score ?? 0,
         roundLog: buildRoundLog(match, effectsResolved),
         isChallenge: match.isChallenge,
+        player1ManualCommits: match.manualCommits?.[0] ?? 0,
+        player2ManualCommits: match.manualCommits?.[1] ?? 0,
         winnerUserId: winnerUserId || null,
         outcome,
         // Only a game that was actually played to a result has a reason; forfeits / sweeps have none.
@@ -510,7 +516,7 @@ async function endMatch(io, match, params) {
   } else if (params.endReason === 'closed') {
     logAbnormalEnd(match, 'This tournament match was decided, so the game was ended.')
   }
-  await persistFinishedGame(match, params)
+  const saved = await persistFinishedGame(match, params)
 
   emitToPlayers(io, match, EV('matchEnd'), (uid, i) => ({
     ...publicMatchView(match, uid),
@@ -525,6 +531,21 @@ async function endMatch(io, match, params) {
 
   destroyMatch(match.id)
   afterTournamentGame(match).catch(() => {})
+  // The PvP pack reward runs only for a match that was actually saved, and AFTER matchEnd is on its way: the result screen
+  // never waits on it, and a reward bug can never cost a match record. The winner hears about it in a separate event.
+  if (saved) awardPvpPack(io, match).catch(err => console.error('[ogGtoons] pack reward failed:', err?.message || err))
+}
+
+/**
+ * Evaluates the PvP pack reward for a saved match and tells the winner the outcome in a separate `packReward` event (the
+ * match is destroyed by now, so it goes to their user room). Idempotent and crash-safe — see ogGtoonsPackReward.js; the
+ * reconcile cron covers a failure here.
+ */
+async function awardPvpPack(io, match) {
+  const res = await evaluatePackReward(db, match.id)
+  if (res.notice && res.winnerUserId) {
+    io.local.to(userRoom(res.winnerUserId)).emit(EV('packReward'), { matchId: match.id, ...res.notice })
+  }
 }
 
 /* ── Leaving / disconnect ────────────────────────────────────────────────────────────────── */
@@ -1015,6 +1036,8 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     }
 
     markCommitted(match, idx)
+    // `||=`: a match restored from Redis after a restart may predate this field.
+    ;(match.manualCommits ||= [0, 0])[idx] += 1
     match.lastActivity = Date.now()
     socket.emit(EV('committed'), { round: match.currentRound })
     const oppIdx = idx === 0 ? 1 : 0

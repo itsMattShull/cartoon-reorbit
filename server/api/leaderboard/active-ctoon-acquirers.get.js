@@ -35,6 +35,7 @@ const COMBINED_CTE = `
       SELECT "winnerId" AS "userId", COUNT(*)::int AS "count"
       FROM "Auction"
       WHERE "winnerId" IS NOT NULL
+        AND "kind" = 'CTOON' -- a pack auction win is not a cToon acquired
         AND "winnerAt" >= NOW() - INTERVAL '7 days'
       GROUP BY "winnerId"
     ),

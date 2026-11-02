@@ -184,6 +184,9 @@
               </button>
             </div>
 
+            <!-- Pack Rewards -->
+            <CodePackRewards ref="packRewardsEl" :initial="initialPacks" />
+
             <!-- Prerequisite cToons -->
             <div class="flex flex-col gap-1">
               <label class="text-xs font-medium">Prerequisite cToons</label>
@@ -323,6 +326,8 @@ const prereqMinOwned    = ref(1)
 const setSearch         = ref('')
 const error         = ref('')
 const warning       = ref('')
+const packRewardsEl = ref(null)
+const initialPacks  = ref([])
 
 // options
 const ctoonOptions  = ref([])
@@ -412,6 +417,13 @@ onMounted(async () => {
     )
     if (ctoonRewards.value.length === 0) {
       ctoonRewards.value = [{ ctoonName: '', quantity: 1, endBonusAt: '' }]
+    }
+
+    // map existing pack rewards (summed across reward batches)
+    {
+      const sums = new Map()
+      for (const r of entry.rewards) for (const pk of r.packs || []) sums.set(pk.packId, (sums.get(pk.packId) || 0) + pk.quantity)
+      initialPacks.value = [...sums].map(([packId, quantity]) => ({ packId, quantity }))
     }
 
     // map existing prerequisites
@@ -532,8 +544,11 @@ async function submitForm() {
     })
     .filter(Boolean)
 
+  const packResult = packRewardsEl.value?.toPayload() || { ok: true, packs: [] }
+  if (!packResult.ok) { error.value = packResult.error; return }
+
   // build either fixed cToons or pooled
-  let rewardBlock = { points: points.value, backgrounds: backgroundsPayload }
+  let rewardBlock = { points: points.value, backgrounds: backgroundsPayload, packs: packResult.packs }
 
   if (pooledEnabled.value) {
     const validPool = []

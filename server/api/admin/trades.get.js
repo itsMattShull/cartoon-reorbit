@@ -98,6 +98,7 @@ export default defineEventHandler(async (event) => {
         // reason to re-serialize a whole second offer to say "this was
         // countered".
         counteredBy: { select: { id: true } },
+        packs: { select: { role: true, userPack: { select: { pack: { select: { id: true, name: true } } } } } },
         ctoons: {
           include: {
             userCtoon: {
@@ -128,6 +129,17 @@ export default defineEventHandler(async (event) => {
     const ctoonsOffered = o.ctoons.filter(x => x.role === 'OFFERED').map(x => ({ ...x.userCtoon.ctoon, mintNumber: x.userCtoon.mintNumber, value: valueCtoon(x.userCtoon.ctoon) }))
     const ctoonsRequested = o.ctoons.filter(x => x.role === 'REQUESTED').map(x => ({ ...x.userCtoon.ctoon, mintNumber: x.userCtoon.mintNumber, value: valueCtoon(x.userCtoon.ctoon) }))
 
+    // Sealed packs grouped by type: [{ name, quantity }]. They carry no price here, so the page leaves them out of the
+    // value totals and the "lopsided trade" highlight instead of pretending they are worth nothing.
+    const groupPacks = (role) => {
+      const m = new Map()
+      for (const p of o.packs) if (p.role === role) {
+        const pk = p.userPack.pack
+        m.set(pk.id, { name: pk.name, quantity: (m.get(pk.id)?.quantity || 0) + 1 })
+      }
+      return [...m.values()]
+    }
+
     // Decision timestamp is when status left PENDING. We use updatedAt.
     // COUNTERED is excluded: nobody decided anything, the offer was superseded
     // by a revised one, and reporting it as a decision made a negotiation look
@@ -141,6 +153,8 @@ export default defineEventHandler(async (event) => {
       pointsOffered: o.pointsOffered,
       ctoonsOffered,
       ctoonsRequested,
+      packsOffered: groupPacks('OFFERED'),
+      packsRequested: groupPacks('REQUESTED'),
       status: o.status,
       createdAt: o.createdAt,      // ISO UTC
       decisionAt,                  // ISO UTC or null

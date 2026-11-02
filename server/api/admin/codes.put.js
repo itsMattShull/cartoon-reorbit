@@ -2,6 +2,7 @@
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { normalizeRewardPacks, assertRewardPackLimits, assertPacksExist } from '@/server/utils/codeRewardPacks'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -45,7 +46,7 @@ export default defineEventHandler(async (event) => {
   const existing = await prisma.claimCode.findUnique({
     where: { code },
     include: {
-      rewards: { include: { ctoons: true, poolCtoons: true, backgrounds: true } },
+      rewards: { include: { ctoons: true, poolCtoons: true, backgrounds: true, packs: true } },
       prerequisites: true
     }
   })
@@ -60,6 +61,11 @@ export default defineEventHandler(async (event) => {
       return id
     })
   }
+
+  const packBatches = rewards.map((r, i) => normalizeRewardPacks(r?.packs, `rewards[${i}].packs`))
+  assertRewardPackLimits(packBatches)
+  await assertPacksExist(prisma, packBatches)
+  const packCreatesFor = (i) => packBatches[i].length ? { packs: { create: packBatches[i] } } : {}
 
   const rewardCreates = rewards.map((r, i) => {
     const { points } = r || {}
@@ -88,6 +94,7 @@ export default defineEventHandler(async (event) => {
         points: points ?? 0,
         pooledUniqueCount: r.pool.uniqueCount,
         poolCtoons: { create: poolCreates },
+        ...packCreatesFor(i),
         ...(bgCreates.length ? { backgrounds: { create: bgCreates } } : {})
       }
     }
@@ -102,6 +109,7 @@ export default defineEventHandler(async (event) => {
     return {
       points: points ?? 0,
       ctoons: { create: fixedCreates },
+      ...packCreatesFor(i),
       ...(bgCreates.length ? { backgrounds: { create: bgCreates } } : {})
     }
   })
@@ -123,6 +131,8 @@ export default defineEventHandler(async (event) => {
     prisma.rewardCtoon.deleteMany({ where: { reward: { codeId } } }),
     prisma.rewardCtoonPool.deleteMany({ where: { reward: { codeId } } }), // NEW
     prisma.rewardBackground.deleteMany({ where: { reward: { codeId } } }),
+    // RewardPack has no ON DELETE CASCADE: leaving this out makes editing any code that awards a pack fail on the FK.
+    prisma.rewardPack.deleteMany({ where: { reward: { codeId } } }),
     prisma.claimCodeReward.deleteMany({ where: { codeId } }),
     prisma.claimCodePrerequisite.deleteMany({ where: { codeId } }),
     prisma.claimCode.update({
@@ -133,7 +143,7 @@ export default defineEventHandler(async (event) => {
   const updated = await prisma.claimCode.findUnique({
     where: { code },
     include: {
-      rewards: { include: { ctoons: true, poolCtoons: true, backgrounds: true } },
+      rewards: { include: { ctoons: true, poolCtoons: true, backgrounds: true, packs: true } },
       prerequisites: true
     }
   })
@@ -149,7 +159,8 @@ export default defineEventHandler(async (event) => {
         pooledUniqueCount: r.pooledUniqueCount ?? null,
         ctoons: (r.ctoons || []).map(x => ({ ctoonId: x.ctoonId, quantity: x.quantity, endBonusAt: x.endBonusAt ? new Date(x.endBonusAt).toISOString() : null })),
         pool: (r.poolCtoons || []).map(x => ({ ctoonId: x.ctoonId, weight: x.weight })),
-        backgrounds: (r.backgrounds || []).map(b => b.backgroundId)
+        backgrounds: (r.backgrounds || []).map(b => b.backgroundId),
+        packs: (r.packs || []).map(x => ({ packId: x.packId, quantity: x.quantity })).sort((a, b) => (a.packId < b.packId ? -1 : 1))
       })),
       prerequisites: (cc.prerequisites || []).map(p => p.ctoonId)
     }

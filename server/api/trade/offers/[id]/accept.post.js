@@ -6,6 +6,7 @@ import {
 import { prisma } from '@/server/prisma'
 import { notifyTradeOfferAccepted } from '@/server/utils/notifications'
 import { captureRequestMeta } from '@/server/utils/tradeOffer'
+import { lockAndAssertOfferPacks, logPackOwners } from '@/server/utils/userPackState'
 
 export default defineEventHandler(async (event) => {
   // 1) Authenticate
@@ -24,7 +25,8 @@ export default defineEventHandler(async (event) => {
   const offer = await prisma.tradeOffer.findUnique({
     where: { id: offerId },
     include: {
-      ctoons: { include: { userCtoon: true } }
+      ctoons: { include: { userCtoon: true } },
+      packs: { select: { role: true, userPackId: true, userPack: { select: { userId: true, opened: true, packId: true } } } }
     }
   })
   if (!offer) throw createError({ statusCode: 404, statusMessage: 'Offer not found' })
@@ -81,6 +83,24 @@ export default defineEventHandler(async (event) => {
           'Offer rejected: one or more requested cToons are no longer owned by the recipient.'
       })
     }
+  }
+
+  // 4a) Verify every pack in the offer is still where the offer says and still sealed. Nothing in the app can open or
+  // auction a pack that sits in a pending offer, so this only trips if an admin/dissolve action moved it — but then the
+  // offer can never be honoured, so close it out (and give the initiator their points back) rather than leave it pending.
+  const offeredPackIds = offer.packs.filter(p => p.role === 'OFFERED').map(p => p.userPackId)
+  const requestedPackIds = offer.packs.filter(p => p.role === 'REQUESTED').map(p => p.userPackId)
+  const packGone = offer.packs.some(p =>
+    p.userPack.opened || p.userPack.userId !== (p.role === 'OFFERED' ? offer.initiatorId : offer.recipientId))
+  if (packGone) {
+    await prisma.$transaction(async (tx) => {
+      await tx.tradeOffer.updateMany({ where: { id: offerId, status: 'PENDING' }, data: { status: 'REJECTED', updatedAt: new Date() } })
+      await tx.lockedPoints.updateMany({
+        where: { userId: offer.initiatorId, status: 'ACTIVE', contextType: 'TRADE', contextId: offerId },
+        data: { status: 'RELEASED' }
+      })
+    })
+    throw createError({ statusCode: 400, statusMessage: 'Offer rejected: one or more packs in it are no longer available.' })
   }
 
   // 5) Verify initiator still has the points (basic guard)
@@ -146,6 +166,17 @@ export default defineEventHandler(async (event) => {
       throw createError({
         statusCode: 409,
         statusMessage: 'This offer is no longer pending.'
+      })
+    }
+
+    // Packs: lock + verify under the lock, BEFORE any points move (lock order: offer row -> UserPack rows -> UserPoints
+    // -> LockedPoints). The offer is already ACCEPTED here, so it no longer counts as the pack's "pending trade".
+    if (offer.packs.length) {
+      await lockAndAssertOfferPacks(tx, {
+        offeredIds: offeredPackIds,
+        requestedIds: requestedPackIds,
+        initiatorId: offer.initiatorId,
+        recipientId: offer.recipientId
       })
     }
 
@@ -258,6 +289,30 @@ export default defineEventHandler(async (event) => {
           tradeOfferId: offerId
         }))
       })
+    }
+
+    // Move the packs. Conditional on the expected current owner AND still sealed, like the cToon transfer above; the
+    // lock taken earlier means this can only fail if something moved a pack outside every lock — then roll back.
+    for (const { ids, from, to } of [
+      { ids: offeredPackIds, from: offer.initiatorId, to: offer.recipientId },
+      { ids: requestedPackIds, from: offer.recipientId, to: offer.initiatorId }
+    ]) {
+      if (!ids.length) continue
+      const moved = await tx.userPack.updateMany({ where: { id: { in: ids }, userId: from, opened: false }, data: { userId: to } })
+      if (moved.count !== ids.length) {
+        throw createError({ statusCode: 409, statusMessage: 'One or more packs in this trade are no longer available.' })
+      }
+    }
+    if (offer.packs.length) {
+      await logPackOwners(tx, offer.packs.map(p => ({
+        userPackId: p.userPackId,
+        packId: p.userPack.packId,
+        userId: p.role === 'OFFERED' ? offer.recipientId : offer.initiatorId,
+        method: 'TRADE',
+        counterpartyUserId: p.role === 'OFFERED' ? offer.initiatorId : offer.recipientId,
+        counterpartyUsername: p.role === 'OFFERED' ? initiator?.username : me.username,
+        tradeOfferId: offerId
+      })))
     }
 
     // Status was already claimed at the top of this transaction.

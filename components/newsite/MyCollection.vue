@@ -42,6 +42,24 @@
       </div>
     </div>
 
+    <!-- ── Section tabs: cToons | Packs ───────────────────────────── -->
+    <div class="mc-tabs" role="tablist" aria-label="Collection sections" @keydown="onTabKeydown">
+      <button
+        id="mc-tab-ctoons" type="button" role="tab" class="mc-tab"
+        :aria-selected="tab === 'ctoons' ? 'true' : 'false'" aria-controls="mc-panel-ctoons"
+        :tabindex="tab === 'ctoons' ? 0 : -1" @click="setTab('ctoons')"
+      >cToons</button>
+      <button
+        id="mc-tab-packs" type="button" role="tab" class="mc-tab"
+        :aria-selected="tab === 'packs' ? 'true' : 'false'" aria-controls="mc-panel-packs"
+        :tabindex="tab === 'packs' ? 0 : -1" @click="setTab('packs')"
+      >Packs<span v-if="packCount > 0" class="mc-tab-count" :aria-label="`${packCount} sealed`">{{ packCount }}</span></button>
+    </div>
+
+    <MyCollectionPacks v-if="tab === 'packs'" />
+
+    <div v-show="tab === 'ctoons'" id="mc-panel-ctoons" class="mc-ctoons-panel" role="tabpanel" aria-labelledby="mc-tab-ctoons">
+
     <!-- ── Active "duplicates only" indicator ─────────────────────── -->
     <div v-if="filter.duplicatesOnly" class="mc-active-filter">
       <button class="mc-chip" title="Turn off the duplicates filter" @click="filter.duplicatesOnly = false">
@@ -118,14 +136,42 @@
       <button class="mc-pg-btn" :disabled="currentPage >= totalPages" @click="nextPage">›</button>
     </div>
 
+    </div><!-- /#mc-panel-ctoons -->
+
   </div>
 </template>
 
 <script setup>
 import CtoonImage from '@/components/CtoonImage.vue'
+import MyCollectionPacks from '@/components/newsite/MyCollectionPacks.vue'
 import { duplicateCtoonIds, groupByCtoonId } from '@/utils/duplicateCtoonIds'
 
 const { open: openCtoonModal } = useCtoonModal()
+
+// ── Tabs (cToons | Packs) ─────────────────────────────────────────
+// The tab lives in shared state so MyCollectionSidebar can hide the cToon-only filters while Packs is showing, and
+// honours ?tab=packs so a notification (or a link from the Redeem page) can land straight on the packs.
+const route  = useRoute()
+const router = useRouter()
+const tab = useState('myCollectionTab', () => 'ctoons')
+tab.value = route.query.tab === 'packs' ? 'packs' : 'ctoons'
+watch(() => route.query.tab, (t) => { tab.value = t === 'packs' ? 'packs' : 'ctoons' })
+
+const packsSummary = useState('myPacksSummary', () => ({ total: 0, byPack: [] }))
+const packCount = computed(() => packsSummary.value?.total || 0)
+
+function setTab (t) {
+  if (tab.value === t) return
+  tab.value = t
+  router.replace({ query: { ...route.query, tab: t === 'packs' ? 'packs' : undefined } })
+}
+function onTabKeydown (e) {
+  if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return
+  e.preventDefault()
+  const next = e.key === 'ArrowLeft' || e.key === 'Home' ? 'ctoons' : 'packs'
+  setTab(next)
+  nextTick(() => document.getElementById(next === 'packs' ? 'mc-tab-packs' : 'mc-tab-ctoons')?.focus())
+}
 const { tradeList, loading: tradeListLoading, add: addToTradeList, remove: removeFromTradeList } = useTradeList()
 
 function openInfo(c) {
@@ -453,6 +499,10 @@ function prevPage() { if (currentPage.value > 1) currentPage.value-- }
 function nextPage() { if (currentPage.value < totalPages.value) currentPage.value++ }
 
 onMounted(() => {
+  // Count for the Packs tab badge. Cheap (summary mode skips the rows), and independent of everything below.
+  ;(async () => {
+    try { const r = await $fetch('/api/collection/self/packs?summary=1'); packsSummary.value = { total: r.total, byPack: r.byPack } } catch {}
+  })()
   // Independent fetches, not awaited together: a slow /worth query must never
   // hold up the grid, and a slow grid load shouldn't delay the worth badge.
   ;(async () => {
@@ -488,6 +538,36 @@ onMounted(() => {
   --img-scale: 0.7;
   --mc-header-height: 23px;
 }
+
+/* ── Tabs ─────────────────────────────────────────────────────── */
+.mc-tabs {
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  padding: 4px 6px 0;
+  background: var(--OrbitDarkBlue);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.mc-tabs::-webkit-scrollbar { display: none; }
+.mc-tab {
+  flex: 0 0 auto;
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 28px; padding: 3px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.25); border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: rgba(0, 0, 0, 0.25); color: #fff;
+  font-size: 0.82rem; font-weight: bold; white-space: nowrap; cursor: pointer;
+}
+.mc-tab[aria-selected="true"] { background: var(--OrbitLightBlue); }
+.mc-tab:focus-visible { outline: 3px solid #fff; outline-offset: -3px; }
+.mc-tab-count { background: rgba(0, 0, 0, 0.3); border-radius: 9px; padding: 0 7px; font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+@media (max-width: 768px) {
+  .mc-tab { min-height: 44px; font-size: 0.95rem; padding: 6px 20px; }
+}
+
+/* The cToons section as one flex child, so toggling tabs doesn't disturb the grid's own flex sizing. */
+.mc-ctoons-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
 .mc-pagination {
   display: flex;
