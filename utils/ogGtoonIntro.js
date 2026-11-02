@@ -13,7 +13,7 @@ export function targetColors(goalColors) {
 
 /**
  * What decides the game, for the middle box of the intro:
- *   two different colors -> most cards of BOTH combined wins outright (a tie is decided by points)
+ *   two different colors -> more cards of EACH color wins outright (otherwise points decide)
  *   one color (or both the same) -> points decide, with +15 for the player holding more of that color
  *   none -> points only
  * @returns {{ key: 'two'|'one'|'none', title: string, colors: string[], lines: string[] }}
@@ -26,8 +26,8 @@ export function introScenario(goalColors) {
       title: 'Two colors revealed',
       colors,
       lines: [
-        'If a player has more cards of both colors, he or she wins automatically.',
-        'If neither player has more of both colors, the game will be decided by points.'
+        'If a player has more cards of each color, he or she wins automatically.',
+        'If neither player has more of each color, the game will be decided by points.'
       ]
     }
   }

@@ -18,15 +18,15 @@
 //   slot 6    "+2 to all Blue cards" (Pepe Le Pew) — powers affect BOTH sides (the bot's Baby Bugs)
 //   bot 1+6   two Bugs Bunny cards: only the lower one counts, so Bugs Teasin' drops to 0 when
 //             Baby Bugs lands (an already-placed card can change later)
-//   slot 7    stays face down; the paid swap draws Blossom Fighting (+2 from Pepe)
+//   slot 7    stays face down; the paid swap brings in Daphne Celebrating, a Green 10 (so the player has more Green AND more Blue)
 //   Silver    TOM and Pepe are Silver: the player picks Blue for them
 // Goal colours are Blue (the player's Dexter) and Green (the bot's Superman) — two different
-// colours, so the most cards of both combined wins outright: 6 to 4, while behind 27-43 on points.
+// colours, so more cards of EACH wins outright (Green 4 to 3, Blue 2 to 1), while behind 25-43 on points.
 
 /** Deck position = array index. Positions 0-5 are the opening hand, 6-11 stay undealt (in order). */
 export const TUTORIAL_USER_DECK = [
   'Cindy Bear', 'Yogi Bear', 'Batman', 'Captain Dodgers', 'Jack Training', 'Dexter',
-  'TOM', 'Pepe Le Pew', 'Goat', 'Buttercup Fighting', 'Blossom Fighting', 'Abuelito'
+  'TOM', 'Pepe Le Pew', 'Goat', 'Buttercup Fighting', 'Daphne Celebrating', 'Abuelito'
 ]
 export const TUTORIAL_BOT_DECK = [
   "Bugs Teasin'", 'Cow', 'Aku', 'Captain Dodgers', 'Superman', 'Baby Bugs',
@@ -51,7 +51,7 @@ export const TUTORIAL_PLAN = {
   },
   // After round 1: the player throws away Jack Training; the bot keeps its hand.
   discard: { user: [4], bot: [] },
-  // Round 3: the player pays for the swap and draws Blossom Fighting; the bot keeps slot 7.
+  // Round 3: the player pays for the swap and swaps in Daphne Celebrating; the bot keeps slot 7.
   swap: { user: true, bot: false, drawIdx: 10 },
   silverColor: { user: 'BLUE', bot: 'GREEN' }
 }

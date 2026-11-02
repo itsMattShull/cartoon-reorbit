@@ -238,7 +238,7 @@ test('recorder: keeps a valid win reason and drops an unknown one', async () => 
 
 test('win reason: the engine\'s reason maps to COLOR / POINTS, a tie has none', () => {
   const card = (color, finalValue) => ({ color, finalValue })
-  // Different goal colours: more cards of both combined wins outright -> COLOR.
+  // Different goal colours: more cards of EACH goal colour wins outright -> COLOR.
   const byColor = determineWinner({
     player1GoalColor: 'RED', player2GoalColor: 'BLUE',
     player1Revealed: [card('RED', 1), card('BLUE', 1), card('RED', 1)], player2Revealed: [card('RED', 9), card('GREEN', 9), card('GREEN', 9)]

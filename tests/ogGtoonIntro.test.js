@@ -7,7 +7,7 @@ test('intro: two different goal colors -> most cards of both wins, otherwise poi
   assert.equal(s.key, 'two')
   assert.equal(s.title, 'Two colors revealed')
   assert.deepEqual(s.colors, ['RED', 'BLUE'])
-  assert.match(s.lines[0], /more cards of both colors/i)
+  assert.match(s.lines[0], /more cards of each color/i)
   assert.match(s.lines[1], /decided by points/i)
 })
 

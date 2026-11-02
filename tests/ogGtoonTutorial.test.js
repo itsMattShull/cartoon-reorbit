@@ -86,7 +86,7 @@ test('tutorial: the scripted match plays through to the scripted win, with no cl
   assert.equal(v.phase, 'play')
   assert.equal(v.round, 2)
   assert.equal(v.phaseEndsAt, null, 'no timer in round 2')
-  assert.deepEqual(v.you.hand.map(c => c.name), ['Dexter', 'TOM', 'Pepe Le Pew', 'Goat', 'Buttercup Fighting', 'Blossom Fighting'])
+  assert.deepEqual(v.you.hand.map(c => c.name), ['Dexter', 'TOM', 'Pepe Le Pew', 'Goat', 'Buttercup Fighting', 'Daphne Celebrating'])
   assert.equal(v.you.discardedCount, 1)
 
   // Round 2: off-script placements are refused.
@@ -111,7 +111,7 @@ test('tutorial: the scripted match plays through to the scripted win, with no cl
   v = h.view()
   assert.equal(v.phase, 'color', 'TOM and Pepe Le Pew are Silver, so the colour pick comes next')
   assert.equal(v.you.mayChooseColor, true)
-  assert.equal(v.you.revealed.find(r => r.slot === 7).name, 'Blossom Fighting')
+  assert.equal(v.you.revealed.find(r => r.slot === 7).name, 'Daphne Celebrating')
   assert.equal(v.opponent.revealed.find(r => r.slot === 7).name, 'Bloo')
 
   await h.call('chooseColor', { color: 'RED' })
@@ -123,8 +123,8 @@ test('tutorial: the scripted match plays through to the scripted win, with no cl
   assert.equal(end.over, true)
   assert.equal(end.outcome, 'PLAYER1')
   assert.equal(end.won, true)
-  // Behind on points (27 = 37 - the 10-point swap penalty, vs 43) but ahead 6 to 4 on Blue + Green.
-  assert.equal(end.player1Score, 27)
+  // Behind on points (25 = 35 - the 10-point swap penalty, vs 43) but more of EACH goal color: Green 4-3, Blue 2-1.
+  assert.equal(end.player1Score, 25)
   assert.equal(end.player2Score, 43)
 
   // What the final board teaches.
@@ -136,7 +136,7 @@ test('tutorial: the scripted match plays through to the scripted win, with no cl
   assert.equal(final('opponent', 1).cancelled, true, "Bugs Teasin' is knocked out by the lower Baby Bugs")
   assert.equal(final('opponent', 5).color, 'BLACK', 'TOM treats the opposing Superman as Black')
   assert.equal(final('opponent', 6).finalValue, 9, "Pepe Le Pew's +2 to Blue also helps the bot's Baby Bugs")
-  assert.equal(final('you', 7).finalValue, 12)
+  assert.equal(final('you', 7).finalValue, 10)
   assert.equal(final('you', 5).color, 'BLUE')
   assert.equal(final('you', 6).color, 'BLUE')
   const countGoal = (side) => end[side].revealed.filter(r => !r.cancelled && ['BLUE', 'GREEN'].includes(r.color)).length
