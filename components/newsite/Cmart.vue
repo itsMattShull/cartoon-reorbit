@@ -52,20 +52,25 @@
               </div>
             </div>
           </div>
-          <GreenButton
-            class="pack-preview-buy-btn"
-            :disabled="buyingPackIds.includes(packPreviewPack?.id)"
-            @click="packPreviewVisible = false; buyPack(packPreviewPack)"
-          >
-            <template v-if="buyingPackIds.includes(packPreviewPack?.id)">Purchasing…</template>
-            <template v-else>
-              Buy for {{ displayPrice(packBasePrice(packPreviewPack)).toLocaleString() }} pts
-              <span
-                v-if="packPreviewPack && displayPrice(packBasePrice(packPreviewPack)) !== packPreviewPack.price"
-                class="pack-price-original"
-              >{{ packPreviewPack.price.toLocaleString() }}</span>
-            </template>
-          </GreenButton>
+          <p class="pack-price-line pack-price-line--preview">
+            {{ displayPrice(packBasePrice(packPreviewPack)).toLocaleString() }} pts
+            <span
+              v-if="packPreviewPack && displayPrice(packBasePrice(packPreviewPack)) !== packPreviewPack.price"
+              class="pack-price-original"
+            >{{ packPreviewPack.price.toLocaleString() }}</span>
+          </p>
+          <div class="pack-buy-row pack-buy-row--preview">
+            <GreenButton
+              class="pack-preview-buy-btn"
+              :disabled="buyingPackIds.includes(packPreviewPack?.id)"
+              @click="packPreviewVisible = false; buyPack(packPreviewPack)"
+            >{{ buyingPackIds.includes(packPreviewPack?.id) ? 'Purchasing…' : 'Buy & Open' }}</GreenButton>
+            <BlueButton
+              class="pack-preview-buy-btn pack-preview-buy-btn--keep"
+              :disabled="buyingPackIds.includes(packPreviewPack?.id)"
+              @click="packPreviewVisible = false; buyPack(packPreviewPack, { open: false })"
+            >{{ buyingPackIds.includes(packPreviewPack?.id) ? 'Purchasing…' : 'Buy' }}</BlueButton>
+          </div>
         </div>
       </div>
     </Teleport>
@@ -265,20 +270,26 @@
               <strong>{{ r.rarity }}:</strong> {{ r.probabilityPercent }}% — {{ r.count }} cToon(s)
             </li>
           </ul>
-          <GreenButton
-            class="pack-buy-btn"
-            :disabled="buyingPackIds.includes(pack.id)"
-            @click="buyPack(pack)"
-          >
-            <template v-if="buyingPackIds.includes(pack.id)">Purchasing…</template>
-            <template v-else>
-              Buy for {{ displayPrice(packBasePrice(pack)).toLocaleString() }} pts
-              <span
-                v-if="displayPrice(packBasePrice(pack)) !== pack.price"
-                class="pack-price-original"
-              >{{ pack.price.toLocaleString() }}</span>
-            </template>
-          </GreenButton>
+          <p class="pack-price-line">
+            {{ displayPrice(packBasePrice(pack)).toLocaleString() }} pts
+            <span
+              v-if="displayPrice(packBasePrice(pack)) !== pack.price"
+              class="pack-price-original"
+            >{{ pack.price.toLocaleString() }}</span>
+          </p>
+          <!-- Two ways to buy: open it right now (the unwrap), or just keep it sealed in My Collection > Packs -->
+          <div class="pack-buy-row">
+            <GreenButton
+              class="pack-buy-btn"
+              :disabled="buyingPackIds.includes(pack.id)"
+              @click="buyPack(pack)"
+            >{{ buyingPackIds.includes(pack.id) ? 'Purchasing…' : 'Buy & Open' }}</GreenButton>
+            <BlueButton
+              class="pack-buy-btn pack-buy-btn--keep"
+              :disabled="buyingPackIds.includes(pack.id)"
+              @click="buyPack(pack, { open: false })"
+            >{{ buyingPackIds.includes(pack.id) ? 'Purchasing…' : 'Buy' }}</BlueButton>
+          </div>
         </div>
       </template>
     </div>
@@ -904,7 +915,9 @@ async function buy(ctoon, priceOverride = null) {
 }
 
 // ── Pack buying ───────────────────────────────────────────────
-async function buyPack(pack) {
+// `open: true` (default, "Buy & Open") plays the unwrap straight away; `open: false` ("Buy") just keeps the sealed pack in
+// My Collection > Packs for later — or to trade or auction. Both make the same purchase.
+async function buyPack(pack, { open = true } = {}) {
   if (buyingPackIds.value.includes(pack.id)) return
   const price = displayPrice(packBasePrice(pack))
   if (user.value && user.value.points < price) {
@@ -919,10 +932,15 @@ async function buyPack(pack) {
       body: { packId: pack.id },
     })
 
-    // The purchase created a sealed pack; the overlay opens it (POST /api/packs/open). If that fails the pack simply
-    // stays sealed in My Collection > Packs — the player never loses it.
-    openingPack.value       = pack
-    openingUserPackId.value = res.userPackId
+    if (open) {
+      // The purchase created a sealed pack; the overlay opens it (POST /api/packs/open). If that fails the pack simply
+      // stays sealed in My Collection > Packs — the player never loses it.
+      openingPack.value       = pack
+      openingUserPackId.value = res.userPackId
+    } else {
+      showToast(`${pack.name} added to My Collection › Packs.`, 'success')
+      fetchPacks() // the pack may have just sold out of cMart
+    }
 
     await fetchSelf({ force: true })
     await loadOwnedCtoonIds()
@@ -1165,13 +1183,32 @@ async function closeOverlay() {
   line-height: 1.4;
 }
 
-.pack-buy-btn {
+.pack-price-line {
+  margin: auto 0 0;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: bold;
+  color: #fff;
+}
+.pack-price-line--preview { margin: 8px 0 4px; font-size: 0.9rem; }
+
+.pack-buy-row {
+  display: flex;
+  gap: 4px;
   width: 100%;
-  margin-top: auto;
+  margin-top: 4px;
+}
+.pack-buy-row--preview { margin-top: 0; }
+
+.pack-buy-btn {
+  flex: 1 1 0;
+  min-width: 0;
   font-size: 0.7rem;
   padding: 4px 6px;
   white-space: nowrap;
 }
+/* The primary action (open now) gets the larger share; plain Buy is the quiet alternative. */
+.pack-buy-btn--keep { flex: 0 1 38%; }
 
 .pack-img--clickable {
   cursor: pointer;
@@ -1335,8 +1372,16 @@ async function closeOverlay() {
 }
 
 .pack-preview-buy-btn {
-  width: 100%;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 44px;
   font-size: 0.8rem;
+}
+.pack-preview-buy-btn--keep { flex: 0 1 38%; }
+
+/* Tap targets on a phone: both buy buttons are real purchases. */
+@media (max-width: 768px) {
+  .pack-buy-btn { min-height: 44px; font-size: 0.8rem; }
 }
 
 /* The opening overlay's styles live in components/PackOpenOverlay.vue. These two badge rules stay: the pack PREVIEW

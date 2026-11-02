@@ -225,3 +225,13 @@ test('admin reward settings: pack + limit are all-or-nothing in the UI, inputs c
   assert.match(games, /ogGtoonsWinPackId: +ogWinPack\.value\.packId/)
   assert.match(games, /!!ogPackRewardEl\?\.problem/)
 })
+
+test('cMart packs offer two purchases: Buy & Open (unwrap now) and Buy (keep it sealed in My Collection > Packs), on the card AND in the preview', () => {
+  assert.match(cmart, /async function buyPack\(pack, \{ open = true \} = \{\}\)/)
+  assert.ok((cmart.match(/'Buy & Open'/g) || []).length >= 2, 'both the card and the preview have Buy & Open')
+  assert.ok((cmart.match(/buyPack\([^)]*\{ open: false \}\)/g) || []).length >= 2, 'both have a keep-sealed Buy')
+  // Buy-only must NOT start the overlay; it tells the player where the pack went.
+  const fn = cmart.slice(cmart.indexOf('async function buyPack'), cmart.indexOf('async function closeOverlay'))
+  assert.match(fn, /if \(open\) \{[\s\S]*openingUserPackId\.value = res\.userPackId[\s\S]*\} else \{[\s\S]*added to My Collection/)
+  assert.match(cmart, /\.pack-buy-btn \{ min-height: 44px/)
+})
