@@ -23,7 +23,7 @@
           loading="eager"
           fetchpriority="high"
         />
-        <div v-else class="cmp-banner">
+        <div v-else class="cmp-banner" :class="{ 'cmp-banner--prestige': cmoon.isPrestigeCMoon }">
           <h1 class="cmp-title">{{ cmoon.name }}</h1>
           <p class="cmp-member-count">{{ cmoon.memberCount.toLocaleString() }} member{{ cmoon.memberCount === 1 ? '' : 's' }}</p>
         </div>
@@ -928,6 +928,12 @@ onBeforeUnmount(() => {
   background: var(--cm-banner, var(--OrbitDarkBlue));
   color: var(--cm-banner-text, #ffffff);
   padding: 18px 16px;
+}
+
+/* Reserves room for .cmp-prestige-badge (top-right, ~110px wide incl. its glow) so a long team
+   name wrapping in the plain-text banner variant doesn't run under the badge. */
+.cmp-banner--prestige {
+  padding-right: 120px;
 }
 
 .cmp-title {
