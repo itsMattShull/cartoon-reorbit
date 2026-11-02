@@ -103,7 +103,8 @@ watch(activeTab, (tab) => {
   if (tab === 'decks') setSidebarMiddle('OgGtoonDeckSidebar')
   else clearSidebarMiddle()
 }, { immediate: true })
-onBeforeUnmount(clearSidebarMiddle)
+// Only clear our own sidebar: when a match starts, the match page has already set OgGtoonSidebar by the time this unmounts.
+onBeforeUnmount(() => clearSidebarMiddle('OgGtoonDeckSidebar'))
 
 watch([visibleTabs, ready], ([tabs, isReady]) => {
   if (isReady && tabs.length && !tabs.some(t => t.id === activeTab.value)) activeTab.value = tabs[0].id
