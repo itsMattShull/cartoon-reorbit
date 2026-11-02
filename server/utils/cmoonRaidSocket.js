@@ -1302,7 +1302,11 @@ export async function restoreCMoonRaids() {
     for (const [uid, p] of raid.participants) {
       if (!p.pendingJoin) continue
       raid.participants.delete(uid)
-      db.cMoonEnemyRaidParticipant.updateMany({ where: { raidId, userId: uid }, data: { activeUserId: null } }).catch(() => {})
+      // Deleted outright, not just activeUserId-cleared: this row never represented a real,
+      // finished join (the raid never left FORMING), and @@unique([raidId, userId]) means
+      // leaving it behind would permanently block this exact user from ever rejoining THIS raid
+      // again — the same bug class cmoonraid:leave's own delete below exists to avoid.
+      db.cMoonEnemyRaidParticipant.deleteMany({ where: { raidId, userId: uid } }).catch(() => {})
     }
     // Backfills a raid whose Redis snapshot predates special attacks (created on an older deploy,
     // restored after a restart mid-fight — a narrow window, but a missing numeric field here would
@@ -1722,7 +1726,14 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     // showing a raid it just asked to leave (a pre-existing gap in this handler — it simply had
     // no UI entry point to leave from until this feature added one).
     socket.emit(EV('leftRaid'), { raidId })
-    await db.cMoonEnemyRaidParticipant.updateMany({ where: { raidId, userId: me.id }, data: { activeUserId: null } }).catch(() => {})
+    // Deleted outright, not just activeUserId-cleared: this raid is still FORMING (the guard
+    // above guarantees combat never started for this participant), so there's no round history
+    // or reward record on this row worth keeping. Leaving it behind — even with activeUserId
+    // nulled — would still permanently violate @@unique([raidId, userId]) on any future rejoin
+    // attempt for THIS exact raid, since cmoonraid:join only ever does a plain `create`: the
+    // insert would 409 on that stale row and get reported back as "You are already in a raid",
+    // even though the player is no longer in any raid at all.
+    await db.cMoonEnemyRaidParticipant.deleteMany({ where: { raidId, userId: me.id } }).catch(() => {})
     // The ORIGINAL raid starter leaving their OWN still-FORMING raid (the status check above
     // already guarantees combat never started) gets their pre-raid lastCMoonBattlePopupAt
     // restored — see raid.initiatorPreviousPopupCooldownAt's own comment at creation. A lobby
