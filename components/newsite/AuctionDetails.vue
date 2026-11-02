@@ -19,7 +19,7 @@
       <!-- Top section: image + details + bid actions -->
       <div class="adet-top">
 
-        <!-- cToon image -->
+        <!-- cToon image (a pack: tap to see what's inside) -->
         <div class="adet-img-wrap adet-img-clickable" @click="openInfoModal">
           <CtoonImage class="adet-img" :ctoon="auction.ctoon" :alt="auction.ctoon.name" draggable="false" />
           <SecondEditionOverlay :ctoon="auction.ctoon" />
@@ -34,7 +34,8 @@
           </div>
 
           <div class="adet-meta">
-            <span class="adet-rarity" :class="`r-${rarityKey(auction.ctoon.rarity)}`">{{ auction.ctoon.rarity }}</span>
+            <span v-if="isPack" class="adet-rarity adet-pack-tag">Sealed pack</span>
+            <span v-else class="adet-rarity" :class="`r-${rarityKey(auction.ctoon.rarity)}`">{{ auction.ctoon.rarity }}</span>
             <span v-if="!auction.isHolidayItem && auction.ctoon.mintNumber" class="adet-dim">#{{ auction.ctoon.mintNumber }}</span>
             <span v-if="auction.ctoon.series" class="adet-dim">{{ auction.ctoon.series }}</span>
           </div>
@@ -49,7 +50,7 @@
 
           <!-- Re-list: this cToon never left its owner, so it can go back up -->
           <div v-if="auction.canRelist" class="adet-relist-wrap">
-            <button class="adet-relist" @click="openRelist">Re-list this cToon</button>
+            <button class="adet-relist" @click="openRelist">Re-list this {{ isPack ? 'pack' : 'cToon' }}</button>
             <div class="adet-hint">Starts a new auction — you can change the price and duration.</div>
           </div>
 
@@ -136,12 +137,15 @@
     <!-- Toast -->
     <div v-if="toast.message" class="adet-toast" :class="toast.type">{{ toast.message }}</div>
 
+    <PackPreviewModal v-if="packPreview" :pack-id="packPreview.packId" :name="packPreview.name" @close="packPreview = null" />
+
     <ScavengerHuntModal v-if="scavenger.isOpen && scavenger.sessionId" />
   </div>
 </template>
 
 <script setup>
 import CtoonImage from '@/components/CtoonImage.vue'
+import PackPreviewModal from '@/components/PackPreviewModal.vue'
 import { formatRemainingShort } from '~/server/utils/auctionDuration'
 const props = defineProps({
   auctionId: { type: [String, Number], required: true },
@@ -155,6 +159,7 @@ const { open: openCtoonModal } = useCtoonModal()
 const { open: openAuctionModal, createdSignal: auctionCreatedSignal } = useAuctionModal()
 
 const loading  = ref(true)
+const packPreview = ref(null)
 const auction  = ref({ ctoon: {}, winnerUsername: null, endAt: null, highestBid: 0, initialBet: 0 })
 const bids     = ref([])
 const userPoints  = ref(0)
@@ -171,6 +176,8 @@ const myLockedHere = ref(0)
 let timer, featuredLeadTimer, socket
 
 // ── Computed ─────────────────────────────────────────────────────
+// A sealed pack is sold through the very same page; only the item differs (server/utils/auctionItem.js).
+const isPack = computed(() => auction.value?.kind === 'PACK')
 const ended = computed(() => auction.value.endAt && new Date(auction.value.endAt) <= now.value)
 const hasBids = computed(() => (auction.value?.highestBid ?? 0) > 0)
 const displayedBid = computed(() => {
@@ -265,6 +272,7 @@ async function refreshFeaturedLead() {
 
 // ── Actions ───────────────────────────────────────────────────────
 function openInfoModal() {
+  if (isPack.value) { packPreview.value = { packId: auction.value.ctoon.packId, name: auction.value.ctoon.name }; return }
   openCtoonModal({
     ctoonId:     auction.value.ctoon.id         || null,
     userCtoonId: auction.value.ctoon.userCtoonId || null,
@@ -278,7 +286,13 @@ function openRelist() {
   if (!auction.value?.canRelist) return
   const duration = reconstructDurationPrefill(auction.value.createdAt, auction.value.endAt, auction.value.durationMinutes)
   openAuctionModal({
-    ctoon: {
+    ctoon: isPack.value ? {
+      kind:      'PACK',
+      id:        auction.value.userPackId,
+      packId:    auction.value.ctoon.packId,
+      name:      auction.value.ctoon.name,
+      assetPath: auction.value.ctoon.assetPath,
+    } : {
       id:         auction.value.ctoon.userCtoonId,
       ctoonId:    auction.value.ctoon.id,
       name:       auction.value.ctoon.name,
@@ -423,6 +437,8 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.adet-pack-tag { background: #7c3aed; color: #fff; }
+
 .adet {
   display: flex;
   flex-direction: column;

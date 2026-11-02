@@ -1,12 +1,12 @@
 <template>
   <Teleport to="body">
-    <div class="am-overlay" @mousedown.self="$emit('close')">
-      <div class="am-modal">
+    <div class="am-overlay" @mousedown.self="$emit('close')" @keydown.esc.stop="$emit('close')">
+      <div class="am-modal" role="dialog" aria-modal="true" aria-labelledby="am-title-text">
 
         <!-- ── Header ── -->
         <div class="am-header">
-          <span class="am-title">{{ isRelist ? 'Re-list at Auction' : 'Send to Auction' }}</span>
-          <button class="am-close" @click="$emit('close')">✕</button>
+          <span id="am-title-text" class="am-title">{{ isRelist ? 'Re-list at Auction' : 'Send to Auction' }}</span>
+          <button class="am-close" aria-label="Close" @click="$emit('close')">✕</button>
         </div>
 
         <!-- ── Body ── -->
@@ -18,8 +18,9 @@
             <div class="am-preview-info">
               <div class="am-preview-name">{{ ctoon.name }}</div>
               <div class="am-preview-meta">
-                <span class="am-rarity-badge" :class="`r-${rarityKey(ctoon.rarity)}`">{{ ctoon.rarity }}</span>
-                <span v-if="ctoon.mintNumber" class="am-dim">#{{ ctoon.mintNumber }}</span>
+                <span v-if="isPack" class="am-rarity-badge am-pack-badge">Sealed pack</span>
+                <span v-else class="am-rarity-badge" :class="`r-${rarityKey(ctoon.rarity)}`">{{ ctoon.rarity }}</span>
+                <span v-if="!isPack && ctoon.mintNumber" class="am-dim">#{{ ctoon.mintNumber }}</span>
               </div>
               <!-- Recent auctions -->
               <div v-if="recentAuctions.length" class="am-recent">
@@ -33,7 +34,7 @@
           </div>
 
           <!-- cZone warning -->
-          <div v-if="inCzone" class="am-warning">
+          <div v-if="inCzone && !isPack" class="am-warning">
             This cToon is in one of your cZone layouts. If the auction sells, it will be
             removed automatically.
           </div>
@@ -94,7 +95,7 @@
             <div class="am-confirm-title">List for {{ durationLabel }}?</div>
             <div class="am-confirm-body">
               Ends {{ durationEndsAt }}. An auction can't be withdrawn once it starts,
-              and this cToon can't be traded until it ends.
+              and this {{ isPack ? 'pack' : 'cToon' }} can't be {{ isPack ? 'opened or ' : '' }}traded until it ends.
             </div>
             <div class="am-confirm-actions">
               <button class="am-cancel" @click="confirming = false">Back</button>
@@ -108,7 +109,7 @@
 
         <!-- ── Footer ── -->
         <div class="am-footer">
-          <button class="am-instabid" :disabled="sending" @click="instaBid">
+          <button v-if="!isPack" class="am-instabid" :disabled="sending" @click="instaBid">
             Insta-bid · {{ instaBidValue }} pts
           </button>
           <div class="am-footer-right">
@@ -144,7 +145,10 @@ const RARITY_MIN = {
   'crazy rare': 312, 'code only': 50, 'prize only': 50, 'auction only': 50,
 }
 
-const instaBidValue = computed(() => RARITY_MIN[(props.ctoon.rarity || '').toLowerCase()] ?? 50)
+// A sealed pack (props.ctoon.kind === 'PACK'; its `id` is the UserPack id) is auctioned through its own endpoint with no
+// rarity floor, no insta-bid and no cZone: any whole number of points from 1.
+const isPack = computed(() => props.ctoon?.kind === 'PACK')
+const instaBidValue = computed(() => isPack.value ? 1 : (RARITY_MIN[(props.ctoon.rarity || '').toLowerCase()] ?? 50))
 const minInitialBet = computed(() => Math.max(1, instaBidValue.value))
 
 // When re-listing, start from the terms that didn't sell last time so the
@@ -154,7 +158,7 @@ const isRelist = computed(() => !!props.prefill?.isRelist)
 const initialBet = ref(
   props.prefill?.initialBet != null
     ? Math.max(props.prefill.initialBet, instaBidValue.value)
-    : Math.max(props.ctoon.price || 0, instaBidValue.value)
+    : Math.max(isPack.value ? 100 : (props.ctoon.price || 0), instaBidValue.value)
 )
 const durationPrefill = computed(() => ({
   preset:            props.prefill?.durationPreset || 'days',
@@ -174,6 +178,14 @@ const inCzone        = ref(false)
 const toast          = reactive({ message: '', type: 'success' })
 
 onMounted(async () => {
+  if (isPack.value) {
+    // Recent sales of this pack TYPE; there is no price suggestion engine for packs.
+    try {
+      const res = await $fetch(`/api/packs/${props.ctoon.packId}/recent-sales`)
+      recentAuctions.value = Array.isArray(res) ? res : []
+    } catch { recentAuctions.value = [] } finally { loadingSuggestion.value = false }
+    return
+  }
   try {
     const res = await $fetch(`/api/ctoon/${props.ctoon.ctoonId}/getRecentAuctions`, {
       query: {
@@ -265,6 +277,14 @@ const durationEndsAt = computed(() => {
 const CONFIRM_THRESHOLD_MINUTES = 1440
 
 function buildPayload(createInitialBid = false) {
+  if (isPack.value) {
+    return {
+      userPackId:      props.ctoon.id,
+      initialBet:      initialBet.value,
+      durationDays:    duration.value.durationDays,
+      durationMinutes: duration.value.durationMinutes
+    }
+  }
   return {
     userCtoonId:     props.ctoon.id,
     initialBet:      initialBet.value,
@@ -287,7 +307,7 @@ async function submitAuction() {
   if (!canSubmit.value) return
   sending.value = true
   try {
-    await $fetch('/api/auctions', { method: 'POST', body: buildPayload(false) })
+    await $fetch(isPack.value ? '/api/auctions/pack' : '/api/auctions', { method: 'POST', body: buildPayload(false) })
     showToast('Auction created!', 'success')
     emit('created', props.ctoon.id)
     setTimeout(() => emit('close'), 1200)
@@ -300,7 +320,7 @@ async function submitAuction() {
 }
 
 async function instaBid() {
-  if (sending.value) return
+  if (sending.value || isPack.value) return
   sending.value = true
   try {
     await $fetch('/api/auctions', {
@@ -323,6 +343,8 @@ function formatDate(d) { try { return new Date(d).toLocaleDateString() } catch {
 
 <style scoped>
 /* ── Overlay ── */
+.am-pack-badge { background: #7c3aed; color: #fff; }
+
 .am-overlay {
   position: fixed;
   inset: 0;

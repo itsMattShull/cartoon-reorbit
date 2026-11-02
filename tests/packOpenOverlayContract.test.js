@@ -149,3 +149,47 @@ test('pack picker: never handles pack row ids, 44px steppers on phones, accessib
   assert.match(picker, /aria-expanded/)
   assert.match(picker, /MAX_PACKS_PER_SIDE/)
 })
+
+const house = read('components/newsite/AuctionHouse.vue')
+const amodal = read('components/newsite/AuctionModal.vue')
+const adet = read('components/newsite/AuctionDetails.vue')
+const socketServer = read('server/socket-server.js')
+const settle = read('server/utils/auctionSettle.js')
+
+test('Auction House: type switch lives in the top bar (the sidebar is collapsed on phones), packs get their own tag and preview', () => {
+  assert.match(house, /class="ah-type" role="group"/)
+  assert.match(house, /aria-pressed/)
+  assert.match(house, /params\.set\('type', +'PACK'\)/)
+  assert.match(house, /item\.kind === 'PACK'/)
+  assert.match(house, /<PackPreviewModal/)
+  assert.match(house, /\.ah-type-btn, \.ah-vt-btn \{ min-height: 32px/)
+})
+
+test('Auction modal: a pack goes to its own endpoint, with no rarity floor, insta-bid or cZone warning', () => {
+  assert.match(amodal, /'\/api\/auctions\/pack'/)
+  assert.match(amodal, /const isPack = computed\(\(\) => props\.ctoon\?\.kind === 'PACK'\)/)
+  assert.match(amodal, /v-if="!isPack" class="am-instabid"/)
+  assert.match(amodal, /v-if="inCzone && !isPack"/)
+  assert.match(amodal, /role="dialog" aria-modal="true"/)
+})
+
+test('Auction detail page: pack variant (tag, preview, re-list through the pack form)', () => {
+  assert.match(adet, /const isPack = computed\(\(\) => auction\.value\?\.kind === 'PACK'\)/)
+  assert.match(adet, /<PackPreviewModal/)
+  assert.match(adet, /kind: +'PACK'/)
+})
+
+test('the ending-soon notifier and settlement both branch on a pack auction (no unguarded cToon read)', () => {
+  assert.match(socketServer, /soonAuctions\.map\(a => a\.userCtoon\?\.ctoonId\)\.filter\(Boolean\)/)
+  assert.match(socketServer, /const isPack = auc\.kind === 'PACK'/)
+  assert.doesNotMatch(socketServer, /soonAuctions\.map\(a => a\.userCtoon\.ctoonId\)/)
+  assert.match(settle, /const isPack = auc\.kind === 'PACK'/)
+  assert.match(settle, /isPack \? \{ userPackId \} : \{ userCtoonId \}/)
+  assert.doesNotMatch(settle, /where: \{ userCtoonId, id: \{ not: id \} \}/, 'the NULL-userCtoonId trap')
+})
+
+test('My Collection > Packs offers Auction, in the pack form of the shared modal', () => {
+  assert.match(packsTab, /class="mcp-btn mcp-auction"/)
+  assert.match(packsTab, /kind: 'PACK', id: it\.id, packId: it\.packId/)
+  assert.match(packsTab, /watch\(auctionCreatedSignal/)
+})

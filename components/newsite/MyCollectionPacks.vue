@@ -75,6 +75,11 @@
               {{ blockReason(it) || 'Open' }}
             </GreenButton>
           </template>
+          <template #footer-right>
+            <BlueButton class="mcp-btn mcp-auction" :disabled="!!blockReason(it)" @click="startAuction(it)">
+              {{ it.inAuction ? 'Listed' : it.inPendingTrade ? 'In Trade' : 'Auction' }}
+            </BlueButton>
+          </template>
         </ShortCard>
       </template>
     </div>
@@ -168,6 +173,16 @@ const statusAria = (it) => it.inAuction
   : `${it.name} is part of a pending trade and cannot be opened`
 
 const otherOpenable = computed(() => items.value.filter(i => !blockReason(i) && i.id !== opening.value?.id))
+
+// ── auctioning ────────────────────────────────────────────────────
+// The same "Send to Auction" modal the cToons use, in its pack form (kind: 'PACK'; `id` is the sealed pack's id).
+const { open: openAuctionModal, createdSignal: auctionCreatedSignal } = useAuctionModal()
+function startAuction (it) {
+  if (blockReason(it)) return
+  openAuctionModal({ ctoon: { kind: 'PACK', id: it.id, packId: it.packId, name: it.name, assetPath: it.imagePath } })
+}
+// A listing was just created (here or elsewhere): that pack is now "In Auction", so refresh the flags.
+watch(auctionCreatedSignal, () => { load({ silent: true }) })
 
 // ── opening ───────────────────────────────────────────────────────
 function startOpen (it) {
@@ -264,12 +279,13 @@ watch(() => summary.value.total, (n, o) => { if (o != null && n === 0) items.val
   padding: 4px;
   box-sizing: border-box;
   --shortcard-width: 100%;
-  --shortcard-height: 190px;
+  /* Two stacked action buttons (Open / Auction), like the cToon grid, so the artwork keeps its room. */
+  --shortcard-height: 214px;
 }
 /* Prefixed with the grid class so it beats ShortCard's own scoped rule deterministically (see MyCollection.vue). */
 .mcp-grid :deep(.sc-footer) { flex-direction: column; }
 .mcp-grid :deep(.sc-footer-left),
-.mcp-grid :deep(.sc-footer-right) { width: 100%; flex: 0 0 auto; }
+.mcp-grid :deep(.sc-footer-right) { width: 100%; flex: 0 0 auto; justify-content: flex-start; }
 .mcp-grid :deep(.sc) { --sc-footer-gap: 3px; }
 
 .mcp-art { position: relative; width: 100%; height: 100%; }
@@ -298,9 +314,9 @@ watch(() => summary.value.total, (n, o) => { if (o != null && n === 0) items.val
 
 @media (max-width: 768px) {
   .mcp-grid { grid-template-columns: repeat(2, 1fr); grid-auto-rows: auto; }
-  .mcp-grid :deep(.sc) { height: auto; aspect-ratio: 3 / 4; }
-  @supports not (aspect-ratio: 3 / 4) { .mcp-grid :deep(.sc) { height: var(--shortcard-height, 190px); } }
-  .mcp-skel { aspect-ratio: 3 / 4; }
+  .mcp-grid :deep(.sc) { height: auto; aspect-ratio: 3 / 4.4; }
+  @supports not (aspect-ratio: 3 / 4.4) { .mcp-grid :deep(.sc) { height: var(--shortcard-height, 214px); } }
+  .mcp-skel { aspect-ratio: 3 / 4.4; }
   /* Real tap targets on a phone (the desktop sizes above are mouse-sized). */
   .mcp-btn { min-height: 44px; font-size: 0.9rem; }
   .mcp-chip { min-height: 40px; font-size: 0.8rem; padding: 4px 14px; }

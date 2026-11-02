@@ -71,8 +71,9 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
 
   // Auctions won (closed with winner)
   if (ach.auctionsWonGte != null) {
+    // cToon auctions only: a sealed-pack auction (trivially repeatable between two accounts) must not feed achievements.
     const won = await db.auction.count({
-      where: { winnerId: userId, status: 'CLOSED' }
+      where: { winnerId: userId, status: 'CLOSED', kind: 'CTOON' }
     })
     if (won < ach.auctionsWonGte) return false
   }
@@ -80,7 +81,7 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
   // Auctions created (closed with winner)
   if (ach.auctionsCreatedGte != null) {
     const created = await db.auction.count({
-      where: { creatorId: userId, status: 'CLOSED', winnerId: { not: null } }
+      where: { creatorId: userId, status: 'CLOSED', winnerId: { not: null }, kind: 'CTOON' }
     })
     if (created < ach.auctionsCreatedGte) return false
   }

@@ -3,6 +3,7 @@ import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { PACK_ITEM_SELECT, packItemFields } from '~/server/utils/auctionItem'
 
 function normalizeListParam(value) {
   if (Array.isArray(value)) {
@@ -31,8 +32,13 @@ function applyAuctionFilters(items, filters) {
   // '__none__' means "cToons with no cMoon assigned"; any other non-empty value is a cMoon id.
   const cMoonFilter = filters.cMoon || ''
 
+  // 'PACK' | 'CTOON' | '' (both). Any cToon-only filter drops packs on its own (a pack has no rarity/set/series).
+  const typeFilter = filters.type || ''
+
   return items.filter(item => {
     if (!item) return false
+    if (typeFilter === 'PACK' && item.kind !== 'PACK') return false
+    if (typeFilter === 'CTOON' && item.kind === 'PACK') return false
     if (term) {
       const nameMatch = (item.name || '').toLowerCase().includes(term)
       const chars = Array.isArray(item.characters) ? item.characters : []
@@ -185,6 +191,7 @@ export default defineEventHandler(async (event) => {
       userCtoon: {
         include: { ctoon: { include: { cMoon: { select: { id: true, name: true, color: true } } } } }
       },
+      userPack: PACK_ITEM_SELECT,
       winner: { select: { id: true, username: true } }
     }
   })
@@ -242,7 +249,8 @@ export default defineEventHandler(async (event) => {
       didWin: ended && (
         (!!a.winner && a.winner.id === userId) ||
         (!a.winner && myBid != null && myBid === highestFromBids)
-      )
+      ),
+      ...packItemFields(a)
     }
   })
 
@@ -256,7 +264,8 @@ export default defineEventHandler(async (event) => {
     wishlistSet,
     hasBidsOnly,
     gtoonsOnly,
-    cMoon: cMoonFilter
+    cMoon: cMoonFilter,
+    type: typeof query.type === 'string' ? query.type.trim().toUpperCase() : ''
   })
 
   const sorted = sortMyBids(filtered, effectiveSort, now)
