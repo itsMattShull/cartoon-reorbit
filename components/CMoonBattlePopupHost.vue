@@ -39,8 +39,8 @@
           <p v-if="bossEnrageText" class="cbp-boss-enrage">⚡ {{ bossEnrageText }}</p>
           <p class="cbp-flavor">
             Pick the right move each round to land hits.
-            <template v-if="inCMoon">A win earns cMoon points for your team and a chance at prizes.</template>
-            <template v-else>A win earns a chance at prizes — join a cMoon to also earn points for a team.</template>
+            <template v-if="inCMoon">A win earns <strong>{{ enemy?.cMoonPointsReward ?? 0 }}</strong> cMoon point{{ enemy?.cMoonPointsReward === 1 ? '' : 's' }} for your team and a chance at prizes.</template>
+            <template v-else>A win earns a chance at prizes — join a cMoon to also earn {{ enemy?.cMoonPointsReward ?? 0 }} point{{ enemy?.cMoonPointsReward === 1 ? '' : 's' }} for a team.</template>
           </p>
           <p v-if="pityProgressText" class="cbp-pity-progress">{{ pityProgressText }}</p>
           <p v-if="currentTaunt" class="cbp-taunt">&ldquo;{{ currentTaunt }}&rdquo;</p>

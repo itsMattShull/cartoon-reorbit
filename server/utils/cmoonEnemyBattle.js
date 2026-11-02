@@ -389,6 +389,10 @@ export function serializeEnemyForClient(member, pityEmptyWinStreak = null) {
     isRaidBoss: !!member.isRaidBoss,
     maxHp: member.maxHp,
     hp,
+    // Shown in the offer popup ("A win earns N cMoon points…") so a player can size up a fight
+    // before committing, not just after winning it — not admin-only info, every other reward
+    // detail (exact drop tables/chances) stays hidden, but the plain points-on-win number doesn't.
+    cMoonPointsReward: member.cMoonPointsReward,
     // Null hides the UI entirely — pity disabled for this member, or the caller didn't pass a
     // streak (see this function's own comment on who does). Never sent for a raid boss (pity is
     // solo-only — see CMoonEnemyMember.pityThreshold's own schema comment).
