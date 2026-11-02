@@ -44,7 +44,15 @@ export async function getPrestigeStatus(userId) {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, cMoonId: true, cMoonPoints: true, prestigeLevel: true, banned: true },
+    select: {
+      id: true, cMoonId: true, cMoonPoints: true, prestigeLevel: true, banned: true,
+      // The SECOND, prestige-exclusive rank ladder (see CMoonPrestigeRankTier's own schema
+      // comment) — distinct from prestigeLevel/nextLevel above, which is purely "how many times
+      // has this player prestiged." Only ever non-null while actually a member of a prestige
+      // cMoon (currentCMoonPrestigeRankId is reset to null on every cMoon move — see
+      // reassignUserCMoon).
+      currentCMoonPrestigeRank: { select: { tier: { select: { name: true } } } },
+    },
   })
   if (!user) throw new CMoonPrestigeError(CMOON_PRESTIGE_ERRORS.NOT_FOUND)
 
@@ -58,6 +66,7 @@ export async function getPrestigeStatus(userId) {
     nextLevelTitle: nextLevel?.title || null,
     pointThreshold: nextLevel ? nextLevel.pointThreshold : null,
     currentPoints: user.cMoonPoints,
+    currentPrestigeRankName: user.currentCMoonPrestigeRank?.tier?.name || null,
   }
 
   if (!user.cMoonId) return { ...base, eligible: false, blockedReason: 'NO_CMOON', prestigeCMoons: [] }

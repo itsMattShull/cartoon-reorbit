@@ -2158,9 +2158,14 @@ async function autoBalanceFor7hp() {
         })),
       },
     })
-    memberForm.attackChancePercent = result.attackChancePercent
-    memberForm.critChanceFromPercent = result.critChanceFromPercent
-    memberForm.critChanceAgainstPercent = result.critChanceAgainstPercent
+    // Rounded here, not left as the solver's one-decimal-precision values (e.g. 62.7): saveMember()
+    // truncates every stat field to a whole number before persisting (CMoonEnemyMember's columns
+    // are Int), so leaving a decimal in these inputs would silently drop up to a full percentage
+    // point versus the nearest whole number — the admin would see "~25.3% win rate" and believe
+    // that's what got saved, when Math.trunc would actually save a stat further from the target.
+    memberForm.attackChancePercent = Math.round(result.attackChancePercent)
+    memberForm.critChanceFromPercent = Math.round(result.critChanceFromPercent)
+    memberForm.critChanceAgainstPercent = Math.round(result.critChanceAgainstPercent)
     memberForm.attackAccuracyPercent = result.attackAccuracyPercent
     memberForm.baseDamage = result.baseDamage
     autoBalanceResult.value = result

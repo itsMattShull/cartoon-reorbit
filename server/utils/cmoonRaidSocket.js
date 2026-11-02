@@ -1294,6 +1294,12 @@ export async function restoreCMoonRaids() {
         // A snapshot from before cross-cMoon raids has no per-participant special; every member
         // was then on the initiator's cMoon, so theirs IS raid.cMoonSpecialAttack.
         specialAttack: 'specialAttack' in p ? p.specialAttack : (raid.cMoonSpecialAttack ?? null),
+        // A snapshot from before the prestige feature has neither of these per-participant
+        // fields at all — same missing-field trap as specialAttack above. Falls back to the
+        // raid's own cMoon flag (already backfilled below), matching publicParticipantTeam's own
+        // legacy fallback for a participant with no snapshot of their own.
+        cMoonIsPrestige: 'cMoonIsPrestige' in p ? p.cMoonIsPrestige : (raid.cMoonIsPrestige ?? false),
+        prestigeLevel: 'prestigeLevel' in p ? p.prestigeLevel : 0,
       },
     ])))
     raid.resolving = false
@@ -1676,11 +1682,21 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     if (raid.participants.size >= (raid.maxParticipants || MAX_PARTY_SIZE)) return socket.emit(EV('error'), { message: 'This raid is full' })
     addParticipant(raid, { userId: me.id, username: elig.user.username, isInitiator: false, maxHp: joinerMaxHp, profile, pendingJoin: true })
 
-    // ── 3. The one write. Only a DB failure (e.g. P2002: an active raid/solo row the in-memory
-    // maps didn't know about) can still turn this away, and the reservation is rolled back then.
+    // ── 3. The one write. An upsert, not a plain create: a same-raid rejoin race (cmoonraid:leave
+    // and this handler aren't mutually exclusive — Socket.IO dispatches each event's listener as
+    // its own async task, so a leave followed immediately by a join for the SAME raid can still
+    // have this run before that handler's own deleteMany has committed) would otherwise hit the
+    // stale (raidId, userId) row and 409 as "already in a raid" even though the player just left.
+    // The update branch only ever fires for that exact race (a genuine still-active OTHER raid
+    // collides on activeUserId's own unique constraint instead, which still correctly P2002s
+    // below). Only a DB failure (e.g. that activeUserId collision, or an active solo row the
+    // in-memory maps didn't know about) can still turn this away, and the reservation is rolled
+    // back then.
     try {
-      await db.cMoonEnemyRaidParticipant.create({
-        data: { raidId, userId: me.id, hpRemaining: joinerMaxHp, isInitiator: false, activeUserId: me.id },
+      await db.cMoonEnemyRaidParticipant.upsert({
+        where: { raidId_userId: { raidId, userId: me.id } },
+        create: { raidId, userId: me.id, hpRemaining: joinerMaxHp, isInitiator: false, activeUserId: me.id },
+        update: { hpRemaining: joinerMaxHp, isInitiator: false, activeUserId: me.id, knockedOutAt: null, rewardsGranted: null, joinedAt: new Date() },
       })
     } catch (err) {
       releaseReservation(raid, me.id)
@@ -1730,9 +1746,10 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     // above guarantees combat never started for this participant), so there's no round history
     // or reward record on this row worth keeping. Leaving it behind — even with activeUserId
     // nulled — would still permanently violate @@unique([raidId, userId]) on any future rejoin
-    // attempt for THIS exact raid, since cmoonraid:join only ever does a plain `create`: the
-    // insert would 409 on that stale row and get reported back as "You are already in a raid",
-    // even though the player is no longer in any raid at all.
+    // attempt for THIS exact raid. cmoonraid:join's own upsert (see its own comment) tolerates a
+    // stale row surviving this delete for a moment on a tight leave-then-rejoin race, but this
+    // delete is still the normal path — without it, every ordinary leave would permanently litter
+    // this raid's own id with a dead row for no reason.
     await db.cMoonEnemyRaidParticipant.deleteMany({ where: { raidId, userId: me.id } }).catch(() => {})
     // The ORIGINAL raid starter leaving their OWN still-FORMING raid (the status check above
     // already guarantees combat never started) gets their pre-raid lastCMoonBattlePopupAt

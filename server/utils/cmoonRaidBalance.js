@@ -92,6 +92,14 @@ export function simulateRaidTrial({ bossHp, attackChancePercent, critChanceFromP
 
       if (action.type === 'SPECIAL') {
         p.charged = false
+        // Mirrors the real engine's own bank-leftover-past-threshold math (cmoonRaidSocket.js:
+        // `p.hitStreak = Math.max(0, p.hitStreak - hitStreakThreshold)`) — without this, streak
+        // stays pinned AT threshold after firing (it's capped there just above), so the very next
+        // landed hit would re-trigger `p.streak >= threshold` and recharge the special
+        // immediately, instead of requiring a fresh run of hits. streak never exceeds threshold
+        // here (charged forces a SPECIAL action before any more ATTACKs can accumulate it
+        // further), so this always resets to exactly 0.
+        p.streak = Math.max(0, p.streak - (p.role === 'paralyze' ? PARALYZE_STREAK_THRESHOLD : FLAT_DAMAGE_STREAK_THRESHOLD))
         if (p.role === 'paralyze') {
           if (rand() < PARALYZE_ACCURACY) paralyzeLandedThisRound = true
         } else {

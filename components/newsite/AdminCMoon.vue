@@ -710,6 +710,138 @@
           </div>
           <p v-if="prestigeLevelsError" class="text-[11px] text-red-600 mt-1">{{ prestigeLevelsError }}</p>
         </div>
+
+        <!-- The SECOND, prestige-exclusive rank ladder — entirely separate from Prestige Levels
+             above (which just counts how many times a player has prestiged) and from every
+             cMoon's own universal rank ladder (Manage Rank Tiers elsewhere in this admin). Only
+             ever mirrored onto cMoons flagged "✦ Prestige cMoon" below — see
+             prisma/schema.prisma's CMoonPrestigeRankTier comment. -->
+        <div class="border-t pt-3 mt-3">
+          <div class="flex items-center justify-between mb-1">
+            <h2 class="text-sm font-semibold">Prestige Ranks</h2>
+            <button type="button" class="cm-tap px-3 text-[11px] font-semibold rounded-md bg-indigo-600 text-white hover:bg-indigo-700" @click="startAddPrestigeRankTier">+ Add rank</button>
+          </div>
+          <p class="text-[11px] text-gray-600 mb-2">
+            A SECOND rank ladder, only climbable while a member of a "✦ Prestige cMoon" (below) —
+            separate from each cMoon's own universal ranks and separate from Prestige Levels
+            above. Each rung auto-grants its own reward the moment a member's cMoonPoints reach
+            its threshold.
+          </p>
+          <div v-if="prestigeRankTiersLoading" class="text-[11px] text-gray-500">Loading…</div>
+          <div v-else-if="prestigeRankTiers.length" class="space-y-1">
+            <template v-for="t in prestigeRankTiers" :key="t.id">
+              <div v-if="prestigeRankTierForm.id !== t.id" class="flex items-center gap-2 text-[11px]">
+                <span class="text-gray-500 w-24 flex-shrink-0 truncate" :title="t.name">{{ t.name }}</span>
+                <span class="text-gray-500 flex-shrink-0">{{ t.pointThreshold.toLocaleString() }} pts</span>
+                <span class="flex-1 min-w-0 truncate">{{ prestigeRankRewardLabel(t) }}</span>
+                <button type="button" class="cm-tap text-indigo-600" @click="startEditPrestigeRankTier(t)">Edit</button>
+                <button type="button" class="cm-tap text-red-600" @click="removePrestigeRankTier(t)">Delete</button>
+              </div>
+              <div v-else class="flex items-center gap-2 text-[11px] flex-wrap bg-gray-50 rounded p-2">
+                <label class="flex items-center gap-1 flex-1 min-w-[100px]">Name
+                  <input v-model="prestigeRankTierForm.name" type="text" maxlength="60" class="cm-field flex-1 border rounded px-1" style="font-size:16px" />
+                </label>
+                <label class="flex items-center gap-1">Order
+                  <input v-model.number="prestigeRankTierForm.sortOrder" type="number" inputmode="numeric" class="cm-field w-14 border rounded px-1" style="font-size:16px" />
+                </label>
+                <label class="flex items-center gap-1">Points
+                  <input v-model.number="prestigeRankTierForm.pointThreshold" type="number" min="0" inputmode="numeric" class="cm-field w-28 border rounded px-1" style="font-size:16px" />
+                </label>
+                <label class="flex items-center gap-1">Reward
+                  <select v-model="prestigeRankTierForm.rewardType" class="cm-field border rounded px-1" style="font-size:16px">
+                    <option value="POINTS">Points</option>
+                    <option value="CTOON">cToon</option>
+                    <option value="AVATAR">Avatar</option>
+                    <option value="BACKGROUND">Background</option>
+                    <option value="PACK">Pack</option>
+                  </select>
+                </label>
+                <label v-if="prestigeRankTierForm.rewardType === 'CTOON'" class="flex items-center gap-1 flex-1 min-w-[140px]">cToon
+                  <select v-model="prestigeRankTierForm.ctoonId" class="cm-field flex-1 border rounded px-1" style="font-size:16px">
+                    <option value="">Select…</option>
+                    <option v-for="c in ctoons" :key="c.id" :value="c.id">{{ c.name }}</option>
+                  </select>
+                </label>
+                <label v-else-if="prestigeRankTierForm.rewardType === 'AVATAR'" class="flex items-center gap-1 flex-1 min-w-[140px]">Avatar
+                  <select v-model="prestigeRankTierForm.avatarId" class="cm-field flex-1 border rounded px-1" style="font-size:16px">
+                    <option value="">Select…</option>
+                    <option v-for="av in avatarsCatalog" :key="av.id" :value="av.id">{{ av.label || av.filename }}</option>
+                  </select>
+                </label>
+                <label v-else-if="prestigeRankTierForm.rewardType === 'BACKGROUND'" class="flex items-center gap-1 flex-1 min-w-[140px]">Background
+                  <select v-model="prestigeRankTierForm.backgroundId" class="cm-field flex-1 border rounded px-1" style="font-size:16px">
+                    <option value="">Select…</option>
+                    <option v-for="bg in backgrounds" :key="bg.id" :value="bg.id">{{ bg.label || bg.filename }}</option>
+                  </select>
+                </label>
+                <label v-else-if="prestigeRankTierForm.rewardType === 'PACK'" class="flex items-center gap-1 flex-1 min-w-[140px]">Pack
+                  <select v-model="prestigeRankTierForm.packId" class="cm-field flex-1 border rounded px-1" style="font-size:16px">
+                    <option value="">Select…</option>
+                    <option v-for="p in prestigeRankPacksCatalog" :key="p.id" :value="p.id">{{ p.name }}</option>
+                  </select>
+                </label>
+                <label v-if="prestigeRankTierForm.rewardType === 'CTOON' || prestigeRankTierForm.rewardType === 'PACK' || prestigeRankTierForm.rewardType === 'POINTS'" class="flex items-center gap-1">
+                  {{ prestigeRankTierForm.rewardType === 'POINTS' ? 'Amount' : 'Qty' }}
+                  <input v-model.number="prestigeRankTierForm.quantity" type="number" min="1" inputmode="numeric" class="cm-field w-20 border rounded px-1" style="font-size:16px" />
+                </label>
+                <button type="button" class="cm-tap text-indigo-600 font-semibold" :disabled="prestigeRankTierSaving" @click="savePrestigeRankTierForm">{{ prestigeRankTierSaving ? 'Saving…' : 'Save' }}</button>
+                <button type="button" class="cm-tap text-gray-600" @click="cancelPrestigeRankTierForm">Cancel</button>
+              </div>
+            </template>
+          </div>
+          <div v-else-if="prestigeRankTierForm.id !== 'new'" class="text-[11px] text-gray-500">No prestige ranks configured yet.</div>
+          <div v-if="prestigeRankTierForm.id === 'new'" class="flex items-center gap-2 text-[11px] flex-wrap bg-gray-50 rounded p-2 mt-1">
+            <label class="flex items-center gap-1 flex-1 min-w-[100px]">Name
+              <input v-model="prestigeRankTierForm.name" type="text" maxlength="60" class="cm-field flex-1 border rounded px-1" style="font-size:16px" />
+            </label>
+            <label class="flex items-center gap-1">Order
+              <input v-model.number="prestigeRankTierForm.sortOrder" type="number" inputmode="numeric" class="cm-field w-14 border rounded px-1" style="font-size:16px" />
+            </label>
+            <label class="flex items-center gap-1">Points
+              <input v-model.number="prestigeRankTierForm.pointThreshold" type="number" min="0" inputmode="numeric" class="cm-field w-28 border rounded px-1" style="font-size:16px" />
+            </label>
+            <label class="flex items-center gap-1">Reward
+              <select v-model="prestigeRankTierForm.rewardType" class="cm-field border rounded px-1" style="font-size:16px">
+                <option value="POINTS">Points</option>
+                <option value="CTOON">cToon</option>
+                <option value="AVATAR">Avatar</option>
+                <option value="BACKGROUND">Background</option>
+                <option value="PACK">Pack</option>
+              </select>
+            </label>
+            <label v-if="prestigeRankTierForm.rewardType === 'CTOON'" class="flex items-center gap-1 flex-1 min-w-[140px]">cToon
+              <select v-model="prestigeRankTierForm.ctoonId" class="cm-field flex-1 border rounded px-1" style="font-size:16px">
+                <option value="">Select…</option>
+                <option v-for="c in ctoons" :key="c.id" :value="c.id">{{ c.name }}</option>
+              </select>
+            </label>
+            <label v-else-if="prestigeRankTierForm.rewardType === 'AVATAR'" class="flex items-center gap-1 flex-1 min-w-[140px]">Avatar
+              <select v-model="prestigeRankTierForm.avatarId" class="cm-field flex-1 border rounded px-1" style="font-size:16px">
+                <option value="">Select…</option>
+                <option v-for="av in avatarsCatalog" :key="av.id" :value="av.id">{{ av.label || av.filename }}</option>
+              </select>
+            </label>
+            <label v-else-if="prestigeRankTierForm.rewardType === 'BACKGROUND'" class="flex items-center gap-1 flex-1 min-w-[140px]">Background
+              <select v-model="prestigeRankTierForm.backgroundId" class="cm-field flex-1 border rounded px-1" style="font-size:16px">
+                <option value="">Select…</option>
+                <option v-for="bg in backgrounds" :key="bg.id" :value="bg.id">{{ bg.label || bg.filename }}</option>
+              </select>
+            </label>
+            <label v-else-if="prestigeRankTierForm.rewardType === 'PACK'" class="flex items-center gap-1 flex-1 min-w-[140px]">Pack
+              <select v-model="prestigeRankTierForm.packId" class="cm-field flex-1 border rounded px-1" style="font-size:16px">
+                <option value="">Select…</option>
+                <option v-for="p in prestigeRankPacksCatalog" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
+            </label>
+            <label v-if="prestigeRankTierForm.rewardType === 'CTOON' || prestigeRankTierForm.rewardType === 'PACK' || prestigeRankTierForm.rewardType === 'POINTS'" class="flex items-center gap-1">
+              {{ prestigeRankTierForm.rewardType === 'POINTS' ? 'Amount' : 'Qty' }}
+              <input v-model.number="prestigeRankTierForm.quantity" type="number" min="1" inputmode="numeric" class="cm-field w-20 border rounded px-1" style="font-size:16px" />
+            </label>
+            <button type="button" class="cm-tap text-indigo-600 font-semibold" :disabled="prestigeRankTierSaving" @click="savePrestigeRankTierForm">{{ prestigeRankTierSaving ? 'Saving…' : 'Save' }}</button>
+            <button type="button" class="cm-tap text-gray-600" @click="cancelPrestigeRankTierForm">Cancel</button>
+          </div>
+          <p v-if="prestigeRankTiersError" class="text-[11px] text-red-600 mt-1">{{ prestigeRankTiersError }}</p>
+        </div>
       </div>
 
       <!-- Rank Ladder: ONE shared list of ranks — same name, order, and point threshold in
@@ -2612,6 +2744,96 @@ async function removePrestigeLevel(l) {
   }
 }
 
+// The SECOND, prestige-exclusive rank ladder — see CMoonPrestigeRankTier's own schema comment
+// and server/utils/cmoonPrestigeRankTiers.js. Reuses ctoons/backgrounds/avatarsCatalog already
+// loaded above for the universal ladder's own reward pickers; only packs needs a catalog of its
+// own here (loaded in load() below).
+const prestigeRankPacksCatalog = ref([])
+const prestigeRankTiers = ref([])
+const prestigeRankTiersLoading = ref(false)
+const prestigeRankTiersError = ref('')
+const emptyPrestigeRankTierForm = () => ({
+  id: '', name: '', sortOrder: 0, pointThreshold: 0, rewardType: 'POINTS',
+  ctoonId: '', avatarId: '', backgroundId: '', packId: '', quantity: 1,
+})
+const prestigeRankTierForm = reactive(emptyPrestigeRankTierForm())
+const prestigeRankTierSaving = ref(false)
+
+function prestigeRankRewardLabel(t) {
+  if (t.rewardType === 'POINTS') return `${t.quantity.toLocaleString()} points`
+  if (t.rewardType === 'CTOON') return `${t.ctoon?.name || 'Unknown cToon'} ×${t.quantity}`
+  if (t.rewardType === 'AVATAR') return t.avatar?.label || 'Unknown avatar'
+  if (t.rewardType === 'BACKGROUND') return t.background?.label || 'Unknown background'
+  if (t.rewardType === 'PACK') return `${t.pack?.name || 'Unknown pack'} ×${t.quantity}`
+  return '—'
+}
+
+async function loadPrestigeRankTiers() {
+  prestigeRankTiersLoading.value = true
+  prestigeRankTiersError.value = ''
+  try {
+    const res = await $fetch('/api/admin/cmoon-prestige-rank-tiers')
+    prestigeRankTiers.value = res.tiers || []
+  } catch (e) {
+    prestigeRankTiersError.value = e?.data?.statusMessage || 'Failed to load prestige ranks'
+  } finally {
+    prestigeRankTiersLoading.value = false
+  }
+}
+
+function startAddPrestigeRankTier() {
+  const nextOrder = prestigeRankTiers.value.length
+    ? Math.max(...prestigeRankTiers.value.map(t => t.sortOrder)) + 1
+    : 0
+  Object.assign(prestigeRankTierForm, emptyPrestigeRankTierForm(), { id: 'new', sortOrder: nextOrder })
+}
+function startEditPrestigeRankTier(t) {
+  Object.assign(prestigeRankTierForm, {
+    id: t.id, name: t.name, sortOrder: t.sortOrder, pointThreshold: t.pointThreshold, rewardType: t.rewardType,
+    ctoonId: t.ctoonId || '', avatarId: t.avatarId || '', backgroundId: t.backgroundId || '', packId: t.packId || '',
+    quantity: t.quantity,
+  })
+}
+function cancelPrestigeRankTierForm() {
+  Object.assign(prestigeRankTierForm, emptyPrestigeRankTierForm())
+}
+async function savePrestigeRankTierForm() {
+  prestigeRankTierSaving.value = true
+  prestigeRankTiersError.value = ''
+  try {
+    const body = {
+      name: prestigeRankTierForm.name, sortOrder: prestigeRankTierForm.sortOrder,
+      pointThreshold: prestigeRankTierForm.pointThreshold, rewardType: prestigeRankTierForm.rewardType,
+      ctoonId: prestigeRankTierForm.rewardType === 'CTOON' ? prestigeRankTierForm.ctoonId : null,
+      avatarId: prestigeRankTierForm.rewardType === 'AVATAR' ? prestigeRankTierForm.avatarId : null,
+      backgroundId: prestigeRankTierForm.rewardType === 'BACKGROUND' ? prestigeRankTierForm.backgroundId : null,
+      packId: prestigeRankTierForm.rewardType === 'PACK' ? prestigeRankTierForm.packId : null,
+      quantity: prestigeRankTierForm.quantity,
+    }
+    if (prestigeRankTierForm.id === 'new') {
+      await $fetch('/api/admin/cmoon-prestige-rank-tiers', { method: 'POST', body })
+    } else {
+      await $fetch(`/api/admin/cmoon-prestige-rank-tiers/${prestigeRankTierForm.id}`, { method: 'PUT', body })
+    }
+    cancelPrestigeRankTierForm()
+    await loadPrestigeRankTiers()
+  } catch (e) {
+    prestigeRankTiersError.value = e?.data?.statusMessage || 'Failed to save prestige rank'
+  } finally {
+    prestigeRankTierSaving.value = false
+  }
+}
+async function removePrestigeRankTier(t) {
+  if (!confirm(`Delete the "${t.name}" prestige rank? Blocked if any player currently holds it.`)) return
+  prestigeRankTiersError.value = ''
+  try {
+    await $fetch(`/api/admin/cmoon-prestige-rank-tiers/${t.id}`, { method: 'DELETE' })
+    await loadPrestigeRankTiers()
+  } catch (e) {
+    prestigeRankTiersError.value = e?.data?.statusMessage || 'Failed to delete prestige rank'
+  }
+}
+
 // Reward-choice count defaults to 5, admin-adjustable 1-6 per rank tier (see
 // MIN_TIER_REWARD_CHOICES/MAX_TIER_REWARD_CTOONS/DEFAULT_TIER_REWARD_CHOICES in
 // server/utils/cmoonRankTiers.js — kept in sync with those literal bounds here).
@@ -3447,11 +3669,22 @@ async function runAffinityBackfill() {
   }
 }
 
+async function loadPrestigeRankPacksCatalog() {
+  try {
+    const res = await $fetch('/api/admin/packs', { query: { limit: 200 } })
+    prestigeRankPacksCatalog.value = res?.items || []
+  } catch {
+    prestigeRankPacksCatalog.value = []
+  }
+}
+
 onMounted(() => {
   load()
   loadScoring()
   loadRankTiers()
   loadPrestigeLevels()
+  loadPrestigeRankTiers()
+  loadPrestigeRankPacksCatalog()
 })
 </script>
 

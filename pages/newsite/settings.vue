@@ -128,6 +128,13 @@
                   toward Prestige {{ prestigeStatus.nextLevel }}{{ prestigeStatus.nextLevelTitle ? ` — ${prestigeStatus.nextLevelTitle}` : '' }}.
                   {{ prestigeStatus.currentLevel > 0 ? `Currently Prestige ${prestigeStatus.currentLevel}.` : '' }}
                 </p>
+                <!-- The SECOND, prestige-exclusive rank ladder — only ever non-null while actually
+                     a member of a prestige cMoon (see currentPrestigeRankName's own comment in
+                     server/utils/cmoonPrestige.js). Separate from the Prestige N level shown
+                     above, which is a lifetime counter, not a standing on this team's own ladder. -->
+                <p v-if="prestigeStatus.currentPrestigeRankName" class="settings-row-desc">
+                  Prestige rank: <strong>{{ prestigeStatus.currentPrestigeRankName }}</strong>
+                </p>
               </div>
               <button v-if="prestigeStatus.eligible" class="btn-team" @click="openPrestigeModal">✦ Prestige Now</button>
             </div>

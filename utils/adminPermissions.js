@@ -110,6 +110,7 @@ export const ADMIN_API_SEGMENT_PERMS = {
   'cmoon-join-effects': ['cMoon', 'cMoonJoinEffects', 'cMoonEnemies'],
   'cmoon-points-log': ['cmoonPointLogs'],
   'cmoon-prestige-levels': ['cMoon'],
+  'cmoon-prestige-rank-tiers': ['cMoon'],
   'cmoon-rank-tiers': ['cMoon'],
   'cmoon-riddles': ['cMoonRiddles'],
   'cmoon-scoring': ['cMoon'],

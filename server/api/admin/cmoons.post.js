@@ -6,6 +6,7 @@ import { isValidHexColor, isValidDiscordSnowflake, isValidCMoonEffectType, reass
 import { invalidateCMoonList } from '@/server/api/cmoons.get'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
 import { provisionAllTiersForCMoon } from '@/server/utils/cmoonRankTiers'
+import { provisionAllPrestigeTiersForCMoon } from '@/server/utils/cmoonPrestigeRankTiers'
 
 export default defineEventHandler(async (event) => {
   const me = await requireAdmin(event)
@@ -130,6 +131,18 @@ export default defineEventHandler(async (event) => {
       prevValue: null,
       newValue: { id: created.id, name, error: err?.message || String(err) },
     }).catch(() => {})
+  }
+
+  // Only relevant for a cMoon created already flagged as a prestige destination — the
+  // prestige-exclusive ladder (see CMoonPrestigeRankTier's own schema comment) is mirrored ONLY
+  // onto prestige cMoons, unlike the universal ladder above.
+  if (isPrestigeCMoon) {
+    try {
+      await provisionAllPrestigeTiersForCMoon(created.id)
+    } catch (err) {
+      provisioningFailed = true
+      console.error(`[cmoons.post] provisionAllPrestigeTiersForCMoon failed for new cMoon ${created.id} (${name}):`, err)
+    }
   }
 
   await logAdminChange(db, { userId: me.id, area: 'cMoon', key: `create:${created.id}`, prevValue: null, newValue: { id: created.id, name } })

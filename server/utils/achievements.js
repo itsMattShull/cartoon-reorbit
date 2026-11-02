@@ -5,6 +5,7 @@ import { announceAchievement, assignDiscordRoleByName } from '../../server/utils
 import { getWordleWinCount, getWordleCurrentStreak } from '../../server/utils/wordle.js'
 import { createMemoClient } from './memoClient.js'
 import { announceCMoonRankUp } from './cmoonDiscordEvents.js'
+import { maybeGrantCMoonPrestigeRank } from './cmoonPrestigeRankTiers.js'
 
 let cachedAchievements     = null
 let cachedAchievementsTime = 0
@@ -249,7 +250,7 @@ async function getOrCreateUserPoints(tx, userId) {
 // per feature. cToon mint jobs are NOT enqueued here — mintQueue.add isn't rollback-safe, so the
 // caller must only enqueue the returned `ctoonJobs` after its transaction has committed (see
 // enqueueCtoonJobs).
-export async function grantRewardInTx(tx, userId, reward, method) {
+export async function grantRewardInTx(tx, userId, reward, method, packSource = 'CMOON_ENEMY_REWARD') {
   const summary = { points: 0, backgrounds: 0, avatars: 0, border: false, glow: false, ctoonJobs: [], packs: 0, packGrants: [] }
   if (!reward) return summary
 
@@ -347,24 +348,28 @@ export async function grantRewardInTx(tx, userId, reward, method) {
   // not queued: a pack has no mint/supply step of its own, so there's nothing to defer post-commit
   // the way mintQueue defers an actual cToon mint. Not dedup'd/ownership-capped like backgrounds/
   // avatars either — every hit grants real new sealed packs, same as several independent CTOON
-  // rows each mint their own copies. Tagged PackSource.CMOON_ENEMY_REWARD (never the PURCHASE
-  // default) so purchase-limit/analytics queries that key on UserPack.source never see these as a
-  // cMart buy — this function has no single natural "claim id" the way CODE/OG_GTOONS_PVP's own
-  // grant helpers do (it's shared across many unrelated callers), so sourceRef/sourceOrdinal are
-  // left null here, same as every other reward type this function already grants.
+  // rows each mint their own copies. Tagged by the `packSource` param (never the PURCHASE default)
+  // so purchase-limit/analytics queries that key on UserPack.source never see these as a cMart buy
+  // — this function has no single natural "claim id" the way CODE/OG_GTOONS_PVP's own grant
+  // helpers do (it's shared across many unrelated callers, each passing their own PackSource value
+  // — CMOON_ENEMY_REWARD is just the default for the original, oldest caller), so sourceRef/
+  // sourceOrdinal are left null here, same as every other reward type this function already grants.
   const packRewards = reward.packs || []
   if (packRewards.length) {
     const packIds = [...new Set(packRewards.map(p => p.packId))]
     const packRows = await tx.pack.findMany({ where: { id: { in: packIds } }, select: { id: true, name: true } })
     const packNameById = new Map(packRows.map(p => [p.id, p.name]))
+    const rows = []
     for (const rp of packRewards) {
       const qty = Math.max(1, Number(rp.quantity || 1))
-      for (let i = 0; i < qty; i++) {
-        await tx.userPack.create({ data: { userId, packId: rp.packId, opened: false, pricePaid: null, source: 'CMOON_ENEMY_REWARD' } })
-      }
+      for (let i = 0; i < qty; i++) rows.push({ userId, packId: rp.packId, opened: false, pricePaid: null, source: packSource })
       summary.packs += qty
       summary.packGrants.push({ packId: rp.packId, name: packNameById.get(rp.packId) || rp.packId, quantity: qty })
     }
+    // One round trip for every pack copy across every hit reward row, not one `create` per
+    // copy — sourceRef/sourceOrdinal are left null on every row here (see comment above), and
+    // Postgres treats NULL as distinct in a unique index, so no skipDuplicates is needed.
+    await tx.userPack.createMany({ data: rows })
   }
 
   return summary
@@ -490,6 +495,15 @@ export async function processAchievementsForUser(userId) {
     // console.log('[achievements] process: skip inactive/banned', { userId, active: user.active, banned: user.banned })
     return { awarded: 0 }
   }
+
+  // Prestige-exclusive rank ladder (server/utils/cmoonPrestigeRankTiers.js) — piggybacks on this
+  // function's own existing trigger set (the cMoonPoints-aggregate cron, a solo/raid win, a TKO
+  // win) rather than needing a trigger of its own; no-ops instantly for anyone not currently a
+  // member of a prestige cMoon. Deliberately swallowed: a failure here must never block the
+  // achievement loop below from running for this same user.
+  await maybeGrantCMoonPrestigeRank(userId).catch((err) => {
+    console.error('[achievements] maybeGrantCMoonPrestigeRank failed:', { userId, error: err?.message })
+  })
 
   if (!cachedAchievements || Date.now() - cachedAchievementsTime > ACHIEVEMENTS_TTL_MS) {
     cachedAchievements     = await prisma.achievement.findMany({

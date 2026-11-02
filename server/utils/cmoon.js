@@ -1138,7 +1138,7 @@ export async function selectCMoonForUser(userId, cMoonId) {
       data: {
         cMoonId: cmoon.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: false,
         cMoonOptedOut: false, cMoonOptedOutAt: null,
-        cMoonPoints: 0, currentCMoonRankId: null, cMoonRankRoleGrantedAt: null,
+        cMoonPoints: 0, currentCMoonRankId: null, cMoonRankRoleGrantedAt: null, currentCMoonPrestigeRankId: null,
       },
     })
     if (result.count === 0) throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
@@ -1318,6 +1318,12 @@ export async function reassignUserCMoon(userId, newCMoonId) {
         currentCMoonRankId: null,
         cMoonRankRoleGrantedAt: null,
         cMoonRoleGrantedAt: null,
+        // Same "only means something within the cMoon it was earned in" reasoning as
+        // currentCMoonRankId above, for the SECOND, prestige-exclusive ladder (see
+        // CMoonPrestigeRank's own schema comment) — a rank earned on one prestige cMoon's own
+        // ladder means nothing on whatever cMoon this move lands the user in next, prestige or
+        // not.
+        currentCMoonPrestigeRankId: null,
         // Mirrors selectCMoonForUser's reset on self-join: an admin-driven move (or removal) must
         // clear these the same way, or a user who once opted out keeps a stale cMoonOptedOut/
         // cMoonOptedOutAt around forever — harmless while they stay put, but if later removed
@@ -1510,6 +1516,9 @@ export async function executeBalancePlan() {
           currentCMoonRankId: null,
           cMoonRankRoleGrantedAt: null,
           cMoonRoleGrantedAt: null,
+          // Same reset as reassignUserCMoon's own currentCMoonPrestigeRankId clear above — a
+          // Balance Teams move is just another cMoon reassignment.
+          currentCMoonPrestigeRankId: null,
           // isAdmin:false in the where clause above already excludes every captain (see this
           // function's header comment), so unlike reassignUserCMoon this never needs a
           // per-user captaincy check — every mover here starts the destination team fresh at

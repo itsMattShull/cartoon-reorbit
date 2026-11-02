@@ -74,13 +74,15 @@ export default defineEventHandler(async (event) => {
       })
       if (isPack) {
         // Tagged PackSource.CMOON_DISPERSAL with sourceRef = this claim's own id and a running
-        // sourceOrdinal, same idempotency-key shape server/utils/codePackGrant.js already uses
-        // for a ClaimCode's packs (one parent claim row, N sealed-pack children).
-        for (let i = 0; i < offer.quantityPerMember; i++) {
-          await tx.userPack.create({
-            data: { userId, packId: option.packId, opened: false, pricePaid: null, source: 'CMOON_DISPERSAL', sourceRef: created.id, sourceOrdinal: i },
-          })
-        }
+        // sourceOrdinal, same idempotency-key shape (and same one-call createMany, not N
+        // sequential creates) server/utils/codePackGrant.js already uses for a ClaimCode's packs
+        // (one parent claim row, N sealed-pack children).
+        await tx.userPack.createMany({
+          data: Array.from({ length: offer.quantityPerMember }, (_, i) => (
+            { userId, packId: option.packId, opened: false, pricePaid: null, source: 'CMOON_DISPERSAL', sourceRef: created.id, sourceOrdinal: i }
+          )),
+          skipDuplicates: true,
+        })
       }
       return created
     })
