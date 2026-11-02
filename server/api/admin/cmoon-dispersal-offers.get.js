@@ -4,6 +4,7 @@
 import { defineEventHandler, getQuery } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { requireAdmin } from '@/server/utils/requireAdmin'
+import { serializeDispersalOption } from '@/server/utils/cmoonDispersal'
 
 const LIST_LIMIT = 30
 
@@ -44,11 +45,9 @@ export default defineEventHandler(async (event) => {
       initiatedByUsername: o.initiatedBy?.username || '',
       closedByUsername: o.closedBy?.username || '',
       cMoons: o.cMoons.map(c => ({ id: c.cMoon.id, name: c.cMoon.name })),
-      // Each option is a cToon or a Pack, never both — see CMoonDispersalOption's own schema
+      // Each option is a cToon or a Pack, never both — see serializeDispersalOption's own
       // comment. `kind` lets the admin UI render the right image/label without re-deriving it.
-      options: o.options.map(opt => opt.ctoon
-        ? { id: opt.id, kind: 'CTOON', ctoonId: opt.ctoon.id, name: opt.ctoon.name, assetPath: opt.ctoon.assetPath }
-        : { id: opt.id, kind: 'PACK', packId: opt.pack.id, name: opt.pack.name, assetPath: opt.pack.imagePath }),
+      options: o.options.map(opt => serializeDispersalOption(opt)),
       totalClaims: o._count?.claims ?? 0,
     })),
   }
