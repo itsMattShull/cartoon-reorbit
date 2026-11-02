@@ -24,3 +24,8 @@ export const MAX_CTOONS_PER_SIDE = 10000
 /// How many counters deep one negotiation may go. A counter is cheap to send and
 /// DMs the other party, so an unbounded chain is a notification-spam vector.
 export const MAX_COUNTER_CHAIN_DEPTH = 20
+
+/// Ceiling on how many sealed packs one side of an offer may contain (all pack types together). Far lower than the
+/// cToon limit on purpose: every pack committed is a row lock taken in one statement when the offer is created.
+/// Shared with the client (components/trade/TradePackPicker.vue) so the stepper and the server agree.
+export const MAX_PACKS_PER_SIDE = 50

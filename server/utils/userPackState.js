@@ -32,9 +32,14 @@
 import { createError } from 'h3'
 import { isUuid } from './tradeOfferRules.js'
 import { UNAVAILABLE_REQUEST_MESSAGE } from './lockRules.js'
+import { MAX_PACKS_PER_SIDE } from './tradeOfferLimits.js'
 
-/** Most packs on one side of a trade offer. Each one is a row lock, so this stays small (cToons use 10,000 — no). */
-export const MAX_PACKS_PER_SIDE = 50
+export { MAX_PACKS_PER_SIDE }
+
+/** Most distinct pack TYPES on one side, so a request can't fan out into dozens of candidate queries. */
+export const MAX_PACK_TYPES_PER_SIDE = 20
+/** Extra candidates considered per wanted pack type, so a concurrent writer taking the oldest copy doesn't fail us. */
+const PICK_CANDIDATE_BUFFER = 5
 
 /** One generic message for every reason a pack can't be used, so responses can't be used to probe pack state. */
 export const PACK_UNAVAILABLE_MESSAGE = UNAVAILABLE_REQUEST_MESSAGE.replace('cToons', 'packs')
@@ -48,33 +53,32 @@ export const PACK_BLOCK = Object.freeze({
 })
 
 /**
- * Validates one side's pack id list: an array of UUIDs, deduplicated, at most MAX_PACKS_PER_SIDE.
- * Deliberately NOT normalizeCtoonIdList: that accepts any string and 10,000 entries, which here would mean taking
- * thousands of row locks in one statement.
+ * Validates one side's pack request: `[{ packId, quantity }]` — pack TYPES and how many of each. Packs of one type are
+ * interchangeable, so a trade names "2 x Starter Pack", never specific copies; the server picks the copies (see
+ * lockAndPickPacks). That also means no client ever needs, or is given, another player's pack row ids.
+ * Integer quantities, UUID types, duplicates merged, at most MAX_PACKS_PER_SIDE in total.
  */
-export function normalizePackIdList (list, label = 'packs') {
-  if (list == null) return []
-  if (!Array.isArray(list)) {
-    throw createError({ statusCode: 400, statusMessage: `${label} must be an array` })
+export function normalizePackWants (raw, label = 'packs') {
+  if (raw == null) return []
+  if (!Array.isArray(raw)) throw createError({ statusCode: 400, statusMessage: `${label} must be an array` })
+  if (raw.length > MAX_PACK_TYPES_PER_SIDE) {
+    throw createError({ statusCode: 400, statusMessage: `${label} may name at most ${MAX_PACK_TYPES_PER_SIDE} different packs` })
   }
-  for (const id of list) {
-    if (!isUuid(id)) {
-      throw createError({ statusCode: 400, statusMessage: `${label} contains an invalid pack reference` })
+  const merged = new Map()
+  for (const entry of raw) {
+    const packId = typeof entry?.packId === 'string' ? entry.packId.toLowerCase() : null
+    if (!isUuid(packId)) throw createError({ statusCode: 400, statusMessage: `${label} contains an invalid pack reference` })
+    const q = entry.quantity
+    if (!Number.isInteger(q) || q < 1 || q > MAX_PACKS_PER_SIDE) {
+      throw createError({ statusCode: 400, statusMessage: `${label}: quantity must be a whole number from 1 to ${MAX_PACKS_PER_SIDE}` })
     }
+    merged.set(packId, (merged.get(packId) || 0) + q)
   }
-  const unique = [...new Set(list.map(id => id.toLowerCase()))]
-  if (unique.length > MAX_PACKS_PER_SIDE) {
+  const wants = [...merged].map(([packId, quantity]) => ({ packId, quantity })).sort((a, b) => (a.packId < b.packId ? -1 : 1))
+  if (wants.reduce((n, w) => n + w.quantity, 0) > MAX_PACKS_PER_SIDE) {
     throw createError({ statusCode: 400, statusMessage: `${label} may contain at most ${MAX_PACKS_PER_SIDE} packs` })
   }
-  return unique
-}
-
-/** The same sealed pack cannot sit on both sides of one offer. */
-export function assertNoPackCrossSideOverlap (offeredPackIds, requestedPackIds) {
-  const requested = new Set(requestedPackIds)
-  if (offeredPackIds.some(id => requested.has(id))) {
-    throw createError({ statusCode: 400, statusMessage: 'The same pack cannot be both offered and requested.' })
-  }
+  return wants
 }
 
 /**
@@ -187,6 +191,81 @@ export async function lockAndAssertPacks (tx, ids, { ownerId, excludeOfferIds = 
     if (reason) throw packBlockError(reason, { generic })
   }
   return rows
+}
+
+/**
+ * Chooses and locks the sealed packs a trade offer commits, for BOTH sides at once.
+ *
+ *   sides: [{ key, ownerId, wants: [{ packId, quantity }], generic }]
+ *   returns { [key]: [userPackId, ...] }
+ *
+ * Candidates (oldest first, a few spare per type) are read without a lock, then ALL candidates for ALL sides are locked in
+ * one sorted statement — a single global order, so two offers touching the same players can't deadlock — and re-checked
+ * UNDER the lock. Only then are the first `quantity` still-valid copies taken. Throws if a side can't be filled:
+ * `generic` sides (the other party's packs) get the single probe-proof message.
+ */
+export async function lockAndPickPacks (tx, { sides }) {
+  const plans = []
+  const every = new Set()
+  for (const side of sides) {
+    const perType = []
+    for (const want of side.wants) {
+      const rows = await tx.userPack.findMany({
+        where: {
+          userId: side.ownerId,
+          packId: want.packId,
+          opened: false,
+          auctions: { none: { status: 'ACTIVE' } },
+          tradeOfferPacks: { none: { tradeOffer: { status: 'PENDING' } } }
+        },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: want.quantity + PICK_CANDIDATE_BUFFER,
+        select: { id: true }
+      })
+      const ids = rows.map(r => r.id)
+      ids.forEach(id => every.add(id))
+      perType.push({ want, ids })
+    }
+    plans.push({ side, perType })
+  }
+
+  const all = [...every]
+  const locked = await lockPacksForUpdate(tx, all)
+  const lockedById = new Map(locked.map(r => [r.id, r]))
+  const states = await getPackLockState(tx, all)
+
+  const out = {}
+  for (const { side, perType } of plans) {
+    const picked = []
+    for (const { want, ids } of perType) {
+      const valid = ids.filter(id => !packBlockReason(lockedById.get(id), states.get(id), side.ownerId))
+      if (valid.length < want.quantity) {
+        throw side.generic
+          ? createError({ statusCode: 400, statusMessage: PACK_UNAVAILABLE_MESSAGE })
+          : createError({ statusCode: 400, statusMessage: 'You don’t have enough of those packs available right now (packs in an auction or another trade can’t be used).' })
+      }
+      picked.push(...valid.slice(0, want.quantity))
+    }
+    out[side.key] = picked
+  }
+  return out
+}
+
+/**
+ * Accepting an offer: lock every pack it commits (both sides, one sorted statement) and verify each is still where the
+ * offer says — offered copies with the initiator, requested copies with the recipient, none opened, none in an active
+ * auction. Call it right after claiming the offer (so the offer itself no longer counts as "pending") and BEFORE any
+ * points move. A pack held by a DIFFERENT pending offer also fails the check, which the create path makes impossible.
+ */
+export async function lockAndAssertOfferPacks (tx, { offeredIds, requestedIds, initiatorId, recipientId }) {
+  const all = [...offeredIds, ...requestedIds]
+  const locked = await lockPacksForUpdate(tx, all)
+  const byId = new Map(locked.map(r => [r.id, r]))
+  const states = await getPackLockState(tx, all)
+  const bad = (ids, ownerId) => ids.some(id => packBlockReason(byId.get(id), states.get(id), ownerId))
+  if (bad(offeredIds, initiatorId) || bad(requestedIds, recipientId)) {
+    throw createError({ statusCode: 409, statusMessage: 'One or more packs in this trade are no longer available.' })
+  }
 }
 
 /** Appends audit rows. `entries` are { userPackId, packId, userId, method, counterpartyUserId?, ... }. */

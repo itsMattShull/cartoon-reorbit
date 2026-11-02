@@ -119,3 +119,33 @@ test('Redeem page: a pack already opened in another tab is dropped, not retried'
   assert.match(redeem, /function onPackFailed/)
   assert.match(redeem, /status === 400 \|\| status === 404/)
 })
+
+const trade = read('components/newsite/Trade.vue')
+const picker = read('components/trade/TradePackPicker.vue')
+
+test('Trade builder: packs are picked on both sides, sent by TYPE+quantity, and gate Next/Send like cToons do', () => {
+  assert.match(trade, /<TradePackPicker v-model="requestedPacks"/)
+  assert.match(trade, /<TradePackPicker v-model="offeredPacks"/)
+  assert.match(trade, /packsRequested: packPayload\(requestedPacks\.value\)/)
+  assert.match(trade, /packsOffered: packPayload\(offeredPacks\.value\)/)
+  assert.match(trade, /!selectedTargetCtoons\.length && !requestedPacks\.length && !isCounterMode/)
+  assert.match(trade, /selectedInitiatorCtoons\.value\.length === 0 && !offeredPacks\.value\.length/)
+  // a counter mirrors the packs, and every reset path clears them
+  assert.match(trade, /requestedPacks\.value = packGroups\(offer, 'OFFERED'\)/)
+  assert.match(trade, /offeredPacks\.value = packGroups\(offer, 'REQUESTED'\)/)
+  assert.ok((trade.match(/requestedPacks\.value = \[\]; offeredPacks\.value = \[\]/g) || []).length >= 2)
+})
+
+test('Trade builder says packs are not valued, wherever a value estimate is shown', () => {
+  assert.ok((trade.match(/Sealed packs are not valued/g) || []).length >= 2)
+  assert.match(picker, /aren’t included in the value estimate/)
+})
+
+test('pack picker: never handles pack row ids, 44px steppers on phones, accessible stepper + live region', () => {
+  assert.doesNotMatch(picker, /userPackId|userPackIds/)
+  assert.match(picker, /\.tpp-step \{ width: 44px; height: 44px; \}/)
+  assert.match(picker, /role="group" :aria-label="`Quantity of/)
+  assert.match(picker, /<output class="tpp-qty" aria-live="polite">/)
+  assert.match(picker, /aria-expanded/)
+  assert.match(picker, /MAX_PACKS_PER_SIDE/)
+})

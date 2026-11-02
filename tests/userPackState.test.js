@@ -3,8 +3,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  packBlockReason, packBlockError, normalizePackIdList, assertNoPackCrossSideOverlap,
-  PACK_BLOCK, PACK_UNAVAILABLE_MESSAGE, MAX_PACKS_PER_SIDE
+  packBlockReason, packBlockError, normalizePackWants,
+  PACK_BLOCK, PACK_UNAVAILABLE_MESSAGE, MAX_PACKS_PER_SIDE, MAX_PACK_TYPES_PER_SIDE
 } from '../server/utils/userPackState.js'
 
 const U = '11111111-1111-4111-8111-111111111111'
@@ -43,18 +43,24 @@ test('generic errors are identical for every reason; specific ones are not', () 
   assert.ok(specific.size > 1)
 })
 
-test('normalizePackIdList: accepts UUIDs, lowercases, dedupes; rejects junk and oversize', () => {
-  assert.deepEqual(normalizePackIdList(undefined), [])
-  assert.deepEqual(normalizePackIdList([P, P.toUpperCase()]), [P])
-  assert.throws(() => normalizePackIdList('x'), /must be an array/)
-  assert.throws(() => normalizePackIdList(['not-a-uuid']), /invalid pack reference/)
-  assert.throws(() => normalizePackIdList([{}]), /invalid pack reference/)
-  const many = Array.from({ length: MAX_PACKS_PER_SIDE + 1 }, (_, i) => `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`)
-  assert.throws(() => normalizePackIdList(many), /at most/)
-  assert.equal(normalizePackIdList(many.slice(0, MAX_PACKS_PER_SIDE)).length, MAX_PACKS_PER_SIDE)
+test('normalizePackWants: accepts {packId, quantity}, lowercases, merges duplicates, sorts', () => {
+  assert.deepEqual(normalizePackWants(undefined), [])
+  assert.deepEqual(normalizePackWants([]), [])
+  assert.deepEqual(normalizePackWants([{ packId: P.toUpperCase(), quantity: 2 }, { packId: P, quantity: 3 }]), [{ packId: P, quantity: 5 }])
+  const a = '00000000-0000-4000-8000-000000000001'; const b = '00000000-0000-4000-8000-000000000002'
+  assert.deepEqual(normalizePackWants([{ packId: b, quantity: 1 }, { packId: a, quantity: 1 }]).map(w => w.packId), [a, b])
 })
 
-test('a pack cannot be on both sides of one offer', () => {
-  assert.throws(() => assertNoPackCrossSideOverlap([P], [P]), /both offered and requested/)
-  assert.doesNotThrow(() => assertNoPackCrossSideOverlap([P], [U]))
+test('normalizePackWants: rejects junk, bad quantities, oversize', () => {
+  assert.throws(() => normalizePackWants('x'), /must be an array/)
+  assert.throws(() => normalizePackWants([{ packId: 'not-a-uuid', quantity: 1 }]), /invalid pack reference/)
+  assert.throws(() => normalizePackWants([null]), /invalid pack reference/)
+  assert.throws(() => normalizePackWants([{ packId: P, quantity: 0 }]), /quantity/)
+  assert.throws(() => normalizePackWants([{ packId: P, quantity: 1.5 }]), /quantity/)
+  assert.throws(() => normalizePackWants([{ packId: P, quantity: '2' }]), /quantity/)
+  assert.throws(() => normalizePackWants([{ packId: P, quantity: MAX_PACKS_PER_SIDE + 1 }]), /quantity/)
+  assert.throws(() => normalizePackWants([{ packId: P, quantity: 30 }, { packId: P, quantity: 30 }]), /at most/, 'merged total over the cap')
+  const types = Array.from({ length: MAX_PACK_TYPES_PER_SIDE + 1 }, (_, i) => ({ packId: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, quantity: 1 }))
+  assert.throws(() => normalizePackWants(types), /different packs/)
+  assert.equal(normalizePackWants([{ packId: P, quantity: MAX_PACKS_PER_SIDE }])[0].quantity, MAX_PACKS_PER_SIDE)
 })

@@ -59,11 +59,11 @@ export function normalizeCtoonIdList (list, label) {
 }
 
 /** An offer has to actually offer something, or it is just a notification. */
-export function assertOfferHasContent ({ resolvedOffered, resolvedRequested, pointsOffered, pointsRequested = 0 }) {
-  if (!resolvedOffered.length && !resolvedRequested.length && !pointsOffered && !pointsRequested) {
+export function assertOfferHasContent ({ resolvedOffered, resolvedRequested, pointsOffered, pointsRequested = 0, packsOffered = [], packsRequested = [] }) {
+  if (!resolvedOffered.length && !resolvedRequested.length && !packsOffered.length && !packsRequested.length && !pointsOffered && !pointsRequested) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'A trade offer must include at least one cToon or some points.'
+      statusMessage: 'A trade offer must include at least one cToon, pack or some points.'
     })
   }
 }
