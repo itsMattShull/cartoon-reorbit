@@ -17,6 +17,7 @@
 //     discardReady // [bool, bool] during the discard phase
 //     swapReady,   // [bool, bool] during the round-3 slot-7 swap phase
 //     pendingSwap, // [bool, bool] who asked to swap (applied together once both are ready)
+//     swapPick,    // [deckIdx|null, ...] the hand card each player chose to bring into slot 7 (null = random)
 //     colorReady,  // [bool, bool] during the end-of-game Silver colour phase
 //     pendingColor,// [string|null, ...] held picks, applied together once both are ready
 //     silverColor, // [string|null, ...] the colour each player's Silver cards count as (once picked)
@@ -26,7 +27,8 @@
 
 import { sanitizeGtoonCardStyle } from '../../utils/gtoonCardStyle.js'
 import { revealDurationMs } from '../../utils/ogGtoonReveal.js'
-import { resolveFinalBoard } from './ogGtoonEffects.js'
+import { resolveFinalBoard, widenAllMatchingScope } from './ogGtoonEffects.js'
+import { powerDescriptionFor, describeEffects } from './ogGtoonPowerCatalog.js'
 import {
   determineWinner, recolorSilver, isRealColor, REAL_COLORS, COLOR_MS, hasSuddenDeathCardsRemaining, dealOpeningHand, discardAndDeal,
   goalCardFor, targetColorsOf, slotsForRound, isSuddenDeathRound, shuffled, REGULATION_ROUNDS, DISCARD_AFTER_ROUND,
@@ -131,7 +133,7 @@ export function toSnapshotCard(ctoon, position) {
     type3: ctoon.gtoonType3 ?? null,
     group: ctoon.gtoonGroup ?? null,
     isSlam: !!ctoon.isSlamGtoon,
-    effect: ctoon.gtoonEffect ?? null,
+    effect: widenAllMatchingScope(ctoon.gtoonEffect ?? null),
     position
   }
 }
@@ -154,6 +156,7 @@ export function initHands(match, rng = Math.random) {
   match.swapUsed = [false, false]
   match.swapReady = [false, false]
   match.pendingSwap = [false, false]
+  match.swapPick = [null, null]
   match.colorReady = [false, false]
   match.pendingColor = [null, null]
   match.silverColor = [null, null]
@@ -173,10 +176,32 @@ export function initHands(match, rng = Math.random) {
   return match
 }
 
+/** A goal card as both players see it (the goal cards are public from the start). Includes what the pre-match screen shows. */
 function goalCardView(match, idx) {
   const c = goalCardFor(match, idx)
   if (!c) return null
-  return { ctoonId: c.ctoonId, name: c.name, assetPath: c.assetPath, color: c.color, cardStyle: c.cardStyle, value: c.value }
+  return {
+    ctoonId: c.ctoonId, name: c.name, assetPath: c.assetPath, color: c.color, cardStyle: c.cardStyle, value: c.value,
+    type1: c.type1 ?? null, type2: c.type2 ?? null, type3: c.type3 ?? null, group: c.group ?? null,
+    power: powerDescriptionFor(c.effect) || describeEffects(c.effect) || null
+  }
+}
+
+/* ── Pre-match intro ───────────────────────────────────────────────────────────────────────
+ * Before the first round both players are shown the goal cards and how the game will be decided,
+ * with a countdown. The first placing deadline starts after it, and players cannot place or commit
+ * until it is over (the clients keep the board hidden meanwhile; this is the server-side guard). */
+export const INTRO_MS = 10_000
+
+/** Starts the intro: the first phase's clock is pushed back by the same amount so no placing time is lost. */
+export function startIntro(match, ms = INTRO_MS, now = Date.now()) {
+  match.introEndsAt = now + ms
+  if (match.deadline) match.deadline += ms
+}
+
+/** True while the pre-match intro is still counting down. */
+export function introActive(match, now = Date.now()) {
+  return !!match.introEndsAt && now < match.introEndsAt
 }
 
 /* ── Phase clock ───────────────────────────────────────────────────────────────────────────── */
@@ -203,7 +228,7 @@ export function startPhaseClock(match, now = Date.now()) {
     ] }] })
   } else if (match.phase === 'swap') {
     logEvent(match, { kind: 'phase', title: 'Round 3 — slot-7 swap', sections: [{ label: null, lines: [
-      `Optional: replace your slot-7 card with a random undealt card (costs ${SWAP_SCORE_PENALTY} points off your match score).${clock('no swap if time runs out')}`
+      `Optional: replace your slot-7 card with a card from your hand (costs ${SWAP_SCORE_PENALTY} points off your match score).${clock('no swap if time runs out')}`
     ] }] })
   } else {
     const slots = slotsForRound(match.currentRound)
@@ -237,6 +262,8 @@ export function publicMatchView(match, uid, opts = {}) {
     suddenDeath: isSuddenDeathRound(match.currentRound),
     phase: match.phase || 'play',
     phaseEndsAt: match.deadline || null,
+    // Pre-match intro: milliseconds left (a duration, so a skewed client clock cannot shorten or stretch it).
+    introRemainingMs: introActive(match) ? match.introEndsAt - Date.now() : 0,
     ...(opts.log === false ? {} : { gameLog: match.gameLog || [] }),
     // The latest resolved board ({ cards:[{side,slot,finalValue,color,cancelled}], totals, markers }), so values
     // stay correct between rounds / after a reconnect. null until the first card has been revealed.
@@ -414,20 +441,41 @@ export function checkSwap(match, idx) {
   return OK
 }
 
-/** Records a player's choice for the swap phase: `swap` true = replace slot 7, false = skip. */
-export function recordSwapChoice(match, idx, swap) {
+/**
+ * Records a player's choice for the swap phase: `swap` true = replace slot 7, false = skip.
+ * A swapping player picks which hand card takes slot 7 (`cardIdx`, a deck index in their hand). With
+ * exactly one hand card left the choice is made for them. `requireCard` (human players) refuses a
+ * swap that does not name a card when there is a real choice; without it a missing card falls back
+ * to a random draw (used by the scripted tutorial and old callers).
+ */
+export function recordSwapChoice(match, idx, swap, cardIdx = null, { requireCard = false } = {}) {
   if (match.ending) return bad('over', 'The match is over.')
   if (match.phase !== 'swap') return bad('wrongPhase', 'Not the swap phase.')
   if (match.swapReady[idx]) return bad('already_swapped', 'You already made your swap choice.')
   if (swap && !canOfferSwap(match, idx)) return bad('nothingToSwap', 'There are no cards left in your deck to swap with.')
+  let pick = null
+  if (swap) {
+    const hand = match.hand[idx] || []
+    if (cardIdx !== null && cardIdx !== undefined) {
+      if (!Number.isInteger(cardIdx) || !hand.includes(cardIdx)) return bad('badCard', 'That card is not in your hand.')
+      pick = cardIdx
+    } else if (hand.length === 1) {
+      pick = hand[0]
+    } else if (requireCard && hand.length > 1) {
+      return bad('needSwapCard', 'Choose which card from your hand to swap in.')
+    }
+  }
+  if (!match.swapPick) match.swapPick = [null, null]
   match.pendingSwap[idx] = !!swap
+  match.swapPick[idx] = pick
   match.swapReady[idx] = true
   return OK
 }
 
 /**
  * Once both sides have chosen: applies the swaps together. The slot-7 card goes back into the
- * undealt pile and a random undealt card takes its place (revealed as a round-3 entry).
+ * player's hand and the hand card they chose (or, with no choice recorded, a random card from
+ * their deck) takes its place (revealed as a round-3 entry).
  * Returns null while someone is still deciding, else { entries, order } shaped like a reveal
  * (entries only for the sides that swapped).
  */
@@ -441,7 +489,9 @@ export function resolveSwapPhase(match, rng = Math.random) {
     swapped[i] = old
     if (!old || !swapPoolSize(match, i)) continue
     const handLen = match.hand[i].length
-    const pick = Math.floor(rng() * swapPoolSize(match, i))
+    const chosen = match.swapPick?.[i] ?? null
+    const chosenAt = chosen === null ? -1 : match.hand[i].indexOf(chosen)
+    const pick = chosenAt >= 0 ? chosenAt : Math.floor(rng() * swapPoolSize(match, i))
     let drawnIdx
     if (pick < handLen) {
       drawnIdx = match.hand[i][pick]
@@ -476,6 +526,7 @@ export function resolveSwapPhase(match, rng = Math.random) {
     sections: [{ label: null, lines: [`Slot 7: ${nameOfSide(match, 0)} ${showCard(entries[0][0])}  vs  ${nameOfSide(match, 1)} ${showCard(entries[1][0])}`] }]
   })
   match.pendingSwap = [false, false]
+  match.swapPick = [null, null]
   match.swapReady = [false, false]
   match.phase = 'play' // the caller either ends the match or advances into sudden death
   const order = [...new Set([...entries[0], ...entries[1]].map(e => e.slot))].sort((a, b) => a - b)
@@ -907,6 +958,7 @@ export function advanceRound(match) {
   } else if (justPlayed === SWAP_AFTER_ROUND) {
     match.phase = 'swap'
     match.pendingSwap = [false, false]
+    match.swapPick = [null, null]
     match.swapReady = [!canOfferSwap(match, 0), !canOfferSwap(match, 1)]
   } else {
     match.phase = 'play'

@@ -106,6 +106,8 @@ test('tutorial: the scripted match plays through to the scripted win, with no cl
   await h.call('swapSkip')
   assert.equal(h.errors().at(-1).code, 'offScript')
   await h.call('swap')
+  assert.equal(h.errors().at(-1).code, 'offScript', 'the player has to pick the scripted card')
+  await h.call('swap', { cardIdx: 10 })
   v = h.view()
   assert.equal(v.phase, 'color', 'TOM and Pepe Le Pew are Silver, so the colour pick comes next')
   assert.equal(v.you.mayChooseColor, true)

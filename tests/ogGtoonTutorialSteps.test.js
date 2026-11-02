@@ -11,7 +11,7 @@ import { TUTORIAL_PLAN } from '../server/utils/ogGtoonTutorialScript.js'
 
 function newGuide() {
   const h = harness()
-  const board = { sel: null, tab: 'log', swapSheetOpen: false, discardPick: [], flipping: false }
+  const board = { sel: null, tab: 'log', swapSheetOpen: false, swapPick: null, discardPick: [], flipping: false }
   const ctx = () => ({ ...board, m: h.view(), ended: h.sent.some(s => s.ev === 'oggtoons:matchEnd') })
   return { h, board, ctx }
 }
@@ -38,8 +38,10 @@ async function tap({ h, board, ctx }, target) {
     await h.call('discard', { cardIdxs: board.discardPick }); board.discardPick = []
   } else if (target === 'swap-btn') {
     board.swapSheetOpen = true
+  } else if ((m = /^swap-card-(\d+)$/.exec(target))) {
+    board.swapPick = Number(m[1])
   } else if (target === 'swap-confirm') {
-    await h.call('swap'); board.swapSheetOpen = false
+    await h.call('swap', { cardIdx: board.swapPick }); board.swapSheetOpen = false; board.swapPick = null
   } else if ((m = /^color-([A-Z]+)$/.exec(target))) {
     await h.call('chooseColor', { color: m[1] })
   } else {

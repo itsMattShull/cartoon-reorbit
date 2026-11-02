@@ -14,7 +14,8 @@
 // reveal is still animating), done(ctx) (action steps), button (info steps).
 //
 // `ctx` is what the board knows: { m: the player's match view, sel: the selected hand card's deck
-// index or null, tab: 'log' | 'info', swapSheetOpen, discardPick: [deck idx], flipping: a reveal is
+// index or null, tab: 'log' | 'info', swapSheetOpen, swapPick: the hand card chosen in the swap sheet (deck
+// index or null), discardPick: [deck idx], flipping: a reveal is
 // animating, ended: the match is over }.
 
 /** Coarse position in the match; steps from an earlier stage are skipped (e.g. after a refresh). */
@@ -167,7 +168,7 @@ export const TUTORIAL_STEPS = [
   {
     id: 'swap-intro', stage: 3, kind: 'info', target: ['strip'], button: 'Next', ready: settled,
     title: 'Slot-7 swap',
-    text: 'Slot 7 is still face down. Now each player may swap their slot-7 card for a random card from the cards they have left. The old card goes back into the pile. It costs 10 points off your final score, once per match, and both players choose before slot 7 flips.'
+    text: 'Slot 7 is still face down. Now each player may swap their slot-7 card for any card in their hand. The old card goes back into your hand. It costs 10 points off your final score, once per match, and both players choose before slot 7 flips.'
   },
   {
     id: 'swap-why', stage: 3, kind: 'info', target: 'deck-box', button: 'Next', ready: settled,
@@ -181,9 +182,15 @@ export const TUTORIAL_STEPS = [
     done: (c) => !!c.swapSheetOpen || !!c.m?.you?.swapReady || stageOf(c) > 3
   },
   {
+    id: 'swap-pick', stage: 3, kind: 'action', target: 'swap-card-10',
+    title: 'Choose your swap card',
+    text: 'You choose which card from your hand takes slot 7. Pick Blossom Fighting, the Blue 10.',
+    done: (c) => c.swapPick === 10 || !!c.m?.you?.swapReady || stageOf(c) > 3
+  },
+  {
     id: 'swap-confirm', stage: 3, kind: 'action', target: 'swap-confirm',
     title: 'Confirm the swap',
-    text: 'Goat goes back into your pile and a random card takes slot 7. Tap "Swap (-10 points)".',
+    text: 'Goat goes back into your hand and Blossom Fighting takes slot 7. Tap "Swap (-10 points)".',
     done: (c) => !!c.m?.you?.swapReady || stageOf(c) > 3
   },
 
@@ -191,7 +198,7 @@ export const TUTORIAL_STEPS = [
   {
     id: 'reveal-3', stage: 4, kind: 'info', target: 'arena', button: 'Next', ready: settled,
     title: 'Slot 7 flips',
-    text: 'You drew Blossom Fighting, a Blue 10 (Pepe makes her a 12). The bot kept its Bloo.'
+    text: 'You swapped in Blossom Fighting, a Blue 10 (Pepe makes her a 12). The bot kept its Bloo.'
   },
   {
     id: 'silver-intro', stage: 4, kind: 'info', target: 'strip', button: 'Next', ready: settled,

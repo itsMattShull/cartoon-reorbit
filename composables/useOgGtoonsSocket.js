@@ -104,8 +104,8 @@ export function useOgGtoonsSocket() {
   /** Put hand card `cardIdx` (deck index) into board slot `slot`; moves it if already placed. */
   function place(cardIdx, slot) { send('place', { cardIdx, slot }) }
   function unplace(slot) { send('unplace', { slot }) }
-  /** Round 3: replace the card in slot 7 with a random undealt card (10 pts in PvP). */
-  function swap() { send('swap', {}) }
+  /** Round 3: replace the card in slot 7 with hand card `cardIdx` (deck index; 10 off the match score). */
+  function swap(cardIdx) { send('swap', { cardIdx }) }
   /** Round 3: keep slot 7 as it is. */
   function swapSkip() { send('swapSkip', {}) }
   /** End of the game: choose the real colour your Silver cards count as. */

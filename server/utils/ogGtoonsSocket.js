@@ -45,7 +45,7 @@ import { assignRandomGoals } from './ogGtoonEngine.js'
 import {
   publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd, buildRoundLog,
   placeCard, unplaceSlot, checkCommit, checkSwap, recordSwapChoice, resolveSwapPhase, expirePhase,
-  submitDiscard, resolveDiscardPhase, enterColorPhase, submitColor, resolveColorPhase, startPhaseClock, markCommitted, logAbnormalEnd, extendDeadlineForReveal
+  submitDiscard, resolveDiscardPhase, enterColorPhase, submitColor, resolveColorPhase, startPhaseClock, markCommitted, logAbnormalEnd, extendDeadlineForReveal, startIntro, introActive
 } from './ogGtoonMatchCore.js'
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
 import { isPracticing, registerPvpProbe, onPresenceChange } from './ogGtoonPresence.js'
@@ -261,6 +261,8 @@ async function startMatch(io, a, b, { isChallenge, tournament = null, matchId: f
   a.socket.data.ogGtoonsMatchId = matchId
   b.socket.data.ogGtoonsMatchId = matchId
 
+  // Both players see the goal cards and how the game is decided, with a countdown, before round 1 begins.
+  startIntro(match)
   emitToPlayers(io, match, EV('matchStart'))
   armPhaseTimer(io, match)
   return match
@@ -677,6 +679,7 @@ export async function restoreOgGtoonsMatches(io) {
     // no longer line up with the board.
     if (!Array.isArray(match.hand) || !Array.isArray(match.swapReady)) initHands(match, secureRng)
     if (!Array.isArray(match.held)) match.held = [null, null]
+    if (!Array.isArray(match.swapPick)) match.swapPick = [null, null]
     if (!Array.isArray(match.colorReady)) {
       match.colorReady = [false, false]
       match.pendingColor = [null, null]
@@ -928,12 +931,14 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     return { user, match, idx }
   }
   const reject = (res) => socket.emit(EV('error'), { code: res.code, message: res.message })
+  const INTRO_BLOCK = { code: 'intro', message: 'The match starts in a moment.' }
 
   // Placing/unplacing only changes this player's private view; nothing is sent to the opponent
   // until they commit.
   socket.on(EV('place'), async ({ cardIdx, slot } = {}) => {
     const side = await liveSide()
     if (!side) return
+    if (introActive(side.match)) return reject(INTRO_BLOCK)
     const res = placeCard(side.match, side.idx, { cardIdx, slot })
     if (!res.ok) return reject(res)
     side.match.lastActivity = Date.now()
@@ -944,6 +949,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
   socket.on(EV('unplace'), async ({ slot } = {}) => {
     const side = await liveSide()
     if (!side) return
+    if (introActive(side.match)) return reject(INTRO_BLOCK)
     const res = unplaceSlot(side.match, side.idx, { slot })
     if (!res.ok) return reject(res)
     side.match.lastActivity = Date.now()
@@ -951,16 +957,17 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     emitStateTo(io, side.match, side.idx)
   })
 
-  // Round-3 swap: replace the card in slot 7 with a random undealt one. The 10-point fee comes off the
+  // Round-3 swap: replace the card in slot 7 with a hand card the player chooses. The 10-point fee comes off the
   // match score at scoring (never the points balance). The choice is held
   // until both players have made theirs, so neither sees the other's result first.
-  socket.on(EV('swap'), async () => {
+  socket.on(EV('swap'), async ({ cardIdx } = {}) => {
     const side = await liveSide()
     if (!side) return
     const { user, match, idx } = side
     const check = checkSwap(match, idx)
     if (!check.ok) return reject(check)
-    const res = recordSwapChoice(match, idx, true)
+    // The player picks which hand card takes slot 7 (made for them when only one is left).
+    const res = recordSwapChoice(match, idx, true, Number.isInteger(cardIdx) ? cardIdx : null, { requireCard: true })
     if (!res.ok) return reject(res)
     match.lastActivity = Date.now()
     fireSync(match.id, match)
@@ -1000,6 +1007,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     if (!side) return
     const { match, idx } = side
     if (matchId && matchId !== match.id) return
+    if (introActive(match)) return reject(INTRO_BLOCK)
     const check = checkCommit(match, idx, round)
     if (!check.ok) {
       if (check.code !== 'staleRound' && check.code !== 'already_committed') reject(check)

@@ -10,7 +10,7 @@ import { slotsForRound, PLACE_MS, DISCARD_MS, SWAP_MS } from '../server/utils/og
 import {
   publicMatchView, initHands, placeCard, unplaceSlot, checkCommit, checkSwap, recordSwapChoice,
   resolveSwapPhase, expirePhase, autoFillPlacements, runFinalBoardResolution, phaseDurationMs,
-  submitDiscard, resolveDiscardPhase, markCommitted, revealPlacedCards, advanceRound, checkMatchEnd, buildRoundLog, TOTAL_ROUNDS
+  submitDiscard, resolveDiscardPhase, markCommitted, revealPlacedCards, advanceRound, checkMatchEnd, buildRoundLog, TOTAL_ROUNDS, toSnapshotCard, startIntro, introActive, INTRO_MS
 } from '../server/utils/ogGtoonMatchCore.js'
 import { registerOgGtoonsPractice, hasLivePracticeMatch } from '../server/utils/ogGtoonsPractice.js'
 import { isPracticing } from '../server/utils/ogGtoonPresence.js'
@@ -282,6 +282,39 @@ test('core: slot-7 swap is held until both choose, then replaces slot 7 with a c
   assert.equal(m.swapUsed[0], true)
   assert.equal(m.swapUsed[1], false)
   assert.equal(m.phase, 'play')
+})
+
+test('core: the swapping player picks the hand card that takes slot 7; the old card goes back into the hand', () => {
+  const m = playToSwapPhase(freshMatch(makeDeck(), makeDeck()))
+  const old = m.held[0]
+  const hand = [...m.hand[0]]
+  const undealt = [...m.undealt[0]]
+  assert.ok(hand.length > 1)
+  // A real choice must name a card that is in the hand.
+  assert.equal(recordSwapChoice(m, 0, true, null, { requireCard: true }).code, 'needSwapCard')
+  assert.equal(recordSwapChoice(m, 0, true, undealt[0], { requireCard: true }).code, 'badCard')
+  assert.equal(m.swapReady[0], false, 'a rejected choice records nothing')
+  const pick = hand[2]
+  assert.equal(recordSwapChoice(m, 0, true, pick, { requireCard: true }).ok, true)
+  recordSwapChoice(m, 1, false)
+  const res = resolveSwapPhase(m, seeded(7))
+  assert.equal(res.entries[0][0].deckIdx, pick)
+  assert.equal(m.revealed[0].find(r => r.slot === 7).deckIdx, pick)
+  assert.deepEqual(m.hand[0], hand.map(i => (i === pick ? old.deckIdx : i)))
+  assert.deepEqual(m.undealt[0], undealt, 'the undealt pile is untouched')
+})
+
+test('core: with a single card left in hand the swap picks it for the player', () => {
+  const m = playToSwapPhase(freshMatch(makeDeck(), makeDeck()))
+  const old = m.held[0]
+  m.hand[0] = [m.hand[0][0]]
+  const only = m.hand[0][0]
+  assert.equal(recordSwapChoice(m, 0, true, null, { requireCard: true }).ok, true)
+  assert.equal(m.swapPick[0], only)
+  recordSwapChoice(m, 1, false)
+  const res = resolveSwapPhase(m, seeded(1))
+  assert.equal(res.entries[0][0].deckIdx, only)
+  assert.deepEqual(m.hand[0], [old.deckIdx])
 })
 
 test('core: a player who discarded everything still has hand cards to swap with', () => {
@@ -607,7 +640,7 @@ test('core: an unplayed card of the opponent is never exposed in the view', () =
 
 /* ── Practice runtime (fake sockets, injected deps) ──────────────────────────────────────── */
 
-function harness({ config, deck = makeDeck(), isInPvp = false, userId = 'u1', loadBotDeck = async () => null, recordResult } = {}) {
+function harness({ config, deck = makeDeck(), isInPvp = false, userId = 'u1', loadBotDeck = async () => null, recordResult, introMs } = {}) {
   const handlers = {}
   const sent = []
   const io = { local: { to: (sid) => ({ emit: (ev, payload) => sent.push({ sid, ev, payload }) }) } }
@@ -624,7 +657,8 @@ function harness({ config, deck = makeDeck(), isInPvp = false, userId = 'u1', lo
     botDelay: () => 0,
     rng: seeded(11),
     isInPvp: () => isInPvp,
-    recordResult
+    recordResult,
+    introMs: introMs ?? 0
   })
   const events = (name) => sent.filter(s => s.ev === name).map(s => s.payload)
   const waitFor = async (name, ms = 3000) => {
@@ -667,7 +701,7 @@ async function playToEnd(h, { difficulty = 'normal', swap = false } = {}) {
     if (view.phase === 'discard' && !view.you.discardReady) {
       await h.handlers['oggtoons:practice:discard']({ cardIdxs: [] })
     } else if (view.phase === 'swap' && !view.you.swapReady) {
-      await h.handlers[swap ? 'oggtoons:practice:swap' : 'oggtoons:practice:swapSkip']()
+      await h.handlers[swap ? 'oggtoons:practice:swap' : 'oggtoons:practice:swapSkip'](swap ? { cardIdx: view.you.hand[0].idx } : undefined)
     } else if (view.phase === 'play' && !view.you.ready) {
       const placed = new Set(view.you.placements.map(p => p.cardIdx))
       const free = view.you.hand.filter(c => !placed.has(c.idx))
@@ -853,13 +887,22 @@ test('practice: the slot-7 swap is free, happens once the bot has chosen too, an
   assert.equal(view.you.revealed.some(r => r.slot === 7), false)   // slot 7 is not on the board yet
   const old = view.you.heldCard
   assert.equal(view.opponent.heldSlot, 7)
+  // With a real choice (3 hand cards) the player must name the card to swap in.
   await h.handlers['oggtoons:practice:swap']()
+  assert.equal(h.events('oggtoons:error').at(-1).code, 'needSwapCard')
+  assert.equal(h.events('oggtoons:swapApplied').length, 0)
+  await h.handlers['oggtoons:practice:swap']({ cardIdx: 9999 })
+  assert.equal(h.events('oggtoons:error').at(-1).code, 'badCard')
+  const chosen = view.you.hand[1]
+  await h.handlers['oggtoons:practice:swap']({ cardIdx: chosen.idx })
   assert.equal(h.events('oggtoons:swapApplied').length, 1)
   const reveal = await until(() => h.events('oggtoons:reveal').find(r => r.reveal.round === 3))
   assert.deepEqual(reveal.reveal.order, [7])
   assert.equal(reveal.reveal.you[0].slot, 7)
   assert.equal(reveal.reveal.opponent[0].slot, 7)
   assert.notEqual(reveal.reveal.you[0].ctoonId, old.ctoonId)
+  assert.equal(reveal.reveal.you[0].ctoonId, chosen.ctoonId, 'the card the player picked takes slot 7')
+  assert.ok(reveal.you.hand.some(c => c.idx === old.deckIdx), 'the old slot-7 card goes back into the hand')
   assert.equal(reveal.you.swapUsed, true)
   await h.handlers['oggtoons:practice:leave']()
 })
@@ -1088,4 +1131,81 @@ test('core: a slot-7 swap takes 10 off the swapper\'s match score, only for the 
   const [s1, s2] = end ? [end.player1Score, end.player2Score] : [res.player1Score, res.player2Score]
   assert.equal(s1, raw(0) - 10)
   assert.equal(s2, raw(1))
+})
+
+/* ── "+N to all <colour> cards" reaches both sides of the board ─────────────────────────── */
+
+test('core: "+3 to all Green cards" boosts Green cards on both sides, whoever played the power', () => {
+  const power = [{ trigger: 'onReveal', target: { selector: 'allMatching', scope: 'both', filters: [{ by: 'color', value: 'GREEN' }] }, action: { type: 'modifyValue', operation: 'add', amount: 3 } }]
+  const deck = (powerAt) => Array.from({ length: 12 }, (_, i) => ({
+    ctoonId: `g${powerAt}-${i}`, name: `G${i}`, assetPath: '/g.png', characters: [],
+    color: i <= 1 || i === 11 ? 'GREEN' : 'RED', value: 5, type1: null, type2: null, type3: null, group: null,
+    isSlam: false, effect: i === powerAt ? power : null, position: i
+  }))
+  for (const powerSide of [0, 1]) {
+    const decks = [deck(powerSide === 0 ? 0 : 99), deck(powerSide === 1 ? 0 : 99)]
+    const m = freshMatch(decks[0], decks[1])
+    m.hand = [[0, 1, 2, 3, 4, 5], [0, 1, 2, 3, 4, 5]]
+    for (const i of [0, 1]) [0, 1, 2, 3].forEach((cardIdx, k) => placeCard(m, i, { cardIdx, slot: k + 1 }))
+    m.ready = [true, true]
+    revealPlacedCards(m)
+    const green = m.liveBoard.cards.filter(c => c.color === 'GREEN').map(c => `${c.side}:${c.slot}:${c.finalValue}`)
+    assert.deepEqual(green, ['0:1:8', '0:2:8', '1:1:8', '1:2:8'], `power on side ${powerSide}`)
+  }
+})
+
+test('core: a stored allMatching power limited to the owner\'s side is widened to both sides in the match snapshot', () => {
+  const own = [{ trigger: 'onReveal', target: { selector: 'allMatching', scope: 'own', filters: [{ by: 'color', value: 'GREEN' }] }, action: { type: 'modifyValue', operation: 'add', amount: 3 } }]
+  const props = [{ trigger: 'onReveal', target: { selector: 'allMatching', scope: 'opponent', filters: [{ by: 'type', value: 'PROP' }] }, action: { type: 'modifyValue', operation: 'add', amount: -5 } }]
+  const snap = (gtoonEffect) => toSnapshotCard({ id: 'x', name: 'X', assetPath: '/x', gtoonColor: 'GREEN', gtoonValue: 1, gtoonEffect }, 0)
+  assert.equal(snap(own).effect[0].target.scope, 'both')
+  assert.equal(own[0].target.scope, 'own', 'the stored power itself is not mutated')
+  assert.equal(snap(props).effect[0].target.scope, 'opponent', 'opponent-only powers stay opponent-only')
+  assert.equal(snap(null).effect, null)
+})
+
+/* ── Pre-match intro (goal cards + how the game is decided + countdown) ─────────────────── */
+
+test('core: the intro lasts 10s, pushes the first deadline back and is reported as a remaining duration', () => {
+  const m = freshMatch(makeDeck(), makeDeck())
+  const before = m.deadline
+  assert.equal(introActive(m), false)
+  assert.equal(publicMatchView(m, 'a').introRemainingMs, 0)
+  startIntro(m, INTRO_MS, 1_000)
+  assert.equal(INTRO_MS, 10_000)
+  assert.equal(m.introEndsAt, 11_000)
+  assert.equal(m.deadline, before + INTRO_MS, 'the first placing round keeps its full clock')
+  assert.equal(introActive(m, 10_999), true)
+  assert.equal(introActive(m, 11_000), false)
+})
+
+test('core: the public view carries both goal cards with their types and power for the intro screen', () => {
+  const power = [{ trigger: 'onReveal', target: { selector: 'allMatching', scope: 'both', filters: [{ by: 'color', value: 'BLACK' }] }, action: { type: 'modifyValue', operation: 'add', amount: -2 } }]
+  const deckA = makeDeck(); deckA[11] = { ...deckA[11], name: 'Liberty Belle', type1: 'FEMALE', type2: 'HERO', effect: null }
+  const deckB = makeDeck(); deckB[11] = { ...deckB[11], name: 'Jack Bruised', type1: 'MALE', type2: 'HERO', effect: power }
+  const m = freshMatch(deckA, deckB)
+  m.goalCardIdx = [11, 11]
+  const v = publicMatchView(m, 'a')
+  assert.equal(v.you.goalCard.name, 'Liberty Belle')
+  assert.deepEqual([v.you.goalCard.type1, v.you.goalCard.type2], ['FEMALE', 'HERO'])
+  assert.equal(v.you.goalCard.power, null)
+  assert.equal(v.opponent.goalCard.name, 'Jack Bruised')
+  assert.equal(v.opponent.goalCard.power, '-2 to all Black cards')
+})
+
+test('practice: during the intro nothing can be placed or committed; the match view carries the countdown', async () => {
+  const h = harness({ userId: 'intro1', introMs: 400 })
+  await h.handlers['oggtoons:practice:start']({ deckId: 'd1' })
+  const start = await h.waitFor('oggtoons:matchStart')
+  assert.ok(start.introRemainingMs > 0 && start.introRemainingMs <= 400)
+  const view = latestView(h)
+  await h.handlers['oggtoons:practice:place']({ cardIdx: view.you.hand[0].idx, slot: 1 })
+  assert.equal(h.events('oggtoons:error').at(-1)?.code, 'intro')
+  await h.handlers['oggtoons:practice:commit']({ round: 1 })
+  await new Promise(r => setTimeout(r, 450))
+  await h.handlers['oggtoons:practice:place']({ cardIdx: view.you.hand[0].idx, slot: 1 })
+  const after = latestView(h)
+  assert.equal(after.introRemainingMs, 0)
+  assert.equal(after.you.placements.length, 1, 'placing works once the countdown is over')
+  await h.handlers['oggtoons:practice:leave']()
 })

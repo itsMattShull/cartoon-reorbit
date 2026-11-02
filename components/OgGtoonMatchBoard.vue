@@ -6,7 +6,14 @@
     </div>
 
     <template v-else>
-      <div class="og-layout">
+      <!-- First 10 seconds: both players see the goal cards, how the game is decided and a countdown. -->
+      <OgGtoonMatchIntro
+        v-if="introActive"
+        :you="{ name: matchState.you.username || 'You', color: matchState.you.goalColor, card: matchState.you.goalCard }"
+        :opponent="{ name: matchState.opponent.username || 'Opponent', color: matchState.opponent.goalColor, card: matchState.opponent.goalCard }"
+        :seconds="introSeconds"
+      />
+      <div v-else class="og-layout">
         <!-- Board: opponent on top, you on the bottom, call-to-action strip between -->
         <section class="og-arena" data-tut="arena">
           <div v-if="sidebarState" class="og-pbar" data-tut="pbar-opp">
@@ -124,7 +131,7 @@
             </div>
 
             <div v-show="tab === 'info'" data-tut="info-panel" class="og-scroll og-info">
-              <p v-if="!infoCard" class="text-gray-300 text-xs">Click a gToon on the board or in your deck to see its info here.</p>
+              <p v-if="!infoCard" class="text-gray-300 text-xs">Click one of your gToons, or any revealed gToon on the board, to see its info here.</p>
               <template v-else>
                 <div class="flex items-start gap-3">
                   <div class="w-20 flex-shrink-0">
@@ -196,44 +203,46 @@
         </aside>
       </div>
 
-      <!-- Opening "how you win" modal, shown once at the start of a match -->
-      <transition name="fade">
-        <div v-if="introOpen && !matchEnded" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-3">
-          <div class="bg-gray-900 border border-white/20 rounded-xl p-5 w-[30rem] max-w-full max-h-[90vh] overflow-y-auto">
-            <h2 class="text-xl font-bold mb-1 text-center">How to win</h2>
-            <p class="text-xs text-gray-400 mb-3 text-center">Your goal colors are shown at the top of the board. What decides the game depends on them:</p>
-            <ul class="space-y-2 text-sm">
-              <li v-for="s in winScenarios" :key="s.key" class="rounded-lg border p-3" :class="s.key === introScenarioKey ? 'border-cyan-300/70 bg-cyan-300/10' : 'border-white/10 bg-black/20'">
-                <p class="font-semibold">{{ s.title }}<span v-if="s.key === introScenarioKey" class="ml-2 text-[10px] uppercase tracking-wide text-cyan-300">This match</span></p>
-                <p class="text-xs text-gray-300 mt-1">{{ s.text }}</p>
-              </li>
-            </ul>
-            <p class="text-xs text-gray-400 mt-3">Black and Silver cards are never a target color. Silver cards become a color of your choice before scoring. If it is still tied after points, sudden death adds one extra card each until someone leads.</p>
-            <div class="flex justify-center mt-4">
-              <button @click="introOpen = false" class="bg-indigo-500 hover:bg-indigo-600 px-6 py-2 rounded font-semibold">Let's Play</button>
-            </div>
-          </div>
-        </div>
-      </transition>
-
-      <!-- Swap bottom sheet: confirm replacing slot 7 with a random undealt card -->
+      <!-- Swap bottom sheet: choose which hand card takes slot 7 (chosen for you when only one is left) -->
       <transition name="fade">
         <div v-if="swapSheetOpen" class="fixed inset-0 bg-black/50 z-40" @click="closeSwapSheet"></div>
       </transition>
       <transition name="slide-up">
-        <div v-if="swapSheetOpen" class="fixed inset-x-0 bottom-0 bg-gray-900 border-t border-white/20 rounded-t-xl z-50 p-4 max-h-[70vh] overflow-y-auto">
+        <div v-if="swapSheetOpen" class="fixed inset-x-0 bottom-0 bg-gray-900 border-t border-white/20 rounded-t-xl z-50 p-4 max-h-[80vh] overflow-y-auto">
           <h3 class="font-bold mb-3">Swap your slot 7 card</h3>
           <div v-if="slotSevenCard" class="flex items-center gap-3 mb-3">
-            <div class="w-20"><OgGtoonCardTile :card="slotSevenCard" size="board" tone="selected" :animate="false" :inspectable="false" /></div>
+            <div class="w-20 flex-shrink-0"><OgGtoonCardTile :card="slotSevenCard" size="board" tone="selected" :animate="false" :inspectable="false" /></div>
             <p class="text-xs text-gray-300">
-              <strong>{{ slotSevenCard.name }}</strong> goes back into your undealt cards, and a
-              <strong>random</strong> undealt card takes slot 7.
+              <strong>{{ slotSevenCard.name }}</strong> goes back into your hand, and the gToon you choose below takes slot 7.
             </p>
           </div>
+          <template v-if="swapHand.length === 1">
+            <p class="text-xs text-cyan-200 mb-2">Only one gToon is left in your hand, so it is chosen for you:</p>
+          </template>
+          <p v-else class="text-xs text-cyan-200 mb-2">Choose the gToon from your hand to put in slot 7:</p>
+          <div class="grid grid-cols-4 sm:grid-cols-6 gap-2 mb-3">
+            <button
+              v-for="c in swapHand"
+              :key="c.idx"
+              type="button"
+              class="og-swap-card"
+              :class="{ 'og-swap-card-on': swapChoice === c.idx }"
+              :data-tut="'swap-card-' + c.idx"
+              :aria-pressed="swapChoice === c.idx"
+              :aria-label="`${c.name}, value ${c.value}`"
+              @click="pickSwapCard(c)"
+            >
+              <OgGtoonCardTile :card="c" size="board" :tone="swapChoice === c.idx ? 'selected' : 'idle'" :animate="false" :inspectable="false" />
+            </button>
+          </div>
+          <p v-if="swapChoiceCard" class="text-xs text-white bg-black/30 rounded px-2 py-1.5 mb-3">
+            <strong>{{ swapChoiceCard.name }}</strong> · {{ swapChoiceCard.value }} · {{ ogTitleCase(swapChoiceCard.color) }}
+            <span v-if="infoDetail && infoDetail.id === swapChoiceCard.ctoonId" class="text-gray-300"> — {{ infoDetail.power.description || 'No power' }}</span>
+          </p>
           <p class="text-xs text-gray-400 mb-3">Costs 10 points off your match score. You can only do this once per match. Both players choose before the new cards are revealed.</p>
           <div class="flex justify-end gap-2">
             <button @click="closeSwapSheet" class="px-4 py-2 bg-gray-700 rounded text-sm">Cancel</button>
-            <button data-tut="swap-confirm" @click="confirmSwap" class="px-4 py-2 bg-indigo-500 rounded text-sm">Swap (-10 points)</button>
+            <button data-tut="swap-confirm" :disabled="swapChoice === null" @click="confirmSwap" class="px-4 py-2 bg-indigo-500 disabled:opacity-50 rounded text-sm">Swap (-10 points)</button>
           </div>
         </div>
       </transition>
@@ -291,6 +300,7 @@ import { OG_GROUP_LABELS, ogTitleCase } from '@/utils/ogGtoonLabels'
 import { GTOON_PALETTE } from '@/utils/gtoonCardStyle'
 import { normalizeRevealTiming } from '@/utils/ogGtoonReveal'
 import OgGtoonGameLog from '@/components/OgGtoonGameLog.vue'
+import OgGtoonMatchIntro from '@/components/oggtoons/OgGtoonMatchIntro.vue'
 import OgGtoonTutorial from '@/components/oggtoons/OgGtoonTutorial.vue'
 import OgGtoonTournamentResult from '@/components/oggtoons/OgGtoonTournamentResult.vue'
 import { difficultyLabel as ogDifficultyLabel } from '@/utils/ogGtoonDifficulty'
@@ -412,7 +422,7 @@ onBeforeUnmount(() => { playToken += 1 })
  * this is only the display. Hidden once the player has finished their part of the phase. */
 const nowMs = ref(Date.now())
 let tickTimer = null
-onMounted(() => { tickTimer = setInterval(() => { nowMs.value = Date.now() }, 500) })
+onMounted(() => { tickTimer = setInterval(() => { nowMs.value = Date.now() }, 250) })
 onBeforeUnmount(() => clearInterval(tickTimer))
 const secondsLeft = computed(() => {
   const m = matchState.value
@@ -532,13 +542,16 @@ function onHandClick(idx) {
 }
 
 function onSlotClick(slot) {
-  if (!isOpenSlot(slot)) return
-  if (selectedCard.value !== null) {
+  const open = isOpenSlot(slot)
+  // With a hand card selected, a tap on an open slot places it.
+  if (open && selectedCard.value !== null) {
     place(selectedCard.value, slot)
     selectedCard.value = null
-  } else if (placementsBySlot.value.has(slot)) {
-    unplace(slot)
+    return
   }
+  // Otherwise your own gToon always shows its details, whether it is still face down, held or already flipped.
+  showInfo(yourSlotCard(slot))
+  if (open && placementsBySlot.value.has(slot)) unplace(slot)
 }
 
 function confirmDiscard() {
@@ -578,7 +591,7 @@ const helpText = computed(() => {
   }
   if (m.phase === 'swap') {
     return m.you.maySwap
-      ? `Swap your slot-7 card for a random card from your deck, or keep it. Swapping takes 10 points off your match score. Keeping it costs nothing. Slot 7 stays face down for your opponent until you have both decided. If time runs out you keep it.`
+      ? `Swap your slot-7 card for any gToon in your hand (you choose which), or keep it. Swapping takes 10 points off your match score. Keeping it costs nothing. Slot 7 stays face down for your opponent until you have both decided. If time runs out you keep it.`
       : (m.you.swapReady ? 'Waiting for your opponent to choose...' : 'You have no cards left in your deck to swap with.')
   }
   if (m.you.ready) return 'Your cards are face down. They flip, in slot order, when your opponent commits.'
@@ -628,6 +641,7 @@ function showInfo(card) {
   showInfoCard(card)
   setTab('info')
 }
+/** The opponent's gToons show details only once they are face up (oppSlotCard is null for hidden ones). */
 function onBoardCardClick(card) { showInfo(card) }
 const shownInfo = computed(() => ({
   ctoonId: infoDetail.value?.id ?? infoCard.value?.ctoonId ?? null,
@@ -669,10 +683,28 @@ const endReasonLabel = computed(() => {
 
 /* ── Round-3 swap: confirm in the sheet ─────────────────────────────────────────────────── */
 const swapSheetOpen = ref(false)
-function openSwapSheet() { swapSheetOpen.value = true }
-function closeSwapSheet() { swapSheetOpen.value = false }
+const swapPick = ref(null) // deck index of the hand card chosen in the sheet
+// Every card still in hand can come into slot 7.
+const swapHand = computed(() => matchState.value?.you?.hand || [])
+// With a single card left the choice is made for the player; otherwise it is whatever they tapped.
+const swapChoice = computed(() => {
+  if (swapHand.value.length === 1) return swapHand.value[0].idx
+  return swapHand.value.some(c => c.idx === swapPick.value) ? swapPick.value : null
+})
+const swapChoiceCard = computed(() => swapHand.value.find(c => c.idx === swapChoice.value) || null)
+function pickSwapCard(card) {
+  swapPick.value = card.idx
+  showInfoCard(card) // loads its power for the sheet (the Info tab is left alone)
+}
+function openSwapSheet() {
+  swapPick.value = null
+  swapSheetOpen.value = true
+  if (swapHand.value.length === 1) showInfoCard(swapHand.value[0])
+}
+function closeSwapSheet() { swapSheetOpen.value = false; swapPick.value = null }
 function confirmSwap() {
-  swap()
+  if (swapChoice.value === null) return
+  swap(swapChoice.value)
   closeSwapSheet()
 }
 // The sheet belongs to the swap phase; close it if the phase moves on (e.g. the clock ran out).
@@ -718,21 +750,18 @@ watchEffect(() => {
 })
 onBeforeUnmount(() => { sidebarState.value = null })
 
-/* ── Opening "how to win" modal ──────────────────────────────────────────────────────────── */
-const winScenarios = [
-  { key: 'two', title: 'Two different colors revealed', text: 'Whoever has the most cards of both colors combined wins outright, regardless of points. If the combined count is tied, the higher point total wins.' },
-  { key: 'one', title: 'One color revealed (or both the same)', text: 'The player with more cards of that color earns 15 bonus points. The higher point total then wins.' },
-  { key: 'none', title: 'No target color', text: 'The higher point total wins.' }
-]
-const introScenarioKey = computed(() => (goalColors.value.length >= 2 ? 'two' : goalColors.value.length === 1 ? 'one' : 'none'))
-const introOpen = ref(false)
-let introShown = false
-// Only at the start of a match: a reconnect mid-match (round > 1) skips it.
-watch(matchState, (m) => {
-  if (introShown || !m) return
-  introShown = true
-  if (m.round === 1 && !matchEnded.value && !m.tutorial) introOpen.value = true
+/* ── Pre-match intro ─────────────────────────────────────────────────────────────────────────
+ * For the first 10 seconds of a match both players see the goal cards, how the game will be decided and a
+ * countdown (components/oggtoons/OgGtoonMatchIntro.vue). The server sends the time left as a duration and also
+ * refuses placing/committing until it is over; the first round's clock starts after it. A reconnect during the
+ * intro lands back on it with the remaining time. */
+const introEndsLocal = ref(0)
+watch(() => matchState.value?.introRemainingMs, (ms) => {
+  introEndsLocal.value = ms > 0 ? Date.now() + ms : 0
 }, { immediate: true })
+const introActive = computed(() => !!matchState.value && !matchEnded.value && !isTutorial.value
+  && introEndsLocal.value > 0 && nowMs.value < introEndsLocal.value)
+const introSeconds = computed(() => Math.max(0, Math.ceil((introEndsLocal.value - nowMs.value) / 1000)))
 
 /* ── Tutorial guide ──────────────────────────────────────────────────────────────────────── */
 // Everything the guide's steps look at (see utils/ogGtoonTutorialSteps.js), as one object.
@@ -741,6 +770,7 @@ const tutorialBoard = computed(() => ({
   sel: selectedCard.value,
   tab: tab.value,
   swapSheetOpen: swapSheetOpen.value,
+  swapPick: swapChoice.value,
   discardPick: [...discardPick.value],
   flipping: flipping.value,
   ended: !!matchEnded.value
@@ -814,6 +844,8 @@ const tutorialBoard = computed(() => ({
 .og-deck { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; align-content: start; }
 .og-deck-card { cursor: pointer; aspect-ratio: 1; }
 .og-deck-empty { grid-column: 1 / -1; font-size: .7rem; color: #cfe; }
+.og-swap-card { aspect-ratio: 1; border-radius: 8px; padding: 0; background: transparent; cursor: pointer; border: 2px solid transparent; }
+.og-swap-card-on { border-color: var(--og-accent, #99ffff); box-shadow: 0 0 0 2px rgba(153, 255, 255, .35); }
 
 @media (max-width: 767px) {
   .og-layout { grid-template-columns: 1fr; height: auto; }
