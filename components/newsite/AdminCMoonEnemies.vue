@@ -674,6 +674,26 @@
             </div>
           </div>
 
+          <div v-if="memberForm.isRaidBoss" class="pt-1">
+            <button
+              type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
+              :disabled="!memberForm.maxHp || autoBalancing" @click="autoBalanceFor7hp"
+            >{{ autoBalancing ? 'Calculating…' : 'Automate stats for 7hp players' }}</button>
+            <p class="text-[10px] text-gray-500 mt-1">
+              Keeps Max HP as entered above and sets attack chance / crit chance against / crit chance from (and
+              resets accuracy to 100%, base damage to 1) so a 4-player party of all-7hp players has roughly a 25%
+              chance of winning. Simulated against a generic "decent" comp (one player using a stun-type special,
+              three using a flat-damage special) plus whatever wind-up moves are already saved below — not this
+              specific boss's own special attack, which is open-ended admin content outside what a generic
+              estimate can account for. Fills the fields below for you to review; doesn't save by itself.
+            </p>
+            <p v-if="autoBalanceResult" class="text-[10px] mt-1" :class="autoBalanceResult.targetReached ? 'text-green-700' : 'text-amber-600'">
+              {{ autoBalanceResult.targetReached ? 'Tuned for' : 'Closest reachable:' }} ~{{ autoBalanceResult.achievedWinRatePercent }}% win rate vs. 4× 7hp players.
+              <span v-if="!autoBalanceResult.targetReached">Couldn't reach exactly 25% at this HP even at the most lenient/hardest bounds.</span>
+            </p>
+            <p v-if="autoBalanceError" class="text-[10px] text-red-600 mt-1">{{ autoBalanceError }}</p>
+          </div>
+
           <div class="flex gap-2">
             <div class="flex-1 min-w-0">
               <label class="block text-xs font-medium mb-1">Crit chance against (0-100%)</label>
@@ -815,7 +835,7 @@
             <div v-if="editingMemberRewards.length" class="space-y-1">
               <div v-for="r in editingMemberRewards" :key="r.id" class="flex items-center gap-2 text-[11px] bg-gray-50 rounded px-2 py-1">
                 <span class="flex-1 min-w-0 break-words">
-                  {{ rewardLabel(r) }} — {{ r.dropChancePercent }}% chance<span v-if="r.rewardType === 'CTOON'"> · x{{ r.quantity }}</span>
+                  {{ rewardLabel(r) }} — {{ r.dropChancePercent }}% chance<span v-if="r.rewardType === 'CTOON' || r.rewardType === 'PACK'"> · x{{ r.quantity }}</span>
                 </span>
                 <button type="button" class="text-red-600 hover:underline flex-shrink-0" :disabled="deletingRewardId === r.id" @click="removeReward(r)">
                   {{ deletingRewardId === r.id ? 'Removing…' : 'Remove' }}
@@ -833,13 +853,14 @@
                   <option value="AVATAR">Avatar</option>
                   <option value="BACKGROUND">Background</option>
                   <option value="POINTS">Points</option>
+                  <option value="PACK">Pack</option>
                 </select>
               </div>
               <div class="w-24 flex-shrink-0">
                 <label class="block text-[11px] font-medium mb-1">Drop % (0-100)</label>
                 <input v-model.number="rewardForm.dropChancePercent" type="number" min="0" max="100" step="0.1" class="w-full border rounded px-2 py-1" />
               </div>
-              <div v-if="rewardForm.rewardType === 'CTOON'" class="w-20 flex-shrink-0">
+              <div v-if="rewardForm.rewardType === 'CTOON' || rewardForm.rewardType === 'PACK'" class="w-20 flex-shrink-0">
                 <label class="block text-[11px] font-medium mb-1">Qty (1-20)</label>
                 <input v-model.number="rewardForm.quantity" type="number" min="1" max="20" class="w-full border rounded px-2 py-1" />
               </div>
@@ -881,6 +902,13 @@
               <select v-model="rewardForm.backgroundId" class="w-full border rounded px-2 py-1">
                 <option value="">Select a background…</option>
                 <option v-for="bg in backgrounds" :key="bg.id" :value="bg.id">{{ bg.label || bg.filename }}</option>
+              </select>
+            </div>
+            <div v-else-if="rewardForm.rewardType === 'PACK'">
+              <label class="block text-[11px] font-medium mb-1">Pack</label>
+              <select v-model="rewardForm.packId" class="w-full border rounded px-2 py-1">
+                <option value="">Select a pack…</option>
+                <option v-for="p in packsCatalog" :key="p.id" :value="p.id">{{ p.name }}</option>
               </select>
             </div>
             <!-- POINTS needs no catalog picker — its amount is the "Points (1-5000)" input above. -->
@@ -1038,6 +1066,7 @@ const members = ref([])
 const backgrounds = ref([])
 const avatarsCatalog = ref([])
 const ctoonsCatalog = ref([])
+const packsCatalog = ref([])
 const joinEffects = ref([])
 const specialAttacks = ref([])
 const loading = ref(false)
@@ -1164,7 +1193,7 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [factionsData, membersData, backgroundsData, avatarsData, ctoonsData, joinEffectsData, cmoonsData, specialAttacksData] = await Promise.all([
+    const [factionsData, membersData, backgroundsData, avatarsData, ctoonsData, joinEffectsData, cmoonsData, specialAttacksData, packsData] = await Promise.all([
       $fetch('/api/admin/cmoon-enemy-factions'),
       $fetch('/api/admin/cmoon-enemy-members'),
       $fetch('/api/admin/backgrounds'),
@@ -1173,12 +1202,15 @@ async function load() {
       $fetch('/api/admin/cmoon-join-effects'),
       $fetch('/api/admin/cmoons'),
       $fetch('/api/admin/cmoon-special-attacks'),
+      $fetch('/api/admin/packs', { query: { limit: 200 } }),
     ])
     factions.value = factionsData?.factions || []
     members.value = membersData?.members || []
     backgrounds.value = backgroundsData || []
     avatarsCatalog.value = avatarsData || []
     ctoonsCatalog.value = ctoonsData || []
+    // /api/admin/packs returns { items, total, page, limit }, unlike the bare-array catalogs above.
+    packsCatalog.value = packsData?.items || []
     joinEffects.value = joinEffectsData?.effects || []
     higherTierFirst.value = !!cmoonsData?.cMoonEnemyHigherTierFirst
     captainBoostEnabled.value = !!cmoonsData?.cMoonCaptainBoostEnabled
@@ -1872,6 +1904,8 @@ function resetMemberForm() {
   editingMemberWindUpMoves.value = []
   resetRewardForm()
   resetWindUpMoveForm()
+  autoBalanceResult.value = null
+  autoBalanceError.value = ''
   Object.assign(memberForm, emptyMemberForm())
   if (memberFactionFilter.value) memberForm.factionId = memberFactionFilter.value
 }
@@ -2101,6 +2135,42 @@ async function saveMember() {
   }
 }
 
+// ── Automate stats for 7hp players (see server/utils/cmoonRaidBalance.js for the solver) ──────
+const autoBalancing = ref(false)
+const autoBalanceError = ref('')
+const autoBalanceResult = ref(null)
+
+async function autoBalanceFor7hp() {
+  if (!memberForm.maxHp || autoBalancing.value) return
+  autoBalancing.value = true
+  autoBalanceError.value = ''
+  autoBalanceResult.value = null
+  try {
+    const result = await $fetch('/api/admin/cmoon-enemy-members/auto-balance-7hp', {
+      method: 'POST',
+      body: {
+        maxHp: memberForm.maxHp,
+        windUpEnabled: memberForm.windUpEnabled,
+        // Whatever wind-up moves are already saved for this member — a brand-new member has none
+        // yet, which the solver treats the same as the feature being off.
+        windUpMoves: editingMemberWindUpMoves.value.map(w => ({
+          occurrencePercent: w.occurrencePercent, bonusType: w.bonusType, bonusAmount: w.bonusAmount,
+        })),
+      },
+    })
+    memberForm.attackChancePercent = result.attackChancePercent
+    memberForm.critChanceFromPercent = result.critChanceFromPercent
+    memberForm.critChanceAgainstPercent = result.critChanceAgainstPercent
+    memberForm.attackAccuracyPercent = result.attackAccuracyPercent
+    memberForm.baseDamage = result.baseDamage
+    autoBalanceResult.value = result
+  } catch (e) {
+    autoBalanceError.value = e?.data?.statusMessage || 'Failed to calculate stats'
+  } finally {
+    autoBalancing.value = false
+  }
+}
+
 async function removeMember(m) {
   if (m.hasBattles) return
   if (!confirm(`Delete member "${m.name}"? This can't be undone.`)) return
@@ -2163,7 +2233,7 @@ const rewardFormError = ref('')
 const deletingRewardId = ref('')
 const rewardCtoonSearch = ref('')
 
-const emptyRewardForm = () => ({ rewardType: 'CTOON', ctoonId: '', avatarId: '', backgroundId: '', dropChancePercent: 10, quantity: 1, pointsAmount: 100 })
+const emptyRewardForm = () => ({ rewardType: 'CTOON', ctoonId: '', avatarId: '', backgroundId: '', packId: '', dropChancePercent: 10, quantity: 1, pointsAmount: 100 })
 const rewardForm = reactive(emptyRewardForm())
 
 function resetRewardForm() {
@@ -2176,6 +2246,7 @@ watch(() => rewardForm.rewardType, () => {
   rewardForm.ctoonId = ''
   rewardForm.avatarId = ''
   rewardForm.backgroundId = ''
+  rewardForm.packId = ''
   rewardCtoonSearch.value = ''
 })
 
@@ -2194,6 +2265,7 @@ function rewardLabel(r) {
   if (r.rewardType === 'CTOON') return r.ctoon?.name || 'Unknown cToon'
   if (r.rewardType === 'AVATAR') return r.avatar?.label || 'Unknown avatar'
   if (r.rewardType === 'POINTS') return `${r.quantity} points`
+  if (r.rewardType === 'PACK') return r.pack?.name || 'Unknown pack'
   return r.background?.label || 'Unknown background'
 }
 
@@ -2218,6 +2290,12 @@ async function addReward() {
   } else if (rewardForm.rewardType === 'BACKGROUND') {
     if (!rewardForm.backgroundId) { rewardFormError.value = 'Pick a background.'; return }
     body.backgroundId = rewardForm.backgroundId
+  } else if (rewardForm.rewardType === 'PACK') {
+    if (!rewardForm.packId) { rewardFormError.value = 'Pick a pack.'; return }
+    body.packId = rewardForm.packId
+    const quantity = Math.trunc(Number(rewardForm.quantity)) || 1
+    if (quantity < 1 || quantity > 20) { rewardFormError.value = 'Quantity must be between 1 and 20.'; return }
+    body.quantity = quantity
   } else {
     // POINTS
     const pointsAmount = Math.trunc(Number(rewardForm.pointsAmount))

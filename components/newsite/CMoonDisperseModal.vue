@@ -18,7 +18,7 @@
     <div class="cmd relative bg-white w-full sm:max-w-lg flex flex-col text-gray-900" style="height:100dvh; max-height:100dvh;">
       <div class="flex items-center justify-between px-4 py-3 border-b flex-shrink-0">
         <h3 class="text-sm font-semibold break-words min-w-0">
-          {{ view === 'create' ? 'New cToon Offer' : (view === 'detail' ? 'Manage Offer' : `cToon Offers — ${cmoon.name}`) }}
+          {{ view === 'create' ? 'New Offer' : (view === 'detail' ? 'Manage Offer' : `Offers — ${cmoon.name}`) }}
         </h3>
         <button class="cmd-tap text-gray-400 hover:text-gray-600 text-xl leading-none flex-shrink-0" @click="attemptClose" :disabled="busy">✕</button>
       </div>
@@ -67,18 +67,18 @@
           </div>
 
           <div>
-            <label class="block text-xs font-medium mb-1">cToon{{ selectedOptions.length === 1 ? '' : 's' }} offered{{ selectedOptions.length > 1 ? ' (members pick one)' : '' }}</label>
-            <p class="text-[11px] text-gray-500 mb-1">Only unlimited-quantity cToons can be offered here. Add just one for a plain "everyone gets this" offer, or several to let members pick.</p>
+            <label class="block text-xs font-medium mb-1">Option{{ selectedOptions.length === 1 ? '' : 's' }} offered{{ selectedOptions.length > 1 ? ' (members pick one)' : '' }}</label>
+            <p class="text-[11px] text-gray-500 mb-1">Each option is a cToon or a Pack. Only unlimited-quantity cToons can be offered. Add just one for a plain "everyone gets this" offer, or several to let members pick.</p>
             <input
               v-model="ctoonSearch"
               class="cmd-field w-full border rounded px-2 py-1"
               style="font-size:16px"
-              placeholder="Type 3+ characters"
+              placeholder="Type 3+ characters of a cToon"
               autocapitalize="none" autocorrect="off" spellcheck="false"
               role="combobox"
               :aria-expanded="ctoonSuggestions.length > 0"
               aria-controls="disperse-offer-ctoon-suggestions"
-              :disabled="eligibleCtoonsLoading"
+              :disabled="eligibleCtoonsLoading || selectedOptions.length >= MAX_OPTIONS"
             />
             <p v-if="eligibleCtoonsLoading" class="text-[11px] text-gray-500 mt-1">Loading eligible cToons…</p>
             <div v-if="ctoonSuggestions.length" id="disperse-offer-ctoon-suggestions" class="mt-2 border rounded divide-y bg-white max-h-40 overflow-y-auto">
@@ -86,11 +86,24 @@
                 v-for="c in ctoonSuggestions" :key="c.id"
                 type="button"
                 class="cmd-tap w-full text-left px-3 text-[11px] hover:bg-gray-100"
-                @click="addOption(c)"
+                @click="addCtoonOption(c)"
               >{{ c.name }}</button>
             </div>
+
+            <div class="mt-2 flex gap-2">
+              <select
+                v-model="selectedPackId" class="cmd-field flex-1 border rounded px-2 py-1" style="font-size:16px"
+                :disabled="eligiblePacksLoading || selectedOptions.length >= MAX_OPTIONS"
+              >
+                <option value="">{{ eligiblePacksLoading ? 'Loading packs…' : 'Or add a pack…' }}</option>
+                <option v-for="p in packChoices" :key="p.id" :value="p.id">{{ p.name }}</option>
+              </select>
+              <button type="button" class="cmd-tap px-3 border rounded text-[11px] flex-shrink-0" :disabled="!selectedPackId" @click="addPackOption">Add</button>
+            </div>
+
             <div v-if="selectedOptions.length" class="mt-2 space-y-1">
-              <div v-for="(opt, i) in selectedOptions" :key="opt.id" class="flex items-center gap-2 text-[11px]">
+              <div v-for="(opt, i) in selectedOptions" :key="`${opt.kind}:${opt.id}`" class="flex items-center gap-2 text-[11px]">
+                <span class="text-gray-400 flex-shrink-0">{{ opt.kind === 'PACK' ? 'Pack' : 'cToon' }}</span>
                 <span class="break-words min-w-0">{{ opt.name }}</span>
                 <button type="button" class="cmd-tap ml-auto flex-shrink-0 text-red-600" @click="selectedOptions.splice(i, 1)">Remove</button>
               </div>
@@ -129,8 +142,9 @@
 
             <div class="space-y-1">
               <div v-for="opt in detail.options" :key="opt.id" class="flex items-center gap-2 text-[11px] border rounded px-2 py-1.5">
-                <CtoonImage v-if="opt.assetPath" :ctoon="opt" :alt="opt.name" class="h-8 w-auto flex-shrink-0" />
-                <span class="break-words min-w-0 flex-1">{{ opt.name }}</span>
+                <CtoonImage v-if="opt.kind === 'CTOON' && opt.assetPath" :ctoon="opt" :alt="opt.name" class="h-8 w-auto flex-shrink-0" />
+                <img v-else-if="opt.kind === 'PACK' && opt.assetPath" :src="opt.assetPath" :alt="opt.name" class="h-8 w-auto flex-shrink-0 object-contain" />
+                <span class="break-words min-w-0 flex-1">{{ opt.name }}<span v-if="opt.kind === 'PACK'" class="text-gray-400"> (Pack)</span></span>
                 <span class="flex-shrink-0 text-gray-600">{{ opt.claimCount }} pick{{ opt.claimCount === 1 ? '' : 's' }}</span>
               </div>
             </div>
@@ -245,6 +259,11 @@ const selectedCMoonIds = ref([props.cmoon.id])
 const eligibleCtoons = ref([])
 const eligibleCtoonsLoading = ref(false)
 const ctoonSearch = ref('')
+const eligiblePacks = ref([])
+const eligiblePacksLoading = ref(false)
+const selectedPackId = ref('')
+// Each entry: { kind: 'CTOON'|'PACK', id, name, assetPath } — dedup'd on (kind, id), never on id
+// alone, since a cToon id and a pack id are from different tables and could coincidentally match.
 const selectedOptions = ref([])
 const quantityPerMember = ref(1)
 const formError = ref('')
@@ -262,18 +281,46 @@ async function loadEligibleCtoons() {
   }
 }
 
+async function loadEligiblePacks() {
+  eligiblePacksLoading.value = true
+  try {
+    const res = await $fetch('/api/admin/cmoon-dispersal-offers/eligible-packs')
+    eligiblePacks.value = res.packs || []
+  } catch {
+    eligiblePacks.value = []
+  } finally {
+    eligiblePacksLoading.value = false
+  }
+}
+
 const ctoonSuggestions = computed(() => {
   const v = String(ctoonSearch.value || '').trim().toLowerCase()
   if (v.length < 3) return []
-  const chosenIds = new Set(selectedOptions.value.map(o => o.id))
+  const chosenIds = new Set(selectedOptions.value.filter(o => o.kind === 'CTOON').map(o => o.id))
   return eligibleCtoons.value.filter(c => !chosenIds.has(c.id) && c.name?.toLowerCase().includes(v)).slice(0, 20)
 })
 
-function addOption(c) {
+// Packs catalogs are small (no live-search needed, unlike cToons) — a plain dropdown of
+// not-yet-chosen packs, same shape as AdminManageUsers.vue's "Reset Pack Limit" pack picker.
+const packChoices = computed(() => {
+  const chosenIds = new Set(selectedOptions.value.filter(o => o.kind === 'PACK').map(o => o.id))
+  return eligiblePacks.value.filter(p => !chosenIds.has(p.id))
+})
+
+function addCtoonOption(c) {
   if (selectedOptions.value.length >= MAX_OPTIONS) return
-  if (selectedOptions.value.find(o => o.id === c.id)) return
-  selectedOptions.value.push(c)
+  if (selectedOptions.value.find(o => o.kind === 'CTOON' && o.id === c.id)) return
+  selectedOptions.value.push({ kind: 'CTOON', id: c.id, name: c.name, assetPath: c.assetPath })
   ctoonSearch.value = ''
+}
+
+function addPackOption() {
+  if (!selectedPackId.value || selectedOptions.value.length >= MAX_OPTIONS) return
+  const p = eligiblePacks.value.find(p => p.id === selectedPackId.value)
+  if (!p) return
+  if (selectedOptions.value.find(o => o.kind === 'PACK' && o.id === p.id)) return
+  selectedOptions.value.push({ kind: 'PACK', id: p.id, name: p.name, assetPath: p.imagePath })
+  selectedPackId.value = ''
 }
 
 const safeQuantity = computed(() => {
@@ -290,11 +337,13 @@ const canSubmit = computed(() =>
 function openCreate() {
   selectedCMoonIds.value = [props.cmoon.id]
   ctoonSearch.value = ''
+  selectedPackId.value = ''
   selectedOptions.value = []
   quantityPerMember.value = 1
   formError.value = ''
   view.value = 'create'
   if (!eligibleCtoons.value.length) loadEligibleCtoons()
+  if (!eligiblePacks.value.length) loadEligiblePacks()
 }
 
 async function submitCreate() {
@@ -306,7 +355,7 @@ async function submitCreate() {
       method: 'POST',
       body: {
         cMoonIds: selectedCMoonIds.value,
-        ctoonIds: selectedOptions.value.map(o => o.id),
+        options: selectedOptions.value.map(o => ({ kind: o.kind, id: o.id })),
         quantityPerMember: safeQuantity.value,
       },
     })

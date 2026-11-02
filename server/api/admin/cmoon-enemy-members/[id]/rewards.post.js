@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
   if (!parsed.ok) {
     throw createError({ statusCode: 400, statusMessage: parsed.message })
   }
-  const { rewardType, ctoonId, avatarId, backgroundId } = parsed.data
+  const { rewardType, ctoonId, avatarId, backgroundId, packId } = parsed.data
 
   // parseRewardBody guarantees exactly the one id matching rewardType is set; confirm it's real.
   if (rewardType === 'CTOON') {
@@ -41,6 +41,9 @@ export default defineEventHandler(async (event) => {
   } else if (rewardType === 'BACKGROUND') {
     const found = await db.background.count({ where: { id: backgroundId } })
     if (!found) throw createError({ statusCode: 404, statusMessage: 'Reward background not found' })
+  } else if (rewardType === 'PACK') {
+    const found = await db.pack.count({ where: { id: packId } })
+    if (!found) throw createError({ statusCode: 404, statusMessage: 'Reward pack not found' })
   }
 
   let created

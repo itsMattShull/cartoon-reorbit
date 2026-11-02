@@ -27,7 +27,11 @@ export default defineEventHandler(async (event) => {
         id: true, quantityPerMember: true, status: true, createdAt: true,
         options: {
           orderBy: { sortOrder: 'asc' },
-          select: { id: true, ctoon: { select: { id: true, name: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT } } },
+          select: {
+            id: true,
+            ctoon: { select: { id: true, name: true, assetPath: true, ...OG_GTOON_DISPLAY_SELECT } },
+            pack: { select: { id: true, name: true, imagePath: true } },
+          },
         },
         claims: { where: { userId }, select: { optionId: true, quantity: true } },
       },
@@ -40,7 +44,11 @@ export default defineEventHandler(async (event) => {
       id: o.id,
       quantityPerMember: o.quantityPerMember,
       status: o.status,
-      options: o.options.map(opt => ({ id: opt.id, ctoonId: opt.ctoon.id, name: opt.ctoon.name, assetPath: opt.ctoon.assetPath, ...ogGtoonDisplay(opt.ctoon) })),
+      // Each option is a cToon or a Pack, never both — see CMoonDispersalOption's own schema
+      // comment. ogGtoonDisplay's OG-gToon special rendering only applies to cToons.
+      options: o.options.map(opt => opt.ctoon
+        ? { id: opt.id, kind: 'CTOON', ctoonId: opt.ctoon.id, name: opt.ctoon.name, assetPath: opt.ctoon.assetPath, ...ogGtoonDisplay(opt.ctoon) }
+        : { id: opt.id, kind: 'PACK', packId: opt.pack.id, name: opt.pack.name, assetPath: opt.pack.imagePath }),
       myClaim: o.claims[0] ? { optionId: o.claims[0].optionId, quantity: o.claims[0].quantity } : null,
     })),
   }

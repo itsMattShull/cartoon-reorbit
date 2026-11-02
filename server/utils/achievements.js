@@ -249,7 +249,7 @@ async function getOrCreateUserPoints(tx, userId) {
 // caller must only enqueue the returned `ctoonJobs` after its transaction has committed (see
 // enqueueCtoonJobs).
 export async function grantRewardInTx(tx, userId, reward, method) {
-  const summary = { points: 0, backgrounds: 0, avatars: 0, border: false, glow: false, ctoonJobs: [] }
+  const summary = { points: 0, backgrounds: 0, avatars: 0, border: false, glow: false, ctoonJobs: [], packs: 0, packGrants: [] }
   if (!reward) return summary
 
   // Points
@@ -339,6 +339,26 @@ export async function grantRewardInTx(tx, userId, reward, method) {
     const canGive = lim == null ? qty : Math.max(0, Math.min(qty, lim - minted))
     if (canGive > 0) {
       summary.ctoonJobs.push({ ctoonId: rc.ctoonId, quantity: canGive, name: rc?.ctoon?.name || rc.ctoonId })
+    }
+  }
+
+  // Packs — unlike cToons above, these are granted synchronously right here (tx.userPack.create),
+  // not queued: a pack has no mint/supply step of its own, so there's nothing to defer post-commit
+  // the way mintQueue defers an actual cToon mint. Not dedup'd/ownership-capped like backgrounds/
+  // avatars either — every hit grants real new sealed packs, same as several independent CTOON
+  // rows each mint their own copies.
+  const packRewards = reward.packs || []
+  if (packRewards.length) {
+    const packIds = [...new Set(packRewards.map(p => p.packId))]
+    const packRows = await tx.pack.findMany({ where: { id: { in: packIds } }, select: { id: true, name: true } })
+    const packNameById = new Map(packRows.map(p => [p.id, p.name]))
+    for (const rp of packRewards) {
+      const qty = Math.max(1, Number(rp.quantity || 1))
+      for (let i = 0; i < qty; i++) {
+        await tx.userPack.create({ data: { userId, packId: rp.packId, opened: false, pricePaid: null } })
+      }
+      summary.packs += qty
+      summary.packGrants.push({ packId: rp.packId, name: packNameById.get(rp.packId) || rp.packId, quantity: qty })
     }
   }
 

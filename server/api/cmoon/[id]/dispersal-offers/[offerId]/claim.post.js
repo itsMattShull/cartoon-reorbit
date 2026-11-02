@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
       select: {
         id: true, status: true, quantityPerMember: true,
         cMoons: { select: { cMoonId: true } },
-        options: { select: { id: true, ctoonId: true } },
+        options: { select: { id: true, ctoonId: true, packId: true } },
       },
     }),
   ])
@@ -50,20 +50,34 @@ export default defineEventHandler(async (event) => {
 
   const option = offer.options.find(o => o.id === optionId)
   if (!option) throw createError({ statusCode: 400, statusMessage: 'Invalid option' })
+  const isPack = !!option.packId
 
   let claim
   try {
-    claim = await db.cMoonDispersalClaim.create({
-      data: {
-        offerId,
-        optionId: option.id,
-        ctoonId: option.ctoonId,
-        userId,
-        username: me.username,
-        cMoonId: me.cMoonId,
-        quantity: offer.quantityPerMember,
-      },
-      select: { id: true },
+    // A pack option's grant (tx.userPack.create) happens synchronously in the SAME transaction as
+    // the claim row — unlike a cToon's mint, a pack has no mint/supply step of its own to defer
+    // post-commit, so there's no reason not to grant it atomically with the claim that earns it
+    // (same shape server/api/cmart/packs/buy.post.js already uses for a cMart pack purchase).
+    claim = await db.$transaction(async (tx) => {
+      const created = await tx.cMoonDispersalClaim.create({
+        data: {
+          offerId,
+          optionId: option.id,
+          ctoonId: option.ctoonId,
+          packId: option.packId,
+          userId,
+          username: me.username,
+          cMoonId: me.cMoonId,
+          quantity: offer.quantityPerMember,
+        },
+        select: { id: true },
+      })
+      if (isPack) {
+        for (let i = 0; i < offer.quantityPerMember; i++) {
+          await tx.userPack.create({ data: { userId, packId: option.packId, opened: false, pricePaid: null } })
+        }
+      }
+      return created
     })
   } catch (err) {
     if (err?.code === 'P2002') {
@@ -72,25 +86,28 @@ export default defineEventHandler(async (event) => {
     throw err
   }
 
-  // Fire-and-forget, exactly like every other bulk-mint call site in the app (grantCMoonPrizes,
-  // the cZone-contest distribute route) — mint.worker.js is never special-cased per caller, so
-  // nothing here tracks these jobs' outcomes afterward. The CMoonDispersalClaim row above is the
-  // durable record of "who picked what"; whether each mint actually lands is left entirely to
-  // the worker's own atomic transaction and its normal sold-out/failure handling.
-  const jobs = []
-  for (let copy = 0; copy < offer.quantityPerMember; copy++) {
-    jobs.push({
-      name: 'mintCtoon',
-      data: {
-        userId,
-        ctoonId: option.ctoonId,
-        isSpecial: true,
-        method: 'CMOON_DISPERSAL',
-      },
-      opts: { jobId: `dispersal-claim:${claim.id}:${copy}`, priority: CLAIM_JOB_PRIORITY },
-    })
+  // cToon options still mint fire-and-forget, exactly like every other bulk-mint call site in the
+  // app (grantCMoonPrizes, the cZone-contest distribute route) — mint.worker.js is never
+  // special-cased per caller, so nothing here tracks these jobs' outcomes afterward. The
+  // CMoonDispersalClaim row above is the durable record of "who picked what"; whether each mint
+  // actually lands is left entirely to the worker's own atomic transaction and its normal
+  // sold-out/failure handling.
+  if (!isPack) {
+    const jobs = []
+    for (let copy = 0; copy < offer.quantityPerMember; copy++) {
+      jobs.push({
+        name: 'mintCtoon',
+        data: {
+          userId,
+          ctoonId: option.ctoonId,
+          isSpecial: true,
+          method: 'CMOON_DISPERSAL',
+        },
+        opts: { jobId: `dispersal-claim:${claim.id}:${copy}`, priority: CLAIM_JOB_PRIORITY },
+      })
+    }
+    await mintQueue.addBulk(jobs)
   }
-  await mintQueue.addBulk(jobs)
 
   return { claimId: claim.id, optionId: option.id, quantity: offer.quantityPerMember }
 })

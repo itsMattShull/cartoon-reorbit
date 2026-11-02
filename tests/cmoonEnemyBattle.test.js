@@ -308,7 +308,7 @@ test('buildGrantableReward ignores a row whose id field is missing for its decla
   // e.g. a CTOON-type row with no ctoonId (shouldn't happen given API validation, but the
   // mapping itself must not silently grant a malformed entry either)
   const hits = [{ rewardType: 'CTOON', ctoonId: null, quantity: 1 }]
-  assert.deepEqual(buildGrantableReward(hits), { backgrounds: [], avatars: [], ctoons: [], points: 0 })
+  assert.deepEqual(buildGrantableReward(hits), { backgrounds: [], avatars: [], ctoons: [], packs: [], points: 0 })
 })
 
 test('buildGrantableReward sums multiple independently-rolled POINTS rows into one total', () => {
@@ -320,7 +320,13 @@ test('buildGrantableReward sums multiple independently-rolled POINTS rows into o
 })
 
 test('buildGrantableReward defaults with no hits at all', () => {
-  assert.deepEqual(buildGrantableReward([]), { backgrounds: [], avatars: [], ctoons: [], points: 0 })
+  assert.deepEqual(buildGrantableReward([]), { backgrounds: [], avatars: [], ctoons: [], packs: [], points: 0 })
+})
+
+test('buildGrantableReward collects PACK rows with a defaulted quantity', () => {
+  const hits = [{ rewardType: 'PACK', packId: 'p1', quantity: 2 }, { rewardType: 'PACK', packId: 'p2', quantity: 0 }]
+  const reward = buildGrantableReward(hits)
+  assert.deepEqual(reward.packs, [{ packId: 'p1', quantity: 2 }, { packId: 'p2', quantity: 1 }])
 })
 
 test('PLAYER_MAX_HP is the 5 hits specified by the feature', () => {

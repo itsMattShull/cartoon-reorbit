@@ -356,7 +356,7 @@
         </div>
 
         <template v-if="offers.length">
-          <h2 class="cmp-section-title">cToon Offers</h2>
+          <h2 class="cmp-section-title">Offers</h2>
           <div v-for="o in offers" :key="o.id" class="cmp-offer">
             <p class="cmp-offer-meta">
               <span v-if="o.myClaim">You claimed this offer.</span>
@@ -377,7 +377,8 @@
                 :disabled="!!o.myClaim || o.status !== 'OPEN' || !eligible || offerClaiming[o.id]"
                 @click="offerSelections[o.id] = opt.id"
               >
-                <CtoonImage :ctoon="opt" :alt="opt.name" class="cmp-card-img" loading="lazy" />
+                <CtoonImage v-if="opt.kind !== 'PACK'" :ctoon="opt" :alt="opt.name" class="cmp-card-img" loading="lazy" />
+                <img v-else :src="opt.assetPath" :alt="opt.name" class="cmp-card-img" loading="lazy" />
                 <span class="cmp-card-name">{{ opt.name }}</span>
                 <span v-if="o.myClaim && o.myClaim.optionId === opt.id" class="cmp-offer-picked-badge">Your pick</span>
               </button>
@@ -646,7 +647,7 @@ async function claimOffer(offer) {
   const optionId = offerSelections[offer.id]
   if (!optionId || offerClaiming[offer.id]) return
   const opt = offer.options.find(o => o.id === optionId)
-  if (!confirm(`Claim ${opt?.name || 'this cToon'}? This can't be changed once claimed.`)) return
+  if (!confirm(`Claim ${opt?.name || 'this'}? This can't be changed once claimed.`)) return
   offerClaiming[offer.id] = true
   offerErrors[offer.id] = ''
   try {
@@ -657,9 +658,9 @@ async function claimOffer(offer) {
     offer.myClaim = { optionId: res.optionId, quantity: res.quantity }
     openRewardModal({
       kind: 'offer',
-      eyebrow: 'cToon Offer Claimed!',
+      eyebrow: opt?.kind === 'PACK' ? 'Pack Offer Claimed!' : 'cToon Offer Claimed!',
       title: offer.options.length > 1 ? 'Nice pick!' : 'Claimed!',
-      items: [{ id: res.optionId, imagePath: opt?.assetPath || null, label: opt?.name || 'cToon', qty: res.quantity, variant: 'ctoon' }],
+      items: [{ id: res.optionId, imagePath: opt?.assetPath || null, label: opt?.name || 'reward', qty: res.quantity, variant: opt?.kind === 'PACK' ? 'pack' : 'ctoon' }],
     })
   } catch (err) {
     offerErrors[offer.id] = err?.data?.statusMessage || 'Failed to claim'

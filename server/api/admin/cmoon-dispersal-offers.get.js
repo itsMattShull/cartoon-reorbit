@@ -22,7 +22,14 @@ export default defineEventHandler(async (event) => {
       initiatedBy: { select: { username: true } },
       closedBy: { select: { username: true } },
       cMoons: { select: { cMoon: { select: { id: true, name: true } } } },
-      options: { orderBy: { sortOrder: 'asc' }, select: { ctoon: { select: { id: true, name: true, assetPath: true } } } },
+      options: {
+        orderBy: { sortOrder: 'asc' },
+        select: {
+          id: true,
+          ctoon: { select: { id: true, name: true, assetPath: true } },
+          pack: { select: { id: true, name: true, imagePath: true } },
+        },
+      },
       _count: { select: { claims: true } },
     },
   })
@@ -37,7 +44,11 @@ export default defineEventHandler(async (event) => {
       initiatedByUsername: o.initiatedBy?.username || '',
       closedByUsername: o.closedBy?.username || '',
       cMoons: o.cMoons.map(c => ({ id: c.cMoon.id, name: c.cMoon.name })),
-      options: o.options.map(opt => ({ ctoonId: opt.ctoon.id, name: opt.ctoon.name, assetPath: opt.ctoon.assetPath })),
+      // Each option is a cToon or a Pack, never both — see CMoonDispersalOption's own schema
+      // comment. `kind` lets the admin UI render the right image/label without re-deriving it.
+      options: o.options.map(opt => opt.ctoon
+        ? { id: opt.id, kind: 'CTOON', ctoonId: opt.ctoon.id, name: opt.ctoon.name, assetPath: opt.ctoon.assetPath }
+        : { id: opt.id, kind: 'PACK', packId: opt.pack.id, name: opt.pack.name, assetPath: opt.pack.imagePath }),
       totalClaims: o._count?.claims ?? 0,
     })),
   }

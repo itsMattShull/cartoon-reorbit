@@ -330,7 +330,7 @@ export function forcePickOneReward(rewardRows) {
 // border/glow aren't reachable from a cMoon enemy reward table (buildGrantableReward never sets
 // borderCMoonId/glowCMoonId for this caller), so they're deliberately not checked here.
 export function grantSummaryIsEmpty(summary) {
-  return !summary?.points && !summary?.backgrounds && !summary?.avatars && !summary?.ctoonJobs?.length
+  return !summary?.points && !summary?.backgrounds && !summary?.avatars && !summary?.ctoonJobs?.length && !summary?.packs
 }
 
 // Merges a member's own unique taunts (CMoonEnemyMemberTaunt) with its faction's shared pool
@@ -494,6 +494,7 @@ export function buildGrantableReward(hitRewardRows) {
   const backgrounds = []
   const avatars = []
   const ctoons = []
+  const packs = []
   let points = 0
   for (const row of hitRewardRows) {
     if (row.rewardType === 'BACKGROUND' && row.backgroundId) backgrounds.push({ backgroundId: row.backgroundId })
@@ -504,6 +505,11 @@ export function buildGrantableReward(hitRewardRows) {
         quantity: Math.max(1, Number(row.quantity) || 1),
         ctoon: row.ctoon ? { quantity: row.ctoon.quantity, name: row.ctoon.name } : undefined,
       })
+    // Sealed Packs — no supply cap to resolve here (unlike cToons' mint-limit math above), just
+    // how many copies to grant. Granted synchronously in grantRewardInTx (tx.userPack.create),
+    // not queued, since a pack has no mint/supply step of its own.
+    } else if (row.rewardType === 'PACK' && row.packId) {
+      packs.push({ packId: row.packId, quantity: Math.max(1, Number(row.quantity) || 1) })
     // Plain site points (User.points via grantRewardInTx, which already reads a bare `points`
     // number off this same bundle) — summed across every hit POINTS row into the one total
     // grantRewardInTx expects, same as several independent CTOON rows each contribute their own
@@ -512,5 +518,5 @@ export function buildGrantableReward(hitRewardRows) {
       points += Math.max(0, Number(row.quantity) || 0)
     }
   }
-  return { backgrounds, avatars, ctoons, points }
+  return { backgrounds, avatars, ctoons, packs, points }
 }

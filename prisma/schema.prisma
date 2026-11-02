@@ -1106,11 +1106,14 @@ model Pack {
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
-  rarityConfigs PackRarityConfig[]
-  ctoonOptions  PackCtoonOption[]
-  userPacks     UserPack[]
-  limitResets   UserPackLimitReset[]
-  rewardPacks   RewardPack[]
+  rarityConfigs       PackRarityConfig[]
+  ctoonOptions        PackCtoonOption[]
+  userPacks           UserPack[]
+  limitResets         UserPackLimitReset[]
+  rewardPacks         RewardPack[]
+  cMoonEnemyRewards   CMoonEnemyReward[]
+  cMoonDispersalOptions CMoonDispersalOption[]
+  cMoonDispersalClaims  CMoonDispersalClaim[]
 }
 
 model PackRarityConfig {
@@ -4950,37 +4953,50 @@ model CMoonDispersalOfferCMoon {
   @@index([cMoonId])
 }
 
-// One of the (1+) cToon choices a member can pick for a given offer — a 1-option offer has
+// One of the (1+) choices a member can pick for a given offer — a cToon or a Pack, never both
+// (exactly one of ctoonId/packId is set, enforced by a raw-SQL CHECK constraint added in this
+// model's own migration, since Prisma can't express a type-conditional FK). A 1-option offer has
 // nothing to actually choose between, so the player-facing claim flow skips the "pick one"
 // framing for it (see CMoonPage.vue), but it's still represented as a normal single-row options
 // list rather than a separate "no choice" shape.
 model CMoonDispersalOption {
-  id        String @id @default(uuid())
+  id        String  @id @default(uuid())
   offerId   String
-  ctoonId   String
-  sortOrder Int    @default(0)
+  ctoonId   String?
+  packId    String?
+  sortOrder Int     @default(0)
 
   offer  CMoonDispersalOffer   @relation(fields: [offerId], references: [id], onDelete: Cascade)
-  ctoon  Ctoon                 @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  ctoon  Ctoon?                @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  pack   Pack?                 @relation(fields: [packId], references: [id], onDelete: Restrict)
   claims CMoonDispersalClaim[]
 
+  // Both kept (rather than one unique on [offerId, ctoonId, packId]) so each independently stops
+  // the same cToon — or the same pack — being offered twice on one offer. Postgres treats NULLs
+  // as distinct for uniqueness purposes, so a CTOON row (packId NULL) and a PACK row (ctoonId
+  // NULL) never collide with each other here.
   @@unique([offerId, ctoonId])
+  @@unique([offerId, packId])
 }
 
 // One row per member who claimed an offer — at most one per (offer, user), enforced by the
 // unique constraint below (a claim is final once made, no re-picking). `cMoonId`/`username` are
 // snapshots of which cMoon they were a live member of and their name at claim time, surviving
-// them later leaving that cMoon or renaming. This is a plain immutable log of who picked what —
-// it deliberately does NOT track the resulting mint job's outcome (no status/mintNumber fields):
-// the mint itself is queued fire-and-forget straight to mintQueue, same as every other bulk-mint
-// call site in the app (grantCMoonPrizes, the cZone-contest distribute route), and nothing writes
-// back into this row afterward — mint.worker.js is the shared hot path for every mint in the app
-// and is intentionally never special-cased for any one caller.
+// them later leaving that cMoon or renaming. Exactly one of ctoonId/packId is set, mirroring
+// whichever kind of CMoonDispersalOption was claimed (same CHECK-constraint discipline as that
+// model). This is a plain immutable log of who picked what — it deliberately does NOT track the
+// resulting grant's outcome (no status/mintNumber fields): a cToon claim is queued fire-and-forget
+// straight to mintQueue, same as every other bulk-mint call site in the app (grantCMoonPrizes, the
+// cZone-contest distribute route), and nothing writes back into this row afterward — mint.worker.js
+// is the shared hot path for every mint in the app and is intentionally never special-cased for any
+// one caller. A pack claim instead creates its UserPack row(s) synchronously in the same
+// transaction as this row (packs have no mint/supply step to queue against).
 model CMoonDispersalClaim {
   id        String   @id @default(uuid())
   offerId   String
   optionId  String
-  ctoonId   String
+  ctoonId   String?
+  packId    String?
   userId    String
   username  String
   cMoonId   String
@@ -4989,7 +5005,8 @@ model CMoonDispersalClaim {
 
   offer  CMoonDispersalOffer  @relation(fields: [offerId], references: [id], onDelete: Cascade)
   option CMoonDispersalOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
-  ctoon  Ctoon                @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  ctoon  Ctoon?               @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  pack   Pack?                @relation(fields: [packId], references: [id], onDelete: Restrict)
   user   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   cMoon  CMoon                @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
 
@@ -6064,6 +6081,11 @@ enum CMoonEnemyRewardType {
   // independently-rolled prize row like any other CMoonEnemyReward. Amount is stored in this
   // row's `quantity` column (see that field's own comment) rather than a dedicated column.
   POINTS
+  // A sealed Pack (cToon/gToon), granted via tx.userPack.create — same synchronous, in-transaction
+  // grant shape server/api/cmart/packs/buy.post.js already uses, not the queued mintQueue path
+  // CTOON rows go through (a pack has no mint/supply step of its own). `quantity` means "how many
+  // sealed copies of this pack," same convention CTOON already uses for its own quantity column.
+  PACK
 }
 
 // ── cMoon Enemy Battles: Special Attacks ─────────────────────────────────────────────────
@@ -6576,7 +6598,7 @@ model CMoonEnemyMemberTaunt {
 // One admin-configured possible prize for defeating a CMoonEnemyMember. Each row's chance is
 // rolled INDEPENDENTLY (not a normalized weighted pool like LottoPoolCtoon/HolidayEventPool) —
 // zero, one, or several rows can hit on the same win, matching "potential prizes" (never
-// guaranteed) from the feature request. Exactly one of ctoonId/avatarId/backgroundId is set,
+// guaranteed) from the feature request. Exactly one of ctoonId/avatarId/backgroundId/packId is set,
 // matching rewardType — enforced at the API layer (Prisma can't express a type-conditional FK).
 model CMoonEnemyReward {
   id                String               @id @default(uuid())
@@ -6585,8 +6607,9 @@ model CMoonEnemyReward {
   ctoonId           String?
   avatarId          String?
   backgroundId      String?
+  packId            String?
   dropChancePercent Float                @default(10) // 0-100, rolled independently per row
-  quantity          Int                  @default(1) // cToon copy count OR points amount (POINTS); ignored for avatar/background
+  quantity          Int                  @default(1) // cToon/pack copy count OR points amount (POINTS); ignored for avatar/background
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 
@@ -6594,6 +6617,7 @@ model CMoonEnemyReward {
   ctoon       Ctoon?           @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
   avatar      Avatar?          @relation(fields: [avatarId], references: [id], onDelete: Restrict)
   background  Background?      @relation(fields: [backgroundId], references: [id], onDelete: Restrict)
+  pack        Pack?            @relation(fields: [packId], references: [id], onDelete: Restrict)
 
   @@index([enemyMemberId])
 }
