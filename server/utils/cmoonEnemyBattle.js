@@ -112,6 +112,22 @@ export function computeHpAdjustmentForTarget(naturalHp, targetHp) {
   return Math.round(Number(targetHp) || 0) - Math.round(Number(naturalHp) || 0)
 }
 
+// Same idea as combinePlayerMaxHp above, for the stamina mechanic (CMoonEnemyBattle.
+// playerMaxStamina, solo battles only — see GlobalGameConfig.cMoonEnemyBattleStartingStamina's
+// own schema comment) — but with no rank-bonus term, since stamina has no per-rank bonus concept
+// at all: every player's NATURAL max stamina is simply the site-wide starting value. adjustment
+// is User.cMoonStaminaAdjustment, from the "Manage User HP" admin tool's Stamina section.
+// Floored at 0, not 1 like HP — 0 stamina is a legitimate, already-existing "mechanic off for
+// this battle" state (see start.post.js), not a danger to guard against.
+export function combinePlayerMaxStamina(defaultStamina, adjustment = 0) {
+  return Math.max(0, (Number(defaultStamina) || 0) + (Number(adjustment) || 0))
+}
+
+// Mirrors computeHpAdjustmentForTarget above, for stamina.
+export function computeStaminaAdjustmentForTarget(naturalStamina, targetStamina) {
+  return Math.round(Number(targetStamina) || 0) - Math.round(Number(naturalStamina) || 0)
+}
+
 // Exported for action.post.js's own stamina-cost gating (is the player's SUBMITTED action an
 // attack?) and for resolveRound's own stamina cost/regen below (is the EFFECTIVE action, after
 // any paralysis override, an attack or a block?) — same two predicates either caller needs,

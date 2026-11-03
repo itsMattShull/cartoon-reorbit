@@ -4,6 +4,7 @@ import {
   resolveBattleRound, rollEnemyAction, rollEnemyRewards, buildGrantableReward, rollHitDamage,
   isValidBattleAction, BATTLE_ACTIONS, PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE,
   HEAL_ON_SUCCESSFUL_BLOCK, resolveRound, combinePlayerMaxHp, computeHpAdjustmentForTarget,
+  combinePlayerMaxStamina, computeStaminaAdjustmentForTarget,
   SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, isValidPlayerSubmittedAction,
   isAttack, isBlock, STARTING_STAMINA, pickEffectiveSpecialAttack,
 } from '../server/utils/cmoonEnemyBattle.js'
@@ -385,6 +386,32 @@ test('computeHpAdjustmentForTarget: a rank-up that raises natural HP raises effe
 
 test('HEAL_ON_SUCCESSFUL_BLOCK is a single positive HP amount', () => {
   assert.equal(HEAL_ON_SUCCESSFUL_BLOCK, 1)
+})
+
+// combinePlayerMaxStamina/computeStaminaAdjustmentForTarget mirror the HP pair above, for the
+// "Manage User HP" admin tool's Stamina section — simpler since stamina has no rank-bonus term.
+test('combinePlayerMaxStamina: adds the default and the adjustment', () => {
+  assert.equal(combinePlayerMaxStamina(3, 0), 3)
+  assert.equal(combinePlayerMaxStamina(3, 2), 5)
+  assert.equal(combinePlayerMaxStamina(3, -1), 2)
+})
+
+test('combinePlayerMaxStamina: floors at 0, not 1 — stamina 0 is a legitimate "mechanic off" state', () => {
+  assert.equal(combinePlayerMaxStamina(3, -3), 0)
+  assert.equal(combinePlayerMaxStamina(3, -10), 0)
+})
+
+test('combinePlayerMaxStamina: treats a missing/non-numeric adjustment as 0, not NaN', () => {
+  assert.equal(combinePlayerMaxStamina(3, undefined), 3)
+  assert.equal(combinePlayerMaxStamina(3, null), 3)
+  assert.equal(combinePlayerMaxStamina(3), 3)
+})
+
+test('computeStaminaAdjustmentForTarget: solves for the adjustment that hits the target exactly', () => {
+  assert.equal(computeStaminaAdjustmentForTarget(3, 10), 7)
+  assert.equal(computeStaminaAdjustmentForTarget(10, 3), -7)
+  assert.equal(computeStaminaAdjustmentForTarget(3, 3), 0)
+  assert.equal(computeStaminaAdjustmentForTarget(3, 0), -3)
 })
 
 // ── Special attacks (see CMoonSpecialAttack's own schema comment) ──────────────────────────

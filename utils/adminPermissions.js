@@ -263,9 +263,12 @@ function usersAccess (rest) {
   // tool's own autocomplete; account transfer is not.
   if (a === 'search') return { type: 'perms', perms: ['manageUsers', 'cMoon', 'manageUserHp'] }
   if (b === 'update-cmoon') return { type: 'perms', perms: ['manageUsers', 'cMoon'] }
-  // "Manage User HP" (per-user get/set + mass raise/lower) is its own dedicated admin tool —
-  // see the manageUserHp section in utils/adminSections.js.
-  if (b === 'hp' || a === 'hp-mass-adjust') return { type: 'perms', perms: ['manageUserHp'] }
+  // "Manage User HP" (per-user get/set + mass raise/lower, for both HP and the Stamina section
+  // on that same admin page) is its own dedicated admin tool — see the manageUserHp section in
+  // utils/adminSections.js.
+  if (b === 'hp' || a === 'hp-mass-adjust' || b === 'stamina' || a === 'stamina-mass-adjust') {
+    return { type: 'perms', perms: ['manageUserHp'] }
+  }
   return { type: 'perms', perms: ['manageUsers'] }
 }
 

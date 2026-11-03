@@ -668,6 +668,18 @@ model User {
   // "lower HP") — combinePlayerMaxHp still floors the final effective HP at 1.
   cMoonHpAdjustment Int @default(0)
 
+  // Same deal as cMoonHpAdjustment immediately above, for the cMoon Enemy Battle stamina
+  // mechanic (solo battles only — see GlobalGameConfig.cMoonEnemyBattleStartingStamina's own
+  // schema comment) — set by an admin via the "Manage User HP" tool's Stamina section (server/
+  // api/admin/users/stamina*). Unlike HP, stamina has no per-rank bonus to add on top of: a
+  // player's natural max stamina is just the site-wide starting value, so this is the only thing
+  // that can ever make one player's stamina differ from another's. combinePlayerMaxStamina
+  // floors the result at 0 (not 1, like HP) — 0 is a legitimate, already-existing "mechanic off
+  // for this battle" state, not a danger to avoid. Read once at CMoonEnemyBattle.playerMaxStamina
+  // snapshot time (server/api/cmoon/battle/start.post.js) — like every other per-battle snapshot,
+  // changing this never affects a battle already in progress, only the player's NEXT one.
+  cMoonStaminaAdjustment Int @default(0)
+
   // ── cMoon Prestige ───────────────────────────────────────────────────────────────────────────
   // How many times this player has prestiged — permanent, cumulative, NEVER reset by
   // reassignUserCMoon (unlike cMoonPoints/currentCMoonRankId, which a prestige move resets
