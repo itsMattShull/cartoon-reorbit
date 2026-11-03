@@ -260,10 +260,12 @@ export async function notifyOutbidByUserId(prisma, userId, auctionId) {
             mintNumber: true,
             ctoon: { select: { name: true, isSecondEdition: true } }
           }
-        }
+        },
+        // A pack auction has no userCtoon.
+        userPack: { select: { pack: { select: { name: true } } } }
       }
     })
-    const ctoonName = auc?.userCtoon?.ctoon?.name || 'cToon'
+    const ctoonName = auc?.userCtoon?.ctoon?.name || (auc?.userPack?.pack?.name ? `${auc.userPack.pack.name} (sealed pack)` : 'cToon')
     const isSecondEdition = !!auc?.userCtoon?.ctoon?.isSecondEdition
     const mintNumber = auc?.userCtoon?.mintNumber ?? null
     const highestBid = auc?.highestBid ?? 0

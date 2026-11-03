@@ -45,12 +45,13 @@ import { assignRandomGoals } from './ogGtoonEngine.js'
 import {
   publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd, buildRoundLog,
   placeCard, unplaceSlot, checkCommit, checkSwap, recordSwapChoice, resolveSwapPhase, expirePhase,
-  submitDiscard, resolveDiscardPhase, enterColorPhase, submitColor, resolveColorPhase, startPhaseClock, markCommitted, logAbnormalEnd, extendDeadlineForReveal
+  submitDiscard, resolveDiscardPhase, enterColorPhase, submitColor, resolveColorPhase, startPhaseClock, markCommitted, logAbnormalEnd, extendDeadlineForReveal, startIntro, introActive
 } from './ogGtoonMatchCore.js'
 import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
 import { isPracticing, registerPvpProbe, onPresenceChange } from './ogGtoonPresence.js'
 import * as ogRedis from './ogGtoonsRedisState.js'
 import { getOgGtoonsConfig, peekRevealTiming } from './ogGtoonsConfig.js'
+import { evaluatePackReward } from './ogGtoonsPackReward.js'
 import { clearLive, isPairingClosed, flagNeedsAdmin } from './ogGtoonTournamentLive.js'
 import { enqueueOgTournamentJob } from './queues.js'
 import { registerOgGtoonsTournament } from './ogGtoonsTournamentSocket.js'
@@ -206,6 +207,9 @@ async function startMatch(io, a, b, { isChallenge, tournament = null, matchId: f
     stake: [stake, stake],
     isChallenge: !!isChallenge,
     tournament: tournament || null,
+    // Rounds each player committed THEMSELVES (their own commit click), as opposed to being auto-filled by the round
+    // timer. The PvP pack reward needs the loser to have genuinely played (see server/utils/ogGtoonsPackReward.js).
+    manualCommits: [0, 0],
     ending: false,
     graceTimers: {},
     startedAt: Date.now(),
@@ -261,6 +265,8 @@ async function startMatch(io, a, b, { isChallenge, tournament = null, matchId: f
   a.socket.data.ogGtoonsMatchId = matchId
   b.socket.data.ogGtoonsMatchId = matchId
 
+  // Both players see the goal cards and how the game is decided, with a countdown, before round 1 begins.
+  startIntro(match)
   emitToPlayers(io, match, EV('matchStart'))
   armPhaseTimer(io, match)
   return match
@@ -424,6 +430,8 @@ async function persistAndSettle(match, { outcome, winnerUserId, player1Score, pl
         player2Score: player2Score ?? 0,
         roundLog: buildRoundLog(match, effectsResolved),
         isChallenge: match.isChallenge,
+        player1ManualCommits: match.manualCommits?.[0] ?? 0,
+        player2ManualCommits: match.manualCommits?.[1] ?? 0,
         winnerUserId: winnerUserId || null,
         outcome,
         // Only a game that was actually played to a result has a reason; forfeits / sweeps have none.
@@ -508,7 +516,7 @@ async function endMatch(io, match, params) {
   } else if (params.endReason === 'closed') {
     logAbnormalEnd(match, 'This tournament match was decided, so the game was ended.')
   }
-  await persistFinishedGame(match, params)
+  const saved = await persistFinishedGame(match, params)
 
   emitToPlayers(io, match, EV('matchEnd'), (uid, i) => ({
     ...publicMatchView(match, uid),
@@ -523,6 +531,21 @@ async function endMatch(io, match, params) {
 
   destroyMatch(match.id)
   afterTournamentGame(match).catch(() => {})
+  // The PvP pack reward runs only for a match that was actually saved, and AFTER matchEnd is on its way: the result screen
+  // never waits on it, and a reward bug can never cost a match record. The winner hears about it in a separate event.
+  if (saved) awardPvpPack(io, match).catch(err => console.error('[ogGtoons] pack reward failed:', err?.message || err))
+}
+
+/**
+ * Evaluates the PvP pack reward for a saved match and tells the winner the outcome in a separate `packReward` event (the
+ * match is destroyed by now, so it goes to their user room). Idempotent and crash-safe — see ogGtoonsPackReward.js; the
+ * reconcile cron covers a failure here.
+ */
+async function awardPvpPack(io, match) {
+  const res = await evaluatePackReward(db, match.id)
+  if (res.notice && res.winnerUserId) {
+    io.local.to(userRoom(res.winnerUserId)).emit(EV('packReward'), { matchId: match.id, ...res.notice })
+  }
 }
 
 /* ── Leaving / disconnect ────────────────────────────────────────────────────────────────── */
@@ -677,6 +700,7 @@ export async function restoreOgGtoonsMatches(io) {
     // no longer line up with the board.
     if (!Array.isArray(match.hand) || !Array.isArray(match.swapReady)) initHands(match, secureRng)
     if (!Array.isArray(match.held)) match.held = [null, null]
+    if (!Array.isArray(match.swapPick)) match.swapPick = [null, null]
     if (!Array.isArray(match.colorReady)) {
       match.colorReady = [false, false]
       match.pendingColor = [null, null]
@@ -928,12 +952,14 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     return { user, match, idx }
   }
   const reject = (res) => socket.emit(EV('error'), { code: res.code, message: res.message })
+  const INTRO_BLOCK = { code: 'intro', message: 'The match starts in a moment.' }
 
   // Placing/unplacing only changes this player's private view; nothing is sent to the opponent
   // until they commit.
   socket.on(EV('place'), async ({ cardIdx, slot } = {}) => {
     const side = await liveSide()
     if (!side) return
+    if (introActive(side.match)) return reject(INTRO_BLOCK)
     const res = placeCard(side.match, side.idx, { cardIdx, slot })
     if (!res.ok) return reject(res)
     side.match.lastActivity = Date.now()
@@ -944,6 +970,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
   socket.on(EV('unplace'), async ({ slot } = {}) => {
     const side = await liveSide()
     if (!side) return
+    if (introActive(side.match)) return reject(INTRO_BLOCK)
     const res = unplaceSlot(side.match, side.idx, { slot })
     if (!res.ok) return reject(res)
     side.match.lastActivity = Date.now()
@@ -951,16 +978,17 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     emitStateTo(io, side.match, side.idx)
   })
 
-  // Round-3 swap: replace the card in slot 7 with a random undealt one. The 10-point fee comes off the
+  // Round-3 swap: replace the card in slot 7 with a hand card the player chooses. The 10-point fee comes off the
   // match score at scoring (never the points balance). The choice is held
   // until both players have made theirs, so neither sees the other's result first.
-  socket.on(EV('swap'), async () => {
+  socket.on(EV('swap'), async ({ cardIdx } = {}) => {
     const side = await liveSide()
     if (!side) return
     const { user, match, idx } = side
     const check = checkSwap(match, idx)
     if (!check.ok) return reject(check)
-    const res = recordSwapChoice(match, idx, true)
+    // The player picks which hand card takes slot 7 (made for them when only one is left).
+    const res = recordSwapChoice(match, idx, true, Number.isInteger(cardIdx) ? cardIdx : null, { requireCard: true })
     if (!res.ok) return reject(res)
     match.lastActivity = Date.now()
     fireSync(match.id, match)
@@ -1000,6 +1028,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     if (!side) return
     const { match, idx } = side
     if (matchId && matchId !== match.id) return
+    if (introActive(match)) return reject(INTRO_BLOCK)
     const check = checkCommit(match, idx, round)
     if (!check.ok) {
       if (check.code !== 'staleRound' && check.code !== 'already_committed') reject(check)
@@ -1007,6 +1036,8 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     }
 
     markCommitted(match, idx)
+    // `||=`: a match restored from Redis after a restart may predate this field.
+    ;(match.manualCommits ||= [0, 0])[idx] += 1
     match.lastActivity = Date.now()
     socket.emit(EV('committed'), { round: match.currentRound })
     const oppIdx = idx === 0 ? 1 : 0

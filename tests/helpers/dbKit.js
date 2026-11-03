@@ -11,7 +11,7 @@
 import http from 'node:http'
 import { randomUUID } from 'node:crypto'
 import { register } from 'node:module'
-import { createApp, createRouter, toNodeListener } from 'h3'
+import { createApp, createRouter, toNodeListener, defineEventHandler } from 'h3'
 
 export const DB_URL = process.env.OWNERSHIP_TEST_DB
 // `run` is test() when a database is configured, test.skip otherwise.
@@ -81,7 +81,12 @@ export const ownerOf = async (prisma, userCtoonId) =>
 export async function startApi(routes) {
   const router = createRouter()
   for (const { method, path, handler } of routes) router[method](path, handler)
-  const server = http.createServer(toNodeListener(createApp().use(router)))
+  // Production's server/middleware/auth.js sets event.context.userId from the session JWT; here the cookie is
+  // `testUser=<id>`. Handlers that read context.userId (rather than calling /api/auth/me) rely on this.
+  const app = createApp().use(defineEventHandler((event) => {
+    event.context.userId = /testUser=([^;]+)/.exec(event.node.req.headers.cookie || '')?.[1] || null
+  }))
+  const server = http.createServer(toNodeListener(app.use(router)))
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve))
   const base = `http://127.0.0.1:${server.address().port}`
   return {
@@ -99,3 +104,18 @@ export async function startApi(routes) {
     close: () => new Promise(resolve => server.close(resolve))
   }
 }
+
+/** A pack definition with no contents — enough for anything that only needs a Pack row to point at. */
+export function mkBarePack(prisma, over = {}) {
+  return prisma.pack.create({ data: { name: `Pack ${tag()}`, inCmart: false, imagePath: `/test/pack-${tag()}.png`, ...over } })
+}
+
+/** A SEALED pack owned by `userId` (a new bare Pack unless `packId` is given). */
+export async function mkUserPack(prisma, userId, over = {}) {
+  const packId = over.packId ?? (await mkBarePack(prisma)).id
+  const { packId: _omit, ...rest } = over
+  return prisma.userPack.create({ data: { userId, packId, opened: false, source: 'CODE', ...rest } })
+}
+
+export const packOwnerOf = async (prisma, userPackId) =>
+  (await prisma.userPack.findUnique({ where: { id: userPackId }, select: { userId: true } }))?.userId

@@ -26,17 +26,22 @@ export function serializeMatch(match) {
     gameLog: match.gameLog || [],
     swapReady: match.swapReady,
     pendingSwap: match.pendingSwap,
+    swapPick: match.swapPick,
     colorReady: match.colorReady,
     pendingColor: match.pendingColor,
     silverColor: match.silverColor,
     colorDone: match.colorDone,
     deadline: match.deadline,
+    introEndsAt: match.introEndsAt ?? null,
     ready: match.ready,
     held: match.held,
     revealed: match.revealed, // roundLog itself is built once, at match completion, not carried live
     stake: match.stake,
     currentRound: match.currentRound,
     isChallenge: match.isChallenge,
+    // Rounds each player committed themselves — the PvP pack reward's "was the loser really playing" signal. Without this a
+    // restart mid-match would zero it and a real loser could look idle.
+    manualCommits: match.manualCommits || [0, 0],
     // Without this a restart would turn a tournament game into a casual one that never counts.
     tournament: match.tournament || null,
     startedAt: match.startedAt,

@@ -10,7 +10,7 @@
 //     printed value counts, so no deck holds two cards of one character (e.g. both Bubbles).
 //   • The goal card is one random Red/Blue/Green/... card in the deck (never Black/Silver). A deck whose
 //     coloured cards are one or two colours therefore has a predictable goal, and every coloured card helps
-//     the +15 / combined-colour count; Black is neutral but carries the highest printed values (8-10).
+//     the +15 / two-colour count; Black is neutral but carries the highest printed values (8-10).
 //   • Only 7 of the 12 cards reach the board and the bot places by value, so a deck is mostly judged by its
 //     printed values and unconditional powers; adjacency combos are a bonus, not a plan.
 //   • Powers that hit "all X" hit BOTH sides, and some hurt their own deck (Amoeba Boys, Cosmo Spacely...).

@@ -11,7 +11,7 @@ import { TUTORIAL_PLAN } from '../server/utils/ogGtoonTutorialScript.js'
 
 function newGuide() {
   const h = harness()
-  const board = { sel: null, tab: 'log', swapSheetOpen: false, discardPick: [], flipping: false }
+  const board = { sel: null, tab: 'log', swapSheetOpen: false, swapPick: null, discardPick: [], flipping: false }
   const ctx = () => ({ ...board, m: h.view(), ended: h.sent.some(s => s.ev === 'oggtoons:matchEnd') })
   return { h, board, ctx }
 }
@@ -38,8 +38,10 @@ async function tap({ h, board, ctx }, target) {
     await h.call('discard', { cardIdxs: board.discardPick }); board.discardPick = []
   } else if (target === 'swap-btn') {
     board.swapSheetOpen = true
+  } else if ((m = /^swap-card-(\d+)$/.exec(target))) {
+    board.swapPick = Number(m[1])
   } else if (target === 'swap-confirm') {
-    await h.call('swap'); board.swapSheetOpen = false
+    await h.call('swap', { cardIdx: board.swapPick }); board.swapSheetOpen = false; board.swapPick = null
   } else if ((m = /^color-([A-Z]+)$/.exec(target))) {
     await h.call('chooseColor', { color: m[1] })
   } else {
@@ -74,7 +76,7 @@ test('guided steps: following every step plays the scripted match to its win', a
   const end = g.h.view()
   assert.equal(end.over, true)
   assert.equal(end.won, true)
-  assert.equal(end.player1Score, 27)
+  assert.equal(end.player1Score, 25)
   assert.equal(end.player2Score, 43)
   assert.deepEqual(g.h.errors(), [], 'the guide never makes the player do something the server refuses')
 })
@@ -94,7 +96,7 @@ test('guided steps: ids are unique and every action step names one target and a 
 
 test('guided steps: the text names the same cards the script places', () => {
   const text = TUTORIAL_STEPS.map(s => `${s.title} ${s.text}`).join(' ')
-  for (const name of ['Cindy Bear', 'Yogi Bear', 'Batman', 'Captain Dodgers', 'Jack Training', 'TOM', 'Pepe Le Pew', 'Goat', 'Blossom Fighting']) {
+  for (const name of ['Cindy Bear', 'Yogi Bear', 'Batman', 'Captain Dodgers', 'Jack Training', 'TOM', 'Pepe Le Pew', 'Goat', 'Daphne Celebrating']) {
     assert.ok(text.includes(name), `the steps never mention ${name}`)
   }
   // The five "pick" targets of round 1 are the first five deck cards the script plays.

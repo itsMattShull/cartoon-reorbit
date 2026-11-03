@@ -117,9 +117,9 @@ export function chooseBotDiscards({ difficulty, hand, undealt, goalColor }) {
 }
 
 /**
- * Decides whether the bot pays for the round-3 swap: replacing the card in its slot 7 with a random
- * undealt card. Easy never swaps; Normal/Hard swap when the undealt cards average clearly better
- * than the slot-7 card they would be replacing by more than the swap's score penalty plus a margin.
+ * Decides whether the bot pays for the round-3 swap: replacing the card in its slot 7 with the best
+ * card in its hand. Easy never swaps; Normal/Hard swap when that card is clearly better than the
+ * slot-7 card it would replace, by more than the swap's score penalty plus a margin.
  *
  * @param {object} view
  * @param {string} view.difficulty
@@ -132,10 +132,22 @@ export function chooseBotSwap({ difficulty, slotCard, undealt, goalColor }) {
   const level = normalizeDifficulty(difficulty)
   if (level === 'easy' || !slotCard) return false
   if (!Array.isArray(undealt) || undealt.length === 0) return false
-  const avg = undealt.reduce((a, c) => a + cardScore(c, goalColor, level), 0) / undealt.length
+  // The bot brings in its best candidate (see chooseBotSwapCard), so that is the card to compare against.
+  const best = Math.max(...undealt.map(c => cardScore(c, goalColor, level)))
   const threshold = level === 'hard' ? 2 : 3
-  // Swapping takes SWAP_SCORE_PENALTY off the bot's match score, so the expected gain has to beat that too.
-  return avg - cardScore(slotCard, goalColor, level) - SWAP_SCORE_PENALTY >= threshold
+  // Swapping takes SWAP_SCORE_PENALTY off the bot's match score, so the gain has to beat that too.
+  return best - cardScore(slotCard, goalColor, level) - SWAP_SCORE_PENALTY >= threshold
+}
+
+/** Which candidate (cards carry their deck index as `idx`) the bot swaps into slot 7: its best one. */
+export function chooseBotSwapCard({ difficulty, undealt, goalColor }) {
+  const level = normalizeDifficulty(difficulty)
+  let best = null
+  for (const c of undealt || []) {
+    const s = cardScore(c, goalColor, level)
+    if (!best || s > best.s) best = { idx: c.idx, s }
+  }
+  return best ? best.idx : null
 }
 
 /** Cosmetic think time before the bot commits a round (the choice itself is already made). */

@@ -40,7 +40,8 @@ export const NOTIFICATION_TYPES = Object.freeze({
   TRADE_OFFER_RECEIVED: 'TRADE_OFFER_RECEIVED',
   TRADE_OFFER_ACCEPTED: 'TRADE_OFFER_ACCEPTED',
   CMOON_RAID_BOSS_STARTED: 'CMOON_RAID_BOSS_STARTED',
-  CMOON_RAID_PREVIEW_STARTED: 'CMOON_RAID_PREVIEW_STARTED'
+  CMOON_RAID_PREVIEW_STARTED: 'CMOON_RAID_PREVIEW_STARTED',
+  PVP_PACK_WON: 'PVP_PACK_WON'
 })
 
 // Mirrors the guard in server/utils/discord.js — the official account is a
@@ -298,5 +299,27 @@ export async function notifyCMoonRaidPreviewStarted (db, { userId, raidId, enemy
     title: `Raid preview started: ${enemyName || 'a cMoon enemy'}`,
     body: `${startedByUsername || 'An admin'} is testing this raid boss — join in, no rewards or real records are involved.`,
     contextId: raidId
+  })
+}
+
+// Fixed collapse key for PvP pack rewards, so several wins before the player looks bump one notification's count
+// (×N) instead of stacking a row per win. NULL would never collapse: the partial unique index treats NULLs as distinct.
+export const PVP_PACK_CONTEXT_ID = 'pvp-pack-won'
+
+/**
+ * You won a sealed pack for winning an OG gToons match. Call AFTER the award's transaction commits, with the plain client
+ * (never the transaction): a failed INSERT inside a Postgres transaction poisons the whole transaction, and this function
+ * swallows its own errors by design. No `contextType` — that enum is AUCTION/TRADE-specific (see LockedContextType) — and
+ * the click target is derived from `type` on the client (notificationRoute in components/Onboarding.vue): My Collection >
+ * Packs.
+ */
+export async function notifyPvpPackWon (db, { userId, packName }) {
+  if (!(await isNotifiable(db, userId))) return false
+  return createNotification(db, {
+    userId,
+    type: NOTIFICATION_TYPES.PVP_PACK_WON,
+    title: `You won a ${packName || 'pack'}!`,
+    body: 'Open it from My Collection > Packs.',
+    contextId: PVP_PACK_CONTEXT_ID
   })
 }

@@ -247,6 +247,20 @@ export function isValidEffect(e) {
   return true
 }
 
+/**
+ * "+N to all <X> cards" powers hit every matching card on the whole board, both players' sides. A
+ * stored power that limits an `allMatching` target to the owner's own side (`scope: 'own'`, e.g. from the
+ * admin Advanced builder) is widened to both sides when a match snapshots the card; the original game has
+ * no own-side-only "all X" power. `scope: 'opponent'` ("-5 to any opponent's Props") is kept as it is.
+ * Returns the effect unchanged when nothing needs widening, else a new array (the input is not mutated).
+ */
+export function widenAllMatchingScope(effect) {
+  if (!Array.isArray(effect)) return effect
+  const needs = (e) => e?.target?.selector === 'allMatching' && e.target.scope === 'own'
+  if (!effect.some(needs)) return effect
+  return effect.map(e => (needs(e) ? { ...e, target: { ...e.target, scope: 'both' } } : e))
+}
+
 /** Validates a full Ctoon.gtoonEffect value (array or single object). Returns { ok, errors }. */
 export function validateEffectSchema(raw) {
   if (raw == null) return { ok: true, errors: [] }

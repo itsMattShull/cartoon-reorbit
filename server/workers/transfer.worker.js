@@ -1,6 +1,7 @@
 import { Worker } from 'bullmq'
 import { prisma } from '../prisma.js'
 import { logAdminChange, buildSeizureAuditPayload } from '../utils/adminChangeLog.js'
+import { moveSealedPacks } from '../utils/userPackTransfer.js'
 
 const QUEUE_NAME = process.env.TRANSFER_QUEUE_KEY || 'transferQueue'
 
@@ -132,6 +133,12 @@ const worker = new Worker(QUEUE_NAME, async (job) => {
     // Progress from 15% to 65% across all cToons
     await progress(job, 15 + Math.floor(50 * (i + 1) / Math.max(total, 1)), `Transferring cToons… (${i + 1}/${Math.max(total, 1)})`)
   }
+
+  // ── Step 2b: sealed packs → the target account (offers holding them rejected, running pack auctions go with them) ──
+  const packMove = await prisma.$transaction(tx => moveSealedPacks(tx, {
+    fromUserId: sourceUserId, toUserId: targetUserId, method: 'ADMIN_TRANSFER', fromUsername: source.username
+  }), { timeout: 30000, maxWait: 10000 })
+  auctionsReassigned += packMove.auctionsReassigned
 
   await progress(job, 65, 'Reassigning auctions…')
 

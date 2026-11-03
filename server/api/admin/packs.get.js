@@ -45,7 +45,8 @@ export default defineEventHandler(async (event) => {
       prisma.pack.findMany({
         include: {
           rarityConfigs: true, // include probabilities in list too
-          _count: { select: { userPacks: true, ctoonOptions: true } }
+          // `purchasedCount` is cMart PURCHASES only — userPacks also holds code, PvP-win, traded and auctioned packs.
+          _count: { select: { userPacks: { where: { source: 'PURCHASE' } }, ctoonOptions: true } }
         },
         orderBy: { createdAt: 'desc' },
         skip,

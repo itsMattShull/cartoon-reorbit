@@ -33,7 +33,8 @@ export default defineEventHandler(async (event) => {
             }
           }
         }
-      }
+      },
+      packs: { include: { userPack: { select: { pack: { select: { id: true, name: true, imagePath: true } } } } } }
     }
   })
 
@@ -44,6 +45,9 @@ export default defineEventHandler(async (event) => {
     pointsOffered: o.pointsOffered,
     ctoonsOffered: o.ctoons.filter(x => x.role === 'OFFERED').map(x => x.userCtoon.ctoon),
     ctoonsRequested: o.ctoons.filter(x => x.role === 'REQUESTED').map(x => x.userCtoon.ctoon),
+    // Sealed packs ride the same lists, named as packs so an admin can see everything a pending offer holds.
+    packsOffered: (o.packs || []).filter(x => x.role === 'OFFERED').map(x => x.userPack?.pack).filter(Boolean),
+    packsRequested: (o.packs || []).filter(x => x.role === 'REQUESTED').map(x => x.userPack?.pack).filter(Boolean),
     createdAt: o.createdAt
   }))
 

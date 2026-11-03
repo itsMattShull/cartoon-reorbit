@@ -6,9 +6,12 @@
 /**
  * Returns the start of the current 8pm–7:59pm CST daily window as a UTC Date.
  * If it's before 8pm Chicago time, the window started yesterday at 8pm.
+ *
+ * `now` is injectable so callers can attribute an event to the window it actually happened in (the OG gToons PvP
+ * reward uses the match's endedAt, so a retry or the reconcile cron after 8pm still lands in the right window) and so
+ * the DST boundaries can be tested.
  */
-export function getPackDailyWindowStart() {
-  const now = new Date()
+export function getPackDailyWindowStart(now = new Date()) {
 
   const fmt = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Chicago',

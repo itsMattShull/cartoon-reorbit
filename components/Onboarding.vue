@@ -424,6 +424,11 @@ const notificationRoute = (n) => {
   if (n.type === 'TRADE_OFFER_RECEIVED' || n.type === 'TRADE_OFFER_ACCEPTED') {
     return '/newsite/trade'
   }
+  if (n.type === 'PVP_PACK_WON') {
+    // A sealed pack won in an OG gToons match: straight to the Packs tab. Before the contextId fallback below, which
+    // would send an unknown typed notification to /newsite/AuctionHouse/<id>.
+    return '/newsite/MyCollection?tab=packs'
+  }
   if (n.type === 'CMOON_RAID_BOSS_STARTED') {
     // Raids are cross-cMoon now: every raid alert opens the Raid Boss Lobby on the cMoons page,
     // which lists every open raid from any team (including older per-raid alerts, whose raid has

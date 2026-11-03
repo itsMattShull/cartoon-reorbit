@@ -19,6 +19,7 @@ import {
   lockedRequestedIds,
   UNAVAILABLE_REQUEST_MESSAGE
 } from '@/server/utils/lockRules'
+import { normalizePackWants, lockAndPickPacks } from '@/server/utils/userPackState'
 import { getClientRequestIP } from '@/server/utils/request-ip'
 import { encryptIp } from '@/server/utils/ip-encrypt'
 
@@ -95,6 +96,18 @@ export async function resolveOfferCtoons ({ ctoonIdsOffered, ctoonIdsRequested }
   assertNoDuplicateResolution(resolvedRequested, 'ctoonIdsRequested')
   assertNoCrossSideOverlap(resolvedOffered, resolvedRequested)
   return { resolvedOffered, resolvedRequested }
+}
+
+/**
+ * Validates the pack side of an offer body: `[{ packId, quantity }]` per side (see normalizePackWants). Shape only —
+ * which copies are actually available is decided inside the creating transaction, under row locks
+ * (createTradeOfferTx), because a check made out here can be stale by the time the offer is written.
+ */
+export function resolveOfferPacks ({ packsOffered, packsRequested }) {
+  return {
+    packsOffered: normalizePackWants(packsOffered, 'packsOffered'),
+    packsRequested: normalizePackWants(packsRequested, 'packsRequested')
+  }
 }
 
 /**
@@ -267,6 +280,9 @@ export async function createTradeOfferTx (tx, {
   pointsRequested = 0,
   resolvedOffered,
   resolvedRequested,
+  // Packs, as [{ packId, quantity }] per side. The server picks and LOCKS specific sealed copies below.
+  packsOffered = [],
+  packsRequested = [],
   counteredOfferId = null,
   // Request metadata for the offer's creator, captured by the caller (see
   // offers.post.js / counter.post.js) and stored encrypted for the admin
@@ -274,6 +290,20 @@ export async function createTradeOfferTx (tx, {
   initiatorIp = null,
   initiatorUserAgent = null
 }) {
+  // Packs first (lock order: TradeOffer/Auction row -> UserPack rows -> UserPoints -> LockedPoints). Picks the oldest
+  // available copies of each wanted type, locks them all in one sorted statement and re-checks under the lock, so the
+  // offer can never hold a pack that is simultaneously in an auction, in another trade, or being opened.
+  let pickedPacks = { OFFERED: [], REQUESTED: [] }
+  if (packsOffered.length || packsRequested.length) {
+    pickedPacks = await lockAndPickPacks(tx, {
+      sides: [
+        { key: 'OFFERED', ownerId: initiatorId, wants: packsOffered, generic: false },
+        // The other party's packs: one probe-proof message for every way they can be unavailable.
+        { key: 'REQUESTED', ownerId: recipientId, wants: packsRequested, generic: true }
+      ]
+    })
+  }
+
   if (pointsOffered > 0) {
     const ptsNow = await tx.userPoints.findUnique({
       where: { userId: initiatorId },
@@ -319,6 +349,12 @@ export async function createTradeOfferTx (tx, {
     select: { id: true, status: true, createdAt: true, counteredOfferId: true }
   })
 
+  const packRows = [
+    ...pickedPacks.OFFERED.map(id => ({ tradeOfferId: created.id, userPackId: id, role: 'OFFERED' })),
+    ...pickedPacks.REQUESTED.map(id => ({ tradeOfferId: created.id, userPackId: id, role: 'REQUESTED' }))
+  ]
+  if (packRows.length) await tx.tradeOfferPack.createMany({ data: packRows })
+
   if (pointsOffered > 0) {
     await tx.lockedPoints.create({
       data: {
@@ -331,7 +367,7 @@ export async function createTradeOfferTx (tx, {
       }
     })
   }
-  return created
+  return { ...created, packsOffered: pickedPacks.OFFERED.length, packsRequested: pickedPacks.REQUESTED.length }
 }
 
 /**
@@ -369,6 +405,8 @@ export async function sendTradeOfferDM ({
   pointsRequested = 0,
   offeredCount,
   requestedCount,
+  offeredPackCount = 0,
+  requestedPackCount = 0,
   isCounter = false
 }) {
   if (!recipientDiscordId || !process.env.BOT_TOKEN) return
@@ -391,6 +429,8 @@ export async function sendTradeOfferDM ({
     ...(pointsRequested > 0 ? [`• Points requested: **${pointsRequested}**`] : []),
     `• cToons offered: **${offeredCount}**`,
     `• cToons requested: **${requestedCount}**`,
+    ...(offeredPackCount > 0 ? [`• Packs offered: **${offeredPackCount}**`] : []),
+    ...(requestedPackCount > 0 ? [`• Packs requested: **${requestedPackCount}**`] : []),
     ``,
     `🔗 View it here: ${baseUrl}`
   ].join('\n')

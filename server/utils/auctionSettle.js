@@ -9,14 +9,18 @@
 // Returns null when there is nothing to broadcast (auction missing/already closed, closed too early and
 // rescheduled, or its end was extended by a late bid); otherwise { winnerId, winningBid } for 'auction-ended'.
 import { resolveAuctionCloseOutcome, AUCTION_CLOSE_DOUBLE_SALE } from './auctionClose.js'
+import { lockPacksForUpdate, logPackOwners } from './userPackState.js'
 
 export async function settleAuction(auctionId, { db, scheduleAuctionClose, notifyAuctionWon }) {
   const auc = await db.auction.findUnique({
     where: { id: auctionId },
     select: {
       id: true, status: true, endAt: true, creatorId: true, userCtoonId: true, createdAt: true,
+      // A pack auction sells a sealed UserPack instead of a UserCtoon (exactly one of the two ids is set).
+      kind: true, userPackId: true,
       // Only for the "you won" notification's text.
-      userCtoon: { select: { ctoon: { select: { name: true } } } }
+      userCtoon: { select: { ctoon: { select: { name: true } } } },
+      userPack: { select: { packId: true, pack: { select: { name: true } } } }
     }
   })
 
@@ -31,7 +35,8 @@ export async function settleAuction(auctionId, { db, scheduleAuctionClose, notif
     return null
   }
 
-  const { id, creatorId, userCtoonId } = auc
+  const { id, creatorId, userCtoonId, userPackId } = auc
+  const isPack = auc.kind === 'PACK'
   const now = new Date()
 
   // Resolve seller: creatorId or OFFICIAL_USERNAME
@@ -104,8 +109,10 @@ export async function settleAuction(auctionId, { db, scheduleAuctionClose, notif
     // pair that predates it would debit a second winner, credit the seller
     // twice and move the cToon off the first winner — so it is checked, not
     // assumed.
+    // Keyed on the item this auction sells. Never `{ userCtoonId }` for a pack: userCtoonId is NULL on every pack auction,
+    // and `where: { userCtoonId: null }` would match ALL of them and read as a false double sale.
     const otherAuctions = await tx.auction.findMany({
-      where: { userCtoonId, id: { not: id } },
+      where: { ...(isPack ? { userPackId } : { userCtoonId }), id: { not: id } },
       select: { id: true, status: true, winnerId: true, winnerAt: true }
     })
     const { outcome, conflictingAuctionId } = resolveAuctionCloseOutcome({
@@ -134,6 +141,28 @@ export async function settleAuction(auctionId, { db, scheduleAuctionClose, notif
       return
     }
 
+    // PACK: take the UserPack row lock (lock order: Auction -> UserPack -> UserPoints) and confirm the pack is still the
+    // seller's and still sealed BEFORE any points move. If it isn't — an admin moved it, say — close with no winner and no
+    // payout, the pack analogue of the double-sale branch above: nobody is charged for a pack they cannot receive.
+    let packMovable = true
+    if (isPack && winningBid) {
+      const [row] = await lockPacksForUpdate(tx, [userPackId])
+      packMovable = !!row && !row.opened && !!resolvedCreatorId && row.userId === resolvedCreatorId
+      if (!packMovable) {
+        console.error(
+          `[auction] refusing to settle pack auction ${id}: pack ${userPackId} is no longer the seller's sealed pack ` +
+          `(holder ${row?.userId ?? 'none'}, opened ${row?.opened ?? 'n/a'}). Closing with no winner; no points moved.`
+        )
+        settledAsDoubleSale = true
+        await tx.auction.update({ where: { id }, data: { status: 'CLOSED', winnerAt: now } })
+        await tx.lockedPoints.updateMany({
+          where: { status: 'ACTIVE', contextType: 'AUCTION', contextId: id },
+          data:  { status: 'RELEASED' }
+        })
+        return
+      }
+    }
+
     await tx.auction.update({
       where: { id },
       data: {
@@ -146,6 +175,25 @@ export async function settleAuction(auctionId, { db, scheduleAuctionClose, notif
     })
 
     if (winningBid) {
+      if (isPack) {
+        // The pack moves to the winner; nothing cToon-shaped happens (no lastAuctionSold price — pack sales stay out of
+        // the cToon economy — no trade-list row, no CtoonOwnerLog). Conditional on the expected holder, like every other
+        // transfer in the app; the lock above makes a miss impossible, so a miss rolls the whole settlement back.
+        const moved = await tx.userPack.updateMany({
+          where: { id: userPackId, userId: resolvedCreatorId, opened: false },
+          data:  { userId: winningBid.userId }
+        })
+        if (moved.count !== 1) throw new Error(`pack auction ${id}: pack ${userPackId} could not be transferred`)
+        await logPackOwners(tx, [{
+          userPackId,
+          packId: auc.userPack?.packId,
+          userId: winningBid.userId,
+          method: 'AUCTION',
+          counterpartyUserId: resolvedCreatorId,
+          counterpartyUsername: resolvedCreatorUsername,
+          auctionId: id
+        }])
+      } else {
       const uc = await tx.userCtoon.update({
         where:  { id: userCtoonId },
         data:   { userId: winningBid.userId, isTradeable: true },
@@ -175,6 +223,7 @@ export async function settleAuction(auctionId, { db, scheduleAuctionClose, notif
           counterpartyUsername: resolvedCreatorUsername
         }
       })
+      }
 
       const loserPts = await tx.userPoints.update({
         where: { userId: winningBid.userId },
@@ -201,7 +250,7 @@ export async function settleAuction(auctionId, { db, scheduleAuctionClose, notif
       await notifyAuctionWon(tx, {
         userId: winningBid.userId,
         auctionId: id,
-        ctoonName: auc.userCtoon?.ctoon?.name || null,
+        ctoonName: isPack ? (auc.userPack?.pack?.name || 'Pack') : (auc.userCtoon?.ctoon?.name || null),
         amount: winningBid.amount
       })
 
@@ -231,10 +280,14 @@ export async function settleAuction(auctionId, { db, scheduleAuctionClose, notif
         })
       }
     } else {
-      await tx.userCtoon.update({
-        where: { id: userCtoonId },
-        data:  { isTradeable: true }
-      })
+      // Unsold: a cToon becomes tradeable again. A pack has no such flag — its state is derived from the (now CLOSED)
+      // auction row, so there is nothing to restore.
+      if (!isPack) {
+        await tx.userCtoon.update({
+          where: { id: userCtoonId },
+          data:  { isTradeable: true }
+        })
+      }
       await tx.lockedPoints.updateMany({
         where: { status: 'ACTIVE', contextType: 'AUCTION', contextId: id },
         data:  { status: 'RELEASED' }

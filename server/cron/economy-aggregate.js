@@ -124,7 +124,9 @@ async function aggregateTrades(sinceDate) {
   const rangeEnd = new Date(Math.max(...days.map(d => d.getTime())) + 24 * 60 * 60 * 1000)
 
   const offers = await prisma.tradeOffer.findMany({
-    where: { status: 'ACCEPTED', updatedAt: { gte: rangeStart, lt: rangeEnd } },
+    // Offers that include a sealed pack are left out: the price is imputed from the cToons and points in the offer, so a
+    // pack on either side would be read as a free (or overpaid-for) cToon and skew that cToon's price history.
+    where: { status: 'ACCEPTED', updatedAt: { gte: rangeStart, lt: rangeEnd }, packs: { none: {} } },
     select: {
       updatedAt: true,
       pointsOffered: true,

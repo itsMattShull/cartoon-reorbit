@@ -5,7 +5,7 @@ import {
 } from '../server/utils/ogGtoonEngine.js'
 import {
   initHands, publicMatchView, enterColorPhase, submitColor, resolveColorPhase, autoSilverColor,
-  expirePhase, checkMatchEnd
+  expirePhase, checkMatchEnd, runFinalBoardResolution
 } from '../server/utils/ogGtoonMatchCore.js'
 
 const card = (color, i = 0) => ({
@@ -35,8 +35,10 @@ test('determineWinner counts a Silver card as its owner\'s picked colour', () =>
     player1Revealed: [r('RED'), r('SILVER'), r('SILVER')],
     player2Revealed: [r('BLUE'), r('BLUE'), r('RED')]
   }
-  // Silver stays colourless until picked: combined Red+Blue is 1 vs 3, so p2 leads.
-  assert.equal(determineWinner(base).winner, 'player2')
+  // Silver stays colourless until picked: p1 has 1 Red to p2's 1 and 0 Blue to 2, so nobody leads both -> points
+  // (15 each, a tie), never a color win.
+  assert.notEqual(determineWinner(base).reason, 'both_colors')
+  assert.equal(determineWinner(base).winner, null)
   // p1 holds more Red (2 vs 1); a Blue pick gives them more Blue (3 vs 1) too, so they win outright.
   const sides = {
     player1GoalColor: 'RED', player2GoalColor: 'BLUE',
@@ -99,4 +101,33 @@ test('timeout picks the best colour; the pick decides the goal-colour count', ()
   const end = checkMatchEnd(m)
   assert.equal(m.revealed[0][0].color, 'RED')
   assert.ok(end || m.currentRound >= 3)
+})
+
+test('a Silver card turned Green counts as Green for powers like "+2 to all Green"', () => {
+  const greenBuff = [{
+    trigger: 'onReveal',
+    target: { selector: 'allMatching', scope: 'own', filters: [{ by: 'color', value: 'GREEN' }] },
+    action: { type: 'modifyValue', operation: 'add', amount: 2 }
+  }]
+  const m = silverMatch()
+  m.goalColor = ['GREEN', 'BLUE']
+  const entry = (c, slot, extra = {}) => ({ ...c, deckIdx: slot, baseColor: c.color, baseValue: c.value, finalValue: c.value, cancelled: false, round: 1, slot, ...extra })
+  m.revealed = [
+    [entry(card('GREEN', 0), 1, { effect: greenBuff }), entry(card('SILVER', 1), 2)],
+    [entry(card('BLUE', 2), 1), entry(card('BLUE', 3), 2)]
+  ]
+
+  // Picked Blue -> it is Blue when powers resolve, so the Green buff misses it.
+  m.silverColor = ['BLUE', null]
+  assert.deepEqual(runFinalBoardResolution(m).final.player1.revealed.map(r => r.finalValue), [7, 5])
+
+  // Picked Green -> it is Green when powers resolve, so it gets the +2 as well.
+  m.silverColor = ['GREEN', null]
+  const { final } = runFinalBoardResolution(m)
+  assert.deepEqual(final.player1.revealed.map(r => r.finalValue), [7, 7])
+  assert.equal(m.revealed[0][1].color, 'GREEN')
+
+  // And an unpicked side's automatic choice sees the buff too.
+  m.silverColor = [null, null]
+  assert.equal(autoSilverColor(m, 0), 'GREEN')
 })

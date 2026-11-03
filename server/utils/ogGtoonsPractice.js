@@ -36,13 +36,13 @@ import { loadVerifiedDeckSnapshot } from './ogGtoonDeck.js'
 import { loadBotDeck } from './ogGtoonBotDeck.js'
 import { assignRandomGoals, slotsForRound } from './ogGtoonEngine.js'
 import {
-  publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd,
+  publicMatchView, initHands, revealPlacedCards, advanceRound, checkMatchEnd, startIntro, introActive, INTRO_MS,
   placeCard, unplaceSlot, checkCommit, checkSwap, recordSwapChoice, resolveSwapPhase, expirePhase,
   submitDiscard, resolveDiscardPhase, markCommitted, extendDeadlineForReveal,
   enterColorPhase, submitColor, resolveColorPhase, autoSilverColor
 } from './ogGtoonMatchCore.js'
 import {
-  BOT_ID, BOT_USERNAME, buildBotDeck, chooseBotPlacements, chooseBotDiscards, chooseBotSwap,
+  BOT_ID, BOT_USERNAME, buildBotDeck, chooseBotPlacements, chooseBotDiscards, chooseBotSwap, chooseBotSwapCard,
   botCommitDelayMs, normalizeDifficulty
 } from './ogGtoonBot.js'
 import { markPracticing, clearPracticing, isInPvp } from './ogGtoonPresence.js'
@@ -147,13 +147,16 @@ async function botSwap(io, match, deps) {
   // a swap both start ready, and without this the phase would sit waiting until the timer died.
   if (!match.swapReady[1]) {
     const slotSeven = match.held?.[1] || null
-    const doSwap = chooseBotSwap({
+    // Like a human, the bot swaps in a card from its hand: its best one.
+    const candidates = botCards(match, match.hand[1])
+    const view = {
       difficulty: match.difficulty,
       slotCard: slotSeven ? { value: slotSeven.baseValue, color: slotSeven.color } : null,
-      undealt: botCards(match, [...match.hand[1], ...match.undealt[1]]),
+      undealt: candidates,
       goalColor: match.goalColor[1]
-    })
-    recordSwapChoice(match, 1, doSwap)
+    }
+    const doSwap = chooseBotSwap(view)
+    recordSwapChoice(match, 1, doSwap, doSwap ? chooseBotSwapCard(view) : null)
   }
   match.lastActivity = Date.now()
   emitState(io, match)
@@ -326,7 +329,7 @@ export function startOgGtoonsPracticeSweep() {
 /* ── Registration ────────────────────────────────────────────────────────────────────────── */
 
 /**
- * @param deps  injectable for tests: { loadDeck, loadBotDeck, getConfig, botDelay, rng, isInPvp, recordResult }
+ * @param deps  injectable for tests: { loadDeck, loadBotDeck, getConfig, botDelay, rng, isInPvp, recordResult, introMs }
  *              `recordResult` has no default on purpose: tests never write to a database by accident.
  */
 export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {}) {
@@ -337,7 +340,9 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
     botDelay: deps.botDelay || (() => botCommitDelayMs()),
     rng: deps.rng || Math.random,
     isInPvp: deps.isInPvp || isInPvp,
-    recordResult: deps.recordResult || null
+    recordResult: deps.recordResult || null,
+    // Length of the pre-match goal-card countdown; tests inject 0.
+    introMs: deps.introMs ?? INTRO_MS
   }
   const fail = (code, message) => socket.emit(OUT('error'), { code, message })
 
@@ -412,6 +417,8 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
     markPracticing(user.id)
     socket.data.ogGtoonsPracticeUserId = user.id
 
+    // The goal cards and how the game is decided are shown with a countdown before round 1.
+    if (d.introMs > 0) startIntro(match, d.introMs)
     emitToHuman(io, match, OUT('matchStart'), publicMatchView(match, user.id))
     armPhaseTimer(io, match, d)
     scheduleBot(io, match, d)
@@ -446,19 +453,26 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
     return true
   }
 
+  // Nothing can be placed or committed while the pre-match countdown is running.
+  const blockedByIntro = (match) => {
+    if (!introActive(match)) return false
+    fail('intro', 'The match starts in a moment.')
+    return true
+  }
+
   socket.on(EV('place'), async ({ cardIdx, slot } = {}) => {
     const match = await liveMatch()
-    if (match) settle(placeCard(match, 0, { cardIdx, slot }), match, { log: false })
+    if (match && !blockedByIntro(match)) settle(placeCard(match, 0, { cardIdx, slot }), match, { log: false })
   })
 
   socket.on(EV('unplace'), async ({ slot } = {}) => {
     const match = await liveMatch()
-    if (match) settle(unplaceSlot(match, 0, { slot }), match, { log: false })
+    if (match && !blockedByIntro(match)) settle(unplaceSlot(match, 0, { slot }), match, { log: false })
   })
 
   socket.on(EV('commit'), async ({ round } = {}) => {
     const match = await liveMatch()
-    if (!match) return
+    if (!match || blockedByIntro(match)) return
     const check = checkCommit(match, 0, round)
     if (!check.ok) {
       if (check.code !== 'staleRound' && check.code !== 'already_committed') fail(check.code, check.message)
@@ -473,12 +487,13 @@ export function registerOgGtoonsPractice(io, socket, resolveSocketUser, deps = {
 
   // Round-3 slot-7 swap. Costs 10 off the match score like PvP, with no balance check or debit.
   // Held until the bot has chosen too, like PvP.
-  socket.on(EV('swap'), async () => {
+  socket.on(EV('swap'), async ({ cardIdx } = {}) => {
     const match = await liveMatch()
     if (!match) return
     const check = checkSwap(match, 0)
     if (!check.ok) return fail(check.code, check.message)
-    if (settle(recordSwapChoice(match, 0, true), match)) {
+    // The player picks which hand card takes slot 7 (made for them when only one is left).
+    if (settle(recordSwapChoice(match, 0, true, Number.isInteger(cardIdx) ? cardIdx : null, { requireCard: true }), match)) {
       socket.emit(OUT('swapApplied'), { matchId: match.id })
       await settleSwap(io, match, d)
     }

@@ -73,6 +73,7 @@
                 class="border-t"
                 :class="{
                   'bg-yellow-100':
+                    !hasPacks(trade) &&
                     computeTotalValue(trade.ctoonsOffered) <
                     (trade.pointsOffered + computeTotalValue(trade.ctoonsRequested)) * 0.8
                 }"
@@ -91,8 +92,8 @@
                   <span v-else>-</span>
                 </td>
                 <td class="px-1.5 py-1 text-right tabular-nums">{{ trade.pointsOffered }}</td>
-                <td class="px-1.5 py-1 text-right tabular-nums">{{ trade.ctoonsOffered.length }}</td>
-                <td class="px-1.5 py-1 text-right tabular-nums">{{ trade.ctoonsRequested.length }}</td>
+                <td class="px-1.5 py-1 text-right tabular-nums">{{ trade.ctoonsOffered.length }}<span v-if="packCount(trade.packsOffered)" class="text-purple-700" :title="packText(trade.packsOffered)"> +{{ packCount(trade.packsOffered) }}pk</span></td>
+                <td class="px-1.5 py-1 text-right tabular-nums">{{ trade.ctoonsRequested.length }}<span v-if="packCount(trade.packsRequested)" class="text-purple-700" :title="packText(trade.packsRequested)"> +{{ packCount(trade.packsRequested) }}pk</span></td>
                 <td class="px-1.5 py-1 text-right tabular-nums">
                   {{ trade.pointsOffered + computeTotalValue(trade.ctoonsOffered) }}
                 </td>
@@ -117,6 +118,7 @@
             class="border rounded p-2 shadow break-words text-[11px]"
             :class="{
               'bg-yellow-100':
+                !hasPacks(trade) &&
                 computeTotalValue(trade.ctoonsOffered) <
                 (trade.pointsOffered + computeTotalValue(trade.ctoonsRequested)) * 0.8
             }"
@@ -139,8 +141,8 @@
 
             <div class="space-y-0.5">
               <div><span class="font-medium">Points:</span> {{ trade.pointsOffered }}</div>
-              <div><span class="font-medium">Offered:</span> {{ trade.ctoonsOffered.length }}</div>
-              <div><span class="font-medium">Requested:</span> {{ trade.ctoonsRequested.length }}</div>
+              <div><span class="font-medium">Offered:</span> {{ trade.ctoonsOffered.length }}<span v-if="packCount(trade.packsOffered)"> + {{ packText(trade.packsOffered) }}</span></div>
+              <div><span class="font-medium">Requested:</span> {{ trade.ctoonsRequested.length }}<span v-if="packCount(trade.packsRequested)"> + {{ packText(trade.packsRequested) }}</span></div>
               <div><span class="font-medium">Total Offered Value:</span> {{ trade.pointsOffered + computeTotalValue(trade.ctoonsOffered) }}</div>
               <div><span class="font-medium">Total Requested Value:</span> {{ computeTotalValue(trade.ctoonsRequested) }}</div>
             </div>
@@ -187,6 +189,7 @@
               <div class="mt-1"><span class="font-medium">Points Offered:</span> {{ selectedTrade.pointsOffered }}</div>
               <div><span class="font-medium">cToon Value:</span> {{ computeTotalValue(selectedTrade.ctoonsOffered) }}</div>
               <div><span class="font-medium">Total Offered Value:</span> {{ selectedTrade.pointsOffered + computeTotalValue(selectedTrade.ctoonsOffered) }}</div>
+              <div v-if="selectedTrade.packsOffered?.length" class="mt-1"><span class="font-medium">Packs Offered:</span> {{ packText(selectedTrade.packsOffered) }} <span class="text-gray-500">(not valued)</span></div>
               <div class="font-medium mt-2">cToons Offered:</div>
               <div class="grid grid-cols-4 gap-2 mt-1">
                 <div v-for="item in selectedTrade.ctoonsOffered" :key="item.id" class="text-center">
@@ -201,6 +204,7 @@
             <!-- Recipient & Requests -->
             <div class="p-2 border rounded">
               <div><span class="font-medium">Recipient:</span> {{ selectedTrade.recipient.username }}</div>
+              <div v-if="selectedTrade.packsRequested?.length" class="mt-1"><span class="font-medium">Packs Requested:</span> {{ packText(selectedTrade.packsRequested) }} <span class="text-gray-500">(not valued)</span></div>
               <div class="font-medium mt-2">cToons Requested:</div>
               <div class="grid grid-cols-4 gap-2 mt-1">
                 <div v-for="item in selectedTrade.ctoonsRequested" :key="item.id" class="text-center">
@@ -303,6 +307,10 @@ function openModal(trade) { selectedTrade.value = trade; showModal.value = true 
 function closeModal() { showModal.value = false }
 
 // Helpers
+const packCount = (list) => (list || []).reduce((n, p) => n + p.quantity, 0)
+const packText = (list) => (list || []).map(p => `${p.quantity}× ${p.name}`).join(', ')
+const hasPacks = (t) => packCount(t.packsOffered) + packCount(t.packsRequested) > 0
+
 function computeTotalValue(arr) {
   return arr.reduce((sum, item) => sum + (item.value ?? rarityValues[item.rarity] ?? 1250), 0)
 }

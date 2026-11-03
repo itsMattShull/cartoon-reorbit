@@ -261,9 +261,13 @@ export default defineEventHandler(async (event) => {
 
     const ctoon = await db.auction.findUnique({
       where: { id: auctionId },
-      select: { userCtoon: { select: { ctoon: { select: { name: true } } } } }
+      select: {
+        userCtoon: { select: { ctoon: { select: { name: true } } } },
+        // A pack auction has no userCtoon; notify with the pack's name.
+        userPack: { select: { pack: { select: { name: true } } } }
+      }
     })
-    const ctoonName = ctoon?.userCtoon?.ctoon?.name || null
+    const ctoonName = ctoon?.userCtoon?.ctoon?.name || ctoon?.userPack?.pack?.name || null
 
     const outbid = Array.from(new Set(outbidUserIds))
       .filter(uid => uid && uid !== finalLeaderId)

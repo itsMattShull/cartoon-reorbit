@@ -78,6 +78,7 @@
                     <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Available At (CST)</th>
                     <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Expires At</th>
                     <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100"># cToons</th>
+                    <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100"># Packs</th>
                     <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100"># of Backgrounds</th>
                     <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100">Points</th>
                     <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100">Redeemed</th>
@@ -100,6 +101,7 @@
                       <span v-else class="text-gray-500">Never</span>
                     </td>
                     <td class="px-2 py-1.5 text-right">{{ countCtoons(c) }}</td>
+                    <td class="px-2 py-1.5 text-right" :title="packTitle(c)">{{ countPacks(c) }}</td>
                     <td class="px-2 py-1.5 text-right">{{ countBackgrounds(c) }}</td>
                     <td class="px-2 py-1.5 text-right">{{ countPoints(c) }}</td>
                     <td class="px-2 py-1.5 text-right">{{ redeemedCount(c) }} / {{ c.maxClaims }}</td>
@@ -141,6 +143,7 @@
                     <span v-else>Never</span>
                   </p>
                   <p><strong># cToons:</strong> {{ countCtoons(c) }}</p>
+                  <p><strong># Packs:</strong> {{ countPacks(c) }}<span v-if="packTitle(c)" class="text-gray-500"> ({{ packTitle(c) }})</span></p>
                   <p><strong># Backgrounds:</strong> {{ countBackgrounds(c) }}</p>
                   <p><strong>Points:</strong> {{ countPoints(c) }}</p>
                   <p><strong>Redeemed:</strong> {{ redeemedCount(c) }} / {{ c.maxClaims }}</p>
@@ -204,6 +207,7 @@
                     <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Code</th>
                     <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">User</th>
                     <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Claimed At</th>
+                    <th class="px-2 py-1.5 text-right text-[11px] font-semibold text-gray-600 bg-gray-100">Packs granted</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y">
@@ -213,6 +217,7 @@
                     <td class="px-2 py-1.5">
                       {{ new Date(row.claimedAt).toLocaleString() }}
                     </td>
+                    <td class="px-2 py-1.5 text-right">{{ row.packsGranted || 0 }}</td>
                   </tr>
                 </tbody>
               </table>
@@ -233,6 +238,7 @@
                 <p><strong>Claimed At:</strong>
                   {{ new Date(row.claimedAt).toLocaleString() }}
                 </p>
+                <p><strong>Packs granted:</strong> {{ row.packsGranted || 0 }}</p>
               </div>
               <div v-if="!claimed.length" class="text-gray-500 py-6 text-center">
                 No claims found.
@@ -415,6 +421,21 @@ function countPoints(code) {
 // distinct players have actually redeemed this code, out of its maxClaims limit.
 function redeemedCount(code) {
   return code._count?.claims ?? 0
+}
+
+// Sealed packs a code awards (summed across reward batches), and a "2× Pack A, 1× Pack B" tooltip for them.
+function countPacks(code) {
+  return (code.rewards || []).reduce((sum, r) => sum + (r.packs || []).reduce((s2, p) => s2 + (p.quantity || 0), 0), 0)
+}
+function packTitle(code) {
+  const byName = new Map()
+  for (const r of (code.rewards || [])) {
+    for (const p of (r.packs || [])) {
+      const name = p.pack?.name || 'Pack'
+      byName.set(name, (byName.get(name) || 0) + (p.quantity || 0))
+    }
+  }
+  return [...byName].map(([n, q]) => `${q}× ${n}`).join(', ')
 }
 
 // Helper to sum up all cToon quantities

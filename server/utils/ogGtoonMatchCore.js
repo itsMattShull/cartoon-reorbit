@@ -17,6 +17,7 @@
 //     discardReady // [bool, bool] during the discard phase
 //     swapReady,   // [bool, bool] during the round-3 slot-7 swap phase
 //     pendingSwap, // [bool, bool] who asked to swap (applied together once both are ready)
+//     swapPick,    // [deckIdx|null, ...] the hand card each player chose to bring into slot 7 (null = random)
 //     colorReady,  // [bool, bool] during the end-of-game Silver colour phase
 //     pendingColor,// [string|null, ...] held picks, applied together once both are ready
 //     silverColor, // [string|null, ...] the colour each player's Silver cards count as (once picked)
@@ -26,7 +27,8 @@
 
 import { sanitizeGtoonCardStyle } from '../../utils/gtoonCardStyle.js'
 import { revealDurationMs } from '../../utils/ogGtoonReveal.js'
-import { resolveFinalBoard } from './ogGtoonEffects.js'
+import { resolveFinalBoard, widenAllMatchingScope } from './ogGtoonEffects.js'
+import { powerDescriptionFor, describeEffects } from './ogGtoonPowerCatalog.js'
 import {
   determineWinner, recolorSilver, isRealColor, REAL_COLORS, COLOR_MS, hasSuddenDeathCardsRemaining, dealOpeningHand, discardAndDeal,
   goalCardFor, targetColorsOf, slotsForRound, isSuddenDeathRound, shuffled, REGULATION_ROUNDS, DISCARD_AFTER_ROUND,
@@ -58,7 +60,7 @@ const COLOR_WORD = (c) => (c ? c.charAt(0) + c.slice(1).toLowerCase() : '?')
 const targetWord = (c) => (isRealColor(c) ? COLOR_WORD(c) : 'none')
 function targetSummary(goalColors) {
   const t = targetColorsOf(goalColors)
-  if (t.length === 2) return `Two target colors revealed (${t.map(COLOR_WORD).join(' and ')}): the most cards of both colors combined wins the game regardless of points. A tie is broken by points.`
+  if (t.length === 2) return `Two target colors revealed (${t.map(COLOR_WORD).join(' and ')}): having more cards of each color than your opponent wins the game regardless of points. Otherwise it is decided by points.`
   if (t.length === 1) return `One target color revealed (${COLOR_WORD(t[0])}): decided by points; more ${COLOR_WORD(t[0])} cards earns a 15 point bonus.`
   return 'No target color revealed: decided by points only.'
 }
@@ -131,7 +133,7 @@ export function toSnapshotCard(ctoon, position) {
     type3: ctoon.gtoonType3 ?? null,
     group: ctoon.gtoonGroup ?? null,
     isSlam: !!ctoon.isSlamGtoon,
-    effect: ctoon.gtoonEffect ?? null,
+    effect: widenAllMatchingScope(ctoon.gtoonEffect ?? null),
     position
   }
 }
@@ -154,6 +156,7 @@ export function initHands(match, rng = Math.random) {
   match.swapUsed = [false, false]
   match.swapReady = [false, false]
   match.pendingSwap = [false, false]
+  match.swapPick = [null, null]
   match.colorReady = [false, false]
   match.pendingColor = [null, null]
   match.silverColor = [null, null]
@@ -173,10 +176,32 @@ export function initHands(match, rng = Math.random) {
   return match
 }
 
+/** A goal card as both players see it (the goal cards are public from the start). Includes what the pre-match screen shows. */
 function goalCardView(match, idx) {
   const c = goalCardFor(match, idx)
   if (!c) return null
-  return { ctoonId: c.ctoonId, name: c.name, assetPath: c.assetPath, color: c.color, cardStyle: c.cardStyle, value: c.value }
+  return {
+    ctoonId: c.ctoonId, name: c.name, assetPath: c.assetPath, color: c.color, cardStyle: c.cardStyle, value: c.value,
+    type1: c.type1 ?? null, type2: c.type2 ?? null, type3: c.type3 ?? null, group: c.group ?? null,
+    power: powerDescriptionFor(c.effect) || describeEffects(c.effect) || null
+  }
+}
+
+/* ── Pre-match intro ───────────────────────────────────────────────────────────────────────
+ * Before the first round both players are shown the goal cards and how the game will be decided,
+ * with a countdown. The first placing deadline starts after it, and players cannot place or commit
+ * until it is over (the clients keep the board hidden meanwhile; this is the server-side guard). */
+export const INTRO_MS = 10_000
+
+/** Starts the intro: the first phase's clock is pushed back by the same amount so no placing time is lost. */
+export function startIntro(match, ms = INTRO_MS, now = Date.now()) {
+  match.introEndsAt = now + ms
+  if (match.deadline) match.deadline += ms
+}
+
+/** True while the pre-match intro is still counting down. */
+export function introActive(match, now = Date.now()) {
+  return !!match.introEndsAt && now < match.introEndsAt
 }
 
 /* ── Phase clock ───────────────────────────────────────────────────────────────────────────── */
@@ -203,7 +228,7 @@ export function startPhaseClock(match, now = Date.now()) {
     ] }] })
   } else if (match.phase === 'swap') {
     logEvent(match, { kind: 'phase', title: 'Round 3 — slot-7 swap', sections: [{ label: null, lines: [
-      `Optional: replace your slot-7 card with a random undealt card (costs ${SWAP_SCORE_PENALTY} points off your match score).${clock('no swap if time runs out')}`
+      `Optional: replace your slot-7 card with a card from your hand (costs ${SWAP_SCORE_PENALTY} points off your match score).${clock('no swap if time runs out')}`
     ] }] })
   } else {
     const slots = slotsForRound(match.currentRound)
@@ -237,6 +262,8 @@ export function publicMatchView(match, uid, opts = {}) {
     suddenDeath: isSuddenDeathRound(match.currentRound),
     phase: match.phase || 'play',
     phaseEndsAt: match.deadline || null,
+    // Pre-match intro: milliseconds left (a duration, so a skewed client clock cannot shorten or stretch it).
+    introRemainingMs: introActive(match) ? match.introEndsAt - Date.now() : 0,
     ...(opts.log === false ? {} : { gameLog: match.gameLog || [] }),
     // The latest resolved board ({ cards:[{side,slot,finalValue,color,cancelled}], totals, markers }), so values
     // stay correct between rounds / after a reconnect. null until the first card has been revealed.
@@ -414,20 +441,41 @@ export function checkSwap(match, idx) {
   return OK
 }
 
-/** Records a player's choice for the swap phase: `swap` true = replace slot 7, false = skip. */
-export function recordSwapChoice(match, idx, swap) {
+/**
+ * Records a player's choice for the swap phase: `swap` true = replace slot 7, false = skip.
+ * A swapping player picks which hand card takes slot 7 (`cardIdx`, a deck index in their hand). With
+ * exactly one hand card left the choice is made for them. `requireCard` (human players) refuses a
+ * swap that does not name a card when there is a real choice; without it a missing card falls back
+ * to a random draw (used by the scripted tutorial and old callers).
+ */
+export function recordSwapChoice(match, idx, swap, cardIdx = null, { requireCard = false } = {}) {
   if (match.ending) return bad('over', 'The match is over.')
   if (match.phase !== 'swap') return bad('wrongPhase', 'Not the swap phase.')
   if (match.swapReady[idx]) return bad('already_swapped', 'You already made your swap choice.')
   if (swap && !canOfferSwap(match, idx)) return bad('nothingToSwap', 'There are no cards left in your deck to swap with.')
+  let pick = null
+  if (swap) {
+    const hand = match.hand[idx] || []
+    if (cardIdx !== null && cardIdx !== undefined) {
+      if (!Number.isInteger(cardIdx) || !hand.includes(cardIdx)) return bad('badCard', 'That card is not in your hand.')
+      pick = cardIdx
+    } else if (hand.length === 1) {
+      pick = hand[0]
+    } else if (requireCard && hand.length > 1) {
+      return bad('needSwapCard', 'Choose which card from your hand to swap in.')
+    }
+  }
+  if (!match.swapPick) match.swapPick = [null, null]
   match.pendingSwap[idx] = !!swap
+  match.swapPick[idx] = pick
   match.swapReady[idx] = true
   return OK
 }
 
 /**
  * Once both sides have chosen: applies the swaps together. The slot-7 card goes back into the
- * undealt pile and a random undealt card takes its place (revealed as a round-3 entry).
+ * player's hand and the hand card they chose (or, with no choice recorded, a random card from
+ * their deck) takes its place (revealed as a round-3 entry).
  * Returns null while someone is still deciding, else { entries, order } shaped like a reveal
  * (entries only for the sides that swapped).
  */
@@ -441,7 +489,9 @@ export function resolveSwapPhase(match, rng = Math.random) {
     swapped[i] = old
     if (!old || !swapPoolSize(match, i)) continue
     const handLen = match.hand[i].length
-    const pick = Math.floor(rng() * swapPoolSize(match, i))
+    const chosen = match.swapPick?.[i] ?? null
+    const chosenAt = chosen === null ? -1 : match.hand[i].indexOf(chosen)
+    const pick = chosenAt >= 0 ? chosenAt : Math.floor(rng() * swapPoolSize(match, i))
     let drawnIdx
     if (pick < handLen) {
       drawnIdx = match.hand[i][pick]
@@ -476,6 +526,7 @@ export function resolveSwapPhase(match, rng = Math.random) {
     sections: [{ label: null, lines: [`Slot 7: ${nameOfSide(match, 0)} ${showCard(entries[0][0])}  vs  ${nameOfSide(match, 1)} ${showCard(entries[1][0])}`] }]
   })
   match.pendingSwap = [false, false]
+  match.swapPick = [null, null]
   match.swapReady = [false, false]
   match.phase = 'play' // the caller either ends the match or advances into sudden death
   const order = [...new Set([...entries[0], ...entries[1]].map(e => e.slot))].sort((a, b) => a - b)
@@ -527,9 +578,12 @@ export function hasSilver(match, idx) {
   return (match.revealed?.[idx] || []).some(r => (r.baseColor ?? r.color) === 'SILVER')
 }
 
-function resolveBoardSafe(match) {
+function resolveBoardSafe(match, silvers = [match.silverColor?.[0] ?? null, match.silverColor?.[1] ?? null]) {
   try {
-    return resolveFinalBoard({ player1: finalBoardInputFor(match, 0), player2: finalBoardInputFor(match, 1) })
+    return resolveFinalBoard({
+      player1: finalBoardInputFor(match, 0, match.revealed[0], silvers[0]),
+      player2: finalBoardInputFor(match, 1, match.revealed[1], silvers[1])
+    })
   } catch {
     return null
   }
@@ -546,12 +600,15 @@ export function autoSilverColor(match, idx) {
   const theirs = isRealColor(match.goalColor?.[opp]) ? match.goalColor[opp] : null
   const candidates = [...new Set([own, theirs].filter(Boolean))]
   if (!candidates.length) return REAL_COLORS[0]
-  const final = candidates.length > 1 ? resolveBoardSafe(match) : null
-  if (!final) return candidates[0]
+  if (candidates.length < 2) return candidates[0]
   const oppSilver = match.silverColor?.[opp] ?? match.pendingColor?.[opp] ?? (theirs || own)
   let best = null
   for (const color of candidates) {
     const silvers = idx === 0 ? [color, oppSilver] : [oppSilver, color]
+    // Silver becomes a real colour BEFORE powers resolve (a "+2 to all Green" power buffs it), so
+    // the board has to be resolved afresh for each candidate pair rather than once.
+    const final = resolveBoardSafe(match, silvers)
+    if (!final) return candidates[0]
     const o = determineWinner({
       player1GoalColor: match.goalColor[0], player2GoalColor: match.goalColor[1],
       player1Revealed: final.player1.revealed, player2Revealed: final.player2.revealed,
@@ -657,13 +714,19 @@ function playableCards(match, idx) {
   return [...match.hand[idx], ...match.undealt[idx]]
 }
 
+function silverAs(color, silverColor) {
+  return color === 'SILVER' && isRealColor(silverColor) ? silverColor : color
+}
+
 /** Builds the { revealed, goalCard } shape resolveFinalBoard expects for one side of the match. */
-export function finalBoardInputFor(match, idx, entries = match.revealed[idx]) {
+export function finalBoardInputFor(match, idx, entries = match.revealed[idx], silverColor = match.silverColor?.[idx] ?? null) {
   return {
     revealed: entries.map(r => ({
       // The PRINTED color: `color` is overwritten with the resolved one after each speculative
       // pass, and the next pass must start from the card as printed, not from its last result.
-      ctoonId: r.ctoonId, name: r.name, characters: r.characters, color: r.baseColor ?? r.color, value: r.baseValue,
+      // A Silver card is the exception: once its owner has picked a colour it IS that colour before
+      // any power resolves, so "+2 to all Green" and every other colour-keyed power sees it as such.
+      ctoonId: r.ctoonId, name: r.name, characters: r.characters, color: silverAs(r.baseColor ?? r.color, silverColor), value: r.baseValue,
       type1: r.type1, type2: r.type2, type3: r.type3, group: r.group,
       isSlam: r.isSlam, effect: r.effect, round: r.round, slot: r.slot
     })),
@@ -679,11 +742,15 @@ export function finalBoardInputFor(match, idx, entries = match.revealed[idx]) {
  * the database or roundLog; only the caller's end-of-match step persists anything.
  */
 export function runFinalBoardResolution(match) {
+  // Silver is colourless until its owner picks: it becomes that colour BEFORE powers resolve, so a
+  // recolour-keyed power ("+2 to all Green") buffs it. A side that picked nothing (Silver only arrived
+  // in sudden death) gets its best colour for the board as it stands.
+  const silvers = [0, 1].map(i => match.silverColor?.[i] ?? (hasSilver(match, i) ? autoSilverColor(match, i) : null))
   let final
   try {
     final = resolveFinalBoard({
-      player1: finalBoardInputFor(match, 0),
-      player2: finalBoardInputFor(match, 1)
+      player1: finalBoardInputFor(match, 0, match.revealed[0], silvers[0]),
+      player2: finalBoardInputFor(match, 1, match.revealed[1], silvers[1])
     })
   } catch (err) {
     // A malformed admin-authored gtoonEffect must never take the shared socket process down —
@@ -705,13 +772,7 @@ export function runFinalBoardResolution(match) {
       match.revealed[idx][i].cancelled = !!r.cancelled
     })
   }
-  // A still-Silver card counts as its owner's pick; a side that picked nothing (Silver only arrived
-  // in sudden death) gets its best colour for the board as it stands.
-  const silvers = [0, 1].map(i => {
-    const key = i === 0 ? 'player1' : 'player2'
-    if (!final[key].revealed.some(r => r.color === 'SILVER')) return null
-    return match.silverColor?.[i] ?? autoSilverColor(match, i)
-  })
+  // Anything still Silver after powers ran (a power turned a card Silver) counts as its owner's pick.
   // Show the picked colour on the cards themselves (a fallback colour is only used for scoring).
   for (const idx of [0, 1]) {
     if (!match.silverColor?.[idx]) continue
@@ -907,6 +968,7 @@ export function advanceRound(match) {
   } else if (justPlayed === SWAP_AFTER_ROUND) {
     match.phase = 'swap'
     match.pendingSwap = [false, false]
+    match.swapPick = [null, null]
     match.swapReady = [!canOfferSwap(match, 0), !canOfferSwap(match, 1)]
   } else {
     match.phase = 'play'
@@ -971,7 +1033,7 @@ function logFinalScoring(match, outcome, final, continues) {
   if (outcome.bonus) totals.push(`${nameOfSide(match, outcome.bonus.player === 'player1' ? 0 : 1)} gets +15 for holding more ${COLOR_WORD(outcome.bonus.color)} cards.`)
   const verdict = outcome.winner === null
     ? (continues ? 'Tied — sudden death.' : 'Tied — no cards left to break it.')
-    : `${outcome.winner === 'player1' ? n0 : n1} wins ${outcome.reason === 'both_colors' ? 'by holding the most cards of both goal colors combined' : 'on total value'}.`
+    : `${outcome.winner === 'player1' ? n0 : n1} wins ${outcome.reason === 'both_colors' ? 'by holding more cards of each goal color' : 'on total value'}.`
   if (!d.notable && !d.sections[4].lines.length) d.sections[0].lines.push('No powers fired — every card scores its printed value.')
   logEvent(match, {
     kind: 'scoring', title: isSuddenDeathRound(match.currentRound) ? 'Sudden-death scoring' : 'Final scoring',

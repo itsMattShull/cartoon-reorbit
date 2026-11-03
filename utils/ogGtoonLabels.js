@@ -6,4 +6,8 @@ export const OG_GROUP_LABELS = {
   POWERPUFF_GIRLS: 'Powerpuff Girls', SQUIRREL_SCOUTS: 'Squirrel Scouts', TEEN_TITANS: 'Teen Titans',
   TIME_SQUAD: 'Time Squad', WOOHP: 'WOOHP'
 }
+// One small glyph per card type, for the pre-match goal cards.
+export const OG_TYPE_GLYPHS = {
+  FEMALE: '♀', MALE: '♂', HERO: '★', VILLAIN: '☠', ANIMAL: '🐾', MONSTER: '👾', PLACE: '⌂', PROP: '◆', VEHICLE: '🚗'
+}
 export const ogTitleCase = (s) => (s ? s.charAt(0) + s.slice(1).toLowerCase() : s)
