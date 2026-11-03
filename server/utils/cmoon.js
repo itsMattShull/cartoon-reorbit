@@ -973,17 +973,36 @@ export async function getPlayerCombatMaxHp(userId, config = null) {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { currentCMoonRank: { select: { tier: { select: { sortOrder: true } } } } },
+    select: {
+      cMoonHpAdjustment: true,
+      currentCMoonRank: { select: { tier: { select: { sortOrder: true } } } },
+    },
   })
+  const adjustment = Number(user?.cMoonHpAdjustment) || 0
   const sortOrder = user?.currentCMoonRank?.tier?.sortOrder
-  if (sortOrder == null) return combinePlayerMaxHp(defaultHp, 0)
+  if (sortOrder == null) return combinePlayerMaxHp(defaultHp, 0, adjustment)
 
   const clearedTiers = await prisma.cMoonRankTier.findMany({
     where: { sortOrder: { lte: sortOrder } },
     select: { cMoonEnemyBattleHpBonus: true },
   })
   const bonus = clearedTiers.reduce((sum, t) => sum + (Number(t.cMoonEnemyBattleHpBonus) || 0), 0)
-  return combinePlayerMaxHp(defaultHp, bonus)
+  return combinePlayerMaxHp(defaultHp, bonus, adjustment)
+}
+
+// Shared by the admin "Manage User HP" detail lookup and the mass-adjust tool: computes a single
+// user's current NATURAL max HP (defaultHp + rank-tier bonus, with zero adjustment applied) from
+// their already-fetched rank sortOrder. Separate from getPlayerCombatMaxHp so a caller that
+// already has `sortOrder` in hand (e.g. from a batch query covering many users) doesn't need a
+// second per-user DB round trip just to re-derive it.
+export async function getNaturalCombatMaxHp(sortOrder, defaultHp) {
+  if (sortOrder == null) return combinePlayerMaxHp(defaultHp, 0, 0)
+  const clearedTiers = await prisma.cMoonRankTier.findMany({
+    where: { sortOrder: { lte: sortOrder } },
+    select: { cMoonEnemyBattleHpBonus: true },
+  })
+  const bonus = clearedTiers.reduce((sum, t) => sum + (Number(t.cMoonEnemyBattleHpBonus) || 0), 0)
+  return combinePlayerMaxHp(defaultHp, bonus, 0)
 }
 
 // (pickEffectiveSpecialAttack/SPECIAL_ATTACK_SELECT live in cmoonEnemyBattle.js, imported above —

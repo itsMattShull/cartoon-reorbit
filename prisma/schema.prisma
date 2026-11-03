@@ -660,6 +660,14 @@ model User {
   cMoonRankRoleGrantedAt DateTime?
   cMoonPollVotes         CMoonPollVote[]
 
+  // Permanent ADDITIVE adjustment to this player's cMoon enemy/raid battle max HP, set by an
+  // admin via the "Manage User HP" tool (server/api/admin/users/hp*). Deliberately additive, not
+  // an absolute override: getPlayerCombatMaxHp (server/utils/cmoon.js) adds this on top of the
+  // normal defaultHp + rank-tier-bonus computation, so a player whose HP was hand-adjusted still
+  // gains further HP from a future cMoon rank-up exactly like anyone else. Can be negative (admin
+  // "lower HP") — combinePlayerMaxHp still floors the final effective HP at 1.
+  cMoonHpAdjustment Int @default(0)
+
   // ── cMoon Prestige ───────────────────────────────────────────────────────────────────────────
   // How many times this player has prestiged — permanent, cumulative, NEVER reset by
   // reassignUserCMoon (unlike cMoonPoints/currentCMoonRankId, which a prestige move resets

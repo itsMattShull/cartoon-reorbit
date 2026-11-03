@@ -87,16 +87,29 @@ export function isKnownAction(action) {
   return isValidBattleAction(action) || action === SPECIAL_ACTION || action === PARALYZED_ACTION
 }
 
-// Combines the admin-configured site-wide default (GlobalGameConfig.cMoonEnemyBattleDefaultHp)
-// with a player's own cMoon-rank bonus (CMoonRankTier.cMoonEnemyBattleHpBonus) into their actual
-// max HP for a cMoon Enemy Battle — pure arithmetic, kept here (rather than inline in
+// Combines the admin-configured site-wide default (GlobalGameConfig.cMoonEnemyBattleDefaultHp),
+// a player's own cMoon-rank bonus (CMoonRankTier.cMoonEnemyBattleHpBonus), and any permanent,
+// admin-set HP adjustment (User.cMoonHpAdjustment, from the "Manage User HP" admin tool) into
+// their actual max HP for a cMoon Enemy Battle — pure arithmetic, kept here (rather than inline in
 // getPlayerCombatMaxHp() in server/utils/cmoon.js, which does the actual DB lookups for both
 // inputs) so the one piece of this genuinely worth unit-testing can be, without dragging in that
 // file's BullMQ/Prisma side effects (see tests/cmoonBalanceNoPrizeGrant.test.js's own comment on
-// why cmoon.js can't just be imported in a test). Floored at 1 so a misconfigured negative bonus
-// can never leave a player unable to take a single hit.
-export function combinePlayerMaxHp(defaultHp, bonus) {
-  return Math.max(1, (Number(defaultHp) || 0) + (Number(bonus) || 0))
+// why cmoon.js can't just be imported in a test). adjustment is additive, not an override — a
+// player whose HP was hand-adjusted still gains further HP from a later rank-up, since the rank
+// bonus term keeps growing independently. Floored at 1 so a misconfigured negative bonus/
+// adjustment can never leave a player unable to take a single hit.
+export function combinePlayerMaxHp(defaultHp, bonus, adjustment = 0) {
+  return Math.max(1, (Number(defaultHp) || 0) + (Number(bonus) || 0) + (Number(adjustment) || 0))
+}
+
+// Pure helper for the "Manage User HP" admin tool (server/api/admin/users/[id]/hp*): given a
+// user's current NATURAL max HP (defaultHp + rank-tier bonus, with zero adjustment — see
+// getNaturalCombatMaxHp in server/utils/cmoon.js), returns the User.cMoonHpAdjustment value that
+// makes their EFFECTIVE max HP equal exactly `targetHp` right now. Storing the adjustment this
+// way instead of `targetHp` itself is what lets a later rank-up still add its own bonus on top —
+// the adjustment is a fixed offset from "natural", not a floor/ceiling on the final result.
+export function computeHpAdjustmentForTarget(naturalHp, targetHp) {
+  return Math.round(Number(targetHp) || 0) - Math.round(Number(naturalHp) || 0)
 }
 
 // Exported for action.post.js's own stamina-cost gating (is the player's SUBMITTED action an

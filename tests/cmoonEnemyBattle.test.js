@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   resolveBattleRound, rollEnemyAction, rollEnemyRewards, buildGrantableReward, rollHitDamage,
   isValidBattleAction, BATTLE_ACTIONS, PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE,
-  HEAL_ON_SUCCESSFUL_BLOCK, resolveRound, combinePlayerMaxHp,
+  HEAL_ON_SUCCESSFUL_BLOCK, resolveRound, combinePlayerMaxHp, computeHpAdjustmentForTarget,
   SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, isValidPlayerSubmittedAction,
   isAttack, isBlock, STARTING_STAMINA, pickEffectiveSpecialAttack,
 } from '../server/utils/cmoonEnemyBattle.js'
@@ -352,6 +352,35 @@ test('combinePlayerMaxHp: floors at 1 so a misconfigured negative bonus can neve
 test('combinePlayerMaxHp: treats a missing/non-numeric bonus as 0, not NaN', () => {
   assert.equal(combinePlayerMaxHp(5, undefined), 5)
   assert.equal(combinePlayerMaxHp(5, null), 5)
+})
+
+// The admin "Manage User HP" tool's adjustment (User.cMoonHpAdjustment) is a third additive
+// term, defaulting to 0 so every existing caller (none of which pass a third argument) is
+// unaffected — see server/utils/cmoon.js's getPlayerCombatMaxHp for the real call sites.
+test('combinePlayerMaxHp: adjustment is additive on top of default + bonus', () => {
+  assert.equal(combinePlayerMaxHp(5, 3, 10), 18)
+  assert.equal(combinePlayerMaxHp(5, 3, -4), 4)
+  assert.equal(combinePlayerMaxHp(5, 3), 8) // omitted adjustment defaults to 0
+})
+
+test('combinePlayerMaxHp: still floors at 1 even with a large negative adjustment', () => {
+  assert.equal(combinePlayerMaxHp(5, 3, -1000), 1)
+})
+
+// computeHpAdjustmentForTarget is the inverse operation: given a player's current NATURAL HP
+// (zero adjustment) and an admin's desired effective HP, what adjustment bridges the two — see
+// its own comment in this file for why this must be additive rather than an absolute override.
+test('computeHpAdjustmentForTarget: solves for the adjustment that hits the target exactly', () => {
+  assert.equal(computeHpAdjustmentForTarget(5, 20), 15)
+  assert.equal(computeHpAdjustmentForTarget(20, 5), -15)
+  assert.equal(computeHpAdjustmentForTarget(5, 5), 0)
+})
+
+test('computeHpAdjustmentForTarget: a rank-up that raises natural HP raises effective HP by the same amount, adjustment unchanged', () => {
+  const adjustment = computeHpAdjustmentForTarget(5, 20)
+  assert.equal(combinePlayerMaxHp(5, 0, adjustment), 20)
+  // Player ranks up: their natural HP (bonus) grows from 0 to 7, with the SAME stored adjustment.
+  assert.equal(combinePlayerMaxHp(5, 7, adjustment), 27)
 })
 
 test('HEAL_ON_SUCCESSFUL_BLOCK is a single positive HP amount', () => {

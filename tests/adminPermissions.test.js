@@ -65,7 +65,7 @@ test('every permission named by an API rule is a real permission', () => {
 
 test('every tool is reachable: some API rule or the users rules mention its permission', () => {
   const mentioned = new Set(Object.values(ADMIN_API_SEGMENT_PERMS).flat())
-  ;['manageUsers', 'checkCheating', 'cheatingTool', 'cMoon', 'authLogs', 'adminChanges'].forEach(k => mentioned.add(k))
+  ;['manageUsers', 'manageUserHp', 'checkCheating', 'cheatingTool', 'cMoon', 'authLogs', 'adminChanges'].forEach(k => mentioned.add(k))
   for (const k of ADMIN_PERMISSION_KEYS) {
     assert.ok(mentioned.has(k), `permission ${k} is not named by any API rule; a sub-admin with it could not load anything`)
   }

@@ -44,6 +44,7 @@ export const ADMIN_SECTIONS = [
 
   // ── Users & Moderation ──────────────────────────────────────
   S('manageUsers', 'Manage Users', 'users', nu('AdminManageUsers'), { sensitive: true, desc: 'Ban, suspend, dissolve, rename' }),
+  S('manageUserHp', 'Manage User HP', 'users', nu('AdminManageUserHp'), { sensitive: true, desc: 'Set cMoon battle HP, individually or in bulk' }),
   S('manageCollection', 'Manage Collection', 'users', nu('AdminManageCollection'), { sensitive: true, desc: 'Edit what a user owns' }),
   S('userCtoons', 'User cToons', 'users', nu('AdminUserCtoons'), { superOnly: true, desc: 'Every owned cToon across all users' }),
   S('cheatFinder', 'Cheat Finder', 'users', nu('AdminCheatFinder')),
