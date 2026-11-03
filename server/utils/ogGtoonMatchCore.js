@@ -578,9 +578,12 @@ export function hasSilver(match, idx) {
   return (match.revealed?.[idx] || []).some(r => (r.baseColor ?? r.color) === 'SILVER')
 }
 
-function resolveBoardSafe(match) {
+function resolveBoardSafe(match, silvers = [match.silverColor?.[0] ?? null, match.silverColor?.[1] ?? null]) {
   try {
-    return resolveFinalBoard({ player1: finalBoardInputFor(match, 0), player2: finalBoardInputFor(match, 1) })
+    return resolveFinalBoard({
+      player1: finalBoardInputFor(match, 0, match.revealed[0], silvers[0]),
+      player2: finalBoardInputFor(match, 1, match.revealed[1], silvers[1])
+    })
   } catch {
     return null
   }
@@ -597,12 +600,15 @@ export function autoSilverColor(match, idx) {
   const theirs = isRealColor(match.goalColor?.[opp]) ? match.goalColor[opp] : null
   const candidates = [...new Set([own, theirs].filter(Boolean))]
   if (!candidates.length) return REAL_COLORS[0]
-  const final = candidates.length > 1 ? resolveBoardSafe(match) : null
-  if (!final) return candidates[0]
+  if (candidates.length < 2) return candidates[0]
   const oppSilver = match.silverColor?.[opp] ?? match.pendingColor?.[opp] ?? (theirs || own)
   let best = null
   for (const color of candidates) {
     const silvers = idx === 0 ? [color, oppSilver] : [oppSilver, color]
+    // Silver becomes a real colour BEFORE powers resolve (a "+2 to all Green" power buffs it), so
+    // the board has to be resolved afresh for each candidate pair rather than once.
+    const final = resolveBoardSafe(match, silvers)
+    if (!final) return candidates[0]
     const o = determineWinner({
       player1GoalColor: match.goalColor[0], player2GoalColor: match.goalColor[1],
       player1Revealed: final.player1.revealed, player2Revealed: final.player2.revealed,
@@ -708,13 +714,19 @@ function playableCards(match, idx) {
   return [...match.hand[idx], ...match.undealt[idx]]
 }
 
+function silverAs(color, silverColor) {
+  return color === 'SILVER' && isRealColor(silverColor) ? silverColor : color
+}
+
 /** Builds the { revealed, goalCard } shape resolveFinalBoard expects for one side of the match. */
-export function finalBoardInputFor(match, idx, entries = match.revealed[idx]) {
+export function finalBoardInputFor(match, idx, entries = match.revealed[idx], silverColor = match.silverColor?.[idx] ?? null) {
   return {
     revealed: entries.map(r => ({
       // The PRINTED color: `color` is overwritten with the resolved one after each speculative
       // pass, and the next pass must start from the card as printed, not from its last result.
-      ctoonId: r.ctoonId, name: r.name, characters: r.characters, color: r.baseColor ?? r.color, value: r.baseValue,
+      // A Silver card is the exception: once its owner has picked a colour it IS that colour before
+      // any power resolves, so "+2 to all Green" and every other colour-keyed power sees it as such.
+      ctoonId: r.ctoonId, name: r.name, characters: r.characters, color: silverAs(r.baseColor ?? r.color, silverColor), value: r.baseValue,
       type1: r.type1, type2: r.type2, type3: r.type3, group: r.group,
       isSlam: r.isSlam, effect: r.effect, round: r.round, slot: r.slot
     })),
@@ -730,11 +742,15 @@ export function finalBoardInputFor(match, idx, entries = match.revealed[idx]) {
  * the database or roundLog; only the caller's end-of-match step persists anything.
  */
 export function runFinalBoardResolution(match) {
+  // Silver is colourless until its owner picks: it becomes that colour BEFORE powers resolve, so a
+  // recolour-keyed power ("+2 to all Green") buffs it. A side that picked nothing (Silver only arrived
+  // in sudden death) gets its best colour for the board as it stands.
+  const silvers = [0, 1].map(i => match.silverColor?.[i] ?? (hasSilver(match, i) ? autoSilverColor(match, i) : null))
   let final
   try {
     final = resolveFinalBoard({
-      player1: finalBoardInputFor(match, 0),
-      player2: finalBoardInputFor(match, 1)
+      player1: finalBoardInputFor(match, 0, match.revealed[0], silvers[0]),
+      player2: finalBoardInputFor(match, 1, match.revealed[1], silvers[1])
     })
   } catch (err) {
     // A malformed admin-authored gtoonEffect must never take the shared socket process down —
@@ -756,13 +772,7 @@ export function runFinalBoardResolution(match) {
       match.revealed[idx][i].cancelled = !!r.cancelled
     })
   }
-  // A still-Silver card counts as its owner's pick; a side that picked nothing (Silver only arrived
-  // in sudden death) gets its best colour for the board as it stands.
-  const silvers = [0, 1].map(i => {
-    const key = i === 0 ? 'player1' : 'player2'
-    if (!final[key].revealed.some(r => r.color === 'SILVER')) return null
-    return match.silverColor?.[i] ?? autoSilverColor(match, i)
-  })
+  // Anything still Silver after powers ran (a power turned a card Silver) counts as its owner's pick.
   // Show the picked colour on the cards themselves (a fallback colour is only used for scoring).
   for (const idx of [0, 1]) {
     if (!match.silverColor?.[idx]) continue
