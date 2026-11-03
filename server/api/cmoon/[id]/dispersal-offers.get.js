@@ -7,6 +7,7 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { serializeDispersalOption } from '@/server/utils/cmoonDispersal'
 
 export default defineEventHandler(async (event) => {
   const userId = event.context.userId
@@ -45,10 +46,11 @@ export default defineEventHandler(async (event) => {
       quantityPerMember: o.quantityPerMember,
       status: o.status,
       // Each option is a cToon or a Pack, never both — see CMoonDispersalOption's own schema
-      // comment. ogGtoonDisplay's OG-gToon special rendering only applies to cToons.
-      options: o.options.map(opt => opt.ctoon
-        ? { id: opt.id, kind: 'CTOON', ctoonId: opt.ctoon.id, name: opt.ctoon.name, assetPath: opt.ctoon.assetPath, ...ogGtoonDisplay(opt.ctoon) }
-        : { id: opt.id, kind: 'PACK', packId: opt.pack.id, name: opt.pack.name, assetPath: opt.pack.imagePath }),
+      // comment. Shared shape with the admin endpoints via serializeDispersalOption (server/utils/
+      // cmoonDispersal.js) so the two can never drift apart on it; ogGtoonDisplay's OG-gToon
+      // special rendering is player-facing only, so it's layered on top as `extra` rather than
+      // folded into the shared helper itself.
+      options: o.options.map(opt => serializeDispersalOption(opt, opt.ctoon ? ogGtoonDisplay(opt.ctoon) : {})),
       myClaim: o.claims[0] ? { optionId: o.claims[0].optionId, quantity: o.claims[0].quantity } : null,
     })),
   }

@@ -74,14 +74,24 @@ export async function tierHolderCount(tierId) {
   return prisma.user.count({ where: { currentCMoonPrestigeRank: { tierId } } })
 }
 
-// Deletes a tier and every cMoon's mirror of it. Caller (the admin DELETE endpoint) must have
-// already confirmed via tierHolderCount() that nobody currently holds it — this function does
-// not re-check. onDelete: Cascade on CMoonPrestigeRank.tier means the mirror rows (and in turn,
-// via SetNull, any holder's currentCMoonPrestigeRankId — already confirmed empty) are cleaned up
-// by the database itself; no separate deleteMany needed, unlike the universal ladder's own
-// deleteTierAndProvisionedRows, whose CMoonRank relation has no such cascade.
+// Deletes a tier and every cMoon's mirror of it — but only after RE-CHECKING holder count inside
+// the same transaction as the delete, closing the TOCTOU window between the admin endpoint's own
+// earlier tierHolderCount() call and this call: a player can win and be granted this exact rank
+// (maybeGrantCMoonPrestigeRank, its own concurrent transaction) in that gap, and without this
+// recheck the delete would proceed anyway, cascading their just-earned currentCMoonPrestigeRankId
+// to null with no trace. Returns `{ ok: false, holders }` instead of deleting if the recheck finds
+// a holder (the caller maps this to the same 409 the earlier check already produces); `{ ok: true
+// }` once actually deleted. onDelete: Cascade on CMoonPrestigeRank.tier means the mirror rows (and
+// in turn, via SetNull, any holder's currentCMoonPrestigeRankId — reconfirmed empty here) are
+// cleaned up by the database itself; no separate deleteMany needed, unlike the universal ladder's
+// own deleteTierAndProvisionedRows, whose CMoonRank relation has no such cascade.
 export async function deleteTierAndProvisionedRows(tierId) {
-  await prisma.cMoonPrestigeRankTier.delete({ where: { id: tierId } })
+  return prisma.$transaction(async (tx) => {
+    const holders = await tx.user.count({ where: { currentCMoonPrestigeRank: { tierId } } })
+    if (holders > 0) return { ok: false, holders }
+    await tx.cMoonPrestigeRankTier.delete({ where: { id: tierId } })
+    return { ok: true }
+  })
 }
 
 // Converts one tier row into the duck-typed reward shape grantRewardInTx (server/utils/

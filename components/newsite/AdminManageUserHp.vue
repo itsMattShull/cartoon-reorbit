@@ -134,8 +134,16 @@ const dropdownOpen = ref(false)
 let searchTimer = null
 let searchAbort = null
 let searchToken = 0
+// Set true by pickUser() right before it programmatically sets query.value to the picked
+// username — skips the ONE resulting watch(query) tick so picking a result doesn't immediately
+// re-search for (and silently repopulate a closed dropdown with) the user just picked.
+let suppressNextQuerySearch = false
 
 watch(query, (q) => {
+  if (suppressNextQuerySearch) {
+    suppressNextQuerySearch = false
+    return
+  }
   const trimmed = q.trim()
   if (searchTimer) clearTimeout(searchTimer)
   if (trimmed.length < 3) {
@@ -172,22 +180,37 @@ const targetHp = ref(null)
 const setting = ref(false)
 const setError = ref('')
 const setSuccess = ref('')
+// Guards both pickUser's own GET and submitSetHp's POST against a stale response landing after a
+// newer one — mirrors runSearch's own searchToken pattern above. Without this, picking user A
+// then quickly picking user B (A's slower GET still in flight) could let A's response overwrite
+// B's already-displayed detail; the same gap let a slow "Set HP" call for A splice its result
+// into whatever user is on screen by the time it resolves, even after switching to B.
+let detailToken = 0
 
 async function pickUser(u) {
   dropdownOpen.value = false
   results.value = []
+  suppressNextQuerySearch = true
   query.value = u.username
   setError.value = ''
   setSuccess.value = ''
   detail.value = null
   detailLoading.value = true
+  const token = ++detailToken
   try {
-    detail.value = await $fetch(`/api/admin/users/${u.id}/hp`)
-    targetHp.value = detail.value?.effectiveHp ?? null
+    const res = await $fetch(`/api/admin/users/${u.id}/hp`)
+    if (token === detailToken) {
+      detail.value = res
+      targetHp.value = res?.effectiveHp ?? null
+    }
   } catch (e) {
-    setError.value = e?.data?.statusMessage || 'Failed to load HP detail'
+    if (token === detailToken) setError.value = e?.data?.statusMessage || 'Failed to load HP detail'
   } finally {
-    detailLoading.value = false
+    // Conditional, unlike submitSetHp's own `setting` reset below: picking a user isn't blocked
+    // while a previous pick's fetch is still loading (no disabled state on the search box), so an
+    // older call's finally CAN fire after a newer one has already started — only the newer call's
+    // own completion should clear the spinner.
+    if (token === detailToken) detailLoading.value = false
   }
 }
 
@@ -198,16 +221,23 @@ async function submitSetHp() {
   setting.value = true
   setError.value = ''
   setSuccess.value = ''
+  const token = detailToken
+  const userId = detail.value.id
   try {
-    const res = await $fetch(`/api/admin/users/${detail.value.id}/hp`, {
+    const res = await $fetch(`/api/admin/users/${userId}/hp`, {
       method: 'POST',
       body: { targetHp: targetHp.value },
     })
+    if (token !== detailToken) return
     detail.value = { ...detail.value, adjustment: res.adjustment, effectiveHp: res.effectiveHp }
     setSuccess.value = `Effective HP set to ${res.effectiveHp}.`
   } catch (e) {
+    if (token !== detailToken) return
     setError.value = e?.data?.statusMessage || 'Failed to set HP'
   } finally {
+    // Unconditional, unlike pickUser's own detailLoading reset above: the "Set HP" button is
+    // disabled while `setting` is true, so only one submitSetHp call is ever in flight at once —
+    // no newer call exists whose own busy state this could incorrectly clear.
     setting.value = false
   }
 }
