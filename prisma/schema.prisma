@@ -6442,11 +6442,16 @@ enum CMoonSpecialAttackEffectType {
   REFLECT_DAMAGE
   SIPHON_HEALTH
   // ── RAID-ONLY effect types below — see each field's own comment below for why. A solo battle's
-  // own resolveRound (server/api/cmoon/battle/[id]/action.post.js) has no case for any of these
-  // three: the attack still fires and announces, it just has no mechanical effect there. Admins
-  // assigning one of these to a cMoon/faction whose players also fight solo should expect that —
-  // there's one shared special-attack pool per cMoon/faction, used in both contexts, with no
-  // separate "raid-only" assignment slot to keep a mismatched choice from ever being possible.
+  // own resolveRound (server/api/cmoon/battle/[id]/action.post.js) has no case for POISON_OPPONENT
+  // or SHIELD_PARTY: the attack still fires and announces, it just has no mechanical effect there.
+  // Admins assigning one of those two to a cMoon/faction whose players also fight solo should
+  // expect that — there's one shared special-attack pool per cMoon/faction, used in both
+  // contexts, with no separate "raid-only" assignment slot to keep a mismatched choice from ever
+  // being possible. CLEANSE_SELF is the exception: action.post.js DOES have a solo case for it
+  // (cures this player's own paralysis, plus an optional HP top-up via cleanseAlsoHeals) — only
+  // its healsAllies toggle and the poison side of the cure are genuinely raid-only, since a solo
+  // battle has no allies and no poison state to clear (POISON_OPPONENT, the only thing that could
+  // ever apply one, is itself raid-only).
   POISON_OPPONENT
   CLEANSE_SELF
   SHIELD_PARTY
