@@ -1819,6 +1819,7 @@ model GlobalGameConfig {
   gameTileEdrpsImagePath               String?
   gameTileFruitsamuraiImagePath        String?
   gameTilePokemonbattleImagePath       String?
+  gameTileGtoonsclassicImagePath       String?
   // Account-dissolve "featured auction" rules: cToons matching any of these
   // rarities/series/sets are marked isFeatured when an account is dissolved.
   // Each is a JSON array of strings, edited via the "Edit Featured" modal on

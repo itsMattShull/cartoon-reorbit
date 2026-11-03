@@ -22,7 +22,8 @@ export default defineEventHandler(async () => {
       gameTileBlackjackImagePath:    true,
       gameTileEdrpsImagePath:        true,
       gameTileFruitsamuraiImagePath: true,
-      gameTilePokemonbattleImagePath: true
+      gameTilePokemonbattleImagePath: true,
+      gameTileGtoonsclassicImagePath: true
     }
   })
 
@@ -59,6 +60,7 @@ export default defineEventHandler(async () => {
     blackjack:    cfg?.gameTileBlackjackImagePath     ?? null,
     edrps:        cfg?.gameTileEdrpsImagePath         ?? null,
     fruitsamurai: cfg?.gameTileFruitsamuraiImagePath  ?? null,
-    pokemonbattle: cfg?.gameTilePokemonbattleImagePath ?? null
+    pokemonbattle: cfg?.gameTilePokemonbattleImagePath ?? null,
+    gtoonsclassic: cfg?.gameTileGtoonsclassicImagePath ?? null
   }
 })
