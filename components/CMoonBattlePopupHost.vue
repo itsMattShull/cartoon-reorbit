@@ -295,6 +295,15 @@ const lastRoundLabel = computed(() => {
   // reason for "no damage" than a genuine block, so it gets its own line rather than falling into
   // the generic "no hits landed" below.
   if (enemyMissed) return `${actions}their attack missed!`
+  // A special-attack round (playerAction === SPECIAL_ACTION) can ONLY land here when the enemy
+  // didn't attack this round (see resolveBattleRound/attackLands, server-side: SPECIAL_ACTION is
+  // neither an attack nor a block, so playerHit/enemyHit/playerBlocked/enemyMissed are all
+  // impossible whenever the enemy chose BLOCK_HIGH/BLOCK_LOW) — i.e. the special itself was never
+  // blocked, every special effect (including HEAL_SELF) already applied in full server-side
+  // before this lane exchange even ran (see action.post.js's own ordering comment). The generic
+  // "no hits landed" copy below reused the enemy's action label ("they blocked high"), which read
+  // as if the special itself had been blocked — it hadn't. Say so plainly instead.
+  if (playerAction === 'SPECIAL_ATTACK') return `They ${actionLabel(enemyAction)} — your special attack isn't affected by blocking.`
   return `${actions}no hits landed.`
 })
 const lastRoundClass = computed(() => {
