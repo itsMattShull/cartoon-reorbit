@@ -22,6 +22,7 @@
 // of cause — prestiging is simply another hop through the same guard.
 import { prisma } from '../prisma.js'
 import { getGlobalConfig, reassignUserCMoon, grantCMoonPrizes } from './cmoon.js'
+import { sumBattleUpgradeStatTotals } from './cmoonBattleUpgradeValidation.js'
 // Pure helpers (bounds, error codes, findNextPrestigeLevel) live in their own import-free module
 // so they can be unit-tested directly without pulling in Prisma — see that file's own header
 // comment. Re-exported here so every existing call site can keep importing from this file.
@@ -149,6 +150,21 @@ export async function prestigeUser(userId, newCMoonId) {
   // nothing below it (the level bump, the log row) ever runs.
   const moveResult = await reassignUserCMoon(userId, newCMoonId)
 
+  // Battle upgrades bought from the cMart's "Upgrades" tab (CMoonBattleUpgrade) are the ONE part
+  // of cMoonHpAdjustment/cMoonStaminaAdjustment that prestige resets — read right before the
+  // transaction below (not earlier) so a purchase that lands in the gap between this function's
+  // first read and here is still caught; a manual grant from the separate "Manage User HP &
+  // Stamina" admin tool is untouched either way, since it was never tracked here. Reads each
+  // purchase row's upgrade for its CURRENT amount/stat (see sumBattleUpgradeStatTotals's own
+  // comment on why that's deliberate, not frozen-at-purchase-time).
+  const battleUpgradePurchases = await prisma.userCMoonBattleUpgrade.findMany({
+    where: { userId },
+    select: { timesPurchased: true, upgrade: { select: { stat: true, amount: true } } },
+  })
+  const { hpTotal, staminaTotal } = sumBattleUpgradeStatTotals(
+    battleUpgradePurchases.map(p => ({ stat: p.upgrade.stat, amount: p.upgrade.amount, timesPurchased: p.timesPurchased }))
+  )
+
   // Bumped together so a failure here can never leave one without the other (e.g. a level bump
   // with no log row to show for it, invisible to support trying to reconcile a discrepancy).
   // Deliberately NOT caught/swallowed: reassignUserCMoon above already committed its own move
@@ -161,7 +177,15 @@ export async function prestigeUser(userId, newCMoonId) {
   const [, prestigeLog] = await prisma.$transaction([
     prisma.user.update({
       where: { id: userId },
-      data: { prestigeLevel: newLevel, lastPrestigedAt: new Date() },
+      data: {
+        prestigeLevel: newLevel, lastPrestigedAt: new Date(),
+        // Subtracts back out exactly what the purchases above granted — never a flat reset to 0,
+        // since that would also wipe out any UNRELATED manual adjustment from the "Manage User
+        // HP & Stamina" admin tool, which this reset must never touch (see this function's own
+        // comment above).
+        ...(hpTotal ? { cMoonHpAdjustment: { decrement: hpTotal } } : {}),
+        ...(staminaTotal ? { cMoonStaminaAdjustment: { decrement: staminaTotal } } : {}),
+      },
     }),
     prisma.cMoonPrestigeLog.create({
       data: {
@@ -174,6 +198,9 @@ export async function prestigeUser(userId, newCMoonId) {
         pointsAtPrestige,
       },
     }),
+    // Removing (not zeroing) these rows is what lets the player buy back up to each upgrade's
+    // own purchaseLimit again — see UserCMoonBattleUpgrade's own schema comment.
+    prisma.userCMoonBattleUpgrade.deleteMany({ where: { userId } }),
   ])
 
   // Only a player's FIRST time ever prestiging into this specific cMoon earns its join prizes —
