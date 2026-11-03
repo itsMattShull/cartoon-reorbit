@@ -320,11 +320,28 @@
               </div>
               <p class="text-xs text-gray-600">Everyone who joined received the same prize, and cMoon points went to each player's own cMoon.</p>
             </template>
-            <NuxtLink to="/newsite/home" class="inline-block px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50">Back home</NuxtLink>
+            <div class="flex items-center gap-2 flex-wrap">
+              <NuxtLink to="/newsite/home" class="inline-block px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50">Back home</NuxtLink>
+              <button
+                v-if="raid.battleReport" type="button"
+                class="inline-block px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50"
+                @click="showBattleReport = true"
+              >
+                📊 Click to view battle report
+              </button>
+            </div>
           </div>
         </div>
       </template>
     </div>
+
+    <CMoonRaidBattleReportModal
+      v-if="showBattleReport && raid?.battleReport"
+      :report="raid.battleReport"
+      :enemy-image-path="raid.enemyImagePath"
+      :my-user-id="user?.id"
+      @close="showBattleReport = false"
+    />
   </NuxtLayout>
 </template>
 
@@ -476,6 +493,7 @@ function specialEffectDescription(attack) {
   }
 }
 const showSpecialInfo = ref(false)
+const showBattleReport = ref(false)
 // How many consecutive landed hits MY OWN special needs right now — this attack's own
 // requiredHitStreak, minus 1 under captain boost (see myself.hitStreakThreshold's own comment in
 // cmoonRaidSocket.js) — now per-participant, since different party members' attacks can cost
