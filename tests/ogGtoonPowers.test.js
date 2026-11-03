@@ -378,6 +378,13 @@ function deckFor(cards, goalColor = 'BLACK') {
   }))
 }
 
+/** Silver is colourless only until its owner picks; powers then see it as the picked colour. */
+const SILVER_PICK = 'PINK'
+function withSilverAs(board, color) {
+  const recolor = (c) => (c && c.color === 'SILVER' ? { ...c, color } : c)
+  return { ...board, p1: board.p1.map(recolor), p2: board.p2.map(recolor) }
+}
+
 function playRealMatch(board) {
   const m = initHands({
     id: 'sim', players: ['a', 'b'], usernames: ['A', 'B'],
@@ -397,6 +404,7 @@ function playRealMatch(board) {
   }
   recordSwapChoice(m, 0, false); recordSwapChoice(m, 1, false)
   resolveSwapPhase(m)
+  m.silverColor = [SILVER_PICK, SILVER_PICK]
   checkMatchEnd(m)
   return m
 }
@@ -407,9 +415,10 @@ for (const entry of OG_GTOON_POWER_CATALOG) {
     const bias = vocabFromEffect(entry.effect)
     const rng = rngFrom(99 + entry.description.length * 7919)
     for (let n = 0; n < 12; n++) {
-      const { board, srcRef, src } = buildBoard(rng, VOCAB, bias, entry, { partial: false })
+      const { board: printed, srcRef, src } = buildBoard(rng, VOCAB, bias, entry, { partial: false })
+      const board = withSilverAs(printed, SILVER_PICK)
       const expected = referenceBoard(board, srcRef, entry.description)
-      const m = playRealMatch(board)
+      const m = playRealMatch(printed)
       for (const [i, sideName] of [[0, 'p1'], [1, 'p2']]) {
         m.revealed[i].forEach((r, k) => {
           const card = board[sideName][r.slot - 1]
