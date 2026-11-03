@@ -116,8 +116,18 @@ export default defineNuxtConfig({
     '~/server/middleware/daily-points.js'
   ],
 
+  // `server` is NOT optional-and-defaulted-off here — Nuxt's own schema defaults
+  // sourcemap.server to `true` unconditionally (dev AND prod) unless a config explicitly
+  // overrides it; only `client` defaults based on dev mode. The Nitro server bundle re-includes
+  // the whole SSR-rendered component tree plus every API route, so generating full hi-res
+  // sourcemaps for it is a large, transient memory cost paid on every production build — and the
+  // production deploy has been reliably OOM-killed (exit 137) several times in a row, every time
+  // during exactly this "Bundling server"/"Building Nitro server" step. Disabling it trades away
+  // readable stack traces from server-side error logs for a build that can actually complete;
+  // client sourcemaps (used by the browser devtools, not server logs) are untouched.
   sourcemap: {
-    client: 'hidden'
+    client: 'hidden',
+    server: false
   },
 
   nitro: {
