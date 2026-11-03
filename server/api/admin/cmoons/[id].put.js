@@ -5,6 +5,7 @@ import { logAdminChange } from '@/server/utils/adminChangeLog'
 import { isValidHexColor, isValidDiscordSnowflake, isValidCMoonEffectType, reassignUserCMoon } from '@/server/utils/cmoon'
 import { invalidateCMoonList } from '@/server/api/cmoons.get'
 import { requireAdmin, assertSameOrigin } from '@/server/utils/requireAdmin'
+import { provisionAllPrestigeTiersForCMoon, deprovisionCMoonPrestigeRanks } from '@/server/utils/cmoonPrestigeRankTiers'
 
 export default defineEventHandler(async (event) => {
   const me = await requireAdmin(event)
@@ -47,6 +48,7 @@ export default defineEventHandler(async (event) => {
   const showOnNav = body?.showOnNav === undefined ? cmoon.showOnNav : !!body.showOnNav
   const showButtonOnPages = body?.showButtonOnPages === undefined ? cmoon.showButtonOnPages : !!body.showButtonOnPages
   const allowOptOutJoin = body?.allowOptOutJoin === undefined ? cmoon.allowOptOutJoin : !!body.allowOptOutJoin
+  const isPrestigeCMoon = body?.isPrestigeCMoon === undefined ? cmoon.isPrestigeCMoon : !!body.isPrestigeCMoon
 
   if (!name) throw createError({ statusCode: 400, statusMessage: 'Name is required' })
   if (!isValidHexColor(color)) throw createError({ statusCode: 400, statusMessage: 'Color must be a hex value like #3366ff' })
@@ -106,7 +108,7 @@ export default defineEventHandler(async (event) => {
   await db.$transaction(async (tx) => {
     await tx.cMoon.update({
       where: { id },
-      data: { name, color, pageBgColor, accentColor, textColor, cardBgColor, discordRoleId: discordRoleId || null, discordChannelId: discordChannelId || null, pageDescription, effectType, customJoinEffectId, specialAttackId, joinLocked, showOnNav, showButtonOnPages, allowOptOutJoin },
+      data: { name, color, pageBgColor, accentColor, textColor, cardBgColor, discordRoleId: discordRoleId || null, discordChannelId: discordChannelId || null, pageDescription, effectType, customJoinEffectId, specialAttackId, joinLocked, showOnNav, showButtonOnPages, allowOptOutJoin, isPrestigeCMoon },
     })
     if (captainIds) {
       await tx.cMoonCaptain.deleteMany({ where: { cMoonId: id } })
@@ -117,6 +119,20 @@ export default defineEventHandler(async (event) => {
       if (prizeCtoonRows.length) await tx.cMoonPrizeCtoon.createMany({ data: prizeCtoonRows.map(p => ({ cMoonId: id, ...p })), skipDuplicates: true })
     }
   })
+
+  // The prestige-exclusive rank ladder (see CMoonPrestigeRankTier's own schema comment) is
+  // mirrored ONLY onto prestige cMoons — provision it the moment this flag turns on, deprovision
+  // it (cascading any current holder's rank away) the moment it turns off. A no-op flip (already
+  // true, already false) correctly skips both calls below.
+  if (isPrestigeCMoon && !cmoon.isPrestigeCMoon) {
+    await provisionAllPrestigeTiersForCMoon(id).catch((err) => {
+      console.error(`[cmoons.put] provisionAllPrestigeTiersForCMoon failed for cMoon ${id}:`, err)
+    })
+  } else if (!isPrestigeCMoon && cmoon.isPrestigeCMoon) {
+    await deprovisionCMoonPrestigeRanks(id).catch((err) => {
+      console.error(`[cmoons.put] deprovisionCMoonPrestigeRanks failed for cMoon ${id}:`, err)
+    })
+  }
 
   // Captaincy implies membership: a newly-added captain (one who wasn't already captaining this
   // cMoon before this save) who doesn't already belong to it gets moved in. Removing someone from

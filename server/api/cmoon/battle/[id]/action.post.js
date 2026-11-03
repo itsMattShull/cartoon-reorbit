@@ -493,6 +493,7 @@ async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining, d
       ...(summary.backgrounds ? [{ type: 'BACKGROUND', quantity: summary.backgrounds }] : []),
       ...(summary.avatars ? [{ type: 'AVATAR', quantity: summary.avatars }] : []),
       ...summary.ctoonJobs.map(j => ({ type: 'CTOON', name: j.name, quantity: j.quantity })),
+      ...summary.packGrants.map(p => ({ type: 'PACK', name: p.name, quantity: p.quantity })),
     ]
 
     const updated = await tx.cMoonEnemyBattle.update({

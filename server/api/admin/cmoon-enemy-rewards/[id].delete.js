@@ -37,6 +37,7 @@ export default defineEventHandler(async (event) => {
       ctoonId: reward.ctoonId,
       avatarId: reward.avatarId,
       backgroundId: reward.backgroundId,
+      packId: reward.packId,
       dropChancePercent: reward.dropChancePercent,
       quantity: reward.quantity,
     },

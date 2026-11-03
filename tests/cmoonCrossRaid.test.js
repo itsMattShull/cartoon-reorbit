@@ -441,11 +441,12 @@ test('publicParticipantTeam exposes team colors and rank, and nothing for a pend
     rankName: 'Captain', rankTierName: 'Gold', rankTierLevel: 3, rankTierCount: 5,
   })
   assert.deepEqual(publicParticipantTeam(raid, p), {
-    cMoon: { id: 'moonB', name: 'Moon B', color: '#ff0000', avatarPath: '/b.png' },
+    cMoon: { id: 'moonB', name: 'Moon B', color: '#ff0000', avatarPath: '/b.png', isPrestigeCMoon: false },
     rank: { name: 'Captain', tierName: 'Gold', tierLevel: 3, tierCount: 5 },
     isCaptain: false,
+    prestigeLevel: 0,
   })
-  assert.deepEqual(publicParticipantTeam(raid, participant('x', { pendingJoin: true })), { cMoon: null, rank: null, isCaptain: false })
+  assert.deepEqual(publicParticipantTeam(raid, participant('x', { pendingJoin: true })), { cMoon: null, rank: null, isCaptain: false, prestigeLevel: 0 })
   const legacy = publicParticipantTeam(raid, participant('old'))
   assert.equal(legacy.cMoon.name, 'Moon A')
   assert.equal(legacy.rank, null)
@@ -460,6 +461,19 @@ test('publicParticipantTeam exposes isCaptain (a cMoon captain\'s own cosmetic f
 
   const regularParticipant = participant('reg', { cMoonId: 'moonC', cMoonName: 'Moon C', isCaptain: false })
   assert.equal(publicParticipantTeam(raid, regularParticipant).isCaptain, false)
+})
+
+test('publicParticipantTeam exposes prestigeLevel (the player\'s own) and cMoon.isPrestigeCMoon (the team\'s)', () => {
+  const raid = raidWith([])
+  const prestiged = participant('p', { cMoonId: 'moonD', cMoonName: 'Moon D', cMoonIsPrestige: true, prestigeLevel: 3 })
+  const result = publicParticipantTeam(raid, prestiged)
+  assert.equal(result.prestigeLevel, 3)
+  assert.equal(result.cMoon.isPrestigeCMoon, true)
+
+  const regular = participant('reg', { cMoonId: 'moonD', cMoonName: 'Moon D' })
+  const regularResult = publicParticipantTeam(raid, regular)
+  assert.equal(regularResult.prestigeLevel, 0)
+  assert.equal(regularResult.cMoon.isPrestigeCMoon, false)
 })
 
 // ── Lobby ───────────────────────────────────────────────────────────────────────────────────

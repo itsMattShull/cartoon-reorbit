@@ -26,6 +26,7 @@ export default defineEventHandler(async (event) => {
         userId: true, username: true, quantity: true, claimedAt: true,
         cMoon: { select: { name: true } },
         ctoon: { select: { name: true } },
+        pack: { select: { name: true } },
       },
     }),
     db.cMoonDispersalClaim.count({ where: { offerId } }),
@@ -36,7 +37,9 @@ export default defineEventHandler(async (event) => {
       userId: c.userId,
       username: c.username,
       cMoonName: c.cMoon?.name || '',
-      ctoonName: c.ctoon?.name || '',
+      // Exactly one of ctoon/pack is ever set on a claim row — see CMoonDispersalClaim's own
+      // schema comment.
+      ctoonName: c.ctoon?.name || c.pack?.name || '',
       quantity: c.quantity,
       claimedAt: c.claimedAt,
     })),

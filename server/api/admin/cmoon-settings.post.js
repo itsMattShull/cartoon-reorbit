@@ -54,6 +54,12 @@ export default defineEventHandler(async (event) => {
     data.cMoonOptOutCooldownDays = days
   }
 
+  // Master on/off switch for cMoon Prestige — see GlobalGameConfig.cMoonPrestigeEnabled's schema
+  // comment and server/utils/cmoonPrestige.js.
+  if (body?.cMoonPrestigeEnabled !== undefined) {
+    data.cMoonPrestigeEnabled = !!body.cMoonPrestigeEnabled
+  }
+
   // Master on/off switch for the whole cMoon Enemy Battles feature — see
   // GlobalGameConfig.cMoonEnemyBattlesEnabled's schema comment. Checked before anything else in
   // server/api/cmoon/battle/consider.post.js and start.post.js, independent of the appearance-rate
@@ -418,6 +424,7 @@ export default defineEventHandler(async (event) => {
     cMoonEnabled: updated.cMoonEnabled,
     cMoonEnabledAt: updated.cMoonEnabledAt,
     cMoonOptOutCooldownDays: updated.cMoonOptOutCooldownDays,
+    cMoonPrestigeEnabled: updated.cMoonPrestigeEnabled,
     cMoonEnemyBattlesEnabled: updated.cMoonEnemyBattlesEnabled,
     cMoonBattlePopupChancePercent: updated.cMoonBattlePopupChancePercent,
     cMoonBattlePopupCooldownMinutes: updated.cMoonBattlePopupCooldownMinutes,

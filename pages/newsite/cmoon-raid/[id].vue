@@ -405,6 +405,7 @@ const myRewardsList = computed(() => {
   const rewards = Array.isArray(myself.value?.rewardsGranted) ? myself.value.rewardsGranted : []
   return rewards.map(r => {
     if (r.type === 'CTOON') return `${r.name || 'cToon'}${r.quantity > 1 ? ` x${r.quantity}` : ''}`
+    if (r.type === 'PACK') return `${r.name || 'Pack'}${r.quantity > 1 ? ` x${r.quantity}` : ''}`
     if (r.type === 'AVATAR') return `Avatar${r.quantity > 1 ? ` x${r.quantity}` : ''}`
     if (r.type === 'POINTS') return `${r.quantity} points`
     return `Background${r.quantity > 1 ? ` x${r.quantity}` : ''}`

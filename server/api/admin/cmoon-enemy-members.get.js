@@ -23,6 +23,7 @@ export default defineEventHandler(async (event) => {
           ctoon: { select: { id: true, name: true, assetPath: true } },
           avatar: { select: { id: true, label: true, imagePath: true } },
           background: { select: { id: true, label: true, imagePath: true } },
+          pack: { select: { id: true, name: true, imagePath: true } },
         },
       },
       // Each member's wind-up/telegraph moves — same "include the full rows, not just a count"
@@ -85,11 +86,13 @@ export default defineEventHandler(async (event) => {
         ctoonId: r.ctoonId,
         avatarId: r.avatarId,
         backgroundId: r.backgroundId,
+        packId: r.packId,
         dropChancePercent: r.dropChancePercent,
         quantity: r.quantity,
         ctoon: r.ctoon,
         avatar: r.avatar,
         background: r.background,
+        pack: r.pack,
       })),
       windUpMoves: m.windUpMoves.map(w => ({
         id: w.id,

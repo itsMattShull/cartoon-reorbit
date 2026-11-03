@@ -134,6 +134,7 @@ const rewardsList = computed(() => {
   const items = Array.isArray(wouldGrant.value?.items) ? wouldGrant.value.items : []
   return items.map(item => {
     if (item.type === 'CTOON') return `${item.label || 'cToon'}${item.quantity > 1 ? ` x${item.quantity}` : ''}`
+    if (item.type === 'PACK') return `${item.label || 'Pack'}${item.quantity > 1 ? ` x${item.quantity}` : ''}`
     if (item.type === 'AVATAR') return 'Avatar'
     if (item.type === 'BACKGROUND') return 'Background'
     if (item.type === 'POINTS') return `${item.quantity} points`

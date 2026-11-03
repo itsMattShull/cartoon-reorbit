@@ -973,17 +973,36 @@ export async function getPlayerCombatMaxHp(userId, config = null) {
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { currentCMoonRank: { select: { tier: { select: { sortOrder: true } } } } },
+    select: {
+      cMoonHpAdjustment: true,
+      currentCMoonRank: { select: { tier: { select: { sortOrder: true } } } },
+    },
   })
+  const adjustment = Number(user?.cMoonHpAdjustment) || 0
   const sortOrder = user?.currentCMoonRank?.tier?.sortOrder
-  if (sortOrder == null) return combinePlayerMaxHp(defaultHp, 0)
+  if (sortOrder == null) return combinePlayerMaxHp(defaultHp, 0, adjustment)
 
   const clearedTiers = await prisma.cMoonRankTier.findMany({
     where: { sortOrder: { lte: sortOrder } },
     select: { cMoonEnemyBattleHpBonus: true },
   })
   const bonus = clearedTiers.reduce((sum, t) => sum + (Number(t.cMoonEnemyBattleHpBonus) || 0), 0)
-  return combinePlayerMaxHp(defaultHp, bonus)
+  return combinePlayerMaxHp(defaultHp, bonus, adjustment)
+}
+
+// Shared by the admin "Manage User HP" detail lookup and the mass-adjust tool: computes a single
+// user's current NATURAL max HP (defaultHp + rank-tier bonus, with zero adjustment applied) from
+// their already-fetched rank sortOrder. Separate from getPlayerCombatMaxHp so a caller that
+// already has `sortOrder` in hand (e.g. from a batch query covering many users) doesn't need a
+// second per-user DB round trip just to re-derive it.
+export async function getNaturalCombatMaxHp(sortOrder, defaultHp) {
+  if (sortOrder == null) return combinePlayerMaxHp(defaultHp, 0, 0)
+  const clearedTiers = await prisma.cMoonRankTier.findMany({
+    where: { sortOrder: { lte: sortOrder } },
+    select: { cMoonEnemyBattleHpBonus: true },
+  })
+  const bonus = clearedTiers.reduce((sum, t) => sum + (Number(t.cMoonEnemyBattleHpBonus) || 0), 0)
+  return combinePlayerMaxHp(defaultHp, bonus, 0)
 }
 
 // (pickEffectiveSpecialAttack/SPECIAL_ATTACK_SELECT live in cmoonEnemyBattle.js, imported above —
@@ -1045,7 +1064,26 @@ class CMoonError extends Error {
 // "here's what's coming" reveal — this is the same config already shown publicly on the
 // cMoon's own page, not new information, and the mint jobs above are fire-and-forget, so
 // this list describes what was queued, not a confirmed-delivered receipt.
-async function grantCMoonPrizes(userId, cMoonId) {
+//
+// Idempotent PER (userId, cMoonId), FOREVER — enforced here, not left to each caller's own gate,
+// because each caller's gate only covers its OWN mechanism: selectCMoonForUser can only ever fire
+// once per account (requires cMoonId: null), and prestigeUser's gate only catches a repeat
+// PRESTIGE into the same destination. Neither alone catches a player who already collected this
+// cMoon's prizes as an ordinary member, was later moved elsewhere by an admin-driven path
+// (reassignUserCMoon/Balance Teams/an accepted CMoonChangeRequest — none of which grant, see
+// tests/cmoonBalanceNoPrizeGrant.test.js), and then prestiges back INTO this same cMoon — see
+// CMoonPrizeGrantLog's own schema comment. The log row is written BEFORE the mint jobs below are
+// queued, not after: on the rare crash in between, a player simply never gets this prize rather
+// than this function being safely re-callable and silently double-granting it later — the right
+// failure mode for a one-time reward.
+export async function grantCMoonPrizes(userId, cMoonId) {
+  try {
+    await prisma.cMoonPrizeGrantLog.create({ data: { userId, cMoonId } })
+  } catch (err) {
+    if (err?.code === 'P2002') return []
+    throw err
+  }
+
   const prizes = await prisma.cMoonPrizeCtoon.findMany({
     where: { cMoonId },
     include: { ctoon: { select: { name: true, assetPath: true } } },
@@ -1119,7 +1157,7 @@ export async function selectCMoonForUser(userId, cMoonId) {
       data: {
         cMoonId: cmoon.id, cMoonSelectedAt: new Date(), cMoonAutoAssigned: false,
         cMoonOptedOut: false, cMoonOptedOutAt: null,
-        cMoonPoints: 0, currentCMoonRankId: null, cMoonRankRoleGrantedAt: null,
+        cMoonPoints: 0, currentCMoonRankId: null, cMoonRankRoleGrantedAt: null, currentCMoonPrestigeRankId: null,
       },
     })
     if (result.count === 0) throw new CMoonError(CMOON_SELECT_ERRORS.ALREADY_ASSIGNED)
@@ -1299,6 +1337,12 @@ export async function reassignUserCMoon(userId, newCMoonId) {
         currentCMoonRankId: null,
         cMoonRankRoleGrantedAt: null,
         cMoonRoleGrantedAt: null,
+        // Same "only means something within the cMoon it was earned in" reasoning as
+        // currentCMoonRankId above, for the SECOND, prestige-exclusive ladder (see
+        // CMoonPrestigeRank's own schema comment) — a rank earned on one prestige cMoon's own
+        // ladder means nothing on whatever cMoon this move lands the user in next, prestige or
+        // not.
+        currentCMoonPrestigeRankId: null,
         // Mirrors selectCMoonForUser's reset on self-join: an admin-driven move (or removal) must
         // clear these the same way, or a user who once opted out keeps a stale cMoonOptedOut/
         // cMoonOptedOutAt around forever — harmless while they stay put, but if later removed
@@ -1491,6 +1535,9 @@ export async function executeBalancePlan() {
           currentCMoonRankId: null,
           cMoonRankRoleGrantedAt: null,
           cMoonRoleGrantedAt: null,
+          // Same reset as reassignUserCMoon's own currentCMoonPrestigeRankId clear above — a
+          // Balance Teams move is just another cMoon reassignment.
+          currentCMoonPrestigeRankId: null,
           // isAdmin:false in the where clause above already excludes every captain (see this
           // function's header comment), so unlike reassignUserCMoon this never needs a
           // per-user captaincy check — every mover here starts the destination team fresh at

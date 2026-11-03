@@ -102,9 +102,52 @@
               </div>
               <button class="btn-team" @click="openSpecialAttackModal">Choose cMoon Special Attack</button>
             </div>
+
+            <!-- cMoon Prestige — hidden entirely unless the feature is on AND the player is
+                 currently on a cMoon (nothing to reset/leave otherwise). Mirrors Request Team
+                 Change's own "only show when currentCMoonId exists" stance. -->
+            <div v-if="prestigeStatus?.enabled && currentCMoonId" class="settings-row">
+              <div>
+                <h2 class="settings-row-title">✦ cMoon Prestige</h2>
+                <p v-if="prestigeStatus.eligible" class="settings-row-desc">
+                  You've reached the threshold for Prestige {{ prestigeStatus.nextLevel }}{{ prestigeStatus.nextLevelTitle ? ` — ${prestigeStatus.nextLevelTitle}` : '' }}!
+                  Elect to reset your cMoonPoints to 0 and join a prestige cMoon — you keep every
+                  reward and achievement you've already earned.
+                </p>
+                <p v-else-if="prestigeStatus.blockedReason === 'NO_LEVEL_CONFIGURED'" class="settings-row-desc">
+                  You're currently Prestige {{ prestigeStatus.currentLevel }}. The next level hasn't been configured yet.
+                </p>
+                <p v-else-if="prestigeStatus.blockedReason === 'ACTIVE_BATTLE'" class="settings-row-desc">
+                  Finish your current cMoon Enemy battle to prestige.
+                </p>
+                <p v-else-if="prestigeStatus.blockedReason === 'ACTIVE_RAID'" class="settings-row-desc">
+                  Finish your current raid to prestige.
+                </p>
+                <p v-else class="settings-row-desc">
+                  {{ prestigeStatus.currentPoints.toLocaleString() }} / {{ (prestigeStatus.pointThreshold || 0).toLocaleString() }} cMoonPoints
+                  toward Prestige {{ prestigeStatus.nextLevel }}{{ prestigeStatus.nextLevelTitle ? ` — ${prestigeStatus.nextLevelTitle}` : '' }}.
+                  {{ prestigeStatus.currentLevel > 0 ? `Currently Prestige ${prestigeStatus.currentLevel}.` : '' }}
+                </p>
+                <!-- The SECOND, prestige-exclusive rank ladder — only ever non-null while actually
+                     a member of a prestige cMoon (see currentPrestigeRankName's own comment in
+                     server/utils/cmoonPrestige.js). Separate from the Prestige N level shown
+                     above, which is a lifetime counter, not a standing on this team's own ladder. -->
+                <p v-if="prestigeStatus.currentPrestigeRankName" class="settings-row-desc">
+                  Prestige rank: <strong>{{ prestigeStatus.currentPrestigeRankName }}</strong>
+                </p>
+              </div>
+              <button v-if="prestigeStatus.eligible" class="btn-team" @click="openPrestigeModal">✦ Prestige Now</button>
+            </div>
           </div>
         </div>
       </div>
+
+      <CMoonPrestigeModal
+        v-if="showPrestigeModal"
+        :status="prestigeStatus"
+        @close="showPrestigeModal = false"
+        @prestiged="onPrestiged"
+      />
 
       <!-- Avatar modal -->
       <!-- Teleported to body: .site-container carries a `transform`, which makes it the
@@ -630,6 +673,33 @@ async function cancelTeamChangeRequest() {
 }
 
 onMounted(loadCMoonState)
+
+// ── cMoon Prestige ───────────────────────────────────────────────────────
+const prestigeStatus = ref(null)
+const showPrestigeModal = ref(false)
+
+async function loadPrestigeStatus() {
+  try {
+    prestigeStatus.value = await $fetch('/api/cmoon/prestige-status', { credentials: 'include' })
+  } catch {
+    // Non-critical: the whole section just stays hidden if this fails to load.
+    prestigeStatus.value = null
+  }
+}
+
+function openPrestigeModal() {
+  showPrestigeModal.value = true
+}
+
+// The modal already performed the move itself (and the full-screen reveal) before emitting this —
+// just refresh this page's own copy of the status/cMoon state so the row reflects the new level
+// immediately rather than the stale pre-prestige one.
+async function onPrestiged() {
+  showPrestigeModal.value = false
+  await Promise.all([loadPrestigeStatus(), loadCMoonState()])
+}
+
+onMounted(loadPrestigeStatus)
 </script>
 
 <style>

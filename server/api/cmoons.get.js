@@ -22,7 +22,7 @@ async function getAllCMoons() {
       select: {
         id: true, name: true, color: true, memberCount: true, imagePath: true, avatarPath: true,
         effectType: true, joinLocked: true, showOnNav: true, buttonImagePath: true, showButtonOnPages: true,
-        allowOptOutJoin: true,
+        allowOptOutJoin: true, isPrestigeCMoon: true,
         // Only populated when effectType is null (see the CMoon_effectType_xor_customJoinEffectId
         // DB constraint) — small string fields, cheap to carry on this already-broad select
         // (effectType itself is already shipped to every view including ?view=nav today).

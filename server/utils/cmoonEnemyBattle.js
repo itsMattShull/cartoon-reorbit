@@ -87,16 +87,45 @@ export function isKnownAction(action) {
   return isValidBattleAction(action) || action === SPECIAL_ACTION || action === PARALYZED_ACTION
 }
 
-// Combines the admin-configured site-wide default (GlobalGameConfig.cMoonEnemyBattleDefaultHp)
-// with a player's own cMoon-rank bonus (CMoonRankTier.cMoonEnemyBattleHpBonus) into their actual
-// max HP for a cMoon Enemy Battle — pure arithmetic, kept here (rather than inline in
+// Combines the admin-configured site-wide default (GlobalGameConfig.cMoonEnemyBattleDefaultHp),
+// a player's own cMoon-rank bonus (CMoonRankTier.cMoonEnemyBattleHpBonus), and any permanent,
+// admin-set HP adjustment (User.cMoonHpAdjustment, from the "Manage User HP" admin tool) into
+// their actual max HP for a cMoon Enemy Battle — pure arithmetic, kept here (rather than inline in
 // getPlayerCombatMaxHp() in server/utils/cmoon.js, which does the actual DB lookups for both
 // inputs) so the one piece of this genuinely worth unit-testing can be, without dragging in that
 // file's BullMQ/Prisma side effects (see tests/cmoonBalanceNoPrizeGrant.test.js's own comment on
-// why cmoon.js can't just be imported in a test). Floored at 1 so a misconfigured negative bonus
-// can never leave a player unable to take a single hit.
-export function combinePlayerMaxHp(defaultHp, bonus) {
-  return Math.max(1, (Number(defaultHp) || 0) + (Number(bonus) || 0))
+// why cmoon.js can't just be imported in a test). adjustment is additive, not an override — a
+// player whose HP was hand-adjusted still gains further HP from a later rank-up, since the rank
+// bonus term keeps growing independently. Floored at 1 so a misconfigured negative bonus/
+// adjustment can never leave a player unable to take a single hit.
+export function combinePlayerMaxHp(defaultHp, bonus, adjustment = 0) {
+  return Math.max(1, (Number(defaultHp) || 0) + (Number(bonus) || 0) + (Number(adjustment) || 0))
+}
+
+// Pure helper for the "Manage User HP" admin tool (server/api/admin/users/[id]/hp*): given a
+// user's current NATURAL max HP (defaultHp + rank-tier bonus, with zero adjustment — see
+// getNaturalCombatMaxHp in server/utils/cmoon.js), returns the User.cMoonHpAdjustment value that
+// makes their EFFECTIVE max HP equal exactly `targetHp` right now. Storing the adjustment this
+// way instead of `targetHp` itself is what lets a later rank-up still add its own bonus on top —
+// the adjustment is a fixed offset from "natural", not a floor/ceiling on the final result.
+export function computeHpAdjustmentForTarget(naturalHp, targetHp) {
+  return Math.round(Number(targetHp) || 0) - Math.round(Number(naturalHp) || 0)
+}
+
+// Same idea as combinePlayerMaxHp above, for the stamina mechanic (CMoonEnemyBattle.
+// playerMaxStamina, solo battles only — see GlobalGameConfig.cMoonEnemyBattleStartingStamina's
+// own schema comment) — but with no rank-bonus term, since stamina has no per-rank bonus concept
+// at all: every player's NATURAL max stamina is simply the site-wide starting value. adjustment
+// is User.cMoonStaminaAdjustment, from the "Manage User HP" admin tool's Stamina section.
+// Floored at 0, not 1 like HP — 0 stamina is a legitimate, already-existing "mechanic off for
+// this battle" state (see start.post.js), not a danger to guard against.
+export function combinePlayerMaxStamina(defaultStamina, adjustment = 0) {
+  return Math.max(0, (Number(defaultStamina) || 0) + (Number(adjustment) || 0))
+}
+
+// Mirrors computeHpAdjustmentForTarget above, for stamina.
+export function computeStaminaAdjustmentForTarget(naturalStamina, targetStamina) {
+  return Math.round(Number(targetStamina) || 0) - Math.round(Number(naturalStamina) || 0)
 }
 
 // Exported for action.post.js's own stamina-cost gating (is the player's SUBMITTED action an
@@ -330,7 +359,7 @@ export function forcePickOneReward(rewardRows) {
 // border/glow aren't reachable from a cMoon enemy reward table (buildGrantableReward never sets
 // borderCMoonId/glowCMoonId for this caller), so they're deliberately not checked here.
 export function grantSummaryIsEmpty(summary) {
-  return !summary?.points && !summary?.backgrounds && !summary?.avatars && !summary?.ctoonJobs?.length
+  return !summary?.points && !summary?.backgrounds && !summary?.avatars && !summary?.ctoonJobs?.length && !summary?.packs
 }
 
 // Merges a member's own unique taunts (CMoonEnemyMemberTaunt) with its faction's shared pool
@@ -389,6 +418,10 @@ export function serializeEnemyForClient(member, pityEmptyWinStreak = null) {
     isRaidBoss: !!member.isRaidBoss,
     maxHp: member.maxHp,
     hp,
+    // Shown in the offer popup ("A win earns N cMoon points…") so a player can size up a fight
+    // before committing, not just after winning it — not admin-only info, every other reward
+    // detail (exact drop tables/chances) stays hidden, but the plain points-on-win number doesn't.
+    cMoonPointsReward: member.cMoonPointsReward,
     // Null hides the UI entirely — pity disabled for this member, or the caller didn't pass a
     // streak (see this function's own comment on who does). Never sent for a raid boss (pity is
     // solo-only — see CMoonEnemyMember.pityThreshold's own schema comment).
@@ -494,6 +527,7 @@ export function buildGrantableReward(hitRewardRows) {
   const backgrounds = []
   const avatars = []
   const ctoons = []
+  const packs = []
   let points = 0
   for (const row of hitRewardRows) {
     if (row.rewardType === 'BACKGROUND' && row.backgroundId) backgrounds.push({ backgroundId: row.backgroundId })
@@ -504,6 +538,11 @@ export function buildGrantableReward(hitRewardRows) {
         quantity: Math.max(1, Number(row.quantity) || 1),
         ctoon: row.ctoon ? { quantity: row.ctoon.quantity, name: row.ctoon.name } : undefined,
       })
+    // Sealed Packs — no supply cap to resolve here (unlike cToons' mint-limit math above), just
+    // how many copies to grant. Granted synchronously in grantRewardInTx (tx.userPack.create),
+    // not queued, since a pack has no mint/supply step of its own.
+    } else if (row.rewardType === 'PACK' && row.packId) {
+      packs.push({ packId: row.packId, quantity: Math.max(1, Number(row.quantity) || 1) })
     // Plain site points (User.points via grantRewardInTx, which already reads a bare `points`
     // number off this same bundle) — summed across every hit POINTS row into the one total
     // grantRewardInTx expects, same as several independent CTOON rows each contribute their own
@@ -512,5 +551,5 @@ export function buildGrantableReward(hitRewardRows) {
       points += Math.max(0, Number(row.quantity) || 0)
     }
   }
-  return { backgrounds, avatars, ctoons, points }
+  return { backgrounds, avatars, ctoons, packs, points }
 }

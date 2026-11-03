@@ -1,9 +1,10 @@
 <template>
   <div
     class="rf"
-    :class="[`rf-${variant}`, { 'rf-ko': knockedOut, 'rf-me': isMe, 'rf-no-team': !team, 'rf-captain': isCaptain }]"
+    :class="[`rf-${variant}`, { 'rf-ko': knockedOut, 'rf-me': isMe, 'rf-no-team': !team, 'rf-captain': isCaptain, 'rf-prestige': isPrestiged }]"
     :style="teamVars"
   >
+    <span v-if="isPrestiged" class="rf-prestige-glow" aria-hidden="true"></span>
     <span v-if="isCaptain" class="rf-captain-glow" aria-hidden="true"></span>
     <span class="rf-sash" aria-hidden="true"></span>
     <span class="rf-crest">
@@ -13,6 +14,7 @@
     <span class="rf-body">
       <span class="rf-name-row">
         <span class="rf-name">{{ participant.username || 'Player' }}</span>
+        <span v-if="isPrestiged" class="rf-prestige-badge" :title="`Prestige ${prestigeLevel} — has ascended ${prestigeLevel} time${prestigeLevel === 1 ? '' : 's'}`">✦<span class="rf-prestige-text"> Prestige {{ prestigeLevel }}</span></span>
         <span v-if="isCaptain" class="rf-captain-badge" title="cMoon Captain — their presence inspires the whole party">🎖️<span class="rf-captain-text"> Captain</span></span>
         <span v-if="participant.isInitiator" class="rf-leader" title="Started this raid">👑<span class="rf-leader-text"> Raid leader</span></span>
         <span v-if="isMe" class="rf-you">you</span>
@@ -43,7 +45,7 @@ import { computed } from 'vue'
 import { isSafeCMoonColor, lightenHex, contrastTextColor } from '~/utils/cmoonColor'
 
 const props = defineProps({
-  // { username, isInitiator, isCaptain, cMoon: { name, color, avatarPath } | null, rank: { name, tierName, tierLevel, tierCount } | null }
+  // { username, isInitiator, isCaptain, prestigeLevel, cMoon: { name, color, avatarPath, isPrestigeCMoon } | null, rank: { name, tierName, tierLevel, tierCount } | null }
   participant: { type: Object, required: true },
   variant: { type: String, default: 'card' }, // 'card' (roster/lobby) | 'compact' (combat rows)
   isMe: { type: Boolean, default: false },
@@ -61,6 +63,15 @@ const rank = computed(() => props.participant?.rank || null)
 // label swap every other surface a captain is shown on already applies; this component layers
 // the extra "epic" visual treatment the raid feature specifically asked for on top of that.
 const isCaptain = computed(() => !!props.participant?.isCaptain)
+
+// Whether THIS fighter has ever prestiged (User.prestigeLevel > 0) — deliberately keyed off the
+// PLAYER's own permanent achievement, not whether their current team happens to be flagged
+// CMoon.isPrestigeCMoon (a brand-new player can join a prestige cMoon directly without ever
+// prestiging themselves, and shouldn't get this treatment). The holographic/prismatic shimmer +
+// "✦ Prestige N" badge is the "really show they have prestiged" epic treatment the raid feature
+// specifically asked for, layered the same way isCaptain's gold glow/badge already is above.
+const prestigeLevel = computed(() => Number(props.participant?.prestigeLevel) || 0)
+const isPrestiged = computed(() => prestigeLevel.value > 0)
 
 const teamVars = computed(() => {
   const color = isSafeCMoonColor(team.value?.color) ? team.value.color : FALLBACK
@@ -191,6 +202,51 @@ const rankTitle = computed(() => {
 @media (prefers-reduced-motion: reduce) {
   .rf-captain-glow, .rf-captain-badge { animation: none; }
 }
+
+/* ── cMoon Prestige: the headline "epic" treatment — a holographic/prismatic shimmer, meant to
+   outshine even the captain glow above when a fighter is both (see .rf-prestige's cascade order
+   below, and the stacking comment further down). No gameplay effect — purely a permanent badge of
+   having prestiged at least once (see isPrestiged's own comment above). */
+.rf-prestige-badge {
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  background: linear-gradient(90deg, #ff5ec0, #ffd75e, #4fd6ff, #8a5cf6, #ff5ec0);
+  background-size: 300% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: rf-prestige-text-shimmer 3s linear infinite;
+}
+.rf-compact .rf-prestige-text { display: none; }
+.rf-prestige-glow {
+  position: absolute;
+  inset: -8px;
+  z-index: -2;
+  border-radius: inherit;
+  background: conic-gradient(from 0deg, #ff5ec0, #ffd75e, #4fd6ff, #8a5cf6, #ff5ec0);
+  filter: blur(10px);
+  opacity: 0.55;
+  animation: rf-prestige-spin 4s linear infinite;
+  pointer-events: none;
+}
+@keyframes rf-prestige-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+@keyframes rf-prestige-text-shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+@keyframes rf-prestige-border-cycle {
+  0%, 100% { border-color: #ff5ec0; box-shadow: 0 2px 0 #ff5ec0, 0 0 18px rgba(255, 94, 192, 0.55); }
+  33% { border-color: #8a5cf6; box-shadow: 0 2px 0 #8a5cf6, 0 0 18px rgba(138, 92, 246, 0.55); }
+  66% { border-color: #4fd6ff; box-shadow: 0 2px 0 #4fd6ff, 0 0 18px rgba(79, 214, 255, 0.55); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rf-prestige-glow, .rf-prestige-badge, .rf-prestige { animation: none; }
+}
 .rf-you {
   font-size: 10px;
   font-weight: 700;
@@ -244,6 +300,15 @@ const rankTitle = computed(() => {
   box-shadow: 0 2px 0 #d97706, 0 0 0 2px #facc15, 0 0 16px rgba(250, 204, 21, 0.55);
 }
 .rf-compact.rf-captain { box-shadow: 0 0 0 2px #facc15, 0 0 10px rgba(250, 204, 21, 0.6); }
+
+/* After rf-captain in source order: a fighter who is BOTH a captain and prestiged shows the
+   prismatic prestige shimmer, never the plain gold captain ring — prestiging is the rarer,
+   harder-earned achievement, so it's the one that should "really show" per the feature's own ask. */
+.rf-prestige {
+  border-width: 2px;
+  animation: rf-prestige-border-cycle 3s ease-in-out infinite;
+}
+.rf-compact.rf-prestige { border-width: 1.5px; animation: rf-prestige-border-cycle 3s ease-in-out infinite; }
 
 .sr-only {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;

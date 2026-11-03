@@ -13,6 +13,7 @@
     <div v-else-if="error" class="cmp-status cmp-status--error">{{ error }}</div>
     <template v-else-if="cmoon">
       <div class="cmp-masthead-wrap">
+        <span v-if="cmoon.isPrestigeCMoon" class="cmp-prestige-badge">✦ Prestige cMoon</span>
         <img
           v-if="cmoon.pageBannerImagePath"
           :src="cmoon.pageBannerImagePath"
@@ -22,7 +23,7 @@
           loading="eager"
           fetchpriority="high"
         />
-        <div v-else class="cmp-banner">
+        <div v-else class="cmp-banner" :class="{ 'cmp-banner--prestige': cmoon.isPrestigeCMoon }">
           <h1 class="cmp-title">{{ cmoon.name }}</h1>
           <p class="cmp-member-count">{{ cmoon.memberCount.toLocaleString() }} member{{ cmoon.memberCount === 1 ? '' : 's' }}</p>
         </div>
@@ -355,7 +356,7 @@
         </div>
 
         <template v-if="offers.length">
-          <h2 class="cmp-section-title">cToon Offers</h2>
+          <h2 class="cmp-section-title">Offers</h2>
           <div v-for="o in offers" :key="o.id" class="cmp-offer">
             <p class="cmp-offer-meta">
               <span v-if="o.myClaim">You claimed this offer.</span>
@@ -376,7 +377,8 @@
                 :disabled="!!o.myClaim || o.status !== 'OPEN' || !eligible || offerClaiming[o.id]"
                 @click="offerSelections[o.id] = opt.id"
               >
-                <CtoonImage :ctoon="opt" :alt="opt.name" class="cmp-card-img" loading="lazy" />
+                <CtoonImage v-if="opt.kind !== 'PACK'" :ctoon="opt" :alt="opt.name" class="cmp-card-img" loading="lazy" />
+                <img v-else :src="opt.assetPath" :alt="opt.name" class="cmp-card-img" loading="lazy" />
                 <span class="cmp-card-name">{{ opt.name }}</span>
                 <span v-if="o.myClaim && o.myClaim.optionId === opt.id" class="cmp-offer-picked-badge">Your pick</span>
               </button>
@@ -645,7 +647,7 @@ async function claimOffer(offer) {
   const optionId = offerSelections[offer.id]
   if (!optionId || offerClaiming[offer.id]) return
   const opt = offer.options.find(o => o.id === optionId)
-  if (!confirm(`Claim ${opt?.name || 'this cToon'}? This can't be changed once claimed.`)) return
+  if (!confirm(`Claim ${opt?.name || 'this'}? This can't be changed once claimed.`)) return
   offerClaiming[offer.id] = true
   offerErrors[offer.id] = ''
   try {
@@ -656,9 +658,9 @@ async function claimOffer(offer) {
     offer.myClaim = { optionId: res.optionId, quantity: res.quantity }
     openRewardModal({
       kind: 'offer',
-      eyebrow: 'cToon Offer Claimed!',
+      eyebrow: opt?.kind === 'PACK' ? 'Pack Offer Claimed!' : 'cToon Offer Claimed!',
       title: offer.options.length > 1 ? 'Nice pick!' : 'Claimed!',
-      items: [{ id: res.optionId, imagePath: opt?.assetPath || null, label: opt?.name || 'cToon', qty: res.quantity, variant: 'ctoon' }],
+      items: [{ id: res.optionId, imagePath: opt?.assetPath || null, label: opt?.name || 'reward', qty: res.quantity, variant: opt?.kind === 'PACK' ? 'pack' : 'ctoon' }],
     })
   } catch (err) {
     offerErrors[offer.id] = err?.data?.statusMessage || 'Failed to claim'
@@ -874,6 +876,35 @@ onBeforeUnmount(() => {
 
 .cmp-masthead-wrap {
   width: 100%;
+  position: relative;
+}
+
+/* "This is a prestige destination" — purely informational, same holographic/prismatic treatment
+   as a prestiged PLAYER's own badge (see CMoonRaidFighter.vue's rf-prestige-badge), just applied
+   to the team instead of a member. Works over either masthead variant (banner image or plain
+   text banner) since it's positioned relative to the shared wrapper, not either child. */
+.cmp-prestige-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  white-space: nowrap;
+  color: #fff;
+  background: linear-gradient(90deg, #ff5ec0, #ffd75e, #4fd6ff, #8a5cf6, #ff5ec0);
+  background-size: 300% 100%;
+  animation: cmp-prestige-shimmer 3s linear infinite;
+  box-shadow: 0 0 14px rgba(138, 92, 246, 0.6);
+}
+@keyframes cmp-prestige-shimmer {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 300% 50%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cmp-prestige-badge { animation: none; }
 }
 
 /* aspect-ratio is bound per-cMoon inline (bannerStyle) to the upload's real stored dimensions
@@ -897,6 +928,12 @@ onBeforeUnmount(() => {
   background: var(--cm-banner, var(--OrbitDarkBlue));
   color: var(--cm-banner-text, #ffffff);
   padding: 18px 16px;
+}
+
+/* Reserves room for .cmp-prestige-badge (top-right, ~110px wide incl. its glow) so a long team
+   name wrapping in the plain-text banner variant doesn't run under the badge. */
+.cmp-banner--prestige {
+  padding-right: 120px;
 }
 
 .cmp-title {

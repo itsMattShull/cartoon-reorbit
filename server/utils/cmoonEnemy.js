@@ -87,7 +87,7 @@ export const CMOON_POINTS_REWARD_DEFAULT = 10
 export const REWARD_QUANTITY_DEFAULT = 1
 
 export const BATTLE_MODES = ['PER_PLAYER', 'SHARED_POOL']
-export const REWARD_TYPES = ['CTOON', 'AVATAR', 'BACKGROUND', 'POINTS']
+export const REWARD_TYPES = ['CTOON', 'AVATAR', 'BACKGROUND', 'POINTS', 'PACK']
 
 // Cosmetic difficulty/importance tier — see CMoonEnemyRank's own schema comment. Declared
 // low-to-high, matching the admin dropdown and the enum's own declaration order.
@@ -180,7 +180,7 @@ export const OCCURRENCE_PERCENT_DEFAULT = 50
 // Which id field a reward row of each type must carry — the XOR Prisma can't express (see the
 // CMoonEnemyReward model's own comment). No entry for POINTS: it has no id column at all, its
 // amount lives in `quantity` instead (see parseRewardBody's own handling of that case).
-const REWARD_ID_FIELD = { CTOON: 'ctoonId', AVATAR: 'avatarId', BACKGROUND: 'backgroundId' }
+const REWARD_ID_FIELD = { CTOON: 'ctoonId', AVATAR: 'avatarId', BACKGROUND: 'backgroundId', PACK: 'packId' }
 const REWARD_ID_FIELDS = Object.values(REWARD_ID_FIELD)
 
 export function isValidFactionName(value) {
@@ -552,12 +552,12 @@ export function parseWindUpMoveBody(body) {
 // Create-only (reward rows are added/removed whole, never partially patched — see
 // cmoon-enemy-members/[id]/rewards.post.js), so there's no `existing` parameter. Enforces the
 // exactly-one-id-matching-rewardType rule here, since Prisma can't: the id field for the chosen
-// type must be set, and the other two must be absent/null/''. Existence of the referenced
-// cToon/avatar/background is the caller's DB check.
+// type must be set, and the other three must be absent/null/''. Existence of the referenced
+// cToon/avatar/background/pack is the caller's DB check.
 export function parseRewardBody(body) {
   const rewardType = typeof body?.rewardType === 'string' ? body.rewardType.trim() : ''
   if (!isValidRewardType(rewardType)) {
-    return { ok: false, message: 'Reward type must be CTOON, AVATAR, BACKGROUND, or POINTS' }
+    return { ok: false, message: 'Reward type must be CTOON, AVATAR, BACKGROUND, POINTS, or PACK' }
   }
 
   const ids = {}
@@ -591,12 +591,12 @@ export function parseRewardBody(body) {
     return { ok: false, message: `Drop chance must be a number between ${DROP_CHANCE_MIN} and ${DROP_CHANCE_MAX}` }
   }
 
-  // quantity means a copy count for cToons, a points amount for POINTS (see the schema comment +
-  // buildGrantableReward), and is otherwise stored as 1 regardless of the body (avatars/
+  // quantity means a copy count for cToons/packs, a points amount for POINTS (see the schema
+  // comment + buildGrantableReward), and is otherwise stored as 1 regardless of the body (avatars/
   // backgrounds), so a stray value from the client can't leave a misleading number in the admin
   // list.
   let quantity = REWARD_QUANTITY_DEFAULT
-  if (rewardType === 'CTOON' && body?.quantity !== undefined) {
+  if ((rewardType === 'CTOON' || rewardType === 'PACK') && body?.quantity !== undefined) {
     quantity = toNumber(body.quantity)
     if (!isValidRewardQuantity(quantity)) {
       return { ok: false, message: `Quantity must be a whole number between ${REWARD_QUANTITY_MIN} and ${REWARD_QUANTITY_MAX}` }
@@ -617,6 +617,7 @@ export function parseRewardBody(body) {
       ctoonId: ids.ctoonId,
       avatarId: ids.avatarId,
       backgroundId: ids.backgroundId,
+      packId: ids.packId,
       dropChancePercent,
       quantity,
     },

@@ -5,7 +5,7 @@ import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { assertSameOrigin } from '@/server/utils/requireAdmin'
 import { getGlobalConfig, getPlayerCombatMaxHp } from '@/server/utils/cmoon'
-import { ABANDON_AFTER_MINUTES, SPECIAL_ATTACK_SELECT } from '@/server/utils/cmoonEnemyBattle'
+import { ABANDON_AFTER_MINUTES, SPECIAL_ATTACK_SELECT, combinePlayerMaxStamina } from '@/server/utils/cmoonEnemyBattle'
 import { serializeBattleForClient } from '@/server/utils/cmoonEnemyBattle'
 import { countRecentSoloStarts } from '@/server/utils/cmoonEnemy'
 import { markEnemyOfferAccepted } from '@/server/utils/cmoonEnemyAnalytics'
@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
 
   const user = await db.user.findUnique({
     where: { id: userId },
-    select: { cMoonId: true, banned: true, active: true },
+    select: { cMoonId: true, banned: true, active: true, cMoonStaminaAdjustment: true },
   })
   if (!user || user.banned || !user.active) throw createError({ statusCode: 403, statusMessage: 'Not eligible to battle' })
   // No cMoon membership required to fight — a player with no cMoon just can't earn cMoon points
@@ -125,10 +125,12 @@ export default defineEventHandler(async (event) => {
   // Snapshotted once at battle-start — see CMoonEnemyBattle.playerMaxHp's own schema comment on
   // why this is never re-read live mid-fight.
   const playerMaxHp = await getPlayerCombatMaxHp(userId, config)
-  // Same snapshot-at-start timing as playerMaxHp above — see
-  // CMoonEnemyBattle.playerMaxStamina's own schema comment. Floored at 0 (never negative), which
-  // also naturally disables the mechanic for this battle if an admin has set it to 0 or less.
-  const playerMaxStamina = Math.max(0, Number(config?.cMoonEnemyBattleStartingStamina) || 0)
+  // Same snapshot-at-start timing as playerMaxHp above — see CMoonEnemyBattle.playerMaxStamina's
+  // own schema comment. combinePlayerMaxStamina folds in this player's own permanent
+  // cMoonStaminaAdjustment (the "Manage User HP" admin tool's Stamina section) on top of the
+  // site-wide starting value, floored at 0 (never negative) — which also naturally disables the
+  // mechanic for this battle if the combined result is 0 or less.
+  const playerMaxStamina = combinePlayerMaxStamina(config?.cMoonEnemyBattleStartingStamina, user.cMoonStaminaAdjustment)
 
   let battle
   try {
