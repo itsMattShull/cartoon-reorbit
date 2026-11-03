@@ -3342,7 +3342,8 @@ const gameTileSlots = [
   { slot: 'fruitsamurai',  label: 'Fruit Samurai',          column: 'gameTileFruitsamuraiImagePath' },
   { slot: 'blackjack',     label: 'ReOrbit Blackjack',      column: 'gameTileBlackjackImagePath' },
   { slot: 'edrps',         label: 'Ed, Edd n Eddy RPS',     column: 'gameTileEdrpsImagePath' },
-  { slot: 'pokemonbattle', label: 'Pokemon: Fire, Water, Grass!', column: 'gameTilePokemonbattleImagePath' }
+  { slot: 'pokemonbattle', label: 'Pokemon: Fire, Water, Grass!', column: 'gameTilePokemonbattleImagePath' },
+  { slot: 'gtoonsclassic', label: 'gToons (Original)',     column: 'gameTileGtoonsclassicImagePath' }
 ]
 const fromSlots = (value) => Object.fromEntries(gameTileSlots.map(t => [t.slot, value]))
 const gameTileImages = ref(fromSlots(''))

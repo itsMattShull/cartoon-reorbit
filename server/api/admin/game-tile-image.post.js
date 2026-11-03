@@ -46,7 +46,8 @@ const SLOT_FIELD = {
   blackjack:    'gameTileBlackjackImagePath',
   edrps:        'gameTileEdrpsImagePath',
   fruitsamurai: 'gameTileFruitsamuraiImagePath',
-  pokemonbattle: 'gameTilePokemonbattleImagePath'
+  pokemonbattle: 'gameTilePokemonbattleImagePath',
+  gtoonsclassic: 'gameTileGtoonsclassicImagePath'
 }
 
 export default defineEventHandler(async (event) => {
