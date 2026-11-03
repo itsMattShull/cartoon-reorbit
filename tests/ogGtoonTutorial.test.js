@@ -123,8 +123,8 @@ test('tutorial: the scripted match plays through to the scripted win, with no cl
   assert.equal(end.over, true)
   assert.equal(end.outcome, 'PLAYER1')
   assert.equal(end.won, true)
-  // Behind on points (25 = 35 - the 10-point swap penalty, vs 43) but more of EACH goal color: Green 4-3, Blue 2-1.
-  assert.equal(end.player1Score, 25)
+  // Behind on points (29 = 39 - the 10-point swap penalty, vs 43) but more of EACH goal color: Green 4-3, Blue 2-1.
+  assert.equal(end.player1Score, 29)
   assert.equal(end.player2Score, 43)
 
   // What the final board teaches.

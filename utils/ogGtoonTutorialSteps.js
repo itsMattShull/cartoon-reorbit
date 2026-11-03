@@ -216,7 +216,7 @@ export const TUTORIAL_STEPS = [
   {
     id: 'result', stage: 5, kind: 'info', target: null, button: 'Next', ready: settled,
     title: 'You win!',
-    text: "You finished behind on points (25 to 43, and that already includes the 10 you paid for the swap), but you won anyway: your goal colors are Blue and Green, and you hold more cards of each: 4 Green to the bot's 3, and 2 Blue to its 1. Superman went Black, and its Bugs Teasin' and Captain Dodgers were cancelled. When you have more cards of each goal color, you win no matter the points."
+    text: "You finished behind on points (29 to 43, and that already includes the 10 you paid for the swap), but you won anyway: your goal colors are Blue and Green, and you hold more cards of each: 4 Green to the bot's 3, and 2 Blue to its 1. Superman went Black, and its Bugs Teasin' and Captain Dodgers were cancelled. When you have more cards of each goal color, you win no matter the points."
   },
   {
     id: 'recap', stage: 5, kind: 'info', target: null, button: 'Finish tutorial', finish: true, ready: settled,

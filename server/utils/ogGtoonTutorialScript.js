@@ -21,7 +21,7 @@
 //   slot 7    stays face down; the paid swap brings in Daphne Celebrating, a Green 10 (so the player has more Green AND more Blue)
 //   Silver    TOM and Pepe are Silver: the player picks Blue for them
 // Goal colours are Blue (the player's Dexter) and Green (the bot's Superman) — two different
-// colours, so more cards of EACH wins outright (Green 4 to 3, Blue 2 to 1), while behind 25-43 on points.
+// colours, so more cards of EACH wins outright (Green 4 to 3, Blue 2 to 1), while behind 29-43 on points.
 
 /** Deck position = array index. Positions 0-5 are the opening hand, 6-11 stay undealt (in order). */
 export const TUTORIAL_USER_DECK = [

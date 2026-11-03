@@ -76,7 +76,7 @@ test('guided steps: following every step plays the scripted match to its win', a
   const end = g.h.view()
   assert.equal(end.over, true)
   assert.equal(end.won, true)
-  assert.equal(end.player1Score, 25)
+  assert.equal(end.player1Score, 29)
   assert.equal(end.player2Score, 43)
   assert.deepEqual(g.h.errors(), [], 'the guide never makes the player do something the server refuses')
 })
