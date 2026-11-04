@@ -60,7 +60,7 @@ export function parseExclusions(query) {
 export function buildExclusionSql(ex) {
   const parts = []
   if (ex.hideGtoons === true) {
-    parts.push(Prisma.sql`c."isGtoon" = false`)
+    parts.push(Prisma.sql`c."isGtoon" = false AND c."isOgGtoon" = false`)
   }
   if (ex.hidePokemon === true) {
     // COALESCE keeps NULL-series cToons visible: `series <> 'Pokemon'` evaluates

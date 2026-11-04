@@ -47,7 +47,7 @@ function applyAuctionFilters(items, filters) {
       if (!nameMatch && !charMatch) return false
     }
     if (setFilter.length && !setFilter.includes(item.set)) return false
-    if (requireGtoons && !item.isGtoon) return false
+    if (requireGtoons && !item.isGtoon && !item.isOgGtoon) return false
     if (seriesFilter.length && !seriesFilter.includes(item.series)) return false
     if (rarityFilter.length && !rarityFilter.includes(item.rarity)) return false
     if (requireFeatured && !item.isFeatured) return false
