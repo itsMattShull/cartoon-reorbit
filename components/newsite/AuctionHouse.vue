@@ -514,7 +514,7 @@ function applyFilters(items) {
       if (!hasLoadedWishlist.value || !wishlistCtoonIdSet.value.has(item.ctoonId)) return false
     }
     if (aFilters.value.hasBidsOnly && Number(item.bidCount ?? 0) < 1)               return false
-    if (aFilters.value.gtoonsOnly  && !item.isGtoon)                                 return false
+    if (aFilters.value.gtoonsOnly  && !item.isGtoon && !item.isOgGtoon)                              return false
     const currentPrice = Number(item.highestBid > 0 ? item.highestBid : item.initialBid) || 0
     if (filter.value.priceMin !== '' && currentPrice < Number(filter.value.priceMin)) return false
     if (filter.value.priceMax !== '' && currentPrice > Number(filter.value.priceMax)) return false

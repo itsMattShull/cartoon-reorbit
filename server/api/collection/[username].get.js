@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
       ctoons: {
         where: {
           isTradeable: true,
-          ...(filter === 'gtoon' ? { ctoon: { isGtoon: true } } : {})
+          ...(filter === 'gtoon' ? { ctoon: { OR: [{ isGtoon: true }, { isOgGtoon: true }] } } : {})
         },
         include: { ctoon: { include: { cMoon: { select: { id: true, name: true, color: true } } } } }
       }
