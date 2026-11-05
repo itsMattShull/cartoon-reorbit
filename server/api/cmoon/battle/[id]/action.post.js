@@ -24,7 +24,7 @@ import {
   isValidPlayerSubmittedAction, resolveRound, rollEnemyRewards, buildGrantableReward,
   serializeBattleForClient, MAX_ROUNDS_SAFETY, HEAL_ON_SUCCESSFUL_BLOCK,
   SPECIAL_ACTION, HIT_STREAK_THRESHOLD, shouldForcePityReward, forcePickOneReward, grantSummaryIsEmpty,
-  isAttack, isBlock, pickEffectiveSpecialAttack, SPECIAL_ATTACK_SELECT,
+  isAttack, isBlock, pickEffectiveSpecialAttack, SPECIAL_ATTACK_SELECT, applySoloCleanseSelfHeal,
 } from '@/server/utils/cmoonEnemyBattle'
 
 // `user: { chosenSpecialAttack }` — this player's own special-attack choice (see
@@ -217,6 +217,18 @@ export default defineEventHandler(async (event) => {
       playerSpecialEvent.missed = true
     } else if (playerSpecialAttack.effectType === 'DAMAGE_OPPONENT') totalDamageDealt += await damageEnemy(playerSpecialAttack.amount)
     else if (playerSpecialAttack.effectType === 'HEAL_SELF') playerHp = Math.min(battle.playerMaxHp, playerHp + playerSpecialAttack.amount)
+    // CLEANSE_SELF: cures this player's own active paralysis (there's no separate poison state
+    // in a solo battle — POISON_OPPONENT, the only thing that could ever apply one, is genuinely
+    // raid-only, see that effect's own schema comment — so "self only, unless healsAllies" has
+    // nothing left to do here; healsAllies itself is a raid-only concept too, no allies to heal
+    // solo). Optional HP top-up (cleanseAlsoHeals), same shape as HEAL_SELF just above. Setting
+    // playerParalyzedTurns here, before step 2's resolveRound call below reads it, means a
+    // same-round cure also lets THIS round's own lane exchange go through unparalyzed — same
+    // "instant, not deferred" timing PARALYZE_OPPONENT's own opposite-direction branch relies on.
+    else if (playerSpecialAttack.effectType === 'CLEANSE_SELF') {
+      playerParalyzedTurns = 0
+      playerHp = applySoloCleanseSelfHeal(playerHp, battle.playerMaxHp, playerSpecialAttack.cleanseAlsoHeals, playerSpecialAttack.amount)
+    }
     else if (playerSpecialAttack.effectType === 'PARALYZE_OPPONENT') enemyParalyzedTurns += playerSpecialAttack.amount
     else if (playerSpecialAttack.effectType === 'LOWER_OPPONENT_ATTACK') enemyAtkBonus -= playerSpecialAttack.amount
     else if (playerSpecialAttack.effectType === 'RAISE_ALLY_ATTACK') playerAtkBonus += playerSpecialAttack.amount

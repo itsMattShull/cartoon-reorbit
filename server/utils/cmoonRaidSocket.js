@@ -95,6 +95,7 @@ import {
   effectiveHitStreakThreshold,
 } from './cmoonEnemyRaid.js'
 import * as raidRedis from './cmoonRaidRedisState.js'
+import { buildRaidBattleReport } from './cmoonRaidBattleReport.js'
 
 const SWEEP_INTERVAL_MS = 2000
 const EV = (name) => `cmoonraid:${name}`
@@ -431,6 +432,18 @@ function publicRaidView(raid) {
       rewardsGranted: p.rewardsGranted || null,
       isFirstWinAgainstThisEnemy: !!p.isFirstWinAgainstThisEnemy,
     })),
+    // "Click to view battle report" leaderboard — only buildable (and only meaningful) once the
+    // fight is actually over; null the whole rest of the raid so the client never has to guess
+    // whether an in-progress fight's partial roundLog would produce a misleading report.
+    battleReport: raid.status === 'RESOLVED' ? buildRaidBattleReport({
+      roundLog: raid.roundLog,
+      participants: Array.from(raid.participants.values()).map(p => ({
+        userId: p.userId, username: p.username, hpRemaining: p.hpRemaining, maxHp: p.maxHp,
+        knockedOut: !!p.knockedOutAt, isInitiator: p.isInitiator,
+      })),
+      enemyName: raid.enemyName, enemyMaxHp: raid.enemyStats.maxHp,
+      enemyHpRemaining: raid.enemyHpRemaining, outcome: raid.outcome,
+    }) : null,
   }
 }
 
@@ -1014,8 +1027,8 @@ async function closeRound(io, raid) {
     raid.roundLog.push({
       round: raid.roundNumber, enemyAction, enemyDamageDealt,
       enemyHpRemaining: raid.enemyHpRemaining,
-      participants: perParticipant.map(({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit, enemyMissed }) =>
-        ({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit, enemyMissed })),
+      participants: perParticipant.map(({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit, enemyMissed, playerDamage, enemyDamage }) =>
+        ({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit, enemyMissed, playerDamage, enemyDamage })),
       ...(specialEvents.length ? { specials: specialEvents } : {}),
       ...(windUpBonus ? { windUpBonus } : {}),
     })
@@ -1943,6 +1956,18 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         })(),
         rank: null,
       })),
+      // Same reasoning as publicRaidView's own battleReport field — only a RESOLVED row has a
+      // meaningful roundLog to build one from. maxHp isn't kept historically here either (same
+      // gap as `rank: null` just above), so the aggregator's own `?? null` fallback covers it.
+      battleReport: row.outcome ? buildRaidBattleReport({
+        roundLog: row.roundLog,
+        participants: row.participants.map(p => ({
+          userId: p.userId, username: p.user?.username || null, hpRemaining: p.hpRemaining,
+          knockedOut: !!p.knockedOutAt, isInitiator: p.isInitiator,
+        })),
+        enemyName: row.enemyMember.name, enemyMaxHp: row.enemyMember.maxHp,
+        enemyHpRemaining: row.enemyHpRemaining, outcome: row.outcome,
+      }) : null,
     })
   })
 

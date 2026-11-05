@@ -4,7 +4,7 @@ import {
   resolveBattleRound, rollEnemyAction, rollEnemyRewards, buildGrantableReward, rollHitDamage,
   isValidBattleAction, BATTLE_ACTIONS, PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE,
   HEAL_ON_SUCCESSFUL_BLOCK, resolveRound, combinePlayerMaxHp, computeHpAdjustmentForTarget,
-  combinePlayerMaxStamina, computeStaminaAdjustmentForTarget,
+  combinePlayerMaxStamina, computeStaminaAdjustmentForTarget, applySoloCleanseSelfHeal,
   SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, isValidPlayerSubmittedAction,
   isAttack, isBlock, STARTING_STAMINA, pickEffectiveSpecialAttack,
 } from '../server/utils/cmoonEnemyBattle.js'
@@ -412,6 +412,27 @@ test('computeStaminaAdjustmentForTarget: solves for the adjustment that hits the
   assert.equal(computeStaminaAdjustmentForTarget(10, 3), -7)
   assert.equal(computeStaminaAdjustmentForTarget(3, 3), 0)
   assert.equal(computeStaminaAdjustmentForTarget(3, 0), -3)
+})
+
+// applySoloCleanseSelfHeal guards the exact bug reported: CLEANSE_SELF ("CCF Ribbon Recovery!")
+// was shipped raid-only, so a solo fight fired and announced it with zero mechanical effect — no
+// heal, no cleanse. action.post.js now always clears playerParalyzedTurns directly (no arithmetic
+// to test there) and calls this function for the optional HP top-up.
+test('applySoloCleanseSelfHeal: heals by amount when cleanseAlsoHeals is on', () => {
+  assert.equal(applySoloCleanseSelfHeal(5, 12, true, 3), 8)
+})
+
+test('applySoloCleanseSelfHeal: caps at playerMaxHp, never overshoots', () => {
+  assert.equal(applySoloCleanseSelfHeal(11, 12, true, 5), 12)
+})
+
+test('applySoloCleanseSelfHeal: cleanseAlsoHeals off is a pure status-cleanse, HP untouched', () => {
+  assert.equal(applySoloCleanseSelfHeal(5, 12, false, 3), 5)
+})
+
+test('applySoloCleanseSelfHeal: treats a missing/non-numeric amount as 0, not NaN', () => {
+  assert.equal(applySoloCleanseSelfHeal(5, 12, true, undefined), 5)
+  assert.equal(applySoloCleanseSelfHeal(5, 12, true, null), 5)
 })
 
 // ── Special attacks (see CMoonSpecialAttack's own schema comment) ──────────────────────────

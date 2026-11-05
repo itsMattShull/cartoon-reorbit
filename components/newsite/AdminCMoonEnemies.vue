@@ -1087,7 +1087,7 @@ const SPECIAL_ATTACK_EFFECT_LABELS = {
   REFLECT_DAMAGE: 'Reflect damage',
   SIPHON_HEALTH: 'Siphon health',
   POISON_OPPONENT: 'Poison opponent (raids only)',
-  CLEANSE_SELF: 'Cleanse self/allies (raids only)',
+  CLEANSE_SELF: 'Cleanse self (+allies in raids)',
   SHIELD_PARTY: 'Shield party (raids only)',
 }
 const SPECIAL_ATTACK_EFFECT_HELP = {
@@ -1099,7 +1099,7 @@ const SPECIAL_ATTACK_EFFECT_HELP = {
   REFLECT_DAMAGE: "Reflects a percent of whatever REAL damage the enemy deals to the caster's side this round back onto the enemy — if the enemy blocks instead of attacking, nothing reflects. Amount is unused for this effect.",
   SIPHON_HEALTH: 'Deals Amount flat damage to the enemy and heals the caster by a percent of it — UNLIKE every other effect above, this one fails outright (no damage, no heal) if the enemy blocks.',
   POISON_OPPONENT: 'Deals Amount damage at the end of each round for a configurable number of rounds. Re-casting on an already-poisoned target refreshes it (replaces amount/duration) rather than stacking a second tick. Only has an effect in a RAID — a solo fight has no case for it, the attack just fires and announces.',
-  CLEANSE_SELF: "Cures the caster's own side of active Paralyze (always the whole side) and Poison (self only, unless \"Also heals allies\" below is on). The player/boss can be paralyzed or poisoned again right after — this is a one-time cure, not temporary immunity. Only has an effect in a RAID.",
+  CLEANSE_SELF: "Cures the caster's own active Paralyze, plus Poison in a raid (self only, unless \"Also heals allies\" below is on — solo has no poison to clear either way). The player/boss can be paralyzed or poisoned again right after — this is a one-time cure, not temporary immunity. Works in BOTH solo and raids; \"Also heals allies\" only matters in a raid (no allies to extend to solo).",
   SHIELD_PARTY: "Negates ALL damage the party would otherwise take this round — the normal attack exchange AND any boss special that would deal damage, cast by any party member. Only works when cast by a PLAYER in a RAID; assigning this to an enemy faction's own special just makes it fire and announce with no effect, since by the time the boss could cast it the round's damage already happened.",
 }
 

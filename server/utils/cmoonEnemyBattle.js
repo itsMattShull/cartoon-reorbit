@@ -128,6 +128,20 @@ export function computeStaminaAdjustmentForTarget(naturalStamina, targetStamina)
   return Math.round(Number(targetStamina) || 0) - Math.round(Number(naturalStamina) || 0)
 }
 
+// Pure arithmetic for a SOLO CLEANSE_SELF cast (server/api/cmoon/battle/[id]/action.post.js's own
+// CLEANSE_SELF branch) — pulled out here, same reasoning as every other pure-arithmetic helper in
+// this file, specifically so this exact piece can carry a real regression test: this effect type
+// was shipped raid-only at first, a solo fight silently firing-and-announcing it with no actual
+// heal/cleanse, which is the precise bug this function's own test guards against recurring. Solo
+// only ever cures the caster's own paralysis (done directly in action.post.js, not here — no
+// arithmetic involved) plus this optional HP top-up; there's no poison state or allies to extend
+// to in solo (see the effectType's own schema comment), so this is simpler than the raid-side
+// CLEANSE_SELF handling in cmoonEnemyRaid.js on purpose, not a partial port of it.
+export function applySoloCleanseSelfHeal(playerHp, playerMaxHp, cleanseAlsoHeals, amount) {
+  if (!cleanseAlsoHeals) return Number(playerHp) || 0
+  return Math.min(Number(playerMaxHp) || 0, (Number(playerHp) || 0) + (Number(amount) || 0))
+}
+
 // Exported for action.post.js's own stamina-cost gating (is the player's SUBMITTED action an
 // attack?) and for resolveRound's own stamina cost/regen below (is the EFFECTIVE action, after
 // any paralysis override, an attack or a block?) — same two predicates either caller needs,
