@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   BEST_OF, formatFor, swissRoundsFor, pairKey, compareStandings, seededShuffle,
   buildBracketSeedPairs, bracketSizeFor, bracketRoundLabel, pairSwissRound, computeSeries,
-  decideAtDeadline, computeRecords, buildFinalPlacements, prizeRecipients, checkLockedDeck,
+  decideAtDeadline, computeRecords, buildFinalPlacements, prizeRecipients, checkLockedDeck, effectiveOptInStatus,
   roundDueAt, WALKOVER_MIN_READY_MS
 } from '../server/utils/tournamentCore.js'
 
@@ -374,4 +374,23 @@ test('locked deck check finds missing, burned and re-homed copies', () => {
 test('roundDueAt adds the window in hours', () => {
   const due = roundDueAt('2026-11-01T00:00:00Z', 72)
   assert.equal(due.toISOString(), '2026-11-04T00:00:00.000Z')
+})
+
+/* ── what status a player sees ─────────────────────────────────────────────────────────── */
+
+test('effective status: a DRAFT inside its opt-in window is shown as open (the scheduler is just late)', () => {
+  const start = '2026-11-06T12:00:00Z'; const end = '2026-11-13T12:00:00Z'
+  assert.equal(effectiveOptInStatus('DRAFT', start, end, new Date('2026-11-06T12:00:00Z')), 'OPT_IN_OPEN', 'exactly at the start')
+  assert.equal(effectiveOptInStatus('DRAFT', start, end, new Date('2026-11-08T00:00:00Z')), 'OPT_IN_OPEN')
+  assert.equal(effectiveOptInStatus('DRAFT', start, end, new Date('2026-11-06T11:59:59Z')), 'DRAFT', 'before the start')
+  assert.equal(effectiveOptInStatus('DRAFT', start, end, new Date('2026-11-14T00:00:00Z')), 'DRAFT', 'a window that was never opened is left to the scheduler')
+})
+
+test('effective status: an OPT_IN_OPEN past its end is shown as closed; everything else is as stored', () => {
+  const start = '2026-11-06T12:00:00Z'; const end = '2026-11-13T12:00:00Z'
+  assert.equal(effectiveOptInStatus('OPT_IN_OPEN', start, end, new Date('2026-11-13T12:00:00Z')), 'OPT_IN_OPEN', 'the end instant itself is still open')
+  assert.equal(effectiveOptInStatus('OPT_IN_OPEN', start, end, new Date('2026-11-13T12:00:01Z')), 'OPT_IN_CLOSED')
+  for (const s of ['OPT_IN_CLOSED', 'SWISS_ACTIVE', 'BRACKET_ACTIVE', 'COMPLETE', 'CANCELLED']) {
+    assert.equal(effectiveOptInStatus(s, start, end, new Date('2026-11-08T00:00:00Z')), s)
+  }
 })

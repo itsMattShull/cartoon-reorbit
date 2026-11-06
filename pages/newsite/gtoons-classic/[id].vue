@@ -46,7 +46,7 @@ function onExit() {
   if (matchState.value?.tutorial) $fetch('/api/game/oggtoons/tutorial', { method: 'POST' }).catch(() => {})
   leaveMatch()
   router.push(
-    tournament ? `/newsite/gtoons-classic?tab=tournaments&t=${tournament.tournamentId}`
+    tournament ? `/newsite/gtoons-classic/tournaments/${tournament.tournamentId}`
       : wasPractice ? '/newsite/gtoons-classic?tab=matchmaking' : '/newsite/gtoons-classic'
   )
 }
