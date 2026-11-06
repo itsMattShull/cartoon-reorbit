@@ -1,6 +1,8 @@
 <!-- components/newsite/admin/legacy/CodePackRewards.vue
      The "Pack Rewards" section of the Create / Edit Code forms: which sealed packs a code awards, and how many of each.
      Redeemers get them as sealed packs in My Collection > Packs (and can open them straight from the Redeem page).
+     Also used for the pack prizes of an OG gToons tournament (AdminOgGtoonTournaments.vue), which sets `noun`, `title`
+     and `hint` (and listens for `summary` to put the packs in its "winners receive …" preview).
 
        <CodePackRewards ref="el" :initial="[{ packId, quantity }]" />
        const r = el.value.toPayload()   // { ok, packs: [{ packId, quantity }], error }
@@ -8,20 +10,22 @@
      Pack names aren't unique, so the datalist value carries the id: "Starter Pack (b3f1…)". -->
 <template>
   <div class="flex flex-col gap-1">
-    <label class="text-xs font-medium">Pack Rewards</label>
+    <label class="text-xs font-medium">{{ title }}</label>
     <p class="text-[10px] text-gray-500">
-      Sealed packs go into the player's My Collection &rsaquo; Packs, and they can open them right on the Redeem page.
-      Up to {{ MAX_PACK_QUANTITY_PER_CODE }} of one pack and {{ MAX_PACKS_PER_CODE }} packs in total per code.
+      <template v-if="hint">{{ hint }}</template>
+      <template v-else>Sealed packs go into the player's My Collection &rsaquo; Packs, and they can open them right on the Redeem page.</template>
+      Up to {{ MAX_PACK_QUANTITY_PER_CODE }} of one pack and {{ MAX_PACKS_PER_CODE }} packs in total per {{ noun }}.
     </p>
 
-    <datalist id="code-pack-options">
+    <!-- One id per instance: the tournament form shows several of these at once. -->
+    <datalist :id="listId">
       <option v-for="p in options" :key="p.id" :value="label(p)" />
     </datalist>
 
     <div v-for="(row, idx) in rows" :key="idx" class="flex items-center gap-2">
       <input
         v-model="row.name"
-        list="code-pack-options"
+        :list="listId"
         type="text"
         class="flex-1 border rounded-md px-2 py-1.5 text-sm"
         placeholder="Type to search packs"
@@ -45,16 +49,22 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, getCurrentInstance } from 'vue'
 
 // Kept in step with server/utils/codeRewardPacks.js (the server enforces them; these only shape the form).
 const MAX_PACK_QUANTITY_PER_CODE = 25
 const MAX_PACKS_PER_CODE = 50
 
 const props = defineProps({
-  initial: { type: Array, default: () => [] } // [{ packId, quantity }] — the Edit form
+  initial: { type: Array, default: () => [] }, // [{ packId, quantity }] — the Edit form
+  noun: { type: String, default: 'code' }, // "…per code" / "…per prize"
+  title: { type: String, default: 'Pack Rewards' },
+  hint: { type: String, default: '' } // replaces the default sentence about where packs land
 })
+// Plain-text list of the recognised rows ("2× Starter Pack"), for a parent's preview line.
+const emit = defineEmits(['summary'])
 
+const listId = `pack-options-${getCurrentInstance()?.uid ?? 0}`
 const options = ref([])
 const rows = ref([])
 const loadError = ref('')
@@ -82,6 +92,15 @@ function populate () {
   })
 }
 watch(() => props.initial, populate, { deep: true })
+watch([rows, options], () => {
+  const parts = []
+  for (const r of rows.value) {
+    const p = find(r.name)
+    const q = Number(r.quantity)
+    if (p && Number.isInteger(q) && q >= 1) parts.push(`${q}× ${p.name}`)
+  }
+  emit('summary', parts.join(', '))
+}, { deep: true })
 
 onMounted(async () => {
   try {
@@ -117,11 +136,11 @@ function toPayload () {
   const packs = [...merged].map(([packId, quantity]) => ({ packId, quantity }))
   for (const { packId, quantity } of packs) {
     if (quantity > MAX_PACK_QUANTITY_PER_CODE) {
-      return { ok: false, packs: [], error: `A code can award at most ${MAX_PACK_QUANTITY_PER_CODE} of “${find(packId)?.name}”.` }
+      return { ok: false, packs: [], error: `A ${props.noun} can award at most ${MAX_PACK_QUANTITY_PER_CODE} of “${find(packId)?.name}”.` }
     }
   }
   if (packs.reduce((n, p) => n + p.quantity, 0) > MAX_PACKS_PER_CODE) {
-    return { ok: false, packs: [], error: `A code can award at most ${MAX_PACKS_PER_CODE} packs in total.` }
+    return { ok: false, packs: [], error: `A ${props.noun} can award at most ${MAX_PACKS_PER_CODE} packs in total.` }
   }
   return { ok: true, packs, error: '' }
 }

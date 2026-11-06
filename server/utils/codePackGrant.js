@@ -10,17 +10,20 @@ import { randomUUID } from 'node:crypto'
 
 /**
  * @param {*} tx  Prisma transaction client (or client)
- * @param {{ userId:string, claimId:string, awards:Array<{packId:string, quantity:number}> }} p
+ * Also used for OG gToons tournament pack prizes (`source: 'OG_GTOONS_TOURNAMENT'`, `claimId` = the prize grant's id): same
+ * idempotency, same audit trail, `method` = the source.
+ *
+ * @param {{ userId:string, claimId:string, awards:Array<{packId:string, quantity:number}>, source?:string }} p
  * @returns {Promise<Array<{ packId:string, userPackIds:string[] }>>}
  */
-export async function grantCodePacks (tx, { userId, claimId, awards }) {
+export async function grantCodePacks (tx, { userId, claimId, awards, source = 'CODE' }) {
   if (!awards.length) return []
 
   const rows = []
   let ordinal = 0
   for (const { packId, quantity } of awards) {
     for (let i = 0; i < quantity; i++) {
-      rows.push({ id: randomUUID(), userId, packId, opened: false, source: 'CODE', sourceRef: claimId, sourceOrdinal: ordinal++ })
+      rows.push({ id: randomUUID(), userId, packId, opened: false, source, sourceRef: claimId, sourceOrdinal: ordinal++ })
     }
   }
   const created = await tx.userPack.createMany({ data: rows, skipDuplicates: true })
@@ -33,7 +36,7 @@ export async function grantCodePacks (tx, { userId, claimId, awards }) {
   // Audit trail only for a first run; a repeat inserted nothing new.
   if (created.count > 0) {
     await tx.packOwnerLog.createMany({
-      data: granted.map(g => ({ userPackId: g.id, packId: g.packId, userId, method: 'CODE' }))
+      data: granted.map(g => ({ userPackId: g.id, packId: g.packId, userId, method: source }))
     })
   }
 

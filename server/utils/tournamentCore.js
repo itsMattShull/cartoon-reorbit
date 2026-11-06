@@ -427,14 +427,21 @@ export function buildFinalPlacements({ format, records, bracketMatches }) {
  * Who is owed what. FIRST goes to place 1; TOP8 goes to places 2-8 but only when the field had at
  * least `minEntrantsTop8` entrants (otherwise "top 8" would just be everyone but the winner).
  * `eligible` is the set of user ids allowed to be paid (played a real game, not disqualified/banned).
+ *
+ * PARTICIPANT is the participation prize: every eligible player who did NOT get a place prize. That includes the
+ * winner when there is no 1st-place prize, and places 2-8 when the field was too small for the Top 8 prize — in other
+ * words each player gets exactly one prize, the best tier that applies to them, never a place prize AND a
+ * participation prize.
  */
-export function prizeRecipients({ placements, entrants, minEntrantsTop8 = 9, eligible = null, hasFirst = true, hasTop8 = true }) {
+export function prizeRecipients({ placements, entrants, minEntrantsTop8 = 9, eligible = null, hasFirst = true, hasTop8 = true, hasParticipant = false }) {
   const out = []
   for (const p of placements) {
     if (eligible && !eligible.has(p.userId)) continue
     if (p.place === 1 && hasFirst) out.push({ userId: p.userId, place: p.place, tier: 'FIRST' })
     else if (p.place >= 2 && p.place <= 8 && hasTop8 && entrants >= minEntrantsTop8) {
       out.push({ userId: p.userId, place: p.place, tier: 'TOP8' })
+    } else if (hasParticipant) {
+      out.push({ userId: p.userId, place: p.place, tier: 'PARTICIPANT' })
     }
   }
   return out

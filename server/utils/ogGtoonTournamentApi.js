@@ -49,23 +49,27 @@ export async function ogtRoundLabel(match) {
   return bracketRoundLabel(count)
 }
 
-const hasPrize = (b) => !!b && (Number(b.points) > 0 || b.ctoons?.length || b.backgrounds?.length)
+export const hasPrize = (b) => !!b && !!(Number(b.points) > 0 || b.ctoons?.length || b.backgrounds?.length || b.packs?.length)
 
 /** A prize bundle with names and images resolved, ready to show on the page. */
 export async function ogtPrizeView(bundle) {
   if (!hasPrize(bundle)) return null
   const ctoonIds = (bundle.ctoons || []).map(c => c.ctoonId)
   const bgIds = (bundle.backgrounds || []).map(b => b.backgroundId)
-  const [ctoons, bgs] = await Promise.all([
+  const packIds = (bundle.packs || []).map(p => p.packId)
+  const [ctoons, bgs, packs] = await Promise.all([
     ctoonIds.length ? prisma.ctoon.findMany({ where: { id: { in: ctoonIds } }, select: { id: true, name: true, assetPath: true } }) : [],
-    bgIds.length ? prisma.background.findMany({ where: { id: { in: bgIds } }, select: { id: true, imagePath: true, filename: true } }) : []
+    bgIds.length ? prisma.background.findMany({ where: { id: { in: bgIds } }, select: { id: true, imagePath: true, filename: true } }) : [],
+    packIds.length ? prisma.pack.findMany({ where: { id: { in: packIds } }, select: { id: true, name: true, imagePath: true } }) : []
   ])
   const cById = new Map(ctoons.map(c => [c.id, c]))
   const bById = new Map(bgs.map(b => [b.id, b]))
+  const pById = new Map(packs.map(p => [p.id, p]))
   return {
     points: Number(bundle.points) || 0,
     ctoons: (bundle.ctoons || []).map(c => ({ ctoonId: c.ctoonId, quantity: c.quantity, name: cById.get(c.ctoonId)?.name || 'cToon', assetPath: cById.get(c.ctoonId)?.assetPath || null })),
-    backgrounds: (bundle.backgrounds || []).map(b => ({ backgroundId: b.backgroundId, imagePath: bById.get(b.backgroundId)?.imagePath || null, name: bById.get(b.backgroundId)?.filename || 'Background' }))
+    backgrounds: (bundle.backgrounds || []).map(b => ({ backgroundId: b.backgroundId, imagePath: bById.get(b.backgroundId)?.imagePath || null, name: bById.get(b.backgroundId)?.filename || 'Background' })),
+    packs: (bundle.packs || []).map(p => ({ packId: p.packId, quantity: p.quantity, name: pById.get(p.packId)?.name || 'Pack', imagePath: pById.get(p.packId)?.imagePath || null }))
   }
 }
 

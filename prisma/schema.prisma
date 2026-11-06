@@ -59,6 +59,9 @@ enum PackSource {
   // Reaching a PACK-type CMoonPrestigeRankTier's rank while a member of a prestige cMoon — see
   // maybeGrantCMoonPrestigeRank in server/utils/cmoonPrestigeRankTiers.js.
   CMOON_PRESTIGE_RANK
+  // A pack prize paid by an OG gToons tournament (OgGtoonTournamentPrizeGrant) — see payOneGrant in
+  // server/utils/ogGtoonTournament.js. sourceRef = the prize grant's id.
+  OG_GTOONS_TOURNAMENT
 }
 
 /// What an Auction row is selling. Exactly one of Auction.userCtoonId / Auction.userPackId is set,
@@ -1232,8 +1235,8 @@ model UserPack {
   /// `userId` is the current owner and changes on trade/auction; purchase-limit queries and purchase
   /// analytics key on this instead. Plain column (no FK) so account deletion needs no extra ordering.
   buyerId       String?
-  /// Idempotency key for grants: ClaimCode claim id (CODE) or OgGtoonMatch id (OG_GTOONS_PVP), with a
-  /// per-grant ordinal. A repeated grant for the same (sourceRef, sourceOrdinal) hits the unique key.
+  /// Idempotency key for grants: ClaimCode claim id (CODE), OgGtoonMatch id (OG_GTOONS_PVP) or
+  /// OgGtoonTournamentPrizeGrant id (OG_GTOONS_TOURNAMENT), with a per-grant ordinal. A repeated grant for the same (sourceRef, sourceOrdinal) hits the unique key.
   sourceRef     String?
   sourceOrdinal Int?
 
@@ -3176,6 +3179,9 @@ enum OgGtoonTournamentResolution {
 enum OgGtoonTournamentPrizeTier {
   FIRST
   TOP8
+  // Everyone else who played: the participation prize. A player gets ONE grant (unique per
+  // tournament+user), so this is only ever their prize when no place prize applies to them.
+  PARTICIPANT
 }
 
 enum OgGtoonTournamentPrizeStatus {
@@ -3201,11 +3207,13 @@ model OgGtoonTournament {
   maxExtraGames       Int                      @default(4) // bracket only: extra sudden-death games when a series ends level
   roundWindowHours    Int                      @default(72)
 
-  // Prizes: a reward bundle { points, ctoons:[{ctoonId,quantity}], backgrounds:[{backgroundId}] }
-  // for the winner, and another for places 2-8 (only paid when the field has at least
-  // minEntrantsTop8Prize entrants, so a tiny bracket cannot be farmed for the second prize).
+  // Prizes: a reward bundle { points, ctoons:[{ctoonId,quantity}], backgrounds:[{backgroundId}],
+  // packs:[{packId,quantity}] } for the winner, another for places 2-8 (only paid when the field has
+  // at least minEntrantsTop8Prize entrants, so a tiny bracket cannot be farmed for the second prize),
+  // and a participation bundle for every other entrant who played a real game.
   firstPrizeJson       Json?
   top8PrizeJson        Json?
+  participantPrizeJson Json?
   minEntrantsTop8Prize Int       @default(9)
   requirePrizeApproval Boolean   @default(true)
   prizesQueuedAt       DateTime?

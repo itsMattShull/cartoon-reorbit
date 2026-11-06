@@ -149,19 +149,21 @@
 
           <!-- Prizes -->
           <div v-show="tab === 'prizes'" class="bg-white rounded border shadow p-3 space-y-3">
-            <div class="grid md:grid-cols-2 gap-3">
-              <div v-for="p in [{ k: 'first', t: '🥇 1st place', v: detail.firstPrizeView }, { k: 'top8', t: '🏅 Top 8 (places 2–8)', v: detail.top8PrizeView }]" :key="p.k" class="border rounded p-2">
+            <div class="grid md:grid-cols-3 gap-3">
+              <div v-for="p in [{ k: 'first', t: '🥇 1st place', v: detail.firstPrizeView }, { k: 'top8', t: '🏅 Top 8 (places 2–8)', v: detail.top8PrizeView }, { k: 'participant', t: '🎟️ Participation', v: detail.participantPrizeView }]" :key="p.k" class="border rounded p-2">
                 <p class="font-semibold">{{ p.t }}</p>
                 <p v-if="!p.v" class="text-gray-500">No prize set.</p>
                 <ul v-else class="mt-1 space-y-0.5">
                   <li v-if="p.v.points">⭐ {{ p.v.points.toLocaleString() }} points</li>
                   <li v-for="c in p.v.ctoons" :key="c.ctoonId">{{ c.quantity }}× {{ c.name }}</li>
                   <li v-for="b in p.v.backgrounds" :key="b.backgroundId">Background {{ b.name }}</li>
+                  <li v-for="k in p.v.packs" :key="k.packId">📦 {{ k.quantity }}× {{ k.name }}</li>
                 </ul>
               </div>
             </div>
             <p class="text-gray-500">
-              Top 8 prize is paid only if {{ detail.tournament.minEntrantsTop8Prize }}+ players entered. Payout needs a real game played and is
+              Top 8 prize is paid only if {{ detail.tournament.minEntrantsTop8Prize }}+ players entered. The participation prize goes to every other
+              player who played at least one real game (nobody gets both a place prize and the participation prize). Payout is
               {{ detail.tournament.requirePrizeApproval ? 'held until you approve it below' : 'automatic' }}.
             </p>
             <div v-if="detail.prizeGrants.length">
@@ -249,7 +251,15 @@
                   <p v-if="!backgrounds.length" class="col-span-full text-gray-500">No backgrounds found.</p>
                 </div>
               </div>
-              <p class="text-gray-600"><strong>Winner{{ tier.k === 'top8' ? 's each' : '' }} receive{{ tier.k === 'top8' ? '' : 's' }}:</strong> {{ previewText(form[tier.k]) }}</p>
+              <CodePackRewards
+                :initial="form[tier.k].packs"
+                noun="prize"
+                title="Packs"
+                hint="Sealed packs go straight into the player's My Collection › Packs."
+                @summary="form[tier.k].packSummary = $event"
+                :ref="el => { if (el) packEls[tier.k] = el }"
+              />
+              <p class="text-gray-600"><strong>{{ tier.who }}:</strong> {{ previewText(form[tier.k]) }}</p>
             </div>
           </fieldset>
           <p v-if="formError" class="text-red-600" role="alert">{{ formError }}</p>
@@ -328,7 +338,11 @@
 import { ref, reactive, computed, watch, onMounted } from 'vue'
 
 const TABS = [{ id: 'matches', label: 'Matches' }, { id: 'entrants', label: 'Entrants' }, { id: 'prizes', label: 'Prizes' }]
-const TIERS = [{ k: 'first', title: '🥇 1st place prize' }, { k: 'top8', title: '🏅 Top 8 prize (places 2–8, not the winner)' }]
+const TIERS = [
+  { k: 'first', title: '🥇 1st place prize', who: 'The winner receives' },
+  { k: 'top8', title: '🏅 Top 8 prize (places 2–8, not the winner)', who: 'Each of places 2–8 receives' },
+  { k: 'participant', title: '🎟️ Participation prize (everyone else who plays at least one real game)', who: 'Each participant receives' }
+]
 const API = '/api/admin/og-tournaments'
 const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local'
 
@@ -353,7 +367,7 @@ const statusLabel = (s) => STATUS[s]?.[0] || s
 const statusClass = (s) => STATUS[s]?.[1] || ''
 const grantClass = (s) => ({ PAID: 'bg-green-100 text-green-800', FAILED: 'bg-red-100 text-red-800', PENDING_APPROVAL: 'bg-amber-100 text-amber-800', PENDING: 'bg-blue-100 text-blue-800', SKIPPED: 'bg-gray-100 text-gray-700' })[s] || ''
 const prizeSummary = (c) => (Object.keys(c || {}).length ? Object.entries(c).map(([k, v]) => `${v} ${k.replace('_', ' ').toLowerCase()}`).join(', ') : 'none')
-const grantSummary = (s) => [s.points && `${s.points} pts`, s.backgrounds && `${s.backgrounds} background(s)`, s.ctoonJobs?.length && `${s.ctoonJobs.reduce((n, j) => n + j.quantity, 0)} cToon(s)${s.mintsPending ? ' (minting)' : ''}`].filter(Boolean).join(', ') || 'paid'
+const grantSummary = (s) => [s.points && `${s.points} pts`, s.backgrounds && `${s.backgrounds} background(s)`, s.ctoonJobs?.length && `${s.ctoonJobs.reduce((n, j) => n + j.quantity, 0)} cToon(s)${s.mintsPending ? ' (minting)' : ''}`, s.packs?.length && s.packs.map(p => `${p.quantity}× ${p.name}`).join(', ')].filter(Boolean).join(', ') || 'paid'
 const scoreText = (m) => (m.status === 'BYE' ? 'bye' : m.status === 'COMPLETE' || m.gamesCounted ? `${m.winsA}–${m.winsB}${m.ties ? ` (${m.ties} tied)` : ''}${m.status === 'COMPLETE' && m.outcome === 'TIE' ? ' draw' : ''}` : 'not started')
 
 /* ── Loading ─────────────────────────────────────────────────────────────────────────────── */
@@ -434,10 +448,13 @@ async function submitDq() {
 }
 
 /* ── Create / edit form ──────────────────────────────────────────────────────────────────── */
-const blankPrize = () => ({ points: 0, ctoons: [], backgrounds: [] })
+// `packs` is [{ packId, quantity }] and only seeds the pack picker (CodePackRewards owns the rows while the form is open;
+// we read them back with toPayload() on save). `packSummary` is the picker's text, kept for the preview line.
+const blankPrize = () => ({ points: 0, ctoons: [], backgrounds: [], packs: [], packSummary: '' })
+const packEls = {} // tier key -> the CodePackRewards instance
 const formOpen = ref(false); const formError = ref(''); const formWarnings = ref([])
-const form = reactive({ id: null, locked: false, name: '', description: '', optInStartAt: '', optInEndAt: '', roundWindowHours: 72, swissRoundsOverride: '', minEntrantsTop8Prize: 9, requirePrizeApproval: true, first: blankPrize(), top8: blankPrize() })
-const search = reactive({ first: '', top8: '' }); const results = reactive({ first: [], top8: [] })
+const form = reactive({ id: null, locked: false, name: '', description: '', optInStartAt: '', optInEndAt: '', roundWindowHours: 72, swissRoundsOverride: '', minEntrantsTop8Prize: 9, requirePrizeApproval: true, first: blankPrize(), top8: blankPrize(), participant: blankPrize() })
+const search = reactive({ first: '', top8: '', participant: '' }); const results = reactive({ first: [], top8: [], participant: [] })
 const backgrounds = ref([])
 const toLocalInput = (v) => { if (!v) return ''; const d = new Date(v); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
 
@@ -446,20 +463,26 @@ async function openForm(id = null) {
   if (!backgrounds.value.length) { try { backgrounds.value = await $fetch(`${API}/backgrounds`) } catch { backgrounds.value = [] } }
   if (!id) {
     const start = new Date(Date.now() + 3600 * 1000); const end = new Date(Date.now() + 7 * 86400 * 1000)
-    Object.assign(form, { id: null, locked: false, name: '', description: '', optInStartAt: toLocalInput(start), optInEndAt: toLocalInput(end), roundWindowHours: 72, swissRoundsOverride: '', minEntrantsTop8Prize: 9, requirePrizeApproval: true, first: blankPrize(), top8: blankPrize() })
+    Object.assign(form, { id: null, locked: false, name: '', description: '', optInStartAt: toLocalInput(start), optInEndAt: toLocalInput(end), roundWindowHours: 72, swissRoundsOverride: '', minEntrantsTop8Prize: 9, requirePrizeApproval: true, first: blankPrize(), top8: blankPrize(), participant: blankPrize() })
   } else {
     try {
       const d = await $fetch(`${API}/${id}`); const t = d.tournament
-      const toForm = (view) => ({ points: view?.points || 0, ctoons: (view?.ctoons || []).map(c => ({ ctoonId: c.ctoonId, name: c.name, assetPath: c.assetPath, quantity: c.quantity })), backgrounds: (view?.backgrounds || []).map(b => b.backgroundId) })
+      const toForm = (view) => ({
+        points: view?.points || 0,
+        ctoons: (view?.ctoons || []).map(c => ({ ctoonId: c.ctoonId, name: c.name, assetPath: c.assetPath, quantity: c.quantity })),
+        backgrounds: (view?.backgrounds || []).map(b => b.backgroundId),
+        packs: (view?.packs || []).map(p => ({ packId: p.packId, quantity: p.quantity })),
+        packSummary: ''
+      })
       Object.assign(form, {
         id: t.id, locked: !['DRAFT', 'OPT_IN_OPEN'].includes(t.status), name: t.name, description: t.description || '',
         optInStartAt: toLocalInput(t.optInStartAt), optInEndAt: toLocalInput(t.optInEndAt), roundWindowHours: t.roundWindowHours,
         swissRoundsOverride: t.swissRoundsOverride ?? '', minEntrantsTop8Prize: t.minEntrantsTop8Prize, requirePrizeApproval: t.requirePrizeApproval,
-        first: toForm(d.firstPrizeView), top8: toForm(d.top8PrizeView)
+        first: toForm(d.firstPrizeView), top8: toForm(d.top8PrizeView), participant: toForm(d.participantPrizeView)
       })
     } catch (e) { pageError.value = errMsg(e); return }
   }
-  search.first = search.top8 = ''; results.first = results.top8 = []
+  search.first = search.top8 = search.participant = ''; results.first = results.top8 = results.participant = []
   formOpen.value = true
 }
 let searchTimer = null
@@ -479,10 +502,20 @@ function previewText(b) {
   if (b.points) parts.push(`${Number(b.points).toLocaleString()} points`)
   for (const c of b.ctoons) parts.push(`${c.quantity}× ${c.name}`)
   if (b.backgrounds.length) parts.push(`${b.backgrounds.length} background${b.backgrounds.length > 1 ? 's' : ''}`)
+  if (b.packSummary) parts.push(b.packSummary)
   return parts.length ? parts.join(', ') : 'nothing (no prize)'
 }
-const bundleBody = (b) => ({ points: Number(b.points) || 0, ctoons: b.ctoons.map(c => ({ ctoonId: c.ctoonId, quantity: Math.max(1, Number(c.quantity) || 1) })), backgrounds: b.backgrounds.map(id => ({ backgroundId: id })) })
+const bundleBody = (b, packs) => ({ points: Number(b.points) || 0, ctoons: b.ctoons.map(c => ({ ctoonId: c.ctoonId, quantity: Math.max(1, Number(c.quantity) || 1) })), backgrounds: b.backgrounds.map(id => ({ backgroundId: id })), packs })
 async function saveForm() {
+  // Read each tier's packs back from its picker first; an unrecognised pack name stops the save before anything is sent.
+  const packs = {}
+  if (!form.locked) {
+    for (const tier of TIERS) {
+      const r = packEls[tier.k]?.toPayload?.()
+      if (r && !r.ok) { formError.value = `${tier.title}: ${r.error}`; return }
+      packs[tier.k] = r?.packs || []
+    }
+  }
   busy.value = true; formError.value = ''; formWarnings.value = []
   try {
     const body = {
@@ -490,7 +523,8 @@ async function saveForm() {
       optInStartAt: form.optInStartAt ? new Date(form.optInStartAt).toISOString() : '', optInEndAt: form.optInEndAt ? new Date(form.optInEndAt).toISOString() : '',
       roundWindowHours: form.roundWindowHours, swissRoundsOverride: form.swissRoundsOverride === '' ? null : Number(form.swissRoundsOverride),
       minEntrantsTop8Prize: form.minEntrantsTop8Prize, requirePrizeApproval: form.requirePrizeApproval,
-      firstPrize: bundleBody(form.first), top8Prize: bundleBody(form.top8)
+      firstPrize: bundleBody(form.first, packs.first || []), top8Prize: bundleBody(form.top8, packs.top8 || []),
+      participantPrize: bundleBody(form.participant, packs.participant || [])
     }
     const r = form.id ? await $fetch(`${API}/${form.id}`, { method: 'PUT', body }) : await $fetch(API, { method: 'POST', body })
     if (r.warnings?.length) { formWarnings.value = r.warnings; flash('Saved — but see the supply warnings.') } else { formOpen.value = false; flash(form.id ? 'Saved.' : 'Tournament created.') }

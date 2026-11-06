@@ -5,7 +5,7 @@
 import { defineEventHandler } from 'h3'
 import { prisma } from '@/server/prisma'
 import { cachedJson } from '@/server/utils/cache'
-import { ogtRequireUser, ogtRequireEnabled } from '@/server/utils/ogGtoonTournamentApi'
+import { ogtRequireUser, ogtRequireEnabled, hasPrize } from '@/server/utils/ogGtoonTournamentApi'
 
 export default defineEventHandler(async (event) => {
   const me = await ogtRequireUser(event)
@@ -20,19 +20,18 @@ export default defineEventHandler(async (event) => {
       select: {
         id: true, name: true, description: true, status: true, format: true, optInStartAt: true, optInEndAt: true,
         bestOf: true, roundWindowHours: true, tournamentCompletedAt: true, winner: { select: { username: true } },
-        firstPrizeJson: true, top8PrizeJson: true
+        firstPrizeJson: true, top8PrizeJson: true, participantPrizeJson: true
       }
     })
     const counts = await prisma.ogGtoonTournamentOptIn.groupBy({
       by: ['tournamentId'], where: { isActive: true, tournamentId: { in: rows.map(r => r.id) } }, _count: { _all: true }
     })
     const countBy = new Map(counts.map(c => [c.tournamentId, c._count._all]))
-    return rows.map(({ firstPrizeJson, top8PrizeJson, winner, ...t }) => ({
+    return rows.map(({ firstPrizeJson, top8PrizeJson, participantPrizeJson, winner, ...t }) => ({
       ...t,
       optInCount: countBy.get(t.id) || 0,
       winnerUsername: winner?.username || null,
-      hasPrizes: !!(firstPrizeJson && (firstPrizeJson.points || firstPrizeJson.ctoons?.length || firstPrizeJson.backgrounds?.length)) ||
-        !!(top8PrizeJson && (top8PrizeJson.points || top8PrizeJson.ctoons?.length || top8PrizeJson.backgrounds?.length))
+      hasPrizes: hasPrize(firstPrizeJson) || hasPrize(top8PrizeJson) || hasPrize(participantPrizeJson)
     }))
   })
 
