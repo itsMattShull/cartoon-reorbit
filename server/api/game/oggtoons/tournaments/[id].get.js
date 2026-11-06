@@ -16,21 +16,23 @@ export default defineEventHandler(async (event) => {
         id: true, name: true, description: true, status: true, format: true, optInStartAt: true, optInEndAt: true,
         swissRoundsPlanned: true, bestOf: true, roundWindowHours: true, minEntrantsTop8Prize: true,
         finalPlacementsJson: true, winnerUserId: true, tournamentCompletedAt: true, firstPrizeJson: true, top8PrizeJson: true,
+        participantPrizeJson: true,
         winner: { select: { username: true } }
       }
     })
     if (!t) return null
-    const [optInCount, round, first, top8] = await Promise.all([
+    const [optInCount, round, first, top8, participant] = await Promise.all([
       prisma.ogGtoonTournamentOptIn.count({ where: { tournamentId: id, isActive: true } }),
       prisma.ogGtoonTournamentRound.findFirst({ where: { tournamentId: id }, orderBy: [{ openedAt: 'desc' }] }),
       ogtPrizeView(t.firstPrizeJson),
-      ogtPrizeView(t.top8PrizeJson)
+      ogtPrizeView(t.top8PrizeJson),
+      ogtPrizeView(t.participantPrizeJson)
     ])
-    const { firstPrizeJson, top8PrizeJson, winner, ...rest } = t
+    const { firstPrizeJson, top8PrizeJson, participantPrizeJson, winner, ...rest } = t
     return {
       ...rest, optInCount, winnerUsername: winner?.username || null,
       currentRound: round ? { stage: round.stage, roundNumber: round.roundNumber, dueAt: round.dueAt } : null,
-      prizes: { first, top8 }
+      prizes: { first, top8, participant }
     }
   })
   if (!pub) throw createError({ statusCode: 404, statusMessage: 'Tournament not found' })

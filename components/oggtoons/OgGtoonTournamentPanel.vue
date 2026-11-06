@@ -31,7 +31,7 @@
         </dl>
         <p v-if="countdownText" class="text-sm text-indigo-300 mt-2">{{ countdownText }}</p>
 
-        <div v-if="t.prizes?.first || t.prizes?.top8" class="grid sm:grid-cols-2 gap-3 mt-4">
+        <div v-if="prizeBlocks.length" class="grid sm:grid-cols-2 gap-3 mt-4">
           <div v-for="p in prizeBlocks" :key="p.key" class="rounded border border-amber-300/30 bg-amber-300/5 p-3">
             <p class="text-xs font-semibold uppercase tracking-wide text-amber-200">{{ p.title }}</p>
             <p v-if="p.note" class="text-[11px] text-gray-400">{{ p.note }}</p>
@@ -44,6 +44,10 @@
               <li v-for="b in p.prize.backgrounds" :key="b.backgroundId" class="flex items-center gap-2">
                 <img v-if="b.imagePath" :src="b.imagePath" :alt="b.name" class="h-8 w-14 object-cover rounded" loading="lazy" />
                 <span>Background</span>
+              </li>
+              <li v-for="k in p.prize.packs" :key="k.packId" class="flex items-center gap-2">
+                <img v-if="k.imagePath" :src="k.imagePath" :alt="k.name" class="h-8 w-8 object-contain" loading="lazy" />
+                <span>{{ k.quantity > 1 ? k.quantity + '× ' : '' }}{{ k.name }} <span class="text-gray-400">(pack)</span></span>
               </li>
             </ul>
           </div>
@@ -344,6 +348,7 @@ const prizeBlocks = computed(() => {
   const out = []
   if (t.value?.prizes?.first) out.push({ key: 'first', title: '🥇 1st place', prize: t.value.prizes.first })
   if (t.value?.prizes?.top8) out.push({ key: 'top8', title: '🏅 Top 8 (places 2–8)', prize: t.value.prizes.top8, note: `Paid when ${t.value.minEntrantsTop8Prize}+ players enter.` })
+  if (t.value?.prizes?.participant) out.push({ key: 'participant', title: '🎟️ Participation', prize: t.value.prizes.participant, note: 'Every other player who plays at least one game.' })
   return out
 })
 const prizeTierFor = (place) => {
