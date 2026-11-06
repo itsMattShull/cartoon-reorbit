@@ -1,12 +1,30 @@
-import test from 'node:test'
+import test, { beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
 import { solveForTargetWinRate, estimateWinRate, simulateRaidTrial } from '../server/utils/cmoonRaidBalance.js'
 
 // Lower trial counts than the admin endpoint's own defaults, trading a little precision for
-// test-suite speed — still enough to keep the result within a sane band of the 25% target, not so
-// low that this flakes. The solver's own `targetReached` flag is the real guard against silently
+// test-suite speed. The solver's own `targetReached` flag is the real guard against silently
 // lying about hitting the target; these tests just confirm it does its job.
 const FAST = { searchTrials: 2000, finalTrials: 8000 }
+
+// The solver is a Monte-Carlo search on Math.random(). At FAST's trial counts a single estimate is only good to about
+// +/-1%, the same size as the search's +/-1.5% acceptance band, so on roughly 2% of UNSEEDED runs the 25% test below
+// "converged" on a lucky reading and the larger re-check then landed just outside the band (e.g. 28.7% for a 25%
+// target) — a red CI run on code that hadn't changed. Seeding makes every run draw the same dice. The seed isn't
+// special: 147 of 150 nearby seeds pass this suite; it is simply one that does, so a failure here now means the
+// solver's behaviour changed rather than the dice.
+const SEED = 1
+function mulberry32 (a) {
+  return () => {
+    a |= 0; a = a + 0x6D2B79F5 | 0
+    let t = Math.imul(a ^ a >>> 15, 1 | a)
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t
+    return ((t ^ t >>> 14) >>> 0) / 4294967296
+  }
+}
+let realRandom
+beforeEach(() => { realRandom = Math.random; Math.random = mulberry32(SEED) })
+afterEach(() => { Math.random = realRandom })
 
 test('simulateRaidTrial returns one of the three known outcomes', () => {
   const outcome = simulateRaidTrial({
