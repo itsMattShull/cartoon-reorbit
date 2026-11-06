@@ -7,6 +7,7 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { requireAdmin } from '@/server/utils/requireAdmin'
+import { serializeDispersalOption } from '@/server/utils/cmoonDispersal'
 
 export default defineEventHandler(async (event) => {
   await requireAdmin(event)
@@ -21,7 +22,14 @@ export default defineEventHandler(async (event) => {
       initiatedBy: { select: { username: true } },
       closedBy: { select: { username: true } },
       cMoons: { select: { cMoon: { select: { id: true, name: true, memberCount: true } } } },
-      options: { orderBy: { sortOrder: 'asc' }, select: { id: true, ctoon: { select: { id: true, name: true, assetPath: true } } } },
+      options: {
+        orderBy: { sortOrder: 'asc' },
+        select: {
+          id: true,
+          ctoon: { select: { id: true, name: true, assetPath: true } },
+          pack: { select: { id: true, name: true, imagePath: true } },
+        },
+      },
       _count: { select: { claims: true } },
     },
   })
@@ -39,13 +47,7 @@ export default defineEventHandler(async (event) => {
     initiatedByUsername: offer.initiatedBy?.username || '',
     closedByUsername: offer.closedBy?.username || '',
     cMoons: offer.cMoons.map(c => ({ id: c.cMoon.id, name: c.cMoon.name, memberCount: c.cMoon.memberCount })),
-    options: offer.options.map(opt => ({
-      id: opt.id,
-      ctoonId: opt.ctoon.id,
-      name: opt.ctoon.name,
-      assetPath: opt.ctoon.assetPath,
-      claimCount: claimsByOption[opt.id] || 0,
-    })),
+    options: offer.options.map(opt => serializeDispersalOption(opt, { claimCount: claimsByOption[opt.id] || 0 })),
     totalClaims: offer._count?.claims ?? 0,
   }
 })

@@ -14,7 +14,7 @@
 // it is super-admin only and cannot be granted.
 export const ADMIN_PERMISSION_KEYS = [
   'analytics', 'collectionAnalytics', 'setAnalytics', 'packAnalytics', 'cMoonEnemyAnalytics', 'checkUserMints', 'retention',
-  'manageUsers', 'manageCollection', 'cheatFinder', 'checkCheating', 'cheatingTool',
+  'manageUsers', 'manageUserHp', 'manageCollection', 'cheatFinder', 'checkCheating', 'cheatingTool',
   'suspiciousActivity', 'deviceFingerprints', 'vpn-queue', 'initiateTrade',
   'ctoons', 'ctoonsBulkUpload', 'submittedCtoons', 'ctoonSuggestions', 'starterSets', 'packs',
   'backgrounds', 'czoneSearch', 'czoneContest', 'homepage', 'announcements', 'ads', 'tutorial',
@@ -109,6 +109,8 @@ export const ADMIN_API_SEGMENT_PERMS = {
   'cmoon-hunts': ['cMoonHunts'],
   'cmoon-join-effects': ['cMoon', 'cMoonJoinEffects', 'cMoonEnemies'],
   'cmoon-points-log': ['cmoonPointLogs'],
+  'cmoon-prestige-levels': ['cMoon'],
+  'cmoon-prestige-rank-tiers': ['cMoon'],
   'cmoon-rank-tiers': ['cMoon'],
   'cmoon-riddles': ['cMoonRiddles'],
   'cmoon-scoring': ['cMoon'],
@@ -257,9 +259,16 @@ function usersAccess (rest) {
   const [a, b] = rest
   // Granting or removing admin/sub-admin access is never available to a sub-admin.
   if (b === 'admin-access' || b === 'make-admin' || b === 'remove-admin') return { type: 'full-only' }
-  // The user picker is shared with the cMoon award/assign dialogs; account transfer is not.
-  if (a === 'search') return { type: 'perms', perms: ['manageUsers', 'cMoon'] }
+  // The user picker is shared with the cMoon award/assign dialogs and the Manage User HP
+  // tool's own autocomplete; account transfer is not.
+  if (a === 'search') return { type: 'perms', perms: ['manageUsers', 'cMoon', 'manageUserHp'] }
   if (b === 'update-cmoon') return { type: 'perms', perms: ['manageUsers', 'cMoon'] }
+  // "Manage User HP" (per-user get/set + mass raise/lower, for both HP and the Stamina section
+  // on that same admin page) is its own dedicated admin tool — see the manageUserHp section in
+  // utils/adminSections.js.
+  if (b === 'hp' || a === 'hp-mass-adjust' || b === 'stamina' || a === 'stamina-mass-adjust') {
+    return { type: 'perms', perms: ['manageUserHp'] }
+  }
   return { type: 'perms', perms: ['manageUsers'] }
 }
 
@@ -337,7 +346,7 @@ export function adminScopeDenial (scope, rawPath, method = 'GET') {
 // settings. Everything else stays on. Existing isSubAdmin accounts were migrated to exactly this
 // list (prisma/migrations/20261018130000_sub_admin_permissions).
 export const STANDARD_SUB_ADMIN_WITHHELD = [
-  'manageUsers', 'initiateTrade', 'production', 'cheatingTool', 'checkCheating', 'codes',
+  'manageUsers', 'manageUserHp', 'initiateTrade', 'production', 'cheatingTool', 'checkCheating', 'codes',
   'auctions', 'dissolveQueue', 'globalSettings'
 ]
 

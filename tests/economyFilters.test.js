@@ -94,7 +94,7 @@ test('buildExclusionSql parameterises the series list and keeps NULL series/mint
   assert.deepEqual(none.values, [])
 
   const gtoons = buildExclusionSql({ hideGtoons: true, hidePokemon: false, hideHighMints: false })
-  assert.match(gtoons.strings.join('?'), /"isGtoon" = false/)
+  assert.match(gtoons.strings.join('?'), /"isGtoon" = false AND c."isOgGtoon" = false/)
   assert.deepEqual(gtoons.values, [])
 
   const pokemon = buildExclusionSql({ hideGtoons: false, hidePokemon: true, hideHighMints: false })
@@ -112,7 +112,7 @@ test('buildExclusionSql parameterises the series list and keeps NULL series/mint
   assert.ok(highMints.values.includes(500))
 
   const all = buildExclusionSql({ hideGtoons: true, hidePokemon: true, hideHighMints: true })
-  assert.match(all.strings.join('?'), /"isGtoon" = false/)
+  assert.match(all.strings.join('?'), /"isGtoon" = false AND c."isOgGtoon" = false/)
   assert.match(all.strings.join('?'), /BTRIM/)
   assert.match(all.strings.join('?'), /"totalMinted"/)
 })

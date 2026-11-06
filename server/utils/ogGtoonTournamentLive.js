@@ -12,7 +12,7 @@ import { prisma } from '../prisma.js'
 import { toSnapshotCard } from './ogGtoonMatchCore.js'
 import { checkLockedDeck, computeSeries, BEST_OF } from './tournamentCore.js'
 
-/** A ready-up counts for this long; after that the player has to press Play again. */
+/** A ready-up counts for this long; after that the player has to press Start next game again. */
 export const READY_TTL_MS = 30 * 60 * 1000
 
 export const ACTIVE_STATUSES = ['SWISS_ACTIVE', 'BRACKET_ACTIVE']

@@ -31,7 +31,7 @@
         </dl>
         <p v-if="countdownText" class="text-sm text-indigo-300 mt-2">{{ countdownText }}</p>
 
-        <div v-if="t.prizes?.first || t.prizes?.top8" class="grid sm:grid-cols-2 gap-3 mt-4">
+        <div v-if="prizeBlocks.length" class="grid sm:grid-cols-2 gap-3 mt-4">
           <div v-for="p in prizeBlocks" :key="p.key" class="rounded border border-amber-300/30 bg-amber-300/5 p-3">
             <p class="text-xs font-semibold uppercase tracking-wide text-amber-200">{{ p.title }}</p>
             <p v-if="p.note" class="text-[11px] text-gray-400">{{ p.note }}</p>
@@ -44,6 +44,10 @@
               <li v-for="b in p.prize.backgrounds" :key="b.backgroundId" class="flex items-center gap-2">
                 <img v-if="b.imagePath" :src="b.imagePath" :alt="b.name" class="h-8 w-14 object-cover rounded" loading="lazy" />
                 <span>Background</span>
+              </li>
+              <li v-for="k in p.prize.packs" :key="k.packId" class="flex items-center gap-2">
+                <img v-if="k.imagePath" :src="k.imagePath" :alt="k.name" class="h-8 w-8 object-contain" loading="lazy" />
+                <span>{{ k.quantity > 1 ? k.quantity + '× ' : '' }}{{ k.name }} <span class="text-gray-400">(pack)</span></span>
               </li>
             </ul>
           </div>
@@ -134,7 +138,7 @@
           <div v-else>
             <div class="flex flex-wrap items-center gap-2">
               <button v-if="!liveReady.my" class="px-5 py-2 rounded bg-green-500 hover:bg-green-600 text-sm font-semibold disabled:opacity-50" :disabled="busy || !!deckProblem" @click="play">
-                {{ liveReady.opponent ? `Play now — ${my.match.opponent?.username} is ready` : 'Play' }}
+                {{ liveReady.opponent ? `Start next game — ${my.match.opponent?.username} is ready` : 'Start next game' }}
               </button>
               <template v-else>
                 <span class="text-sm text-indigo-300" aria-live="polite">⏳ You're ready — waiting for {{ my.match.opponent?.username }}…</span>
@@ -143,9 +147,9 @@
               <button class="px-3 py-1.5 rounded bg-red-700/70 hover:bg-red-700 text-xs ml-auto" :disabled="busy" @click="forfeit">Forfeit match</button>
             </div>
             <p class="text-xs mt-2" :class="liveReady.opponentOnline ? 'text-green-300' : 'text-gray-400'">
-              {{ liveReady.opponentOnline ? `● ${my.match.opponent?.username} is on gToons right now.` : `○ ${my.match.opponent?.username} isn't on gToons right now — if you press Play they'll be sent a Discord message.` }}
+              {{ liveReady.opponentOnline ? `● ${my.match.opponent?.username} is on gToons right now.` : `○ ${my.match.opponent?.username} isn't on gToons right now — if you press Start next game they'll be sent a Discord message.` }}
             </p>
-            <p class="text-xs text-gray-500 mt-1">Both of you need to press Play within 30 minutes of each other. Leaving a game forfeits that game; a dropped connection gets 90 seconds to come back.</p>
+            <p class="text-xs text-gray-500 mt-1">The game starts as soon as you BOTH press Start next game (within 30 minutes of each other) and you'll be taken to the board automatically. Leaving a game forfeits that game; a dropped connection gets 90 seconds to come back.</p>
           </div>
         </div>
       </section>
@@ -344,6 +348,7 @@ const prizeBlocks = computed(() => {
   const out = []
   if (t.value?.prizes?.first) out.push({ key: 'first', title: '🥇 1st place', prize: t.value.prizes.first })
   if (t.value?.prizes?.top8) out.push({ key: 'top8', title: '🏅 Top 8 (places 2–8)', prize: t.value.prizes.top8, note: `Paid when ${t.value.minEntrantsTop8Prize}+ players enter.` })
+  if (t.value?.prizes?.participant) out.push({ key: 'participant', title: '🎟️ Participation', prize: t.value.prizes.participant, note: 'Every other player who plays at least one game.' })
   return out
 })
 const prizeTierFor = (place) => {
@@ -354,7 +359,8 @@ const prizeTierFor = (place) => {
 
 /* ── Derived state ───────────────────────────────────────────────────────────────────────── */
 const myEntry = computed(() => ({ isOptedIn: !!t.value?.isOptedIn }))
-const canEnter = computed(() => t.value?.status === 'OPT_IN_OPEN' && !t.value?.disqualified)
+// The time check matters for a page left open past the deadline: the server refuses entry then, so don't offer the button.
+const canEnter = computed(() => t.value?.status === 'OPT_IN_OPEN' && !t.value?.disqualified && new Date(t.value.optInEndAt).getTime() > now.value)
 const validDecks = computed(() => decks.value.filter(d => d.valid && new Set(d.cards.map(c => c.id)).size === 12))
 const selectedDeck = computed(() => validDecks.value.find(d => d.id === selectedDeckId.value))
 const showSwiss = computed(() => t.value?.format !== 'BRACKET_8_OR_LESS')

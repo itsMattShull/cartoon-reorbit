@@ -48,6 +48,20 @@ enum PackSource {
   PURCHASE
   CODE
   OG_GTOONS_PVP
+  // Defeating a cMoon enemy/raid boss that has a PACK-type CMoonEnemyReward row — see
+  // grantRewardInTx's own `reward.packs` block in server/utils/achievements.js. Shared by both
+  // the solo and raid win paths (CMOON_ENEMY_BATTLE_WIN/CMOON_ENEMY_RAID_WIN), same "one channel
+  // covers everything that earns it" granularity as CODE/OG_GTOONS_PVP above.
+  CMOON_ENEMY_REWARD
+  // Claiming a PACK-type option on a CMoonDispersalOffer — see
+  // server/api/cmoon/[id]/dispersal-offers/[offerId]/claim.post.js.
+  CMOON_DISPERSAL
+  // Reaching a PACK-type CMoonPrestigeRankTier's rank while a member of a prestige cMoon — see
+  // maybeGrantCMoonPrestigeRank in server/utils/cmoonPrestigeRankTiers.js.
+  CMOON_PRESTIGE_RANK
+  // A pack prize paid by an OG gToons tournament (OgGtoonTournamentPrizeGrant) — see payOneGrant in
+  // server/utils/ogGtoonTournament.js. sourceRef = the prize grant's id.
+  OG_GTOONS_TOURNAMENT
 }
 
 /// What an Auction row is selling. Exactly one of Auction.userCtoonId / Auction.userPackId is set,
@@ -392,6 +406,7 @@ model Ctoon {
   rewardPoolRows             RewardCtoonPool[]           @relation("RewardPoolToCtoon")
   winballGrandPrizeSchedules WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCtoon")
   cMoonEnemyRewards          CMoonEnemyReward[]
+  cMoonPrestigeRankTiers     CMoonPrestigeRankTier[]
   imageHash                  CtoonImageHash?
   userSuggestions            CtoonUserSuggestion[]
 
@@ -647,6 +662,46 @@ model User {
   // nightly reconciliation cron (syncCMoonDiscordRoles) rather than synchronously on unlock.
   cMoonRankRoleGrantedAt DateTime?
   cMoonPollVotes         CMoonPollVote[]
+
+  // Permanent ADDITIVE adjustment to this player's cMoon enemy/raid battle max HP, set by an
+  // admin via the "Manage User HP" tool (server/api/admin/users/hp*). Deliberately additive, not
+  // an absolute override: getPlayerCombatMaxHp (server/utils/cmoon.js) adds this on top of the
+  // normal defaultHp + rank-tier-bonus computation, so a player whose HP was hand-adjusted still
+  // gains further HP from a future cMoon rank-up exactly like anyone else. Can be negative (admin
+  // "lower HP") — combinePlayerMaxHp still floors the final effective HP at 1.
+  cMoonHpAdjustment Int @default(0)
+
+  // Same deal as cMoonHpAdjustment immediately above, for the cMoon Enemy Battle stamina
+  // mechanic (solo battles only — see GlobalGameConfig.cMoonEnemyBattleStartingStamina's own
+  // schema comment) — set by an admin via the "Manage User HP" tool's Stamina section (server/
+  // api/admin/users/stamina*). Unlike HP, stamina has no per-rank bonus to add on top of: a
+  // player's natural max stamina is just the site-wide starting value, so this is the only thing
+  // that can ever make one player's stamina differ from another's. combinePlayerMaxStamina
+  // floors the result at 0 (not 1, like HP) — 0 is a legitimate, already-existing "mechanic off
+  // for this battle" state, not a danger to avoid. Read once at CMoonEnemyBattle.playerMaxStamina
+  // snapshot time (server/api/cmoon/battle/start.post.js) — like every other per-battle snapshot,
+  // changing this never affects a battle already in progress, only the player's NEXT one.
+  cMoonStaminaAdjustment Int @default(0)
+
+  // ── cMoon Prestige ───────────────────────────────────────────────────────────────────────────
+  // How many times this player has prestiged — permanent, cumulative, NEVER reset by
+  // reassignUserCMoon (unlike cMoonPoints/currentCMoonRankId, which a prestige move resets
+  // exactly like any other team switch — see prestigeUser in server/utils/cmoonPrestige.js). 0
+  // means never prestiged. Drives: which CMoonPrestigeLevel threshold is next, the "✦ Prestige N"
+  // raid badge (CMoonRaidFighter.vue), and the one-time Prestiged profile badge.
+  prestigeLevel              Int                  @default(0)
+  // When this player last prestiged — null until their first one. Display/audit only (shown next
+  // to their current level in Settings); CMoonPrestigeLog carries the full per-event history.
+  lastPrestigedAt            DateTime?
+  prestigeLogs               CMoonPrestigeLog[]
+  prizeGrantLogs             CMoonPrizeGrantLog[]
+  // This player's standing on the SECOND, prestige-exclusive rank ladder (CMoonPrestigeRankTier/
+  // CMoonPrestigeRank) — entirely separate from currentCMoonRankId above, which is the universal
+  // ladder every cMoon (prestige or not) already has. Null for anyone not currently a member of
+  // a prestige cMoon, or one who hasn't reached this ladder's first rung yet. Reset to null on any
+  // cMoonId change (reassignUserCMoon), exactly like currentCMoonRankId already is.
+  currentCMoonPrestigeRankId String?
+  currentCMoonPrestigeRank   CMoonPrestigeRank?   @relation("CurrentCMoonPrestigeRank", fields: [currentCMoonPrestigeRankId], references: [id], onDelete: SetNull)
 
   // Which of this user's earned cMoon-affinity cZone borders (see UserCMoonBorder) is currently
   // displayed on their cZone — a player can outrank the border threshold for more than one cMoon
@@ -1128,13 +1183,17 @@ model Pack {
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
 
-  rarityConfigs PackRarityConfig[]
-  ctoonOptions  PackCtoonOption[]
-  userPacks     UserPack[]
-  limitResets   UserPackLimitReset[]
-  rewardPacks   RewardPack[]
-  ogGtoonsWinConfigs GameConfig[] @relation("OgGtoonsWinPack")
-  ogGtoonPackAwards  OgGtoonPackAward[]
+  rarityConfigs          PackRarityConfig[]
+  ctoonOptions           PackCtoonOption[]
+  userPacks              UserPack[]
+  limitResets            UserPackLimitReset[]
+  rewardPacks            RewardPack[]
+  cMoonEnemyRewards      CMoonEnemyReward[]
+  cMoonDispersalOptions  CMoonDispersalOption[]
+  cMoonPrestigeRankTiers CMoonPrestigeRankTier[]
+  cMoonDispersalClaims   CMoonDispersalClaim[]
+  ogGtoonsWinConfigs     GameConfig[]            @relation("OgGtoonsWinPack")
+  ogGtoonPackAwards      OgGtoonPackAward[]
 }
 
 model PackRarityConfig {
@@ -1176,8 +1235,8 @@ model UserPack {
   /// `userId` is the current owner and changes on trade/auction; purchase-limit queries and purchase
   /// analytics key on this instead. Plain column (no FK) so account deletion needs no extra ordering.
   buyerId       String?
-  /// Idempotency key for grants: ClaimCode claim id (CODE) or OgGtoonMatch id (OG_GTOONS_PVP), with a
-  /// per-grant ordinal. A repeated grant for the same (sourceRef, sourceOrdinal) hits the unique key.
+  /// Idempotency key for grants: ClaimCode claim id (CODE), OgGtoonMatch id (OG_GTOONS_PVP) or
+  /// OgGtoonTournamentPrizeGrant id (OG_GTOONS_TOURNAMENT), with a per-grant ordinal. A repeated grant for the same (sourceRef, sourceOrdinal) hits the unique key.
   sourceRef     String?
   sourceOrdinal Int?
 
@@ -1189,13 +1248,13 @@ model UserPack {
   auctions        Auction[]
   ownerLogs       PackOwnerLog[]
   pvpAwards       OgGtoonPackAward[]
-
-  @@unique([sourceRef, sourceOrdinal])
   // NOTE: partial indexes created only in migration 20261102000000_owned_packs (Prisma can't express
   // them; they show up as drift in `prisma migrate dev` — do not drop them):
   //   UserPack_unopened_idx      (userId, createdAt DESC, id) WHERE opened = false   — Packs tab + lock pre-checks
   //   UserPack_buyer_idx         (buyerId, packId, createdAt) WHERE buyerId IS NOT NULL — buy-limit queries
   //   UserPack_pack_opened_idx   (packId, openedAt) WHERE opened                      — pack analytics
+
+  @@unique([sourceRef, sourceOrdinal])
 }
 
 /// Audit trail of who held a UserPack and how it changed hands — the pack counterpart of CtoonOwnerLog.
@@ -1893,6 +1952,11 @@ model GlobalGameConfig {
   // computeCMoonRejoinAvailableAt in server/utils/cmoon.js. 0 = no cooldown. Independent of, and
   // applied together with, each CMoon's own allowOptOutJoin toggle below.
   cMoonOptOutCooldownDays              Int       @default(14)
+  // Master switch for cMoon Prestige (see server/utils/cmoonPrestige.js) — off by default, easy
+  // to disable without losing any CMoonPrestigeLevel/CMoonPrestigeLog data already configured or
+  // recorded. When off, the Settings-page prestige section and its endpoints simply report the
+  // feature as unavailable; nothing about a player's existing prestigeLevel is touched.
+  cMoonPrestigeEnabled                 Boolean   @default(false)
   // Weekly cMoon team-leaderboard scoring rules (see server/utils/cmoon.js
   // runDailyCMoonScoring / recordDailyTaskCompletions). Admin-editable via
   // Admin > cMoons > Scoring Rules; changes apply forward-only to future cron
@@ -2451,9 +2515,9 @@ model Auction {
 
   userCtoon     UserCtoon? @relation(fields: [userCtoonId], references: [id], onDelete: Restrict)
   userPack      UserPack?  @relation(fields: [userPackId], references: [id], onDelete: Restrict)
-  creator       User?     @relation("AuctionsCreated", fields: [creatorId], references: [id])
-  highestBidder User?     @relation("HighestBidder", fields: [highestBidderId], references: [id])
-  winner        User?     @relation("AuctionWinner", fields: [winnerId], references: [id])
+  creator       User?      @relation("AuctionsCreated", fields: [creatorId], references: [id])
+  highestBidder User?      @relation("HighestBidder", fields: [highestBidderId], references: [id])
+  winner        User?      @relation("AuctionWinner", fields: [winnerId], references: [id])
 
   bids     Bid[] // one-to-many on Bid
   autoBids AuctionAutoBid[]
@@ -2712,8 +2776,8 @@ model OgGtoonMatch {
   rewardWindowStart    DateTime? // 8pm Central window the match ended in
   // Moves each player actually committed themselves (not auto-played on a timer). The loser needs a
   // minimum, otherwise an idle opponent who is auto-played "loses naturally" and feeds a farm.
-  player1ManualCommits Int      @default(0)
-  player2ManualCommits Int      @default(0)
+  player1ManualCommits Int                  @default(0)
+  player2ManualCommits Int                  @default(0)
 
   packAward OgGtoonPackAward?
   // NOTE: partial index "OgGtoonMatch_reward_unchecked_idx" (endedAt) WHERE rewardCheckedAt IS NULL
@@ -3115,6 +3179,9 @@ enum OgGtoonTournamentResolution {
 enum OgGtoonTournamentPrizeTier {
   FIRST
   TOP8
+  // Everyone else who played: the participation prize. A player gets ONE grant (unique per
+  // tournament+user), so this is only ever their prize when no place prize applies to them.
+  PARTICIPANT
 }
 
 enum OgGtoonTournamentPrizeStatus {
@@ -3140,11 +3207,13 @@ model OgGtoonTournament {
   maxExtraGames       Int                      @default(4) // bracket only: extra sudden-death games when a series ends level
   roundWindowHours    Int                      @default(72)
 
-  // Prizes: a reward bundle { points, ctoons:[{ctoonId,quantity}], backgrounds:[{backgroundId}] }
-  // for the winner, and another for places 2-8 (only paid when the field has at least
-  // minEntrantsTop8Prize entrants, so a tiny bracket cannot be farmed for the second prize).
+  // Prizes: a reward bundle { points, ctoons:[{ctoonId,quantity}], backgrounds:[{backgroundId}],
+  // packs:[{packId,quantity}] } for the winner, another for places 2-8 (only paid when the field has
+  // at least minEntrantsTop8Prize entrants, so a tiny bracket cannot be farmed for the second prize),
+  // and a participation bundle for every other entrant who played a real game.
   firstPrizeJson       Json?
   top8PrizeJson        Json?
+  participantPrizeJson Json?
   minEntrantsTop8Prize Int       @default(9)
   requirePrizeApproval Boolean   @default(true)
   prizesQueuedAt       DateTime?
@@ -3488,6 +3557,7 @@ model Background {
   achievementRewardBackgrounds AchievementRewardBackground[]
   affinityLevelRewards         CMoonAffinityLevel[]
   cMoonEnemyRewards            CMoonEnemyReward[]
+  cMoonPrestigeRankTiers       CMoonPrestigeRankTier[]
 
   @@index([createdAt])
 }
@@ -4421,6 +4491,16 @@ model CMoon {
   // shipped — see prisma/migrations/20260826000000_add_cmoon_show_on_nav.
   showOnNav Boolean @default(true)
 
+  // Whether this cMoon is a valid PRESTIGE destination — see prestigeUser in
+  // server/utils/cmoonPrestige.js. A prestiging player can only pick from cMoons with this true
+  // (and joinLocked false — prestige respects joinLocked exactly like a normal join, it is never
+  // a bypass). Otherwise this cMoon works exactly like any other: its own /newsite/cmoon/[id]
+  // page, joinLocked/showOnNav, prize cToons, rank ladder — all unchanged by this flag, which only
+  // ever gates "can a prestiging player land here" and the epic shimmer treatment current members
+  // get in Raid Battles (CMoonRaidFighter.vue). Independent of joinLocked/showOnNav, same as every
+  // other display/eligibility toggle on this model.
+  isPrestigeCMoon Boolean @default(false)
+
   // Public "cMoon page" content (/newsite/cmoon/[id]) — a display/catalog feature, independent
   // of the cMoonEnabled faction-join flag above. pageImagePath is exactly 800x600, matching CZone.
   // No longer rendered on the redesigned cMoon page (superseded by pageBannerImagePath +
@@ -4508,8 +4588,160 @@ model CMoon {
   specialAttackId String?
   specialAttack   CMoonSpecialAttack? @relation(fields: [specialAttackId], references: [id], onDelete: Restrict)
 
+  // Prestige audit trail — see CMoonPrestigeLog's own comment. Named relations since a log row
+  // references two different cMoons (the one left, the one joined).
+  prestigeLogsFrom CMoonPrestigeLog[]   @relation("CMoonPrestigeLog_From")
+  prestigeLogsTo   CMoonPrestigeLog[]   @relation("CMoonPrestigeLog_To")
+  prizeGrantLogs   CMoonPrizeGrantLog[]
+  // This cMoon's own mirror of the prestige-exclusive rank ladder — only ever populated while
+  // isPrestigeCMoon is true (see CMoonPrestigeRank's own comment).
+  prestigeRanks    CMoonPrestigeRank[]
+
   @@index([memberCount])
   @@index([teamScore])
+}
+
+// One rung of the admin-defined prestige ladder — "Prestige 1 needs N points, Prestige 2 needs M
+// points, etc." (the user's own explicit choice over a flat threshold or a per-level multiplier).
+// level is the prestige level THIS row unlocks (1, 2, 3, ...) — a player currently at
+// User.prestigeLevel can prestige again once their cMoonPoints reach the row where
+// level = prestigeLevel + 1. No row for the next level means prestiging further simply isn't
+// configured yet (not an error — see cmoonPrestige.js's eligibility check), so an admin can add
+// higher levels later without anything breaking in the meantime.
+model CMoonPrestigeLevel {
+  id             String   @id @default(uuid())
+  level          Int      @unique
+  pointThreshold Int
+  // Optional display name shown alongside the plain "Prestige N" label (e.g. "Ascendant") on the
+  // raid badge and Settings page — purely cosmetic, never required.
+  title          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([level])
+}
+
+// One completed prestige event — audit trail only, never read by any gameplay/eligibility logic
+// (User.prestigeLevel/lastPrestigedAt are the live state; this is history), same role
+// CMoonChangeRequest/CMoonPointLog already play for their own event kinds. fromCMoonId is
+// nullable (a user can reach the point threshold with no current cMoon in an edge case — see
+// cmoonPrestige.js's own guard — though in practice prestigeUser requires one); toCMoonId is
+// always the destination. onDelete: SetNull on both cMoon FKs — a deleted cMoon shouldn't block
+// deleting itself, and this row's historical value (name snapshotted below) stays meaningful
+// either way.
+model CMoonPrestigeLog {
+  id               String   @id @default(uuid())
+  userId           String
+  fromCMoonId      String?
+  // Nullable (not the logical "always has a destination" it reads as) purely so onDelete:
+  // SetNull is valid here — a deleted cMoon must never be blocked from deletion just because old
+  // prestige history points at it. toCMoonName below is what actually keeps this row meaningful.
+  toCMoonId        String?
+  level            Int // the NEW level reached by this event (matches User.prestigeLevel right after)
+  // Snapshots, not live lookups — this row must still read sensibly after either cMoon is
+  // renamed or deleted, same "freeze the facts at the moment it happened" stance every other
+  // audit log in this codebase already takes (e.g. CMoonChangeRequest.currentCMoonId's comment).
+  fromCMoonName    String?
+  toCMoonName      String
+  pointsAtPrestige Int // the player's cMoonPoints right before the reset, for admin/support visibility
+  createdAt        DateTime @default(now())
+
+  user      User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromCMoon CMoon? @relation("CMoonPrestigeLog_From", fields: [fromCMoonId], references: [id], onDelete: SetNull)
+  toCMoon   CMoon? @relation("CMoonPrestigeLog_To", fields: [toCMoonId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+// Durable "has this user EVER received this specific cMoon's join prizes" idempotency record —
+// checked and written inside grantCMoonPrizes itself (server/utils/cmoon.js), so it holds
+// regardless of WHICH caller granted them (selectCMoonForUser's genuine first-time self-select,
+// or prestigeUser's first-visit-into-this-destination grant). Needed because those two callers'
+// own gates are each scoped to their OWN mechanism only: selectCMoonForUser only ever fires once
+// per account (cMoonId must be null), and prestigeUser's own CMoonPrestigeLog-based gate only
+// catches a repeat PRESTIGE into the same destination — neither one, on its own, catches a player
+// who already collected cMoon X's prizes by ordinary membership, was later moved to a different
+// cMoon by an admin-driven path (reassignUserCMoon never grants — see CMoonPrestigeLog's own
+// neighbor test file, tests/cmoonBalanceNoPrizeGrant.test.js), and then prestiges back INTO X —
+// which would otherwise double-grant X's prize set. One row per (userId, cMoonId) pair, forever.
+model CMoonPrizeGrantLog {
+  id        String   @id @default(uuid())
+  userId    String
+  cMoonId   String
+  grantedAt DateTime @default(now())
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cMoon CMoon @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, cMoonId])
+}
+
+enum CMoonPrestigeRankRewardType {
+  CTOON
+  AVATAR
+  BACKGROUND
+  POINTS
+  PACK
+}
+
+// Admin-authored global rank ladder, mirrored ONLY onto cMoons flagged isPrestigeCMoon (see that
+// field's own schema comment) — never onto an ordinary cMoon. This is the "special prestige
+// ranks only applicable to prestige moons" ladder the Prestige feature is built around: a SECOND,
+// independently-configured rank track, entirely separate from both the universal CMoonRankTier
+// ladder (which every cMoon, prestige or not, already has — see that model's own comment) and
+// CMoonPrestigeLevel (which tracks how many times a player has prestiged overall, not anything
+// about their standing within whichever prestige cMoon they currently belong to). A member of a
+// prestige cMoon climbs both ladders at once off the exact same User.cMoonPoints metric — this
+// one is just scoped to prestige cMoons, with its own (typically harsher) thresholds and its own
+// one-shot reward per rung, auto-granted on reaching it (no claim-choice UI, unlike the universal
+// ladder's up-to-6-cToon pick — see server/utils/cmoonPrestigeRankTiers.js for why that's a
+// deliberately simpler mechanic). See that same file for the provisioning/grant mechanics.
+model CMoonPrestigeRankTier {
+  id             String                      @id @default(uuid())
+  name           String                      @unique
+  sortOrder      Int                         @unique
+  pointThreshold Int // cumulative User.cMoonPoints required — same metric CMoonRankTier uses
+  rewardType     CMoonPrestigeRankRewardType @default(POINTS)
+  // Exactly one of these four is set, matching rewardType — same XOR-by-convention shape
+  // CMoonEnemyReward's own ctoonId/avatarId/backgroundId/packId quartet already uses (see
+  // REWARD_ID_FIELD in server/utils/cmoonPrestigeRankTiers.js for the validation that enforces
+  // this app-side; there is no DB-level CHECK here since, unlike CMoonDispersalOption's two-FK
+  // pair, a fifth type — POINTS — has no id field at all, which a boolean XOR constraint can't
+  // express as cleanly).
+  ctoonId        String?
+  avatarId       String?
+  backgroundId   String?
+  packId         String?
+  // Points granted (POINTS) or copy count (CTOON/PACK) — ignored for AVATAR/BACKGROUND, which
+  // are one-time unlocks. Same dual-purpose field CMoonEnemyReward.quantity already is.
+  quantity       Int                         @default(1)
+  createdAt      DateTime                    @default(now())
+  updatedAt      DateTime                    @updatedAt
+
+  ctoon      Ctoon?              @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  avatar     Avatar?             @relation(fields: [avatarId], references: [id], onDelete: Restrict)
+  background Background?         @relation(fields: [backgroundId], references: [id], onDelete: Restrict)
+  pack       Pack?               @relation(fields: [packId], references: [id], onDelete: Restrict)
+  ranks      CMoonPrestigeRank[]
+}
+
+// Per-prestige-cMoon mirror of one CMoonPrestigeRankTier — see cmoonPrestigeRankTiers.js. Exists
+// only for cMoons currently flagged isPrestigeCMoon; un-flagging a cMoon deletes its rows here
+// (cascading any current holder's User.currentCMoonPrestigeRankId to null via SetNull below),
+// since a rank whose own cMoon is no longer a prestige destination has nothing left to be "the
+// prestige ladder" for.
+model CMoonPrestigeRank {
+  id        String   @id @default(uuid())
+  cMoonId   String
+  tierId    String
+  createdAt DateTime @default(now())
+
+  cMoon   CMoon                 @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  tier    CMoonPrestigeRankTier @relation(fields: [tierId], references: [id], onDelete: Cascade)
+  holders User[]                @relation("CurrentCMoonPrestigeRank")
+
+  @@unique([cMoonId, tierId])
 }
 
 // Admin-authored full-screen join effect: a simple generic template (background color fade-in,
@@ -4801,10 +5033,11 @@ model Avatar {
   createdAt   DateTime @default(now())
   createdById String?
 
-  createdBy         User?                            @relation("AvatarCreatedBy", fields: [createdById], references: [id])
-  owners            UserAvatar[]
-  levelRewards      CMoonAffinityLevelRewardAvatar[]
-  cMoonEnemyRewards CMoonEnemyReward[]
+  createdBy              User?                            @relation("AvatarCreatedBy", fields: [createdById], references: [id])
+  owners                 UserAvatar[]
+  levelRewards           CMoonAffinityLevelRewardAvatar[]
+  cMoonEnemyRewards      CMoonEnemyReward[]
+  cMoonPrestigeRankTiers CMoonPrestigeRankTier[]
 
   @@index([createdAt])
 }
@@ -5021,37 +5254,50 @@ model CMoonDispersalOfferCMoon {
   @@index([cMoonId])
 }
 
-// One of the (1+) cToon choices a member can pick for a given offer — a 1-option offer has
+// One of the (1+) choices a member can pick for a given offer — a cToon or a Pack, never both
+// (exactly one of ctoonId/packId is set, enforced by a raw-SQL CHECK constraint added in this
+// model's own migration, since Prisma can't express a type-conditional FK). A 1-option offer has
 // nothing to actually choose between, so the player-facing claim flow skips the "pick one"
 // framing for it (see CMoonPage.vue), but it's still represented as a normal single-row options
 // list rather than a separate "no choice" shape.
 model CMoonDispersalOption {
-  id        String @id @default(uuid())
+  id        String  @id @default(uuid())
   offerId   String
-  ctoonId   String
-  sortOrder Int    @default(0)
+  ctoonId   String?
+  packId    String?
+  sortOrder Int     @default(0)
 
   offer  CMoonDispersalOffer   @relation(fields: [offerId], references: [id], onDelete: Cascade)
-  ctoon  Ctoon                 @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  ctoon  Ctoon?                @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  pack   Pack?                 @relation(fields: [packId], references: [id], onDelete: Restrict)
   claims CMoonDispersalClaim[]
 
+  // Both kept (rather than one unique on [offerId, ctoonId, packId]) so each independently stops
+  // the same cToon — or the same pack — being offered twice on one offer. Postgres treats NULLs
+  // as distinct for uniqueness purposes, so a CTOON row (packId NULL) and a PACK row (ctoonId
+  // NULL) never collide with each other here.
   @@unique([offerId, ctoonId])
+  @@unique([offerId, packId])
 }
 
 // One row per member who claimed an offer — at most one per (offer, user), enforced by the
 // unique constraint below (a claim is final once made, no re-picking). `cMoonId`/`username` are
 // snapshots of which cMoon they were a live member of and their name at claim time, surviving
-// them later leaving that cMoon or renaming. This is a plain immutable log of who picked what —
-// it deliberately does NOT track the resulting mint job's outcome (no status/mintNumber fields):
-// the mint itself is queued fire-and-forget straight to mintQueue, same as every other bulk-mint
-// call site in the app (grantCMoonPrizes, the cZone-contest distribute route), and nothing writes
-// back into this row afterward — mint.worker.js is the shared hot path for every mint in the app
-// and is intentionally never special-cased for any one caller.
+// them later leaving that cMoon or renaming. Exactly one of ctoonId/packId is set, mirroring
+// whichever kind of CMoonDispersalOption was claimed (same CHECK-constraint discipline as that
+// model). This is a plain immutable log of who picked what — it deliberately does NOT track the
+// resulting grant's outcome (no status/mintNumber fields): a cToon claim is queued fire-and-forget
+// straight to mintQueue, same as every other bulk-mint call site in the app (grantCMoonPrizes, the
+// cZone-contest distribute route), and nothing writes back into this row afterward — mint.worker.js
+// is the shared hot path for every mint in the app and is intentionally never special-cased for any
+// one caller. A pack claim instead creates its UserPack row(s) synchronously in the same
+// transaction as this row (packs have no mint/supply step to queue against).
 model CMoonDispersalClaim {
   id        String   @id @default(uuid())
   offerId   String
   optionId  String
-  ctoonId   String
+  ctoonId   String?
+  packId    String?
   userId    String
   username  String
   cMoonId   String
@@ -5060,7 +5306,8 @@ model CMoonDispersalClaim {
 
   offer  CMoonDispersalOffer  @relation(fields: [offerId], references: [id], onDelete: Cascade)
   option CMoonDispersalOption @relation(fields: [optionId], references: [id], onDelete: Restrict)
-  ctoon  Ctoon                @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  ctoon  Ctoon?               @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  pack   Pack?                @relation(fields: [packId], references: [id], onDelete: Restrict)
   user   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   cMoon  CMoon                @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
 
@@ -6135,6 +6382,11 @@ enum CMoonEnemyRewardType {
   // independently-rolled prize row like any other CMoonEnemyReward. Amount is stored in this
   // row's `quantity` column (see that field's own comment) rather than a dedicated column.
   POINTS
+  // A sealed Pack (cToon/gToon), granted via tx.userPack.create — same synchronous, in-transaction
+  // grant shape server/api/cmart/packs/buy.post.js already uses, not the queued mintQueue path
+  // CTOON rows go through (a pack has no mint/supply step of its own). `quantity` means "how many
+  // sealed copies of this pack," same convention CTOON already uses for its own quantity column.
+  PACK
 }
 
 // ── cMoon Enemy Battles: Special Attacks ─────────────────────────────────────────────────
@@ -6209,13 +6461,13 @@ enum CMoonSpecialAttackEffectType {
 }
 
 model CMoonSpecialAttack {
-  id                  String                       @id @default(uuid())
-  name                String                       @unique
-  description         String? // shown in the player-facing "?" tooltip alongside the effect/charge copy below
-  effectType          CMoonSpecialAttackEffectType
+  id                   String                       @id @default(uuid())
+  name                 String                       @unique
+  description          String? // shown in the player-facing "?" tooltip alongside the effect/charge copy below
+  effectType           CMoonSpecialAttackEffectType
   // Meaning depends on effectType — damage points / heal points / paralyze-turns / attack-stat
   // delta. Always a positive whole number; which one it is is just effectType's own label.
-  amount              Int
+  amount               Int
   // Only meaningful when effectType = RAISE_ALLY_ATTACK (ignored otherwise — enforced in
   // parseSpecialAttackBody, same "normalized rather than stored" stance healsAllies below takes).
   // How many ROUNDS this attack's attack-stat raise lasts once it fires in a RAID — 1-300, default
@@ -6224,20 +6476,20 @@ model CMoonSpecialAttack {
   // entirely and keeps the old permanent-for-the-fight behavior — see the enum's own comment on
   // why only raids need a duration at all (raids can run far longer, up to raidRoundLimit rounds,
   // so an un-timed buff there would trivially outlast the whole fight once applied).
-  raiseDurationRounds Int                          @default(300)
+  raiseDurationRounds  Int                          @default(300)
   // Only meaningful when effectType = REFLECT_DAMAGE (ignored otherwise, same "normalized rather
   // than stored" stance raiseDurationRounds/healsAllies take for their own effect type) — what
   // percent of the real damage dealt to the caster's side this round reflects back onto the
   // opponent. 1-500: capped above 100 so a well-built reflect attack can genuinely punish an
   // opponent harder than they hit, not just cancel the hit out, matching this feature's own
   // request for up to 500%.
-  reflectPercent      Int                          @default(100)
+  reflectPercent       Int                          @default(100)
   // Only meaningful when effectType = SIPHON_HEALTH (ignored otherwise). What percent of this
   // attack's own flat `amount` (the damage it deals once it lands, see that column's comment)
   // converts into healing for the caster's side. 1-100 — unlike reflectPercent above, this one is
   // capped at 100 since it's converting a fixed, already-dealt amount into healing, not
   // amplifying an opponent's own hit.
-  siphonPercent       Int                          @default(50)
+  siphonPercent        Int                          @default(50)
   // Only meaningful when effectType = POISON_OPPONENT (ignored otherwise). How many ROUNDS the
   // poison lasts once it lands — the target takes `amount` damage at the end of each of those
   // rounds (see closeRound's own poison-tick comment). 1-20: short enough that an admin tuning
@@ -6245,17 +6497,17 @@ model CMoonSpecialAttack {
   // getting silly. A re-cast on an already-poisoned target REFRESHES this (new amount, duration
   // reset to the fresh value here) rather than stacking a second independent tick — the request
   // this feature shipped from explicitly chose refresh-not-stack for how re-poisoning should work.
-  poisonDurationRounds Int                         @default(3)
+  poisonDurationRounds Int                          @default(3)
   // Only meaningful when effectType = CLEANSE_SELF (ignored otherwise). Whether this attack, on
   // top of its always-on job (stripping active Poison/Paralyze from whoever it targets — see
   // healsAllies just below for who that is), ALSO heals those same targets by `amount` HP. false
   // (the default) makes this a pure status-cleanse with no HP change; an admin who wants both in
   // one attack can flip this on rather than needing a separate Heal Self pick.
-  cleanseAlsoHeals    Boolean                      @default(false)
+  cleanseAlsoHeals     Boolean                      @default(false)
   // Optional sound (MP3/OGG/WAV, uploaded via cmoon-special-attacks/[id]/sound.post.js — same
   // magic-byte-sniffed discipline as every other audio upload in this codebase), played the
   // moment this attack actually fires, by whichever side cast it.
-  soundPath           String?
+  soundPath            String?
   // Only meaningful when effectType = HEAL_SELF, SIPHON_HEALTH, or CLEANSE_SELF (false/ignored
   // for every other effectType — enforced in parseSpecialAttackBody, never just left to the
   // client). In a SOLO battle this changes nothing — there are no allies to target either way, so
@@ -6267,7 +6519,7 @@ model CMoonSpecialAttack {
   // side always cures the WHOLE PARTY regardless of this flag, because CMoonEnemyRaid's own
   // partyParalyzedTurns is one shared counter for the whole party, not something a per-player
   // "self only" cure could even partially clear — see closeRound's own CLEANSE_SELF comment.
-  healsAllies         Boolean                      @default(false)
+  healsAllies          Boolean                      @default(false)
   // How many consecutive landed hits are needed to charge THIS attack, replacing the engine's old
   // one-size-fits-all HIT_STREAK_THRESHOLD (cmoonEnemyBattle.js, still 3 — that constant now only
   // matters as the fallback for historical rows/any code path that can't resolve an attack's own
@@ -6278,7 +6530,7 @@ model CMoonSpecialAttack {
   // — a captain's presence lowers THIS value by 1 (floored at the same minimum of 1), the same
   // relationship the old fixed 3→2 reduction already had, rather than being a flat override that
   // makes every attack equally cheap regardless of its own configured cost.
-  requiredHitStreak   Int                          @default(3)
+  requiredHitStreak    Int                          @default(3)
   // What percent of the time this attack actually lands once cast — 0-100, default 100 (every
   // existing attack keeps today's "always lands" behavior unless an admin dials one down). Rolled
   // independently of everything else that can already make an attack do nothing (REFLECT_DAMAGE/
@@ -6286,16 +6538,16 @@ model CMoonSpecialAttack {
   // runs FIRST, before any of those, so a miss is a miss regardless of what the opponent did that
   // round. The balancing case this shipped for: Paralyze is strong enough that an admin may want
   // it to not reliably land even when charged and aimed correctly.
-  accuracyPercent     Int                          @default(100)
+  accuracyPercent      Int                          @default(100)
   // Lets a player pick THIS attack for themselves (see User.chosenSpecialAttackId) instead of
   // always using their cMoon's admin-assigned one — an admin toggle per attack, off by default so
   // shipping this column changes nothing until an admin opts an attack in. A player's choice is
   // re-validated against this flag live every time it's resolved (solo or raid), so turning it off
   // here immediately falls everyone who had chosen it back to their cMoon's own special, with no
   // separate cleanup needed.
-  playerChoice        Boolean                      @default(false)
-  createdAt           DateTime                     @default(now())
-  updatedAt           DateTime                     @updatedAt
+  playerChoice         Boolean                      @default(false)
+  createdAt            DateTime                     @default(now())
+  updatedAt            DateTime                     @updatedAt
 
   cmoons        CMoon[]
   enemyFactions CMoonEnemyFaction[]
@@ -6647,7 +6899,7 @@ model CMoonEnemyMemberTaunt {
 // One admin-configured possible prize for defeating a CMoonEnemyMember. Each row's chance is
 // rolled INDEPENDENTLY (not a normalized weighted pool like LottoPoolCtoon/HolidayEventPool) —
 // zero, one, or several rows can hit on the same win, matching "potential prizes" (never
-// guaranteed) from the feature request. Exactly one of ctoonId/avatarId/backgroundId is set,
+// guaranteed) from the feature request. Exactly one of ctoonId/avatarId/backgroundId/packId is set,
 // matching rewardType — enforced at the API layer (Prisma can't express a type-conditional FK).
 model CMoonEnemyReward {
   id                String               @id @default(uuid())
@@ -6656,8 +6908,9 @@ model CMoonEnemyReward {
   ctoonId           String?
   avatarId          String?
   backgroundId      String?
+  packId            String?
   dropChancePercent Float                @default(10) // 0-100, rolled independently per row
-  quantity          Int                  @default(1) // cToon copy count OR points amount (POINTS); ignored for avatar/background
+  quantity          Int                  @default(1) // cToon/pack copy count OR points amount (POINTS); ignored for avatar/background
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
 
@@ -6665,6 +6918,7 @@ model CMoonEnemyReward {
   ctoon       Ctoon?           @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
   avatar      Avatar?          @relation(fields: [avatarId], references: [id], onDelete: Restrict)
   background  Background?      @relation(fields: [backgroundId], references: [id], onDelete: Restrict)
+  pack        Pack?            @relation(fields: [packId], references: [id], onDelete: Restrict)
 
   @@index([enemyMemberId])
 }

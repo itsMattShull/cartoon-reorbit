@@ -196,7 +196,8 @@ const items = computed(() => data.value?.items || [])
   border-radius: 50%;
 }
 .crm-reward-img--background,
-.crm-reward-img--ctoon {
+.crm-reward-img--ctoon,
+.crm-reward-img--pack {
   border-radius: 8px;
 }
 

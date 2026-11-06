@@ -20,6 +20,7 @@ import { DateTime } from 'luxon'
 import { randomBytes } from 'node:crypto'
 import { sendDiscordDMByDiscordId, sendGuildChannelMessageById } from './discord.js'
 import { grantRewardInTx, enqueueCtoonJobs } from './achievements.js'
+import { grantCodePacks } from './codePackGrant.js'
 import { hasFlag, setFlag } from './cache.js'
 import {
   BEST_OF, WINS_NEEDED, formatFor, swissRoundsFor, compareStandings, seededShuffle, bracketSizeFor,
@@ -37,8 +38,14 @@ const HOUR = 3600 * 1000
 function baseUrl() {
   return process.env.PUBLIC_BASE_URL || (process.env.NODE_ENV === 'production' ? 'https://www.cartoonreorbit.com' : 'http://localhost:3000')
 }
+/**
+ * The tournament's own page (opt in/out, your next opponent, standings, and the Start next game button). Every Discord
+ * message about a tournament links here — keep it in step with pages/newsite/gtoons-classic/tournaments/[tid].vue.
+ * (Links sent before this page existed, `/newsite/gtoons-classic?tab=tournaments&t=<id>`, still work: the Tournaments
+ * tab forwards them.)
+ */
 export function getOgTournamentUrl(tournamentId) {
-  return `${baseUrl()}/newsite/gtoons-classic?tab=tournaments&t=${tournamentId}`
+  return `${baseUrl()}/newsite/gtoons-classic/tournaments/${tournamentId}`
 }
 export function formatCentral(date) {
   const dt = DateTime.fromJSDate(new Date(date)).setZone(CENTRAL_TZ)
@@ -100,7 +107,7 @@ async function sendRoundOpenDMs(db, tournamentId, roundId) {
         `🏆 ${tournament.name} — ${label}`,
         `You are paired with ${opp.username || 'your opponent'}.`,
         `• Best of 3 (first to 2 wins). Both of you need to be online to play.${due}`,
-        `• Open the tournament and press Play: ${link}`
+        `• Open your match and press Start next game: ${link}`
       ].join('\n')
     })
     items.push(mk(m.playerA, m.playerB), mk(m.playerB, m.playerA))
@@ -780,7 +787,25 @@ export async function cancelTournament(db, tournamentId) {
 /* ── Prizes ──────────────────────────────────────────────────────────────────────────────── */
 
 export function bundleIsEmpty(b) {
-  return !b || (!(Number(b.points) > 0) && !(b.ctoons?.length) && !(b.backgrounds?.length))
+  return !b || (!(Number(b.points) > 0) && !(b.ctoons?.length) && !(b.backgrounds?.length) && !(b.packs?.length))
+}
+
+/** The prize bundle a tier pays (null when that tier has none). */
+function bundleForTier(tournament, tier) {
+  if (tier === 'FIRST') return tournament.firstPrizeJson
+  if (tier === 'TOP8') return tournament.top8PrizeJson
+  return tournament.participantPrizeJson
+}
+
+/** A bundle's packs as clean `[{ packId, quantity }]`: bad rows dropped, the same pack merged. */
+function packAwardsOf(bundle) {
+  const merged = new Map()
+  for (const p of bundle?.packs || []) {
+    const quantity = Math.floor(Number(p?.quantity))
+    if (!p?.packId || !(quantity >= 1)) continue
+    merged.set(p.packId, (merged.get(p.packId) || 0) + quantity)
+  }
+  return [...merged].map(([packId, quantity]) => ({ packId, quantity }))
 }
 
 /** Creates one ledger row per recipient (idempotent: unique on tournament+user). */
@@ -800,14 +825,15 @@ export async function queuePrizeGrants(db, tournament, placements) {
   const entrants = optIns.length
   const recipients = prizeRecipients({
     placements, entrants, minEntrantsTop8: full.minEntrantsTop8Prize, eligible,
-    hasFirst: !bundleIsEmpty(full.firstPrizeJson), hasTop8: !bundleIsEmpty(full.top8PrizeJson)
+    hasFirst: !bundleIsEmpty(full.firstPrizeJson), hasTop8: !bundleIsEmpty(full.top8PrizeJson),
+    hasParticipant: !bundleIsEmpty(full.participantPrizeJson)
   })
   if (recipients.length) {
     await db.ogGtoonTournamentPrizeGrant.createMany({
       data: recipients.map(r => ({
         tournamentId: tournament.id, userId: r.userId, tier: r.tier, place: r.place,
         status: full.requirePrizeApproval ? 'PENDING_APPROVAL' : 'PENDING',
-        rewardJson: r.tier === 'FIRST' ? full.firstPrizeJson : full.top8PrizeJson
+        rewardJson: bundleForTier(full, r.tier)
       })),
       skipDuplicates: true
     })
@@ -841,7 +867,10 @@ async function rewardForGrant(db, bundle) {
 async function payOneGrant(db, grant, tournament) {
   const method = `ogGtoonTournament:${tournament.id}:${grant.tier}`
   const reward = await rewardForGrant(db, grant.rewardJson)
-  if (bundleIsEmpty({ points: reward.points, ctoons: reward.ctoons, backgrounds: reward.backgrounds })) {
+  // Packs are NOT part of `reward`: handing them to grantRewardInTx would tag them as a cMoon enemy reward and give
+  // them no idempotency key or owner log. They are granted below by grantCodePacks, keyed to this grant's id.
+  const packAwards = packAwardsOf(grant.rewardJson)
+  if (bundleIsEmpty({ points: reward.points, ctoons: reward.ctoons, backgrounds: reward.backgrounds, packs: packAwards })) {
     await db.ogGtoonTournamentPrizeGrant.updateMany({ where: { id: grant.id }, data: { status: 'SKIPPED' } })
     return
   }
@@ -854,6 +883,15 @@ async function payOneGrant(db, grant, tournament) {
       })
       if (!claimed.count) return null
       const s = await grantRewardInTx(tx, grant.userId, reward, method)
+      // Same transaction as the PAID claim above: a failure here rolls the claim back, so a pack prize is paid exactly
+      // once (and (sourceRef, sourceOrdinal) is unique in the database if anything ever tried to pay it twice).
+      let packs = []
+      if (packAwards.length) {
+        await grantCodePacks(tx, { userId: grant.userId, claimId: grant.id, awards: packAwards, source: 'OG_GTOONS_TOURNAMENT' })
+        const rows = await tx.pack.findMany({ where: { id: { in: packAwards.map(p => p.packId) } }, select: { id: true, name: true } })
+        const nameById = new Map(rows.map(p => [p.id, p.name]))
+        packs = packAwards.map(p => ({ packId: p.packId, name: nameById.get(p.packId) || p.packId, quantity: p.quantity }))
+      }
       const requested = reward.ctoons.map(c => ({ name: c.ctoon?.name || c.ctoonId, requested: c.quantity }))
       const granted = new Map(s.ctoonJobs.map(j => [j.name, j.quantity]))
       const shortfall = requested
@@ -863,7 +901,7 @@ async function payOneGrant(db, grant, tournament) {
         where: { id: grant.id },
         data: {
           summaryJson: {
-            points: s.points, backgrounds: s.backgrounds, ctoonJobs: s.ctoonJobs,
+            points: s.points, backgrounds: s.backgrounds, ctoonJobs: s.ctoonJobs, packs,
             mintsPending: s.ctoonJobs.length > 0, shortfall
           },
           ...(shortfall.length ? { errorMessage: 'cToon supply ran short — an admin may need to top this up' } : {})
@@ -1014,7 +1052,7 @@ export async function notifyOpponentReady(db, { tournamentMatchId, readyUserId }
   await dmUsers(db, [{
     userId: opp.id,
     text: `🎮 ${me.username} is ready to play your ${m.tournament.name} match and is waiting for you. ` +
-      `Open the tournament and press Play: ${getOgTournamentUrl(m.tournament.id)}`
+      `Open your match and press Start next game: ${getOgTournamentUrl(m.tournament.id)}`
   }])
 }
 

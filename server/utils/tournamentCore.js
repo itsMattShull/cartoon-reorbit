@@ -427,14 +427,21 @@ export function buildFinalPlacements({ format, records, bracketMatches }) {
  * Who is owed what. FIRST goes to place 1; TOP8 goes to places 2-8 but only when the field had at
  * least `minEntrantsTop8` entrants (otherwise "top 8" would just be everyone but the winner).
  * `eligible` is the set of user ids allowed to be paid (played a real game, not disqualified/banned).
+ *
+ * PARTICIPANT is the participation prize: every eligible player who did NOT get a place prize. That includes the
+ * winner when there is no 1st-place prize, and places 2-8 when the field was too small for the Top 8 prize — in other
+ * words each player gets exactly one prize, the best tier that applies to them, never a place prize AND a
+ * participation prize.
  */
-export function prizeRecipients({ placements, entrants, minEntrantsTop8 = 9, eligible = null, hasFirst = true, hasTop8 = true }) {
+export function prizeRecipients({ placements, entrants, minEntrantsTop8 = 9, eligible = null, hasFirst = true, hasTop8 = true, hasParticipant = false }) {
   const out = []
   for (const p of placements) {
     if (eligible && !eligible.has(p.userId)) continue
     if (p.place === 1 && hasFirst) out.push({ userId: p.userId, place: p.place, tier: 'FIRST' })
     else if (p.place >= 2 && p.place <= 8 && hasTop8 && entrants >= minEntrantsTop8) {
       out.push({ userId: p.userId, place: p.place, tier: 'TOP8' })
+    } else if (hasParticipant) {
+      out.push({ userId: p.userId, place: p.place, tier: 'PARTICIPANT' })
     }
   }
   return out
@@ -459,6 +466,22 @@ export function checkLockedDeck(snapshot, userId, owned) {
 }
 
 /* ── Time ────────────────────────────────────────────────────────────────────────────────── */
+
+/**
+ * The status a player should SEE, given the clock. The stored status only changes when the scheduler runs, which can be a
+ * few minutes late in either direction, and the page must agree with what the opt-in endpoints will actually accept:
+ *   DRAFT       + inside the opt-in window  -> OPT_IN_OPEN   (the window has opened; the scheduler just hasn't flipped it)
+ *   OPT_IN_OPEN + past the end of the window -> OPT_IN_CLOSED (entry is already refused; pairings are still being made)
+ * Everything else is shown as stored. Display only: closing a window does real work (pairings), which stays the scheduler's.
+ */
+export function effectiveOptInStatus(status, optInStartAt, optInEndAt, now = new Date()) {
+  const t = new Date(now).getTime()
+  const start = new Date(optInStartAt).getTime()
+  const end = new Date(optInEndAt).getTime()
+  if (status === 'DRAFT' && t >= start && t <= end) return 'OPT_IN_OPEN'
+  if (status === 'OPT_IN_OPEN' && t > end) return 'OPT_IN_CLOSED'
+  return status
+}
 
 export function roundDueAt(openedAt, hours) {
   return new Date(new Date(openedAt).getTime() + Math.max(1, Number(hours) || 72) * 3600 * 1000)

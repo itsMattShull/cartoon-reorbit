@@ -133,6 +133,12 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *                                // per-participant snapshot taken at start/join — see
  *                                // "Cross-cMoon raids" in cmoonEnemyRaid.js:
  *                                cMoonId, cMoonName, cMoonColor, cMoonAvatarPath,
+ *                                cMoonIsPrestige, prestigeLevel,  // whether the TEAM they joined
+ *                                                 // as is a prestige cMoon, and their own
+ *                                                 // prestige level — purely cosmetic (see
+ *                                                 // CMoonRaidFighter.vue's holographic shimmer +
+ *                                                 // "Prestige N" badge), snapshotted once here
+ *                                                 // exactly like every other field in this list.
  *                                rankName, rankTierName, rankTierLevel, rankTierCount,
  *                                specialAttack,
  *                                isCaptain }>,   // whether THEY were a captain of THEIR OWN
@@ -480,7 +486,7 @@ async function loadParticipantProfile(userId, cMoonId) {
   const [cMoon, user, tiers, isCaptain] = await Promise.all([
     db.cMoon.findUnique({
       where: { id: cMoonId },
-      select: { id: true, name: true, color: true, avatarPath: true, specialAttack: true },
+      select: { id: true, name: true, color: true, avatarPath: true, specialAttack: true, isPrestigeCMoon: true },
     }),
     // Also selects chosenSpecialAttack here (merged into the SAME User row lookup rather than a
     // second findUnique via resolveEffectiveSpecialAttack in cmoon.js) — one query per
@@ -490,6 +496,7 @@ async function loadParticipantProfile(userId, cMoonId) {
       select: {
         currentCMoonRank: { select: { name: true, cMoonId: true, tierId: true, tier: { select: { name: true } } } },
         chosenSpecialAttack: { select: SPECIAL_ATTACK_SELECT },
+        prestigeLevel: true,
       },
     }),
     loadRankTiers().catch(() => []),
@@ -511,6 +518,11 @@ async function loadParticipantProfile(userId, cMoonId) {
     cMoonName: cMoon.name,
     cMoonColor: cMoon.color || null,
     cMoonAvatarPath: cMoon.avatarPath || null,
+    // Whether the TEAM they joined as is itself a prestige cMoon, plus their own prestige level —
+    // both purely cosmetic (CMoonRaidFighter.vue's holographic shimmer + "Prestige N" badge), same
+    // snapshot-once-never-re-read stance as every other field here.
+    cMoonIsPrestige: !!cMoon.isPrestigeCMoon,
+    prestigeLevel: user?.prestigeLevel || 0,
     isCaptain,
     // Overrides the DISPLAYED rank name only, same "Captain" label swap every other surface
     // (cZone, standings, leaderboard) already applies — see displayRankName's own comment.
@@ -574,6 +586,7 @@ function addParticipant(raid, { userId, username, isInitiator, maxHp, profile = 
     hitStreak: 0, specialCharged: false,
     poisonAmount: 0, poisonTurnsRemaining: 0,
     cMoonId: null, cMoonName: null, cMoonColor: null, cMoonAvatarPath: null, isCaptain: false,
+    cMoonIsPrestige: false, prestigeLevel: 0,
     rankName: null, rankTierName: null, rankTierLevel: 0, rankTierCount: 0,
     specialAttack: null,
     ...(profile || {}),
@@ -1136,6 +1149,7 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
             ...(summary.backgrounds ? [{ type: 'BACKGROUND', quantity: summary.backgrounds }] : []),
             ...(summary.avatars ? [{ type: 'AVATAR', quantity: summary.avatars }] : []),
             ...summary.ctoonJobs.map(j => ({ type: 'CTOON', name: j.name, quantity: j.quantity })),
+            ...summary.packGrants.map(p => ({ type: 'PACK', name: p.name, quantity: p.quantity })),
           ]
           if (summary.ctoonJobs.length) ctoonJobsByUser.set(userId, summary.ctoonJobs)
         }
@@ -1280,6 +1294,12 @@ export async function restoreCMoonRaids() {
         // A snapshot from before cross-cMoon raids has no per-participant special; every member
         // was then on the initiator's cMoon, so theirs IS raid.cMoonSpecialAttack.
         specialAttack: 'specialAttack' in p ? p.specialAttack : (raid.cMoonSpecialAttack ?? null),
+        // A snapshot from before the prestige feature has neither of these per-participant
+        // fields at all — same missing-field trap as specialAttack above. Falls back to the
+        // raid's own cMoon flag (already backfilled below), matching publicParticipantTeam's own
+        // legacy fallback for a participant with no snapshot of their own.
+        cMoonIsPrestige: 'cMoonIsPrestige' in p ? p.cMoonIsPrestige : (raid.cMoonIsPrestige ?? false),
+        prestigeLevel: 'prestigeLevel' in p ? p.prestigeLevel : 0,
       },
     ])))
     raid.resolving = false
@@ -1288,7 +1308,11 @@ export async function restoreCMoonRaids() {
     for (const [uid, p] of raid.participants) {
       if (!p.pendingJoin) continue
       raid.participants.delete(uid)
-      db.cMoonEnemyRaidParticipant.updateMany({ where: { raidId, userId: uid }, data: { activeUserId: null } }).catch(() => {})
+      // Deleted outright, not just activeUserId-cleared: this row never represented a real,
+      // finished join (the raid never left FORMING), and @@unique([raidId, userId]) means
+      // leaving it behind would permanently block this exact user from ever rejoining THIS raid
+      // again — the same bug class cmoonraid:leave's own delete below exists to avoid.
+      db.cMoonEnemyRaidParticipant.deleteMany({ where: { raidId, userId: uid } }).catch(() => {})
     }
     // Backfills a raid whose Redis snapshot predates special attacks (created on an older deploy,
     // restored after a restart mid-fight — a narrow window, but a missing numeric field here would
@@ -1307,6 +1331,9 @@ export async function restoreCMoonRaids() {
     raid.partyParalyzedTurns ??= 0
     raid.enemyPoisonAmount ??= 0
     raid.enemyPoisonTurnsRemaining ??= 0
+    // Predates the prestige feature -> false is the correct backfill (an old snapshot's cMoon was
+    // never flagged isPrestigeCMoon in the first place).
+    raid.cMoonIsPrestige ??= false
     // Predates the leave-cooldown-restore feature -> null is the correct backfill (nothing to
     // restore to; the initiator leaving a raid restored from one of these old snapshots simply
     // keeps whatever lastCMoonBattlePopupAt they already have, same as if this feature never
@@ -1406,7 +1433,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       // left to resolve any more, see discordChannelId below.
       const cMoon = await db.cMoon.findUnique({
         where: { id: elig.user.cMoonId },
-        select: { id: true, name: true, specialAttack: true },
+        select: { id: true, name: true, specialAttack: true, isPrestigeCMoon: true },
       })
       if (!cMoon) return socket.emit(EV('error'), { message: 'Your cMoon could not be found' })
       const initiatorProfile = await loadParticipantProfile(me.id, cMoon.id)
@@ -1431,7 +1458,12 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
           : JOIN_WINDOW_SECONDS
       ) * 1000
       const raid = {
-        id: raidId, enemyMemberId, cMoonId: cMoon.id, cMoonName: cMoon.name, discordChannelId, discordThreadId: null,
+        id: raidId, enemyMemberId, cMoonId: cMoon.id, cMoonName: cMoon.name,
+        // The raid's OWN cMoon's prestige flag — needed as publicParticipantTeam's legacy-
+        // participant fallback (a pre-cross-raid-refactor snapshot with no cMoonIsPrestige of its
+        // own), same "legacy falls back to the raid's own cMoon fields" shape cMoonName already has.
+        cMoonIsPrestige: !!cMoon.isPrestigeCMoon,
+        discordChannelId, discordThreadId: null,
         // The lobby names a raid after whoever started it — kept on the raid itself so the name
         // doesn't change if they leave during FORMING (see buildRaidLobbyEntry).
         initiatorUsername: elig.user.username,
@@ -1650,11 +1682,21 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     if (raid.participants.size >= (raid.maxParticipants || MAX_PARTY_SIZE)) return socket.emit(EV('error'), { message: 'This raid is full' })
     addParticipant(raid, { userId: me.id, username: elig.user.username, isInitiator: false, maxHp: joinerMaxHp, profile, pendingJoin: true })
 
-    // ── 3. The one write. Only a DB failure (e.g. P2002: an active raid/solo row the in-memory
-    // maps didn't know about) can still turn this away, and the reservation is rolled back then.
+    // ── 3. The one write. An upsert, not a plain create: a same-raid rejoin race (cmoonraid:leave
+    // and this handler aren't mutually exclusive — Socket.IO dispatches each event's listener as
+    // its own async task, so a leave followed immediately by a join for the SAME raid can still
+    // have this run before that handler's own deleteMany has committed) would otherwise hit the
+    // stale (raidId, userId) row and 409 as "already in a raid" even though the player just left.
+    // The update branch only ever fires for that exact race (a genuine still-active OTHER raid
+    // collides on activeUserId's own unique constraint instead, which still correctly P2002s
+    // below). Only a DB failure (e.g. that activeUserId collision, or an active solo row the
+    // in-memory maps didn't know about) can still turn this away, and the reservation is rolled
+    // back then.
     try {
-      await db.cMoonEnemyRaidParticipant.create({
-        data: { raidId, userId: me.id, hpRemaining: joinerMaxHp, isInitiator: false, activeUserId: me.id },
+      await db.cMoonEnemyRaidParticipant.upsert({
+        where: { raidId_userId: { raidId, userId: me.id } },
+        create: { raidId, userId: me.id, hpRemaining: joinerMaxHp, isInitiator: false, activeUserId: me.id },
+        update: { hpRemaining: joinerMaxHp, isInitiator: false, activeUserId: me.id, knockedOutAt: null, rewardsGranted: null, joinedAt: new Date() },
       })
     } catch (err) {
       releaseReservation(raid, me.id)
@@ -1700,7 +1742,15 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     // showing a raid it just asked to leave (a pre-existing gap in this handler — it simply had
     // no UI entry point to leave from until this feature added one).
     socket.emit(EV('leftRaid'), { raidId })
-    await db.cMoonEnemyRaidParticipant.updateMany({ where: { raidId, userId: me.id }, data: { activeUserId: null } }).catch(() => {})
+    // Deleted outright, not just activeUserId-cleared: this raid is still FORMING (the guard
+    // above guarantees combat never started for this participant), so there's no round history
+    // or reward record on this row worth keeping. Leaving it behind — even with activeUserId
+    // nulled — would still permanently violate @@unique([raidId, userId]) on any future rejoin
+    // attempt for THIS exact raid. cmoonraid:join's own upsert (see its own comment) tolerates a
+    // stale row surviving this delete for a moment on a tight leave-then-rejoin race, but this
+    // delete is still the normal path — without it, every ordinary leave would permanently litter
+    // this raid's own id with a dead row for no reason.
+    await db.cMoonEnemyRaidParticipant.deleteMany({ where: { raidId, userId: me.id } }).catch(() => {})
     // The ORIGINAL raid starter leaving their OWN still-FORMING raid (the status check above
     // already guarantees combat never started) gets their pre-raid lastCMoonBattlePopupAt
     // restored — see raid.initiatorPreviousPopupCooldownAt's own comment at creation. A lobby

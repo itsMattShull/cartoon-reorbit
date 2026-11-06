@@ -39,8 +39,8 @@
           <p v-if="bossEnrageText" class="cbp-boss-enrage">⚡ {{ bossEnrageText }}</p>
           <p class="cbp-flavor">
             Pick the right move each round to land hits.
-            <template v-if="inCMoon">A win earns cMoon points for your team and a chance at prizes.</template>
-            <template v-else>A win earns a chance at prizes — join a cMoon to also earn points for a team.</template>
+            <template v-if="inCMoon">A win earns <strong>{{ enemy?.cMoonPointsReward ?? 0 }}</strong> cMoon point{{ enemy?.cMoonPointsReward === 1 ? '' : 's' }} for your team and a chance at prizes.</template>
+            <template v-else>A win earns a chance at prizes — join a cMoon to also earn {{ enemy?.cMoonPointsReward ?? 0 }} point{{ enemy?.cMoonPointsReward === 1 ? '' : 's' }} for a team.</template>
           </p>
           <p v-if="pityProgressText" class="cbp-pity-progress">{{ pityProgressText }}</p>
           <p v-if="currentTaunt" class="cbp-taunt">&ldquo;{{ currentTaunt }}&rdquo;</p>
@@ -295,6 +295,15 @@ const lastRoundLabel = computed(() => {
   // reason for "no damage" than a genuine block, so it gets its own line rather than falling into
   // the generic "no hits landed" below.
   if (enemyMissed) return `${actions}their attack missed!`
+  // A special-attack round (playerAction === SPECIAL_ACTION) can ONLY land here when the enemy
+  // didn't attack this round (see resolveBattleRound/attackLands, server-side: SPECIAL_ACTION is
+  // neither an attack nor a block, so playerHit/enemyHit/playerBlocked/enemyMissed are all
+  // impossible whenever the enemy chose BLOCK_HIGH/BLOCK_LOW) — i.e. the special itself was never
+  // blocked, every special effect (including HEAL_SELF) already applied in full server-side
+  // before this lane exchange even ran (see action.post.js's own ordering comment). The generic
+  // "no hits landed" copy below reused the enemy's action label ("they blocked high"), which read
+  // as if the special itself had been blocked — it hadn't. Say so plainly instead.
+  if (playerAction === 'SPECIAL_ATTACK') return `They ${actionLabel(enemyAction)} — your special attack isn't affected by blocking.`
   return `${actions}no hits landed.`
 })
 const lastRoundClass = computed(() => {
@@ -325,6 +334,7 @@ const rewardsList = computed(() => {
   const rewards = Array.isArray(battle.value?.rewardsGranted) ? battle.value.rewardsGranted : []
   return rewards.map(r => {
     if (r.type === 'CTOON') return `${r.name || 'cToon'}${r.quantity > 1 ? ` x${r.quantity}` : ''}`
+    if (r.type === 'PACK') return `${r.name || 'Pack'}${r.quantity > 1 ? ` x${r.quantity}` : ''}`
     if (r.type === 'AVATAR') return `Avatar${r.quantity > 1 ? ` x${r.quantity}` : ''}`
     if (r.type === 'POINTS') return `${r.quantity} points`
     return `Background${r.quantity > 1 ? ` x${r.quantity}` : ''}`

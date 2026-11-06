@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import {
   BEST_OF, formatFor, swissRoundsFor, pairKey, compareStandings, seededShuffle,
   buildBracketSeedPairs, bracketSizeFor, bracketRoundLabel, pairSwissRound, computeSeries,
-  decideAtDeadline, computeRecords, buildFinalPlacements, prizeRecipients, checkLockedDeck,
+  decideAtDeadline, computeRecords, buildFinalPlacements, prizeRecipients, checkLockedDeck, effectiveOptInStatus,
   roundDueAt, WALKOVER_MIN_READY_MS
 } from '../server/utils/tournamentCore.js'
 
@@ -322,6 +322,42 @@ test('prize recipients: ineligible players are skipped and missing prizes pay no
   assert.deepEqual(prizeRecipients({ placements, entrants: 20, hasFirst: false, hasTop8: false }), [])
 })
 
+test('prize recipients: participation prize goes to everyone without a place prize, never in addition to one', () => {
+  const placements = Array.from({ length: 12 }, (_, i) => ({ userId: `u${i + 1}`, place: i + 1 }))
+  const out = prizeRecipients({ placements, entrants: 12, minEntrantsTop8: 9, hasParticipant: true })
+  assert.equal(out.length, 12, 'every player gets exactly one prize')
+  assert.equal(new Set(out.map(r => r.userId)).size, 12)
+  assert.deepEqual(out.filter(r => r.tier === 'FIRST').map(r => r.place), [1])
+  assert.deepEqual(out.filter(r => r.tier === 'TOP8').map(r => r.place), [2, 3, 4, 5, 6, 7, 8])
+  assert.deepEqual(out.filter(r => r.tier === 'PARTICIPANT').map(r => r.place), [9, 10, 11, 12])
+})
+
+test('prize recipients: participation prize is off by default, so existing tournaments pay exactly as before', () => {
+  const placements = Array.from({ length: 12 }, (_, i) => ({ userId: `u${i + 1}`, place: i + 1 }))
+  const out = prizeRecipients({ placements, entrants: 12, minEntrantsTop8: 9 })
+  assert.equal(out.length, 8)
+  assert.ok(out.every(r => r.tier !== 'PARTICIPANT'))
+})
+
+test('prize recipients: participation prize covers the places a tier would have skipped', () => {
+  const placements = Array.from({ length: 6 }, (_, i) => ({ userId: `u${i + 1}`, place: i + 1 }))
+  // Small field: Top 8 is not paid (needs 9+), so places 2-6 fall back to the participation prize.
+  const small = prizeRecipients({ placements, entrants: 6, minEntrantsTop8: 9, hasParticipant: true })
+  assert.deepEqual(small.map(r => r.tier), ['FIRST', 'PARTICIPANT', 'PARTICIPANT', 'PARTICIPANT', 'PARTICIPANT', 'PARTICIPANT'])
+  // No 1st-place prize configured: the winner still gets the participation prize.
+  const noFirst = prizeRecipients({ placements, entrants: 6, minEntrantsTop8: 9, hasFirst: false, hasParticipant: true })
+  assert.equal(noFirst[0].tier, 'PARTICIPANT')
+  assert.equal(noFirst.length, 6)
+  // Only a participation prize configured.
+  assert.ok(prizeRecipients({ placements, entrants: 20, hasFirst: false, hasTop8: false, hasParticipant: true }).every(r => r.tier === 'PARTICIPANT'))
+})
+
+test('prize recipients: ineligible players (did not play, banned, disqualified) get no participation prize', () => {
+  const placements = [{ userId: 'a', place: 1 }, { userId: 'b', place: 2 }, { userId: 'c', place: 3 }]
+  const out = prizeRecipients({ placements, entrants: 3, eligible: new Set(['a', 'c']), hasParticipant: true })
+  assert.deepEqual(out.map(r => r.userId), ['a', 'c'])
+})
+
 /* ── locked deck ───────────────────────────────────────────────────────────────────────── */
 
 test('locked deck check finds missing, burned and re-homed copies', () => {
@@ -338,4 +374,23 @@ test('locked deck check finds missing, burned and re-homed copies', () => {
 test('roundDueAt adds the window in hours', () => {
   const due = roundDueAt('2026-11-01T00:00:00Z', 72)
   assert.equal(due.toISOString(), '2026-11-04T00:00:00.000Z')
+})
+
+/* ── what status a player sees ─────────────────────────────────────────────────────────── */
+
+test('effective status: a DRAFT inside its opt-in window is shown as open (the scheduler is just late)', () => {
+  const start = '2026-11-06T12:00:00Z'; const end = '2026-11-13T12:00:00Z'
+  assert.equal(effectiveOptInStatus('DRAFT', start, end, new Date('2026-11-06T12:00:00Z')), 'OPT_IN_OPEN', 'exactly at the start')
+  assert.equal(effectiveOptInStatus('DRAFT', start, end, new Date('2026-11-08T00:00:00Z')), 'OPT_IN_OPEN')
+  assert.equal(effectiveOptInStatus('DRAFT', start, end, new Date('2026-11-06T11:59:59Z')), 'DRAFT', 'before the start')
+  assert.equal(effectiveOptInStatus('DRAFT', start, end, new Date('2026-11-14T00:00:00Z')), 'DRAFT', 'a window that was never opened is left to the scheduler')
+})
+
+test('effective status: an OPT_IN_OPEN past its end is shown as closed; everything else is as stored', () => {
+  const start = '2026-11-06T12:00:00Z'; const end = '2026-11-13T12:00:00Z'
+  assert.equal(effectiveOptInStatus('OPT_IN_OPEN', start, end, new Date('2026-11-13T12:00:00Z')), 'OPT_IN_OPEN', 'the end instant itself is still open')
+  assert.equal(effectiveOptInStatus('OPT_IN_OPEN', start, end, new Date('2026-11-13T12:00:01Z')), 'OPT_IN_CLOSED')
+  for (const s of ['OPT_IN_CLOSED', 'SWISS_ACTIVE', 'BRACKET_ACTIVE', 'COMPLETE', 'CANCELLED']) {
+    assert.equal(effectiveOptInStatus(s, start, end, new Date('2026-11-08T00:00:00Z')), s)
+  }
 })

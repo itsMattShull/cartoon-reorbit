@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import {
   resolveBattleRound, rollEnemyAction, rollEnemyRewards, buildGrantableReward, rollHitDamage,
   isValidBattleAction, BATTLE_ACTIONS, PLAYER_MAX_HP, NORMAL_HIT_DAMAGE, CRITICAL_HIT_DAMAGE,
-  HEAL_ON_SUCCESSFUL_BLOCK, resolveRound, combinePlayerMaxHp,
+  HEAL_ON_SUCCESSFUL_BLOCK, resolveRound, combinePlayerMaxHp, computeHpAdjustmentForTarget,
+  combinePlayerMaxStamina, computeStaminaAdjustmentForTarget,
   SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, isValidPlayerSubmittedAction,
   isAttack, isBlock, STARTING_STAMINA, pickEffectiveSpecialAttack,
 } from '../server/utils/cmoonEnemyBattle.js'
@@ -308,7 +309,7 @@ test('buildGrantableReward ignores a row whose id field is missing for its decla
   // e.g. a CTOON-type row with no ctoonId (shouldn't happen given API validation, but the
   // mapping itself must not silently grant a malformed entry either)
   const hits = [{ rewardType: 'CTOON', ctoonId: null, quantity: 1 }]
-  assert.deepEqual(buildGrantableReward(hits), { backgrounds: [], avatars: [], ctoons: [], points: 0 })
+  assert.deepEqual(buildGrantableReward(hits), { backgrounds: [], avatars: [], ctoons: [], packs: [], points: 0 })
 })
 
 test('buildGrantableReward sums multiple independently-rolled POINTS rows into one total', () => {
@@ -320,7 +321,13 @@ test('buildGrantableReward sums multiple independently-rolled POINTS rows into o
 })
 
 test('buildGrantableReward defaults with no hits at all', () => {
-  assert.deepEqual(buildGrantableReward([]), { backgrounds: [], avatars: [], ctoons: [], points: 0 })
+  assert.deepEqual(buildGrantableReward([]), { backgrounds: [], avatars: [], ctoons: [], packs: [], points: 0 })
+})
+
+test('buildGrantableReward collects PACK rows with a defaulted quantity', () => {
+  const hits = [{ rewardType: 'PACK', packId: 'p1', quantity: 2 }, { rewardType: 'PACK', packId: 'p2', quantity: 0 }]
+  const reward = buildGrantableReward(hits)
+  assert.deepEqual(reward.packs, [{ packId: 'p1', quantity: 2 }, { packId: 'p2', quantity: 1 }])
 })
 
 test('PLAYER_MAX_HP is the 5 hits specified by the feature', () => {
@@ -348,8 +355,63 @@ test('combinePlayerMaxHp: treats a missing/non-numeric bonus as 0, not NaN', () 
   assert.equal(combinePlayerMaxHp(5, null), 5)
 })
 
+// The admin "Manage User HP" tool's adjustment (User.cMoonHpAdjustment) is a third additive
+// term, defaulting to 0 so every existing caller (none of which pass a third argument) is
+// unaffected — see server/utils/cmoon.js's getPlayerCombatMaxHp for the real call sites.
+test('combinePlayerMaxHp: adjustment is additive on top of default + bonus', () => {
+  assert.equal(combinePlayerMaxHp(5, 3, 10), 18)
+  assert.equal(combinePlayerMaxHp(5, 3, -4), 4)
+  assert.equal(combinePlayerMaxHp(5, 3), 8) // omitted adjustment defaults to 0
+})
+
+test('combinePlayerMaxHp: still floors at 1 even with a large negative adjustment', () => {
+  assert.equal(combinePlayerMaxHp(5, 3, -1000), 1)
+})
+
+// computeHpAdjustmentForTarget is the inverse operation: given a player's current NATURAL HP
+// (zero adjustment) and an admin's desired effective HP, what adjustment bridges the two — see
+// its own comment in this file for why this must be additive rather than an absolute override.
+test('computeHpAdjustmentForTarget: solves for the adjustment that hits the target exactly', () => {
+  assert.equal(computeHpAdjustmentForTarget(5, 20), 15)
+  assert.equal(computeHpAdjustmentForTarget(20, 5), -15)
+  assert.equal(computeHpAdjustmentForTarget(5, 5), 0)
+})
+
+test('computeHpAdjustmentForTarget: a rank-up that raises natural HP raises effective HP by the same amount, adjustment unchanged', () => {
+  const adjustment = computeHpAdjustmentForTarget(5, 20)
+  assert.equal(combinePlayerMaxHp(5, 0, adjustment), 20)
+  // Player ranks up: their natural HP (bonus) grows from 0 to 7, with the SAME stored adjustment.
+  assert.equal(combinePlayerMaxHp(5, 7, adjustment), 27)
+})
+
 test('HEAL_ON_SUCCESSFUL_BLOCK is a single positive HP amount', () => {
   assert.equal(HEAL_ON_SUCCESSFUL_BLOCK, 1)
+})
+
+// combinePlayerMaxStamina/computeStaminaAdjustmentForTarget mirror the HP pair above, for the
+// "Manage User HP" admin tool's Stamina section — simpler since stamina has no rank-bonus term.
+test('combinePlayerMaxStamina: adds the default and the adjustment', () => {
+  assert.equal(combinePlayerMaxStamina(3, 0), 3)
+  assert.equal(combinePlayerMaxStamina(3, 2), 5)
+  assert.equal(combinePlayerMaxStamina(3, -1), 2)
+})
+
+test('combinePlayerMaxStamina: floors at 0, not 1 — stamina 0 is a legitimate "mechanic off" state', () => {
+  assert.equal(combinePlayerMaxStamina(3, -3), 0)
+  assert.equal(combinePlayerMaxStamina(3, -10), 0)
+})
+
+test('combinePlayerMaxStamina: treats a missing/non-numeric adjustment as 0, not NaN', () => {
+  assert.equal(combinePlayerMaxStamina(3, undefined), 3)
+  assert.equal(combinePlayerMaxStamina(3, null), 3)
+  assert.equal(combinePlayerMaxStamina(3), 3)
+})
+
+test('computeStaminaAdjustmentForTarget: solves for the adjustment that hits the target exactly', () => {
+  assert.equal(computeStaminaAdjustmentForTarget(3, 10), 7)
+  assert.equal(computeStaminaAdjustmentForTarget(10, 3), -7)
+  assert.equal(computeStaminaAdjustmentForTarget(3, 3), 0)
+  assert.equal(computeStaminaAdjustmentForTarget(3, 0), -3)
 })
 
 // ── Special attacks (see CMoonSpecialAttack's own schema comment) ──────────────────────────

@@ -46,6 +46,7 @@ export default defineEventHandler(async (event) => {
       pageDescription: true,
       memberCount: true,
       teamScore: true,
+      isPrestigeCMoon: true,
       captains: { select: { user: { select: { username: true } } } },
       _count: { select: { featuredCtoons: true } }
     }
@@ -266,6 +267,7 @@ export default defineEventHandler(async (event) => {
     featuredCtoons,
     memberCount: cmoon.memberCount,
     teamScore: cmoon.teamScore,
+    isPrestigeCMoon: cmoon.isPrestigeCMoon,
     rank: rankRows[0].count + 1,
     captains: [...captainUsernames],
     topPointContributors: topPointContributors.map(u => ({ username: u.username, avatar: u.avatar, points: u.points })),

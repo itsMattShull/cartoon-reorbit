@@ -10,8 +10,11 @@ import { dirname, join } from 'node:path'
 // Requirement under test: moving an EXISTING member to a different cMoon — admin single-user
 // reassignment, an accepted CMoonChangeRequest, captain auto-align (all via reassignUserCMoon),
 // and bulk admin "Balance Teams" (executeBalancePlan) — must never grant a fresh cMoon join
-// prize. Only a genuine first-time self-select (selectCMoonForUser) may. This is already true
-// today (grantCMoonPrizes has exactly one call site); these checks exist to keep it true.
+// prize. Only a genuine first-time self-select (selectCMoonForUser) may — this file only scans
+// server/utils/cmoon.js, so its "exactly one call site" check is scoped to THAT file. A second,
+// deliberately gated exception now exists in server/utils/cmoonPrestige.js (prestigeUser grants
+// a destination's prize only the player's first time ever prestiging INTO that specific cMoon —
+// see tests/cmoonPrestige.test.js's own "prize-grant gating" checks for that invariant).
 //
 // Function bodies are isolated as "from this top-level function's declaration line up to the
 // next top-level function declaration (or EOF)" rather than by brace-counting — this file's
@@ -89,6 +92,23 @@ test('grantCMoonPrizes is only ever called from selectCMoonForUser', () => {
     )
   }
   assert.ok(sawCall, 'expected at least one call site of grantCMoonPrizes (inside selectCMoonForUser) — has it been renamed or removed?')
+})
+
+test('grantCMoonPrizes enforces its own idempotency via CMoonPrizeGrantLog, not just callers\' own gates', () => {
+  const body = bodyOf('grantCMoonPrizes')
+  assert.ok(
+    body.includes('cMoonPrizeGrantLog.create'),
+    'grantCMoonPrizes must write a CMoonPrizeGrantLog row to durably record a (userId, cMoonId) ' +
+    'grant — without this, a player who already collected a cMoon\'s prizes as an ordinary member, ' +
+    'was later moved elsewhere by an admin-driven path, and then prestiges back INTO that same ' +
+    'cMoon would double-collect its prizes (neither selectCMoonForUser\'s nor prestigeUser\'s own ' +
+    'gate catches that case on its own — see CMoonPrizeGrantLog\'s schema comment).',
+  )
+  assert.ok(
+    /P2002/.test(body),
+    'grantCMoonPrizes must treat a CMoonPrizeGrantLog unique-constraint violation as "already ' +
+    'granted, do nothing" rather than letting it throw — that P2002 catch IS the idempotency guard',
+  )
 })
 
 test('cMoon admin mutation routes never reference mintQueue/grantCMoonPrizes directly', () => {

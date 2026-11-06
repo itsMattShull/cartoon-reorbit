@@ -5,7 +5,7 @@
 import { defineEventHandler } from 'h3'
 import { prisma } from '@/server/prisma'
 import { cachedJson } from '@/server/utils/cache'
-import { ogtRequireUser, ogtRequireEnabled } from '@/server/utils/ogGtoonTournamentApi'
+import { ogtRequireUser, ogtRequireEnabled, hasPrize, ogtResolveStatus } from '@/server/utils/ogGtoonTournamentApi'
 
 export default defineEventHandler(async (event) => {
   const me = await ogtRequireUser(event)
@@ -20,20 +20,21 @@ export default defineEventHandler(async (event) => {
       select: {
         id: true, name: true, description: true, status: true, format: true, optInStartAt: true, optInEndAt: true,
         bestOf: true, roundWindowHours: true, tournamentCompletedAt: true, winner: { select: { username: true } },
-        firstPrizeJson: true, top8PrizeJson: true
+        firstPrizeJson: true, top8PrizeJson: true, participantPrizeJson: true
       }
     })
     const counts = await prisma.ogGtoonTournamentOptIn.groupBy({
       by: ['tournamentId'], where: { isActive: true, tournamentId: { in: rows.map(r => r.id) } }, _count: { _all: true }
     })
     const countBy = new Map(counts.map(c => [c.tournamentId, c._count._all]))
-    return rows.map(({ firstPrizeJson, top8PrizeJson, winner, ...t }) => ({
+    return Promise.all(rows.map(async ({ firstPrizeJson, top8PrizeJson, participantPrizeJson, winner, ...t }) => ({
       ...t,
+      // What the clock says, not the stored value (the scheduler flips it a few minutes late): see ogtResolveStatus.
+      status: await ogtResolveStatus(t),
       optInCount: countBy.get(t.id) || 0,
       winnerUsername: winner?.username || null,
-      hasPrizes: !!(firstPrizeJson && (firstPrizeJson.points || firstPrizeJson.ctoons?.length || firstPrizeJson.backgrounds?.length)) ||
-        !!(top8PrizeJson && (top8PrizeJson.points || top8PrizeJson.ctoons?.length || top8PrizeJson.backgrounds?.length))
-    }))
+      hasPrizes: hasPrize(firstPrizeJson) || hasPrize(top8PrizeJson) || hasPrize(participantPrizeJson)
+    })))
   })
 
   const ids = tournaments.map(t => t.id)
