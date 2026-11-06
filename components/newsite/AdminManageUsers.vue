@@ -74,92 +74,13 @@
                 :class="u.adminRestricted ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'"
                 :title="u.adminRestricted ? `Sub-admin: ${u.adminPermissions.length} admin tools` : 'Full admin'"
               >{{ u.adminRestricted ? `Sub-admin · ${u.adminPermissions.length}` : 'Admin' }}</span>
-              <div class="relative">
-                <button
-                  class="ml-0.5 h-6 w-6 grid place-items-center text-gray-500 hover:text-gray-700 rounded hover:bg-gray-100"
-                  title="More"
-                  @click.stop="toggleMenu(u)"
-                >⋮</button>
-                <div
-                  v-if="menuOpenId === u.id"
-                  class="absolute right-0 mt-1 w-40 bg-white border rounded-md shadow-lg z-40 py-1"
-                >
-                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openNotes(u); closeMenu()">Account History</button>
-                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="viewCollection(u); closeMenu()">View Collection</button>
-                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openLockedPoints(u); closeMenu()">See Locked Points</button>
-                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openPendingTrades(u); closeMenu()">View Pending Trades</button>
-                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openAdditionalZones(u); closeMenu()">Additional Zones</button>
-                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openResetPackLimit(u); closeMenu()">Reset Pack Limit</button>
-                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openUpdateUsername(u); closeMenu()">Update Username</button>
-                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openUpdateCMoon(u); closeMenu()">Update cMoon</button>
-                  <button class="w-full text-left px-2 py-1 text-[11px] hover:bg-gray-50" @click="openVpnInfo(u); closeMenu()">VPN Info</button>
-                  <button
-                    v-if="!u.isAdmin && !u.banned"
-                    class="w-full text-left px-2 py-1 text-[11px] text-red-700 hover:bg-red-50"
-                    @click="openActionModal(u, 'BAN'); closeMenu()"
-                  >Ban user</button>
-                  <button
-                    v-if="!u.isAdmin && u.banned"
-                    class="w-full text-left px-2 py-1 text-[11px] text-emerald-700 hover:bg-emerald-50"
-                    @click="openActionModal(u, 'UNBAN'); closeMenu()"
-                  >Unban user</button>
-                  <button
-                    v-if="!u.isAdmin && !u.active && !u.banned"
-                    class="w-full text-left px-2 py-1 text-[11px] text-emerald-700 hover:bg-emerald-50"
-                    @click="activateUser(u); closeMenu()"
-                  >Activate User</button>
-                  <button
-                    v-if="!u.isAdmin && !u.banned && !isSuspended(u)"
-                    class="w-full text-left px-2 py-1 text-[11px] text-orange-700 hover:bg-orange-50"
-                    @click="openSuspendModal(u); closeMenu()"
-                  >Suspend user</button>
-                  <button
-                    v-if="!u.isAdmin && !u.banned && isSuspended(u)"
-                    class="w-full text-left px-2 py-1 text-[11px] text-emerald-700 hover:bg-emerald-50"
-                    @click="openActionModal(u, 'UNSUSPEND'); closeMenu()"
-                  >Remove suspension</button>
-                  <button
-                    v-if="!u.isAdmin && u.active"
-                    class="w-full text-left px-2 py-1 text-[11px] text-rose-700 hover:bg-rose-50"
-                    @click="openDissolveModal(u); closeMenu()"
-                  >Dissolve User</button>
-                  <button
-                    v-if="!u.banned && u.active"
-                    class="w-full text-left px-2 py-1 text-[11px] text-purple-700 hover:bg-purple-50"
-                    @click="openTransferModal(u); closeMenu()"
-                  >Transfer</button>
-                  <button
-                    v-if="isFullAdmin && !u.isAdmin"
-                    class="w-full text-left px-2 py-1 text-[11px] text-blue-700 font-semibold hover:bg-blue-50"
-                    @click="openSubAdminModal(u); closeMenu()"
-                  >Make sub-admin…</button>
-                  <button
-                    v-if="isFullAdmin && u.isAdmin && u.adminRestricted"
-                    class="w-full text-left px-2 py-1 text-[11px] text-blue-700 font-semibold hover:bg-blue-50"
-                    @click="openSubAdminModal(u); closeMenu()"
-                  >Edit sub-admin access…</button>
-                  <button
-                    v-if="isSuperAdmin && u.isAdmin && !u.adminRestricted && u.discordId !== superAdminId"
-                    class="w-full text-left px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-50"
-                    @click="openSubAdminModal(u); closeMenu()"
-                  >Convert to sub-admin…</button>
-                  <button
-                    v-if="isSuperAdmin && !u.isAdmin"
-                    class="w-full text-left px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-50"
-                    @click="makeAdmin(u); closeMenu()"
-                  >Make Admin (full)</button>
-                  <button
-                    v-if="isSuperAdmin && u.isAdmin && u.adminRestricted"
-                    class="w-full text-left px-2 py-1 text-[11px] text-blue-700 hover:bg-blue-50"
-                    @click="makeAdmin(u); closeMenu()"
-                  >Promote to full Admin</button>
-                  <button
-                    v-if="isSuperAdmin && u.isAdmin && u.discordId !== superAdminId"
-                    class="w-full text-left px-2 py-1 text-[11px] text-amber-700 hover:bg-amber-50"
-                    @click="removeAdmin(u); closeMenu()"
-                  >Remove Admin</button>
-                </div>
-              </div>
+              <button
+                class="ml-0.5 h-6 w-6 grid place-items-center text-gray-500 hover:text-gray-700 rounded hover:bg-gray-100"
+                title="More"
+                aria-haspopup="menu"
+                :aria-expanded="menuOpenId === u.id"
+                @click.stop="toggleMenu(u, $event)"
+              >⋮</button>
             </div>
             <!-- Username second in DOM: appears below badges on mobile, on left on desktop -->
             <div class="min-w-0">
@@ -221,21 +142,21 @@
     </div>
 
     <!-- Pending Trades modal -->
-    <div v-if="showPendingTradesModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showPendingTradesModal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click="closePendingTradesModal()"></div>
-      <div class="relative bg-white w-[92%] max-w-2xl rounded-lg shadow-lg flex flex-col max-h-[90vh]">
-        <div class="flex items-center justify-between px-5 py-4 border-b flex-shrink-0">
+      <div class="relative bg-white w-full sm:w-[92%] max-w-2xl rounded-t-2xl sm:rounded-lg shadow-lg flex flex-col max-h-[92dvh]">
+        <div class="flex items-center justify-between px-4 py-3 sm:px-5 sm:py-4 border-b flex-shrink-0">
           <h3 class="text-lg font-semibold">Pending Trades — {{ pendingTradesTarget?.username || pendingTradesTarget?.discordTag || 'user' }}</h3>
           <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closePendingTradesModal()">✕</button>
         </div>
 
-        <div class="overflow-y-auto flex-1 px-5 py-4">
+        <div class="overflow-y-auto flex-1 px-4 py-3 sm:px-5 sm:py-4">
           <div v-if="pendingTradesLoading" class="text-sm text-gray-500 py-3">Loading…</div>
           <div v-else-if="pendingTradesError" class="text-sm text-red-600 py-3">{{ pendingTradesError }}</div>
           <div v-else-if="!pendingTrades.length" class="text-sm text-gray-500 py-3">No pending trades.</div>
           <div v-else class="space-y-4">
-            <div v-for="trade in pendingTrades" :key="trade.id" class="border rounded-lg p-4">
-              <div class="flex items-center justify-between text-sm mb-3">
+            <div v-for="trade in pendingTrades" :key="trade.id" class="border rounded-lg p-3 sm:p-4">
+              <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between text-sm mb-3">
                 <div>
                   <span class="text-gray-500">From:</span>
                   <span class="font-medium ml-1">{{ trade.initiator.username }}</span>
@@ -246,7 +167,7 @@
                 <div class="text-xs text-gray-400">{{ formatDate(trade.createdAt) }}</div>
               </div>
 
-              <div class="grid grid-cols-2 gap-4">
+              <div class="grid grid-cols-1 min-[420px]:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <div class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Offered</div>
                   <div v-if="trade.pointsOffered" class="mb-2 text-sm font-medium text-blue-700">{{ trade.pointsOffered }} pts</div>
@@ -274,17 +195,17 @@
           </div>
         </div>
 
-        <div class="flex items-center justify-end px-5 py-4 border-t flex-shrink-0">
-          <button class="px-3 py-1 text-sm border rounded-md" @click="closePendingTradesModal()">Close</button>
+        <div class="flex items-center justify-end px-4 py-3 sm:px-5 sm:py-4 border-t flex-shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-4">
+          <button class="px-4 py-2 sm:px-3 sm:py-1 text-sm border rounded-md" @click="closePendingTradesModal()">Close</button>
         </div>
       </div>
     </div>
 
     <!-- VPN Info modal -->
-    <div v-if="showVpnModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showVpnModal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click="closeVpnModal()"></div>
-      <div class="relative bg-white w-[92%] max-w-2xl rounded-lg shadow-lg flex flex-col max-h-[90vh]">
-        <div class="flex items-center justify-between px-5 py-4 border-b flex-shrink-0">
+      <div class="relative bg-white w-full sm:w-[92%] max-w-2xl rounded-t-2xl sm:rounded-lg shadow-lg flex flex-col max-h-[92dvh]">
+        <div class="flex items-center justify-between px-4 py-3 sm:px-5 sm:py-4 border-b flex-shrink-0">
           <div>
             <h3 class="text-lg font-semibold">VPN Info — {{ vpnTarget?.username || vpnTarget?.discordTag || 'user' }}</h3>
             <p class="text-xs text-gray-500 mt-0.5">VPN detection log for this user</p>
@@ -292,7 +213,7 @@
           <button class="text-gray-400 hover:text-gray-600 text-xl leading-none" @click="closeVpnModal()">✕</button>
         </div>
 
-        <div class="overflow-y-auto flex-1 px-5 py-4">
+        <div class="overflow-y-auto flex-1 px-4 py-3 sm:px-5 sm:py-4">
           <div v-if="vpnLoading" class="text-sm text-gray-500 py-3">Loading…</div>
           <div v-else-if="vpnError" class="text-sm text-red-600 py-3">{{ vpnError }}</div>
           <div v-else-if="!vpnLogs.length" class="text-sm text-gray-500 py-3">No VPN log entries found for this user.</div>
@@ -303,41 +224,133 @@
               class="border rounded-lg p-3 text-xs"
               :class="log.isVpn ? 'border-orange-200 bg-orange-50' : 'border-gray-200 bg-gray-50'"
             >
-              <div class="flex items-center justify-between mb-2">
-                <div class="flex items-center gap-2">
+              <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between mb-2">
+                <div class="flex flex-wrap items-center gap-2">
                   <span
                     class="px-1.5 py-0.5 rounded text-[10px] font-medium border"
                     :class="log.isVpn ? 'bg-orange-100 text-orange-800 border-orange-200' : 'bg-green-100 text-green-800 border-green-200'"
                   >{{ log.isVpn ? 'VPN' : 'Clean' }}</span>
-                  <span class="font-mono font-medium text-gray-800">{{ log.ip }}</span>
+                  <span class="font-mono font-medium text-gray-800 break-all">{{ log.ip }}</span>
                 </div>
                 <span class="text-gray-400">{{ formatDate(log.detectedAt) }}</span>
               </div>
-              <div class="grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
                 <div v-if="log.proxyType"><span class="text-gray-500">Proxy type:</span> <span class="font-medium">{{ log.proxyType }}</span></div>
                 <div v-if="log.isp"><span class="text-gray-500">ISP:</span> <span class="font-medium">{{ log.isp }}</span></div>
                 <div v-if="log.org"><span class="text-gray-500">Org:</span> <span class="font-medium">{{ log.org }}</span></div>
                 <div v-if="log.asn"><span class="text-gray-500">ASN:</span> <span class="font-medium">{{ log.asn }}</span></div>
                 <div v-if="log.country"><span class="text-gray-500">Country:</span> <span class="font-medium">{{ log.country }}{{ log.countryCode ? ` (${log.countryCode})` : '' }}</span></div>
-                <div v-if="log.reason" class="col-span-2"><span class="text-gray-500">Reason:</span> <span class="font-medium">{{ log.reason }}</span></div>
+                <div v-if="log.reason" class="sm:col-span-2"><span class="text-gray-500">Reason:</span> <span class="font-medium">{{ log.reason }}</span></div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="flex items-center justify-end px-5 py-4 border-t flex-shrink-0">
-          <button class="px-3 py-1 text-sm border rounded-md" @click="closeVpnModal()">Close</button>
+        <div class="flex items-center justify-end px-4 py-3 sm:px-5 sm:py-4 border-t flex-shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:pb-4">
+          <button class="px-4 py-2 sm:px-3 sm:py-1 text-sm border rounded-md" @click="closeVpnModal()">Close</button>
         </div>
       </div>
     </div>
 
-    <!-- Kebab menu outside-click catcher -->
-    <div v-if="menuOpenId" class="fixed inset-0 z-30" @click="closeMenu()"></div>
+    <!-- Kebab menu. Rendered once, position: fixed, instead of inside each card: the admin
+         body is `overflow-x: auto` (which also makes overflow-y auto), so an absolutely
+         positioned dropdown got clipped / scrolled inside it. On phones it is a bottom sheet. -->
+    <div v-if="menuUser" class="fixed inset-0 z-30" @click="closeMenu()"></div>
+    <div
+      v-if="menuUser"
+      role="menu"
+      class="fixed z-40 bg-white border shadow-lg overflow-y-auto overscroll-contain
+             inset-x-0 bottom-0 max-h-[80dvh] rounded-t-2xl pb-[max(0.5rem,env(safe-area-inset-bottom))]
+             sm:inset-x-auto sm:bottom-auto sm:w-48 sm:max-h-none sm:rounded-md sm:py-1 sm:pb-1"
+      :style="menuStyle"
+    >
+      <div class="sm:hidden sticky top-0 bg-white flex items-center justify-between px-4 py-3 border-b">
+        <div class="min-w-0">
+          <div class="font-semibold text-sm truncate">{{ menuUser.username || menuUser.discordTag || 'user' }}</div>
+          <div class="text-[11px] text-gray-500 truncate">{{ menuUser.discordTag || 'No tag' }}</div>
+        </div>
+        <button class="text-gray-400 hover:text-gray-600 text-xl leading-none px-2" aria-label="Close menu" @click="closeMenu()">✕</button>
+      </div>
+                  <button class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] hover:bg-gray-50" @click="openNotes(menuUser); closeMenu()">Account History</button>
+                  <button class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] hover:bg-gray-50" @click="viewCollection(menuUser); closeMenu()">View Collection</button>
+                  <button class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] hover:bg-gray-50" @click="openLockedPoints(menuUser); closeMenu()">See Locked Points</button>
+                  <button class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] hover:bg-gray-50" @click="openPendingTrades(menuUser); closeMenu()">View Pending Trades</button>
+                  <button class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] hover:bg-gray-50" @click="openAdditionalZones(menuUser); closeMenu()">Additional Zones</button>
+                  <button class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] hover:bg-gray-50" @click="openResetPackLimit(menuUser); closeMenu()">Reset Pack Limit</button>
+                  <button class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] hover:bg-gray-50" @click="openUpdateUsername(menuUser); closeMenu()">Update Username</button>
+                  <button class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] hover:bg-gray-50" @click="openUpdateCMoon(menuUser); closeMenu()">Update cMoon</button>
+                  <button class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] hover:bg-gray-50" @click="openVpnInfo(menuUser); closeMenu()">VPN Info</button>
+                  <button
+                    v-if="!menuUser.isAdmin && !menuUser.banned"
+                    class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] text-red-700 hover:bg-red-50"
+                    @click="openActionModal(menuUser, 'BAN'); closeMenu()"
+                  >Ban user</button>
+                  <button
+                    v-if="!menuUser.isAdmin && menuUser.banned"
+                    class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] text-emerald-700 hover:bg-emerald-50"
+                    @click="openActionModal(menuUser, 'UNBAN'); closeMenu()"
+                  >Unban user</button>
+                  <button
+                    v-if="!menuUser.isAdmin && !menuUser.active && !menuUser.banned"
+                    class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] text-emerald-700 hover:bg-emerald-50"
+                    @click="activateUser(menuUser); closeMenu()"
+                  >Activate User</button>
+                  <button
+                    v-if="!menuUser.isAdmin && !menuUser.banned && !isSuspended(menuUser)"
+                    class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] text-orange-700 hover:bg-orange-50"
+                    @click="openSuspendModal(menuUser); closeMenu()"
+                  >Suspend user</button>
+                  <button
+                    v-if="!menuUser.isAdmin && !menuUser.banned && isSuspended(menuUser)"
+                    class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] text-emerald-700 hover:bg-emerald-50"
+                    @click="openActionModal(menuUser, 'UNSUSPEND'); closeMenu()"
+                  >Remove suspension</button>
+                  <button
+                    v-if="!menuUser.isAdmin && menuUser.active"
+                    class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] text-rose-700 hover:bg-rose-50"
+                    @click="openDissolveModal(menuUser); closeMenu()"
+                  >Dissolve User</button>
+                  <button
+                    v-if="!menuUser.banned && menuUser.active"
+                    class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] text-purple-700 hover:bg-purple-50"
+                    @click="openTransferModal(menuUser); closeMenu()"
+                  >Transfer</button>
+                  <button
+                    v-if="isFullAdmin && !menuUser.isAdmin"
+                    class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] text-blue-700 font-semibold hover:bg-blue-50"
+                    @click="openSubAdminModal(menuUser); closeMenu()"
+                  >Make sub-admin…</button>
+                  <button
+                    v-if="isFullAdmin && menuUser.isAdmin && menuUser.adminRestricted"
+                    class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] text-blue-700 font-semibold hover:bg-blue-50"
+                    @click="openSubAdminModal(menuUser); closeMenu()"
+                  >Edit sub-admin access…</button>
+                  <button
+                    v-if="isSuperAdmin && menuUser.isAdmin && !menuUser.adminRestricted && menuUser.discordId !== superAdminId"
+                    class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] text-blue-700 hover:bg-blue-50"
+                    @click="openSubAdminModal(menuUser); closeMenu()"
+                  >Convert to sub-admin…</button>
+                  <button
+                    v-if="isSuperAdmin && !menuUser.isAdmin"
+                    class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] text-blue-700 hover:bg-blue-50"
+                    @click="makeAdmin(menuUser); closeMenu()"
+                  >Make Admin (full)</button>
+                  <button
+                    v-if="isSuperAdmin && menuUser.isAdmin && menuUser.adminRestricted"
+                    class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] text-blue-700 hover:bg-blue-50"
+                    @click="makeAdmin(menuUser); closeMenu()"
+                  >Promote to full Admin</button>
+                  <button
+                    v-if="isSuperAdmin && menuUser.isAdmin && menuUser.discordId !== superAdminId"
+                    class="w-full text-left px-4 py-2.5 text-sm sm:px-2 sm:py-1 sm:text-[11px] text-amber-700 hover:bg-amber-50"
+                    @click="removeAdmin(menuUser); closeMenu()"
+                  >Remove Admin</button>
+    </div>
 
     <!-- Ban/Unban/Remove-suspension modal (reason only — Suspend itself has its own modal below, since it also needs a duration) -->
-    <div v-if="showActionModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showActionModal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click="closeBanModal()"></div>
-      <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
+      <div class="relative bg-white w-full sm:w-[92%] max-w-lg rounded-t-2xl sm:rounded-lg shadow-lg p-4 sm:p-5 max-h-[92dvh] overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-5">
         <h3 class="text-lg font-semibold">{{ ACTION_LABELS[actionType].title }} {{ actionTarget?.username || actionTarget?.discordTag || 'user' }}</h3>
         <p class="mt-2 text-sm text-gray-600">Please provide a reason (min 10 characters). This will be stored and shown in Account History.</p>
 
@@ -352,10 +365,10 @@
 
         <div v-if="actionError" class="mt-2 text-sm text-red-600">{{ actionError }}</div>
 
-        <div class="mt-4 flex items-center justify-end gap-2">
-          <button class="px-3 py-1 text-sm border rounded-md" @click="closeBanModal" :disabled="working">Cancel</button>
+        <div class="mt-4 flex items-center justify-end gap-2 [&>button]:flex-1 sm:[&>button]:flex-none sticky bottom-0 bg-white pt-3 pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:static sm:pt-0 sm:pb-0">
+          <button class="px-4 py-2 sm:px-3 sm:py-1 text-sm border rounded-md" @click="closeBanModal" :disabled="working">Cancel</button>
           <button
-            class="px-3 py-1 text-sm rounded-md text-white"
+            class="px-4 py-2 sm:px-3 sm:py-1 text-sm rounded-md text-white"
             :class="canConfirm ? ACTION_LABELS[actionType].confirmClass : 'bg-gray-300 cursor-not-allowed'"
             :disabled="!canConfirm || working"
             @click="confirmAction"
@@ -367,9 +380,9 @@
     </div>
 
     <!-- Suspend modal (duration + reason) -->
-    <div v-if="showSuspendModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showSuspendModal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click="closeSuspendModal()"></div>
-      <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
+      <div class="relative bg-white w-full sm:w-[92%] max-w-lg rounded-t-2xl sm:rounded-lg shadow-lg p-4 sm:p-5 max-h-[92dvh] overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-5">
         <h3 class="text-lg font-semibold">Suspend {{ suspendTarget?.username || suspendTarget?.discordTag || 'user' }}</h3>
         <p class="mt-2 text-sm text-gray-600">
           Blocks login and play for the chosen duration. This does <strong>not</strong> remove them from Discord —
@@ -408,10 +421,10 @@
 
         <div v-if="suspendError" class="mt-2 text-sm text-red-600">{{ suspendError }}</div>
 
-        <div class="mt-4 flex items-center justify-end gap-2">
-          <button class="px-3 py-1 text-sm border rounded-md" @click="closeSuspendModal" :disabled="suspending">Cancel</button>
+        <div class="mt-4 flex items-center justify-end gap-2 [&>button]:flex-1 sm:[&>button]:flex-none sticky bottom-0 bg-white pt-3 pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:static sm:pt-0 sm:pb-0">
+          <button class="px-4 py-2 sm:px-3 sm:py-1 text-sm border rounded-md" @click="closeSuspendModal" :disabled="suspending">Cancel</button>
           <button
-            class="px-3 py-1 text-sm rounded-md text-white"
+            class="px-4 py-2 sm:px-3 sm:py-1 text-sm rounded-md text-white"
             :class="canConfirmSuspend ? 'bg-orange-600 hover:bg-orange-700' : 'bg-orange-300 cursor-not-allowed'"
             :disabled="!canConfirmSuspend || suspending"
             @click="confirmSuspend"
@@ -423,11 +436,11 @@
     </div>
 
     <!-- Account History modal -->
-    <div v-if="showNotesModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showNotesModal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click="closeNotesModal()"></div>
-      <div class="relative bg-white w-[92%] max-w-xl rounded-lg shadow-lg p-5">
+      <div class="relative bg-white w-full sm:w-[92%] max-w-xl rounded-t-2xl sm:rounded-lg shadow-lg p-4 sm:p-5 max-h-[92dvh] overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-5">
         <h3 class="text-lg font-semibold">Account History — {{ notesTarget?.username || notesTarget?.discordTag || 'user' }}</h3>
-        <div class="mt-3 max-h-80 overflow-auto divide-y">
+        <div class="mt-3 max-h-[55dvh] sm:max-h-80 overflow-auto divide-y">
           <div v-if="notesLoading" class="text-sm text-gray-500 py-3">Loading…</div>
           <div v-else-if="notesError" class="text-sm text-red-600 py-3">{{ notesError }}</div>
           <div v-else-if="!banNotes.length" class="text-sm text-gray-500 py-3">No history yet.</div>
@@ -441,15 +454,15 @@
           </div>
         </div>
         <div class="mt-4 flex items-center justify-end">
-          <button class="px-3 py-1 text-sm border rounded-md" @click="closeNotesModal">Close</button>
+          <button class="px-4 py-2 sm:px-3 sm:py-1 text-sm border rounded-md" @click="closeNotesModal">Close</button>
         </div>
       </div>
     </div>
 
     <!-- Locked Points modal -->
-    <div v-if="showLockedModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showLockedModal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click="closeLockedModal()"></div>
-      <div class="relative bg-white w-[92%] max-w-xl rounded-lg shadow-lg p-5">
+      <div class="relative bg-white w-full sm:w-[92%] max-w-xl rounded-t-2xl sm:rounded-lg shadow-lg p-4 sm:p-5 max-h-[92dvh] overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-5">
         <h3 class="text-lg font-semibold">Locked Points — {{ lockedTarget?.username || lockedTarget?.discordTag || 'user' }}</h3>
         <div class="mt-3">
           <div class="text-sm text-gray-600">Total locked</div>
@@ -460,7 +473,7 @@
           </div>
         </div>
 
-        <div class="mt-4 max-h-80 overflow-auto divide-y">
+        <div class="mt-4 max-h-[50dvh] sm:max-h-80 overflow-auto divide-y">
           <div v-if="lockedLoading" class="text-sm text-gray-500 py-3">Loading…</div>
           <div v-else-if="lockedError" class="text-sm text-red-600 py-3">{{ lockedError }}</div>
           <div v-else-if="!lockedSummary.locks.length" class="text-sm text-gray-500 py-3">No active locks.</div>
@@ -469,8 +482,8 @@
               <div class="font-medium">{{ lock.contextType }}</div>
               <div class="tabular-nums">{{ lock.amount }}</div>
             </div>
-            <div class="mt-1 flex items-center justify-between gap-2 text-xs text-gray-600">
-              <div class="truncate">
+            <div class="mt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-600">
+              <div class="min-w-0 break-words">
                 {{ lock.reason }} • {{ lock.contextId }} • {{ formatDate(lock.createdAt) }}
               </div>
               <button
@@ -485,15 +498,15 @@
         </div>
 
         <div class="mt-4 flex items-center justify-end">
-          <button class="px-3 py-1 text-sm border rounded-md" @click="closeLockedModal()">Close</button>
+          <button class="px-4 py-2 sm:px-3 sm:py-1 text-sm border rounded-md" @click="closeLockedModal()">Close</button>
         </div>
       </div>
     </div>
 
     <!-- Additional cZones modal -->
-    <div v-if="showAdditionalZonesModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showAdditionalZonesModal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click="closeAdditionalZonesModal()"></div>
-      <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
+      <div class="relative bg-white w-full sm:w-[92%] max-w-lg rounded-t-2xl sm:rounded-lg shadow-lg p-4 sm:p-5 max-h-[92dvh] overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-5">
         <h3 class="text-lg font-semibold">Additional cZones — {{ additionalZonesTarget?.username || additionalZonesTarget?.discordTag || 'user' }}</h3>
         <p class="mt-2 text-sm text-gray-600">Set how many extra cZones this user can have.</p>
 
@@ -509,10 +522,10 @@
 
         <div v-if="additionalZonesError" class="mt-2 text-sm text-red-600">{{ additionalZonesError }}</div>
 
-        <div class="mt-4 flex items-center justify-end gap-2">
-          <button class="px-3 py-1 text-sm border rounded-md" @click="closeAdditionalZonesModal()" :disabled="additionalZonesWorking">Cancel</button>
+        <div class="mt-4 flex items-center justify-end gap-2 [&>button]:flex-1 sm:[&>button]:flex-none sticky bottom-0 bg-white pt-3 pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:static sm:pt-0 sm:pb-0">
+          <button class="px-4 py-2 sm:px-3 sm:py-1 text-sm border rounded-md" @click="closeAdditionalZonesModal()" :disabled="additionalZonesWorking">Cancel</button>
           <button
-            class="px-3 py-1 text-sm rounded-md text-white"
+            class="px-4 py-2 sm:px-3 sm:py-1 text-sm rounded-md text-white"
             :class="additionalZonesCanSave ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'"
             :disabled="!additionalZonesCanSave || additionalZonesWorking"
             @click="saveAdditionalZones"
@@ -524,9 +537,9 @@
     </div>
 
     <!-- Reset Pack Limit modal -->
-    <div v-if="showResetPackLimitModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showResetPackLimitModal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click="closeResetPackLimitModal()"></div>
-      <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
+      <div class="relative bg-white w-full sm:w-[92%] max-w-lg rounded-t-2xl sm:rounded-lg shadow-lg p-4 sm:p-5 max-h-[92dvh] overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-5">
         <h3 class="text-lg font-semibold">Reset Pack Limit — {{ resetPackLimitTarget?.username || resetPackLimitTarget?.discordTag || 'user' }}</h3>
         <p class="mt-2 text-sm text-gray-600">Pick a pack to let this user buy up to its daily limit again today.</p>
 
@@ -548,10 +561,10 @@
         </div>
         <div v-if="resetPackLimitError" class="mt-2 text-sm text-red-600">{{ resetPackLimitError }}</div>
 
-        <div class="mt-4 flex items-center justify-end gap-2">
-          <button class="px-3 py-1 text-sm border rounded-md" @click="closeResetPackLimitModal()" :disabled="resetPackLimitWorking">Close</button>
+        <div class="mt-4 flex items-center justify-end gap-2 [&>button]:flex-1 sm:[&>button]:flex-none sticky bottom-0 bg-white pt-3 pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:static sm:pt-0 sm:pb-0">
+          <button class="px-4 py-2 sm:px-3 sm:py-1 text-sm border rounded-md" @click="closeResetPackLimitModal()" :disabled="resetPackLimitWorking">Close</button>
           <button
-            class="px-3 py-1 text-sm rounded-md text-white"
+            class="px-4 py-2 sm:px-3 sm:py-1 text-sm rounded-md text-white"
             :class="resetPackLimitCanSave ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'"
             :disabled="!resetPackLimitCanSave || resetPackLimitWorking"
             @click="saveResetPackLimit"
@@ -563,9 +576,9 @@
     </div>
 
     <!-- Update Username modal -->
-    <div v-if="showUpdateUsernameModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showUpdateUsernameModal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click="closeUpdateUsernameModal()"></div>
-      <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
+      <div class="relative bg-white w-full sm:w-[92%] max-w-lg rounded-t-2xl sm:rounded-lg shadow-lg p-4 sm:p-5 max-h-[92dvh] overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-5">
         <h3 class="text-lg font-semibold">Update Username — {{ updateUsernameTarget?.username || updateUsernameTarget?.discordTag || 'user' }}</h3>
         <p class="mt-2 text-sm text-gray-600">
           Enter a new username. Must be 3 words each starting with a capital letter with no spaces (e.g. <span class="font-mono">AwesomeAlienAce</span>).
@@ -587,10 +600,10 @@
 
         <div v-if="updateUsernameError" class="mt-2 text-sm text-red-600">{{ updateUsernameError }}</div>
 
-        <div class="mt-4 flex items-center justify-end gap-2">
-          <button class="px-3 py-1 text-sm border rounded-md" @click="closeUpdateUsernameModal()" :disabled="updateUsernameWorking">Cancel</button>
+        <div class="mt-4 flex items-center justify-end gap-2 [&>button]:flex-1 sm:[&>button]:flex-none sticky bottom-0 bg-white pt-3 pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:static sm:pt-0 sm:pb-0">
+          <button class="px-4 py-2 sm:px-3 sm:py-1 text-sm border rounded-md" @click="closeUpdateUsernameModal()" :disabled="updateUsernameWorking">Cancel</button>
           <button
-            class="px-3 py-1 text-sm rounded-md text-white"
+            class="px-4 py-2 sm:px-3 sm:py-1 text-sm rounded-md text-white"
             :class="updateUsernameCanSave ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'"
             :disabled="!updateUsernameCanSave || updateUsernameWorking"
             @click="saveUpdateUsername"
@@ -602,9 +615,9 @@
     </div>
 
     <!-- Update cMoon modal -->
-    <div v-if="showUpdateCMoonModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showUpdateCMoonModal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click="closeUpdateCMoonModal()"></div>
-      <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
+      <div class="relative bg-white w-full sm:w-[92%] max-w-lg rounded-t-2xl sm:rounded-lg shadow-lg p-4 sm:p-5 max-h-[92dvh] overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-5">
         <h3 class="text-lg font-semibold">Update cMoon — {{ updateCMoonTarget?.username || updateCMoonTarget?.discordTag || 'user' }}</h3>
         <p class="mt-2 text-sm text-gray-600">Select which cMoon this user should belong to.</p>
 
@@ -621,10 +634,10 @@
 
         <div v-if="updateCMoonError" class="mt-2 text-sm text-red-600">{{ updateCMoonError }}</div>
 
-        <div class="mt-4 flex items-center justify-end gap-2">
-          <button class="px-3 py-1 text-sm border rounded-md" @click="closeUpdateCMoonModal()" :disabled="updateCMoonWorking">Cancel</button>
+        <div class="mt-4 flex items-center justify-end gap-2 [&>button]:flex-1 sm:[&>button]:flex-none sticky bottom-0 bg-white pt-3 pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:static sm:pt-0 sm:pb-0">
+          <button class="px-4 py-2 sm:px-3 sm:py-1 text-sm border rounded-md" @click="closeUpdateCMoonModal()" :disabled="updateCMoonWorking">Cancel</button>
           <button
-            class="px-3 py-1 text-sm rounded-md text-white"
+            class="px-4 py-2 sm:px-3 sm:py-1 text-sm rounded-md text-white"
             :class="updateCMoonCanSave ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'"
             :disabled="!updateCMoonCanSave || updateCMoonWorking"
             @click="saveUpdateCMoon"
@@ -636,9 +649,9 @@
     </div>
 
     <!-- Dissolve User modal -->
-    <div v-if="showDissolveModal" class="fixed inset-0 z-50 flex items-center justify-center">
+    <div v-if="showDissolveModal" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
       <div class="absolute inset-0 bg-black/50" @click="!dissolveWorking && closeDissolveModal()"></div>
-      <div class="relative bg-white w-[92%] max-w-lg rounded-lg shadow-lg p-5">
+      <div class="relative bg-white w-full sm:w-[92%] max-w-lg rounded-t-2xl sm:rounded-lg shadow-lg p-4 sm:p-5 max-h-[92dvh] overflow-y-auto overscroll-contain pb-[max(1rem,env(safe-area-inset-bottom))] sm:pb-5">
         <h3 class="text-lg font-semibold">Dissolve {{ dissolveTarget?.username || dissolveTarget?.discordTag || 'user' }}</h3>
 
         <div v-if="dissolvePhase === 'confirm'" class="mt-2 text-sm text-gray-700 space-y-2">
@@ -653,10 +666,10 @@
           <div class="mt-3 border-t pt-3 space-y-3">
             <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Release Schedule</p>
 
-            <div class="flex items-center gap-2">
-              <label class="w-36 text-xs text-gray-600 shrink-0">Start date (CST)</label>
+            <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+              <label class="sm:w-36 text-xs text-gray-600 shrink-0">Start date (CST)</label>
               <input v-model="dissolveSchedule.startAtLocal" type="datetime-local"
-                     class="flex-1 text-xs border rounded px-2 py-1" />
+                     class="w-full sm:flex-1 text-xs border rounded px-2 py-1" />
             </div>
 
             <div class="rounded border border-purple-100 bg-purple-50 p-2 space-y-1.5">
@@ -666,15 +679,15 @@
                   ({{ dissolveCategoryCounts ? dissolveCategoryCounts.featured : '…' }} cToons)
                 </span>
               </p>
-              <div class="flex items-center gap-2">
-                <label class="w-36 text-xs text-gray-600 shrink-0">Cadence (days)</label>
+              <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                <label class="sm:w-36 text-xs text-gray-600 shrink-0">Cadence (days)</label>
                 <input v-model.number="dissolveSchedule.featuredCadenceDays" type="number" min="1"
-                       class="w-24 text-xs border rounded px-2 py-1" />
+                       class="w-full sm:w-24 text-xs border rounded px-2 py-1" />
               </div>
-              <div class="flex items-center gap-2">
-                <label class="w-36 text-xs text-gray-600 shrink-0">Per cadence</label>
+              <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                <label class="sm:w-36 text-xs text-gray-600 shrink-0">Per cadence</label>
                 <input v-model.number="dissolveSchedule.featuredPerCadence" type="number" min="1"
-                       class="w-24 text-xs border rounded px-2 py-1" />
+                       class="w-full sm:w-24 text-xs border rounded px-2 py-1" />
               </div>
             </div>
 
@@ -685,15 +698,15 @@
                   ({{ dissolveCategoryCounts ? dissolveCategoryCounts.other : '…' }} cToons)
                 </span>
               </p>
-              <div class="flex items-center gap-2">
-                <label class="w-36 text-xs text-gray-600 shrink-0">Cadence (days)</label>
+              <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                <label class="sm:w-36 text-xs text-gray-600 shrink-0">Cadence (days)</label>
                 <input v-model.number="dissolveSchedule.otherCadenceDays" type="number" min="1"
-                       class="w-24 text-xs border rounded px-2 py-1" />
+                       class="w-full sm:w-24 text-xs border rounded px-2 py-1" />
               </div>
-              <div class="flex items-center gap-2">
-                <label class="w-36 text-xs text-gray-600 shrink-0">Per cadence</label>
+              <div class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                <label class="sm:w-36 text-xs text-gray-600 shrink-0">Per cadence</label>
                 <input v-model.number="dissolveSchedule.otherPerCadence" type="number" min="1"
-                       class="w-24 text-xs border rounded px-2 py-1" />
+                       class="w-full sm:w-24 text-xs border rounded px-2 py-1" />
               </div>
             </div>
           </div>
@@ -731,15 +744,15 @@
           <p class="text-xs text-red-500 select-all">User ID: {{ dissolveTarget?.id }}</p>
         </div>
 
-        <div class="mt-4 flex items-center justify-end gap-2">
+        <div class="mt-4 flex items-center justify-end gap-2 [&>button]:flex-1 sm:[&>button]:flex-none sticky bottom-0 bg-white pt-3 pb-1 -mx-4 px-4 sm:mx-0 sm:px-0 sm:static sm:pt-0 sm:pb-0">
           <button
             v-if="dissolvePhase !== 'working'"
-            class="px-3 py-1 text-sm border rounded-md"
+            class="px-4 py-2 sm:px-3 sm:py-1 text-sm border rounded-md"
             @click="closeDissolveModal"
           >{{ dissolvePhase === 'done' ? 'Close' : 'Cancel' }}</button>
           <button
             v-if="dissolvePhase === 'confirm'"
-            class="px-3 py-1 text-sm rounded-md text-white bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300"
+            class="px-4 py-2 sm:px-3 sm:py-1 text-sm rounded-md text-white bg-rose-600 hover:bg-rose-700 disabled:bg-rose-300"
             :disabled="dissolveWorking || !dissolveTarget"
             @click="confirmDissolve"
           >Confirm</button>
@@ -1466,10 +1479,47 @@ async function openVpnInfo(u) {
 
 // Kebab menu state
 const menuOpenId = ref(null)
-function toggleMenu(u) {
-  menuOpenId.value = (menuOpenId.value === u.id ? null : u.id)
+const menuStyle = ref({})
+const menuUser = computed(() => users.value.find(x => x.id === menuOpenId.value) || null)
+const MENU_WIDTH = 192 // matches sm:w-48
+function toggleMenu(u, ev) {
+  if (menuOpenId.value === u.id) return closeMenu()
+  // Desktop/tablet: anchor a fixed popover to the button, flipped/clamped so it
+  // always stays inside the viewport. Phones use the bottom sheet (CSS only).
+  menuStyle.value = {}
+  const btn = ev?.currentTarget
+  if (btn && typeof window !== 'undefined' && window.innerWidth >= 640) {
+    const r = btn.getBoundingClientRect()
+    const vh = window.innerHeight
+    const left = Math.max(8, Math.min(r.right - MENU_WIDTH, window.innerWidth - MENU_WIDTH - 8))
+    const below = vh - r.bottom - 8
+    const above = r.top - 8
+    if (below >= 320 || below >= above) {
+      menuStyle.value = { left: left + 'px', top: r.bottom + 4 + 'px', maxHeight: Math.max(below - 4, 160) + 'px' }
+    } else {
+      menuStyle.value = { left: left + 'px', bottom: vh - r.top + 4 + 'px', maxHeight: Math.max(above - 4, 160) + 'px' }
+    }
+  }
+  menuOpenId.value = u.id
 }
 function closeMenu() { menuOpenId.value = null }
+// The popover is position: fixed, so it would drift away from its button if the
+// page scrolled or resized underneath it. (The phone bottom sheet is unaffected.)
+function onViewportChange(e) {
+  if (e?.target?.closest?.('[role="menu"]')) return
+  if (window.innerWidth >= 640 || e?.type === 'resize') closeMenu()
+}
+watch(menuOpenId, (id) => {
+  if (typeof window === 'undefined') return
+  const fn = id ? 'addEventListener' : 'removeEventListener'
+  window[fn]('scroll', onViewportChange, true)
+  window[fn]('resize', onViewportChange)
+})
+onBeforeUnmount(() => {
+  if (typeof window === 'undefined') return
+  window.removeEventListener('scroll', onViewportChange, true)
+  window.removeEventListener('resize', onViewportChange)
+})
 
 async function makeAdmin(u) {
   try {
