@@ -2,7 +2,7 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { cachedJson } from '@/server/utils/cache'
-import { ogtRequireUser, ogtRequireEnabled, ogtId, ogtPrizeView } from '@/server/utils/ogGtoonTournamentApi'
+import { ogtRequireUser, ogtRequireEnabled, ogtId, ogtPrizeView, ogtResolveStatus } from '@/server/utils/ogGtoonTournamentApi'
 
 export default defineEventHandler(async (event) => {
   const me = await ogtRequireUser(event)
@@ -30,7 +30,8 @@ export default defineEventHandler(async (event) => {
     ])
     const { firstPrizeJson, top8PrizeJson, participantPrizeJson, winner, ...rest } = t
     return {
-      ...rest, optInCount, winnerUsername: winner?.username || null,
+      // What the clock says, not the stored value (the scheduler flips it a few minutes late): see ogtResolveStatus.
+      ...rest, status: await ogtResolveStatus(t), optInCount, winnerUsername: winner?.username || null,
       currentRound: round ? { stage: round.stage, roundNumber: round.roundNumber, dueAt: round.dueAt } : null,
       prizes: { first, top8, participant }
     }

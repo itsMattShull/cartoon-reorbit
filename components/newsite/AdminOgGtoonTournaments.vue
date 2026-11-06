@@ -69,7 +69,7 @@
                   <template v-if="detail.tournament.seedValue"> · bracket seed <code>{{ detail.tournament.seedValue }}</code></template></p>
               </div>
               <div class="flex flex-wrap gap-2">
-                <a class="px-3 py-1 border rounded-md hover:bg-gray-50" :href="`/newsite/gtoons-classic?tab=tournaments&t=${detail.tournament.id}`" target="_blank" rel="noopener">View as player</a>
+                <a class="px-3 py-1 border rounded-md hover:bg-gray-50" :href="`/newsite/gtoons-classic/tournaments/${detail.tournament.id}`" target="_blank" rel="noopener">View as player</a>
                 <button class="px-3 py-1 border rounded-md hover:bg-gray-50" :disabled="busy" @click="recompute">Recompute / advance</button>
                 <button class="px-3 py-1 border rounded-md hover:bg-gray-50" @click="openForm(detail.tournament.id)">Edit</button>
                 <button v-if="!['COMPLETE', 'CANCELLED'].includes(detail.tournament.status)" class="px-3 py-1 border rounded-md text-red-700 border-red-200 hover:bg-red-50" :disabled="busy" @click="cancelT">Cancel tournament</button>

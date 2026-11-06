@@ -4,7 +4,7 @@
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { lockTournamentDeck } from '@/server/utils/ogGtoonTournamentLive'
-import { ogtRequireUser, ogtRequireEnabled, ogtId } from '@/server/utils/ogGtoonTournamentApi'
+import { ogtRequireUser, ogtRequireEnabled, ogtId, ogtResolveStatus } from '@/server/utils/ogGtoonTournamentApi'
 
 export default defineEventHandler(async (event) => {
   const me = await ogtRequireUser(event)
@@ -17,13 +17,7 @@ export default defineEventHandler(async (event) => {
   const now = new Date()
 
   // The cron opens the window a few minutes late; don't make players wait for it.
-  if (t.status === 'DRAFT' && now >= t.optInStartAt && now <= t.optInEndAt) {
-    await prisma.ogGtoonTournament.updateMany({
-      where: { id, status: 'DRAFT' },
-      data: { status: 'OPT_IN_OPEN', nextAnnouncementAt: t.optInStartAt, lastAnnouncementAt: null, finalOptInMidnightAnnouncementSent: false }
-    })
-    t.status = 'OPT_IN_OPEN'
-  }
+  t.status = await ogtResolveStatus(t, now)
   if (t.status !== 'OPT_IN_OPEN' || now > t.optInEndAt) throw createError({ statusCode: 400, statusMessage: 'Opt-in is closed' })
 
   const existing = await prisma.ogGtoonTournamentOptIn.findUnique({ where: { tournamentId_userId: { tournamentId: id, userId: me.id } } })

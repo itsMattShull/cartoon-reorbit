@@ -38,8 +38,14 @@ const HOUR = 3600 * 1000
 function baseUrl() {
   return process.env.PUBLIC_BASE_URL || (process.env.NODE_ENV === 'production' ? 'https://www.cartoonreorbit.com' : 'http://localhost:3000')
 }
+/**
+ * The tournament's own page (opt in/out, your next opponent, standings, and the Start next game button). Every Discord
+ * message about a tournament links here — keep it in step with pages/newsite/gtoons-classic/tournaments/[tid].vue.
+ * (Links sent before this page existed, `/newsite/gtoons-classic?tab=tournaments&t=<id>`, still work: the Tournaments
+ * tab forwards them.)
+ */
 export function getOgTournamentUrl(tournamentId) {
-  return `${baseUrl()}/newsite/gtoons-classic?tab=tournaments&t=${tournamentId}`
+  return `${baseUrl()}/newsite/gtoons-classic/tournaments/${tournamentId}`
 }
 export function formatCentral(date) {
   const dt = DateTime.fromJSDate(new Date(date)).setZone(CENTRAL_TZ)
@@ -101,7 +107,7 @@ async function sendRoundOpenDMs(db, tournamentId, roundId) {
         `🏆 ${tournament.name} — ${label}`,
         `You are paired with ${opp.username || 'your opponent'}.`,
         `• Best of 3 (first to 2 wins). Both of you need to be online to play.${due}`,
-        `• Open the tournament and press Play: ${link}`
+        `• Open your match and press Start next game: ${link}`
       ].join('\n')
     })
     items.push(mk(m.playerA, m.playerB), mk(m.playerB, m.playerA))
@@ -1046,7 +1052,7 @@ export async function notifyOpponentReady(db, { tournamentMatchId, readyUserId }
   await dmUsers(db, [{
     userId: opp.id,
     text: `🎮 ${me.username} is ready to play your ${m.tournament.name} match and is waiting for you. ` +
-      `Open the tournament and press Play: ${getOgTournamentUrl(m.tournament.id)}`
+      `Open your match and press Start next game: ${getOgTournamentUrl(m.tournament.id)}`
   }])
 }
 

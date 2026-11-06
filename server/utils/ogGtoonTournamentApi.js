@@ -7,7 +7,7 @@ import { createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { getOgGtoonsConfig } from '@/server/utils/ogGtoonsConfig'
 import { enqueueOgTournamentJob, bestEffort } from '@/server/utils/queues'
-import { bracketRoundLabel } from '@/server/utils/tournamentCore'
+import { bracketRoundLabel, effectiveOptInStatus } from '@/server/utils/tournamentCore'
 
 /** The signed-in player, read straight from the session (no loopback HTTP). 401/403 otherwise. */
 export async function ogtRequireUser(event) {
@@ -34,6 +34,26 @@ export function ogtId(event) {
   const id = event.context.params?.id
   if (!id || typeof id !== 'string') throw createError({ statusCode: 400, statusMessage: 'Missing tournament id' })
   return id
+}
+
+/**
+ * The status to show (and enforce) for a tournament row `{ id, status, optInStartAt, optInEndAt }`.
+ *
+ * The scheduler opens the opt-in window a few minutes late, and every player-facing read used to return the stored
+ * DRAFT in that gap, so the page said "opt-in hasn't opened" (and offered no button) inside the real window. This
+ * applies the same flip the scheduler would — the identical guarded update, so announcements still go out from the
+ * start time — and returns what the clock says. A window that has run out is reported as closed even if the scheduler
+ * hasn't closed it yet (it still owns that: closing builds the pairings).
+ */
+export async function ogtResolveStatus(t, now = new Date()) {
+  const status = effectiveOptInStatus(t.status, t.optInStartAt, t.optInEndAt, now)
+  if (t.status === 'DRAFT' && status === 'OPT_IN_OPEN') {
+    await prisma.ogGtoonTournament.updateMany({
+      where: { id: t.id, status: 'DRAFT' },
+      data: { status: 'OPT_IN_OPEN', nextAnnouncementAt: t.optInStartAt, lastAnnouncementAt: null, finalOptInMidnightAnnouncementSent: false }
+    })
+  }
+  return status
 }
 
 /** Wakes the worker to score a pairing and build the next round. Best effort: the cron is the net. */

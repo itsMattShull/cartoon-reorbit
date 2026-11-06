@@ -467,6 +467,22 @@ export function checkLockedDeck(snapshot, userId, owned) {
 
 /* ── Time ────────────────────────────────────────────────────────────────────────────────── */
 
+/**
+ * The status a player should SEE, given the clock. The stored status only changes when the scheduler runs, which can be a
+ * few minutes late in either direction, and the page must agree with what the opt-in endpoints will actually accept:
+ *   DRAFT       + inside the opt-in window  -> OPT_IN_OPEN   (the window has opened; the scheduler just hasn't flipped it)
+ *   OPT_IN_OPEN + past the end of the window -> OPT_IN_CLOSED (entry is already refused; pairings are still being made)
+ * Everything else is shown as stored. Display only: closing a window does real work (pairings), which stays the scheduler's.
+ */
+export function effectiveOptInStatus(status, optInStartAt, optInEndAt, now = new Date()) {
+  const t = new Date(now).getTime()
+  const start = new Date(optInStartAt).getTime()
+  const end = new Date(optInEndAt).getTime()
+  if (status === 'DRAFT' && t >= start && t <= end) return 'OPT_IN_OPEN'
+  if (status === 'OPT_IN_OPEN' && t > end) return 'OPT_IN_CLOSED'
+  return status
+}
+
 export function roundDueAt(openedAt, hours) {
   return new Date(new Date(openedAt).getTime() + Math.max(1, Number(hours) || 72) * 3600 * 1000)
 }
