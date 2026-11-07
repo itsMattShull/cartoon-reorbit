@@ -131,7 +131,7 @@
                 v-if="activeUnreadCount > 0"
                 type="button"
                 class="ob-mark-all mb-2 w-full rounded-lg border border-white/15 bg-white/5 text-[11px] font-semibold text-white/70 hover:text-white hover:bg-white/10 transition"
-                @click="markAllRead(activeNotificationList)"
+                @click="markAllRead(activeTab)"
               >
                 Mark all read
               </button>
@@ -427,19 +427,25 @@ const fetchUnreadCount = async () => {
   }
 }
 
-watch([isOpen, activeTab], ([nextOpen, nextTab]) => {
+watch([isOpen, activeTab], ([nextOpen, nextTab], [prevOpen]) => {
   if (!nextOpen) return
   if (nextTab === 'daily') {
     fetchDaily()
-    return
-  }
-  if (nextTab === 'alerts' || nextTab === 'raidboss') {
+  } else if (nextTab === 'alerts' || nextTab === 'raidboss') {
     // Opening the tab deliberately does NOT mark anything read — a stray tap on
     // a phone would otherwise wipe the only signal that something happened.
     fetchAlerts()
     return
+  } else {
+    fetchEvents()
   }
-  fetchEvents()
+  // The Alerts/Raid Boss tab badges (alertUnreadCount/raidUnreadCount below) are computed from
+  // notifications.value, which only fetchAlerts() populates — without this, a player who opens
+  // the drawer on the default Daily tab and never switches away sees both tab badges stuck at 0
+  // no matter how many unread alerts they actually have. Only on the open transition
+  // (!prevOpen), not every Daily<->Events tab switch while already open, to avoid refetching on
+  // every click.
+  if (!prevOpen) fetchAlerts()
 })
 
 const notificationRoute = (n) => {
@@ -489,22 +495,31 @@ const onNotificationClick = async (n) => {
   await markRead([n.id])
 }
 
-// Scoped to whichever tab's list is passed in (Alerts or Raid Boss), so marking one tab's alerts
-// read never silently clears unread badges on the other — a player checking raid alerts
-// shouldn't lose track of an unread auction/trade alert they haven't looked at yet.
-const markAllRead = async (list) => {
+// Scoped to whichever tab is active (Alerts or Raid Boss), so marking one tab's alerts read
+// never silently clears unread badges on the other — a player checking raid alerts shouldn't
+// lose track of an unread auction/trade alert they haven't looked at yet. Sent as a
+// types/excludeTypes-scoped request (not `{ ids }`) so it clears every matching unread row
+// server-side, not just whichever ≤30 are currently loaded in `notifications.value` (GET
+// /api/notifications caps at PAGE_SIZE) — a player with more unread alerts than that could
+// previously click "Mark all read" and still see the badge come right back.
+const markAllRead = async (tab) => {
+  const raidTypes = [...RAID_NOTIFICATION_TYPES]
+  const body = tab === 'raidboss' ? { types: raidTypes } : { excludeTypes: raidTypes }
+  const list = tab === 'raidboss' ? raidNotifications.value : alertNotifications.value
   const now = new Date().toISOString()
-  const ids = (list || []).filter(n => !n.readAt).map(n => n.id)
-  if (!ids.length) return
-  const idSet = new Set(ids)
+  const idSet = new Set(list.filter(n => !n.readAt).map(n => n.id))
   notifications.value.forEach(n => { if (idSet.has(n.id)) n.readAt = now })
-  unreadCount.value = Math.max(0, unreadCount.value - ids.length)
+  unreadCount.value = Math.max(0, unreadCount.value - idSet.size)
   try {
     await $fetch('/api/notifications/read', {
       method: 'POST',
       credentials: 'include',
-      body: { ids }
+      body
     })
+    // The server may have just cleared unread rows beyond what's loaded client-side (only the
+    // newest PAGE_SIZE are ever fetched) — resync the true total rather than trusting the
+    // locally-loaded-rows decrement above.
+    fetchUnreadCount()
   } catch {
     // Put the truth back if the server disagreed.
     fetchAlerts()
@@ -785,7 +800,9 @@ onMounted(() => {
       fetchUnreadCount()
       // Only refresh the visible list too if the player is actually looking at it — otherwise
       // this would silently clear the "stray tap" protection fetchAlerts' own comment describes.
-      if (isOpen.value && activeTab.value === 'alerts') fetchAlerts()
+      // Both tabs share one fetch (see the watch([isOpen, activeTab], ...) below), so a raid-boss
+      // push while the Raid Boss tab is open must refresh it too, not just the Alerts tab.
+      if (isOpen.value && (activeTab.value === 'alerts' || activeTab.value === 'raidboss')) fetchAlerts()
     })
   }
 })

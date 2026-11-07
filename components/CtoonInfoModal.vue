@@ -55,7 +55,7 @@
           :class="activeTab === 'oggtoon' ? 'bg-white text-gray-900' : 'bg-gray-700/60 text-gray-200 hover:bg-gray-700'"
           @click="activeTab = 'oggtoon'"
         >
-          gToon
+          OG gToon
         </button>
         <button
           v-if="ctoon.id"

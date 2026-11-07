@@ -747,13 +747,22 @@ async function applyAfkKicks(io, raid) {
   // Targeted: reaches every open tab the kicked player has (see realtimeNotify.js's own `user:
   // {id}` room convention) with enough to show "you were kicked" and send them off this page —
   // same shape cmoonraid:leftRaid already uses for a voluntary leave, just fired from here instead
-  // of from their own socket handler (there's no "their" socket to call .leave()/.emit() on
-  // directly from inside closeRound).
+  // of from their own socket handler.
   for (const p of kicked) {
     io.local.to(`user:${p.userId}`).emit(EV('kicked'), { raidId: raid.id, reason: 'AFK' })
+    // There's no "their" socket to call .leave() on directly from inside closeRound (unlike
+    // cmoonraid:leave, this doesn't run inside that player's own socket handler) — but
+    // socketsLeave reaches it anyway via the `user:{id}` room every one of their tabs already
+    // joined on connect. Without this, their socket stays in the raid room and keeps receiving
+    // every broadcast below (participantKicked, then every future roundResolved) for a raid their
+    // own client just told them they left, silently flipping the "you were kicked" screen back to
+    // showing the raid continuing the instant the next one arrives.
+    io.in(`user:${p.userId}`).socketsLeave(raidRoom(raid.id))
   }
   // Room-wide: refreshes the roster for whoever's left AND carries `kicked` for the client to show
   // an overlay naming who just got removed — same broadcast() shape every other raid event uses.
+  // The kicked player's own socket already left the room above, so (like cmoonraid:leave) they
+  // never receive this one.
   broadcast(io, raid, EV('participantKicked'), { kicked: kickedPayload })
 
   for (const p of kicked) {

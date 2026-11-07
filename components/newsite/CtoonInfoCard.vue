@@ -77,7 +77,7 @@
           class="ctic-tab"
           :class="{ 'ctic-tab--active': activeTab === 'oggtoon' }"
           @click="activeTab = 'oggtoon'"
-        >gToon</button>
+        >OG gToon</button>
         <button
           v-if="ctoon.id"
           class="ctic-tab"

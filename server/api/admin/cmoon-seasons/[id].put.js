@@ -20,7 +20,14 @@ export default defineEventHandler(async (event) => {
   const id = event.context.params?.id
   const existing = await db.cMoonSeason.findUnique({ where: { id } })
   if (!existing) throw createError({ statusCode: 404, statusMessage: 'Season not found' })
-  const started = existing.startAt.getTime() <= Date.now()
+  const now = Date.now()
+  const started = existing.startAt.getTime() <= now
+  // Distinct from `started`: a season that's already ENDED has an endAt already in the past by
+  // definition, so the "can't set endAt in the past" guard below must not apply to it — otherwise
+  // the edit form (which re-submits the existing endAt unchanged) could never save ANY edit to a
+  // past season, including just fixing its header/blurb. The guard only needs to protect a
+  // CURRENTLY-ongoing season from being retroactively ended early.
+  const alreadyEnded = existing.endAt.getTime() <= now
 
   const body = await readBody(event)
   const parsed = parseSeasonBody(body)
@@ -30,7 +37,7 @@ export default defineEventHandler(async (event) => {
     if (parsed.data.startAt.getTime() !== existing.startAt.getTime()) {
       throw createError({ statusCode: 400, statusMessage: "A season's start date can't change once it has started" })
     }
-    if (parsed.data.endAt.getTime() < Date.now()) {
+    if (!alreadyEnded && parsed.data.endAt.getTime() < now) {
       throw createError({ statusCode: 400, statusMessage: "A started season's end date can't be set in the past" })
     }
   }

@@ -57,11 +57,12 @@ export function useCMoonRaidSocket() {
         currentRaidId.value = null
       }
     })
-    // Targeted the same way as leftRaid above (see applyAfkKicks' own comment in
-    // cmoonRaidSocket.js for why it can't just call socket.leave()/.emit() the way a voluntary
-    // leave does) — this socket WAS just removed from the raid, so it never receives the
-    // room-wide participantKicked broadcast below naming it either. Reuses the same "I'm out,
-    // show why" shape as leftRaid, just with a message the page surfaces through lastError.
+    // Targeted the same way as leftRaid above — applyAfkKicks (cmoonRaidSocket.js) can't call
+    // socket.leave() directly the way a voluntary leave does (it doesn't run inside this player's
+    // own socket handler), but it does remove this socket from the raid room server-side via
+    // socketsLeave before broadcasting, so by the time the room-wide participantKicked broadcast
+    // below goes out, this socket is already gone and never receives it. Reuses the same "I'm
+    // out, show why" shape as leftRaid, just with a message the page surfaces through lastError.
     socket.on('cmoonraid:kicked', (payload) => {
       if (!payload?.raidId || payload.raidId === currentRaidId.value) {
         lastError.value = 'You were kicked from the raid for inactivity.'
