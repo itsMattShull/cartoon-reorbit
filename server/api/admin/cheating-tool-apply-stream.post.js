@@ -1,6 +1,7 @@
 import { defineEventHandler, readBody, getRequestHeader, createError, createEventStream } from 'h3'
 import { prisma } from '@/server/prisma'
 import { logAdminChange, buildSeizureAuditPayload } from '@/server/utils/adminChangeLog'
+import { withdrawPendingTradeOffersForUserCtoon } from '@/server/utils/tradeOffer'
 
 const FALLBACK_RARITY_PRICES = {
   'Common':       100,
@@ -246,6 +247,11 @@ export default defineEventHandler(async (event) => {
       for (const uc of targetCurrentOwned) {
         try {
           await prisma.$transaction(async (tx) => {
+            // A copy seized out from under a still-open trade offer must not leave that offer
+            // PENDING: its stale TradeOfferCtoon row would permanently lock the copy for whoever
+            // ends up owning it next (see withdrawPendingTradeOffersForUserCtoon's own comment).
+            await withdrawPendingTradeOffersForUserCtoon(tx, uc.id)
+
             await tx.userCtoon.update({
               where: { id: uc.id },
               data: { userId: officialId, isTradeable: false }
