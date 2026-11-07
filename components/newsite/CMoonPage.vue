@@ -355,46 +355,29 @@
           </section>
         </div>
 
-        <template v-if="offers.length">
-          <h2 class="cmp-section-title">Offers</h2>
-          <div v-for="o in offers" :key="o.id" class="cmp-offer">
-            <p class="cmp-offer-meta">
-              <span v-if="o.myClaim">You claimed this offer.</span>
-              <span v-else-if="o.status !== 'OPEN'">This offer has closed.</span>
-              <span v-else-if="!eligible">Join this cMoon to claim a reward here.</span>
-              <span v-else-if="o.options.length > 1">Pick one — you'll get {{ o.quantityPerMember }} cop{{ o.quantityPerMember === 1 ? 'y' : 'ies' }}.</span>
-              <span v-else>You'll get {{ o.quantityPerMember }} cop{{ o.quantityPerMember === 1 ? 'y' : 'ies' }}.</span>
-            </p>
-            <div class="cmp-grid">
-              <button
-                v-for="opt in o.options" :key="opt.id"
-                type="button"
-                class="cmp-card cmp-offer-option"
-                :class="{
-                  'cmp-offer-option--picked': o.myClaim && o.myClaim.optionId === opt.id,
-                  'cmp-offer-option--selected': !o.myClaim && offerSelections[o.id] === opt.id,
-                }"
-                :disabled="!!o.myClaim || o.status !== 'OPEN' || !eligible || offerClaiming[o.id]"
-                @click="offerSelections[o.id] = opt.id"
-              >
-                <CtoonImage v-if="opt.kind !== 'PACK'" :ctoon="opt" :alt="opt.name" class="cmp-card-img" loading="lazy" />
-                <img v-else :src="opt.assetPath" :alt="opt.name" class="cmp-card-img" loading="lazy" />
-                <span class="cmp-card-name">{{ opt.name }}</span>
-                <span v-if="o.myClaim && o.myClaim.optionId === opt.id" class="cmp-offer-picked-badge">Your pick</span>
-              </button>
-            </div>
-            <button
-              v-if="!o.myClaim && o.status === 'OPEN' && eligible"
-              type="button"
-              class="cmp-offer-claim-btn"
-              :disabled="!offerSelections[o.id] || offerClaiming[o.id]"
-              @click="claimOffer(o)"
-            >{{ offerClaiming[o.id] ? 'Claiming…' : 'Claim' }}</button>
-            <p v-if="offerErrors[o.id]" class="cmp-offer-error">{{ offerErrors[o.id] }}</p>
-          </div>
-        </template>
+        <button
+          v-if="offers.length"
+          type="button"
+          class="cmp-offers-trigger"
+          @click="showOffersModal = true"
+        >
+          <span>cMoon Offers</span>
+          <span v-if="openUnclaimedOfferCount > 0" class="cmp-offers-badge">{{ openUnclaimedOfferCount }}</span>
+        </button>
       </div>
     </template>
+
+    <CMoonOffersModal
+      v-if="showOffersModal && cmoon"
+      :cmoon-name="cmoon.name"
+      :offers="offers"
+      :eligible="eligible"
+      :selections="offerSelections"
+      :claiming="offerClaiming"
+      :errors="offerErrors"
+      @close="showOffersModal = false"
+      @claim="claimOffer"
+    />
   </div>
 </template>
 
@@ -408,6 +391,7 @@ import { useCMoonRewardModal } from '@/composables/useCMoonRewardModal'
 import { useFullscreenEffect } from '@/composables/useFullscreenEffect'
 import CMoonAffinityLadderModal from '@/components/newsite/CMoonAffinityLadderModal.vue'
 import CMoonRankLadderModal from '@/components/newsite/CMoonRankLadderModal.vue'
+import CMoonOffersModal from '@/components/newsite/CMoonOffersModal.vue'
 import ShortCard from '@/components/newsite/ShortCard.vue'
 
 const route = useRoute()
@@ -456,6 +440,11 @@ const eligible = ref(false)
 const offerSelections = reactive({})
 const offerClaiming = reactive({})
 const offerErrors = reactive({})
+const showOffersModal = ref(false)
+// Badge count on the "cMoon Offers" trigger — only counts offers the viewer could actually act
+// on right now (open, unclaimed, and a member of this cMoon); closed/already-claimed offers never
+// contribute, same as the old inline section's own claim-eligibility gating.
+const openUnclaimedOfferCount = computed(() => offers.value.filter(o => o.status === 'OPEN' && !o.myClaim && eligible.value).length)
 
 // Unclaimed cMoon rank-up rewards (see rank-progress.get.js's unclaimedRankRewards) — keyed by
 // achievementId so multiple pending claims (a lump-sum point jump can unlock more than one tier
@@ -1313,15 +1302,6 @@ onBeforeUnmount(() => {
   font-size: 0.9rem;
 }
 
-.cmp-grid {
-  display: grid;
-  /* auto-fit off the container's own rendered width (see the .cmp-body comment above) — settles
-     into ~6 columns for a 12-item grid on a wide pane, fewer on a narrow one, with no viewport
-     breakpoint to keep in sync. */
-  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
-  gap: 8px;
-}
-
 /* Featured cToons only: fixed-size (not 1fr-stretched) tracks with justify-content:center, so the
    grid reads as a flush, centered block — like the reference layout's 2-row-of-6 — instead of
    stretching cards edge-to-edge and instead of an off-center last row. auto-fill (not auto-fit)
@@ -1385,39 +1365,6 @@ onBeforeUnmount(() => {
   color: var(--cm-text, #ffffff);
   overflow-wrap: anywhere;
   line-height: 1.15;
-}
-
-.cmp-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  background: var(--cm-tile-bg, rgba(255,255,255,0.08));
-  border: none;
-  border-radius: 6px;
-  padding: 8px;
-  cursor: pointer;
-  color: var(--cm-text, #ffffff);
-  font-family: inherit;
-  /* Real touch target on top of whatever internal padding the image adds. */
-  min-height: 44px;
-  box-sizing: border-box;
-}
-@media (hover: hover) and (pointer: fine) {
-  .cmp-card:hover { opacity: 0.85; }
-}
-.cmp-card:focus-visible { outline: 2px solid var(--cm-focus-ring, var(--OrbitLightBlue)); outline-offset: 1px; }
-
-.cmp-card-img {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  object-fit: contain;
-}
-
-.cmp-card-name {
-  font-size: 0.75rem;
-  text-align: center;
-  overflow-wrap: anywhere;
 }
 
 .cmp-leaderboard-select {
@@ -1557,63 +1504,38 @@ onBeforeUnmount(() => {
   .cmp-claim-confirm-btn:not(:disabled):hover { opacity: 0.9; }
 }
 
-.cmp-offer {
-  margin-bottom: 24px;
-}
-
-.cmp-offer-meta {
-  margin: 0 0 8px;
-  font-size: 0.85rem;
-  color: var(--cm-text-muted, rgba(255,255,255,0.6));
-}
-
-.cmp-offer-option {
-  border: 2px solid transparent;
-  position: relative;
-}
-.cmp-offer-option:disabled {
-  cursor: default;
-  opacity: 0.55;
-}
-@media (hover: hover) and (pointer: fine) {
-  .cmp-offer-option:disabled:hover { opacity: 0.55; }
-}
-
-.cmp-offer-option--selected {
-  border-color: var(--cm-focus-ring, var(--OrbitLightBlue));
-  opacity: 1;
-}
-
-.cmp-offer-option--picked {
-  border-color: #22c55e;
-  opacity: 1 !important;
-}
-
-.cmp-offer-picked-badge {
-  font-size: 0.65rem;
-  font-weight: 700;
-  color: #22c55e;
-}
-
-.cmp-offer-claim-btn {
-  margin-top: 10px;
+.cmp-offers-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   min-height: 44px;
-  padding: 0 20px;
-  width: 100%;
+  padding: 0 16px;
   border: none;
-  border-radius: 6px;
-  background: var(--cm-banner, var(--OrbitLightBlue));
-  color: var(--cm-banner-text, #ffffff);
+  border-radius: 8px;
+  background: var(--cm-tile-bg, rgba(255,255,255,0.08));
+  color: var(--cm-text, #ffffff);
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   cursor: pointer;
-}
-.cmp-offer-claim-btn:disabled {
-  opacity: 0.5;
-  cursor: default;
+  font-family: inherit;
 }
 @media (hover: hover) and (pointer: fine) {
-  .cmp-offer-claim-btn:not(:disabled):hover { opacity: 0.9; }
+  .cmp-offers-trigger:hover { opacity: 0.85; }
+}
+.cmp-offers-trigger:focus-visible { outline: 2px solid var(--cm-focus-ring, var(--OrbitLightBlue)); outline-offset: 1px; }
+
+.cmp-offers-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 800;
 }
 
 .cmp-offer-error {

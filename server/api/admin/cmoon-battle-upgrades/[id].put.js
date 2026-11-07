@@ -19,10 +19,11 @@ export default defineEventHandler(async (event) => {
 
   // Changing `stat` on an upgrade players have already bought would silently misattribute every
   // past purchase's HP grant as Stamina (or vice versa) the next time prestige tries to reverse
-  // it (see cmoonPrestige.js's own reset, which trusts the upgrade's CURRENT stat for every past
-  // purchase). Amount/price/purchaseLimit changing after the fact is fine — prestige always
-  // reads today's `amount`, so a later change only affects future purchases and future resets
-  // consistently, never a stale mix of old-vs-new math for the same player.
+  // it (see cmoonPrestige.js's own reset, which trusts each UserCMoonBattleUpgrade row's own
+  // upgrade.stat for every past purchase under it). Amount/price/purchaseLimit changing after the
+  // fact is fine — each purchase stamps its own grantedTotal from amount AT THAT TIME (see that
+  // column's own schema comment), so a later amount change only affects future purchases, never
+  // retroactively changing what a player's past purchases are worth.
   if (parsed.data.stat !== upgrade.stat) {
     const purchaseCount = await db.userCMoonBattleUpgrade.count({ where: { upgradeId: id } })
     if (purchaseCount > 0) {

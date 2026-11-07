@@ -7,6 +7,7 @@ import {
   combinePlayerMaxStamina, computeStaminaAdjustmentForTarget, applySoloCleanseSelfHeal,
   SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, isValidPlayerSubmittedAction,
   isAttack, isBlock, STARTING_STAMINA, pickEffectiveSpecialAttack,
+  pickWeightedSpecialAttack, pickEnemySpecialAttack, enemySpecialAttackRequiredHitStreak,
 } from '../server/utils/cmoonEnemyBattle.js'
 
 const baseEnemyMember = { critChanceAgainstPercent: 0, critChanceFromPercent: 0, maxHp: 5 }
@@ -710,4 +711,103 @@ test('pickEffectiveSpecialAttack: a chosen attack whose playerChoice was toggled
 test('pickEffectiveSpecialAttack: returns null when neither a valid choice nor a team default exists', () => {
   assert.equal(pickEffectiveSpecialAttack(null, null), null)
   assert.equal(pickEffectiveSpecialAttack(toggledOffAttack, null), null)
+})
+
+// ── pickWeightedSpecialAttack / pickEnemySpecialAttack / enemySpecialAttackRequiredHitStreak
+// (per-enemy-member special-attack overrides) ────────────────────────────
+
+test('pickWeightedSpecialAttack: null for an empty/missing list', () => {
+  assert.equal(pickWeightedSpecialAttack([]), null)
+  assert.equal(pickWeightedSpecialAttack(null), null)
+  assert.equal(pickWeightedSpecialAttack(undefined), null)
+})
+
+test('pickWeightedSpecialAttack: a single candidate is always picked regardless of weight', () => {
+  const only = { id: 'a', usePercent: 1 }
+  for (let i = 0; i < 20; i++) assert.equal(pickWeightedSpecialAttack([only]), only)
+})
+
+test('pickWeightedSpecialAttack: a zero/invalid usePercent floors to 1 rather than being unreachable', () => {
+  const zero = { id: 'zero', usePercent: 0 }
+  const negative = { id: 'neg', usePercent: -5 }
+  const nonFinite = { id: 'nan', usePercent: NaN }
+  let sawZero = false, sawNegative = false, sawNonFinite = false
+  for (let i = 0; i < 500; i++) {
+    const picked = pickWeightedSpecialAttack([zero, negative, nonFinite])
+    if (picked === zero) sawZero = true
+    if (picked === negative) sawNegative = true
+    if (picked === nonFinite) sawNonFinite = true
+  }
+  assert.equal(sawZero, true)
+  assert.equal(sawNegative, true)
+  assert.equal(sawNonFinite, true)
+})
+
+test('pickWeightedSpecialAttack: a much heavier weight is picked far more often over many rolls', () => {
+  const heavy = { id: 'heavy', usePercent: 999 }
+  const light = { id: 'light', usePercent: 1 }
+  let heavyCount = 0
+  const trials = 1000
+  for (let i = 0; i < trials; i++) {
+    if (pickWeightedSpecialAttack([heavy, light]) === heavy) heavyCount++
+  }
+  assert.ok(heavyCount > trials * 0.9, `expected the heavy candidate to dominate, got ${heavyCount}/${trials}`)
+})
+
+const factionAttack = { id: 'faction1', name: 'Faction Special', requiredHitStreak: 3 }
+const overrideA = { id: 'ov-a', name: 'Override A', requiredHitStreak: 2 }
+const overrideB = { id: 'ov-b', name: 'Override B', requiredHitStreak: 5 }
+
+test('pickEnemySpecialAttack: falls back to the faction attack when the member has no overrides', () => {
+  const member = { faction: { specialAttack: factionAttack }, specialAttacks: [] }
+  assert.equal(pickEnemySpecialAttack(member), factionAttack)
+  assert.equal(pickEnemySpecialAttack({ faction: { specialAttack: factionAttack } }), factionAttack)
+})
+
+test('pickEnemySpecialAttack: returns null when neither overrides nor a faction attack exist', () => {
+  assert.equal(pickEnemySpecialAttack({ faction: {} }), null)
+  assert.equal(pickEnemySpecialAttack({}), null)
+  assert.equal(pickEnemySpecialAttack(null), null)
+})
+
+test('pickEnemySpecialAttack: member-level overrides ALWAYS win over the faction attack when any are configured', () => {
+  const member = {
+    faction: { specialAttack: factionAttack },
+    specialAttacks: [{ usePercent: 100, specialAttack: overrideA }],
+  }
+  assert.equal(pickEnemySpecialAttack(member).id, overrideA.id)
+})
+
+test('pickEnemySpecialAttack: with several overrides, both can be picked across many rolls', () => {
+  const member = {
+    faction: { specialAttack: factionAttack },
+    specialAttacks: [
+      { usePercent: 50, specialAttack: overrideA },
+      { usePercent: 50, specialAttack: overrideB },
+    ],
+  }
+  const seen = new Set()
+  for (let i = 0; i < 200; i++) seen.add(pickEnemySpecialAttack(member).id)
+  assert.ok(seen.has(overrideA.id))
+  assert.ok(seen.has(overrideB.id))
+})
+
+test('enemySpecialAttackRequiredHitStreak: falls back to the faction attack\'s own threshold with no overrides', () => {
+  assert.equal(enemySpecialAttackRequiredHitStreak({ faction: { specialAttack: factionAttack } }), 3)
+})
+
+test('enemySpecialAttackRequiredHitStreak: falls back to HIT_STREAK_THRESHOLD when nothing at all is configured', () => {
+  assert.equal(enemySpecialAttackRequiredHitStreak({ faction: {} }), HIT_STREAK_THRESHOLD)
+  assert.equal(enemySpecialAttackRequiredHitStreak({}), HIT_STREAK_THRESHOLD)
+})
+
+test('enemySpecialAttackRequiredHitStreak: with overrides, uses the LOWEST requiredHitStreak among them, independent of the faction attack', () => {
+  const member = {
+    faction: { specialAttack: factionAttack }, // requiredHitStreak: 3
+    specialAttacks: [
+      { usePercent: 50, specialAttack: overrideA }, // requiredHitStreak: 2
+      { usePercent: 50, specialAttack: overrideB }, // requiredHitStreak: 5
+    ],
+  }
+  assert.equal(enemySpecialAttackRequiredHitStreak(member), 2)
 })

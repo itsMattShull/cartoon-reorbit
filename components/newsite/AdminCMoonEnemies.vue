@@ -976,6 +976,48 @@
             >{{ windUpMoveSaving ? 'Adding…' : 'Add wind-up move' }}</button>
           </div>
 
+          <!-- Special-attack overrides (CMoonEnemyMemberSpecialAttack) — give THIS member its own
+               pool of one or more special attacks, independent of its faction's single shared
+               specialAttack. Only for an already-created member, same "add one, remove one" shape
+               as the prizes/wind-up blocks above. Works for a solo enemy or a raid boss alike. -->
+          <div v-if="memberForm.id" class="pt-2 border-t space-y-2">
+            <h4 class="font-semibold text-xs">Special attack overrides</h4>
+            <p class="text-[10px] text-gray-500">
+              When this member has one or more rows here, they ALWAYS replace its faction's shared special
+              attack — a fresh weighted pick happens every time this member's hit-streak charges up, so with
+              several rows configured it can fire a different one each time. With no rows here, this member
+              keeps using its faction's own special attack exactly as before.
+            </p>
+            <div v-if="editingMemberSpecialAttacks.length" class="space-y-1">
+              <div v-for="s in editingMemberSpecialAttacks" :key="s.id" class="flex items-center gap-2 text-[11px] bg-gray-50 rounded px-2 py-1">
+                <span class="flex-1 min-w-0 break-words">{{ s.specialAttack?.name || 'Unknown attack' }} — weight {{ s.usePercent }}</span>
+                <button type="button" class="text-red-600 hover:underline flex-shrink-0" :disabled="deletingMemberSpecialAttackId === s.id" @click="removeMemberSpecialAttack(s)">
+                  {{ deletingMemberSpecialAttackId === s.id ? 'Removing…' : 'Remove' }}
+                </button>
+              </div>
+            </div>
+            <p v-else class="text-gray-500">No overrides yet — this member uses its faction's special attack.</p>
+
+            <p v-if="memberSpecialAttackFormError" class="text-red-600">{{ memberSpecialAttackFormError }}</p>
+            <div class="flex gap-2 flex-wrap items-end">
+              <div class="flex-1 min-w-[160px]">
+                <label class="block text-[11px] font-medium mb-1">Special attack</label>
+                <select v-model="memberSpecialAttackForm.specialAttackId" class="w-full border rounded px-2 py-1">
+                  <option value="">Select…</option>
+                  <option v-for="a in specialAttacks" :key="a.id" :value="a.id">{{ a.name }}</option>
+                </select>
+              </div>
+              <div class="w-28 flex-shrink-0">
+                <label class="block text-[11px] font-medium mb-1">Weight (1-100)</label>
+                <input v-model.number="memberSpecialAttackForm.usePercent" type="number" min="1" max="100" class="w-full border rounded px-2 py-1" />
+              </div>
+              <button
+                type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                :disabled="memberSpecialAttackSaving" @click="addMemberSpecialAttack"
+              >{{ memberSpecialAttackSaving ? 'Adding…' : 'Add override' }}</button>
+            </div>
+          </div>
+
           <!-- Member taunts (CMoonEnemyMemberTaunt) — this member's own unique taunt pool, merged
                with its faction's shared pool at battle time (see mergeTauntPools). Only for an
                already-created member, same shape as the faction taunts block above. -->
@@ -1793,6 +1835,7 @@ const startingRaidPreviewId = ref('')
 const editingMemberHasBattles = ref(false)
 const editingMemberRewards = ref([])
 const editingMemberWindUpMoves = ref([])
+const editingMemberSpecialAttacks = ref([])
 const memberPendingFile = ref(null)
 const memberPendingFilePreviewUrl = ref(null)
 const memberUploadingImage = ref(false)
@@ -1902,8 +1945,10 @@ function resetMemberForm() {
   editingMemberHasBattles.value = false
   editingMemberRewards.value = []
   editingMemberWindUpMoves.value = []
+  editingMemberSpecialAttacks.value = []
   resetRewardForm()
   resetWindUpMoveForm()
+  resetMemberSpecialAttackForm()
   autoBalanceResult.value = null
   autoBalanceError.value = ''
   Object.assign(memberForm, emptyMemberForm())
@@ -1956,6 +2001,7 @@ function startEditMember(m) {
   editingMemberHasBattles.value = !!m.hasBattles
   editingMemberRewards.value = m.rewards || []
   editingMemberWindUpMoves.value = m.windUpMoves || []
+  editingMemberSpecialAttacks.value = m.specialAttacks || []
 }
 
 function onMemberFile(ev) {
@@ -2352,6 +2398,58 @@ const windUpMoveForm = reactive(emptyWindUpMoveForm())
 function resetWindUpMoveForm() {
   windUpMoveFormError.value = ''
   Object.assign(windUpMoveForm, emptyWindUpMoveForm())
+}
+
+// ── Special-attack overrides (per-member, add/remove one row at a time) — same shape as the
+// rewards/wind-up blocks above, see rewards' own header comment for why editing a row is "remove
+// and re-add" instead of in-place. ───────────────────────────────────────────────────────────
+const memberSpecialAttackSaving = ref(false)
+const memberSpecialAttackFormError = ref('')
+const deletingMemberSpecialAttackId = ref('')
+
+const emptyMemberSpecialAttackForm = () => ({ specialAttackId: '', usePercent: 100 })
+const memberSpecialAttackForm = reactive(emptyMemberSpecialAttackForm())
+
+function resetMemberSpecialAttackForm() {
+  memberSpecialAttackFormError.value = ''
+  Object.assign(memberSpecialAttackForm, emptyMemberSpecialAttackForm())
+}
+
+async function addMemberSpecialAttack() {
+  memberSpecialAttackFormError.value = ''
+  if (!memberSpecialAttackForm.specialAttackId) { memberSpecialAttackFormError.value = 'Pick a special attack.'; return }
+  const usePercent = Math.trunc(Number(memberSpecialAttackForm.usePercent)) || 100
+  if (usePercent < 1 || usePercent > 100) { memberSpecialAttackFormError.value = 'Weight must be between 1 and 100.'; return }
+  memberSpecialAttackSaving.value = true
+  try {
+    await $fetch(`/api/admin/cmoon-enemy-members/${memberForm.id}/special-attacks`, {
+      method: 'POST',
+      body: { specialAttackId: memberSpecialAttackForm.specialAttackId, usePercent },
+    })
+    resetMemberSpecialAttackForm()
+    await load()
+    const fresh = members.value.find(m => m.id === memberForm.id)
+    if (fresh) editingMemberSpecialAttacks.value = fresh.specialAttacks || []
+  } catch (e) {
+    memberSpecialAttackFormError.value = e?.data?.statusMessage || 'Failed to add override'
+  } finally {
+    memberSpecialAttackSaving.value = false
+  }
+}
+
+async function removeMemberSpecialAttack(s) {
+  if (!confirm('Remove this special-attack override?')) return
+  deletingMemberSpecialAttackId.value = s.id
+  try {
+    await $fetch(`/api/admin/cmoon-enemy-member-special-attacks/${s.id}`, { method: 'DELETE' })
+    await load()
+    const fresh = members.value.find(m => m.id === memberForm.id)
+    if (fresh) editingMemberSpecialAttacks.value = fresh.specialAttacks || []
+  } catch (e) {
+    loadError.value = e?.data?.statusMessage || 'Failed to remove override'
+  } finally {
+    deletingMemberSpecialAttackId.value = ''
+  }
 }
 
 // ── Member taunts (CMoonEnemyMemberTaunt) — this member's own unique taunt pool, merged with its

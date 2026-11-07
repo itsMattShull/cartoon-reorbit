@@ -78,12 +78,12 @@ import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from '.
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 import { announceCMoonRaidBoss, resolveCMoonRaidDiscordChannelId, sendCMoonTeamUpdate, startThreadFromMessage } from './discord.js'
 import { getActiveBossLoreRiddle } from './cmoonRiddle.js'
-import { notifyCMoonRaidLobbyOpened } from './notifications.js'
+import { notifyCMoonRaidLobbyOpened, notifyCMoonRaidKickedAfk } from './notifications.js'
 import { pushUserNotifications } from './realtimeNotify.js'
 import {
   buildGrantableReward, isValidPlayerSubmittedAction, rollEnemyAction, rollEnemyRewards, PLAYER_MAX_HP,
   SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, mergeTauntPools,
-  pickEffectiveSpecialAttack, SPECIAL_ATTACK_SELECT,
+  pickEffectiveSpecialAttack, SPECIAL_ATTACK_SELECT, pickWeightedSpecialAttack,
 } from './cmoonEnemyBattle.js'
 import { resolveMemberSoundPaths, RAID_ROUND_LIMIT_MIN, RAID_ROUND_LIMIT_MAX } from './cmoonEnemy.js'
 import { markEnemyOfferAccepted } from './cmoonEnemyAnalytics.js'
@@ -162,6 +162,12 @@ const REWARD_METHOD = 'CMOON_ENEMY_RAID_WIN'
  *   enemySpecialAttack,   // same shape, from enemyMember.faction.specialAttack, or null — NEVER
  *                         // sent to a client in advance (see publicRaidView), same "don't spoil
  *                         // the enemy's kit" stance the solo battle already takes.
+ *   enemySpecialAttackCandidates, // this boss's OWN member-level overrides (see
+ *                         // CMoonEnemyMemberSpecialAttack), pre-flattened to [{ ...attack,
+ *                         // usePercent }]. When non-empty, ALWAYS used instead of enemySpecialAttack
+ *                         // above (pickRaidEnemySpecialAttack) — a fresh weighted roll each time
+ *                         // the boss's streak fires, so a boss with several rows can fire a
+ *                         // different one each time rather than always the same.
  *   enemyHitStreak,       // the boss's own SHARED streak — advances the instant its one rolled
  *                         // action lands on at least one alive participant, resets otherwise.
  *   partyAtkBonus,        // PERMANENT net damage modifier EVERY participant's own landed hit gets,
@@ -596,6 +602,10 @@ function addParticipant(raid, { userId, username, isInitiator, maxHp, profile = 
     // no team snapshot yet, so publicParticipantTeam shows no team rather than guessing one.
     pendingJoin: !!pendingJoin,
     isInitiator: !!isInitiator, pendingAction: null, joinedAt: Date.now(),
+    // Consecutive ROUNDS (not actions) this participant has been auto-filled rather than
+    // submitting their own action — see closeRound's own AFK-tracking comment. Reset to 0 the
+    // instant they act for real; 4 in a row triggers applyAfkKicks.
+    consecutiveAfkRounds: 0,
     hitStreak: 0, specialCharged: false,
     poisonAmount: 0, poisonTurnsRemaining: 0,
     cMoonId: null, cMoonName: null, cMoonColor: null, cMoonAvatarPath: null, isCaptain: false,
@@ -686,6 +696,72 @@ function aliveParticipants(raid) {
 function allActed(raid) {
   const alive = aliveParticipants(raid)
   return alive.length > 0 && alive.every(p => p.pendingAction)
+}
+
+// Raid-side mirrors of pickEnemySpecialAttack/enemySpecialAttackRequiredHitStreak in
+// cmoonEnemyBattle.js — same "member-level overrides always win, fresh weighted roll per fire"
+// design, just reading from the in-memory raid object's own snapshot (raid.enemySpecialAttack /
+// raid.enemySpecialAttackCandidates, both set once at cmoonraid:start from the boss's faction and
+// CMoonEnemyMemberSpecialAttack rows respectively) rather than a live Prisma relation — a raid
+// already snapshots everything else about its boss onto the in-memory object instead of
+// re-querying mid-fight, and this follows the same shape for consistency with cmoonEnemyBattle.js's
+// own pair rather than duplicating their logic inline here.
+function raidEnemySpecialAttackThreshold(raid) {
+  if (raid.enemySpecialAttackCandidates?.length) {
+    return Math.min(...raid.enemySpecialAttackCandidates.map(c => Number(c.requiredHitStreak) || HIT_STREAK_THRESHOLD))
+  }
+  return raid.enemySpecialAttack?.requiredHitStreak ?? HIT_STREAK_THRESHOLD
+}
+function pickRaidEnemySpecialAttack(raid) {
+  if (raid.enemySpecialAttackCandidates?.length) return pickWeightedSpecialAttack(raid.enemySpecialAttackCandidates)
+  return raid.enemySpecialAttack || null
+}
+
+// How many consecutive ROUNDS of being auto-filled (see closeRound's own afkThisRound tracking)
+// gets a participant kicked outright — never SPECIAL_ACTION, never a choice they made, just the
+// deadline straggler fallback, round after round after round.
+const AFK_KICK_ROUNDS = 4
+
+// Removes anyone who's been AFK for AFK_KICK_ROUNDS straight rounds — no rewards (they're deleted
+// from raid.participants before resolveCMoonRaidOutcome ever reads participantIds), a targeted
+// notice to the kicked player, and a room-wide notice for whoever's left. Mirrors
+// cmoonraid:leave's own initiator-handoff logic (promote the earliest remaining joiner) for the
+// case where the kicked player was the current leader — but unlike a voluntary leave, this can
+// fire mid-IN_PROGRESS-combat, which cmoonraid:leave itself is never allowed to touch.
+async function applyAfkKicks(io, raid) {
+  const kicked = aliveParticipants(raid).filter(p => (p.consecutiveAfkRounds || 0) >= AFK_KICK_ROUNDS)
+  if (!kicked.length) return
+
+  for (const p of kicked) {
+    raid.participants.delete(p.userId)
+    if (raidByUser.get(p.userId) === raid.id) raidByUser.delete(p.userId)
+
+    if (p.isInitiator && raid.participants.size) {
+      const successor = Array.from(raid.participants.values()).sort((a, b) => a.joinedAt - b.joinedAt)[0]
+      successor.isInitiator = true
+      raid.initiatorUsername = successor.username
+    }
+  }
+
+  const kickedPayload = kicked.map(p => ({ userId: p.userId, username: p.username }))
+  // Targeted: reaches every open tab the kicked player has (see realtimeNotify.js's own `user:
+  // {id}` room convention) with enough to show "you were kicked" and send them off this page —
+  // same shape cmoonraid:leftRaid already uses for a voluntary leave, just fired from here instead
+  // of from their own socket handler (there's no "their" socket to call .leave()/.emit() on
+  // directly from inside closeRound).
+  for (const p of kicked) {
+    io.local.to(`user:${p.userId}`).emit(EV('kicked'), { raidId: raid.id, reason: 'AFK' })
+  }
+  // Room-wide: refreshes the roster for whoever's left AND carries `kicked` for the client to show
+  // an overlay naming who just got removed — same broadcast() shape every other raid event uses.
+  broadcast(io, raid, EV('participantKicked'), { kicked: kickedPayload })
+
+  for (const p of kicked) {
+    notifyCMoonRaidKickedAfk(db, { userId: p.userId, enemyName: raid.enemyName }).catch(() => {})
+  }
+  pushUserNotifications(io, kicked.map(p => p.userId))
+
+  fireSync(raid.id, raid)
 }
 
 // The call-to-arms thread (once created) is where every later raid post goes — keeps the
@@ -809,7 +885,24 @@ async function closeRound(io, raid) {
     // A straggler who never acted before the deadline is auto-filled with a uniform-random
     // action (see this file's own header comment) so they can never freeze the round forever.
     // Never SPECIAL_ACTION — only an explicit cmoonraid:action submission can choose that.
-    for (const p of alive) if (!p.pendingAction) p.pendingAction = rollEnemyAction()
+    // Tracked here (afkThisRound) rather than inferred later — p.pendingAction is overwritten
+    // with the real action immediately below, and cleared to null further down in this same
+    // function, so "were they auto-filled THIS round" has no other record once that happens.
+    const afkThisRound = new Set()
+    for (const p of alive) {
+      if (!p.pendingAction) {
+        p.pendingAction = rollEnemyAction()
+        afkThisRound.add(p.userId)
+      }
+    }
+    // Consecutive-round AFK streak (see applyAfkKicks below) — bumped for whoever was just
+    // auto-filled above, reset for everyone else alive this round. A participant who submits a
+    // real action every round never accumulates one; a knocked-out participant stops being
+    // tracked at all (they're excluded from `alive`), same as the solo battle never penalizing a
+    // player for not acting once they're already out.
+    for (const p of alive) {
+      p.consecutiveAfkRounds = afkThisRound.has(p.userId) ? (p.consecutiveAfkRounds || 0) + 1 : 0
+    }
 
     const specialEvents = []
     // REFLECT_DAMAGE/SIPHON_HEALTH bookkeeping for THIS round only — a player cast of either
@@ -993,13 +1086,18 @@ async function closeRound(io, raid) {
     // already uses for the enemy side. ─────────────────────────────────────────────────────────
     const bossLandedAHit = perParticipant.some(r => r.playerHit)
     raid.enemyHitStreak = bossLandedAHit ? raid.enemyHitStreak + 1 : 0
-    const enemyRequiredHitStreak = raid.enemySpecialAttack?.requiredHitStreak ?? HIT_STREAK_THRESHOLD
-    if (raid.enemyHitStreak >= enemyRequiredHitStreak && raid.enemySpecialAttack) {
+    const enemyRequiredHitStreak = raidEnemySpecialAttackThreshold(raid)
+    const hasAnyEnemySpecial = !!(raid.enemySpecialAttack || raid.enemySpecialAttackCandidates?.length)
+    if (raid.enemyHitStreak >= enemyRequiredHitStreak && hasAnyEnemySpecial) {
       raid.enemyHitStreak = 0
+      // A fresh weighted pick among the boss's own member-level overrides when it has any (see
+      // pickRaidEnemySpecialAttack above), falling back to its faction's single shared attack
+      // otherwise — can fire a DIFFERENT attack than last time even within the same raid.
+      const effectiveEnemySpecialAttack = pickRaidEnemySpecialAttack(raid)
       // Re-reads `alive` from the Map rather than the stale array captured above — a participant
       // this round's own DAMAGE_OPPONENT/lane exchange just knocked out must not also be hit by
       // the boss's bonus effect this same round (they're already down).
-      applyRaidSpecialAttack(raid, aliveParticipants(raid), raid.enemySpecialAttack, { side: 'ENEMY' }, specialEvents, { roundInfo, partyShielded })
+      applyRaidSpecialAttack(raid, aliveParticipants(raid), effectiveEnemySpecialAttack, { side: 'ENEMY' }, specialEvents, { roundInfo, partyShielded })
     }
 
     // ── 4. Wind-up telegraph payoff — if this round telegraphed a lane (see openRound), check
@@ -1033,7 +1131,14 @@ async function closeRound(io, raid) {
       ...(windUpBonus ? { windUpBonus } : {}),
     })
 
-    const everyoneDown = Array.from(raid.participants.values()).every(p => !!p.knockedOutAt)
+    // AFK kicks happen AFTER this round's own log/broadcast data is built (above) but BEFORE the
+    // everyoneDown/outcome checks below — a kicked participant's last auto-moved action still
+    // shows up in THIS round's reveal (they did act, just not by choice), but they're gone from
+    // raid.participants by the time win/loss/abandon is decided, so they're excluded from
+    // `participantIds` in resolveCMoonRaidOutcome and never get rewards for this win.
+    await applyAfkKicks(io, raid)
+
+    const everyoneDown = raid.participants.size > 0 && Array.from(raid.participants.values()).every(p => !!p.knockedOutAt)
     const nextRoundNumber = raid.roundNumber + 1
 
     broadcast(io, raid, EV('roundResolved'), {
@@ -1046,7 +1151,13 @@ async function closeRound(io, raid) {
       sendCMoonTeamUpdate(raidDiscordPostTarget(raid), formatRaidRoundMessage(raid, { enemyDamageDealt, perParticipant, specialEvents }))
     }
 
-    if (raid.enemyHpRemaining <= 0) {
+    // AFK kicks can empty the party outright (every remaining alive participant kicked the same
+    // round — including the solo-AFK case of a single participant). `everyoneDown` is already
+    // false here (participants.size === 0 short-circuits it above), so without this check an
+    // empty party would otherwise fall through to openRound and keep "fighting" with nobody left.
+    if (raid.participants.size === 0) {
+      await resolveCMoonRaidOutcome(io, raid, raid.enemyHpRemaining <= 0 ? 'WIN' : 'ABANDONED')
+    } else if (raid.enemyHpRemaining <= 0) {
       await resolveCMoonRaidOutcome(io, raid, 'WIN')
     } else if (everyoneDown) {
       await resolveCMoonRaidOutcome(io, raid, 'LOSS')
@@ -1303,7 +1414,8 @@ export async function restoreCMoonRaids() {
   for (const [raidId, raid] of restored.entries()) {
     raid.participants = new Map(raid.participants.map(p => ([
       p.userId, {
-        hitStreak: 0, specialCharged: false, isCaptain: false, poisonAmount: 0, poisonTurnsRemaining: 0, ...p,
+        hitStreak: 0, specialCharged: false, isCaptain: false, poisonAmount: 0, poisonTurnsRemaining: 0,
+        consecutiveAfkRounds: 0, ...p,
         // A snapshot from before cross-cMoon raids has no per-participant special; every member
         // was then on the initiator's cMoon, so theirs IS raid.cMoonSpecialAttack.
         specialAttack: 'specialAttack' in p ? p.specialAttack : (raid.cMoonSpecialAttack ?? null),
@@ -1333,6 +1445,10 @@ export async function restoreCMoonRaids() {
     // for the rest of the raid rather than just... not having specials).
     raid.cMoonSpecialAttack ??= null
     raid.enemySpecialAttack ??= null
+    // Predates per-member special-attack overrides -> [] is the correct backfill (an old
+    // snapshot's boss never had any CMoonEnemyMemberSpecialAttack rows in the first place, so it
+    // keeps falling back to raid.enemySpecialAttack exactly as it did before this feature existed).
+    raid.enemySpecialAttackCandidates ??= []
     raid.enemyHitStreak ??= 0
     raid.partyAtkBonus ??= 0
     raid.enemyAtkBonus ??= 0
@@ -1427,6 +1543,9 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
           // This member's OWN unique taunts (see CMoonEnemyMemberTaunt) — merged with the
           // faction's shared pool above by mergeTauntPools.
           taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+          // This member's OWN special-attack overrides — when any exist, they ALWAYS win over the
+          // faction's shared specialAttack above (see pickRaidEnemySpecialAttack).
+          specialAttacks: { include: { specialAttack: true }, orderBy: { sortOrder: 'asc' } },
         },
       })
       if (!enemyMember || !enemyMember.active || !enemyMember.faction.active) {
@@ -1519,6 +1638,13 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         // means and cmoonEnemyRaid.js's header comment for why every effect here is party-wide.
         cMoonSpecialAttack: cMoon.specialAttack || null,
         enemySpecialAttack: enemyMember.faction?.specialAttack || null,
+        // This boss's OWN configured overrides, pre-flattened to the { ...attack, usePercent }
+        // shape pickWeightedSpecialAttack expects — [] for every boss with none configured (every
+        // one that existed before this feature shipped), which keeps falling back to
+        // enemySpecialAttack above exactly as before. See pickRaidEnemySpecialAttack's own comment.
+        enemySpecialAttackCandidates: (enemyMember.specialAttacks || [])
+          .filter(r => r.specialAttack)
+          .map(r => ({ ...r.specialAttack, usePercent: r.usePercent })),
         enemyHitStreak: 0, partyAtkBonus: 0, enemyAtkBonus: 0,
         partyAtkRaiseAmount: 0, partyAtkRaiseTurnsRemaining: 0,
         enemyAtkRaiseAmount: 0, enemyAtkRaiseTurnsRemaining: 0,
@@ -1988,8 +2114,9 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       // The whole party can't act at all this round (see raid.partyParalyzedTurns's own shape
       // comment) — including firing an already-charged special, same guard the solo battle has
       // for its own paralyzed player. The charge itself is untouched so it's still there once
-      // paralysis wears off.
-      if (raid.partyParalyzedTurns > 0) {
+      // paralysis wears off. CLEANSE_SELF is exempt — its entire job is curing this paralysis,
+      // so blocking it exactly while paralyzed would make it permanently unreachable.
+      if (raid.partyParalyzedTurns > 0 && p.specialAttack?.effectType !== 'CLEANSE_SELF') {
         return socket.emit(EV('error'), { message: `Your party is paralyzed and can't act for ${raid.partyParalyzedTurns} more round(s)` })
       }
     }

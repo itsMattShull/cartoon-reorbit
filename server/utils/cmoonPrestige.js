@@ -151,31 +151,44 @@ export async function prestigeUser(userId, newCMoonId) {
   const moveResult = await reassignUserCMoon(userId, newCMoonId)
 
   // Battle upgrades bought from the cMart's "Upgrades" tab (CMoonBattleUpgrade) are the ONE part
-  // of cMoonHpAdjustment/cMoonStaminaAdjustment that prestige resets — read right before the
-  // transaction below (not earlier) so a purchase that lands in the gap between this function's
-  // first read and here is still caught; a manual grant from the separate "Manage User HP &
-  // Stamina" admin tool is untouched either way, since it was never tracked here. Reads each
-  // purchase row's upgrade for its CURRENT amount/stat (see sumBattleUpgradeStatTotals's own
-  // comment on why that's deliberate, not frozen-at-purchase-time).
-  const battleUpgradePurchases = await prisma.userCMoonBattleUpgrade.findMany({
-    where: { userId },
-    select: { timesPurchased: true, upgrade: { select: { stat: true, amount: true } } },
-  })
-  const { hpTotal, staminaTotal } = sumBattleUpgradeStatTotals(
-    battleUpgradePurchases.map(p => ({ stat: p.upgrade.stat, amount: p.upgrade.amount, timesPurchased: p.timesPurchased }))
-  )
+  // of cMoonHpAdjustment/cMoonStaminaAdjustment that prestige resets; a manual grant from the
+  // separate "Manage User HP & Stamina" admin tool is untouched either way, since it was never
+  // tracked here. Reads each purchase row's own grantedTotal (see that column's own schema
+  // comment) — NOT the upgrade's current amount, which may have been edited since any of these
+  // purchases happened.
+  //
+  // Bumped together with the prestige level/log/upgrade-row-delete below so a failure can never
+  // leave one without the other (e.g. a level bump with no log row to show for it, invisible to
+  // support trying to reconcile a discrepancy). Deliberately NOT caught/swallowed: reassignUserCMoon
+  // above already committed its own move (points reset, new cMoon), so a failure here would
+  // otherwise let this function return a false "success" — prizes granted, a prestigeLevel the
+  // response claims but never actually wrote — instead of surfacing the real error. A player who
+  // hits this rare failure is left moved-but-not-leveled-up, the same gap every other
+  // reassignUserCMoon caller already accepts (its own transaction boundary is separate from
+  // callers' follow-up work); worth a support look if it ever shows up in the server logs, not a
+  // silent false-positive to the player.
+  //
+  // The battleUpgradePurchases read happens INSIDE this same transaction, as a SELECT ... FOR
+  // UPDATE, immediately before the decrement and delete that depend on it — not as a plain
+  // pre-transaction query (an ordinary SELECT never blocks on another transaction's uncommitted
+  // write under Postgres's default READ COMMITTED isolation, so that only narrowed the race
+  // window rather than closing it). FOR UPDATE takes a row lock, so a purchase
+  // (cmoonBattleUpgradeOps.js's own INSERT ... ON CONFLICT DO UPDATE) still in flight when this
+  // transaction reaches here makes this SELECT block until that purchase commits or rolls back —
+  // guaranteeing the totals below are computed from the row's truly-latest committed state, never
+  // a snapshot that a concurrent purchase is about to invalidate out from under the delete further
+  // down.
+  const [, prestigeLog] = await prisma.$transaction(async tx => {
+    const battleUpgradePurchases = await tx.$queryRaw`
+      SELECT u."grantedTotal" AS "grantedTotal", c.stat AS stat
+      FROM "UserCMoonBattleUpgrade" u
+      JOIN "CMoonBattleUpgrade" c ON c.id = u."upgradeId"
+      WHERE u."userId" = ${userId}
+      FOR UPDATE OF u
+    `
+    const { hpTotal, staminaTotal } = sumBattleUpgradeStatTotals(battleUpgradePurchases)
 
-  // Bumped together so a failure here can never leave one without the other (e.g. a level bump
-  // with no log row to show for it, invisible to support trying to reconcile a discrepancy).
-  // Deliberately NOT caught/swallowed: reassignUserCMoon above already committed its own move
-  // (points reset, new cMoon), so a failure here would otherwise let this function return a
-  // false "success" — prizes granted, a prestigeLevel the response claims but never actually
-  // wrote — instead of surfacing the real error. A player who hits this rare failure is left
-  // moved-but-not-leveled-up, the same gap every other reassignUserCMoon caller already accepts
-  // (its own transaction boundary is separate from callers' follow-up work); worth a support
-  // look if it ever shows up in the server logs, not a silent false-positive to the player.
-  const [, prestigeLog] = await prisma.$transaction([
-    prisma.user.update({
+    const userUpdate = await tx.user.update({
       where: { id: userId },
       data: {
         prestigeLevel: newLevel, lastPrestigedAt: new Date(),
@@ -186,8 +199,8 @@ export async function prestigeUser(userId, newCMoonId) {
         ...(hpTotal ? { cMoonHpAdjustment: { decrement: hpTotal } } : {}),
         ...(staminaTotal ? { cMoonStaminaAdjustment: { decrement: staminaTotal } } : {}),
       },
-    }),
-    prisma.cMoonPrestigeLog.create({
+    })
+    const log = await tx.cMoonPrestigeLog.create({
       data: {
         userId,
         fromCMoonId: fromCMoon?.id || null,
@@ -197,11 +210,12 @@ export async function prestigeUser(userId, newCMoonId) {
         level: newLevel,
         pointsAtPrestige,
       },
-    }),
+    })
     // Removing (not zeroing) these rows is what lets the player buy back up to each upgrade's
     // own purchaseLimit again — see UserCMoonBattleUpgrade's own schema comment.
-    prisma.userCMoonBattleUpgrade.deleteMany({ where: { userId } }),
-  ])
+    await tx.userCMoonBattleUpgrade.deleteMany({ where: { userId } })
+    return [userUpdate, log]
+  })
 
   // Only a player's FIRST time ever prestiging into this specific cMoon earns its join prizes —
   // without this, a player could grind back and forth between just two prestige cMoons forever,

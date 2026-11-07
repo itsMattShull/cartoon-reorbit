@@ -624,6 +624,34 @@ export function parseRewardBody(body) {
   }
 }
 
+// Validates the body for adding ONE CMoonEnemyMemberSpecialAttack override row — see that model's
+// own schema comment and pickEnemySpecialAttack in cmoonEnemyBattle.js for why this exists at all
+// (a member with any of these always uses this pool instead of its faction's single shared
+// attack). Same add-one/remove-one shape as parseRewardBody above, just simpler: there's no
+// type-conditional id to resolve, only a required specialAttackId and an optional relative weight.
+export function parseMemberSpecialAttackBody(body) {
+  const specialAttackId = toOptionalId(body?.specialAttackId)
+  if (!specialAttackId) {
+    return { ok: false, message: 'specialAttackId is required' }
+  }
+
+  // Same "not a percent out of 100, never required to sum to 100" relative-weight semantics as
+  // CMoonEnemyMember.occurrencePercent — reuses that column's own bounds (OCCURRENCE_PERCENT_MIN/
+  // MAX) rather than inventing a separate range for what is the same kind of knob. The default
+  // (100, not OCCURRENCE_PERCENT_DEFAULT's 50) matches CMoonEnemyMemberSpecialAttack.usePercent's
+  // own schema default exactly — a single row with no weight specified should be "the only
+  // candidate" in every practical sense, same as a member with just one configured.
+  let usePercent = 100
+  if (body?.usePercent !== undefined) {
+    usePercent = toNumber(body.usePercent)
+    if (!isValidOccurrencePercent(usePercent)) {
+      return { ok: false, message: `Use weight must be a whole number between ${OCCURRENCE_PERCENT_MIN} and ${OCCURRENCE_PERCENT_MAX}` }
+    }
+  }
+
+  return { ok: true, data: { specialAttackId, usePercent } }
+}
+
 // Narrows an already-eligible candidate list (consider.post.js has already applied active/
 // defeated/minPriorDefeats/raid-availability filtering before calling this) down to just the
 // highest CMoonEnemyRank tier actually present, when GlobalGameConfig.cMoonEnemyHigherTierFirst

@@ -100,11 +100,17 @@ export async function purchaseBattleUpgrade(userId, upgradeId) {
     // row is left untouched and RETURNING yields nothing, which the empty-check below turns back
     // into the same LIMIT_REACHED error the pre-check already gives the common (non-racing) case
     // — rolling back the points/HP writes above via this transaction, not just this one statement.
+    // grantedTotal is stamped from upgrade.amount AT THIS EXACT PURCHASE, never re-derived later
+    // from the upgrade's current amount — see that column's own schema comment on why: an admin
+    // editing amount after this player already owns earlier purchases of it must not retroactively
+    // change what THOSE purchases are worth when prestige reverses them.
     const purchaseRows = await tx.$queryRaw`
-      INSERT INTO "UserCMoonBattleUpgrade" (id, "userId", "upgradeId", "timesPurchased", "updatedAt")
-      VALUES (gen_random_uuid()::text, ${userId}, ${upgradeId}, 1, now())
+      INSERT INTO "UserCMoonBattleUpgrade" (id, "userId", "upgradeId", "timesPurchased", "grantedTotal", "updatedAt")
+      VALUES (gen_random_uuid()::text, ${userId}, ${upgradeId}, 1, ${upgrade.amount}, now())
       ON CONFLICT ("userId", "upgradeId") DO UPDATE
-        SET "timesPurchased" = "UserCMoonBattleUpgrade"."timesPurchased" + 1, "updatedAt" = now()
+        SET "timesPurchased" = "UserCMoonBattleUpgrade"."timesPurchased" + 1,
+            "grantedTotal" = "UserCMoonBattleUpgrade"."grantedTotal" + ${upgrade.amount},
+            "updatedAt" = now()
         WHERE "UserCMoonBattleUpgrade"."timesPurchased" < ${upgrade.purchaseLimit}
       RETURNING "timesPurchased"
     `

@@ -77,16 +77,18 @@ export function validateBattleUpgradeBody(body, existing = null) {
 }
 
 // Pure arithmetic for the prestige reset (prestigeUser in cmoonPrestige.js): given this player's
-// purchase rows — each `{ stat, amount, timesPurchased }`, `amount` being the UPGRADE's current
-// per-purchase amount (not stored per-purchase-row) — sums how much HP and Stamina to subtract
-// back out of User.cMoonHpAdjustment/cMoonStaminaAdjustment. Always reads the upgrade's CURRENT
-// amount (see the [id].put.js edit endpoint's own comment on why an amount change is safe here),
-// never a value frozen at purchase time.
+// purchase rows — each `{ stat, grantedTotal }`, `grantedTotal` being UserCMoonBattleUpgrade's own
+// running total of what THIS player's purchases of THIS upgrade actually granted (stamped at each
+// purchase from the upgrade's amount at that time — see that column's own schema comment) — sums
+// how much HP and Stamina to subtract back out of User.cMoonHpAdjustment/cMoonStaminaAdjustment.
+// Never re-derives from the upgrade's CURRENT amount: an admin can edit `amount` after a player
+// already owns earlier purchases (see cmoon-battle-upgrades/[id].put.js), and re-deriving would
+// then misattribute those purchases' grants to the new value.
 export function sumBattleUpgradeStatTotals(purchases) {
   let hpTotal = 0
   let staminaTotal = 0
   for (const p of purchases || []) {
-    const total = (Number(p.amount) || 0) * (Number(p.timesPurchased) || 0)
+    const total = Number(p.grantedTotal) || 0
     if (p.stat === 'STAMINA') staminaTotal += total
     else hpTotal += total
   }

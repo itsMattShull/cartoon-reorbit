@@ -84,13 +84,21 @@ test('canPurchaseBattleUpgrade allows a fresh purchase-limit-of-1 upgrade exactl
   assert.equal(canPurchaseBattleUpgrade({ active: true, purchaseLimit: 1, timesPurchased: 1 }).ok, false)
 })
 
-test('sumBattleUpgradeStatTotals separates HP and Stamina and multiplies by timesPurchased', () => {
+test('sumBattleUpgradeStatTotals separates HP and Stamina and sums each row\'s own grantedTotal', () => {
   const totals = sumBattleUpgradeStatTotals([
-    { stat: 'HP', amount: 10, timesPurchased: 2 },
-    { stat: 'HP', amount: 5, timesPurchased: 1 },
-    { stat: 'STAMINA', amount: 3, timesPurchased: 4 },
+    { stat: 'HP', grantedTotal: 20 },
+    { stat: 'HP', grantedTotal: 5 },
+    { stat: 'STAMINA', grantedTotal: 12 },
   ])
   assert.deepEqual(totals, { hpTotal: 25, staminaTotal: 12 })
+})
+
+test('sumBattleUpgradeStatTotals never re-derives from an upgrade\'s CURRENT amount, so an admin editing it after the fact does not retroactively change what a past purchase is worth', () => {
+  // Same row, grantedTotal frozen at the OLD amount (10) from when the purchase happened, even
+  // though the upgrade itself has since been edited to a different amount — sumBattleUpgradeStatTotals
+  // takes grantedTotal as-is and never multiplies by any "current amount" the caller might also know.
+  const totals = sumBattleUpgradeStatTotals([{ stat: 'HP', grantedTotal: 10 }])
+  assert.deepEqual(totals, { hpTotal: 10, staminaTotal: 0 })
 })
 
 test('sumBattleUpgradeStatTotals handles an empty/missing purchase list', () => {

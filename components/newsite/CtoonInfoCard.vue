@@ -73,6 +73,12 @@
           @click="activeTab = 'gtoon'"
         >gToon</button>
         <button
+          v-if="hasOgGtoon"
+          class="ctic-tab"
+          :class="{ 'ctic-tab--active': activeTab === 'oggtoon' }"
+          @click="activeTab = 'oggtoon'"
+        >gToon</button>
+        <button
           v-if="ctoon.id"
           class="ctic-tab"
           :class="{ 'ctic-tab--active': activeTab === 'owners' }"
@@ -301,6 +307,35 @@
             <div class="ctic-tile ctic-tile-wide">
               <div class="ctic-label">Ability</div>
               <div class="ctic-value">{{ abilityLabel(ctoon.abilityKey) }}</div>
+            </div>
+          </div>
+        </template>
+
+        <!-- ── OG gToon tab (power/effect) ── -->
+        <template v-else-if="activeTab === 'oggtoon' && hasOgGtoon">
+          <div v-if="ogGtoonLoading" class="ctic-grid ctic-skel-wrap">
+            <div v-for="i in 3" :key="`oggtoon-skel-${i}`" class="ctic-skel-tile">
+              <div class="ctic-skel-line ctic-skel-lbl"></div>
+              <div class="ctic-skel-line ctic-skel-val"></div>
+            </div>
+          </div>
+          <div v-else-if="ogGtoonError" class="ctic-error">{{ ogGtoonError }}</div>
+          <div v-else class="ctic-grid">
+            <div class="ctic-tile">
+              <div class="ctic-label">Power</div>
+              <div class="ctic-value">{{ formatValue(ctoon.gtoonValue) }}</div>
+            </div>
+            <div class="ctic-tile">
+              <div class="ctic-label">Types</div>
+              <div class="ctic-value">{{ ogGtoonData?.types?.length ? ogGtoonData.types.join(', ') : '—' }}</div>
+            </div>
+            <div v-if="ogGtoonData?.group" class="ctic-tile ctic-tile-wide">
+              <div class="ctic-label">Group</div>
+              <div class="ctic-value">{{ ogGtoonData.group }}</div>
+            </div>
+            <div class="ctic-tile ctic-tile-wide">
+              <div class="ctic-label">Effect{{ ogGtoonData?.power?.isSlam ? ' (Slam)' : '' }}</div>
+              <div class="ctic-value">{{ ogGtoonData?.power?.description || 'No effect' }}</div>
             </div>
           </div>
         </template>
@@ -584,6 +619,7 @@ const userCtoon = computed(() => data.value?.userCtoon || null)
 const ownedCount = computed(() => data.value?.ownedCount ?? 0)
 const totalCzoneCount = computed(() => data.value?.totalCzoneCount ?? 0)
 const hasGtoon = computed(() => !!ctoon.value?.isGtoon)
+const hasOgGtoon = computed(() => !!ctoon.value?.isOgGtoon)
 const totalQuantityLabel = computed(() => formatQuantity(ctoon.value?.quantity))
 
 const route = useRoute()
@@ -791,6 +827,10 @@ const ownersLoading = ref(false)
 const ownersError = ref('')
 const ownersList = ref([])
 const lastOwnersCtoonId = ref(null)
+const ogGtoonLoading = ref(false)
+const ogGtoonError = ref('')
+const ogGtoonData = ref(null)
+const lastOgGtoonCtoonId = ref(null)
 const valuationsMap = ref({})
 
 function replaySound() {
@@ -945,6 +985,19 @@ watch([isOpen, hasGtoon], ([open, isGtoon]) => {
   if (!isGtoon && activeTab.value === 'gtoon') activeTab.value = 'info'
 })
 
+watch([isOpen, hasOgGtoon], ([open, isOgGtoon]) => {
+  if (!open) return
+  if (!isOgGtoon && activeTab.value === 'oggtoon') activeTab.value = 'info'
+})
+
+watch([isOpen, activeTab, () => ctoon.value?.id], ([open, tab, ctoonId]) => {
+  if (!open) return
+  if (tab !== 'oggtoon') return
+  if (!ctoonId) { ogGtoonData.value = null; ogGtoonError.value = ''; return }
+  if (lastOgGtoonCtoonId.value === ctoonId && ogGtoonData.value) return
+  loadOgGtoonPower(ctoonId)
+})
+
 watch([isOpen, activeTab, () => ctoon.value?.id], ([open, tab, ctoonId]) => {
   if (!open) return
   if (tab !== 'owners') return
@@ -1038,6 +1091,21 @@ onBeforeUnmount(() => {
   if (audioEl.value) audioEl.value.pause()
   stopRevealCountdown()
 })
+
+async function loadOgGtoonPower(ctoonId) {
+  ogGtoonLoading.value = true
+  ogGtoonError.value = ''
+  try {
+    const res = await $fetch(`/api/game/oggtoons/card/${ctoonId}`)
+    ogGtoonData.value = res || null
+    lastOgGtoonCtoonId.value = ctoonId
+  } catch {
+    ogGtoonError.value = 'Failed to load gToon details.'
+    ogGtoonData.value = null
+  } finally {
+    ogGtoonLoading.value = false
+  }
+}
 
 async function loadOwners(ctoonId) {
   ownersLoading.value = true

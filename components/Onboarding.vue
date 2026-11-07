@@ -22,7 +22,12 @@
               Hide
             </button>
           </div>
-          <div class="mt-3 flex rounded-full bg-white/10 p-1 text-xs font-semibold">
+          <!-- A 2x2 grid, not a single row of 4 — at 288px wide a single row leaves each tab
+               under 45px of text room, and "Notifications"/"Raid Boss" wrap to two lines there
+               (same squeeze the original 3-tab row's own comment already worked around by
+               shortening "Notifications" to "Alerts"; a 4th tab makes that fix insufficient on
+               its own). Two rows of two keeps every label on one line at any panel width. -->
+          <div class="mt-3 grid grid-cols-2 gap-1 rounded-2xl bg-white/10 p-1 text-xs font-semibold">
             <button
               type="button"
               :class="tabButtonClass('daily')"
@@ -37,16 +42,25 @@
             >
               Events
             </button>
-            <!-- "Alerts", not "Notifications". At 360px the panel is 288px wide,
-                 which leaves each of three tabs ~58px of text room at 12px —
-                 "Notifications" wraps to two lines, "Alerts" does not. -->
+            <!-- "Alerts", not "Notifications" — kept short for the same reason as always, even
+                 though the grid gives it more room than the old single-row layout did. -->
             <button
               type="button"
               :class="tabButtonClass('alerts')"
               @click="activeTab = 'alerts'"
             >
               Alerts
-              <span v-if="unreadCount > 0" class="ob-tab-count">{{ badgeLabel }}</span>
+              <span v-if="alertUnreadCount > 0" class="ob-tab-count">{{ alertUnreadCount > 99 ? '99+' : alertUnreadCount }}</span>
+            </button>
+            <!-- Raid-boss alerts get their own tab so they stop burying auction/trade alerts on
+                 the Alerts tab — see this component's own notifications computed split below. -->
+            <button
+              type="button"
+              :class="tabButtonClass('raidboss')"
+              @click="activeTab = 'raidboss'"
+            >
+              Raid Boss
+              <span v-if="raidUnreadCount > 0" class="ob-tab-count">{{ raidUnreadCount > 99 ? '99+' : raidUnreadCount }}</span>
             </button>
           </div>
         </div>
@@ -103,7 +117,7 @@
               </li>
             </ul>
           </div>
-          <div v-else-if="activeTab === 'alerts'" class="flex-1 min-h-0 flex flex-col">
+          <div v-else-if="activeTab === 'alerts' || activeTab === 'raidboss'" class="flex-1 min-h-0 flex flex-col">
             <div v-if="alertsPending && !alertsLoaded" class="space-y-3 animate-pulse">
               <div class="h-4 bg-white/10 rounded w-5/6"></div>
               <div class="h-4 bg-white/10 rounded w-4/6"></div>
@@ -114,18 +128,18 @@
             </div>
             <template v-else>
               <button
-                v-if="unreadCount > 0"
+                v-if="activeUnreadCount > 0"
                 type="button"
                 class="ob-mark-all mb-2 w-full rounded-lg border border-white/15 bg-white/5 text-[11px] font-semibold text-white/70 hover:text-white hover:bg-white/10 transition"
-                @click="markAllRead"
+                @click="markAllRead(activeNotificationList)"
               >
                 Mark all read
               </button>
-              <p v-if="!notifications.length" class="text-sm text-white/45">
-                No notifications yet.
+              <p v-if="!activeNotificationList.length" class="text-sm text-white/45">
+                {{ activeEmptyText }}
               </p>
               <ul v-else class="space-y-2 flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1">
-                <li v-for="n in notifications" :key="n.id">
+                <li v-for="n in activeNotificationList" :key="n.id">
                   <component
                     :is="notificationRoute(n) ? 'NuxtLink' : 'div'"
                     v-bind="notificationRoute(n) ? { to: notificationRoute(n) } : {}"
@@ -340,6 +354,18 @@ const alertsPending = ref(false)
 const alertsLoaded = ref(false)
 const alertsError = ref(null)
 
+// Raid-boss alerts (CMOON_RAID_BOSS_STARTED/CMOON_RAID_PREVIEW_STARTED) get their own "Raid Boss"
+// tab instead of burying auction/trade alerts on "Alerts" — both tabs share the same underlying
+// fetch/poll (fetchAlerts/notifications below), just split client-side by type.
+const RAID_NOTIFICATION_TYPES = new Set(['CMOON_RAID_BOSS_STARTED', 'CMOON_RAID_PREVIEW_STARTED'])
+const alertNotifications = computed(() => notifications.value.filter(n => !RAID_NOTIFICATION_TYPES.has(n.type)))
+const raidNotifications = computed(() => notifications.value.filter(n => RAID_NOTIFICATION_TYPES.has(n.type)))
+const alertUnreadCount = computed(() => alertNotifications.value.filter(n => !n.readAt).length)
+const raidUnreadCount = computed(() => raidNotifications.value.filter(n => !n.readAt).length)
+const activeNotificationList = computed(() => activeTab.value === 'raidboss' ? raidNotifications.value : alertNotifications.value)
+const activeUnreadCount = computed(() => activeTab.value === 'raidboss' ? raidUnreadCount.value : alertUnreadCount.value)
+const activeEmptyText = computed(() => activeTab.value === 'raidboss' ? 'No raid boss alerts yet.' : 'No notifications yet.')
+
 const dailyData = ref(null)
 const dailyPending = ref(false)
 const dailyError = ref(null)
@@ -407,7 +433,7 @@ watch([isOpen, activeTab], ([nextOpen, nextTab]) => {
     fetchDaily()
     return
   }
-  if (nextTab === 'alerts') {
+  if (nextTab === 'alerts' || nextTab === 'raidboss') {
     // Opening the tab deliberately does NOT mark anything read — a stray tap on
     // a phone would otherwise wipe the only signal that something happened.
     fetchAlerts()
@@ -463,15 +489,21 @@ const onNotificationClick = async (n) => {
   await markRead([n.id])
 }
 
-const markAllRead = async () => {
+// Scoped to whichever tab's list is passed in (Alerts or Raid Boss), so marking one tab's alerts
+// read never silently clears unread badges on the other — a player checking raid alerts
+// shouldn't lose track of an unread auction/trade alert they haven't looked at yet.
+const markAllRead = async (list) => {
   const now = new Date().toISOString()
-  notifications.value.forEach(n => { if (!n.readAt) n.readAt = now })
-  unreadCount.value = 0
+  const ids = (list || []).filter(n => !n.readAt).map(n => n.id)
+  if (!ids.length) return
+  const idSet = new Set(ids)
+  notifications.value.forEach(n => { if (idSet.has(n.id)) n.readAt = now })
+  unreadCount.value = Math.max(0, unreadCount.value - ids.length)
   try {
     await $fetch('/api/notifications/read', {
       method: 'POST',
       credentials: 'include',
-      body: { all: true }
+      body: { ids }
     })
   } catch {
     // Put the truth back if the server disagreed.
@@ -484,6 +516,7 @@ const badgeLabel = computed(() => (unreadCount.value > 99 ? '99+' : String(unrea
 const panelHeading = computed(() => {
   if (activeTab.value === 'daily') return 'Daily Checklist'
   if (activeTab.value === 'alerts') return 'Notifications'
+  if (activeTab.value === 'raidboss') return 'Raid Boss Alerts'
   return 'Events'
 })
 

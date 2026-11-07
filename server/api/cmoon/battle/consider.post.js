@@ -35,6 +35,7 @@ export default defineEventHandler(async (event) => {
         include: {
           faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } },
           taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+          specialAttacks: { include: { specialAttack: true }, orderBy: { sortOrder: 'asc' } },
         },
       },
       cMoon: { include: { specialAttack: true } },
@@ -103,6 +104,7 @@ export default defineEventHandler(async (event) => {
     include: {
       faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } },
       taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+      specialAttacks: { include: { specialAttack: true }, orderBy: { sortOrder: 'asc' } },
     },
   }).then(rows => rows.filter(m => m.minPriorDefeats <= (m.isRaidBoss ? personalSoloWinCount : personalWinCount)))
   // raidOneTime/raidCooldownMinutes can't be expressed as a single Prisma `where` filter (the

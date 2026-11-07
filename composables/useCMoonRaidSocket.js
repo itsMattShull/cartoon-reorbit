@@ -8,6 +8,7 @@ import { useRuntimeConfig } from '#imports'
 
 const raidState = ref(null)   // latest cmoonraid:created/state/roundOpened/roundResolved/ended payload
 const lastRound = ref(null)   // the most recent cmoonraid:roundResolved's `round` detail, for the reveal UI
+const lastKicked = ref(null)  // most recent cmoonraid:participantKicked payload (AFK), for the remaining party's overlay
 const lastError = ref('')
 const isConnected = ref(false)
 const currentRaidId = ref(null)
@@ -55,6 +56,26 @@ export function useCMoonRaidSocket() {
         raidState.value = null
         currentRaidId.value = null
       }
+    })
+    // Targeted the same way as leftRaid above (see applyAfkKicks' own comment in
+    // cmoonRaidSocket.js for why it can't just call socket.leave()/.emit() the way a voluntary
+    // leave does) — this socket WAS just removed from the raid, so it never receives the
+    // room-wide participantKicked broadcast below naming it either. Reuses the same "I'm out,
+    // show why" shape as leftRaid, just with a message the page surfaces through lastError.
+    socket.on('cmoonraid:kicked', (payload) => {
+      if (!payload?.raidId || payload.raidId === currentRaidId.value) {
+        lastError.value = 'You were kicked from the raid for inactivity.'
+        raidState.value = null
+        currentRaidId.value = null
+      }
+    })
+    // Room-wide — reaches everyone STILL in the raid (the kicked player already got the targeted
+    // event above and is on their way out). Applies the refreshed roster like every other state
+    // push, and separately stamps `lastKicked` with a fresh object each time so the raid page's
+    // own watcher can fire a banner even if the same userId is kicked twice in one raid.
+    socket.on('cmoonraid:participantKicked', (payload) => {
+      applyState(payload)
+      lastKicked.value = { kicked: payload?.kicked || [], at: Date.now() }
     })
     // Broadcast to the WHOLE room (unlike cmoonraid:leftRaid above, which is targeted — a cancel
     // kicks out every current participant, not just the caller) — see cmoonraid:cancelRaid's own
@@ -137,7 +158,7 @@ export function useCMoonRaidSocket() {
   }
 
   return {
-    socket, raidState, lastRound, lastError, isConnected, currentRaidId,
+    socket, raidState, lastRound, lastKicked, lastError, isConnected, currentRaidId,
     lobbyRaids, lobbyLoaded, lobbyViewer, lobbyClockOffsetMs,
     startRaid, joinRaid, leaveRaid, getState, submitAction, subscribeLobby, unsubscribeLobby,
     toggleKeepOpen, forceStartRaid, voteSpeedUp, cancelRaid,
