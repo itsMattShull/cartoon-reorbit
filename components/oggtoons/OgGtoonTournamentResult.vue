@@ -59,7 +59,7 @@
             <span v-if="opponentReady">· {{ series.opponentName }} is already ready</span>
           </p>
           <div class="mt-2 flex justify-center gap-2">
-            <button class="px-4 py-2 rounded bg-green-500 hover:bg-green-600 text-sm font-semibold" @click="readyNow">Ready now</button>
+            <button class="px-4 py-2 rounded bg-green-500 hover:bg-green-600 text-sm font-semibold" @click="readyNow">Start next game</button>
             <button v-if="countdown !== null" class="px-3 py-2 rounded bg-gray-600 hover:bg-gray-500 text-sm" @click="stopCountdown">Not yet</button>
           </div>
         </template>

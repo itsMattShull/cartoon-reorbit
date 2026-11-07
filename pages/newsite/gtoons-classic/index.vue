@@ -60,6 +60,7 @@ import OgGtoonChallengeModal from '@/components/oggtoons/OgGtoonChallengeModal.v
 import OgGtoonTournaments from '@/components/oggtoons/OgGtoonTournaments.vue'
 import OgGtoonTournamentReadyModal from '@/components/oggtoons/OgGtoonTournamentReadyModal.vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
+import { syncTabWithUrl } from '@/utils/hubTabUrl'
 
 definePageMeta({
   layout: 'newsite-template',
@@ -109,6 +110,11 @@ onBeforeUnmount(() => clearSidebarMiddle('OgGtoonDeckSidebar'))
 watch([visibleTabs, ready], ([tabs, isReady]) => {
   if (isReady && tabs.length && !tabs.some(t => t.id === activeTab.value)) activeTab.value = tabs[0].id
 }, { immediate: true })
+
+// Every tab has its own address: /newsite/gtoons-classic?tab=<decks|matchmaking|leaderboard|meta|tournaments>.
+// The address follows the tab and the tab follows the address (see utils/hubTabUrl.js). `t` is the legacy
+// tournament-link parameter, only meaningful on the Tournaments tab (which forwards it to the tournament's page).
+syncTabWithUrl({ route, router, activeTab, ready, tabIds: () => visibleTabs.value.map(t => t.id), scopedQuery: { t: 'tournaments' } })
 
 /* ── Tutorial ────────────────────────────────────────────────────────────────────────────── */
 const { currentMatchId, lastError, startTutorial } = useOgGtoonsSocket()
@@ -164,7 +170,7 @@ onMounted(async () => {
     }).catch(() => {})
   }
   // First visit only; never over a match that is already running, and never over a tournament link
-  // (a Discord message about a pairing lands here with ?tab=tournaments).
+  // (older Discord messages about a pairing land here with ?tab=tournaments&t=<id>).
   if (seen.status === 'fulfilled' && !seen.value.seen && tutorialAvailable.value && !currentMatchId.value && requestedTab !== 'tournaments') promptOpen.value = true
 })
 </script>

@@ -764,7 +764,7 @@ const ctoons = computed(() => {
     list = list.filter(c => !c.nextReleaseAt && !(c.quantity != null && c.totalMinted >= c.quantity))
 
   if (aFilters.value.gtoonsOnly)
-    list = list.filter(c => c.isGtoon)
+    list = list.filter(c => c.isGtoon || c.isOgGtoon)
 
   if (aFilters.value.wishlistOnly) {
     const wishSet = new Set(wishlistCtoonIds.value)

@@ -548,3 +548,144 @@ run('the cron entry point does everything in order: close opt-in, score unscored
   assert.equal(grant.status, 'PAID')
   assert.equal((await db.userPoints.findUnique({ where: { userId: done.winnerUserId } })).points, 25)
 })
+
+/* ── pack prizes + participation prize ─────────────────────────────────────────────────── */
+
+async function mkPack(name) {
+  return db.pack.create({
+    data: { name, inCmart: false, rarityConfigs: { create: [{ rarity: 'Common', count: 1, probabilityPercent: 100 }] } }
+  })
+}
+
+run('pack prizes: winner gets packs, every other player gets the participation pack, each exactly once', async () => {
+  await setup()
+  const users = await mkUsers(6)
+  const winPack = await mkPack(`Winner pack ${seq}`)
+  const partPack = await mkPack(`Participant pack ${seq}`)
+  const t = await mkTournament(users, {
+    firstPrizeJson: { points: 0, ctoons: [], backgrounds: [], packs: [{ packId: winPack.id, quantity: 2 }] },
+    participantPrizeJson: { points: 0, ctoons: [], backgrounds: [], packs: [{ packId: partPack.id, quantity: 1 }] },
+    requirePrizeApproval: false
+  })
+  const closed = await close(t, users)
+  assert.equal(closed.format, 'BRACKET_8_OR_LESS')
+
+  let guard = 0
+  while (guard++ < 10) {
+    const open = await openMatches(t.id)
+    if (!open.length) break
+    for (const m of open) await playSeries(m.id, ['A', 'A'])
+    await T.advanceAndNotify(db, t.id)
+  }
+  const done = await db.ogGtoonTournament.findUnique({ where: { id: t.id } })
+  assert.equal(done.status, 'COMPLETE')
+
+  // 6 players, no Top 8 prize: one FIRST and five PARTICIPANT, and nobody is queued twice.
+  const grants = await db.ogGtoonTournamentPrizeGrant.findMany({ where: { tournamentId: t.id } })
+  assert.equal(grants.length, 6)
+  assert.deepEqual(grants.map(g => g.tier).sort(), ['FIRST', 'PARTICIPANT', 'PARTICIPANT', 'PARTICIPANT', 'PARTICIPANT', 'PARTICIPANT'])
+  assert.equal(new Set(grants.map(g => g.userId)).size, 6)
+  assert.ok(grants.every(g => g.status === 'PENDING'), 'approval is off, so they are payable straight away')
+
+  await T.processPrizeGrants(db)
+  const paid = await db.ogGtoonTournamentPrizeGrant.findMany({ where: { tournamentId: t.id } })
+  assert.ok(paid.every(g => g.status === 'PAID'), JSON.stringify(paid.map(g => [g.tier, g.status, g.errorMessage])))
+
+  const winnerGrant = paid.find(g => g.tier === 'FIRST')
+  const winnerPacks = await db.userPack.findMany({ where: { userId: winnerGrant.userId } })
+  assert.equal(winnerPacks.length, 2, 'the winner gets the 1st-place packs and NOT the participation pack too')
+  for (const p of winnerPacks) {
+    assert.equal(p.packId, winPack.id)
+    assert.equal(p.source, 'OG_GTOONS_TOURNAMENT')
+    assert.equal(p.sourceRef, winnerGrant.id, 'keyed to the prize grant, which is what makes a re-run harmless')
+    assert.equal(p.opened, false)
+  }
+  assert.deepEqual(winnerPacks.map(p => p.sourceOrdinal).sort(), [0, 1])
+  assert.deepEqual(winnerGrant.summaryJson.packs, [{ packId: winPack.id, name: winPack.name, quantity: 2 }])
+  const log = await db.packOwnerLog.findMany({ where: { userPackId: { in: winnerPacks.map(p => p.id) } } })
+  assert.equal(log.length, 2)
+  assert.ok(log.every(l => l.method === 'OG_GTOONS_TOURNAMENT' && l.userId === winnerGrant.userId))
+
+  for (const g of paid.filter(x => x.tier === 'PARTICIPANT')) {
+    const mine = await db.userPack.findMany({ where: { userId: g.userId } })
+    assert.deepEqual(mine.map(p => p.packId), [partPack.id])
+    assert.equal(mine[0].source, 'OG_GTOONS_TOURNAMENT')
+  }
+
+  // Running the payout again (cron, double click on Approve) must not hand out a second set.
+  await T.processPrizeGrants(db)
+  await T.processPrizeGrants(db)
+  const all = await db.userPack.findMany({ where: { userId: { in: users.map(u => u.id) } } })
+  assert.equal(all.length, 2 + 5)
+})
+
+run('pack prizes: a pack that cannot be granted rolls the whole prize back, so a retry cannot double-pay the points', async () => {
+  await setup()
+  const [u] = await mkUsers(1)
+  const t = await mkTournament([u], { requirePrizeApproval: false })
+  const grant = await db.ogGtoonTournamentPrizeGrant.create({
+    data: {
+      tournamentId: t.id, userId: u.id, tier: 'PARTICIPANT', place: 3, status: 'PENDING',
+      // A pack id that does not exist (deleted after the tournament was set up): the pack insert hits the foreign key.
+      rewardJson: { points: 40, ctoons: [], backgrounds: [], packs: [{ packId: '00000000-0000-4000-8000-000000000000', quantity: 1 }] }
+    }
+  })
+  await T.processPrizeGrants(db)
+  const after = await db.ogGtoonTournamentPrizeGrant.findUnique({ where: { id: grant.id } })
+  assert.equal(after.status, 'FAILED')
+  assert.ok(after.errorMessage)
+  assert.equal(await db.userPack.count({ where: { userId: u.id } }), 0)
+  const pts = await db.userPoints.findUnique({ where: { userId: u.id } })
+  assert.ok(!pts || pts.points === 0, 'the points half of the prize was rolled back with the failed packs')
+})
+
+run('pack prizes: a prize that is only invalid pack rows is skipped, not paid as nothing', async () => {
+  await setup()
+  const [u] = await mkUsers(1)
+  const pack = await mkPack(`Zero pack ${seq}`)
+  const t = await mkTournament([u], { requirePrizeApproval: false })
+  const grant = await db.ogGtoonTournamentPrizeGrant.create({
+    data: {
+      tournamentId: t.id, userId: u.id, tier: 'PARTICIPANT', place: 1, status: 'PENDING',
+      rewardJson: { points: 0, ctoons: [], backgrounds: [], packs: [{ packId: pack.id, quantity: 0 }] }
+    }
+  })
+  await T.processPrizeGrants(db)
+  assert.equal((await db.ogGtoonTournamentPrizeGrant.findUnique({ where: { id: grant.id } })).status, 'SKIPPED')
+  assert.equal(await db.userPack.count({ where: { userId: u.id } }), 0)
+})
+
+run('pack prizes: a participation-only tournament queues nothing for a player who never played a game', async () => {
+  await setup()
+  const users = await mkUsers(4)
+  const pack = await mkPack(`Participation pack ${seq}`)
+  const t = await mkTournament(users, {
+    participantPrizeJson: { points: 0, ctoons: [], backgrounds: [], packs: [{ packId: pack.id, quantity: 1 }] },
+    requirePrizeApproval: false
+  })
+  await close(t, users)
+  // Semi 1 is played. Semi 2 is decided by an admin without a game, so its loser never plays a counted game.
+  const open = await openMatches(t.id)
+  assert.equal(open.length, 2)
+  await playSeries(open[0].id, ['A', 'A'])
+  const res = await T.adminSetMatchResult(db, { tournamentId: t.id, matchId: open[1].id, outcome: 'A_WIN', note: 'test: nobody showed up to play' })
+  assert.equal(res.ok, true, res.message)
+  const neverPlayed = open[1].playerBUserId
+  await T.advanceAndNotify(db, t.id)
+  assert.equal(await db.ogGtoonTournamentPrizeGrant.count({ where: { tournamentId: t.id } }), 0, 'nothing is queued until the tournament completes')
+
+  // The final is played for real.
+  let guard = 0
+  while (guard++ < 10) {
+    const next = await openMatches(t.id)
+    if (!next.length) break
+    for (const m of next) await playSeries(m.id, ['A', 'A'])
+    await T.advanceAndNotify(db, t.id)
+  }
+  assert.equal((await db.ogGtoonTournament.findUnique({ where: { id: t.id } })).status, 'COMPLETE')
+
+  const grants = await db.ogGtoonTournamentPrizeGrant.findMany({ where: { tournamentId: t.id } })
+  assert.equal(grants.length, 3, 'three of the four players played a counted game')
+  assert.ok(grants.every(g => g.tier === 'PARTICIPANT'), 'no 1st/Top 8 prize is set, so everyone who played gets the participation prize')
+  assert.ok(!grants.some(g => g.userId === neverPlayed), 'a player who never played a counted game is not paid')
+})

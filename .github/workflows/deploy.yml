@@ -4,15 +4,14 @@ name: Deploy
 on:
   push:
     branches: [ master, dev ]
-  pull_request:
-    branches: [ master, dev ]
 
 concurrency:
   group: deploy-${{ github.ref_name }}
   cancel-in-progress: false
 
 jobs:
-  # CI gate: the deploy jobs below only run if this passes. On pull requests only this job runs.
+  # CI gate: the deploy jobs below only run if this passes. It runs once per push to master or dev (there is no
+  # separate pull-request run, so a merged PR is tested exactly once, on the push that deploys it).
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 15

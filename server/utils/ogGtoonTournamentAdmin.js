@@ -5,6 +5,7 @@ import { createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { parseRewardBundle, validateRewardBundleRefs } from '@/server/utils/achievementRewardBundle'
 import { prizeSupplyWarnings, bundleIsEmpty } from '@/server/utils/ogGtoonTournament'
+import { normalizeRewardPacks, assertRewardPackLimits, assertPacksExist } from '@/server/utils/codeRewardPacks'
 
 const bad = (message) => createError({ statusCode: 400, statusMessage: message })
 
@@ -58,16 +59,35 @@ export async function parseTournamentBody(body, { only = ['basics', 'window', 'r
   }
 
   if (only.includes('prizes')) {
-    const first = parseRewardBundle(body?.firstPrize || {})
-    const top8 = parseRewardBundle(body?.top8Prize || {})
-    await validateRewardBundleRefs(prisma, [first, top8])
-    if (first.points > 1_000_000 || top8.points > 1_000_000) throw bad('Points prizes are capped at 1,000,000')
+    const first = parsePrizeBundle(body?.firstPrize, '1st place')
+    const top8 = parsePrizeBundle(body?.top8Prize, 'Top 8')
+    const participant = parsePrizeBundle(body?.participantPrize, 'Participation')
+    const bundles = [first, top8, participant]
+    await validateRewardBundleRefs(prisma, bundles)
+    await assertPacksExist(prisma, bundles.map(b => b.packs))
+    if (bundles.some(b => b.points > 1_000_000)) throw bad('Points prizes are capped at 1,000,000')
     data.firstPrizeJson = bundleIsEmpty(first) ? null : first
     data.top8PrizeJson = bundleIsEmpty(top8) ? null : top8
+    data.participantPrizeJson = bundleIsEmpty(participant) ? null : participant
     warnings.push(...(await prizeSupplyWarnings(prisma, first, 1)).map(w => `1st place: ${w}`))
     warnings.push(...(await prizeSupplyWarnings(prisma, top8, 7)).map(w => `Top 8: ${w}`))
+    // The field size is not known until opt-in closes, so this is checked for ONE player.
+    warnings.push(...(await prizeSupplyWarnings(prisma, participant, 1)).map(w => `Participation (per player): ${w}`))
   }
   return { data, warnings }
+}
+
+/**
+ * One tier's prize: the shared points/cToons/backgrounds bundle plus its sealed packs. The pack rules are the ones codes
+ * use (a whole number 1-25 of any one pack, 50 packs in total per player), so a prize can't be set up to flood a
+ * winner's collection. Packs are validated here rather than in parseRewardBundle because that parser is shared with
+ * achievements, whose rewards have no packs.
+ */
+function parsePrizeBundle(raw, label) {
+  const bundle = parseRewardBundle(raw || {})
+  const packs = normalizeRewardPacks(raw?.packs, `${label} packs`)
+  assertRewardPackLimits([packs])
+  return { ...bundle, packs }
 }
 
 /** The audit entry every state-changing admin action writes. */

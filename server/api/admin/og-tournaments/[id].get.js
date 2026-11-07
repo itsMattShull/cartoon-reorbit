@@ -28,10 +28,12 @@ export default defineEventHandler(async (event) => {
     prisma.ogGtoonTournamentPrizeGrant.findMany({ where: { tournamentId: t.id }, include: { user: { select: { username: true } } }, orderBy: [{ place: 'asc' }] })
   ])
   const now = Date.now()
-  const [firstPrizeView, top8PrizeView] = await Promise.all([ogtPrizeView(t.firstPrizeJson), ogtPrizeView(t.top8PrizeJson)])
+  const [firstPrizeView, top8PrizeView, participantPrizeView] = await Promise.all([
+    ogtPrizeView(t.firstPrizeJson), ogtPrizeView(t.top8PrizeJson), ogtPrizeView(t.participantPrizeJson)
+  ])
   return {
     tournament: { ...t, winnerUsername: t.winner?.username || null, winner: undefined },
-    firstPrizeView, top8PrizeView,
+    firstPrizeView, top8PrizeView, participantPrizeView,
     entrants: optIns.map(o => ({
       userId: o.userId, username: o.user?.username, banned: !!o.user?.banned, isActive: o.isActive,
       disqualified: o.disqualified, disqualifiedNote: o.disqualifiedNote, optedInAt: o.optedInAt,
