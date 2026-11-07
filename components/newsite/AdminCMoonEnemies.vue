@@ -626,8 +626,8 @@
               <p class="text-[10px] text-gray-500 mt-1">How many players this raid's party can hold. Changing this only affects raids started after you save.</p>
             </div>
             <div v-if="memberForm.isRaidBoss">
-              <label class="block text-[11px] font-medium mb-1">Round limit (50-500)</label>
-              <input v-model.number="memberForm.raidRoundLimit" type="number" min="50" max="500" class="w-full border rounded px-2 py-1 text-xs" />
+              <label class="block text-[11px] font-medium mb-1">Round limit (50-10000)</label>
+              <input v-model.number="memberForm.raidRoundLimit" type="number" min="50" max="10000" class="w-full border rounded px-2 py-1 text-xs" />
               <p class="text-[10px] text-gray-500 mt-1">
                 If the raid reaches this many rounds with neither side defeated, it ends with no clear winner.
                 Changing this only affects raids started after you save.
@@ -2120,8 +2120,8 @@ async function saveMember() {
     return
   }
   const raidRoundLimit = Math.trunc(Number(memberForm.raidRoundLimit)) || 300
-  if (!Number.isInteger(raidRoundLimit) || raidRoundLimit < 50 || raidRoundLimit > 500) {
-    memberFormError.value = 'Round limit must be between 50 and 500.'
+  if (!Number.isInteger(raidRoundLimit) || raidRoundLimit < 50 || raidRoundLimit > 10000) {
+    memberFormError.value = 'Round limit must be between 50 and 10000.'
     return
   }
 

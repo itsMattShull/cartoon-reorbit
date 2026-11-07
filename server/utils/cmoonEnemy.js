@@ -125,12 +125,12 @@ export const MAX_PARTICIPANTS_MAX = 8
 export const MAX_PARTICIPANTS_DEFAULT = 4
 
 // Round-count safety valve for a raid boss — see CMoonEnemyMember.raidRoundLimit's own schema
-// comment. 300 is the new default (the original hardcoded RAID_MAX_ROUNDS_SAFETY went 100 -> 150
-// -> this per-member override), with a floor high enough that no admin can accidentally make a
+// comment. 300 is the default (the original hardcoded RAID_MAX_ROUNDS_SAFETY went 100 -> 150 ->
+// this per-member override), with a floor high enough that no admin can accidentally make a
 // raid boss unwinnable-in-time (a raid that hits this cap with neither side at 0 resolves
-// ABANDONED) and a ceiling the feature request asked for explicitly.
+// ABANDONED) and a ceiling raised to 10000 so a raid can theoretically run that long.
 export const RAID_ROUND_LIMIT_MIN = 50
-export const RAID_ROUND_LIMIT_MAX = 500
+export const RAID_ROUND_LIMIT_MAX = 10000
 export const RAID_ROUND_LIMIT_DEFAULT = 300
 
 // Wind-up/telegraph moves (see CMoonEnemyWindUpMove's own schema comment) — same 0-100 "flat,
