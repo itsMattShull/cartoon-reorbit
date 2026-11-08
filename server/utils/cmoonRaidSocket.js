@@ -385,6 +385,11 @@ function publicRaidView(raid) {
     // to speed the countdown up to 5 seconds.
     leaderKeepOpen: !!raid.leaderKeepOpen,
     speedVoteCount: raid.speedVotes ? raid.speedVotes.size : 0,
+    // How many votes are actually needed right now (see requiredSpeedVotes' own comment) — null
+    // while voting isn't meaningful yet (fewer than 3 raiders, or the party's already full). The
+    // client reads this directly instead of recomputing the 2/3-majority formula itself, so the
+    // displayed "(X/Y)" can never drift out of sync with what the server actually requires.
+    speedVoteRequired: requiredSpeedVotes(raid),
     // Whether this raid is invite-only (see CMoonEnemyRaid.isPrivate) — display-only; the actual
     // discoverability/eligibility enforcement happens server-side (buildRaidLobby, the join
     // handler's notify/announce gating).
@@ -671,25 +676,33 @@ function openRound(io, raid) {
 }
 
 // ── Lobby controls (see cmoonraid:toggleKeepOpen/forceStart/voteSpeedUp below) ─────────────────
-// Re-evaluated after every vote AND after every join/leave (the denominator — current participant
-// count — changes then too). Once every CURRENT non-leader participant has voted and the party
-// isn't already full (a full party starts on its own via the join handler, with nothing left to
-// "speed up"), clamps the join window down to 5 seconds from now and clears any leaderKeepOpen
-// pause — a leader keeping the lobby open can still be overridden by a unanimous party vote.
+// Minimum votes needed to speed-start a FORMING raid's join window down to 5 seconds — a 2/3
+// majority of non-leader participants, but ONLY once at least 3 total raiders (the leader plus 2
+// or more others) are present. Below that, returns null (voting is not meaningful yet): without
+// this floor, a single joiner's own vote would immediately satisfy "2/3 of 1 voter" and let them
+// speed-run a 2-person lobby to combat the instant they arrive, with no other real participant
+// ever getting a say — exactly the "one player joins and immediately votes to start" case this
+// threshold exists to prevent. Also null once the party is already full (it starts on its own via
+// the join handler then, with nothing left to "speed up").
 //
 // The leader is deliberately EXCLUDED from both the numerator and the denominator — they already
 // have strictly more direct control (cmoonraid:forceStart starts instantly, no 5s wait), and the
 // client never shows them a vote button at all (see pages/newsite/cmoon-raid/[id].vue's own
-// `v-if="!isInitiator && ..."` on that button). Counting them in the denominator without any way
-// for them to actually cast a vote would make "unanimous" unreachable for any raid with more than
-// one participant — exactly the bug this comment is here to prevent reintroducing.
-function maybeApplySpeedVote(raid) {
-  if (raid.status !== 'FORMING') return
+// `v-if="!isInitiator && ..."` on that button).
+function requiredSpeedVotes(raid) {
   const size = raid.participants.size
   const maxParticipants = raid.maxParticipants || MAX_PARTY_SIZE
-  if (size === 0 || size >= maxParticipants) return
+  if (size < 3 || size >= maxParticipants) return null
   const voterCount = size - 1 // every participant except the one-and-only leader
-  if (voterCount <= 0 || raid.speedVotes.size < voterCount) return
+  return Math.ceil(voterCount * 2 / 3)
+}
+
+// Re-evaluated after every vote AND after every join/leave (requiredSpeedVotes' own denominator —
+// current participant count — changes then too).
+function maybeApplySpeedVote(raid) {
+  if (raid.status !== 'FORMING') return
+  const required = requiredSpeedVotes(raid)
+  if (required === null || raid.speedVotes.size < required) return
   raid.joinDeadlineAt = Math.min(raid.joinDeadlineAt, Date.now() + 5000)
   raid.leaderKeepOpen = false
 }
@@ -1398,6 +1411,23 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
   destroyRaid(raid.id)
 }
 
+// A FORMING raid abandoned alone past SOLO_FORMING_ABANDON_MS (see sweep's own comment on the
+// branch that calls this) — same DB-side release cmoonraid:cancelRaid does before its own
+// destroyRaid call, AWAITED first so activeUserId is actually cleared before destroyRaid clears
+// raidByUser, rather than racing a fire-and-forget write against a same-tick rejoin attempt.
+async function destroySoloAbandonedRaid(io, raid) {
+  const participantIds = Array.from(raid.participants.keys())
+  broadcast(io, raid, EV('cancelled'), { message: 'This raid was cancelled — no one joined in time.' })
+  try {
+    await db.cMoonEnemyRaidParticipant.updateMany({
+      where: { raidId: raid.id, userId: { in: participantIds } }, data: { activeUserId: null },
+    })
+  } catch (err) {
+    console.error('[cmoonRaidSocket] solo-abandon activeUserId release failed:', err)
+  }
+  destroyRaid(raid.id)
+}
+
 /* ── Sweep: the join-window and round-timeout clock (see header comment) ────────────────────── */
 
 function sweep(io) {
@@ -1426,16 +1456,14 @@ function sweep(io) {
       // FORMING-state equivalent of RAID_MAX_ROUNDS_SAFETY/roundLimit for IN_PROGRESS combat.
       if (!raid.soloQueueEnabled && raid.participants.size < 2) {
         if (now - raid.startedAt >= SOLO_FORMING_ABANDON_MS) {
-          const participantIds = Array.from(raid.participants.keys())
-          broadcast(io, raid, EV('cancelled'), { message: 'This raid was cancelled — no one joined in time.' })
-          // Same DB-side release cmoonraid:cancelRaid does before its own destroyRaid call —
-          // without it, the lone participant's row keeps activeUserId set, which independently
-          // 409s their next join/start attempt (a P2002 on its own unique constraint) even once
-          // the in-memory raidByUser entry above is gone.
-          db.cMoonEnemyRaidParticipant.updateMany({
-            where: { raidId: raid.id, userId: { in: participantIds } }, data: { activeUserId: null },
-          }).catch(() => {})
-          destroyRaid(raid.id)
+          // Fire-and-forget at the sweep level (same as closeRound below), but AWAITS the DB
+          // release internally before calling destroyRaid — unlike a bare fire-and-forget write,
+          // this guarantees activeUserId is actually cleared before raidByUser is (destroyRaid
+          // runs synchronously and would otherwise let a same-tick rejoin attempt race the still-
+          // in-flight DB write), and logs instead of silently swallowing a failure, since there is
+          // no retry and no raid left afterward to ever clear this lock on.
+          destroySoloAbandonedRaid(io, raid)
+            .catch(err => console.error('[cmoonRaidSocket] sweep solo-abandon failed:', err))
           continue
         }
         raid.joinDeadlineAt = now + (raid.joinWindowMs || JOIN_WINDOW_SECONDS * 1000)
@@ -1969,9 +1997,9 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       successor.isInitiator = true
       // Both stale otherwise: the lobby list would keep naming the ORIGINAL leader long after
       // they've left (see buildRaidLobbyEntry's own raid.initiatorUsername read), and a vote the
-      // successor cast back when they were a plain participant would still count against
-      // maybeApplySpeedVote's "every non-leader has voted" denominator even though they're now
-      // exempt from voting at all (they can just force-start).
+      // successor cast back when they were a plain participant would still count toward
+      // requiredSpeedVotes' 2/3-of-non-leaders threshold even though they're now exempt from
+      // voting at all (they can just force-start).
       raid.initiatorUsername = successor.username
       raid.speedVotes.delete(successor.userId)
     }
@@ -2072,15 +2100,25 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
     destroyRaid(raidId)
   })
 
-  // Any current participant: vote to cut the join window down to 5 seconds. Re-votable (idempotent
-  // — voting again while already counted is a no-op) but not revocable; resolves automatically via
-  // maybeApplySpeedVote once every current participant has voted.
+  // Any non-leader participant: vote to cut the join window down to 5 seconds. Re-votable
+  // (idempotent — voting again while already counted is a no-op) but not revocable; resolves
+  // automatically via maybeApplySpeedVote once a 2/3 majority of non-leader participants has
+  // voted (requiredSpeedVotes), which itself requires at least 3 total raiders in the first place.
   socket.on(EV('voteSpeedUp'), async ({ raidId } = {}) => {
     const me = await resolveSocketUser(socket)
     if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
     const raid = raids.get(raidId)
     if (!raid || raid.status !== 'FORMING' || !raid.participants.has(me.id)) {
       return socket.emit(EV('error'), { message: 'You are not in this raid' })
+    }
+    // Never trusted from a client, same stance the file's own eligibility checks take — the
+    // vote button is hidden for the leader client-side, but requiredSpeedVotes' whole 2/3-of-
+    // non-leaders math assumes the leader never appears in speedVotes at all. Without this guard
+    // a direct cmoonraid:voteSpeedUp emit from the leader's own socket would count toward the
+    // threshold anyway, letting them satisfy "2/3 of non-leaders" with fewer genuine non-leader
+    // votes than that actually requires.
+    if (raid.participants.get(me.id)?.isInitiator) {
+      return socket.emit(EV('error'), { message: 'The raid leader cannot vote — use Start now instead' })
     }
     raid.speedVotes.add(me.id)
     maybeApplySpeedVote(raid)

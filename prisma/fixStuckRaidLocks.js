@@ -14,10 +14,15 @@
 // in cmoonRaidSocket.js) stops this from recurring going forward; this script is for whatever is
 // ALREADY stuck in the database from before that fix landed.
 //
-// A row is "stuck" here if activeUserId is set and its raid's startedAt is more than
-// STALE_HOURS old — generous well beyond both the FORMING window (60s, repeatedly re-armable
-// before the fix) and IN_PROGRESS combat's own round-limit/AFK-kick self-resolution (which
-// completes in minutes), so nothing that's still plausibly a live raid is ever touched.
+// A row is "stuck" here if activeUserId is set, its raid's startedAt is more than STALE_HOURS
+// old, AND the raid is NOT currently IN_PROGRESS. The age alone is generous well beyond the
+// FORMING window (60s, repeatedly re-armable before the fix) and IN_PROGRESS combat's own
+// round-limit/AFK-kick self-resolution at the DEFAULT round limit — but an admin can configure a
+// boss's round limit up to RAID_ROUND_LIMIT_MAX (10000, see server/utils/cmoonEnemy.js), and at
+// ROUND_TIMEOUT_SECONDS=15/round that boss can legitimately still be IN_PROGRESS well past
+// STALE_HOURS. The explicit status exclusion is what actually keeps this script from clearing a
+// still-live raid's locks out from under it (which would let its participants double-join a
+// second raid while the first is still running) — age alone is not enough.
 //
 // What --apply does: sets activeUserId to null on each stuck row. Nothing else is touched — the
 // raid's own status/outcome/roundLog are left exactly as they are, same as a normal resolution
@@ -43,7 +48,7 @@ async function main() {
   const stuck = await prisma.cMoonEnemyRaidParticipant.findMany({
     where: {
       activeUserId: { not: null },
-      raid: { startedAt: { lt: staleBefore } },
+      raid: { startedAt: { lt: staleBefore }, status: { not: 'IN_PROGRESS' } },
     },
     select: {
       id: true, userId: true, raidId: true,

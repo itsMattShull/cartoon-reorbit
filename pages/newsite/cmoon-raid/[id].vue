@@ -130,14 +130,22 @@
               >Cancel raid</button>
             </div>
 
-            <!-- Any non-leader participant can vote to cut the countdown to 5s, once every OTHER
-                 non-leader participant agrees too — see maybeApplySpeedVote in cmoonRaidSocket.js,
-                 whose denominator deliberately excludes the leader (they already have "Start now"
-                 for an instant start, and never get a vote button here). -->
+            <!-- Any non-leader participant can vote to cut the countdown to 5s, once a 2/3
+                 majority of non-leader participants agrees — see requiredSpeedVotes in
+                 cmoonRaidSocket.js, whose denominator deliberately excludes the leader (they
+                 already have "Start now" for an instant start, and never get a vote button here).
+                 Requires at least 3 total raiders in the first place (speedVoteRequired is null
+                 below that), so a single joiner can never immediately vote to speed-run a
+                 2-person lobby the instant they arrive — the threshold itself, not just the
+                 button's visibility, is server-enforced in maybeApplySpeedVote. -->
             <button
-              v-if="!isInitiator && hasJoined && raid.participants.length < raid.maxParticipants"
+              v-if="!isInitiator && hasJoined && raid.speedVoteRequired != null && raid.participants.length < raid.maxParticipants"
               type="button" class="cr-link-btn" @click="raidSocket.voteSpeedUp(raidId)"
-            >Vote to start in 5s ({{ raid.speedVoteCount }}/{{ raid.participants.length - 1 }})</button>
+            >Vote to start in 5s ({{ raid.speedVoteCount }}/{{ raid.speedVoteRequired }})</button>
+            <p
+              v-else-if="!isInitiator && hasJoined && raid.participants.length < raid.maxParticipants"
+              class="cr-solo-disabled-note"
+            >At least 3 raiders are needed before the party can vote to start early.</p>
           </div>
 
           <!-- ── IN_PROGRESS: live combat ─────────────────────────────────── -->
