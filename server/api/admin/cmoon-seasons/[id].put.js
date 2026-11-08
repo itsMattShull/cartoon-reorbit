@@ -3,8 +3,11 @@
 // started (including an already-ended one), startAt is locked — shifting when a LIVE window began
 // would retroactively change what already counted toward it — but header/blurb/goal/tracker
 // fields, and endAt, stay editable so an admin can fix a typo or extend/shorten a currently
-// featured season without deleting and recreating it. endAt may never be set to a moment already
-// in the past, so a started season can't be made to look like it silently ended before "now."
+// featured season without deleting and recreating it. A currently-ongoing season's endAt may
+// never be set to a moment already in the past (so it can't be made to look like it silently
+// ended before "now"), and symmetrically an already-ended season's endAt may never be set to the
+// present or future (so it can't be silently resurrected as the live season by an edit that
+// never meant to touch its dates at all).
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
@@ -23,10 +26,11 @@ export default defineEventHandler(async (event) => {
   const now = Date.now()
   const started = existing.startAt.getTime() <= now
   // Distinct from `started`: a season that's already ENDED has an endAt already in the past by
-  // definition, so the "can't set endAt in the past" guard below must not apply to it — otherwise
-  // the edit form (which re-submits the existing endAt unchanged) could never save ANY edit to a
-  // past season, including just fixing its header/blurb. The guard only needs to protect a
-  // CURRENTLY-ongoing season from being retroactively ended early.
+  // definition, so the "can't set endAt in the past" guard below must not apply to it as written
+  // — otherwise the edit form (which re-submits the existing endAt unchanged) could never save
+  // ANY edit to a past season, including just fixing its header/blurb. Instead it gets the
+  // mirror-image guard just below: its endAt must STAY in the past, so an edit that was never
+  // meant to touch the dates at all can't silently resurrect it as the current season either.
   const alreadyEnded = existing.endAt.getTime() <= now
 
   const body = await readBody(event)
@@ -37,7 +41,11 @@ export default defineEventHandler(async (event) => {
     if (parsed.data.startAt.getTime() !== existing.startAt.getTime()) {
       throw createError({ statusCode: 400, statusMessage: "A season's start date can't change once it has started" })
     }
-    if (!alreadyEnded && parsed.data.endAt.getTime() < now) {
+    if (alreadyEnded) {
+      if (parsed.data.endAt.getTime() >= now) {
+        throw createError({ statusCode: 400, statusMessage: "An already-ended season's end date can't be moved into the present or future" })
+      }
+    } else if (parsed.data.endAt.getTime() < now) {
       throw createError({ statusCode: 400, statusMessage: "A started season's end date can't be set in the past" })
     }
   }
