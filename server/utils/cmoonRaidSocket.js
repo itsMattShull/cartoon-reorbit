@@ -98,6 +98,11 @@ import * as raidRedis from './cmoonRaidRedisState.js'
 import { buildRaidBattleReport } from './cmoonRaidBattleReport.js'
 
 const SWEEP_INTERVAL_MS = 2000
+// Safety valve for a FORMING raid stuck alone with solo queueing disabled for its cMoon (see
+// sweep's own comment on the re-arm branch below) — the IN_PROGRESS equivalent of
+// RAID_MAX_ROUNDS_SAFETY/roundLimit. 30 minutes is generous enough that a leader who stepped away
+// for a few minutes, or whose connection briefly dropped, is never caught by it.
+const SOLO_FORMING_ABANDON_MS = 30 * 60 * 1000
 const EV = (name) => `cmoonraid:${name}`
 const raidRoom = (raidId) => `cmoonraid:room:${raidId}`
 // Every socket with the Raid Boss Lobby open (see cmoonraid:lobbySubscribe) — gets the full open
@@ -1391,9 +1396,29 @@ function sweep(io) {
       // automatic instead of leader-triggered. Re-arms on every sweep tick the window is still
       // solo at — the very next tick after a second player joins naturally falls through to the
       // ordinary startCombat call below instead (the `participants.size < 2` check above is now
-      // false), and the leader leaving while still alone destroys the raid entirely (see
-      // cmoonraid:leave), so this never spins forever once either happens.
+      // false), and the leader explicitly leaving while still alone destroys the raid entirely
+      // (see cmoonraid:leave). But there is no socket 'disconnect' handler anywhere in this
+      // module, so a leader whose tab just closes — never clicking Leave or Cancel Raid — leaves
+      // this branch re-arming forever with nobody left to ever stop it: raidByUser keeps that one
+      // userId permanently pinned to this raid (every future join/start attempt of theirs fails
+      // with "You are already in a raid"), and fireSync below keeps refreshing this raid's Redis
+      // TTL too, so even a server restart can't self-heal it by letting the snapshot expire. Give
+      // up and destroy the raid once it's been alone this long instead of re-arming again — the
+      // FORMING-state equivalent of RAID_MAX_ROUNDS_SAFETY/roundLimit for IN_PROGRESS combat.
       if (!raid.soloQueueEnabled && raid.participants.size < 2) {
+        if (now - raid.startedAt >= SOLO_FORMING_ABANDON_MS) {
+          const participantIds = Array.from(raid.participants.keys())
+          broadcast(io, raid, EV('cancelled'), { message: 'This raid was cancelled — no one joined in time.' })
+          // Same DB-side release cmoonraid:cancelRaid does before its own destroyRaid call —
+          // without it, the lone participant's row keeps activeUserId set, which independently
+          // 409s their next join/start attempt (a P2002 on its own unique constraint) even once
+          // the in-memory raidByUser entry above is gone.
+          db.cMoonEnemyRaidParticipant.updateMany({
+            where: { raidId: raid.id, userId: { in: participantIds } }, data: { activeUserId: null },
+          }).catch(() => {})
+          destroyRaid(raid.id)
+          continue
+        }
         raid.joinDeadlineAt = now + (raid.joinWindowMs || JOIN_WINDOW_SECONDS * 1000)
         fireSync(raid.id, raid)
         broadcast(io, raid, EV('state'))
