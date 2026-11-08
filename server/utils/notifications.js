@@ -41,7 +41,8 @@ export const NOTIFICATION_TYPES = Object.freeze({
   TRADE_OFFER_ACCEPTED: 'TRADE_OFFER_ACCEPTED',
   CMOON_RAID_BOSS_STARTED: 'CMOON_RAID_BOSS_STARTED',
   CMOON_RAID_PREVIEW_STARTED: 'CMOON_RAID_PREVIEW_STARTED',
-  PVP_PACK_WON: 'PVP_PACK_WON'
+  PVP_PACK_WON: 'PVP_PACK_WON',
+  CMOON_RAID_KICKED_AFK: 'CMOON_RAID_KICKED_AFK'
 })
 
 // Mirrors the guard in server/utils/discord.js — the official account is a
@@ -133,6 +134,19 @@ async function isNotifiable (db, userId) {
   }
 }
 
+// Same gate as isNotifiable, plus the raid-specific opt-out (User.muteRaidNotifications) — kept
+// as its own helper rather than folded into isNotifiable itself, since every OTHER notification
+// type (auction/trade) must stay unaffected by this one channel's mute toggle.
+async function isRaidNotifiable (db, userId) {
+  if (!(await isNotifiable(db, userId))) return false
+  try {
+    const u = await db.user.findUnique({ where: { id: userId }, select: { muteRaidNotifications: true } })
+    return !u?.muteRaidNotifications
+  } catch {
+    return false
+  }
+}
+
 /** You were outbid on an auction you had the lead on. */
 export async function notifyOutbid (db, { userId, auctionId, ctoonName, amount }) {
   if (!(await isNotifiable(db, userId))) return false
@@ -217,7 +231,7 @@ export async function notifyTradeOfferAccepted (db, { userId, offerId, byUsernam
  * specific raid. No `contextType`: that enum is AUCTION/TRADE-specific (see LockedContextType).
  */
 export async function notifyCMoonRaidBossStarted (db, { userId, raidId, enemyName, cMoonName }) {
-  if (!(await isNotifiable(db, userId))) return false
+  if (!(await isRaidNotifiable(db, userId))) return false
   return createNotification(db, {
     userId,
     type: NOTIFICATION_TYPES.CMOON_RAID_BOSS_STARTED,
@@ -242,7 +256,9 @@ const LOBBY_BATCH_SIZE = 1000
  * A raid boss lobby just opened and any cMoon member may join it (cross-cMoon raids, see
  * server/utils/cmoonRaidSocket.js). One set-based upsert per batch instead of one
  * lookup + insert per recipient, so notifying every cMoon member doesn't flood the connection
- * pool. Banned users and the official account are filtered in SQL, same rules as isNotifiable.
+ * pool. Banned users, the official account, and anyone with muteRaidNotifications are all
+ * filtered in SQL, same rules as isRaidNotifiable above (this just can't reuse that per-row
+ * helper directly, being a single set-based statement).
  * Returns the userIds actually written (for the live push), or [] on failure — never throws.
  */
 export async function notifyCMoonRaidLobbyOpened (db, { userIds, enemyName, initiatorUsername, cMoonName }) {
@@ -268,6 +284,7 @@ export async function notifyCMoonRaidLobbyOpened (db, { userIds, enemyName, init
         FROM unnest(${ids}::text[], ${batch}::text[]) AS t("id", "userId")
         JOIN "User" u ON u."id" = t."userId"
         WHERE COALESCE(u."banned", false) = false AND u."username" IS DISTINCT FROM ${OFFICIAL_USERNAME}::text
+          AND COALESCE(u."muteRaidNotifications", false) = false
         ON CONFLICT ("userId", "type", "contextId") WHERE "readAt" IS NULL
         DO UPDATE SET
           "count"     = "Notification"."count" + 1,
@@ -292,7 +309,7 @@ export async function notifyCMoonRaidLobbyOpened (db, { userIds, enemyName, init
  * No `contextType`, same reasoning as notifyCMoonRaidBossStarted above.
  */
 export async function notifyCMoonRaidPreviewStarted (db, { userId, raidId, enemyName, startedByUsername }) {
-  if (!(await isNotifiable(db, userId))) return false
+  if (!(await isRaidNotifiable(db, userId))) return false
   return createNotification(db, {
     userId,
     type: NOTIFICATION_TYPES.CMOON_RAID_PREVIEW_STARTED,
@@ -321,5 +338,23 @@ export async function notifyPvpPackWon (db, { userId, packName }) {
     title: `You won a ${packName || 'pack'}!`,
     body: 'Open it from My Collection > Packs.',
     contextId: PVP_PACK_CONTEXT_ID
+  })
+}
+
+/**
+ * You were auto-kicked from a cMoon raid for going AFK (auto-moved) 4 consecutive rounds — see
+ * the AFK-kick block in closeRound, server/utils/cmoonRaidSocket.js. Deliberately uses
+ * isNotifiable, not isRaidNotifiable: muteRaidNotifications is an opt-out from "a raid is
+ * starting, come join" spam, not from being told about something that already happened to you
+ * personally. No contextId/contextType: the raid is over for this recipient either way, so there
+ * is nothing left to click through to (see CMOON_RAID_KICKED_AFK's own schema comment).
+ */
+export async function notifyCMoonRaidKickedAfk (db, { userId, enemyName }) {
+  if (!(await isNotifiable(db, userId))) return false
+  return createNotification(db, {
+    userId,
+    type: NOTIFICATION_TYPES.CMOON_RAID_KICKED_AFK,
+    title: `You were kicked from the ${enemyName || 'raid'} for inactivity`,
+    body: 'Auto-moving for too many rounds in a row kicks you out with no rewards. Stay active to keep your spot next time!'
   })
 }

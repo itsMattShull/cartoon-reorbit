@@ -250,11 +250,16 @@ function specialEffectDescription(attack) {
     case 'RAISE_ALLY_ATTACK': return `Raises your own attack damage by ${n} for the rest of the fight.`
     case 'REFLECT_DAMAGE': return `Reflects ${attack?.reflectPercent}% of whatever the enemy hits you for this round back at them — nothing reflects if they block.`
     case 'SIPHON_HEALTH': return `Deals ${n} damage and heals you for ${attack?.siphonPercent}% of it — unless the enemy blocks, in which case it does nothing.`
-    // POISON_OPPONENT/CLEANSE_SELF/SHIELD_PARTY are raid-only (see cmoonEnemyRaid.js's own header
-    // comment) — a cMoon/faction's special is one shared pool used in both contexts, so one of
-    // these CAN end up equipped here. It still fires and announces, just with no mechanical
-    // effect — this tooltip says so plainly rather than showing nothing.
-    case 'POISON_OPPONENT': case 'CLEANSE_SELF': case 'SHIELD_PARTY':
+    // CLEANSE_SELF works here too (see action.post.js's own CLEANSE_SELF comment) — cures your
+    // paralysis, plus heals you if cleanseAlsoHeals is on. Its healsAllies toggle is a raid-only
+    // extension (no allies to heal solo), not mentioned here since it changes nothing you'd see.
+    case 'CLEANSE_SELF':
+      return `Cures your own paralysis${attack?.cleanseAlsoHeals ? `, and heals you for ${n} HP` : ''}.`
+    // POISON_OPPONENT/SHIELD_PARTY are raid-only (see cmoonEnemyRaid.js's own header comment) — a
+    // cMoon/faction's special is one shared pool used in both contexts, so one of these CAN end up
+    // equipped here. It still fires and announces, just with no mechanical effect — this tooltip
+    // says so plainly rather than showing nothing.
+    case 'POISON_OPPONENT': case 'SHIELD_PARTY':
       return 'This effect only works in a co-op raid — in a solo fight it fires and announces, but does nothing.'
     default: return ''
   }

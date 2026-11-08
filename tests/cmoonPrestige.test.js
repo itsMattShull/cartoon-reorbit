@@ -38,6 +38,42 @@ test('prestigeUser only grants prizes on a player\'s first-ever visit to a given
   )
 })
 
+test('prestigeUser resets purchased cMoon battle upgrades, never a manual HP/Stamina adjustment', () => {
+  assert.match(
+    prestigeSrc,
+    /sumBattleUpgradeStatTotals\(/,
+    'prestigeUser must sum up this player\'s CMoonBattleUpgrade purchases to know how much HP/Stamina to subtract back out',
+  )
+  assert.match(
+    prestigeSrc,
+    /cMoonHpAdjustment:\s*\{\s*decrement:\s*hpTotal\s*\}/,
+    'the reset must DECREMENT cMoonHpAdjustment by the purchased total, never overwrite/zero it — a flat reset would also wipe out an unrelated manual admin adjustment',
+  )
+  assert.match(
+    prestigeSrc,
+    /cMoonStaminaAdjustment:\s*\{\s*decrement:\s*staminaTotal\s*\}/,
+    'the reset must DECREMENT cMoonStaminaAdjustment by the purchased total, same reasoning as cMoonHpAdjustment',
+  )
+  assert.match(
+    prestigeSrc,
+    /userCMoonBattleUpgrade\.deleteMany\(\s*\{\s*where:\s*\{\s*userId\s*\}\s*\}\s*\)/,
+    'prestigeUser must delete this player\'s UserCMoonBattleUpgrade rows (not just zero a counter) so every upgrade\'s purchaseLimit resets to buyable again',
+  )
+  // All three (read+sum, decrement, deleteMany) must run inside the SAME $transaction as the
+  // prestigeLevel bump — a reset that happens outside that transaction could leave a player
+  // leveled-up with their old purchased stats still intact (or vice versa) if one step fails, and
+  // the battleUpgradePurchases READ itself must be in here too (not a separate query before the
+  // transaction starts), or a concurrent purchase landing in that gap could grant HP/Stamina this
+  // reset never subtracts back out.
+  const txStart = prestigeSrc.indexOf('await prisma.$transaction(async tx => {')
+  const txEnd = prestigeSrc.indexOf('\n  })', txStart)
+  assert.ok(txStart !== -1 && txEnd !== -1, 'could not locate the prestige $transaction block')
+  const txBody = prestigeSrc.slice(txStart, txEnd)
+  assert.match(txBody, /tx\.userCMoonBattleUpgrade\.findMany|FOR UPDATE/, 'the battleUpgradePurchases read must be inside the prestige transaction, not a separate query before it')
+  assert.match(txBody, /decrement:\s*hpTotal/, 'the HP decrement must be inside the prestige transaction')
+  assert.match(txBody, /userCMoonBattleUpgrade\.deleteMany/, 'the purchase-row deleteMany must be inside the prestige transaction')
+})
+
 test('findNextPrestigeLevel finds the row for currentLevel + 1', () => {
   const levels = [
     { level: 1, pointThreshold: 1000 },

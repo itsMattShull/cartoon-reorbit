@@ -105,11 +105,28 @@
             </div>
           </div>
 
+          <!-- Same "can't be undone" reasoning as the long-duration confirm above — an insta-bid
+               immediately places a real bid, so the auction is live and locked in the instant
+               this fires. -->
+          <div v-else-if="confirmingInstaBid" class="am-confirm">
+            <div class="am-confirm-title">Insta-bid for {{ instaBidValue }} pts?</div>
+            <div class="am-confirm-body">
+              This immediately starts a 1-day auction with your {{ instaBidValue }}-point bid already placed.
+              It can't be withdrawn once it starts, and this cToon can't be traded until it ends.
+            </div>
+            <div class="am-confirm-actions">
+              <button class="am-cancel" @click="confirmingInstaBid = false">Back</button>
+              <button class="am-submit" :disabled="sending" @click="instaBid">
+                {{ sending ? 'Sending…' : 'Confirm' }}
+              </button>
+            </div>
+          </div>
+
         </div>
 
         <!-- ── Footer ── -->
         <div class="am-footer">
-          <button v-if="!isPack" class="am-instabid" :disabled="sending" @click="instaBid">
+          <button v-if="!isPack" class="am-instabid" :disabled="sending" @click="confirmingInstaBid = true">
             Insta-bid · {{ instaBidValue }} pts
           </button>
           <div class="am-footer-right">
@@ -170,6 +187,7 @@ const durationPrefill = computed(() => ({
 const duration       = ref({ durationDays: 0, durationMinutes: 0, totalMinutes: null, valid: false })
 const durationPicker = ref(null)
 const confirming     = ref(false)
+const confirmingInstaBid = ref(false)
 const sending        = ref(false)
 const recentAuctions = ref([])
 const suggestion     = ref(null)
@@ -339,6 +357,7 @@ async function instaBid() {
     setTimeout(() => emit('close'), 1200)
   } catch (e) {
     showToast(e.data?.statusMessage || e.data?.message || 'Failed to create auction.', 'error')
+    confirmingInstaBid.value = false
   } finally {
     sending.value = false
   }

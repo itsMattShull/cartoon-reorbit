@@ -19,6 +19,7 @@ const BATTLE_INCLUDE = {
       // This member's OWN unique taunts (see CMoonEnemyMemberTaunt) — merged with the faction's
       // shared pool above by mergeTauntPools in cmoonEnemyBattle.js.
       taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+      specialAttacks: { include: { specialAttack: true }, orderBy: { sortOrder: 'asc' } },
     },
   },
   cMoon: { include: { specialAttack: true } },

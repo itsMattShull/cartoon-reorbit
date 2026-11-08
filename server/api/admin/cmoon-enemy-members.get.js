@@ -33,6 +33,11 @@ export default defineEventHandler(async (event) => {
       // This member's own unique taunts (CMoonEnemyMemberTaunt) — same shape as the faction's own
       // shared taunt pool (factions.get.js's own `taunts` include), just scoped to one member.
       taunts: { orderBy: [{ trigger: 'asc' }, { sortOrder: 'asc' }, { createdAt: 'asc' }] },
+      // This member's own special-attack overrides — same "include the full rows" shape as
+      // rewards/windUpMoves above, since the only way to remove one is its own DELETE endpoint.
+      // When non-empty, these ALWAYS win over the faction's shared specialAttack (see
+      // pickEnemySpecialAttack in cmoonEnemyBattle.js).
+      specialAttacks: { orderBy: { sortOrder: 'asc' }, include: { specialAttack: { select: { id: true, name: true } } } },
     },
   })
 
@@ -104,6 +109,10 @@ export default defineEventHandler(async (event) => {
       })),
       taunts: m.taunts.map(t => ({
         id: t.id, trigger: t.trigger, text: t.text, soundPath: t.soundPath, active: t.active, sortOrder: t.sortOrder,
+      })),
+      specialAttacks: m.specialAttacks.map(s => ({
+        id: s.id, specialAttackId: s.specialAttackId, usePercent: s.usePercent,
+        specialAttack: s.specialAttack,
       })),
     })),
   }

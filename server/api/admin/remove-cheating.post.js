@@ -2,6 +2,7 @@ import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { scheduleAuctionClose } from '@/server/utils/queues'
 import { logAdminChange, buildSeizureAuditPayload } from '@/server/utils/adminChangeLog'
+import { withdrawPendingTradeOffersForUserCtoon } from '@/server/utils/tradeOffer'
 
 const sleep = (ms) => new Promise(res => setTimeout(res, ms))
 
@@ -201,6 +202,12 @@ export default defineEventHandler(async (event) => {
           select: { id: true }
         })
         if (active) throw new Error('Item already has an ACTIVE auction.')
+
+        // A copy seized out from under a still-open trade offer (either side — the cheater
+        // offering it away, or someone else offering for it) must not leave that offer PENDING:
+        // its stale TradeOfferCtoon row would permanently lock the copy for whoever ends up
+        // owning it next (see withdrawPendingTradeOffersForUserCtoon's own comment).
+        await withdrawPendingTradeOffersForUserCtoon(tx, row.id)
 
         await tx.userCtoon.update({
           where: { id: row.id },

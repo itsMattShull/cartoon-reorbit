@@ -626,8 +626,8 @@
               <p class="text-[10px] text-gray-500 mt-1">How many players this raid's party can hold. Changing this only affects raids started after you save.</p>
             </div>
             <div v-if="memberForm.isRaidBoss">
-              <label class="block text-[11px] font-medium mb-1">Round limit (50-500)</label>
-              <input v-model.number="memberForm.raidRoundLimit" type="number" min="50" max="500" class="w-full border rounded px-2 py-1 text-xs" />
+              <label class="block text-[11px] font-medium mb-1">Round limit (50-10000)</label>
+              <input v-model.number="memberForm.raidRoundLimit" type="number" min="50" max="10000" class="w-full border rounded px-2 py-1 text-xs" />
               <p class="text-[10px] text-gray-500 mt-1">
                 If the raid reaches this many rounds with neither side defeated, it ends with no clear winner.
                 Changing this only affects raids started after you save.
@@ -976,6 +976,48 @@
             >{{ windUpMoveSaving ? 'Adding…' : 'Add wind-up move' }}</button>
           </div>
 
+          <!-- Special-attack overrides (CMoonEnemyMemberSpecialAttack) — give THIS member its own
+               pool of one or more special attacks, independent of its faction's single shared
+               specialAttack. Only for an already-created member, same "add one, remove one" shape
+               as the prizes/wind-up blocks above. Works for a solo enemy or a raid boss alike. -->
+          <div v-if="memberForm.id" class="pt-2 border-t space-y-2">
+            <h4 class="font-semibold text-xs">Special attack overrides</h4>
+            <p class="text-[10px] text-gray-500">
+              When this member has one or more rows here, they ALWAYS replace its faction's shared special
+              attack — a fresh weighted pick happens every time this member's hit-streak charges up, so with
+              several rows configured it can fire a different one each time. With no rows here, this member
+              keeps using its faction's own special attack exactly as before.
+            </p>
+            <div v-if="editingMemberSpecialAttacks.length" class="space-y-1">
+              <div v-for="s in editingMemberSpecialAttacks" :key="s.id" class="flex items-center gap-2 text-[11px] bg-gray-50 rounded px-2 py-1">
+                <span class="flex-1 min-w-0 break-words">{{ s.specialAttack?.name || 'Unknown attack' }} — weight {{ s.usePercent }}</span>
+                <button type="button" class="text-red-600 hover:underline flex-shrink-0" :disabled="deletingMemberSpecialAttackId === s.id" @click="removeMemberSpecialAttack(s)">
+                  {{ deletingMemberSpecialAttackId === s.id ? 'Removing…' : 'Remove' }}
+                </button>
+              </div>
+            </div>
+            <p v-else class="text-gray-500">No overrides yet — this member uses its faction's special attack.</p>
+
+            <p v-if="memberSpecialAttackFormError" class="text-red-600">{{ memberSpecialAttackFormError }}</p>
+            <div class="flex gap-2 flex-wrap items-end">
+              <div class="flex-1 min-w-[160px]">
+                <label class="block text-[11px] font-medium mb-1">Special attack</label>
+                <select v-model="memberSpecialAttackForm.specialAttackId" class="w-full border rounded px-2 py-1">
+                  <option value="">Select…</option>
+                  <option v-for="a in specialAttacks" :key="a.id" :value="a.id">{{ a.name }}</option>
+                </select>
+              </div>
+              <div class="w-28 flex-shrink-0">
+                <label class="block text-[11px] font-medium mb-1">Weight (1-100)</label>
+                <input v-model.number="memberSpecialAttackForm.usePercent" type="number" min="1" max="100" class="w-full border rounded px-2 py-1" />
+              </div>
+              <button
+                type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                :disabled="memberSpecialAttackSaving" @click="addMemberSpecialAttack"
+              >{{ memberSpecialAttackSaving ? 'Adding…' : 'Add override' }}</button>
+            </div>
+          </div>
+
           <!-- Member taunts (CMoonEnemyMemberTaunt) — this member's own unique taunt pool, merged
                with its faction's shared pool at battle time (see mergeTauntPools). Only for an
                already-created member, same shape as the faction taunts block above. -->
@@ -1087,7 +1129,7 @@ const SPECIAL_ATTACK_EFFECT_LABELS = {
   REFLECT_DAMAGE: 'Reflect damage',
   SIPHON_HEALTH: 'Siphon health',
   POISON_OPPONENT: 'Poison opponent (raids only)',
-  CLEANSE_SELF: 'Cleanse self/allies (raids only)',
+  CLEANSE_SELF: 'Cleanse self (+allies in raids)',
   SHIELD_PARTY: 'Shield party (raids only)',
 }
 const SPECIAL_ATTACK_EFFECT_HELP = {
@@ -1099,7 +1141,7 @@ const SPECIAL_ATTACK_EFFECT_HELP = {
   REFLECT_DAMAGE: "Reflects a percent of whatever REAL damage the enemy deals to the caster's side this round back onto the enemy — if the enemy blocks instead of attacking, nothing reflects. Amount is unused for this effect.",
   SIPHON_HEALTH: 'Deals Amount flat damage to the enemy and heals the caster by a percent of it — UNLIKE every other effect above, this one fails outright (no damage, no heal) if the enemy blocks.',
   POISON_OPPONENT: 'Deals Amount damage at the end of each round for a configurable number of rounds. Re-casting on an already-poisoned target refreshes it (replaces amount/duration) rather than stacking a second tick. Only has an effect in a RAID — a solo fight has no case for it, the attack just fires and announces.',
-  CLEANSE_SELF: "Cures the caster's own side of active Paralyze (always the whole side) and Poison (self only, unless \"Also heals allies\" below is on). The player/boss can be paralyzed or poisoned again right after — this is a one-time cure, not temporary immunity. Only has an effect in a RAID.",
+  CLEANSE_SELF: "Cures the caster's own active Paralyze, plus Poison in a raid (self only, unless \"Also heals allies\" below is on — solo has no poison to clear either way). The player/boss can be paralyzed or poisoned again right after — this is a one-time cure, not temporary immunity. Works in BOTH solo and raids; \"Also heals allies\" only matters in a raid (no allies to extend to solo).",
   SHIELD_PARTY: "Negates ALL damage the party would otherwise take this round — the normal attack exchange AND any boss special that would deal damage, cast by any party member. Only works when cast by a PLAYER in a RAID; assigning this to an enemy faction's own special just makes it fire and announce with no effect, since by the time the boss could cast it the round's damage already happened.",
 }
 
@@ -1793,6 +1835,7 @@ const startingRaidPreviewId = ref('')
 const editingMemberHasBattles = ref(false)
 const editingMemberRewards = ref([])
 const editingMemberWindUpMoves = ref([])
+const editingMemberSpecialAttacks = ref([])
 const memberPendingFile = ref(null)
 const memberPendingFilePreviewUrl = ref(null)
 const memberUploadingImage = ref(false)
@@ -1902,8 +1945,10 @@ function resetMemberForm() {
   editingMemberHasBattles.value = false
   editingMemberRewards.value = []
   editingMemberWindUpMoves.value = []
+  editingMemberSpecialAttacks.value = []
   resetRewardForm()
   resetWindUpMoveForm()
+  resetMemberSpecialAttackForm()
   autoBalanceResult.value = null
   autoBalanceError.value = ''
   Object.assign(memberForm, emptyMemberForm())
@@ -1956,6 +2001,7 @@ function startEditMember(m) {
   editingMemberHasBattles.value = !!m.hasBattles
   editingMemberRewards.value = m.rewards || []
   editingMemberWindUpMoves.value = m.windUpMoves || []
+  editingMemberSpecialAttacks.value = m.specialAttacks || []
 }
 
 function onMemberFile(ev) {
@@ -2074,8 +2120,8 @@ async function saveMember() {
     return
   }
   const raidRoundLimit = Math.trunc(Number(memberForm.raidRoundLimit)) || 300
-  if (!Number.isInteger(raidRoundLimit) || raidRoundLimit < 50 || raidRoundLimit > 500) {
-    memberFormError.value = 'Round limit must be between 50 and 500.'
+  if (!Number.isInteger(raidRoundLimit) || raidRoundLimit < 50 || raidRoundLimit > 10000) {
+    memberFormError.value = 'Round limit must be between 50 and 10000.'
     return
   }
 
@@ -2352,6 +2398,58 @@ const windUpMoveForm = reactive(emptyWindUpMoveForm())
 function resetWindUpMoveForm() {
   windUpMoveFormError.value = ''
   Object.assign(windUpMoveForm, emptyWindUpMoveForm())
+}
+
+// ── Special-attack overrides (per-member, add/remove one row at a time) — same shape as the
+// rewards/wind-up blocks above, see rewards' own header comment for why editing a row is "remove
+// and re-add" instead of in-place. ───────────────────────────────────────────────────────────
+const memberSpecialAttackSaving = ref(false)
+const memberSpecialAttackFormError = ref('')
+const deletingMemberSpecialAttackId = ref('')
+
+const emptyMemberSpecialAttackForm = () => ({ specialAttackId: '', usePercent: 100 })
+const memberSpecialAttackForm = reactive(emptyMemberSpecialAttackForm())
+
+function resetMemberSpecialAttackForm() {
+  memberSpecialAttackFormError.value = ''
+  Object.assign(memberSpecialAttackForm, emptyMemberSpecialAttackForm())
+}
+
+async function addMemberSpecialAttack() {
+  memberSpecialAttackFormError.value = ''
+  if (!memberSpecialAttackForm.specialAttackId) { memberSpecialAttackFormError.value = 'Pick a special attack.'; return }
+  const usePercent = Math.trunc(Number(memberSpecialAttackForm.usePercent)) || 100
+  if (usePercent < 1 || usePercent > 100) { memberSpecialAttackFormError.value = 'Weight must be between 1 and 100.'; return }
+  memberSpecialAttackSaving.value = true
+  try {
+    await $fetch(`/api/admin/cmoon-enemy-members/${memberForm.id}/special-attacks`, {
+      method: 'POST',
+      body: { specialAttackId: memberSpecialAttackForm.specialAttackId, usePercent },
+    })
+    resetMemberSpecialAttackForm()
+    await load()
+    const fresh = members.value.find(m => m.id === memberForm.id)
+    if (fresh) editingMemberSpecialAttacks.value = fresh.specialAttacks || []
+  } catch (e) {
+    memberSpecialAttackFormError.value = e?.data?.statusMessage || 'Failed to add override'
+  } finally {
+    memberSpecialAttackSaving.value = false
+  }
+}
+
+async function removeMemberSpecialAttack(s) {
+  if (!confirm('Remove this special-attack override?')) return
+  deletingMemberSpecialAttackId.value = s.id
+  try {
+    await $fetch(`/api/admin/cmoon-enemy-member-special-attacks/${s.id}`, { method: 'DELETE' })
+    await load()
+    const fresh = members.value.find(m => m.id === memberForm.id)
+    if (fresh) editingMemberSpecialAttacks.value = fresh.specialAttacks || []
+  } catch (e) {
+    loadError.value = e?.data?.statusMessage || 'Failed to remove override'
+  } finally {
+    deletingMemberSpecialAttackId.value = ''
+  }
 }
 
 // ── Member taunts (CMoonEnemyMemberTaunt) — this member's own unique taunt pool, merged with its

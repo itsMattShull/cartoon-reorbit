@@ -13,17 +13,19 @@ export default defineEventHandler(async (event) => {
   const id = event.context.params?.id
   const attack = await db.cMoonSpecialAttack.findUnique({
     where: { id },
-    include: { _count: { select: { cmoons: true, enemyFactions: true } } },
+    include: { _count: { select: { cmoons: true, enemyFactions: true, enemyMemberLinks: true } } },
   })
   if (!attack) throw createError({ statusCode: 404, statusMessage: 'Special attack not found' })
 
-  // Friendly pre-check message; the FKs' ON DELETE RESTRICT (see CMoon.specialAttack and
-  // CMoonEnemyFaction.specialAttack in prisma/schema.prisma) are the real race-proof backstop
-  // below, same pattern as cmoon-join-effects/[id].delete.js's own P2003 catch.
-  if (attack._count?.cmoons > 0 || attack._count?.enemyFactions > 0) {
+  // Friendly pre-check message; the FKs' ON DELETE RESTRICT (see CMoon.specialAttack,
+  // CMoonEnemyFaction.specialAttack, and CMoonEnemyMemberSpecialAttack.specialAttack in
+  // prisma/schema.prisma) are the real race-proof backstop below, same pattern as
+  // cmoon-join-effects/[id].delete.js's own P2003 catch.
+  if (attack._count?.cmoons > 0 || attack._count?.enemyFactions > 0 || attack._count?.enemyMemberLinks > 0) {
     const parts = []
     if (attack._count.cmoons > 0) parts.push(`${attack._count.cmoons} cMoon(s)`)
     if (attack._count.enemyFactions > 0) parts.push(`${attack._count.enemyFactions} enemy faction(s)`)
+    if (attack._count.enemyMemberLinks > 0) parts.push(`${attack._count.enemyMemberLinks} enemy member(s)`)
     throw createError({
       statusCode: 409,
       statusMessage: `Cannot delete — this attack is assigned to ${parts.join(' and ')}. Reassign them first.`,

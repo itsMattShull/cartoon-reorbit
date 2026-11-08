@@ -41,7 +41,7 @@
             </div>
             <div class="flex items-center gap-3 flex-shrink-0">
               <button
-                v-if="isFuture(s)" type="button" class="text-indigo-600 hover:underline"
+                type="button" class="text-indigo-600 hover:underline"
                 @click="openEditForm(s)"
               >Edit</button>
               <button
@@ -62,7 +62,13 @@
         <div class="flex gap-2 flex-wrap">
           <div class="flex-1 min-w-[160px]">
             <label class="block text-xs font-medium mb-1">Start date</label>
-            <input v-model="form.startAt" type="datetime-local" class="w-full border rounded px-2 py-1" />
+            <input
+              v-model="form.startAt" type="datetime-local" class="w-full border rounded px-2 py-1"
+              :disabled="editingStartedSeason" :class="{ 'bg-gray-100 text-gray-500': editingStartedSeason }"
+            />
+            <p v-if="editingStartedSeason" class="text-[11px] text-gray-500 mt-1">
+              Can't change the start date of a season that's already begun.
+            </p>
           </div>
           <div class="flex-1 min-w-[160px]">
             <label class="block text-xs font-medium mb-1">End date</label>
@@ -182,6 +188,10 @@ const formOpen = ref(false)
 const editingId = ref('')
 const saving = ref(false)
 const formError = ref('')
+// Whether the season currently being edited has already started — locks the Start date field
+// client-side as a UX hint; server/api/admin/cmoon-seasons/[id].put.js enforces the same rule
+// as the real guard.
+const editingStartedSeason = ref(false)
 
 function emptyForm() {
   return {
@@ -256,6 +266,7 @@ async function load() {
 function openAddForm() {
   editingId.value = ''
   formError.value = ''
+  editingStartedSeason.value = false
   Object.assign(form, emptyForm())
   // Default the very first season's start date to whenever cMoons first launched — nothing to
   // default to for a later season, left blank for the admin to pick.
@@ -271,6 +282,7 @@ function openAddForm() {
 function openEditForm(s) {
   editingId.value = s.id
   formError.value = ''
+  editingStartedSeason.value = new Date(s.startAt).getTime() <= Date.now()
   Object.assign(form, {
     startAt: toLocalInput(s.startAt),
     endAt: toLocalInput(s.endAt),

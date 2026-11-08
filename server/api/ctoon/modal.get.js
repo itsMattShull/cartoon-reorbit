@@ -219,6 +219,8 @@ export default defineEventHandler(async (event) => {
       power: ctoon.power,
       abilityKey: ctoon.abilityKey,
       abilityData: ctoon.abilityData,
+      isOgGtoon: ctoon.isOgGtoon,
+      gtoonValue: ctoon.gtoonValue,
       highestSale: highestSale?.highestBid ?? null,
       highestSaleMint: highestSale?.userCtoon?.mintNumber ?? null,
       highestSaleEndedAt: highestSale?.endAt ?? null,

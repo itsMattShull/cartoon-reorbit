@@ -40,6 +40,14 @@
             <p v-if="showCaptainBoostOverlay" class="cr-boost-overlay">Captain present! Players boosted!</p>
           </Transition>
 
+          <!-- AFK kick banner — for whoever's LEFT in the raid (the kicked player themselves never
+               sees this: their own socket gets cmoonraid:kicked instead, which clears `raid`
+               straight to the "Loading raid…"/lastError screen above). A few seconds, then gone,
+               same timed-banner shape as the captain entrance banner above. -->
+          <Transition name="cr-reveal">
+            <p v-if="afkKickBanner" class="cr-kick-banner">{{ afkKickBanner }}</p>
+          </Transition>
+
           <div v-if="raid.isPrivate" class="cr-private-row">
             <span>🔒 Private raid — only reachable via this page's own link.</span>
             <button type="button" class="cr-link-btn" @click="copyInviteLink">{{ inviteLinkCopied ? 'Copied!' : 'Copy invite link' }}</button>
@@ -320,11 +328,28 @@
               </div>
               <p class="text-xs text-gray-600">Everyone who joined received the same prize, and cMoon points went to each player's own cMoon.</p>
             </template>
-            <NuxtLink to="/newsite/home" class="inline-block px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50">Back home</NuxtLink>
+            <div class="flex items-center gap-2 flex-wrap">
+              <NuxtLink to="/newsite/home" class="inline-block px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50">Back home</NuxtLink>
+              <button
+                v-if="raid.battleReport" type="button"
+                class="inline-block px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50"
+                @click="showBattleReport = true"
+              >
+                📊 Click to view battle report
+              </button>
+            </div>
           </div>
         </div>
       </template>
     </div>
+
+    <CMoonRaidBattleReportModal
+      v-if="showBattleReport && raid?.battleReport"
+      :report="raid.battleReport"
+      :enemy-image-path="raid.enemyImagePath"
+      :my-user-id="user?.id"
+      @close="showBattleReport = false"
+    />
   </NuxtLayout>
 </template>
 
@@ -476,6 +501,7 @@ function specialEffectDescription(attack) {
   }
 }
 const showSpecialInfo = ref(false)
+const showBattleReport = ref(false)
 // How many consecutive landed hits MY OWN special needs right now — this attack's own
 // requiredHitStreak, minus 1 under captain boost (see myself.hitStreakThreshold's own comment in
 // cmoonRaidSocket.js) — now per-participant, since different party members' attacks can cost
@@ -768,6 +794,20 @@ watch(() => raid.value?.outcome, (outcome) => {
   else if (outcome === 'LOSS') playSound(raid.value?.enemySounds?.defeatSoundPath)
 })
 
+// AFK kick banner for the party members who AREN'T the one just kicked — see
+// composable's own cmoonraid:participantKicked handler (lastKicked) for why the kicked player
+// themselves never reaches this watcher with `raid` still non-null. Watches `.at`, not the object
+// itself, so a second kick with the exact same username still re-fires the banner/timer.
+const afkKickBanner = ref('')
+let afkKickTimer = null
+watch(() => raidSocket.lastKicked.value?.at, () => {
+  const names = (raidSocket.lastKicked.value?.kicked || []).map(k => k.username || 'Someone')
+  if (!names.length) return
+  afkKickBanner.value = `⏱️ ${joinWithAnd(names)} ${names.length > 1 ? 'were' : 'was'} kicked from the raid for inactivity.`
+  if (afkKickTimer) clearTimeout(afkKickTimer)
+  afkKickTimer = setTimeout(() => { afkKickBanner.value = '' }, 5000)
+})
+
 onMounted(() => {
   raidSocket.getState(raidId.value)
   countdownTimer = setInterval(() => { tickCountdown(); tickSecondsSinceStart() }, 250)
@@ -780,6 +820,7 @@ onUnmounted(() => {
   if (specialUseTimer) clearTimeout(specialUseTimer)
   if (shakeTimer) clearTimeout(shakeTimer)
   if (captainEntranceTimer) clearTimeout(captainEntranceTimer)
+  if (afkKickTimer) clearTimeout(afkKickTimer)
   if (resultFlashTimer) clearTimeout(resultFlashTimer)
   battleMusic.stop()
 })
@@ -970,6 +1011,25 @@ onUnmounted(() => {
 }
 @media (prefers-reduced-motion: reduce) {
   .cr-captain-banner { animation: none; }
+}
+
+/* AFK kick banner — same timed-callout shape as .cr-captain-banner above (one-shot entrance,
+   auto-clears via afkKickTimer), just in a "something went wrong for someone" red rather than the
+   captain banner's celebratory gold. */
+.cr-kick-banner {
+  font-size: 13.5px;
+  font-weight: 800;
+  text-align: center;
+  color: #7f1d1d;
+  background: linear-gradient(90deg, rgba(248, 113, 113, 0.2), rgba(248, 113, 113, 0.4), rgba(248, 113, 113, 0.2));
+  border: 1px solid #dc2626;
+  border-radius: 8px;
+  padding: 7px 12px;
+  margin: 0;
+  animation: cr-captain-banner-pop 0.5s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cr-kick-banner { animation: none; }
 }
 
 /* Captain boost overlay — GlobalGameConfig.cMoonCaptainBoostEnabled's own epic callout (see

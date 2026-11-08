@@ -125,12 +125,12 @@ export const MAX_PARTICIPANTS_MAX = 8
 export const MAX_PARTICIPANTS_DEFAULT = 4
 
 // Round-count safety valve for a raid boss — see CMoonEnemyMember.raidRoundLimit's own schema
-// comment. 300 is the new default (the original hardcoded RAID_MAX_ROUNDS_SAFETY went 100 -> 150
-// -> this per-member override), with a floor high enough that no admin can accidentally make a
+// comment. 300 is the default (the original hardcoded RAID_MAX_ROUNDS_SAFETY went 100 -> 150 ->
+// this per-member override), with a floor high enough that no admin can accidentally make a
 // raid boss unwinnable-in-time (a raid that hits this cap with neither side at 0 resolves
-// ABANDONED) and a ceiling the feature request asked for explicitly.
+// ABANDONED) and a ceiling raised to 10000 so a raid can theoretically run that long.
 export const RAID_ROUND_LIMIT_MIN = 50
-export const RAID_ROUND_LIMIT_MAX = 500
+export const RAID_ROUND_LIMIT_MAX = 10000
 export const RAID_ROUND_LIMIT_DEFAULT = 300
 
 // Wind-up/telegraph moves (see CMoonEnemyWindUpMove's own schema comment) — same 0-100 "flat,
@@ -622,6 +622,34 @@ export function parseRewardBody(body) {
       quantity,
     },
   }
+}
+
+// Validates the body for adding ONE CMoonEnemyMemberSpecialAttack override row — see that model's
+// own schema comment and pickEnemySpecialAttack in cmoonEnemyBattle.js for why this exists at all
+// (a member with any of these always uses this pool instead of its faction's single shared
+// attack). Same add-one/remove-one shape as parseRewardBody above, just simpler: there's no
+// type-conditional id to resolve, only a required specialAttackId and an optional relative weight.
+export function parseMemberSpecialAttackBody(body) {
+  const specialAttackId = toOptionalId(body?.specialAttackId)
+  if (!specialAttackId) {
+    return { ok: false, message: 'specialAttackId is required' }
+  }
+
+  // Same "not a percent out of 100, never required to sum to 100" relative-weight semantics as
+  // CMoonEnemyMember.occurrencePercent — reuses that column's own bounds (OCCURRENCE_PERCENT_MIN/
+  // MAX) rather than inventing a separate range for what is the same kind of knob. The default
+  // (100, not OCCURRENCE_PERCENT_DEFAULT's 50) matches CMoonEnemyMemberSpecialAttack.usePercent's
+  // own schema default exactly — a single row with no weight specified should be "the only
+  // candidate" in every practical sense, same as a member with just one configured.
+  let usePercent = 100
+  if (body?.usePercent !== undefined) {
+    usePercent = toNumber(body.usePercent)
+    if (!isValidOccurrencePercent(usePercent)) {
+      return { ok: false, message: `Use weight must be a whole number between ${OCCURRENCE_PERCENT_MIN} and ${OCCURRENCE_PERCENT_MAX}` }
+    }
+  }
+
+  return { ok: true, data: { specialAttackId, usePercent } }
 }
 
 // Narrows an already-eligible candidate list (consider.post.js has already applied active/

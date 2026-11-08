@@ -174,6 +174,12 @@ const blockedByFeaturedLead = ref(false)
 // these against them when bidding/auto-bidding here.
 const myLockedHere = ref(0)
 let timer, featuredLeadTimer, socket
+// Guards against the race where this component is closed (this view lives inside a
+// frequently opened/closed quick-view modal — see EconomyAuctionViewModal.vue) before
+// connectSocket's dynamic import resolves: without it, the .then() callback below still
+// runs after onUnmounted already fired, creating a live, forever-connected socket with
+// active listeners that nothing is left to ever disconnect.
+let isUnmounted = false
 
 // ── Computed ─────────────────────────────────────────────────────
 // A sealed pack is sold through the very same page; only the item differs (server/utils/auctionItem.js).
@@ -381,6 +387,7 @@ function connectSocket() {
   const { io } = window.socketIOClient ? window : {}
   // Use dynamic import so it doesn't break SSR
   import('socket.io-client').then(({ io: ioFn }) => {
+    if (isUnmounted) return
     const path = import.meta.env.PROD
       ? undefined
       : `http://localhost:${config.public.socketPort}`
@@ -418,6 +425,10 @@ function connectSocket() {
 onMounted(async () => {
   scavenger.reset()
   await loadAuction()
+  // Closed (see isUnmounted's own comment above) while that fetch was in flight — onUnmounted
+  // already ran with nothing to clean up yet, so setting up a timer/socket now would leak both
+  // forever instead of just the socket.
+  if (isUnmounted) return
   loading.value = false
   timer = setInterval(() => { now.value = new Date() }, 1000)
   if (auction.value.isFeatured) {
@@ -427,6 +438,7 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  isUnmounted = true
   clearInterval(timer)
   clearInterval(featuredLeadTimer)
   if (socket) {
