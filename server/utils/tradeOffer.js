@@ -391,6 +391,47 @@ export async function counterChainDepth (offerId, max) {
 }
 
 /**
+ * Force-withdraws any PENDING trade offer that references this exact physical UserCtoon copy —
+ * for use whenever a copy's ownership is reassigned OUTSIDE the normal accept-trade flow (e.g. an
+ * admin seizing it from a cheater's account into the official account). Without this, the stale
+ * TradeOfferCtoon row still ties this userCtoonId to a PENDING offer — server/api/collection/
+ * [username].get.js's pendingTradeSet (and server/utils/userPackState.js's pack equivalent, which
+ * this also clears for free once the offer's status flips) checks that alone, independent of
+ * current ownership — permanently locking the copy from trading/auctioning for whoever ends up
+ * owning it next. That next owner is neither the stale offer's initiator nor its recipient, so
+ * they can never see it in their own Incoming/Outgoing lists to cancel it themselves either.
+ *
+ * The whole-account dissolve/transfer workers (server/workers/dissolve.worker.js,
+ * transfer.worker.js) already do the equivalent cleanup, scoped to every offer the departing user
+ * is party to, before moving their cToons. This is the narrower, single-copy version for a
+ * targeted seizure, where the offer's other party may be someone unrelated to the seizure.
+ *
+ * Must run inside the SAME transaction as the ownership reassignment (pass `tx`), the same reason
+ * server/api/locks/[userCtoonId].post.js's own comment gives for its own auction check — a
+ * check-then-write split would let a legitimate accept/counter land in the gap.
+ *
+ * @returns the number of trade offers withdrawn (almost always 0 or 1 in practice).
+ */
+export async function withdrawPendingTradeOffersForUserCtoon (tx, userCtoonId) {
+  const links = await tx.tradeOfferCtoon.findMany({
+    where: { userCtoonId, tradeOffer: { status: 'PENDING' } },
+    select: { tradeOfferId: true }
+  })
+  const offerIds = [...new Set(links.map(l => l.tradeOfferId))]
+  if (!offerIds.length) return 0
+
+  const { count } = await tx.tradeOffer.updateMany({
+    where: { id: { in: offerIds }, status: 'PENDING' },
+    data: { status: 'WITHDRAWN', updatedAt: new Date() }
+  })
+  await tx.lockedPoints.updateMany({
+    where: { contextType: 'TRADE', contextId: { in: offerIds }, status: 'ACTIVE' },
+    data: { status: 'RELEASED' }
+  })
+  return count
+}
+
+/**
  * Discord DM telling the recipient about a new offer or a counter.
  *
  * Callers must not await this. The offer is already committed by the time it

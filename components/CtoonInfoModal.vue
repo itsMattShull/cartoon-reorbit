@@ -50,6 +50,14 @@
           gToon
         </button>
         <button
+          v-if="hasOgGtoon"
+          class="px-3 py-1.5 rounded text-sm font-medium transition"
+          :class="activeTab === 'oggtoon' ? 'bg-white text-gray-900' : 'bg-gray-700/60 text-gray-200 hover:bg-gray-700'"
+          @click="activeTab = 'oggtoon'"
+        >
+          OG gToon
+        </button>
+        <button
           v-if="ctoon.id"
           class="px-3 py-1.5 rounded text-sm font-medium transition"
           :class="activeTab === 'owners' ? 'bg-white text-gray-900' : 'bg-gray-700/60 text-gray-200 hover:bg-gray-700'"
@@ -214,6 +222,36 @@
             <div class="rounded bg-gray-700/60 p-3 sm:col-span-2">
               <div class="text-xs uppercase text-gray-300">Ability</div>
               <div class="font-semibold">{{ abilityLabel(ctoon.abilityKey) }}</div>
+            </div>
+          </div>
+        </template>
+
+        <template v-else-if="activeTab === 'oggtoon' && hasOgGtoon">
+          <div v-if="ogGtoonLoading" class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm animate-pulse">
+            <div v-for="i in 3" :key="`oggtoon-skel-${i}`" class="rounded bg-gray-700/60 p-3">
+              <div class="h-3 w-20 bg-gray-600/70 rounded"></div>
+              <div class="mt-2 h-4 w-24 bg-gray-600/70 rounded"></div>
+            </div>
+          </div>
+          <div v-else-if="ogGtoonError" class="text-sm text-red-300">
+            Failed to load gToon details.
+          </div>
+          <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div class="rounded bg-gray-700/60 p-3">
+              <div class="text-xs uppercase text-gray-300">Value</div>
+              <div class="font-semibold">{{ formatValue(ctoon.gtoonValue) }}</div>
+            </div>
+            <div class="rounded bg-gray-700/60 p-3">
+              <div class="text-xs uppercase text-gray-300">Types</div>
+              <div class="font-semibold">{{ ogGtoonData?.types?.length ? ogGtoonData.types.join(', ') : '—' }}</div>
+            </div>
+            <div v-if="ogGtoonData?.group" class="rounded bg-gray-700/60 p-3 sm:col-span-2">
+              <div class="text-xs uppercase text-gray-300">Group</div>
+              <div class="font-semibold">{{ ogGtoonData.group }}</div>
+            </div>
+            <div class="rounded bg-gray-700/60 p-3 sm:col-span-2">
+              <div class="text-xs uppercase text-gray-300">Power{{ ogGtoonData?.power?.isSlam ? ' (Slam)' : '' }}</div>
+              <div class="font-semibold">{{ ogGtoonData?.power?.description || 'No power' }}</div>
             </div>
           </div>
         </template>
@@ -446,6 +484,7 @@ const ctoonDescription = computed(() => String(ctoon.value?.description || '').t
 const userCtoon = computed(() => data.value?.userCtoon || null)
 const ownedCount = computed(() => data.value?.ownedCount ?? 0)
 const hasGtoon = computed(() => !!ctoon.value?.isGtoon)
+const hasOgGtoon = computed(() => !!ctoon.value?.isOgGtoon)
 const totalQuantityLabel = computed(() => {
   return formatQuantity(ctoon.value?.quantity)
 })
@@ -512,6 +551,11 @@ const ownersLoading = ref(false)
 const ownersError = ref('')
 const ownersList = ref([])
 const lastOwnersCtoonId = ref(null)
+
+const ogGtoonLoading = ref(false)
+const ogGtoonError = ref('')
+const ogGtoonData = ref(null)
+const lastOgGtoonCtoonId = ref(null)
 const ownerValuations = ref({})
 const ownerValuationsLoading = ref(false)
 
@@ -692,6 +736,10 @@ watch(isOpen, (open) => {
     lastOwnersCtoonId.value = null
     ownerValuations.value = {}
     ownerValuationsLoading.value = false
+    ogGtoonLoading.value = false
+    ogGtoonError.value = ''
+    ogGtoonData.value = null
+    lastOgGtoonCtoonId.value = null
     if (audioEl.value) { audioEl.value.pause(); audioEl.value.currentTime = 0 }
     return
   }
@@ -713,6 +761,23 @@ watch([isOpen, loading], async ([open, isLoading]) => {
 watch([isOpen, hasGtoon], ([open, isGtoon]) => {
   if (!open) return
   if (!isGtoon && activeTab.value === 'gtoon') activeTab.value = 'info'
+})
+
+watch([isOpen, hasOgGtoon], ([open, isOgGtoon]) => {
+  if (!open) return
+  if (!isOgGtoon && activeTab.value === 'oggtoon') activeTab.value = 'info'
+})
+
+watch([isOpen, activeTab, () => ctoon.value?.id], ([open, tab, ctoonId]) => {
+  if (!open) return
+  if (tab !== 'oggtoon') return
+  if (!ctoonId) {
+    ogGtoonData.value = null
+    ogGtoonError.value = ''
+    return
+  }
+  if (lastOgGtoonCtoonId.value === ctoonId && ogGtoonData.value) return
+  loadOgGtoonPower(ctoonId)
 })
 
 watch([isOpen, activeTab, () => ctoon.value?.id], ([open, tab, ctoonId]) => {
@@ -800,6 +865,21 @@ onBeforeUnmount(() => {
   if (seriesSuggestTimer) clearTimeout(seriesSuggestTimer)
   if (setSuggestTimer) clearTimeout(setSuggestTimer)
 })
+
+async function loadOgGtoonPower(ctoonId) {
+  ogGtoonLoading.value = true
+  ogGtoonError.value = ''
+  try {
+    const res = await $fetch(`/api/game/oggtoons/card/${ctoonId}`)
+    ogGtoonData.value = res || null
+    lastOgGtoonCtoonId.value = ctoonId
+  } catch {
+    ogGtoonError.value = 'Failed to load gToon details.'
+    ogGtoonData.value = null
+  } finally {
+    ogGtoonLoading.value = false
+  }
+}
 
 async function loadOwners(ctoonId) {
   ownersLoading.value = true

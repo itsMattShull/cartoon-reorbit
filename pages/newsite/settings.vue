@@ -75,6 +75,28 @@
             </p>
             <p v-if="cMoonPopupsError" class="settings-error">{{ cMoonPopupsError }}</p>
 
+            <div class="settings-row">
+              <div>
+                <h2 class="settings-row-title">Raid Boss Notifications</h2>
+                <p class="settings-row-desc">Get notified when a cMoon raid boss lobby opens. Turning this off only mutes the alert — you can still see and join raids normally.</p>
+              </div>
+
+              <div class="toggle-wrap">
+                <div v-if="loading" class="toggle-skeleton"></div>
+                <label v-else class="toggle-label">
+                  <input type="checkbox" class="sr-only" v-model="muteRaidNotifications" @change="onToggleMuteRaidNotifications" :disabled="raidNotificationsSaving || loading" />
+                  <div :class="['toggle-track', !muteRaidNotifications ? 'toggle-on' : 'toggle-off']">
+                    <div :class="['toggle-knob', !muteRaidNotifications ? 'toggle-knob-on' : '']"></div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <p class="settings-status" :class="{ 'settings-status-dim': raidNotificationsSaving || loading }">
+              {{ loading ? '' : raidNotificationsSaving ? 'Saving…' : 'Changes are saved instantly.' }}
+            </p>
+            <p v-if="raidNotificationsError" class="settings-error">{{ raidNotificationsError }}</p>
+
             <div class="settings-row settings-row-haptic">
               <div>
                 <h2 class="settings-row-title">Haptic Sounds</h2>
@@ -351,6 +373,9 @@ const avatars = ref([])
 const allowCMoonPopups  = ref(true)
 const cMoonPopupsSaving = ref(false)
 const cMoonPopupsError  = ref('')
+const muteRaidNotifications = ref(false)
+const raidNotificationsSaving = ref(false)
+const raidNotificationsError  = ref('')
 
 const showAvatarModal      = ref(false)
 const showUsernameModal    = ref(false)
@@ -430,6 +455,7 @@ async function loadSetting() {
     const data = await res.json()
     allow.value = !!data.allowAuctionNotifications
     allowCMoonPopups.value = data.allowCMoonEnemyPopups !== false
+    muteRaidNotifications.value = !!data.muteRaidNotifications
   } catch (e) {
     console.error(e)
     error.value = 'Failed to load preference.'
@@ -485,6 +511,31 @@ async function onToggleCMoonPopups() {
     cMoonPopupsError.value = 'Could not save. Please try again.'
   } finally {
     cMoonPopupsSaving.value = false
+  }
+}
+
+async function onToggleMuteRaidNotifications() {
+  if (loading.value) return
+  raidNotificationsError.value = ''
+  const next = muteRaidNotifications.value
+  const prev = !muteRaidNotifications.value
+  raidNotificationsSaving.value = true
+  try {
+    const res = await fetch('/api/user/notifications', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ muteRaidNotifications: next })
+    })
+    if (!res.ok) throw new Error(await res.text())
+    const data = await res.json()
+    muteRaidNotifications.value = !!data.muteRaidNotifications
+  } catch (err) {
+    console.error(err)
+    muteRaidNotifications.value = prev
+    raidNotificationsError.value = 'Could not save. Please try again.'
+  } finally {
+    raidNotificationsSaving.value = false
   }
 }
 

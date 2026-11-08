@@ -24,7 +24,8 @@ import {
   isValidPlayerSubmittedAction, resolveRound, rollEnemyRewards, buildGrantableReward,
   serializeBattleForClient, MAX_ROUNDS_SAFETY, HEAL_ON_SUCCESSFUL_BLOCK,
   SPECIAL_ACTION, HIT_STREAK_THRESHOLD, shouldForcePityReward, forcePickOneReward, grantSummaryIsEmpty,
-  isAttack, isBlock, pickEffectiveSpecialAttack, SPECIAL_ATTACK_SELECT,
+  isAttack, isBlock, pickEffectiveSpecialAttack, SPECIAL_ATTACK_SELECT, applySoloCleanseSelfHeal,
+  pickEnemySpecialAttack, enemySpecialAttackRequiredHitStreak,
 } from '@/server/utils/cmoonEnemyBattle'
 
 // `user: { chosenSpecialAttack }` — this player's own special-attack choice (see
@@ -43,6 +44,10 @@ const BATTLE_INCLUDE = {
       // This member's OWN unique taunts (see CMoonEnemyMemberTaunt) — merged with the faction's
       // shared pool above by mergeTauntPools in cmoonEnemyBattle.js.
       taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+      // This member's OWN special-attack overrides (see pickEnemySpecialAttack in
+      // cmoonEnemyBattle.js) — when any exist, they ALWAYS win over the faction's shared
+      // specialAttack above, "regardless of their faction's special attack."
+      specialAttacks: { include: { specialAttack: true }, orderBy: { sortOrder: 'asc' } },
     },
   },
   cMoon: { include: { specialAttack: true } },
@@ -91,7 +96,10 @@ export default defineEventHandler(async (event) => {
   // the equivalent guard for the 5th, since the special's effect applies BEFORE that override
   // would otherwise catch it). The charge itself is untouched — the player tried and failed to
   // act, not chose not to, so it's still there to fire the moment paralysis wears off.
-  if (isSpecial && battle.playerParalyzedTurns > 0) {
+  // CLEANSE_SELF is the one exception: its entire job is curing this player's OWN active
+  // paralysis, so blocking it exactly while paralyzed would make the effect permanently
+  // unreachable in its primary use case.
+  if (isSpecial && battle.playerParalyzedTurns > 0 && playerSpecialAttack?.effectType !== 'CLEANSE_SELF') {
     throw createError({ statusCode: 409, statusMessage: `You're paralyzed and can't act for ${battle.playerParalyzedTurns} more round(s)` })
   }
   // Stamina gate (see CMoonEnemyBattle.playerStamina's own schema comment) — the actual point of
@@ -217,6 +225,18 @@ export default defineEventHandler(async (event) => {
       playerSpecialEvent.missed = true
     } else if (playerSpecialAttack.effectType === 'DAMAGE_OPPONENT') totalDamageDealt += await damageEnemy(playerSpecialAttack.amount)
     else if (playerSpecialAttack.effectType === 'HEAL_SELF') playerHp = Math.min(battle.playerMaxHp, playerHp + playerSpecialAttack.amount)
+    // CLEANSE_SELF: cures this player's own active paralysis (there's no separate poison state
+    // in a solo battle — POISON_OPPONENT, the only thing that could ever apply one, is genuinely
+    // raid-only, see that effect's own schema comment — so "self only, unless healsAllies" has
+    // nothing left to do here; healsAllies itself is a raid-only concept too, no allies to heal
+    // solo). Optional HP top-up (cleanseAlsoHeals), same shape as HEAL_SELF just above. Setting
+    // playerParalyzedTurns here, before step 2's resolveRound call below reads it, means a
+    // same-round cure also lets THIS round's own lane exchange go through unparalyzed — same
+    // "instant, not deferred" timing PARALYZE_OPPONENT's own opposite-direction branch relies on.
+    else if (playerSpecialAttack.effectType === 'CLEANSE_SELF') {
+      playerParalyzedTurns = 0
+      playerHp = applySoloCleanseSelfHeal(playerHp, battle.playerMaxHp, playerSpecialAttack.cleanseAlsoHeals, playerSpecialAttack.amount)
+    }
     else if (playerSpecialAttack.effectType === 'PARALYZE_OPPONENT') enemyParalyzedTurns += playerSpecialAttack.amount
     else if (playerSpecialAttack.effectType === 'LOWER_OPPONENT_ATTACK') enemyAtkBonus -= playerSpecialAttack.amount
     else if (playerSpecialAttack.effectType === 'RAISE_ALLY_ATTACK') playerAtkBonus += playerSpecialAttack.amount
@@ -281,11 +301,17 @@ export default defineEventHandler(async (event) => {
   }
   enemyHitStreak = roundCore.playerHit ? enemyHitStreak + 1 : 0
 
-  // ── 4. The NPC has no choice to make — the instant ITS OWN streak caps out, its faction's
-  // special (if any) fires automatically as a bonus on top of whatever this round already did.
-  const enemySpecialAttack = battle.enemyMember.faction?.specialAttack || null
-  if (enemySpecialAttack && enemyHitStreak >= (enemySpecialAttack.requiredHitStreak ?? HIT_STREAK_THRESHOLD)) {
+  // ── 4. The NPC has no choice to make — the instant ITS OWN streak caps out, its special fires
+  // automatically as a bonus on top of whatever this round already did. "Its special" is a fresh
+  // weighted pick among this member's own configured overrides when it has any — see
+  // pickEnemySpecialAttack's own comment in cmoonEnemyBattle.js for why — falling back to its
+  // faction's single shared attack otherwise. Readiness (the threshold check) deliberately stays
+  // independent of which attack eventually fires — see enemySpecialAttackRequiredHitStreak's own
+  // comment for why gating on any one candidate's own requiredHitStreak would be wrong here.
+  const hasAnyEnemySpecial = !!(battle.enemyMember.faction?.specialAttack || battle.enemyMember.specialAttacks?.length)
+  if (hasAnyEnemySpecial && enemyHitStreak >= enemySpecialAttackRequiredHitStreak(battle.enemyMember)) {
     enemyHitStreak = 0
+    const enemySpecialAttack = pickEnemySpecialAttack(battle.enemyMember)
     const enemySpecialEvent = {
       side: 'ENEMY', name: enemySpecialAttack.name,
       effectType: enemySpecialAttack.effectType, amount: enemySpecialAttack.amount,

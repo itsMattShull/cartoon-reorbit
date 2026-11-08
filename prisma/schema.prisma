@@ -39,6 +39,10 @@ enum NotificationType {
   // drawer routes any typed notification with a contextId to /newsite/AuctionHouse/<id>. The client
   // maps this type straight to /newsite/MyCollection?tab=packs instead.
   PVP_PACK_WON
+  // This player was auto-kicked from a raid for going AFK (auto-moved) 4 consecutive rounds — see
+  // the AFK-kick block in closeRound, server/utils/cmoonRaidSocket.js. No contextId: the raid is
+  // over for them either way, there's nothing left to click through to.
+  CMOON_RAID_KICKED_AFK
 }
 
 /// Where a sealed UserPack came from. Pack purchase limits and purchase analytics count PURCHASE rows
@@ -625,6 +629,16 @@ model User {
   // blocks the popup entirely — solo AND raid offers both — since a player asking to stop being
   // shown it at all shouldn't still get raid-boss interruptions.
   allowCMoonEnemyPopups  Boolean         @default(true)
+  // Opt out of raid-boss notifications specifically — the "Raid Boss" tab in the Daily widget
+  // (components/Onboarding.vue) and its underlying Notification rows. Unlike allowCMoonEnemyPopups
+  // above (which blocks the battle-encounter POPUP), this only silences the notification CHANNEL:
+  // a muted player can still see/join raids normally, they just stop getting pinged about new
+  // ones. @default(false) (a "mute", not an "allow") so existing players keep today's behavior —
+  // the opposite default convention from allow* fields on purpose, since the feature itself is an
+  // opt-OUT. Checked in notifyCMoonRaidLobbyOpened/notifyCMoonRaidBossStarted/
+  // notifyCMoonRaidPreviewStarted (server/utils/notifications.js) before a row is ever written —
+  // muting suppresses creation entirely rather than just hiding already-created rows client-side.
+  muteRaidNotifications  Boolean         @default(false)
   // Set when a player explicitly declines to pick a cMoon from the initial join modal (there is no
   // more time-based auto-assignment — see server/utils/cmoon.js). Only meaningful while cMoonId is
   // null; cleared back to false on a successful selectCMoonForUser. Lets the modal stop popping up
@@ -681,7 +695,13 @@ model User {
   // for this battle" state, not a danger to avoid. Read once at CMoonEnemyBattle.playerMaxStamina
   // snapshot time (server/api/cmoon/battle/start.post.js) — like every other per-battle snapshot,
   // changing this never affects a battle already in progress, only the player's NEXT one.
-  cMoonStaminaAdjustment Int @default(0)
+  cMoonStaminaAdjustment Int                      @default(0)
+  // One row per CMoonBattleUpgrade this player has ever bought at least once (see that model's
+  // own schema comment) — how many times, capped at the upgrade's own purchaseLimit. Deleted
+  // (not decremented) when the player prestiges, which is what both resets the HP/Stamina those
+  // purchases granted (see prestigeUser in cmoonPrestige.js) and lets them buy up to the limit
+  // again afterward.
+  battleUpgradePurchases UserCMoonBattleUpgrade[]
 
   // ── cMoon Prestige ───────────────────────────────────────────────────────────────────────────
   // How many times this player has prestiged — permanent, cumulative, NEVER reset by
@@ -3199,6 +3219,8 @@ model OgGtoonTournament {
   status              OgGtoonTournamentStatus  @default(DRAFT)
   optInStartAt        DateTime
   optInEndAt          DateTime
+  // When pairings are made and play begins. Null = legacy tournaments, which start the moment opt-in closes.
+  startAt             DateTime?
   format              OgGtoonTournamentFormat?
   // Null = derive from the field size when opt-in closes (see tournamentCore.swissRoundsFor).
   swissRoundsOverride Int?
@@ -4652,6 +4674,78 @@ model CMoonPrestigeLog {
 
   @@index([userId])
   @@index([createdAt])
+}
+
+enum CMoonBattleUpgradeStat {
+  HP
+  STAMINA
+}
+
+// Admin-defined, player-purchasable PERMANENT boosts to a player's cMoon battle HP or Stamina —
+// bought from the cMart's existing "Upgrades" tab (components/newsite/Cmart.vue), alongside
+// "Additional cZone". Each purchase grants `amount` of `stat`, applied the exact same additive
+// way the "Manage User HP & Stamina" admin tool's own adjustment does (see combinePlayerMaxHp/
+// combinePlayerMaxStamina in cmoonEnemyBattle.js) — by incrementing that SAME User.
+// cMoonHpAdjustment/cMoonStaminaAdjustment field, never a separate stat. A player may buy any
+// one upgrade up to `purchaseLimit` times — see UserCMoonBattleUpgrade for how that's tracked
+// per player — and every purchase of it resets (and must be bought again) the next time that
+// player prestiges (see prestigeUser in server/utils/cmoonPrestige.js), unlike a manual grant
+// from the separate HP/Stamina admin tool, which prestige never touches.
+model CMoonBattleUpgrade {
+  id            String                 @id @default(uuid())
+  name          String
+  description   String?
+  stat          CMoonBattleUpgradeStat
+  // HP or Stamina granted per purchase — always positive; `price` is what makes an upgrade
+  // "cost" something, this is purely the reward side.
+  amount        Int
+  // Cost in points, per purchase (the same purchase repeated by the same player costs this each
+  // time, up to purchaseLimit times).
+  price         Int
+  // Max times ONE player may buy this (see UserCMoonBattleUpgrade.timesPurchased) — resets to
+  // zero again the next time that player prestiges, not a lifetime-forever cap.
+  purchaseLimit Int
+  // Hides this upgrade from the cMart listing without deleting it — deleting is blocked once
+  // anyone has purchased it (onDelete: Restrict below), so retiring an upgrade players already
+  // bought uses this instead, the same "soft-retire, never hard-delete a referenced row" stance
+  // CMoonSpecialAttack/Pack take elsewhere in this schema.
+  active        Boolean                @default(true)
+  sortOrder     Int                    @default(0)
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  purchases UserCMoonBattleUpgrade[]
+
+  @@index([active, sortOrder])
+}
+
+// One row per (player, upgrade) they have ever purchased at least once — timesPurchased is
+// capped at the upgrade's own purchaseLimit by server/utils/cmoonBattleUpgradeOps.js (an
+// admin-editable limit, so not a DB CHECK constraint). Deleted outright — never decremented — the
+// next time this player prestiges (prestigeUser in cmoonPrestige.js both subtracts
+// timesPurchased × upgrade.amount back out of the matching User.cMoonHpAdjustment/
+// cMoonStaminaAdjustment field AND removes these rows in the same transaction), which is what
+// lets the player buy back up to the limit again afterward.
+model UserCMoonBattleUpgrade {
+  id             String   @id @default(uuid())
+  userId         String
+  upgradeId      String
+  timesPurchased Int      @default(0)
+  // Running total of HP/Stamina this user has ACTUALLY been granted from purchases of this
+  // upgrade — stamped at each purchase from the upgrade's `amount` AT THAT TIME (see
+  // purchaseBattleUpgrade in cmoonBattleUpgradeOps.js), never re-derived from the upgrade's
+  // CURRENT amount × timesPurchased. An admin can freely edit `amount` after players have already
+  // bought an upgrade (see that field's own [id].put.js comment) — re-deriving from today's amount
+  // would then misattribute every PRIOR purchase's grant to the new value, so prestige's reset
+  // (sumBattleUpgradeStatTotals in cmoonBattleUpgradeValidation.js) sums this column directly
+  // instead.
+  grantedTotal   Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  user    User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  upgrade CMoonBattleUpgrade @relation(fields: [upgradeId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, upgradeId])
 }
 
 // Durable "has this user EVER received this specific cMoon's join prizes" idempotency record —
@@ -6450,11 +6544,16 @@ enum CMoonSpecialAttackEffectType {
   REFLECT_DAMAGE
   SIPHON_HEALTH
   // ── RAID-ONLY effect types below — see each field's own comment below for why. A solo battle's
-  // own resolveRound (server/api/cmoon/battle/[id]/action.post.js) has no case for any of these
-  // three: the attack still fires and announces, it just has no mechanical effect there. Admins
-  // assigning one of these to a cMoon/faction whose players also fight solo should expect that —
-  // there's one shared special-attack pool per cMoon/faction, used in both contexts, with no
-  // separate "raid-only" assignment slot to keep a mismatched choice from ever being possible.
+  // own resolveRound (server/api/cmoon/battle/[id]/action.post.js) has no case for POISON_OPPONENT
+  // or SHIELD_PARTY: the attack still fires and announces, it just has no mechanical effect there.
+  // Admins assigning one of those two to a cMoon/faction whose players also fight solo should
+  // expect that — there's one shared special-attack pool per cMoon/faction, used in both
+  // contexts, with no separate "raid-only" assignment slot to keep a mismatched choice from ever
+  // being possible. CLEANSE_SELF is the exception: action.post.js DOES have a solo case for it
+  // (cures this player's own paralysis, plus an optional HP top-up via cleanseAlsoHeals) — only
+  // its healsAllies toggle and the poison side of the cure are genuinely raid-only, since a solo
+  // battle has no allies and no poison state to clear (POISON_OPPONENT, the only thing that could
+  // ever apply one, is itself raid-only).
   POISON_OPPONENT
   CLEANSE_SELF
   SHIELD_PARTY
@@ -6552,6 +6651,7 @@ model CMoonSpecialAttack {
   cmoons        CMoon[]
   enemyFactions CMoonEnemyFaction[]
   chosenByUsers User[]
+  enemyMemberLinks CMoonEnemyMemberSpecialAttack[]
 }
 
 // The themed group an admin creates in "Manage cMoon Enemies" — mostly organizational (name,
@@ -6826,8 +6926,40 @@ model CMoonEnemyMember {
   rewardPity  CMoonEnemyRewardPity[]
   windUpMoves CMoonEnemyWindUpMove[]
   taunts      CMoonEnemyMemberTaunt[]
+  specialAttacks CMoonEnemyMemberSpecialAttack[]
 
   @@index([active, defeatedAt, sortOrder])
+}
+
+// An admin-configured special attack assigned directly to ONE enemy member (solo or raid boss),
+// independent of its faction's single shared CMoonEnemyFaction.specialAttack — "individually
+// manually configure and add any or multiple special attacks... regardless of their faction's
+// special attack." A member with one or more of these rows ALWAYS uses this pool instead of its
+// faction's attack (never both at once — see pickEnemySpecialAttack in cmoonEnemyBattle.js); a
+// member with none configured here is unaffected and keeps using its faction's attack exactly as
+// before this model existed.
+model CMoonEnemyMemberSpecialAttack {
+  id              String   @id @default(uuid())
+  enemyMemberId   String
+  specialAttackId String
+  // Relative weight among this member's OWN other rows when it has more than one — same "not a
+  // percent out of 100, never required to sum to 100" semantics as
+  // CMoonEnemyMember.occurrencePercent (see pickWeightedEnemy in cmoonEnemy.js, and
+  // pickWeightedSpecialAttack in cmoonEnemyBattle.js, which this feeds). Rolled fresh every single
+  // time this member's hit-streak threshold is reached, so a member with several rows can fire a
+  // DIFFERENT one each time rather than always the same — that variance IS the feature.
+  usePercent      Int      @default(100)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  enemyMember   CMoonEnemyMember   @relation(fields: [enemyMemberId], references: [id], onDelete: Cascade)
+  // Restrict, same as CMoonEnemyFaction.specialAttackId: an admin must reassign/remove every row
+  // using an attack before that attack can be deleted (enforced in cmoon-special-attacks/[id]/
+  // delete.post.js's own pre-check, which already has to look at the faction side too).
+  specialAttack CMoonSpecialAttack @relation(fields: [specialAttackId], references: [id], onDelete: Restrict)
+
+  @@unique([enemyMemberId, specialAttackId])
+  @@index([enemyMemberId, sortOrder])
 }
 
 enum CMoonEnemyTauntTrigger {

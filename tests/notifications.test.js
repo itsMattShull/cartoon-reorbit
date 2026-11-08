@@ -11,7 +11,8 @@ import {
   notifyTradeOfferAccepted,
   notifyCMoonRaidBossStarted,
   notifyCMoonRaidPreviewStarted,
-  notifyPvpPackWon
+  notifyPvpPackWon,
+  notifyCMoonRaidKickedAfk
 } from '../server/utils/notifications.js'
 
 // A stand-in for the Prisma client that records what it was asked to do. The
@@ -44,7 +45,7 @@ function fakeDb ({ user = { username: 'alice', banned: false }, throwOnWrite = f
 test('every helper is exported and callable', () => {
   for (const fn of [createNotification, notifyOutbid, notifyAuctionBid,
     notifyAuctionWon, notifyTradeOfferReceived, notifyTradeOfferAccepted, notifyCMoonRaidBossStarted,
-    notifyCMoonRaidPreviewStarted, notifyPvpPackWon]) {
+    notifyCMoonRaidPreviewStarted, notifyPvpPackWon, notifyCMoonRaidKickedAfk]) {
     assert.equal(typeof fn, 'function')
   }
 })
@@ -56,6 +57,7 @@ test('the type set is closed and frozen', () => {
     'AUCTION_OUTBID',
     'AUCTION_WON',
     'CMOON_RAID_BOSS_STARTED',
+    'CMOON_RAID_KICKED_AFK',
     'CMOON_RAID_PREVIEW_STARTED',
     'PVP_PACK_WON',
     'TRADE_OFFER_ACCEPTED',
@@ -216,6 +218,15 @@ test('raid boss notifications carry the raid id as contextId and no contextType'
   assert.match(values.join(' | '), /Solar Flares/)
 })
 
+test('raid boss notifications are suppressed for a player who muted them', async () => {
+  const db = fakeDb({ user: { username: 'alice', banned: false, muteRaidNotifications: true } })
+  const ok = await notifyCMoonRaidBossStarted(db, {
+    userId: 'u1', raidId: 'raid-9', enemyName: 'Grim Sentinel', cMoonName: 'Solar Flares',
+  })
+  assert.equal(ok, false)
+  assert.equal(db.calls.writes.length, 0)
+})
+
 test('raid preview notifications carry the preview raid id as contextId and no contextType', async () => {
   const db = fakeDb()
   await notifyCMoonRaidPreviewStarted(db, {
@@ -226,6 +237,32 @@ test('raid preview notifications carry the preview raid id as contextId and no c
   assert.ok(values.includes('CMOON_RAID_PREVIEW_STARTED'))
   assert.match(values.join(' | '), /Grim Sentinel/)
   assert.match(values.join(' | '), /admin_bob/)
+})
+
+test('raid preview notifications are suppressed for a player who muted them', async () => {
+  const db = fakeDb({ user: { username: 'alice', banned: false, muteRaidNotifications: true } })
+  const ok = await notifyCMoonRaidPreviewStarted(db, {
+    userId: 'u1', raidId: 'preview-9', enemyName: 'Grim Sentinel', startedByUsername: 'admin_bob',
+  })
+  assert.equal(ok, false)
+  assert.equal(db.calls.writes.length, 0)
+})
+
+test('AFK-kicked notification writes with no contextId and is NOT gated by muteRaidNotifications', async () => {
+  const db = fakeDb({ user: { username: 'alice', banned: false, muteRaidNotifications: true } })
+  const ok = await notifyCMoonRaidKickedAfk(db, { userId: 'u1', enemyName: 'Grim Sentinel' })
+  assert.equal(ok, true)
+  const { values } = db.calls.writes[0]
+  assert.ok(values.includes('CMOON_RAID_KICKED_AFK'))
+  assert.match(values.join(' | '), /Grim Sentinel/)
+  assert.equal(values[values.length - 1], null) // contextId
+})
+
+test('AFK-kicked notification is still suppressed for a banned/official account', async () => {
+  const db = fakeDb({ user: { username: 'CartoonReOrbitOfficial', banned: false } })
+  const ok = await notifyCMoonRaidKickedAfk(db, { userId: 'u1', enemyName: 'Grim Sentinel' })
+  assert.equal(ok, false)
+  assert.equal(db.calls.writes.length, 0)
 })
 
 // ── Raid Boss Lobby broadcast (cross-cMoon raids) ──────────────────────────────────────────────
@@ -257,8 +294,10 @@ test('raid lobby broadcast is one batched upsert on a fixed collapse key, dedupe
   assert.match(values.join(' | '), /Grim Sentinel/)
   assert.match(values.join(' | '), /JanGloopManx \(Cartoon Netmoon\)/)
   assert.match(sql, /ON CONFLICT/)
-  // Banned users and the official account are filtered in SQL, like isNotifiable.
+  // Banned users, the official account, and muted players are filtered in SQL, like
+  // isRaidNotifiable.
   assert.match(sql, /banned/)
+  assert.match(sql, /muteRaidNotifications/)
   assert.ok(values.includes('CartoonReOrbitOfficial'))
   // Prisma 7 sends raw params untyped: every one in the SELECT list is cast.
   assert.match(sql, /\?::text\[\], \?::text\[\]/)

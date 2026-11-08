@@ -155,6 +155,12 @@ function onTouchEnd() {
 // the rest of that cycle.
 let socket = null
 const joinedIds = new Set()
+// Guards against the race where this component unmounts (e.g. navigating off the Economy
+// page) before connectSocket's dynamic import resolves: without it, the .then() callback
+// below still runs after onBeforeUnmount already fired disconnectSocket() against a still-null
+// `socket`, creating a live, forever-connected socket with active listeners that nothing is
+// left to ever disconnect.
+let isUnmounted = false
 
 function diffSocketRooms(list) {
   if (!socket || !socket.connected) return
@@ -188,6 +194,7 @@ async function fetchAuctions() {
 
 function connectSocket() {
   import('socket.io-client').then(({ io: ioFn }) => {
+    if (isUnmounted) return
     const path = import.meta.env.PROD
       ? undefined
       : `http://localhost:${config.public.socketPort}`
@@ -263,6 +270,7 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  isUnmounted = true
   document.removeEventListener('visibilitychange', onVisibilityChange)
   if (pollHandle) clearInterval(pollHandle)
   if (resumeTimeout) clearTimeout(resumeTimeout)

@@ -17,6 +17,7 @@ export default defineEventHandler(async (event) => {
         include: {
           faction: { include: { appearEffect: true, specialAttack: true, taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } } } },
           taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+          specialAttacks: { include: { specialAttack: true }, orderBy: { sortOrder: 'asc' } },
         },
       },
       cMoon: { include: { specialAttack: true } },

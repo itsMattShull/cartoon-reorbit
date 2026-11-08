@@ -883,7 +883,7 @@ test('parseMemberBody: an update with no maxParticipants/windUpEnabled fields ke
   assert.equal(result.data.windUpEnabled, true)
 })
 
-// ── raidRoundLimit (raid round-count safety valve, default 300, up to 500) ──────────────
+// ── raidRoundLimit (raid round-count safety valve, default 300, up to 10000) ────────────
 
 test('parseMemberBody: raidRoundLimit defaults to RAID_ROUND_LIMIT_DEFAULT on create when omitted', () => {
   const result = parseMemberBody(baseMemberBody, undefined)

@@ -8,11 +8,24 @@
 import { defineEventHandler, getRequestHeader, readBody, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { isUuid } from '@/server/utils/tradeOfferRules'
+import { NOTIFICATION_TYPES } from '@/server/utils/notifications'
 
 // The drawer only ever shows PAGE_SIZE (30) rows, so 100 is already generous.
 // The cap is what stops `{ ids: [...200_000] }` from being turned into a
 // Postgres IN-list past the bind-parameter ceiling by any logged-in account.
 const MAX_IDS = 100
+
+function validateTypes (types, field) {
+  if (!Array.isArray(types) || types.length === 0) {
+    throw createError({ statusCode: 400, statusMessage: `\`${field}\` must be a non-empty array` })
+  }
+  for (const t of types) {
+    if (!NOTIFICATION_TYPES[t]) {
+      throw createError({ statusCode: 400, statusMessage: `\`${field}\` contains an invalid type` })
+    }
+  }
+  return [...new Set(types)]
+}
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -28,12 +41,40 @@ export default defineEventHandler(async (event) => {
   const body = await readBody(event)
   const hasIds = body?.ids !== undefined
   const hasAll = body?.all !== undefined
+  const hasTypes = body?.types !== undefined
+  const hasExcludeTypes = body?.excludeTypes !== undefined
 
-  if (hasIds === hasAll) {
+  if ([hasIds, hasAll, hasTypes, hasExcludeTypes].filter(Boolean).length !== 1) {
     throw createError({
       statusCode: 400,
-      statusMessage: 'Provide exactly one of `ids` or `all`'
+      statusMessage: 'Provide exactly one of `ids`, `all`, `types`, or `excludeTypes`'
     })
+  }
+
+  // Both scoped the same way `all` is below (userId + readAt:null in the WHERE
+  // clause), but filtered to a type set instead of every row — this is what lets
+  // the drawer's per-tab "Mark all read" (see Onboarding.vue's markAllRead) clear
+  // every matching unread row for this user, not just whichever ≤30 are currently
+  // loaded client-side (GET /api/notifications caps at PAGE_SIZE). `types` marks
+  // just the given type(s) read (the Raid Boss tab); `excludeTypes` marks every
+  // OTHER type read (the Alerts tab) without needing to enumerate every non-raid
+  // type here.
+  if (hasTypes) {
+    const types = validateTypes(body.types, 'types')
+    const { count } = await db.notification.updateMany({
+      where: { userId, readAt: null, type: { in: types } },
+      data: { readAt: new Date() }
+    })
+    return { updated: count }
+  }
+
+  if (hasExcludeTypes) {
+    const excludeTypes = validateTypes(body.excludeTypes, 'excludeTypes')
+    const { count } = await db.notification.updateMany({
+      where: { userId, readAt: null, type: { notIn: excludeTypes } },
+      data: { readAt: new Date() }
+    })
+    return { updated: count }
   }
 
   if (hasAll) {

@@ -18,14 +18,16 @@ export default defineEventHandler(async (event) => {
   const data = {}
   if (body?.allowAuctionNotifications !== undefined) data.allowAuctionNotifications = Boolean(body.allowAuctionNotifications)
   if (body?.allowCMoonEnemyPopups !== undefined) data.allowCMoonEnemyPopups = Boolean(body.allowCMoonEnemyPopups)
+  if (body?.muteRaidNotifications !== undefined) data.muteRaidNotifications = Boolean(body.muteRaidNotifications)
 
   const updated = await db.user.update({
     where: { id: me.id },
     data,
-    select: { allowAuctionNotifications: true, allowCMoonEnemyPopups: true }
+    select: { allowAuctionNotifications: true, allowCMoonEnemyPopups: true, muteRaidNotifications: true }
   })
   return {
     allowAuctionNotifications: updated.allowAuctionNotifications,
     allowCMoonEnemyPopups: updated.allowCMoonEnemyPopups,
+    muteRaidNotifications: updated.muteRaidNotifications,
   }
 })

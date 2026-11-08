@@ -43,9 +43,11 @@
                 <span v-if="t.overdueCount" class="px-1.5 rounded bg-red-100 text-red-800 border border-red-300 text-[10px]">{{ t.overdueCount }} overdue</span>
               </div>
               <p class="text-gray-600 mt-1">Opt-in: {{ fmt(t.optInStartAt) }} → {{ fmt(t.optInEndAt) }} · {{ t.optInCount }} entrants · {{ t.roundWindowHours }}h rounds</p>
+              <p v-if="t.startAt && canStart(t.status)" class="text-gray-600">Starts: {{ central(t.startAt) }}</p>
               <p v-if="t.status === 'COMPLETE'" class="text-gray-600">Winner: {{ t.winnerUsername || '—' }} · prizes: {{ prizeSummary(t.prizeCounts) }}</p>
             </div>
             <div class="flex flex-wrap gap-2">
+              <button v-if="canStart(t.status)" class="px-3 py-1 font-semibold rounded-md bg-green-600 text-white hover:bg-green-700" :disabled="busy" @click="startT(t)">Start</button>
               <button class="px-3 py-1 border rounded-md hover:bg-gray-50" @click="open(t.id)">Manage</button>
               <button class="px-3 py-1 border rounded-md hover:bg-gray-50" @click="openForm(t.id)">Edit</button>
             </div>
@@ -65,11 +67,13 @@
                   <span class="ml-2 px-1.5 rounded border text-[10px] font-medium" :class="statusClass(detail.tournament.status)">{{ statusLabel(detail.tournament.status) }}</span>
                 </h2>
                 <p class="text-gray-600 mt-1">Opt-in (your time): {{ fmt(detail.tournament.optInStartAt) }} → {{ fmt(detail.tournament.optInEndAt) }} · Central: {{ central(detail.tournament.optInStartAt) }} → {{ central(detail.tournament.optInEndAt) }}</p>
+                <p v-if="detail.tournament.startAt" class="text-gray-600">Starts (Central): {{ central(detail.tournament.startAt) }}</p>
                 <p class="text-gray-600">{{ detail.entrants.filter(e => e.isActive).length }} entrants · {{ detail.tournament.format === 'SWISS_THEN_TOP8' ? `Swiss (${detail.tournament.swissRoundsPlanned} rounds) → Top 8` : detail.tournament.format === 'BRACKET_8_OR_LESS' ? 'Single elimination' : 'Format is chosen when opt-in closes' }} · {{ detail.tournament.roundWindowHours }}h per round
                   <template v-if="detail.tournament.seedValue"> · bracket seed <code>{{ detail.tournament.seedValue }}</code></template></p>
               </div>
               <div class="flex flex-wrap gap-2">
                 <a class="px-3 py-1 border rounded-md hover:bg-gray-50" :href="`/newsite/gtoons-classic/tournaments/${detail.tournament.id}`" target="_blank" rel="noopener">View as player</a>
+                <button v-if="canStart(detail.tournament.status)" class="px-3 py-1 font-semibold rounded-md bg-green-600 text-white hover:bg-green-700" :disabled="busy" @click="startT(detail.tournament)">Start tournament</button>
                 <button class="px-3 py-1 border rounded-md hover:bg-gray-50" :disabled="busy" @click="recompute">Recompute / advance</button>
                 <button class="px-3 py-1 border rounded-md hover:bg-gray-50" @click="openForm(detail.tournament.id)">Edit</button>
                 <button v-if="!['COMPLETE', 'CANCELLED'].includes(detail.tournament.status)" class="px-3 py-1 border rounded-md text-red-700 border-red-200 hover:bg-red-50" :disabled="busy" @click="cancelT">Cancel tournament</button>
@@ -87,7 +91,7 @@
 
           <!-- Matches -->
           <div v-show="tab === 'matches'" class="bg-white rounded border shadow p-3 space-y-3">
-            <p v-if="!detail.rounds.length" class="text-gray-500">No pairings yet. They are created when opt-in closes.</p>
+            <p v-if="!detail.rounds.length" class="text-gray-500">No pairings yet. They are made when the tournament starts (at its start time, or when you press Start).</p>
             <div v-for="r in detail.rounds" :key="r.id" class="border rounded">
               <div class="px-2 py-1 bg-gray-50 border-b flex justify-between">
                 <span class="font-semibold">{{ r.stage === 'SWISS' ? `Swiss round ${r.roundNumber}` : `Bracket round ${r.roundNumber}` }}</span>
@@ -210,7 +214,12 @@
               <div><label class="block font-medium mb-1" for="f-start">Opt-in opens</label><input id="f-start" v-model="form.optInStartAt" type="datetime-local" class="w-full border rounded px-2 py-1.5" /></div>
               <div><label class="block font-medium mb-1" for="f-end">Opt-in closes</label><input id="f-end" v-model="form.optInEndAt" type="datetime-local" class="w-full border rounded px-2 py-1.5" /></div>
             </div>
-            <p class="text-gray-500 -mt-1">Times are in your browser's time zone ({{ tz }}). Discord messages show Central time.</p>
+            <div>
+              <label class="block font-medium mb-1" for="f-go">Tournament starts (Central time, CST/CDT)</label>
+              <input id="f-go" v-model="form.startAt" type="datetime-local" class="w-full border rounded px-2 py-1.5" @input="startTouched = true" />
+              <p class="text-gray-500 mt-1">Pairings are made at this time. It must be after opt-in closes and defaults to 1 minute after it. You can also press Start on the tournament to begin early.</p>
+            </div>
+            <p class="text-gray-500 -mt-1">Opt-in times are in your browser's time zone ({{ tz }}); the start time is Central. Discord messages show Central time.</p>
             <div class="grid sm:grid-cols-3 gap-3">
               <div>
                 <label class="block font-medium mb-1" for="f-win">Time per round</label>
@@ -453,9 +462,29 @@ async function submitDq() {
 const blankPrize = () => ({ points: 0, ctoons: [], backgrounds: [], packs: [], packSummary: '' })
 const packEls = {} // tier key -> the CodePackRewards instance
 const formOpen = ref(false); const formError = ref(''); const formWarnings = ref([])
-const form = reactive({ id: null, locked: false, name: '', description: '', optInStartAt: '', optInEndAt: '', roundWindowHours: 72, swissRoundsOverride: '', minEntrantsTop8Prize: 9, requirePrizeApproval: true, first: blankPrize(), top8: blankPrize(), participant: blankPrize() })
+const form = reactive({ id: null, locked: false, name: '', description: '', optInStartAt: '', optInEndAt: '', startAt: '', roundWindowHours: 72, swissRoundsOverride: '', minEntrantsTop8Prize: 9, requirePrizeApproval: true, first: blankPrize(), top8: blankPrize(), participant: blankPrize() })
+const startTouched = ref(false)
 const search = reactive({ first: '', top8: '', participant: '' }); const results = reactive({ first: [], top8: [], participant: [] })
 const backgrounds = ref([])
+// The start time is typed and shown in US Central time whatever the browser's zone is.
+const centralParts = (d) => Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: 'America/Chicago', hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).formatToParts(d).map(x => [x.type, x.value]))
+function toCentralInput(v) { if (!v) return ''; const q = centralParts(new Date(v)); return `${q.year}-${q.month}-${q.day}T${q.hour}:${q.minute}` }
+function centralInputToISO(str) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(str || ''); if (!m) return ''
+  const want = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5])
+  let t = want
+  for (let i = 0; i < 2; i += 1) { const q = centralParts(new Date(t)); t += want - Date.UTC(+q.year, +q.month - 1, +q.day, +q.hour, +q.minute) }
+  return new Date(t).toISOString()
+}
+const defaultStartFrom = (endLocal) => (endLocal ? toCentralInput(new Date(new Date(endLocal).getTime() + 60000)) : '')
+// Until the admin picks their own start time, keep it one minute after opt-in closes.
+watch(() => form.optInEndAt, (v) => { if (!startTouched.value && !form.locked) form.startAt = defaultStartFrom(v) })
+const canStart = (s) => ['OPT_IN_OPEN', 'OPT_IN_CLOSED'].includes(s)
+const startT = (t) => {
+  if (window.confirm(`Start "${t.name}" now? Opt-in closes immediately and everyone who has entered is paired for round 1. This cannot be undone.`)) {
+    act(async () => { const r = await $fetch(`${API}/${t.id}/start`, { method: 'POST' }); if (r?.cancelled) throw new Error('Not enough players entered (at least 2 are needed), so the tournament was cancelled.') }, 'Tournament started — pairings are made and players are messaged.')
+  }
+}
 const toLocalInput = (v) => { if (!v) return ''; const d = new Date(v); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}` }
 
 async function openForm(id = null) {
@@ -463,7 +492,8 @@ async function openForm(id = null) {
   if (!backgrounds.value.length) { try { backgrounds.value = await $fetch(`${API}/backgrounds`) } catch { backgrounds.value = [] } }
   if (!id) {
     const start = new Date(Date.now() + 3600 * 1000); const end = new Date(Date.now() + 7 * 86400 * 1000)
-    Object.assign(form, { id: null, locked: false, name: '', description: '', optInStartAt: toLocalInput(start), optInEndAt: toLocalInput(end), roundWindowHours: 72, swissRoundsOverride: '', minEntrantsTop8Prize: 9, requirePrizeApproval: true, first: blankPrize(), top8: blankPrize(), participant: blankPrize() })
+    startTouched.value = false
+    Object.assign(form, { id: null, locked: false, name: '', description: '', optInStartAt: toLocalInput(start), optInEndAt: toLocalInput(end), startAt: defaultStartFrom(toLocalInput(end)), roundWindowHours: 72, swissRoundsOverride: '', minEntrantsTop8Prize: 9, requirePrizeApproval: true, first: blankPrize(), top8: blankPrize(), participant: blankPrize() })
   } else {
     try {
       const d = await $fetch(`${API}/${id}`); const t = d.tournament
@@ -474,9 +504,10 @@ async function openForm(id = null) {
         packs: (view?.packs || []).map(p => ({ packId: p.packId, quantity: p.quantity })),
         packSummary: ''
       })
+      startTouched.value = true
       Object.assign(form, {
         id: t.id, locked: !['DRAFT', 'OPT_IN_OPEN'].includes(t.status), name: t.name, description: t.description || '',
-        optInStartAt: toLocalInput(t.optInStartAt), optInEndAt: toLocalInput(t.optInEndAt), roundWindowHours: t.roundWindowHours,
+        optInStartAt: toLocalInput(t.optInStartAt), optInEndAt: toLocalInput(t.optInEndAt), startAt: t.startAt ? toCentralInput(t.startAt) : defaultStartFrom(toLocalInput(t.optInEndAt)), roundWindowHours: t.roundWindowHours,
         swissRoundsOverride: t.swissRoundsOverride ?? '', minEntrantsTop8Prize: t.minEntrantsTop8Prize, requirePrizeApproval: t.requirePrizeApproval,
         first: toForm(d.firstPrizeView), top8: toForm(d.top8PrizeView), participant: toForm(d.participantPrizeView)
       })
@@ -516,11 +547,15 @@ async function saveForm() {
       packs[tier.k] = r?.packs || []
     }
   }
+  if (!form.locked) {
+    if (!form.startAt) { formError.value = 'A start time is required.'; return }
+    if (new Date(centralInputToISO(form.startAt)) <= new Date(form.optInEndAt)) { formError.value = 'The start time must be after opt-in closes.'; return }
+  }
   busy.value = true; formError.value = ''; formWarnings.value = []
   try {
     const body = {
       name: form.name, description: form.description,
-      optInStartAt: form.optInStartAt ? new Date(form.optInStartAt).toISOString() : '', optInEndAt: form.optInEndAt ? new Date(form.optInEndAt).toISOString() : '',
+      optInStartAt: form.optInStartAt ? new Date(form.optInStartAt).toISOString() : '', optInEndAt: form.optInEndAt ? new Date(form.optInEndAt).toISOString() : '', startAt: centralInputToISO(form.startAt),
       roundWindowHours: form.roundWindowHours, swissRoundsOverride: form.swissRoundsOverride === '' ? null : Number(form.swissRoundsOverride),
       minEntrantsTop8Prize: form.minEntrantsTop8Prize, requirePrizeApproval: form.requirePrizeApproval,
       firstPrize: bundleBody(form.first, packs.first || []), top8Prize: bundleBody(form.top8, packs.top8 || []),

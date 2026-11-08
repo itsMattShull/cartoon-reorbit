@@ -311,6 +311,25 @@
           <template v-else>Buy for {{ nextCzoneCost.toLocaleString() }} pts</template>
         </GreenButton>
       </div>
+
+      <!-- cMoon battle HP/Stamina upgrades — admin-configured, see AdminCMoonBattleUpgrades.vue.
+           Permanent for this cMoon until the player prestiges, at which point they reset (see
+           cmoonPrestige.js's own comment) and can be bought again. -->
+      <div v-for="u in battleUpgrades" :key="u.id" class="upgrade-card">
+        <p class="upgrade-name">{{ u.name }} <span class="upgrade-stat-tag">{{ u.stat === 'STAMINA' ? 'Stamina' : 'HP' }}</span></p>
+        <p v-if="u.description" class="upgrade-desc">{{ u.description }}</p>
+        <p class="upgrade-desc">+{{ u.amount }} {{ u.stat === 'STAMINA' ? 'stamina' : 'HP' }}, permanently (until you prestige).</p>
+        <p class="upgrade-count">Purchased {{ u.timesPurchased }}/{{ u.purchaseLimit }} time{{ u.purchaseLimit === 1 ? '' : 's' }}.</p>
+        <GreenButton
+          class="upgrade-buy-btn"
+          :disabled="buyingUpgradeIds.includes(u.id) || u.timesPurchased >= u.purchaseLimit"
+          @click="buyBattleUpgrade(u)"
+        >
+          <template v-if="buyingUpgradeIds.includes(u.id)">Purchasing…</template>
+          <template v-else-if="u.timesPurchased >= u.purchaseLimit">Maxed out</template>
+          <template v-else>Buy for {{ u.price.toLocaleString() }} pts</template>
+        </GreenButton>
+      </div>
     </div>
 
     <!-- ── Holiday Event cToons ─────────────────────────────────────── -->
@@ -461,6 +480,37 @@ async function buyCzone() {
     showToast(describePurchaseError(err, 'upgrade'), 'error')
   } finally {
     buyingCzone.value = false
+  }
+}
+
+// ── Upgrades: cMoon battle HP/Stamina upgrades ───────────────────
+const battleUpgrades = ref([])
+const buyingUpgradeIds = ref([])
+
+async function loadBattleUpgrades() {
+  try {
+    const res = await $fetch('/api/cmart/battle-upgrades')
+    battleUpgrades.value = Array.isArray(res?.upgrades) ? res.upgrades : []
+  } catch (err) {
+    console.error('Cmart: failed to load battle upgrades', err)
+  }
+}
+
+async function buyBattleUpgrade(u) {
+  if (buyingUpgradeIds.value.includes(u.id) || u.timesPurchased >= u.purchaseLimit) return
+  if (user.value && user.value.points < u.price) {
+    showToast(`Not enough points — this upgrade costs ${u.price.toLocaleString()} pts.`, 'error')
+    return
+  }
+  buyingUpgradeIds.value = [...buyingUpgradeIds.value, u.id]
+  try {
+    await $fetch(`/api/cmart/battle-upgrades/${u.id}/buy`, { method: 'POST' })
+    showToast(`${u.name} purchased!`, 'success')
+    await Promise.all([loadBattleUpgrades(), fetchSelf({ force: true })])
+  } catch (err) {
+    showToast(describePurchaseError(err, 'upgrade'), 'error')
+  } finally {
+    buyingUpgradeIds.value = buyingUpgradeIds.value.filter(id => id !== u.id)
   }
 }
 
@@ -805,7 +855,8 @@ onMounted(async () => {
       $fetch('/api/cmart'),
       $fetch('/api/cmart/upgrades-config').catch(() => ({})),
       loadActiveSale(),
-      loadHolidayEvent()
+      loadHolidayEvent(),
+      loadBattleUpgrades(),
     ])
     allCtoons.value = ctoonRes
     cmartHalfPriceEnabled.value = upgradesRes?.cmartHalfPriceEnabled === true
@@ -1249,6 +1300,19 @@ async function closeOverlay() {
   font-weight: bold;
   color: #fff;
   margin: 0;
+}
+
+.upgrade-stat-tag {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+  vertical-align: middle;
 }
 
 .upgrade-desc {

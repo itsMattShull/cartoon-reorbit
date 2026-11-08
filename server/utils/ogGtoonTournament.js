@@ -304,7 +304,66 @@ async function createTop8Bracket(tx, tournament, now) {
   return createBracketRound(tx, tournament, 1, buildBracketSeedPairs(bracketSizeFor(top.length)), seedMap, now)
 }
 
-/* ── State transitions (opt-in open / close) ─────────────────────────────────────────────── */
+/* ── State transitions (opt-in open / close / start) ─────────────────────────────────────── */
+
+/**
+ * Closes entry (if still open) and pairs everyone: builds the player records, disqualifies accounts no longer in good
+ * standing, then makes round 1 (Swiss or bracket) — or cancels when fewer than 2 players are left. Runs under a row lock and
+ * only acts on OPT_IN_OPEN / OPT_IN_CLOSED, so the cron, a late cron run and the admin Start button can't double-start.
+ * Returns the events (round opened) for the caller to send after the transaction.
+ */
+export async function startTournament(db, tournamentId, now = new Date()) {
+  const events = []
+  await db.$transaction(async (tx) => {
+    const locked = await tx.$queryRaw`SELECT id FROM "OgGtoonTournament" WHERE id = ${tournamentId} FOR UPDATE`
+    if (!locked.length) return
+    const t = await tx.ogGtoonTournament.findUnique({ where: { id: tournamentId } })
+    if (!t || !['OPT_IN_OPEN', 'OPT_IN_CLOSED'].includes(t.status)) return
+    // Entry ends now if it was still open, so nobody can join or leave mid-pairing.
+    await tx.ogGtoonTournament.update({
+      where: { id: t.id },
+      data: { status: 'OPT_IN_CLOSED', nextAnnouncementAt: null, ...(t.optInEndAt > now ? { optInEndAt: now } : {}) }
+    })
+
+    const optIns = await tx.ogGtoonTournamentOptIn.findMany({
+      where: { tournamentId: t.id, isActive: true, disqualified: false },
+      select: { id: true, userId: true, user: { select: { banned: true, active: true } } }
+    })
+    const bad = optIns.filter(o => o.user?.banned || o.user?.active === false)
+    if (bad.length) {
+      await tx.ogGtoonTournamentOptIn.updateMany({
+        where: { id: { in: bad.map(o => o.id) } },
+        data: { disqualified: true, disqualifiedNote: 'Account not in good standing when the tournament started' }
+      })
+    }
+    const good = optIns.filter(o => !bad.includes(o))
+    await tx.ogGtoonTournamentPlayerRecord.createMany({
+      data: good.map(o => ({ tournamentId: t.id, userId: o.userId })),
+      skipDuplicates: true
+    })
+
+    if (good.length < 2) {
+      await tx.ogGtoonTournament.update({ where: { id: t.id }, data: { status: 'CANCELLED' } })
+      return
+    }
+
+    const seedValue = randomBytes(8).toString('hex')
+    const format = formatFor(good.length)
+    const fresh = { ...t, seedValue, roundWindowHours: t.roundWindowHours }
+    let round
+    if (format === 'BRACKET_8_OR_LESS') {
+      await tx.ogGtoonTournament.update({ where: { id: t.id }, data: { status: 'BRACKET_ACTIVE', format, seedValue } })
+      round = await createFirstBracket(tx, fresh, good.map(o => o.userId), now)
+    } else {
+      const planned = swissRoundsFor(good.length, t.swissRoundsOverride)
+      await tx.ogGtoonTournament.update({ where: { id: t.id }, data: { status: 'SWISS_ACTIVE', format, seedValue, swissRoundsPlanned: planned } })
+      round = await createSwissRound(tx, fresh, 1, now)
+    }
+    events.push({ type: 'ROUND_OPEN', tournamentId: t.id, roundId: round.id })
+  }, { timeout: 60000, maxWait: 10000 })
+  return events
+}
+
 
 export async function processStateTransitions(db, now = new Date()) {
   const events = []
@@ -317,55 +376,20 @@ export async function processStateTransitions(db, now = new Date()) {
     })
   }
 
+  // Opt-in has ended. Tournaments with a start time just close entry and wait for it (or the admin's Start
+  // button); legacy ones with no start time start straight away, as they always did.
   const toClose = await db.ogGtoonTournament.findMany({ where: { status: 'OPT_IN_OPEN', optInEndAt: { lte: now } } })
   for (const t of toClose) {
-    let roundId = null
-    await db.$transaction(async (tx) => {
-      const closed = await tx.ogGtoonTournament.updateMany({
-        where: { id: t.id, status: 'OPT_IN_OPEN' },
-        data: { status: 'OPT_IN_CLOSED', nextAnnouncementAt: null }
-      })
-      if (!closed.count) return
-
-      const optIns = await tx.ogGtoonTournamentOptIn.findMany({
-        where: { tournamentId: t.id, isActive: true, disqualified: false },
-        select: { id: true, userId: true, user: { select: { banned: true, active: true } } }
-      })
-      const bad = optIns.filter(o => o.user?.banned || o.user?.active === false)
-      if (bad.length) {
-        await tx.ogGtoonTournamentOptIn.updateMany({
-          where: { id: { in: bad.map(o => o.id) } },
-          data: { disqualified: true, disqualifiedNote: 'Account not in good standing when opt-in closed' }
-        })
-      }
-      const good = optIns.filter(o => !bad.includes(o))
-      await tx.ogGtoonTournamentPlayerRecord.createMany({
-        data: good.map(o => ({ tournamentId: t.id, userId: o.userId })),
-        skipDuplicates: true
-      })
-
-      if (good.length < 2) {
-        await tx.ogGtoonTournament.update({ where: { id: t.id }, data: { status: 'CANCELLED' } })
-        return
-      }
-
-      const seedValue = randomBytes(8).toString('hex')
-      const format = formatFor(good.length)
-      const fresh = { ...t, seedValue, roundWindowHours: t.roundWindowHours }
-      if (format === 'BRACKET_8_OR_LESS') {
-        await tx.ogGtoonTournament.update({ where: { id: t.id }, data: { status: 'BRACKET_ACTIVE', format, seedValue } })
-        roundId = (await createFirstBracket(tx, fresh, good.map(o => o.userId), now)).id
-      } else {
-        const planned = swissRoundsFor(good.length, t.swissRoundsOverride)
-        await tx.ogGtoonTournament.update({
-          where: { id: t.id },
-          data: { status: 'SWISS_ACTIVE', format, seedValue, swissRoundsPlanned: planned }
-        })
-        roundId = (await createSwissRound(tx, fresh, 1, now)).id
-      }
-    }, { timeout: 60000, maxWait: 10000 })
-    if (roundId) events.push({ type: 'ROUND_OPEN', tournamentId: t.id, roundId })
+    if (t.startAt) {
+      await db.ogGtoonTournament.updateMany({ where: { id: t.id, status: 'OPT_IN_OPEN' }, data: { status: 'OPT_IN_CLOSED', nextAnnouncementAt: null } })
+    } else {
+      const ev = await startTournament(db, t.id, now)
+      events.push(...ev)
+    }
   }
+
+  const toStart = await db.ogGtoonTournament.findMany({ where: { status: 'OPT_IN_CLOSED', startAt: { not: null, lte: now } }, select: { id: true } })
+  for (const t of toStart) events.push(...(await startTournament(db, t.id, now)))
   return events
 }
 

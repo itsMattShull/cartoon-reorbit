@@ -68,6 +68,70 @@ export function pickEffectiveSpecialAttack(chosenSpecialAttack, cMoonSpecialAtta
   return cMoonSpecialAttack || null
 }
 
+// Weighted random pick among a list of { ...CMoonSpecialAttack fields, usePercent } — same
+// "relative weight, not a percent out of 100, never required to sum to 100" semantics as
+// CMoonEnemyMember.occurrencePercent (see pickWeightedEnemy in cmoonEnemy.js, which this mirrors
+// exactly for a different candidate shape). A non-positive/non-finite usePercent floors to 1
+// rather than being excluded outright — a misconfigured 0 should still be reachable, just rare,
+// not silently impossible to ever fire.
+export function pickWeightedSpecialAttack(candidates) {
+  if (!candidates?.length) return null
+  const weights = candidates.map(c => {
+    const w = Number(c.usePercent)
+    return Number.isFinite(w) && w > 0 ? w : 1
+  })
+  const total = weights.reduce((sum, w) => sum + w, 0)
+  let roll = Math.random() * total
+  for (let i = 0; i < candidates.length; i++) {
+    roll -= weights[i]
+    if (roll <= 0) return candidates[i]
+  }
+  return candidates[candidates.length - 1]
+}
+
+// This enemy MEMBER's own configured special-attack overrides (CMoonEnemyMemberSpecialAttack),
+// in the { ...attack, usePercent } shape pickWeightedSpecialAttack expects — `[]` when none are
+// configured, which is every enemy that existed before this feature shipped and any new one an
+// admin never touches, so neither helper below changes behavior for them.
+function memberSpecialAttackCandidates(member) {
+  const rows = member?.specialAttacks
+  if (!Array.isArray(rows) || !rows.length) return []
+  return rows
+    .filter(r => r.specialAttack)
+    .map(r => ({ ...r.specialAttack, usePercent: r.usePercent }))
+}
+
+// The attack that actually fires THIS time this member's hit-streak threshold is reached — a
+// fresh weighted roll (pickWeightedSpecialAttack) among its own member-level overrides when any
+// are configured ("any or multiple special attacks... regardless of their faction's special
+// attack" — this member-level list always wins outright over the faction's single shared one when
+// non-empty), falling back to the faction's shared CMoonEnemyFaction.specialAttack otherwise. Each
+// call can return a DIFFERENT attack from the pool — that variance IS the feature (see
+// enemySpecialAttackRequiredHitStreak below for how timing stays well-defined despite it).
+export function pickEnemySpecialAttack(member) {
+  const candidates = memberSpecialAttackCandidates(member)
+  if (candidates.length) return pickWeightedSpecialAttack(candidates)
+  return member?.faction?.specialAttack || null
+}
+
+// How long this member's hit-streak must run before pickEnemySpecialAttack above is even
+// consulted. Deliberately NOT per-candidate: which attack in a member's pool fires is re-rolled
+// every time (see pickEnemySpecialAttack), so gating readiness on any ONE candidate's own
+// requiredHitStreak would make the roll's own `usePercent` weighting partly moot (whichever
+// candidate happens to have the lowest threshold would dominate simply by being ready first,
+// regardless of its configured weight). Using the LOWEST requiredHitStreak configured across the
+// whole pool keeps "ready to fire" independent of which candidate eventually gets picked, while
+// still respecting the fastest-charging attack an admin configured. Falls back to the faction's
+// own single attack's threshold (or HIT_STREAK_THRESHOLD) when no member-level override exists —
+// identical to this value's pre-feature computation for every untouched enemy.
+export function enemySpecialAttackRequiredHitStreak(member) {
+  const candidates = memberSpecialAttackCandidates(member)
+  if (candidates.length) {
+    return Math.min(...candidates.map(c => Number(c.requiredHitStreak) || HIT_STREAK_THRESHOLD))
+  }
+  return member?.faction?.specialAttack?.requiredHitStreak ?? HIT_STREAK_THRESHOLD
+}
+
 export function isValidBattleAction(action) {
   return BATTLE_ACTIONS.includes(action)
 }
@@ -126,6 +190,20 @@ export function combinePlayerMaxStamina(defaultStamina, adjustment = 0) {
 // Mirrors computeHpAdjustmentForTarget above, for stamina.
 export function computeStaminaAdjustmentForTarget(naturalStamina, targetStamina) {
   return Math.round(Number(targetStamina) || 0) - Math.round(Number(naturalStamina) || 0)
+}
+
+// Pure arithmetic for a SOLO CLEANSE_SELF cast (server/api/cmoon/battle/[id]/action.post.js's own
+// CLEANSE_SELF branch) — pulled out here, same reasoning as every other pure-arithmetic helper in
+// this file, specifically so this exact piece can carry a real regression test: this effect type
+// was shipped raid-only at first, a solo fight silently firing-and-announcing it with no actual
+// heal/cleanse, which is the precise bug this function's own test guards against recurring. Solo
+// only ever cures the caster's own paralysis (done directly in action.post.js, not here — no
+// arithmetic involved) plus this optional HP top-up; there's no poison state or allies to extend
+// to in solo (see the effectType's own schema comment), so this is simpler than the raid-side
+// CLEANSE_SELF handling in cmoonEnemyRaid.js on purpose, not a partial port of it.
+export function applySoloCleanseSelfHeal(playerHp, playerMaxHp, cleanseAlsoHeals, amount) {
+  if (!cleanseAlsoHeals) return Number(playerHp) || 0
+  return Math.min(Number(playerMaxHp) || 0, (Number(playerHp) || 0) + (Number(amount) || 0))
 }
 
 // Exported for action.post.js's own stamina-cost gating (is the player's SUBMITTED action an
@@ -489,13 +567,14 @@ export function serializeBattleForClient(battle) {
     // name/effect/amount — those stay hidden until it actually fires (see action.post.js's
     // `specials` round events), this is only enough for a "something's coming" warning pulse.
     enemyHitStreak: battle.enemyHitStreak || 0,
-    enemyHasSpecialAttack: !!battle.enemyMember?.faction?.specialAttack,
-    // The enemy's own attack's requiredHitStreak (1-10, default 3) — safe to reveal despite
+    enemyHasSpecialAttack: !!(battle.enemyMember?.faction?.specialAttack || battle.enemyMember?.specialAttacks?.length),
+    // The enemy's own current threshold (1-10, default 3) — safe to reveal despite
     // enemyHasSpecialAttack hiding everything else about that attack: this is purely "how close is
     // the telegraphed warning," the same spirit enemyHitStreak itself already has, never the
-    // attack's own identity/effect. Lets the UI's "about to fire" pulse trigger at the right point
-    // for THIS attack instead of a hardcoded 3.
-    enemyRequiredHitStreak: battle.enemyMember?.faction?.specialAttack?.requiredHitStreak ?? HIT_STREAK_THRESHOLD,
+    // attack's own identity/effect. Lets the UI's "about to fire" pulse trigger at the right point.
+    // See enemySpecialAttackRequiredHitStreak's own comment for why this stays independent of
+    // WHICH of a member's several possible attacks eventually fires.
+    enemyRequiredHitStreak: enemySpecialAttackRequiredHitStreak(battle.enemyMember),
     // Rounds left where the player can't act at all (set by the enemy's own PARALYZE_OPPONENT
     // special) — surfaced so the UI can explain why their moves (including an already-charged
     // special) are about to whiff, rather than that just appearing to happen with no warning.

@@ -70,6 +70,11 @@ function serializeRaid(raid) {
     // enemyStats — so these are listed explicitly rather than trusted to a future caller's memory.
     cMoonSpecialAttack: raid.cMoonSpecialAttack,
     enemySpecialAttack: raid.enemySpecialAttack,
+    // This boss's OWN member-level special-attack overrides — see pickRaidEnemySpecialAttack's
+    // own comment in cmoonRaidSocket.js. Missing here would silently drop every override on
+    // restart, falling the boss back to its faction's single shared attack for the rest of the
+    // raid — same "a field missing here silently drops it" trap as enemySpecialAttack above.
+    enemySpecialAttackCandidates: raid.enemySpecialAttackCandidates,
     enemyHitStreak: raid.enemyHitStreak,
     partyAtkBonus: raid.partyAtkBonus,
     enemyAtkBonus: raid.enemyAtkBonus,
