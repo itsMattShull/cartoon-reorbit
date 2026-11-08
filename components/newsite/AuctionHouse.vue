@@ -421,20 +421,22 @@ async function loadWishlist() {
   }
 }
 
-// Populate cmartCtoons so CtoonFilter's series/set dropdowns are relevant
+// Populate cmartCtoons so CtoonFilter's series/set dropdowns are relevant. A UNION of
+// everything seen this session — never a replacement — since CtoonFilter reads this same
+// shared state as "the complete catalog" for its Series/Set dropdowns, but each call here
+// only ever sees ONE tab's currently-loaded page. Reassigning wholesale used to collapse
+// those dropdowns down to whatever's on the current page the moment any paginated tab (My
+// Auctions/My Bids/All) loaded after a broader fetch had already populated it — e.g.
+// returning via Back from a listing's View page re-triggers the active tab's own loader,
+// which is easily narrower than the options a player already had on screen.
 function syncCmartCtoons() {
-  const seen = new Set()
-  cmartCtoons.value = [
-    ...auctions.value,
-    ...trendingAuctions.value,
-    ...myAuctions.value,
-    ...myBids.value,
-    ...allAuctions.value,
-  ].filter(a => {
-    if (!a?.ctoonId || seen.has(a.ctoonId)) return false
-    seen.add(a.ctoonId)
-    return true
-  })
+  const merged = new Map(cmartCtoons.value.map(c => [c.ctoonId, c]))
+  for (const a of [...auctions.value, ...trendingAuctions.value, ...myAuctions.value, ...myBids.value, ...allAuctions.value]) {
+    // Overwrite (not skip) when already present — refreshes stale data for whatever's in
+    // the current batch while still leaving anything NOT in it untouched from before.
+    if (a?.ctoonId) merged.set(a.ctoonId, a)
+  }
+  cmartCtoons.value = [...merged.values()]
 }
 
 // ── Watchers ──────────────────────────────────────────────────────
