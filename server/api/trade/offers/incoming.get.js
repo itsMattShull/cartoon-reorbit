@@ -18,8 +18,8 @@ export default defineEventHandler(async (event) => {
     where: { recipientId: userId },
     orderBy: { createdAt: 'desc' },
     include: {
-      initiator: { select: { id: true, username: true } },
-      recipient: { select: { id: true, username: true } },
+      initiator: { select: { id: true, username: true, avatar: true } },
+      recipient: { select: { id: true, username: true, avatar: true } },
       ctoons: {
         include: {
           userCtoon: {
