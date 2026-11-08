@@ -30,7 +30,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from '#imports'
 import OgGtoonTournamentPanel from '@/components/oggtoons/OgGtoonTournamentPanel.vue'
 import OgGtoonTournamentReadyModal from '@/components/oggtoons/OgGtoonTournamentReadyModal.vue'
@@ -77,7 +77,8 @@ onMounted(async () => {
     if (cfg?.gameEnabled === false || cfg?.tournamentsEnabled !== true) unavailable.value = 'Tournaments are currently unavailable.'
   } catch { /* leave it to the panel's own error handling */ }
 })
-onBeforeUnmount(() => clearSidebarMiddle())
+// No clear on unmount: this page sets no sidebar of its own, and when a game starts the match page has already set
+// OgGtoonSidebar by the time this unmounts — clearing here would wipe the player-stats sidebar on the board.
 </script>
 
 <style>
