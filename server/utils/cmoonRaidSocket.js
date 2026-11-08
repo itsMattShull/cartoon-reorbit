@@ -748,6 +748,25 @@ async function applyAfkKicks(io, raid) {
     }
   }
 
+  // An AFK-kicked participant is excluded from raid.participants from this point on, so
+  // resolveCMoonRaidOutcome's own activeUserId: null cleanup — which only ever iterates
+  // participantIds built AFTER this function returns — never reaches them. Every OTHER way a
+  // participant leaves (a voluntary cmoonraid:leave, cmoonraid:cancelRaid, or a normal
+  // win/loss/abandon resolution) clears this DB sentinel ("at most one active raid per user" —
+  // see the column's own schema comment); this was the one path that didn't, leaving a kicked
+  // player's row permanently holding it. The P2002 their next join/start attempt then hits is
+  // the exact "You are already in a raid" report this was fixed for — it has nothing to do with
+  // raidByUser (already cleared above, correctly) and nothing a server restart or waiting it out
+  // could ever fix on its own.
+  const kickedIds = kicked.map(p => p.userId)
+  try {
+    await db.cMoonEnemyRaidParticipant.updateMany({
+      where: { raidId: raid.id, userId: { in: kickedIds } }, data: { activeUserId: null },
+    })
+  } catch (err) {
+    console.error('[cmoonRaidSocket] applyAfkKicks activeUserId release failed:', err)
+  }
+
   const kickedPayload = kicked.map(p => ({ userId: p.userId, username: p.username }))
   // Targeted: reaches every open tab the kicked player has (see realtimeNotify.js's own `user:
   // {id}` room convention) with enough to show "you were kicked" and send them off this page —
