@@ -3199,6 +3199,8 @@ model OgGtoonTournament {
   status              OgGtoonTournamentStatus  @default(DRAFT)
   optInStartAt        DateTime
   optInEndAt          DateTime
+  // When pairings are made and play begins. Null = legacy tournaments, which start the moment opt-in closes.
+  startAt             DateTime?
   format              OgGtoonTournamentFormat?
   // Null = derive from the field size when opt-in closes (see tournamentCore.swissRoundsFor).
   swissRoundsOverride Int?

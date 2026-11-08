@@ -10,7 +10,7 @@ export default defineEventHandler(async (event) => {
     orderBy: { optInStartAt: 'desc' },
     take: 200,
     select: {
-      id: true, name: true, status: true, format: true, optInStartAt: true, optInEndAt: true, roundWindowHours: true,
+      id: true, name: true, status: true, format: true, optInStartAt: true, optInEndAt: true, startAt: true, roundWindowHours: true,
       tournamentCompletedAt: true, lastAdvancedAt: true, requirePrizeApproval: true, prizesQueuedAt: true, prizesApprovedAt: true,
       winner: { select: { username: true } }
     }

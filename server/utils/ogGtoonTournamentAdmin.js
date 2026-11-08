@@ -38,6 +38,10 @@ export async function parseTournamentBody(body, { only = ['basics', 'window', 'r
     if (optInStartAt >= optInEndAt) throw bad('Opt-in start must be before opt-in end')
     data.optInStartAt = optInStartAt
     data.optInEndAt = optInEndAt
+    // Every tournament saved here needs a start time (only legacy rows already in the database may have none).
+    const startAt = parseDate(body?.startAt, 'Start time')
+    if (startAt <= optInEndAt) throw bad('Start time must be after opt-in closes')
+    data.startAt = startAt
   }
 
   if (only.includes('rules')) {
