@@ -99,15 +99,15 @@
 
             <div class="settings-row settings-row-haptic">
               <div>
-                <h2 class="settings-row-title">Haptic Sounds</h2>
-                <p class="settings-row-desc">Play a click sound and highlight buttons when you tap or click them, like the original Cartoon Orbit.</p>
+                <h2 class="settings-row-title">Mute sounds</h2>
+                <p class="settings-row-desc">Silences the button click sound/vibration (like the original Cartoon Orbit) and all cMoon raid battle sound effects and music.</p>
               </div>
 
               <div class="toggle-wrap">
                 <label class="toggle-label">
-                  <input type="checkbox" class="sr-only" :checked="hapticSoundsEnabled" @change="onToggleHapticSounds" />
-                  <div :class="['toggle-track', hapticSoundsEnabled ? 'toggle-on' : 'toggle-off']">
-                    <div :class="['toggle-knob', hapticSoundsEnabled ? 'toggle-knob-on' : '']"></div>
+                  <input type="checkbox" class="sr-only" :checked="!hapticSoundsEnabled" @change="onToggleHapticSounds" />
+                  <div :class="['toggle-track', !hapticSoundsEnabled ? 'toggle-on' : 'toggle-off']">
+                    <div :class="['toggle-knob', !hapticSoundsEnabled ? 'toggle-knob-on' : '']"></div>
                   </div>
                 </label>
               </div>
@@ -360,8 +360,12 @@ const { user, fetchSelf } = useAuth()
 
 const { enabled: hapticSoundsEnabled, hydrate: hydrateHapticSoundsPref, setEnabled: setHapticSoundsEnabled } = useHapticSoundsPref()
 onMounted(hydrateHapticSoundsPref)
+// The checkbox itself tracks "muted" (matching the row's own "Mute sounds" label), inverted
+// against the underlying pref's "sounds enabled" boolean — see useHapticSoundsPref's own comment
+// for why that composable stays phrased as "enabled" (it's shared with the site-wide click sound
+// effect, unaware of what this one row happens to call itself).
 function onToggleHapticSounds(event) {
-  setHapticSoundsEnabled(event.target.checked)
+  setHapticSoundsEnabled(!event.target.checked)
 }
 
 const allow   = ref(true)

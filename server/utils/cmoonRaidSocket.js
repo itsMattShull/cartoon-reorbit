@@ -437,8 +437,14 @@ function publicRaidView(raid) {
       // Status effects currently afflicting THIS participant (see POISON_OPPONENT's own schema/
       // cmoonEnemyRaid.js comment) — public on purpose, same as their own HP bar: seeing a
       // teammate's poison tick is part of the co-op tension, nothing balance-sensitive to hide.
-      poisonAmount: p.poisonTurnsRemaining > 0 ? p.poisonAmount : 0,
-      poisonTurnsRemaining: p.poisonTurnsRemaining || 0,
+      // Forced to 0 once knocked out — the per-round tick already skips a KO'd participant
+      // (see closeRound's own `if (p.knockedOutAt) continue`) and a party-wide cleanse only ever
+      // reaches `alive` participants, so nothing in the engine ever clears this counter for someone
+      // who goes down mid-poison; left unguarded here, the client would show a "☠️ N more rounds"
+      // badge frozen next to a KO'd name for the rest of the raid even though it can no longer do
+      // anything, exactly like `hasActed` just above is forced false once knocked out.
+      poisonAmount: !p.knockedOutAt && p.poisonTurnsRemaining > 0 ? p.poisonAmount : 0,
+      poisonTurnsRemaining: p.knockedOutAt ? 0 : (p.poisonTurnsRemaining || 0),
       // Team colors + rank to show off on the raid screen — see publicParticipantTeam.
       ...publicParticipantTeam(raid, p),
       // Both null/false until the raid actually resolves (see resolveCMoonRaidOutcome, which

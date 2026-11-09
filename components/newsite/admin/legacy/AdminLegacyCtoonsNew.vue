@@ -150,7 +150,7 @@
 
             <div v-if="mintLimitType === 'defined' && isStandardizableRarity" class="flex items-center justify-between gap-2">
               <p class="text-[11px] text-gray-500">
-                Fills Total/Initial Quantity below from {{ cmartMetricsInfo?.activePlayerCount ?? '…' }} players active {{ windowStartDaysAgo }}–{{ windowEndDaysAgo }} days ago × the Common/Uncommon/Rare/etc percentage set on Admin &gt; cMart Metrics. Still editable afterward.
+                Fills Total/Initial Quantity below from {{ cmartMetricsInfo?.activePlayerCount ?? '…' }} players active in the last {{ windowDays }} days × the Common/Uncommon/Rare/etc percentage set on Admin &gt; cMart Metrics. Still editable afterward.
               </p>
               <button
                 type="button"
@@ -710,8 +710,7 @@ const perUserLimit = ref(null)
 const codeOnly = ref(false)
 const inCmart = ref(false)
 const cmartMetricsInfo = ref(null)
-const windowStartDaysAgo = ref(14)
-const windowEndDaysAgo = ref(7)
+const windowDays = ref(14)
 const price = ref(0)
 const imageFile = ref(null)
 const seriesOptions = ref([])
@@ -990,8 +989,7 @@ onMounted(async () => {
   try { const r = await relRes.json(); releasePercent.value = Number(r.initialReleasePercent ?? 75); delayHours.value = Number(r.finalReleaseDelayHours ?? 12) } catch {}
   try {
     cmartMetricsInfo.value = await cmartMetricsRes.json()
-    if (cmartMetricsInfo.value?.windowStartDaysAgo) windowStartDaysAgo.value = cmartMetricsInfo.value.windowStartDaysAgo
-    if (cmartMetricsInfo.value?.windowEndDaysAgo) windowEndDaysAgo.value = cmartMetricsInfo.value.windowEndDaysAgo
+    if (cmartMetricsInfo.value?.windowDays) windowDays.value = cmartMetricsInfo.value.windowDays
   } catch {}
 })
 
