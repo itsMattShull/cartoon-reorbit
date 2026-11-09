@@ -1,7 +1,7 @@
 // server/utils/cmartStandardizedMetrics.js
 //
 // Backs the "Fill from Active Players" button on the Add/Edit cToon forms: a one-time suggestion
-// for Total/Initial Quantity, computed from the prior-week active-player count
+// for Total/Initial Quantity, computed from the trailing-14-day active-player count
 // (server/utils/activePlayers.js) and a per-rarity percentage, instead of an admin guessing a
 // number that goes stale as the player base grows or shrinks. The button only fills the fields —
 // they're ordinary editable inputs afterward, and nothing is enforced server-side at save time.

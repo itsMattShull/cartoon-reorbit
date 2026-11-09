@@ -1,11 +1,15 @@
 // composables/useHapticSoundsPref.js
 //
-// Per-browser on/off switch for the site-wide "Haptic Sounds" click effect (see
-// composables/useClickSoundEffects.js). Deliberately localStorage-backed rather than an
-// account preference (like User.allowAuctionNotifications) — this needs to work for
-// logged-out visitors too, since the click sound plays sitewide regardless of auth state, and
-// it's a device/session preference (someone may want it off on a shared kiosk, on at home)
-// rather than something tied to an account.
+// Per-browser on/off switch for the site-wide click sound effect (see
+// composables/useClickSoundEffects.js) — and, since settings.vue's "Mute sounds" row now covers
+// both, also for cMoon raid battle sound effects/music (see pages/newsite/cmoon-raid/[id].vue).
+// Deliberately localStorage-backed rather than an account preference (like
+// User.allowAuctionNotifications) — this needs to work for logged-out visitors too, since the
+// click sound plays sitewide regardless of auth state, and it's a device/session preference
+// (someone may want it off on a shared kiosk, on at home) rather than something tied to an
+// account. Stays phrased as "enabled" (sound ON) rather than "muted" even though the settings
+// row built on top of it is named the other way around — this composable has no opinion on what
+// any one caller calls its own toggle.
 const STORAGE_KEY = 'cr_haptic_sounds_enabled_v1'
 
 export function useHapticSoundsPref() {
