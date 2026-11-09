@@ -425,7 +425,7 @@
               <div class="border rounded-lg p-3">
                 <div class="text-[11px] text-gray-500 uppercase tracking-wide">Active Players</div>
                 <div class="text-xl font-semibold tabular-nums">{{ formatMetricNumber(metrics.activePlayerCount) }}</div>
-                <div class="text-[11px] text-gray-500 mt-0.5">Active {{ metrics.windowStartDaysAgo }}–{{ metrics.windowEndDaysAgo }} days ago</div>
+                <div class="text-[11px] text-gray-500 mt-0.5">Active in the last {{ metrics.windowDays }} days</div>
               </div>
               <div class="border rounded-lg p-3">
                 <div class="text-[11px] text-gray-500 uppercase tracking-wide">Median Points / Active Player</div>
