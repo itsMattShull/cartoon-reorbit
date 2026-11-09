@@ -363,6 +363,7 @@
 
 <script setup>
 import { cMoonPillStyle } from '~/utils/cmoonColor'
+import { useHapticSoundsPref } from '@/composables/useHapticSoundsPref'
 
 // The fixed-chrome `.main-content` box is `overflow: hidden` by default
 // (layouts/newsite-template.vue) — a raid party can now be up to 8 players (was a hardcoded 4),
@@ -652,8 +653,13 @@ function triggerShake(isCrit) {
     shakeTimer = setTimeout(() => { shaking.value = false }, 450)
   })
 }
+// Settings page's "Mute sounds" row (composables/useHapticSoundsPref.js) — shared `useState`, so
+// toggling it in another tab/on the settings page takes effect here without a page reload; the
+// battleMusic watch below reacts to it live, and this guard covers every one-shot effect (hit/
+// block/special/taunt/appear/victory/defeat) in one place rather than at each call site.
+const { enabled: soundsEnabled, hydrate: hydrateSoundsPref } = useHapticSoundsPref()
 function playSound(path) {
-  if (!path || typeof window === 'undefined') return
+  if (!path || !soundsEnabled.value || typeof window === 'undefined') return
   try {
     const el = new Audio(path)
     el.volume = 0.7
@@ -754,9 +760,17 @@ watch(myHitStreak, (streak, prevStreak) => {
 // instead of only reacting to a future transition.
 const battleMusic = useBattleMusic()
 watch(() => raid.value?.status, (status) => {
-  if (status === 'IN_PROGRESS') battleMusic.start(raid.value?.battleMusicPath)
+  if (status === 'IN_PROGRESS' && soundsEnabled.value) battleMusic.start(raid.value?.battleMusicPath)
   else battleMusic.stop()
 }, { immediate: true })
+// Toggling "Mute sounds" mid-fight (e.g. from another tab) should take effect immediately rather
+// than waiting for the next status change — the watch above only re-evaluates on a STATUS
+// transition, which an already-IN_PROGRESS raid never has again until it resolves.
+watch(soundsEnabled, (on) => {
+  if (raid.value?.status !== 'IN_PROGRESS') return
+  if (on) battleMusic.start(raid.value?.battleMusicPath)
+  else battleMusic.stop()
+})
 
 // ── Captain entrance banner — a one-time, purely cosmetic "epic" moment naming every cMoon
 // captain in the party (see CMoonCaptain's own schema comment), meant to pump up everyone else in
@@ -817,6 +831,7 @@ watch(() => raidSocket.lastKicked.value?.at, () => {
 })
 
 onMounted(() => {
+  hydrateSoundsPref()
   raidSocket.getState(raidId.value)
   countdownTimer = setInterval(() => { tickCountdown(); tickSecondsSinceStart() }, 250)
   roundCountdownTimer = setInterval(tickRoundCountdown, 250)
