@@ -200,7 +200,13 @@ export function applyPvpSpecialAttack(match, aliveByTeam, attack, caster, specia
     target.poisonTurnsRemaining = attack.poisonDurationRounds
   } else if (attack.effectType === 'HEAL_SELF') {
     if (attack.healsAllies) {
-      for (const p of aliveByTeam[team]) p.hpRemaining = Math.min(p.maxHp, p.hpRemaining + attack.amount)
+      // `aliveByTeam[team]` is a snapshot taken once before step 1's whole loop runs — a teammate
+      // killed earlier THIS SAME round by an opposing DAMAGE_OPPONENT (processed first in join
+      // order) is still in it. Without this check they'd get healed back to positive HP while
+      // knockedOutAt stays set, leaving a knocked-out participant with a nonzero HP bar in the
+      // match's own persisted/broadcast state — same guard SIPHON_HEALTH's own healsAllies branch
+      // below already applies.
+      for (const p of aliveByTeam[team]) { if (!p.knockedOutAt) p.hpRemaining = Math.min(p.maxHp, p.hpRemaining + attack.amount) }
     } else {
       const casterP = match.participants.get(caster.userId)
       if (casterP && !casterP.knockedOutAt) casterP.hpRemaining = Math.min(casterP.maxHp, casterP.hpRemaining + attack.amount)
@@ -241,7 +247,10 @@ export function applyPvpSpecialAttack(match, aliveByTeam, attack, caster, specia
     // cleared.
     match[`team${team}ParalyzedTurns`] = 0
     if (attack.healsAllies) {
+      // Same stale-snapshot guard as HEAL_SELF's own healsAllies branch above — a teammate already
+      // knocked out earlier this same round must not get revived by the HP top-up.
       for (const p of aliveByTeam[team]) {
+        if (p.knockedOutAt) continue
         p.poisonAmount = 0; p.poisonTurnsRemaining = 0
         if (attack.cleanseAlsoHeals) p.hpRemaining = Math.min(p.maxHp, p.hpRemaining + attack.amount)
       }
@@ -260,9 +269,15 @@ export function applyPvpSpecialAttack(match, aliveByTeam, attack, caster, specia
   // state, computed fresh every round.
 }
 
+// `pool` (an `aliveByTeam[...]` array) is a snapshot taken once before step 1's whole loop runs,
+// so by the time a LATER special in that same loop calls this, an earlier special this same round
+// may already have knocked someone in it out — re-filtered here rather than trusting membership,
+// so DAMAGE_OPPONENT/POISON_OPPONENT/SIPHON_HEALTH can never target (and silently waste a special
+// on) a corpse when a genuinely alive opponent exists.
 function randomAlive(pool) {
-  if (!pool || !pool.length) return null
-  return pool[Math.floor(Math.random() * pool.length)]
+  const candidates = (pool || []).filter(p => !p.knockedOutAt)
+  if (!candidates.length) return null
+  return candidates[Math.floor(Math.random() * candidates.length)]
 }
 
 // Applies one already-cast REFLECT_DAMAGE's numeric effect, given this round's REAL outcome
