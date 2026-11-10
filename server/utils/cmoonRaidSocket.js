@@ -1216,14 +1216,17 @@ async function closeRound(io, raid) {
         }
       }
       if (raid.mapPoisonAffectsEnemies) raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - raid.mapPoisonAmount)
-      mapTicks.push({ type: 'POISON', amount: raid.mapPoisonAmount })
+      // Only announce a tick that actually did something — an admin can leave both affects
+      // toggles off (e.g. while staging a map), and this must never report a phantom "POISON"
+      // event into the round log/broadcast when no HP anywhere actually changed.
+      if (raid.mapPoisonAffectsPlayers || raid.mapPoisonAffectsEnemies) mapTicks.push({ type: 'POISON', amount: raid.mapPoisonAmount })
     }
     if (raid.mapHealIntervalRounds > 0 && raid.mapHealAmount > 0 && raid.roundNumber % raid.mapHealIntervalRounds === 0) {
       if (raid.mapHealAffectsPlayers) {
         for (const p of aliveParticipants(raid)) p.hpRemaining = Math.min(p.maxHp, p.hpRemaining + raid.mapHealAmount)
       }
       if (raid.mapHealAffectsEnemies) raid.enemyHpRemaining = Math.min(raid.enemyStats.maxHp, raid.enemyHpRemaining + raid.mapHealAmount)
-      mapTicks.push({ type: 'HEAL', amount: raid.mapHealAmount })
+      if (raid.mapHealAffectsPlayers || raid.mapHealAffectsEnemies) mapTicks.push({ type: 'HEAL', amount: raid.mapHealAmount })
     }
 
     raid.roundLog.push({

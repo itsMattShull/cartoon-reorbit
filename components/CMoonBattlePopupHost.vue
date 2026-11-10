@@ -478,7 +478,14 @@ let pokeballClearTimer = null
 const brokeFreeBanner = ref('')
 let brokeFreeTimer = null
 watch(lastRound, (round) => {
-  const attempt = round?.specials?.find(s => s.effectType === 'CATCH_ATTEMPT')
+  // side === 'PLAYER' matters here: CATCH_ATTEMPT is only ever assignable through the same
+  // CMoonSpecialAttack catalog every other special attack comes from, with nothing stopping an
+  // admin from putting it on an enemy's own faction/member special slot too — inert server-side
+  // (action.post.js's enemy-auto-fire branch has no case for it, same "no case = inert" mechanism
+  // as every other side-specific effect), but that inert ENEMY-side event still has
+  // effectType: 'CATCH_ATTEMPT' and no `brokeFree` flag, which without this filter reads as a
+  // successful PLAYER capture and wrongly shows "you caught it!" on a battle that's still going.
+  const attempt = round?.specials?.find(s => s.side === 'PLAYER' && s.effectType === 'CATCH_ATTEMPT')
   if (!attempt) return
   if (pokeballClearTimer) clearTimeout(pokeballClearTimer)
   if (attempt.brokeFree) {
