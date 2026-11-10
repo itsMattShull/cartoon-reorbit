@@ -269,6 +269,12 @@
               :disabled="entrySaving" @click="addEntry"
             >{{ entrySaving ? 'Adding…' : 'Add team' }}</button>
           </div>
+
+          <AdminCMoonPvpTournamentBracket
+            v-if="selectedTournament.status !== 'DRAFT' && selectedTournament.status !== 'ENTRY_OPEN'"
+            :tournament="selectedTournament" class="pt-2 border-t"
+            @refresh="refreshSelectedTournament"
+          />
         </div>
 
         <!-- Create tournament -->
@@ -459,6 +465,12 @@ async function selectTournament(id) {
   } catch (e) {
     tournamentActionError.value = e?.data?.statusMessage || 'Failed to load tournament'
   }
+}
+// After the bracket component opens a round — reloads this tournament's own detail (new
+// CMoonPvpTournamentMatch rows) and the list (status may have just flipped to IN_PROGRESS).
+async function refreshSelectedTournament() {
+  if (!selectedTournament.value) return
+  await Promise.all([loadTournaments(), selectTournament(selectedTournament.value.id)])
 }
 
 async function setTournamentStatus(status) {
