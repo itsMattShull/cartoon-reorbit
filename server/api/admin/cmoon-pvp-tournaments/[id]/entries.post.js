@@ -50,6 +50,19 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'A team needs at least one member' })
   }
 
+  // A player already on another entry in THIS tournament can never be rostered here too — once a
+  // round pairs these entries against each other, createTournamentMatch would try to create two
+  // CMoonPvpParticipant rows with the same (matchId, userId) and fail the whole pairing with no
+  // recovery short of cancelling the tournament.
+  const alreadyRostered = await db.cMoonPvpTournamentEntryMember.findMany({
+    where: { userId: { in: memberUserIds }, entry: { tournamentId } },
+    select: { userId: true, entry: { select: { teamName: true } } },
+  })
+  if (alreadyRostered.length) {
+    const names = [...new Set(alreadyRostered.map(m => m.entry.teamName))].join(', ')
+    throw createError({ statusCode: 409, statusMessage: `One or more of these players are already entered on another team in this tournament (${names})` })
+  }
+
   let created
   try {
     created = await db.cMoonPvpTournamentEntry.create({

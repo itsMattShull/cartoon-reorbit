@@ -69,7 +69,7 @@
 
 import { randomUUID } from 'crypto'
 import { prisma as db } from '../prisma.js'
-import { getGlobalConfig, getPlayerCombatMaxHp, isCMoonCaptain, displayRankName } from './cmoon.js'
+import { getGlobalConfig, getPlayerCombatMaxHp, getPvpCombatMaxHp, isCMoonCaptain, displayRankName } from './cmoon.js'
 import { grantRewardInTx, enqueueCtoonJobs, processAchievementsForUser } from './achievements.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 import {
@@ -322,7 +322,13 @@ async function loadPvpParticipantProfile(userId) {
   }
   const tiers = await loadRankTiers().catch(() => [])
   const rank = user.currentCMoonRank && cMoon && user.currentCMoonRank.cMoonId === cMoon.id ? user.currentCMoonRank : null
-  const specialAttack = pickEffectiveSpecialAttack(user.chosenSpecialAttack, cMoon?.specialAttack)
+  // pickEffectiveSpecialAttack is shared with solo/raid combat and knows nothing about PvP — an
+  // attack an admin has pulled from PvP via pvpEligible: false (see CMoonSpecialAttack's own schema
+  // comment) must never reach a PvP participant, so it's suppressed to "no special attack" here,
+  // at the one chokepoint every PvP participant profile (join, forceStart, createTournamentMatch)
+  // is loaded through — never just hidden from the admin dropdown.
+  let specialAttack = pickEffectiveSpecialAttack(user.chosenSpecialAttack, cMoon?.specialAttack)
+  if (specialAttack?.pvpEligible === false) specialAttack = null
   return {
     cMoonId: cMoon?.id || null,
     cMoonName: cMoon?.name || null,
@@ -764,6 +770,12 @@ async function resolveTournamentMatchLinkage(match, winningTeam) {
   if (!winningTeam) return
   const tm = await db.cMoonPvpTournamentMatch.findUnique({ where: { id: match.tournamentMatchId } })
   if (!tm || tm.winnerEntryId) return
+  // A tournament the admin already cancelled must never be revived by a match that was still in
+  // flight at cancel time — cancel.post.js's own comment documents that such a match "just never
+  // gets credited to a tournament placement." Checked fresh here (not cached) since cancellation
+  // can happen at any point while this match is live.
+  const tournament = await db.cMoonPvpTournament.findUnique({ where: { id: tm.tournamentId }, select: { status: true } })
+  if (!tournament || tournament.status === 'CANCELLED') return
   const winnerEntryId = winningTeam === 'A' ? tm.entryAId : tm.entryBId
   if (!winnerEntryId) return
   await db.cMoonPvpTournamentMatch.update({ where: { id: tm.id }, data: { winnerEntryId } })
@@ -929,6 +941,22 @@ export async function createTournamentMatch({ tournamentMatchId, entryA, entryB 
   const pointsPerWin = Math.max(0, Number(config?.cMoonPvpPointsPerWin) || 0)
 
   const allUserIds = [...entryA.memberUserIds, ...entryB.memberUserIds]
+  // A user rostered on both sides (entries.post.js should already prevent this, but a bracket
+  // pairing is the actual point a @@unique([matchId, userId]) violation would otherwise strike,
+  // leaving the CMoonPvpTournamentMatch row stuck with no winner and no recovery path) can never
+  // make a valid pairing.
+  if (new Set(allUserIds).size !== allUserIds.length) {
+    throw new Error('A player is rostered on both sides of this pairing')
+  }
+  // Same cross-exclusivity guard cmoonpvp:start/cmoonpvp:join already run via loadPvpEligibility —
+  // a tournament pairing skips FORMING/join entirely, but a member mid-raid or mid-solo-battle (or
+  // already locked into another PvP match) must never be dropped straight into a second combat.
+  // teammatesOnly doesn't apply here (the roster is already fixed by the bracket, not by who
+  // joins which side), so `config` is omitted to keep that branch off.
+  const eligibilities = await Promise.all(allUserIds.map(userId => loadPvpEligibility({ userId, team: null, match: null })))
+  const ineligible = eligibilities.find(e => !e.ok)
+  if (ineligible) throw new Error(ineligible.message)
+
   const users = await db.user.findMany({ where: { id: { in: allUserIds } }, select: { id: true, username: true } })
   const usernameById = new Map(users.map(u => [u.id, u.username]))
 
@@ -953,17 +981,21 @@ export async function createTournamentMatch({ tournamentMatchId, entryA, entryB 
     roundLimit, tournamentMatchId,
   }
 
-  const participantRows = []
+  const memberSlots = []
   for (const [team, entry] of [['A', entryA], ['B', entryB]]) {
-    for (let i = 0; i < entry.memberUserIds.length; i++) {
-      const userId = entry.memberUserIds[i]
-      const username = usernameById.get(userId) || 'Player'
-      const profile = await loadPvpParticipantProfile(userId)
-      const maxHp = equalizeHpEnabled ? (equalizeHpAmount || PLAYER_MAX_HP) : await getPlayerCombatMaxHp(userId, config)
-      const isInitiator = team === 'A' && i === 0
-      addParticipant(match, { userId, username, team, isInitiator, maxHp, profile })
-      participantRows.push({ matchId, userId, team, hpRemaining: maxHp, isInitiator, activeUserId: userId })
-    }
+    entry.memberUserIds.forEach((userId, i) => memberSlots.push({ userId, team, isInitiator: team === 'A' && i === 0 }))
+  }
+  const loaded = await Promise.all(memberSlots.map(async (slot) => ({
+    ...slot,
+    profile: await loadPvpParticipantProfile(slot.userId),
+    maxHp: await getPvpCombatMaxHp(slot.userId, config),
+  })))
+
+  const participantRows = []
+  for (const { userId, team, isInitiator, profile, maxHp } of loaded) {
+    const username = usernameById.get(userId) || 'Player'
+    addParticipant(match, { userId, username, team, isInitiator, maxHp, profile })
+    participantRows.push({ matchId, userId, team, hpRemaining: maxHp, isInitiator, activeUserId: userId })
   }
 
   await db.$transaction([
@@ -1011,7 +1043,7 @@ export function registerCMoonPvp(io, socket, resolveSocketUser) {
       const equalizeHpAmount = equalizeHpEnabled
         ? (Number.isInteger(config.cMoonPvpEqualizeHpAmount) && config.cMoonPvpEqualizeHpAmount > 0 ? config.cMoonPvpEqualizeHpAmount : PLAYER_MAX_HP)
         : null
-      const initiatorMaxHp = equalizeHpEnabled ? equalizeHpAmount : await getPlayerCombatMaxHp(me.id, config)
+      const initiatorMaxHp = await getPvpCombatMaxHp(me.id, config)
       const profile = await loadPvpParticipantProfile(me.id)
       if (!profile) return socket.emit(EV('error'), { message: 'Your profile could not be loaded' })
 

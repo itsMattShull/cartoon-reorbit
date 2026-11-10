@@ -51,6 +51,7 @@ export const SPECIAL_ATTACK_SELECT = {
   id: true, name: true, description: true, effectType: true, amount: true, raiseDurationRounds: true,
   reflectPercent: true, siphonPercent: true, soundPath: true, healsAllies: true, playerChoice: true,
   poisonDurationRounds: true, cleanseAlsoHeals: true, requiredHitStreak: true, accuracyPercent: true,
+  pvpEligible: true,
 }
 
 // A player's EFFECTIVE special attack for a cMoon Enemy Battle (solo or raid): `chosenSpecialAttack`
