@@ -790,7 +790,10 @@ export const SPECIAL_ATTACK_EFFECT_TYPES = [
   // has no case for any of these three (the attack still fires and announces, just no mechanical
   // effect there).
   'POISON_OPPONENT', 'CLEANSE_SELF', 'SHIELD_PARTY',
-  // Solo-only, the mirror image of the three above — see CMoonSpecialAttackEffectType.
+  // Raid + PvP (not solo) — revives a knocked-out teammate, see CMoonSpecialAttackEffectType.
+  // REVIVE_ALLY's own schema comment.
+  'REVIVE_ALLY',
+  // Solo-only, the mirror image of the raid-only block above — see CMoonSpecialAttackEffectType.
   // CATCH_ATTEMPT's own schema comment for why neither raid nor PvP has a case for this one.
   'CATCH_ATTEMPT',
 ]
@@ -992,7 +995,9 @@ export function parseSpecialAttackBody(body, existing) {
   if (effectType !== 'CATCH_ATTEMPT' && !isValidSpecialAttackAccuracyPercent(accuracyPercentRaw)) {
     return { ok: false, message: `Accuracy percent must be a whole number between ${SPECIAL_ATTACK_ACCURACY_PERCENT_MIN} and ${SPECIAL_ATTACK_ACCURACY_PERCENT_MAX}` }
   }
-  const healsAllies = (effectType === 'HEAL_SELF' || effectType === 'SIPHON_HEALTH' || effectType === 'CLEANSE_SELF') ? healsAlliesRaw : false
+  // REVIVE_ALLY reuses this same field as "revive one random knocked-out ally (off) vs. every
+  // knocked-out ally (on)" — see CMoonSpecialAttackEffectType.REVIVE_ALLY's own schema comment.
+  const healsAllies = (effectType === 'HEAL_SELF' || effectType === 'SIPHON_HEALTH' || effectType === 'CLEANSE_SELF' || effectType === 'REVIVE_ALLY') ? healsAlliesRaw : false
   const cleanseAlsoHeals = effectType === 'CLEANSE_SELF' ? cleanseAlsoHealsRaw : false
   const raiseDurationRounds = effectType === 'RAISE_ALLY_ATTACK' ? raiseDurationRoundsRaw : SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT
   const reflectPercent = effectType === 'REFLECT_DAMAGE' ? reflectPercentRaw : SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT

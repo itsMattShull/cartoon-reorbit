@@ -261,6 +261,28 @@ export function applyPvpSpecialAttack(match, aliveByTeam, attack, caster, specia
         if (attack.cleanseAlsoHeals) casterP.hpRemaining = Math.min(casterP.maxHp, casterP.hpRemaining + attack.amount)
       }
     }
+  } else if (attack.effectType === 'REVIVE_ALLY') {
+    // Symmetric for either team, unlike raid's own PLAYER-only branch (PvP has no boss/enemy side
+    // at all to exclude) — see CMoonSpecialAttackEffectType.REVIVE_ALLY's own schema comment.
+    // Pulled from match.participants directly, NOT aliveByTeam[team] -- aliveByTeam is this
+    // round's pre-step-1 ALIVE snapshot, which by definition excludes anyone knocked out, so it
+    // can never contain a revive target.
+    const knockedOut = Array.from(match.participants.values()).filter(p => p.team === team && p.knockedOutAt)
+    if (!knockedOut.length) {
+      event.fizzled = true
+    } else {
+      const targets = attack.healsAllies ? knockedOut : [knockedOut[Math.floor(Math.random() * knockedOut.length)]]
+      for (const p of targets) {
+        p.knockedOutAt = null
+        p.hpRemaining = Math.max(1, Math.min(p.maxHp, attack.amount))
+        // Clean slate, not a frozen-at-death snapshot -- same reasoning a freshly-joined
+        // participant starts from.
+        p.poisonAmount = 0; p.poisonTurnsRemaining = 0
+        p.hitStreak = 0; p.specialCharged = false
+        p.pendingAction = null
+      }
+      if (targets.length === 1) event.targetUserId = targets[0].userId
+    }
   }
   // SHIELD_PARTY has no branch here at all -- the cast above already pushed/announced the event,
   // and that's everything this function needs to do. The actual effect (negating this round's

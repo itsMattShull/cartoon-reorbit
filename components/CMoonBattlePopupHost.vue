@@ -265,6 +265,10 @@ function specialEffectDescription(attack) {
     // says so plainly rather than showing nothing.
     case 'POISON_OPPONENT': case 'SHIELD_PARTY':
       return 'This effect only works in a co-op raid — in a solo fight it fires and announces, but does nothing.'
+    // REVIVE_ALLY is the same raid-only shape as the two above, just also wired into PvP (see
+    // cmoonPvp.js) — a solo fight has no teammates to revive either way.
+    case 'REVIVE_ALLY':
+      return 'This effect only works in a co-op raid or a PvP match — in a solo fight there are no teammates to revive, so it fires and announces, but does nothing.'
     // CATCH_ATTEMPT is the mirror image — solo-only, inert in a raid/PvP. Deals no damage either
     // way; the roll it describes is the ENEMY's own catch rate, not this attack's accuracy.
     case 'CATCH_ATTEMPT':

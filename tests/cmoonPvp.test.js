@@ -215,6 +215,71 @@ test('applyPvpSpecialAttack: CLEANSE_SELF cures own team paralysis + self poison
   assert.deepEqual([a2.poisonAmount, a2.poisonTurnsRemaining], [5, 2]) // ally untouched -- healsAllies off
 })
 
+test('applyPvpSpecialAttack: REVIVE_ALLY revives exactly ONE random knocked-out ally on the caster\'s OWN team by default', () => {
+  const match = makeMatch()
+  const down1 = makeParticipant('down1', 'A', { hpRemaining: 0, knockedOutAt: 10, maxHp: 20, poisonAmount: 3, poisonTurnsRemaining: 2, hitStreak: 5, specialCharged: true, pendingAction: 'ATTACK_HIGH' })
+  const down2 = makeParticipant('down2', 'A', { hpRemaining: 0, knockedOutAt: 20, maxHp: 20 })
+  const bDown = makeParticipant('bDown', 'B', { hpRemaining: 0, knockedOutAt: 30, maxHp: 20 }) // opposing team -- never a valid target
+  const a1 = makeParticipant('a1', 'A')
+  match.participants.set('down1', down1); match.participants.set('down2', down2)
+  match.participants.set('bDown', bDown); match.participants.set('a1', a1)
+  const attack = { ...baseAttack, effectType: 'REVIVE_ALLY', amount: 15, healsAllies: false }
+  const events = []
+  applyPvpSpecialAttack(match, { A: [a1], B: [] }, attack, { team: 'A', userId: 'a1' }, events, {})
+  const revivedCount = [down1, down2].filter(p => !p.knockedOutAt).length
+  assert.equal(revivedCount, 1) // exactly one, never both
+  assert.equal(bDown.knockedOutAt, 30) // opposing team's own knocked-out member is NEVER touched
+  const revived = down1.knockedOutAt ? down2 : down1
+  assert.equal(revived.hpRemaining, 15)
+  assert.equal(events[0].fizzled, undefined)
+  assert.equal(events[0].targetUserId, revived.userId)
+})
+
+test('applyPvpSpecialAttack: REVIVE_ALLY clears poison/hitStreak/specialCharged/pendingAction on the revived ally (fresh start)', () => {
+  const match = makeMatch()
+  const down = makeParticipant('down', 'A', { hpRemaining: 0, knockedOutAt: 10, poisonAmount: 3, poisonTurnsRemaining: 2, hitStreak: 5, specialCharged: true, pendingAction: 'ATTACK_HIGH' })
+  match.participants.set('down', down)
+  applyPvpSpecialAttack(match, { A: [], B: [] }, { ...baseAttack, effectType: 'REVIVE_ALLY', amount: 15 }, { team: 'A', userId: 'a1' }, [], {})
+  assert.equal(down.knockedOutAt, null)
+  assert.deepEqual([down.poisonAmount, down.poisonTurnsRemaining], [0, 0])
+  assert.equal(down.hitStreak, 0)
+  assert.equal(down.specialCharged, false)
+  assert.equal(down.pendingAction, null)
+})
+
+test('applyPvpSpecialAttack: REVIVE_ALLY with healsAllies revives EVERY knocked-out ally on the caster\'s own team at once', () => {
+  const match = makeMatch()
+  const down1 = makeParticipant('down1', 'A', { hpRemaining: 0, knockedOutAt: 10, maxHp: 20 })
+  const down2 = makeParticipant('down2', 'A', { hpRemaining: 0, knockedOutAt: 20, maxHp: 20 })
+  const bDown = makeParticipant('bDown', 'B', { hpRemaining: 0, knockedOutAt: 30, maxHp: 20 })
+  match.participants.set('down1', down1); match.participants.set('down2', down2); match.participants.set('bDown', bDown)
+  applyPvpSpecialAttack(match, { A: [], B: [] }, { ...baseAttack, effectType: 'REVIVE_ALLY', amount: 15, healsAllies: true }, { team: 'A', userId: 'a1' }, [], {})
+  assert.equal(down1.knockedOutAt, null)
+  assert.equal(down2.knockedOutAt, null)
+  assert.equal(down1.hpRemaining, 15)
+  assert.equal(down2.hpRemaining, 15)
+  assert.equal(bDown.knockedOutAt, 30) // the opposing team is never affected, even with healsAllies on
+})
+
+test('applyPvpSpecialAttack: REVIVE_ALLY clamps revived HP to the target\'s own maxHp', () => {
+  const match = makeMatch()
+  const down = makeParticipant('down', 'A', { hpRemaining: 0, knockedOutAt: 10, maxHp: 10 })
+  match.participants.set('down', down)
+  applyPvpSpecialAttack(match, { A: [], B: [] }, { ...baseAttack, effectType: 'REVIVE_ALLY', amount: 9999 }, { team: 'A', userId: 'a1' }, [], {})
+  assert.equal(down.hpRemaining, 10)
+})
+
+test('applyPvpSpecialAttack: REVIVE_ALLY fizzles (no effect) when nobody on the caster\'s team is knocked out', () => {
+  const match = makeMatch()
+  const a1 = makeParticipant('a1', 'A')
+  const bDown = makeParticipant('bDown', 'B', { hpRemaining: 0, knockedOutAt: 10 }) // opposing team is down -- irrelevant
+  match.participants.set('a1', a1); match.participants.set('bDown', bDown)
+  const events = []
+  applyPvpSpecialAttack(match, { A: [a1], B: [] }, { ...baseAttack, effectType: 'REVIVE_ALLY', amount: 15 }, { team: 'A', userId: 'a1' }, events, {})
+  assert.equal(events[0].fizzled, true)
+  assert.equal(a1.hpRemaining, PLAYER_MAX_HP)
+})
+
 test('applyPvpSpecialAttack: SHIELD_PARTY only announces -- no match-state mutation', () => {
   const match = makeMatch()
   const before = JSON.stringify(match, (k, v) => k === 'participants' ? undefined : v)

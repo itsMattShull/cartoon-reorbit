@@ -549,6 +549,9 @@ function specialEffectDescription(attack) {
       ? `Cures you and every raid ally of paralysis and poison${attack?.cleanseAlsoHeals ? `, healing ${n} HP too` : ''}.`
       : `Cures you of paralysis and poison${attack?.cleanseAlsoHeals ? `, healing ${n} HP too` : ''}. Everyone else's party-wide paralysis is cured too — only poison is self-only here.`
     case 'SHIELD_PARTY': return `Negates ALL damage the party would take this round, from the boss's normal attack and any special it casts.`
+    case 'REVIVE_ALLY': return attack?.healsAllies
+      ? `Revives EVERY knocked-out party member at once, each with ${n} HP (capped at their own max HP).`
+      : `Revives one random knocked-out party member with ${n} HP (capped at their own max HP). Fires and announces with no effect if nobody's down.`
     default: return ''
   }
 }

@@ -612,7 +612,7 @@ test('parseSpecialAttackBody: raiseDurationRounds is only ever stored when effec
   assert.equal(raiseResult.data.raiseDurationRounds, 250)
 })
 
-test('parseSpecialAttackBody: healsAllies is only ever stored true when effectType is HEAL_SELF or SIPHON_HEALTH', () => {
+test('parseSpecialAttackBody: healsAllies is only ever stored true when effectType is HEAL_SELF, SIPHON_HEALTH, CLEANSE_SELF, or REVIVE_ALLY', () => {
   // A truthy healsAllies sent alongside any other effectType is silently normalized to false —
   // see that field's own schema comment on why this is never trusted to the client/admin UI alone.
   const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', healsAllies: true })
@@ -626,6 +626,12 @@ test('parseSpecialAttackBody: healsAllies is only ever stored true when effectTy
   const siphonResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', healsAllies: true })
   assert.equal(siphonResult.ok, true)
   assert.equal(siphonResult.data.healsAllies, true)
+
+  // REVIVE_ALLY reuses this same field as "revive one random knocked-out ally (off) vs. every
+  // knocked-out ally (on)" — see CMoonSpecialAttackEffectType.REVIVE_ALLY's own schema comment.
+  const reviveResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'REVIVE_ALLY', healsAllies: true })
+  assert.equal(reviveResult.ok, true)
+  assert.equal(reviveResult.data.healsAllies, true)
 })
 
 test('parseSpecialAttackBody: an omitted healsAllies defaults to false on create', () => {

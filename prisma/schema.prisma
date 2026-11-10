@@ -6636,6 +6636,20 @@ enum CMoonSpecialAttackEffectType {
   POISON_OPPONENT
   CLEANSE_SELF
   SHIELD_PARTY
+  // Revives a currently knocked-out teammate — same raid-only mechanism as the three effects just
+  // above (no case for it in solo's own action.post.js), but ALSO fully wired into PvP
+  // (applyPvpSpecialAttack in cmoonPvp.js), unlike those three: a raid/PvP party has knocked-out
+  // teammates to bring back, solo never does (there's nobody else to revive). `amount` is reused
+  // as "HP the revived ally comes back with" (clamped to their own maxHp, floored at 1). `healsAllies`
+  // is reused as "revive one random knocked-out ally (off, default) vs. every knocked-out ally on
+  // the caster's own side (on)" — the same self-vs-whole-team reinterpretation HEAL_SELF/
+  // CLEANSE_SELF/SIPHON_HEALTH already give that field, just with "knocked-out teammates" as the
+  // pool instead of "everyone alive." Fizzles (no effect, still announced) if nobody on the
+  // caster's side is currently knocked out. Never has a sensible boss-side meaning in a raid (the
+  // boss has no teammates, and its own death ends the raid outright rather than being a per-round
+  // knockout) — assigning it to an enemy's own special just fires/announces with no effect, same
+  // fallback SHIELD_PARTY's own boss-cast branch already uses.
+  REVIVE_ALLY
   // ── SOLO-ONLY, the mirror image of the raid-only block above — neither cmoonRaidSocket.js's nor
   // cmoonPvpSocket.js's own special-attack application function has a case for this one, so it
   // fires and announces but does nothing outside a solo CMoonEnemyBattle, same "no case for it =

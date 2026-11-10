@@ -370,6 +370,9 @@ function specialEffectDescription(attack) {
       ? `Cures you and your whole team of paralysis and poison${attack?.cleanseAlsoHeals ? `, healing ${n} HP too` : ''}.`
       : `Cures you of poison, and your whole team of paralysis${attack?.cleanseAlsoHeals ? `, healing ${n} HP too` : ''}.`
     case 'SHIELD_PARTY': return `Negates ALL damage your team would take this round, from ordinary attacks and any special cast against you.`
+    case 'REVIVE_ALLY': return attack?.healsAllies
+      ? `Revives EVERY knocked-out teammate on your team at once, each with ${n} HP (capped at their own max HP).`
+      : `Revives one random knocked-out teammate on your team with ${n} HP (capped at their own max HP). Fires and announces with no effect if nobody on your team is down.`
     default: return ''
   }
 }

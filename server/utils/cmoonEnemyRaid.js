@@ -507,6 +507,30 @@ export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvent
       raid.enemyPoisonTurnsRemaining = 0
       if (attack.cleanseAlsoHeals) raid.enemyHpRemaining = Math.min(raid.enemyStats.maxHp, raid.enemyHpRemaining + attack.amount)
     }
+  } else if (attack.effectType === 'REVIVE_ALLY' && caster.side === 'PLAYER') {
+    // PLAYER-only — see CMoonSpecialAttackEffectType.REVIVE_ALLY's own schema comment on why this
+    // has no sensible boss-side meaning in a raid at all (no branch for caster.side === 'ENEMY',
+    // same "fires and announces with no effect" fallback SHIELD_PARTY's own boss-cast case gets).
+    // Pulled from raid.participants directly, NOT `alive` — `alive` is this round's pre-step-1
+    // snapshot of who was ALREADY alive, which by definition excludes anyone knocked out, so it
+    // can never contain a revive target.
+    const knockedOut = Array.from(raid.participants.values()).filter(p => p.knockedOutAt)
+    if (!knockedOut.length) {
+      event.fizzled = true
+    } else {
+      const targets = attack.healsAllies ? knockedOut : [knockedOut[Math.floor(Math.random() * knockedOut.length)]]
+      for (const p of targets) {
+        p.knockedOutAt = null
+        p.hpRemaining = Math.max(1, Math.min(p.maxHp, attack.amount))
+        // Clean slate, not a frozen-at-death snapshot — same reasoning a freshly-joined
+        // participant starts from, see this function's own header comment on pendingAction/
+        // hitStreak/specialCharged defaults elsewhere in this file.
+        p.poisonAmount = 0; p.poisonTurnsRemaining = 0
+        p.hitStreak = 0; p.specialCharged = false
+        p.pendingAction = null
+      }
+      if (targets.length === 1) event.targetUserId = targets[0].userId
+    }
   }
   // SHIELD_PARTY has no branch here at all when caster.side === 'PLAYER' — the cast above already
   // pushed/announced the event, and that's everything applyRaidSpecialAttack itself needs to do.

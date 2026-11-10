@@ -114,6 +114,7 @@
                 <span v-if="a.effectType === 'POISON_OPPONENT'"> · {{ a.poisonDurationRounds }} round(s)</span>
                 <span v-if="a.effectType === 'CLEANSE_SELF' && a.cleanseAlsoHeals"> · also heals {{ a.amount }} HP</span>
                 <span v-if="(a.effectType === 'HEAL_SELF' || a.effectType === 'SIPHON_HEALTH' || a.effectType === 'CLEANSE_SELF') && a.healsAllies"> · heals the whole party in raids</span>
+                <span v-if="a.effectType === 'REVIVE_ALLY'"> · {{ a.healsAllies ? 'revives EVERY knocked-out ally' : 'revives one random knocked-out ally' }} with {{ a.amount }} HP</span>
                 <span> · needs {{ a.requiredHitStreak }} hit streak</span>
                 <span v-if="a.accuracyPercent < 100"> · {{ a.accuracyPercent }}% accuracy</span>
                 <span v-if="a.playerChoice"> · player choice</span>
@@ -208,6 +209,20 @@
                 In a raid, off means only the caster is affected; on extends the same to every other alive party
                 member too. For Cleanse Self, this only governs the Poison side of the cure — the Paralyze side
                 always cures the whole party regardless of this toggle.
+              </p>
+            </span>
+          </label>
+
+          <label v-if="specialAttackForm.effectType === 'REVIVE_ALLY'" class="flex items-start gap-2">
+            <input type="checkbox" v-model="specialAttackForm.healsAllies" class="mt-0.5" />
+            <span>
+              <span class="text-xs font-medium">Revive EVERY knocked-out ally (instead of just one)</span>
+              <p class="text-[10px] text-gray-500 mt-0.5">
+                Off (default): revives one random currently knocked-out ally. On: revives every knocked-out ally on
+                the caster's own side at once — much stronger, especially against an enemy with multiple specials
+                landing per round. Either way the revived ally (or allies) comes back with Amount HP (capped at
+                their own max HP) and sits out the round they were revived in, same as anyone else who couldn't
+                submit an action that round.
               </p>
             </span>
           </label>
@@ -1214,7 +1229,7 @@ const loadError = ref('')
 // since that file is server-only, same as RANKS/RANK_LABELS below.
 const SPECIAL_ATTACK_EFFECT_TYPES = [
   'DAMAGE_OPPONENT', 'HEAL_SELF', 'PARALYZE_OPPONENT', 'LOWER_OPPONENT_ATTACK', 'RAISE_ALLY_ATTACK',
-  'REFLECT_DAMAGE', 'SIPHON_HEALTH', 'POISON_OPPONENT', 'CLEANSE_SELF', 'SHIELD_PARTY', 'CATCH_ATTEMPT',
+  'REFLECT_DAMAGE', 'SIPHON_HEALTH', 'POISON_OPPONENT', 'CLEANSE_SELF', 'SHIELD_PARTY', 'REVIVE_ALLY', 'CATCH_ATTEMPT',
 ]
 const SPECIAL_ATTACK_EFFECT_LABELS = {
   DAMAGE_OPPONENT: 'Damage opponent',
@@ -1227,6 +1242,7 @@ const SPECIAL_ATTACK_EFFECT_LABELS = {
   POISON_OPPONENT: 'Poison opponent (raids only)',
   CLEANSE_SELF: 'Cleanse self (+allies in raids)',
   SHIELD_PARTY: 'Shield party (raids only)',
+  REVIVE_ALLY: 'Revive ally (raids + PvP only)',
   CATCH_ATTEMPT: 'Throw Pokeball (solo only)',
 }
 const SPECIAL_ATTACK_EFFECT_HELP = {
@@ -1240,6 +1256,7 @@ const SPECIAL_ATTACK_EFFECT_HELP = {
   POISON_OPPONENT: 'Deals Amount damage at the end of each round for a configurable number of rounds. Re-casting on an already-poisoned target refreshes it (replaces amount/duration) rather than stacking a second tick. Only has an effect in a RAID — a solo fight has no case for it, the attack just fires and announces.',
   CLEANSE_SELF: "Cures the caster's own active Paralyze, plus Poison in a raid (self only, unless \"Also heals allies\" below is on — solo has no poison to clear either way). The player/boss can be paralyzed or poisoned again right after — this is a one-time cure, not temporary immunity. Works in BOTH solo and raids; \"Also heals allies\" only matters in a raid (no allies to extend to solo).",
   SHIELD_PARTY: "Negates ALL damage the party would otherwise take this round — the normal attack exchange AND any boss special that would deal damage, cast by any party member. Only works when cast by a PLAYER in a RAID; assigning this to an enemy faction's own special just makes it fire and announce with no effect, since by the time the boss could cast it the round's damage already happened.",
+  REVIVE_ALLY: "Revives a currently knocked-out ally with Amount HP (capped at their own max HP) — one random one by default, or every knocked-out ally at once with \"Revive EVERY knocked-out ally\" below. Only has an effect in a RAID or PvP match — a solo fight has no teammates, so the attack just fires and announces. Has no sensible boss-side meaning either (the boss has no teammates, and its own death ends the raid outright); assigning it to an enemy faction's own special just fires and announces with no effect.",
   CATCH_ATTEMPT: "Deals no damage. Gives a chance to CAPTURE the target enemy instead of fighting it — only works in a SOLO battle, and only against an enemy toggled \"Catchable\" with a nonzero catch rate (set on that enemy's own member page, not here). Amount and Accuracy percent are both ignored — the only roll that matters is the target's own catch rate. Fires and announces with no effect in a raid or PvP, same as the raid-only effects above do in solo.",
 }
 
@@ -1559,7 +1576,7 @@ async function saveSpecialAttack() {
       reflectPercent,
       siphonPercent,
       poisonDurationRounds,
-      healsAllies: ['HEAL_SELF', 'SIPHON_HEALTH', 'CLEANSE_SELF'].includes(specialAttackForm.effectType) ? specialAttackForm.healsAllies : false,
+      healsAllies: ['HEAL_SELF', 'SIPHON_HEALTH', 'CLEANSE_SELF', 'REVIVE_ALLY'].includes(specialAttackForm.effectType) ? specialAttackForm.healsAllies : false,
       cleanseAlsoHeals: specialAttackForm.effectType === 'CLEANSE_SELF' ? specialAttackForm.cleanseAlsoHeals : false,
       playerChoice: specialAttackForm.playerChoice,
       pvpEligible: specialAttackForm.pvpEligible,
