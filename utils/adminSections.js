@@ -95,6 +95,7 @@ export const ADMIN_SECTIONS = [
   S('cmoonChangeRequests', 'cMoon Change Requests', 'games', nu('AdminCMoonChangeRequests')),
   S('manageNavigation', 'Manage Navigation', 'games', nu('AdminManageNavigation')),
   S('cMoonEnemies', 'Manage cMoon Enemies', 'games', nu('AdminCMoonEnemies')),
+  S('cMoonPvp', 'cMoon PvP', 'games', nu('AdminCMoonPvp')),
   S('cMoonBattleUpgrades', 'Manage Upgrades', 'games', nu('AdminCMoonBattleUpgrades'), { desc: 'cMart HP/Stamina upgrades — prices, limits, resets on prestige' }),
   S('cMoonRiddles', 'cMoon Riddles', 'games', nu('AdminCMoonRiddles')),
   S('cMoonHunts', 'cMoon Scavenger Hunts', 'games', nu('AdminCMoonHunts')),

@@ -876,6 +876,10 @@ export function parseSpecialAttackBody(body, existing) {
   // Whether a player can choose this attack for themselves — see CMoonSpecialAttack.playerChoice's
   // own schema comment. Independent of effectType, unlike healsAllies above.
   const playerChoice = toBoolean(body?.playerChoice, existing ? !!existing.playerChoice : false)
+  // Whether this attack is reachable in cMoon PvP at all — see CMoonSpecialAttack.pvpEligible's own
+  // schema comment. Independent of effectType; defaults true (every pre-existing attack stays
+  // reachable unless an admin explicitly pulls it).
+  const pvpEligible = toBoolean(body?.pvpEligible, existing ? existing.pvpEligible !== false : true)
   // Applies to EVERY effectType, unlike every field above this point — see
   // CMoonSpecialAttack.requiredHitStreak/accuracyPercent's own schema comments.
   const requiredHitStreak = body?.requiredHitStreak === undefined
@@ -918,6 +922,9 @@ export function parseSpecialAttackBody(body, existing) {
   if (playerChoice === null) {
     return { ok: false, message: 'playerChoice must be true or false' }
   }
+  if (pvpEligible === null) {
+    return { ok: false, message: 'pvpEligible must be true or false' }
+  }
   if (!isValidSpecialAttackRequiredHitStreak(requiredHitStreak)) {
     return { ok: false, message: `Required hit streak must be a whole number between ${SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MIN} and ${SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MAX}` }
   }
@@ -934,7 +941,7 @@ export function parseSpecialAttackBody(body, existing) {
   return {
     ok: true,
     data: {
-      name, description, effectType, amount, healsAllies, playerChoice, raiseDurationRounds, reflectPercent, siphonPercent,
+      name, description, effectType, amount, healsAllies, playerChoice, pvpEligible, raiseDurationRounds, reflectPercent, siphonPercent,
       poisonDurationRounds, cleanseAlsoHeals, requiredHitStreak, accuracyPercent,
     },
   }

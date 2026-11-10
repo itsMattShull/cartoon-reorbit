@@ -525,7 +525,7 @@ test('parseSpecialAttackBody: a valid create body parses with trimmed name and t
   assert.equal(result.ok, true)
   assert.deepEqual(result.data, {
     name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10,
-    healsAllies: false, playerChoice: false, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
+    healsAllies: false, playerChoice: false, pvpEligible: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
     reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
     poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT, cleanseAlsoHeals: false,
     requiredHitStreak: SPECIAL_ATTACK_REQUIRED_HIT_STREAK_DEFAULT, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_DEFAULT,
@@ -552,7 +552,7 @@ test('parseSpecialAttackBody: a blank/null description normalizes to null, a rea
 test('parseSpecialAttackBody: on update, an omitted field falls back to the existing row, not a bare default', () => {
   const existing = {
     name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7,
-    healsAllies: true, playerChoice: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
+    healsAllies: true, playerChoice: true, pvpEligible: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
     reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
     poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT, cleanseAlsoHeals: false,
     requiredHitStreak: 5, accuracyPercent: 80,
@@ -561,11 +561,26 @@ test('parseSpecialAttackBody: on update, an omitted field falls back to the exis
   assert.equal(result.ok, true)
   assert.deepEqual(result.data, {
     name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 20,
-    healsAllies: true, playerChoice: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
+    healsAllies: true, playerChoice: true, pvpEligible: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
     reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
     poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT, cleanseAlsoHeals: false,
     requiredHitStreak: 5, accuracyPercent: 80,
   })
+})
+
+test('parseSpecialAttackBody: pvpEligible defaults true on create, is settable to false, and rejects non-booleans', () => {
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody }).data.pvpEligible, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, pvpEligible: false }).data.pvpEligible, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, pvpEligible: 'nope' }).ok, false)
+  // On update, an omitted pvpEligible falls back to the existing row, same as every other field.
+  const existing = {
+    name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7,
+    healsAllies: true, playerChoice: true, pvpEligible: false, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
+    reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
+    poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT, cleanseAlsoHeals: false,
+    requiredHitStreak: 5, accuracyPercent: 80,
+  }
+  assert.equal(parseSpecialAttackBody({}, existing).data.pvpEligible, false)
 })
 
 // ── raiseDurationRounds (RAISE_ALLY_ATTACK's own non-stacking duration, see its schema comment) ──

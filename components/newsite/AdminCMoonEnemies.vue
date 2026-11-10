@@ -215,6 +215,19 @@
             </span>
           </label>
 
+          <label class="flex items-start gap-2">
+            <input type="checkbox" v-model="specialAttackForm.pvpEligible" class="mt-0.5" />
+            <span>
+              <span class="text-xs font-medium">PvP eligible</span>
+              <p class="text-[10px] text-gray-500 mt-0.5">
+                On (default) lets this attack fire in cMoon PvP matches. Turn off to pull a specific
+                attack from PvP without touching its solo/raid balance — values here (especially
+                Amount/Required hit streak) were tuned for a boss fight, which can be very different
+                from PvP's symmetric player-vs-player scale.
+              </p>
+            </span>
+          </label>
+
           <div class="flex gap-2">
             <div class="w-44 flex-shrink-0">
               <label class="block text-xs font-medium mb-1">Required hit streak (1-10)</label>
@@ -1280,7 +1293,7 @@ const specialAttackSavedSoundPath = ref('')
 const emptySpecialAttackForm = () => ({
   id: '', name: '', description: '', effectType: 'DAMAGE_OPPONENT', amount: 10,
   raiseDurationRounds: 300, reflectPercent: 100, siphonPercent: 50, poisonDurationRounds: 3,
-  healsAllies: false, cleanseAlsoHeals: false, playerChoice: false,
+  healsAllies: false, cleanseAlsoHeals: false, playerChoice: false, pvpEligible: true,
   requiredHitStreak: 3, accuracyPercent: 100,
 })
 const specialAttackForm = reactive(emptySpecialAttackForm())
@@ -1308,6 +1321,7 @@ function startEditSpecialAttack(a) {
   specialAttackForm.healsAllies = !!a.healsAllies
   specialAttackForm.cleanseAlsoHeals = !!a.cleanseAlsoHeals
   specialAttackForm.playerChoice = !!a.playerChoice
+  specialAttackForm.pvpEligible = a.pvpEligible !== false
   specialAttackForm.requiredHitStreak = a.requiredHitStreak ?? 3
   specialAttackForm.accuracyPercent = a.accuracyPercent ?? 100
   specialAttackSavedSoundPath.value = a.soundPath || ''
@@ -1410,6 +1424,7 @@ async function saveSpecialAttack() {
       healsAllies: ['HEAL_SELF', 'SIPHON_HEALTH', 'CLEANSE_SELF'].includes(specialAttackForm.effectType) ? specialAttackForm.healsAllies : false,
       cleanseAlsoHeals: specialAttackForm.effectType === 'CLEANSE_SELF' ? specialAttackForm.cleanseAlsoHeals : false,
       playerChoice: specialAttackForm.playerChoice,
+      pvpEligible: specialAttackForm.pvpEligible,
       requiredHitStreak,
       accuracyPercent,
     }
