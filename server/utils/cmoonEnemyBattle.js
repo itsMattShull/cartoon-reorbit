@@ -404,6 +404,19 @@ export function rollEnemyAction(attackChancePercent = 50) {
   return isAttack ? (isHigh ? 'ATTACK_HIGH' : 'ATTACK_LOW') : (isHigh ? 'BLOCK_HIGH' : 'BLOCK_LOW')
 }
 
+// The ONE success roll for a fired "Throw Pokeball" special attack (CATCH_ATTEMPT) — see
+// CMoonEnemyMember.catchRatePercent's own schema comment for why this is deliberately the only
+// roll involved (no separate accuracy roll stacked on top). `catchRatePercent` is already forced
+// to 0 server-side for a non-catchable member (parseMemberBody in cmoonEnemy.js), so a throw at
+// one always returns false here with no separate "is this member even catchable" check needed —
+// one source of truth. Pulled out as its own pure function so action.post.js's resolveCapture
+// path is directly unit-testable without a battle fixture.
+export function rollCatchAttempt(catchRatePercent) {
+  const chance = Number(catchRatePercent)
+  if (!Number.isFinite(chance) || chance <= 0) return false
+  return Math.random() * 100 < chance
+}
+
 // Rolls each reward row's dropChancePercent INDEPENDENTLY (not a normalized weighted pick) —
 // zero, one, or several rows can hit on the same call. `rewardRows` is the raw
 // CMoonEnemyReward[] as read from the DB (rewardType/ctoonId/avatarId/backgroundId/
@@ -509,6 +522,11 @@ export function serializeEnemyForClient(member, pityEmptyWinStreak = null) {
     // before committing, not just after winning it — not admin-only info, every other reward
     // detail (exact drop tables/chances) stays hidden, but the plain points-on-win number doesn't.
     cMoonPointsReward: member.cMoonPointsReward,
+    // Whether a "Throw Pokeball" special attack could ever capture this member — a bare boolean,
+    // same "tell them it's possible, not the exact odds" stance cMoonPointsReward just took for
+    // points but every reward table's own drop chance does NOT take; catchRatePercent itself
+    // stays server-side only.
+    catchable: !!member.catchable,
     // Null hides the UI entirely — pity disabled for this member, or the caller didn't pass a
     // streak (see this function's own comment on who does). Never sent for a raid boss (pity is
     // solo-only — see CMoonEnemyMember.pityThreshold's own schema comment).

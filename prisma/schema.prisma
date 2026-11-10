@@ -66,6 +66,11 @@ enum PackSource {
   // A pack prize paid by an OG gToons tournament (OgGtoonTournamentPrizeGrant) — see payOneGrant in
   // server/utils/ogGtoonTournament.js. sourceRef = the prize grant's id.
   OG_GTOONS_TOURNAMENT
+  // A PACK-type CMoonEnemyCaptureReward row, granted on a successful "Throw Pokeball" capture —
+  // see action.post.js's resolveCapture. Deliberately its own value, not CMOON_ENEMY_REWARD: a
+  // capture is NOT a win (see CMoonEnemyBattleOutcome.CAPTURED's own schema comment), so its pack
+  // grants shouldn't read as if they came from defeating the enemy.
+  CMOON_ENEMY_CAPTURE
 }
 
 /// What an Auction row is selling. Exactly one of Auction.userCtoonId / Auction.userPackId is set,
@@ -410,6 +415,7 @@ model Ctoon {
   rewardPoolRows             RewardCtoonPool[]           @relation("RewardPoolToCtoon")
   winballGrandPrizeSchedules WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCtoon")
   cMoonEnemyRewards          CMoonEnemyReward[]
+  cMoonEnemyCaptureRewards   CMoonEnemyCaptureReward[]
   cMoonPvpRewards            CMoonPvpReward[]
   cMoonPrestigeRankTiers     CMoonPrestigeRankTier[]
   imageHash                  CtoonImageHash?
@@ -1214,6 +1220,7 @@ model Pack {
   limitResets            UserPackLimitReset[]
   rewardPacks            RewardPack[]
   cMoonEnemyRewards      CMoonEnemyReward[]
+  cMoonEnemyCaptureRewards CMoonEnemyCaptureReward[]
   cMoonPvpRewards        CMoonPvpReward[]
   cMoonDispersalOptions  CMoonDispersalOption[]
   cMoonPrestigeRankTiers CMoonPrestigeRankTier[]
@@ -2162,6 +2169,12 @@ model GlobalGameConfig {
   // (block stays pure defense + heal, the pre-this-feature behavior) — solo-only, same scope as
   // the stamina mechanic above.
   cMoonEnemyBattleBlockCounterDamage   Int       @default(1)
+  // Optional MP3/OGG/WAV (uploaded via a dedicated admin endpoint, sniffed by magic bytes same as
+  // every other audio upload in this codebase), played the instant ANY cMoon enemy is captured
+  // (see CMoonEnemyBattleOutcome.CAPTURED) — ONE track for the whole site, unlike
+  // CMoonEnemyMember's own per-enemy appear/victory/defeat sound paths, since the request calls
+  // for this to play "universally... regardless of faction." Null = no sound.
+  cMoonEnemyCaptureMusicPath           String?
   // When true, consider.post.js's candidate roll restricts itself to only the highest
   // CMoonEnemyRank tier actually present among this player's eligible candidates (active,
   // not-defeated, minPriorDefeats already met, raid-availability already checked) before applying
@@ -3624,6 +3637,7 @@ model Background {
   achievementRewardBackgrounds AchievementRewardBackground[]
   affinityLevelRewards         CMoonAffinityLevel[]
   cMoonEnemyRewards            CMoonEnemyReward[]
+  cMoonEnemyCaptureRewards     CMoonEnemyCaptureReward[]
   cMoonPvpRewards              CMoonPvpReward[]
   cMoonPrestigeRankTiers       CMoonPrestigeRankTier[]
 
@@ -5185,6 +5199,7 @@ model Avatar {
   owners                 UserAvatar[]
   levelRewards           CMoonAffinityLevelRewardAvatar[]
   cMoonEnemyRewards      CMoonEnemyReward[]
+  cMoonEnemyCaptureRewards CMoonEnemyCaptureReward[]
   cMoonPvpRewards        CMoonPvpReward[]
   cMoonPrestigeRankTiers CMoonPrestigeRankTier[]
 
@@ -6520,6 +6535,15 @@ enum CMoonEnemyBattleOutcome {
   // PER_PLAYER member — nothing but this battle's own player can move that mode's HP at all, so
   // damageDealt is always > 0 there by construction.
   UNCREDITED
+  // A "Throw Pokeball" special attack (CATCH_ATTEMPT) succeeded — see action.post.js's
+  // resolveCapture. Deliberately its OWN outcome, not WIN or LOSS: NOT a win (no
+  // CMoon.battleWins increment, no cMoonPointsReward/first-win bonus, no pity progress, no
+  // "defeat" achievement credit — the enemy was captured, not defeated) and NOT a loss either
+  // (no CMoon.battleLosses increment — the player didn't lose this fight, they ended it on
+  // their own terms). Grants only whatever rolled from this member's own
+  // CMoonEnemyCaptureReward table (see that model's own comment), stored in the same
+  // rewardsGranted column every other outcome already uses.
+  CAPTURED
 }
 
 enum CMoonEnemyRewardType {
@@ -6612,6 +6636,17 @@ enum CMoonSpecialAttackEffectType {
   POISON_OPPONENT
   CLEANSE_SELF
   SHIELD_PARTY
+  // ── SOLO-ONLY, the mirror image of the raid-only block above — neither cmoonRaidSocket.js's nor
+  // cmoonPvpSocket.js's own special-attack application function has a case for this one, so it
+  // fires and announces but does nothing outside a solo CMoonEnemyBattle, same "no case for it =
+  // inert there" mechanism, just the opposite direction. Attempts to capture the enemy member
+  // (CMoonEnemyMember.catchable/catchRatePercent) rather than damaging/healing/buffing anyone —
+  // see action.post.js's resolveCapture. amount and accuracyPercent are both ignored/forced for
+  // this effectType (parseSpecialAttackBody): there is exactly one success roll for this ability,
+  // the target member's own catchRatePercent, not a second independent accuracy roll stacked on
+  // top of it. requiredHitStreak is still fully meaningful — "how many consecutive hits charges
+  // this throw" — same as every other special attack.
+  CATCH_ATTEMPT
 }
 
 model CMoonSpecialAttack {
@@ -6965,6 +7000,19 @@ model CMoonEnemyMember {
   // applies to THIS enemy's own attack landing on the player — never to the player's own damage
   // against the enemy, which is unaffected and still flat 1/2.
   baseDamage               Int                  @default(1)
+  // Whether a "Throw Pokeball" special attack (CMoonSpecialAttack.effectType = CATCH_ATTEMPT) can
+  // actually capture THIS member — SOLO BATTLES ONLY, same scope note as pityThreshold/
+  // firstWinBonusPoints above (a raid/PvP context never reads either of these two columns at
+  // all — see that effect type's own schema comment). False (the default) matches every
+  // pre-existing member, which never had a catch mechanic to begin with.
+  catchable                Boolean              @default(false)
+  // 0-100 chance a fired CATCH_ATTEMPT actually captures this member (see
+  // action.post.js's resolveCapture) — meaningless, and FORCED to 0 server-side regardless of
+  // what's submitted (see parseMemberBody in cmoonEnemy.js), whenever catchable above is false,
+  // so there is exactly one source of truth for "can this enemy ever be caught" rather than two
+  // columns that could disagree. The admin form grays this input out and zeroes it the same way
+  // whenever the toggle is off.
+  catchRatePercent         Int                  @default(0)
   active                   Boolean              @default(true)
   // Set the moment a SHARED_POOL member's currentHp reaches 0 — once set, the popup-consider
   // roll skips this member (it stays visible/browsable in the admin page and battle logs, just
@@ -7080,6 +7128,7 @@ model CMoonEnemyMember {
 
   faction        CMoonEnemyFaction               @relation(fields: [factionId], references: [id], onDelete: Cascade)
   rewards        CMoonEnemyReward[]
+  captureRewards CMoonEnemyCaptureReward[]
   battles        CMoonEnemyBattle[]
   raids          CMoonEnemyRaid[]
   riddles        CMoonRiddle[]
@@ -7194,6 +7243,35 @@ model CMoonEnemyMemberTaunt {
 // guaranteed) from the feature request. Exactly one of ctoonId/avatarId/backgroundId/packId is set,
 // matching rewardType — enforced at the API layer (Prisma can't express a type-conditional FK).
 model CMoonEnemyReward {
+  id                String               @id @default(uuid())
+  enemyMemberId     String
+  rewardType        CMoonEnemyRewardType
+  ctoonId           String?
+  avatarId          String?
+  backgroundId      String?
+  packId            String?
+  dropChancePercent Float                @default(10) // 0-100, rolled independently per row
+  quantity          Int                  @default(1) // cToon/pack copy count OR points amount (POINTS); ignored for avatar/background
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  enemyMember CMoonEnemyMember @relation(fields: [enemyMemberId], references: [id], onDelete: Cascade)
+  ctoon       Ctoon?           @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  avatar      Avatar?          @relation(fields: [avatarId], references: [id], onDelete: Restrict)
+  background  Background?      @relation(fields: [backgroundId], references: [id], onDelete: Restrict)
+  pack        Pack?            @relation(fields: [packId], references: [id], onDelete: Restrict)
+
+  @@index([enemyMemberId])
+}
+
+// One admin-configured possible prize for CAPTURING (not defeating) a CMoonEnemyMember via a
+// "Throw Pokeball" special attack (see CMoonSpecialAttackEffectType.CATCH_ATTEMPT and
+// action.post.js's resolveCapture) — byte-identical column shape and independent-per-row roll
+// semantics to CMoonEnemyReward (reuses the same rollEnemyRewards/buildGrantableReward helpers
+// unchanged), but a WHOLLY SEPARATE pool: a capture never rolls against CMoonEnemyReward, and a
+// normal win never rolls against this table. Lets an admin offer something a defeat never would
+// (e.g. a rarer "shiny" variant cToon) as the capture-specific payoff the feature requested.
+model CMoonEnemyCaptureReward {
   id                String               @id @default(uuid())
   enemyMemberId     String
   rewardType        CMoonEnemyRewardType

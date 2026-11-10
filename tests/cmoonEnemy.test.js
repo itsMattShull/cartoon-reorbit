@@ -747,6 +747,36 @@ test('parseSpecialAttackBody: accuracyPercent defaults to the DEFAULT constant a
   assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_MAX + 1 }).ok, false)
 })
 
+// ── CATCH_ATTEMPT ("Throw Pokeball") — amount and accuracyPercent are both ignored/forced, since
+// there's exactly ONE success roll for this ability (the target member's own catchRatePercent,
+// rolled elsewhere via rollCatchAttempt) ───────────────────────────────────────────────────────
+test('parseSpecialAttackBody: CATCH_ATTEMPT is a valid effectType and ignores amount entirely', () => {
+  const result = parseSpecialAttackBody({ name: 'Throw Pokeball', description: null, effectType: 'CATCH_ATTEMPT' }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.effectType, 'CATCH_ATTEMPT')
+  // amount is normally required (1-999) and this body omits it entirely — CATCH_ATTEMPT must not
+  // reject that the way every other effectType would.
+  assert.equal(typeof result.data.amount, 'number')
+})
+
+test('parseSpecialAttackBody: CATCH_ATTEMPT forces accuracyPercent to 100 regardless of what was submitted', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'CATCH_ATTEMPT', accuracyPercent: 1 }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.accuracyPercent, 100)
+})
+
+test('parseSpecialAttackBody: switching a stored CATCH_ATTEMPT attack to another effectType re-validates amount normally', () => {
+  const existing = {
+    ...baseSpecialAttackBody, effectType: 'CATCH_ATTEMPT', amount: 1, accuracyPercent: 100,
+    requiredHitStreak: SPECIAL_ATTACK_REQUIRED_HIT_STREAK_DEFAULT,
+  }
+  const result = parseSpecialAttackBody({ effectType: 'DAMAGE_OPPONENT' }, existing)
+  // existing.amount (1) satisfies SPECIAL_ATTACK_AMOUNT_MIN — the point is amount IS validated
+  // once the effectType is no longer CATCH_ATTEMPT, not that this particular value happens to pass.
+  assert.equal(result.ok, true)
+  assert.equal(result.data.amount, 1)
+})
+
 test('isValidSpecialAttackPoisonDurationRounds/isValidSpecialAttackRequiredHitStreak/isValidSpecialAttackAccuracyPercent reject non-integers and out-of-range values', () => {
   assert.equal(isValidSpecialAttackPoisonDurationRounds(3), true)
   assert.equal(isValidSpecialAttackPoisonDurationRounds(0), false)
@@ -922,6 +952,48 @@ test('parseMemberBody: an update with no raidRoundLimit field in the body keeps 
   const result = parseMemberBody({ name: 'Renamed' }, existing)
   assert.equal(result.ok, true)
   assert.equal(result.data.raidRoundLimit, 400)
+})
+
+// ── catchable / catchRatePercent ("Throw Pokeball") ───────────────────────
+test('parseMemberBody: catchable and catchRatePercent both default off/0 on create when omitted', () => {
+  const result = parseMemberBody({ ...baseMemberBody }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.catchable, false)
+  assert.equal(result.data.catchRatePercent, 0)
+})
+
+test('parseMemberBody: catchRatePercent is stored as submitted while catchable is true', () => {
+  const result = parseMemberBody({ ...baseMemberBody, catchable: true, catchRatePercent: 35 }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.catchable, true)
+  assert.equal(result.data.catchRatePercent, 35)
+})
+
+test('parseMemberBody: catchRatePercent is FORCED to 0 whenever catchable is false, even if a nonzero rate was submitted', () => {
+  const result = parseMemberBody({ ...baseMemberBody, catchable: false, catchRatePercent: 80 }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.catchRatePercent, 0)
+})
+
+test('parseMemberBody: toggling catchable off in an update also zeroes a previously-set catch rate, even with no catchRatePercent field in this request', () => {
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, catchable: true, catchRatePercent: 60 }
+  const result = parseMemberBody({ catchable: false }, existing)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.catchable, false)
+  assert.equal(result.data.catchRatePercent, 0)
+})
+
+test('parseMemberBody: an update with neither field keeps the existing catchable/catchRatePercent', () => {
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, catchable: true, catchRatePercent: 42 }
+  const result = parseMemberBody({ name: 'Renamed' }, existing)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.catchable, true)
+  assert.equal(result.data.catchRatePercent, 42)
+})
+
+test('parseMemberBody: rejects a catchRatePercent outside 0-100 while catchable', () => {
+  assert.equal(parseMemberBody({ ...baseMemberBody, catchable: true, catchRatePercent: -1 }, undefined).ok, false)
+  assert.equal(parseMemberBody({ ...baseMemberBody, catchable: true, catchRatePercent: 101 }, undefined).ok, false)
 })
 
 // ── Wind-up/telegraph moves ───────────────────────────────────────────────

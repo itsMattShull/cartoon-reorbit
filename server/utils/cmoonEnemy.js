@@ -48,6 +48,15 @@ export const ATTACK_ACCURACY_PERCENT_MIN = 0
 export const ATTACK_ACCURACY_PERCENT_MAX = 100
 export const ATTACK_ACCURACY_PERCENT_DEFAULT = 100
 
+// 0-100 chance a fired "Throw Pokeball" special attack (CATCH_ATTEMPT) actually captures THIS
+// member — see CMoonEnemyMember.catchRatePercent's own schema comment, and
+// rollCatchAttempt in cmoonEnemyBattle.js for the actual roll. 0 is the admin default (not 100,
+// unlike every other accuracy-style field above) since catchable itself also defaults false —
+// an admin must deliberately opt an enemy INTO being catchable before this number means anything.
+export const CATCH_RATE_PERCENT_MIN = 0
+export const CATCH_RATE_PERCENT_MAX = 100
+export const CATCH_RATE_PERCENT_DEFAULT = 0
+
 // 1-100. The flat damage THIS enemy's own landed normal attack deals to the player — see
 // CMoonEnemyMember.baseDamage's own schema comment. 1 is the admin default so an existing enemy's
 // damage output never changes until an admin dials it up, same "default reproduces pre-feature
@@ -233,6 +242,10 @@ export function isValidCritChance(value) {
 
 export function isValidAttackAccuracyPercent(value) {
   return Number.isInteger(value) && value >= ATTACK_ACCURACY_PERCENT_MIN && value <= ATTACK_ACCURACY_PERCENT_MAX
+}
+
+export function isValidCatchRatePercent(value) {
+  return Number.isInteger(value) && value >= CATCH_RATE_PERCENT_MIN && value <= CATCH_RATE_PERCENT_MAX
 }
 
 export function isValidBaseDamage(value) {
@@ -435,6 +448,16 @@ export function parseMemberBody(body, existing) {
   const overrideMapId = body?.overrideMapId === undefined
     ? (existing ? (existing.overrideMapId ?? null) : null)
     : toOptionalId(body.overrideMapId)
+  const catchable = toBoolean(body?.catchable, existing ? !!existing.catchable : false)
+  // Forced to 0 whenever catchable is (or is becoming) false — see CMoonEnemyMember.
+  // catchRatePercent's own schema comment on why this is the ONE source of truth for "can this
+  // enemy ever be caught" rather than trusting the client to have already zeroed/disabled the
+  // field. Checked against the RESOLVED catchable value above, so an update that flips catchable
+  // off in the same request also zeroes the rate, not just a request that leaves it unchanged.
+  const catchRatePercentRaw = body?.catchRatePercent === undefined
+    ? (existing ? existing.catchRatePercent : CATCH_RATE_PERCENT_DEFAULT)
+    : toNumber(body.catchRatePercent)
+  const catchRatePercent = catchable ? catchRatePercentRaw : 0
 
   if (!factionId) {
     return { ok: false, message: 'Faction is required' }
@@ -531,6 +554,12 @@ export function parseMemberBody(body, existing) {
   if (overrideMapId === undefined) {
     return { ok: false, message: 'overrideMapId must be a string id' }
   }
+  if (catchable === null) {
+    return { ok: false, message: 'Catchable must be true or false' }
+  }
+  if (!isValidCatchRatePercent(catchRatePercent)) {
+    return { ok: false, message: `Catch rate must be a whole number between ${CATCH_RATE_PERCENT_MIN} and ${CATCH_RATE_PERCENT_MAX}` }
+  }
 
   return {
     ok: true,
@@ -539,6 +568,7 @@ export function parseMemberBody(body, existing) {
       critChanceAgainstPercent, critChanceFromPercent, attackAccuracyPercent, baseDamage, attackChancePercent, pityThreshold, firstWinBonusPoints,
       active, sortOrder,
       isRaidBoss, raidAnnouncementText, raidOneTime, raidCooldownMinutes, maxParticipants, raidRoundLimit, windUpEnabled, overrideMapId,
+      catchable, catchRatePercent,
     },
   }
 }
@@ -760,6 +790,9 @@ export const SPECIAL_ATTACK_EFFECT_TYPES = [
   // has no case for any of these three (the attack still fires and announces, just no mechanical
   // effect there).
   'POISON_OPPONENT', 'CLEANSE_SELF', 'SHIELD_PARTY',
+  // Solo-only, the mirror image of the three above — see CMoonSpecialAttackEffectType.
+  // CATCH_ATTEMPT's own schema comment for why neither raid nor PvP has a case for this one.
+  'CATCH_ATTEMPT',
 ]
 // Same bound for every effect type, even though they mean different units (damage/heal points,
 // paralyze turns, attack-stat delta) — simplest shared cap that comfortably covers each one;
@@ -862,7 +895,11 @@ export function parseSpecialAttackBody(body, existing) {
   const effectType = body?.effectType === undefined
     ? (existing ? existing.effectType : '')
     : (typeof body.effectType === 'string' ? body.effectType.trim() : '')
-  const amount = body?.amount === undefined
+  // Ignored/forced for CATCH_ATTEMPT (see that effectType's own schema comment — "Throw Pokeball"
+  // deals no damage/heal/etc., so the usual 1-999 "how much" number means nothing for it), same
+  // "ignore a stale value from switching the dropdown away and back" stance every other
+  // effect-specific field below already takes for ITS own effect type.
+  const amountRaw = body?.amount === undefined
     ? (existing ? existing.amount : undefined)
     : toNumber(body.amount)
   // Only meaningful for RAISE_ALLY_ATTACK (see that column's own schema comment) — validated
@@ -906,7 +943,10 @@ export function parseSpecialAttackBody(body, existing) {
   const requiredHitStreak = body?.requiredHitStreak === undefined
     ? (existing ? existing.requiredHitStreak : SPECIAL_ATTACK_REQUIRED_HIT_STREAK_DEFAULT)
     : toNumber(body.requiredHitStreak)
-  const accuracyPercent = body?.accuracyPercent === undefined
+  // Ignored/forced for CATCH_ATTEMPT — see that effectType's own schema comment on why there is
+  // exactly ONE success roll for a catch attempt (the target member's own catchRatePercent), not
+  // this accuracy roll stacked on top of it.
+  const accuracyPercentRaw = body?.accuracyPercent === undefined
     ? (existing ? existing.accuracyPercent : SPECIAL_ATTACK_ACCURACY_PERCENT_DEFAULT)
     : toNumber(body.accuracyPercent)
 
@@ -919,7 +959,7 @@ export function parseSpecialAttackBody(body, existing) {
   if (!isValidSpecialAttackEffectType(effectType)) {
     return { ok: false, message: `Effect must be one of ${SPECIAL_ATTACK_EFFECT_TYPES.join(', ')}` }
   }
-  if (!isValidSpecialAttackAmount(amount)) {
+  if (effectType !== 'CATCH_ATTEMPT' && !isValidSpecialAttackAmount(amountRaw)) {
     return { ok: false, message: `Amount must be a whole number between ${SPECIAL_ATTACK_AMOUNT_MIN} and ${SPECIAL_ATTACK_AMOUNT_MAX}` }
   }
   if (effectType === 'RAISE_ALLY_ATTACK' && !isValidSpecialAttackRaiseDurationRounds(raiseDurationRoundsRaw)) {
@@ -949,7 +989,7 @@ export function parseSpecialAttackBody(body, existing) {
   if (!isValidSpecialAttackRequiredHitStreak(requiredHitStreak)) {
     return { ok: false, message: `Required hit streak must be a whole number between ${SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MIN} and ${SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MAX}` }
   }
-  if (!isValidSpecialAttackAccuracyPercent(accuracyPercent)) {
+  if (effectType !== 'CATCH_ATTEMPT' && !isValidSpecialAttackAccuracyPercent(accuracyPercentRaw)) {
     return { ok: false, message: `Accuracy percent must be a whole number between ${SPECIAL_ATTACK_ACCURACY_PERCENT_MIN} and ${SPECIAL_ATTACK_ACCURACY_PERCENT_MAX}` }
   }
   const healsAllies = (effectType === 'HEAL_SELF' || effectType === 'SIPHON_HEALTH' || effectType === 'CLEANSE_SELF') ? healsAlliesRaw : false
@@ -958,6 +998,10 @@ export function parseSpecialAttackBody(body, existing) {
   const reflectPercent = effectType === 'REFLECT_DAMAGE' ? reflectPercentRaw : SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT
   const siphonPercent = effectType === 'SIPHON_HEALTH' ? siphonPercentRaw : SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT
   const poisonDurationRounds = effectType === 'POISON_OPPONENT' ? poisonDurationRoundsRaw : SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT
+  // Fixed, ignored values for CATCH_ATTEMPT — see amountRaw/accuracyPercentRaw's own comments
+  // above for why neither the usual "how much" nor "chance this cast lands" number applies here.
+  const amount = effectType === 'CATCH_ATTEMPT' ? 1 : amountRaw
+  const accuracyPercent = effectType === 'CATCH_ATTEMPT' ? 100 : accuracyPercentRaw
 
   return {
     ok: true,

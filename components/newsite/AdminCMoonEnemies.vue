@@ -72,6 +72,26 @@
           </span>
         </label>
         <p v-if="privateLobbiesEnabledError" class="text-red-600">{{ privateLobbiesEnabledError }}</p>
+
+        <div class="pt-1 border-t">
+          <span class="font-medium">Capture music</span>
+          <p class="text-[11px] text-gray-500 mt-0.5">
+            Plays the instant ANY cMoon enemy is captured via "Throw Pokeball" — one track for the whole
+            site, regardless of faction, unlike each enemy's own appear/victory/defeat sounds.
+          </p>
+          <div class="flex items-center gap-4 flex-wrap mt-1">
+            <audio v-if="captureMusicPath" :src="captureMusicPath" controls class="h-8" style="max-width: 220px;" />
+            <span v-else class="text-[10px] text-gray-400">No sound</span>
+            <div class="space-y-2 flex-1 min-w-[200px]">
+              <input type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav" class="block w-full" @change="uploadCaptureMusic" />
+              <p v-if="captureMusicError" class="text-red-600">{{ captureMusicError }}</p>
+              <button
+                v-if="captureMusicPath" type="button" class="text-red-600 hover:underline disabled:opacity-40"
+                :disabled="captureMusicSaving" @click="removeCaptureMusic"
+              >Remove</button>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- ── Special attacks ──────────────────────────────────────── -->
@@ -134,7 +154,7 @@
                 <option v-for="t in SPECIAL_ATTACK_EFFECT_TYPES" :key="t" :value="t">{{ SPECIAL_ATTACK_EFFECT_LABELS[t] }}</option>
               </select>
             </div>
-            <div class="w-28 flex-shrink-0">
+            <div v-if="specialAttackForm.effectType !== 'CATCH_ATTEMPT'" class="w-28 flex-shrink-0">
               <label class="block text-xs font-medium mb-1">Amount (1-999)</label>
               <input v-model.number="specialAttackForm.amount" type="number" min="1" max="999" class="w-full border rounded px-2 py-1" />
             </div>
@@ -237,7 +257,7 @@
                 presence in a raid still lowers this by 1 on top, same as before.
               </p>
             </div>
-            <div class="w-40 flex-shrink-0">
+            <div v-if="specialAttackForm.effectType !== 'CATCH_ATTEMPT'" class="w-40 flex-shrink-0">
               <label class="block text-xs font-medium mb-1">Accuracy percent (0-100)</label>
               <input v-model.number="specialAttackForm.accuracyPercent" type="number" min="0" max="100" class="w-full border rounded px-2 py-1" />
               <p class="text-[10px] text-gray-500 mt-1">
@@ -245,6 +265,10 @@
                 before this existed.
               </p>
             </div>
+            <p v-else class="text-[10px] text-gray-500 flex-1">
+              No Amount or Accuracy for this effect — the only roll is the target enemy's own catch rate (set
+              on its own member page).
+            </p>
           </div>
 
           <div>
@@ -712,6 +736,25 @@
             </div>
           </div>
 
+          <div class="border rounded p-2 space-y-2 bg-blue-50/50">
+            <label class="flex items-center gap-2">
+              <input type="checkbox" v-model="memberForm.catchable" />
+              <span class="text-xs font-medium">Catchable (solo battles only)</span>
+            </label>
+            <p class="text-[11px] text-gray-500">
+              Lets a player assigned a "Throw Pokeball" special attack (effect type CATCH_ATTEMPT, set up
+              under Special Attacks below) capture this enemy instead of defeating it — ends the fight
+              immediately with its own music/modal and its own "Capture rewards" drop table further down,
+              not the normal win rewards. Solo battles only; a raid boss or PvP never honors this.
+            </p>
+            <div v-if="memberForm.catchable">
+              <label class="block text-[11px] font-medium mb-1">Catch rate (0-100%)</label>
+              <input v-model.number="memberForm.catchRatePercent" type="number" min="0" max="100" class="w-full border rounded px-2 py-1 text-xs" />
+              <p class="text-[10px] text-gray-500 mt-1">The chance a fired Throw Pokeball actually captures this enemy.</p>
+            </div>
+            <p v-else class="text-[10px] text-gray-500">Catch rate is grayed out and forced to 0 while this is off.</p>
+          </div>
+
           <div v-if="memberForm.isRaidBoss" class="pt-1">
             <button
               type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50"
@@ -957,6 +1000,20 @@
             >{{ rewardSaving ? 'Adding…' : 'Add prize' }}</button>
           </div>
 
+          <!-- Capture-only prizes ("Throw Pokeball") — a WHOLLY SEPARATE pool from the win-reward
+               table above, rolled only on a successful capture. Same shape, own endpoints. -->
+          <div v-if="memberForm.id" class="pt-2 border-t">
+            <CMoonEnemyRewardEditor
+              :rows="editingMemberCaptureRewards"
+              title="Capture prizes ('Throw Pokeball', each rolled independently — never the win rewards above)"
+              empty-message="No capture prizes configured yet — a successful capture still ends the fight either way."
+              :add-url="`/api/admin/cmoon-enemy-members/${memberForm.id}/capture-rewards`"
+              delete-url-base="/api/admin/cmoon-enemy-capture-rewards"
+              :ctoons-catalog="ctoonsCatalog" :avatars-catalog="avatarsCatalog" :backgrounds="backgrounds" :packs-catalog="packsCatalog"
+              @changed="onCaptureRewardsChanged"
+            />
+          </div>
+
           <!-- Wind-up/telegraph moves — only for a raid boss that's already been created, same
                "add one, remove one, no in-place edit" shape as the prizes block above. -->
           <div v-if="memberForm.id && memberForm.isRaidBoss" class="pt-2 border-t space-y-2">
@@ -1157,7 +1214,7 @@ const loadError = ref('')
 // since that file is server-only, same as RANKS/RANK_LABELS below.
 const SPECIAL_ATTACK_EFFECT_TYPES = [
   'DAMAGE_OPPONENT', 'HEAL_SELF', 'PARALYZE_OPPONENT', 'LOWER_OPPONENT_ATTACK', 'RAISE_ALLY_ATTACK',
-  'REFLECT_DAMAGE', 'SIPHON_HEALTH', 'POISON_OPPONENT', 'CLEANSE_SELF', 'SHIELD_PARTY',
+  'REFLECT_DAMAGE', 'SIPHON_HEALTH', 'POISON_OPPONENT', 'CLEANSE_SELF', 'SHIELD_PARTY', 'CATCH_ATTEMPT',
 ]
 const SPECIAL_ATTACK_EFFECT_LABELS = {
   DAMAGE_OPPONENT: 'Damage opponent',
@@ -1170,6 +1227,7 @@ const SPECIAL_ATTACK_EFFECT_LABELS = {
   POISON_OPPONENT: 'Poison opponent (raids only)',
   CLEANSE_SELF: 'Cleanse self (+allies in raids)',
   SHIELD_PARTY: 'Shield party (raids only)',
+  CATCH_ATTEMPT: 'Throw Pokeball (solo only)',
 }
 const SPECIAL_ATTACK_EFFECT_HELP = {
   DAMAGE_OPPONENT: 'Deals Amount flat damage to the enemy, bypassing block entirely.',
@@ -1182,6 +1240,7 @@ const SPECIAL_ATTACK_EFFECT_HELP = {
   POISON_OPPONENT: 'Deals Amount damage at the end of each round for a configurable number of rounds. Re-casting on an already-poisoned target refreshes it (replaces amount/duration) rather than stacking a second tick. Only has an effect in a RAID — a solo fight has no case for it, the attack just fires and announces.',
   CLEANSE_SELF: "Cures the caster's own active Paralyze, plus Poison in a raid (self only, unless \"Also heals allies\" below is on — solo has no poison to clear either way). The player/boss can be paralyzed or poisoned again right after — this is a one-time cure, not temporary immunity. Works in BOTH solo and raids; \"Also heals allies\" only matters in a raid (no allies to extend to solo).",
   SHIELD_PARTY: "Negates ALL damage the party would otherwise take this round — the normal attack exchange AND any boss special that would deal damage, cast by any party member. Only works when cast by a PLAYER in a RAID; assigning this to an enemy faction's own special just makes it fire and announce with no effect, since by the time the boss could cast it the round's damage already happened.",
+  CATCH_ATTEMPT: "Deals no damage. Gives a chance to CAPTURE the target enemy instead of fighting it — only works in a SOLO battle, and only against an enemy toggled \"Catchable\" with a nonzero catch rate (set on that enemy's own member page, not here). Amount and Accuracy percent are both ignored — the only roll that matters is the target's own catch rate. Fires and announces with no effect in a raid or PvP, same as the raid-only effects above do in solo.",
 }
 
 const memberFactionFilter = ref('')
@@ -1270,6 +1329,56 @@ async function savePrivateLobbiesEnabled() {
   }
 }
 
+// GlobalGameConfig.cMoonEnemyCaptureMusicPath — ONE site-wide track, uploaded/cleared via its own
+// dedicated endpoints (not cmoon-settings, which only handles plain toggle/number fields) — same
+// magic-byte-sniffed upload shape as a special attack's own sound, just targeting the singleton
+// global config row instead of a per-row model.
+const captureMusicPath = ref('')
+const captureMusicSaving = ref(false)
+const captureMusicError = ref('')
+
+async function uploadCaptureMusic(ev) {
+  captureMusicError.value = ''
+  const f = ev.target.files?.[0] || null
+  if (!f) return
+  if (!['audio/mpeg', 'audio/ogg', 'audio/wav'].includes(f.type)) {
+    captureMusicError.value = 'MP3, OGG, or WAV only.'
+    ev.target.value = ''
+    return
+  }
+  if (f.size > 3 * 1024 * 1024) {
+    captureMusicError.value = 'Audio must be 3MB or smaller.'
+    ev.target.value = ''
+    return
+  }
+  captureMusicSaving.value = true
+  try {
+    const fd = new FormData()
+    fd.append('audio', f)
+    const res = await $fetch('/api/admin/cmoon-settings/capture-music', { method: 'POST', body: fd })
+    captureMusicPath.value = res.cMoonEnemyCaptureMusicPath || ''
+  } catch (e) {
+    captureMusicError.value = e?.data?.statusMessage || 'Upload failed.'
+  } finally {
+    captureMusicSaving.value = false
+    ev.target.value = ''
+  }
+}
+
+async function removeCaptureMusic() {
+  if (!confirm('Remove the capture music track?')) return
+  captureMusicError.value = ''
+  captureMusicSaving.value = true
+  try {
+    await $fetch('/api/admin/cmoon-settings/capture-music', { method: 'DELETE' })
+    captureMusicPath.value = ''
+  } catch (e) {
+    captureMusicError.value = e?.data?.statusMessage || 'Failed to remove'
+  } finally {
+    captureMusicSaving.value = false
+  }
+}
+
 async function load() {
   loading.value = true
   loadError.value = ''
@@ -1300,6 +1409,7 @@ async function load() {
     // their own ref initializers above.
     soloQueueEnabled.value = cmoonsData?.cMoonRaidSoloQueueEnabled !== false
     privateLobbiesEnabled.value = cmoonsData?.cMoonRaidPrivateLobbiesEnabled !== false
+    captureMusicPath.value = cmoonsData?.cMoonEnemyCaptureMusicPath || ''
     specialAttacks.value = specialAttacksData?.attacks || []
     enemyMaps.value = enemyMapsData?.maps || []
   } catch (e) {
@@ -1879,6 +1989,7 @@ const previewMemberId = ref(null)
 const startingRaidPreviewId = ref('')
 const editingMemberHasBattles = ref(false)
 const editingMemberRewards = ref([])
+const editingMemberCaptureRewards = ref([])
 const editingMemberWindUpMoves = ref([])
 const editingMemberSpecialAttacks = ref([])
 const memberPendingFile = ref(null)
@@ -1971,6 +2082,7 @@ const emptyMemberForm = () => ({
   active: true, sortOrder: 0,
   isRaidBoss: false, raidAnnouncementText: '', raidOneTime: false, raidCooldownMinutes: 0,
   maxParticipants: 4, raidRoundLimit: 300, windUpEnabled: false, overrideMapId: '',
+  catchable: false, catchRatePercent: 0,
 })
 const memberForm = reactive(emptyMemberForm())
 const memberPreviewImageSrc = computed(() => memberPendingFilePreviewUrl.value || memberSavedImagePath.value || '')
@@ -1989,6 +2101,7 @@ function resetMemberForm() {
   resetMemberSoundState()
   editingMemberHasBattles.value = false
   editingMemberRewards.value = []
+  editingMemberCaptureRewards.value = []
   editingMemberWindUpMoves.value = []
   editingMemberSpecialAttacks.value = []
   resetRewardForm()
@@ -2041,11 +2154,13 @@ function startEditMember(m) {
     raidOneTime: !!m.raidOneTime, raidCooldownMinutes: m.raidCooldownMinutes ?? 0,
     maxParticipants: m.maxParticipants ?? 4, raidRoundLimit: m.raidRoundLimit ?? 300, windUpEnabled: !!m.windUpEnabled,
     overrideMapId: m.overrideMapId || '',
+    catchable: !!m.catchable, catchRatePercent: m.catchRatePercent ?? 0,
   })
   memberSavedImagePath.value = m.imagePath || ''
   for (const s of SOUND_SLOTS) memberSoundState[s.key].savedPath = m[s.field] || ''
   editingMemberHasBattles.value = !!m.hasBattles
   editingMemberRewards.value = m.rewards || []
+  editingMemberCaptureRewards.value = m.captureRewards || []
   editingMemberWindUpMoves.value = m.windUpMoves || []
   editingMemberSpecialAttacks.value = m.specialAttacks || []
 }
@@ -2203,6 +2318,8 @@ async function saveMember() {
       raidRoundLimit,
       windUpEnabled: memberForm.windUpEnabled,
       overrideMapId: memberForm.overrideMapId || null,
+      catchable: memberForm.catchable,
+      catchRatePercent: Math.trunc(Number(memberForm.catchRatePercent)) || 0,
     }
     let id = memberForm.id
     if (id) {
@@ -2431,6 +2548,14 @@ async function removeReward(r) {
   } finally {
     deletingRewardId.value = ''
   }
+}
+
+// CMoonEnemyRewardEditor (capture-prizes instance) does its own add/remove HTTP calls and just
+// tells us when something changed — same resync shape as removeReward/addReward above.
+async function onCaptureRewardsChanged() {
+  await load()
+  const fresh = members.value.find(m => m.id === memberForm.id)
+  if (fresh) editingMemberCaptureRewards.value = fresh.captureRewards || []
 }
 
 // ── Wind-up/telegraph moves (per-member, add/remove one row at a time) — same shape as the

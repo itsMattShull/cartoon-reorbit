@@ -71,6 +71,19 @@
         </ul>
       </div>
     </template>
+    <template v-else-if="outcome === 'CAPTURED'">
+      <!-- Deliberately NO cMoon points line here — a capture is neither a win nor a loss (see
+           CMoonEnemyBattleOutcome.CAPTURED's own schema comment), so the normal win-reward payout
+           never applies; only this member's own, wholly separate CMoonEnemyCaptureReward table
+           (the same rewardsList prop, just populated from a different source server-side). -->
+      <p class="cbc-flavor">Caught, not defeated — it'll live to fight another trainer another day.</p>
+      <div v-if="rewardsList.length" class="cbc-rewards">
+        <p class="cbc-rewards-title">Prizes:</p>
+        <ul>
+          <li v-for="(r, i) in rewardsList" :key="i" class="cbc-reward-item" :style="{ animationDelay: (i * 150) + 'ms' }">{{ r }}</li>
+        </ul>
+      </div>
+    </template>
     <p v-else-if="outcome === 'ABANDONED'" class="cbc-flavor">The fight timed out — no penalty, try again anytime.</p>
     <p v-else-if="outcome === 'UNCREDITED'" class="cbc-flavor">Someone else landed the final blow on this one — no prize this time, but good luck on the next bounty!</p>
     <p v-else class="cbc-flavor">No penalty beyond the loss itself — take another shot anytime.</p>
