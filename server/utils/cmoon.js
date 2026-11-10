@@ -990,6 +990,24 @@ export async function getPlayerCombatMaxHp(userId, config = null) {
   return combinePlayerMaxHp(defaultHp, bonus, adjustment)
 }
 
+// A player's max HP for a cMoon PvP match specifically — see GlobalGameConfig.
+// cMoonPvpEqualizeHpEnabled/cMoonPvpEqualizeHpAmount's own schema comments. When the toggle is on,
+// EVERY PvP participant gets the flat configured amount regardless of rank, so a base-7HP player
+// isn't crushed by a higher-ranked opponent in competitive team play; off, this is simply
+// getPlayerCombatMaxHp — the same rank-based chain every other cMoon Enemy Battle mode already
+// uses. `userId` is still passed through to that fallback (needed for the rank-bonus lookup), but
+// is never read on the equalized path — every participant gets the exact same number then,
+// deliberately not personalized.
+export async function getPvpCombatMaxHp(userId, config = null) {
+  const cfg = config || await getGlobalConfig()
+  if (cfg?.cMoonPvpEqualizeHpEnabled) {
+    return Number.isInteger(cfg.cMoonPvpEqualizeHpAmount) && cfg.cMoonPvpEqualizeHpAmount > 0
+      ? cfg.cMoonPvpEqualizeHpAmount
+      : PLAYER_MAX_HP
+  }
+  return getPlayerCombatMaxHp(userId, cfg)
+}
+
 // Shared by the admin "Manage User HP" detail lookup and the mass-adjust tool: computes a single
 // user's current NATURAL max HP (defaultHp + rank-tier bonus, with zero adjustment applied) from
 // their already-fetched rank sortOrder. Separate from getPlayerCombatMaxHp so a caller that

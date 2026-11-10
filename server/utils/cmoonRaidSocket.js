@@ -489,6 +489,10 @@ async function loadEligibility({ userId, enemyMember, reservedForRaidId = null }
   if (activeRaidId && activeRaidId !== reservedForRaidId) return { ok: false, message: 'You are already in a raid' }
   const activeSolo = await db.cMoonEnemyBattle.findFirst({ where: { userId, status: 'IN_PROGRESS' }, select: { id: true } })
   if (activeSolo) return { ok: false, message: 'Finish your current battle before joining a raid' }
+  // cMoon PvP (server/utils/cmoonPvpSocket.js) is a separate live feature with its own "at most
+  // one active thing per user" lock — a player can never be in a raid and a PvP match at once.
+  const activePvp = await db.cMoonPvpParticipant.findFirst({ where: { userId, activeUserId: userId }, select: { id: true } })
+  if (activePvp) return { ok: false, message: 'Finish your current PvP match before joining a raid' }
   if (enemyMember.minPriorDefeats > 0) {
     // SOLO wins only (raidId: null) — a shared raid win, credited to every participant off one
     // kill, must not unlock a harder raid boss faster than someone's own solo record would. Every

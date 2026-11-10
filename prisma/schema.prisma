@@ -7771,9 +7771,13 @@ model CMoonPvpParticipant {
   knockedOutAt   DateTime?
   isInitiator    Boolean      @default(false)
   joinedAt       DateTime     @default(now())
-  // Same shape/timing as CMoonEnemyRaidParticipant.rewardsGranted — set once, at match resolution,
-  // on every participant on the WINNING side (identical bundle for the whole team, per the single
-  // shared roll); left null on the losing side and null here until resolution either way.
+  // Set once, at match resolution, from ONE context's reward pool (CMoonPvpReward) — MATCH_WIN
+  // for every participant on the winning side, MATCH_PARTICIPATION for every participant on the
+  // losing side (a smaller consolation pool, so losing isn't a total dead end — see this feature's
+  // own "competitive but also fun" design goal), identical bundle for everyone on the same side
+  // per the single shared roll. An ABANDONED match (round-limit reached, or both sides emptied the
+  // same round) grants neither — same "no reward for a fight that didn't resolve" stance
+  // CMoonEnemyRaid's own ABANDONED outcome already takes. Null until resolution either way.
   rewardsGranted Json?
 
   match CMoonPvpMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)

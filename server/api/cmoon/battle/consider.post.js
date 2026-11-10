@@ -51,6 +51,11 @@ export default defineEventHandler(async (event) => {
   // encounter on top of it.
   const activeRaid = await db.cMoonEnemyRaidParticipant.findFirst({ where: { userId, activeUserId: userId }, select: { id: true } })
   if (activeRaid) return { offered: false }
+  // Same "stay quiet rather than roll a second, unrelated encounter" stance for cMoon PvP
+  // (server/utils/cmoonPvpSocket.js) — a player mid PvP match already has its own notification/
+  // created event to return to.
+  const activePvp = await db.cMoonPvpParticipant.findFirst({ where: { userId, activeUserId: userId }, select: { id: true } })
+  if (activePvp) return { offered: false }
 
   // Full per-player opt-out (Settings page) — unlike the spawn cap below (which only narrows the
   // pool to raid bosses), this blocks the popup outright, solo and raid offers alike: a player who
