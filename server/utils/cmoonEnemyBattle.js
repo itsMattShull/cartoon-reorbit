@@ -220,7 +220,15 @@ function lane(action) { return action.endsWith('_HIGH') ? 'HIGH' : 'LOW' }
 //   - both block (any lanes)               -> no hits (nobody attacked)
 //   - one attacks, other blocks same lane  -> cancelled, no hit
 //   - one attacks, other blocks other lane -> the attack lands (blocking the wrong lane doesn't help)
-function attackLands(attackerAction, defenderAction) {
+// Exported (unlike `lane` above, which stays private) for cmoonPvp.js's own one-directional
+// per-attacker-vs-randomly-assigned-defender resolution — a PvP round has no single shared
+// "enemy action" the way solo/raid do, so resolveBattleRound's bidirectional return (which
+// assumes the SAME two parties are attacking each other back) doesn't fit: an attacker's
+// randomly-assigned target may themselves be attacking someone else entirely this round, so
+// only the one-directional "did THIS attacker's hit land on THIS specific defender" question
+// — this function, called once per (attacker, assigned defender) pair — is meaningful in that
+// shape. See resolvePvpRound's own comment for the full reasoning.
+export function attackLands(attackerAction, defenderAction) {
   if (!isAttack(attackerAction)) return false
   if (isBlock(defenderAction) && lane(defenderAction) === lane(attackerAction)) return false
   return true
