@@ -86,6 +86,7 @@ import {
   pickEffectiveSpecialAttack, SPECIAL_ATTACK_SELECT, pickWeightedSpecialAttack,
 } from './cmoonEnemyBattle.js'
 import { resolveMemberSoundPaths, RAID_ROUND_LIMIT_MIN, RAID_ROUND_LIMIT_MAX } from './cmoonEnemy.js'
+import { resolveMapForRaid } from './cmoonEnemyMap.js'
 import { markEnemyOfferAccepted } from './cmoonEnemyAnalytics.js'
 import { announceTeamEnemiesMilestone, checkAndAnnounceSeasonGoalReached } from './cmoonDiscordEvents.js'
 import {
@@ -370,7 +371,7 @@ function publicRaidView(raid) {
     // charge-meter math now reads participants[].hitStreakThreshold below instead, since each
     // participant's own special attack can set its own requiredHitStreak (1-10, default 3 — see
     // that column's own schema comment) and this is no longer one shared raid-level number.
-    hitStreakThreshold: effectiveHitStreakThreshold(HIT_STREAK_THRESHOLD, !!raid.captainBoostEnabled, captainPresent),
+    hitStreakThreshold: effectiveHitStreakThreshold(HIT_STREAK_THRESHOLD, !!raid.captainBoostEnabled, captainPresent, raid.mapSpecialThresholdReduction),
     // Explicit boolean the client reads for its "Captain boost" overlay — replaces a client-side
     // heuristic that used to compare hitStreakThreshold against a hardcoded 3, which broke the
     // moment per-attack requiredHitStreak existed (an attack configured with its OWN threshold
@@ -405,7 +406,25 @@ function publicRaidView(raid) {
     // resolves, so players can react. Only the public message/lane are ever exposed here — the
     // configured bonus amount/type stay server-side only (see raid.currentWindUp's own shape,
     // set in openRound) until it actually applies and shows up in a round's own broadcast.
-    currentWindUp: raid.currentWindUp ? { message: raid.currentWindUp.message, direction: raid.currentWindUp.direction } : null,
+    // Suppressed entirely under the map's own fogOfWarEnabled effect — never "send it and hide
+    // it client-side" (see CMoonEnemyMap.fogOfWarEnabled's own schema comment); the telegraph's
+    // bonus payoff logic in closeRound is unaffected, only its visibility here.
+    currentWindUp: (raid.currentWindUp && !raid.mapFogOfWarEnabled) ? { message: raid.currentWindUp.message, direction: raid.currentWindUp.direction } : null,
+    // The map resolved for this raid (see resolveMapForRaid in server/utils/cmoonEnemyMap.js),
+    // snapshotted once at creation — null only for a raid that predates this feature. The
+    // client's own CMoonEnemyMapBackground/CMoonEnemyMapInfoModal read this; fogOfWarEnabled is
+    // included so the client knows to show its own "HP hidden" treatment where relevant (raids
+    // have no opposing side to hide HP from — that's a PvP-only effect of the same flag).
+    map: raid.mapId ? {
+      id: raid.mapId, name: raid.mapName, isBaseMap: !!raid.mapIsBaseMap,
+      backgroundAnimation: raid.mapBackgroundAnimation, backgroundColor: raid.mapBackgroundColor,
+      specialThresholdReduction: raid.mapSpecialThresholdReduction || 0,
+      poisonAmount: raid.mapPoisonAmount || 0, poisonIntervalRounds: raid.mapPoisonIntervalRounds || 0,
+      poisonAffectsPlayers: !!raid.mapPoisonAffectsPlayers, poisonAffectsEnemies: !!raid.mapPoisonAffectsEnemies,
+      healAmount: raid.mapHealAmount || 0, healIntervalRounds: raid.mapHealIntervalRounds || 0,
+      healAffectsPlayers: !!raid.mapHealAffectsPlayers, healAffectsEnemies: !!raid.mapHealAffectsEnemies,
+      fogOfWarEnabled: !!raid.mapFogOfWarEnabled,
+    } : null,
     participants: Array.from(raid.participants.values()).map(p => ({
       userId: p.userId,
       username: p.username,
@@ -430,7 +449,7 @@ function publicRaidView(raid) {
       // members' attacks can now cost different amounts to charge. Falls back to the plain
       // HIT_STREAK_THRESHOLD for a participant with no special attack assigned at all (their own
       // charge meter is moot either way — see cmoonraid:action's own `!p.specialAttack` gate).
-      hitStreakThreshold: effectiveHitStreakThreshold(p.specialAttack?.requiredHitStreak, !!raid.captainBoostEnabled, captainPresent),
+      hitStreakThreshold: effectiveHitStreakThreshold(p.specialAttack?.requiredHitStreak, !!raid.captainBoostEnabled, captainPresent, raid.mapSpecialThresholdReduction),
       // This participant's OWN cMoon special (their team's, not the initiator's) — public on
       // purpose: it's that team's kit, shown on their charge meter and their own fire button.
       specialAttack: p.specialAttack || null,
@@ -735,10 +754,14 @@ function allActed(raid) {
 // re-querying mid-fight, and this follows the same shape for consistency with cmoonEnemyBattle.js's
 // own pair rather than duplicating their logic inline here.
 function raidEnemySpecialAttackThreshold(raid) {
-  if (raid.enemySpecialAttackCandidates?.length) {
-    return Math.min(...raid.enemySpecialAttackCandidates.map(c => Number(c.requiredHitStreak) || HIT_STREAK_THRESHOLD))
-  }
-  return raid.enemySpecialAttack?.requiredHitStreak ?? HIT_STREAK_THRESHOLD
+  const base = raid.enemySpecialAttackCandidates?.length
+    ? Math.min(...raid.enemySpecialAttackCandidates.map(c => Number(c.requiredHitStreak) || HIT_STREAK_THRESHOLD))
+    : raid.enemySpecialAttack?.requiredHitStreak ?? HIT_STREAK_THRESHOLD
+  // The map's own specialThresholdReduction applies symmetrically to the boss too (see this
+  // file's own comment on effectiveHitStreakThreshold) — captain boost never does (false, false
+  // here), since that's a party-only perk, but the environment making specials easier affects
+  // everyone fighting in it, boss included.
+  return effectiveHitStreakThreshold(base, false, false, raid.mapSpecialThresholdReduction)
 }
 function pickRaidEnemySpecialAttack(raid) {
   if (raid.enemySpecialAttackCandidates?.length) return pickWeightedSpecialAttack(raid.enemySpecialAttackCandidates)
@@ -1046,7 +1069,7 @@ async function closeRound(io, raid) {
       p.hpRemaining = result.hpRemaining
       p.pendingAction = null
       if (result.knockedOut && !p.knockedOutAt) p.knockedOutAt = Date.now()
-      const hitStreakThreshold = effectiveHitStreakThreshold(p.specialAttack?.requiredHitStreak, !!raid.captainBoostEnabled, captainPresent)
+      const hitStreakThreshold = effectiveHitStreakThreshold(p.specialAttack?.requiredHitStreak, !!raid.captainBoostEnabled, captainPresent, raid.mapSpecialThresholdReduction)
       // This participant's OWN streak — see CMoonEnemyRaidParticipant's in-memory shape comment
       // above for why this stays per-player even though every other new field here is shared.
       if (firedSpecialUserIds.has(result.userId)) {
@@ -1178,6 +1201,31 @@ async function closeRound(io, raid) {
       raid.currentWindUp = null
     }
 
+    // ── 4.5. Map environmental hazard/heal tick (see CMoonEnemyMap's own schema comment) — a
+    // periodic, admin-configured hit independent of any cast POISON_OPPONENT/HEAL_SELF status,
+    // checked against THIS round's own number so an interval of e.g. 3 fires on rounds 3, 6, 9...
+    // regardless of the raid's special-attack/wind-up state. Runs after every other HP mutation
+    // this round so it's never silently clobbered by an earlier overwrite, same ordering
+    // discipline the wind-up payoff just above already follows. ─────────────────────────────────
+    const mapTicks = []
+    if (raid.mapPoisonIntervalRounds > 0 && raid.mapPoisonAmount > 0 && raid.roundNumber % raid.mapPoisonIntervalRounds === 0) {
+      if (raid.mapPoisonAffectsPlayers) {
+        for (const p of aliveParticipants(raid)) {
+          p.hpRemaining = Math.max(0, p.hpRemaining - raid.mapPoisonAmount)
+          if (p.hpRemaining <= 0) p.knockedOutAt = Date.now()
+        }
+      }
+      if (raid.mapPoisonAffectsEnemies) raid.enemyHpRemaining = Math.max(0, raid.enemyHpRemaining - raid.mapPoisonAmount)
+      mapTicks.push({ type: 'POISON', amount: raid.mapPoisonAmount })
+    }
+    if (raid.mapHealIntervalRounds > 0 && raid.mapHealAmount > 0 && raid.roundNumber % raid.mapHealIntervalRounds === 0) {
+      if (raid.mapHealAffectsPlayers) {
+        for (const p of aliveParticipants(raid)) p.hpRemaining = Math.min(p.maxHp, p.hpRemaining + raid.mapHealAmount)
+      }
+      if (raid.mapHealAffectsEnemies) raid.enemyHpRemaining = Math.min(raid.enemyStats.maxHp, raid.enemyHpRemaining + raid.mapHealAmount)
+      mapTicks.push({ type: 'HEAL', amount: raid.mapHealAmount })
+    }
+
     raid.roundLog.push({
       round: raid.roundNumber, enemyAction, enemyDamageDealt,
       enemyHpRemaining: raid.enemyHpRemaining,
@@ -1185,6 +1233,7 @@ async function closeRound(io, raid) {
         ({ userId, action, playerHit, enemyHit, playerBlocked, enemyBlocked, playerCrit, enemyCrit, enemyMissed, playerDamage, enemyDamage })),
       ...(specialEvents.length ? { specials: specialEvents } : {}),
       ...(windUpBonus ? { windUpBonus } : {}),
+      ...(mapTicks.length ? { mapTicks } : {}),
     })
 
     // AFK kicks happen AFTER this round's own log/broadcast data is built (above) but BEFORE the
@@ -1198,7 +1247,7 @@ async function closeRound(io, raid) {
     const nextRoundNumber = raid.roundNumber + 1
 
     broadcast(io, raid, EV('roundResolved'), {
-      round: { roundNumber: raid.roundNumber, enemyAction, enemyDamageDealt, participants: perParticipant, specials: specialEvents, windUpBonus },
+      round: { roundNumber: raid.roundNumber, enemyAction, enemyDamageDealt, participants: perParticipant, specials: specialEvents, windUpBonus, mapTicks },
     })
     // Skipped for a PRIVATE raid — see postRaidRecap's own comment; a live round-by-round feed to
     // the cMoon's public Discord channel would defeat "never announced anywhere but its own URL"
@@ -1578,6 +1627,23 @@ export async function restoreCMoonRaids() {
     raid.windUpMoves ??= []
     raid.currentWindUp ??= null
     raid.captainBoostEnabled ??= false
+    // Map fields — predates this feature entirely for a raid snapshotted before it shipped, so
+    // every effect backfills to its off/zero default (no map resolved, no hazard/boost applied).
+    raid.mapId ??= null
+    raid.mapName ??= null
+    raid.mapIsBaseMap ??= false
+    raid.mapBackgroundAnimation ??= 'STATIC_COLOR'
+    raid.mapBackgroundColor ??= '#000000'
+    raid.mapSpecialThresholdReduction ??= 0
+    raid.mapPoisonAmount ??= 0
+    raid.mapPoisonIntervalRounds ??= 0
+    raid.mapPoisonAffectsPlayers ??= true
+    raid.mapPoisonAffectsEnemies ??= true
+    raid.mapHealAmount ??= 0
+    raid.mapHealIntervalRounds ??= 0
+    raid.mapHealAffectsPlayers ??= true
+    raid.mapHealAffectsEnemies ??= true
+    raid.mapFogOfWarEnabled ??= false
     // Predates this toggle -> solo queueing was unconditionally allowed back then, so true (not
     // false) is the correct backfill, same "preserve old behavior" reasoning as isPrivate ??= false
     // above preserving "never private" for an old snapshot.
@@ -1628,8 +1694,10 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
             include: {
               specialAttack: true,
               taunts: { where: { active: true }, orderBy: { sortOrder: 'asc' } },
+              defaultMap: true,
             },
           },
+          overrideMap: true,
           windUpMoves: true,
           // This member's OWN unique taunts (see CMoonEnemyMemberTaunt) — merged with the
           // faction's shared pool above by mergeTauntPools.
@@ -1650,6 +1718,13 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
       if (!availability.available) return socket.emit(EV('error'), { message: availability.message })
       const elig = await loadEligibility({ userId: me.id, enemyMember })
       if (!elig.ok) return socket.emit(EV('error'), { message: elig.message })
+
+      // Map resolution (see server/utils/cmoonEnemyMap.js) — boss override > faction default >
+      // weighted random pool among every currently-active map. Only the random-pool branch
+      // actually needs this query; cheap enough (a handful of rows, at most once per raid
+      // creation) to just always fetch it rather than special-casing the override/default path.
+      const activeMaps = await db.cMoonEnemyMap.findMany({ where: { active: true } })
+      const resolvedMap = resolveMapForRaid(enemyMember, enemyMember.faction, activeMaps)
 
       // raid.cMoonId is the INITIATOR's cMoon. Joiners from other cMoons bring their own
       // team/special snapshot (loadParticipantProfile) — Discord-wise there's nothing per-cMoon
@@ -1794,6 +1869,27 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
         // raid boss that doesn't use this mechanic).
         windUpMoves: enemyMember.windUpEnabled ? (enemyMember.windUpMoves || []) : [],
         currentWindUp: null,
+        // The map resolved just above — snapshotted field-by-field (flat, matching every other
+        // admin-configured value's own snapshot style here) rather than nested, so
+        // cmoonRaidRedisState.js's serializeRaid can't miss one the way a nested object might
+        // silently drop a key on a shallow spread. Null/off-default fields on a raid with no
+        // resolved map at all (shouldn't happen once the "No Effect" base map ships, but a
+        // defensive fallback costs nothing).
+        mapId: resolvedMap?.id || null,
+        mapName: resolvedMap?.name || null,
+        mapIsBaseMap: !!resolvedMap?.isBaseMap,
+        mapBackgroundAnimation: resolvedMap?.backgroundAnimation || 'STATIC_COLOR',
+        mapBackgroundColor: resolvedMap?.backgroundColor || '#000000',
+        mapSpecialThresholdReduction: resolvedMap?.specialThresholdReduction || 0,
+        mapPoisonAmount: resolvedMap?.poisonAmount || 0,
+        mapPoisonIntervalRounds: resolvedMap?.poisonIntervalRounds || 0,
+        mapPoisonAffectsPlayers: resolvedMap ? !!resolvedMap.poisonAffectsPlayers : true,
+        mapPoisonAffectsEnemies: resolvedMap ? !!resolvedMap.poisonAffectsEnemies : true,
+        mapHealAmount: resolvedMap?.healAmount || 0,
+        mapHealIntervalRounds: resolvedMap?.healIntervalRounds || 0,
+        mapHealAffectsPlayers: resolvedMap ? !!resolvedMap.healAffectsPlayers : true,
+        mapHealAffectsEnemies: resolvedMap ? !!resolvedMap.healAffectsEnemies : true,
+        mapFogOfWarEnabled: !!resolvedMap?.fogOfWarEnabled,
       }
       addParticipant(raid, { userId: me.id, username: elig.user.username, isInitiator: true, maxHp: initiatorMaxHp, profile: initiatorProfile })
       raids.set(raidId, raid)
@@ -1807,7 +1903,7 @@ export function registerCMoonRaid(io, socket, resolveSocketUser) {
             data: {
               id: raidId, enemyMemberId, cMoonId: cMoon.id, status: 'FORMING',
               enemyHpRemaining: enemyMember.maxHp, joinDeadlineAt: new Date(raid.joinDeadlineAt),
-              isPrivate: raid.isPrivate,
+              isPrivate: raid.isPrivate, mapId: raid.mapId,
             },
           }),
           db.cMoonEnemyRaidParticipant.create({

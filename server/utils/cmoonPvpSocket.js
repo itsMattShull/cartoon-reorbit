@@ -79,9 +79,10 @@ import {
 import {
   assignPvpTargets, resolvePvpRound, applyPvpSpecialAttack, applyPvpReflectDamage, applyPvpSiphonHealth,
   splitPvpPoints, buildPvpLobby, JOIN_WINDOW_SECONDS, ROUND_TIMEOUT_SECONDS, MAX_TEAM_SIZE,
-  PVP_ROUND_LIMIT_SAFETY, PLAYER_MAX_HP, HIT_STREAK_THRESHOLD, SPECIAL_ACTION, PARALYZED_ACTION, TEAMS,
+  PVP_ROUND_LIMIT_SAFETY, PLAYER_MAX_HP, SPECIAL_ACTION, PARALYZED_ACTION, TEAMS,
 } from './cmoonPvp.js'
-import { rankTierLevel } from './cmoonEnemyRaid.js'
+import { rankTierLevel, effectiveHitStreakThreshold } from './cmoonEnemyRaid.js'
+import { resolveMapForPvp } from './cmoonEnemyMap.js'
 import * as pvpRedis from './cmoonPvpRedisState.js'
 import { buildPvpBattleReport } from './cmoonPvpBattleReport.js'
 
@@ -191,7 +192,13 @@ function bothTeamsReady(match) {
  * Unlike raid there's no "enemy kit" to hide — both sides are players with their own public
  * special attacks, so team-wide status (paralyze/raise) is safe to reveal on both sides here.
  */
-function publicPvpMatchView(match) {
+// `viewerTeam` ('A'/'B'/null) is only consulted while fog of war is on AND combat is actually
+// IN_PROGRESS (a FORMING lobby or a RESOLVED/post-game report has nothing worth hiding) — see
+// broadcast()'s own per-viewer emission below for why this can't just be baked in once and
+// cached. hpRemaining/knockedOut are nulled (not 0/false — a lie a client could act on) for
+// every participant on the OPPOSING side only; the viewer's own team is never touched.
+function publicPvpMatchView(match, viewerTeam = null) {
+  const hideOpponentHp = !!match.mapFogOfWarEnabled && match.status === 'IN_PROGRESS' && (viewerTeam === 'A' || viewerTeam === 'B')
   return {
     id: match.id,
     status: match.status,
@@ -214,32 +221,47 @@ function publicPvpMatchView(match) {
     speedVoteCount: match.speedVotes ? match.speedVotes.size : 0,
     speedVoteRequired: requiredSpeedVotes(match),
     isPrivate: !!match.isPrivate,
-    participants: Array.from(match.participants.values()).map(p => ({
-      userId: p.userId,
-      username: p.username,
-      team: p.team,
-      hpRemaining: p.hpRemaining,
-      maxHp: p.maxHp,
-      knockedOut: !!p.knockedOutAt,
-      isInitiator: p.isInitiator,
-      hasActed: match.status === 'IN_PROGRESS' && !p.knockedOutAt ? !!p.pendingAction : false,
-      hitStreak: p.hitStreak || 0,
-      specialCharged: !!p.specialCharged,
-      hitStreakThreshold: p.specialAttack?.requiredHitStreak || HIT_STREAK_THRESHOLD,
-      specialAttack: p.specialAttack || null,
-      poisonAmount: !p.knockedOutAt && p.poisonTurnsRemaining > 0 ? p.poisonAmount : 0,
-      poisonTurnsRemaining: p.knockedOutAt ? 0 : (p.poisonTurnsRemaining || 0),
-      cMoon: p.pendingJoin && !p.cMoonId ? null : {
-        id: p.cMoonId || null, name: p.cMoonName || null, color: p.cMoonColor || null,
-        avatarPath: p.cMoonAvatarPath || null, isPrestigeCMoon: !!p.cMoonIsPrestige,
-      },
-      rank: p.rankName
-        ? { name: p.rankName, tierName: p.rankTierName || null, tierLevel: p.rankTierLevel || 0, tierCount: p.rankTierCount || 0 }
-        : null,
-      isCaptain: !!p.isCaptain,
-      prestigeLevel: p.prestigeLevel || 0,
-      rewardsGranted: p.rewardsGranted || null,
-    })),
+    // The map resolved for this match (see resolveMapForPvp in server/utils/cmoonEnemyMap.js),
+    // snapshotted once at creation — null only for a match that predates this feature.
+    map: match.mapId ? {
+      id: match.mapId, name: match.mapName, isBaseMap: !!match.mapIsBaseMap,
+      backgroundAnimation: match.mapBackgroundAnimation, backgroundColor: match.mapBackgroundColor,
+      specialThresholdReduction: match.mapSpecialThresholdReduction || 0,
+      poisonAmount: match.mapPoisonAmount || 0, poisonIntervalRounds: match.mapPoisonIntervalRounds || 0,
+      healAmount: match.mapHealAmount || 0, healIntervalRounds: match.mapHealIntervalRounds || 0,
+      fogOfWarEnabled: !!match.mapFogOfWarEnabled,
+    } : null,
+    participants: Array.from(match.participants.values()).map(p => {
+      const hidden = hideOpponentHp && p.team !== viewerTeam
+      return {
+        userId: p.userId,
+        username: p.username,
+        team: p.team,
+        hpRemaining: hidden ? null : p.hpRemaining,
+        maxHp: p.maxHp,
+        knockedOut: hidden ? null : !!p.knockedOutAt,
+        isInitiator: p.isInitiator,
+        hasActed: match.status === 'IN_PROGRESS' && !p.knockedOutAt ? !!p.pendingAction : false,
+        hitStreak: p.hitStreak || 0,
+        specialCharged: !!p.specialCharged,
+        hitStreakThreshold: effectiveHitStreakThreshold(p.specialAttack?.requiredHitStreak, false, false, match.mapSpecialThresholdReduction),
+        specialAttack: p.specialAttack || null,
+        poisonAmount: !p.knockedOutAt && p.poisonTurnsRemaining > 0 ? p.poisonAmount : 0,
+        poisonTurnsRemaining: p.knockedOutAt ? 0 : (p.poisonTurnsRemaining || 0),
+        cMoon: p.pendingJoin && !p.cMoonId ? null : {
+          id: p.cMoonId || null, name: p.cMoonName || null, color: p.cMoonColor || null,
+          avatarPath: p.cMoonAvatarPath || null, isPrestigeCMoon: !!p.cMoonIsPrestige,
+        },
+        rank: p.rankName
+          ? { name: p.rankName, tierName: p.rankTierName || null, tierLevel: p.rankTierLevel || 0, tierCount: p.rankTierCount || 0 }
+          : null,
+        isCaptain: !!p.isCaptain,
+        prestigeLevel: p.prestigeLevel || 0,
+        rewardsGranted: p.rewardsGranted || null,
+      }
+    }),
+    // Never hidden — once the match is over there's no competitive reason left to redact
+    // anything, same "fog of war" scope every other effect here keeps to live combat only.
     battleReport: match.status === 'RESOLVED' ? buildPvpBattleReport({
       roundLog: match.roundLog,
       participants: Array.from(match.participants.values()).map(p => ({
@@ -251,8 +273,24 @@ function publicPvpMatchView(match) {
   }
 }
 
+// Under fog of war, no single payload is correct for every viewer (each side must see their
+// OWN team's HP but not the other's) — so this emits once per participant, to their own
+// `user:${userId}` room, instead of the single room-wide emit every other match uses. The
+// per-socket cost only applies to matches that actually turned the effect on. `extra` is
+// usually a plain object, but a caller whose own extra payload ALSO carries opposing-side HP
+// (e.g. roundResolved's per-participant round data) passes a `(viewerTeam) => extraObject`
+// function instead, so IT can redact consistently with publicPvpMatchView's own stripping —
+// a plain object would otherwise leak that same HP straight back through `extra`.
 function broadcast(io, match, event, extra) {
-  io.local.to(matchRoom(match.id)).emit(event, { ...publicPvpMatchView(match), ...extra })
+  if (match.mapFogOfWarEnabled && match.status === 'IN_PROGRESS') {
+    for (const p of match.participants.values()) {
+      const resolvedExtra = typeof extra === 'function' ? extra(p.team) : extra
+      io.local.to(`user:${p.userId}`).emit(event, { ...publicPvpMatchView(match, p.team), ...resolvedExtra })
+    }
+    return
+  }
+  const resolvedExtra = typeof extra === 'function' ? extra(null) : extra
+  io.local.to(matchRoom(match.id)).emit(event, { ...publicPvpMatchView(match), ...resolvedExtra })
 }
 
 /* ── Eligibility (re-checked fresh on every start/join — never trusted from a client) ───────────
@@ -517,9 +555,11 @@ async function closeRound(io, match) {
       p.pendingAction = null
       if (result.knockedOut && !p.knockedOutAt) p.knockedOutAt = Date.now()
       // No captain-boost mechanic in PvP (raid's cMoonCaptainBoostEnabled never applies here — see
-      // this feature's own plan on captain glow being purely cosmetic in PvP); just the attack's
-      // own requiredHitStreak, same "bank leftover hits past threshold" rule raid already uses.
-      const hitStreakThreshold = p.specialAttack?.requiredHitStreak || HIT_STREAK_THRESHOLD
+      // this feature's own plan on captain glow being purely cosmetic in PvP); the attack's own
+      // requiredHitStreak, minus the match's own snapshotted map reduction (applied symmetrically
+      // to both teams, see effectiveHitStreakThreshold's own comment in cmoonEnemyRaid.js) — same
+      // "bank leftover hits past threshold" rule raid already uses.
+      const hitStreakThreshold = effectiveHitStreakThreshold(p.specialAttack?.requiredHitStreak, false, false, match.mapSpecialThresholdReduction)
       if (firedSpecialUserIds.has(result.userId)) {
         p.hitStreak = Math.max(0, p.hitStreak - hitStreakThreshold)
         p.specialCharged = p.hitStreak >= hitStreakThreshold
@@ -567,11 +607,30 @@ async function closeRound(io, match) {
       if (pending) applyPvpSiphonHealth(match, aliveByTeam, pending.attack, pending.caster, roundInfo, pending.event)
     }
 
+    // ── Map environmental hazard/heal tick (see CMoonEnemyMap's own schema comment) — same
+    // periodic, admin-configured mechanic as the raid engine's own version (cmoonRaidSocket.js),
+    // independent of any cast POISON_OPPONENT/HEAL_SELF status. PvP has no "enemies" side to
+    // split against — poisonAffectsPlayers/healAffectsPlayers both collapse to "every alive
+    // participant on BOTH teams" here, unlike a raid's party-vs-boss split. ───────────────────
+    const mapTicks = []
+    if (match.mapPoisonIntervalRounds > 0 && match.mapPoisonAmount > 0 && match.roundNumber % match.mapPoisonIntervalRounds === 0) {
+      for (const p of aliveParticipants(match)) {
+        p.hpRemaining = Math.max(0, p.hpRemaining - match.mapPoisonAmount)
+        if (p.hpRemaining <= 0) p.knockedOutAt = Date.now()
+      }
+      mapTicks.push({ type: 'POISON', amount: match.mapPoisonAmount })
+    }
+    if (match.mapHealIntervalRounds > 0 && match.mapHealAmount > 0 && match.roundNumber % match.mapHealIntervalRounds === 0) {
+      for (const p of aliveParticipants(match)) p.hpRemaining = Math.min(p.maxHp, p.hpRemaining + match.mapHealAmount)
+      mapTicks.push({ type: 'HEAL', amount: match.mapHealAmount })
+    }
+
     match.roundLog.push({
       round: match.roundNumber,
       participants: perParticipant.map(({ userId, team, action, targetUserId, hit, damageDealt, damageTaken, blocked, hpRemaining, knockedOut }) =>
         ({ userId, team, action, targetUserId, hit, damageDealt, damageTaken, blocked, hpRemaining, knockedOut })),
       ...(specialEvents.length ? { specials: specialEvents } : {}),
+      ...(mapTicks.length ? { mapTicks } : {}),
     })
 
     // AFK kicks happen after this round's own log/broadcast data is built but before the win/loss
@@ -581,9 +640,21 @@ async function closeRound(io, match) {
     const { a: aliveA, b: aliveB } = teamCounts2(match)
     const nextRoundNumber = match.roundNumber + 1
 
-    broadcast(io, match, EV('roundResolved'), {
-      round: { roundNumber: match.roundNumber, participants: perParticipant, specials: specialEvents },
-    })
+    // Under fog of war, this round's own per-participant data must be redacted the SAME way
+    // publicPvpMatchView's own participants array already is for a given viewer — otherwise the
+    // opposing team's real hpRemaining/knockedOut would leak straight through this round event
+    // even though the persistent view hides it. Combat feedback about the exchange ITSELF (hit/
+    // blocked/damageDealt/damageTaken/action) stays visible either way — only the resulting HP
+    // total and knocked-out flag are in scope for "enemy player health does not appear".
+    broadcast(io, match, EV('roundResolved'), (viewerTeam) => ({
+      round: {
+        roundNumber: match.roundNumber,
+        participants: (match.mapFogOfWarEnabled && (viewerTeam === 'A' || viewerTeam === 'B'))
+          ? perParticipant.map(r => r.team !== viewerTeam ? { ...r, hpRemaining: null, knockedOut: null } : r)
+          : perParticipant,
+        specials: specialEvents, mapTicks,
+      },
+    }))
 
     if (aliveA === 0 && aliveB === 0) {
       await resolveCMoonPvpOutcome(io, match, 'ABANDONED')
@@ -914,6 +985,19 @@ export async function restoreCMoonPvpMatches() {
     match.equalizeHpEnabled ??= false
     match.pointsPerWin ??= 0
     match.tournamentMatchId ??= null
+    // Map fields — predates this feature entirely for a match snapshotted before it shipped, so
+    // every effect backfills to its off/zero default (no map resolved, no hazard/boost applied).
+    match.mapId ??= null
+    match.mapName ??= null
+    match.mapIsBaseMap ??= false
+    match.mapBackgroundAnimation ??= 'STATIC_COLOR'
+    match.mapBackgroundColor ??= '#000000'
+    match.mapSpecialThresholdReduction ??= 0
+    match.mapPoisonAmount ??= 0
+    match.mapPoisonIntervalRounds ??= 0
+    match.mapHealAmount ??= 0
+    match.mapHealIntervalRounds ??= 0
+    match.mapFogOfWarEnabled ??= false
     match.originalInitiatorUserId ??= Array.from(match.participants.values()).find(p => p.isInitiator)?.userId ?? null
     matches.set(matchId, match)
     for (const uid of match.participants.keys()) matchByUser.set(uid, matchId)
@@ -960,6 +1044,11 @@ export async function createTournamentMatch({ tournamentMatchId, entryA, entryB 
   const users = await db.user.findMany({ where: { id: { in: allUserIds } }, select: { id: true, username: true } })
   const usernameById = new Map(users.map(u => [u.id, u.username]))
 
+  // Map resolution — same weighted-random pool a tournament match's own entries draw from as
+  // an ordinary lobby match (see resolveMapForPvp in server/utils/cmoonEnemyMap.js); tournament
+  // entries carry no faction/boss of their own to check an override/default against.
+  const resolvedMap = resolveMapForPvp(await db.cMoonEnemyMap.findMany({ where: { active: true } }))
+
   const matchId = randomUUID()
   const now = Date.now()
   const match = {
@@ -979,6 +1068,17 @@ export async function createTournamentMatch({ tournamentMatchId, entryA, entryB 
     originalInitiatorUserId: entryA.memberUserIds[0] || null,
     leaderKeepOpen: false, keepOpenExtensionUsed: false, speedVotes: new Set(),
     roundLimit, tournamentMatchId,
+    mapId: resolvedMap?.id || null,
+    mapName: resolvedMap?.name || null,
+    mapIsBaseMap: !!resolvedMap?.isBaseMap,
+    mapBackgroundAnimation: resolvedMap?.backgroundAnimation || 'STATIC_COLOR',
+    mapBackgroundColor: resolvedMap?.backgroundColor || '#000000',
+    mapSpecialThresholdReduction: resolvedMap?.specialThresholdReduction || 0,
+    mapPoisonAmount: resolvedMap?.poisonAmount || 0,
+    mapPoisonIntervalRounds: resolvedMap?.poisonIntervalRounds || 0,
+    mapHealAmount: resolvedMap?.healAmount || 0,
+    mapHealIntervalRounds: resolvedMap?.healIntervalRounds || 0,
+    mapFogOfWarEnabled: !!resolvedMap?.fogOfWarEnabled,
   }
 
   const memberSlots = []
@@ -1003,7 +1103,7 @@ export async function createTournamentMatch({ tournamentMatchId, entryA, entryB 
       data: {
         id: matchId, status: 'IN_PROGRESS', teamACMoonId: match.teamACMoonId, teamBCMoonId: match.teamBCMoonId,
         maxTeamSize, equalizeHpEnabled, equalizeHpAmount, joinDeadlineAt: new Date(now),
-        combatStartedAt: new Date(now), isPrivate: true, tournamentMatchId,
+        combatStartedAt: new Date(now), isPrivate: true, tournamentMatchId, mapId: match.mapId,
       },
     }),
     ...participantRows.map(row => db.cMoonPvpParticipant.create({ data: row })),
@@ -1054,6 +1154,10 @@ export function registerCMoonPvp(io, socket, resolveSocketUser) {
       const roundLimit = Number.isInteger(config.cMoonPvpRoundLimit) && config.cMoonPvpRoundLimit > 0
         ? config.cMoonPvpRoundLimit : PVP_ROUND_LIMIT_SAFETY
       const pointsPerWin = Math.max(0, Number(config.cMoonPvpPointsPerWin) || 0)
+      // Map resolution (see server/utils/cmoonEnemyMap.js) — PvP has no faction/boss concept, so
+      // this is always a weighted-random pick among every currently-active, non-
+      // assignedEnemiesOnly map.
+      const resolvedMap = resolveMapForPvp(await db.cMoonEnemyMap.findMany({ where: { active: true } }))
 
       const matchId = randomUUID()
       const match = {
@@ -1074,6 +1178,19 @@ export function registerCMoonPvp(io, socket, resolveSocketUser) {
         originalInitiatorUserId: me.id,
         leaderKeepOpen: false, keepOpenExtensionUsed: false, speedVotes: new Set(),
         roundLimit, tournamentMatchId: null,
+        // The map resolved just above — snapshotted field-by-field, same flat style every other
+        // admin-configured value here uses (see cmoonPvpRedisState.js's own serialize comment).
+        mapId: resolvedMap?.id || null,
+        mapName: resolvedMap?.name || null,
+        mapIsBaseMap: !!resolvedMap?.isBaseMap,
+        mapBackgroundAnimation: resolvedMap?.backgroundAnimation || 'STATIC_COLOR',
+        mapBackgroundColor: resolvedMap?.backgroundColor || '#000000',
+        mapSpecialThresholdReduction: resolvedMap?.specialThresholdReduction || 0,
+        mapPoisonAmount: resolvedMap?.poisonAmount || 0,
+        mapPoisonIntervalRounds: resolvedMap?.poisonIntervalRounds || 0,
+        mapHealAmount: resolvedMap?.healAmount || 0,
+        mapHealIntervalRounds: resolvedMap?.healIntervalRounds || 0,
+        mapFogOfWarEnabled: !!resolvedMap?.fogOfWarEnabled,
       }
       addParticipant(match, { userId: me.id, username: elig.user.username, team: chosenTeam, isInitiator: true, maxHp: initiatorMaxHp, profile })
       matches.set(matchId, match)
@@ -1084,7 +1201,7 @@ export function registerCMoonPvp(io, socket, resolveSocketUser) {
             data: {
               id: matchId, status: 'FORMING', teamACMoonId: match.teamACMoonId, teamBCMoonId: match.teamBCMoonId,
               maxTeamSize, equalizeHpEnabled, equalizeHpAmount, joinDeadlineAt: new Date(match.joinDeadlineAt),
-              isPrivate: match.isPrivate,
+              isPrivate: match.isPrivate, mapId: match.mapId,
             },
           }),
           db.cMoonPvpParticipant.create({
@@ -1289,7 +1406,7 @@ export function registerCMoonPvp(io, socket, resolveSocketUser) {
     const match = matches.get(matchId)
     if (match) {
       if (match.participants.has(me.id)) socket.join(matchRoom(matchId))
-      return socket.emit(EV('state'), publicPvpMatchView(match))
+      return socket.emit(EV('state'), publicPvpMatchView(match, match.participants.get(me.id)?.team))
     }
     // Not in memory — either it never existed or it already resolved; fall back to a read-only
     // view of the permanent record so a late notification click still shows something.

@@ -163,11 +163,17 @@ export const RAID_MAX_ROUNDS_SAFETY = 300
 // (e.g. no special assigned at all). A captain's presence still lowers whatever threshold was
 // passed in by exactly 1 (floored at 1) — the same relationship the old fixed 3->2 reduction had,
 // rather than a flat override that would make every attack equally cheap regardless of its own
-// configured cost. Returns `baseThreshold` unchanged whenever the toggle is off or no captain is
-// in the party.
-export function effectiveHitStreakThreshold(baseThreshold, captainBoostEnabled, anyCaptainPresent) {
+// configured cost. `mapReduction` is the raid/match's own snapshotted
+// CMoonEnemyMap.specialThresholdReduction (0 for an ordinary match/raid, or when this helper is
+// called from a context with no map concept) — applied additively with the captain reduction,
+// symmetric for every side (unlike the captain boost, which only ever applies to the raid
+// party), still floored at 1 overall. Returns `baseThreshold` unchanged whenever the toggle is
+// off, no captain is present, and no map reduction applies.
+export function effectiveHitStreakThreshold(baseThreshold, captainBoostEnabled, anyCaptainPresent, mapReduction = 0) {
   const base = Number(baseThreshold) || HIT_STREAK_THRESHOLD
-  return (captainBoostEnabled && anyCaptainPresent) ? Math.max(1, base - 1) : base
+  const captainReduction = (captainBoostEnabled && anyCaptainPresent) ? 1 : 0
+  const totalReduction = captainReduction + (Number(mapReduction) || 0)
+  return totalReduction > 0 ? Math.max(1, base - totalReduction) : base
 }
 
 // Whether a raid boss can be started right now, given its own admin-configured

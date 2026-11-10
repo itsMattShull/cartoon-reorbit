@@ -76,6 +76,7 @@ export default defineEventHandler(async (event) => {
       maxParticipants: m.maxParticipants,
       raidRoundLimit: m.raidRoundLimit,
       windUpEnabled: m.windUpEnabled,
+      overrideMapId: m.overrideMapId,
       raidDefeatedAt: m.raidDefeatedAt,
       defeatedAt: m.defeatedAt,
       sortOrder: m.sortOrder,

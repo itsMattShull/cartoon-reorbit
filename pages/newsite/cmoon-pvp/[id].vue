@@ -262,6 +262,15 @@
       :my-user-id="user?.id"
       @close="showBattleReport = false"
     />
+
+    <CMoonEnemyMapBackground
+      v-if="match?.map"
+      :animation="match.map.backgroundAnimation" :color="match.map.backgroundColor"
+    />
+    <CMoonEnemyMapInfoModal
+      v-if="showMapInfoModal && match?.map"
+      :map="match.map" context="pvp" @understood="showMapInfoModal = false"
+    />
   </NuxtLayout>
 </template>
 
@@ -518,6 +527,18 @@ watch(() => match.value?.status, (status) => {
     showVsBanner.value = true
   }
 }, { immediate: true })
+
+// Map info modal — same "I Understand" explainer as cmoon-raid/[id].vue's own, shown once this
+// match reaches IN_PROGRESS and only for a non-base active map.
+const showMapInfoModal = ref(false)
+let mapInfoShownForMatchId = null
+watch(() => match.value?.status, (status) => {
+  if (status !== 'IN_PROGRESS') return
+  if (!match.value?.map || match.value.map.isBaseMap) return
+  if (mapInfoShownForMatchId === match.value.id) return
+  mapInfoShownForMatchId = match.value.id
+  showMapInfoModal.value = true
+})
 
 onMounted(() => {
   pvpSocket.getState(matchId.value)

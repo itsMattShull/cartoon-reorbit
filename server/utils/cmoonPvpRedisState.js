@@ -72,6 +72,21 @@ function serializeMatch(match) {
     keepOpenExtensionUsed: match.keepOpenExtensionUsed,
     originalInitiatorUserId: match.originalInitiatorUserId,
     speedVotes: Array.from(match.speedVotes || []),
+    // The map resolved for this match at creation (see resolveMapForPvp in
+    // server/utils/cmoonEnemyMap.js) — same missing-field trap as every other snapshot above;
+    // without these, a restart would silently drop the match back to no map/no hazard effects
+    // mid-fight.
+    mapId: match.mapId,
+    mapName: match.mapName,
+    mapIsBaseMap: match.mapIsBaseMap,
+    mapBackgroundAnimation: match.mapBackgroundAnimation,
+    mapBackgroundColor: match.mapBackgroundColor,
+    mapSpecialThresholdReduction: match.mapSpecialThresholdReduction,
+    mapPoisonAmount: match.mapPoisonAmount,
+    mapPoisonIntervalRounds: match.mapPoisonIntervalRounds,
+    mapHealAmount: match.mapHealAmount,
+    mapHealIntervalRounds: match.mapHealIntervalRounds,
+    mapFogOfWarEnabled: match.mapFogOfWarEnabled,
   }
 }
 

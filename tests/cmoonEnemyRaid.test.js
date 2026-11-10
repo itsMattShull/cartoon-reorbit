@@ -316,6 +316,26 @@ test('effectiveHitStreakThreshold: applies to any attack-specific base, floored 
   assert.equal(effectiveHitStreakThreshold(undefined, false, false), HIT_STREAK_THRESHOLD)
 })
 
+// ── Map effect: CMoonEnemyMap.specialThresholdReduction (4th param, additive with captain) ─────
+test('effectiveHitStreakThreshold: a map reduction applies even with no captain boost at all', () => {
+  assert.equal(effectiveHitStreakThreshold(4, false, false, 1), 3)
+  assert.equal(effectiveHitStreakThreshold(4, false, false, 0), 4)
+})
+
+test('effectiveHitStreakThreshold: a map reduction stacks additively with an active captain boost', () => {
+  assert.equal(effectiveHitStreakThreshold(5, true, true, 1), 3) // -1 captain, -1 map
+  assert.equal(effectiveHitStreakThreshold(5, true, false, 1), 4) // captain inactive this round, -1 map only
+})
+
+test('effectiveHitStreakThreshold: the combined reduction is still floored at 1, never 0 or negative', () => {
+  assert.equal(effectiveHitStreakThreshold(2, true, true, 5), 1)
+  assert.equal(effectiveHitStreakThreshold(1, false, false, 10), 1)
+})
+
+test('effectiveHitStreakThreshold: an omitted map reduction defaults to 0 (no behavior change)', () => {
+  assert.equal(effectiveHitStreakThreshold(4, true, true), effectiveHitStreakThreshold(4, true, true, 0))
+})
+
 // ── Raid special-attack charge banking (closeRound in cmoonRaidSocket.js) ──────────────────────
 // Regression test for a real "infinite special attacks" bug: closeRound's own banking math
 // (`p.hitStreak = Math.max(0, p.hitStreak - hitStreakThreshold)`, done once per round, in the

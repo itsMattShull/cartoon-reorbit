@@ -392,6 +392,15 @@
       :my-user-id="user?.id"
       @close="showBattleReport = false"
     />
+
+    <CMoonEnemyMapBackground
+      v-if="raid?.map"
+      :animation="raid.map.backgroundAnimation" :color="raid.map.backgroundColor"
+    />
+    <CMoonEnemyMapInfoModal
+      v-if="showMapInfoModal && raid?.map"
+      :map="raid.map" context="raid" @understood="showMapInfoModal = false"
+    />
   </NuxtLayout>
 </template>
 
@@ -862,6 +871,19 @@ watch(() => raidSocket.lastKicked.value?.at, () => {
   afkKickBanner.value = `⏱️ ${joinWithAnd(names)} ${names.length > 1 ? 'were' : 'was'} kicked from the raid for inactivity.`
   if (afkKickTimer) clearTimeout(afkKickTimer)
   afkKickTimer = setTimeout(() => { afkKickBanner.value = '' }, 5000)
+})
+
+// Map info modal — "I Understand" explainer for a non-base active map, shown once the raid
+// actually reaches IN_PROGRESS (its effects don't matter during FORMING) and never again for
+// the same raid, mirroring announcedRaidId's own one-shot-per-id gating above.
+const showMapInfoModal = ref(false)
+let mapInfoShownForRaidId = null
+watch(() => raid.value?.status, (status) => {
+  if (status !== 'IN_PROGRESS') return
+  if (!raid.value?.map || raid.value.map.isBaseMap) return
+  if (mapInfoShownForRaidId === raid.value.id) return
+  mapInfoShownForRaidId = raid.value.id
+  showMapInfoModal.value = true
 })
 
 onMounted(() => {

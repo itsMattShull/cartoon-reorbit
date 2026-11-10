@@ -6718,6 +6718,87 @@ model CMoonSpecialAttack {
   enemyMemberLinks CMoonEnemyMemberSpecialAttack[]
 }
 
+enum CMoonEnemyMapAnimation {
+  GLOW
+  SMOKE
+  GLITTER
+  STATIC_COLOR
+}
+
+// An admin-authored animated battle background ("map") shown behind a RAID fight — NPC raids
+// and cMoon PvP matches only, never a solo CMoonEnemyBattle (see "Manage cMoon Enemy Maps").
+// A map is purely cosmetic (backgroundAnimation/backgroundColor) by default, but every effect
+// column below can turn it into an environmental hazard/advantage layered on top of the normal
+// combat math — resolved and snapshotted ONCE per raid/match at creation (see CMoonEnemyRaid.
+// mapId/CMoonPvpMatch.mapId), never retroactive mid-fight, same discipline every other admin-
+// configured value these two features already snapshot (roundLimit, maxTeamSize, etc.).
+model CMoonEnemyMap {
+  id                   String                  @id @default(uuid())
+  name                 String                  @unique
+  // Off by default for every map an admin creates — see the seeded "No Effect" row's own
+  // isBaseMap comment below for the one exception. An inactive map is never rolled by the
+  // weighted random pool and can't be picked from a faction-default/boss-override dropdown for
+  // a NEW assignment, but an already-assigned (now-inactive) map stays assigned until an admin
+  // changes it — same "doesn't retroactively break what's already wired up" stance
+  // CMoonEnemyFaction.active takes toward its own members.
+  active               Boolean                 @default(false)
+  // True on exactly one seeded row ("No Effect"), inserted by this feature's own migration —
+  // never settable through the admin UI. Read in two places: the random-pool fallback must
+  // always have at least one candidate even on a fresh install (so this row ships pre-active),
+  // and the client's "I Understand" map-info modal skips itself for this one row, since a map
+  // with every effect at its off/zero default needs no explanation.
+  isBaseMap            Boolean                 @default(false)
+  backgroundAnimation  CMoonEnemyMapAnimation  @default(STATIC_COLOR)
+  // "#RRGGBB", validated server-side the same way CMoonJoinEffect.backgroundColor already is
+  // (server/utils/cmoon.js#isValidHexColor) — tints every animation type (glow/smoke/glitter)
+  // or is the flat fill for STATIC_COLOR.
+  backgroundColor      String                  @default("#000000")
+  // Relative weight in the random-pool pick (server/utils/cmoonEnemyMap.js's pickWeightedMap),
+  // same "not a percent out of 100, never required to sum to 100" semantics as
+  // CMoonEnemyMember.occurrencePercent — a map at 90 is offered ~9x as often as one at 10 among
+  // whichever OTHER maps are in that same pool.
+  occurrenceWeight     Int                     @default(50)
+  // When true, this map is excluded from the random weighted pool entirely — the only way it
+  // can ever be used is a faction's own defaultMapId or a raid boss's own overrideMapId.
+  assignedEnemiesOnly  Boolean                 @default(false)
+  // Subtracted (floored at 1) from every attack's own requiredHitStreak, applied symmetrically
+  // to every side (players and NPCs in a raid, both teams in PvP) — see
+  // effectiveHitStreakThreshold in server/utils/cmoonEnemyRaid.js, which this feeds into
+  // alongside the existing captain-boost reduction. 0 (the default) changes nothing.
+  specialThresholdReduction Int                @default(0)
+  // A periodic environmental hazard tick, independent of (and never clobbered by or clobbering)
+  // a cast POISON_OPPONENT's own poisonAmount/poisonTurnsRemaining on a participant — checked
+  // every poisonIntervalRounds-th round in closeRound, dealing poisonAmount flat damage to
+  // whichever sides poisonAffectsPlayers/poisonAffectsEnemies say to hit (PvP has no "enemies"
+  // side, so both toggles collapse to "both teams" there). intervalRounds = 0 disables the tick
+  // regardless of amount.
+  poisonAmount          Int                     @default(0)
+  poisonIntervalRounds  Int                     @default(0)
+  poisonAffectsPlayers  Boolean                 @default(true)
+  poisonAffectsEnemies  Boolean                 @default(true)
+  // Same shape as the poison columns above, healing instead of damaging — independent of a cast
+  // HEAL_SELF's own state.
+  healAmount            Int                     @default(0)
+  healIntervalRounds    Int                     @default(0)
+  healAffectsPlayers    Boolean                 @default(true)
+  healAffectsEnemies    Boolean                 @default(true)
+  // In a raid: the boss's own wind-up/telegraph message (CMoonEnemyWindUpMove) is never sent to
+  // the client at all while this is on — the bonus payoff logic underneath is unaffected, only
+  // its visibility is suppressed server-side (never "send it and hide it client-side"). In PvP:
+  // each side's own serialized view omits the OPPOSING team's hpRemaining/knockedOut — a player
+  // always sees their own team's HP in full.
+  fogOfWarEnabled       Boolean                 @default(false)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  defaultForFactions CMoonEnemyFaction[] @relation("CMoonEnemyFaction_DefaultMap")
+  overrideForMembers CMoonEnemyMember[]  @relation("CMoonEnemyMember_OverrideMap")
+  raids              CMoonEnemyRaid[]
+  pvpMatches         CMoonPvpMatch[]
+
+  @@index([active, assignedEnemiesOnly])
+}
+
 // The themed group an admin creates in "Manage cMoon Enemies" — mostly organizational (name,
 // banner art, an on/off switch for the whole group at once); the actual things a player fights
 // are its members below.
@@ -6769,6 +6850,13 @@ model CMoonEnemyFaction {
   // admin can delete it (enforced in cmoon-special-attacks/[id].delete.js's own pre-check).
   specialAttackId               String?
   specialAttack                 CMoonSpecialAttack? @relation(fields: [specialAttackId], references: [id], onDelete: Restrict)
+  // Battle map every raid against a member of this faction uses by default, unless that
+  // specific raid boss has its own overrideMapId set (see CMoonEnemyMember.overrideMapId,
+  // which wins outright when present) — see CMoonEnemyMap's own header comment. onDelete:
+  // SetNull (unlike specialAttackId's Restrict): a map carries no history the way an attack
+  // does, so deleting one just clears whichever factions/members pointed at it.
+  defaultMapId                  String?
+  defaultMap                    CMoonEnemyMap?      @relation("CMoonEnemyFaction_DefaultMap", fields: [defaultMapId], references: [id], onDelete: SetNull)
   createdAt                     DateTime            @default(now())
   updatedAt                     DateTime            @updatedAt
 
@@ -6981,6 +7069,14 @@ model CMoonEnemyMember {
   // this same enemy within the cooldown window can never both trigger a post. Independent of
   // raidDefeatedAt/defeatedAt — this only ever gates a chat message, never battle eligibility.
   lastFinalBossPingAt  DateTime?
+  // Overrides whichever map this boss's own faction would otherwise default to (see
+  // CMoonEnemyFaction.defaultMapId) — wins outright over both that default AND the random
+  // weighted pool whenever set. Meaningless unless isRaidBoss is also true, but — matching
+  // raidRoundLimit/windUpEnabled's own "persists independent of the flag" stance — not force-
+  // cleared when isRaidBoss is toggled off. onDelete: SetNull, same reasoning as
+  // CMoonEnemyFaction.defaultMapId.
+  overrideMapId        String?
+  overrideMap           CMoonEnemyMap?                  @relation("CMoonEnemyMember_OverrideMap", fields: [overrideMapId], references: [id], onDelete: SetNull)
 
   faction        CMoonEnemyFaction               @relation(fields: [factionId], references: [id], onDelete: Cascade)
   rewards        CMoonEnemyReward[]
@@ -7437,9 +7533,15 @@ model CMoonEnemyRaid {
   // otherwise unchanged: any eligible player who has the link can still join, from any cMoon,
   // same as a public raid — this only controls DISCOVERABILITY, not who may join.
   isPrivate        Boolean                @default(false)
+  // The map resolved for THIS raid (boss override > faction default > weighted random pool —
+  // see resolveMapForRaid in server/utils/cmoonEnemyMap.js), snapshotted once at creation,
+  // same "never retroactive mid-fight" discipline as every other admin-configured value here.
+  // Null only for a raid created before this feature shipped.
+  mapId            String?
 
   enemyMember  CMoonEnemyMember            @relation(fields: [enemyMemberId], references: [id], onDelete: Restrict)
   cMoon        CMoon                       @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  map          CMoonEnemyMap?              @relation(fields: [mapId], references: [id], onDelete: SetNull)
   participants CMoonEnemyRaidParticipant[]
   battles      CMoonEnemyBattle[] // the synthetic per-participant rows created at resolution
 
@@ -7862,9 +7964,15 @@ model CMoonPvpMatch {
   // Set only when this match was spawned from a cMoon PvP tournament round (see
   // CMoonPvpTournamentMatch below) — null for an ordinary player-created lobby.
   tournamentMatchId String?               @unique
+  // The map resolved for THIS match — PvP has no faction/boss concept, so this is always a
+  // weighted-random pick from the active, non-assignedEnemiesOnly pool (see resolveMapForPvp
+  // in server/utils/cmoonEnemyMap.js), snapshotted once at creation. Null only for a match
+  // created before this feature shipped.
+  mapId             String?
 
   teamA           CMoon?                   @relation("CMoonPvpMatch_TeamA", fields: [teamACMoonId], references: [id], onDelete: SetNull)
   teamB           CMoon?                   @relation("CMoonPvpMatch_TeamB", fields: [teamBCMoonId], references: [id], onDelete: SetNull)
+  map             CMoonEnemyMap?           @relation(fields: [mapId], references: [id], onDelete: SetNull)
   participants    CMoonPvpParticipant[]
   tournamentMatch CMoonPvpTournamentMatch? @relation(fields: [tournamentMatchId], references: [id], onDelete: SetNull)
 

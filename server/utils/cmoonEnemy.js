@@ -315,6 +315,13 @@ export function parseFactionBody(body, existing) {
   const specialAttackId = body?.specialAttackId === undefined
     ? (existing ? existing.specialAttackId : null)
     : toOptionalId(body.specialAttackId)
+  // The battle map every raid against a member of this faction uses by default, unless that
+  // specific boss has its own overrideMapId set (see parseMemberBody below, which wins outright
+  // when present) — see CMoonEnemyMap's own schema comment. Same nullable-id shape/convention as
+  // appearEffectId/specialAttackId above.
+  const defaultMapId = body?.defaultMapId === undefined
+    ? (existing ? (existing.defaultMapId ?? null) : null)
+    : toOptionalId(body.defaultMapId)
 
   if (!isValidFactionName(name)) {
     return { ok: false, message: `Name is required (max ${FACTION_NAME_MAX_LENGTH} characters)` }
@@ -334,8 +341,11 @@ export function parseFactionBody(body, existing) {
   if (specialAttackId === undefined) {
     return { ok: false, message: 'specialAttackId must be a string id' }
   }
+  if (defaultMapId === undefined) {
+    return { ok: false, message: 'defaultMapId must be a string id' }
+  }
 
-  return { ok: true, data: { name, description, active, sortOrder, appearEffectId, specialAttackId } }
+  return { ok: true, data: { name, description, active, sortOrder, appearEffectId, specialAttackId, defaultMapId } }
 }
 
 // Shared by the member create/update endpoints, same `existing` convention as parseFactionBody.
@@ -417,6 +427,14 @@ export function parseMemberBody(body, existing) {
     ? (existing ? existing.raidRoundLimit : RAID_ROUND_LIMIT_DEFAULT)
     : toNumber(body.raidRoundLimit)
   const windUpEnabled = toBoolean(body?.windUpEnabled, existing ? !!existing.windUpEnabled : false)
+  // Overrides whichever map this member's own faction would otherwise default to (see
+  // CMoonEnemyFaction.defaultMapId) — meaningless unless isRaidBoss, but not force-cleared when
+  // isRaidBoss is toggled off, same "persists independent of the flag" stance raidRoundLimit/
+  // windUpEnabled above already take. Same nullable-id shape/convention as parseFactionBody's
+  // own defaultMapId.
+  const overrideMapId = body?.overrideMapId === undefined
+    ? (existing ? (existing.overrideMapId ?? null) : null)
+    : toOptionalId(body.overrideMapId)
 
   if (!factionId) {
     return { ok: false, message: 'Faction is required' }
@@ -510,6 +528,9 @@ export function parseMemberBody(body, existing) {
   if (windUpEnabled === null) {
     return { ok: false, message: 'windUpEnabled must be true or false' }
   }
+  if (overrideMapId === undefined) {
+    return { ok: false, message: 'overrideMapId must be a string id' }
+  }
 
   return {
     ok: true,
@@ -517,7 +538,7 @@ export function parseMemberBody(body, existing) {
       factionId, name, maxHp, battleMode, rank, minPriorDefeats, occurrencePercent, cMoonPointsReward,
       critChanceAgainstPercent, critChanceFromPercent, attackAccuracyPercent, baseDamage, attackChancePercent, pityThreshold, firstWinBonusPoints,
       active, sortOrder,
-      isRaidBoss, raidAnnouncementText, raidOneTime, raidCooldownMinutes, maxParticipants, raidRoundLimit, windUpEnabled,
+      isRaidBoss, raidAnnouncementText, raidOneTime, raidCooldownMinutes, maxParticipants, raidRoundLimit, windUpEnabled, overrideMapId,
     },
   }
 }

@@ -355,6 +355,19 @@
           </div>
 
           <div>
+            <label class="block text-xs font-medium mb-1">Default map (optional)</label>
+            <select v-model="factionForm.defaultMapId" class="w-full border rounded px-2 py-1">
+              <option value="">None — raids roll a map from the random pool</option>
+              <option v-for="m in enemyMaps" :key="m.id" :value="m.id">{{ m.name }}</option>
+            </select>
+            <p class="text-[10px] text-gray-500 mt-1">
+              Every raid against a member of this faction uses this map, unless that specific boss has
+              its own override map set below. Built in
+              <NuxtLink to="/newsite/admin/cMoonEnemyMaps" class="text-indigo-600 hover:underline">Manage cMoon Enemy Maps</NuxtLink>.
+            </p>
+          </div>
+
+          <div>
             <label class="block text-xs font-medium mb-1">Banner (optional, static or animated GIF)</label>
             <div class="flex items-center gap-4 flex-wrap">
               <div class="w-32 h-[42px] bg-gray-100 border rounded flex items-center justify-center overflow-hidden shrink-0">
@@ -654,6 +667,18 @@
               <p class="text-[10px] text-gray-500 mt-1">
                 When on, this boss can telegraph an incoming high/low attack (configured below) that the whole
                 party can block for a bonus. Requires at least one move configured below to actually fire.
+              </p>
+            </div>
+            <div v-if="memberForm.isRaidBoss" class="pt-1">
+              <label class="block text-[11px] font-medium mb-1">Override map (optional)</label>
+              <select v-model="memberForm.overrideMapId" class="w-full border rounded px-2 py-1 text-xs">
+                <option value="">None — uses the faction's default map, or the random pool</option>
+                <option v-for="m in enemyMaps" :key="m.id" :value="m.id">{{ m.name }}</option>
+              </select>
+              <p class="text-[10px] text-gray-500 mt-1">
+                Wins outright over the faction's own default map — whenever this boss is raided, this map
+                always shows up. Built in
+                <NuxtLink to="/newsite/admin/cMoonEnemyMaps" class="text-indigo-600 hover:underline">Manage cMoon Enemy Maps</NuxtLink>.
               </p>
             </div>
           </div>
@@ -1124,6 +1149,7 @@ const ctoonsCatalog = ref([])
 const packsCatalog = ref([])
 const joinEffects = ref([])
 const specialAttacks = ref([])
+const enemyMaps = ref([])
 const loading = ref(false)
 const loadError = ref('')
 
@@ -1248,7 +1274,7 @@ async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [factionsData, membersData, backgroundsData, avatarsData, ctoonsData, joinEffectsData, cmoonsData, specialAttacksData, packsData] = await Promise.all([
+    const [factionsData, membersData, backgroundsData, avatarsData, ctoonsData, joinEffectsData, cmoonsData, specialAttacksData, packsData, enemyMapsData] = await Promise.all([
       $fetch('/api/admin/cmoon-enemy-factions'),
       $fetch('/api/admin/cmoon-enemy-members'),
       $fetch('/api/admin/backgrounds'),
@@ -1258,6 +1284,7 @@ async function load() {
       $fetch('/api/admin/cmoons'),
       $fetch('/api/admin/cmoon-special-attacks'),
       $fetch('/api/admin/packs', { query: { limit: 200 } }),
+      $fetch('/api/admin/cmoon-enemy-maps'),
     ])
     factions.value = factionsData?.factions || []
     members.value = membersData?.members || []
@@ -1274,6 +1301,7 @@ async function load() {
     soloQueueEnabled.value = cmoonsData?.cMoonRaidSoloQueueEnabled !== false
     privateLobbiesEnabled.value = cmoonsData?.cMoonRaidPrivateLobbiesEnabled !== false
     specialAttacks.value = specialAttacksData?.attacks || []
+    enemyMaps.value = enemyMapsData?.maps || []
   } catch (e) {
     loadError.value = e?.data?.statusMessage || 'Failed to load cMoon enemies'
   } finally {
@@ -1534,7 +1562,7 @@ async function uploadFactionSound(slotKey) {
   await load()
 }
 
-const emptyFactionForm = () => ({ id: '', name: '', description: '', active: true, sortOrder: 0, appearEffectId: '', specialAttackId: '' })
+const emptyFactionForm = () => ({ id: '', name: '', description: '', active: true, sortOrder: 0, appearEffectId: '', specialAttackId: '', defaultMapId: '' })
 const factionForm = reactive(emptyFactionForm())
 const factionPreviewImageSrc = computed(() => factionPendingFilePreviewUrl.value || factionSavedImagePath.value || '')
 
@@ -1565,6 +1593,7 @@ function startEditFaction(f) {
   factionForm.sortOrder = f.sortOrder
   factionForm.appearEffectId = f.appearEffectId || ''
   factionForm.specialAttackId = f.specialAttackId || ''
+  factionForm.defaultMapId = f.defaultMapId || ''
   factionSavedImagePath.value = f.bannerImagePath || ''
   factionSavedMusicPath.value = f.battleMusicPath || ''
   for (const s of FACTION_SOUND_SLOTS) factionSoundState[s.key].savedPath = f[s.field] || ''
@@ -1665,6 +1694,7 @@ async function saveFaction() {
       sortOrder: Math.trunc(Number(factionForm.sortOrder)) || 0,
       appearEffectId: factionForm.appearEffectId || null,
       specialAttackId: factionForm.specialAttackId || null,
+      defaultMapId: factionForm.defaultMapId || null,
     }
     if (factionForm.id) {
       await $fetch(`/api/admin/cmoon-enemy-factions/${factionForm.id}`, { method: 'PUT', body })
@@ -1940,7 +1970,7 @@ const emptyMemberForm = () => ({
   attackChancePercent: 50, pityThreshold: 0, firstWinBonusPoints: 0,
   active: true, sortOrder: 0,
   isRaidBoss: false, raidAnnouncementText: '', raidOneTime: false, raidCooldownMinutes: 0,
-  maxParticipants: 4, raidRoundLimit: 300, windUpEnabled: false,
+  maxParticipants: 4, raidRoundLimit: 300, windUpEnabled: false, overrideMapId: '',
 })
 const memberForm = reactive(emptyMemberForm())
 const memberPreviewImageSrc = computed(() => memberPendingFilePreviewUrl.value || memberSavedImagePath.value || '')
@@ -2010,6 +2040,7 @@ function startEditMember(m) {
     isRaidBoss: !!m.isRaidBoss, raidAnnouncementText: m.raidAnnouncementText || '',
     raidOneTime: !!m.raidOneTime, raidCooldownMinutes: m.raidCooldownMinutes ?? 0,
     maxParticipants: m.maxParticipants ?? 4, raidRoundLimit: m.raidRoundLimit ?? 300, windUpEnabled: !!m.windUpEnabled,
+    overrideMapId: m.overrideMapId || '',
   })
   memberSavedImagePath.value = m.imagePath || ''
   for (const s of SOUND_SLOTS) memberSoundState[s.key].savedPath = m[s.field] || ''
@@ -2171,6 +2202,7 @@ async function saveMember() {
       maxParticipants,
       raidRoundLimit,
       windUpEnabled: memberForm.windUpEnabled,
+      overrideMapId: memberForm.overrideMapId || null,
     }
     let id = memberForm.id
     if (id) {
