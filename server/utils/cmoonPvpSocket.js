@@ -228,7 +228,11 @@ function publicPvpMatchView(match, viewerTeam = null) {
       backgroundAnimation: match.mapBackgroundAnimation, backgroundColor: match.mapBackgroundColor,
       specialThresholdReduction: match.mapSpecialThresholdReduction || 0,
       poisonAmount: match.mapPoisonAmount || 0, poisonIntervalRounds: match.mapPoisonIntervalRounds || 0,
+      // No "affects enemies" side to send — PvP has no enemies, see describeEnemyMapEffects's own
+      // pvp-context handling of this single flag.
+      poisonAffectsPlayers: match.mapPoisonAffectsPlayers !== false,
       healAmount: match.mapHealAmount || 0, healIntervalRounds: match.mapHealIntervalRounds || 0,
+      healAffectsPlayers: match.mapHealAffectsPlayers !== false,
       fogOfWarEnabled: !!match.mapFogOfWarEnabled,
     } : null,
     participants: Array.from(match.participants.values()).map(p => {
@@ -533,7 +537,13 @@ async function closeRound(io, match) {
     // opponent, both substituted with PARALYZED_ACTION if their whole TEAM is currently stunned. ─
     const teamAParalyzedThisRound = (match.teamAParalyzedTurns || 0) > 0
     const teamBParalyzedThisRound = (match.teamBParalyzedTurns || 0) > 0
-    const roundParticipants = alive.map(p => ({
+    // Re-filtered from `alive`, not just mapped from it: unlike raid (where a player special can
+    // only ever target the single shared boss, never another player), step 1 above can knock out
+    // an opposing-team participant directly (DAMAGE_OPPONENT/POISON_OPPONENT's own instant-kill
+    // tick). Without re-checking knockedOutAt here, that now-dead participant's `alive`-snapshot
+    // object reference would still be included — still with a queued attack action — and get to
+    // land a hit in this same round's lane exchange after having already been defeated.
+    const roundParticipants = alive.filter(p => !p.knockedOutAt).map(p => ({
       userId: p.userId, team: p.team,
       action: (p.team === 'A' ? teamAParalyzedThisRound : teamBParalyzedThisRound) ? PARALYZED_ACTION : p.pendingAction,
       hpRemaining: p.hpRemaining, maxHp: p.maxHp,
@@ -610,17 +620,21 @@ async function closeRound(io, match) {
     // ── Map environmental hazard/heal tick (see CMoonEnemyMap's own schema comment) — same
     // periodic, admin-configured mechanic as the raid engine's own version (cmoonRaidSocket.js),
     // independent of any cast POISON_OPPONENT/HEAL_SELF status. PvP has no "enemies" side to
-    // split against — poisonAffectsPlayers/healAffectsPlayers both collapse to "every alive
-    // participant on BOTH teams" here, unlike a raid's party-vs-boss split. ───────────────────
+    // split against, so mapPoisonAffectsEnemies/mapHealAffectsEnemies have no PvP meaning and are
+    // ignored here — but mapPoisonAffectsPlayers/mapHealAffectsPlayers still do: every PvP
+    // participant on both teams IS "a player," so an admin who built a map with the tick turned
+    // off for players (poisonAffectsPlayers: false — e.g. a map meant to be a boss-only hazard in
+    // raid) must see that same map apply no tick to anyone here, not silently hit both teams
+    // regardless of the toggle. ─────────────────────────────────────────────────────────────────
     const mapTicks = []
-    if (match.mapPoisonIntervalRounds > 0 && match.mapPoisonAmount > 0 && match.roundNumber % match.mapPoisonIntervalRounds === 0) {
+    if (match.mapPoisonAffectsPlayers && match.mapPoisonIntervalRounds > 0 && match.mapPoisonAmount > 0 && match.roundNumber % match.mapPoisonIntervalRounds === 0) {
       for (const p of aliveParticipants(match)) {
         p.hpRemaining = Math.max(0, p.hpRemaining - match.mapPoisonAmount)
         if (p.hpRemaining <= 0) p.knockedOutAt = Date.now()
       }
       mapTicks.push({ type: 'POISON', amount: match.mapPoisonAmount })
     }
-    if (match.mapHealIntervalRounds > 0 && match.mapHealAmount > 0 && match.roundNumber % match.mapHealIntervalRounds === 0) {
+    if (match.mapHealAffectsPlayers && match.mapHealIntervalRounds > 0 && match.mapHealAmount > 0 && match.roundNumber % match.mapHealIntervalRounds === 0) {
       for (const p of aliveParticipants(match)) p.hpRemaining = Math.min(p.maxHp, p.hpRemaining + match.mapHealAmount)
       mapTicks.push({ type: 'HEAL', amount: match.mapHealAmount })
     }
@@ -995,8 +1009,10 @@ export async function restoreCMoonPvpMatches() {
     match.mapSpecialThresholdReduction ??= 0
     match.mapPoisonAmount ??= 0
     match.mapPoisonIntervalRounds ??= 0
+    match.mapPoisonAffectsPlayers ??= true
     match.mapHealAmount ??= 0
     match.mapHealIntervalRounds ??= 0
+    match.mapHealAffectsPlayers ??= true
     match.mapFogOfWarEnabled ??= false
     match.originalInitiatorUserId ??= Array.from(match.participants.values()).find(p => p.isInitiator)?.userId ?? null
     matches.set(matchId, match)
@@ -1076,8 +1092,10 @@ export async function createTournamentMatch({ tournamentMatchId, entryA, entryB 
     mapSpecialThresholdReduction: resolvedMap?.specialThresholdReduction || 0,
     mapPoisonAmount: resolvedMap?.poisonAmount || 0,
     mapPoisonIntervalRounds: resolvedMap?.poisonIntervalRounds || 0,
+    mapPoisonAffectsPlayers: resolvedMap ? !!resolvedMap.poisonAffectsPlayers : true,
     mapHealAmount: resolvedMap?.healAmount || 0,
     mapHealIntervalRounds: resolvedMap?.healIntervalRounds || 0,
+    mapHealAffectsPlayers: resolvedMap ? !!resolvedMap.healAffectsPlayers : true,
     mapFogOfWarEnabled: !!resolvedMap?.fogOfWarEnabled,
   }
 
@@ -1188,8 +1206,10 @@ export function registerCMoonPvp(io, socket, resolveSocketUser) {
         mapSpecialThresholdReduction: resolvedMap?.specialThresholdReduction || 0,
         mapPoisonAmount: resolvedMap?.poisonAmount || 0,
         mapPoisonIntervalRounds: resolvedMap?.poisonIntervalRounds || 0,
+        mapPoisonAffectsPlayers: resolvedMap ? !!resolvedMap.poisonAffectsPlayers : true,
         mapHealAmount: resolvedMap?.healAmount || 0,
         mapHealIntervalRounds: resolvedMap?.healIntervalRounds || 0,
+        mapHealAffectsPlayers: resolvedMap ? !!resolvedMap.healAffectsPlayers : true,
         mapFogOfWarEnabled: !!resolvedMap?.fogOfWarEnabled,
       }
       addParticipant(match, { userId: me.id, username: elig.user.username, team: chosenTeam, isInitiator: true, maxHp: initiatorMaxHp, profile })

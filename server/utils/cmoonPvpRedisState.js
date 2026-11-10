@@ -84,8 +84,10 @@ function serializeMatch(match) {
     mapSpecialThresholdReduction: match.mapSpecialThresholdReduction,
     mapPoisonAmount: match.mapPoisonAmount,
     mapPoisonIntervalRounds: match.mapPoisonIntervalRounds,
+    mapPoisonAffectsPlayers: match.mapPoisonAffectsPlayers,
     mapHealAmount: match.mapHealAmount,
     mapHealIntervalRounds: match.mapHealIntervalRounds,
+    mapHealAffectsPlayers: match.mapHealAffectsPlayers,
     mapFogOfWarEnabled: match.mapFogOfWarEnabled,
   }
 }
