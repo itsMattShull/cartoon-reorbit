@@ -1,4 +1,5 @@
 // /api/admin/ctoon/[id].put.js
+import { clearActiveSaleCache } from '@/server/utils/activeSaleCache'
 import {
   defineEventHandler,
   createError,
@@ -329,6 +330,9 @@ export default defineEventHandler(async (event) => {
     where: { id },
     data: updateData
   })
+
+  // The cMart Sale showcase caches each item's cToon (incl. price) for 30s; drop it so an edit shows right away.
+  clearActiveSaleCache()
 
   if (imageHashData) {
     await prisma.ctoonImageHash.upsert({

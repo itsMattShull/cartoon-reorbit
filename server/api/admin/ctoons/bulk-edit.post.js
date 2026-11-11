@@ -4,6 +4,7 @@
 import { defineEventHandler, readBody, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { logAdminChange } from '@/server/utils/adminChangeLog'
+import { clearActiveSaleCache } from '@/server/utils/activeSaleCache'
 import { scheduleMintEnd, cancelMintEnd } from '@/server/utils/queues'
 
 const ALLOWED_FIELDS = new Set([
@@ -123,6 +124,7 @@ export default defineEventHandler(async (event) => {
       if (!before) { errors.push({ id, error: 'Not found' }); continue }
 
       const updated = await prisma.ctoon.update({ where: { id }, data: updateData })
+      clearActiveSaleCache() // Sale showcase caches cToon prices for 30s
 
       // Log field-level changes
       try {
