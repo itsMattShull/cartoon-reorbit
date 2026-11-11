@@ -598,7 +598,7 @@ const items = computed(() => {
     {
       id: 'tko',
       done: Boolean(st.tkoPointsComplete),
-      text: `Play TKO, gToons Clash or Ed, Edd n Eddy RPS to win up to ${tkoDailyPointLimit} combined points.`
+      text: `Play TKO, OG gToons or Ed, Edd n Eddy RPS to win up to ${tkoDailyPointLimit} combined points.`
     },
     {
       id: 'winwheel',
