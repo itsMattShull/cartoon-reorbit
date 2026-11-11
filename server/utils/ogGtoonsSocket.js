@@ -55,6 +55,7 @@ import { evaluatePackReward } from './ogGtoonsPackReward.js'
 import { clearLive, isPairingClosed, flagNeedsAdmin } from './ogGtoonTournamentLive.js'
 import { enqueueOgTournamentJob } from './queues.js'
 import { registerOgGtoonsTournament } from './ogGtoonsTournamentSocket.js'
+import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
 
 const RECONNECT_GRACE_MS = 20_000
 // A dropped connection costs a game of a best-of-3 that is played for a prize, so tournament games
@@ -461,6 +462,35 @@ async function persistAndSettle(match, { outcome, winnerUserId, player1Score, pl
 }
 
 /**
+ * Pays the winner of a PvP match the configured points-per-win out of the shared daily combat pool,
+ * exactly like gToons Clash did. Only a match played to a natural finish pays (no forfeits, ties or
+ * timeouts), and tournament games never do — they have their own prizes. Never throws: a points bug
+ * must not cost anyone a match result. Returns the points actually awarded.
+ */
+async function awardWinPoints(match, params) {
+  if (!params.winnerUserId || params.outcome === 'TIE' || params.outcome === 'INCOMPLETE') return 0
+  if (params.endReason !== 'natural' || match.tournament) return 0
+  try {
+    const [cfg, globalCfg] = await Promise.all([
+      db.gameConfig.findUnique({ where: { gameName: 'OgGtoons' }, select: { pointsPerWin: true } }),
+      db.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { tkoDailyPointLimit: true } })
+    ])
+    if (!cfg || !globalCfg) return 0
+    return await db.$transaction(tx => awardCappedGamePoints(tx, {
+      userId: params.winnerUserId,
+      gameName: 'OgGtoons',
+      poolGameNames: COMBAT_POOL_GAME_NAMES,
+      pointsPerWin: cfg.pointsPerWin,
+      cap: globalCfg.tkoDailyPointLimit,
+      method: 'Game - gToons'
+    }))
+  } catch (err) {
+    console.error('[ogGtoons] win points failed:', err?.message || err)
+    return 0
+  }
+}
+
+/**
  * A tournament game that did not finish normally (stale sweep, or its pairing was decided while it
  * was running) is saved as INCOMPLETE: it never counts toward the series and is simply replayed.
  */
@@ -517,12 +547,15 @@ async function endMatch(io, match, params) {
     logAbnormalEnd(match, 'This tournament match was decided, so the game was ended.')
   }
   const saved = await persistFinishedGame(match, params)
+  // Daily-pool win points (same shared cap as TKO / Clash / RPS). Only after the match is safely saved.
+  const pointsAwarded = saved ? await awardWinPoints(match, params) : 0
 
   emitToPlayers(io, match, EV('matchEnd'), (uid, i) => ({
     ...publicMatchView(match, uid),
     over: true,
     outcome: params.outcome,
     won: params.winnerUserId === uid,
+    pointsAwarded: params.winnerUserId === uid ? pointsAwarded : 0,
     endReason: params.endReason,
     player1Score: params.player1Score,
     player2Score: params.player2Score,
