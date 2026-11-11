@@ -2015,6 +2015,23 @@ model GlobalGameConfig {
   cMoonEnemySlayerBoardEnabled         Boolean   @default(true) // whether this board counts toward HIGH_SCORE/TOP10
   cMoonEnemySlayerFirstPlacePoints     Int       @default(100) // per-player weekly total for holding rank #1 (solo kills only)
   cMoonEnemySlayerTop10Points          Int       @default(50) // per-player weekly total for a top-N finish (solo kills only)
+  // When off (default), getTopNScoreHolders/getTopNWinsHolders (the arcade-game HIGH_SCORE/TOP10
+  // ranking above) rank every player's entire lifetime best/win-count, unchanged original
+  // behavior. When on, only activity from the last 7 days counts — a rolling window, not a
+  // calendar week, same convention server/utils/gameLeaderboard.js's own weekly period already
+  // uses for the player-facing per-game leaderboards (a separate, unrelated ranking).
+  cMoonGamesWeeklyScoringEnabled        Boolean   @default(false)
+  // Same idea as cMoonGamesWeeklyScoringEnabled, but for getTopNEnemySlayerHolders (the Solo
+  // Enemy Slayer board above) — ranks only solo kills from the last 7 days instead of all-time.
+  cMoonEnemySlayerWeeklyScoringEnabled  Boolean   @default(false)
+  // Flat cMoon points awarded to the WINNER of every live OG gToons match played to a natural
+  // finish against another real player (never a tie, forfeit, timeout, or tournament game — see
+  // awardWinPoints's own identical gate in server/utils/ogGtoonsSocket.js, which this mirrors for
+  // the cMoon-points side of the same win). Awarded live, per match, via CMoonScoreLog's
+  // OG_GTOONS_WIN category — the FULL amount every time, never divided by 7 like HIGH_SCORE/TOP10,
+  // since this is a one-off per-event award, not a daily-re-snapshotted weekly entitlement. 0
+  // (default) awards nothing.
+  cMoonOgGtoonsWinPoints                Int       @default(0)
   // Game keys (SCORE_GAMES[].name / WIN_GAMES[].name in server/utils/cmoon.js)
   // excluded from HIGH_SCORE eligibility. JSON string[] to match the
   // featuredAuctionHours/featuredDissolve* array-field convention above.
