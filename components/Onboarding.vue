@@ -593,7 +593,7 @@ const items = computed(() => {
     {
       id: 'games',
       done: Boolean(st.gamePointsComplete),
-      text: `Play Winball or ReOrbit Match to win up to ${dailyPointLimit} points.`
+      text: `Play Winball or ReOrbit Memory to win up to ${dailyPointLimit} points.`
     },
     {
       id: 'tko',
