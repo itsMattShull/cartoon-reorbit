@@ -66,6 +66,11 @@ enum PackSource {
   // A pack prize paid by an OG gToons tournament (OgGtoonTournamentPrizeGrant) — see payOneGrant in
   // server/utils/ogGtoonTournament.js. sourceRef = the prize grant's id.
   OG_GTOONS_TOURNAMENT
+  // A PACK-type CMoonEnemyCaptureReward row, granted on a successful "Throw Pokeball" capture —
+  // see action.post.js's resolveCapture. Deliberately its own value, not CMOON_ENEMY_REWARD: a
+  // capture is NOT a win (see CMoonEnemyBattleOutcome.CAPTURED's own schema comment), so its pack
+  // grants shouldn't read as if they came from defeating the enemy.
+  CMOON_ENEMY_CAPTURE
 }
 
 /// What an Auction row is selling. Exactly one of Auction.userCtoonId / Auction.userPackId is set,
@@ -410,6 +415,8 @@ model Ctoon {
   rewardPoolRows             RewardCtoonPool[]           @relation("RewardPoolToCtoon")
   winballGrandPrizeSchedules WinballGrandPrizeSchedule[] @relation("WinballGrandPrizeCtoon")
   cMoonEnemyRewards          CMoonEnemyReward[]
+  cMoonEnemyCaptureRewards   CMoonEnemyCaptureReward[]
+  cMoonPvpRewards            CMoonPvpReward[]
   cMoonPrestigeRankTiers     CMoonPrestigeRankTier[]
   imageHash                  CtoonImageHash?
   userSuggestions            CtoonUserSuggestion[]
@@ -939,6 +946,10 @@ model User {
   cMoonEnemyPopupLogs          CMoonEnemyPopupLog[]
   cMoonHuntAssignments         CMoonHuntAssignment[]
 
+  // cMoon PvP
+  cMoonPvpParticipations    CMoonPvpParticipant[]
+  cMoonPvpTournamentEntries CMoonPvpTournamentEntryMember[]
+
   @@unique([discordId, active]) // at most one active user per Discord ID
   @@index([cMoonId])
   @@index([cMoonId, cMoonRoleGrantedAt])
@@ -1209,6 +1220,8 @@ model Pack {
   limitResets            UserPackLimitReset[]
   rewardPacks            RewardPack[]
   cMoonEnemyRewards      CMoonEnemyReward[]
+  cMoonEnemyCaptureRewards CMoonEnemyCaptureReward[]
+  cMoonPvpRewards        CMoonPvpReward[]
   cMoonDispersalOptions  CMoonDispersalOption[]
   cMoonPrestigeRankTiers CMoonPrestigeRankTier[]
   cMoonDispersalClaims   CMoonDispersalClaim[]
@@ -2156,6 +2169,12 @@ model GlobalGameConfig {
   // (block stays pure defense + heal, the pre-this-feature behavior) — solo-only, same scope as
   // the stamina mechanic above.
   cMoonEnemyBattleBlockCounterDamage   Int       @default(1)
+  // Optional MP3/OGG/WAV (uploaded via a dedicated admin endpoint, sniffed by magic bytes same as
+  // every other audio upload in this codebase), played the instant ANY cMoon enemy is captured
+  // (see CMoonEnemyBattleOutcome.CAPTURED) — ONE track for the whole site, unlike
+  // CMoonEnemyMember's own per-enemy appear/victory/defeat sound paths, since the request calls
+  // for this to play "universally... regardless of faction." Null = no sound.
+  cMoonEnemyCaptureMusicPath           String?
   // When true, consider.post.js's candidate roll restricts itself to only the highest
   // CMoonEnemyRank tier actually present among this player's eligible candidates (active,
   // not-defeated, minPriorDefeats already met, raid-availability already checked) before applying
@@ -2173,6 +2192,45 @@ model GlobalGameConfig {
   // behavior before this toggle existed — same "default off, admin opts in" convention as
   // cMoonEnemyHigherTierFirst just above.
   cMoonCaptainBoostEnabled             Boolean   @default(false)
+  // ── cMoon PvP ───────────────────────────────────────────────────────────────────────────────
+  // Master switch, same "off by default, checked before anything else" stance as
+  // cMoonEnemyBattlesEnabled above — see server/utils/cmoonPvpSocket.js.
+  cMoonPvpEnabled                      Boolean   @default(false)
+  // Max players per side (1-8, per the feature request) — snapshotted onto CMoonPvpMatch at
+  // creation, so an admin change never shrinks/grows an already-forming lobby's cap mid-fill.
+  cMoonPvpMaxTeamSize                  Int       @default(4)
+  // When true, a PvP match's two sides are each locked to a single cMoon's own members (the first
+  // joiner on a side sets that side's required cMoonId; later joiners for that side must match it;
+  // the two sides must resolve to different cMoons) — "cMoon vs. cMoon" mode. False (the default)
+  // leaves team composition unrestricted, same cross-cMoon-squad freedom raids already have.
+  cMoonPvpTeammatesOnlyEnabled         Boolean   @default(false)
+  // When true, every PvP participant's maxHp is forced to cMoonPvpEqualizeHpAmount instead of their
+  // normal rank-based getPlayerCombatMaxHp() value (see getPvpCombatMaxHp in server/utils/cmoon.js)
+  // — so a base-7HP player isn't crushed by a higher-ranked opponent's earned HP bonus in
+  // competitive PvP specifically; solo/raid combat is completely unaffected either way. Both
+  // fields snapshotted onto CMoonPvpMatch at creation, same "never retroactive mid-match" rule as
+  // every other admin-configured value raids/PvP read at FORMING time.
+  cMoonPvpEqualizeHpEnabled            Boolean   @default(false)
+  cMoonPvpEqualizeHpAmount             Int       @default(7)
+  // cMoon points awarded to each member of the WINNING team, split evenly (remainder to earliest
+  // joiners, same splitRaidPoints convention raids already use) and credited to each player's own
+  // cMoon. 0 disables point rewards entirely (same "0 disables" convention used elsewhere in this
+  // config) — CMoonPvpReward rows are the separate, independently-rolled item/avatar/background/
+  // pack/points reward pool, unaffected by this value either way.
+  cMoonPvpPointsPerWin                 Int       @default(0)
+  // How long a PvP match's FORMING join window stays open by default — same role as
+  // cMoonRaidJoinWindowSeconds above, see JOIN_WINDOW_SECONDS in server/utils/cmoonPvp.js for the
+  // hardcoded fallback this overrides.
+  cMoonPvpJoinWindowSeconds            Int       @default(60)
+  // Round-count safety valve, same role as CMoonEnemyMember.raidRoundLimit — if a match somehow
+  // never reaches a win condition (a pathological RNG streak with both sides perpetually surviving)
+  // it resolves ABANDONED at this round rather than running forever.
+  cMoonPvpRoundLimit                   Int       @default(300)
+  // Whether a player can create a PvP match as private/invite-only, same discoverability-only
+  // (not real access control) semantics as CMoonEnemyRaid.isPrivate — see that column's own schema
+  // comment. True (the default) lets two pre-arranged teams duel via a shared link without a
+  // separate challenge/accept flow.
+  cMoonPvpPrivateLobbiesEnabled        Boolean   @default(true)
   // cMoon points awarded to the first solver's team for ANY CMoonRiddle (weekly or boss-lore) —
   // see claimCMoonRiddleSolve in server/utils/cmoonRiddle.js, which writes a CMoonScoreLog row of
   // this many points under category 'RIDDLE_SOLVE'. One shared value for both riddle kinds rather
@@ -3579,6 +3637,8 @@ model Background {
   achievementRewardBackgrounds AchievementRewardBackground[]
   affinityLevelRewards         CMoonAffinityLevel[]
   cMoonEnemyRewards            CMoonEnemyReward[]
+  cMoonEnemyCaptureRewards     CMoonEnemyCaptureReward[]
+  cMoonPvpRewards              CMoonPvpReward[]
   cMoonPrestigeRankTiers       CMoonPrestigeRankTier[]
 
   @@index([createdAt])
@@ -4598,17 +4658,25 @@ model CMoon {
   // so unlike teamScore (which must exclude points from members who've since left) there's no
   // membership-retroactivity concern to guard against by recomputing from CMoonEnemyBattle later.
   // Shown on the cMoons leaderboard tab — see server/api/leaderboard/cmoons.get.js.
-  battleWins      Int                 @default(0)
-  battleLosses    Int                 @default(0)
-  enemyBattles    CMoonEnemyBattle[]
-  enemyRaids      CMoonEnemyRaid[]
+  battleWins           Int                       @default(0)
+  battleLosses         Int                       @default(0)
+  enemyBattles         CMoonEnemyBattle[]
+  enemyRaids           CMoonEnemyRaid[]
+  // cMoon PvP — battleWins/battleLosses above are shared with cMoon Enemy Battles (both increment
+  // the same running counts, see CMoonPvpMatch's own header comment), but a PvP match additionally
+  // needs to know which two specific cMoons a match was BETWEEN (teammates-only mode locks each
+  // side's roster to one cMoon) — named relations since one match can reference two different
+  // cMoons, same shape as prestigeLogsFrom/prestigeLogsTo below.
+  pvpMatchesAsTeamA    CMoonPvpMatch[]           @relation("CMoonPvpMatch_TeamA")
+  pvpMatchesAsTeamB    CMoonPvpMatch[]           @relation("CMoonPvpMatch_TeamB")
+  pvpTournamentEntries CMoonPvpTournamentEntry[]
   // This team's own special attack in cMoon Enemy Battles — any of ITS members fighting solo can
   // charge and fire it after landing 3 consecutive hits on an enemy (see
   // CMoonEnemyBattle.playerHitStreak/playerSpecialCharged and CMoonSpecialAttack's own header
   // comment). Optional: a cMoon with none assigned simply never offers the special-attack button
   // at all. onDelete: Restrict, same reassign-before-delete shape as customJoinEffectId above.
-  specialAttackId String?
-  specialAttack   CMoonSpecialAttack? @relation(fields: [specialAttackId], references: [id], onDelete: Restrict)
+  specialAttackId      String?
+  specialAttack        CMoonSpecialAttack?       @relation(fields: [specialAttackId], references: [id], onDelete: Restrict)
 
   // Prestige audit trail — see CMoonPrestigeLog's own comment. Named relations since a log row
   // references two different cMoons (the one left, the one joined).
@@ -5131,6 +5199,8 @@ model Avatar {
   owners                 UserAvatar[]
   levelRewards           CMoonAffinityLevelRewardAvatar[]
   cMoonEnemyRewards      CMoonEnemyReward[]
+  cMoonEnemyCaptureRewards CMoonEnemyCaptureReward[]
+  cMoonPvpRewards        CMoonPvpReward[]
   cMoonPrestigeRankTiers CMoonPrestigeRankTier[]
 
   @@index([createdAt])
@@ -6465,6 +6535,15 @@ enum CMoonEnemyBattleOutcome {
   // PER_PLAYER member — nothing but this battle's own player can move that mode's HP at all, so
   // damageDealt is always > 0 there by construction.
   UNCREDITED
+  // A "Throw Pokeball" special attack (CATCH_ATTEMPT) succeeded — see action.post.js's
+  // resolveCapture. Deliberately its OWN outcome, not WIN or LOSS: NOT a win (no
+  // CMoon.battleWins increment, no cMoonPointsReward/first-win bonus, no pity progress, no
+  // "defeat" achievement credit — the enemy was captured, not defeated) and NOT a loss either
+  // (no CMoon.battleLosses increment — the player didn't lose this fight, they ended it on
+  // their own terms). Grants only whatever rolled from this member's own
+  // CMoonEnemyCaptureReward table (see that model's own comment), stored in the same
+  // rewardsGranted column every other outcome already uses.
+  CAPTURED
 }
 
 enum CMoonEnemyRewardType {
@@ -6557,6 +6636,31 @@ enum CMoonSpecialAttackEffectType {
   POISON_OPPONENT
   CLEANSE_SELF
   SHIELD_PARTY
+  // Revives a currently knocked-out teammate — same raid-only mechanism as the three effects just
+  // above (no case for it in solo's own action.post.js), but ALSO fully wired into PvP
+  // (applyPvpSpecialAttack in cmoonPvp.js), unlike those three: a raid/PvP party has knocked-out
+  // teammates to bring back, solo never does (there's nobody else to revive). `amount` is reused
+  // as "HP the revived ally comes back with" (clamped to their own maxHp, floored at 1). `healsAllies`
+  // is reused as "revive one random knocked-out ally (off, default) vs. every knocked-out ally on
+  // the caster's own side (on)" — the same self-vs-whole-team reinterpretation HEAL_SELF/
+  // CLEANSE_SELF/SIPHON_HEALTH already give that field, just with "knocked-out teammates" as the
+  // pool instead of "everyone alive." Fizzles (no effect, still announced) if nobody on the
+  // caster's side is currently knocked out. Never has a sensible boss-side meaning in a raid (the
+  // boss has no teammates, and its own death ends the raid outright rather than being a per-round
+  // knockout) — assigning it to an enemy's own special just fires/announces with no effect, same
+  // fallback SHIELD_PARTY's own boss-cast branch already uses.
+  REVIVE_ALLY
+  // ── SOLO-ONLY, the mirror image of the raid-only block above — neither cmoonRaidSocket.js's nor
+  // cmoonPvpSocket.js's own special-attack application function has a case for this one, so it
+  // fires and announces but does nothing outside a solo CMoonEnemyBattle, same "no case for it =
+  // inert there" mechanism, just the opposite direction. Attempts to capture the enemy member
+  // (CMoonEnemyMember.catchable/catchRatePercent) rather than damaging/healing/buffing anyone —
+  // see action.post.js's resolveCapture. amount and accuracyPercent are both ignored/forced for
+  // this effectType (parseSpecialAttackBody): there is exactly one success roll for this ability,
+  // the target member's own catchRatePercent, not a second independent accuracy roll stacked on
+  // top of it. requiredHitStreak is still fully meaningful — "how many consecutive hits charges
+  // this throw" — same as every other special attack.
+  CATCH_ATTEMPT
 }
 
 model CMoonSpecialAttack {
@@ -6645,13 +6749,103 @@ model CMoonSpecialAttack {
   // here immediately falls everyone who had chosen it back to their cMoon's own special, with no
   // separate cleanup needed.
   playerChoice         Boolean                      @default(false)
+  // Lets an admin pull this attack out of cMoon PvP specifically (solo/raid balance untouched) —
+  // see the cMoon PvP feature's own header comment on why the existing amount/requiredHitStreak/
+  // accuracyPercent columns, tuned for "boss vs. party" (raid) or "player vs. boss" (solo), can be
+  // wildly over- or under-powered once applied symmetrically at PvP's 1-of-N-vs-1-of-N scale —
+  // e.g. a PARALYZE_OPPONENT that stuns a lone raid boss for a few rounds stuns an ENTIRE opposing
+  // PvP team of up to 8 the same way. True by default so shipping this column changes nothing
+  // until PvP itself is enabled and an admin has reviewed the roster; applyPvpSpecialAttack's own
+  // caller (cmoonPvpSocket.js's closeRound) is what actually enforces this, not just the admin UI.
+  pvpEligible          Boolean                      @default(true)
   createdAt            DateTime                     @default(now())
   updatedAt            DateTime                     @updatedAt
 
-  cmoons        CMoon[]
-  enemyFactions CMoonEnemyFaction[]
-  chosenByUsers User[]
+  cmoons           CMoon[]
+  enemyFactions    CMoonEnemyFaction[]
+  chosenByUsers    User[]
   enemyMemberLinks CMoonEnemyMemberSpecialAttack[]
+}
+
+enum CMoonEnemyMapAnimation {
+  GLOW
+  SMOKE
+  GLITTER
+  STATIC_COLOR
+}
+
+// An admin-authored animated battle background ("map") shown behind a RAID fight — NPC raids
+// and cMoon PvP matches only, never a solo CMoonEnemyBattle (see "Manage cMoon Enemy Maps").
+// A map is purely cosmetic (backgroundAnimation/backgroundColor) by default, but every effect
+// column below can turn it into an environmental hazard/advantage layered on top of the normal
+// combat math — resolved and snapshotted ONCE per raid/match at creation (see CMoonEnemyRaid.
+// mapId/CMoonPvpMatch.mapId), never retroactive mid-fight, same discipline every other admin-
+// configured value these two features already snapshot (roundLimit, maxTeamSize, etc.).
+model CMoonEnemyMap {
+  id                   String                  @id @default(uuid())
+  name                 String                  @unique
+  // Off by default for every map an admin creates — see the seeded "No Effect" row's own
+  // isBaseMap comment below for the one exception. An inactive map is never rolled by the
+  // weighted random pool and can't be picked from a faction-default/boss-override dropdown for
+  // a NEW assignment, but an already-assigned (now-inactive) map stays assigned until an admin
+  // changes it — same "doesn't retroactively break what's already wired up" stance
+  // CMoonEnemyFaction.active takes toward its own members.
+  active               Boolean                 @default(false)
+  // True on exactly one seeded row ("No Effect"), inserted by this feature's own migration —
+  // never settable through the admin UI. Read in two places: the random-pool fallback must
+  // always have at least one candidate even on a fresh install (so this row ships pre-active),
+  // and the client's "I Understand" map-info modal skips itself for this one row, since a map
+  // with every effect at its off/zero default needs no explanation.
+  isBaseMap            Boolean                 @default(false)
+  backgroundAnimation  CMoonEnemyMapAnimation  @default(STATIC_COLOR)
+  // "#RRGGBB", validated server-side the same way CMoonJoinEffect.backgroundColor already is
+  // (server/utils/cmoon.js#isValidHexColor) — tints every animation type (glow/smoke/glitter)
+  // or is the flat fill for STATIC_COLOR.
+  backgroundColor      String                  @default("#000000")
+  // Relative weight in the random-pool pick (server/utils/cmoonEnemyMap.js's pickWeightedMap),
+  // same "not a percent out of 100, never required to sum to 100" semantics as
+  // CMoonEnemyMember.occurrencePercent — a map at 90 is offered ~9x as often as one at 10 among
+  // whichever OTHER maps are in that same pool.
+  occurrenceWeight     Int                     @default(50)
+  // When true, this map is excluded from the random weighted pool entirely — the only way it
+  // can ever be used is a faction's own defaultMapId or a raid boss's own overrideMapId.
+  assignedEnemiesOnly  Boolean                 @default(false)
+  // Subtracted (floored at 1) from every attack's own requiredHitStreak, applied symmetrically
+  // to every side (players and NPCs in a raid, both teams in PvP) — see
+  // effectiveHitStreakThreshold in server/utils/cmoonEnemyRaid.js, which this feeds into
+  // alongside the existing captain-boost reduction. 0 (the default) changes nothing.
+  specialThresholdReduction Int                @default(0)
+  // A periodic environmental hazard tick, independent of (and never clobbered by or clobbering)
+  // a cast POISON_OPPONENT's own poisonAmount/poisonTurnsRemaining on a participant — checked
+  // every poisonIntervalRounds-th round in closeRound, dealing poisonAmount flat damage to
+  // whichever sides poisonAffectsPlayers/poisonAffectsEnemies say to hit (PvP has no "enemies"
+  // side, so both toggles collapse to "both teams" there). intervalRounds = 0 disables the tick
+  // regardless of amount.
+  poisonAmount          Int                     @default(0)
+  poisonIntervalRounds  Int                     @default(0)
+  poisonAffectsPlayers  Boolean                 @default(true)
+  poisonAffectsEnemies  Boolean                 @default(true)
+  // Same shape as the poison columns above, healing instead of damaging — independent of a cast
+  // HEAL_SELF's own state.
+  healAmount            Int                     @default(0)
+  healIntervalRounds    Int                     @default(0)
+  healAffectsPlayers    Boolean                 @default(true)
+  healAffectsEnemies    Boolean                 @default(true)
+  // In a raid: the boss's own wind-up/telegraph message (CMoonEnemyWindUpMove) is never sent to
+  // the client at all while this is on — the bonus payoff logic underneath is unaffected, only
+  // its visibility is suppressed server-side (never "send it and hide it client-side"). In PvP:
+  // each side's own serialized view omits the OPPOSING team's hpRemaining/knockedOut — a player
+  // always sees their own team's HP in full.
+  fogOfWarEnabled       Boolean                 @default(false)
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  defaultForFactions CMoonEnemyFaction[] @relation("CMoonEnemyFaction_DefaultMap")
+  overrideForMembers CMoonEnemyMember[]  @relation("CMoonEnemyMember_OverrideMap")
+  raids              CMoonEnemyRaid[]
+  pvpMatches         CMoonPvpMatch[]
+
+  @@index([active, assignedEnemiesOnly])
 }
 
 // The themed group an admin creates in "Manage cMoon Enemies" — mostly organizational (name,
@@ -6705,6 +6899,13 @@ model CMoonEnemyFaction {
   // admin can delete it (enforced in cmoon-special-attacks/[id].delete.js's own pre-check).
   specialAttackId               String?
   specialAttack                 CMoonSpecialAttack? @relation(fields: [specialAttackId], references: [id], onDelete: Restrict)
+  // Battle map every raid against a member of this faction uses by default, unless that
+  // specific raid boss has its own overrideMapId set (see CMoonEnemyMember.overrideMapId,
+  // which wins outright when present) — see CMoonEnemyMap's own header comment. onDelete:
+  // SetNull (unlike specialAttackId's Restrict): a map carries no history the way an attack
+  // does, so deleting one just clears whichever factions/members pointed at it.
+  defaultMapId                  String?
+  defaultMap                    CMoonEnemyMap?      @relation("CMoonEnemyFaction_DefaultMap", fields: [defaultMapId], references: [id], onDelete: SetNull)
   createdAt                     DateTime            @default(now())
   updatedAt                     DateTime            @updatedAt
 
@@ -6813,6 +7014,19 @@ model CMoonEnemyMember {
   // applies to THIS enemy's own attack landing on the player — never to the player's own damage
   // against the enemy, which is unaffected and still flat 1/2.
   baseDamage               Int                  @default(1)
+  // Whether a "Throw Pokeball" special attack (CMoonSpecialAttack.effectType = CATCH_ATTEMPT) can
+  // actually capture THIS member — SOLO BATTLES ONLY, same scope note as pityThreshold/
+  // firstWinBonusPoints above (a raid/PvP context never reads either of these two columns at
+  // all — see that effect type's own schema comment). False (the default) matches every
+  // pre-existing member, which never had a catch mechanic to begin with.
+  catchable                Boolean              @default(false)
+  // 0-100 chance a fired CATCH_ATTEMPT actually captures this member (see
+  // action.post.js's resolveCapture) — meaningless, and FORCED to 0 server-side regardless of
+  // what's submitted (see parseMemberBody in cmoonEnemy.js), whenever catchable above is false,
+  // so there is exactly one source of truth for "can this enemy ever be caught" rather than two
+  // columns that could disagree. The admin form grays this input out and zeroes it the same way
+  // whenever the toggle is off.
+  catchRatePercent         Int                  @default(0)
   active                   Boolean              @default(true)
   // Set the moment a SHARED_POOL member's currentHp reaches 0 — once set, the popup-consider
   // roll skips this member (it stays visible/browsable in the admin page and battle logs, just
@@ -6917,15 +7131,24 @@ model CMoonEnemyMember {
   // this same enemy within the cooldown window can never both trigger a post. Independent of
   // raidDefeatedAt/defeatedAt — this only ever gates a chat message, never battle eligibility.
   lastFinalBossPingAt  DateTime?
+  // Overrides whichever map this boss's own faction would otherwise default to (see
+  // CMoonEnemyFaction.defaultMapId) — wins outright over both that default AND the random
+  // weighted pool whenever set. Meaningless unless isRaidBoss is also true, but — matching
+  // raidRoundLimit/windUpEnabled's own "persists independent of the flag" stance — not force-
+  // cleared when isRaidBoss is toggled off. onDelete: SetNull, same reasoning as
+  // CMoonEnemyFaction.defaultMapId.
+  overrideMapId        String?
+  overrideMap           CMoonEnemyMap?                  @relation("CMoonEnemyMember_OverrideMap", fields: [overrideMapId], references: [id], onDelete: SetNull)
 
-  faction     CMoonEnemyFaction       @relation(fields: [factionId], references: [id], onDelete: Cascade)
-  rewards     CMoonEnemyReward[]
-  battles     CMoonEnemyBattle[]
-  raids       CMoonEnemyRaid[]
-  riddles     CMoonRiddle[]
-  rewardPity  CMoonEnemyRewardPity[]
-  windUpMoves CMoonEnemyWindUpMove[]
-  taunts      CMoonEnemyMemberTaunt[]
+  faction        CMoonEnemyFaction               @relation(fields: [factionId], references: [id], onDelete: Cascade)
+  rewards        CMoonEnemyReward[]
+  captureRewards CMoonEnemyCaptureReward[]
+  battles        CMoonEnemyBattle[]
+  raids          CMoonEnemyRaid[]
+  riddles        CMoonRiddle[]
+  rewardPity     CMoonEnemyRewardPity[]
+  windUpMoves    CMoonEnemyWindUpMove[]
+  taunts         CMoonEnemyMemberTaunt[]
   specialAttacks CMoonEnemyMemberSpecialAttack[]
 
   @@index([active, defeatedAt, sortOrder])
@@ -7034,6 +7257,35 @@ model CMoonEnemyMemberTaunt {
 // guaranteed) from the feature request. Exactly one of ctoonId/avatarId/backgroundId/packId is set,
 // matching rewardType — enforced at the API layer (Prisma can't express a type-conditional FK).
 model CMoonEnemyReward {
+  id                String               @id @default(uuid())
+  enemyMemberId     String
+  rewardType        CMoonEnemyRewardType
+  ctoonId           String?
+  avatarId          String?
+  backgroundId      String?
+  packId            String?
+  dropChancePercent Float                @default(10) // 0-100, rolled independently per row
+  quantity          Int                  @default(1) // cToon/pack copy count OR points amount (POINTS); ignored for avatar/background
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  enemyMember CMoonEnemyMember @relation(fields: [enemyMemberId], references: [id], onDelete: Cascade)
+  ctoon       Ctoon?           @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  avatar      Avatar?          @relation(fields: [avatarId], references: [id], onDelete: Restrict)
+  background  Background?      @relation(fields: [backgroundId], references: [id], onDelete: Restrict)
+  pack        Pack?            @relation(fields: [packId], references: [id], onDelete: Restrict)
+
+  @@index([enemyMemberId])
+}
+
+// One admin-configured possible prize for CAPTURING (not defeating) a CMoonEnemyMember via a
+// "Throw Pokeball" special attack (see CMoonSpecialAttackEffectType.CATCH_ATTEMPT and
+// action.post.js's resolveCapture) — byte-identical column shape and independent-per-row roll
+// semantics to CMoonEnemyReward (reuses the same rollEnemyRewards/buildGrantableReward helpers
+// unchanged), but a WHOLLY SEPARATE pool: a capture never rolls against CMoonEnemyReward, and a
+// normal win never rolls against this table. Lets an admin offer something a defeat never would
+// (e.g. a rarer "shiny" variant cToon) as the capture-specific payoff the feature requested.
+model CMoonEnemyCaptureReward {
   id                String               @id @default(uuid())
   enemyMemberId     String
   rewardType        CMoonEnemyRewardType
@@ -7373,9 +7625,15 @@ model CMoonEnemyRaid {
   // otherwise unchanged: any eligible player who has the link can still join, from any cMoon,
   // same as a public raid — this only controls DISCOVERABILITY, not who may join.
   isPrivate        Boolean                @default(false)
+  // The map resolved for THIS raid (boss override > faction default > weighted random pool —
+  // see resolveMapForRaid in server/utils/cmoonEnemyMap.js), snapshotted once at creation,
+  // same "never retroactive mid-fight" discipline as every other admin-configured value here.
+  // Null only for a raid created before this feature shipped.
+  mapId            String?
 
   enemyMember  CMoonEnemyMember            @relation(fields: [enemyMemberId], references: [id], onDelete: Restrict)
   cMoon        CMoon                       @relation(fields: [cMoonId], references: [id], onDelete: Cascade)
+  map          CMoonEnemyMap?              @relation(fields: [mapId], references: [id], onDelete: SetNull)
   participants CMoonEnemyRaidParticipant[]
   battles      CMoonEnemyBattle[] // the synthetic per-participant rows created at resolution
 
@@ -7648,4 +7906,282 @@ model CMoonSeasonTracker {
   season CMoonSeason @relation(fields: [seasonId], references: [id], onDelete: Cascade)
 
   @@index([seasonId, active, sortOrder])
+}
+
+// ── cMoon PvP ─────────────────────────────────────────────────────────────────────────────────
+// Live, real-time TEAM-vs-TEAM battles — the player-vs-player sibling of cMoon Enemy Raid Bosses
+// (CMoonEnemyRaid above), reusing that feature's lifecycle/Redis-persistence/reward conventions
+// wherever "one party vs. one shared-HP boss" can be made symmetric ("team vs. team", both sides
+// acting every round, individual HP on BOTH sides — no shared pool at all, unlike a raid boss).
+// Owned end-to-end by server/utils/cmoonPvpSocket.js (registered into server/socket-server.js
+// exactly like registerCMoonRaid) — there is no REST endpoint for starting, joining, or acting in
+// a match, only for admin-facing settings/rewards/tournaments. Round-by-round state lives in that
+// process's memory (mirrored to Redis for restart survival, see cmoonPvpRedisState.js) rather than
+// being written to Postgres every round — same "write the permanent log, not a live journal"
+// tradeoff CMoonEnemyRaid already makes.
+//
+// The one genuinely new combat primitive versus raid: raid always resolves ONE shared boss action
+// against EACH participant's own choice (asymmetric N-vs-1). PvP has no boss — every attacker on
+// either side is randomly assigned ONE currently-alive opponent each round (uniform random, not
+// weighted toward low HP) before the existing hit/crit/miss/block math runs per pairing — see
+// assignPvpTargets/resolvePvpRound in server/utils/cmoonPvp.js.
+enum CMoonPvpMatchStatus {
+  // Join window open — up to cMoonPvpJoinWindowSeconds from CMoonPvpMatch.startedAt. Anyone
+  // eligible can join either side up to maxTeamSize, same doubled-raid-lobby UX as
+  // CMoonEnemyRaidStatus.FORMING.
+  FORMING
+  // Combat rounds running. Both sides act every round — there is no single shared "enemy action"
+  // the way a raid boss has; see this model's own header comment.
+  IN_PROGRESS
+  // Terminal — see `outcome`. Live state is evicted from the socket process's in-memory Map/Redis
+  // mirror once resolved; this row plus both sides' CMoonPvpParticipant rows are the permanent
+  // record from here on.
+  RESOLVED
+}
+
+enum CMoonPvpMatchOutcome {
+  TEAM_A_WIN
+  TEAM_B_WIN
+  // Round-limit safety valve reached with players still alive on both sides — same no-penalty
+  // escape hatch CMoonEnemyRaidOutcome.ABANDONED is for a raid (see that value's own comment): a
+  // pathological RNG streak, never a real defeat for either side.
+  ABANDONED
+}
+
+enum CMoonPvpTeam {
+  A
+  B
+}
+
+// One player's membership on one side of one CMoonPvpMatch. Mirrors CMoonEnemyRaidParticipant's
+// own shape closely — same "created the moment they join, never deleted" discipline, same reason a
+// knocked-out participant keeps their row and still shares in a WIN.
+model CMoonPvpParticipant {
+  id             String       @id @default(uuid())
+  matchId        String
+  userId         String
+  team           CMoonPvpTeam
+  hpRemaining    Int
+  knockedOutAt   DateTime?
+  isInitiator    Boolean      @default(false)
+  joinedAt       DateTime     @default(now())
+  // Set once, at match resolution, from ONE context's reward pool (CMoonPvpReward) — MATCH_WIN
+  // for every participant on the winning side, MATCH_PARTICIPATION for every participant on the
+  // losing side (a smaller consolation pool, so losing isn't a total dead end — see this feature's
+  // own "competitive but also fun" design goal), identical bundle for everyone on the same side
+  // per the single shared roll. An ABANDONED match (round-limit reached, or both sides emptied the
+  // same round) grants neither — same "no reward for a fight that didn't resolve" stance
+  // CMoonEnemyRaid's own ABANDONED outcome already takes. Null until resolution either way.
+  rewardsGranted Json?
+
+  match CMoonPvpMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  user  User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // "At most one active PvP match per user" as a real DB constraint — same sentinel pattern as
+  // CMoonEnemyRaidParticipant.activeUserId: holds this row's own userId while the PARENT match is
+  // FORMING/IN_PROGRESS, cleared to NULL the instant it resolves (or the participant leaves/is
+  // AFK-kicked/the match is cancelled). Every exit path must clear this — a raid-side historical
+  // bug (a kicked participant's row keeping this lock forever) is exactly the failure mode this
+  // guards against; see cmoonPvpSocket.js's own header comment on this column.
+  activeUserId String? @unique
+
+  @@unique([matchId, userId])
+  @@index([userId])
+}
+
+// One admin-configured possible prize for a cMoon PvP win/participation/tournament placement.
+// Byte-identical column shape to CMoonEnemyReward (same independent-per-row roll semantics, same
+// XOR-one-of-ctoonId/avatarId/backgroundId/packId-per-rewardType convention, enforced at the API
+// layer same as that model) — keyed by `context` instead of an owning enemy, so an admin can
+// configure separate pools for an ordinary match win versus a tournament placement.
+enum CMoonPvpRewardContext {
+  MATCH_WIN
+  MATCH_PARTICIPATION
+  TOURNAMENT_WINNER
+  TOURNAMENT_PARTICIPATION
+}
+
+model CMoonPvpReward {
+  id                String                @id @default(uuid())
+  context           CMoonPvpRewardContext
+  rewardType        CMoonEnemyRewardType
+  ctoonId           String?
+  avatarId          String?
+  backgroundId      String?
+  packId            String?
+  dropChancePercent Float                 @default(10) // 0-100, rolled independently per row
+  quantity          Int                   @default(1) // cToon/pack copy count OR points amount (POINTS); ignored for avatar/background
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  ctoon      Ctoon?      @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  avatar     Avatar?     @relation(fields: [avatarId], references: [id], onDelete: Restrict)
+  background Background? @relation(fields: [backgroundId], references: [id], onDelete: Restrict)
+  pack       Pack?       @relation(fields: [packId], references: [id], onDelete: Restrict)
+
+  @@index([context])
+}
+
+// One live PvP match. Created at FORMING, updated once more at RESOLVED — see this feature's own
+// header comment for why round-by-round state isn't written here every round.
+model CMoonPvpMatch {
+  id                String                @id @default(uuid())
+  status            CMoonPvpMatchStatus   @default(FORMING)
+  outcome           CMoonPvpMatchOutcome?
+  // Set only while cMoonPvpTeammatesOnlyEnabled was on at this match's creation (locking each side
+  // to a single cMoon's own members) — null either way once that admin toggle is off, since a mixed
+  // -cMoon side has no single team to credit here. onDelete: SetNull (not Cascade, unlike
+  // CMoonEnemyRaid.cMoonId, which is required): a match is a historical record of two SPECIFIC
+  // teams meeting, worth preserving even if one side's cMoon is later deleted — same "low-stakes,
+  // reversible" stance Ctoon.cMoonId's own SetNull already takes (see cmoons/[id].delete.js).
+  teamACMoonId      String?
+  teamBCMoonId      String?
+  // Admin-configured values snapshotted at creation — never retroactive mid-match, same discipline
+  // CMoonEnemyRaid.maxParticipants/roundLimit already follow.
+  maxTeamSize       Int
+  equalizeHpEnabled Boolean
+  equalizeHpAmount  Int?
+  roundNumber       Int                   @default(1)
+  // [{ round, participants: [{ userId, team, action, targetUserId, hit, blocked, crit, damageTaken
+  //   }], ... }, ...] — written once, at resolution, from the in-memory log accumulated over the
+  //   match, same timing/shape convention as CMoonEnemyRaid.roundLog.
+  roundLog          Json                  @default("[]")
+  joinDeadlineAt    DateTime
+  combatStartedAt   DateTime?
+  startedAt         DateTime              @default(now())
+  endedAt           DateTime?
+  // Same discoverability-only (not real access control) semantics as CMoonEnemyRaid.isPrivate —
+  // see that column's own schema comment.
+  isPrivate         Boolean               @default(false)
+  // Set only when this match was spawned from a cMoon PvP tournament round (see
+  // CMoonPvpTournamentMatch below) — null for an ordinary player-created lobby.
+  tournamentMatchId String?               @unique
+  // The map resolved for THIS match — PvP has no faction/boss concept, so this is always a
+  // weighted-random pick from the active, non-assignedEnemiesOnly pool (see resolveMapForPvp
+  // in server/utils/cmoonEnemyMap.js), snapshotted once at creation. Null only for a match
+  // created before this feature shipped.
+  mapId             String?
+
+  teamA           CMoon?                   @relation("CMoonPvpMatch_TeamA", fields: [teamACMoonId], references: [id], onDelete: SetNull)
+  teamB           CMoon?                   @relation("CMoonPvpMatch_TeamB", fields: [teamBCMoonId], references: [id], onDelete: SetNull)
+  map             CMoonEnemyMap?           @relation(fields: [mapId], references: [id], onDelete: SetNull)
+  participants    CMoonPvpParticipant[]
+  tournamentMatch CMoonPvpTournamentMatch? @relation(fields: [tournamentMatchId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([teamACMoonId])
+  @@index([teamBCMoonId])
+}
+
+// ── cMoon PvP Tournaments ────────────────────────────────────────────────────────────────────
+// A genuinely new, parallel schema from the existing GtoonTournament*/OgGtoonTournament* tables
+// (both hardcoded 1-vs-1 User FKs throughout, which cannot represent a TEAM as one side without
+// new columns) — this codebase already has three independently-duplicated 1v1 tournament
+// implementations, so a fourth, team-shaped one matches its own precedent rather than forcing a
+// risky shared abstraction onto tables built for individual competitors. The pure bracket-pairing
+// math (bracketSizeFor/buildBracketSeedPairs/bracketRoundLabel in server/utils/tournamentCore.js)
+// IS reused, by substituting CMoonPvpTournamentEntry ids for user ids — those functions are
+// ID-agnostic.
+//
+// V1 is single-elimination bracket only, admin-driven round-by-round (an admin manually opens each
+// round once both teams are ready — mirroring the simpler server/api/admin/tournaments/* flow, not
+// the cron-driven server/api/admin/og-tournaments/* one: a cron can't make two live teams show up
+// at the same instant, so admin-gated round-opening is the only model that works for a real-time
+// match). Swiss is a documented future extension, not built now — see server/utils/
+// cmoonPvpTournament.js's own header comment for where it would hook in.
+enum CMoonPvpTournamentFormat {
+  SINGLE_ELIM
+}
+
+enum CMoonPvpTournamentStatus {
+  DRAFT // admin authoring — not yet visible/joinable
+  ENTRY_OPEN // teams can opt in
+  ENTRY_CLOSED // opt-in locked, bracket generated, waiting for the admin to open round 1
+  IN_PROGRESS // at least one round's matches have been opened
+  COMPLETE
+  CANCELLED
+}
+
+model CMoonPvpTournament {
+  id               String                   @id @default(uuid())
+  name             String
+  status           CMoonPvpTournamentStatus @default(DRAFT)
+  format           CMoonPvpTournamentFormat @default(SINGLE_ELIM)
+  // Team-size cap for every entry in THIS tournament — independent of the live cMoonPvpMaxTeamSize
+  // global default, since a tournament may deliberately run smaller/larger squads than ordinary
+  // open-lobby PvP.
+  maxTeamSize      Int                      @default(4)
+  // Same admin-link-sharing semantics as CMoonEnemyMember.raidAnnouncementText's {cmoon}/{enemy}
+  // placeholder substitution — {teamA}/{teamB} here. Posted via the same sendGuildChannelMessageById
+  // primitive server/utils/discord.js already wraps for raid-boss/match announcements.
+  announcementText String?
+  discordChannelId String?
+  winnerEntryId    String?                  @unique
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  entries     CMoonPvpTournamentEntry[]
+  matches     CMoonPvpTournamentMatch[]
+  winnerEntry CMoonPvpTournamentEntry?  @relation("CMoonPvpTournament_Winner", fields: [winnerEntryId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+}
+
+// One competing TEAM in one tournament — either a whole cMoon's roster (cMoonId set) or, when the
+// tournament allows mixed squads, a captain-curated list of specific userIds (see
+// CMoonPvpTournamentEntryMember below either way: a cMoon-backed entry still enumerates exactly
+// who's eligible to play for it, same "snapshot who's actually competing" discipline as everything
+// else in this feature — a team's live roster can change after opt-in, but the entry shouldn't).
+model CMoonPvpTournamentEntry {
+  id           String   @id @default(uuid())
+  tournamentId String
+  teamName     String
+  cMoonId      String?
+  createdAt    DateTime @default(now())
+
+  tournament    CMoonPvpTournament              @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  cMoon         CMoon?                          @relation(fields: [cMoonId], references: [id], onDelete: SetNull)
+  members       CMoonPvpTournamentEntryMember[]
+  matchesAsA    CMoonPvpTournamentMatch[]       @relation("CMoonPvpTournamentMatch_EntryA")
+  matchesAsB    CMoonPvpTournamentMatch[]       @relation("CMoonPvpTournamentMatch_EntryB")
+  wonTournament CMoonPvpTournament?             @relation("CMoonPvpTournament_Winner")
+
+  @@unique([tournamentId, teamName])
+  @@index([tournamentId])
+  @@index([cMoonId])
+}
+
+// One userId eligible to actually play for a CMoonPvpTournamentEntry — populated from the whole
+// cMoon roster at opt-in time (cMoon-backed entry) or hand-picked up to the tournament's
+// maxTeamSize (mixed-squad entry).
+model CMoonPvpTournamentEntryMember {
+  id      String @id @default(uuid())
+  entryId String
+  userId  String
+
+  entry CMoonPvpTournamentEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  user  User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, userId])
+  @@index([userId])
+}
+
+// One scheduled pairing within a tournament's bracket — created for every round by
+// server/utils/cmoonPvpTournament.js's pairing logic, resolved once the admin opens it and the
+// linked live CMoonPvpMatch finishes.
+model CMoonPvpTournamentMatch {
+  id            String   @id @default(uuid())
+  tournamentId  String
+  roundNumber   Int
+  entryAId      String? // null = a bye this round
+  entryBId      String?
+  winnerEntryId String?
+  createdAt     DateTime @default(now())
+
+  tournament CMoonPvpTournament       @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  entryA     CMoonPvpTournamentEntry? @relation("CMoonPvpTournamentMatch_EntryA", fields: [entryAId], references: [id], onDelete: SetNull)
+  entryB     CMoonPvpTournamentEntry? @relation("CMoonPvpTournamentMatch_EntryB", fields: [entryBId], references: [id], onDelete: SetNull)
+  pvpMatch   CMoonPvpMatch?
+
+  @@index([tournamentId, roundNumber])
 }

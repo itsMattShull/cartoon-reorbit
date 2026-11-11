@@ -316,6 +316,26 @@ test('effectiveHitStreakThreshold: applies to any attack-specific base, floored 
   assert.equal(effectiveHitStreakThreshold(undefined, false, false), HIT_STREAK_THRESHOLD)
 })
 
+// ── Map effect: CMoonEnemyMap.specialThresholdReduction (4th param, additive with captain) ─────
+test('effectiveHitStreakThreshold: a map reduction applies even with no captain boost at all', () => {
+  assert.equal(effectiveHitStreakThreshold(4, false, false, 1), 3)
+  assert.equal(effectiveHitStreakThreshold(4, false, false, 0), 4)
+})
+
+test('effectiveHitStreakThreshold: a map reduction stacks additively with an active captain boost', () => {
+  assert.equal(effectiveHitStreakThreshold(5, true, true, 1), 3) // -1 captain, -1 map
+  assert.equal(effectiveHitStreakThreshold(5, true, false, 1), 4) // captain inactive this round, -1 map only
+})
+
+test('effectiveHitStreakThreshold: the combined reduction is still floored at 1, never 0 or negative', () => {
+  assert.equal(effectiveHitStreakThreshold(2, true, true, 5), 1)
+  assert.equal(effectiveHitStreakThreshold(1, false, false, 10), 1)
+})
+
+test('effectiveHitStreakThreshold: an omitted map reduction defaults to 0 (no behavior change)', () => {
+  assert.equal(effectiveHitStreakThreshold(4, true, true), effectiveHitStreakThreshold(4, true, true, 0))
+})
+
 // ── Raid special-attack charge banking (closeRound in cmoonRaidSocket.js) ──────────────────────
 // Regression test for a real "infinite special attacks" bug: closeRound's own banking math
 // (`p.hitStreak = Math.max(0, p.hitStreak - hitStreakThreshold)`, done once per round, in the
@@ -604,4 +624,79 @@ test('applyRaidSpecialAttack: CLEANSE_SELF boss-cast cures the boss\'s own paral
   assert.equal(raid.enemyPoisonAmount, 0)
   assert.equal(raid.enemyPoisonTurnsRemaining, 0)
   assert.equal(raid.enemyHpRemaining, 25)
+})
+
+test('applyRaidSpecialAttack: REVIVE_ALLY player-cast revives exactly ONE random knocked-out ally by default', () => {
+  const raid = makeRaid()
+  const down1 = makeParticipant('down1', { hpRemaining: 0, knockedOutAt: 10, maxHp: 20, poisonAmount: 3, poisonTurnsRemaining: 2, hitStreak: 5, specialCharged: true, pendingAction: 'ATTACK_HIGH' })
+  const down2 = makeParticipant('down2', { hpRemaining: 0, knockedOutAt: 20, maxHp: 20 })
+  const alive = makeParticipant('a')
+  raid.participants.set('down1', down1); raid.participants.set('down2', down2); raid.participants.set('a', alive)
+  const attack = { ...baseAttack, effectType: 'REVIVE_ALLY', amount: 15, healsAllies: false }
+  const events = []
+  applyRaidSpecialAttack(raid, [alive], attack, { side: 'PLAYER', userId: 'a' }, events, {})
+  const revivedCount = [down1, down2].filter(p => !p.knockedOutAt).length
+  assert.equal(revivedCount, 1) // exactly one, never both
+  const revived = down1.knockedOutAt ? down2 : down1
+  const stillDown = down1.knockedOutAt ? down1 : down2
+  assert.equal(revived.hpRemaining, 15)
+  assert.equal(stillDown.hpRemaining, 0)
+  assert.equal(events[0].fizzled, undefined)
+  assert.equal(events[0].targetUserId, revived.userId)
+})
+
+test('applyRaidSpecialAttack: REVIVE_ALLY clears poison/hitStreak/specialCharged/pendingAction on the revived ally (fresh start)', () => {
+  const raid = makeRaid()
+  const down = makeParticipant('down', { hpRemaining: 0, knockedOutAt: 10, poisonAmount: 3, poisonTurnsRemaining: 2, hitStreak: 5, specialCharged: true, pendingAction: 'ATTACK_HIGH' })
+  raid.participants.set('down', down)
+  const attack = { ...baseAttack, effectType: 'REVIVE_ALLY', amount: 15 }
+  applyRaidSpecialAttack(raid, [], attack, { side: 'PLAYER', userId: 'a' }, [], {})
+  assert.equal(down.knockedOutAt, null)
+  assert.deepEqual([down.poisonAmount, down.poisonTurnsRemaining], [0, 0])
+  assert.equal(down.hitStreak, 0)
+  assert.equal(down.specialCharged, false)
+  assert.equal(down.pendingAction, null)
+})
+
+test('applyRaidSpecialAttack: REVIVE_ALLY with healsAllies revives EVERY knocked-out ally at once', () => {
+  const raid = makeRaid()
+  const down1 = makeParticipant('down1', { hpRemaining: 0, knockedOutAt: 10, maxHp: 20 })
+  const down2 = makeParticipant('down2', { hpRemaining: 0, knockedOutAt: 20, maxHp: 20 })
+  const alive = makeParticipant('a')
+  raid.participants.set('down1', down1); raid.participants.set('down2', down2); raid.participants.set('a', alive)
+  const attack = { ...baseAttack, effectType: 'REVIVE_ALLY', amount: 15, healsAllies: true }
+  applyRaidSpecialAttack(raid, [alive], attack, { side: 'PLAYER', userId: 'a' }, [], {})
+  assert.equal(down1.knockedOutAt, null)
+  assert.equal(down2.knockedOutAt, null)
+  assert.equal(down1.hpRemaining, 15)
+  assert.equal(down2.hpRemaining, 15)
+})
+
+test('applyRaidSpecialAttack: REVIVE_ALLY clamps revived HP to the target\'s own maxHp', () => {
+  const raid = makeRaid()
+  const down = makeParticipant('down', { hpRemaining: 0, knockedOutAt: 10, maxHp: 10 })
+  raid.participants.set('down', down)
+  applyRaidSpecialAttack(raid, [], { ...baseAttack, effectType: 'REVIVE_ALLY', amount: 9999 }, { side: 'PLAYER', userId: 'a' }, [], {})
+  assert.equal(down.hpRemaining, 10)
+})
+
+test('applyRaidSpecialAttack: REVIVE_ALLY fizzles (no effect) when nobody is knocked out', () => {
+  const raid = makeRaid()
+  const alive = makeParticipant('a')
+  raid.participants.set('a', alive)
+  const events = []
+  applyRaidSpecialAttack(raid, [alive], { ...baseAttack, effectType: 'REVIVE_ALLY', amount: 15 }, { side: 'PLAYER', userId: 'a' }, events, {})
+  assert.equal(events[0].fizzled, true)
+  assert.equal(alive.hpRemaining, PLAYER_MAX_HP)
+})
+
+test('applyRaidSpecialAttack: REVIVE_ALLY has no sensible boss-side meaning — an ENEMY cast only announces, no state change', () => {
+  const raid = makeRaid()
+  const down = makeParticipant('down', { hpRemaining: 0, knockedOutAt: 10 })
+  raid.participants.set('down', down)
+  const events = []
+  applyRaidSpecialAttack(raid, [], { ...baseAttack, effectType: 'REVIVE_ALLY', amount: 15 }, { side: 'ENEMY' }, events, {})
+  assert.equal(events.length, 1)
+  assert.equal(down.knockedOutAt, 10) // untouched -- no case for ENEMY-cast REVIVE_ALLY
+  assert.equal(down.hpRemaining, 0)
 })

@@ -12,11 +12,16 @@
         <span aria-hidden="true">⚔️</span> Raid boss lobby
         <span v-if="openRaidCount" class="cmn-raid-count">{{ openRaidCount }} open</span>
       </button>
+      <button type="button" class="cmn-raid-btn" @click="openPvpLobby">
+        <span aria-hidden="true">🛡️</span> cMoon PvP
+        <span v-if="openPvpCount" class="cmn-raid-count">{{ openPvpCount }} open</span>
+      </button>
     </div>
 
     <!-- Client-only: the lobby lives on a Socket.IO connection, which must never be opened during SSR. -->
     <ClientOnly>
       <CMoonRaidLobbyModal :open="raidLobbyOpen" @close="closeRaidLobby" />
+      <CMoonPvpLobbyModal :open="pvpLobbyOpen" @close="closePvpLobby" />
     </ClientOnly>
 
     <div class="cmn-console">
@@ -201,6 +206,20 @@ function closeRaidLobby(opts) {
 }
 watch(() => route.query.raidLobby, (flag) => { if (flag) raidLobbyOpen.value = true })
 
+// ── cMoon PvP lobby — same ref-counted-subscription shape as the Raid Boss Lobby above, see that
+// section's own comments. No query-param deep link yet: PvP has no Discord/notification entry
+// point in V1 (see cmoonPvpSocket.js's own header comment on scope) to link one from.
+const pvpSocket = shallowRef(null)
+const pvpLobbyOpen = ref(false)
+const openPvpCount = computed(() => (pvpSocket.value?.lobbyMatches.value || []).filter(m =>
+  m.status === 'FORMING' && (m.teamASize < m.maxTeamSize || m.teamBSize < m.maxTeamSize)).length)
+function openPvpLobby() {
+  pvpLobbyOpen.value = true
+}
+function closePvpLobby() {
+  pvpLobbyOpen.value = false
+}
+
 // ── Seasonal updates (bottom half, admin-customizable via Manage Navigation) ─────────────────
 const seasonLoaded = ref(false)
 const seasonData = ref({ active: false, season: null, leaderboard: [], nextSeasonStartAt: null, pastSeasons: [] })
@@ -260,6 +279,8 @@ onMounted(async () => {
   raidSocket.value = useCMoonRaidSocket()
   raidSocket.value.subscribeLobby()
   if (route.query.raidLobby) raidLobbyOpen.value = true
+  pvpSocket.value = useCMoonPvpSocket()
+  pvpSocket.value.subscribeLobby()
 
   const [listResult] = await Promise.allSettled([
     $fetch('/api/cmoons', { params: { view: 'nav' } }),
@@ -279,6 +300,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (nowTimer) clearInterval(nowTimer)
   raidSocket.value?.unsubscribeLobby()
+  pvpSocket.value?.unsubscribeLobby()
 })
 
 // ── Swirl background ────────────────────────────────────────────────────

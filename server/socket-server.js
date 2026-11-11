@@ -37,6 +37,7 @@ import { recordPracticeResult } from './utils/ogGtoonPracticeRecord.js'
 import { registerOgGtoonsTutorial, startOgGtoonsTutorialSweep } from './utils/ogGtoonsTutorial.js'
 import { registerCMoonRaid, startCMoonRaidSweep, restoreCMoonRaids } from './utils/cmoonRaidSocket.js'
 import { registerCMoonRaidPreview, startCMoonRaidPreviewSweep } from './utils/cmoonRaidPreviewSocket.js'
+import { registerCMoonPvp, startCMoonPvpSweep, restoreCMoonPvpMatches } from './utils/cmoonPvpSocket.js'
 
 startDiagnostics().catch((err) => {
   console.error('[Diagnostics] failed to start (socket server):', err)
@@ -1530,6 +1531,9 @@ io.on('connection', socket => {
   // Admin-only, consequence-free raid boss preview — see server/utils/cmoonRaidPreviewSocket.js.
   registerCMoonRaidPreview(io, socket, resolveSocketUser)
 
+  // cMoon PvP — live team-vs-team battles; see server/utils/cmoonPvpSocket.js.
+  registerCMoonPvp(io, socket, resolveSocketUser)
+
   socket.on('leaveClashRoom', async ({ roomId }) => {
     try {
       // Authenticated, so this can only ever end the caller's own participation. With a
@@ -2407,6 +2411,10 @@ restoreCMoonRaids()
 // No Redis restore call — preview raids are deliberately in-memory only (see
 // cmoonRaidPreviewSocket.js's own header comment on why).
 startCMoonRaidPreviewSweep(io)
+startCMoonPvpSweep(io)
+restoreCMoonPvpMatches()
+  .then(n => { if (n) console.log(`[cmoonPvp] restored ${n} in-progress match(es) from Redis`) })
+  .catch(err => console.error('[cmoonPvp] failed to restore matches from Redis:', err))
 
 // Called by the BullMQ worker for each auction job. The settlement itself is in utils/auctionSettle.js.
 async function performAuctionClose(auctionId) {
