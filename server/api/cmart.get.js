@@ -14,7 +14,9 @@ function computeInitialCap(totalQty, percent, overrideQty) {
 
 const SALE_FEATURED_LOOKAHEAD_MS = 24 * 60 * 60 * 1000 // 24 hours — keep in sync with activeSaleCache.js
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
+  // Prices come straight from the cToon records; never let a browser/proxy serve a stored copy.
+  setHeader(event, 'Cache-Control', 'no-store')
   const now = new Date()
   const twoWeeksAhead = new Date(now.getTime() + 6 * 24 * 60 * 60 * 1000)
   const saleLookaheadEnd = new Date(now.getTime() + SALE_FEATURED_LOOKAHEAD_MS)

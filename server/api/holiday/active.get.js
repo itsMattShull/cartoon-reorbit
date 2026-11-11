@@ -1,9 +1,12 @@
 // server/api/holiday/active.get.js
-import { defineEventHandler, getRequestHeader, createError } from 'h3'
+import { defineEventHandler, getRequestHeader, createError, setHeader } from 'h3'
 import { prisma } from '@/server/prisma'
 import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
+  // Prices come straight from the cToon records; never let a browser/proxy serve a stored copy.
+  setHeader(event, 'Cache-Control', 'no-store')
+
   // 1) Auth
   const cookie = getRequestHeader(event, 'cookie') || ''
   let me
