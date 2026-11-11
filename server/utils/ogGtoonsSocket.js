@@ -56,6 +56,7 @@ import { clearLive, isPairingClosed, flagNeedsAdmin } from './ogGtoonTournamentL
 import { enqueueOgTournamentJob } from './queues.js'
 import { registerOgGtoonsTournament } from './ogGtoonsTournamentSocket.js'
 import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
+import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 
 const RECONNECT_GRACE_MS = 20_000
 // A dropped connection costs a game of a best-of-3 that is played for a prize, so tournament games
@@ -491,6 +492,44 @@ async function awardWinPoints(match, params) {
 }
 
 /**
+ * Pays the winner of a PvP match a flat amount of CMOON points — a separate currency from the
+ * regular points awardWinPoints above pays, see GlobalGameConfig.cMoonOgGtoonsWinPoints's own
+ * schema comment. Same gate as awardWinPoints: only a match played to a natural finish against
+ * another real player pays (no forfeits/ties/timeouts), and tournament games never do. Awarded
+ * LIVE, the full configured amount every time — never divided down for a daily/weekly cadence,
+ * since this is a one-off per-event award, not a snapshot-based entitlement like HIGH_SCORE/TOP10
+ * (see server/utils/cmoon.js's own perRunAward comment for that distinction). A winner with no
+ * cMoon (cMoonId null) earns nothing — there's no team to credit, same stance the ENEMY_BATTLE_WIN
+ * award in server/api/cmoon/battle/[id]/action.post.js already takes. Never throws: a points bug
+ * must not cost anyone a match result.
+ */
+async function awardCMoonWinPoints(match, params) {
+  if (!params.winnerUserId || params.outcome === 'TIE' || params.outcome === 'INCOMPLETE') return
+  if (params.endReason !== 'natural' || match.tournament) return
+  try {
+    const [cfg, winner] = await Promise.all([
+      db.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { cMoonOgGtoonsWinPoints: true } }),
+      db.user.findUnique({ where: { id: params.winnerUserId }, select: { cMoonId: true } }),
+    ])
+    const points = Math.max(0, Number(cfg?.cMoonOgGtoonsWinPoints) || 0)
+    if (points <= 0 || !winner?.cMoonId) return
+    // cMoonPoints/CMoon.teamScore are fully-recomputed aggregates, never incremented directly —
+    // see action.post.js's own identical comment on its ENEMY_BATTLE_WIN award. This CMoonScoreLog
+    // row is the only correct way to grant it; recomputeCMoonPointsForUsers below reflects it into
+    // the winner's own cMoonPoints immediately rather than waiting on the ~45-minute sweep.
+    await db.cMoonScoreLog.create({
+      data: {
+        cMoonId: winner.cMoonId, userId: params.winnerUserId, category: 'OG_GTOONS_WIN',
+        detail: match.id, points, weekStart: new Date(),
+      },
+    })
+    await recomputeCMoonPointsForUsers([params.winnerUserId])
+  } catch (err) {
+    console.error('[ogGtoons] cMoon win points failed:', err?.message || err)
+  }
+}
+
+/**
  * A tournament game that did not finish normally (stale sweep, or its pairing was decided while it
  * was running) is saved as INCOMPLETE: it never counts toward the series and is simply replayed.
  */
@@ -547,7 +586,9 @@ async function endMatch(io, match, params) {
     logAbnormalEnd(match, 'This tournament match was decided, so the game was ended.')
   }
   const saved = await persistFinishedGame(match, params)
-  // Daily-pool win points (same shared cap as TKO / Clash / RPS). Only after the match is safely saved.
+  // Daily-pool win points (same shared cap as TKO / Clash / RPS). Only after the match is safely
+  // saved — and, unlike the cMoon-points award below, its own RETURN VALUE feeds the matchEnd
+  // payload right below, so this one genuinely has to be awaited before that emit.
   const pointsAwarded = saved ? await awardWinPoints(match, params) : 0
 
   emitToPlayers(io, match, EV('matchEnd'), (uid, i) => ({
@@ -567,6 +608,11 @@ async function endMatch(io, match, params) {
   // The PvP pack reward runs only for a match that was actually saved, and AFTER matchEnd is on its way: the result screen
   // never waits on it, and a reward bug can never cost a match record. The winner hears about it in a separate event.
   if (saved) awardPvpPack(io, match).catch(err => console.error('[ogGtoons] pack reward failed:', err?.message || err))
+  // Same "after matchEnd, never block the result screen" reasoning as awardPvpPack just above —
+  // unlike awardWinPoints, nothing here feeds the emitted payload, it's pure bookkeeping the
+  // players never see a return value from. awardCMoonWinPoints already never throws on its own
+  // (internal try/catch), so this .catch is defense in depth, not a real safety net.
+  if (saved) awardCMoonWinPoints(match, params).catch(() => {})
 }
 
 /**

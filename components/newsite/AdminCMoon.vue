@@ -560,14 +560,23 @@
             <div class="text-xs font-medium mb-1.5">Solo Enemy Slayer leaderboard</div>
             <label class="cm-tap flex items-center gap-2 mb-2">
               <input type="checkbox" v-model="scoring.enemySlayerBoardEnabled" />
-              <span class="text-xs">Award points for the all-time Solo Enemy Slayers leaderboard</span>
+              <span class="text-xs">Award points for the Solo Enemy Slayers leaderboard ({{ scoring.enemySlayerWeeklyScoringEnabled ? 'last 7 days' : 'all-time' }})</span>
             </label>
+            <label v-if="scoring.enemySlayerBoardEnabled" class="cm-tap flex items-center gap-2 mb-2 ml-1">
+              <input type="checkbox" v-model="scoring.enemySlayerWeeklyScoringEnabled" />
+              <span class="text-xs">Rank by the last 7 days instead of all-time</span>
+            </label>
+            <p v-if="scoring.enemySlayerBoardEnabled" class="text-[11px] text-gray-500 mb-2 ml-1">
+              Off (default): a player's lifetime best kill total keeps them ranked #1/top-10
+              forever, even if they stop playing. On: only solo kills from the rolling last 7
+              days count, so the board stays active-players-only.
+            </p>
             <div v-if="scoring.enemySlayerBoardEnabled" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label class="block text-xs font-medium mb-1">First place points (weekly total)</label>
                 <input v-model.number="scoring.enemySlayerFirstPlacePoints" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full border rounded px-2 py-1" style="font-size:16px" />
                 <p class="text-[11px] text-gray-500 mt-1">
-                  Per player, for holding rank #1 (all-time, solo victories only) — ÷7/day ≈
+                  Per player, for holding rank #1 (solo victories only) — ÷7/day ≈
                   {{ Math.round((scoring.enemySlayerFirstPlacePoints || 0) / 7) }} pts/day. Stacks with the top-10 bonus below.
                 </p>
               </div>
@@ -582,11 +591,36 @@
             </div>
           </div>
 
+          <!-- Flat cMoon points per live OG gToons PvP win against another real player — see
+               awardOgGtoonsWinPoints in server/utils/ogGtoonsSocket.js. Awarded LIVE per match,
+               never divided by 7 like the HIGH_SCORE/TOP10 amounts above (those are a daily-
+               re-snapshotted weekly entitlement; this is a one-off per-event award). -->
+          <div class="border-t pt-3 mt-3">
+            <div class="text-xs font-medium mb-1.5">OG gToons PvP win points</div>
+            <label class="block text-xs font-medium mb-1">Points per win (full amount, awarded live)</label>
+            <input v-model.number="scoring.ogGtoonsWinPoints" type="number" min="0" max="100000" inputmode="numeric" class="cm-field w-full sm:w-40 border rounded px-2 py-1" style="font-size:16px" />
+            <p class="text-[11px] text-gray-500 mt-1">
+              Awarded to the winner of every live OG gToons match played to a natural finish
+              against another real player — never on a tie, forfeit, timeout, or tournament game
+              (those have their own prizes). 0 (default) awards nothing. Unlike every bonus
+              above, this is the full amount every time, not divided down for a daily cadence.
+            </p>
+          </div>
+
           <div class="border-t pt-3 mt-3">
             <div class="text-xs font-medium mb-1">High Score / Top 10 eligible games</div>
             <p class="text-[11px] text-gray-500 mb-2">
               A checked game's #1 holder earns High Score; everyone in its top-{{ scoring.top10RankCutoff || 10 }}
               (rank cutoff above), #1 included, earns Top 10. Unchecking a game turns off both bonuses for it.
+            </p>
+            <label class="cm-tap flex items-center gap-2 mb-2">
+              <input type="checkbox" v-model="scoring.gamesWeeklyScoringEnabled" />
+              <span class="text-xs">Rank by the last 7 days instead of all-time</span>
+            </label>
+            <p class="text-[11px] text-gray-500 mb-2">
+              Off (default): a player's lifetime best score/win-count on an eligible game keeps
+              them ranked #1/top-10 forever, even if they stop playing. On: only scores/wins from
+              the rolling last 7 days count, for every game checked below.
             </p>
 
             <div class="flex items-center justify-between mb-1">
@@ -3141,6 +3175,9 @@ const scoring = reactive({
   enemySlayerBoardEnabled: true,
   enemySlayerFirstPlacePoints: 100,
   enemySlayerTop10Points: 50,
+  gamesWeeklyScoringEnabled: false,
+  enemySlayerWeeklyScoringEnabled: false,
+  ogGtoonsWinPoints: 0,
   disabledScoreGames: [],
   disabledWinGames: [],
   runHour: 0,
@@ -3211,6 +3248,9 @@ async function loadScoring() {
       enemySlayerBoardEnabled: data.enemySlayerBoardEnabled,
       enemySlayerFirstPlacePoints: data.enemySlayerFirstPlacePoints,
       enemySlayerTop10Points: data.enemySlayerTop10Points,
+      gamesWeeklyScoringEnabled: !!data.gamesWeeklyScoringEnabled,
+      enemySlayerWeeklyScoringEnabled: !!data.enemySlayerWeeklyScoringEnabled,
+      ogGtoonsWinPoints: data.ogGtoonsWinPoints ?? 0,
       disabledScoreGames: data.disabledScoreGames || [],
       disabledWinGames: data.disabledWinGames || [],
       runHour: data.runHour ?? 0,
@@ -3304,6 +3344,9 @@ async function saveScoring() {
       enemySlayerBoardEnabled: scoring.enemySlayerBoardEnabled,
       enemySlayerFirstPlacePoints: scoring.enemySlayerFirstPlacePoints,
       enemySlayerTop10Points: scoring.enemySlayerTop10Points,
+      gamesWeeklyScoringEnabled: scoring.gamesWeeklyScoringEnabled,
+      enemySlayerWeeklyScoringEnabled: scoring.enemySlayerWeeklyScoringEnabled,
+      ogGtoonsWinPoints: scoring.ogGtoonsWinPoints,
       disabledScoreGames: scoring.disabledScoreGames,
       disabledWinGames: scoring.disabledWinGames,
       runHour: scoring.runHour,
@@ -3322,6 +3365,9 @@ async function saveScoring() {
       enemySlayerBoardEnabled: res.enemySlayerBoardEnabled,
       enemySlayerFirstPlacePoints: res.enemySlayerFirstPlacePoints,
       enemySlayerTop10Points: res.enemySlayerTop10Points,
+      gamesWeeklyScoringEnabled: !!res.gamesWeeklyScoringEnabled,
+      enemySlayerWeeklyScoringEnabled: !!res.enemySlayerWeeklyScoringEnabled,
+      ogGtoonsWinPoints: res.ogGtoonsWinPoints ?? 0,
       disabledScoreGames: res.disabledScoreGames || [],
       disabledWinGames: res.disabledWinGames || [],
       runHour: res.runHour ?? 0,
