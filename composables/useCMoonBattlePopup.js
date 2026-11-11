@@ -215,6 +215,11 @@ export function useCMoonBattlePopup() {
         isFirstWinAgainstThisEnemy.value = !!res.isFirstWinAgainstThisEnemy
         if (battle.value.outcome === 'WIN') playSound(battle.value.enemy?.victorySoundPath || RESULT_STINGER.WIN)
         else if (battle.value.outcome === 'LOSS') playSound(battle.value.enemy?.defeatSoundPath || RESULT_STINGER.LOSS)
+        // ONE global track for every capture, regardless of faction — see
+        // GlobalGameConfig.cMoonEnemyCaptureMusicPath's own schema comment. Only ever present on
+        // the response for THIS resolving round (action.post.js attaches it only on the branch
+        // that actually captures), never a persistent field on `battle` itself.
+        else if (battle.value.outcome === 'CAPTURED') playSound(res.captureMusicPath)
         // A win awards cMoon points server-side — refresh auth so the nav's own point/rank
         // display doesn't sit stale until the next unrelated refetch.
         if (battle.value.outcome === 'WIN') {

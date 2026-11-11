@@ -16,7 +16,7 @@
         <span class="rf-name">{{ participant.username || 'Player' }}</span>
         <span v-if="isPrestiged" class="rf-prestige-badge" :title="`Prestige ${prestigeLevel} — has ascended ${prestigeLevel} time${prestigeLevel === 1 ? '' : 's'}`">✦<span class="rf-prestige-text"> Prestige {{ prestigeLevel }}</span></span>
         <span v-if="isCaptain" class="rf-captain-badge" title="cMoon Captain — their presence inspires the whole party">🎖️<span class="rf-captain-text"> Captain</span></span>
-        <span v-if="participant.isInitiator" class="rf-leader" title="Started this raid">👑<span class="rf-leader-text"> Raid leader</span></span>
+        <span v-if="participant.isInitiator" class="rf-leader" title="Started this fight">👑<span class="rf-leader-text"> Leader</span></span>
         <span v-if="isMe" class="rf-you">you</span>
       </span>
       <span v-if="team?.name" class="rf-team">{{ team.name }}</span>

@@ -95,6 +95,7 @@
           >
             <template #portrait-badge>
               <span v-if="enemySpecialWarning" class="cbp-warning-badge" title="This enemy is about to unleash a special attack!">⚠</span>
+              <CMoonPokeballThrow v-if="pokeballThrow" :key="pokeballThrow.key" :captured="pokeballThrow.captured" />
             </template>
             <template #enemy-dmg-float>
               <span
@@ -119,6 +120,7 @@
                 </template>
               </p>
               <p v-if="comboCallout" class="cbp-combo-callout">{{ comboCallout }}</p>
+              <p v-if="brokeFreeBanner" class="cbp-broke-free-banner">{{ brokeFreeBanner }}</p>
               <p v-if="currentTaunt" class="cbp-taunt">&ldquo;{{ currentTaunt }}&rdquo;</p>
             </template>
             <template #special-attack>
@@ -180,6 +182,8 @@ const RANK_LABELS = { GOON: 'Goon', ENFORCER: 'Enforcer', UNDERBOSS: 'Underboss'
 
 const route = useRoute()
 const isAdminRoute = computed(() => route.path.startsWith('/newsite/admin'))
+// Only used for the player's own username in the CAPTURED result title ("{you} captured {enemy}!").
+const { user } = useAuth()
 
 const {
   visible, phase, enemy, battle, inCMoon, busy, error, lastRound, currentTaunt, isFirstWinAgainstThisEnemy,
@@ -261,6 +265,14 @@ function specialEffectDescription(attack) {
     // says so plainly rather than showing nothing.
     case 'POISON_OPPONENT': case 'SHIELD_PARTY':
       return 'This effect only works in a co-op raid — in a solo fight it fires and announces, but does nothing.'
+    // REVIVE_ALLY is the same raid-only shape as the two above, just also wired into PvP (see
+    // cmoonPvp.js) — a solo fight has no teammates to revive either way.
+    case 'REVIVE_ALLY':
+      return 'This effect only works in a co-op raid or a PvP match — in a solo fight there are no teammates to revive, so it fires and announces, but does nothing.'
+    // CATCH_ATTEMPT is the mirror image — solo-only, inert in a raid/PvP. Deals no damage either
+    // way; the roll it describes is the ENEMY's own catch rate, not this attack's accuracy.
+    case 'CATCH_ATTEMPT':
+      return "Gives a chance to CAPTURE the enemy instead of defeating it — only works against an enemy toggled \"Catchable,\" and only in a solo fight (inert in a raid or PvP). Deals no damage either way."
     default: return ''
   }
 }
@@ -323,6 +335,9 @@ const lastRoundClass = computed(() => {
 
 const resultTitle = computed(() => {
   if (battle.value?.outcome === 'WIN') return 'Victory!'
+  // Neither a win nor a loss (see CMoonEnemyBattleOutcome.CAPTURED's own schema comment) — names
+  // both the player and the enemy, matching the feature's own requested copy.
+  if (battle.value?.outcome === 'CAPTURED') return `${user.value?.username || 'You'} captured ${battle.value?.enemy?.name || 'the enemy'}!`
   if (battle.value?.outcome === 'ABANDONED') return 'Battle ended'
   // See CMoonEnemyBattleOutcome.UNCREDITED's own schema comment: the enemy is genuinely dead,
   // just not by this player's own hand — "Defeated" (implying THEY lost) would be a flat lie.
@@ -331,7 +346,7 @@ const resultTitle = computed(() => {
 })
 const resultTitleClass = computed(() => {
   // cbc- (not cbp-) — applied inside CMoonBattleCard.vue, which owns the result title element.
-  if (battle.value?.outcome === 'WIN') return 'cbc-title-win'
+  if (battle.value?.outcome === 'WIN' || battle.value?.outcome === 'CAPTURED') return 'cbc-title-win'
   if (battle.value?.outcome === 'LOSS') return 'cbc-title-loss'
   return ''
 })
@@ -456,6 +471,38 @@ watch(lastRound, (round) => {
 const enemyFloatingDamage = computed(() => floatingDamage.value.filter(d => d.side === 'enemy'))
 const playerFloatingDamage = computed(() => floatingDamage.value.filter(d => d.side === 'player'))
 
+// ── "Throw Pokeball" (CATCH_ATTEMPT) — see CMoonPokeballThrow.vue's own header comment for why
+// it's keyed/re-mounted per attempt rather than driven by internal timers. `captured: true`
+// deliberately never auto-clears here — it stays slotted into the portrait through the RESULT
+// screen too (reset only on the next fresh battle, see the phase watcher further down); a failed
+// attempt clears itself once its own CSS animation (1.4s) has had time to finish. ──────────────
+const pokeballThrow = ref(null)
+let pokeballSeq = 0
+let pokeballClearTimer = null
+const brokeFreeBanner = ref('')
+let brokeFreeTimer = null
+watch(lastRound, (round) => {
+  // side === 'PLAYER' matters here: CATCH_ATTEMPT is only ever assignable through the same
+  // CMoonSpecialAttack catalog every other special attack comes from, with nothing stopping an
+  // admin from putting it on an enemy's own faction/member special slot too — inert server-side
+  // (action.post.js's enemy-auto-fire branch has no case for it, same "no case = inert" mechanism
+  // as every other side-specific effect), but that inert ENEMY-side event still has
+  // effectType: 'CATCH_ATTEMPT' and no `brokeFree` flag, which without this filter reads as a
+  // successful PLAYER capture and wrongly shows "you caught it!" on a battle that's still going.
+  const attempt = round?.specials?.find(s => s.side === 'PLAYER' && s.effectType === 'CATCH_ATTEMPT')
+  if (!attempt) return
+  if (pokeballClearTimer) clearTimeout(pokeballClearTimer)
+  if (attempt.brokeFree) {
+    pokeballThrow.value = { key: ++pokeballSeq, captured: false }
+    pokeballClearTimer = setTimeout(() => { pokeballThrow.value = null }, 1500)
+    brokeFreeBanner.value = `${battle.value?.enemy?.name || 'The enemy'} broke free!`
+    if (brokeFreeTimer) clearTimeout(brokeFreeTimer)
+    brokeFreeTimer = setTimeout(() => { brokeFreeBanner.value = '' }, 2200)
+  } else {
+    pokeballThrow.value = { key: ++pokeballSeq, captured: true }
+  }
+})
+
 // ── Combo callout — a transient "Nx HIT STREAK!" every time playerHitStreak actually climbs
 // (never on a reset to 0, and never re-fired by an unrelated re-render of the same value, hence
 // watching the number itself rather than deriving off lastRound). Mirrors the existing special-
@@ -536,7 +583,14 @@ watch(phase, (p) => {
 // lives in a shared composable rather than duplicated here and on the raid page.
 const battleMusic = useBattleMusic()
 watch(phase, (p) => {
-  if (p === 'FIGHT') { battleMusic.start(battle.value?.enemy?.faction?.battleMusicPath); overkillAmount.value = 0 }
+  if (p === 'FIGHT') {
+    battleMusic.start(battle.value?.enemy?.faction?.battleMusicPath)
+    overkillAmount.value = 0
+    // A fresh battle starting — clear any leftover pokeball/broke-free state from a previous
+    // fight against this same enemy (OFFER -> FIGHT -> OFFER again, same popup instance reused).
+    pokeballThrow.value = null
+    brokeFreeBanner.value = ''
+  }
   else { battleMusic.stop(); showSpecialInfo.value = false }
 })
 onBeforeUnmount(() => {
@@ -546,6 +600,8 @@ onBeforeUnmount(() => {
   if (resultFlashTimer) clearTimeout(resultFlashTimer)
   if (bossIntroTimer) clearTimeout(bossIntroTimer)
   if (confettiTimer) clearTimeout(confettiTimer)
+  if (pokeballClearTimer) clearTimeout(pokeballClearTimer)
+  if (brokeFreeTimer) clearTimeout(brokeFreeTimer)
 })
 
 async function onFight() {
@@ -936,6 +992,22 @@ watch(() => route.path, maybeCheck)
 }
 @media (prefers-reduced-motion: reduce) {
   .cbp-combo-callout, .cbp-overkill { animation: none; }
+}
+
+/* "X broke free!" — a failed Throw Pokeball attempt, same escalating-moment treatment as the
+   combo callout above but in a cool blue (same family CMoonBattleCard.vue's own MISS! badge
+   already uses) since "didn't work" reads differently than "streak is climbing." */
+.cbp-broke-free-banner {
+  font-size: 14px;
+  font-weight: 800;
+  color: #38bdf8;
+  text-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+  text-align: center;
+  margin: 4px 0;
+  animation: cbp-combo-pop 0.4s ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .cbp-broke-free-banner { animation: none; }
 }
 
 /* Cosmetic difficulty tier badge — see CMoonEnemyRank's own schema comment. Colors escalate

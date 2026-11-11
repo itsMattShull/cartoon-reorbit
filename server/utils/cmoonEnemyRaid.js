@@ -163,11 +163,17 @@ export const RAID_MAX_ROUNDS_SAFETY = 300
 // (e.g. no special assigned at all). A captain's presence still lowers whatever threshold was
 // passed in by exactly 1 (floored at 1) — the same relationship the old fixed 3->2 reduction had,
 // rather than a flat override that would make every attack equally cheap regardless of its own
-// configured cost. Returns `baseThreshold` unchanged whenever the toggle is off or no captain is
-// in the party.
-export function effectiveHitStreakThreshold(baseThreshold, captainBoostEnabled, anyCaptainPresent) {
+// configured cost. `mapReduction` is the raid/match's own snapshotted
+// CMoonEnemyMap.specialThresholdReduction (0 for an ordinary match/raid, or when this helper is
+// called from a context with no map concept) — applied additively with the captain reduction,
+// symmetric for every side (unlike the captain boost, which only ever applies to the raid
+// party), still floored at 1 overall. Returns `baseThreshold` unchanged whenever the toggle is
+// off, no captain is present, and no map reduction applies.
+export function effectiveHitStreakThreshold(baseThreshold, captainBoostEnabled, anyCaptainPresent, mapReduction = 0) {
   const base = Number(baseThreshold) || HIT_STREAK_THRESHOLD
-  return (captainBoostEnabled && anyCaptainPresent) ? Math.max(1, base - 1) : base
+  const captainReduction = (captainBoostEnabled && anyCaptainPresent) ? 1 : 0
+  const totalReduction = captainReduction + (Number(mapReduction) || 0)
+  return totalReduction > 0 ? Math.max(1, base - totalReduction) : base
 }
 
 // Whether a raid boss can be started right now, given its own admin-configured
@@ -500,6 +506,30 @@ export function applyRaidSpecialAttack(raid, alive, attack, caster, specialEvent
       raid.enemyPoisonAmount = 0
       raid.enemyPoisonTurnsRemaining = 0
       if (attack.cleanseAlsoHeals) raid.enemyHpRemaining = Math.min(raid.enemyStats.maxHp, raid.enemyHpRemaining + attack.amount)
+    }
+  } else if (attack.effectType === 'REVIVE_ALLY' && caster.side === 'PLAYER') {
+    // PLAYER-only — see CMoonSpecialAttackEffectType.REVIVE_ALLY's own schema comment on why this
+    // has no sensible boss-side meaning in a raid at all (no branch for caster.side === 'ENEMY',
+    // same "fires and announces with no effect" fallback SHIELD_PARTY's own boss-cast case gets).
+    // Pulled from raid.participants directly, NOT `alive` — `alive` is this round's pre-step-1
+    // snapshot of who was ALREADY alive, which by definition excludes anyone knocked out, so it
+    // can never contain a revive target.
+    const knockedOut = Array.from(raid.participants.values()).filter(p => p.knockedOutAt)
+    if (!knockedOut.length) {
+      event.fizzled = true
+    } else {
+      const targets = attack.healsAllies ? knockedOut : [knockedOut[Math.floor(Math.random() * knockedOut.length)]]
+      for (const p of targets) {
+        p.knockedOutAt = null
+        p.hpRemaining = Math.max(1, Math.min(p.maxHp, attack.amount))
+        // Clean slate, not a frozen-at-death snapshot — same reasoning a freshly-joined
+        // participant starts from, see this function's own header comment on pendingAction/
+        // hitStreak/specialCharged defaults elsewhere in this file.
+        p.poisonAmount = 0; p.poisonTurnsRemaining = 0
+        p.hitStreak = 0; p.specialCharged = false
+        p.pendingAction = null
+      }
+      if (targets.length === 1) event.targetUserId = targets[0].userId
     }
   }
   // SHIELD_PARTY has no branch here at all when caster.side === 'PLAYER' — the cast above already

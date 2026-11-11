@@ -26,6 +26,18 @@ export default defineEventHandler(async (event) => {
           pack: { select: { id: true, name: true, imagePath: true } },
         },
       },
+      // "Throw Pokeball" capture-only reward table (see CMoonEnemyCaptureReward's own schema
+      // comment) — same "include the full rows, not just a count" shape as rewards above, for
+      // the same reason (its only removal path is its own DELETE endpoint).
+      captureRewards: {
+        orderBy: { createdAt: 'asc' },
+        include: {
+          ctoon: { select: { id: true, name: true, assetPath: true } },
+          avatar: { select: { id: true, label: true, imagePath: true } },
+          background: { select: { id: true, label: true, imagePath: true } },
+          pack: { select: { id: true, name: true, imagePath: true } },
+        },
+      },
       // Each member's wind-up/telegraph moves — same "include the full rows, not just a count"
       // shape as rewards above, since the only way to remove one is its own DELETE endpoint and
       // the admin UI needs the row ids.
@@ -76,6 +88,9 @@ export default defineEventHandler(async (event) => {
       maxParticipants: m.maxParticipants,
       raidRoundLimit: m.raidRoundLimit,
       windUpEnabled: m.windUpEnabled,
+      overrideMapId: m.overrideMapId,
+      catchable: m.catchable,
+      catchRatePercent: m.catchRatePercent,
       raidDefeatedAt: m.raidDefeatedAt,
       defeatedAt: m.defeatedAt,
       sortOrder: m.sortOrder,
@@ -86,6 +101,20 @@ export default defineEventHandler(async (event) => {
       // controls up front instead of waiting for the 400/409.
       hasBattles: (m._count?.battles ?? 0) > 0,
       rewards: m.rewards.map(r => ({
+        id: r.id,
+        rewardType: r.rewardType,
+        ctoonId: r.ctoonId,
+        avatarId: r.avatarId,
+        backgroundId: r.backgroundId,
+        packId: r.packId,
+        dropChancePercent: r.dropChancePercent,
+        quantity: r.quantity,
+        ctoon: r.ctoon,
+        avatar: r.avatar,
+        background: r.background,
+        pack: r.pack,
+      })),
+      captureRewards: m.captureRewards.map(r => ({
         id: r.id,
         rewardType: r.rewardType,
         ctoonId: r.ctoonId,

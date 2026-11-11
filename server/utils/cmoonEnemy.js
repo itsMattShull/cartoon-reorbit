@@ -48,6 +48,15 @@ export const ATTACK_ACCURACY_PERCENT_MIN = 0
 export const ATTACK_ACCURACY_PERCENT_MAX = 100
 export const ATTACK_ACCURACY_PERCENT_DEFAULT = 100
 
+// 0-100 chance a fired "Throw Pokeball" special attack (CATCH_ATTEMPT) actually captures THIS
+// member — see CMoonEnemyMember.catchRatePercent's own schema comment, and
+// rollCatchAttempt in cmoonEnemyBattle.js for the actual roll. 0 is the admin default (not 100,
+// unlike every other accuracy-style field above) since catchable itself also defaults false —
+// an admin must deliberately opt an enemy INTO being catchable before this number means anything.
+export const CATCH_RATE_PERCENT_MIN = 0
+export const CATCH_RATE_PERCENT_MAX = 100
+export const CATCH_RATE_PERCENT_DEFAULT = 0
+
 // 1-100. The flat damage THIS enemy's own landed normal attack deals to the player — see
 // CMoonEnemyMember.baseDamage's own schema comment. 1 is the admin default so an existing enemy's
 // damage output never changes until an admin dials it up, same "default reproduces pre-feature
@@ -235,6 +244,10 @@ export function isValidAttackAccuracyPercent(value) {
   return Number.isInteger(value) && value >= ATTACK_ACCURACY_PERCENT_MIN && value <= ATTACK_ACCURACY_PERCENT_MAX
 }
 
+export function isValidCatchRatePercent(value) {
+  return Number.isInteger(value) && value >= CATCH_RATE_PERCENT_MIN && value <= CATCH_RATE_PERCENT_MAX
+}
+
 export function isValidBaseDamage(value) {
   return Number.isInteger(value) && value >= BASE_DAMAGE_MIN && value <= BASE_DAMAGE_MAX
 }
@@ -315,6 +328,13 @@ export function parseFactionBody(body, existing) {
   const specialAttackId = body?.specialAttackId === undefined
     ? (existing ? existing.specialAttackId : null)
     : toOptionalId(body.specialAttackId)
+  // The battle map every raid against a member of this faction uses by default, unless that
+  // specific boss has its own overrideMapId set (see parseMemberBody below, which wins outright
+  // when present) — see CMoonEnemyMap's own schema comment. Same nullable-id shape/convention as
+  // appearEffectId/specialAttackId above.
+  const defaultMapId = body?.defaultMapId === undefined
+    ? (existing ? (existing.defaultMapId ?? null) : null)
+    : toOptionalId(body.defaultMapId)
 
   if (!isValidFactionName(name)) {
     return { ok: false, message: `Name is required (max ${FACTION_NAME_MAX_LENGTH} characters)` }
@@ -334,8 +354,11 @@ export function parseFactionBody(body, existing) {
   if (specialAttackId === undefined) {
     return { ok: false, message: 'specialAttackId must be a string id' }
   }
+  if (defaultMapId === undefined) {
+    return { ok: false, message: 'defaultMapId must be a string id' }
+  }
 
-  return { ok: true, data: { name, description, active, sortOrder, appearEffectId, specialAttackId } }
+  return { ok: true, data: { name, description, active, sortOrder, appearEffectId, specialAttackId, defaultMapId } }
 }
 
 // Shared by the member create/update endpoints, same `existing` convention as parseFactionBody.
@@ -417,6 +440,24 @@ export function parseMemberBody(body, existing) {
     ? (existing ? existing.raidRoundLimit : RAID_ROUND_LIMIT_DEFAULT)
     : toNumber(body.raidRoundLimit)
   const windUpEnabled = toBoolean(body?.windUpEnabled, existing ? !!existing.windUpEnabled : false)
+  // Overrides whichever map this member's own faction would otherwise default to (see
+  // CMoonEnemyFaction.defaultMapId) — meaningless unless isRaidBoss, but not force-cleared when
+  // isRaidBoss is toggled off, same "persists independent of the flag" stance raidRoundLimit/
+  // windUpEnabled above already take. Same nullable-id shape/convention as parseFactionBody's
+  // own defaultMapId.
+  const overrideMapId = body?.overrideMapId === undefined
+    ? (existing ? (existing.overrideMapId ?? null) : null)
+    : toOptionalId(body.overrideMapId)
+  const catchable = toBoolean(body?.catchable, existing ? !!existing.catchable : false)
+  // Forced to 0 whenever catchable is (or is becoming) false — see CMoonEnemyMember.
+  // catchRatePercent's own schema comment on why this is the ONE source of truth for "can this
+  // enemy ever be caught" rather than trusting the client to have already zeroed/disabled the
+  // field. Checked against the RESOLVED catchable value above, so an update that flips catchable
+  // off in the same request also zeroes the rate, not just a request that leaves it unchanged.
+  const catchRatePercentRaw = body?.catchRatePercent === undefined
+    ? (existing ? existing.catchRatePercent : CATCH_RATE_PERCENT_DEFAULT)
+    : toNumber(body.catchRatePercent)
+  const catchRatePercent = catchable ? catchRatePercentRaw : 0
 
   if (!factionId) {
     return { ok: false, message: 'Faction is required' }
@@ -510,6 +551,15 @@ export function parseMemberBody(body, existing) {
   if (windUpEnabled === null) {
     return { ok: false, message: 'windUpEnabled must be true or false' }
   }
+  if (overrideMapId === undefined) {
+    return { ok: false, message: 'overrideMapId must be a string id' }
+  }
+  if (catchable === null) {
+    return { ok: false, message: 'Catchable must be true or false' }
+  }
+  if (!isValidCatchRatePercent(catchRatePercent)) {
+    return { ok: false, message: `Catch rate must be a whole number between ${CATCH_RATE_PERCENT_MIN} and ${CATCH_RATE_PERCENT_MAX}` }
+  }
 
   return {
     ok: true,
@@ -517,7 +567,8 @@ export function parseMemberBody(body, existing) {
       factionId, name, maxHp, battleMode, rank, minPriorDefeats, occurrencePercent, cMoonPointsReward,
       critChanceAgainstPercent, critChanceFromPercent, attackAccuracyPercent, baseDamage, attackChancePercent, pityThreshold, firstWinBonusPoints,
       active, sortOrder,
-      isRaidBoss, raidAnnouncementText, raidOneTime, raidCooldownMinutes, maxParticipants, raidRoundLimit, windUpEnabled,
+      isRaidBoss, raidAnnouncementText, raidOneTime, raidCooldownMinutes, maxParticipants, raidRoundLimit, windUpEnabled, overrideMapId,
+      catchable, catchRatePercent,
     },
   }
 }
@@ -739,6 +790,12 @@ export const SPECIAL_ATTACK_EFFECT_TYPES = [
   // has no case for any of these three (the attack still fires and announces, just no mechanical
   // effect there).
   'POISON_OPPONENT', 'CLEANSE_SELF', 'SHIELD_PARTY',
+  // Raid + PvP (not solo) — revives a knocked-out teammate, see CMoonSpecialAttackEffectType.
+  // REVIVE_ALLY's own schema comment.
+  'REVIVE_ALLY',
+  // Solo-only, the mirror image of the raid-only block above — see CMoonSpecialAttackEffectType.
+  // CATCH_ATTEMPT's own schema comment for why neither raid nor PvP has a case for this one.
+  'CATCH_ATTEMPT',
 ]
 // Same bound for every effect type, even though they mean different units (damage/heal points,
 // paralyze turns, attack-stat delta) — simplest shared cap that comfortably covers each one;
@@ -841,7 +898,11 @@ export function parseSpecialAttackBody(body, existing) {
   const effectType = body?.effectType === undefined
     ? (existing ? existing.effectType : '')
     : (typeof body.effectType === 'string' ? body.effectType.trim() : '')
-  const amount = body?.amount === undefined
+  // Ignored/forced for CATCH_ATTEMPT (see that effectType's own schema comment — "Throw Pokeball"
+  // deals no damage/heal/etc., so the usual 1-999 "how much" number means nothing for it), same
+  // "ignore a stale value from switching the dropdown away and back" stance every other
+  // effect-specific field below already takes for ITS own effect type.
+  const amountRaw = body?.amount === undefined
     ? (existing ? existing.amount : undefined)
     : toNumber(body.amount)
   // Only meaningful for RAISE_ALLY_ATTACK (see that column's own schema comment) — validated
@@ -876,12 +937,19 @@ export function parseSpecialAttackBody(body, existing) {
   // Whether a player can choose this attack for themselves — see CMoonSpecialAttack.playerChoice's
   // own schema comment. Independent of effectType, unlike healsAllies above.
   const playerChoice = toBoolean(body?.playerChoice, existing ? !!existing.playerChoice : false)
+  // Whether this attack is reachable in cMoon PvP at all — see CMoonSpecialAttack.pvpEligible's own
+  // schema comment. Independent of effectType; defaults true (every pre-existing attack stays
+  // reachable unless an admin explicitly pulls it).
+  const pvpEligible = toBoolean(body?.pvpEligible, existing ? existing.pvpEligible !== false : true)
   // Applies to EVERY effectType, unlike every field above this point — see
   // CMoonSpecialAttack.requiredHitStreak/accuracyPercent's own schema comments.
   const requiredHitStreak = body?.requiredHitStreak === undefined
     ? (existing ? existing.requiredHitStreak : SPECIAL_ATTACK_REQUIRED_HIT_STREAK_DEFAULT)
     : toNumber(body.requiredHitStreak)
-  const accuracyPercent = body?.accuracyPercent === undefined
+  // Ignored/forced for CATCH_ATTEMPT — see that effectType's own schema comment on why there is
+  // exactly ONE success roll for a catch attempt (the target member's own catchRatePercent), not
+  // this accuracy roll stacked on top of it.
+  const accuracyPercentRaw = body?.accuracyPercent === undefined
     ? (existing ? existing.accuracyPercent : SPECIAL_ATTACK_ACCURACY_PERCENT_DEFAULT)
     : toNumber(body.accuracyPercent)
 
@@ -894,7 +962,7 @@ export function parseSpecialAttackBody(body, existing) {
   if (!isValidSpecialAttackEffectType(effectType)) {
     return { ok: false, message: `Effect must be one of ${SPECIAL_ATTACK_EFFECT_TYPES.join(', ')}` }
   }
-  if (!isValidSpecialAttackAmount(amount)) {
+  if (effectType !== 'CATCH_ATTEMPT' && !isValidSpecialAttackAmount(amountRaw)) {
     return { ok: false, message: `Amount must be a whole number between ${SPECIAL_ATTACK_AMOUNT_MIN} and ${SPECIAL_ATTACK_AMOUNT_MAX}` }
   }
   if (effectType === 'RAISE_ALLY_ATTACK' && !isValidSpecialAttackRaiseDurationRounds(raiseDurationRoundsRaw)) {
@@ -918,23 +986,32 @@ export function parseSpecialAttackBody(body, existing) {
   if (playerChoice === null) {
     return { ok: false, message: 'playerChoice must be true or false' }
   }
+  if (pvpEligible === null) {
+    return { ok: false, message: 'pvpEligible must be true or false' }
+  }
   if (!isValidSpecialAttackRequiredHitStreak(requiredHitStreak)) {
     return { ok: false, message: `Required hit streak must be a whole number between ${SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MIN} and ${SPECIAL_ATTACK_REQUIRED_HIT_STREAK_MAX}` }
   }
-  if (!isValidSpecialAttackAccuracyPercent(accuracyPercent)) {
+  if (effectType !== 'CATCH_ATTEMPT' && !isValidSpecialAttackAccuracyPercent(accuracyPercentRaw)) {
     return { ok: false, message: `Accuracy percent must be a whole number between ${SPECIAL_ATTACK_ACCURACY_PERCENT_MIN} and ${SPECIAL_ATTACK_ACCURACY_PERCENT_MAX}` }
   }
-  const healsAllies = (effectType === 'HEAL_SELF' || effectType === 'SIPHON_HEALTH' || effectType === 'CLEANSE_SELF') ? healsAlliesRaw : false
+  // REVIVE_ALLY reuses this same field as "revive one random knocked-out ally (off) vs. every
+  // knocked-out ally (on)" — see CMoonSpecialAttackEffectType.REVIVE_ALLY's own schema comment.
+  const healsAllies = (effectType === 'HEAL_SELF' || effectType === 'SIPHON_HEALTH' || effectType === 'CLEANSE_SELF' || effectType === 'REVIVE_ALLY') ? healsAlliesRaw : false
   const cleanseAlsoHeals = effectType === 'CLEANSE_SELF' ? cleanseAlsoHealsRaw : false
   const raiseDurationRounds = effectType === 'RAISE_ALLY_ATTACK' ? raiseDurationRoundsRaw : SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT
   const reflectPercent = effectType === 'REFLECT_DAMAGE' ? reflectPercentRaw : SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT
   const siphonPercent = effectType === 'SIPHON_HEALTH' ? siphonPercentRaw : SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT
   const poisonDurationRounds = effectType === 'POISON_OPPONENT' ? poisonDurationRoundsRaw : SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT
+  // Fixed, ignored values for CATCH_ATTEMPT — see amountRaw/accuracyPercentRaw's own comments
+  // above for why neither the usual "how much" nor "chance this cast lands" number applies here.
+  const amount = effectType === 'CATCH_ATTEMPT' ? 1 : amountRaw
+  const accuracyPercent = effectType === 'CATCH_ATTEMPT' ? 100 : accuracyPercentRaw
 
   return {
     ok: true,
     data: {
-      name, description, effectType, amount, healsAllies, playerChoice, raiseDurationRounds, reflectPercent, siphonPercent,
+      name, description, effectType, amount, healsAllies, playerChoice, pvpEligible, raiseDurationRounds, reflectPercent, siphonPercent,
       poisonDurationRounds, cleanseAlsoHeals, requiredHitStreak, accuracyPercent,
     },
   }

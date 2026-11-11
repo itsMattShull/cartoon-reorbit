@@ -72,6 +72,9 @@ export default defineEventHandler(async (event) => {
   const enemySlayerBoardEnabled = !!body?.enemySlayerBoardEnabled
   const enemySlayerFirstPlacePoints = requireInt(body?.enemySlayerFirstPlacePoints, { min: POINTS_MIN, max: POINTS_MAX, label: 'Solo Enemy Slayer first place points' })
   const enemySlayerTop10Points = requireInt(body?.enemySlayerTop10Points, { min: POINTS_MIN, max: POINTS_MAX, label: 'Solo Enemy Slayer top 10 points' })
+  const gamesWeeklyScoringEnabled = !!body?.gamesWeeklyScoringEnabled
+  const enemySlayerWeeklyScoringEnabled = !!body?.enemySlayerWeeklyScoringEnabled
+  const ogGtoonsWinPoints = requireInt(body?.ogGtoonsWinPoints, { min: POINTS_MIN, max: POINTS_MAX, label: 'OG gToons PvP win points' })
   const disabledScoreGames = requireGameKeyList(body?.disabledScoreGames, SCORE_GAME_KEYS, 'Disabled score games')
   const disabledWinGames = requireGameKeyList(body?.disabledWinGames, WIN_GAME_KEYS, 'Disabled win games')
   const runHour = requireInt(body?.runHour, { min: 0, max: 23, label: 'Run hour' })
@@ -89,6 +92,9 @@ export default defineEventHandler(async (event) => {
     cMoonEnemySlayerBoardEnabled: enemySlayerBoardEnabled,
     cMoonEnemySlayerFirstPlacePoints: enemySlayerFirstPlacePoints,
     cMoonEnemySlayerTop10Points: enemySlayerTop10Points,
+    cMoonGamesWeeklyScoringEnabled: gamesWeeklyScoringEnabled,
+    cMoonEnemySlayerWeeklyScoringEnabled: enemySlayerWeeklyScoringEnabled,
+    cMoonOgGtoonsWinPoints: ogGtoonsWinPoints,
     cMoonDisabledScoreGames: disabledScoreGames,
     cMoonDisabledWinGames: disabledWinGames,
     cMoonScoringRunHour: runHour,
@@ -124,6 +130,9 @@ export default defineEventHandler(async (event) => {
     enemySlayerBoardEnabled: updated.cMoonEnemySlayerBoardEnabled,
     enemySlayerFirstPlacePoints: updated.cMoonEnemySlayerFirstPlacePoints,
     enemySlayerTop10Points: updated.cMoonEnemySlayerTop10Points,
+    gamesWeeklyScoringEnabled: updated.cMoonGamesWeeklyScoringEnabled,
+    enemySlayerWeeklyScoringEnabled: updated.cMoonEnemySlayerWeeklyScoringEnabled,
+    ogGtoonsWinPoints: updated.cMoonOgGtoonsWinPoints,
     disabledScoreGames: updated.cMoonDisabledScoreGames,
     disabledWinGames: updated.cMoonDisabledWinGames,
     runHour: updated.cMoonScoringRunHour,

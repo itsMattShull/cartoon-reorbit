@@ -512,6 +512,9 @@ function validatePayload(payload) {
       throw createError({ statusCode: 400, statusMessage: '"pointsPerWin" must be a whole number of 0 or more' })
     }
   } else if (payload.gameName === 'OgGtoons') {
+    if (payload.pointsPerWin != null && (!Number.isInteger(payload.pointsPerWin) || payload.pointsPerWin < 0)) {
+      throw createError({ statusCode: 400, statusMessage: '"pointsPerWin" must be a whole number of 0 or more' })
+    }
     // Visibility switches need no range-check; the reveal pacing values do.
     for (const [key, limit] of Object.entries(OG_REVEAL_FIELDS)) {
       const v = payload[key]
@@ -913,6 +916,7 @@ export default defineEventHandler(async (event) => {
       } else if (gameName === 'OgGtoons') {
         // Explicit null checks, not truthiness ones: `false` is the whole point of each field.
         const ogGtoonsData = {}
+        if (body.pointsPerWin != null) ogGtoonsData.pointsPerWin = body.pointsPerWin
         for (const key of ['ogGtoonsMatchmakingEnabled', 'ogGtoonsGameEnabled', 'ogGtoonsDeckBuildingEnabled', 'ogGtoonsLeaderboardEnabled', 'ogGtoonsPracticeEnabled', 'ogGtoonsTournamentsEnabled', 'ogGtoonsGamesPageVisible']) {
           if (body[key] != null) ogGtoonsData[key] = Boolean(body[key])
         }
@@ -1201,6 +1205,9 @@ export default defineEventHandler(async (event) => {
             }
           }
         } else if (gameName === 'OgGtoons') {
+          if (body.pointsPerWin != null && before?.pointsPerWin !== body.pointsPerWin) {
+            await logAdminChange(tx, { userId: me.id, area, key: 'pointsPerWin', prevValue: before?.pointsPerWin, newValue: body.pointsPerWin })
+          }
           // The reward gives out real items, so a change is audited with the pack's NAME, not just its id.
           if (winPackAudit && winPackAudit.prev !== winPackAudit.next) {
             await logAdminChange(tx, { userId: me.id, area: 'GameConfig:OgGtoons', key: 'pvpWinPackReward', prevValue: winPackAudit.prev, newValue: winPackAudit.next })

@@ -130,6 +130,25 @@ function serializeRaid(raid) {
     speedVotes: Array.from(raid.speedVotes || []),
     windUpMoves: raid.windUpMoves,
     currentWindUp: raid.currentWindUp,
+    // The map resolved for this raid at creation (see resolveMapForRaid in
+    // server/utils/cmoonEnemyMap.js) — same missing-field trap as every other snapshot above;
+    // without these, a restart would silently drop the raid back to no map/no hazard effects
+    // mid-fight.
+    mapId: raid.mapId,
+    mapName: raid.mapName,
+    mapIsBaseMap: raid.mapIsBaseMap,
+    mapBackgroundAnimation: raid.mapBackgroundAnimation,
+    mapBackgroundColor: raid.mapBackgroundColor,
+    mapSpecialThresholdReduction: raid.mapSpecialThresholdReduction,
+    mapPoisonAmount: raid.mapPoisonAmount,
+    mapPoisonIntervalRounds: raid.mapPoisonIntervalRounds,
+    mapPoisonAffectsPlayers: raid.mapPoisonAffectsPlayers,
+    mapPoisonAffectsEnemies: raid.mapPoisonAffectsEnemies,
+    mapHealAmount: raid.mapHealAmount,
+    mapHealIntervalRounds: raid.mapHealIntervalRounds,
+    mapHealAffectsPlayers: raid.mapHealAffectsPlayers,
+    mapHealAffectsEnemies: raid.mapHealAffectsEnemies,
+    mapFogOfWarEnabled: raid.mapFogOfWarEnabled,
   }
 }
 

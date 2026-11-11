@@ -525,7 +525,7 @@ test('parseSpecialAttackBody: a valid create body parses with trimmed name and t
   assert.equal(result.ok, true)
   assert.deepEqual(result.data, {
     name: 'Toxic Bite', description: null, effectType: 'DAMAGE_OPPONENT', amount: 10,
-    healsAllies: false, playerChoice: false, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
+    healsAllies: false, playerChoice: false, pvpEligible: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
     reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
     poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT, cleanseAlsoHeals: false,
     requiredHitStreak: SPECIAL_ATTACK_REQUIRED_HIT_STREAK_DEFAULT, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_DEFAULT,
@@ -552,7 +552,7 @@ test('parseSpecialAttackBody: a blank/null description normalizes to null, a rea
 test('parseSpecialAttackBody: on update, an omitted field falls back to the existing row, not a bare default', () => {
   const existing = {
     name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7,
-    healsAllies: true, playerChoice: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
+    healsAllies: true, playerChoice: true, pvpEligible: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
     reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
     poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT, cleanseAlsoHeals: false,
     requiredHitStreak: 5, accuracyPercent: 80,
@@ -561,11 +561,26 @@ test('parseSpecialAttackBody: on update, an omitted field falls back to the exis
   assert.equal(result.ok, true)
   assert.deepEqual(result.data, {
     name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 20,
-    healsAllies: true, playerChoice: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
+    healsAllies: true, playerChoice: true, pvpEligible: true, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
     reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
     poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT, cleanseAlsoHeals: false,
     requiredHitStreak: 5, accuracyPercent: 80,
   })
+})
+
+test('parseSpecialAttackBody: pvpEligible defaults true on create, is settable to false, and rejects non-booleans', () => {
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody }).data.pvpEligible, true)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, pvpEligible: false }).data.pvpEligible, false)
+  assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, pvpEligible: 'nope' }).ok, false)
+  // On update, an omitted pvpEligible falls back to the existing row, same as every other field.
+  const existing = {
+    name: 'Old Name', description: 'Old desc', effectType: 'HEAL_SELF', amount: 7,
+    healsAllies: true, playerChoice: true, pvpEligible: false, raiseDurationRounds: SPECIAL_ATTACK_RAISE_DURATION_ROUNDS_DEFAULT,
+    reflectPercent: SPECIAL_ATTACK_REFLECT_PERCENT_DEFAULT, siphonPercent: SPECIAL_ATTACK_SIPHON_PERCENT_DEFAULT,
+    poisonDurationRounds: SPECIAL_ATTACK_POISON_DURATION_ROUNDS_DEFAULT, cleanseAlsoHeals: false,
+    requiredHitStreak: 5, accuracyPercent: 80,
+  }
+  assert.equal(parseSpecialAttackBody({}, existing).data.pvpEligible, false)
 })
 
 // ── raiseDurationRounds (RAISE_ALLY_ATTACK's own non-stacking duration, see its schema comment) ──
@@ -597,7 +612,7 @@ test('parseSpecialAttackBody: raiseDurationRounds is only ever stored when effec
   assert.equal(raiseResult.data.raiseDurationRounds, 250)
 })
 
-test('parseSpecialAttackBody: healsAllies is only ever stored true when effectType is HEAL_SELF or SIPHON_HEALTH', () => {
+test('parseSpecialAttackBody: healsAllies is only ever stored true when effectType is HEAL_SELF, SIPHON_HEALTH, CLEANSE_SELF, or REVIVE_ALLY', () => {
   // A truthy healsAllies sent alongside any other effectType is silently normalized to false —
   // see that field's own schema comment on why this is never trusted to the client/admin UI alone.
   const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'DAMAGE_OPPONENT', healsAllies: true })
@@ -611,6 +626,12 @@ test('parseSpecialAttackBody: healsAllies is only ever stored true when effectTy
   const siphonResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'SIPHON_HEALTH', healsAllies: true })
   assert.equal(siphonResult.ok, true)
   assert.equal(siphonResult.data.healsAllies, true)
+
+  // REVIVE_ALLY reuses this same field as "revive one random knocked-out ally (off) vs. every
+  // knocked-out ally (on)" — see CMoonSpecialAttackEffectType.REVIVE_ALLY's own schema comment.
+  const reviveResult = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'REVIVE_ALLY', healsAllies: true })
+  assert.equal(reviveResult.ok, true)
+  assert.equal(reviveResult.data.healsAllies, true)
 })
 
 test('parseSpecialAttackBody: an omitted healsAllies defaults to false on create', () => {
@@ -730,6 +751,36 @@ test('parseSpecialAttackBody: accuracyPercent defaults to the DEFAULT constant a
   assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_MAX }).ok, true)
   assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_MIN - 1 }).ok, false)
   assert.equal(parseSpecialAttackBody({ ...baseSpecialAttackBody, accuracyPercent: SPECIAL_ATTACK_ACCURACY_PERCENT_MAX + 1 }).ok, false)
+})
+
+// ── CATCH_ATTEMPT ("Throw Pokeball") — amount and accuracyPercent are both ignored/forced, since
+// there's exactly ONE success roll for this ability (the target member's own catchRatePercent,
+// rolled elsewhere via rollCatchAttempt) ───────────────────────────────────────────────────────
+test('parseSpecialAttackBody: CATCH_ATTEMPT is a valid effectType and ignores amount entirely', () => {
+  const result = parseSpecialAttackBody({ name: 'Throw Pokeball', description: null, effectType: 'CATCH_ATTEMPT' }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.effectType, 'CATCH_ATTEMPT')
+  // amount is normally required (1-999) and this body omits it entirely — CATCH_ATTEMPT must not
+  // reject that the way every other effectType would.
+  assert.equal(typeof result.data.amount, 'number')
+})
+
+test('parseSpecialAttackBody: CATCH_ATTEMPT forces accuracyPercent to 100 regardless of what was submitted', () => {
+  const result = parseSpecialAttackBody({ ...baseSpecialAttackBody, effectType: 'CATCH_ATTEMPT', accuracyPercent: 1 }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.accuracyPercent, 100)
+})
+
+test('parseSpecialAttackBody: switching a stored CATCH_ATTEMPT attack to another effectType re-validates amount normally', () => {
+  const existing = {
+    ...baseSpecialAttackBody, effectType: 'CATCH_ATTEMPT', amount: 1, accuracyPercent: 100,
+    requiredHitStreak: SPECIAL_ATTACK_REQUIRED_HIT_STREAK_DEFAULT,
+  }
+  const result = parseSpecialAttackBody({ effectType: 'DAMAGE_OPPONENT' }, existing)
+  // existing.amount (1) satisfies SPECIAL_ATTACK_AMOUNT_MIN — the point is amount IS validated
+  // once the effectType is no longer CATCH_ATTEMPT, not that this particular value happens to pass.
+  assert.equal(result.ok, true)
+  assert.equal(result.data.amount, 1)
 })
 
 test('isValidSpecialAttackPoisonDurationRounds/isValidSpecialAttackRequiredHitStreak/isValidSpecialAttackAccuracyPercent reject non-integers and out-of-range values', () => {
@@ -907,6 +958,48 @@ test('parseMemberBody: an update with no raidRoundLimit field in the body keeps 
   const result = parseMemberBody({ name: 'Renamed' }, existing)
   assert.equal(result.ok, true)
   assert.equal(result.data.raidRoundLimit, 400)
+})
+
+// ── catchable / catchRatePercent ("Throw Pokeball") ───────────────────────
+test('parseMemberBody: catchable and catchRatePercent both default off/0 on create when omitted', () => {
+  const result = parseMemberBody({ ...baseMemberBody }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.catchable, false)
+  assert.equal(result.data.catchRatePercent, 0)
+})
+
+test('parseMemberBody: catchRatePercent is stored as submitted while catchable is true', () => {
+  const result = parseMemberBody({ ...baseMemberBody, catchable: true, catchRatePercent: 35 }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.catchable, true)
+  assert.equal(result.data.catchRatePercent, 35)
+})
+
+test('parseMemberBody: catchRatePercent is FORCED to 0 whenever catchable is false, even if a nonzero rate was submitted', () => {
+  const result = parseMemberBody({ ...baseMemberBody, catchable: false, catchRatePercent: 80 }, undefined)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.catchRatePercent, 0)
+})
+
+test('parseMemberBody: toggling catchable off in an update also zeroes a previously-set catch rate, even with no catchRatePercent field in this request', () => {
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, catchable: true, catchRatePercent: 60 }
+  const result = parseMemberBody({ catchable: false }, existing)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.catchable, false)
+  assert.equal(result.data.catchRatePercent, 0)
+})
+
+test('parseMemberBody: an update with neither field keeps the existing catchable/catchRatePercent', () => {
+  const existing = { ...baseMemberBody, rank: 'GOON', active: true, sortOrder: 0, critChanceAgainstPercent: 0, critChanceFromPercent: 0, attackAccuracyPercent: 100, baseDamage: 1, catchable: true, catchRatePercent: 42 }
+  const result = parseMemberBody({ name: 'Renamed' }, existing)
+  assert.equal(result.ok, true)
+  assert.equal(result.data.catchable, true)
+  assert.equal(result.data.catchRatePercent, 42)
+})
+
+test('parseMemberBody: rejects a catchRatePercent outside 0-100 while catchable', () => {
+  assert.equal(parseMemberBody({ ...baseMemberBody, catchable: true, catchRatePercent: -1 }, undefined).ok, false)
+  assert.equal(parseMemberBody({ ...baseMemberBody, catchable: true, catchRatePercent: 101 }, undefined).ok, false)
 })
 
 // ── Wind-up/telegraph moves ───────────────────────────────────────────────
