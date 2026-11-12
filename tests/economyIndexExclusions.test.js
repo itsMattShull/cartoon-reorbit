@@ -40,11 +40,23 @@ test('Prisma is imported for the Prisma.join fragment composition', () => {
   assert.match(aggregate, /import \{ Prisma \} from '@prisma\/client'/)
 })
 
-test('the inflation index excludes cToons minted more than 400 times', () => {
+test('the inflation endpoint returns both the full index and a second, ex-high-mints variant (> 400 mints excluded) rather than replacing one with the other', () => {
   assert.match(inflation, /const HIGH_MINT_EXCLUSION_THRESHOLD = 400/)
   const fn = inflation.slice(inflation.indexOf('async function computeInflation'), inflation.indexOf('export default'))
   assert.match(fn, /JOIN "Ctoon" c ON c\.id = cpd\."ctoonId"/)
   assert.match(fn, /c\."totalMinted" <= \$\{HIGH_MINT_EXCLUSION_THRESHOLD\}/)
+  assert.match(fn, /exHighMints: deriveIndex\(/)
+  // The full-index numbers (top-level available/indexThisWeek/pctChange/direction)
+  // are still returned unfiltered alongside exHighMints, not replaced by it.
+  assert.match(fn, /\.\.\.deriveIndex\(row\.thisWeekSum \|\| 0, row\.thisWeekVolume \|\| 0, row\.lastWeekSum \|\| 0, row\.lastWeekVolume \|\| 0\)/)
+  // The real cutoff travels to the client in the response itself, so the
+  // explanation modal never has to hardcode a copy that could drift from it.
+  assert.match(fn, /highMintExclusionThreshold: HIGH_MINT_EXCLUSION_THRESHOLD/)
+})
+
+test('deriveIndex is one shared helper, not two copies of the same math', () => {
+  const matches = inflation.match(/function deriveIndex\(/g) || []
+  assert.equal(matches.length, 1)
 })
 
 test('economyFilters.js keeps its own separate, opt-in 500 browse-filter cutoff unchanged', () => {
