@@ -185,6 +185,15 @@ const isAdminRoute = computed(() => route.path.startsWith('/newsite/admin'))
 // Only used for the player's own username in the CAPTURED result title ("{you} captured {enemy}!").
 const { user } = useAuth()
 
+// Settings page's "Mute sounds" row (composables/useHapticSoundsPref.js) — shared `useState`,
+// same pattern pages/newsite/cmoon-raid/[id].vue already uses for its own battle music. hydrate()
+// is normally already a no-op here by the time any battle plays: layouts/newsite-template.vue's
+// onMounted both mounts this component AND calls useClickSoundEffects().install() (which hydrates
+// this same shared ref) on every page load. Called again here anyway, defensively, so this
+// component's own sound gating never depends on that other composable continuing to run first.
+const { enabled: soundsEnabled, hydrate: hydrateSoundsPref } = useHapticSoundsPref()
+onMounted(() => { hydrateSoundsPref() })
+
 const {
   visible, phase, enemy, battle, inCMoon, busy, error, lastRound, currentTaunt, isFirstWinAgainstThisEnemy,
   raidPrivateLobbiesEnabled, raidSoloQueueEnabled,
@@ -584,7 +593,7 @@ watch(phase, (p) => {
 const battleMusic = useBattleMusic()
 watch(phase, (p) => {
   if (p === 'FIGHT') {
-    battleMusic.start(battle.value?.enemy?.faction?.battleMusicPath)
+    if (soundsEnabled.value) battleMusic.start(battle.value?.enemy?.faction?.battleMusicPath)
     overkillAmount.value = 0
     // A fresh battle starting — clear any leftover pokeball/broke-free state from a previous
     // fight against this same enemy (OFFER -> FIGHT -> OFFER again, same popup instance reused).
@@ -592,6 +601,15 @@ watch(phase, (p) => {
     brokeFreeBanner.value = ''
   }
   else { battleMusic.stop(); showSpecialInfo.value = false }
+})
+// Toggling "Mute sounds" mid-fight (e.g. from another tab, or the Settings page itself) should
+// take effect immediately rather than waiting for the next phase change — the watch above only
+// re-evaluates on a phase TRANSITION, and a battle already in FIGHT never has another one until
+// it resolves. Mirrors pages/newsite/cmoon-raid/[id].vue's identical watch for raid battle music.
+watch(soundsEnabled, (on) => {
+  if (phase.value !== 'FIGHT') return
+  if (on) battleMusic.start(battle.value?.enemy?.faction?.battleMusicPath)
+  else battleMusic.stop()
 })
 onBeforeUnmount(() => {
   battleMusic.stop()
