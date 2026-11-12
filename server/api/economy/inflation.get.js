@@ -22,11 +22,23 @@ const CACHE_TTL = 60
 
 const FLAT_THRESHOLD_PCT = 0.05 // below this, "up"/"down" would just be sub-percent floating-point noise
 
+// A cToon minted MORE than this many times is common enough that its sale
+// volume can swing this volume-weighted average on sheer supply rather than
+// on anything meaningful about demand — excluded from the index only (the
+// per-source Top 10/trending/history views elsewhere on the Economy page stay
+// unfiltered, since a common cToon's own price history is still legitimate
+// data to look up there). Deliberately a separate, stricter, always-on cutoff
+// from economyFilters.js's HIGH_MINT_THRESHOLD (500) — that one is an opt-in
+// browse filter for the per-cToon list, this one is a fixed policy for the
+// single glanceable index figure.
+const HIGH_MINT_EXCLUSION_THRESHOLD = 400
+
 async function computeInflation() {
   // Both weeks pulled in one query so the two aggregates are computed from an
-  // identical snapshot of the table. Filters on `date` alone, no `source`
-  // predicate, so this is served by CtoonPriceDaily's @@index([date, ctoonId,
-  // volume]) the same way trending.get.js's date-only query is.
+  // identical snapshot of the table. Joined to Ctoon only to apply the
+  // high-mint exclusion above; still served by CtoonPriceDaily's
+  // @@index([date, ctoonId, volume]) the same way trending.get.js's
+  // date-only query is, since the join is on Ctoon's own primary key.
   const rows = await prisma.$queryRaw`
     SELECT
       (SUM(cpd."avgPrice" * cpd."volume") FILTER (
@@ -46,7 +58,9 @@ async function computeInflation() {
           AND cpd."date" < NOW() - INTERVAL '7 days'
       ))::int AS "lastWeekVolume"
     FROM "CtoonPriceDaily" cpd
+    JOIN "Ctoon" c ON c.id = cpd."ctoonId"
     WHERE cpd."date" >= NOW() - INTERVAL '14 days'
+      AND c."totalMinted" <= ${HIGH_MINT_EXCLUSION_THRESHOLD}
   `
   const row = rows[0] || {}
   const thisWeekVolume = row.thisWeekVolume || 0

@@ -27,8 +27,10 @@
 // Incremental runs find which *days* saw new activity since the cursor, then
 // recompute those days in full. Recomputing only the new rows would corrupt
 // the average for a day that was already partially aggregated.
+import { Prisma } from '@prisma/client'
 import { prisma } from '../prisma.js'
 import { getAuctionReferenceValues, getCmartPrices, pickReferenceValue } from '../utils/economyValuation.js'
+import { getSystemUserIds } from '../utils/systemAccounts.js'
 
 const LOCK_KEY = 847362910 // arbitrary constant unique to this job, for pg_try_advisory_lock
 const SAFETY_BUFFER_MS = 5 * 60 * 1000 // re-scan a trailing window each run to catch stragglers
@@ -74,18 +76,37 @@ async function replaceDays(source, dates, rows) {
 }
 
 async function aggregateAuctions(sinceDate) {
+  // The house/system account(s) — see server/utils/systemAccounts.js. auctions.post.js
+  // seeds every "insta-bid" auction's initial bid from CartoonReOrbitOfficial
+  // (createInitialBid, ~line 234); when nobody else ever bids, the auction closes with
+  // that account as the "winner" at the rarity-floor seed price. That's not a sale
+  // between two players, just the seed bid closing out unclaimed, so it's excluded the
+  // same way server/utils/economyValuation.js's getAuctionReferenceValues already
+  // excludes it from trade-value imputation — same cached ids, same reasoning. A real
+  // player outbidding the seed becomes the winner instead, so this never touches a real sale.
+  const excludeIds = await getSystemUserIds()
+
   // COALESCE to endAt because winnerAt was only added in the
   // 20250611235321_auction_bids_and_winner migration — every auction closed
   // before then has winnerAt NULL (the old closedAt column was dropped), and
   // keying on winnerAt alone silently skips all of that history.
+  //
+  // `dates` (used below to decide which days' stored rows to replace) comes from this
+  // query alone, independent of the per-ctoon `rows` query right after — a day where
+  // every closed/won auction turns out to be a system-account no-bid win still needs its
+  // stale CtoonPriceDaily rows cleared, even though the per-ctoon query returns nothing
+  // for that day.
+  const touchedRows = await prisma.$queryRaw`
+    SELECT DISTINCT date_trunc('day', COALESCE(a."winnerAt", a."endAt")) AS d
+    FROM "Auction" a
+    WHERE a.status = 'CLOSED'
+      AND a."winnerId" IS NOT NULL
+      AND COALESCE(a."winnerAt", a."endAt") > ${sinceDate}
+  `
+  const dates = touchedRows.map(r => r.d)
+  if (!dates.length) return { days: 0, rows: 0 }
+
   const rows = await prisma.$queryRaw`
-    WITH touched AS (
-      SELECT DISTINCT date_trunc('day', COALESCE(a."winnerAt", a."endAt")) AS d
-      FROM "Auction" a
-      WHERE a.status = 'CLOSED'
-        AND a."winnerId" IS NOT NULL
-        AND COALESCE(a."winnerAt", a."endAt") > ${sinceDate}
-    )
     SELECT
       uc."ctoonId" AS "ctoonId",
       date_trunc('day', COALESCE(a."winnerAt", a."endAt")) AS "date",
@@ -95,11 +116,11 @@ async function aggregateAuctions(sinceDate) {
     JOIN "UserCtoon" uc ON a."userCtoonId" = uc.id
     WHERE a.status = 'CLOSED'
       AND a."winnerId" IS NOT NULL
-      AND date_trunc('day', COALESCE(a."winnerAt", a."endAt")) IN (SELECT d FROM touched)
+      AND a."winnerId" NOT IN (${Prisma.join(excludeIds.length ? excludeIds : [''])})
+      AND date_trunc('day', COALESCE(a."winnerAt", a."endAt")) = ANY(${dates}::timestamp[])
     GROUP BY 1, 2
   `
 
-  const dates = [...new Set(rows.map(r => r.date.getTime()))].map(t => new Date(t))
   await replaceDays('AUCTION', dates, rows.map(r => ({
     ctoonId: r.ctoonId,
     source: 'AUCTION',
