@@ -7,7 +7,7 @@
 
       <template v-else>
         <div
-          class="cr-card bg-white rounded border p-4 space-y-3"
+          class="cr-card rounded border p-4 space-y-3"
           :class="{ 'cr-result-flash-win': resultFlash === 'win', 'cr-result-flash-loss': resultFlash === 'loss' }"
         >
           <div class="flex items-center justify-between gap-3">
@@ -594,6 +594,17 @@ function participantHpFillClass(p) {
 }
 .cr-shake { animation: cr-shake-kf 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
 @media (prefers-reduced-motion: reduce) { .cr-shake { animation: none; } }
+
+/* Same fix as pages/newsite/cmoon-raid/[id].vue's own .cr-card rule — see that file's comment.
+   CMoonEnemyMapBackground is a fixed, full-viewport, z-index:-1 layer, but this card's old
+   opaque bg-white covers nearly the whole screen on a phone, leaving the backdrop visible only
+   in a thin margin at its own already-subtle opacity — which is why a configured map's effect
+   was never actually noticeable. A flat rgba scrim, not backdrop-filter: blur — same
+   continuous-recomposite cost pages/newsite/blackjack.vue's own comment already avoids, worse
+   here since this card never leaves the screen for an entire battle. */
+.cr-card {
+  background: rgba(255, 255, 255, 0.86);
+}
 
 .cr-result-flash-win, .cr-result-flash-loss { position: relative; }
 .cr-result-flash-win::after, .cr-result-flash-loss::after {
