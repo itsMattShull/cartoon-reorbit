@@ -703,7 +703,9 @@ function triggerShake(isCrit) {
 // toggling it in another tab/on the settings page takes effect here without a page reload; the
 // battleMusic watch below reacts to it live, and this guard covers every one-shot effect (hit/
 // block/special/taunt/appear/victory/defeat) in one place rather than at each call site.
-const { enabled: soundsEnabled, hydrate: hydrateSoundsPref } = useHapticSoundsPref()
+// plugins/hapticSoundsPref.client.js hydrates this from localStorage before the app ever mounts,
+// so `soundsEnabled.value` is already correct the first time anything here reads it.
+const { enabled: soundsEnabled } = useHapticSoundsPref()
 function playSound(path) {
   if (!path || !soundsEnabled.value || typeof window === 'undefined') return
   try {
@@ -890,7 +892,6 @@ watch(() => raid.value?.status, (status) => {
 })
 
 onMounted(() => {
-  hydrateSoundsPref()
   raidSocket.getState(raidId.value)
   countdownTimer = setInterval(() => { tickCountdown(); tickSecondsSinceStart() }, 250)
   roundCountdownTimer = setInterval(tickRoundCountdown, 250)

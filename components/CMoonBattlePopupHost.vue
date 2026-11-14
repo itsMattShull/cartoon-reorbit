@@ -186,13 +186,12 @@ const isAdminRoute = computed(() => route.path.startsWith('/newsite/admin'))
 const { user } = useAuth()
 
 // Settings page's "Mute sounds" row (composables/useHapticSoundsPref.js) — shared `useState`,
-// same pattern pages/newsite/cmoon-raid/[id].vue already uses for its own battle music. hydrate()
-// is normally already a no-op here by the time any battle plays: layouts/newsite-template.vue's
-// onMounted both mounts this component AND calls useClickSoundEffects().install() (which hydrates
-// this same shared ref) on every page load. Called again here anyway, defensively, so this
-// component's own sound gating never depends on that other composable continuing to run first.
-const { enabled: soundsEnabled, hydrate: hydrateSoundsPref } = useHapticSoundsPref()
-onMounted(() => { hydrateSoundsPref() })
+// same pattern pages/newsite/cmoon-raid/[id].vue already uses for its own battle music.
+// plugins/hapticSoundsPref.client.js hydrates this from localStorage before the app ever mounts,
+// so `soundsEnabled.value` is already correct by the time this component's own setup() runs —
+// including for checkOnNavigate's very first appear sound below, the earliest sound this popup
+// can ever play.
+const { enabled: soundsEnabled } = useHapticSoundsPref()
 
 const {
   visible, phase, enemy, battle, inCMoon, busy, error, lastRound, currentTaunt, isFirstWinAgainstThisEnemy,
