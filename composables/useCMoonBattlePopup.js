@@ -9,8 +9,15 @@
 // few times per battle (not on every click site-wide), so pre-decoding/caching buys nothing here.
 // Never awaited and never throws: a missing/blocked/still-loading sound must not hold up the
 // battle flow it's just decorating.
-function playSound(path) {
-  if (!path || typeof window === 'undefined') return
+//
+// `soundsEnabled` is the settings page's "Mute sounds" preference (composables/
+// useHapticSoundsPref.js) — resolved once inside useCMoonBattlePopup() below (a proper Vue setup
+// context) and threaded in here rather than this plain module-level function calling the
+// useState-backed composable itself. Previously missing entirely: every solo cMoon battle sound
+// (hit/block/special/taunt/appear/victory/defeat) ignored the mute toggle outright, which is why
+// it looked broken to most players — a raid is the much less common way to fight a cMoon enemy.
+function playSound(path, soundsEnabled) {
+  if (!path || !soundsEnabled?.value || typeof window === 'undefined') return
   try {
     const el = new Audio(path)
     el.volume = 0.7
@@ -30,15 +37,15 @@ const RESULT_STINGER = { WIN: '/winball/win.mp3', LOSS: '/winball/lose.mp3' }
 // real simultaneous outcome, not an either/or. enemyBlocked comes straight from
 // resolveBattleRound server-side (a genuinely successful block, not just "wasn't hit because
 // nobody attacked either way" — see that function's own comment).
-function playRoundSounds(round, enemy) {
+function playRoundSounds(round, enemy, soundsEnabled) {
   if (!round || !enemy) return
-  if (round.enemyHit) playSound(enemy.damageTakenSoundPath)
-  else if (round.enemyBlocked) playSound(enemy.damageAvoidedSoundPath)
-  if (round.playerHit) playSound(enemy.attackingSoundPath)
+  if (round.enemyHit) playSound(enemy.damageTakenSoundPath, soundsEnabled)
+  else if (round.enemyBlocked) playSound(enemy.damageAvoidedSoundPath, soundsEnabled)
+  if (round.playerHit) playSound(enemy.attackingSoundPath, soundsEnabled)
   // Special attacks (see CMoonSpecialAttack's own schema comment) each carry their own one sound,
   // independent of the enemy's six battle-moment sounds above — both a player's own cast and the
   // enemy's automatic one can appear in the same round's `specials` list.
-  for (const special of round.specials || []) playSound(special.soundPath)
+  for (const special of round.specials || []) playSound(special.soundPath, soundsEnabled)
 }
 
 // One random pick from an enemy's admin-authored taunt pool for a given moment (see
@@ -51,6 +58,10 @@ function pickRandomTaunt(list) {
 }
 
 export function useCMoonBattlePopup() {
+  // Settings page's "Mute sounds" row (composables/useHapticSoundsPref.js) — read live so this
+  // reacts immediately even if the player toggles it in another tab mid-battle (see playSound's
+  // own comment on why these particular sounds were silently ignoring it).
+  const { enabled: soundsEnabled } = useHapticSoundsPref()
   const visible = useState('cmoon-battle-visible', () => false)
   // 'OFFER' (an enemy to size up, not yet fought) | 'FIGHT' (an in-progress battle) |
   // 'RESULT' (just resolved — shown until the player dismisses it).
@@ -125,11 +136,11 @@ export function useCMoonBattlePopup() {
 
       const reveal = () => {
         visible.value = true
-        playSound(res.enemy?.appearSoundPath)
+        playSound(res.enemy?.appearSoundPath, soundsEnabled)
         const taunt = pickRandomTaunt(res.enemy?.taunts?.appear)
         if (taunt) {
           currentTaunt.value = taunt.text
-          playSound(taunt.soundPath)
+          playSound(taunt.soundPath, soundsEnabled)
         } else {
           currentTaunt.value = ''
         }
@@ -190,7 +201,7 @@ export function useCMoonBattlePopup() {
       })
       battle.value = res.battle
       lastRound.value = res.round || null
-      playRoundSounds(res.round, battle.value?.enemy)
+      playRoundSounds(res.round, battle.value?.enemy, soundsEnabled)
       // A CRIT taunt only fires on the enemy's OWN landed crit — never the player's — matching
       // CMoonEnemyTaunt.trigger's own schema comment on why there's no player-crit slot to pick
       // from here. NOTE the field name: round.playerCrit means "a crit landed ON THE PLAYER"
@@ -203,7 +214,7 @@ export function useCMoonBattlePopup() {
         const taunt = pickRandomTaunt(battle.value?.enemy?.taunts?.crit)
         if (taunt) {
           currentTaunt.value = taunt.text
-          playSound(taunt.soundPath)
+          playSound(taunt.soundPath, soundsEnabled)
         } else {
           currentTaunt.value = ''
         }
@@ -213,13 +224,13 @@ export function useCMoonBattlePopup() {
       if (battle.value.status === 'RESOLVED') {
         phase.value = 'RESULT'
         isFirstWinAgainstThisEnemy.value = !!res.isFirstWinAgainstThisEnemy
-        if (battle.value.outcome === 'WIN') playSound(battle.value.enemy?.victorySoundPath || RESULT_STINGER.WIN)
-        else if (battle.value.outcome === 'LOSS') playSound(battle.value.enemy?.defeatSoundPath || RESULT_STINGER.LOSS)
+        if (battle.value.outcome === 'WIN') playSound(battle.value.enemy?.victorySoundPath || RESULT_STINGER.WIN, soundsEnabled)
+        else if (battle.value.outcome === 'LOSS') playSound(battle.value.enemy?.defeatSoundPath || RESULT_STINGER.LOSS, soundsEnabled)
         // ONE global track for every capture, regardless of faction — see
         // GlobalGameConfig.cMoonEnemyCaptureMusicPath's own schema comment. Only ever present on
         // the response for THIS resolving round (action.post.js attaches it only on the branch
         // that actually captures), never a persistent field on `battle` itself.
-        else if (battle.value.outcome === 'CAPTURED') playSound(res.captureMusicPath)
+        else if (battle.value.outcome === 'CAPTURED') playSound(res.captureMusicPath, soundsEnabled)
         // A win awards cMoon points server-side — refresh auth so the nav's own point/rank
         // display doesn't sit stale until the next unrelated refetch.
         if (battle.value.outcome === 'WIN') {

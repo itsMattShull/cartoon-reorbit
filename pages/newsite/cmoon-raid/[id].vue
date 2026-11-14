@@ -7,7 +7,7 @@
 
       <template v-else>
         <div
-          class="cr-card bg-white rounded border p-4 space-y-3"
+          class="cr-card rounded border p-4 space-y-3"
           :class="{ 'cr-result-flash-win': resultFlash === 'win', 'cr-result-flash-loss': resultFlash === 'loss' }"
         >
           <div class="flex items-center gap-3">
@@ -703,7 +703,9 @@ function triggerShake(isCrit) {
 // toggling it in another tab/on the settings page takes effect here without a page reload; the
 // battleMusic watch below reacts to it live, and this guard covers every one-shot effect (hit/
 // block/special/taunt/appear/victory/defeat) in one place rather than at each call site.
-const { enabled: soundsEnabled, hydrate: hydrateSoundsPref } = useHapticSoundsPref()
+// plugins/hapticSoundsPref.client.js hydrates this from localStorage before the app ever mounts,
+// so `soundsEnabled.value` is already correct the first time anything here reads it.
+const { enabled: soundsEnabled } = useHapticSoundsPref()
 function playSound(path) {
   if (!path || !soundsEnabled.value || typeof window === 'undefined') return
   try {
@@ -890,7 +892,6 @@ watch(() => raid.value?.status, (status) => {
 })
 
 onMounted(() => {
-  hydrateSoundsPref()
   raidSocket.getState(raidId.value)
   countdownTimer = setInterval(() => { tickCountdown(); tickSecondsSinceStart() }, 250)
   roundCountdownTimer = setInterval(tickRoundCountdown, 250)
@@ -961,6 +962,23 @@ onUnmounted(() => {
 .cr-shake-crit { animation: cr-shake-crit-kf 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
 @media (prefers-reduced-motion: reduce) {
   .cr-shake, .cr-shake-crit { animation: none; }
+}
+
+/* CMoonEnemyMapBackground (see the template above) paints a fixed, full-viewport, z-index:-1
+   layer — but this card used to be a fully opaque bg-white, which covers nearly the entire
+   screen on a phone (max-w-2xl only constrains width above ~672px; below that the card fills
+   the viewport minus this page's own 16px side padding). The backdrop was only ever visible in
+   that sliver of margin, at the component's own already-subtle opacity (0.08 for STATIC_COLOR) —
+   which is why an admin-configured map's effect was reported as never actually visible. Dropping
+   `bg-white` for this translucent background instead lets the backdrop read through the card
+   everywhere, not just around its edges on a wide screen. A flat rgba scrim, not
+   backdrop-filter: blur — this card is on screen for the length of an entire raid/PvP fight
+   with an animated (GLOW/SMOKE/GLITTER) backdrop potentially running behind it the whole time,
+   and a continuously-recomposited blur layer for that whole duration is exactly the "mid-range
+   Android feels bad" cost pages/newsite/blackjack.vue's own .bj-sheet-overlay comment already
+   avoids for a scrim that merely re-appears often, let alone one that's never off screen. */
+.cr-card {
+  background: rgba(255, 255, 255, 0.86);
 }
 
 /* Result-screen flash — mirrors components/CMoonBattlePopupHost.vue's cbp-result-flash, applied
