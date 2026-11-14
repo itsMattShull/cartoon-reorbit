@@ -358,8 +358,9 @@ import { useHapticSoundsPref } from '@/composables/useHapticSoundsPref'
 
 const { user, fetchSelf } = useAuth()
 
-const { enabled: hapticSoundsEnabled, hydrate: hydrateHapticSoundsPref, setEnabled: setHapticSoundsEnabled } = useHapticSoundsPref()
-onMounted(hydrateHapticSoundsPref)
+// plugins/hapticSoundsPref.client.js hydrates this from localStorage before the app ever mounts,
+// so `hapticSoundsEnabled.value` (and this checkbox's initial render) is already correct.
+const { enabled: hapticSoundsEnabled, setEnabled: setHapticSoundsEnabled } = useHapticSoundsPref()
 // The checkbox itself tracks "muted" (matching the row's own "Mute sounds" label), inverted
 // against the underlying pref's "sounds enabled" boolean — see useHapticSoundsPref's own comment
 // for why that composable stays phrased as "enabled" (it's shared with the site-wide click sound
