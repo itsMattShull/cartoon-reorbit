@@ -21,6 +21,8 @@ import { randomBytes } from 'node:crypto'
 import { sendDiscordDMByDiscordId, sendGuildChannelMessageById } from './discord.js'
 import { grantRewardInTx, enqueueCtoonJobs } from './achievements.js'
 import { getOgGtoonsConfig } from './ogGtoonsConfig.js'
+import { armOgTournamentDeadline } from './queues.js'
+import { decideAndLock, closeTournamentGames, ensureNextGameInTx, lockPairing } from './ogGtoonTournamentGames.js'
 import { grantCodePacks } from './codePackGrant.js'
 import { hasFlag, setFlag, claimFlag, clearFlag } from './cache.js'
 import {
@@ -537,9 +539,19 @@ export async function advanceTournament(db, tournamentId, { now = new Date() } =
   return events
 }
 
+/** Arms the exact-time deadline decision for every async pairing of a freshly opened round (the cron is the safety net). */
+export async function armRoundDeadlines(db, roundId, arm = armOgTournamentDeadline) {
+  const rows = await db.ogGtoonTournamentMatch.findMany({
+    where: { roundId, asyncRules: true, lockedAt: null, status: { in: ['PENDING', 'IN_PROGRESS'] }, dueAt: { not: null } },
+    select: { id: true, dueAt: true }
+  })
+  for (const r of rows) await arm(r.id, r.dueAt).catch(err => console.error('[ogTournament] could not arm deadline:', err?.message || err))
+}
+
 export async function sendEvents(db, events) {
   for (const e of events) {
     try {
+      if (e.type === 'ROUND_OPEN') await armRoundDeadlines(db, e.roundId)
       if (e.type === 'ROUND_OPEN') await sendRoundOpenDMs(db, e.tournamentId, e.roundId)
       if (e.type === 'COMPLETE') await announceComplete(db, e.tournamentId)
     } catch (err) {
@@ -585,9 +597,12 @@ export async function forfeitMatch(db, { tournamentId, matchId, userId, now = ne
   const isB = match.playerBUserId === userId
   if (!isA && !isB) return { ok: false, code: 403, message: 'You are not a player in this match' }
   if (match.liveMatchId) return { ok: false, code: 400, message: 'A game is being played right now. Finish or leave it first.' }
+  // Under the async rules the games that were really played keep their real score (it feeds the game-win tiebreak); a forfeit
+  // before any game shows the usual 2-0.
+  const keepReal = match.asyncRules && match.gamesCounted > 0
   const done = await lockMatchResult(db, match, {
     outcome: isA ? 'B_WIN' : 'A_WIN', resolution: 'FORFEIT',
-    winsA: isA ? match.winsA : WINS_NEEDED, winsB: isB ? match.winsB : WINS_NEEDED,
+    winsA: isA ? match.winsA : (keepReal ? match.winsA : WINS_NEEDED), winsB: isB ? match.winsB : (keepReal ? match.winsB : WINS_NEEDED),
     note: 'Forfeited by a player', now
   })
   return done ? { ok: true } : { ok: false, code: 409, message: 'This match was just decided' }
@@ -600,8 +615,10 @@ export async function processDeadlines(db, now = new Date()) {
   const decided = []
   await clearStaleLive(db, now)
 
+  // Pairings under the async rules are decided by decideAndLock (below), never by the older both-online rules.
   const due = await db.ogGtoonTournamentMatch.findMany({
     where: {
+      asyncRules: false,
       lockedAt: null, status: { in: ['PENDING', 'IN_PROGRESS'] }, needsAdmin: false, liveMatchId: null,
       dueAt: { lte: now }, tournament: { status: { in: ACTIVE_STATUSES } }
     },
@@ -625,6 +642,28 @@ export async function processDeadlines(db, now = new Date()) {
     }
   }
 
+  // The async pairings whose (extended) deadline has passed: the same decision the exact-time job makes, in case that job was lost.
+  const dueAsync = await db.ogGtoonTournamentMatch.findMany({
+    where: {
+      asyncRules: true, lockedAt: null, status: { in: ['PENDING', 'IN_PROGRESS'] }, needsAdmin: false,
+      dueAt: { lte: now }, tournament: { status: { in: ACTIVE_STATUSES } }
+    },
+    select: { id: true, tournamentId: true }, take: 500
+  })
+  for (const m of dueAsync) {
+    const r = await decideAndLock(m.id, { db })
+    if (r.decided) { touched.add(m.tournamentId); decided.push({ matchId: m.id, reason: r.why }) }
+  }
+  // Re-arm the exact-time job for anything due soon (a Redis flush loses delayed jobs; arming is idempotent).
+  const soon = await db.ogGtoonTournamentMatch.findMany({
+    where: {
+      asyncRules: true, lockedAt: null, status: { in: ['PENDING', 'IN_PROGRESS'] }, needsAdmin: false,
+      dueAt: { gt: now, lte: new Date(now.getTime() + 20 * 60 * 1000) }, tournament: { status: { in: ACTIVE_STATUSES } }
+    },
+    select: { id: true, dueAt: true }, take: 500
+  })
+  for (const m of soon) await armOgTournamentDeadline(m.id, m.dueAt).catch(() => {})
+
   for (const d of decided) {
     try {
       const match = await db.ogGtoonTournamentMatch.findUnique({ where: { id: d.matchId }, include: { tournament: { select: { id: true, name: true } } } })
@@ -632,6 +671,26 @@ export async function processDeadlines(db, now = new Date()) {
     } catch (err) { console.error('[ogTournament] decided DM failed:', err?.message || err) }
   }
   return [...touched]
+}
+
+/**
+ * The exact-time job for one async pairing: decide it if its deadline has passed, otherwise (the deadline was extended by a play
+ * in the last minute, or an admin moved it) arm again for the new deadline. After a decision the players are told and the
+ * tournament advances at once instead of waiting for the next cron run.
+ */
+export async function runDeadlineJob(db, matchId, { arm = armOgTournamentDeadline } = {}) {
+  const r = await decideAndLock(matchId, { db })
+  if (r.reason === 'notDue' && r.dueAt) {
+    await arm(matchId, r.dueAt)
+    return r
+  }
+  if (!r.decided) return r
+  try {
+    const match = await db.ogGtoonTournamentMatch.findUnique({ where: { id: matchId }, include: { tournament: { select: { id: true, name: true } } } })
+    if (match) await sendMatchDecidedDMs(db, match, match.tournament, r.why)
+  } catch (err) { console.error('[ogTournament] decided DM failed:', err?.message || err) }
+  await advanceAndNotify(db, r.tournamentId)
+  return r
 }
 
 export async function processReminders(db, now = new Date()) {
@@ -780,6 +839,12 @@ export async function adminReopenMatch(db, { tournamentId, matchId }) {
       adminNotes: null, dueAt: new Date(Date.now() + (t.roundWindowHours || 72) * HOUR)
     }
   })
+  if (match.asyncRules) {
+    // A reopened pairing gets a fresh ORIGINAL deadline (new games may start against it) and a fresh extension count.
+    const reopened = await db.ogGtoonTournamentMatch.findUnique({ where: { id: matchId }, select: { dueAt: true } })
+    await db.ogGtoonTournamentMatch.update({ where: { id: matchId }, data: { baseDueAt: reopened.dueAt, extensions: 0, deckProblemSide: null } })
+    await armOgTournamentDeadline(matchId, reopened.dueAt).catch(() => {})
+  }
   await settleMatchFromGames(matchId)
   await recomputeRecords(db, tournamentId)
   return { ok: true }
@@ -794,6 +859,14 @@ export async function adminVoidGame(db, { tournamentId, matchId, gameId }) {
   if (!game || game.tournamentMatchId !== matchId) return { ok: false, code: 404, message: 'Game not found in this match' }
   await db.ogGtoonMatch.update({ where: { id: gameId }, data: { outcome: 'INCOMPLETE' } })
   await settleMatchFromGames(matchId)
+  // Under the async rules nobody is watching to start the replacement, so it is created here (a Start is sticky).
+  if (match.asyncRules) {
+    await db.$transaction(async (tx) => {
+      if (!(await lockPairing(tx, matchId))) return
+      const rows = await tx.$queryRaw`SELECT clock_timestamp() AS now`
+      await ensureNextGameInTx(tx, matchId, { now: new Date(rows[0].now) })
+    })
+  }
   return { ok: true }
 }
 
@@ -804,15 +877,23 @@ export async function adminExtendDeadline(db, { tournamentId, matchId, hours }) 
   if (!match || match.tournamentId !== tournamentId) return { ok: false, code: 404, message: 'Match not found' }
   if (match.lockedAt) return { ok: false, code: 400, message: 'This match is already decided' }
   const from = Math.max(Date.now(), match.dueAt ? match.dueAt.getTime() : 0)
+  const dueAt = new Date(from + h * HOUR)
   await db.ogGtoonTournamentMatch.update({
     where: { id: matchId },
-    data: { dueAt: new Date(from + h * HOUR), needsAdmin: false, needsAdminReason: null, reminder24SentAt: null, reminder4SentAt: null }
+    data: {
+      dueAt, needsAdmin: false, needsAdminReason: null, reminder24SentAt: null, reminder4SentAt: null,
+      // An admin extension moves the ORIGINAL deadline too (so a new game can start against it) and starts the extension count over.
+      ...(match.asyncRules ? { baseDueAt: dueAt, extensions: 0 } : {})
+    }
   })
+  if (match.asyncRules) await armOgTournamentDeadline(matchId, dueAt).catch(() => {})
   return { ok: true, hours: h }
 }
 
 export async function cancelTournament(db, tournamentId) {
   await db.ogGtoonTournament.update({ where: { id: tournamentId }, data: { status: 'CANCELLED', nextAnnouncementAt: null } })
+  // A running async game never counts once the tournament is cancelled.
+  await closeTournamentGames(tournamentId, { db })
 }
 
 /* ── Prizes ──────────────────────────────────────────────────────────────────────────────── */

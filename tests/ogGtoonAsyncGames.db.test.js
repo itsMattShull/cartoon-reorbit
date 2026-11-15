@@ -429,6 +429,184 @@ run('Start through the tournament socket handler: sticky, nobody has to be onlin
   assert.equal(stateB.myReady && stateB.opponentReady, true)
 })
 
+/* ── the deadline ───────────────────────────────────────────────────────────────────────── */
+
+const pastDue = (id) => db.ogGtoonTournamentMatch.update({ where: { id }, data: { dueAt: new Date(Date.now() - 1000) } })
+
+run('deadline: nothing happens before it; after it, only one Start counted -> that player wins by walkover', async () => {
+  const { pairing, a } = await mkAsyncPairing()
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: a.id })
+  const early = await G.decideAndLock(pairing.id)
+  assert.deepEqual([early.decided, early.reason], [false, 'notDue'])
+  assert.ok(early.dueAt, 'and it says when to look again')
+
+  await pastDue(pairing.id)
+  const r = await G.decideAndLock(pairing.id)
+  assert.deepEqual([r.decided, r.outcome, r.resolution], [true, pairing.playerAUserId === a.id ? 'A_WIN' : 'B_WIN', 'WALKOVER'])
+  const p = await reload(pairing.id)
+  assert.equal(p.status, 'COMPLETE')
+  assert.equal(p.winnerUserId, a.id)
+  assert.equal((await G.decideAndLock(pairing.id)).decided, false, 'deciding twice does nothing')
+})
+
+run('deadline: the player the game is waiting on loses the whole match, and the running game is closed', async () => {
+  const { pairing, a, b } = await mkAsyncPairing()
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: a.id })
+  const { game } = await G.pressStart({ tournamentMatchId: pairing.id, userId: b.id })
+  assert.equal((await actFor(game.gameId, a)).ok, true, 'A commits; B never does')
+  await pastDue(pairing.id)
+  const r = await G.decideAndLock(pairing.id)
+  assert.equal(r.decided, true)
+  assert.equal(r.resolution, 'DEADLINE')
+  assert.equal((await reload(pairing.id)).winnerUserId, a.id, 'the one who moved wins')
+  assert.equal((await db.ogGtoonTournamentGame.findUnique({ where: { id: game.gameId } })).status, 'CLOSED')
+  assert.equal(await db.ogGtoonMatch.count({ where: { tournamentMatchId: pairing.id } }), 0, 'a closed game never counts')
+  assert.match(r.why, /did not make their move/)
+})
+
+run('deadline: both started but nobody moved -> a bracket goes to the better seed', async () => {
+  const { pairing, a, b } = await mkAsyncPairing()
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: a.id })
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: b.id })
+  await pastDue(pairing.id)
+  const r = await G.decideAndLock(pairing.id)
+  assert.equal(r.decided, true)
+  const betterSeedIsA = pairing.seedA < pairing.seedB
+  assert.equal((await reload(pairing.id)).winnerUserId, betterSeedIsA ? pairing.playerAUserId : pairing.playerBUserId)
+})
+
+run('deadline: a Start pressed too late to count does not beat the earlier walkover', async () => {
+  const { pairing, a, b } = await mkAsyncPairing()
+  // A pressed Start hours ago; the round now has only 30 minutes left (under the hour a Start needs to count).
+  const soon = new Date(Date.now() + 30 * 60 * 1000)
+  await db.ogGtoonTournamentMatch.update({ where: { id: pairing.id }, data: { dueAt: soon, baseDueAt: soon, readyAAt: new Date(Date.now() - 3 * 3600 * 1000) } })
+  // The service refuses a Start this late outright, and records nothing...
+  const refused = await G.pressStart({ tournamentMatchId: pairing.id, userId: b.id })
+  assert.equal(refused.ok, false)
+  assert.equal(refused.code, 'tooLate')
+  assert.equal((await reload(pairing.id)).readyBAt, null)
+  assert.equal(await db.ogGtoonTournamentGame.count({ where: { tournamentMatchId: pairing.id } }), 0, 'and no game was created')
+  // ...and even a press that got in some other way would not count: the earlier player wins the walkover.
+  await db.ogGtoonTournamentMatch.update({ where: { id: pairing.id }, data: { readyBAt: new Date(Date.now() - 60 * 1000), dueAt: new Date(Date.now() - 1000) } })
+  const r = await G.decideAndLock(pairing.id)
+  assert.deepEqual([r.outcome, r.resolution], [pairing.playerAUserId === a.id ? 'A_WIN' : 'B_WIN', 'WALKOVER'])
+})
+
+run('deadline: a player whose deck broke loses; the other is told why', async () => {
+  const { pairing, a, b } = await mkAsyncPairing()
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: a.id })
+  const optA = await db.ogGtoonTournamentOptIn.findFirst({ where: { tournamentId: pairing.tournamentId, userId: a.id } })
+  await db.userCtoon.update({ where: { id: optA.deckSnapshotJson[0].userCtoonId }, data: { userId: b.id } })
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: b.id })
+  await pastDue(pairing.id)
+  const r = await G.decideAndLock(pairing.id)
+  assert.equal(r.decided, true)
+  assert.equal((await reload(pairing.id)).winnerUserId, b.id)
+  assert.match(r.why, /locked deck/)
+})
+
+run('deadline job: re-arms itself when the deadline moved, decides and advances the tournament when it did not', async () => {
+  const { t, pairing, a } = await mkAsyncPairing()
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: a.id })
+  const armed = []
+  const arm = async (id, at) => { armed.push([id, at.getTime()]) }
+  const notDue = await T.runDeadlineJob(db, pairing.id, { arm })
+  assert.equal(notDue.reason, 'notDue')
+  assert.equal(armed.length, 1)
+  assert.equal(armed[0][1], (await reload(pairing.id)).dueAt.getTime(), 'armed for the (possibly extended) deadline')
+
+  await pastDue(pairing.id)
+  const done = await T.runDeadlineJob(db, pairing.id, { arm })
+  assert.equal(done.decided, true)
+  assert.equal(armed.length, 1, 'no further arming once decided')
+  // A 2 player bracket: that was the final, so the tournament is over straight away.
+  assert.equal((await db.ogGtoonTournament.findUnique({ where: { id: t.id } })).status, 'COMPLETE')
+})
+
+run('the cron decides an async pairing whose exact-time job was lost, and never applies the older rules to it', async () => {
+  const { t, pairing, a, b } = await mkAsyncPairing()
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: a.id })
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: b.id })
+  await pastDue(pairing.id)
+  const touched = await T.processDeadlines(db)
+  assert.ok(touched.includes(t.id))
+  const p = await reload(pairing.id)
+  assert.equal(p.status, 'COMPLETE')
+  assert.equal(p.asyncRules, true)
+})
+
+run('admin: extending moves the ORIGINAL deadline too and resets the extension count; cancelling closes running games', async () => {
+  const { t, pairing, a, b } = await mkAsyncPairing()
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: a.id })
+  const { game } = await G.pressStart({ tournamentMatchId: pairing.id, userId: b.id })
+  await db.ogGtoonTournamentMatch.update({ where: { id: pairing.id }, data: { extensions: 4 } })
+  const r = await T.adminExtendDeadline(db, { tournamentId: t.id, matchId: pairing.id, hours: 6 })
+  assert.equal(r.ok, true)
+  const p = await reload(pairing.id)
+  assert.equal(p.baseDueAt.getTime(), p.dueAt.getTime())
+  assert.equal(p.extensions, 0)
+  assert.ok(p.dueAt.getTime() > pairing.dueAt.getTime())
+
+  await T.cancelTournament(db, t.id)
+  assert.equal((await db.ogGtoonTournamentGame.findUnique({ where: { id: game.gameId } })).status, 'CLOSED')
+})
+
+run('a forfeit mid-game closes the game and keeps the games really played at their real score', async () => {
+  const { t, pairing, a, b } = await mkAsyncPairing()
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: a.id })
+  const { game } = await G.pressStart({ tournamentMatchId: pairing.id, userId: b.id })
+  const res = await T.forfeitMatch(db, { tournamentId: t.id, matchId: pairing.id, userId: a.id })
+  assert.equal(res.ok, true, 'allowed any time, including mid-game')
+  const p = await reload(pairing.id)
+  assert.equal(p.winnerUserId, b.id)
+  assert.equal(p.resolution, 'FORFEIT')
+  assert.equal((await db.ogGtoonTournamentGame.findUnique({ where: { id: game.gameId } })).status, 'CLOSED')
+})
+
+run('a move that has to wait on the pairing lock is judged by the clock AFTER it gets the lock, not when it was sent', async () => {
+  const { pairing, a, b } = await mkAsyncPairing()
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: a.id })
+  const { game } = await G.pressStart({ tournamentMatchId: pairing.id, userId: b.id })
+  await db.ogGtoonTournamentMatch.update({ where: { id: pairing.id }, data: { dueAt: new Date(Date.now() + 1500) } })
+
+  // Something else (a deadline job, an admin action) holds the pairing's lock for two seconds.
+  let release
+  const held = new Promise(r => { release = r })
+  const holder = db.$transaction(async (tx) => { await G.lockPairing(tx, pairing.id); await held }, { timeout: 15000 })
+  await new Promise(r => setTimeout(r, 250))
+
+  // A's move is sent while there is still time on the clock; it queues behind the lock.
+  const move = actFor(game.gameId, a)
+  await new Promise(r => setTimeout(r, 2000))
+  release()
+  await holder
+  const res = await move
+  assert.equal(res.ok, false)
+  assert.equal(res.code, 'deadlinePassed', 'it got the lock after the deadline, so it is refused')
+  assert.equal((await db.ogGtoonTournamentGame.findUnique({ where: { id: game.gameId } })).version, 1, 'and changed nothing')
+  // The deadline decision, which waited the same way, then agrees: nobody had moved.
+  const d = await G.decideAndLock(pairing.id)
+  assert.equal(d.decided, true)
+})
+
+run('the panel summary says whose move it is and how many reveals a returning player has not watched', async () => {
+  const { pairing, a, b } = await mkAsyncPairing()
+  assert.equal(await G.gameSummaryFor(pairing.id, a.id), null, 'no game yet')
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: a.id })
+  const { game } = await G.pressStart({ tournamentMatchId: pairing.id, userId: b.id })
+  let s = await G.gameSummaryFor(pairing.id, a.id)
+  assert.deepEqual([s.gameId, s.gameNumber, s.waitingOn, s.unseenReveals], [game.gameId, 1, null, 0])
+  await actFor(game.gameId, a)
+  assert.equal((await G.gameSummaryFor(pairing.id, a.id)).waitingOn, 'opponent')
+  assert.equal((await G.gameSummaryFor(pairing.id, b.id)).waitingOn, 'you')
+  await actFor(game.gameId, b)
+  s = await G.gameSummaryFor(pairing.id, a.id)
+  assert.equal(s.unseenReveals, 1)
+  await G.markSeen({ gameId: game.gameId, userId: a.id, seq: 1 })
+  assert.equal((await G.gameSummaryFor(pairing.id, a.id)).unseenReveals, 0)
+  assert.equal((await G.gameSummaryFor(pairing.id, b.id)).unseenReveals, 1)
+})
+
 test.after(async () => {
   if (!db) return
   await db.gameConfig.deleteMany({ where: { gameName: 'OgGtoons' } })

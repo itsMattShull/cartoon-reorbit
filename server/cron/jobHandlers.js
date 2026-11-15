@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url'
 import { prisma } from '../prisma.js'
 import { enqueueAchievementChecks } from '../utils/queues.js'
 import { runTournamentScheduler } from '../../server/utils/gtoonTournament.js'
-import { runOgGtoonTournamentScheduler, advanceAndNotify, notifyOpponentReady } from '../../server/utils/ogGtoonTournament.js'
+import { runOgGtoonTournamentScheduler, advanceAndNotify, notifyOpponentReady, runDeadlineJob } from '../../server/utils/ogGtoonTournament.js'
 import { syncWordleResults } from '../../server/utils/wordle.js'
 import { checkAndCreateWeeklyCZoneContest } from './create-weekly-czone-contest.js'
 import { checkAndPostWeeklyRiddle } from './cmoon-riddle-rotation.js'
@@ -1145,5 +1145,6 @@ export const SCHEDULED_EVENT_HANDLERS = {
   winballPrizeUpdate: () => updateWinballGrandPrizeFromSchedule(),
   // OG gToons tournaments: queued by the socket server / REST handlers (enqueueOgTournamentJob).
   ogTournamentAdvance: (data) => (data?.tournamentId ? advanceAndNotify(prisma, String(data.tournamentId), { matchId: data.matchId ? String(data.matchId) : null }) : undefined),
+  ogTournamentDeadline: (data) => (data?.matchId ? runDeadlineJob(prisma, String(data.matchId)) : undefined),
   ogTournamentNotifyReady: (data) => (data?.tournamentMatchId ? notifyOpponentReady(prisma, { tournamentMatchId: String(data.tournamentMatchId), readyUserId: String(data.readyUserId) }) : undefined),
 }
