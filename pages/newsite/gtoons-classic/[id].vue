@@ -5,7 +5,7 @@
 </template>
 
 <script setup>
-import { useRouter, useRoute, watch, onBeforeUnmount } from '#imports'
+import { useRouter, useRoute, watch, onBeforeUnmount, onMounted, onActivated } from '#imports'
 import OgGtoonMatchBoard from '@/components/OgGtoonMatchBoard.vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 
@@ -19,9 +19,19 @@ definePageMeta({
 })
 
 // The sidebar's middle section shows both players' name, points and goal-color counts during the match.
-const { setSidebarMiddle, clearSidebarMiddle } = useNewsiteLayout()
+const { sidebarMiddleComponent, setSidebarMiddle, clearSidebarMiddle } = useNewsiteLayout()
 setSidebarMiddle('OgGtoonSidebar')
 onBeforeUnmount(() => clearSidebarMiddle('OgGtoonSidebar'))
+// Whenever a gToons match is on screen (tournament game, PvP or practice) the player-stats sidebar must be showing.
+// When the next game of a tournament series starts the board remounts for the new match id: the new page's setup
+// sets the sidebar, then the old page's unmount clears it — so set it again once mounted, and re-assert it if
+// anything else clears it while this match page is still the current route.
+onMounted(() => setSidebarMiddle('OgGtoonSidebar'))
+onActivated(() => setSidebarMiddle('OgGtoonSidebar'))
+const matchRouteName = useRoute().name
+watch(sidebarMiddleComponent, (v) => {
+  if (v !== 'OgGtoonSidebar' && useRoute().name === matchRouteName) setSidebarMiddle('OgGtoonSidebar')
+})
 
 // The match id in the URL (route.params.id) is purely for navigation/bookmarking — the actual
 // match state is entirely server-held and reattached over the socket (see useOgGtoonsSocket /
