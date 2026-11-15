@@ -10,6 +10,7 @@
 // or already-finished job through the same idempotent paths below.
 import { defineEventHandler, readBody, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { frozenAmong, FROZEN_OWN_MESSAGE } from '../../utils/ogGtoonTournamentFreeze'
 import { resolveUserCtoonId } from '../../utils/userCtoonId'
 import { holidayRedeemQueue } from '../../utils/queues'
 import { QueueEvents } from 'bullmq'
@@ -123,6 +124,10 @@ export default defineEventHandler(async (event) => {
       // safe — the worker resumes from `burnedAt` already set rather than
       // re-checking it — so it picks the redemption back up instead of
       // leaving the user stuck.
+
+      if ((await frozenAmong(prisma, userId, [userCtoonId])).length) {
+        throw createError({ statusCode: 409, statusMessage: FROZEN_OWN_MESSAGE })
+      }
 
       const [pendingOffer, activeAuction] = await Promise.all([
         prisma.tradeOffer.findFirst({

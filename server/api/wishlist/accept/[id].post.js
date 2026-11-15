@@ -1,6 +1,7 @@
 // server/api/wishlist/accept/[id].post.js
 import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { frozenCopyMap } from '@/server/utils/ogGtoonTournamentFreeze'
 
 export default defineEventHandler(async (event) => {
   // auth
@@ -59,6 +60,10 @@ export default defineEventHandler(async (event) => {
     OR: [{ lockedByUserId: null }, { lockedByUserId: { not: recipientId } }]
   }
 
+  // Copies locked into an OG gToons tournament deck are never the one handed over (the server picks which copy leaves).
+  const frozenPre = [...(await frozenCopyMap(prisma, recipientId)).keys()]
+  if (frozenPre.length) availableUserCtoonWhere.id = { notIn: frozenPre }
+
   // preflight ownership
   const ownsCount = await prisma.userCtoon.count({
     where: availableUserCtoonWhere
@@ -83,6 +88,10 @@ export default defineEventHandler(async (event) => {
     if ((ptsNow?.points || 0) - lockedNow < wi.offeredPoints) {
       throw createError({ statusCode: 400, statusMessage: 'Wishlist owner lacks sufficient available points' })
     }
+
+    // Re-read inside the transaction: a deck locked in since the preflight still counts.
+    const frozenNow = [...(await frozenCopyMap(tx, recipientId)).keys()]
+    if (frozenNow.length) availableUserCtoonWhere.id = { notIn: frozenNow }
 
     // pick highest mint owned by recipient
     let uc = await tx.userCtoon.findFirst({

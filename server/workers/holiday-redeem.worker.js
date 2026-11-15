@@ -21,6 +21,7 @@
 import { Worker, QueueEvents } from 'bullmq'
 import { prisma } from '../prisma.js'
 import { mintQueue } from '../utils/queues.js'
+import { frozenAmong, FROZEN_OWN_MESSAGE } from '../utils/ogGtoonTournamentFreeze.js'
 
 const connection = {
   host: process.env.REDIS_HOST,
@@ -232,6 +233,9 @@ async function processHolidayRedeem(job) {
   // restarted), just carry on from here — re-locking isn't needed and
   // re-checking `burnedAt: null` would make this step un-retryable.
   if (!source.burnedAt) {
+    // Burning is the one way a card leaves without anyone receiving it: a card locked into an OG gToons tournament deck
+    // is not burned (checked before the burn, never after).
+    if ((await frozenAmong(prisma, userId, [userCtoonId])).length) throw new Error(FROZEN_OWN_MESSAGE)
     const lockRes = await prisma.userCtoon.updateMany({
       where: { id: userCtoonId, userId, burnedAt: null },
       data: { burnedAt: new Date(), isTradeable: false }
