@@ -77,6 +77,8 @@ export const ADMIN_SECTIONS = [
   S('certificate', 'Manage Certificate', 'content', nu('AdminManageCertificate')),
   S('encyclopedia', 'Manage Encyclopedia', 'content', nu('AdminManageEncyclopedia')),
   S('siteTheme', 'Manage Site Theme', 'content', nu('AdminSiteTheme')),
+  S('myOrbitTiles', 'MyOrbit Tiles', 'content', nu('AdminMyOrbitTiles'), { desc: 'Reusable floor/wall art for the room builder' }),
+  S('myOrbitFurniture', 'MyOrbit Furniture', 'content', nu('AdminMyOrbitFurniture'), { desc: 'Reusable furniture/decoration art for the room builder' }),
 
   // ── Economy ─────────────────────────────────────────────────
   S('manageSales', 'Manage Sales', 'economy', nu('AdminManageSales'), { sensitive: true, desc: 'Changes prices' }),

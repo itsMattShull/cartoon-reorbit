@@ -18,7 +18,7 @@ export const ADMIN_PERMISSION_KEYS = [
   'suspiciousActivity', 'deviceFingerprints', 'vpn-queue', 'initiateTrade',
   'ctoons', 'ctoonsBulkUpload', 'submittedCtoons', 'ctoonSuggestions', 'starterSets', 'packs',
   'backgrounds', 'czoneSearch', 'czoneContest', 'homepage', 'announcements', 'ads', 'tutorial',
-  'certificate', 'encyclopedia', 'siteTheme',
+  'certificate', 'encyclopedia', 'siteTheme', 'myOrbitTiles', 'myOrbitFurniture',
   'manageSales', 'codes', 'auctions', 'dissolveQueue',
   'games', 'cMoon', 'cMoonJoinEffects', 'czoneEffects', 'cmoonChangeRequests', 'manageNavigation',
   'cMoonEnemies', 'cMoonEnemyMaps', 'cMoonPvp', 'cMoonBattleUpgrades', 'cMoonRiddles', 'cMoonHunts', 'lotto', 'clashTournaments', 'ogGtoonTournaments',
@@ -170,6 +170,8 @@ export const ADMIN_API_SEGMENT_PERMS = {
   'lotto-logs': ['lottoLogs'],
   'lotto-logs-summary': ['lottoLogs'],
   'lotto-settings': ['lotto'],
+  'myorbit-furniture': ['myOrbitFurniture'],
+  'myorbit-tiles': ['myOrbitTiles'],
   'net-points-issues': ['analytics'],
   official: ['manageUsers', 'initiateTrade'],
   'official-collection': ['initiateTrade'],
@@ -374,7 +376,7 @@ export const ADMIN_PERMISSION_PRESETS = [
     label: 'Content manager',
     perms: ['analytics', 'ctoons', 'ctoonsBulkUpload', 'submittedCtoons', 'ctoonSuggestions', 'starterSets',
       'packs', 'backgrounds', 'czoneSearch', 'czoneContest', 'homepage', 'announcements', 'ads', 'tutorial',
-      'certificate', 'encyclopedia', 'siteTheme']
+      'certificate', 'encyclopedia', 'siteTheme', 'myOrbitTiles', 'myOrbitFurniture']
   },
   {
     id: 'events',
