@@ -5,6 +5,7 @@
 import { ref } from 'vue'
 import { io } from 'socket.io-client'
 import { useRuntimeConfig } from '#imports'
+import { createReplay, clockOffsetMs } from '@/utils/ogGtoonReplay'
 
 const matchState = ref(null)
 const lastReveal = ref(null)
@@ -21,7 +22,24 @@ const tournamentStates = ref({})
 // The latest "your opponent is ready to play" ping: { tournamentMatchId, tournamentName, username, n }.
 const tournamentOpponentReady = ref(null)
 let tournamentPingCount = 0
+// An async pairing's game was just created: { tournamentMatchId, gameId, gameNumber, n }.
+const tournamentGameStarted = ref(null)
 let socket
+// Set once the socket exists (they close over its handlers); the board calls them through ackReveal / skipReplay.
+let ackRevealImpl = () => {}
+let skipReplayImpl = () => {}
+
+// ── Async + live tournament games ──────────────────────────────────────────────────────────────────────────────
+// A game of an async-rules pairing is opened by id (`openAsyncGame`) and then talks over its own `oggtoons:async:*` events, every
+// one carrying the game id. While one is open this tab ignores the casual/practice/live events entirely (the socket may still be
+// reattached to a casual match by the server, and its pushes must not replace this board), and events for any other game.
+// Closing the board only unsubscribes: it is never a forfeit.
+const asyncGameId = ref(null)
+const nextAsyncGameId = ref(null)       // the next game of the series, once this one has ended
+const asyncPresence = ref({ opponentOnBoard: false })
+const replayInfo = ref(null)            // { index, total } while missed reveals are being replayed, else null
+const clockOffset = ref(0)              // server clock minus this device's clock, in ms
+let replay = null                       // the queue (see utils/ogGtoonReplay.js)
 
 export function useOgGtoonsSocket() {
   if (!socket) {
@@ -33,6 +51,8 @@ export function useOgGtoonsSocket() {
 
     socket.on('connect', () => {
       isConnected.value = true
+      // A reconnect (a phone waking up) lands back on the open async game with whatever it missed.
+      if (asyncGameId.value) socket.emit('oggtoons:async:open', { gameId: asyncGameId.value })
       socket.emit('oggtoons:subscribe')
       // Reattach to a live practice match after a refresh/reconnect (no-op if there isn't one).
       socket.emit('oggtoons:practice:resume')
@@ -45,6 +65,7 @@ export function useOgGtoonsSocket() {
     const keepLog = (state) => (state && state.gameLog === undefined && matchState.value?.gameLog
       ? { ...state, gameLog: matchState.value.gameLog } : state)
     socket.on('oggtoons:matchStart', state => {
+      if (asyncGameId.value) return
       matchState.value = state
       matchEnded.value = null
       packReward.value = null
@@ -53,8 +74,9 @@ export function useOgGtoonsSocket() {
     })
     // Full per-player view pushed after any private action (place/unplace/swap/discard) and when
     // the opponent commits or finishes discarding.
-    socket.on('oggtoons:state', state => { matchState.value = keepLog(state) })
+    socket.on('oggtoons:state', state => { if (asyncGameId.value) return; matchState.value = keepLog(state) })
     socket.on('oggtoons:reveal', state => {
+      if (asyncGameId.value) return
       matchState.value = keepLog(state)
       lastReveal.value = state.reveal
     })
@@ -62,28 +84,121 @@ export function useOgGtoonsSocket() {
     // round resolves — so flip them locally on these events or the board shows a stale
     // "Thinking..." / re-enabled Reveal button until the next reveal.
     socket.on('oggtoons:committed', () => {
+      if (asyncGameId.value) return
       const s = matchState.value
       if (s) matchState.value = { ...s, you: { ...s.you, ready: true } }
     })
     socket.on('oggtoons:opponentCommitted', () => {
+      if (asyncGameId.value) return
       const s = matchState.value
       if (s) matchState.value = { ...s, opponent: { ...s.opponent, ready: true } }
     })
     socket.on('oggtoons:swapApplied', () => {})
     socket.on('oggtoons:opponentDropped', payload => {
+      if (asyncGameId.value) return
       matchState.value = matchState.value ? { ...matchState.value, opponentDropped: payload } : matchState.value
     })
     socket.on('oggtoons:opponentReturned', () => {
+      if (asyncGameId.value) return
       matchState.value = matchState.value ? { ...matchState.value, opponentDropped: null } : matchState.value
     })
     socket.on('oggtoons:matchEnd', state => {
+      if (asyncGameId.value) return
       matchState.value = keepLog(state)
       matchEnded.value = matchState.value
     })
     socket.on('oggtoons:packReward', p => { if (p?.matchId) packReward.value = p })
-    socket.on('oggtoons:error', err => { lastError.value = err })
+    socket.on('oggtoons:error', err => {
+      // Opening a game id that is not an async tournament game (a casual or older-rules match shares this page) is not an
+      // error: this tab just carries on as before.
+      if (err?.gameId && err.gameId === asyncGameId.value && err.code === 'badGame') { asyncGameId.value = null; return }
+      lastError.value = err
+    })
+
+    /* ── async game events ─────────────────────────────────────────────────────────────────────── */
+    const mine = (id) => !!id && id === asyncGameId.value
+    /** Plays the next queued reveal: show the board as it was right after it, then let the board animate it. */
+    function playNextReveal() {
+      const rev = replay?.current()
+      if (!rev) return finishReplay()
+      replayInfo.value = replay.progress()
+      if (rev.view) matchState.value = keepLog(rev.view)
+      lastReveal.value = rev
+    }
+    function finishReplay() {
+      const final = replay?.finalView() || null
+      const seq = replay?.watchedSeq() || 0
+      replay = null
+      replayInfo.value = null
+      lastReveal.value = null
+      if (final) {
+        matchState.value = keepLog(final)
+        if (final.over) matchEnded.value = matchState.value
+      }
+      if (seq && asyncGameId.value) socket.emit('oggtoons:async:seen', { gameId: asyncGameId.value, seq })
+    }
+    socket.on('oggtoons:async:view', ({ gameId, view, unseen, nextGameId } = {}) => {
+      if (!mine(gameId) || !view) return
+      clockOffset.value = clockOffsetMs(view.deadline?.serverNow)
+      nextAsyncGameId.value = nextGameId || null
+      matchEnded.value = null
+      packReward.value = null
+      currentMatchId.value = view.matchId
+      lastReveal.value = null
+      if (Array.isArray(unseen) && unseen.length) {
+        // Everything the player has not watched, in order, then the present.
+        replay = createReplay({ queue: unseen, finalView: view })
+        matchState.value = keepLog({ ...unseen[0].view })
+        playNextReveal()
+      } else {
+        replay = null
+        replayInfo.value = null
+        matchState.value = view
+        if (view.over) matchEnded.value = view
+      }
+    })
+    socket.on('oggtoons:async:state', (view) => {
+      if (!mine(view?.gameId)) return
+      clockOffset.value = clockOffsetMs(view.deadline?.serverNow)
+      if (replay) { replay.setFinalView(view); return }
+      matchState.value = keepLog(view)
+      if (view.over && !matchEnded.value) matchEnded.value = matchState.value
+    })
+    socket.on('oggtoons:async:reveal', ({ gameId, view, reveal } = {}) => {
+      if (!mine(gameId) || !reveal) return
+      const rev = { ...reveal, view }
+      if (replay) {
+        // Already replaying: this one joins the end of the queue instead of interrupting what is playing.
+        if (replay.append(rev) && replay.isDone()) playNextReveal()
+        return
+      }
+      matchState.value = keepLog(view)
+      lastReveal.value = rev
+    })
+    socket.on('oggtoons:async:end', (view) => {
+      if (!mine(view?.gameId)) return
+      if (replay) { replay.setFinalView(view); return }
+      matchState.value = keepLog(view)
+      matchEnded.value = matchState.value
+    })
+    socket.on('oggtoons:async:nextGame', ({ gameId, nextGameId } = {}) => { if (mine(gameId)) nextAsyncGameId.value = nextGameId || null })
+    socket.on('oggtoons:async:presence', ({ gameId, opponentOnBoard } = {}) => { if (mine(gameId)) asyncPresence.value = { opponentOnBoard: !!opponentOnBoard } })
+    // The board calls this when it has finished animating a reveal (see OgGtoonMatchBoard.vue).
+    ackRevealImpl = (rev) => {
+      if (!rev?.seq || !asyncGameId.value) return
+      if (replay) {
+        if (replay.ack(rev.seq)) playNextReveal()
+        else finishReplay()
+        return
+      }
+      socket.emit('oggtoons:async:seen', { gameId: asyncGameId.value, seq: rev.seq })
+    }
+    skipReplayImpl = () => { if (replay) { replay.skip(); finishReplay() } }
     socket.on('oggtoons:tournamentState', s => {
       if (s?.tournamentMatchId) tournamentStates.value = { ...tournamentStates.value, [s.tournamentMatchId]: s }
+    })
+    socket.on('oggtoons:tournamentGameStarted', p => {
+      if (p?.gameId) tournamentGameStarted.value = { ...p, n: ++tournamentPingCount }
     })
     socket.on('oggtoons:tournamentOpponentReady', p => {
       tournamentOpponentReady.value = { ...p, n: ++tournamentPingCount }
@@ -98,12 +213,14 @@ export function useOgGtoonsSocket() {
   const prefix = () => (isTutorial() ? 'oggtoons:tutorial:' : isPractice() ? 'oggtoons:practice:' : 'oggtoons:')
 
   function commit(round) {
+    if (asyncGameId.value) return socket.emit('oggtoons:async:commit', { gameId: asyncGameId.value, round })
     if (!currentMatchId.value) return
     if (isPractice()) socket.emit(`${prefix()}commit`, { round })
     else socket.emit('oggtoons:commit', { matchId: currentMatchId.value, round })
   }
   // All three modes use the same payloads; practice and the tutorial just have their own event names.
   const send = (name, payload) => {
+    if (asyncGameId.value) return socket.emit(`oggtoons:async:${name}`, { ...payload, gameId: asyncGameId.value })
     if (!currentMatchId.value) return
     socket.emit(`${prefix()}${name}`, payload)
   }
@@ -138,7 +255,40 @@ export function useOgGtoonsSocket() {
   function tournamentSync(tournamentMatchId) {
     socket.emit('oggtoons:tournamentSync', { tournamentMatchId })
   }
+  /** Opens an async tournament game by id (a no-op for ids that are not one: the server answers badGame and this tab carries on). */
+  function openAsyncGame(gameId) {
+    if (!gameId) return
+    if (asyncGameId.value && asyncGameId.value !== gameId) closeAsyncGame()
+    lastError.value = null
+    asyncGameId.value = gameId
+    nextAsyncGameId.value = null
+    if (socket.connected) socket.emit('oggtoons:async:open', { gameId })
+  }
+  /** Stops watching the async game. NOT a forfeit: the game carries on, and the opponent is not told you left. */
+  function closeAsyncGame() {
+    const id = asyncGameId.value
+    if (id && socket) socket.emit('oggtoons:async:close', { gameId: id })
+    asyncGameId.value = null
+    nextAsyncGameId.value = null
+    asyncPresence.value = { opponentOnBoard: false }
+    replay = null
+    replayInfo.value = null
+    lastReveal.value = null
+    matchState.value = null
+    matchEnded.value = null
+    currentMatchId.value = null
+  }
+  const ackReveal = (rev) => ackRevealImpl(rev)
+  const skipReplay = () => skipReplayImpl()
+  /** The player dismissed the goal-card intro for this game. */
+  function introSeen() {
+    if (!asyncGameId.value) return
+    socket.emit('oggtoons:async:introSeen', { gameId: asyncGameId.value })
+    if (matchState.value) matchState.value = { ...matchState.value, introPending: false }
+  }
+
   function leaveMatch() {
+    if (asyncGameId.value) return closeAsyncGame()
     if (isPractice()) socket.emit(`${prefix()}leave`)
     else socket.emit('oggtoons:leave')
     matchState.value = null
@@ -150,6 +300,8 @@ export function useOgGtoonsSocket() {
   return {
     socket, matchState, lastReveal, matchEnded, packReward, isConnected, currentMatchId, lastError,
     commit, place, unplace, swap, swapSkip, chooseColor, discard, leaveMatch, startPractice, startTutorial,
-    tournamentStates, tournamentOpponentReady, tournamentReady, tournamentUnready, tournamentSync
+    tournamentStates, tournamentOpponentReady, tournamentReady, tournamentUnready, tournamentSync,
+    tournamentGameStarted, asyncGameId, nextAsyncGameId, asyncPresence, replayInfo, clockOffset,
+    openAsyncGame, closeAsyncGame, ackReveal, skipReplay, introSeen
   }
 }

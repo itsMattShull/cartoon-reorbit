@@ -27,7 +27,7 @@
           <div><dt class="inline text-gray-400">Format: </dt><dd class="inline">{{ formatText }}</dd></div>
           <div><dt class="inline text-gray-400">Every match: </dt><dd class="inline">Best of 3 — first to 2 game wins</dd></div>
           <div><dt class="inline text-gray-400">Entrants: </dt><dd class="inline">{{ t.optInCount }}</dd></div>
-          <div><dt class="inline text-gray-400">Time per round: </dt><dd class="inline">{{ t.roundWindowHours }} hours</dd></div>
+          <div><dt class="inline text-gray-400">Time per round: </dt><dd class="inline">{{ t.roundWindowHours }} hours{{ asyncRoundsOn ? ' · play at your own pace, no turn timers' : '' }}</dd></div>
           <div class="sm:col-span-2"><dt class="inline text-gray-400">Opt-in: </dt><dd class="inline">{{ fmt(t.optInStartAt) }} → {{ fmt(t.optInEndAt) }}</dd></div>
         </dl>
         <p v-if="countdownText" class="text-sm text-indigo-300 mt-2">{{ countdownText }}</p>
@@ -131,8 +131,46 @@
             </div>
           </div>
 
-          <!-- Play -->
-          <div v-if="my.match.live" class="text-sm p-2 rounded bg-indigo-500/20 border border-indigo-400/50">
+          <!-- Async + live: Start is a sticky press, the game then waits for whoever is next, for as long as the round lasts -->
+          <div v-if="my.match.asyncRules">
+            <p v-if="deckNotice" class="text-sm p-2 rounded bg-red-500/15 border border-red-400/50 mb-2" role="alert">{{ deckNotice }}</p>
+
+            <div v-if="my.match.game" class="text-sm p-3 rounded bg-indigo-500/15 border border-indigo-400/50">
+              <p class="font-semibold">{{ gameLine }}</p>
+              <p v-if="my.match.game.unseenReveals" class="text-xs text-indigo-200 mt-1">
+                {{ my.match.game.unseenReveals }} reveal{{ my.match.game.unseenReveals === 1 ? '' : 's' }} to watch since you were last on the board.
+              </p>
+              <p v-if="asyncNote" class="text-xs mt-1" :class="asyncNote.tone === 'urgent' ? 'text-amber-300 font-semibold' : 'text-gray-300'">{{ asyncNote.text }}</p>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <button class="px-5 py-2 rounded bg-green-500 hover:bg-green-600 text-sm font-semibold" @click="$emit('open-match', my.match.game.gameId)">
+                  {{ my.match.game.waitingOn === 'you' ? 'Take your turn' : 'Go to the board' }}
+                </button>
+                <button class="px-3 py-1.5 rounded bg-red-700/70 hover:bg-red-700 text-xs ml-auto" :disabled="busy" @click="forfeit">Forfeit match</button>
+              </div>
+            </div>
+
+            <div v-else>
+              <div class="flex flex-wrap items-center gap-2">
+                <button v-if="!liveReady.my" class="px-5 py-2 rounded bg-green-500 hover:bg-green-600 text-sm font-semibold disabled:opacity-50" :disabled="busy || !!deckProblem" @click="play">
+                  {{ liveReady.opponent ? `Start match — ${my.match.opponent?.username} has pressed Start` : 'Start match' }}
+                </button>
+                <template v-else>
+                  <span class="text-sm text-indigo-300" aria-live="polite">✅ You pressed Start — waiting for {{ my.match.opponent?.username }} to press theirs.</span>
+                  <button v-if="!liveReady.opponent" class="px-3 py-1.5 rounded bg-gray-600 hover:bg-gray-500 text-sm" @click="unready">Take it back</button>
+                </template>
+                <button class="px-3 py-1.5 rounded bg-red-700/70 hover:bg-red-700 text-xs ml-auto" :disabled="busy" @click="forfeit">Forfeit match</button>
+              </div>
+              <p class="text-xs text-gray-400 mt-2">
+                You don't need to be online at the same time. Once you have both pressed Start the first game is created and you each take your turns
+                whenever you can, or play live if you are both on the board. There are no turn timers. If you press Start and your opponent never does,
+                you win the match when the round ends. A Start pressed in the last {{ minPlayableText }} of the round does not count.
+              </p>
+            </div>
+            <p v-if="asyncNote && !my.match.game" class="text-xs text-gray-300 mt-2">{{ asyncNote.text }}</p>
+          </div>
+
+          <!-- Play (the older both-online rules, still used by pairings made before the switch) -->
+          <div v-else-if="my.match.live" class="text-sm p-2 rounded bg-indigo-500/20 border border-indigo-400/50">
             🎮 A game of this match is being played right now.
             <button v-if="currentMatchId" class="underline ml-1" @click="$emit('open-match', currentMatchId)">Go to the board</button>
           </div>
@@ -244,9 +282,10 @@
 import { ref, computed, watch, onMounted, onBeforeUnmount, h } from 'vue'
 import Toast from '@/components/Toast.vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
+import { deadlineNote, clockOffsetMs } from '@/utils/ogGtoonReplay'
 
 const props = defineProps({ tournamentId: { type: String, required: true } })
-defineEmits(['switch-tab', 'open-match'])
+const emit = defineEmits(['switch-tab', 'open-match'])
 
 /* A strip of 12 card thumbnails (functional, so no extra file). */
 const DeckStrip = (p) => h('div', { class: 'grid grid-cols-6 sm:grid-cols-12 gap-1', role: 'list', 'aria-label': 'Deck cards' },
@@ -262,7 +301,7 @@ const DeckStrip = (p) => h('div', { class: 'grid grid-cols-6 sm:grid-cols-12 gap
   ])))
 DeckStrip.props = ['cards', 'showProblems']
 
-const { lastError, currentMatchId, tournamentStates, tournamentReady, tournamentUnready, tournamentSync } = useOgGtoonsSocket()
+const { lastError, currentMatchId, tournamentStates, tournamentReady, tournamentUnready, tournamentSync, tournamentGameStarted } = useOgGtoonsSocket()
 
 const t = ref(null)
 const meId = computed(() => t.value?.meId || null)
@@ -346,6 +385,40 @@ const showBracket = computed(() => t.value?.format === 'BRACKET_8_OR_LESS' || ['
 const placements = computed(() => (Array.isArray(t.value?.finalPlacementsJson) ? t.value.finalPlacementsJson : []))
 const youTitle = computed(() => (t.value?.status === 'OPT_IN_OPEN' ? 'Your entry' : 'Your tournament'))
 const deckProblem = computed(() => !!deck.value?.flaggedPositions?.length)
+/* ── Async + live pairings ───────────────────────────────────────────────────────────────── */
+const clockOffset = computed(() => clockOffsetMs(my.value.match?.serverNow, loadedAt.value))
+const loadedAt = ref(Date.now())
+// The most a Start needs: an hour on a normal round, 10% of it on a short one (server: tournamentCore.minPlayableMs).
+const minPlayableText = computed(() => {
+  const mins = Math.max(5, Math.min(60, Math.floor((t.value?.roundWindowHours || 72) * 60 * 0.1)))
+  return mins >= 60 ? 'hour' : `${mins} minutes`
+})
+const asyncNote = computed(() => {
+  const m = my.value.match
+  if (!m?.asyncRules || !m.dueAt) return null
+  return deadlineNote({
+    waitingOn: m.game?.waitingOn || null, now: now.value + clockOffset.value, opponentName: m.opponent?.username || 'Your opponent',
+    deadline: { dueAt: m.dueAt, baseDueAt: m.baseDueAt, extensions: m.extensions }
+  })
+})
+const gameLine = computed(() => {
+  const g = my.value.match?.game
+  if (!g) return ''
+  const opp = my.value.match.opponent?.username || 'your opponent'
+  if (g.waitingOn === 'you') return `Game ${g.gameNumber} · It's your move`
+  if (g.waitingOn === 'opponent') return `Game ${g.gameNumber} · Waiting on ${opp}`
+  return `Game ${g.gameNumber} · In progress`
+})
+// A locked card that left a collection stops the next game from being created; say whose problem it is.
+const deckNotice = computed(() => {
+  const d = my.value.match?.deckProblem
+  const opp = my.value.match?.opponent?.username || 'Your opponent'
+  if (d === 'you') return 'A card in your locked deck is no longer in your collection, so the next game cannot start. Your deck cannot be changed: if the card is not back by the deadline, you lose the match.'
+  if (d === 'opponent') return `${opp} has a problem with their locked deck, so the next game cannot start yet. If it is not fixed by the deadline they lose the match.`
+  if (d === 'both') return 'Both locked decks have a missing card, so the next game cannot start.'
+  return ''
+})
+const asyncRoundsOn = computed(() => !!my.value.match?.asyncRules)
 const dueMs = computed(() => (my.value.match?.dueAt ? new Date(my.value.match.dueAt).getTime() - now.value : null))
 const overdueSoon = computed(() => dueMs.value !== null && dueMs.value < 6 * 3600 * 1000)
 const dueRelative = computed(() => (dueMs.value === null ? '' : dueMs.value <= 0 ? 'overdue' : `${duration(dueMs.value)} left`))
@@ -397,6 +470,7 @@ async function load({ quiet = false, sync = true } = {}) {
       $fetch(base()), $fetch(`${base()}/my-match`), $fetch(`${base()}/standings`), $fetch(`${base()}/matches`)
     ])
     t.value = tt; my.value = mm; standings.value = Array.isArray(st) ? st : []; rounds.value = Array.isArray(rr) ? rr : []
+    loadedAt.value = Date.now()
     await loadDeck()
     if (canEnter.value) await loadDecks()
     // Only on a real (re)load: a sync answer is itself a state push, which would otherwise reload us again.
@@ -425,6 +499,12 @@ function play() { actionError.value = ''; tournamentReady(my.value.match.id) }
 function unready() { tournamentUnready(my.value.match.id) }
 
 watch(lastError, (e) => { if (e?.message) actionError.value = e.message })
+// The second Start just created the game: take the player who has this page open straight to it (they are here, so play is live).
+watch(tournamentGameStarted, (g) => {
+  if (!g || g.tournamentMatchId !== my.value.match?.id) return
+  showToast(`Game ${g.gameNumber} is ready.`, 'success')
+  emit('open-match', g.gameId)
+})
 // A state push (opponent readied, a game ended...) means the REST picture is stale.
 watch(() => (my.value.match ? tournamentStates.value[my.value.match.id] : null), () => load({ quiet: true, sync: false }))
 

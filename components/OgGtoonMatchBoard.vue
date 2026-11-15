@@ -9,6 +9,8 @@
       <!-- First 10 seconds: both players see the goal cards, how the game is decided and a countdown. -->
       <OgGtoonMatchIntro
         v-if="introActive"
+        :manual="isAsync"
+        @start="dismissIntro"
         :you="{ name: matchState.you.username || 'You', color: matchState.you.goalColor, card: matchState.you.goalCard }"
         :opponent="{ name: matchState.opponent.username || 'Opponent', color: matchState.opponent.goalColor, card: matchState.opponent.goalCard }"
         :seconds="introSeconds"
@@ -56,7 +58,14 @@
             </div>
 
             <div class="og-strip-line og-actions">
-              <template v-if="inDiscardPhase">
+              <template v-if="replaying">
+                <span class="og-note" role="status" aria-live="polite">Replaying what you missed ({{ replayInfo.index + 1 }} of {{ replayInfo.total }})</span>
+                <button type="button" class="bg-gray-600 hover:bg-gray-500 og-btn" @click="skipReplay">Skip</button>
+              </template>
+              <template v-else-if="matchState.over && isAsync">
+                <span class="og-note">{{ matchState.closed ? 'This game was closed when the match was decided.' : 'This game is over.' }}</span>
+              </template>
+              <template v-else-if="inDiscardPhase">
                 <button v-if="!matchState.you.discardReady" data-tut="discard-btn" @click="confirmDiscard" class="bg-red-500 hover:bg-red-600 og-btn">{{ discardPick.size ? `Discard ${discardPick.size} & draw` : 'Keep my hand' }}</button>
                 <span v-else class="og-note">Waiting for opponent to finish discarding...</span>
               </template>
@@ -90,6 +99,7 @@
                 <span v-else-if="matchState.you.ready" class="og-note">Waiting for opponent...</span>
               </template>
             </div>
+            <p v-if="asyncNote && !replaying" class="og-deadline" :class="asyncNote.tone === 'urgent' ? 'og-deadline-urgent' : ''" role="status" aria-live="polite">{{ asyncNote.text }}</p>
             <p v-if="lastError" class="og-error">{{ lastError.message }}</p>
             <div v-if="helpOpen" class="og-help">{{ helpText }}</div>
           </div>
@@ -185,7 +195,10 @@
             </div>
 
             <!-- Always visible, whichever tab is open -->
-            <div class="og-status" :class="oppStatusReady ? 'og-status-ready' : ''">{{ matchState.opponent.username }}: {{ oppStatusLabel }}</div>
+            <div class="og-status" :class="oppStatusReady ? 'og-status-ready' : ''">
+              {{ matchState.opponent.username }}: {{ oppStatusLabel }}
+              <span v-if="isAsync && !matchState.over" class="og-presence" :class="asyncPresence.opponentOnBoard ? 'og-presence-on' : ''">{{ asyncPresence.opponentOnBoard ? '● on the board now' : (lastMoveText ? '○ ' + lastMoveText : '') }}</span>
+            </div>
           </div>
 
           <div class="og-box og-deck-box" data-tut="deck-box">
@@ -284,8 +297,13 @@
       </transition>
       <!-- With the result closed, the finished board stays visible; these bring the result back or leave. -->
       <!-- A tournament game: the series card says where the best-of-3 stands and lines up the next game. -->
+      <OgGtoonAsyncResult
+        v-if="matchEnded && !flipping && resultOpen && isTournament && isAsync"
+        :ended="matchEnded" :tournament="matchState.tournament" :next-game-id="nextAsyncGameId"
+        @exit="$emit('exit')" @view-board="resultOpen = false" @open-game="(id) => emit('open-game', id)"
+      />
       <OgGtoonTournamentResult
-        v-if="matchEnded && !flipping && resultOpen && isTournament"
+        v-else-if="matchEnded && !flipping && resultOpen && isTournament"
         :ended="matchEnded" :tournament="matchState.tournament"
         @exit="$emit('exit')" @view-board="resultOpen = false"
       />
@@ -317,11 +335,16 @@ import OgGtoonGameLog from '@/components/OgGtoonGameLog.vue'
 import OgGtoonMatchIntro from '@/components/oggtoons/OgGtoonMatchIntro.vue'
 import OgGtoonTutorial from '@/components/oggtoons/OgGtoonTutorial.vue'
 import OgGtoonTournamentResult from '@/components/oggtoons/OgGtoonTournamentResult.vue'
+import OgGtoonAsyncResult from '@/components/oggtoons/OgGtoonAsyncResult.vue'
+import { deadlineNote } from '@/utils/ogGtoonReplay'
 import { difficultyLabel as ogDifficultyLabel } from '@/utils/ogGtoonDifficulty'
 
-defineEmits(['exit'])
+const emit = defineEmits(['exit', 'open-game'])
 
-const { matchState, lastReveal, matchEnded, packReward, lastError, commit, place, unplace, swap, swapSkip, chooseColor, discard } = useOgGtoonsSocket()
+const {
+  matchState, lastReveal, matchEnded, packReward, lastError, commit, place, unplace, swap, swapSkip, chooseColor, discard,
+  replayInfo, ackReveal, skipReplay, introSeen, asyncPresence, clockOffset, nextAsyncGameId
+} = useOgGtoonsSocket()
 
 const COLOR_HEX = {
   BLACK: '#cccccc', SILVER: '#c0c0c0', BLUE: '#60a5fa', RED: '#f87171',
@@ -332,6 +355,10 @@ function colorHex(c) { return COLOR_HEX[c] || '#ffffff' }
 const isPractice = computed(() => !!matchState.value?.practice)
 // One game of a tournament best-of-3 (the server tags the view; the series card replaces the usual result screen).
 const isTournament = computed(() => !!matchState.value?.tournament)
+// An async + live tournament game: no clocks, may be picked up hours later, may be replayed, may be over without being played out.
+const isAsync = computed(() => !!matchState.value?.async)
+// While missed reveals are replaying the board shows the game as it WAS and takes no input.
+const replaying = computed(() => !!replayInfo.value)
 // The guided tutorial match (also flagged practice by the server): no timers, no intro modal, no result
 // modal of its own — the guide walks through the result and its last button leaves.
 const isTutorial = computed(() => !!matchState.value?.tutorial)
@@ -388,7 +415,8 @@ watch(lastReveal, async (rev) => {
   playback.value = null
   deltas.value = new Map()
   const steps = rev?.steps || []
-  if (!steps.length) return
+  // A reveal with nothing to animate (a Silver colour pick, say) is finished the moment it is shown.
+  if (!steps.length) { if (rev) ackReveal(rev); return }
   const timing = normalizeRevealTiming(rev.timing) // admin-tunable (Manage Games > gToons (Original))
   playback.value = {
     hidden: new Set(steps.map(st => cardKey(st.side, st.slot))),
@@ -427,7 +455,7 @@ watch(lastReveal, async (rev) => {
     playback.value = { hidden, shown: nextShown, markers }
     await sleep(step.changed ? timing.effectsMs : timing.quietMs)
   }
-  if (token === playToken) playback.value = null
+  if (token === playToken) { playback.value = null; ackReveal(rev) }
 })
 onBeforeUnmount(() => { playToken += 1 })
 
@@ -438,6 +466,24 @@ const nowMs = ref(Date.now())
 let tickTimer = null
 onMounted(() => { tickTimer = setInterval(() => { nowMs.value = Date.now() }, 250) })
 onBeforeUnmount(() => clearInterval(tickTimer))
+/* ── Async games: the deadline note and who last played ──────────────────────────────────────
+ * The device clock can be minutes off, and the final-minute rule makes seconds matter, so everything is compared against the
+ * server's clock (offset sent with each view). */
+const correctedNow = computed(() => nowMs.value + clockOffset.value)
+const asyncNote = computed(() => {
+  const m = matchState.value
+  if (!m?.async || m.over || !m.deadline) return null
+  return deadlineNote({ waitingOn: m.waitingOn, deadline: m.deadline, now: correctedNow.value, opponentName: m.opponent?.username || 'Your opponent' })
+})
+const lastMoveText = computed(() => {
+  const t = matchState.value?.lastPlayAt
+  if (!t) return ''
+  const mins = Math.max(0, Math.floor((correctedNow.value - new Date(t).getTime()) / 60000))
+  if (mins < 1) return 'last move just now'
+  if (mins < 60) return `last move ${mins} min ago`
+  const h = Math.floor(mins / 60)
+  return h < 48 ? `last move ${h} h ago` : `last move ${Math.floor(h / 24)} d ago`
+})
 const secondsLeft = computed(() => {
   const m = matchState.value
   if (!m?.phaseEndsAt) return null
@@ -483,7 +529,7 @@ const unplacedHand = computed(() => (matchState.value?.you?.hand || []).filter(c
 // In the discard phase every hand card is shown; while placing, placed cards leave the tray.
 const handTray = computed(() => (inDiscardPhase.value ? (matchState.value?.you?.hand || []) : unplacedHand.value))
 
-const canEdit = computed(() => !!matchState.value && !matchEnded.value && matchState.value.phase === 'play' && !matchState.value.you.ready)
+const canEdit = computed(() => !!matchState.value && !matchEnded.value && !replaying.value && !matchState.value.over && matchState.value.phase === 'play' && !matchState.value.you.ready)
 const canCommit = computed(() => canEdit.value)
 // The server rejects a short commit; this just keeps the button honest.
 const slotsFilled = computed(() => {
@@ -562,7 +608,7 @@ function handTone(idx) {
 
 function onHandClick(idx) {
   if (inDiscardPhase.value) {
-    if (matchState.value?.you?.discardReady) return
+    if (matchState.value?.you?.discardReady || replaying.value || matchState.value?.over) return
     const next = new Set(discardPick.value)
     next.has(idx) ? next.delete(idx) : next.add(idx)
     discardPick.value = next
@@ -612,6 +658,12 @@ const commitLabel = computed(() => {
 const helpText = computed(() => {
   const m = matchState.value
   if (!m) return ''
+  // Async games have no clock, so the "if time runs out" sentences must not appear.
+  const timed = !!m.phaseEndsAt
+  const strip = (s) => (timed ? s : s.replace(/ If time runs out[^.]*\./, '').replace(/ If time runs out, [^.]*\./, ''))
+  return strip(helpFor(m))
+})
+function helpFor(m) {
   if (m.phase === 'discard') {
     return 'Discard phase: tap any cards you want to throw away, then confirm. Your hand is refilled to 6 from your undealt cards. If time runs out you keep your hand.'
   }
@@ -630,7 +682,7 @@ const helpText = computed(() => {
   const range = slots.length === 1 ? `slot ${slots[0]}` : `slots ${slots[0]}-${slots[slots.length - 1]}`
   if (m.suddenDeath) return `Sudden death: place one card in slot ${slots[0]} and play it.`
   return `Tap a card in your hand, then tap an open ${range} to place it. Fill all ${slots.length} slot${slots.length === 1 ? '' : 's'} to commit. If time runs out, random cards fill the empty slots. Tap a placed card to take it back.`
-})
+}
 
 const oppStatusReady = computed(() => {
   const o = matchState.value?.opponent
@@ -664,6 +716,8 @@ function setTab(t) {
 watch(() => gameLog.value.length, (n) => {
   if (tab.value === 'log') { seenLogCount.value = n; scrollLogToEnd() }
 })
+// Opening an async game that has already been going for hours must not show its whole log as unread.
+watch(() => matchState.value?.gameId, () => { seenLogCount.value = gameLog.value.length })
 
 /* Clicking a face-up gToon (board or deck) shows its printed properties on the Info tab. */
 const { card: infoCard, detail: infoDetail, loading: infoLoading, error: infoError, show: showInfoCard, clear: clearInfo } = useOgGtoonInfoPanel()
@@ -805,8 +859,13 @@ const introEndsLocal = ref(0)
 watch(() => matchState.value?.introRemainingMs, (ms) => {
   introEndsLocal.value = ms > 0 ? Date.now() + ms : 0
 }, { immediate: true })
-const introActive = computed(() => !!matchState.value && !matchEnded.value && !isTutorial.value
-  && introEndsLocal.value > 0 && nowMs.value < introEndsLocal.value)
+// Async games have no countdown: the goal-card screen is shown once per player per game and dismissed with a button.
+const introDismissed = ref(false)
+watch(() => matchState.value?.gameId, () => { introDismissed.value = false })
+function dismissIntro() { introDismissed.value = true; introSeen() }
+const introActive = computed(() => !!matchState.value && !matchEnded.value && !isTutorial.value && !replaying.value && (isAsync.value
+  ? !!matchState.value.introPending && !introDismissed.value
+  : introEndsLocal.value > 0 && nowMs.value < introEndsLocal.value))
 const introSeconds = computed(() => Math.max(0, Math.ceil((introEndsLocal.value - nowMs.value) / 1000)))
 
 /* ── Tutorial guide ──────────────────────────────────────────────────────────────────────── */
@@ -824,6 +883,10 @@ const tutorialBoard = computed(() => ({
 </script>
 
 <style scoped>
+.og-deadline { font-size: .72rem; line-height: 1.25; padding: 4px 8px; border-radius: 6px; background: rgba(0, 0, 0, .28); color: #dbeafe; text-align: center; }
+.og-deadline-urgent { background: rgba(245, 158, 11, .25); color: #fde68a; }
+.og-presence { margin-left: .5rem; font-size: .68rem; color: #9ca3af; }
+.og-presence-on { color: #86efac; }
 .og-board { --og-rim: #7f98b3; --og-plate: #9bb3cb; --og-accent: #99ffff; }
 
 /* ── Layout: board (left) + Log/Info & Deck (right). Stacks on mobile. ── */

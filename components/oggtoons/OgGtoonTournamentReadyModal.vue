@@ -5,11 +5,15 @@
     <div v-if="ping" class="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-3" role="alertdialog" aria-modal="true" aria-labelledby="ogt-ready-title">
       <div class="bg-gray-900 border border-white/20 rounded-xl p-5 w-[24rem] max-w-full text-white text-center">
         <h2 id="ogt-ready-title" class="text-lg font-bold mb-1">🏆 {{ ping.username }} is ready to play</h2>
-        <p class="text-sm text-gray-300 mb-3">Your <strong>{{ ping.tournamentName }}</strong> match is waiting for you. Press Start next game and the game starts as soon as you both are in.</p>
+        <p v-if="ping.async" class="text-sm text-gray-300 mb-3">
+          They pressed Start on your <strong>{{ ping.tournamentName }}</strong> match. Press Start too and the game is created straight away.
+          You don't have to play it right now: take your turns whenever you can before the deadline, or play live if you're both on the board.
+        </p>
+        <p v-else class="text-sm text-gray-300 mb-3">Your <strong>{{ ping.tournamentName }}</strong> match is waiting for you. Press Start next game and the game starts as soon as you both are in.</p>
         <p v-if="errorText" class="text-xs text-red-300 mb-2" role="alert">{{ errorText }}</p>
         <div class="flex justify-center gap-2">
           <button class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded text-sm" @click="dismiss">Later</button>
-          <button class="bg-green-500 hover:bg-green-600 px-5 py-2 rounded text-sm font-semibold" @click="play">Start next game</button>
+          <button class="bg-green-500 hover:bg-green-600 px-5 py-2 rounded text-sm font-semibold" @click="play">{{ ping.async ? 'Start match' : 'Start next game' }}</button>
         </div>
       </div>
     </div>
@@ -20,7 +24,7 @@
 import { ref, watch } from 'vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 
-const { tournamentOpponentReady, tournamentReady, lastError, currentMatchId } = useOgGtoonsSocket()
+const { tournamentOpponentReady, tournamentReady, lastError, currentMatchId, tournamentGameStarted } = useOgGtoonsSocket()
 const ping = ref(null)
 const errorText = ref('')
 
@@ -32,6 +36,8 @@ watch(tournamentOpponentReady, (p) => {
 watch(lastError, (e) => { if (ping.value && e?.message) errorText.value = e.message })
 // A game starting (this one) takes over the screen.
 watch(currentMatchId, (id) => { if (id) ping.value = null })
+// An async game being created for this pairing also closes it.
+watch(tournamentGameStarted, (g) => { if (g && ping.value?.tournamentMatchId === g.tournamentMatchId) ping.value = null })
 
 function play() {
   errorText.value = ''
