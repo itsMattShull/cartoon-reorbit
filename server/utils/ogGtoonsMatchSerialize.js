@@ -46,6 +46,9 @@ export function serializeMatch(match) {
     manualCommits: match.manualCommits || [0, 0],
     // Without this a restart would turn a tournament game into a casual one that never counts.
     tournament: match.tournament || null,
+    // Async tournament games have no clocks at all. Without these a restored copy would quietly get its phase
+    // timers (and the auto-play they bring) back.
+    noTimers: !!match.noTimers,
     startedAt: match.startedAt,
     lastActivity: match.lastActivity
   }

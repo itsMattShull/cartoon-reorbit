@@ -449,6 +449,52 @@ run('Play: nothing starts until BOTH are ready and online; the game starts at ze
   assert.ok(errors().includes('notYours'))
 })
 
+run('async rules are stamped on pairings when a round is created, from the kill switch, and never change afterwards', async () => {
+  await setup()
+  const Config = await import('../server/utils/ogGtoonsConfig.js')
+  const setSwitch = async (on) => {
+    await db.gameConfig.upsert({ where: { gameName: 'OgGtoons' }, create: { gameName: 'OgGtoons', ogGtoonsTournamentsAsyncEnabled: on }, update: { ogGtoonsTournamentsAsyncEnabled: on } })
+    Config.invalidateOgGtoonsConfigCache()
+  }
+  try {
+    // Switch off (the default): today's rules.
+    await setSwitch(false)
+    const old = await mkUsers(4)
+    const t1 = await mkTournament(old, { startAt: null, roundWindowHours: 24 })
+    await T.startTournament(db, t1.id)
+    const legacy = await db.ogGtoonTournamentMatch.findMany({ where: { tournamentId: t1.id } })
+    assert.ok(legacy.length)
+    assert.ok(legacy.every(m => m.asyncRules === false && m.baseDueAt === null), 'older rules, no base deadline')
+
+    // Switch on: new pairings get the async rules and their ORIGINAL deadline.
+    await setSwitch(true)
+    const fresh = await mkUsers(4)
+    const t2 = await mkTournament(fresh, { startAt: null, roundWindowHours: 24 })
+    await T.startTournament(db, t2.id)
+    const stamped = await db.ogGtoonTournamentMatch.findMany({ where: { tournamentId: t2.id, status: 'PENDING' } })
+    assert.ok(stamped.length)
+    for (const m of stamped) {
+      assert.equal(m.asyncRules, true)
+      assert.equal(m.baseDueAt.getTime(), m.dueAt.getTime())
+      assert.equal(m.extensions, 0)
+    }
+
+    // Turning it off again leaves existing pairings exactly as they were, and the next round follows the switch at that moment.
+    await setSwitch(false)
+    const still = await db.ogGtoonTournamentMatch.findMany({ where: { tournamentId: t2.id, status: 'PENDING' } })
+    assert.ok(still.every(m => m.asyncRules === true))
+    for (const m of stamped) await playSeries(m.id, ['A', 'A'])
+    await T.advanceAndNotify(db, t2.id)
+    const next = await db.ogGtoonTournamentMatch.findMany({ where: { tournamentId: t2.id, roundNumber: 2 } })
+    // A 4 player field is a straight bracket: the next round is the final, created while the switch is off.
+    assert.ok(next.length)
+    assert.ok(next.every(m => m.asyncRules === false), 'round 2 was created with the switch off')
+  } finally {
+    await db.gameConfig.deleteMany({ where: { gameName: 'OgGtoons' } })
+    Config.invalidateOgGtoonsConfigCache()
+  }
+})
+
 run('decks are frozen once locked in: the 12 copies cannot leave while the player is in, and there is no repair', async () => {
   await setup()
   const Freeze = await import('../server/utils/ogGtoonTournamentFreeze.js')
