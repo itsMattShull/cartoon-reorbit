@@ -77,6 +77,14 @@ async function playSeries(matchId, games /* e.g. ['A','A'] */) {
   return Live.settleMatchFromGames(matchId)
 }
 
+/**
+ * Turns a tournament's pairings into the older both-online kind, like the ones that already exist in production when the async rules
+ * ship (every new pairing is async). The tests of the older flow (Start/ready-up, the older deadline rules) build theirs this way.
+ */
+async function legacyPairings(tournamentId) {
+  await db.ogGtoonTournamentMatch.updateMany({ where: { tournamentId }, data: { asyncRules: false, baseDueAt: null } })
+}
+
 async function openMatches(tournamentId) {
   return db.ogGtoonTournamentMatch.findMany({ where: { tournamentId, status: { in: ['PENDING', 'IN_PROGRESS'] }, lockedAt: null }, orderBy: [{ roundNumber: 'asc' }, { tableNumber: 'asc' }] })
 }
@@ -265,6 +273,7 @@ run('deadlines: walkover for the player who showed, a Swiss double no-show is a 
   const users = await mkUsers(10)
   const t = await mkTournament(users)
   await close(t, users)
+  await legacyPairings(t.id)
   const open = await openMatches(t.id)
   assert.equal(open.length, 5)
 
@@ -380,6 +389,7 @@ run('Play: nothing starts until BOTH are ready and online; the game starts at ze
     await db.ogGtoonTournamentOptIn.create({ data: { tournamentId: t.id, userId: u.id, deckSnapshotJson: snaps[i] } })
   }
   await T.processStateTransitions(db)
+  await legacyPairings(t.id)
   const [pairing] = await openMatches(t.id)
   const [pa, pb] = [pairing.playerAUserId, pairing.playerBUserId]
 
@@ -452,50 +462,27 @@ run('Play: nothing starts until BOTH are ready and online; the game starts at ze
   assert.ok(errors().includes('notYours'))
 })
 
-run('async rules are stamped on pairings when a round is created, from the kill switch, and never change afterwards', async () => {
+run('every pairing made now is played under the async rules and stamped with its original deadline; older pairings stay as they were', async () => {
   await setup()
-  const Config = await import('../server/utils/ogGtoonsConfig.js')
-  const setSwitch = async (on) => {
-    await db.gameConfig.upsert({ where: { gameName: 'OgGtoons' }, create: { gameName: 'OgGtoons', ogGtoonsTournamentsAsyncEnabled: on }, update: { ogGtoonsTournamentsAsyncEnabled: on } })
-    Config.invalidateOgGtoonsConfigCache()
+  const players = await mkUsers(4)
+  const t = await mkTournament(players, { startAt: null, roundWindowHours: 24 })
+  await T.startTournament(db, t.id)
+  const round1 = await db.ogGtoonTournamentMatch.findMany({ where: { tournamentId: t.id, status: 'PENDING' } })
+  assert.ok(round1.length)
+  for (const m of round1) {
+    assert.equal(m.asyncRules, true)
+    assert.equal(m.baseDueAt.getTime(), m.dueAt.getTime())
+    assert.equal(m.extensions, 0)
   }
-  try {
-    // Switch off (the default): today's rules.
-    await setSwitch(false)
-    const old = await mkUsers(4)
-    const t1 = await mkTournament(old, { startAt: null, roundWindowHours: 24 })
-    await T.startTournament(db, t1.id)
-    const legacy = await db.ogGtoonTournamentMatch.findMany({ where: { tournamentId: t1.id } })
-    assert.ok(legacy.length)
-    assert.ok(legacy.every(m => m.asyncRules === false && m.baseDueAt === null), 'older rules, no base deadline')
 
-    // Switch on: new pairings get the async rules and their ORIGINAL deadline.
-    await setSwitch(true)
-    const fresh = await mkUsers(4)
-    const t2 = await mkTournament(fresh, { startAt: null, roundWindowHours: 24 })
-    await T.startTournament(db, t2.id)
-    const stamped = await db.ogGtoonTournamentMatch.findMany({ where: { tournamentId: t2.id, status: 'PENDING' } })
-    assert.ok(stamped.length)
-    for (const m of stamped) {
-      assert.equal(m.asyncRules, true)
-      assert.equal(m.baseDueAt.getTime(), m.dueAt.getTime())
-      assert.equal(m.extensions, 0)
-    }
-
-    // Turning it off again leaves existing pairings exactly as they were, and the next round follows the switch at that moment.
-    await setSwitch(false)
-    const still = await db.ogGtoonTournamentMatch.findMany({ where: { tournamentId: t2.id, status: 'PENDING' } })
-    assert.ok(still.every(m => m.asyncRules === true))
-    for (const m of stamped) await playSeries(m.id, ['A', 'A'])
-    await T.advanceAndNotify(db, t2.id)
-    const next = await db.ogGtoonTournamentMatch.findMany({ where: { tournamentId: t2.id, roundNumber: 2 } })
-    // A 4 player field is a straight bracket: the next round is the final, created while the switch is off.
-    assert.ok(next.length)
-    assert.ok(next.every(m => m.asyncRules === false), 'round 2 was created with the switch off')
-  } finally {
-    await db.gameConfig.deleteMany({ where: { gameName: 'OgGtoons' } })
-    Config.invalidateOgGtoonsConfigCache()
-  }
+  // A pairing that already existed before the async rules shipped keeps the older rules; the next round is async again.
+  await db.ogGtoonTournamentMatch.update({ where: { id: round1[0].id }, data: { asyncRules: false, baseDueAt: null } })
+  for (const m of round1) await playSeries(m.id, ['A', 'A'])
+  assert.equal((await db.ogGtoonTournamentMatch.findUnique({ where: { id: round1[0].id } })).asyncRules, false, 'settling never changes the rules a pairing was made with')
+  await T.advanceAndNotify(db, t.id)
+  const next = await db.ogGtoonTournamentMatch.findMany({ where: { tournamentId: t.id, roundNumber: 2 } })
+  assert.ok(next.length)
+  assert.ok(next.every(m => m.asyncRules === true && m.baseDueAt), 'round 2 follows the new rules')
 })
 
 run('decks are frozen once locked in: the 12 copies cannot leave while the player is in, and there is no repair', async () => {

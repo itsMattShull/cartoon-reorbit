@@ -1,9 +1,7 @@
 -- OG gToons tournaments: async + live match play.
 -- Purely additive: every new column is nullable or has a default, so rows that already exist (and the
--- tournament running right now) are untouched and keep the old both-online rules (asyncRules = false).
-
--- Kill switch, read when a round is created.
-ALTER TABLE "GameConfig" ADD COLUMN "ogGtoonsTournamentsAsyncEnabled" BOOLEAN DEFAULT false;
+-- tournament running right now) are untouched and keep the old both-online rules (asyncRules = false). Pairings created
+-- after this ships are stamped asyncRules = true by the application.
 
 -- Per-pairing async state.
 ALTER TABLE "OgGtoonTournamentMatch"

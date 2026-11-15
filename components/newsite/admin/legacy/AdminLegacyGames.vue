@@ -862,13 +862,6 @@
                 <span class="block text-[11px] text-gray-500">Best-of-3 tournaments run from the OG gToons Tournaments admin tool. Also requires Live Matches. Off hides the Tournaments tab and rejects opt-in, play and forfeit requests; pairings already made are kept and resume when it is turned back on.</span>
               </span>
             </label>
-            <label class="flex items-start gap-2 p-2 border rounded bg-white">
-              <input type="checkbox" v-model="ogGtoonsTournamentsAsyncEnabled" class="mt-0.5" />
-              <span>
-                <span class="text-xs font-semibold text-gray-800">Tournaments: play at your own pace (async + live)</span>
-                <span class="block text-[11px] text-gray-500">Applies to rounds created AFTER you turn it on; pairings that already exist keep the rules they were made with, so it is safe to flip mid-tournament. On: players press Start, move whenever they can (no turn timers, leaving the board never forfeits), or play live together if they are both on the board. Off: the older rules where both players must be online at once.</span>
-              </span>
-            </label>
           </div>
 
           <hr class="my-4 border-gray-200" />
@@ -2238,7 +2231,6 @@ const ogGtoonsDeckBuildingEnabled = ref(false)
 const ogGtoonsLeaderboardEnabled  = ref(false)
 const ogGtoonsPracticeEnabled     = ref(false)
 const ogGtoonsTournamentsEnabled  = ref(false)
-const ogGtoonsTournamentsAsyncEnabled = ref(false)
 // PvP winner-pack reward: { packId, limit } — both set, or both null (off). See OgPackRewardSettings.vue.
 const ogWinPack                   = ref({ packId: null, limit: null })
 const ogPackRewardEl              = ref(null)
@@ -2684,7 +2676,6 @@ async function loadSettings() {
     ogGtoonsLeaderboardEnabled.value  = og.ogGtoonsLeaderboardEnabled  === true
     ogGtoonsPracticeEnabled.value     = og.ogGtoonsPracticeEnabled     === true
     ogGtoonsTournamentsEnabled.value  = og.ogGtoonsTournamentsEnabled  === true
-    ogGtoonsTournamentsAsyncEnabled.value = og.ogGtoonsTournamentsAsyncEnabled === true
     ogGtoonsGamesPageVisible.value    = og.ogGtoonsGamesPageVisible    !== false
     ogWinPack.value = { packId: og.ogGtoonsWinPackId ?? null, limit: og.ogGtoonsWinPackPerUserLimit ?? null }
     for (const k of Object.keys(ogRevealMs)) ogRevealMs[k] = Number.isInteger(og[k]) ? og[k] : null
@@ -3202,7 +3193,6 @@ async function saveOgGtoonsConfig() {
         ogGtoonsLeaderboardEnabled:  ogGtoonsLeaderboardEnabled.value,
         ogGtoonsPracticeEnabled:     ogGtoonsPracticeEnabled.value,
         ogGtoonsTournamentsEnabled:  ogGtoonsTournamentsEnabled.value,
-        ogGtoonsTournamentsAsyncEnabled: ogGtoonsTournamentsAsyncEnabled.value,
         ogGtoonsGamesPageVisible:    ogGtoonsGamesPageVisible.value,
         ogGtoonsWinPackId:           ogWinPack.value.packId,
         ogGtoonsWinPackPerUserLimit: ogWinPack.value.limit,

@@ -72,8 +72,8 @@ async function mkGame() {
   await setup()
   await db.gameConfig.upsert({
     where: { gameName: 'OgGtoons' },
-    create: { gameName: 'OgGtoons', ogGtoonsGameEnabled: true, ogGtoonsTournamentsEnabled: true, ogGtoonsTournamentsAsyncEnabled: true },
-    update: { ogGtoonsGameEnabled: true, ogGtoonsTournamentsEnabled: true, ogGtoonsTournamentsAsyncEnabled: true }
+    create: { gameName: 'OgGtoons', ogGtoonsGameEnabled: true, ogGtoonsTournamentsEnabled: true },
+    update: { ogGtoonsGameEnabled: true, ogGtoonsTournamentsEnabled: true }
   })
   Config.invalidateOgGtoonsConfigCache()
   const pair = await mkUsers(2)

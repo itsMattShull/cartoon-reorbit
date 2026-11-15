@@ -1821,10 +1821,6 @@ model GameConfig {
   // OG gToons tournaments (Tournaments tab + the server-side opt-in / play / forfeit actions).
   // Same explicit-true rule as the four switches above: a missing row leaves it off.
   ogGtoonsTournamentsEnabled Boolean? @default(false)
-  // Kill switch for the async + live match rules (players move whenever they can, no turn timers). Read when a
-  // ROUND IS CREATED and stamped onto each pairing (OgGtoonTournamentMatch.asyncRules), so turning it on or off
-  // never changes a pairing that already exists. Off = rounds are created with the older both-online rules.
-  ogGtoonsTournamentsAsyncEnabled Boolean? @default(false)
 
   // PvP pack reward (server/utils/ogGtoonsPackReward.js). The winner of a played-out random-queue or
   // direct-challenge match gets one sealed `ogGtoonsWinPackId` pack, up to `ogGtoonsWinPackPerUserLimit`
@@ -3354,8 +3350,8 @@ model OgGtoonTournamentMatch {
   liveStartedAt DateTime? // when that game started; a marker older than a match can last is stale and is cleared
 
   // ── Async + live play (migration 20261115120000_og_tournament_async_games) ────────────────────────
-  // Stamped when the pairing is created from the kill switch above; existing pairings stay false and keep the
-  // old both-online flow and deadline rules untouched.
+  // true for every pairing made from now on (async + live play); false for the pairings that existed before this shipped,
+  // which keep the old both-online flow and deadline rules untouched until they finish.
   asyncRules      Boolean   @default(false)
   // The round's ORIGINAL deadline for this pairing. `dueAt` may be pushed out by final-minute plays (+60s each,
   // `extensions`), but "may a new game still start" and "did a Start count" are judged against this one.

@@ -20,7 +20,6 @@ import { DateTime } from 'luxon'
 import { randomBytes } from 'node:crypto'
 import { sendDiscordDMByDiscordId, sendGuildChannelMessageById } from './discord.js'
 import { grantRewardInTx, enqueueCtoonJobs } from './achievements.js'
-import { getOgGtoonsConfig } from './ogGtoonsConfig.js'
 import { armOgTournamentDeadline } from './queues.js'
 import { decideAndLock, closeTournamentGames, ensureNextGameInTx, lockPairing, restoreMatch, needsToAct } from './ogGtoonTournamentGames.js'
 import { goalCardFor } from './ogGtoonEngine.js'
@@ -227,13 +226,12 @@ async function activePlayerIds(tx, tournamentId) {
   return optIns.map(o => o.userId)
 }
 
-/** The kill switch, read once per round creation and stamped onto each pairing (never re-read for a pairing that exists). */
-async function asyncRulesEnabled() {
-  try { return (await getOgGtoonsConfig()).tournamentsAsyncEnabled === true } catch { return false }
-}
-
-/** Per-pairing fields for the async rules: the flag plus the round's ORIGINAL deadline (dueAt may later move by final-minute plays). */
-const asyncFields = (tournament, round) => (tournament.asyncRules ? { asyncRules: true, baseDueAt: round.dueAt } : {})
+/**
+ * Every pairing made from now on is played under the async + live rules, and is stamped so: the flag plus the round's ORIGINAL
+ * deadline (dueAt may later move by final-minute plays). Pairings made before this shipped carry asyncRules = false and finish
+ * under the older both-online rules.
+ */
+const asyncFields = (_tournament, round) => ({ asyncRules: true, baseDueAt: round.dueAt })
 
 async function createRound(tx, tournament, stage, roundNumber, now) {
   return tx.ogGtoonTournamentRound.create({
@@ -339,7 +337,6 @@ async function createTop8Bracket(tx, tournament, now) {
  */
 export async function startTournament(db, tournamentId, now = new Date()) {
   const events = []
-  const asyncRules = await asyncRulesEnabled()
   await db.$transaction(async (tx) => {
     const locked = await tx.$queryRaw`SELECT id FROM "OgGtoonTournament" WHERE id = ${tournamentId} FOR UPDATE`
     if (!locked.length) return
@@ -375,7 +372,7 @@ export async function startTournament(db, tournamentId, now = new Date()) {
 
     const seedValue = randomBytes(8).toString('hex')
     const format = formatFor(good.length)
-    const fresh = { ...t, seedValue, roundWindowHours: t.roundWindowHours, asyncRules }
+    const fresh = { ...t, seedValue, roundWindowHours: t.roundWindowHours }
     let round
     if (format === 'BRACKET_8_OR_LESS') {
       await tx.ogGtoonTournament.update({ where: { id: t.id }, data: { status: 'BRACKET_ACTIVE', format, seedValue } })
@@ -526,14 +523,13 @@ async function finishTournament(tx, t, now, events) {
  */
 export async function advanceTournament(db, tournamentId, { now = new Date() } = {}) {
   const events = []
-  const asyncRules = await asyncRulesEnabled()
   await db.$transaction(async (tx) => {
     const rows = await tx.$queryRaw`SELECT id FROM "OgGtoonTournament" WHERE id = ${tournamentId} FOR UPDATE`
     if (!rows.length) return
     for (let i = 0; i < 20; i += 1) {
       const row = await tx.ogGtoonTournament.findUnique({ where: { id: tournamentId } })
       if (!row) break
-      const t = { ...row, asyncRules }
+      const t = row
       let progressed = false
       if (t.status === 'SWISS_ACTIVE') progressed = await stepSwiss(tx, t, now, events)
       else if (t.status === 'BRACKET_ACTIVE') progressed = await stepBracket(tx, t, now, events)

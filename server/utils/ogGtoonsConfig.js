@@ -24,7 +24,6 @@ async function load() {
         ogGtoonsLeaderboardEnabled: true,
         ogGtoonsPracticeEnabled: true,
         ogGtoonsTournamentsEnabled: true,
-        ogGtoonsTournamentsAsyncEnabled: true,
         ogGtoonsGamesPageVisible: true,
         ogGtoonsRevealFirstMs: true,
         ogGtoonsRevealCardMs: true,
@@ -43,9 +42,6 @@ async function load() {
       practiceEnabled: row?.ogGtoonsPracticeEnabled === true,
       // Needs live matches too (a tournament game is a live match); checked where it is used.
       tournamentsEnabled: row?.ogGtoonsTournamentsEnabled === true,
-      // Kill switch for the async + live match rules. Read when a round is created and stamped onto each pairing, so
-      // flipping it never changes a pairing that already exists. Only an explicit true turns it on.
-      tournamentsAsyncEnabled: row?.ogGtoonsTournamentsAsyncEnabled === true,
       // Independent of the four above, and opposite polarity on purpose — see this column's
       // schema comment. It isn't part of the rollout-safety gate those four exist for, so a
       // missing row (or a read failure) leaves it visible by default; only an explicit `false`
@@ -59,11 +55,11 @@ async function load() {
     }
   } catch (err) {
     console.error('[ogGtoons] config read failed:', err)
-    return { matchmakingEnabled: false, gameEnabled: false, deckBuildingEnabled: false, leaderboardEnabled: false, practiceEnabled: false, tournamentsEnabled: false, tournamentsAsyncEnabled: false, gamesPageVisible: true, reveal: { ...REVEAL_TIMING_DEFAULTS } }
+    return { matchmakingEnabled: false, gameEnabled: false, deckBuildingEnabled: false, leaderboardEnabled: false, practiceEnabled: false, tournamentsEnabled: false, gamesPageVisible: true, reveal: { ...REVEAL_TIMING_DEFAULTS } }
   }
 }
 
-/** { matchmakingEnabled, gameEnabled, deckBuildingEnabled, leaderboardEnabled, practiceEnabled, tournamentsEnabled, tournamentsAsyncEnabled, gamesPageVisible, reveal } */
+/** { matchmakingEnabled, gameEnabled, deckBuildingEnabled, leaderboardEnabled, practiceEnabled, tournamentsEnabled, gamesPageVisible, reveal } */
 export async function getOgGtoonsConfig() {
   const now = Date.now()
   if (cache && now - cachedAt < TTL_MS) return cache
