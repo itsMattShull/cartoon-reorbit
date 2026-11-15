@@ -607,6 +607,127 @@ run('the panel summary says whose move it is and how many reveals a returning pl
   assert.equal((await G.gameSummaryFor(pairing.id, b.id)).unseenReveals, 1)
 })
 
+/* ── Discord messages ────────────────────────────────────────────────────────────────────── */
+
+/** Replaces fetch for the duration of `fn`: records every DM (by recipient discord id); `state.failing` makes sends fail. */
+async function withDiscord(fn) {
+  const real = globalThis.fetch
+  const oldToken = process.env.BOT_TOKEN
+  const dms = []
+  const state = { failing: false }
+  process.env.BOT_TOKEN = 'test-token'
+  globalThis.fetch = async (url, opts = {}) => {
+    const u = String(url)
+    if (u.endsWith('/users/@me/channels')) return { ok: true, status: 200, json: async () => ({ id: `dm-${JSON.parse(opts.body).recipient_id}` }) }
+    if (u.includes('/messages')) {
+      if (state.failing) return { ok: false, status: 500, json: async () => ({}) }
+      dms.push({ to: u.split('/channels/')[1].split('/')[0].replace('dm-', ''), text: JSON.parse(opts.body).content })
+      return { ok: true, status: 200, json: async () => ({}) }
+    }
+    return real(url, opts)
+  }
+  try { return await fn({ dms, state }) } finally {
+    globalThis.fetch = real
+    if (oldToken === undefined) delete process.env.BOT_TOKEN; else process.env.BOT_TOKEN = oldToken
+  }
+}
+const textsTo = (dms, user) => dms.filter(d => d.to === user.discordId).map(d => d.text)
+
+run('DM: both players get the game link, their goal cards and how it is decided, once each', async () => {
+  const { pairing, a, b } = await mkAsyncPairing()
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: a.id })
+  const { game } = await G.pressStart({ tournamentMatchId: pairing.id, userId: b.id })
+  await withDiscord(async ({ dms }) => {
+    await T.sendGameStartedDMs(db, game.gameId)
+    for (const u of [a, b]) {
+      const [text] = textsTo(dms, u)
+      assert.ok(text, `${u.username} was messaged`)
+      assert.ok(text.includes(`/newsite/gtoons-classic/${game.gameId}`), 'the link goes straight to this game')
+      assert.match(text, /Game 1 is ready/)
+      assert.match(text, /Your goal: .*\(\w+\)/)
+      assert.match(text, /color(s)? revealed|No colors revealed/)
+      assert.match(text, /you don't need to be online at the same time/i)
+      assert.doesNotMatch(text, /Both of you need to be online/)
+    }
+    assert.equal(dms.length, 2)
+    await T.sendGameStartedDMs(db, game.gameId)
+    assert.equal(dms.length, 2, 'a retried job does not message them again')
+  })
+})
+
+run('DM: "your move" goes to the player who has something to do, once per 3 hours, and only while it is still true', async () => {
+  const { pairing, a, b } = await mkAsyncPairing()
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: a.id })
+  const { game } = await G.pressStart({ tournamentMatchId: pairing.id, userId: b.id })
+  await withDiscord(async ({ dms, state }) => {
+    // Nothing played yet: it is both players' move, so B is told when asked (a job queued after A played would do exactly this).
+    assert.equal((await actFor(game.gameId, a)).ok, true)
+    state.failing = true
+    await T.sendYourTurnDM(db, { gameId: game.gameId, userId: b.id })
+    assert.equal(dms.length, 0, 'a failed send...')
+    state.failing = false
+    await T.sendYourTurnDM(db, { gameId: game.gameId, userId: b.id })
+    assert.equal(dms.length, 1, '...does not use up the 3 hour slot')
+    const text = textsTo(dms, b)[0]
+    assert.match(text, new RegExp(`${a.username} has played`))
+    assert.match(text, /you lose the match/)
+    assert.ok(text.includes(`/gtoons-classic/${game.gameId}`))
+    await T.sendYourTurnDM(db, { gameId: game.gameId, userId: b.id })
+    assert.equal(dms.length, 1, 'at most once per 3 hours')
+
+    // A has already made their play in this step, so a "your move" for A would be false: nothing is sent.
+    await T.sendYourTurnDM(db, { gameId: game.gameId, userId: a.id })
+    assert.equal(dms.length, 1, 'a player who has already played this step is not told it is their move')
+
+    // B answers; the round resolves and the NEXT step needs both players, so A (whose slot is unused) is now told.
+    assert.equal((await actFor(game.gameId, b)).ok, true)
+    await T.sendYourTurnDM(db, { gameId: game.gameId, userId: a.id })
+    assert.equal(dms.length, 2)
+    assert.equal(dms[1].to, a.discordId)
+  })
+})
+
+run('DM: a deck problem tells the offender what it costs and the other player what to expect; a decided match tells the one who was away', async () => {
+  const { pairing, a, b } = await mkAsyncPairing()
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: a.id })
+  const optA = await db.ogGtoonTournamentOptIn.findFirst({ where: { tournamentId: pairing.tournamentId, userId: a.id } })
+  await db.userCtoon.update({ where: { id: optA.deckSnapshotJson[0].userCtoonId }, data: { userId: b.id } })
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: b.id })
+  await withDiscord(async ({ dms }) => {
+    await T.sendDeckProblemDMs(db, pairing.id)
+    assert.match(textsTo(dms, a)[0], /a card in your locked deck is no longer in your collection/)
+    assert.match(textsTo(dms, a)[0], /you lose the match/)
+    assert.match(textsTo(dms, b)[0], new RegExp(`${a.username} has a problem`))
+    await T.sendDeckProblemDMs(db, pairing.id)
+    assert.equal(dms.length, 2, 'once')
+
+    await pastDue(pairing.id)
+    const done = await G.decideAndLock(pairing.id)
+    assert.equal(done.decided, true)
+    dms.length = 0
+    await T.sendAwayDecidedDM(db, { matchId: pairing.id, exceptUserId: b.id })
+    assert.equal(dms.length, 1)
+    assert.equal(dms[0].to, a.discordId, 'only the player who was not there')
+    assert.match(dms[0].text, /did not go your way/)
+  })
+})
+
+run('DM: a pairing under the async rules is announced without "both of you need to be online"', async () => {
+  const { t, pairing } = await mkAsyncPairing()
+  await withDiscord(async ({ dms }) => {
+    const round = await db.ogGtoonTournamentRound.findFirst({ where: { tournamentId: t.id } })
+    await db.ogGtoonTournamentMatch.update({ where: { id: pairing.id }, data: { status: 'PENDING' } })
+    // sendRoundOpenDMs is internal; sendEvents is the public way a ROUND_OPEN event reaches it.
+    await T.sendEvents(db, [{ type: 'ROUND_OPEN', tournamentId: t.id, roundId: round.id }])
+    assert.equal(dms.length, 2)
+    for (const d of dms) {
+      assert.match(d.text, /do NOT need to be online at the same time/)
+      assert.doesNotMatch(d.text, /Both of you need to be online/)
+      assert.match(d.text, /If you press Start and your opponent never does, you win/)
+    }
+  })
+})
+
 test.after(async () => {
   if (!db) return
   await db.gameConfig.deleteMany({ where: { gameName: 'OgGtoons' } })

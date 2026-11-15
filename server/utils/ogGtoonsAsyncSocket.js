@@ -139,9 +139,17 @@ export function registerOgGtoonsAsync(io, socket, { resolveSocketUser, EV, userR
     // The other player's own sockets that are NOT on this board (another page, another tab) still want to know.
     const tm = result.game.tournamentMatchId
     pushTournamentState(io, { EV, userRoom }, tm).catch(() => {})
-    if (result.post.advance) {
-      enqueueOgTournamentJob('ogTournamentAdvance', { tournamentId: result.match.tournament.tournamentId, matchId: tm }, { key: tm })
-        .catch(e => console.error('[ogGtoonsAsync] could not queue tournament advance:', e?.message || e))
+    const queue = (name, data, opts) => enqueueOgTournamentJob(name, data, opts).catch(e => console.error(`[ogGtoonsAsync] could not queue ${name}:`, e?.message || e))
+    if (result.post.advance) queue('ogTournamentAdvance', { tournamentId: result.match.tournament.tournamentId, matchId: tm }, { key: tm })
+    const actor = result.match.players[result.idx]
+    const other = result.match.players[result.idx === 0 ? 1 : 0]
+    if (result.post.nextGame) queue('ogTournamentGameStarted', { gameId: result.post.nextGame.gameId }, { key: result.post.nextGame.gameId })
+    if (result.post.deckProblem) queue('ogTournamentDeckProblem', { matchId: tm }, { key: `${tm}-${result.post.deckProblem.side}` })
+    if (result.post.decided) queue('ogTournamentMatchDecided', { matchId: tm, exceptUserId: actor }, { key: tm })
+    // "It's your move" for the other player, unless they are on the board right now (live play) — and the worker re-checks it is
+    // still true a couple of minutes later, so a quick reply never sends it either.
+    if (!result.end && !boardUsers(gameId).has(other)) {
+      queue('ogTournamentYourTurn', { gameId, userId: other }, { key: `${gameId}-${other}`, delayMs: 120_000 })
     }
   }
 

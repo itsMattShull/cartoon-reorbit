@@ -15,7 +15,10 @@ import { fileURLToPath } from 'node:url'
 import { prisma } from '../prisma.js'
 import { enqueueAchievementChecks } from '../utils/queues.js'
 import { runTournamentScheduler } from '../../server/utils/gtoonTournament.js'
-import { runOgGtoonTournamentScheduler, advanceAndNotify, notifyOpponentReady, runDeadlineJob } from '../../server/utils/ogGtoonTournament.js'
+import {
+  runOgGtoonTournamentScheduler, advanceAndNotify, notifyOpponentReady, runDeadlineJob,
+  sendGameStartedDMs, sendYourTurnDM, sendDeckProblemDMs, sendAwayDecidedDM
+} from '../../server/utils/ogGtoonTournament.js'
 import { syncWordleResults } from '../../server/utils/wordle.js'
 import { checkAndCreateWeeklyCZoneContest } from './create-weekly-czone-contest.js'
 import { checkAndPostWeeklyRiddle } from './cmoon-riddle-rotation.js'
@@ -1145,6 +1148,10 @@ export const SCHEDULED_EVENT_HANDLERS = {
   winballPrizeUpdate: () => updateWinballGrandPrizeFromSchedule(),
   // OG gToons tournaments: queued by the socket server / REST handlers (enqueueOgTournamentJob).
   ogTournamentAdvance: (data) => (data?.tournamentId ? advanceAndNotify(prisma, String(data.tournamentId), { matchId: data.matchId ? String(data.matchId) : null }) : undefined),
+  ogTournamentGameStarted: (data) => (data?.gameId ? sendGameStartedDMs(prisma, String(data.gameId)) : undefined),
+  ogTournamentYourTurn: (data) => (data?.gameId && data?.userId ? sendYourTurnDM(prisma, { gameId: String(data.gameId), userId: String(data.userId) }) : undefined),
+  ogTournamentDeckProblem: (data) => (data?.matchId ? sendDeckProblemDMs(prisma, String(data.matchId)) : undefined),
+  ogTournamentMatchDecided: (data) => (data?.matchId ? sendAwayDecidedDM(prisma, { matchId: String(data.matchId), exceptUserId: data.exceptUserId ? String(data.exceptUserId) : null }) : undefined),
   ogTournamentDeadline: (data) => (data?.matchId ? runDeadlineJob(prisma, String(data.matchId)) : undefined),
   ogTournamentNotifyReady: (data) => (data?.tournamentMatchId ? notifyOpponentReady(prisma, { tournamentMatchId: String(data.tournamentMatchId), readyUserId: String(data.readyUserId) }) : undefined),
 }

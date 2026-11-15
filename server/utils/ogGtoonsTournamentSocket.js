@@ -192,6 +192,7 @@ export function registerOgGtoonsTournament(io, socket, h) {
       enqueueOgTournamentJob('ogTournamentGameStarted', { gameId: res.game.gameId }, { key: res.game.gameId })
         .catch(() => {})
     } else if (res.deckProblem) {
+      enqueueOgTournamentJob('ogTournamentDeckProblem', { matchId: ctx.match.id }, { key: `${ctx.match.id}-${res.deckProblem.side}` }).catch(() => {})
       for (const uid of [ctx.match.playerAUserId, ctx.match.playerBUserId]) {
         const mine = res.deckProblem.side === 'BOTH' || (res.deckProblem.side === 'A') === (uid === ctx.match.playerAUserId)
         io.local.to(userRoom(uid)).emit(EV('error'), {
