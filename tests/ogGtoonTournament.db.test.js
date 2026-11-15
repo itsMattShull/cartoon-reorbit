@@ -361,6 +361,8 @@ run('Play: nothing starts until BOTH are ready and online; the game starts at ze
     create: { gameName: 'OgGtoons', ogGtoonsGameEnabled: true, ogGtoonsTournamentsEnabled: true },
     update: { ogGtoonsGameEnabled: true, ogGtoonsTournamentsEnabled: true }
   })
+  // Earlier tests start tournaments, which read the (60s cached) config; make this test see the row it just wrote.
+  ;(await import('../server/utils/ogGtoonsConfig.js')).invalidateOgGtoonsConfigCache()
   const { registerOgGtoonsTournament } = await import('../server/utils/ogGtoonsTournamentSocket.js')
 
   const users = await mkUsers(2)

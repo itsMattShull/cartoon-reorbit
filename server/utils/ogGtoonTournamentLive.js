@@ -152,50 +152,90 @@ export const MAX_VOIDED_GAMES = 2
  * authoritative, so a game that finishes late cannot overturn an admin's or a deadline's decision.
  */
 export async function settleMatchFromGames(matchId, { now = new Date(), db = prisma } = {}) {
-  return db.$transaction(async (tx) => {
-    const locked = await tx.$queryRaw`SELECT "lockedAt", status FROM "OgGtoonTournamentMatch" WHERE id = ${matchId} FOR UPDATE`
-    if (!locked.length) return { found: false }
-    if (locked[0].lockedAt || locked[0].status === 'BYE') return { found: true, locked: true, changed: false }
+  return db.$transaction(tx => settleMatchInTx(tx, matchId, { now }))
+}
 
-    const match = await tx.ogGtoonTournamentMatch.findUnique({
-      where: { id: matchId },
-      include: { tournament: { select: { id: true, status: true, maxExtraGames: true } } }
-    })
-    if (!ACTIVE_STATUSES.includes(match.tournament.status)) return { found: true, locked: false, changed: false, inactive: true }
+/**
+ * The body of settleMatchFromGames, for a caller that already has a transaction (the end of an async game settles its
+ * series in the SAME transaction that wrote the result). The row lock is taken here too; taking it again inside the same
+ * transaction is harmless, and it keeps this safe to call from anywhere.
+ */
+export async function settleMatchInTx(tx, matchId, { now = new Date() } = {}) {
+  const locked = await tx.$queryRaw`SELECT "lockedAt", status FROM "OgGtoonTournamentMatch" WHERE id = ${matchId} FOR UPDATE`
+  if (!locked.length) return { found: false }
+  if (locked[0].lockedAt || locked[0].status === 'BYE') return { found: true, locked: true, changed: false }
 
-    const { games, voided } = await loadSeriesGames(match, tx)
-    const s = computeSeries({
-      games, stage: match.stage, requiresWinner: match.requiresWinner,
-      maxExtraGames: match.tournament.maxExtraGames, bestOf: match.bestOf || BEST_OF
-    })
-
-    const data = {
-      winsA: s.winsA, winsB: s.winsB, ties: s.ties, gamesCounted: s.gamesCounted,
-      extraGamesCounted: s.extraGamesCounted, voidedGames: voided
-    }
-    if (s.gamesCounted > 0 && match.status === 'PENDING') data.status = 'IN_PROGRESS'
-
-    const tooManyVoids = voided > MAX_VOIDED_GAMES
-    if (s.needsAdmin || (tooManyVoids && !s.decided)) {
-      data.needsAdmin = true
-      data.needsAdminReason = s.needsAdminReason || 'Too many voided games'
-    }
-
-    if (s.decided) {
-      Object.assign(data, {
-        status: 'COMPLETE',
-        outcome: s.outcome,
-        winnerUserId: s.winnerSide === 'A' ? match.playerAUserId : s.winnerSide === 'B' ? match.playerBUserId : null,
-        resolution: 'PLAYED',
-        needsAdmin: false,
-        needsAdminReason: null,
-        lockedAt: now,
-        completedAt: now
-      })
-    }
-    await tx.ogGtoonTournamentMatch.update({ where: { id: matchId }, data })
-    return { found: true, locked: false, changed: true, decided: !!s.decided, series: s }
+  const match = await tx.ogGtoonTournamentMatch.findUnique({
+    where: { id: matchId },
+    include: { tournament: { select: { id: true, status: true, maxExtraGames: true } } }
   })
+  if (!ACTIVE_STATUSES.includes(match.tournament.status)) return { found: true, locked: false, changed: false, inactive: true }
+
+  const { games, voided } = await loadSeriesGames(match, tx)
+  const s = computeSeries({
+    games, stage: match.stage, requiresWinner: match.requiresWinner,
+    maxExtraGames: match.tournament.maxExtraGames, bestOf: match.bestOf || BEST_OF
+  })
+
+  const data = {
+    winsA: s.winsA, winsB: s.winsB, ties: s.ties, gamesCounted: s.gamesCounted,
+    extraGamesCounted: s.extraGamesCounted, voidedGames: voided
+  }
+  if (s.gamesCounted > 0 && match.status === 'PENDING') data.status = 'IN_PROGRESS'
+
+  const tooManyVoids = voided > MAX_VOIDED_GAMES
+  if (s.needsAdmin || (tooManyVoids && !s.decided)) {
+    data.needsAdmin = true
+    data.needsAdminReason = s.needsAdminReason || 'Too many voided games'
+  }
+
+  if (s.decided) {
+    Object.assign(data, {
+      status: 'COMPLETE',
+      outcome: s.outcome,
+      winnerUserId: s.winnerSide === 'A' ? match.playerAUserId : s.winnerSide === 'B' ? match.playerBUserId : null,
+      resolution: 'PLAYED',
+      needsAdmin: false,
+      needsAdminReason: null,
+      lockedAt: now,
+      completedAt: now
+    })
+  }
+  await tx.ogGtoonTournamentMatch.update({ where: { id: matchId }, data })
+  return { found: true, locked: false, changed: true, decided: !!s.decided, series: s }
+}
+
+/**
+ * Closes every still-ACTIVE async game of a pairing whose result was decided some other way (deadline, forfeit, admin,
+ * disqualification, cancellation). The game is simply over: it never counts, and it is not written to OgGtoonMatch.
+ * Called from lockMatchResult so no result path can forget it.
+ */
+export async function closeActiveGames(db, tournamentMatchId, now = new Date()) {
+  const r = await db.ogGtoonTournamentGame.updateMany({
+    where: { tournamentMatchId, status: 'ACTIVE' }, data: { status: 'CLOSED', endedAt: now }
+  })
+  return r.count
+}
+
+/**
+ * Decides a pairing without (or beyond) played games. A guarded updateMany, so it only ever lands on a pairing nobody
+ * else has decided, and it closes any running async game in the same step. `outcome` null = both players lose.
+ */
+export async function lockMatchResult(db, match, { outcome, resolution, winsA, winsB, note = null, now = new Date() }) {
+  const winnerUserId = outcome === 'A_WIN' ? match.playerAUserId : outcome === 'B_WIN' ? match.playerBUserId : null
+  const claimed = await db.ogGtoonTournamentMatch.updateMany({
+    where: { id: match.id, lockedAt: null },
+    data: {
+      status: 'COMPLETE', outcome, winnerUserId, resolution,
+      winsA: winsA ?? match.winsA, winsB: winsB ?? match.winsB,
+      needsAdmin: false, needsAdminReason: null, liveMatchId: null, liveStartedAt: null,
+      readyAAt: null, readyBAt: null,
+      ...(note ? { adminNotes: note } : {}),
+      lockedAt: now, completedAt: now
+    }
+  })
+  if (claimed.count === 1) await closeActiveGames(db, match.id, now)
+  return claimed.count === 1
 }
 
 /* ── Play context, ready-up, live marker ─────────────────────────────────────────────────── */
