@@ -664,3 +664,16 @@ export async function gameSummaryFor(tournamentMatchId, uid, { db = prisma } = {
     unseenReveals: Math.max(0, lastSeq(game.reveals) - (idx === 0 ? game.seenA : game.seenB))
   }
 }
+
+/**
+ * Whether player `idx` still has something to do in the game's CURRENT step (placing and committing, discarding, deciding on the
+ * swap, picking a Silver colour). A step the game completed for them (nothing to swap, no Silver card) is not something to do.
+ * Used to decide whether a "your move" message is still true by the time it would be sent.
+ */
+export function needsToAct(match, idx) {
+  if (!match || match.ending || idx < 0) return false
+  if (match.phase === 'discard') return !match.discardReady?.[idx]
+  if (match.phase === 'swap') return !match.swapReady?.[idx]
+  if (match.phase === 'color') return !match.colorReady?.[idx]
+  return !match.ready?.[idx]
+}
