@@ -13,11 +13,17 @@ export default defineEventHandler(async (event) => {
 
   const user = await db.user.findUnique({
     where: { id: me.id },
-    select: { allowAuctionNotifications: true, allowCMoonEnemyPopups: true, muteRaidNotifications: true }
+    select: {
+      allowAuctionNotifications: true,
+      allowCMoonEnemyPopups: true,
+      muteRaidNotifications: true,
+      allowWishlistAuctionNotifications: true
+    }
   })
   return {
     allowAuctionNotifications: !!user?.allowAuctionNotifications,
     allowCMoonEnemyPopups: user?.allowCMoonEnemyPopups !== false,
     muteRaidNotifications: !!user?.muteRaidNotifications,
+    allowWishlistAuctionNotifications: user?.allowWishlistAuctionNotifications !== false,
   }
 })

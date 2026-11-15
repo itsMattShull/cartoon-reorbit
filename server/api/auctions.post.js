@@ -8,6 +8,7 @@ import { prisma } from '@/server/prisma'
 import { useRuntimeConfig } from '#imports'
 import fetch from 'node-fetch'
 import { scheduleAuctionClose } from '@/server/utils/queues'
+import { notifyWishlistAuctionListed } from '@/server/utils/notifications'
 import { resolveUserCtoonId } from '@/server/utils/userCtoonId'
 import { rarityFloor } from '@/server/utils/auctionPriceSuggestion'
 import {
@@ -254,6 +255,16 @@ export default defineEventHandler(async (event) => {
 
   // 7.5 Schedule the BullMQ job that will close this auction at endAt
   await scheduleAuctionClose(auction.id, auction.endAt)
+
+  // 7.6 Alert anyone with this cToon on their wishlist. Fire-and-forget like the Discord
+  // notification below (step 9): a bulk fan-out (findMany + batched upserts) has nothing to do
+  // with whether this auction was created, so it must not hold up the response.
+  notifyWishlistAuctionListed(prisma, {
+    auctionId: auction.id,
+    ctoonId: userCtoonRec.ctoonId,
+    ctoonName: userCtoonRec.ctoon?.name,
+    sellerUserId: userId
+  }).catch(err => console.error('[auctions.post] wishlist notify failed:', err?.message || err))
 
   // 8. Tradeability was already disabled by the claim in step 6, which is what
   // makes it atomic with the auction row.

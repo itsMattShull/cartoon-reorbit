@@ -97,6 +97,28 @@
             </p>
             <p v-if="raidNotificationsError" class="settings-error">{{ raidNotificationsError }}</p>
 
+            <div class="settings-row">
+              <div>
+                <h2 class="settings-row-title">Wishlist Auction Alerts</h2>
+                <p class="settings-row-desc">Get notified in Alerts when a cToon on your wishlist is listed in auction.</p>
+              </div>
+
+              <div class="toggle-wrap">
+                <div v-if="loading" class="toggle-skeleton"></div>
+                <label v-else class="toggle-label">
+                  <input type="checkbox" class="sr-only" v-model="allowWishlistAuctionNotifications" @change="onToggleWishlistAuctionNotifications" :disabled="wishlistNotificationsSaving || loading" />
+                  <div :class="['toggle-track', allowWishlistAuctionNotifications ? 'toggle-on' : 'toggle-off']">
+                    <div :class="['toggle-knob', allowWishlistAuctionNotifications ? 'toggle-knob-on' : '']"></div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <p class="settings-status" :class="{ 'settings-status-dim': wishlistNotificationsSaving || loading }">
+              {{ loading ? '' : wishlistNotificationsSaving ? 'Saving…' : 'Changes are saved instantly.' }}
+            </p>
+            <p v-if="wishlistNotificationsError" class="settings-error">{{ wishlistNotificationsError }}</p>
+
             <div class="settings-row settings-row-haptic">
               <div>
                 <h2 class="settings-row-title">Mute sounds</h2>
@@ -381,6 +403,9 @@ const cMoonPopupsError  = ref('')
 const muteRaidNotifications = ref(false)
 const raidNotificationsSaving = ref(false)
 const raidNotificationsError  = ref('')
+const allowWishlistAuctionNotifications = ref(true)
+const wishlistNotificationsSaving = ref(false)
+const wishlistNotificationsError  = ref('')
 
 const showAvatarModal      = ref(false)
 const showUsernameModal    = ref(false)
@@ -461,6 +486,7 @@ async function loadSetting() {
     allow.value = !!data.allowAuctionNotifications
     allowCMoonPopups.value = data.allowCMoonEnemyPopups !== false
     muteRaidNotifications.value = !!data.muteRaidNotifications
+    allowWishlistAuctionNotifications.value = data.allowWishlistAuctionNotifications !== false
   } catch (e) {
     console.error(e)
     error.value = 'Failed to load preference.'
@@ -541,6 +567,31 @@ async function onToggleMuteRaidNotifications() {
     raidNotificationsError.value = 'Could not save. Please try again.'
   } finally {
     raidNotificationsSaving.value = false
+  }
+}
+
+async function onToggleWishlistAuctionNotifications() {
+  if (loading.value) return
+  wishlistNotificationsError.value = ''
+  const next = allowWishlistAuctionNotifications.value
+  const prev = !allowWishlistAuctionNotifications.value
+  wishlistNotificationsSaving.value = true
+  try {
+    const res = await fetch('/api/user/notifications', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ allowWishlistAuctionNotifications: next })
+    })
+    if (!res.ok) throw new Error(await res.text())
+    const data = await res.json()
+    allowWishlistAuctionNotifications.value = data.allowWishlistAuctionNotifications !== false
+  } catch (err) {
+    console.error(err)
+    allowWishlistAuctionNotifications.value = prev
+    wishlistNotificationsError.value = 'Could not save. Please try again.'
+  } finally {
+    wishlistNotificationsSaving.value = false
   }
 }
 

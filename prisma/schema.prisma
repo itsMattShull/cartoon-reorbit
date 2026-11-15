@@ -43,6 +43,12 @@ enum NotificationType {
   // the AFK-kick block in closeRound, server/utils/cmoonRaidSocket.js. No contextId: the raid is
   // over for them either way, there's nothing left to click through to.
   CMOON_RAID_KICKED_AFK
+  // A cToon on this user's wishlist (WishlistItem) was just listed in a new auction — see
+  // notifyWishlistAuctionListed in server/utils/notifications.js, called from
+  // server/api/auctions.post.js. contextId is the Auction id, contextType AUCTION, same
+  // AUCTION_WON/AUCTION_OUTBID convention, so it routes to /newsite/AuctionHouse/<id> with no
+  // client changes. Gated on User.allowWishlistAuctionNotifications (default true).
+  WISHLIST_AUCTION_LISTED
 }
 
 /// Where a sealed UserPack came from. Pack purchase limits and purchase analytics count PURCHASE rows
