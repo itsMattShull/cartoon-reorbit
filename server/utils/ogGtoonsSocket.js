@@ -55,6 +55,7 @@ import { evaluatePackReward } from './ogGtoonsPackReward.js'
 import { clearLive, isPairingClosed, flagNeedsAdmin } from './ogGtoonTournamentLive.js'
 import { enqueueOgTournamentJob } from './queues.js'
 import { registerOgGtoonsTournament } from './ogGtoonsTournamentSocket.js'
+import { registerOgGtoonsAsync, startAsyncReconcile } from './ogGtoonsAsyncSocket.js'
 
 const RECONNECT_GRACE_MS = 20_000
 // A dropped connection costs a game of a best-of-3 that is played for a prize, so tournament games
@@ -676,6 +677,7 @@ async function reconcileTournamentGames(io) {
 let sweepTimer = null
 export function startOgGtoonsSweep(io) {
   if (sweepTimer) return
+  startAsyncReconcile(io, { EV })
   sweepTimer = setInterval(() => {
     try { sweep(io) } catch (err) { console.error('[ogGtoons] sweep failed:', err) }
   }, 60_000)
@@ -759,6 +761,10 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
   registerOgGtoonsTournament(io, socket, {
     auth, startMatch, matchByUser, queueByUser, removeFromQueue, userRoom, isPracticing, EV
   })
+
+  // Async + live tournament games. Deliberately separate: its own auth (no reattach to a casual match), its own events, and it
+  // never touches matchByUser, the sweep, the phase timers or the Redis mirror. See ogGtoonsAsyncSocket.js.
+  registerOgGtoonsAsync(io, socket, { resolveSocketUser, EV, userRoom })
 
   socket.on(EV('subscribe'), async () => {
     const user = await auth()

@@ -96,7 +96,11 @@ export function resolvePending(match, rng = secureRng) {
     end = colorPhase ? null : checkMatchEnd(match)
     // Advance before recording so the state clients receive already carries the NEXT round and phase.
     if (!end && !colorPhase) advanceRound(match)
-    reveals.push({ round: revealedRound, order, entries, steps: extra.steps || [], before: extra.before || null, timing, logSeq: (match.gameLog || []).length })
+    // `views` = each player's own view of the game right after this reveal (their hand and all). It is what lets a returning
+    // player replay the game step by step, seeing the board as it was then, not as it is now. Server-side only: a client is
+    // only ever sent ITS OWN entry (revealForSeat).
+    const views = match.players.map(uid => publicMatchView(match, uid, { log: false }))
+    reveals.push({ round: revealedRound, order, entries, steps: extra.steps || [], before: extra.before || null, timing, logSeq: (match.gameLog || []).length, views })
   }
 
   if (match.phase === 'play' && match.ready[0] && match.ready[1]) {

@@ -4,7 +4,8 @@
 // schema), so a plain `npm test` stays database-free:
 //
 //   OG_TOURNAMENT_TEST_DB=postgresql://... REDIS_HOST=127.0.0.1 REDIS_PORT=6379 \
-//     node --test tests/ogGtoonTournament.db.test.js
+//     node --test --test-concurrency=1 --test-force-exit tests/ogGtoonTournament.db.test.js
+// (--test-concurrency=1 because the DB test files share one GameConfig row and one Redis; --test-force-exit because the queue connections keep the process alive.)
 //
 // Games are simulated by inserting OgGtoonMatch rows (exactly what the socket server persists), then
 // running the same code the worker runs.
