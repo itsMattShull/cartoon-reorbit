@@ -131,3 +131,23 @@ test('a Silver card turned Green counts as Green for powers like "+2 to all Gree
   m.silverColor = [null, null]
   assert.equal(autoSilverColor(m, 0), 'GREEN')
 })
+
+test('the displayed board shows a picked Silver colour and the boost it earns', () => {
+  const yellowBuff = [{
+    trigger: 'onReveal',
+    target: { selector: 'allMatching', scope: 'both', filters: [{ by: 'color', value: 'YELLOW' }] },
+    action: { type: 'modifyValue', operation: 'add', amount: 3 }
+  }]
+  const m = silverMatch()
+  const entry = (c, slot, extra = {}) => ({ ...c, deckIdx: slot, baseColor: c.color, baseValue: c.value, finalValue: c.value, cancelled: false, round: 1, slot, ...extra })
+  m.revealed = [
+    [entry(card('RED', 0), 1, { effect: yellowBuff }), entry(card('SILVER', 1), 2)],
+    [entry(card('BLUE', 2), 1), entry(card('BLUE', 3), 2)]
+  ]
+  m.silverColor = ['YELLOW', null]
+  runFinalBoardResolution(m)
+  const silver = m.liveBoard.cards.find(c => c.side === 0 && c.slot === 2)
+  assert.equal(silver.color, 'YELLOW')
+  assert.equal(silver.finalValue, 8)
+  assert.equal(m.liveBoard.totals[0], 13)
+})

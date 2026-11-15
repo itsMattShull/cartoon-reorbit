@@ -789,6 +789,12 @@ export function runFinalBoardResolution(match) {
     player2SilverColor: silvers[1],
     ...swapPenalties(match)
   })
+  // The board the players see (card values, colours, totals, markers) was last built card by card at reveal
+  // time, before any Silver pick existed. Rebuild it now with the Silver colours applied so what is shown
+  // is the same resolution that was just scored.
+  if (silvers.some(Boolean)) {
+    try { match.liveBoard = snapshotBoard(match, new Set(), silvers) } catch { /* keep the previous board */ }
+  }
   return { outcome, final }
 }
 
@@ -813,13 +819,14 @@ function toRevealEntry(card, round, slot, deckIdx) {
  * `runFinalBoardResolution`, so this is presentation of the same rules, never a different outcome. */
 
 /** The resolved board with every entry in `hidden` left off. */
-function snapshotBoard(match, hidden) {
+function snapshotBoard(match, hidden, silvers = null) {
   const kept = [0, 1].map(i => match.revealed[i].filter(r => !hidden.has(r)))
   let final = null
   try {
+    // `silvers` (the colours each side's Silver cards count as) defaults to the picks made so far.
     final = resolveFinalBoard({
-      player1: finalBoardInputFor(match, 0, kept[0]),
-      player2: finalBoardInputFor(match, 1, kept[1])
+      player1: finalBoardInputFor(match, 0, kept[0], silvers ? silvers[0] : undefined),
+      player2: finalBoardInputFor(match, 1, kept[1], silvers ? silvers[1] : undefined)
     })
   } catch (err) {
     console.error(`[ogGtoons] reveal-step resolution failed for match ${match.id}:`, err)
