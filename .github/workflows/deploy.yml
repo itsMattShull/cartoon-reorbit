@@ -100,6 +100,23 @@ jobs:
                 [ -s \"/usr/local/nvm/nvm.sh\" ] && . \"/usr/local/nvm/nvm.sh\" || true
                 command -v node >/dev/null 2>&1 || export PATH=\"\$HOME/.local/bin:\$HOME/.npm-global/bin:/usr/local/bin:/usr/bin:\$PATH\"
 
+                # pm2 is a global npm package scoped PER nvm node version - switching to 24 above
+                # can leave this shell with node/npm on PATH but no pm2, even if pm2 is already
+                # running the live app under a different node version (that is what caused
+                # \"pm2: command not found\", exit 127, on this very step). Prefer reusing the
+                # already-installed pm2 binary from whichever other nvm version has it, rather
+                # than npm-installing a fresh one: a mismatched pm2 client talking to the running
+                # daemon makes pm2 kill and restart its own daemon on the next command, which
+                # would turn the deliberate \"pm2 stop all\" below into an extra, unplanned restart.
+                if ! command -v pm2 >/dev/null 2>&1; then
+                  pm2_bin=\$(find \$NVM_DIR/versions/node -maxdepth 2 -name pm2 -type f 2>/dev/null | head -1)
+                  if [ -n \"\$pm2_bin\" ]; then
+                    export PATH=\"\$(dirname \$pm2_bin):\$PATH\"
+                  else
+                    npm install -g pm2
+                  fi
+                fi
+
                 cd /var/www/cartoon-reorbit
 
                 # Stop everything pm2-managed (web server, socket server, all BullMQ
@@ -157,6 +174,23 @@ jobs:
           # Use a supported Node LTS (24.x; keep in sync with .nvmrc)
           nvm install 24 >/dev/null
           nvm use 24 >/dev/null
+
+          # pm2 is a global npm package scoped PER nvm node version - switching to 24 above can
+          # leave this shell with node/npm on PATH but no pm2, even if pm2 is already running the
+          # live app under a different node version (that is what caused "pm2: command not
+          # found", exit 127, on this very step). Prefer reusing the already-installed pm2 binary
+          # from whichever other nvm version has it, rather than npm-installing a fresh one: a
+          # mismatched pm2 client talking to the running daemon makes pm2 kill and restart its own
+          # daemon on the next command, which would turn the later "pm2 reload" into an extra,
+          # unplanned restart instead of the intended graceful rolling reload.
+          if ! command -v pm2 >/dev/null 2>&1; then
+            pm2_bin="$(find "$NVM_DIR/versions/node" -maxdepth 2 -name pm2 -type f 2>/dev/null | head -1)"
+            if [ -n "$pm2_bin" ]; then
+              export PATH="$(dirname "$pm2_bin"):$PATH"
+            else
+              npm install -g pm2
+            fi
+          fi
 
           cd /var/www/dev.cartoon-reorbit
 

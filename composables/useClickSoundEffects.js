@@ -101,9 +101,10 @@ export function useClickSoundEffects() {
     installed = true
 
     const route = useRoute()
-    const { enabled, hydrate } = useHapticSoundsPref()
+    // plugins/hapticSoundsPref.client.js hydrates this from localStorage before the app ever
+    // mounts, so `enabled.value` is already correct here — no separate hydrate() call needed.
+    const { enabled } = useHapticSoundsPref()
     const { soundConfig, ensureLoaded } = useUiClickSound()
-    hydrate()
     ensureLoaded()
 
     document.addEventListener('click', async (event) => {
