@@ -21,11 +21,11 @@ import { randomBytes } from 'node:crypto'
 import { sendDiscordDMByDiscordId, sendGuildChannelMessageById } from './discord.js'
 import { grantRewardInTx, enqueueCtoonJobs } from './achievements.js'
 import { grantCodePacks } from './codePackGrant.js'
-import { hasFlag, setFlag } from './cache.js'
+import { hasFlag, setFlag, claimFlag, clearFlag } from './cache.js'
 import {
   BEST_OF, WINS_NEEDED, formatFor, swissRoundsFor, compareStandings, seededShuffle, bracketSizeFor,
   buildBracketSeedPairs, bracketRoundLabel, pairSwissRound, pairKey, decideAtDeadline,
-  computeRecords, buildFinalPlacements, prizeRecipients, roundDueAt
+  computeRecords, buildFinalPlacements, prizeRecipients, roundDueAt, reminderApplies
 } from './tournamentCore.js'
 import {
   ACTIVE_STATUSES, settleMatchFromGames, loadSeriesGames, clearStaleLive, isFresh, loadLockedDeckForGame
@@ -74,14 +74,16 @@ export function stageLabel(stage, roundNumber, bracketMatchCount = null) {
   return bracketMatchCount ? bracketRoundLabel(bracketMatchCount) : `Bracket Round ${roundNumber}`
 }
 
-async function dmUsers(db, items) {
+async function dmUsers(db, items, { onFail = null } = {}) {
   if (!items.length) return
   const ids = [...new Set(items.map(i => i.userId))]
   const users = await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, discordId: true } })
   const discordById = new Map(users.map(u => [u.id, u.discordId]))
-  await runLimited(items, 3, async ({ userId, text }) => {
-    const discordId = discordById.get(userId)
-    if (discordId) await sendDiscordDMByDiscordId(discordId, text)
+  await runLimited(items, 3, async (item) => {
+    const discordId = discordById.get(item.userId)
+    const sent = discordId ? await sendDiscordDMByDiscordId(discordId, item.text) : false
+    // A failed send must not use up a once-only claim, or the player would never be told.
+    if (!sent && onFail) await onFail(item)
   })
 }
 
@@ -103,6 +105,7 @@ async function sendRoundOpenDMs(db, tournamentId, roundId) {
   for (const m of matches) {
     const mk = (me, opp) => ({
       userId: me.id,
+      claimKey: `ogt-open-dm:${m.id}:${me.id}`,
       text: [
         `🏆 ${tournament.name} — ${label}`,
         `You are paired with ${opp.username || 'your opponent'}.`,
@@ -112,7 +115,12 @@ async function sendRoundOpenDMs(db, tournamentId, roundId) {
     })
     items.push(mk(m.playerA, m.playerB), mk(m.playerB, m.playerA))
   }
-  await dmUsers(db, items)
+  // Once per player per pairing, however many times this runs (a retried job, an admin recompute racing the cron).
+  const fresh = []
+  for (const item of items) {
+    if (await claimFlag(item.claimKey, 14 * 24 * 3600)) fresh.push(item)
+  }
+  await dmUsers(db, fresh, { onFail: (item) => clearFlag(item.claimKey) })
 }
 
 async function sendMatchDecidedDMs(db, match, tournament, reason) {
@@ -648,6 +656,9 @@ export async function processReminders(db, now = new Date()) {
     for (const m of soon) {
       const claimed = await db.ogGtoonTournamentMatch.updateMany({ where: { id: m.id, [field]: null }, data: { [field]: now } })
       if (!claimed.count) continue
+      // The pairing was handed out with no more than this much time, so the pairing message already said it. Mark the
+      // reminder done (so it is not looked at again) without sending a second message within minutes of the first.
+      if (!reminderApplies(m.pairedAt, m.dueAt, hours)) continue
       const items = [[m.playerA, m.playerB], [m.playerB, m.playerA]].map(([me, opp]) => ({
         userId: me.id,
         text: `⏰ ${m.tournament.name}: your match vs ${opp.username} is due in about ${label} (${formatCentral(m.dueAt)}). ` +
