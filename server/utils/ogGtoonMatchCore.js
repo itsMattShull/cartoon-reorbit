@@ -22,7 +22,10 @@
 //     pendingColor,// [string|null, ...] held picks, applied together once both are ready
 //     silverColor, // [string|null, ...] the colour each player's Silver cards count as (once picked)
 //     colorDone,   // true once the colour phase has run (it runs once, before first scoring)
-//     deadline     // epoch ms when the current phase times out }
+//     deadline,    // epoch ms when the current phase times out (null when noTimers)
+//     acted        // [bool, bool] who has made an EXPLICIT play (commit / discard / swap choice / colour pick) in the current step;
+//                  // steps the game completes by itself (nothing to swap, no Silver card) never set it. Reset every phase.
+//   }
 // See ogGtoonEngine.js's header for the hand/slot rules.
 
 import { sanitizeGtoonCardStyle } from '../../utils/gtoonCardStyle.js'
@@ -215,7 +218,9 @@ export function phaseDurationMs(match) {
 
 /** Stamps the deadline for the phase the match just entered. */
 export function startPhaseClock(match, now = Date.now()) {
-  // A match flagged noTimers (the tutorial) has no deadline at all, and its log mentions no clock.
+  // A new step has begun: nobody has played in it yet.
+  match.acted = [false, false]
+  // A match flagged noTimers (the tutorial, and async tournament games) has no deadline at all, and its log mentions no clock.
   const timed = !match.noTimers
   match.deadline = timed ? now + phaseDurationMs(match) : null
   const secs = Math.round(phaseDurationMs(match) / 1000)
@@ -359,9 +364,30 @@ export function unplaceSlot(match, idx, { slot } = {}) {
   return OK
 }
 
+/** Records that `idx` made an explicit play in the current step (see `acted` above). */
+function noteActed(match, idx) {
+  if (!Array.isArray(match.acted)) match.acted = [false, false]
+  match.acted[idx] = true
+}
+
+/**
+ * Who the current step is waiting on, for the deadline rule: when exactly one player has made the play this step needs and the
+ * other has not, returns { moverIdx, blockerIdx }; otherwise null (nobody has played yet, or the step is complete). Uses only
+ * EXPLICIT plays: a player the game completed a step for (nothing to swap, no Silver card) is neither mover nor blocker, so a
+ * player cannot win a match by arranging for the game to make their move for them.
+ */
+export function pendingStepBlocker(match) {
+  if (!match || match.ending) return null
+  const acted = match.acted || [false, false]
+  if (acted[0] === acted[1]) return null
+  const moverIdx = acted[0] ? 0 : 1
+  return { moverIdx, blockerIdx: moverIdx === 0 ? 1 : 0 }
+}
+
 /** Marks `idx` as committed for the round (after `checkCommit` passed) and logs it. */
 export function markCommitted(match, idx) {
   match.ready[idx] = true
+  noteActed(match, idx)
   logEvent(match, { kind: 'commit', title: 'Committed', sections: [{ label: null, lines: [`${nameOfSide(match, idx)} committed their cards.`] }] })
 }
 
@@ -469,6 +495,7 @@ export function recordSwapChoice(match, idx, swap, cardIdx = null, { requireCard
   match.pendingSwap[idx] = !!swap
   match.swapPick[idx] = pick
   match.swapReady[idx] = true
+  noteActed(match, idx)
   return OK
 }
 
@@ -647,6 +674,7 @@ export function submitColor(match, idx, { color } = {}) {
   if (!isRealColor(color)) return bad('badColor', 'Pick a real colour (not Black or Silver).')
   match.pendingColor[idx] = color
   match.colorReady[idx] = true
+  noteActed(match, idx)
   return OK
 }
 
@@ -682,6 +710,7 @@ export function submitDiscard(match, idx, { cardIdxs } = {}) {
   match.pendingDiscard = match.pendingDiscard || [[], []]
   match.pendingDiscard[idx] = res.discarded
   match.discardReady[idx] = true
+  noteActed(match, idx)
   return OK
 }
 

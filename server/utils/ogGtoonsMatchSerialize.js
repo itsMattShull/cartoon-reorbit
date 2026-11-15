@@ -34,6 +34,8 @@ export function serializeMatch(match) {
     deadline: match.deadline,
     introEndsAt: match.introEndsAt ?? null,
     ready: match.ready,
+    // Explicit plays made in the current step (the async deadline rule's "who is the game waiting on").
+    acted: match.acted || [false, false],
     held: match.held,
     revealed: match.revealed, // roundLog itself is built once, at match completion, not carried live
     stake: match.stake,
