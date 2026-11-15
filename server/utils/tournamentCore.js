@@ -486,3 +486,14 @@ export function effectiveOptInStatus(status, optInStartAt, optInEndAt, now = new
 export function roundDueAt(openedAt, hours) {
   return new Date(new Date(openedAt).getTime() + Math.max(1, Number(hours) || 72) * 3600 * 1000)
 }
+
+/**
+ * Whether a "due in about N hours" reminder makes sense for a pairing that was paired at `pairedAt` and is due at `dueAt`.
+ * A reminder only helps when the pairing was handed out with MORE time than the reminder's window; otherwise it would
+ * go out within minutes of the pairing message itself (a 24 hour round is already inside "24 hours left" the moment it
+ * opens), which is exactly the duplicate message players reported.
+ */
+export function reminderApplies(pairedAt, dueAt, hours) {
+  if (!pairedAt || !dueAt) return false
+  return new Date(dueAt).getTime() - new Date(pairedAt).getTime() > Number(hours) * 3600 * 1000
+}

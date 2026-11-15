@@ -58,3 +58,17 @@ export async function hasFlag(key) {
 export async function setFlag(key, ttlSec) {
   try { await withDeadline(getRedis().set(`flag:${key}`, '1', 'EX', ttlSec)) } catch { /* fail open */ }
 }
+
+/**
+ * Atomically claims a once-only flag (SET NX): returns true for exactly one caller per key within the TTL.
+ * Unlike hasFlag()+setFlag() two concurrent callers cannot both win. Fails OPEN (returns true) when Redis is
+ * unreachable, so the thing being guarded still happens rather than being silently dropped.
+ */
+export async function claimFlag(key, ttlSec) {
+  try { return (await withDeadline(getRedis().set(`flag:${key}`, '1', 'EX', ttlSec, 'NX'))) === 'OK' } catch { return true }
+}
+
+/** Releases a flag claimed with claimFlag (used when the guarded send failed, so a retry is not blocked). */
+export async function clearFlag(key) {
+  try { await withDeadline(getRedis().del(`flag:${key}`)) } catch { /* fail open */ }
+}
