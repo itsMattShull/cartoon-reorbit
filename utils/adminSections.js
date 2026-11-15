@@ -79,6 +79,7 @@ export const ADMIN_SECTIONS = [
   S('siteTheme', 'Manage Site Theme', 'content', nu('AdminSiteTheme')),
   S('myOrbitTiles', 'MyOrbit Tiles', 'content', nu('AdminMyOrbitTiles'), { desc: 'Reusable floor/wall art for the room builder' }),
   S('myOrbitFurniture', 'MyOrbit Furniture', 'content', nu('AdminMyOrbitFurniture'), { desc: 'Reusable furniture/decoration art for the room builder' }),
+  S('myOrbitRooms', 'MyOrbit Rooms', 'content', nu('AdminMyOrbitRoomBuilder'), { desc: 'Build the isometric chatrooms players walk around in' }),
 
   // ── Economy ─────────────────────────────────────────────────
   S('manageSales', 'Manage Sales', 'economy', nu('AdminManageSales'), { sensitive: true, desc: 'Changes prices' }),
