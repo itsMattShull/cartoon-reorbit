@@ -49,6 +49,10 @@ export function serializeMatch(match) {
     // Async tournament games have no clocks at all. Without these a restored copy would quietly get its phase
     // timers (and the auto-play they bring) back.
     noTimers: !!match.noTimers,
+    // The latest resolved board and the final result: an async game is rebuilt from this copy hours or days later, so a
+    // reconnecting player must still see the right totals, and an ended game its outcome.
+    liveBoard: match.liveBoard || null,
+    result: match.result || null,
     startedAt: match.startedAt,
     lastActivity: match.lastActivity
   }

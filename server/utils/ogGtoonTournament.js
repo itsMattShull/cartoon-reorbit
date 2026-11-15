@@ -29,7 +29,7 @@ import {
   computeRecords, buildFinalPlacements, prizeRecipients, roundDueAt, reminderApplies
 } from './tournamentCore.js'
 import {
-  ACTIVE_STATUSES, settleMatchFromGames, loadSeriesGames, clearStaleLive, isFresh, loadLockedDeckForGame
+  ACTIVE_STATUSES, settleMatchFromGames, loadSeriesGames, clearStaleLive, isFresh, loadLockedDeckForGame, lockMatchResult
 } from './ogGtoonTournamentLive.js'
 
 const CENTRAL_TZ = 'America/Chicago'
@@ -572,25 +572,8 @@ export async function advanceAndNotify(db, tournamentId, { matchId = null } = {}
 
 /* ── Results that don't come from played games ──────────────────────────────────────────── */
 
-/**
- * Decides a pairing without (or beyond) played games. A guarded updateMany, so it only ever lands on
- * a pairing nobody else has decided. `outcome` null = both players lose (Swiss double no-show).
- */
-export async function lockMatchResult(db, match, { outcome, resolution, winsA, winsB, note = null, now = new Date() }) {
-  const winnerUserId = outcome === 'A_WIN' ? match.playerAUserId : outcome === 'B_WIN' ? match.playerBUserId : null
-  const claimed = await db.ogGtoonTournamentMatch.updateMany({
-    where: { id: match.id, lockedAt: null },
-    data: {
-      status: 'COMPLETE', outcome, winnerUserId, resolution,
-      winsA: winsA ?? match.winsA, winsB: winsB ?? match.winsB,
-      needsAdmin: false, needsAdminReason: null, liveMatchId: null, liveStartedAt: null,
-      readyAAt: null, readyBAt: null,
-      ...(note ? { adminNotes: note } : {}),
-      lockedAt: now, completedAt: now
-    }
-  })
-  return claimed.count === 1
-}
+// lockMatchResult lives in ogGtoonTournamentLive.js (the socket server needs it too) and also closes a running async game.
+export { lockMatchResult }
 
 /** A player gives up their series. Refused while a game is live (leave that game instead). */
 export async function forfeitMatch(db, { tournamentId, matchId, userId, now = new Date() }) {
