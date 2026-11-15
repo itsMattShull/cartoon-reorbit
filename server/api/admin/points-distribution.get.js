@@ -5,6 +5,7 @@ import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
 
 const CACHE_TTL_SECONDS = 1800 // 30 minutes
+const MAX_BUCKETS = 2000 // bars before everything above is lumped into one "N+" bar
 
 export default defineEventHandler(async (event) => {
   // 1) Admin check via /api/auth/me
@@ -25,58 +26,54 @@ export default defineEventHandler(async (event) => {
     ? Number(rawBucketSize)
     : 1000
 
-  // 3) Cache check
-  const cacheKey = `admin:points-distribution:${bucketSize}`
+  // 3) Cache check. The "v2" in the key retires the old unbounded payloads (a single outlier balance
+  // used to cache a ~90 MB response for 30 minutes).
+  const cacheKey = `admin:points-distribution:v2:${bucketSize}`
   try {
     const hit = await redis.get(cacheKey)
     if (hit) return JSON.parse(hit)
   } catch {}
 
+  // The histogram has at most MAX_BUCKETS + 1 bars no matter what the data holds. Every balance at or
+  // above `overflowStart` lands in one final "N+" bar. Previously the SQL generate_series'd a bucket for
+  // every `bucketSize` points up to the single largest balance, so one account holding ~1.2 billion
+  // points produced a ~1.2 million row / ~90 MB response that froze the server and the chart.
+  const overflowStart = MAX_BUCKETS * bucketSize
+
+  // Only buckets that actually contain users come back from SQL (at most MAX_BUCKETS + 1 rows); the
+  // empty bars in between are filled in below.
   const rows = await prisma.$queryRaw`
-    WITH all_pts AS (
-      SELECT
-        u.id,
-        COALESCE(up.points, 0) AS pts
-      FROM "User" u
-      LEFT JOIN "UserPoints" up
-        ON up."userId" = u.id
-      WHERE u.id <> '4f0e8b3b-7d0b-466b-99e7-8996c91d7eb3'
-    ),
-    counts AS (
-      SELECT
-        (floor(pts / ${bucketSize})::int * ${bucketSize}) AS bucket_start,
-        COUNT(*)::int                  AS cnt
-      FROM all_pts
-      GROUP BY bucket_start
-    ),
-    max_bucket AS (
-      SELECT (floor(MAX(pts) / ${bucketSize})::int * ${bucketSize}) AS max_b
-      FROM all_pts
-    ),
-    buckets AS (
-      -- now both 0 and max_b are ints
-      SELECT generate_series(0, (SELECT max_b FROM max_bucket), ${bucketSize}) AS bucket_start
-    )
     SELECT
-      b.bucket_start,
-      COALESCE(c.cnt, 0) AS count
-    FROM buckets b
-    LEFT JOIN counts c
-      ON c.bucket_start = b.bucket_start
-    ORDER BY b.bucket_start
+      (floor(LEAST(COALESCE(up.points, 0), ${overflowStart}::int) / ${bucketSize}::int)::int * ${bucketSize}::int) AS bucket_start,
+      COUNT(*)::int AS cnt
+    FROM "User" u
+    LEFT JOIN "UserPoints" up
+      ON up."userId" = u.id
+    WHERE u.id <> '4f0e8b3b-7d0b-466b-99e7-8996c91d7eb3'
+      AND COALESCE(up.points, 0) >= 0
+    GROUP BY bucket_start
   `
 
   // 4) Shape payload with human-readable labels
-  const result = rows.map(r => {
-    const start = Number(r.bucket_start)
-    const end   = start + (bucketSize - 1)
-    return {
-      bucketStart: start,
-      bucketEnd:   end,
-      count:       Number(r.count),
-      label:       `${start}–${end}`
+  const countByIndex = new Map()
+  let lastIndex = 0
+  for (const r of rows) {
+    const idx = Math.min(MAX_BUCKETS, Math.floor(Number(r.bucket_start) / bucketSize))
+    countByIndex.set(idx, (countByIndex.get(idx) || 0) + Number(r.cnt))
+    if (idx > lastIndex) lastIndex = idx
+  }
+
+  const result = []
+  for (let idx = 0; idx <= lastIndex; idx++) {
+    const start = idx * bucketSize
+    const count = countByIndex.get(idx) || 0
+    if (idx === MAX_BUCKETS) {
+      result.push({ bucketStart: start, bucketEnd: null, count, label: `${start}+` })
+    } else {
+      const end = start + (bucketSize - 1)
+      result.push({ bucketStart: start, bucketEnd: end, count, label: `${start}–${end}` })
     }
-  })
+  }
 
   try { await redis.set(cacheKey, JSON.stringify(result), 'EX', CACHE_TTL_SECONDS) } catch {}
   return result

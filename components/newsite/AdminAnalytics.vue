@@ -809,11 +809,19 @@ function resetPointsZoom () {
   applyPointsZoom()
 }
 
+// Matches server/api/admin/points-distribution.get.js (MAX_BUCKETS + the "N+" overflow bar), with headroom.
+const MAX_POINTS_BUCKETS = 2500
+
 async function fetchPointsDistribution () {
   if (isUnmounted || !ptsHistChart) return
   const res = await fetch(`/api/admin/points-distribution?bucketSize=${pointsBucketSize.value}`, { credentials: 'include' })
   if (isUnmounted || !ptsHistChart) return
-  const hd = await res.json()
+  // A failed request, or anything that isn't a (bounded) bucket list, must never reach Chart.js: it
+  // draws one bar per entry on the main thread, so a runaway payload freezes the whole admin page.
+  if (!res.ok) return
+  const body = await res.json()
+  if (!Array.isArray(body)) return
+  const hd = body.slice(0, MAX_POINTS_BUCKETS)
   const labels = hd.map(b => b.label)
   const counts = hd.map(b => b.count)
   pointsFullData.value = { labels, counts }
