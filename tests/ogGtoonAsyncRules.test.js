@@ -221,3 +221,14 @@ test('the explicit-play marker survives the persisted copy of a game', async () 
   assert.deepEqual(restored.acted, [false, true])
   assert.deepEqual(pendingStepBlocker(restored), { moverIdx: 1, blockerIdx: 0 })
 })
+
+test('a persisted copy keeps noTimers, and a restart never resumes an async game with phase clocks', async () => {
+  const { serializeMatch } = await import('../server/utils/ogGtoonsMatchSerialize.js')
+  const { readFileSync } = await import('node:fs')
+  const m = mkMatch()
+  m.noTimers = true
+  assert.equal(JSON.parse(JSON.stringify(serializeMatch(m))).noTimers, true)
+  assert.equal(m.deadline, null, 'an async game has no clock at all')
+  const socket = readFileSync(new URL('../server/utils/ogGtoonsSocket.js', import.meta.url), 'utf8')
+  assert.match(socket, /match\.noTimers \|\| match\.tournament\?\.async/, 'restore skips async games')
+})

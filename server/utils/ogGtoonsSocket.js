@@ -691,6 +691,12 @@ export function startOgGtoonsSweep(io) {
 export async function restoreOgGtoonsMatches(io) {
   const restored = await ogRedis.scanOgGtoonMatches()
   for (const [matchId, match] of restored.entries()) {
+    // Async tournament games live in the database, never in this mirror. One found here is a leftover that must not be
+    // resumed with phase clocks (and the auto-play they bring), so it is dropped.
+    if (match.noTimers || match.tournament?.async) {
+      ogRedis.delOgGtoonMatch(matchId).catch(() => {})
+      continue
+    }
     match.sockets = [new Set(), new Set()]
     match.graceTimers = {}
     match.ending = false

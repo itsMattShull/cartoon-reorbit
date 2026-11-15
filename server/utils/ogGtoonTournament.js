@@ -20,6 +20,7 @@ import { DateTime } from 'luxon'
 import { randomBytes } from 'node:crypto'
 import { sendDiscordDMByDiscordId, sendGuildChannelMessageById } from './discord.js'
 import { grantRewardInTx, enqueueCtoonJobs } from './achievements.js'
+import { getOgGtoonsConfig } from './ogGtoonsConfig.js'
 import { grantCodePacks } from './codePackGrant.js'
 import { hasFlag, setFlag, claimFlag, clearFlag } from './cache.js'
 import {
@@ -218,6 +219,14 @@ async function activePlayerIds(tx, tournamentId) {
   return optIns.map(o => o.userId)
 }
 
+/** The kill switch, read once per round creation and stamped onto each pairing (never re-read for a pairing that exists). */
+async function asyncRulesEnabled() {
+  try { return (await getOgGtoonsConfig()).tournamentsAsyncEnabled === true } catch { return false }
+}
+
+/** Per-pairing fields for the async rules: the flag plus the round's ORIGINAL deadline (dueAt may later move by final-minute plays). */
+const asyncFields = (tournament, round) => (tournament.asyncRules ? { asyncRules: true, baseDueAt: round.dueAt } : {})
+
 async function createRound(tx, tournament, stage, roundNumber, now) {
   return tx.ogGtoonTournamentRound.create({
     data: {
@@ -253,7 +262,7 @@ async function createSwissRound(tx, tournament, roundNumber, now) {
   const rows = pairs.map(([a, b], i) => ({
     tournamentId: tournament.id, roundId: round.id, stage: 'SWISS', roundNumber, tableNumber: i + 1,
     playerAUserId: a, playerBUserId: b, status: 'PENDING', bestOf: BEST_OF, requiresWinner: false,
-    pairedAt: now, dueAt: round.dueAt
+    pairedAt: now, dueAt: round.dueAt, ...asyncFields(tournament, round)
   }))
   if (byeUserId) {
     rows.push({
@@ -279,7 +288,7 @@ async function createBracketRound(tx, tournament, roundNumber, pairs, seedMap, n
       rows.push({
         tournamentId: tournament.id, roundId: round.id, stage: 'BRACKET', roundNumber, tableNumber: table,
         playerAUserId: a, playerBUserId: b, status: 'PENDING', bestOf: BEST_OF, requiresWinner: true,
-        pairedAt: now, dueAt: round.dueAt, seedA, seedB
+        pairedAt: now, dueAt: round.dueAt, seedA, seedB, ...asyncFields(tournament, round)
       })
     } else if (a || b) {
       const w = a || b
@@ -322,6 +331,7 @@ async function createTop8Bracket(tx, tournament, now) {
  */
 export async function startTournament(db, tournamentId, now = new Date()) {
   const events = []
+  const asyncRules = await asyncRulesEnabled()
   await db.$transaction(async (tx) => {
     const locked = await tx.$queryRaw`SELECT id FROM "OgGtoonTournament" WHERE id = ${tournamentId} FOR UPDATE`
     if (!locked.length) return
@@ -357,7 +367,7 @@ export async function startTournament(db, tournamentId, now = new Date()) {
 
     const seedValue = randomBytes(8).toString('hex')
     const format = formatFor(good.length)
-    const fresh = { ...t, seedValue, roundWindowHours: t.roundWindowHours }
+    const fresh = { ...t, seedValue, roundWindowHours: t.roundWindowHours, asyncRules }
     let round
     if (format === 'BRACKET_8_OR_LESS') {
       await tx.ogGtoonTournament.update({ where: { id: t.id }, data: { status: 'BRACKET_ACTIVE', format, seedValue } })
@@ -462,7 +472,8 @@ async function stepBracket(tx, t, now, events) {
       tournamentId: t.id, roundId: round.id, stage: 'BRACKET', roundNumber: round.roundNumber,
       tableNumber: i / 2 + 1, playerAUserId: winners[i], playerBUserId: winners[i + 1],
       status: 'PENDING', bestOf: BEST_OF, requiresWinner: true, pairedAt: now, dueAt: round.dueAt,
-      seedA: seedByUser.get(winners[i]) || null, seedB: seedByUser.get(winners[i + 1]) || null
+      seedA: seedByUser.get(winners[i]) || null, seedB: seedByUser.get(winners[i + 1]) || null,
+      ...asyncFields(t, round)
     })
   }
   if (rows.length) await tx.ogGtoonTournamentMatch.createMany({ data: rows })
@@ -507,12 +518,14 @@ async function finishTournament(tx, t, now, events) {
  */
 export async function advanceTournament(db, tournamentId, { now = new Date() } = {}) {
   const events = []
+  const asyncRules = await asyncRulesEnabled()
   await db.$transaction(async (tx) => {
     const rows = await tx.$queryRaw`SELECT id FROM "OgGtoonTournament" WHERE id = ${tournamentId} FOR UPDATE`
     if (!rows.length) return
     for (let i = 0; i < 20; i += 1) {
-      const t = await tx.ogGtoonTournament.findUnique({ where: { id: tournamentId } })
-      if (!t) break
+      const row = await tx.ogGtoonTournament.findUnique({ where: { id: tournamentId } })
+      if (!row) break
+      const t = { ...row, asyncRules }
       let progressed = false
       if (t.status === 'SWISS_ACTIVE') progressed = await stepSwiss(tx, t, now, events)
       else if (t.status === 'BRACKET_ACTIVE') progressed = await stepBracket(tx, t, now, events)

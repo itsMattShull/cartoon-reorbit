@@ -1821,6 +1821,10 @@ model GameConfig {
   // OG gToons tournaments (Tournaments tab + the server-side opt-in / play / forfeit actions).
   // Same explicit-true rule as the four switches above: a missing row leaves it off.
   ogGtoonsTournamentsEnabled Boolean? @default(false)
+  // Kill switch for the async + live match rules (players move whenever they can, no turn timers). Read when a
+  // ROUND IS CREATED and stamped onto each pairing (OgGtoonTournamentMatch.asyncRules), so turning it on or off
+  // never changes a pairing that already exists. Off = rounds are created with the older both-online rules.
+  ogGtoonsTournamentsAsyncEnabled Boolean? @default(false)
 
   // PvP pack reward (server/utils/ogGtoonsPackReward.js). The winner of a played-out random-queue or
   // direct-challenge match gets one sealed `ogGtoonsWinPackId` pack, up to `ogGtoonsWinPackPerUserLimit`
@@ -3342,11 +3346,25 @@ model OgGtoonTournamentMatch {
 
   // Ready-up is stored here (not only in socket memory) so it survives a restart and so the
   // deadline rules can see who actually showed up.
+  // Async rules only (see asyncRules): readyAAt / readyBAt mean "pressed Start" and never expire.
   readyAAt      DateTime?
   readyBAt      DateTime?
   firstReadyAt  DateTime?
   liveMatchId   String? // the in-flight OgGtoonMatch id while a game of this series is being played
   liveStartedAt DateTime? // when that game started; a marker older than a match can last is stale and is cleared
+
+  // ── Async + live play (migration 20261115120000_og_tournament_async_games) ────────────────────────
+  // Stamped when the pairing is created from the kill switch above; existing pairings stay false and keep the
+  // old both-online flow and deadline rules untouched.
+  asyncRules      Boolean   @default(false)
+  // The round's ORIGINAL deadline for this pairing. `dueAt` may be pushed out by final-minute plays (+60s each,
+  // `extensions`), but "may a new game still start" and "did a Start count" are judged against this one.
+  baseDueAt       DateTime?
+  extensions      Int       @default(0)
+  lastPlayAt      DateTime? // the last explicit play (commit / discard / swap / colour pick) by either player
+  lastPlayUserId  String?
+  // Set when the next game could not be created because a locked card left a player's collection: 'A' | 'B' | 'BOTH'.
+  deckProblemSide String?
 
   voidedGames       Int       @default(0)
   extraGamesCounted Int       @default(0)
@@ -3362,6 +3380,7 @@ model OgGtoonTournamentMatch {
   playerB    User                   @relation("OgGtoonTournamentMatchPlayerB", fields: [playerBUserId], references: [id])
   winner     User?                  @relation("OgGtoonTournamentMatchWinner", fields: [winnerUserId], references: [id])
   games      OgGtoonMatch[]
+  liveGames  OgGtoonTournamentGame[]
 
   @@unique([roundId, tableNumber])
   @@index([tournamentId, stage, roundNumber])
@@ -3369,6 +3388,45 @@ model OgGtoonTournamentMatch {
   @@index([status, dueAt])
   @@index([playerAUserId])
   @@index([playerBUserId])
+}
+
+enum OgGtoonTournamentGameStatus {
+  ACTIVE // being played (or waiting for a player), state lives in `state`
+  ENDED  // finished normally: written to OgGtoonMatch under the same id
+  CLOSED // the pairing was decided some other way (deadline, forfeit, admin) while it was running
+}
+
+// One game of an async tournament pairing while it is being played. Unlike the live-only flow (an in-memory
+// match mirrored to Redis for two hours) this row IS the game, so it survives restarts and can wait days for a
+// player. `state` is the server-only match object (hands, undealt cards, placements, held cards, game log):
+// it is never sent to a client as is, only through publicMatchView. When the game ends the finished result is
+// written to OgGtoonMatch with this row's id and this row becomes ENDED. A partial unique index (migration)
+// allows only one ACTIVE game per pairing.
+model OgGtoonTournamentGame {
+  id                String                          @id // the OgGtoonMatch id the finished game is written under
+  tournamentMatchId String
+  gameNumber        Int
+  status            OgGtoonTournamentGameStatus     @default(ACTIVE)
+  state             Json
+  // Public reveal payloads in order ({ seq, round, order, steps, before, timing, ... }), for replaying what a
+  // returning player missed. Contains only what both players saw once revealed, never a hand.
+  reveals           Json                            @default("[]")
+  // Highest reveal seq each player has watched (replay cursors) and whether they have dismissed the goal intro.
+  seenA             Int                             @default(0)
+  seenB             Int                             @default(0)
+  introSeenA        Boolean                         @default(false)
+  introSeenB        Boolean                         @default(false)
+  // Compare-and-set counter: every state write bumps it.
+  version           Int                             @default(1)
+  lastPlayAt        DateTime?
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
+  endedAt           DateTime?
+
+  tournamentMatch OgGtoonTournamentMatch @relation(fields: [tournamentMatchId], references: [id])
+
+  @@unique([tournamentMatchId, gameNumber])
+  @@index([status])
 }
 
 model OgGtoonTournamentPlayerRecord {
