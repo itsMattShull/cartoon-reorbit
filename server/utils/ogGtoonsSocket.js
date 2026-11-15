@@ -110,9 +110,10 @@ function scheduleLobbyBroadcast() {
   if (!lobbyIo || lobbyTimer) return
   lobbyTimer = setTimeout(() => {
     lobbyTimer = null
+    const queueCount = queue.length
     for (const [uid, entry] of lobby) {
       const users = availableLobbyUsers(uid)
-      for (const sid of entry.sockets) lobbyIo.local.to(sid).emit(EV('lobbyUsers'), { users })
+      for (const sid of entry.sockets) lobbyIo.local.to(sid).emit(EV('lobbyUsers'), { users, queueCount })
     }
   }, 150)
   lobbyTimer.unref?.()
@@ -870,7 +871,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     lobby.set(user.id, entry)
     socket.data.ogGtoonsLobbyUserId = user.id
     // The newcomer gets their list right away; everyone else's refreshes on the debounce.
-    socket.emit(EV('lobbyUsers'), { users: availableLobbyUsers(user.id) })
+    socket.emit(EV('lobbyUsers'), { users: availableLobbyUsers(user.id), queueCount: queue.length })
     scheduleLobbyBroadcast()
   })
 

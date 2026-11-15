@@ -45,6 +45,9 @@
             Leave Queue
           </button>
           <span v-if="lobbyState?.inQueue" class="text-xs text-amber-300 animate-pulse">Searching for an opponent...</span>
+          <span class="text-xs text-gray-300" data-testid="og-queue-count">
+            {{ queueCount }} {{ queueCount === 1 ? 'player' : 'players' }} waiting in the queue
+          </span>
         </div>
       </div>
 
@@ -115,7 +118,7 @@ import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 
 const emit = defineEmits(['start-tutorial'])
 const {
-  lobbyState, lobbyUsers, joinLobby, leaveLobby, joinQueue, leaveQueue, sendChallenge, cancelChallenge
+  lobbyState, lobbyUsers, queueCount, joinLobby, leaveLobby, joinQueue, leaveQueue, sendChallenge, cancelChallenge
 } = useOgGtoonsRoomSocket()
 const { lastError, startPractice } = useOgGtoonsSocket()
 
