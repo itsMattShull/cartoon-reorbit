@@ -1,11 +1,11 @@
 <template>
   <div class="play-wrapper h-full">
-    <OgGtoonMatchBoard @exit="onExit" />
+    <OgGtoonMatchBoard @exit="onExit" @open-game="goToGame" />
   </div>
 </template>
 
 <script setup>
-import { useRouter, useRoute, watch, onBeforeUnmount } from '#imports'
+import { useRouter, useRoute, watch, onBeforeUnmount, onMounted } from '#imports'
 import OgGtoonMatchBoard from '@/components/OgGtoonMatchBoard.vue'
 import { useOgGtoonsSocket } from '@/composables/useOgGtoonsSocket'
 
@@ -29,11 +29,19 @@ onBeforeUnmount(() => clearSidebarMiddle('OgGtoonSidebar'))
 // this route param, so it is not otherwise read here.
 const router = useRouter()
 const route = useRoute()
-const { leaveMatch, matchState, currentMatchId } = useOgGtoonsSocket()
+const { leaveMatch, matchState, currentMatchId, openAsyncGame, closeAsyncGame, asyncGameId } = useOgGtoonsSocket()
+
+// The id in the address is either a live match (reattached by the server, as always) or an async tournament game, which is
+// opened by id. Opening an id that is not an async game is harmless: the server says so and this page carries on as before.
+// Closing the page only stops watching: it is never a forfeit.
+onMounted(() => openAsyncGame(route.params.id))
+watch(() => route.params.id, (id) => { if (id) openAsyncGame(id) })
+onBeforeUnmount(() => { if (asyncGameId.value) closeAsyncGame() })
+function goToGame(id) { if (id) router.push(`/newsite/gtoons-classic/${id}`) }
 
 // A tournament series is several games in a row: when the next one starts, keep the address bar in step.
 watch(currentMatchId, (id) => {
-  if (id && matchState.value?.tournament && id !== route.params.id) router.replace(`/newsite/gtoons-classic/${id}`)
+  if (id && !asyncGameId.value && matchState.value?.tournament && id !== route.params.id) router.replace(`/newsite/gtoons-classic/${id}`)
 })
 
 function onExit() {

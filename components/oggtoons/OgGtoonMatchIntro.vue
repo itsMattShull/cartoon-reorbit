@@ -59,7 +59,10 @@
             <p v-for="(line, i) in scenario.lines" :key="i" class="og-mid-text">{{ line }}</p>
           </div>
         </div>
-        <div class="og-pill" role="timer">
+        <div v-if="manual" class="og-pill">
+          <button type="button" class="og-start-btn" @click="$emit('start')">Start playing</button>
+        </div>
+        <div v-else class="og-pill" role="timer">
           <template v-if="seconds > 0">Match starts in <strong>{{ seconds }}</strong></template>
           <template v-else>Let's play!</template>
         </div>
@@ -123,8 +126,11 @@ const props = defineProps({
   opponent: { type: Object, required: true },
   // Whole seconds left on the countdown.
   seconds: { type: Number, default: 0 },
+  // Async tournament games have no countdown (nothing is waiting on you): the player reads the goals, then dismisses it once.
+  manual: { type: Boolean, default: false },
   deckSize: { type: Number, default: 12 }
 })
+defineEmits(['start'])
 
 const COLOR_HEX = {
   BLACK: '#cccccc', SILVER: '#c0c0c0', BLUE: '#60a5fa', RED: '#f87171',
@@ -234,4 +240,6 @@ const typeLabel = (card) => typeList(card).map(ogTitleCase).join(', ')
   .og-ic-avatar { width: 26px; height: 26px; }
   .og-ic-user { font-size: .8rem; }
 }
+.og-start-btn { background: #22c55e; color: #fff; font-weight: 700; border-radius: 9999px; padding: .5rem 1.4rem; min-height: 44px; }
+.og-start-btn:hover { background: #16a34a; }
 </style>

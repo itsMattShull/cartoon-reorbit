@@ -204,7 +204,7 @@ export function registerOgGtoonsTournament(io, socket, h) {
     } else {
       // Only one player has pressed Start: tell the opponent live if they are connected, otherwise by Discord DM (rate-limited).
       io.local.to(userRoom(ctx.opponentId)).emit(EV('tournamentOpponentReady'), {
-        tournamentMatchId: ctx.match.id, tournamentName: ctx.tournament.name, username: user.username
+        tournamentMatchId: ctx.match.id, tournamentName: ctx.tournament.name, username: user.username, async: true
       })
       if (!(await isOnline(ctx.opponentId))) {
         enqueueOgTournamentJob('ogTournamentNotifyReady', { tournamentMatchId: ctx.match.id, readyUserId: user.id }, { key: `${ctx.match.id}-${user.id}`, bucketSec: 60 })
