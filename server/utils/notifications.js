@@ -42,7 +42,8 @@ export const NOTIFICATION_TYPES = Object.freeze({
   CMOON_RAID_BOSS_STARTED: 'CMOON_RAID_BOSS_STARTED',
   CMOON_RAID_PREVIEW_STARTED: 'CMOON_RAID_PREVIEW_STARTED',
   PVP_PACK_WON: 'PVP_PACK_WON',
-  CMOON_RAID_KICKED_AFK: 'CMOON_RAID_KICKED_AFK'
+  CMOON_RAID_KICKED_AFK: 'CMOON_RAID_KICKED_AFK',
+  WISHLIST_AUCTION_LISTED: 'WISHLIST_AUCTION_LISTED'
 })
 
 // Mirrors the guard in server/utils/discord.js — the official account is a
@@ -357,4 +358,84 @@ export async function notifyCMoonRaidKickedAfk (db, { userId, enemyName }) {
     title: `You were kicked from the ${enemyName || 'raid'} for inactivity`,
     body: 'Auto-moving for too many rounds in a row kicks you out with no rewards. Stay active to keep your spot next time!'
   })
+}
+
+// Rows per INSERT batch for notifyWishlistAuctionListed — same reasoning as LOBBY_BATCH_SIZE
+// above: keeps any one statement's parameter arrays bounded no matter how many wishlisters a
+// single popular cToon has.
+const WISHLIST_BATCH_SIZE = 1000
+
+/**
+ * A cToon on one or more players' wishlists (WishlistItem) was just listed in a new auction —
+ * call AFTER the auction's creating transaction commits (server/api/auctions.post.js), same
+ * fire-and-forget stance as every other notifier in this file.
+ *
+ * Unlike notifyCMoonRaidLobbyOpened, the caller never already has the recipient set in hand, so
+ * this looks the wishlisters up itself (WishlistItem is indexed on ctoonId, see
+ * prisma/schema.prisma) instead of taking a precomputed userIds list. contextId is the auctionId
+ * itself (not a fixed string): each auction gets its own collapsing alert, so relisting the same
+ * cToon later doesn't silently fold into an already-read notification for a past listing.
+ *
+ * Banned users, the official account, and anyone with allowWishlistAuctionNotifications = false
+ * are filtered in SQL, same rules as isNotifiable above (this just can't reuse that per-row
+ * helper directly, being a single set-based statement). The seller is excluded in the initial
+ * lookup: wishlisting your own cToon and then auctioning it isn't something to alert yourself
+ * about. Returns the userIds actually written (for a future live push), or [] on failure/no
+ * match — never throws.
+ */
+export async function notifyWishlistAuctionListed (db, { auctionId, ctoonId, ctoonName, sellerUserId }) {
+  if (!db || !auctionId || !ctoonId) return []
+
+  let wishlisters
+  try {
+    wishlisters = await db.wishlistItem.findMany({
+      where: {
+        ctoonId,
+        ...(sellerUserId ? { userId: { not: sellerUserId } } : {})
+      },
+      select: { userId: true }
+    })
+  } catch (err) {
+    console.error('[notifications] wishlist lookup failed:', err?.message || err)
+    return []
+  }
+
+  const unique = [...new Set(wishlisters.map(w => w.userId))]
+  if (!unique.length) return []
+
+  const title = `${ctoonName || 'A cToon'} on your wishlist was just listed!`
+  const body = 'Place a bid on it before the auction ends.'
+  const written = []
+  for (let i = 0; i < unique.length; i += WISHLIST_BATCH_SIZE) {
+    const batch = unique.slice(i, i + WISHLIST_BATCH_SIZE)
+    const ids = batch.map(() => randomUUID())
+    try {
+      // Every parameter is cast explicitly: with Prisma 7's pg adapter raw parameters reach
+      // Postgres untyped (see the ::timestamp(3) comment in server/utils/cmoon.js).
+      const rows = await db.$queryRaw`
+        INSERT INTO "Notification" (
+          "id", "userId", "type", "title", "body", "contextType", "contextId",
+          "count", "createdAt", "updatedAt"
+        )
+        SELECT t."id", t."userId", ${NOTIFICATION_TYPES.WISHLIST_AUCTION_LISTED}::"NotificationType",
+               ${title}::text, ${body}::text, 'AUCTION'::"LockedContextType", ${auctionId}::text, 1, NOW(), NOW()
+        FROM unnest(${ids}::text[], ${batch}::text[]) AS t("id", "userId")
+        JOIN "User" u ON u."id" = t."userId"
+        WHERE COALESCE(u."banned", false) = false AND u."username" IS DISTINCT FROM ${OFFICIAL_USERNAME}::text
+          AND COALESCE(u."allowWishlistAuctionNotifications", true) = true
+        ON CONFLICT ("userId", "type", "contextId") WHERE "readAt" IS NULL
+        DO UPDATE SET
+          "count"     = "Notification"."count" + 1,
+          "title"     = EXCLUDED."title",
+          "body"      = EXCLUDED."body",
+          "createdAt" = NOW(),
+          "updatedAt" = NOW()
+        RETURNING "userId"
+      `
+      for (const r of rows || []) written.push(r.userId)
+    } catch (err) {
+      console.error('[notifications] wishlist auction broadcast failed:', err?.message || err)
+    }
+  }
+  return written
 }

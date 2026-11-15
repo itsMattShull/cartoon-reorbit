@@ -12,7 +12,8 @@ import {
   notifyCMoonRaidBossStarted,
   notifyCMoonRaidPreviewStarted,
   notifyPvpPackWon,
-  notifyCMoonRaidKickedAfk
+  notifyCMoonRaidKickedAfk,
+  notifyWishlistAuctionListed
 } from '../server/utils/notifications.js'
 
 // A stand-in for the Prisma client that records what it was asked to do. The
@@ -45,7 +46,7 @@ function fakeDb ({ user = { username: 'alice', banned: false }, throwOnWrite = f
 test('every helper is exported and callable', () => {
   for (const fn of [createNotification, notifyOutbid, notifyAuctionBid,
     notifyAuctionWon, notifyTradeOfferReceived, notifyTradeOfferAccepted, notifyCMoonRaidBossStarted,
-    notifyCMoonRaidPreviewStarted, notifyPvpPackWon, notifyCMoonRaidKickedAfk]) {
+    notifyCMoonRaidPreviewStarted, notifyPvpPackWon, notifyCMoonRaidKickedAfk, notifyWishlistAuctionListed]) {
     assert.equal(typeof fn, 'function')
   }
 })
@@ -61,7 +62,8 @@ test('the type set is closed and frozen', () => {
     'CMOON_RAID_PREVIEW_STARTED',
     'PVP_PACK_WON',
     'TRADE_OFFER_ACCEPTED',
-    'TRADE_OFFER_RECEIVED'
+    'TRADE_OFFER_RECEIVED',
+    'WISHLIST_AUCTION_LISTED'
   ])
 })
 
@@ -311,6 +313,87 @@ test('raid lobby broadcast does nothing for no recipients and never throws', asy
   console.error = () => {}
   try {
     assert.deepEqual(await notifyCMoonRaidLobbyOpened(batchDb({ throwOnQuery: true }), { userIds: ['u1'] }), [])
+  } finally {
+    console.error = orig
+  }
+})
+
+// ── Wishlist auction-listed broadcast ──────────────────────────────────────────────────────────
+// Unlike the raid lobby broadcast above, the caller never already has the recipient set in hand:
+// this looks wishlisters up itself from WishlistItem, then runs the same batched upsert shape.
+function wishlistDb ({ wishlisters = [], throwOnLookup = false, throwOnQuery = false } = {}) {
+  const calls = { lookups: [], writes: [] }
+  return {
+    calls,
+    wishlistItem: {
+      async findMany (args) {
+        calls.lookups.push(args)
+        if (throwOnLookup) throw new Error('db exploded')
+        return wishlisters
+      }
+    },
+    async $queryRaw (strings, ...values) {
+      if (throwOnQuery) throw new Error('db exploded')
+      calls.writes.push({ sql: strings.join('?'), values })
+      const userIds = values.find(v => Array.isArray(v) && v.some(x => String(x).startsWith('u')))
+      return (userIds || []).map(userId => ({ userId }))
+    }
+  }
+}
+
+test('wishlist auction broadcast looks up wishlisters by ctoonId, excluding the seller', async () => {
+  const db = wishlistDb({ wishlisters: [{ userId: 'u1' }, { userId: 'u2' }] })
+  const written = await notifyWishlistAuctionListed(db, {
+    auctionId: 'auction-5', ctoonId: 'ctoon-1', ctoonName: 'Dexter', sellerUserId: 'seller-1'
+  })
+  assert.equal(db.calls.lookups.length, 1)
+  assert.deepEqual(db.calls.lookups[0].where, { ctoonId: 'ctoon-1', userId: { not: 'seller-1' } })
+  assert.deepEqual(written, ['u1', 'u2'])
+  const { sql, values } = db.calls.writes[0]
+  assert.ok(values.includes('auction-5'))
+  assert.match(sql, /'AUCTION'::"LockedContextType"/) // same contextType for every row, so it's a literal, not a bound param
+  assert.ok(values.includes('WISHLIST_AUCTION_LISTED'))
+  assert.match(values.join(' | '), /Dexter/)
+  assert.match(sql, /ON CONFLICT/)
+  // Same eligibility rules as isNotifiable, plus the wishlist-specific opt-out — all filtered in
+  // SQL, same as the raid lobby broadcast.
+  assert.match(sql, /banned/)
+  assert.match(sql, /allowWishlistAuctionNotifications/)
+  assert.ok(values.includes('CartoonReOrbitOfficial'))
+})
+
+test('wishlist auction broadcast does not filter by seller when none is given', async () => {
+  const db = wishlistDb({ wishlisters: [{ userId: 'u1' }] })
+  await notifyWishlistAuctionListed(db, { auctionId: 'a1', ctoonId: 'c1' })
+  assert.deepEqual(db.calls.lookups[0].where, { ctoonId: 'c1' })
+})
+
+test('wishlist auction broadcast dedupes repeated userIds from the lookup', async () => {
+  const db = wishlistDb({ wishlisters: [{ userId: 'u1' }, { userId: 'u1' }, { userId: 'u2' }] })
+  await notifyWishlistAuctionListed(db, { auctionId: 'a1', ctoonId: 'c1' })
+  const { values } = db.calls.writes[0]
+  const idsArg = values.find(v => Array.isArray(v) && v.includes('u1'))
+  assert.equal(idsArg.length, 2)
+})
+
+test('wishlist auction broadcast does nothing when nobody has the cToon wishlisted', async () => {
+  const db = wishlistDb({ wishlisters: [] })
+  const written = await notifyWishlistAuctionListed(db, { auctionId: 'a1', ctoonId: 'c1' })
+  assert.deepEqual(written, [])
+  assert.equal(db.calls.writes.length, 0)
+})
+
+test('wishlist auction broadcast requires an auctionId and a ctoonId, and never throws', async () => {
+  const db = wishlistDb({ wishlisters: [{ userId: 'u1' }] })
+  assert.deepEqual(await notifyWishlistAuctionListed(db, { ctoonId: 'c1' }), [])
+  assert.deepEqual(await notifyWishlistAuctionListed(db, { auctionId: 'a1' }), [])
+  assert.equal(db.calls.lookups.length, 0)
+
+  const orig = console.error
+  console.error = () => {}
+  try {
+    assert.deepEqual(await notifyWishlistAuctionListed(wishlistDb({ throwOnLookup: true }), { auctionId: 'a1', ctoonId: 'c1' }), [])
+    assert.deepEqual(await notifyWishlistAuctionListed(wishlistDb({ wishlisters: [{ userId: 'u1' }], throwOnQuery: true }), { auctionId: 'a1', ctoonId: 'c1' }), [])
   } finally {
     console.error = orig
   }
