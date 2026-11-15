@@ -24,6 +24,7 @@ export default defineEventHandler(async (event) => {
       soundPath: a.soundPath,
       healsAllies: a.healsAllies,
       playerChoice: a.playerChoice,
+      pvpEligible: a.pvpEligible,
       poisonDurationRounds: a.poisonDurationRounds,
       cleanseAlsoHeals: a.cleanseAlsoHeals,
       requiredHitStreak: a.requiredHitStreak,

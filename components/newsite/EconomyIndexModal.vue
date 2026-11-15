@@ -6,41 +6,61 @@
     <div class="eim-overlay" @click.self="$emit('close')">
       <div class="eim-card" role="dialog" aria-modal="true" aria-labelledby="eim-title">
         <div class="eim-header">
-          <h3 id="eim-title" class="eim-title">What is the Economy Index?</h3>
+          <h3 id="eim-title" class="eim-title">{{ title }}</h3>
           <button type="button" class="eim-close" @click="$emit('close')" aria-label="Close">✕</button>
         </div>
 
-        <div v-if="inflation?.available" class="eim-current" :class="`eim-current--${inflation.direction}`">
-          <span class="eim-current-value">{{ formatPoints(inflation.indexThisWeek) }} pts</span>
+        <div v-if="current?.available" class="eim-current" :class="`eim-current--${current.direction}`">
+          <span class="eim-current-value">{{ formatPoints(current.indexThisWeek) }} pts</span>
           <span class="eim-current-change" aria-hidden="true">
-            {{ directionArrow }}{{ Math.abs(inflation.pctChange).toFixed(1) }}%
+            {{ directionArrow }}{{ Math.abs(current.pctChange).toFixed(1) }}%
           </span>
           <span class="eim-current-sub">vs. last week</span>
         </div>
         <p v-else class="eim-current-unavailable">Not enough sales data yet this week or last to show a number.</p>
 
         <div class="eim-body">
-          <p>
-            The Economy Index is the average number of points a cToon sold for over
-            the past 7 days, combining both <strong>auction wins</strong> and
-            <strong>trades</strong> into one number.
-          </p>
-          <p>
-            It's <strong>weighted by volume</strong> — a day with a lot of sales
-            counts for more than a day with just one or two — so the number reflects
-            the overall market rather than swinging on a single high-value auction.
-          </p>
-          <p>
-            The percent change compares this week's average against last week's,
-            using the same method for both, so <span class="eim-up">▲ up</span> means
-            cToons generally sold for more points this week, and
-            <span class="eim-down">▼ down</span> means they generally sold for fewer.
-          </p>
-          <p class="eim-note">
-            Auctions and trades are blended here for a single glanceable figure — the
-            "Top 10 Most Valuable" and "Browse All cToons" sections below stay split
-            by source for a closer look.
-          </p>
+          <template v-if="variant === 'exHighMints'">
+            <p>
+              This is the same Economy Index, but with cToons minted more than
+              <strong>{{ highMintThreshold }} times</strong> left out entirely.
+            </p>
+            <p>
+              A handful of mass-produced cToons can trade or get auctioned very often —
+              since the index is <strong>weighted by volume</strong>, that activity can
+              swing the overall number on sheer supply rather than anything meaningful
+              about demand. Leaving those cToons out shows how prices are moving for
+              everything else.
+            </p>
+            <p class="eim-note">
+              This excludes high-mint cToons from the index figure only — the "Top 10
+              Most Valuable", "Browse All cToons", and a cToon's own price history
+              elsewhere on this page are unaffected.
+            </p>
+          </template>
+          <template v-else>
+            <p>
+              The Economy Index is the average number of points a cToon sold for over
+              the past 7 days, combining both <strong>auction wins</strong> and
+              <strong>trades</strong> into one number.
+            </p>
+            <p>
+              It's <strong>weighted by volume</strong> — a day with a lot of sales
+              counts for more than a day with just one or two — so the number reflects
+              the overall market rather than swinging on a single high-value auction.
+            </p>
+            <p>
+              The percent change compares this week's average against last week's,
+              using the same method for both, so <span class="eim-up">▲ up</span> means
+              cToons generally sold for more points this week, and
+              <span class="eim-down">▼ down</span> means they generally sold for fewer.
+            </p>
+            <p class="eim-note">
+              Auctions and trades are blended here for a single glanceable figure — the
+              "Top 10 Most Valuable" and "Browse All cToons" sections below stay split
+              by source for a closer look.
+            </p>
+          </template>
         </div>
       </div>
     </div>
@@ -51,9 +71,21 @@
 import { computed } from 'vue'
 
 const props = defineProps({
-  inflation: { type: Object, default: null }
+  inflation: { type: Object, default: null },
+  // 'all' is the full index; 'exHighMints' reads inflation.exHighMints and
+  // swaps in the explanation for that variant instead.
+  variant: { type: String, default: 'all' },
+  highMintThreshold: { type: Number, default: 400 }
 })
 defineEmits(['close'])
+
+const title = computed(() => props.variant === 'exHighMints'
+  ? 'What is "Economy Index (ex. high mints)"?'
+  : 'What is the Economy Index?')
+
+const current = computed(() => props.variant === 'exHighMints'
+  ? props.inflation?.exHighMints
+  : props.inflation)
 
 function formatPoints(n) {
   if (n == null) return '—'
@@ -61,7 +93,7 @@ function formatPoints(n) {
 }
 
 const directionArrow = computed(() => {
-  const d = props.inflation?.direction
+  const d = current.value?.direction
   if (d === 'up') return '▲'
   if (d === 'down') return '▼'
   return '–'

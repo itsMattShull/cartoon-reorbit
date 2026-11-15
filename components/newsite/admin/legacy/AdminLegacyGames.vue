@@ -40,7 +40,7 @@
             <input type="number" v-model.number="globalDailyPointLimit" class="border rounded-md px-2 py-1.5 text-sm w-full" />
           </div>
           <div class="mb-6">
-            <label class="block text-xs font-medium text-gray-700">Head-to-Head Daily Points Cap (TKO + gToons Clash + Ed, Edd n Eddy RPS)</label>
+            <label class="block text-xs font-medium text-gray-700">Head-to-Head Daily Points Cap (TKO + gToons Clash + OG gToons + Ed, Edd n Eddy RPS)</label>
             <input type="number" v-model.number="globalTkoDailyPointLimit" class="border rounded-md px-2 py-1.5 text-sm w-full" />
           </div>
           <button @click="saveGlobalConfig" :disabled="loadingGlobal" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
@@ -816,6 +816,15 @@
               The values below are defaults, not what is saved. If this database hasn't had the
               gToons feature-toggle migration applied yet, run it and reload before saving —
               saving now would write these defaults.
+            </p>
+          </div>
+
+          <div class="mb-4 max-w-xs">
+            <label class="block text-xs font-medium text-gray-700">PvP Points Per Win</label>
+            <input type="number" min="0" v-model.number="ogGtoonsPointsPerWin" class="border rounded-md px-2 py-1.5 text-sm w-full" />
+            <p class="text-[11px] text-gray-500 mt-1">
+              Paid to the winner of a PvP match played to a natural finish (not forfeits, ties, practice or tournament
+              games), from the same daily pool as TKO, gToons Clash and Ed, Edd n Eddy RPS.
             </p>
           </div>
 
@@ -2235,6 +2244,7 @@ const ogGtoonsTournamentsEnabled  = ref(false)
 const ogWinPack                   = ref({ packId: null, limit: null })
 const ogPackRewardEl              = ref(null)
 const ogGtoonsGamesPageVisible    = ref(true)
+const ogGtoonsPointsPerWin        = ref(0)
 const loadingOgGtoons             = ref(false)
 // Card-reveal pacing (ms). null/blank = use the built-in default; see utils/ogGtoonReveal.js.
 const ogRevealFields = [
@@ -2677,6 +2687,7 @@ async function loadSettings() {
     ogGtoonsPracticeEnabled.value     = og.ogGtoonsPracticeEnabled     === true
     ogGtoonsTournamentsEnabled.value  = og.ogGtoonsTournamentsEnabled  === true
     ogGtoonsGamesPageVisible.value    = og.ogGtoonsGamesPageVisible    !== false
+    ogGtoonsPointsPerWin.value        = Number.isInteger(og.pointsPerWin) ? og.pointsPerWin : 0
     ogWinPack.value = { packId: og.ogGtoonsWinPackId ?? null, limit: og.ogGtoonsWinPackPerUserLimit ?? null }
     for (const k of Object.keys(ogRevealMs)) ogRevealMs[k] = Number.isInteger(og[k]) ? og[k] : null
     ogGtoonsConfigError.value = ''
@@ -3194,6 +3205,7 @@ async function saveOgGtoonsConfig() {
         ogGtoonsPracticeEnabled:     ogGtoonsPracticeEnabled.value,
         ogGtoonsTournamentsEnabled:  ogGtoonsTournamentsEnabled.value,
         ogGtoonsGamesPageVisible:    ogGtoonsGamesPageVisible.value,
+        pointsPerWin:                Number.isInteger(ogGtoonsPointsPerWin.value) ? ogGtoonsPointsPerWin.value : 0,
         ogGtoonsWinPackId:           ogWinPack.value.packId,
         ogGtoonsWinPackPerUserLimit: ogWinPack.value.limit,
         // null/blank resets a field to its built-in default on the server

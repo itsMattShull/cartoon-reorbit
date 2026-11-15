@@ -92,11 +92,12 @@ export const WIN_GAME_OPTIONS = WIN_GAMES.map(({ name, label }) => ({ key: name,
 // file (see runDailyCMoonScoring/recordDailyTaskCompletions above), ADMIN_BACKFILL from
 // server/workers/cmoon-daily-task-backfill.worker.js's one-time "Backfill cMoon Points" tool,
 // ENEMY_BATTLE_WIN from server/utils/cmoonEnemyBattle.js (the cMoon Enemy Battles mini-game),
-// ENEMY_RAID_WIN from server/utils/cmoonRaidSocket.js (the raid-boss co-op mode), and
-// RIDDLE_SOLVE from server/utils/cmoonRiddle.js (the Discord riddle system), and HUNT_COMPLETE
-// from server/utils/cmoonHunt.js (the split-clue scavenger hunt). Exported so the admin
-// points-log endpoint has a fixed filter list without a DISTINCT query.
-export const CMOON_SCORE_LOG_CATEGORIES = ['HIGH_SCORE', 'TOP10', 'DAILY_TASK', 'ADMIN_BACKFILL', 'ADMIN_GRANT', 'ENEMY_BATTLE_WIN', 'ENEMY_RAID_WIN', 'RIDDLE_SOLVE', 'HUNT_COMPLETE']
+// ENEMY_RAID_WIN from server/utils/cmoonRaidSocket.js (the raid-boss co-op mode),
+// RIDDLE_SOLVE from server/utils/cmoonRiddle.js (the Discord riddle system), HUNT_COMPLETE
+// from server/utils/cmoonHunt.js (the split-clue scavenger hunt), and OG_GTOONS_WIN from
+// awardOgGtoonsWinPoints below (a live per-match award, see that function's own comment).
+// Exported so the admin points-log endpoint has a fixed filter list without a DISTINCT query.
+export const CMOON_SCORE_LOG_CATEGORIES = ['HIGH_SCORE', 'TOP10', 'DAILY_TASK', 'ADMIN_BACKFILL', 'ADMIN_GRANT', 'ENEMY_BATTLE_WIN', 'ENEMY_RAID_WIN', 'RIDDLE_SOLVE', 'HUNT_COMPLETE', 'OG_GTOONS_WIN']
 
 const GAME_LABEL_BY_KEY = new Map([...SCORE_GAMES, ...WIN_GAMES].map(g => [g.name, g.label]))
 
@@ -135,6 +136,8 @@ export function describeCMoonScoreLogSource(category, detail) {
       return 'Riddle solved first'
     case 'HUNT_COMPLETE':
       return 'Scavenger hunt completed'
+    case 'OG_GTOONS_WIN':
+      return 'OG gToons PvP win'
     default:
       return category || 'Unknown'
   }
@@ -153,7 +156,14 @@ export const CMOON_SCORING_DEFAULTS = {
   enemySlayerBoardEnabled: true,
   enemySlayerFirstPlacePoints: 100,
   enemySlayerTop10Points: 50,
+  gamesWeeklyScoringEnabled: false,
+  enemySlayerWeeklyScoringEnabled: false,
+  ogGtoonsWinPoints: 0,
 }
+
+// Rolling window, not a calendar week — same convention server/utils/gameLeaderboard.js's own
+// "weekly" period already uses for the unrelated player-facing per-game leaderboards.
+const WEEKLY_SCORING_WINDOW_DAYS = 7
 
 // How many of the 7 days in a week a player is expected to complete a qualifying daily task —
 // dailyTaskPoints is entered as a weekly total (same convention as highScorePoints/top10Points
@@ -197,22 +207,36 @@ export function resolveScoringConfig(config) {
     enemySlayerBoardEnabled: config?.cMoonEnemySlayerBoardEnabled !== false,
     enemySlayerFirstPlacePoints: int(config?.cMoonEnemySlayerFirstPlacePoints, CMOON_SCORING_DEFAULTS.enemySlayerFirstPlacePoints, 0),
     enemySlayerTop10Points: int(config?.cMoonEnemySlayerTop10Points, CMOON_SCORING_DEFAULTS.enemySlayerTop10Points, 0),
+    gamesWeeklyScoringEnabled: !!config?.cMoonGamesWeeklyScoringEnabled,
+    enemySlayerWeeklyScoringEnabled: !!config?.cMoonEnemySlayerWeeklyScoringEnabled,
+    ogGtoonsWinPoints: int(config?.cMoonOgGtoonsWinPoints, CMOON_SCORING_DEFAULTS.ogGtoonsWinPoints, 0),
     activeScoreGames: SCORE_GAMES.filter(g => !disabledScoreGames.includes(g.name)),
     activeWinGames: WIN_GAMES.filter(g => !disabledWinGames.includes(g.name)),
   }
 }
 
-// All-time top N for a score-based game (highest, or lowest for ReOrbit Memory's move count),
-// one row per user. Shape/exclusions mirror server/utils/gameLeaderboard.js's buildTop11.
-// `table`/`column` are compile-time constants from SCORE_GAMES above, never runtime input —
-// same convention gameLeaderboard.js documents for the identical reason: they can't be bind
-// parameters, so $queryRawUnsafe is used with every actual value (including rankCutoff) still
-// bound. Backs both findTopScoreHolder (rankCutoff=1, for HIGH_SCORE) and the per-game TOP10
-// award below (rankCutoff=top10RankCutoff) — the same "who's currently on this game's board"
-// computation either way, just truncated at a different depth.
-async function getTopNScoreHolders({ table, column, direction, extraWhere }, rankCutoff) {
+// Same rolling-window SQL fragment shape as server/utils/gameLeaderboard.js's own dateFilterAt
+// (not imported from there since the column/alias differ per caller) — a bound interval
+// parameter at a fixed placeholder index, never raw interpolated SQL text. `days === null` means
+// all-time (no filter at all, the original unchanged behavior).
+function weeklyFilterAt(days, column, paramIndex) {
+  return days === null ? '' : `AND ${column} >= NOW() - ($${paramIndex} || ' days')::interval`
+}
+
+// Top N for a score-based game (highest, or lowest for ReOrbit Memory's move count), one row per
+// user — all-time by default, or only the last `days` days when the admin's
+// cMoonGamesWeeklyScoringEnabled toggle is on (see resolveScoringConfig/runDailyCMoonScoring).
+// Shape/exclusions mirror server/utils/gameLeaderboard.js's buildTop11. `table`/`column` are
+// compile-time constants from SCORE_GAMES above, never runtime input — same convention
+// gameLeaderboard.js documents for the identical reason: they can't be bind parameters, so
+// $queryRawUnsafe is used with every actual value (including rankCutoff/days) still bound. Backs
+// both findTopScoreHolder (rankCutoff=1, for HIGH_SCORE) and the per-game TOP10 award below
+// (rankCutoff=top10RankCutoff) — the same "who's currently on this game's board" computation
+// either way, just truncated at a different depth.
+async function getTopNScoreHolders({ table, column, direction, extraWhere }, rankCutoff, days = null) {
   const agg = direction === 'asc' ? 'MIN' : 'MAX'
   const order = direction === 'asc' ? 'ASC' : 'DESC'
+  const dateFilter = weeklyFilterAt(days, 's."createdAt"', 3)
   const sql = `
     SELECT u."id" AS "userId", u."cMoonId" AS "cMoonId", u."createdAt" AS "createdAt"
     FROM "${table}" s
@@ -221,31 +245,40 @@ async function getTopNScoreHolders({ table, column, direction, extraWhere }, ran
       AND COALESCE(u."banned", false) = false
       AND u."id" <> $1
       ${extraWhere || ''}
+      ${dateFilter}
     GROUP BY u."id", u."cMoonId", u."createdAt"
     ORDER BY ${agg}(s."${column}") ${order}
     LIMIT $2
   `
-  return prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff)
+  return days === null
+    ? prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff)
+    : prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff, String(days))
 }
 async function findTopScoreHolder(game) {
   const rows = await getTopNScoreHolders(game, 1)
   return rows[0] || null
 }
 
-// All-time top N by win count for a duel-match game, one row per user. Shape mirrors
-// server/utils/duelLeaderboard.js's rankedRows (all-time period, natural endings only).
-// `table` is a compile-time constant from WIN_GAMES above — see the note on getTopNScoreHolders.
-// Backs findTopWinsHolder (rankCutoff=1) and the per-game TOP10 award the same way.
-async function getTopNWinsHolders({ table }, rankCutoff) {
+// Top N by win count for a duel-match game, one row per user — all-time by default, or only wins
+// from the last `days` days when weekly scoring is on (same toggle/shape as getTopNScoreHolders
+// above). Shape mirrors server/utils/duelLeaderboard.js's rankedRows (natural endings only),
+// including its own choice to filter on `endedAt` — a match's completion time, the right column
+// for "did this win happen in the window," not its creation time. `table` is a compile-time
+// constant from WIN_GAMES above — see the note on getTopNScoreHolders. Backs findTopWinsHolder
+// (rankCutoff=1) and the per-game TOP10 award the same way.
+async function getTopNWinsHolders({ table }, rankCutoff, days = null) {
+  const dateFilter = weeklyFilterAt(days, 'm."endedAt"', 3)
   const sql = `
     WITH participants AS (
       SELECT m."player1UserId" AS uid, (m."winnerUserId" = m."player1UserId") AS won
       FROM "${table}" m
       WHERE m."endedAt" IS NOT NULL AND m."endReason" = 'natural' AND m."player1UserId" <> m."player2UserId"
+        ${dateFilter}
       UNION ALL
       SELECT m."player2UserId" AS uid, (m."winnerUserId" = m."player2UserId") AS won
       FROM "${table}" m
       WHERE m."endedAt" IS NOT NULL AND m."endReason" = 'natural' AND m."player1UserId" <> m."player2UserId"
+        ${dateFilter}
     ),
     agg AS (
       SELECT uid, COUNT(*) FILTER (WHERE won)::int AS wins
@@ -262,7 +295,9 @@ async function getTopNWinsHolders({ table }, rankCutoff) {
     ORDER BY a.wins DESC
     LIMIT $2
   `
-  return prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff)
+  return days === null
+    ? prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff)
+    : prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff, String(days))
 }
 async function findTopWinsHolder(game) {
   const rows = await getTopNWinsHolders(game, 1)
@@ -303,20 +338,27 @@ async function getTop10TotalCtoonsHolders(rankCutoff) {
   `
 }
 
-// All-time top N for the "Top Enemy Slayers" board (server/api/leaderboard/cmoon-enemies.get.js),
-// SOLO victories only — `raidId IS NULL` excludes a raid boss's synthetic per-participant win
-// rows (one credited row per participant off a single shared kill), same reasoning that
-// leaderboard's own query already documents: letting raid participation inflate this ranking
-// would stop it from measuring what it says it measures. Backs both the #1-holder HIGH_SCORE-
-// equivalent award and the top-N TOP10-equivalent award below, same "fetch once, reuse for both
-// categories" shape as getTopNScoreHolders/getTopNWinsHolders.
+// Top N for the "Top Enemy Slayers" board (server/api/leaderboard/cmoon-enemies.get.js), SOLO
+// victories only — `raidId IS NULL` excludes a raid boss's synthetic per-participant win rows
+// (one credited row per participant off a single shared kill), same reasoning that leaderboard's
+// own query already documents: letting raid participation inflate this ranking would stop it from
+// measuring what it says it measures. Backs both the #1-holder HIGH_SCORE-equivalent award and the
+// top-N TOP10-equivalent award below, same "fetch once, reuse for both categories" shape as
+// getTopNScoreHolders/getTopNWinsHolders. All-time by default, or only wins whose `endedAt` falls
+// in the last `days` days when the admin's cMoonEnemySlayerWeeklyScoringEnabled toggle is on —
+// `endedAt`, not `startedAt`/`createdAt`, for the same "when did the WIN happen" reasoning
+// getTopNWinsHolders documents.
 //
 // Ranked by SUM(enemyMaxHp), NOT COUNT(*) — a plain kill count rewards "goon farming" (repeatedly
 // beating the cheapest, lowest-HP enemy available) just as much as taking on a cMoon's toughest
 // fights, which defeats the point of a "slayer" ranking. See CMoonEnemyBattle.enemyMaxHp's own
 // schema comment. Matches the ranking metric server/api/leaderboard/cmoon-enemies.get.js's own
 // public "Top Enemy Slayers" board uses, for the same reason.
-async function getTopNEnemySlayerHolders(rankCutoff) {
+async function getTopNEnemySlayerHolders(rankCutoff, days = null) {
+  // Composed with Prisma.sql (not $queryRawUnsafe) — table/column names here are all fixed, so
+  // there's no need for raw text interpolation; the interval stays a genuine bound parameter
+  // either way, same pattern this file's own recordDailyTaskCompletions branches already use.
+  const dateFilter = days === null ? Prisma.sql`` : Prisma.sql`AND b."endedAt" >= NOW() - (${String(days)} || ' days')::interval`
   return prisma.$queryRaw`
     SELECT u."id" AS "userId", u."cMoonId" AS "cMoonId", u."createdAt" AS "createdAt"
     FROM "CMoonEnemyBattle" b
@@ -326,6 +368,7 @@ async function getTopNEnemySlayerHolders(rankCutoff) {
       AND u."active" = true
       AND COALESCE(u."banned", false) = false
       AND u."id" <> ${EXCLUDED_SYSTEM_USER_ID}
+      ${dateFilter}
     GROUP BY u."id", u."cMoonId", u."createdAt"
     ORDER BY SUM(b."enemyMaxHp") DESC, u."username" ASC
     LIMIT ${rankCutoff}
@@ -627,12 +670,15 @@ export async function runDailyCMoonScoring() {
     highScorePoints, top10Points, dailyTaskPoints, minAccountAgeDays, top10RankCutoff,
     top10PointsBoardEnabled, top10CtoonsBoardEnabled, activeScoreGames, activeWinGames,
     enemySlayerBoardEnabled, enemySlayerFirstPlacePoints, enemySlayerTop10Points,
+    gamesWeeklyScoringEnabled, enemySlayerWeeklyScoringEnabled,
   } = resolveScoringConfig(config)
   const dailyHighScorePoints = perRunAward(highScorePoints)
   const dailyTop10Points = perRunAward(top10Points)
   const dailyTaskAwardPoints = dailyTaskAward(dailyTaskPoints)
   const dailyEnemySlayerFirstPlacePoints = perRunAward(enemySlayerFirstPlacePoints)
   const dailyEnemySlayerTop10Points = perRunAward(enemySlayerTop10Points)
+  const gamesRankingDays = gamesWeeklyScoringEnabled ? WEEKLY_SCORING_WINDOW_DAYS : null
+  const enemySlayerRankingDays = enemySlayerWeeklyScoringEnabled ? WEEKLY_SCORING_WINDOW_DAYS : null
 
   // Chicago-midnight, NOT getChicagoDailyBoundary's hardcoded 8pm — see getChicagoCalendarDayStart's
   // own comment for why: that function is pinned to the DAILY_TASK reset clock, unrelated to (and
@@ -651,11 +697,11 @@ export async function runDailyCMoonScoring() {
   // as HIGH_SCORE, just a deeper cut. #1 naturally earns both categories for the same game,
   // same as it already could for, say, HIGH_SCORE plus a Top Points board finish.
   const [scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders, enemySlayerTopN] = await Promise.all([
-    Promise.all(activeScoreGames.map(g => getTopNScoreHolders(g, top10RankCutoff))),
-    Promise.all(activeWinGames.map(g => getTopNWinsHolders(g, top10RankCutoff))),
+    Promise.all(activeScoreGames.map(g => getTopNScoreHolders(g, top10RankCutoff, gamesRankingDays))),
+    Promise.all(activeWinGames.map(g => getTopNWinsHolders(g, top10RankCutoff, gamesRankingDays))),
     top10PointsBoardEnabled ? getTop10PointsHolders(top10RankCutoff) : Promise.resolve([]),
     top10CtoonsBoardEnabled ? getTop10TotalCtoonsHolders(top10RankCutoff) : Promise.resolve([]),
-    enemySlayerBoardEnabled ? getTopNEnemySlayerHolders(top10RankCutoff) : Promise.resolve([]),
+    enemySlayerBoardEnabled ? getTopNEnemySlayerHolders(top10RankCutoff, enemySlayerRankingDays) : Promise.resolve([]),
   ])
 
   activeScoreGames.forEach((g, i) => {
@@ -780,15 +826,17 @@ async function getHolderSnapshot() {
   const resolvedConfig = resolveScoringConfig(config)
   const {
     activeScoreGames, activeWinGames, top10PointsBoardEnabled, top10CtoonsBoardEnabled, top10RankCutoff,
-    enemySlayerBoardEnabled,
+    enemySlayerBoardEnabled, gamesWeeklyScoringEnabled, enemySlayerWeeklyScoringEnabled,
   } = resolvedConfig
+  const gamesRankingDays = gamesWeeklyScoringEnabled ? WEEKLY_SCORING_WINDOW_DAYS : null
+  const enemySlayerRankingDays = enemySlayerWeeklyScoringEnabled ? WEEKLY_SCORING_WINDOW_DAYS : null
 
   const [scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders, enemySlayerTopN] = await Promise.all([
-    Promise.all(activeScoreGames.map(g => getTopNScoreHolders(g, top10RankCutoff))),
-    Promise.all(activeWinGames.map(g => getTopNWinsHolders(g, top10RankCutoff))),
+    Promise.all(activeScoreGames.map(g => getTopNScoreHolders(g, top10RankCutoff, gamesRankingDays))),
+    Promise.all(activeWinGames.map(g => getTopNWinsHolders(g, top10RankCutoff, gamesRankingDays))),
     top10PointsBoardEnabled ? getTop10PointsHolders(top10RankCutoff) : Promise.resolve([]),
     top10CtoonsBoardEnabled ? getTop10TotalCtoonsHolders(top10RankCutoff) : Promise.resolve([]),
-    enemySlayerBoardEnabled ? getTopNEnemySlayerHolders(top10RankCutoff) : Promise.resolve([]),
+    enemySlayerBoardEnabled ? getTopNEnemySlayerHolders(top10RankCutoff, enemySlayerRankingDays) : Promise.resolve([]),
   ])
 
   cachedHolderSnapshot = { resolvedConfig, activeScoreGames, activeWinGames, scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders, enemySlayerTopN }
@@ -988,6 +1036,24 @@ export async function getPlayerCombatMaxHp(userId, config = null) {
   })
   const bonus = clearedTiers.reduce((sum, t) => sum + (Number(t.cMoonEnemyBattleHpBonus) || 0), 0)
   return combinePlayerMaxHp(defaultHp, bonus, adjustment)
+}
+
+// A player's max HP for a cMoon PvP match specifically — see GlobalGameConfig.
+// cMoonPvpEqualizeHpEnabled/cMoonPvpEqualizeHpAmount's own schema comments. When the toggle is on,
+// EVERY PvP participant gets the flat configured amount regardless of rank, so a base-7HP player
+// isn't crushed by a higher-ranked opponent in competitive team play; off, this is simply
+// getPlayerCombatMaxHp — the same rank-based chain every other cMoon Enemy Battle mode already
+// uses. `userId` is still passed through to that fallback (needed for the rank-bonus lookup), but
+// is never read on the equalized path — every participant gets the exact same number then,
+// deliberately not personalized.
+export async function getPvpCombatMaxHp(userId, config = null) {
+  const cfg = config || await getGlobalConfig()
+  if (cfg?.cMoonPvpEqualizeHpEnabled) {
+    return Number.isInteger(cfg.cMoonPvpEqualizeHpAmount) && cfg.cMoonPvpEqualizeHpAmount > 0
+      ? cfg.cMoonPvpEqualizeHpAmount
+      : PLAYER_MAX_HP
+  }
+  return getPlayerCombatMaxHp(userId, cfg)
 }
 
 // Shared by the admin "Manage User HP" detail lookup and the mass-adjust tool: computes a single

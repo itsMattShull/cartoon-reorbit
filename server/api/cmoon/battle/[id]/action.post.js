@@ -25,7 +25,7 @@ import {
   serializeBattleForClient, MAX_ROUNDS_SAFETY, HEAL_ON_SUCCESSFUL_BLOCK,
   SPECIAL_ACTION, HIT_STREAK_THRESHOLD, shouldForcePityReward, forcePickOneReward, grantSummaryIsEmpty,
   isAttack, isBlock, pickEffectiveSpecialAttack, SPECIAL_ATTACK_SELECT, applySoloCleanseSelfHeal,
-  pickEnemySpecialAttack, enemySpecialAttackRequiredHitStreak,
+  pickEnemySpecialAttack, enemySpecialAttackRequiredHitStreak, rollCatchAttempt,
 } from '@/server/utils/cmoonEnemyBattle'
 
 // `user: { chosenSpecialAttack }` — this player's own special-attack choice (see
@@ -141,6 +141,11 @@ export default defineEventHandler(async (event) => {
   // instant that call ran — so a round that merely OBSERVES the enemy already dead (someone
   // else's hit) contributes nothing here, exactly as it should.
   let totalDamageDealt = battle.damageDealt || 0
+  // Set true only by a successful CATCH_ATTEMPT roll below — checked BEFORE the ordinary
+  // win/loss HP checks further down, since a capture ends the battle regardless of either side's
+  // remaining HP (see resolveCapture's own comment on why this is a full sibling of resolveWin/
+  // resolveLoss, not a variant of either).
+  let captured = false
   const specialEvents = []
   // REFLECT_DAMAGE/SIPHON_HEALTH cast by the PLAYER can't resolve in step 1 below — both need
   // this round's REAL outcome (actual damage dealt, or whether the enemy's own rolled action this
@@ -243,6 +248,17 @@ export default defineEventHandler(async (event) => {
     // See pendingPlayerReflect/pendingPlayerSiphon's own comment above — resolved in step 2.5.
     else if (playerSpecialAttack.effectType === 'REFLECT_DAMAGE') pendingPlayerReflect = playerSpecialAttack
     else if (playerSpecialAttack.effectType === 'SIPHON_HEALTH') pendingPlayerSiphon = playerSpecialAttack
+    // "Throw Pokeball" — the ONE success roll is this member's own catchRatePercent (already
+    // forced to 0 server-side for a non-catchable member, see parseMemberBody), not the accuracy
+    // roll above (forced to 100 for this effectType, so playerSpecialEvent.missed can never be
+    // set here — see parseSpecialAttackBody's own comment). On success, `captured` short-circuits
+    // the round's own outcome checks further down regardless of either side's HP. On failure,
+    // this round otherwise resolves completely normally — the player simply forwent their lane
+    // action to make the attempt, same cost as every other special attack.
+    else if (playerSpecialAttack.effectType === 'CATCH_ATTEMPT') {
+      if (rollCatchAttempt(battle.enemyMember.catchRatePercent)) captured = true
+      else playerSpecialEvent.brokeFree = true
+    }
   }
 
   // ── 2. This round's lane exchange — unchanged mechanics, now paralysis/attack-bonus aware.
@@ -351,6 +367,24 @@ export default defineEventHandler(async (event) => {
     playerHitStreak, playerSpecialCharged, enemyHitStreak, playerStamina,
   }
 
+  // A capture takes priority over EVERYTHING else this round might have also produced (a lethal
+  // hit either way, a mutual KO) — see CMoonEnemyBattleOutcome.CAPTURED's own schema comment on
+  // why this is a full sibling of WIN/LOSS, not a variant of either, and why it's checked first.
+  // Exception: a SHARED_POOL community boss that's already dead (newEnemyHp <= 0 — someone else's
+  // hit, possibly from the very round that raced this one) has nothing left to catch. The roll
+  // itself is HP-independent, so without this guard a capture could still fire against an enemy
+  // that's already defeated — the same "snipe" class of bug totalDamageDealt > 0 below closes for
+  // an ordinary WIN. Falling through instead lands on that exact check: CATCH_ATTEMPT deals no
+  // damage, so totalDamageDealt stays whatever it already was and this resolves as UNCREDITED.
+  if (captured && !(isSharedPool && newEnemyHp <= 0)) {
+    const result = await resolveCapture(battle, roundLog, submittedRound, playerHp, newEnemyHp, totalDamageDealt, playerStamina)
+    // The ONE global, universal-regardless-of-faction capture music track (see
+    // GlobalGameConfig.cMoonEnemyCaptureMusicPath's own schema comment) — fetched here rather
+    // than folded into serializeBattleForClient since it's only ever relevant at the exact
+    // instant a capture happens, never on any other battle read.
+    const captureMusicPath = (await getGlobalConfig())?.cMoonEnemyCaptureMusicPath || null
+    return { round: roundEntry, battle: serializeBattleForClient(result), captureMusicPath }
+  }
   // WIN takes priority over a same-round mutual KO (both sides would have hit 0 hp this round)
   // — the player still gets credit for the kill rather than being denied a reward on a technicality.
   if (newEnemyHp <= 0) {
@@ -552,6 +586,51 @@ async function resolveWin(battle, roundLog, submittedRound, playerHpRemaining, d
   processAchievementsForUser(battle.userId).catch(() => {})
 
   return { battle: txResult.updated, isFirstWinAgainstThisEnemy }
+}
+
+// A successful "Throw Pokeball" (CATCH_ATTEMPT) — see CMoonEnemyBattleOutcome.CAPTURED's own
+// schema comment for why this is a full sibling of resolveWin/resolveLoss, not a variant of
+// either: NO CMoon.battleWins increment, NO cMoonPointsReward/first-win bonus, NO pity streak
+// update, NO "defeat" achievement check. The only side effect is rolling THIS member's own
+// CMoonEnemyCaptureReward table (a wholly separate pool from CMoonEnemyReward — see that model's
+// own comment) through the exact same rollEnemyRewards/buildGrantableReward/grantRewardInTx
+// pipeline resolveWin already uses, tagged 'CMOON_ENEMY_CAPTURE' so a captured-pack grant is
+// never mistaken for one earned by defeating the enemy.
+async function resolveCapture(battle, roundLog, submittedRound, playerHpRemaining, enemyHpRemaining, damageDealt, playerStamina) {
+  const captureRewardRows = await db.cMoonEnemyCaptureReward.findMany({
+    where: { enemyMemberId: battle.enemyMemberId },
+    include: { ctoon: { select: { quantity: true, name: true } } },
+  })
+  const hitRewards = rollEnemyRewards(captureRewardRows)
+  const grantable = buildGrantableReward(hitRewards)
+
+  const txResult = await db.$transaction(async (tx) => {
+    const summary = await grantRewardInTx(tx, battle.userId, grantable, 'CMOON_ENEMY_CAPTURE', 'CMOON_ENEMY_CAPTURE')
+
+    const rewardsGranted = [
+      ...(summary.points ? [{ type: 'POINTS', quantity: summary.points }] : []),
+      ...(summary.backgrounds ? [{ type: 'BACKGROUND', quantity: summary.backgrounds }] : []),
+      ...(summary.avatars ? [{ type: 'AVATAR', quantity: summary.avatars }] : []),
+      ...summary.ctoonJobs.map(j => ({ type: 'CTOON', name: j.name, quantity: j.quantity })),
+      ...summary.packGrants.map(p => ({ type: 'PACK', name: p.name, quantity: p.quantity })),
+    ]
+
+    const updated = await tx.cMoonEnemyBattle.update({
+      where: { id: battle.id },
+      data: {
+        status: 'RESOLVED', outcome: 'CAPTURED', roundNumber: submittedRound + 1,
+        playerHpRemaining, enemyHpRemaining, damageDealt, playerStamina,
+        roundLog, rewardsGranted, endedAt: new Date(), activeUserId: null,
+      },
+      include: BATTLE_INCLUDE,
+    })
+
+    return { updated, ctoonJobs: summary.ctoonJobs }
+  })
+
+  if (txResult.ctoonJobs.length) await enqueueCtoonJobs(battle.userId, txResult.ctoonJobs, 'CMOON_ENEMY_CAPTURE')
+
+  return txResult.updated
 }
 
 async function resolveLoss(battle, roundLog, submittedRound, enemyHpRemaining, damageDealt, playerStamina) {

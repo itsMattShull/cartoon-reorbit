@@ -72,6 +72,26 @@
           </span>
         </label>
         <p v-if="privateLobbiesEnabledError" class="text-red-600">{{ privateLobbiesEnabledError }}</p>
+
+        <div class="pt-1 border-t">
+          <span class="font-medium">Capture music</span>
+          <p class="text-[11px] text-gray-500 mt-0.5">
+            Plays the instant ANY cMoon enemy is captured via "Throw Pokeball" — one track for the whole
+            site, regardless of faction, unlike each enemy's own appear/victory/defeat sounds.
+          </p>
+          <div class="flex items-center gap-4 flex-wrap mt-1">
+            <audio v-if="captureMusicPath" :src="captureMusicPath" controls class="h-8" style="max-width: 220px;" />
+            <span v-else class="text-[10px] text-gray-400">No sound</span>
+            <div class="space-y-2 flex-1 min-w-[200px]">
+              <input type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav" class="block w-full" @change="uploadCaptureMusic" />
+              <p v-if="captureMusicError" class="text-red-600">{{ captureMusicError }}</p>
+              <button
+                v-if="captureMusicPath" type="button" class="text-red-600 hover:underline disabled:opacity-40"
+                :disabled="captureMusicSaving" @click="removeCaptureMusic"
+              >Remove</button>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- ── Special attacks ──────────────────────────────────────── -->
@@ -94,6 +114,7 @@
                 <span v-if="a.effectType === 'POISON_OPPONENT'"> · {{ a.poisonDurationRounds }} round(s)</span>
                 <span v-if="a.effectType === 'CLEANSE_SELF' && a.cleanseAlsoHeals"> · also heals {{ a.amount }} HP</span>
                 <span v-if="(a.effectType === 'HEAL_SELF' || a.effectType === 'SIPHON_HEALTH' || a.effectType === 'CLEANSE_SELF') && a.healsAllies"> · heals the whole party in raids</span>
+                <span v-if="a.effectType === 'REVIVE_ALLY'"> · {{ a.healsAllies ? 'revives EVERY knocked-out ally' : 'revives one random knocked-out ally' }} with {{ a.amount }} HP</span>
                 <span> · needs {{ a.requiredHitStreak }} hit streak</span>
                 <span v-if="a.accuracyPercent < 100"> · {{ a.accuracyPercent }}% accuracy</span>
                 <span v-if="a.playerChoice"> · player choice</span>
@@ -134,7 +155,7 @@
                 <option v-for="t in SPECIAL_ATTACK_EFFECT_TYPES" :key="t" :value="t">{{ SPECIAL_ATTACK_EFFECT_LABELS[t] }}</option>
               </select>
             </div>
-            <div class="w-28 flex-shrink-0">
+            <div v-if="specialAttackForm.effectType !== 'CATCH_ATTEMPT'" class="w-28 flex-shrink-0">
               <label class="block text-xs font-medium mb-1">Amount (1-999)</label>
               <input v-model.number="specialAttackForm.amount" type="number" min="1" max="999" class="w-full border rounded px-2 py-1" />
             </div>
@@ -192,6 +213,20 @@
             </span>
           </label>
 
+          <label v-if="specialAttackForm.effectType === 'REVIVE_ALLY'" class="flex items-start gap-2">
+            <input type="checkbox" v-model="specialAttackForm.healsAllies" class="mt-0.5" />
+            <span>
+              <span class="text-xs font-medium">Revive EVERY knocked-out ally (instead of just one)</span>
+              <p class="text-[10px] text-gray-500 mt-0.5">
+                Off (default): revives one random currently knocked-out ally. On: revives every knocked-out ally on
+                the caster's own side at once — much stronger, especially against an enemy with multiple specials
+                landing per round. Either way the revived ally (or allies) comes back with Amount HP (capped at
+                their own max HP) and sits out the round they were revived in, same as anyone else who couldn't
+                submit an action that round.
+              </p>
+            </span>
+          </label>
+
           <label v-if="specialAttackForm.effectType === 'CLEANSE_SELF'" class="flex items-start gap-2">
             <input type="checkbox" v-model="specialAttackForm.cleanseAlsoHeals" class="mt-0.5" />
             <span>
@@ -215,6 +250,19 @@
             </span>
           </label>
 
+          <label class="flex items-start gap-2">
+            <input type="checkbox" v-model="specialAttackForm.pvpEligible" class="mt-0.5" />
+            <span>
+              <span class="text-xs font-medium">PvP eligible</span>
+              <p class="text-[10px] text-gray-500 mt-0.5">
+                On (default) lets this attack fire in cMoon PvP matches. Turn off to pull a specific
+                attack from PvP without touching its solo/raid balance — values here (especially
+                Amount/Required hit streak) were tuned for a boss fight, which can be very different
+                from PvP's symmetric player-vs-player scale.
+              </p>
+            </span>
+          </label>
+
           <div class="flex gap-2">
             <div class="w-44 flex-shrink-0">
               <label class="block text-xs font-medium mb-1">Required hit streak (1-10)</label>
@@ -224,7 +272,7 @@
                 presence in a raid still lowers this by 1 on top, same as before.
               </p>
             </div>
-            <div class="w-40 flex-shrink-0">
+            <div v-if="specialAttackForm.effectType !== 'CATCH_ATTEMPT'" class="w-40 flex-shrink-0">
               <label class="block text-xs font-medium mb-1">Accuracy percent (0-100)</label>
               <input v-model.number="specialAttackForm.accuracyPercent" type="number" min="0" max="100" class="w-full border rounded px-2 py-1" />
               <p class="text-[10px] text-gray-500 mt-1">
@@ -232,6 +280,10 @@
                 before this existed.
               </p>
             </div>
+            <p v-else class="text-[10px] text-gray-500 flex-1">
+              No Amount or Accuracy for this effect — the only roll is the target enemy's own catch rate (set
+              on its own member page).
+            </p>
           </div>
 
           <div>
@@ -338,6 +390,19 @@
             <p class="text-[10px] text-gray-500 mt-1">
               Every member of this faction charges and fires this one attack after landing 3 consecutive hits on a
               player. Built above in "Manage Special Attacks".
+            </p>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium mb-1">Default map (optional)</label>
+            <select v-model="factionForm.defaultMapId" class="w-full border rounded px-2 py-1">
+              <option value="">None — raids roll a map from the random pool</option>
+              <option v-for="m in enemyMaps" :key="m.id" :value="m.id">{{ m.name }}</option>
+            </select>
+            <p class="text-[10px] text-gray-500 mt-1">
+              Every raid against a member of this faction uses this map, unless that specific boss has
+              its own override map set below. Built in
+              <NuxtLink to="/newsite/admin/cMoonEnemyMaps" class="text-indigo-600 hover:underline">Manage cMoon Enemy Maps</NuxtLink>.
             </p>
           </div>
 
@@ -643,6 +708,18 @@
                 party can block for a bonus. Requires at least one move configured below to actually fire.
               </p>
             </div>
+            <div v-if="memberForm.isRaidBoss" class="pt-1">
+              <label class="block text-[11px] font-medium mb-1">Override map (optional)</label>
+              <select v-model="memberForm.overrideMapId" class="w-full border rounded px-2 py-1 text-xs">
+                <option value="">None — uses the faction's default map, or the random pool</option>
+                <option v-for="m in enemyMaps" :key="m.id" :value="m.id">{{ m.name }}</option>
+              </select>
+              <p class="text-[10px] text-gray-500 mt-1">
+                Wins outright over the faction's own default map — whenever this boss is raided, this map
+                always shows up. Built in
+                <NuxtLink to="/newsite/admin/cMoonEnemyMaps" class="text-indigo-600 hover:underline">Manage cMoon Enemy Maps</NuxtLink>.
+              </p>
+            </div>
           </div>
           <p v-else-if="memberForm.isRaidBoss" class="text-[11px] text-amber-600">This member is marked as a raid boss but is no longer Final Boss rank — switch it back to Final Boss to keep raid mode, or it will be turned off on save.</p>
 
@@ -672,6 +749,25 @@
               <label class="block text-xs font-medium mb-1">cMoon points on win (0-5000)</label>
               <input v-model.number="memberForm.cMoonPointsReward" type="number" min="0" max="5000" class="w-full border rounded px-2 py-1" />
             </div>
+          </div>
+
+          <div class="border rounded p-2 space-y-2 bg-blue-50/50">
+            <label class="flex items-center gap-2">
+              <input type="checkbox" v-model="memberForm.catchable" />
+              <span class="text-xs font-medium">Catchable (solo battles only)</span>
+            </label>
+            <p class="text-[11px] text-gray-500">
+              Lets a player assigned a "Throw Pokeball" special attack (effect type CATCH_ATTEMPT, set up
+              under Special Attacks below) capture this enemy instead of defeating it — ends the fight
+              immediately with its own music/modal and its own "Capture rewards" drop table further down,
+              not the normal win rewards. Solo battles only; a raid boss or PvP never honors this.
+            </p>
+            <div v-if="memberForm.catchable">
+              <label class="block text-[11px] font-medium mb-1">Catch rate (0-100%)</label>
+              <input v-model.number="memberForm.catchRatePercent" type="number" min="0" max="100" class="w-full border rounded px-2 py-1 text-xs" />
+              <p class="text-[10px] text-gray-500 mt-1">The chance a fired Throw Pokeball actually captures this enemy.</p>
+            </div>
+            <p v-else class="text-[10px] text-gray-500">Catch rate is grayed out and forced to 0 while this is off.</p>
           </div>
 
           <div v-if="memberForm.isRaidBoss" class="pt-1">
@@ -919,6 +1015,20 @@
             >{{ rewardSaving ? 'Adding…' : 'Add prize' }}</button>
           </div>
 
+          <!-- Capture-only prizes ("Throw Pokeball") — a WHOLLY SEPARATE pool from the win-reward
+               table above, rolled only on a successful capture. Same shape, own endpoints. -->
+          <div v-if="memberForm.id" class="pt-2 border-t">
+            <CMoonEnemyRewardEditor
+              :rows="editingMemberCaptureRewards"
+              title="Capture prizes ('Throw Pokeball', each rolled independently — never the win rewards above)"
+              empty-message="No capture prizes configured yet — a successful capture still ends the fight either way."
+              :add-url="`/api/admin/cmoon-enemy-members/${memberForm.id}/capture-rewards`"
+              delete-url-base="/api/admin/cmoon-enemy-capture-rewards"
+              :ctoons-catalog="ctoonsCatalog" :avatars-catalog="avatarsCatalog" :backgrounds="backgrounds" :packs-catalog="packsCatalog"
+              @changed="onCaptureRewardsChanged"
+            />
+          </div>
+
           <!-- Wind-up/telegraph moves — only for a raid boss that's already been created, same
                "add one, remove one, no in-place edit" shape as the prizes block above. -->
           <div v-if="memberForm.id && memberForm.isRaidBoss" class="pt-2 border-t space-y-2">
@@ -1111,6 +1221,7 @@ const ctoonsCatalog = ref([])
 const packsCatalog = ref([])
 const joinEffects = ref([])
 const specialAttacks = ref([])
+const enemyMaps = ref([])
 const loading = ref(false)
 const loadError = ref('')
 
@@ -1118,7 +1229,7 @@ const loadError = ref('')
 // since that file is server-only, same as RANKS/RANK_LABELS below.
 const SPECIAL_ATTACK_EFFECT_TYPES = [
   'DAMAGE_OPPONENT', 'HEAL_SELF', 'PARALYZE_OPPONENT', 'LOWER_OPPONENT_ATTACK', 'RAISE_ALLY_ATTACK',
-  'REFLECT_DAMAGE', 'SIPHON_HEALTH', 'POISON_OPPONENT', 'CLEANSE_SELF', 'SHIELD_PARTY',
+  'REFLECT_DAMAGE', 'SIPHON_HEALTH', 'POISON_OPPONENT', 'CLEANSE_SELF', 'SHIELD_PARTY', 'REVIVE_ALLY', 'CATCH_ATTEMPT',
 ]
 const SPECIAL_ATTACK_EFFECT_LABELS = {
   DAMAGE_OPPONENT: 'Damage opponent',
@@ -1131,6 +1242,8 @@ const SPECIAL_ATTACK_EFFECT_LABELS = {
   POISON_OPPONENT: 'Poison opponent (raids only)',
   CLEANSE_SELF: 'Cleanse self (+allies in raids)',
   SHIELD_PARTY: 'Shield party (raids only)',
+  REVIVE_ALLY: 'Revive ally (raids + PvP only)',
+  CATCH_ATTEMPT: 'Throw Pokeball (solo only)',
 }
 const SPECIAL_ATTACK_EFFECT_HELP = {
   DAMAGE_OPPONENT: 'Deals Amount flat damage to the enemy, bypassing block entirely.',
@@ -1143,6 +1256,8 @@ const SPECIAL_ATTACK_EFFECT_HELP = {
   POISON_OPPONENT: 'Deals Amount damage at the end of each round for a configurable number of rounds. Re-casting on an already-poisoned target refreshes it (replaces amount/duration) rather than stacking a second tick. Only has an effect in a RAID — a solo fight has no case for it, the attack just fires and announces.',
   CLEANSE_SELF: "Cures the caster's own active Paralyze, plus Poison in a raid (self only, unless \"Also heals allies\" below is on — solo has no poison to clear either way). The player/boss can be paralyzed or poisoned again right after — this is a one-time cure, not temporary immunity. Works in BOTH solo and raids; \"Also heals allies\" only matters in a raid (no allies to extend to solo).",
   SHIELD_PARTY: "Negates ALL damage the party would otherwise take this round — the normal attack exchange AND any boss special that would deal damage, cast by any party member. Only works when cast by a PLAYER in a RAID; assigning this to an enemy faction's own special just makes it fire and announce with no effect, since by the time the boss could cast it the round's damage already happened.",
+  REVIVE_ALLY: "Revives a currently knocked-out ally with Amount HP (capped at their own max HP) — one random one by default, or every knocked-out ally at once with \"Revive EVERY knocked-out ally\" below. Only has an effect in a RAID or PvP match — a solo fight has no teammates, so the attack just fires and announces. Has no sensible boss-side meaning either (the boss has no teammates, and its own death ends the raid outright); assigning it to an enemy faction's own special just fires and announces with no effect.",
+  CATCH_ATTEMPT: "Deals no damage. Gives a chance to CAPTURE the target enemy instead of fighting it — only works in a SOLO battle, and only against an enemy toggled \"Catchable\" with a nonzero catch rate (set on that enemy's own member page, not here). Amount and Accuracy percent are both ignored — the only roll that matters is the target's own catch rate. Fires and announces with no effect in a raid or PvP, same as the raid-only effects above do in solo.",
 }
 
 const memberFactionFilter = ref('')
@@ -1231,11 +1346,61 @@ async function savePrivateLobbiesEnabled() {
   }
 }
 
+// GlobalGameConfig.cMoonEnemyCaptureMusicPath — ONE site-wide track, uploaded/cleared via its own
+// dedicated endpoints (not cmoon-settings, which only handles plain toggle/number fields) — same
+// magic-byte-sniffed upload shape as a special attack's own sound, just targeting the singleton
+// global config row instead of a per-row model.
+const captureMusicPath = ref('')
+const captureMusicSaving = ref(false)
+const captureMusicError = ref('')
+
+async function uploadCaptureMusic(ev) {
+  captureMusicError.value = ''
+  const f = ev.target.files?.[0] || null
+  if (!f) return
+  if (!['audio/mpeg', 'audio/ogg', 'audio/wav'].includes(f.type)) {
+    captureMusicError.value = 'MP3, OGG, or WAV only.'
+    ev.target.value = ''
+    return
+  }
+  if (f.size > 3 * 1024 * 1024) {
+    captureMusicError.value = 'Audio must be 3MB or smaller.'
+    ev.target.value = ''
+    return
+  }
+  captureMusicSaving.value = true
+  try {
+    const fd = new FormData()
+    fd.append('audio', f)
+    const res = await $fetch('/api/admin/cmoon-settings/capture-music', { method: 'POST', body: fd })
+    captureMusicPath.value = res.cMoonEnemyCaptureMusicPath || ''
+  } catch (e) {
+    captureMusicError.value = e?.data?.statusMessage || 'Upload failed.'
+  } finally {
+    captureMusicSaving.value = false
+    ev.target.value = ''
+  }
+}
+
+async function removeCaptureMusic() {
+  if (!confirm('Remove the capture music track?')) return
+  captureMusicError.value = ''
+  captureMusicSaving.value = true
+  try {
+    await $fetch('/api/admin/cmoon-settings/capture-music', { method: 'DELETE' })
+    captureMusicPath.value = ''
+  } catch (e) {
+    captureMusicError.value = e?.data?.statusMessage || 'Failed to remove'
+  } finally {
+    captureMusicSaving.value = false
+  }
+}
+
 async function load() {
   loading.value = true
   loadError.value = ''
   try {
-    const [factionsData, membersData, backgroundsData, avatarsData, ctoonsData, joinEffectsData, cmoonsData, specialAttacksData, packsData] = await Promise.all([
+    const [factionsData, membersData, backgroundsData, avatarsData, ctoonsData, joinEffectsData, cmoonsData, specialAttacksData, packsData, enemyMapsData] = await Promise.all([
       $fetch('/api/admin/cmoon-enemy-factions'),
       $fetch('/api/admin/cmoon-enemy-members'),
       $fetch('/api/admin/backgrounds'),
@@ -1245,6 +1410,7 @@ async function load() {
       $fetch('/api/admin/cmoons'),
       $fetch('/api/admin/cmoon-special-attacks'),
       $fetch('/api/admin/packs', { query: { limit: 200 } }),
+      $fetch('/api/admin/cmoon-enemy-maps'),
     ])
     factions.value = factionsData?.factions || []
     members.value = membersData?.members || []
@@ -1260,7 +1426,9 @@ async function load() {
     // their own ref initializers above.
     soloQueueEnabled.value = cmoonsData?.cMoonRaidSoloQueueEnabled !== false
     privateLobbiesEnabled.value = cmoonsData?.cMoonRaidPrivateLobbiesEnabled !== false
+    captureMusicPath.value = cmoonsData?.cMoonEnemyCaptureMusicPath || ''
     specialAttacks.value = specialAttacksData?.attacks || []
+    enemyMaps.value = enemyMapsData?.maps || []
   } catch (e) {
     loadError.value = e?.data?.statusMessage || 'Failed to load cMoon enemies'
   } finally {
@@ -1280,7 +1448,7 @@ const specialAttackSavedSoundPath = ref('')
 const emptySpecialAttackForm = () => ({
   id: '', name: '', description: '', effectType: 'DAMAGE_OPPONENT', amount: 10,
   raiseDurationRounds: 300, reflectPercent: 100, siphonPercent: 50, poisonDurationRounds: 3,
-  healsAllies: false, cleanseAlsoHeals: false, playerChoice: false,
+  healsAllies: false, cleanseAlsoHeals: false, playerChoice: false, pvpEligible: true,
   requiredHitStreak: 3, accuracyPercent: 100,
 })
 const specialAttackForm = reactive(emptySpecialAttackForm())
@@ -1308,6 +1476,7 @@ function startEditSpecialAttack(a) {
   specialAttackForm.healsAllies = !!a.healsAllies
   specialAttackForm.cleanseAlsoHeals = !!a.cleanseAlsoHeals
   specialAttackForm.playerChoice = !!a.playerChoice
+  specialAttackForm.pvpEligible = a.pvpEligible !== false
   specialAttackForm.requiredHitStreak = a.requiredHitStreak ?? 3
   specialAttackForm.accuracyPercent = a.accuracyPercent ?? 100
   specialAttackSavedSoundPath.value = a.soundPath || ''
@@ -1407,9 +1576,10 @@ async function saveSpecialAttack() {
       reflectPercent,
       siphonPercent,
       poisonDurationRounds,
-      healsAllies: ['HEAL_SELF', 'SIPHON_HEALTH', 'CLEANSE_SELF'].includes(specialAttackForm.effectType) ? specialAttackForm.healsAllies : false,
+      healsAllies: ['HEAL_SELF', 'SIPHON_HEALTH', 'CLEANSE_SELF', 'REVIVE_ALLY'].includes(specialAttackForm.effectType) ? specialAttackForm.healsAllies : false,
       cleanseAlsoHeals: specialAttackForm.effectType === 'CLEANSE_SELF' ? specialAttackForm.cleanseAlsoHeals : false,
       playerChoice: specialAttackForm.playerChoice,
+      pvpEligible: specialAttackForm.pvpEligible,
       requiredHitStreak,
       accuracyPercent,
     }
@@ -1519,7 +1689,7 @@ async function uploadFactionSound(slotKey) {
   await load()
 }
 
-const emptyFactionForm = () => ({ id: '', name: '', description: '', active: true, sortOrder: 0, appearEffectId: '', specialAttackId: '' })
+const emptyFactionForm = () => ({ id: '', name: '', description: '', active: true, sortOrder: 0, appearEffectId: '', specialAttackId: '', defaultMapId: '' })
 const factionForm = reactive(emptyFactionForm())
 const factionPreviewImageSrc = computed(() => factionPendingFilePreviewUrl.value || factionSavedImagePath.value || '')
 
@@ -1550,6 +1720,7 @@ function startEditFaction(f) {
   factionForm.sortOrder = f.sortOrder
   factionForm.appearEffectId = f.appearEffectId || ''
   factionForm.specialAttackId = f.specialAttackId || ''
+  factionForm.defaultMapId = f.defaultMapId || ''
   factionSavedImagePath.value = f.bannerImagePath || ''
   factionSavedMusicPath.value = f.battleMusicPath || ''
   for (const s of FACTION_SOUND_SLOTS) factionSoundState[s.key].savedPath = f[s.field] || ''
@@ -1650,6 +1821,7 @@ async function saveFaction() {
       sortOrder: Math.trunc(Number(factionForm.sortOrder)) || 0,
       appearEffectId: factionForm.appearEffectId || null,
       specialAttackId: factionForm.specialAttackId || null,
+      defaultMapId: factionForm.defaultMapId || null,
     }
     if (factionForm.id) {
       await $fetch(`/api/admin/cmoon-enemy-factions/${factionForm.id}`, { method: 'PUT', body })
@@ -1834,6 +2006,7 @@ const previewMemberId = ref(null)
 const startingRaidPreviewId = ref('')
 const editingMemberHasBattles = ref(false)
 const editingMemberRewards = ref([])
+const editingMemberCaptureRewards = ref([])
 const editingMemberWindUpMoves = ref([])
 const editingMemberSpecialAttacks = ref([])
 const memberPendingFile = ref(null)
@@ -1925,7 +2098,8 @@ const emptyMemberForm = () => ({
   attackChancePercent: 50, pityThreshold: 0, firstWinBonusPoints: 0,
   active: true, sortOrder: 0,
   isRaidBoss: false, raidAnnouncementText: '', raidOneTime: false, raidCooldownMinutes: 0,
-  maxParticipants: 4, raidRoundLimit: 300, windUpEnabled: false,
+  maxParticipants: 4, raidRoundLimit: 300, windUpEnabled: false, overrideMapId: '',
+  catchable: false, catchRatePercent: 0,
 })
 const memberForm = reactive(emptyMemberForm())
 const memberPreviewImageSrc = computed(() => memberPendingFilePreviewUrl.value || memberSavedImagePath.value || '')
@@ -1944,6 +2118,7 @@ function resetMemberForm() {
   resetMemberSoundState()
   editingMemberHasBattles.value = false
   editingMemberRewards.value = []
+  editingMemberCaptureRewards.value = []
   editingMemberWindUpMoves.value = []
   editingMemberSpecialAttacks.value = []
   resetRewardForm()
@@ -1995,11 +2170,14 @@ function startEditMember(m) {
     isRaidBoss: !!m.isRaidBoss, raidAnnouncementText: m.raidAnnouncementText || '',
     raidOneTime: !!m.raidOneTime, raidCooldownMinutes: m.raidCooldownMinutes ?? 0,
     maxParticipants: m.maxParticipants ?? 4, raidRoundLimit: m.raidRoundLimit ?? 300, windUpEnabled: !!m.windUpEnabled,
+    overrideMapId: m.overrideMapId || '',
+    catchable: !!m.catchable, catchRatePercent: m.catchRatePercent ?? 0,
   })
   memberSavedImagePath.value = m.imagePath || ''
   for (const s of SOUND_SLOTS) memberSoundState[s.key].savedPath = m[s.field] || ''
   editingMemberHasBattles.value = !!m.hasBattles
   editingMemberRewards.value = m.rewards || []
+  editingMemberCaptureRewards.value = m.captureRewards || []
   editingMemberWindUpMoves.value = m.windUpMoves || []
   editingMemberSpecialAttacks.value = m.specialAttacks || []
 }
@@ -2156,6 +2334,9 @@ async function saveMember() {
       maxParticipants,
       raidRoundLimit,
       windUpEnabled: memberForm.windUpEnabled,
+      overrideMapId: memberForm.overrideMapId || null,
+      catchable: memberForm.catchable,
+      catchRatePercent: Math.trunc(Number(memberForm.catchRatePercent)) || 0,
     }
     let id = memberForm.id
     if (id) {
@@ -2384,6 +2565,14 @@ async function removeReward(r) {
   } finally {
     deletingRewardId.value = ''
   }
+}
+
+// CMoonEnemyRewardEditor (capture-prizes instance) does its own add/remove HTTP calls and just
+// tells us when something changed — same resync shape as removeReward/addReward above.
+async function onCaptureRewardsChanged() {
+  await load()
+  const fresh = members.value.find(m => m.id === memberForm.id)
+  if (fresh) editingMemberCaptureRewards.value = fresh.captureRewards || []
 }
 
 // ── Wind-up/telegraph moves (per-member, add/remove one row at a time) — same shape as the

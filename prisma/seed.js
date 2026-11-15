@@ -66,6 +66,17 @@ async function seedGameConfigs() {
     }
   })
 
+  // OG gToons PvP (points per natural-finish win, shared daily combat pool). Every other column
+  // carries a schema default.
+  await prisma.gameConfig.upsert({
+    where: { gameName: 'OgGtoons' },
+    update: {},
+    create: {
+      gameName: 'OgGtoons',
+      pointsPerWin: 100
+    }
+  })
+
   // Pokemon: Fire, Water, Grass! (points per completed head-to-head win). Every other column
   // carries a schema default; this exists so pointsPerWin isn't 0 on a fresh database.
   await prisma.gameConfig.upsert({

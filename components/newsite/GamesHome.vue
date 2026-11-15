@@ -7,6 +7,10 @@
       </NuxtLink>
     </div>
     <div class="gameshome" :style="gridStyle">
+      <NuxtLink v-if="!isHidden('gtoonsclassic')" to="/newsite/gtoons-classic" class="quadrant quadrant--gtoonsclassic">
+        <img v-if="tiles.gtoonsclassic" :src="tiles.gtoonsclassic" alt="gToons" class="tile-img" />
+        <span v-else>gToons</span>
+      </NuxtLink>
       <NuxtLink to="/newsite/newwinball" class="quadrant quadrant--shop">
         <img v-if="tiles.winball" :src="tiles.winball" alt="Winball" class="tile-img" />
         <span v-else>Winball</span>
@@ -71,10 +75,6 @@
       <NuxtLink v-if="!isHidden('pokemonbattle')" to="/newsite/pokemonbattle" class="quadrant quadrant--pokemonbattle">
         <img v-if="tiles.pokemonbattle" :src="tiles.pokemonbattle" alt="Pokemon: Fire, Water, Grass!" class="tile-img" />
         <span v-else>Pokemon: Fire, Water, Grass!</span>
-      </NuxtLink>
-      <NuxtLink v-if="!isHidden('gtoonsclassic')" to="/newsite/gtoons-classic" class="quadrant quadrant--gtoonsclassic">
-        <img v-if="tiles.gtoonsclassic" :src="tiles.gtoonsclassic" alt="gToons" class="tile-img" />
-        <span v-else>gToons</span>
       </NuxtLink>
     </div>
   </div>

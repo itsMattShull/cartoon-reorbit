@@ -7,7 +7,7 @@
 
       <template v-else>
         <div
-          class="cr-card bg-white rounded border p-4 space-y-3"
+          class="cr-card rounded border p-4 space-y-3"
           :class="{ 'cr-result-flash-win': resultFlash === 'win', 'cr-result-flash-loss': resultFlash === 'loss' }"
         >
           <div class="flex items-center gap-3">
@@ -73,8 +73,23 @@
             </div>
           </div>
 
-          <p v-if="currentTaunt" class="cr-taunt">&ldquo;{{ currentTaunt }}&rdquo;</p>
-          <p v-if="raidSocket.lastError.value" class="text-sm text-red-600">{{ raidSocket.lastError.value }}</p>
+          <!-- Fixed-height reserved slot, not a flow-height one — a taunt can pop up mid-fight
+               (the CRIT taunt below) or clear again, and an action error can appear/disappear
+               between rounds; either one appearing/disappearing in ordinary flow would grow or
+               shrink this spot and shove everything below it — including the IN_PROGRESS action
+               buttons further down this same card — up or down by that amount, which is exactly
+               the "text showing up moves the buttons" misclick bug reported in prod. A reserved
+               box this neither one can ever resize (scrolling internally on the rare round where
+               both are showing at once and together overflow it) is what actually fixes that,
+               same reasoning as the two more .cr-*-zone slots further down for this same raid's
+               wind-up banner and status badges, and the one right above the buttons themselves
+               for this exact same lastError value shown a second time. Plain `overflow-y: auto`
+               with an explicit height, not `:has()`/container queries/anything newer — this needs
+               to hold on every browser this site is asked to run in, phones included. -->
+          <div class="cr-notice-zone">
+            <p v-if="currentTaunt" class="cr-taunt">&ldquo;{{ currentTaunt }}&rdquo;</p>
+            <p v-if="raidSocket.lastError.value" class="text-sm text-red-600">{{ raidSocket.lastError.value }}</p>
+          </div>
 
           <!-- ── FORMING: roster + join countdown + lobby controls ───────────── -->
           <div v-if="raid.status === 'FORMING'" class="space-y-3">
@@ -164,11 +179,16 @@
 
               <!-- Wind-up telegraph — a deliberate, narrow exception to the usual "enemy action
                    stays hidden until it resolves" rule (see raid.currentWindUp's own comment in
-                   cmoonRaidSocket.js): the whole party sees this coming and can react. -->
-              <p v-if="raid.currentWindUp" class="cr-windup-banner">
-                ⚠️ {{ raid.currentWindUp.message }}
-                <span class="cr-windup-hint">Block {{ raid.currentWindUp.direction === 'HIGH' ? 'high' : 'low' }} to counter it!</span>
-              </p>
+                   cmoonRaidSocket.js): the whole party sees this coming and can react. Reserved
+                   fixed height (see .cr-notice-zone's own comment above for why) since this comes
+                   and goes round to round and sits above the roster, which sits above the action
+                   buttons further down. -->
+              <div class="cr-windup-zone">
+                <p v-if="raid.currentWindUp" class="cr-windup-banner">
+                  ⚠️ {{ raid.currentWindUp.message }}
+                  <span class="cr-windup-hint">Block {{ raid.currentWindUp.direction === 'HIGH' ? 'high' : 'low' }} to counter it!</span>
+                </p>
+              </div>
 
               <ul class="space-y-2">
                 <li v-for="p in raid.participants" :key="p.userId" class="cr-fighter-row text-xs relative">
@@ -201,22 +221,30 @@
                 </li>
               </ul>
 
-              <!-- ── Shared status: paralysis either direction, poison, boss charge tension ──── -->
-              <p v-if="raid.enemyParalyzedTurns > 0" class="cr-status-badge cr-status-good">
-                ⚡ {{ raid.enemyName }} is paralyzed — {{ raid.enemyParalyzedTurns }} more round{{ raid.enemyParalyzedTurns === 1 ? '' : 's' }}
-              </p>
-              <p v-if="raid.partyParalyzedTurns > 0" class="cr-status-badge cr-status-bad">
-                ⚡ The party is paralyzed — can't act for {{ raid.partyParalyzedTurns }} more round{{ raid.partyParalyzedTurns === 1 ? '' : 's' }}
-              </p>
-              <p v-if="raid.enemyPoisonTurnsRemaining > 0" class="cr-status-badge cr-status-good">
-                ☠️ {{ raid.enemyName }} is poisoned — {{ raid.enemyPoisonAmount }} damage/round for {{ raid.enemyPoisonTurnsRemaining }} more round{{ raid.enemyPoisonTurnsRemaining === 1 ? '' : 's' }}
-              </p>
-              <!-- Only one attack-raise can be active for the party at a time (see
-                   applyRaidSpecialAttack's own non-stacking comment) — shown so a second
-                   RAISE_ALLY_ATTACK cast having no extra effect isn't a silent mystery. -->
-              <p v-if="raid.partyAtkRaiseTurnsRemaining > 0" class="cr-status-badge cr-status-good">
-                💪 The party's attack is raised — {{ raid.partyAtkRaiseTurnsRemaining }} more round{{ raid.partyAtkRaiseTurnsRemaining === 1 ? '' : 's' }}
-              </p>
+              <!-- ── Shared status: paralysis either direction, poison, boss charge tension ────
+                   Reserved fixed height (see .cr-notice-zone's own comment above) — any 0-4 of
+                   these can be showing on a given round, and each one coming or going between
+                   rounds would otherwise grow/shrink this spot and push the action buttons
+                   further down this same card. The wrapper scrolls internally on the rare round
+                   where all 4 are up at once and together overflow it, rather than ever resizing
+                   itself. -->
+              <div class="cr-statusbadges-zone">
+                <p v-if="raid.enemyParalyzedTurns > 0" class="cr-status-badge cr-status-good">
+                  ⚡ {{ raid.enemyName }} is paralyzed — {{ raid.enemyParalyzedTurns }} more round{{ raid.enemyParalyzedTurns === 1 ? '' : 's' }}
+                </p>
+                <p v-if="raid.partyParalyzedTurns > 0" class="cr-status-badge cr-status-bad">
+                  ⚡ The party is paralyzed — can't act for {{ raid.partyParalyzedTurns }} more round{{ raid.partyParalyzedTurns === 1 ? '' : 's' }}
+                </p>
+                <p v-if="raid.enemyPoisonTurnsRemaining > 0" class="cr-status-badge cr-status-good">
+                  ☠️ {{ raid.enemyName }} is poisoned — {{ raid.enemyPoisonAmount }} damage/round for {{ raid.enemyPoisonTurnsRemaining }} more round{{ raid.enemyPoisonTurnsRemaining === 1 ? '' : 's' }}
+                </p>
+                <!-- Only one attack-raise can be active for the party at a time (see
+                     applyRaidSpecialAttack's own non-stacking comment) — shown so a second
+                     RAISE_ALLY_ATTACK cast having no extra effect isn't a silent mystery. -->
+                <p v-if="raid.partyAtkRaiseTurnsRemaining > 0" class="cr-status-badge cr-status-good">
+                  💪 The party's attack is raised — {{ raid.partyAtkRaiseTurnsRemaining }} more round{{ raid.partyAtkRaiseTurnsRemaining === 1 ? '' : 's' }}
+                </p>
+              </div>
 
               <!-- ── Announcements overlay — round reveal, hit-streak combo, and special-use
                    callouts. Absolutely positioned and pointer-events:none, so appearing/
@@ -276,7 +304,13 @@
               </div>
             </div>
 
-            <p v-if="raidSocket.lastError.value" class="text-sm text-red-600">{{ raidSocket.lastError.value }}</p>
+            <!-- Reserved fixed height (see .cr-notice-zone's own comment further up) — this sits
+                 directly above the action buttons, so an error appearing/clearing between rounds
+                 (e.g. a rejected action) is the single most direct way this page could shove the
+                 buttons a player is about to tap. -->
+            <div class="cr-action-notice-zone">
+              <p v-if="raidSocket.lastError.value" class="text-sm text-red-600">{{ raidSocket.lastError.value }}</p>
+            </div>
 
             <template v-if="myself && !myself.knockedOut">
               <p v-if="myself.hasActed" class="text-sm text-gray-500">Locked in — waiting on the rest of the party…</p>
@@ -358,11 +392,21 @@
       :my-user-id="user?.id"
       @close="showBattleReport = false"
     />
+
+    <CMoonEnemyMapBackground
+      v-if="raid?.map"
+      :animation="raid.map.backgroundAnimation" :color="raid.map.backgroundColor"
+    />
+    <CMoonEnemyMapInfoModal
+      v-if="showMapInfoModal && raid?.map"
+      :map="raid.map" context="raid" @understood="showMapInfoModal = false"
+    />
   </NuxtLayout>
 </template>
 
 <script setup>
 import { cMoonPillStyle } from '~/utils/cmoonColor'
+import { useHapticSoundsPref } from '@/composables/useHapticSoundsPref'
 
 // The fixed-chrome `.main-content` box is `overflow: hidden` by default
 // (layouts/newsite-template.vue) — a raid party can now be up to 8 players (was a hardcoded 4),
@@ -505,6 +549,9 @@ function specialEffectDescription(attack) {
       ? `Cures you and every raid ally of paralysis and poison${attack?.cleanseAlsoHeals ? `, healing ${n} HP too` : ''}.`
       : `Cures you of paralysis and poison${attack?.cleanseAlsoHeals ? `, healing ${n} HP too` : ''}. Everyone else's party-wide paralysis is cured too — only poison is self-only here.`
     case 'SHIELD_PARTY': return `Negates ALL damage the party would take this round, from the boss's normal attack and any special it casts.`
+    case 'REVIVE_ALLY': return attack?.healsAllies
+      ? `Revives EVERY knocked-out party member at once, each with ${n} HP (capped at their own max HP).`
+      : `Revives one random knocked-out party member with ${n} HP (capped at their own max HP). Fires and announces with no effect if nobody's down.`
     default: return ''
   }
 }
@@ -652,8 +699,15 @@ function triggerShake(isCrit) {
     shakeTimer = setTimeout(() => { shaking.value = false }, 450)
   })
 }
+// Settings page's "Mute sounds" row (composables/useHapticSoundsPref.js) — shared `useState`, so
+// toggling it in another tab/on the settings page takes effect here without a page reload; the
+// battleMusic watch below reacts to it live, and this guard covers every one-shot effect (hit/
+// block/special/taunt/appear/victory/defeat) in one place rather than at each call site.
+// plugins/hapticSoundsPref.client.js hydrates this from localStorage before the app ever mounts,
+// so `soundsEnabled.value` is already correct the first time anything here reads it.
+const { enabled: soundsEnabled } = useHapticSoundsPref()
 function playSound(path) {
-  if (!path || typeof window === 'undefined') return
+  if (!path || !soundsEnabled.value || typeof window === 'undefined') return
   try {
     const el = new Audio(path)
     el.volume = 0.7
@@ -754,9 +808,17 @@ watch(myHitStreak, (streak, prevStreak) => {
 // instead of only reacting to a future transition.
 const battleMusic = useBattleMusic()
 watch(() => raid.value?.status, (status) => {
-  if (status === 'IN_PROGRESS') battleMusic.start(raid.value?.battleMusicPath)
+  if (status === 'IN_PROGRESS' && soundsEnabled.value) battleMusic.start(raid.value?.battleMusicPath)
   else battleMusic.stop()
 }, { immediate: true })
+// Toggling "Mute sounds" mid-fight (e.g. from another tab) should take effect immediately rather
+// than waiting for the next status change — the watch above only re-evaluates on a STATUS
+// transition, which an already-IN_PROGRESS raid never has again until it resolves.
+watch(soundsEnabled, (on) => {
+  if (raid.value?.status !== 'IN_PROGRESS') return
+  if (on) battleMusic.start(raid.value?.battleMusicPath)
+  else battleMusic.stop()
+})
 
 // ── Captain entrance banner — a one-time, purely cosmetic "epic" moment naming every cMoon
 // captain in the party (see CMoonCaptain's own schema comment), meant to pump up everyone else in
@@ -814,6 +876,19 @@ watch(() => raidSocket.lastKicked.value?.at, () => {
   afkKickBanner.value = `⏱️ ${joinWithAnd(names)} ${names.length > 1 ? 'were' : 'was'} kicked from the raid for inactivity.`
   if (afkKickTimer) clearTimeout(afkKickTimer)
   afkKickTimer = setTimeout(() => { afkKickBanner.value = '' }, 5000)
+})
+
+// Map info modal — "I Understand" explainer for a non-base active map, shown once the raid
+// actually reaches IN_PROGRESS (its effects don't matter during FORMING) and never again for
+// the same raid, mirroring announcedRaidId's own one-shot-per-id gating above.
+const showMapInfoModal = ref(false)
+let mapInfoShownForRaidId = null
+watch(() => raid.value?.status, (status) => {
+  if (status !== 'IN_PROGRESS') return
+  if (!raid.value?.map || raid.value.map.isBaseMap) return
+  if (mapInfoShownForRaidId === raid.value.id) return
+  mapInfoShownForRaidId = raid.value.id
+  showMapInfoModal.value = true
 })
 
 onMounted(() => {
@@ -887,6 +962,23 @@ onUnmounted(() => {
 .cr-shake-crit { animation: cr-shake-crit-kf 0.45s cubic-bezier(0.36, 0.07, 0.19, 0.97) both; }
 @media (prefers-reduced-motion: reduce) {
   .cr-shake, .cr-shake-crit { animation: none; }
+}
+
+/* CMoonEnemyMapBackground (see the template above) paints a fixed, full-viewport, z-index:-1
+   layer — but this card used to be a fully opaque bg-white, which covers nearly the entire
+   screen on a phone (max-w-2xl only constrains width above ~672px; below that the card fills
+   the viewport minus this page's own 16px side padding). The backdrop was only ever visible in
+   that sliver of margin, at the component's own already-subtle opacity (0.08 for STATIC_COLOR) —
+   which is why an admin-configured map's effect was reported as never actually visible. Dropping
+   `bg-white` for this translucent background instead lets the backdrop read through the card
+   everywhere, not just around its edges on a wide screen. A flat rgba scrim, not
+   backdrop-filter: blur — this card is on screen for the length of an entire raid/PvP fight
+   with an animated (GLOW/SMOKE/GLITTER) backdrop potentially running behind it the whole time,
+   and a continuously-recomposited blur layer for that whole duration is exactly the "mid-range
+   Android feels bad" cost pages/newsite/blackjack.vue's own .bj-sheet-overlay comment already
+   avoids for a scrim that merely re-appears often, let alone one that's never off screen. */
+.cr-card {
+  background: rgba(255, 255, 255, 0.86);
 }
 
 /* Result-screen flash — mirrors components/CMoonBattlePopupHost.vue's cbp-result-flash, applied
@@ -974,6 +1066,26 @@ onUnmounted(() => {
   border-radius: 6px;
   padding: 4px 10px;
 }
+
+/* ── Reserved-height notice zones (see the template's own comment on the first one for the full
+   misclick rationale) — a fixed height plus `overflow-y: auto` so a child appearing/disappearing
+   between rounds changes what's visible INSIDE the box, never the box's own contribution to the
+   page's layout, so nothing below it (ultimately, the action buttons) ever moves. Plain CSS
+   (fixed height + overflow), not `:has()`/container queries/anything newer, and no JS height
+   measurement — this has to hold on every browser this site runs in, phones included.
+   -webkit-overflow-scrolling: touch is for older iOS Safari's momentum scroll; harmless no-op on
+   every other browser. Each one's height only needs to clear its own worst realistic case
+   (double-checked against the actual rendered CSS of what it holds) — scrolling covers whatever
+   rarer combination exceeds that, which trades a tiny, uncommon scroll affordance for the one
+   thing that actually matters here: the buttons never move. */
+.cr-notice-zone, .cr-windup-zone, .cr-statusbadges-zone, .cr-action-notice-zone {
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.cr-notice-zone { height: 56px; }
+.cr-windup-zone { height: 48px; }
+.cr-statusbadges-zone { height: 72px; display: flex; flex-direction: column; gap: 4px; }
+.cr-action-notice-zone { height: 44px; }
 
 /* Taunt line — re-colored for the light card, same shape as components/CMoonBattlePopupHost.vue's
    cbp-taunt. */

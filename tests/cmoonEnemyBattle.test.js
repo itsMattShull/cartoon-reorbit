@@ -8,6 +8,7 @@ import {
   SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, isValidPlayerSubmittedAction,
   isAttack, isBlock, STARTING_STAMINA, pickEffectiveSpecialAttack,
   pickWeightedSpecialAttack, pickEnemySpecialAttack, enemySpecialAttackRequiredHitStreak,
+  rollCatchAttempt,
 } from '../server/utils/cmoonEnemyBattle.js'
 
 const baseEnemyMember = { critChanceAgainstPercent: 0, critChanceFromPercent: 0, maxHp: 5 }
@@ -810,4 +811,27 @@ test('enemySpecialAttackRequiredHitStreak: with overrides, uses the LOWEST requi
     ],
   }
   assert.equal(enemySpecialAttackRequiredHitStreak(member), 2)
+})
+
+test('rollCatchAttempt: a 0% (or non-catchable, forced-to-0) rate never succeeds', () => {
+  for (let i = 0; i < 50; i++) assert.equal(rollCatchAttempt(0), false)
+})
+
+test('rollCatchAttempt: a 100% rate always succeeds', () => {
+  for (let i = 0; i < 50; i++) assert.equal(rollCatchAttempt(100), true)
+})
+
+test('rollCatchAttempt: a mid-range rate succeeds roughly that often over many rolls', () => {
+  const trials = 2000
+  let hits = 0
+  for (let i = 0; i < trials; i++) if (rollCatchAttempt(30)) hits++
+  const rate = hits / trials
+  assert.ok(rate > 0.22 && rate < 0.38, `expected ~30% hit rate, got ${(rate * 100).toFixed(1)}%`)
+})
+
+test('rollCatchAttempt: non-finite/negative input is treated as 0 (never throws, never succeeds)', () => {
+  assert.equal(rollCatchAttempt(NaN), false)
+  assert.equal(rollCatchAttempt(-5), false)
+  assert.equal(rollCatchAttempt(undefined), false)
+  assert.equal(rollCatchAttempt(null), false)
 })

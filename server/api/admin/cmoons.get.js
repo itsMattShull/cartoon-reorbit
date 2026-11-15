@@ -48,6 +48,7 @@ export default defineEventHandler(async (event) => {
         cMoonWeeklyRecapEnabled: true, cMoonWeeklyRecapDayOfWeek: true, cMoonWeeklyRecapHour: true, cMoonWeeklyRecapMinute: true,
         cMoonSeasonMvpRecapEnabled: true,
         cMoonSharedBossDefeatAnnounceEnabled: true,
+        cMoonEnemyCaptureMusicPath: true,
       },
     }),
   ])
@@ -89,6 +90,7 @@ export default defineEventHandler(async (event) => {
     cMoonWeeklyRecapMinute: config?.cMoonWeeklyRecapMinute ?? 0,
     cMoonSeasonMvpRecapEnabled: !!config?.cMoonSeasonMvpRecapEnabled,
     cMoonSharedBossDefeatAnnounceEnabled: !!config?.cMoonSharedBossDefeatAnnounceEnabled,
+    cMoonEnemyCaptureMusicPath: config?.cMoonEnemyCaptureMusicPath || null,
     cmoons: cmoons.map(c => ({
       id: c.id,
       name: c.name,

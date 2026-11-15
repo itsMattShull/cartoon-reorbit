@@ -98,6 +98,15 @@ export default defineEventHandler(async (event) => {
   if (activeRaid) {
     throw createError({ statusCode: 409, statusMessage: 'Finish your current raid before starting a solo battle' })
   }
+  // Same cross-exclusivity backstop for cMoon PvP (server/utils/cmoonPvpSocket.js) — a player mid
+  // PvP match must finish it before starting an unrelated solo fight too.
+  const activePvp = await db.cMoonPvpParticipant.findFirst({
+    where: { userId, activeUserId: userId },
+    select: { id: true },
+  })
+  if (activePvp) {
+    throw createError({ statusCode: 409, statusMessage: 'Finish your current PvP match before starting a solo battle' })
+  }
 
   // Backstop for consider.post.js's own candidate filter, same reasoning as the feature-toggle
   // check above: this endpoint takes an explicit enemyMemberId and is reachable directly, so a

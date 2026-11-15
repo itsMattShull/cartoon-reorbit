@@ -3,17 +3,16 @@
 // precedent as rarity-defaults.get.js, since it's read-only, non-sensitive config.
 import { defineEventHandler } from 'h3'
 import { getStandardizedMetricPercentages } from '@/server/utils/cmartStandardizedMetrics'
-import { getPriorWeekActivePlayerCount, PRIOR_WEEK_WINDOW_START_DAYS, PRIOR_WEEK_WINDOW_END_DAYS } from '@/server/utils/activePlayers'
+import { getActivePlayerCount, ACTIVE_PLAYER_WINDOW_DAYS } from '@/server/utils/activePlayers'
 
 export default defineEventHandler(async () => {
   const [percentages, activePlayerCount] = await Promise.all([
     getStandardizedMetricPercentages(),
-    getPriorWeekActivePlayerCount()
+    getActivePlayerCount()
   ])
   return {
     percentages,
     activePlayerCount,
-    windowStartDaysAgo: PRIOR_WEEK_WINDOW_START_DAYS,
-    windowEndDaysAgo: PRIOR_WEEK_WINDOW_END_DAYS
+    windowDays: ACTIVE_PLAYER_WINDOW_DAYS
   }
 })
