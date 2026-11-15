@@ -581,3 +581,86 @@ export async function activeGameId(tournamentMatchId, db = prisma) {
   const g = await db.ogGtoonTournamentGame.findFirst({ where: { tournamentMatchId, status: 'ACTIVE' }, select: { id: true, gameNumber: true } })
   return g || null
 }
+
+/* ═══ Part 7: the deadline ══════════════════════════════════════════════════════════════════════════════════════ */
+
+/** Why a pairing was decided, in words for the players (used in the Discord message). */
+export function describeDecision(d, { blocker, hasGame, deckProblem }) {
+  if (d.resolution === 'WALKOVER') return 'walkover: the other player did not press Start in time'
+  if (deckProblem === 'A' || deckProblem === 'B') return 'a card in a locked deck was no longer in the collection, so the next game could not start'
+  if (blocker) return 'the other player did not make their move before time ran out'
+  if (!hasGame) return d.outcome === 'TIE' ? 'nobody played before time ran out' : 'nobody played before time ran out, so the better seed advances'
+  return 'time ran out'
+}
+
+/**
+ * Decides an async pairing whose deadline has passed, atomically: under the pairing's row lock, with "now" read from the
+ * database after the lock is held. A play that was waiting on the lock when the job started has already been applied (and
+ * may have extended the deadline) by the time this reads the pairing, so the two can never disagree about which came first.
+ * Closes the running game as part of locking the result (lockMatchResult).
+ *
+ *   { found: false }
+ *   { decided: false, reason: 'notEligible' | 'inactive' | 'notDue' (with dueAt) | 'needsAdmin' }
+ *   { decided: true, outcome, resolution, why, tournamentId, matchId }
+ */
+export async function decideAndLock(matchId, { db = prisma } = {}) {
+  return db.$transaction(async (tx) => {
+    if (!(await lockPairing(tx, matchId))) return { found: false }
+    const now = await dbNow(tx)
+    const m = await tx.ogGtoonTournamentMatch.findUnique({ where: { id: matchId }, include: { tournament: true } })
+    if (!m || m.lockedAt || m.status === 'BYE' || !m.asyncRules) return { found: true, decided: false, reason: 'notEligible' }
+    if (!ACTIVE_STATUSES.includes(m.tournament.status)) return { found: true, decided: false, reason: 'inactive' }
+    if (m.needsAdmin) return { found: true, decided: false, reason: 'needsAdmin' }
+    if (!m.dueAt || m.dueAt.getTime() > now.getTime()) return { found: true, decided: false, reason: 'notDue', dueAt: m.dueAt }
+
+    const game = await tx.ogGtoonTournamentGame.findFirst({ where: { tournamentMatchId: matchId, status: 'ACTIVE' } })
+    let blocker = null
+    if (game) {
+      const b = pendingStepBlocker(restoreMatch(game.state))
+      if (b) blocker = b.blockerIdx === 0 ? 'A' : 'B'
+    }
+    const loaded = await loadSeriesGames(m, tx)
+    const hasGame = !!game || loaded.games.length > 0 || (await tx.ogGtoonTournamentGame.count({ where: { tournamentMatchId: matchId } })) > 0
+    const deckProblem = game ? null : (m.deckProblemSide || null)
+    const d = decideAtDeadlineAsync(m, {
+      now: now.getTime(), baseDueAt: m.baseDueAt || m.dueAt, minPlayable: minPlayableMs(m.tournament.roundWindowHours),
+      scoreA: loaded.scoreA, scoreB: loaded.scoreB, hasGame, blocker, deckProblem
+    })
+    if (d.kind === 'NEEDS_ADMIN') {
+      await tx.ogGtoonTournamentMatch.updateMany({ where: { id: matchId, lockedAt: null }, data: { needsAdmin: true, needsAdminReason: d.reason } })
+      return { found: true, decided: false, reason: 'needsAdmin', needsAdminReason: d.reason }
+    }
+    const ok = await lockMatchResult(tx, m, { outcome: d.outcome, resolution: d.resolution, winsA: d.winsA, winsB: d.winsB, now })
+    if (!ok) return { found: true, decided: false, reason: 'notEligible' }
+    return {
+      found: true, decided: true, outcome: d.outcome, resolution: d.resolution, tournamentId: m.tournamentId, matchId,
+      why: describeDecision(d, { blocker, hasGame, deckProblem })
+    }
+  }, { timeout: 30000, maxWait: 10000 })
+}
+
+/** Closes every running async game of a tournament (it was cancelled): they never count. */
+export async function closeTournamentGames(tournamentId, { db = prisma, now = new Date() } = {}) {
+  const r = await db.ogGtoonTournamentGame.updateMany({
+    where: { status: 'ACTIVE', tournamentMatch: { tournamentId } }, data: { status: 'CLOSED', endedAt: now }
+  })
+  return r.count
+}
+
+/**
+ * What the Tournaments panel needs to know about a pairing's running game from one player's point of view: its id, whose move
+ * it is, and when anybody last played. Null when no game is running.
+ */
+export async function gameSummaryFor(tournamentMatchId, uid, { db = prisma } = {}) {
+  const game = await db.ogGtoonTournamentGame.findFirst({ where: { tournamentMatchId, status: 'ACTIVE' } })
+  if (!game) return null
+  const match = restoreMatch(game.state)
+  const idx = match.players.indexOf(uid)
+  const b = pendingStepBlocker(match)
+  return {
+    gameId: game.id, gameNumber: game.gameNumber, lastPlayAt: game.lastPlayAt || null,
+    waitingOn: b ? (b.blockerIdx === idx ? 'you' : 'opponent') : null,
+    // New reveals this player has not watched yet (a returning player is shown them on the board).
+    unseenReveals: Math.max(0, lastSeq(game.reveals) - (idx === 0 ? game.seenA : game.seenB))
+  }
+}

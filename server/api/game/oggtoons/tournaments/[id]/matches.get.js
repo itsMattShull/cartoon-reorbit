@@ -11,14 +11,16 @@ export default defineEventHandler(async (event) => {
   const id = ogtId(event)
   const data = await cachedJson(`og-tournament:${id}:matches`, 15, async () => {
     if (!(await prisma.ogGtoonTournament.findUnique({ where: { id }, select: { id: true } }))) return null
-    const [rounds, matches] = await Promise.all([
+    const [rounds, matches, activeGames] = await Promise.all([
       prisma.ogGtoonTournamentRound.findMany({ where: { tournamentId: id }, orderBy: [{ stage: 'asc' }, { roundNumber: 'asc' }] }),
       prisma.ogGtoonTournamentMatch.findMany({
         where: { tournamentId: id },
         include: { playerA: { select: { id: true, username: true } }, playerB: { select: { id: true, username: true } } },
         orderBy: [{ stage: 'asc' }, { roundNumber: 'asc' }, { tableNumber: 'asc' }]
-      })
+      }),
+      prisma.ogGtoonTournamentGame.findMany({ where: { status: 'ACTIVE', tournamentMatch: { tournamentId: id } }, select: { tournamentMatchId: true } })
     ])
+    const hasGame = new Set(activeGames.map(g => g.tournamentMatchId))
     const out = rounds.map(r => ({ id: r.id, stage: r.stage, roundNumber: r.roundNumber, dueAt: r.dueAt, openedAt: r.openedAt, label: null, matches: [] }))
     const byRound = new Map(out.map(r => [r.id, r]))
     for (const m of matches) {
@@ -28,7 +30,7 @@ export default defineEventHandler(async (event) => {
         playerAName: m.playerA?.username || 'Unknown', playerBName: m.status === 'BYE' ? 'BYE' : (m.playerB?.username || 'Unknown'),
         winsA: m.winsA, winsB: m.winsB, ties: m.ties, gamesCounted: m.gamesCounted,
         outcome: m.outcome, winnerUserId: m.winnerUserId, resolution: m.resolution,
-        seedA: m.seedA, seedB: m.seedB, dueAt: m.dueAt, live: !!m.liveMatchId, needsAdmin: m.needsAdmin
+        seedA: m.seedA, seedB: m.seedB, dueAt: m.dueAt, live: !!m.liveMatchId || hasGame.has(m.id), needsAdmin: m.needsAdmin, asyncRules: m.asyncRules
       })
     }
     for (const r of out) r.label = r.stage === 'SWISS' ? `Swiss Round ${r.roundNumber}` : bracketRoundLabel(r.matches.length)
