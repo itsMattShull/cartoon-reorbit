@@ -1003,67 +1003,10 @@ export async function prizeSupplyWarnings(db, bundle, recipientCount) {
   return warnings
 }
 
-/* ── Deck repair ─────────────────────────────────────────────────────────────────────────── */
-
-/**
- * Lets a player replace the cards of their LOCKED deck that are no longer valid (sold, traded,
- * burned, or handed to someone and back). Only the flagged slots can change, each with a
- * different card the player owns now, and only between series — never mid-series or mid-game.
- * Handing a flagged card back never clears the flag, so lending cards between games cannot be
- * "repaired" away; the card is simply replaced.
- */
-export async function repairLockedDeck(db, { tournamentId, userId, replacements, now = new Date() }) {
-  const t = await db.ogGtoonTournament.findUnique({ where: { id: tournamentId }, select: { status: true } })
-  if (!t || !['OPT_IN_CLOSED', ...ACTIVE_STATUSES].includes(t.status)) {
-    return { ok: false, code: 400, message: 'A deck can only be repaired once opt-in has closed and while the tournament is running. Before that, just lock in a different deck.' }
-  }
-  const optIn = await db.ogGtoonTournamentOptIn.findUnique({ where: { tournamentId_userId: { tournamentId, userId } } })
-  if (!optIn || !optIn.isActive || optIn.disqualified) return { ok: false, code: 403, message: 'You are not an active entrant' }
-
-  const open = await db.ogGtoonTournamentMatch.findFirst({
-    where: { tournamentId, lockedAt: null, status: { in: ['PENDING', 'IN_PROGRESS'] }, OR: [{ playerAUserId: userId }, { playerBUserId: userId }] }
-  })
-  if (open?.liveMatchId) return { ok: false, code: 400, message: 'You are in a game right now' }
-  if (open && open.gamesCounted > 0) return { ok: false, code: 400, message: 'Your deck cannot change in the middle of a series. Finish this series first.' }
-
-  const check = await loadLockedDeckForGame(userId, optIn.deckSnapshotJson, db)
-  const flagged = [...check.missing, ...check.moved]
-  if (!flagged.length) return { ok: false, code: 400, message: 'Your locked deck has no problems to repair' }
-
-  const list = Array.isArray(replacements) ? replacements : []
-  const byPos = new Map(list.map(r => [Number(r?.position), String(r?.ctoonId || '')]))
-  if (byPos.size !== flagged.length || !flagged.every(pos => byPos.get(pos))) {
-    return { ok: false, code: 400, message: 'Replace every flagged card, and only those', flagged }
-  }
-
-  const snapshot = optIn.deckSnapshotJson.map(s => ({ ...s }))
-  const keep = new Set(snapshot.filter(s => !flagged.includes(s.position)).map(s => s.ctoonId))
-  // Every copy in the old snapshot is off the table, flagged ones included: re-picking the very copy
-  // that was lent out would clear the flag, so a flagged slot needs a DIFFERENT copy.
-  const usedCopies = new Set(snapshot.map(s => s.userCtoonId))
-  const newIds = [...byPos.values()]
-  if (new Set(newIds).size !== newIds.length || newIds.some(id => keep.has(id))) {
-    return { ok: false, code: 400, message: 'A tournament deck needs 12 different cards' }
-  }
-  const ctoons = await db.ctoon.findMany({ where: { id: { in: newIds } }, select: { id: true, name: true, isOgGtoon: true } })
-  if (ctoons.length !== newIds.length || ctoons.some(c => !c.isOgGtoon)) return { ok: false, code: 400, message: 'Pick gToon cards' }
-  const copies = await db.userCtoon.findMany({
-    where: { userId, ctoonId: { in: newIds }, burnedAt: null }, select: { id: true, ctoonId: true }, orderBy: { createdAt: 'asc' }
-  })
-  const copyFor = new Map()
-  for (const c of copies) if (!copyFor.has(c.ctoonId) && !usedCopies.has(c.id)) copyFor.set(c.ctoonId, c.id)
-  for (const [pos, ctoonId] of byPos) {
-    const copyId = copyFor.get(ctoonId)
-    if (!copyId) return { ok: false, code: 400, message: `You do not own ${ctoons.find(c => c.id === ctoonId)?.name || 'that card'}` }
-    const slot = snapshot.find(s => s.position === pos)
-    Object.assign(slot, { ctoonId, userCtoonId: copyId, lockedAt: now.toISOString() })
-  }
-  await db.ogGtoonTournamentOptIn.update({
-    where: { id: optIn.id },
-    data: { deckSnapshotJson: snapshot, repairCount: { increment: 1 }, lastRepairedAt: now }
-  })
-  return { ok: true, replaced: flagged.length }
-}
+/* ── Locked decks never change ───────────────────────────────────────────────────────────── */
+// There is deliberately no deck repair: the 12 copies registered at opt-in are the deck for the whole tournament.
+// They are frozen against trades, auctions, hand-overs and burns (ogGtoonTournamentFreeze.js). A copy that still
+// gets out some other way (an admin action) flags the deck, that player cannot play and loses at the deadline.
 
 /* ── Ready-up DM (queued by the socket server) ───────────────────────────────────────────── */
 

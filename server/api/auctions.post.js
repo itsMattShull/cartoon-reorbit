@@ -5,6 +5,7 @@ import {
   createError
 } from 'h3'
 import { prisma } from '@/server/prisma'
+import { frozenAmong, FROZEN_OWN_MESSAGE } from '@/server/utils/ogGtoonTournamentFreeze'
 import { useRuntimeConfig } from '#imports'
 import fetch from 'node-fetch'
 import { scheduleAuctionClose } from '@/server/utils/queues'
@@ -169,6 +170,11 @@ export default defineEventHandler(async (event) => {
   let auction
   try {
     auction = await prisma.$transaction(async (tx) => {
+      // A card locked into an OG gToons tournament deck cannot be auctioned until its owner is out of the tournament.
+      if ((await frozenAmong(tx, userId, [resolvedUserCtoonId])).length) {
+        throw createError({ statusCode: 400, statusMessage: FROZEN_OWN_MESSAGE })
+      }
+
       // Claim the cToon BEFORE creating the auction, in the same transaction.
       //
       // This is both the lock guard and a fix for the write that used to sit

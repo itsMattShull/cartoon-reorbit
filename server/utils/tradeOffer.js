@@ -7,6 +7,7 @@
 // unit-tested without a database; this module composes it with Prisma.
 import { createError, getRequestHeader } from 'h3'
 import { prisma } from '@/server/prisma'
+import { frozenAmong, FROZEN_OWN_MESSAGE } from '@/server/utils/ogGtoonTournamentFreeze'
 import { resolveUserCtoonIds } from '@/server/utils/userCtoonId'
 import {
   normalizeCtoonIdList,
@@ -173,6 +174,16 @@ export async function validateTradeOfferInputs ({
       statusCode: 400,
       statusMessage: 'One or more requested cToons are not owned by the recipient or no longer available'
     })
+  }
+
+  // A card locked into an OG gToons tournament deck cannot change hands until its owner is out of the tournament.
+  // After the ownership checks (so it never says anything about a copy that is not part of this trade). The
+  // requested side gets the generic wording so it cannot be used to read another player's tournament deck.
+  if (resolvedOffered.length && (await frozenAmong(prisma, initiatorId, resolvedOffered)).length) {
+    throw createError({ statusCode: 400, statusMessage: FROZEN_OWN_MESSAGE })
+  }
+  if (resolvedRequested.length && (await frozenAmong(prisma, recipient.id, resolvedRequested)).length) {
+    throw createError({ statusCode: 400, statusMessage: UNAVAILABLE_REQUEST_MESSAGE })
   }
 
   // Locks, after the ownership checks above and before the round trips below.

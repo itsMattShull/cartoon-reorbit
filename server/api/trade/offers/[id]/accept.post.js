@@ -4,6 +4,7 @@ import {
   createError
 } from 'h3'
 import { prisma } from '@/server/prisma'
+import { frozenAmong, FROZEN_OWN_MESSAGE } from '@/server/utils/ogGtoonTournamentFreeze'
 import { notifyTradeOfferAccepted } from '@/server/utils/notifications'
 import { captureRequestMeta } from '@/server/utils/tradeOffer'
 import { lockAndAssertOfferPacks, logPackOwners } from '@/server/utils/userPackState'
@@ -167,6 +168,21 @@ export default defineEventHandler(async (event) => {
         statusCode: 409,
         statusMessage: 'This offer is no longer pending.'
       })
+    }
+
+    // A card locked into an OG gToons tournament deck cannot change hands (the offer may predate the deck being locked in).
+    // Checked inside the transaction, after the claim, so a deck locked in a moment ago still counts and a refusal rolls the claim back.
+    {
+      const [frozenOut, frozenIn] = await Promise.all([
+        frozenAmong(tx, offer.initiatorId, offeredIds),
+        frozenAmong(tx, offer.recipientId, requestedIds)
+      ])
+      if (frozenOut.length || frozenIn.length) {
+        throw createError({
+          statusCode: 409,
+          statusMessage: frozenIn.length ? FROZEN_OWN_MESSAGE : 'One or more cToons in this trade are no longer available.'
+        })
+      }
     }
 
     // Packs: lock + verify under the lock, BEFORE any points move (lock order: offer row -> UserPack rows -> UserPoints
