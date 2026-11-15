@@ -38,6 +38,7 @@ import { registerOgGtoonsTutorial, startOgGtoonsTutorialSweep } from './utils/og
 import { registerCMoonRaid, startCMoonRaidSweep, restoreCMoonRaids } from './utils/cmoonRaidSocket.js'
 import { registerCMoonRaidPreview, startCMoonRaidPreviewSweep } from './utils/cmoonRaidPreviewSocket.js'
 import { registerCMoonPvp, startCMoonPvpSweep, restoreCMoonPvpMatches } from './utils/cmoonPvpSocket.js'
+import { registerMyOrbit, startMyOrbitSweep } from './utils/myOrbitSocket.js'
 
 startDiagnostics().catch((err) => {
   console.error('[Diagnostics] failed to start (socket server):', err)
@@ -1534,6 +1535,9 @@ io.on('connection', socket => {
   // cMoon PvP — live team-vs-team battles; see server/utils/cmoonPvpSocket.js.
   registerCMoonPvp(io, socket, resolveSocketUser)
 
+  // MyOrbit — live avatar chat room presence/movement; see server/utils/myOrbitSocket.js.
+  registerMyOrbit(io, socket, resolveSocketUser)
+
   socket.on('leaveClashRoom', async ({ roomId }) => {
     try {
       // Authenticated, so this can only ever end the caller's own participation. With a
@@ -2415,6 +2419,10 @@ startCMoonPvpSweep(io)
 restoreCMoonPvpMatches()
   .then(n => { if (n) console.log(`[cmoonPvp] restored ${n} in-progress match(es) from Redis`) })
   .catch(err => console.error('[cmoonPvp] failed to restore matches from Redis:', err))
+// No Redis restore call — MyOrbit room presence is deliberately in-memory only (see
+// myOrbitSocket.js's own header comment on why: it's cosmetic, not consequential, so "please
+// rejoin the room" after a restart is the correct outcome, not a gap).
+startMyOrbitSweep()
 
 // Called by the BullMQ worker for each auction job. The settlement itself is in utils/auctionSettle.js.
 async function performAuctionClose(auctionId) {
