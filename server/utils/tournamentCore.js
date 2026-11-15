@@ -298,7 +298,10 @@ export function computeRecords(userIds, swissMatches, bracketMatches) {
       continue
     }
     if (m.status !== 'COMPLETE') continue
-    if (rA && rB) { addOpp(a, b); addOpp(b, a) }
+    // A result nobody played for (a walkover, a no-show draw) says nothing about how strong either opponent is and is not
+    // a real game, so under the async rules it feeds neither tiebreak. Older matches keep the old behaviour exactly.
+    const unplayed = !!m.asyncRules && !(m.gamesCounted > 0)
+    if (rA && rB && !unplayed) { addOpp(a, b); addOpp(b, a) }
     if (m.outcome === 'A_WIN') {
       if (rA) { rA.swissWins += 1; rA.points += 3 }
       if (rB) rB.swissLosses += 1
@@ -313,6 +316,7 @@ export function computeRecords(userIds, swissMatches, bracketMatches) {
       if (rA) rA.swissLosses += 1
       if (rB) rB.swissLosses += 1
     }
+    if (unplayed) continue
     if (rA) { rA.swissGameWins += m.winsA; rA.swissGameLosses += m.winsB; rA.swissGameTies += m.ties }
     if (rB) { rB.swissGameWins += m.winsB; rB.swissGameLosses += m.winsA; rB.swissGameTies += m.ties }
   }
@@ -496,4 +500,121 @@ export function roundDueAt(openedAt, hours) {
 export function reminderApplies(pairedAt, dueAt, hours) {
   if (!pairedAt || !dueAt) return false
   return new Date(dueAt).getTime() - new Date(pairedAt).getTime() > Number(hours) * 3600 * 1000
+}
+
+/* ── Async play: players move whenever they can, or live together ────────────────────────────
+ *
+ * Pure rules for matches created under the async rules (OgGtoonTournamentMatch.asyncRules). The older
+ * live-only rules above (decideAtDeadline, WALKOVER_MIN_READY_MS) are left exactly as they were for the
+ * matches that already exist.
+ */
+
+/** A play made this close to a match's deadline gives the opponent a little longer to answer. */
+export const EXTENSION_WINDOW_MS = 60 * 1000
+/** How much longer. */
+export const EXTENSION_MS = 60 * 1000
+/** Most extensions one match can earn, so two players cannot hold a round open for everyone else. */
+export const MAX_EXTENSIONS = 10
+
+const MIN_PLAYABLE_FLOOR_MS = 5 * 60 * 1000
+const MIN_PLAYABLE_CEIL_MS = 60 * 60 * 1000
+
+/**
+ * How much time must be left in the round for a Start press (or a freshly created game) to count: an hour on a
+ * normal round, scaled down to 10% on a short one (never under 5 minutes). Without it a Start pressed in the last
+ * seconds beats a real walkover, and a game created with minutes left hands the trailing player a free win.
+ */
+export function minPlayableMs(windowHours) {
+  const window = Math.max(1, Number(windowHours) || 72) * 3600 * 1000
+  return Math.max(MIN_PLAYABLE_FLOOR_MS, Math.min(MIN_PLAYABLE_CEIL_MS, Math.floor(window * 0.1)))
+}
+
+const ms = (v) => (v instanceof Date ? v.getTime() : new Date(v).getTime())
+
+/** True when a Start pressed at `readyAt` left at least `minPlayable` before the round's ORIGINAL deadline. */
+export function startCounts(readyAt, baseDueAt, minPlayable) {
+  if (!readyAt || !baseDueAt) return false
+  return ms(readyAt) <= ms(baseDueAt) - minPlayable
+}
+
+/** True while a new game may still be created for a pairing (at `now`, before the ORIGINAL deadline less the minimum). */
+export function mayStartNewGame(now, baseDueAt, minPlayable) {
+  if (!baseDueAt) return false
+  return ms(now) <= ms(baseDueAt) - minPlayable
+}
+
+/**
+ * What a play made at `now` does to the match's deadline. A play inside the last minute adds a minute, once per play,
+ * up to MAX_EXTENSIONS. A play at or after the deadline never extends it (the match is already decided by then).
+ * Returns { dueAt: Date, extensions, extended }.
+ */
+export function extendOnPlay({ dueAt, now, extensions = 0 }) {
+  const due = ms(dueAt)
+  const t = ms(now)
+  const same = { dueAt: new Date(due), extensions, extended: false }
+  if (!Number.isFinite(due) || !Number.isFinite(t) || t >= due) return same
+  if (extensions >= MAX_EXTENSIONS) return same
+  if (due - t > EXTENSION_WINDOW_MS) return same
+  return { dueAt: new Date(due + EXTENSION_MS), extensions: extensions + 1, extended: true }
+}
+
+function bracketTiebreak(m, scoreA, scoreB, resolution = 'DEADLINE') {
+  const wins = { winsA: m.winsA || 0, winsB: m.winsB || 0 }
+  if (scoreA !== scoreB) return { kind: 'RESULT', outcome: scoreA > scoreB ? 'A_WIN' : 'B_WIN', resolution, ...wins }
+  if (m.seedA && m.seedB && m.seedA !== m.seedB) {
+    return { kind: 'RESULT', outcome: m.seedA < m.seedB ? 'A_WIN' : 'B_WIN', resolution, ...wins }
+  }
+  return null
+}
+
+/**
+ * What to do with an async-rules pairing whose (extended) deadline has passed. Pure: the caller supplies the facts.
+ *
+ *   m:   { stage, winsA, winsB, ties, gamesCounted, readyAAt, readyBAt, seedA, seedB }
+ *   ctx: { now, baseDueAt, minPlayable, scoreA, scoreB,
+ *          hasGame,       // a game row exists (active or finished) for this pairing
+ *          blocker,       // 'A' | 'B' | null: the side the game is WAITING ON, set only when the OTHER side has made the move
+ *                         // the current step needs (see ogGtoonMatchCore.pendingStepBlocker); auto-completed steps never count
+ *          deckProblem }  // 'A' | 'B' | 'BOTH' | null: a locked card left a collection so the next game could not be created
+ *
+ * Returns { kind: 'RESULT', outcome: 'A_WIN'|'B_WIN'|'TIE', resolution, winsA, winsB }
+ *      or { kind: 'NEEDS_ADMIN', reason }. wins are the REAL game wins (a walkover shows 2-0 but feeds no tiebreak).
+ *
+ *   1. A player whose deck broke loses.
+ *   2. No game ever started: only one player's Start counted -> that player wins; otherwise nobody showed:
+ *      Swiss draw, bracket better seed.
+ *   3. A game is running and one player is holding it up -> the player who moved wins the whole match.
+ *   4. Nobody is holding it up -> the series leader; level is a Swiss draw / bracket score then seed.
+ */
+export function decideAtDeadlineAsync(m, { now = Date.now(), baseDueAt, minPlayable = MIN_PLAYABLE_CEIL_MS, scoreA = 0, scoreB = 0, hasGame = false, blocker = null, deckProblem = null } = {}) {
+  const isBracket = m.stage === 'BRACKET'
+  const winsA = m.winsA || 0
+  const winsB = m.winsB || 0
+  const result = (outcome, resolution, a = winsA, b = winsB) => ({ kind: 'RESULT', outcome, resolution, winsA: a, winsB: b })
+
+  const noShow = () => {
+    if (!isBracket) return result('TIE', 'DEADLINE', 0, 0)
+    const decided = bracketTiebreak({ ...m, winsA: 0, winsB: 0 }, 0, 0)
+    return decided || { kind: 'NEEDS_ADMIN', reason: 'Nobody played and no seed decides the match' }
+  }
+
+  if (deckProblem === 'A') return result('B_WIN', 'DEADLINE')
+  if (deckProblem === 'B') return result('A_WIN', 'DEADLINE')
+
+  if (!hasGame && !((m.gamesCounted || 0) > 0)) {
+    if (deckProblem === 'BOTH') return noShow()
+    const showedA = startCounts(m.readyAAt, baseDueAt, minPlayable)
+    const showedB = startCounts(m.readyBAt, baseDueAt, minPlayable)
+    if (showedA && !showedB) return result('A_WIN', 'WALKOVER', WINS_NEEDED, 0)
+    if (showedB && !showedA) return result('B_WIN', 'WALKOVER', 0, WINS_NEEDED)
+    return noShow()
+  }
+
+  if (blocker === 'B') return result('A_WIN', 'DEADLINE')
+  if (blocker === 'A') return result('B_WIN', 'DEADLINE')
+
+  if (winsA !== winsB) return result(winsA > winsB ? 'A_WIN' : 'B_WIN', 'DEADLINE')
+  if (!isBracket) return result('TIE', 'DEADLINE')
+  const decided = bracketTiebreak(m, scoreA, scoreB)
+  return decided || { kind: 'NEEDS_ADMIN', reason: 'Level series at the deadline with no tiebreak available' }
 }
