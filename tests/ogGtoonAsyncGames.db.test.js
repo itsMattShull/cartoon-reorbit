@@ -3,7 +3,8 @@
 //
 // Skipped unless OG_TOURNAMENT_TEST_DB is set (a throwaway database already migrated to the current schema):
 //   OG_TOURNAMENT_TEST_DB=postgresql://... REDIS_HOST=127.0.0.1 REDIS_PORT=6379 \
-//     node --test --test-force-exit tests/ogGtoonAsyncGames.db.test.js
+//     node --test --test-concurrency=1 --test-force-exit tests/ogGtoonAsyncGames.db.test.js
+// (--test-concurrency=1 because the DB test files share one GameConfig row and one Redis; --test-force-exit because the queue connections keep the process alive.)
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
@@ -304,6 +305,128 @@ run('deciding a pairing any other way closes its running game', async () => {
   assert.equal(await Live.lockMatchResult(db, p, { outcome: 'A_WIN', resolution: 'ADMIN', winsA: 2, winsB: 0, note: 'test' }), true)
   assert.equal((await db.ogGtoonTournamentGame.findUnique({ where: { id: game.gameId } })).status, 'CLOSED')
   assert.equal(await db.ogGtoonMatch.count({ where: { tournamentMatchId: pairing.id } }), 0, 'a closed game never counts')
+})
+
+/** A fake socket server: records what each socket is sent, no network. */
+function fakeIo() {
+  const sent = []
+  const sockets = new Map()
+  const io = {
+    local: { to: (id) => ({ emit: (ev, p) => sent.push({ to: id, ev, p }) }) },
+    in: () => ({ local: { fetchSockets: async () => [] } })
+  }
+  const mk = (id, uid) => {
+    const handlers = {}
+    const s = {
+      id, data: {}, handlers,
+      on: (ev, fn) => { handlers[ev] = fn },
+      join: () => {}, leave: () => {},
+      emit: (ev, p) => sent.push({ to: id, ev, p })
+    }
+    sockets.set(id, { s, uid })
+    return s
+  }
+  return { io, sent, mk }
+}
+
+run('socket layer: placing is private, reveals are each player\'s own view, closing or dropping never forfeits', async () => {
+  const { pairing, a, b } = await mkAsyncPairing()
+  await G.pressStart({ tournamentMatchId: pairing.id, userId: a.id })
+  const { game } = await G.pressStart({ tournamentMatchId: pairing.id, userId: b.id })
+  const { registerOgGtoonsAsync } = await import('../server/utils/ogGtoonsAsyncSocket.js')
+
+  const { io, sent, mk } = fakeIo()
+  const EV = (n) => `oggtoons:${n}`
+  const connect = (user, id) => {
+    const s = mk(id, user.id)
+    registerOgGtoonsAsync(io, s, { resolveSocketUser: async () => ({ id: user.id, username: user.username }), EV, userRoom: (uid) => `oggtoons:user:${uid}` })
+    return s
+  }
+  const sa = connect(a, 'sock-a')
+  const sb = connect(b, 'sock-b')
+  const to = (id, ev) => sent.filter(e => e.to === id && e.ev === EV(ev))
+
+  await sa.handlers[EV('async:open')]({ gameId: game.gameId })
+  await sb.handlers[EV('async:open')]({ gameId: game.gameId })
+  const openA = to('sock-a', 'async:view')[0].p
+  const openB = to('sock-b', 'async:view')[0].p
+  assert.equal(openA.view.you.username, a.username)
+  assert.deepEqual(openA.unseen, [])
+  assert.equal(to('sock-a', 'async:presence').at(-1).p.opponentOnBoard, true, 'both on the board = live')
+
+  // A places a card: only A hears about it.
+  const hand = openA.view.you.hand
+  sent.length = 0
+  await sa.handlers[EV('async:place')]({ gameId: game.gameId, cardIdx: hand[0].idx, slot: openA.view.roundSlots[0] })
+  assert.equal(to('sock-a', 'async:state').length, 1)
+  assert.equal(to('sock-b', 'async:state').length, 0, 'tentative placing is never shown to the opponent')
+  assert.equal((await db.ogGtoonTournamentGame.findUnique({ where: { id: game.gameId } })).version, 1, 'and never written')
+
+  // Both commit: each is sent the reveal as THEIR view, and nothing about the other side's hand.
+  const commit = async (s, u, v) => {
+    for (const [i, slot] of v.roundSlots.entries()) await s.handlers[EV('async:place')]({ gameId: game.gameId, cardIdx: v.you.hand[i].idx, slot })
+    await s.handlers[EV('async:commit')]({ gameId: game.gameId, round: v.round })
+  }
+  sent.length = 0
+  await commit(sa, a, openA.view)
+  assert.equal(to('sock-a', 'async:reveal').length, 0, 'nothing reveals until both have committed')
+  await commit(sb, b, openB.view)
+  const revA = to('sock-a', 'async:reveal')
+  const revB = to('sock-b', 'async:reveal')
+  assert.equal(revA.length, 1)
+  assert.equal(revB.length, 1)
+  assert.equal(revA[0].p.reveal.seq, 1)
+  assert.equal(revA[0].p.view.you.username, a.username)
+  assert.equal(revB[0].p.view.you.username, b.username)
+  assert.notDeepEqual(revA[0].p.reveal.you, revA[0].p.reveal.opponent)
+  assert.deepEqual(revA[0].p.reveal.you, revB[0].p.reveal.opponent, 'A\'s cards are A\'s `you` and B\'s `opponent`')
+  assert.equal(JSON.stringify(revA[0].p).includes('views'), false, 'the other seat\'s snapshot is never sent')
+
+  // Closing the board and dropping the connection are not forfeits.
+  await sa.handlers[EV('async:close')]({ gameId: game.gameId })
+  sb.handlers.disconnecting?.()
+  const after = await db.ogGtoonTournamentGame.findUnique({ where: { id: game.gameId } })
+  assert.equal(after.status, 'ACTIVE')
+  assert.equal((await reload(pairing.id)).lockedAt, null)
+
+  // The player who was away gets the reveal they missed when they come back.
+  const back = connect(b, 'sock-b2')
+  await back.handlers[EV('async:open')]({ gameId: game.gameId })
+  assert.equal(to('sock-b2', 'async:view')[0].p.unseen.length, 1)
+
+  // A stranger cannot open the game, and a game id that is not theirs is refused rather than guessed.
+  const [stranger] = await mkUsers(1)
+  const ss = connect(stranger, 'sock-x')
+  await ss.handlers[EV('async:open')]({ gameId: game.gameId })
+  assert.equal(to('sock-x', 'async:view').length, 0)
+  assert.ok(sent.some(e => e.to === 'sock-x' && e.ev === EV('error') && e.p.code === 'notYours'))
+})
+
+run('Start through the tournament socket handler: sticky, nobody has to be online, the second Start announces the game', async () => {
+  const { pairing, a, b } = await mkAsyncPairing()
+  const { registerOgGtoonsTournament } = await import('../server/utils/ogGtoonsTournamentSocket.js')
+  const { io, sent, mk } = fakeIo()
+  const EV = (n) => `oggtoons:${n}`
+  let acting = null
+  const s = mk('sock', 'x')
+  registerOgGtoonsTournament(io, s, {
+    auth: async () => acting, startMatch: async () => { throw new Error('the live runtime must not be used') },
+    matchByUser: new Map(), queueByUser: new Map(), removeFromQueue: () => {},
+    userRoom: (uid) => `oggtoons:user:${uid}`, isPracticing: () => false, EV
+  })
+  const press = async (u) => { acting = u; await s.handlers[EV('tournamentReady')]({ tournamentMatchId: pairing.id }) }
+  await press(a)
+  const stateA = sent.filter(e => e.ev === EV('tournamentState') && e.to === `oggtoons:user:${a.id}`).at(-1).p
+  assert.deepEqual([stateA.async, stateA.myReady, stateA.opponentReady, stateA.gameId], [true, true, false, null])
+  // An hour-old Start is still a Start (the older rules let it go stale after 30 minutes).
+  await db.ogGtoonTournamentMatch.update({ where: { id: pairing.id }, data: { readyAAt: new Date(Date.now() - 3 * 3600 * 1000) } })
+  await press(b)
+  const started = sent.filter(e => e.ev === EV('tournamentGameStarted'))
+  assert.equal(started.length, 2, 'both players are told')
+  assert.equal(started[0].p.gameNumber, 1)
+  const stateB = sent.filter(e => e.ev === EV('tournamentState') && e.to === `oggtoons:user:${b.id}`).at(-1).p
+  assert.equal(stateB.gameId, started[0].p.gameId)
+  assert.equal(stateB.myReady && stateB.opponentReady, true)
 })
 
 test.after(async () => {

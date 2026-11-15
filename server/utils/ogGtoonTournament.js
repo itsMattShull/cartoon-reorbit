@@ -1021,7 +1021,8 @@ export async function notifyOpponentReady(db, { tournamentMatchId, readyUserId }
   const me = m.playerAUserId === readyUserId ? m.playerA : m.playerB
   const opp = m.playerAUserId === readyUserId ? m.playerB : m.playerA
   const mine = m.playerAUserId === readyUserId ? m.readyAAt : m.readyBAt
-  if (!isFresh(mine)) return
+  // Under the async rules a Start never expires; the older rules let it go stale after 30 minutes.
+  if (!(m.asyncRules ? mine : isFresh(mine))) return
   await setFlag(flag, 30 * 60)
   await dmUsers(db, [{
     userId: opp.id,
