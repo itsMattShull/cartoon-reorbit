@@ -24,7 +24,8 @@ import { armOgTournamentDeadline } from './queues.js'
 import { decideAndLock, closeTournamentGames, ensureNextGameInTx, lockPairing, restoreMatch, needsToAct } from './ogGtoonTournamentGames.js'
 import { goalCardFor } from './ogGtoonEngine.js'
 import {
-  gameStartedText, yourTurnText, deckProblemText, matchDecidedAwayText, roundOpenAsyncText, reminderAsyncText, gameUrl
+  gameStartedText, yourTurnText, deckProblemText, matchDecidedAwayText, roundOpenAsyncText, reminderAsyncText, gameUrl,
+  roundOpenLiveText, reminderLiveText, opponentReadyText, matchDecidedText, announcementText, tournamentCompleteText
 } from './ogGtoonTournamentMessages.js'
 import { grantCodePacks } from './codePackGrant.js'
 import { hasFlag, setFlag, claimFlag, clearFlag } from './cache.js'
@@ -106,7 +107,6 @@ async function sendRoundOpenDMs(db, tournamentId, roundId) {
   })
   const label = stageLabel(round.stage, round.roundNumber, round.stage === 'BRACKET' ? matches.length : null)
   const link = getOgTournamentUrl(tournament.id)
-  const due = round.dueAt ? `\n• Finish by: ${formatCentral(round.dueAt)}` : ''
   const items = []
   for (const m of matches) {
     const mk = (me, opp) => ({
@@ -114,12 +114,7 @@ async function sendRoundOpenDMs(db, tournamentId, roundId) {
       claimKey: `ogt-open-dm:${m.id}:${me.id}`,
       text: m.asyncRules
         ? roundOpenAsyncText({ tournamentName: tournament.name, label, oppUsername: opp.username || 'your opponent', dueText: round.dueAt ? formatCentral(round.dueAt) : 'the deadline', link })
-        : [
-        `🏆 ${tournament.name} — ${label}`,
-        `You are paired with ${opp.username || 'your opponent'}.`,
-        `• Best of 3 (first to 2 wins). Both of you need to be online to play.${due}`,
-        `• Open your match and press Start next game: ${link}`
-      ].join('\n')
+        : roundOpenLiveText({ tournamentName: tournament.name, label, oppUsername: opp.username || 'your opponent', dueText: round.dueAt ? formatCentral(round.dueAt) : null, link })
     })
     items.push(mk(m.playerA, m.playerB), mk(m.playerB, m.playerA))
   }
@@ -141,7 +136,10 @@ async function sendMatchDecidedDMs(db, match, tournament, reason) {
       : `${name.get(match.winnerUserId) || 'The winner'} advances with the win.`
   const items = [match.playerAUserId, match.playerBUserId].map(userId => ({
     userId,
-    text: `🏆 ${tournament.name}: your match ${name.get(match.playerAUserId)} vs ${name.get(match.playerBUserId)} was decided (${reason}). ${result}\n${getOgTournamentUrl(tournament.id)}`
+    text: matchDecidedText({
+      tournamentName: tournament.name, playerA: name.get(match.playerAUserId), playerB: name.get(match.playerBUserId),
+      reason, result, link: getOgTournamentUrl(tournament.id)
+    })
   }))
   await dmUsers(db, items)
 }
@@ -153,13 +151,11 @@ export async function sendOgTournamentAnnouncement(db, tournament) {
   const botToken = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || process.env.BOT_TOKEN
   if (!channelId || !botToken) return false
   const optInCount = await db.ogGtoonTournamentOptIn.count({ where: { tournamentId: tournament.id, isActive: true } })
-  const lines = [
-    `🏆 ${tournament.name} — OG gToons Tournament`,
-    `• Best of 3 · opt-in: ${formatCentral(tournament.optInStartAt)} → ${formatCentral(tournament.optInEndAt)} (${CENTRAL_TZ})`,
-    `• Current opt-ins: ${optInCount}`,
-    `• Lock in a deck and join: ${getOgTournamentUrl(tournament.id)}`
-  ]
-  return sendGuildChannelMessageById(channelId, lines.join('\n'), botToken)
+  const content = announcementText({
+    tournamentName: tournament.name, optInStart: formatCentral(tournament.optInStartAt), optInEnd: formatCentral(tournament.optInEndAt),
+    tz: CENTRAL_TZ, optInCount, link: getOgTournamentUrl(tournament.id)
+  })
+  return sendGuildChannelMessageById(channelId, content, botToken)
 }
 
 export async function processAnnouncements(db, now = new Date()) {
@@ -569,10 +565,17 @@ async function announceComplete(db, tournamentId) {
   const botToken = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || process.env.BOT_TOKEN
   if (!channelId || !botToken) return
   const top = Array.isArray(t.finalPlacementsJson) ? t.finalPlacementsJson.slice(0, 3) : []
-  const lines = [`🏆 ${t.name} is complete!`, `• Winner: ${t.winner?.username || 'TBD'}`]
-  if (top.length > 1) lines.push(`• Podium: ${top.map(p => `${p.place}. ${p.username}`).join(' · ')}`)
-  lines.push(`• Results: ${getOgTournamentUrl(t.id)}`)
-  await sendGuildChannelMessageById(channelId, lines.join('\n'), botToken)
+  // Tag the podium finishers: look up their Discord ids (anyone without one, or who left the server, is just named).
+  const users = top.length
+    ? await db.user.findMany({ where: { id: { in: top.map(p => p.userId).filter(Boolean) } }, select: { id: true, discordId: true, inGuild: true } })
+    : []
+  const userById = new Map(users.map(u => [u.id, u]))
+  const podium = top.map(p => {
+    const u = userById.get(p.userId)
+    return { place: p.place, username: p.username, discordId: u?.discordId && u.inGuild !== false ? u.discordId : null }
+  })
+  const { content, mentionIds } = tournamentCompleteText({ tournamentName: t.name, podium, link: getOgTournamentUrl(t.id) })
+  await sendGuildChannelMessageById(channelId, content, botToken, mentionIds)
 }
 
 /** Worker entry point: score the pairing that just finished (if given), advance, then notify. */
@@ -720,8 +723,7 @@ export async function processReminders(db, now = new Date()) {
         userId: me.id,
         text: m.asyncRules
           ? reminderAsyncText({ tournamentName: m.tournament.name, oppUsername: opp.username, label, dueText: formatCentral(m.dueAt), link: getOgTournamentUrl(m.tournament.id) })
-          : `⏰ ${m.tournament.name}: your match vs ${opp.username} is due in about ${label} (${formatCentral(m.dueAt)}). ` +
-            `Both of you need to be online to play. ${getOgTournamentUrl(m.tournament.id)}`
+          : reminderLiveText({ tournamentName: m.tournament.name, oppUsername: opp.username, label, dueText: formatCentral(m.dueAt), link: getOgTournamentUrl(m.tournament.id) })
       }))
       await dmUsers(db, items).catch(() => {})
     }
@@ -1111,11 +1113,7 @@ export async function notifyOpponentReady(db, { tournamentMatchId, readyUserId }
   await setFlag(flag, 30 * 60)
   await dmUsers(db, [{
     userId: opp.id,
-    text: m.asyncRules
-      ? `🎮 ${me.username} pressed Start on your ${m.tournament.name} match. Press Start too and the game is created straight away — you don't have to play it right now, ` +
-        `just make your moves before the deadline. If you never press Start, they win when time runs out: ${getOgTournamentUrl(m.tournament.id)}`
-      : `🎮 ${me.username} is ready to play your ${m.tournament.name} match and is waiting for you. ` +
-        `Open your match and press Start next game: ${getOgTournamentUrl(m.tournament.id)}`
+    text: opponentReadyText({ tournamentName: m.tournament.name, oppUsername: me.username, async: !!m.asyncRules, link: getOgTournamentUrl(m.tournament.id) })
   }])
 }
 

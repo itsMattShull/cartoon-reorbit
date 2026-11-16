@@ -1,7 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  decidedByLine, gameStartedText, yourTurnText, deckProblemText, matchDecidedAwayText, roundOpenAsyncText, reminderAsyncText
+  decidedByLine, gameStartedText, yourTurnText, deckProblemText, matchDecidedAwayText, roundOpenAsyncText, reminderAsyncText,
+  roundOpenLiveText, reminderLiveText, opponentReadyText, matchDecidedText, announcementText, tournamentCompleteText
 } from '../server/utils/ogGtoonTournamentMessages.js'
 
 const link = 'https://www.cartoonreorbit.com/newsite/gtoons-classic/game-1'
@@ -64,4 +65,67 @@ test('a game link points at the board page, which exists', async () => {
   const { existsSync } = await import('node:fs')
   assert.equal(gameUrl('https://x.test', 'abc'), 'https://x.test/newsite/gtoons-classic/abc')
   assert.ok(existsSync(new URL('../pages/newsite/gtoons-classic/[id].vue', import.meta.url)), 'the page the link points at must exist')
+})
+
+test('the DMs are laid out as a header, bullet points and the link on its own line', () => {
+  const t = gameStartedText(base)
+  const lines = t.split('\n')
+  assert.match(lines[0], /^🎮 \*\*First gtoon Tournament! — Swiss Round 3\*\*$/)
+  assert.ok(lines.includes(''), 'blank lines separate the sections')
+  assert.ok(lines.filter(l => l.startsWith('• ')).length >= 5, 'the details are bullets')
+  assert.match(lines.at(-1), /^👉 Open the game: https:/, 'the link is the last line, on its own')
+  for (const text of [
+    yourTurnText({ tournamentName: 'Cup', gameNumber: 1, oppUsername: 'Bo', link, dueText: 'x' }),
+    roundOpenAsyncText({ tournamentName: 'Cup', label: 'R1', oppUsername: 'Bo', dueText: 'x', link }),
+    roundOpenLiveText({ tournamentName: 'Cup', label: 'R1', oppUsername: 'Bo', dueText: 'x', link }),
+    reminderAsyncText({ tournamentName: 'Cup', oppUsername: 'Bo', label: '4 hours', dueText: 'x', link }),
+    reminderLiveText({ tournamentName: 'Cup', oppUsername: 'Bo', label: '4 hours', dueText: 'x', link }),
+    opponentReadyText({ tournamentName: 'Cup', oppUsername: 'Bo', async: true, link }),
+    opponentReadyText({ tournamentName: 'Cup', oppUsername: 'Bo', async: false, link }),
+    matchDecidedText({ tournamentName: 'Cup', playerA: 'Ann', playerB: 'Bo', reason: 'deadline passed', result: 'Ann advances with the win.', link }),
+    matchDecidedAwayText({ tournamentName: 'Cup', won: true, oppUsername: 'Bo', link })
+  ]) {
+    assert.ok(text.includes('\n\n'), 'has a blank line')
+    assert.ok(text.includes(link))
+    assert.ok(text.split('\n').some(l => l.startsWith('• ') || l.startsWith('👉')), 'has bullets or a link line')
+  }
+})
+
+test('the older-rules texts keep saying both players must be online; the live pairing text omits a missing deadline', () => {
+  assert.match(roundOpenLiveText({ tournamentName: 'Cup', label: 'R1', oppUsername: 'Bo', dueText: 'Fri', link }), /Both of you need to be online[\s\S]*Finish by:\*\* Fri/)
+  assert.doesNotMatch(roundOpenLiveText({ tournamentName: 'Cup', label: 'R1', oppUsername: 'Bo', dueText: null, link }), /Finish by/)
+  assert.match(reminderLiveText({ tournamentName: 'Cup', oppUsername: 'Bo', label: '4 hours', dueText: 'Fri', link }), /Both of you need to be online/)
+  assert.match(opponentReadyText({ tournamentName: 'Cup', oppUsername: 'Bo', async: true, link }), /they win when time runs out/)
+  assert.match(opponentReadyText({ tournamentName: 'Cup', oppUsername: 'Bo', async: false, link }), /waiting for you/)
+})
+
+test('the channel announcement lists the dates and opt-ins as bullets', () => {
+  const t = announcementText({ tournamentName: 'Cup', optInStart: 'Nov 1', optInEnd: 'Nov 5', tz: 'CST', optInCount: 7, link })
+  for (const s of ['**Opt-in opens:** Nov 1', '**Opt-in closes:** Nov 5 (CST)', '**Current opt-ins:** 7', link]) assert.ok(t.includes(s), s)
+})
+
+test('the tournament-complete post tags the podium finishers and returns exactly those ids to ping', () => {
+  const r = tournamentCompleteText({
+    tournamentName: 'Cup', link,
+    podium: [{ place: 3, username: 'Cy', discordId: '333' }, { place: 1, username: 'Ann', discordId: '111' }, { place: 2, username: 'Bo', discordId: '222' }]
+  })
+  assert.deepEqual(r.mentionIds.sort(), ['111', '222', '333'])
+  assert.match(r.content, /🏆 \*\*Cup is complete!\*\*/)
+  assert.match(r.content, /champion <@111>/)
+  const podium = r.content.split('\n').filter(l => l.startsWith('• '))
+  assert.deepEqual(podium, ['• 🥇 **1st:** <@111>', '• 🥈 **2nd:** <@222>', '• 🥉 **3rd:** <@333>'], 'ordered by place whatever order they came in')
+  assert.ok(r.content.includes(link))
+})
+
+test('a podium finisher with no Discord account is named, not tagged, and a one-player field still posts', () => {
+  const r = tournamentCompleteText({
+    tournamentName: 'Cup', link,
+    podium: [{ place: 1, username: 'Ann', discordId: '111' }, { place: 2, username: 'Bo', discordId: null }]
+  })
+  assert.deepEqual(r.mentionIds, ['111'])
+  assert.match(r.content, /🥈 \*\*2nd:\*\* \*\*Bo\*\*/)
+  const solo = tournamentCompleteText({ tournamentName: 'Cup', link, podium: [{ place: 1, username: 'Ann', discordId: '111' }] })
+  assert.match(solo.content, /champion <@111>/)
+  assert.doesNotMatch(solo.content, /Final podium/)
+  assert.deepEqual(tournamentCompleteText({ tournamentName: 'Cup', link, podium: [] }).mentionIds, [])
 })
