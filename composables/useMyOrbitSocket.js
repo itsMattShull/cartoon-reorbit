@@ -10,6 +10,10 @@ const roomState = ref(null) // latest myorbit:state/participantJoined/participan
 const lastError = ref('')
 const isConnected = ref(false)
 const currentRoomId = ref(null)
+// Live-only (see MyOrbitModerationLog's own schema comment on why chat is never persisted) -
+// a bounded rolling window of recent messages, not a full history. Cleared on room change.
+const MAX_CHAT_MESSAGES = 200
+const chatMessages = ref([])
 let socket
 
 export function useMyOrbitSocket() {
@@ -32,8 +36,24 @@ export function useMyOrbitSocket() {
     // must be merged onto the existing roomState rather than replacing it wholesale (that would
     // wipe out the already-loaded tiles/furniture layout on every single move tick).
     socket.on('myorbit:state', (state) => {
+      const isNewRoom = state?.id && state.id !== currentRoomId.value
       roomState.value = state
       if (state?.id) currentRoomId.value = state.id
+      if (isNewRoom) chatMessages.value = [] // switching rooms starts a fresh chat window
+    })
+    socket.on('myorbit:chatMessage', (message) => {
+      chatMessages.value = [...chatMessages.value.slice(-(MAX_CHAT_MESSAGES - 1)), message]
+    })
+    socket.on('myorbit:messageDeleted', ({ messageId }) => {
+      chatMessages.value = chatMessages.value.filter(m => m.id !== messageId)
+    })
+    // Targeted at this user specifically (an admin ban's live kick) - distinct from myorbit:error:
+    // the room membership is already gone server-side, so local state must be cleared too.
+    socket.on('myorbit:kicked', (payload) => {
+      lastError.value = payload?.reason || 'You were removed from MyOrbit by an admin.'
+      roomState.value = null
+      currentRoomId.value = null
+      chatMessages.value = []
     })
     const mergeParticipants = (payload) => {
       if (!roomState.value) return
@@ -66,6 +86,7 @@ export function useMyOrbitSocket() {
     socket.emit('myorbit:leave')
     roomState.value = null
     currentRoomId.value = null
+    chatMessages.value = []
   }
   function getState(roomId) {
     currentRoomId.value = roomId
@@ -75,6 +96,13 @@ export function useMyOrbitSocket() {
     lastError.value = ''
     socket.emit('myorbit:move', { x, y })
   }
+  function sendChat(message) {
+    lastError.value = ''
+    socket.emit('myorbit:chat', { message })
+  }
 
-  return { socket, roomState, lastError, isConnected, currentRoomId, joinRoom, leaveRoom, getState, moveTo }
+  return {
+    socket, roomState, lastError, isConnected, currentRoomId, chatMessages,
+    joinRoom, leaveRoom, getState, moveTo, sendChat
+  }
 }

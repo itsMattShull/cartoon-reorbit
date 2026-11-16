@@ -33,8 +33,10 @@
 // consider walkable anymore; findPath's own "the start cell itself must be walkable" check
 // already turns that into a clean "can't move" rather than a crash — nobody gets kicked, they
 // just can't path out of a now-invalid tile until they rejoin and get placed on a valid one.
+import { randomUUID } from 'crypto'
 import { prisma as db } from '../prisma.js'
 import { buildWalkableSet, findPath, firstWalkableCell } from './myOrbitPathfinding.js'
+import { parseMyOrbitChatMessage, containsBannedWord } from './myOrbitChatFilter.js'
 
 const EV = (name) => `myorbit:${name}`
 const roomChannel = (roomId) => `myorbit:room:${roomId}`
@@ -44,9 +46,23 @@ const STEP_MS = 350 // ms per tile step while walking a path
 // the room roster — same spirit as ogGtoonsSocket.js's RECONNECT_GRACE_MS, just shorter: nothing
 // here is "forfeited" by leaving, so there's no reason to hold the door open as long.
 const RECONNECT_GRACE_MS = 15_000
+const CHAT_RATE_LIMIT_MS = 1200 // minimum gap between one user's own chat messages
 
 const rooms = new Map()      // roomId -> room
 const roomByUser = new Map() // userId -> roomId (which room, if any, this user is currently in)
+
+// Admin-managed banned-word list, cached rather than queried on every single chat message — a
+// banned word added just now taking up to BANNED_WORDS_TTL_MS to actually apply is an acceptable
+// staleness window for a chat filter, and far cheaper than a DB round trip per message.
+const BANNED_WORDS_TTL_MS = 30_000
+let bannedWordsCache = { words: [], loadedAt: 0 }
+
+async function getBannedWords() {
+  if (Date.now() - bannedWordsCache.loadedAt < BANNED_WORDS_TTL_MS) return bannedWordsCache.words
+  const rows = await db.myOrbitBannedWord.findMany({ select: { phrase: true } })
+  bannedWordsCache = { words: rows.map(r => r.phrase), loadedAt: Date.now() }
+  return bannedWordsCache.words
+}
 
 async function loadRoomDefinition(roomId) {
   const room = await db.myOrbitRoom.findUnique({
@@ -130,6 +146,11 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
     if (typeof roomId !== 'string' || !roomId) return socket.emit(EV('error'), { message: 'A roomId is required' })
 
+    // MyOrbit-scoped ban (User.myOrbitBannedAt), deliberately separate from the site-wide ban
+    // checked by resolveSocketUser itself — see that field's own schema comment.
+    const moderation = await db.user.findUnique({ where: { id: me.id }, select: { myOrbitBannedAt: true } })
+    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+
     // Room-hopping: leave whatever room this user was previously in first. Never double-membership.
     const previousRoomId = roomByUser.get(me.id)
     if (previousRoomId && previousRoomId !== roomId) {
@@ -191,7 +212,7 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
         userCtoonId, ctoonAssetPath: userCtoon.ctoon.assetPath,
         x: spawn.x, y: spawn.y,
         path: null, pathIndex: 0, moveTimer: null,
-        sockets: new Set([socket.id]), graceTimer: null
+        sockets: new Set([socket.id]), graceTimer: null, lastMessageAt: null
       }
       room.participants.set(me.id, participant)
 
@@ -269,6 +290,127 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     socket.leave(roomChannel(roomId))
     removeParticipant(io, roomId, me.id)
   }))
+
+  // Live-only chat (never persisted — see MyOrbitModerationLog's own schema comment on why
+  // deleting one still gets audited even though the message itself is never otherwise stored).
+  // Identity always comes from resolveSocketUser, never the payload. Checked in this order: must
+  // actually be in a room, must not be banned/muted (MyOrbit-scoped, separate from the site-wide
+  // ban resolveSocketUser itself already rejects), must not be rate-limited, must parse (non-
+  // empty, within length), must not contain an admin-banned phrase.
+  socket.on(EV('chat'), safe(socket, async ({ message } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return
+    const roomId = roomByUser.get(me.id)
+    const room = roomId ? rooms.get(roomId) : null
+    const participant = room?.participants.get(me.id)
+    if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
+
+    const moderation = await db.user.findUnique({
+      where: { id: me.id },
+      select: { myOrbitBannedAt: true, myOrbitMutedUntil: true }
+    })
+    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
+      return socket.emit(EV('error'), { message: 'You are muted' })
+    }
+
+    const now = Date.now()
+    if (participant.lastMessageAt && now - participant.lastMessageAt < CHAT_RATE_LIMIT_MS) {
+      return socket.emit(EV('error'), { message: 'Slow down a little' })
+    }
+
+    const parsed = parseMyOrbitChatMessage(message)
+    if (!parsed.ok) {
+      return socket.emit(EV('error'), { message: parsed.reason === 'too_long' ? 'That message is too long' : 'Say something first' })
+    }
+
+    const bannedWords = await getBannedWords()
+    if (containsBannedWord(parsed.message, bannedWords)) {
+      return socket.emit(EV('error'), { message: 'That message was blocked' })
+    }
+
+    participant.lastMessageAt = now
+    // roomId is included so a listener that can be subscribed to more than one room's channel
+    // at once (AdminMyOrbitModeration.vue's spectate view) can tell which room a message
+    // belongs to — an ordinary player is only ever in one room's channel, so this is a no-op
+    // for them.
+    const chatMessage = { id: randomUUID(), roomId, userId: me.id, username: me.username, message: parsed.message, createdAt: now }
+    io.local.to(roomChannel(roomId)).emit(EV('chatMessage'), chatMessage)
+  }))
+
+  // Read-only admin "spectate" — joins the room's broadcast channel (live chat, movement) WITHOUT
+  // becoming a walking participant: never added to room.participants, so it never counts against
+  // capacity or appears in anyone else's roster. This is how AdminMyOrbitModeration.vue actually
+  // sees message ids/senders to act on, since chat is never otherwise persisted anywhere to query.
+  socket.on(EV('adminSpectate'), safe(socket, async ({ roomId } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return
+    if (typeof roomId !== 'string' || !roomId) return
+    // Re-checked fresh here, not from resolveSocketUser's cached {id, username} shape, which
+    // carries neither isAdmin nor the sub-admin permission scope. A sub-admin only gets this if
+    // granted the myOrbitModeration key (utils/adminPermissions.js — this file is plain node so
+    // it can't import that module) — same requireAdminUser pattern as
+    // cmoonRaidPreviewSocket.js:105, since without it a restricted sub-admin missing that grant
+    // could still spectate every room's live chat.
+    const admin = await db.user.findUnique({
+      where: { id: me.id },
+      select: { isAdmin: true, banned: true, active: true, adminRestricted: true, adminPermissions: true }
+    })
+    if (!admin?.isAdmin || admin.banned || admin.active === false) {
+      return socket.emit(EV('error'), { message: 'Admins only' })
+    }
+    if (admin.adminRestricted && !(admin.adminPermissions || []).includes('myOrbitModeration')) {
+      return socket.emit(EV('error'), { message: 'Admins only' })
+    }
+    // Leave whatever room this socket was previously spectating — otherwise switching rooms in
+    // AdminMyOrbitModeration.vue leaves it subscribed to BOTH channels, mixing two rooms' chat
+    // into one feed. Never leaves socket.data.myOrbitRoomId though: that's the room this same
+    // connection is actually PLAYING in (if the admin also has a cToon avatar out walking around),
+    // which this read-only spectate join must never interfere with.
+    const previousSpectateRoomId = socket.data.myOrbitSpectateRoomId
+    if (previousSpectateRoomId && previousSpectateRoomId !== roomId && previousSpectateRoomId !== socket.data.myOrbitRoomId) {
+      socket.leave(roomChannel(previousSpectateRoomId))
+    }
+    socket.data.myOrbitSpectateRoomId = roomId
+    socket.join(roomChannel(roomId))
+  }))
+
+  // ── Bridge-only admin actions ──────────────────────────────────────────────────────────────
+  // Triggered from server/api/admin/myorbit/*.post.js via server/utils/socketBridge.js, never by
+  // an ordinary browser socket — same `if (!socket.data?.isBridge) return` gate socket-server.js's
+  // own 'new-bid' handler already uses, so a regular player can never spoof a kick/retraction.
+  // Neither handler has an `await`, so neither is wrapped with `safe` (that helper catches a
+  // rejected promise) — a plain try/catch instead, same reasoning as the `disconnecting` handler
+  // below: an uncaught throw here would otherwise crash this single-instance process for every
+  // feature, not just MyOrbit.
+  socket.on(EV('adminKick'), ({ userId, reason } = {}) => {
+    try {
+      if (!socket.data?.isBridge) return
+      if (typeof userId !== 'string' || !userId) return
+      const roomId = roomByUser.get(userId)
+      if (!roomId) return
+      io.local.to(`user:${userId}`).emit(EV('kicked'), { reason: reason || 'Removed by an admin' })
+      removeParticipant(io, roomId, userId)
+      // Without this, a kicked user's still-open tab stays subscribed to the room's broadcast
+      // channel (the `kicked` emit above tells the CLIENT to clear its own state, but does
+      // nothing server-side) and keeps silently receiving its chat/movement events forever —
+      // same socketsLeave call cmoonPvpSocket.js:485 and cmoonRaidSocket.js:830 make for the
+      // identical situation.
+      io.in(`user:${userId}`).socketsLeave(roomChannel(roomId))
+    } catch (err) {
+      console.error('[myOrbit] adminKick error:', err?.message || err)
+    }
+  })
+
+  socket.on(EV('adminDeleteMessage'), ({ roomId, messageId } = {}) => {
+    try {
+      if (!socket.data?.isBridge) return
+      if (typeof roomId !== 'string' || !roomId || typeof messageId !== 'string' || !messageId) return
+      io.local.to(roomChannel(roomId)).emit(EV('messageDeleted'), { messageId })
+    } catch (err) {
+      console.error('[myOrbit] adminDeleteMessage error:', err?.message || err)
+    }
+  })
 
   // Not wrapped with `safe` (that helper catches a rejected PROMISE; this listener has no
   // `await` at all) — wrapped in a plain try/catch instead, same reasoning as `safe` itself: an
