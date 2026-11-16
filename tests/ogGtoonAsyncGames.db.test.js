@@ -644,7 +644,7 @@ run('DM: both players get the game link, their goal cards and how it is decided,
       assert.ok(text, `${u.username} was messaged`)
       assert.ok(text.includes(`/newsite/gtoons-classic/${game.gameId}`), 'the link goes straight to this game')
       assert.match(text, /Game 1 is ready/)
-      assert.match(text, /Your goal: .*\(\w+\)/)
+      assert.match(text, /Your goal:\*\* .*\(\w+\)/)
       assert.match(text, /color(s)? revealed|No colors revealed/)
       assert.match(text, /you don't need to be online at the same time/i)
       assert.doesNotMatch(text, /Both of you need to be online/)
@@ -695,7 +695,7 @@ run('DM: a deck problem tells the offender what it costs and the other player wh
   await G.pressStart({ tournamentMatchId: pairing.id, userId: b.id })
   await withDiscord(async ({ dms }) => {
     await T.sendDeckProblemDMs(db, pairing.id)
-    assert.match(textsTo(dms, a)[0], /a card in your locked deck is no longer in your collection/)
+    assert.match(textsTo(dms, a)[0], /a card in your locked deck is no longer in your collection/i)
     assert.match(textsTo(dms, a)[0], /you lose the match/)
     assert.match(textsTo(dms, b)[0], new RegExp(`${a.username} has a problem`))
     await T.sendDeckProblemDMs(db, pairing.id)
