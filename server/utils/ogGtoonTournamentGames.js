@@ -193,8 +193,12 @@ export function overlayTentative(match, idx, placements) {
 
 /** The database's clock, read NOW (clock_timestamp, not now(): now() is frozen at the start of the transaction). */
 export async function dbNow(tx) {
-  const rows = await tx.$queryRaw`SELECT clock_timestamp() AS now`
-  return new Date(rows[0].now)
+  // Ask for the UTC wall-clock time as a plain `timestamp` (the same shape as every DateTime column), so the result is the true
+  // instant whatever time zone the database session is set to, instead of relying on how a bare timestamptz is decoded.
+  const rows = await tx.$queryRaw`SELECT (clock_timestamp() AT TIME ZONE 'UTC') AS now`
+  const v = rows[0].now
+  // A `timestamp` may come back as a Date (read as UTC) or an ISO string without an offset; treat both as UTC.
+  return v instanceof Date ? v : new Date(/[zZ]|[+-]\d\d:?\d\d$/.test(String(v)) ? v : `${v}Z`)
 }
 
 /** The row lock every change to a pairing starts with. */
