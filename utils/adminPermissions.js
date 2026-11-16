@@ -15,10 +15,10 @@
 export const ADMIN_PERMISSION_KEYS = [
   'analytics', 'collectionAnalytics', 'setAnalytics', 'packAnalytics', 'cMoonEnemyAnalytics', 'checkUserMints', 'retention',
   'manageUsers', 'manageUserHp', 'manageCollection', 'cheatFinder', 'checkCheating', 'cheatingTool',
-  'suspiciousActivity', 'deviceFingerprints', 'vpn-queue', 'initiateTrade',
+  'suspiciousActivity', 'deviceFingerprints', 'vpn-queue', 'initiateTrade', 'myOrbitModeration',
   'ctoons', 'ctoonsBulkUpload', 'submittedCtoons', 'ctoonSuggestions', 'starterSets', 'packs',
   'backgrounds', 'czoneSearch', 'czoneContest', 'homepage', 'announcements', 'ads', 'tutorial',
-  'certificate', 'encyclopedia', 'siteTheme',
+  'certificate', 'encyclopedia', 'siteTheme', 'myOrbitTiles', 'myOrbitFurniture', 'myOrbitRooms',
   'manageSales', 'codes', 'auctions', 'dissolveQueue',
   'games', 'cMoon', 'cMoonJoinEffects', 'czoneEffects', 'cmoonChangeRequests', 'manageNavigation',
   'cMoonEnemies', 'cMoonEnemyMaps', 'cMoonPvp', 'cMoonBattleUpgrades', 'cMoonRiddles', 'cMoonHunts', 'lotto', 'clashTournaments', 'ogGtoonTournaments',
@@ -170,6 +170,12 @@ export const ADMIN_API_SEGMENT_PERMS = {
   'lotto-logs': ['lottoLogs'],
   'lotto-logs-summary': ['lottoLogs'],
   'lotto-settings': ['lotto'],
+  myorbit: ['myOrbitModeration'],
+  'myorbit-banned-words': ['myOrbitModeration'],
+  'myorbit-furniture': ['myOrbitFurniture'],
+  'myorbit-rooms': ['myOrbitRooms'],
+  'myorbit-settings': ['myOrbitRooms'],
+  'myorbit-tiles': ['myOrbitTiles'],
   'net-points-issues': ['analytics'],
   official: ['manageUsers', 'initiateTrade'],
   'official-collection': ['initiateTrade'],
@@ -354,7 +360,7 @@ export function adminScopeDenial (scope, rawPath, method = 'GET') {
 // list (prisma/migrations/20261018130000_sub_admin_permissions).
 export const STANDARD_SUB_ADMIN_WITHHELD = [
   'manageUsers', 'manageUserHp', 'initiateTrade', 'production', 'cheatingTool', 'checkCheating', 'codes',
-  'auctions', 'dissolveQueue', 'globalSettings'
+  'auctions', 'dissolveQueue', 'globalSettings', 'myOrbitModeration'
 ]
 
 export const ADMIN_PERMISSION_PRESETS = [
@@ -367,14 +373,14 @@ export const ADMIN_PERMISSION_PRESETS = [
     id: 'moderator',
     label: 'Moderator',
     perms: ['manageUsers', 'manageCollection', 'cheatFinder', 'suspiciousActivity', 'vpn-queue',
-      'tradeLogs', 'auctionLogs', 'ctoonOwnerLogs', 'pointLogs']
+      'tradeLogs', 'auctionLogs', 'ctoonOwnerLogs', 'pointLogs', 'myOrbitModeration']
   },
   {
     id: 'content',
     label: 'Content manager',
     perms: ['analytics', 'ctoons', 'ctoonsBulkUpload', 'submittedCtoons', 'ctoonSuggestions', 'starterSets',
       'packs', 'backgrounds', 'czoneSearch', 'czoneContest', 'homepage', 'announcements', 'ads', 'tutorial',
-      'certificate', 'encyclopedia', 'siteTheme']
+      'certificate', 'encyclopedia', 'siteTheme', 'myOrbitTiles', 'myOrbitFurniture', 'myOrbitRooms']
   },
   {
     id: 'events',
