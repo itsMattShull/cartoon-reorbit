@@ -1,5 +1,7 @@
 // utils/ogGtoonDeckFilter.js — the Manage Deck tab's gToon search/filter, shared by the sidebar panel
 // (components/newsite/OgGtoonDeckSidebar.vue) and the card grid (components/oggtoons/OgGtoonDecks.vue).
+import { GTOON_COLOR_ORDER } from './gtoonCardStyle.js'
+
 export const OG_CARD_TYPES = ['ANIMAL', 'FEMALE', 'HERO', 'MALE', 'MONSTER', 'PLACE', 'PROP', 'VEHICLE', 'VILLAIN']
 
 export const emptyDeckFilter = () => ({
@@ -49,4 +51,33 @@ export function sharedCharacters(card, slotCards) {
     for (const c of other.characters || []) if (mine.has(String(c).toLowerCase())) out.add(c)
   }
   return [...out]
+}
+
+/**
+ * One entry per distinct gToon. /api/user/ctoons returns a row per COPY owned, but a deck is 12 different gToons
+ * (the server rejects repeats and addCard refuses a second copy), so extra copies only bloat the grid. The first
+ * copy stands for the card and `ownedCount` says how many the player has.
+ */
+export function dedupeByCtoon(cards) {
+  const byCtoon = new Map()
+  for (const c of cards || []) {
+    const seen = byCtoon.get(c.ctoonId)
+    if (seen) seen.ownedCount += 1
+    else byCtoon.set(c.ctoonId, { ...c, ownedCount: 1 })
+  }
+  return [...byCtoon.values()]
+}
+
+const colorRank = (color) => {
+  const i = GTOON_COLOR_ORDER.indexOf(String(color || '').toUpperCase())
+  return i === -1 ? GTOON_COLOR_ORDER.length : i
+}
+
+/** Grid order: by colour (GTOON_COLOR_ORDER), then by the number on the card (low to high), then by name. Returns a new array. */
+export function sortDeckCards(cards) {
+  return [...cards].sort((a, b) =>
+    colorRank(a.gtoonColor) - colorRank(b.gtoonColor)
+    || (Number(a.gtoonValue) || 0) - (Number(b.gtoonValue) || 0)
+    || String(a.name || '').localeCompare(String(b.name || ''), undefined, { sensitivity: 'base' })
+  )
 }
