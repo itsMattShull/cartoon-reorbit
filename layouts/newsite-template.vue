@@ -343,6 +343,7 @@ html.newsite-active [role="button"]:not([aria-disabled="true"]) {
   <FullscreenEffectHost />
   <CMoonRewardModal />
   <CMoonBattlePopupHost />
+  <MyOrbitWindow v-if="!isAdminRoute" />
 </template>
 
 <script setup>

@@ -37,6 +37,7 @@ import { randomUUID } from 'crypto'
 import { prisma as db } from '../prisma.js'
 import { buildWalkableSet, findPath, firstWalkableCell } from './myOrbitPathfinding.js'
 import { parseMyOrbitChatMessage, containsBannedWord } from './myOrbitChatFilter.js'
+import { getGlobalConfig } from './cmoon.js'
 
 const EV = (name) => `myorbit:${name}`
 const roomChannel = (roomId) => `myorbit:room:${roomId}`
@@ -145,6 +146,12 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     const me = await resolveSocketUser(socket)
     if (!me) return socket.emit(EV('error'), { message: 'Not authenticated' })
     if (typeof roomId !== 'string' || !roomId) return socket.emit(EV('error'), { message: 'A roomId is required' })
+
+    // Master on/off switch (GlobalGameConfig.myOrbitEnabled) — same gate shape as
+    // cmoonPvpSocket.js's own 'start' handler. Only blocks a NEW join; someone already standing
+    // in a room when an admin flips this off is left alone rather than kicked.
+    const config = await getGlobalConfig()
+    if (!config?.myOrbitEnabled) return socket.emit(EV('error'), { message: 'MyOrbit is currently disabled' })
 
     // MyOrbit-scoped ban (User.myOrbitBannedAt), deliberately separate from the site-wide ban
     // checked by resolveSocketUser itself — see that field's own schema comment.

@@ -13,6 +13,16 @@
 
       <p v-if="loadError" class="text-red-600">{{ loadError }}</p>
 
+      <!-- ── Master on/off switch ──────────────────────────────────── -->
+      <div class="bg-white border rounded p-3">
+        <label class="flex items-center gap-2 cursor-pointer">
+          <input type="checkbox" :checked="myOrbitEnabled" :disabled="savingEnabled" @change="toggleEnabled($event.target.checked)" />
+          <span class="font-semibold text-sm">MyOrbit is {{ myOrbitEnabled ? 'enabled' : 'disabled' }} site-wide</span>
+        </label>
+        <p class="text-gray-500 mt-1">Players can't join any room while this is off. Doesn't kick anyone already in one.</p>
+        <p v-if="enabledError" class="text-red-600">{{ enabledError }}</p>
+      </div>
+
       <!-- ── Room list ──────────────────────────────────────────────── -->
       <div class="bg-white border rounded p-3 space-y-2">
         <h2 class="font-semibold text-sm">Rooms</h2>
@@ -184,6 +194,9 @@ import {
 
 const rooms = ref([])
 const loadError = ref('')
+const myOrbitEnabled = ref(false)
+const savingEnabled = ref(false)
+const enabledError = ref('')
 const selectedId = ref(null)
 const form = ref(null)
 const savingMeta = ref(false)
@@ -268,8 +281,22 @@ async function loadRooms() {
   try {
     const res = await $fetch('/api/admin/myorbit-rooms')
     rooms.value = res?.rooms || []
+    myOrbitEnabled.value = !!res?.myOrbitEnabled
   } catch (e) {
     loadError.value = e?.data?.statusMessage || 'Failed to load rooms'
+  }
+}
+
+async function toggleEnabled(next) {
+  enabledError.value = ''
+  savingEnabled.value = true
+  try {
+    const res = await $fetch('/api/admin/myorbit-settings', { method: 'POST', body: { myOrbitEnabled: next } })
+    myOrbitEnabled.value = !!res?.myOrbitEnabled
+  } catch (e) {
+    enabledError.value = e?.data?.statusMessage || 'Failed to save'
+  } finally {
+    savingEnabled.value = false
   }
 }
 

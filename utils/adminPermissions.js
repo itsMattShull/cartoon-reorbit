@@ -174,6 +174,7 @@ export const ADMIN_API_SEGMENT_PERMS = {
   'myorbit-banned-words': ['myOrbitModeration'],
   'myorbit-furniture': ['myOrbitFurniture'],
   'myorbit-rooms': ['myOrbitRooms'],
+  'myorbit-settings': ['myOrbitRooms'],
   'myorbit-tiles': ['myOrbitTiles'],
   'net-points-issues': ['analytics'],
   official: ['manageUsers', 'initiateTrade'],

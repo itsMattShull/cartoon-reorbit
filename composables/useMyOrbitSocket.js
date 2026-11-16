@@ -62,7 +62,15 @@ export function useMyOrbitSocket() {
     socket.on('myorbit:participantJoined', mergeParticipants)
     socket.on('myorbit:participantLeft', mergeParticipants)
     socket.on('myorbit:participantMoved', mergeParticipants)
-    socket.on('myorbit:error', (payload) => { lastError.value = payload?.message || 'Something went wrong' })
+    // A rejected join (room full, banned, MyOrbit disabled, ...) is the one error that can arrive
+    // while roomState is still null — joinRoom() below sets currentRoomId optimistically before
+    // the server confirms, and nothing else ever clears it on a rejection. Left stuck, it makes
+    // the minimized tab permanently claim "(in a room)" for a room never actually joined, and a
+    // later reconnect's getState would ask the server about membership that was never granted.
+    socket.on('myorbit:error', (payload) => {
+      lastError.value = payload?.message || 'Something went wrong'
+      if (!roomState.value) currentRoomId.value = null
+    })
     socket.on('myorbit:moveRejected', () => { lastError.value = "You can't walk there." })
     // Sent instead of a plain error when a resync (getState) finds this client is no longer a
     // participant — most commonly a dropped connection that outlasted the server's reconnect

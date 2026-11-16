@@ -7,12 +7,16 @@ import { requireAdmin } from '@/server/utils/requireAdmin'
 export default defineEventHandler(async (event) => {
   await requireAdmin(event)
 
-  const rooms = await db.myOrbitRoom.findMany({
-    orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-    include: { _count: { select: { tiles: true, furniture: true } } }
-  })
+  const [rooms, config] = await Promise.all([
+    db.myOrbitRoom.findMany({
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+      include: { _count: { select: { tiles: true, furniture: true } } }
+    }),
+    db.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { myOrbitEnabled: true } })
+  ])
 
   return {
+    myOrbitEnabled: !!config?.myOrbitEnabled,
     rooms: rooms.map(r => ({
       id: r.id,
       name: r.name,
