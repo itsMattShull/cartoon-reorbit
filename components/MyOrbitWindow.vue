@@ -13,10 +13,11 @@
     >🧑‍🚀 MyOrbit{{ currentRoomId ? ' (in a room)' : '' }}</button>
 
     <!-- ── Open window ─────────────────────────────────────────────────────────────────────── -->
-    <div v-else ref="windowEl" class="mow-window" :style="dragStyle">
+    <div v-else ref="windowEl" class="mow-window" :class="{ 'mow-window-maximized': maximized }" :style="dragStyle">
       <div class="mow-header" @pointerdown="onHeaderPointerDown">
         <span class="mow-title">MyOrbit</span>
         <div class="mow-header-btns">
+          <button type="button" class="mow-header-btn" :title="maximized ? 'Restore' : 'Maximize'" @click.stop="maximized = !maximized">{{ maximized ? '❐' : '⛶' }}</button>
           <button type="button" class="mow-header-btn" title="Minimize" @click.stop="uiState = 'minimized'">–</button>
           <button type="button" class="mow-header-btn" title="Close" @click.stop="onClose">✕</button>
         </div>
@@ -268,13 +269,19 @@ function onSendChat() {
   chatInput.value = ''
 }
 
+// ── Maximize (fills the viewport, like maximizing a desktop window) ─────────────────────────
+const maximized = ref(false)
+
 // ── Drag-to-reposition (pointer events cover both mouse and touch) ──────────────────────────
 const windowEl = ref(null)
 const dragPos = ref(null) // null until the user actually drags once — before that, default CSS corner anchor applies
 let dragStartX = 0, dragStartY = 0, dragOriginLeft = 0, dragOriginTop = 0, dragging = false
-const dragStyle = computed(() => dragPos.value ? { left: dragPos.value.x + 'px', top: dragPos.value.y + 'px', right: 'auto', bottom: 'auto' } : {})
+// While maximized, .mow-window-maximized's own CSS (inset: 12px) positions the window — an
+// inline left/top from a PRIOR drag would otherwise win (inline style beats a class rule), so
+// this is skipped entirely whenever maximized, not just left at its last dragged value.
+const dragStyle = computed(() => (!maximized.value && dragPos.value) ? { left: dragPos.value.x + 'px', top: dragPos.value.y + 'px', right: 'auto', bottom: 'auto' } : {})
 function onHeaderPointerDown(e) {
-  if (!windowEl.value) return
+  if (!windowEl.value || maximized.value) return
   dragging = true
   const rect = windowEl.value.getBoundingClientRect()
   dragStartX = e.clientX; dragStartY = e.clientY
@@ -317,7 +324,11 @@ onBeforeUnmount(() => {
   position: fixed;
   left: 12px;
   bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
-  z-index: 45;
+  /* Above the "Daily" onboarding pill (components/Onboarding.vue's own .ob-root, Tailwind
+     z-50) — on a narrow phone this window's own width reaches well into its corner, and at a
+     lower z-index Daily's pill/panel was painting over this window's bottom edge, covering the
+     chat send button entirely. A window the player just opened should win that fight. */
+  z-index: 55;
   width: 360px;
   max-width: calc(100vw - 24px);
   background: #0d2a4d;
@@ -328,6 +339,24 @@ onBeforeUnmount(() => {
   flex-direction: column;
   overflow: hidden;
 }
+/* Maximize — fills the viewport (minus a small margin) like maximizing a desktop window, same
+   on mobile as on PC. Positioning overrides the default corner anchor; dragStyle itself skips
+   emitting an inline left/top while maximized so there's nothing of higher specificity to fight
+   this rule. */
+.mow-window-maximized {
+  left: 12px;
+  right: 12px;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  width: auto;
+  max-width: none;
+  height: auto;
+}
+.mow-window-maximized .mow-header { cursor: default; }
+.mow-window-maximized .mow-body { flex: 1; max-height: none; min-height: 0; }
+.mow-window-maximized .mow-room { flex: 1; min-height: 0; }
+.mow-window-maximized .mow-stage-wrap { flex: 1; max-height: none; min-height: 0; }
+.mow-window-maximized .mow-chat-log { max-height: none; flex: 1; }
 .mow-header {
   display: flex;
   align-items: center;
@@ -350,7 +379,11 @@ onBeforeUnmount(() => {
   font-size: 12px;
   cursor: pointer;
 }
-.mow-body { background: #fff; display: flex; flex-direction: column; max-height: 70vh; }
+/* Explicit dark text color, not just a white background: this layout's global default
+   (layouts/newsite-template.vue's --text-color) is WHITE, meant for its own dark page
+   background — every element below that doesn't set its own color was inheriting that and
+   rendering invisible white-on-white text against this panel's white background. */
+.mow-body { background: #fff; color: #0f172a; display: flex; flex-direction: column; max-height: 70vh; }
 .mow-error { color: #b91c1c; font-size: 11px; padding: 6px 10px 0; margin: 0; }
 .mow-rooms { padding: 10px; overflow-y: auto; }
 .mow-section-label { font-size: 11px; font-weight: 700; color: #334155; margin: 6px 0 4px; }
