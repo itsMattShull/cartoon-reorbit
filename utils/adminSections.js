@@ -85,6 +85,7 @@ export const ADMIN_SECTIONS = [
   // ── Economy ─────────────────────────────────────────────────
   S('manageSales', 'Manage Sales', 'economy', nu('AdminManageSales'), { sensitive: true, desc: 'Changes prices' }),
   S('codes', 'Manage Codes', 'economy', legacy('AdminLegacyCodes'), { sensitive: true, desc: 'Creates points and cToon codes' }),
+  S('handicapRedeems', 'Handicap Redeems', 'economy', nu('AdminHandicapRedeems'), { sensitive: true, desc: 'Silently delays a flagged player\'s cToon-code redemptions' }),
   S('codes/new', 'Create Code', 'economy', legacy('AdminLegacyCodesNew'), { hidden: true, perm: 'codes' }),
   S('codes/edit', 'Edit Code', 'economy', legacy('AdminLegacyCodesEdit'), { hidden: true, perm: 'codes' }),
   S('auctions', 'Auction Only', 'economy', legacy('AdminLegacyAuctions')),

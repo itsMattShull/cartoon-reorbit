@@ -908,6 +908,11 @@ model User {
   suspiciousActivityMute       SuspiciousActivityMute?  @relation("SuspiciousMutedUser")
   suspiciousActivityMutesGiven SuspiciousActivityMute[] @relation("SuspiciousMutedBy")
 
+  // Handicap Redeems relations (see HandicapRedeemer/HandicapRedeemHold's own comments)
+  handicapRedeemerFlag   HandicapRedeemer?    @relation("HandicapRedeemerUser")
+  handicapRedeemsFlagged HandicapRedeemer[]   @relation("HandicapRedeemerFlaggedBy")
+  handicapRedeemHolds    HandicapRedeemHold[]
+
   // TKO Game relations
   tkoRoundsWon  TkoRound[] @relation("TkoRoundWinner")
   tkoRoundsLost TkoRound[] @relation("TkoRoundLoser")
@@ -1098,6 +1103,7 @@ model ClaimCode {
   rewards               ClaimCodeReward[]
   prerequisites         ClaimCodePrerequisite[]
   userBackgroundUnlocks UserBackground[]        @relation("UserBackgroundSourceCode")
+  handicapHolds         HandicapRedeemHold[]
 }
 
 model Claim {
@@ -1110,6 +1116,64 @@ model Claim {
   code ClaimCode @relation(fields: [codeId], references: [id])
 
   @@unique([userId, codeId])
+}
+
+// An admin-flagged player (see server/api/admin/handicap-redeems/) whose code redemptions that
+// award a cToon are silently held — see HandicapRedeemHold below — until enough OTHER players
+// have minted the same code first. The flagged player is never told; the redeem page shows a
+// plain "Redeeming..." state (server/api/redeem.post.js / server/utils/codeRedemption.js) for as
+// long as the hold is open. Deliberately separate from the site-wide ban/suspension system and
+// from SuspiciousActivityMute (which only hides a row from the admin's own monitor UI and
+// changes no player-facing behavior) — this one actively changes what happens when the flagged
+// player redeems a code.
+model HandicapRedeemer {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  reason      String?
+  flaggedById String
+  createdAt   DateTime @default(now())
+
+  user      User @relation("HandicapRedeemerUser", fields: [userId], references: [id], onDelete: Cascade)
+  flaggedBy User @relation("HandicapRedeemerFlaggedBy", fields: [flaggedById], references: [id])
+
+  @@index([createdAt])
+}
+
+enum HandicapRedeemHoldStatus {
+  PENDING
+  // Claimed by exactly one release attempt (the atomic PENDING->RELEASING flip in
+  // server/utils/codeRedemption.js's releaseHold is what makes "exactly one" true) but the
+  // redemption itself hasn't finished yet. Treated identically to PENDING by every reader
+  // (server/api/redeem/status.get.js, pending.get.js) — it exists only so a poll landing in
+  // this narrow window never sees "COMPLETED" before resultJson is actually populated.
+  RELEASING
+  COMPLETED
+}
+
+// One row per (flagged user, code) the user has attempted while flagged. Created the moment a
+// flagged player submits a code that awards a cToon, instead of letting the redemption proceed;
+// released once at least HANDICAP_REQUIRED_RELEASE_CLAIMS other players have claimed the same
+// code AFTER requestedAt (see server/utils/handicapRedeem.js's releaseEligibleHandicapHolds,
+// triggered at the end of every successful redemption of that code). Released early and
+// unconditionally by an admin's "force release" action. `resultJson` caches the exact success
+// response (points/ctoons/backgrounds/packs) once released, so a client still polling this same
+// code (server/api/redeem/status.get.js) gets back the identical shape a normal on-time
+// redemption would have returned - the delay is the only visible difference, and only to someone
+// timing it.
+model HandicapRedeemHold {
+  id          String                   @id @default(uuid())
+  userId      String
+  codeId      String
+  requestedAt DateTime                 @default(now())
+  status      HandicapRedeemHoldStatus @default(PENDING)
+  completedAt DateTime?
+  resultJson  String?
+
+  user User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code ClaimCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, codeId])
+  @@index([codeId, status])
 }
 
 model ClaimCodeReward {
