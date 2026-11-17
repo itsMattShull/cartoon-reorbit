@@ -69,6 +69,7 @@ export default defineEventHandler(async (event) => {
           gtoonType1: true,
           gtoonType2: true,
           gtoonType3: true,
+          gtoonGroup: true,
           gtoonCardStyle: true
         }
       }
@@ -107,6 +108,7 @@ export default defineEventHandler(async (event) => {
 function ogGtoonPowerFields(ctoon) {
   const effect = Array.isArray(ctoon.gtoonEffect) && ctoon.gtoonEffect.length ? ctoon.gtoonEffect : null
   return {
+    gtoonGroup:       ctoon.gtoonGroup || null,
     gtoonTypes:       [ctoon.gtoonType1, ctoon.gtoonType2, ctoon.gtoonType3].filter(Boolean),
     powerDescription: effect ? (powerDescriptionFor(effect) || describeEffects(effect)) : null,
   }

@@ -119,7 +119,7 @@
             placeholder="Search gToons by name or character..."
             aria-label="Search your gToons by name or character"
             autocomplete="off"
-            class="w-full border rounded px-3 py-2 text-gray-800 text-sm mb-2"
+            class="md:hidden w-full border rounded px-3 py-2 text-gray-800 text-sm mb-2"
           />
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             <div
@@ -299,6 +299,8 @@ async function loadGToons() {
   filterMeta.value = {
     sets: [...new Set(rows.map(r => r.set).filter(Boolean))].sort(),
     series: [...new Set(rows.map(r => r.series).filter(Boolean))].sort(),
+    colors: [...new Set(rows.map(r => r.gtoonColor).filter(Boolean))],
+    groups: [...new Set(rows.map(r => r.gtoonGroup).filter(Boolean))].sort(),
     minNumber: values.length ? Math.min(...values) : 0,
     maxNumber: values.length ? Math.max(...values) : 0
   }

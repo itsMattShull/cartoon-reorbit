@@ -8,6 +8,8 @@ export const emptyDeckFilter = () => ({
   search: '',        // matches the gToon's name and/or any of its character names
   set: '',
   series: '',
+  color: '',
+  group: '',
   types: [],         // a card matches when it carries ANY selected type
   hasPowers: false,
   minNumber: '',     // the number printed on the card (its value); '' = no bound
@@ -31,6 +33,8 @@ export function matchesDeckFilter(card, f) {
   }
   if (f.set && card.set !== f.set) return false
   if (f.series && card.series !== f.series) return false
+  if (f.color && card.gtoonColor !== f.color) return false
+  if (f.group && card.gtoonGroup !== f.group) return false
   if (f.types?.length && !(card.gtoonTypes || []).some(t => f.types.includes(t))) return false
   if (f.hasPowers && !card.powerDescription) return false
   const value = Number(card.gtoonValue)
