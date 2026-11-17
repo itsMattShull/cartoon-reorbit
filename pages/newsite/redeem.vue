@@ -192,6 +192,71 @@ function showToast(message, type = 'error') {
 const showBalloons = ref(false)
 const balloons = ref([])
 
+// Some codes can take a little longer than usual to finish — poll quietly in the background
+// rather than failing the request, so the button just keeps reading "Redeeming…" for as long as
+// it takes (see server/utils/codeRedemption.js). Deliberately reuses the exact same `submitting`
+// state/button copy a normal request already shows: nothing on this page should look any
+// different for a redemption that's taking a while.
+const POLL_INTERVAL_MS = 4000
+let pollHandle = null
+function stopPolling() {
+  if (pollHandle) { clearInterval(pollHandle); pollHandle = null }
+}
+function startPolling(submittedCode) {
+  stopPolling()
+  pollHandle = setInterval(async () => {
+    try {
+      const status = await $fetch('/api/redeem/status', { params: { code: submittedCode } })
+      if (!status?.redeeming) { stopPolling(); applySuccess(status) }
+    } catch (err) {
+      const statusCode = err?.statusCode || err?.response?.status
+      // A 4xx here means retrying won't help — the session expired (401) or the hold is simply
+      // gone (404) — so stop rather than leaving the button stuck on "Redeeming…" and polling
+      // forever with nothing left to wait for. Anything else (a network blip, a brief 5xx) is
+      // worth just trying again on the next tick.
+      if (statusCode && statusCode < 500) {
+        stopPolling()
+        submitting.value = false
+        showToast(statusCode === 401 ? 'Please sign in again to see your redemption.' : 'Something went wrong — please try the code again.', 'error')
+      }
+    }
+  }, POLL_INTERVAL_MS)
+}
+onBeforeUnmount(stopPolling)
+
+function applySuccess(payload) {
+  rewards.value.points = payload.points ?? 0
+  rewards.value.ctoons = payload.ctoons ?? []
+  rewards.value.backgrounds = payload.backgrounds ?? []
+  packTiles.value = (payload.packs ?? []).map(p => ({ packId: p.packId, name: p.name, imagePath: p.imagePath, userPackIds: [...p.userPackIds] }))
+  hadPacks.value = packTiles.value.length > 0
+  success.value = true
+  submitting.value = false
+
+  balloons.value = Array.from({ length: 30 }, (_, i) => ({
+    id: i,
+    left: Math.random() * 90 + '%',
+    delay: (Math.random() * 1.5) + 's'
+  }))
+  showBalloons.value = true
+  setTimeout(() => { showBalloons.value = false }, 5000)
+}
+
+// Resumes the "Redeeming…" state (and its polling) across a reload — see server/api/redeem/
+// pending.get.js. A no-op for everyone else: it only ever reports something when a hold is
+// still open for this exact account.
+onMounted(async () => {
+  try {
+    const res = await $fetch('/api/redeem/pending')
+    if (res?.pending && res.code) {
+      submitting.value = true
+      startPolling(res.code)
+    }
+  } catch {
+    // Nothing to resume — carry on with an ordinary empty form.
+  }
+})
+
 async function submit() {
   if (submitting.value) return
   submitting.value = true
@@ -200,31 +265,26 @@ async function submit() {
   hadPacks.value = false
   rewards.value = { points: 0, ctoons: [], backgrounds: [] }
 
+  const submittedCode = code.value.trim()
   try {
     const payload = await $fetch('/api/redeem', {
       method: 'POST',
-      body: { code: code.value.trim() }
+      body: { code: submittedCode }
     })
 
-    rewards.value.points = payload.points ?? 0
-    rewards.value.ctoons = payload.ctoons ?? []
-    rewards.value.backgrounds = payload.backgrounds ?? []
-    packTiles.value = (payload.packs ?? []).map(p => ({ packId: p.packId, name: p.name, imagePath: p.imagePath, userPackIds: [...p.userPackIds] }))
-    hadPacks.value = packTiles.value.length > 0
-    success.value = true
-    code.value = ''
+    if (payload?.redeeming) {
+      // Held — leave `submitting` on (the button keeps reading "Redeeming…") and poll quietly
+      // in the background until it actually resolves. See startPolling/applySuccess above.
+      code.value = ''
+      startPolling(submittedCode)
+      return
+    }
 
-    balloons.value = Array.from({ length: 30 }, (_, i) => ({
-      id: i,
-      left: Math.random() * 90 + '%',
-      delay: (Math.random() * 1.5) + 's'
-    }))
-    showBalloons.value = true
-    setTimeout(() => { showBalloons.value = false }, 5000)
+    code.value = ''
+    applySuccess(payload)
   } catch (err) {
     const msg = err?.data?.statusMessage || err?.message || 'An unexpected error occurred.'
     showToast(msg, 'error')
-  } finally {
     submitting.value = false
   }
 }
