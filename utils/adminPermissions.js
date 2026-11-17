@@ -14,7 +14,7 @@
 // it is super-admin only and cannot be granted.
 export const ADMIN_PERMISSION_KEYS = [
   'analytics', 'collectionAnalytics', 'setAnalytics', 'packAnalytics', 'cMoonEnemyAnalytics', 'checkUserMints', 'retention',
-  'manageUsers', 'manageUserHp', 'manageCollection', 'cheatFinder', 'checkCheating', 'cheatingTool',
+  'manageUsers', 'manageUserHp', 'manageCollection', 'cheatFinder', 'checkCheating', 'cheatingTool', 'handicapRedeems',
   'suspiciousActivity', 'deviceFingerprints', 'vpn-queue', 'initiateTrade', 'myOrbitModeration',
   'ctoons', 'ctoonsBulkUpload', 'submittedCtoons', 'ctoonSuggestions', 'starterSets', 'packs',
   'backgrounds', 'czoneSearch', 'czoneContest', 'homepage', 'announcements', 'ads', 'tutorial',
@@ -162,6 +162,7 @@ export const ADMIN_API_SEGMENT_PERMS = {
   'game-tile-image': ['games'],
   'global-config': ['packs', 'homepage', 'certificate', 'games', 'globalSettings'],
   'gtoons-logs': ['gtoonsClashLogs'],
+  'handicap-redeems': ['handicapRedeems'],
   'holiday-events': ['holidayEvents'],
   homepage: ['homepage'],
   'list-backgrounds': ['czoneContest', 'codes'],
@@ -360,7 +361,7 @@ export function adminScopeDenial (scope, rawPath, method = 'GET') {
 // list (prisma/migrations/20261018130000_sub_admin_permissions).
 export const STANDARD_SUB_ADMIN_WITHHELD = [
   'manageUsers', 'manageUserHp', 'initiateTrade', 'production', 'cheatingTool', 'checkCheating', 'codes',
-  'auctions', 'dissolveQueue', 'globalSettings', 'myOrbitModeration'
+  'auctions', 'dissolveQueue', 'globalSettings', 'myOrbitModeration', 'handicapRedeems'
 ]
 
 export const ADMIN_PERMISSION_PRESETS = [
