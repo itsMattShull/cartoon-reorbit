@@ -25,11 +25,51 @@ import {
   ACTIVE_STATUSES, isFresh, getPlayContext, settleMatchFromGames, setReady, clearReady,
   markLive, clearLive, loadLockedDeckForGame
 } from './ogGtoonTournamentLive.js'
+import { pressStart, cancelStart, activeGameId } from './ogGtoonTournamentGames.js'
 
 async function roundLabel(match) {
   if (match.stage === 'SWISS') return `Swiss Round ${match.roundNumber}`
   const count = await db.ogGtoonTournamentMatch.count({ where: { roundId: match.roundId } })
   return bracketRoundLabel(count)
+}
+
+/**
+ * The state one player's Tournaments panel needs for a pairing, from their own point of view. Under the async rules a Start
+ * never expires (the pairing's readyAAt / readyBAt just mean "pressed Start") and there is no "online at the same time"
+ * requirement, so those pairings report the sticky press, whether a game exists, and its id so the panel can link to it.
+ */
+export async function tournamentStateFor(io, { userRoom }, m, uid) {
+  const side = m.playerAUserId === uid ? 'A' : 'B'
+  const opp = side === 'A' ? m.playerBUserId : m.playerAUserId
+  const mine = side === 'A' ? m.readyAAt : m.readyBAt
+  const theirs = side === 'A' ? m.readyBAt : m.readyAAt
+  const online = (await io.in(userRoom(opp)).local.fetchSockets()).length > 0
+  if (m.asyncRules) {
+    const game = m.lockedAt ? null : await activeGameId(m.id)
+    return {
+      tournamentMatchId: m.id, async: true, myReady: !!mine, opponentReady: !!theirs, opponentOnline: online,
+      gameId: game?.id || null, gameNumber: game?.gameNumber || null, live: !!game,
+      gamesCounted: m.gamesCounted, locked: !!m.lockedAt
+    }
+  }
+  return {
+    tournamentMatchId: m.id,
+    myReady: isFresh(mine),
+    opponentReady: isFresh(theirs),
+    opponentOnline: online,
+    live: !!m.liveMatchId,
+    gamesCounted: m.gamesCounted,
+    locked: !!m.lockedAt
+  }
+}
+
+/** Pushes the current panel state of a pairing to both players' user rooms (used by the async runtime after a move). */
+export async function pushTournamentState(io, h, matchId) {
+  const m = await db.ogGtoonTournamentMatch.findUnique({ where: { id: matchId } })
+  if (!m) return
+  for (const uid of [m.playerAUserId, m.playerBUserId]) {
+    io.local.to(h.userRoom(uid)).emit(h.EV('tournamentState'), await tournamentStateFor(io, h, m, uid))
+  }
 }
 
 export function registerOgGtoonsTournament(io, socket, h) {
@@ -48,28 +88,8 @@ export function registerOgGtoonsTournament(io, socket, h) {
     return true
   }
 
-  /** The state each player's Tournaments panel needs, from their own point of view. */
-  async function stateFor(m, uid) {
-    const side = m.playerAUserId === uid ? 'A' : 'B'
-    const opp = side === 'A' ? m.playerBUserId : m.playerAUserId
-    return {
-      tournamentMatchId: m.id,
-      myReady: isFresh(side === 'A' ? m.readyAAt : m.readyBAt),
-      opponentReady: isFresh(side === 'A' ? m.readyBAt : m.readyAAt),
-      opponentOnline: await isOnline(opp),
-      live: !!m.liveMatchId,
-      gamesCounted: m.gamesCounted,
-      locked: !!m.lockedAt
-    }
-  }
-
-  async function pushState(matchId) {
-    const m = await db.ogGtoonTournamentMatch.findUnique({ where: { id: matchId } })
-    if (!m) return
-    for (const uid of [m.playerAUserId, m.playerBUserId]) {
-      io.local.to(userRoom(uid)).emit(EV('tournamentState'), await stateFor(m, uid))
-    }
-  }
+  const stateFor = (m, uid) => tournamentStateFor(io, h, m, uid)
+  const pushState = (matchId) => pushTournamentState(io, h, matchId)
 
   /** Starts the game if both players are ready, online and free. Returns true when a game began. */
   async function tryStart(matchId) {
@@ -151,11 +171,56 @@ export function registerOgGtoonsTournament(io, socket, h) {
     return true
   }
 
+  /**
+   * Start under the async rules: a sticky press, no online / busy requirements. The second Start creates the game (see
+   * pressStart); everyone is then told, and the worker is asked to send the DMs.
+   */
+  async function handleAsyncStart(user, ctx) {
+    // Surface a deck problem to the person who pressed Start, now, rather than when the game is created.
+    const own = await loadLockedDeckForGame(user.id, ctx.optIn.deckSnapshotJson)
+    if (!own.valid) {
+      const names = [...own.missing, ...own.moved].map(p => own.names[p]).filter(Boolean)
+      return err('badLockedDeck', `Your locked deck has a problem${names.length ? ` (${names.join(', ')})` : ''}. Your deck cannot be changed, so you cannot play this match until those cards are back in your collection.`, { missing: own.missing, moved: own.moved })
+    }
+    const res = await pressStart({ tournamentMatchId: ctx.match.id, userId: user.id })
+    if (!res.ok) return err(res.code, res.message)
+
+    if (res.game) {
+      for (const uid of [ctx.match.playerAUserId, ctx.match.playerBUserId]) {
+        io.local.to(userRoom(uid)).emit(EV('tournamentGameStarted'), { tournamentMatchId: ctx.match.id, gameId: res.game.gameId, gameNumber: res.game.gameNumber })
+      }
+      enqueueOgTournamentJob('ogTournamentGameStarted', { gameId: res.game.gameId }, { key: res.game.gameId })
+        .catch(() => {})
+    } else if (res.deckProblem) {
+      enqueueOgTournamentJob('ogTournamentDeckProblem', { matchId: ctx.match.id }, { key: `${ctx.match.id}-${res.deckProblem.side}` }).catch(() => {})
+      for (const uid of [ctx.match.playerAUserId, ctx.match.playerBUserId]) {
+        const mine = res.deckProblem.side === 'BOTH' || (res.deckProblem.side === 'A') === (uid === ctx.match.playerAUserId)
+        io.local.to(userRoom(uid)).emit(EV('error'), {
+          code: mine ? 'badLockedDeck' : 'opponentDeckProblem',
+          message: mine
+            ? 'Your locked deck has a problem, so the game cannot start. Your deck cannot be changed; if the missing cards are not back in your collection by the deadline, you lose this match.'
+            : 'Your opponent has a deck problem, so the game cannot start yet. If it is not sorted out by the deadline they lose the match.'
+        })
+      }
+    } else {
+      // Only one player has pressed Start: tell the opponent live if they are connected, otherwise by Discord DM (rate-limited).
+      io.local.to(userRoom(ctx.opponentId)).emit(EV('tournamentOpponentReady'), {
+        tournamentMatchId: ctx.match.id, tournamentName: ctx.tournament.name, username: user.username, async: true
+      })
+      if (!(await isOnline(ctx.opponentId))) {
+        enqueueOgTournamentJob('ogTournamentNotifyReady', { tournamentMatchId: ctx.match.id, readyUserId: user.id }, { key: `${ctx.match.id}-${user.id}`, bucketSec: 60 })
+          .catch(() => {})
+      }
+    }
+    await pushState(ctx.match.id)
+  }
+
   socket.on(EV('tournamentReady'), async ({ tournamentMatchId } = {}) => {
     const user = await auth()
     if (!user || !(await gate())) return
     const ctx = await getPlayContext(user.id, tournamentMatchId)
     if (!ctx.ok) return err(ctx.code, ctx.message)
+    if (ctx.match.asyncRules) return handleAsyncStart(user, ctx)
     if (ctx.match.liveMatchId) return err('gameLive', 'A game of this match is already being played.')
     if (matchByUser.has(user.id) || isPracticing(user.id)) return err('inMatch', 'You are already in a game.')
 
@@ -194,6 +259,11 @@ export function registerOgGtoonsTournament(io, socket, h) {
     if (!user) return
     const ctx = await getPlayContext(user.id, tournamentMatchId)
     if (!ctx.ok) return
+    if (ctx.match.asyncRules) {
+      const res = await cancelStart({ tournamentMatchId: ctx.match.id, userId: user.id })
+      if (!res.ok) err(res.code, res.message)
+      return pushState(ctx.match.id)
+    }
     await clearReady(ctx.match.id, ctx.side)
     await pushState(ctx.match.id)
   })

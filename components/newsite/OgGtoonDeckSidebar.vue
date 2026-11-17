@@ -30,6 +30,22 @@
       </select>
     </div>
 
+    <div>
+      <div class="ogds-label">Color</div>
+      <select class="ogds-select" v-model="filter.color">
+        <option value="">All Colors</option>
+        <option v-for="c in meta.colors" :key="c" :value="c">{{ ogTitleCase(c) }}</option>
+      </select>
+    </div>
+
+    <div>
+      <div class="ogds-label">Group</div>
+      <select class="ogds-select" v-model="filter.group">
+        <option value="">All Groups</option>
+        <option v-for="g in meta.groups" :key="g" :value="g">{{ OG_GROUP_LABELS[g] || g }}</option>
+      </select>
+    </div>
+
     <hr class="ogds-divider" />
 
     <div>
@@ -71,7 +87,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { ogTitleCase } from '@/utils/ogGtoonLabels'
+import { ogTitleCase, OG_GROUP_LABELS } from '@/utils/ogGtoonLabels'
 import { OG_CARD_TYPES, emptyDeckFilter, isDeckFilterActive } from '@/utils/ogGtoonDeckFilter'
 
 const filter = useOgGtoonDeckFilter()

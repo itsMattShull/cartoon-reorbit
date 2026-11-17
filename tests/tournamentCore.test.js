@@ -4,7 +4,7 @@ import {
   BEST_OF, formatFor, swissRoundsFor, pairKey, compareStandings, seededShuffle,
   buildBracketSeedPairs, bracketSizeFor, bracketRoundLabel, pairSwissRound, computeSeries,
   decideAtDeadline, computeRecords, buildFinalPlacements, prizeRecipients, checkLockedDeck, effectiveOptInStatus,
-  roundDueAt, WALKOVER_MIN_READY_MS
+  roundDueAt, WALKOVER_MIN_READY_MS, reminderApplies
 } from '../server/utils/tournamentCore.js'
 
 /* ── format / rounds / seeding ─────────────────────────────────────────────────────────── */
@@ -393,4 +393,18 @@ test('effective status: an OPT_IN_OPEN past its end is shown as closed; everythi
   for (const s of ['OPT_IN_CLOSED', 'SWISS_ACTIVE', 'BRACKET_ACTIVE', 'COMPLETE', 'CANCELLED']) {
     assert.equal(effectiveOptInStatus(s, start, end, new Date('2026-11-08T00:00:00Z')), s)
   }
+})
+
+/* ── reminders (the duplicate round-start message) ─────────────────────────────────────── */
+
+test('a reminder is only sent when the pairing had MORE time than the reminder window (no "24 hours left" right after a 24h pairing)', () => {
+  const paired = '2026-11-08T20:12:00Z'
+  const due = (h) => new Date(new Date(paired).getTime() + h * 3600 * 1000)
+  assert.equal(reminderApplies(paired, due(24), 24), false, 'a 24h round: the pairing message already said it')
+  assert.equal(reminderApplies(paired, due(24), 4), true, 'but the 4 hour reminder still helps on a 24h round')
+  assert.equal(reminderApplies(paired, due(48), 24), true)
+  assert.equal(reminderApplies(paired, due(72), 24), true)
+  assert.equal(reminderApplies(paired, due(4), 4), false)
+  assert.equal(reminderApplies(paired, due(2), 4), false)
+  assert.equal(reminderApplies(null, due(48), 24), false, 'unknown dates never remind')
 })

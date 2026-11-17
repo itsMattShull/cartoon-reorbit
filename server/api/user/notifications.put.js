@@ -19,15 +19,22 @@ export default defineEventHandler(async (event) => {
   if (body?.allowAuctionNotifications !== undefined) data.allowAuctionNotifications = Boolean(body.allowAuctionNotifications)
   if (body?.allowCMoonEnemyPopups !== undefined) data.allowCMoonEnemyPopups = Boolean(body.allowCMoonEnemyPopups)
   if (body?.muteRaidNotifications !== undefined) data.muteRaidNotifications = Boolean(body.muteRaidNotifications)
+  if (body?.allowWishlistAuctionNotifications !== undefined) data.allowWishlistAuctionNotifications = Boolean(body.allowWishlistAuctionNotifications)
 
   const updated = await db.user.update({
     where: { id: me.id },
     data,
-    select: { allowAuctionNotifications: true, allowCMoonEnemyPopups: true, muteRaidNotifications: true }
+    select: {
+      allowAuctionNotifications: true,
+      allowCMoonEnemyPopups: true,
+      muteRaidNotifications: true,
+      allowWishlistAuctionNotifications: true
+    }
   })
   return {
     allowAuctionNotifications: updated.allowAuctionNotifications,
     allowCMoonEnemyPopups: updated.allowCMoonEnemyPopups,
     muteRaidNotifications: updated.muteRaidNotifications,
+    allowWishlistAuctionNotifications: updated.allowWishlistAuctionNotifications,
   }
 })

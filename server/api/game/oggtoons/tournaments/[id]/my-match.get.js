@@ -4,6 +4,7 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { readSeries, isFresh } from '@/server/utils/ogGtoonTournamentLive'
+import { gameSummaryFor } from '@/server/utils/ogGtoonTournamentGames'
 import { ogtRequireUser, ogtRequireEnabled, ogtId, ogtRoundLabel } from '@/server/utils/ogGtoonTournamentApi'
 
 export default defineEventHandler(async (event) => {
@@ -42,19 +43,29 @@ export default defineEventHandler(async (event) => {
       where: { tournamentMatchId: open.id, endedAt: { not: null } },
       orderBy: { startedAt: 'asc' }, select: { id: true, outcome: true, winnerUserId: true }
     })
+    // Under the async rules a Start never expires, and there can be a game waiting on somebody for days.
+    const asyncRules = !!open.asyncRules
+    const game = asyncRules ? await gameSummaryFor(open.id, me.id) : null
+    const mineReady = side === 'A' ? open.readyAAt : open.readyBAt
+    const theirsReady = side === 'A' ? open.readyBAt : open.readyAAt
+    const deckProblem = open.deckProblemSide
+      ? (open.deckProblemSide === 'BOTH' ? 'both' : (open.deckProblemSide === side ? 'you' : 'opponent'))
+      : null
     return {
       phase: open.needsAdmin ? 'NEEDS_ADMIN' : 'OPEN',
       needsAdminReason: open.needsAdmin ? open.needsAdminReason : null,
       match: {
         id: open.id, stage: open.stage, roundNumber: open.roundNumber, label: await ogtRoundLabel(open),
-        bestOf: open.bestOf, dueAt: open.dueAt, live: !!open.liveMatchId, requiresWinner: open.requiresWinner,
+        bestOf: open.bestOf, dueAt: open.dueAt, live: asyncRules ? !!game : !!open.liveMatchId, requiresWinner: open.requiresWinner,
+        asyncRules, baseDueAt: open.baseDueAt, extensions: open.extensions || 0, serverNow: new Date(),
+        game, deckProblem,
         opponent: side === 'A' ? open.playerB : open.playerA,
         you: { userId: me.id, wins: side === 'A' ? series.winsA : series.winsB },
         opponentWins: side === 'A' ? series.winsB : series.winsA,
         ties: series.ties, gamesCounted: series.gamesCounted, nextGameNumber: series.nextGameNumber,
         voided: series.voided, decided: series.decided,
-        myReady: isFresh(side === 'A' ? open.readyAAt : open.readyBAt),
-        opponentReady: isFresh(side === 'A' ? open.readyBAt : open.readyAAt),
+        myReady: asyncRules ? !!mineReady : isFresh(mineReady),
+        opponentReady: asyncRules ? !!theirsReady : isFresh(theirsReady),
         games: games.map(g => ({ id: g.id, result: g.outcome === 'INCOMPLETE' ? 'VOID' : g.outcome === 'TIE' ? 'TIE' : g.winnerUserId === me.id ? 'WIN' : 'LOSS' }))
       }
     }

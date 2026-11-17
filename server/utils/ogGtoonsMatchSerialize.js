@@ -34,6 +34,8 @@ export function serializeMatch(match) {
     deadline: match.deadline,
     introEndsAt: match.introEndsAt ?? null,
     ready: match.ready,
+    // Explicit plays made in the current step (the async deadline rule's "who is the game waiting on").
+    acted: match.acted || [false, false],
     held: match.held,
     revealed: match.revealed, // roundLog itself is built once, at match completion, not carried live
     stake: match.stake,
@@ -44,6 +46,13 @@ export function serializeMatch(match) {
     manualCommits: match.manualCommits || [0, 0],
     // Without this a restart would turn a tournament game into a casual one that never counts.
     tournament: match.tournament || null,
+    // Async tournament games have no clocks at all. Without these a restored copy would quietly get its phase
+    // timers (and the auto-play they bring) back.
+    noTimers: !!match.noTimers,
+    // The latest resolved board and the final result: an async game is rebuilt from this copy hours or days later, so a
+    // reconnecting player must still see the right totals, and an ended game its outcome.
+    liveBoard: match.liveBoard || null,
+    result: match.result || null,
     startedAt: match.startedAt,
     lastActivity: match.lastActivity
   }

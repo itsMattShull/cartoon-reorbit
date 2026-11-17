@@ -111,10 +111,20 @@
               (showing {{ visibleGtoons.length }} of {{ gtoons.length }})
             </span>
           </p>
+          <!-- Same state as the sidebar's search box (useOgGtoonDeckFilter), so the two always agree; this one is for
+               small screens where the sidebar isn't shown. Matches the gToon's name or any of its character names. -->
+          <input
+            v-model="filter.search"
+            type="search"
+            placeholder="Search gToons by name or character..."
+            aria-label="Search your gToons by name or character"
+            autocomplete="off"
+            class="md:hidden w-full border rounded px-3 py-2 text-gray-800 text-sm mb-2"
+          />
           <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             <div
-              v-for="c in visibleGtoons"
-              :key="c.id"
+              v-for="c in shownGtoons"
+              :key="c.ctoonId"
               v-on="gestureFor(c).events"
               @click.capture="gestureFor(c).clickCapture($event)"
               @click="addCard(c)"
@@ -138,6 +148,11 @@
               <p class="text-[10px]" :style="{ color: colorHex(c.gtoonColor) }">{{ c.gtoonColor }}</p>
               <p class="text-[10px] text-gray-300">Value: {{ c.gtoonValue }}</p>
               <p v-if="c.isSlamGtoon" class="text-[10px] font-bold text-yellow-300">SLAM</p>
+              <span
+                v-if="c.ownedCount > 1"
+                class="absolute top-1 left-1 z-10 px-1 rounded bg-black/60 text-[10px] font-semibold text-white"
+                :title="`You own ${c.ownedCount} copies`"
+              >×{{ c.ownedCount }}</span>
               <p
                 class="text-[10px] text-center w-full mt-0.5 sm:line-clamp-2"
                 :class="c.powerDescription ? 'text-white/90' : 'text-gray-400'"
@@ -145,6 +160,13 @@
               >{{ c.powerDescription || 'No power' }}</p>
             </div>
           </div>
+          <button
+            v-if="hasMore"
+            ref="showMoreEl"
+            type="button"
+            class="w-full mb-4 px-3 py-2 rounded bg-white/10 hover:bg-white/20 text-sm"
+            @click="showMore"
+          >Show more ({{ visibleGtoons.length - shownGtoons.length }} more)</button>
           <p v-if="!loadingGtoons && !gtoons.length" class="text-sm text-gray-400 mb-4">
             You don't own any gToons yet.
           </p>
@@ -185,12 +207,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import Toast from '@/components/Toast.vue'
 import CtoonImage from '@/components/CtoonImage.vue'
 import OgGtoonInfoModal from '@/components/oggtoons/OgGtoonInfoModal.vue'
 import { useOgGtoonInfo } from '@/composables/useOgGtoonInfo'
-import { matchesDeckFilter, sharedCharacters, isDeckFilterActive, emptyDeckFilter } from '@/utils/ogGtoonDeckFilter'
+import { matchesDeckFilter, sharedCharacters, isDeckFilterActive, emptyDeckFilter, dedupeByCtoon, sortDeckCards } from '@/utils/ogGtoonDeckFilter'
 
 // Right-click / long-press a card for its printed properties; one gesture handler set per card object.
 const { inspectGesture } = useOgGtoonInfo()
@@ -232,6 +254,29 @@ const mobileSelection = ref('')
 const filter = useOgGtoonDeckFilter()
 const filterMeta = useOgGtoonDeckMeta()
 const visibleGtoons = computed(() => gtoons.value.filter(c => matchesDeckFilter(c, filter.value)))
+
+// Only the first PAGE_SIZE cards are in the DOM; the "Show more" button below the grid (also triggered by scrolling
+// it into view) adds another page. A collection can be hundreds of gToons and every card mounts an image, so
+// rendering them all at once is what made this tab slow to scroll.
+const PAGE_SIZE = 48
+const shownCount = ref(PAGE_SIZE)
+const shownGtoons = computed(() => visibleGtoons.value.slice(0, shownCount.value))
+const hasMore = computed(() => visibleGtoons.value.length > shownCount.value)
+const showMoreEl = ref(null)
+let moreObserver = null
+function showMore() { shownCount.value += PAGE_SIZE }
+// A new search / filter starts again from the top of the (re-ordered) list.
+watch(filter, () => { shownCount.value = PAGE_SIZE }, { deep: true })
+// The button only exists while there is more to show, so (re)attach the observer whenever it appears.
+watch(showMoreEl, (el, prev) => {
+  if (prev && moreObserver) moreObserver.unobserve(prev)
+  if (!el || typeof IntersectionObserver === 'undefined') return
+  moreObserver ||= new IntersectionObserver((entries) => {
+    if (entries.some(e => e.isIntersecting)) showMore()
+  }, { rootMargin: '300px' })
+  moreObserver.observe(el)
+})
+onBeforeUnmount(() => { moreObserver?.disconnect(); moreObserver = null })
 const filtersActive = computed(() => isDeckFilterActive(filter.value))
 
 const WARN_ICON = '\u26A0\uFE0F'
@@ -246,12 +291,16 @@ const canSave = computed(() => form.value.name.trim() && filledCount.value === 1
 
 async function loadGToons() {
   loadingGtoons.value = true
-  const rows = await $fetch('/api/user/ctoons?isOgGtoon=true')
+  // One row per copy owned comes back; the deck builder works with one card per distinct gToon, grouped by colour
+  // and then by the number on the card.
+  const rows = sortDeckCards(dedupeByCtoon(await $fetch('/api/user/ctoons?isOgGtoon=true')))
   gtoons.value = rows
   const values = rows.map(r => Number(r.gtoonValue)).filter(Number.isFinite)
   filterMeta.value = {
     sets: [...new Set(rows.map(r => r.set).filter(Boolean))].sort(),
     series: [...new Set(rows.map(r => r.series).filter(Boolean))].sort(),
+    colors: [...new Set(rows.map(r => r.gtoonColor).filter(Boolean))],
+    groups: [...new Set(rows.map(r => r.gtoonGroup).filter(Boolean))].sort(),
     minNumber: values.length ? Math.min(...values) : 0,
     maxNumber: values.length ? Math.max(...values) : 0
   }

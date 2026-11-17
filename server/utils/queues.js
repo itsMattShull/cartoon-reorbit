@@ -441,3 +441,18 @@ export async function enqueueOgTournamentJob(name, data, { key, delayMs = 500, b
     delay: delayMs
   })
 }
+
+/**
+ * Arms the exact-time deadline decision for an OG gToons async pairing (handled by the critical scheduler as
+ * `ogTournamentDeadline`). The job id carries the deadline, so arming the same deadline twice is a no-op and a moved
+ * deadline gets its own job; a job that fires before the (extended) deadline simply re-arms itself. One second of slack
+ * covers a timer that fires fractionally early. Best effort: the 15 minute cron decides anything this misses.
+ */
+export async function armOgTournamentDeadline(matchId, dueAt) {
+  const at = new Date(dueAt).getTime()
+  if (!matchId || !Number.isFinite(at)) return
+  await scheduledEventsQueue.add('ogTournamentDeadline', { matchId, dueAtMs: at }, {
+    jobId: `og-dl-${matchId}-${at}`,
+    delay: Math.max(0, at - Date.now()) + 1000
+  })
+}

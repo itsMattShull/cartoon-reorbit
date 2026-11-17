@@ -7,6 +7,8 @@ export const useOgGtoonDeckFilter = () => useState('ogGtoonDeckFilter', () => em
 export const useOgGtoonDeckMeta = () => useState('ogGtoonDeckMeta', () => ({
   sets: [],
   series: [],
+  colors: [],
+  groups: [],
   minNumber: 0,
   maxNumber: 0
 }))

@@ -44,6 +44,7 @@ export const ADMIN_SECTIONS = [
 
   // ── Users & Moderation ──────────────────────────────────────
   S('manageUsers', 'Manage Users', 'users', nu('AdminManageUsers'), { sensitive: true, desc: 'Ban, suspend, dissolve, rename' }),
+  S('myOrbitModeration', 'MyOrbit Moderation', 'users', nu('AdminMyOrbitModeration'), { sensitive: true, desc: 'Spectate live chat; mute, ban, delete messages' }),
   S('manageUserHp', 'Manage User HP & Stamina', 'users', nu('AdminManageUserHp'), { sensitive: true, desc: 'Set cMoon battle HP and stamina, individually or in bulk' }),
   S('manageCollection', 'Manage Collection', 'users', nu('AdminManageCollection'), { sensitive: true, desc: 'Edit what a user owns' }),
   S('userCtoons', 'User cToons', 'users', nu('AdminUserCtoons'), { superOnly: true, desc: 'Every owned cToon across all users' }),
@@ -77,6 +78,9 @@ export const ADMIN_SECTIONS = [
   S('certificate', 'Manage Certificate', 'content', nu('AdminManageCertificate')),
   S('encyclopedia', 'Manage Encyclopedia', 'content', nu('AdminManageEncyclopedia')),
   S('siteTheme', 'Manage Site Theme', 'content', nu('AdminSiteTheme')),
+  S('myOrbitTiles', 'MyOrbit Tiles', 'content', nu('AdminMyOrbitTiles'), { desc: 'Reusable floor/wall art for the room builder' }),
+  S('myOrbitFurniture', 'MyOrbit Furniture', 'content', nu('AdminMyOrbitFurniture'), { desc: 'Reusable furniture/decoration art for the room builder' }),
+  S('myOrbitRooms', 'MyOrbit Rooms', 'content', nu('AdminMyOrbitRoomBuilder'), { desc: 'Build the isometric chatrooms players walk around in' }),
 
   // ── Economy ─────────────────────────────────────────────────
   S('manageSales', 'Manage Sales', 'economy', nu('AdminManageSales'), { sensitive: true, desc: 'Changes prices' }),

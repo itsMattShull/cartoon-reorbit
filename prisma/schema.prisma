@@ -43,6 +43,12 @@ enum NotificationType {
   // the AFK-kick block in closeRound, server/utils/cmoonRaidSocket.js. No contextId: the raid is
   // over for them either way, there's nothing left to click through to.
   CMOON_RAID_KICKED_AFK
+  // A cToon on this user's wishlist (WishlistItem) was just listed in a new auction — see
+  // notifyWishlistAuctionListed in server/utils/notifications.js, called from
+  // server/api/auctions.post.js. contextId is the Auction id, contextType AUCTION, same
+  // AUCTION_WON/AUCTION_OUTBID convention, so it routes to /newsite/AuctionHouse/<id> with no
+  // client changes. Gated on User.allowWishlistAuctionNotifications (default true).
+  WISHLIST_AUCTION_LISTED
 }
 
 /// Where a sealed UserPack came from. Pack purchase limits and purchase analytics count PURCHASE rows
@@ -646,6 +652,20 @@ model User {
   // notifyCMoonRaidPreviewStarted (server/utils/notifications.js) before a row is ever written —
   // muting suppresses creation entirely rather than just hiding already-created rows client-side.
   muteRaidNotifications  Boolean         @default(false)
+  // MyOrbit (live avatar chat rooms) moderation state — scoped to MyOrbit only, deliberately
+  // separate from the site-wide `banned`/`suspendedUntil` above: an admin can silence someone in
+  // chat rooms without touching their ability to play the rest of the game. A set, still-future
+  // myOrbitMutedUntil blocks sending chat; a set myOrbitBannedAt (permanent, no "until") blocks
+  // joining any room at all. See server/utils/myOrbitSocket.js and MyOrbitModerationLog below.
+  myOrbitMutedUntil      DateTime?
+  myOrbitBannedAt        DateTime?
+  myOrbitBannedReason    String?
+  // Convenience only, never a source of truth for an active session's avatar: remembers the last
+  // cToon this player picked as their MyOrbit avatar so the picker can default to it next time.
+  // Deliberately a plain id with no relation/FK — the referenced UserCtoon can be traded, burned,
+  // or sold after this is set, and the picker already has to fall back gracefully (to "no avatar
+  // selected") when it no longer resolves, so a cascading/constrained relation would add nothing.
+  myOrbitLastUserCtoonId String?
   // Set when a player explicitly declines to pick a cMoon from the initial join modal (there is no
   // more time-based auto-assignment — see server/utils/cmoon.js). Only meaningful while cMoonId is
   // null; cleared back to false on a successful selectCMoonForUser. Lets the modal stop popping up
@@ -846,6 +866,9 @@ model User {
   // Ban notes relations
   banNotes                    UserBanNote[]                   @relation("BanNoteUser")
   banNotesAuthored            UserBanNote[]                   @relation("BanNoteAdmin")
+  // MyOrbit moderation relations
+  myOrbitModerationReceived   MyOrbitModerationLog[]          @relation("MyOrbitModerationTarget")
+  myOrbitModerationIssued     MyOrbitModerationLog[]          @relation("MyOrbitModerationAdmin")
 
   // Scavenger Hunt relations
   scavengerSessions    ScavengerSession[]
@@ -2328,6 +2351,12 @@ model GlobalGameConfig {
   // server-wide season-goal announcement, since there's no single "team" to credit a community
   // kill to.
   cMoonSharedBossDefeatAnnounceEnabled Boolean   @default(false)
+  // Master switch for MyOrbit (live avatar chat rooms, see server/utils/myOrbitSocket.js) — off
+  // by default since the feature ships with no rooms/assets until an admin builds some. Checked
+  // both by the client (whether to render the floating-window launcher at all) and server-side on
+  // room join, same "don't just hide the button" stance every other major feature's kill switch
+  // in this file takes.
+  myOrbitEnabled                       Boolean   @default(false)
   createdAt                            DateTime  @default(now())
   updatedAt                            DateTime  @updatedAt
 }
@@ -3417,11 +3446,25 @@ model OgGtoonTournamentMatch {
 
   // Ready-up is stored here (not only in socket memory) so it survives a restart and so the
   // deadline rules can see who actually showed up.
+  // Async rules only (see asyncRules): readyAAt / readyBAt mean "pressed Start" and never expire.
   readyAAt      DateTime?
   readyBAt      DateTime?
   firstReadyAt  DateTime?
   liveMatchId   String? // the in-flight OgGtoonMatch id while a game of this series is being played
   liveStartedAt DateTime? // when that game started; a marker older than a match can last is stale and is cleared
+
+  // ── Async + live play (migration 20261115120000_og_tournament_async_games) ────────────────────────
+  // true for every pairing made from now on (async + live play); false for the pairings that existed before this shipped,
+  // which keep the old both-online flow and deadline rules untouched until they finish.
+  asyncRules      Boolean   @default(false)
+  // The round's ORIGINAL deadline for this pairing. `dueAt` may be pushed out by final-minute plays (+60s each,
+  // `extensions`), but "may a new game still start" and "did a Start count" are judged against this one.
+  baseDueAt       DateTime?
+  extensions      Int       @default(0)
+  lastPlayAt      DateTime? // the last explicit play (commit / discard / swap / colour pick) by either player
+  lastPlayUserId  String?
+  // Set when the next game could not be created because a locked card left a player's collection: 'A' | 'B' | 'BOTH'.
+  deckProblemSide String?
 
   voidedGames       Int       @default(0)
   extraGamesCounted Int       @default(0)
@@ -3437,6 +3480,7 @@ model OgGtoonTournamentMatch {
   playerB    User                   @relation("OgGtoonTournamentMatchPlayerB", fields: [playerBUserId], references: [id])
   winner     User?                  @relation("OgGtoonTournamentMatchWinner", fields: [winnerUserId], references: [id])
   games      OgGtoonMatch[]
+  liveGames  OgGtoonTournamentGame[]
 
   @@unique([roundId, tableNumber])
   @@index([tournamentId, stage, roundNumber])
@@ -3444,6 +3488,45 @@ model OgGtoonTournamentMatch {
   @@index([status, dueAt])
   @@index([playerAUserId])
   @@index([playerBUserId])
+}
+
+enum OgGtoonTournamentGameStatus {
+  ACTIVE // being played (or waiting for a player), state lives in `state`
+  ENDED  // finished normally: written to OgGtoonMatch under the same id
+  CLOSED // the pairing was decided some other way (deadline, forfeit, admin) while it was running
+}
+
+// One game of an async tournament pairing while it is being played. Unlike the live-only flow (an in-memory
+// match mirrored to Redis for two hours) this row IS the game, so it survives restarts and can wait days for a
+// player. `state` is the server-only match object (hands, undealt cards, placements, held cards, game log):
+// it is never sent to a client as is, only through publicMatchView. When the game ends the finished result is
+// written to OgGtoonMatch with this row's id and this row becomes ENDED. A partial unique index (migration)
+// allows only one ACTIVE game per pairing.
+model OgGtoonTournamentGame {
+  id                String                          @id // the OgGtoonMatch id the finished game is written under
+  tournamentMatchId String
+  gameNumber        Int
+  status            OgGtoonTournamentGameStatus     @default(ACTIVE)
+  state             Json
+  // Public reveal payloads in order ({ seq, round, order, steps, before, timing, ... }), for replaying what a
+  // returning player missed. Contains only what both players saw once revealed, never a hand.
+  reveals           Json                            @default("[]")
+  // Highest reveal seq each player has watched (replay cursors) and whether they have dismissed the goal intro.
+  seenA             Int                             @default(0)
+  seenB             Int                             @default(0)
+  introSeenA        Boolean                         @default(false)
+  introSeenB        Boolean                         @default(false)
+  // Compare-and-set counter: every state write bumps it.
+  version           Int                             @default(1)
+  lastPlayAt        DateTime?
+  createdAt         DateTime                        @default(now())
+  updatedAt         DateTime                        @updatedAt
+  endedAt           DateTime?
+
+  tournamentMatch OgGtoonTournamentMatch @relation(fields: [tournamentMatchId], references: [id])
+
+  @@unique([tournamentMatchId, gameNumber])
+  @@index([status])
 }
 
 model OgGtoonTournamentPlayerRecord {
@@ -8201,4 +8284,158 @@ model CMoonPvpTournamentMatch {
   pvpMatch   CMoonPvpMatch?
 
   @@index([tournamentId, roundNumber])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+// MyOrbit — live isometric avatar chat rooms (Habbo-style). A player picks any owned cToon as
+// a walking token, moves it around an admin-built room, and chats live with whoever else is
+// there. See server/utils/myOrbitSocket.js for the real-time runtime and
+// server/utils/myOrbitPathfinding.js for the movement engine these models feed.
+// ═══════════════════════════════════════════════════════════════════════════════════════════
+
+// A reusable floor/wall art asset an admin paints rooms with — shared across any number of
+// rooms, same relationship a cToon has to its many placed cZone instances. `walkable` is the
+// BASE passability for any cell using this tile; a placed MyOrbitRoomFurniture on top of it can
+// still block movement even over a walkable tile (see MyOrbitFurniture.blocksWalk).
+model MyOrbitTile {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  assetPath String
+  walkable  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  placements MyOrbitRoomTile[]
+}
+
+// A reusable furniture/decoration art asset, placed at one or more grid cells in a room.
+// `footprintW`/`footprintH` are in whole tiles (a 2x1 sofa occupies two cells along one axis),
+// measured UNROTATED — see MyOrbitRoomFurniture.rotation for how a placed instance's effective
+// footprint is derived from this. `blocksWalk` can only ADD a block on top of the underlying
+// tile(s)' own `walkable` flag for every cell the footprint covers once placed — it is combined
+// with AND, never OR, so effective walkability for a covered cell is always
+// `tile.walkable && !blocksWalk`: a decorative rug (blocksWalk=false) sitting on a walkable floor
+// tile changes nothing, and a wardrobe (blocksWalk=true) blocks its footprint regardless of
+// what's painted underneath — but blocksWalk=false can NEVER make an already-unwalkable tile
+// (e.g. a wall) walkable, such as a picture frame hung on a wall tile. `zOffset` nudges this
+// item's rendered stacking order within its own tile's depth band (floor < furniture < avatars,
+// see myOrbitIsometric.js's projection), for tall items that should render in front of/behind an
+// avatar standing one row off — never affects pathfinding, purely cosmetic layering.
+model MyOrbitFurniture {
+  id         String   @id @default(uuid())
+  name       String   @unique
+  assetPath  String
+  footprintW Int      @default(1)
+  footprintH Int      @default(1)
+  blocksWalk Boolean  @default(true)
+  zOffset    Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  placements MyOrbitRoomFurniture[]
+}
+
+// An admin-built chatroom. `gridWidth`/`gridHeight` are in tiles — the room builder
+// (AdminMyOrbitRoomBuilder.vue) and the player client render the exact same grid from the same
+// projection math, so there is no separate "preview" rendering path to drift from reality.
+// `active=false` rooms are hidden from the player-facing room list but keep their saved layout,
+// same "inactive doesn't delete your work" stance CMoonEnemyMap.active already takes.
+model MyOrbitRoom {
+  id         String   @id @default(uuid())
+  name       String   @unique
+  gridWidth  Int      @default(10)
+  gridHeight Int      @default(10)
+  capacity   Int      @default(20)
+  active     Boolean  @default(false)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tiles      MyOrbitRoomTile[]
+  furniture  MyOrbitRoomFurniture[]
+  moderation MyOrbitModerationLog[]
+}
+
+// One painted floor/wall cell. A cell with no row here is unwalkable void (outside the built
+// room) rather than defaulting to any particular tile — the room builder must explicitly paint
+// every cell meant to be standable space.
+model MyOrbitRoomTile {
+  id     String @id @default(uuid())
+  roomId String
+  x      Int
+  y      Int
+  tileId String
+
+  room MyOrbitRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  tile MyOrbitTile @relation(fields: [tileId], references: [id], onDelete: Restrict)
+
+  @@unique([roomId, x, y])
+  @@index([tileId])
+}
+
+// One placed furniture instance. `x`/`y` is the footprint's top-left cell; `rotation` is one of
+// 0/90/180/270 degrees. At 0/180 the blocked cells are exactly `furniture.footprintW` x
+// `footprintH` starting at (x, y); at 90/270 the effective blocked footprint has width and
+// height SWAPPED from the library item's unrotated values, so a rotated non-square piece (e.g. a
+// 2x1 bench turned sideways) blocks exactly what it visually occupies — never only the
+// unrotated cells. This swap must happen wherever a room's walkable mask is built from its
+// furniture placements (see server/utils/myOrbitPathfinding.js), not just in the renderer.
+model MyOrbitRoomFurniture {
+  id          String @id @default(uuid())
+  roomId      String
+  furnitureId String
+  x           Int
+  y           Int
+  rotation    Int    @default(0)
+
+  room      MyOrbitRoom      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  furniture MyOrbitFurniture @relation(fields: [furnitureId], references: [id], onDelete: Restrict)
+
+  @@index([roomId])
+  @@index([furnitureId])
+}
+
+// Admin-managed banned-word list, checked (case-insensitively, substring match) against every
+// chat message before it ever reaches the room — see filterMyOrbitChat in
+// server/utils/myOrbitChatFilter.js. Deliberately a flat phrase list rather than regex: admins
+// managing this list are not expected to write regex.
+model MyOrbitBannedWord {
+  id        String   @id @default(uuid())
+  phrase    String   @unique
+  createdAt DateTime @default(now())
+}
+
+enum MyOrbitModerationAction {
+  MUTE
+  UNMUTE
+  BAN
+  UNBAN
+  DELETE_MESSAGE
+}
+
+// Audit trail for every MyOrbit-scoped moderation action — chat messages themselves are never
+// persisted anywhere ELSE (live-only, like a speech bubble), but the ACT of muting/banning/
+// deleting one always is, same "every moderation action gets an audit row" stance UserBanNote
+// already takes for the site-wide ban system. `roomId` is null for a DELETE_MESSAGE issued while
+// the room data itself has since been deleted — never cascades the log away, unlike the room's
+// own child rows above. `messageSnapshot` is set only for a DELETE_MESSAGE row — this is the ONE
+// place the deleted text survives at all, so an admin's use of the delete power (or a muted/
+// banned player's appeal) can actually be reviewed later instead of the log only recording that
+// *something* was removed.
+model MyOrbitModerationLog {
+  id              String                   @id @default(uuid())
+  roomId          String?
+  targetUserId    String
+  adminUserId     String
+  action          MyOrbitModerationAction
+  reason          String?
+  messageSnapshot String?
+  createdAt       DateTime                 @default(now())
+
+  room   MyOrbitRoom? @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  target User         @relation("MyOrbitModerationTarget", fields: [targetUserId], references: [id], onDelete: Cascade)
+  admin  User         @relation("MyOrbitModerationAdmin", fields: [adminUserId], references: [id], onDelete: Restrict)
+
+  @@index([targetUserId, createdAt])
+  @@index([roomId, createdAt])
 }

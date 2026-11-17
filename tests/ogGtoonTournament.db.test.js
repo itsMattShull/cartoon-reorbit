@@ -4,7 +4,8 @@
 // schema), so a plain `npm test` stays database-free:
 //
 //   OG_TOURNAMENT_TEST_DB=postgresql://... REDIS_HOST=127.0.0.1 REDIS_PORT=6379 \
-//     node --test tests/ogGtoonTournament.db.test.js
+//     node --test --test-concurrency=1 --test-force-exit tests/ogGtoonTournament.db.test.js
+// (--test-concurrency=1 because the DB test files share one GameConfig row and one Redis; --test-force-exit because the queue connections keep the process alive.)
 //
 // Games are simulated by inserting OgGtoonMatch rows (exactly what the socket server persists), then
 // running the same code the worker runs.
@@ -74,6 +75,14 @@ async function playSeries(matchId, games /* e.g. ['A','A'] */) {
     })
   }
   return Live.settleMatchFromGames(matchId)
+}
+
+/**
+ * Turns a tournament's pairings into the older both-online kind, like the ones that already exist in production when the async rules
+ * ship (every new pairing is async). The tests of the older flow (Start/ready-up, the older deadline rules) build theirs this way.
+ */
+async function legacyPairings(tournamentId) {
+  await db.ogGtoonTournamentMatch.updateMany({ where: { tournamentId }, data: { asyncRules: false, baseDueAt: null } })
 }
 
 async function openMatches(tournamentId) {
@@ -264,6 +273,7 @@ run('deadlines: walkover for the player who showed, a Swiss double no-show is a 
   const users = await mkUsers(10)
   const t = await mkTournament(users)
   await close(t, users)
+  await legacyPairings(t.id)
   const open = await openMatches(t.id)
   assert.equal(open.length, 5)
 
@@ -361,6 +371,8 @@ run('Play: nothing starts until BOTH are ready and online; the game starts at ze
     create: { gameName: 'OgGtoons', ogGtoonsGameEnabled: true, ogGtoonsTournamentsEnabled: true },
     update: { ogGtoonsGameEnabled: true, ogGtoonsTournamentsEnabled: true }
   })
+  // Earlier tests start tournaments, which read the (60s cached) config; make this test see the row it just wrote.
+  ;(await import('../server/utils/ogGtoonsConfig.js')).invalidateOgGtoonsConfigCache()
   const { registerOgGtoonsTournament } = await import('../server/utils/ogGtoonsTournamentSocket.js')
 
   const users = await mkUsers(2)
@@ -377,6 +389,7 @@ run('Play: nothing starts until BOTH are ready and online; the game starts at ze
     await db.ogGtoonTournamentOptIn.create({ data: { tournamentId: t.id, userId: u.id, deckSnapshotJson: snaps[i] } })
   }
   await T.processStateTransitions(db)
+  await legacyPairings(t.id)
   const [pairing] = await openMatches(t.id)
   const [pa, pb] = [pairing.playerAUserId, pairing.playerBUserId]
 
@@ -449,53 +462,66 @@ run('Play: nothing starts until BOTH are ready and online; the game starts at ze
   assert.ok(errors().includes('notYours'))
 })
 
-run('deck repair: only flagged slots, a different copy each, never mid-series, and a lent card cannot be re-picked', async () => {
+run('every pairing made now is played under the async rules and stamped with its original deadline; older pairings stay as they were', async () => {
   await setup()
+  const players = await mkUsers(4)
+  const t = await mkTournament(players, { startAt: null, roundWindowHours: 24 })
+  await T.startTournament(db, t.id)
+  const round1 = await db.ogGtoonTournamentMatch.findMany({ where: { tournamentId: t.id, status: 'PENDING' } })
+  assert.ok(round1.length)
+  for (const m of round1) {
+    assert.equal(m.asyncRules, true)
+    assert.equal(m.baseDueAt.getTime(), m.dueAt.getTime())
+    assert.equal(m.extensions, 0)
+  }
+
+  // A pairing that already existed before the async rules shipped keeps the older rules; the next round is async again.
+  await db.ogGtoonTournamentMatch.update({ where: { id: round1[0].id }, data: { asyncRules: false, baseDueAt: null } })
+  for (const m of round1) await playSeries(m.id, ['A', 'A'])
+  assert.equal((await db.ogGtoonTournamentMatch.findUnique({ where: { id: round1[0].id } })).asyncRules, false, 'settling never changes the rules a pairing was made with')
+  await T.advanceAndNotify(db, t.id)
+  const next = await db.ogGtoonTournamentMatch.findMany({ where: { tournamentId: t.id, roundNumber: 2 } })
+  assert.ok(next.length)
+  assert.ok(next.every(m => m.asyncRules === true && m.baseDueAt), 'round 2 follows the new rules')
+})
+
+run('decks are frozen once locked in: the 12 copies cannot leave while the player is in, and there is no repair', async () => {
+  await setup()
+  const Freeze = await import('../server/utils/ogGtoonTournamentFreeze.js')
   const [u, other] = await mkUsers(2)
-  const { deck, ctoons } = await mkDeckFor(u, 'rep')
+  const { deck } = await mkDeckFor(u, 'frz')
   const { snapshot } = await Live.lockTournamentDeck(u.id, deck.id)
   const t = await db.ogGtoonTournament.create({
-    data: { name: 'Repair Cup', status: 'OPT_IN_CLOSED', optInStartAt: new Date(Date.now() - 86400000), optInEndAt: new Date(Date.now() - 1000), announcementChannelId: '' }
+    data: { name: 'Freeze Cup', status: 'OPT_IN_OPEN', optInStartAt: new Date(Date.now() - 86400000), optInEndAt: new Date(Date.now() + 86400000), announcementChannelId: '' }
   })
-  await db.ogGtoonTournamentOptIn.create({ data: { tournamentId: t.id, userId: u.id, deckSnapshotJson: snapshot } })
+  const optIn = await db.ogGtoonTournamentOptIn.create({ data: { tournamentId: t.id, userId: u.id, deckSnapshotJson: snapshot } })
+  const ids = snapshot.map(s => s.userCtoonId)
 
-  // Nothing wrong yet.
-  assert.equal((await T.repairLockedDeck(db, { tournamentId: t.id, userId: u.id, replacements: [] })).ok, false)
+  // Frozen from the moment they lock in, even while opt-in is still open.
+  assert.equal((await Freeze.frozenAmong(db, u.id, ids)).length, 12)
+  // A spare card they own that is NOT in the deck is free to trade.
+  const spare = await db.ctoon.create({ data: { name: 'frz-spare', type: 'gtoon', rarity: 'Common', assetPath: '/x/frz.png', isOgGtoon: true, gtoonColor: 'RED', gtoonValue: 5 } })
+  const spareCopy = await db.userCtoon.create({ data: { userId: u.id, ctoonId: spare.id } })
+  assert.deepEqual(await Freeze.frozenAmong(db, u.id, [spareCopy.id, ids[0]]), [ids[0]])
+  // Nobody else's copies are touched.
+  assert.deepEqual(await Freeze.frozenAmong(db, other.id, ids), [])
 
-  // Lend slot 4's card away and back (flagged as moved) and sell slot 7's card.
-  const s4 = snapshot[4]
-  await db.ctoonOwnerLog.create({ data: { userId: other.id, userCtoonId: s4.userCtoonId, ctoonId: s4.ctoonId, method: 'TRADE' } })
-  await db.userCtoon.update({ where: { id: snapshot[7].userCtoonId }, data: { userId: other.id } })
+  // Re-locking a different deck before opt-in closes releases the old copies.
+  const { deck: deck2 } = await mkDeckFor(u, 'frz2')
+  const second = await Live.lockTournamentDeck(u.id, deck2.id)
+  await db.ogGtoonTournamentOptIn.update({ where: { id: optIn.id }, data: { deckSnapshotJson: second.snapshot } })
+  assert.equal((await Freeze.frozenAmong(db, u.id, ids)).length, 0, 'the old deck is released')
+  assert.equal((await Freeze.frozenAmong(db, u.id, second.snapshot.map(s => s.userCtoonId))).length, 12, 'the new deck is frozen')
 
-  // Spare cards the player could swap in.
-  const spare = await db.ctoon.create({ data: { name: 'spare', type: 'gtoon', rarity: 'Common', assetPath: '/x/spare.png', isOgGtoon: true, gtoonColor: 'RED', gtoonValue: 5 } })
-  const spare2 = await db.ctoon.create({ data: { name: 'spare2', type: 'gtoon', rarity: 'Common', assetPath: '/x/spare2.png', isOgGtoon: true, gtoonColor: 'RED', gtoonValue: 5 } })
-  await db.userCtoon.create({ data: { userId: u.id, ctoonId: spare.id } })
-  await db.userCtoon.create({ data: { userId: u.id, ctoonId: spare2.id } })
+  // Disqualified, opted out, or finished: released.
+  await db.ogGtoonTournamentOptIn.update({ where: { id: optIn.id }, data: { disqualified: true } })
+  assert.equal((await Freeze.frozenAmong(db, u.id, second.snapshot.map(s => s.userCtoonId))).length, 0)
+  await db.ogGtoonTournamentOptIn.update({ where: { id: optIn.id }, data: { disqualified: false } })
+  await db.ogGtoonTournament.update({ where: { id: t.id }, data: { status: 'COMPLETE' } })
+  assert.equal((await Freeze.frozenAmong(db, u.id, second.snapshot.map(s => s.userCtoonId))).length, 0)
 
-  const bad = (r) => assert.equal(r.ok, false)
-  bad(await T.repairLockedDeck(db, { tournamentId: t.id, userId: u.id, replacements: [{ position: 7, ctoonId: spare.id }] }))                       // slot 4 not replaced
-  bad(await T.repairLockedDeck(db, { tournamentId: t.id, userId: u.id, replacements: [{ position: 4, ctoonId: spare.id }, { position: 7, ctoonId: spare.id }] })) // same card twice
-  bad(await T.repairLockedDeck(db, { tournamentId: t.id, userId: u.id, replacements: [{ position: 4, ctoonId: ctoons[0].id }, { position: 7, ctoonId: spare.id }] })) // duplicates a kept card
-
-  // The very copy that was lent out cannot be chosen again for its own slot.
-  const same = await T.repairLockedDeck(db, { tournamentId: t.id, userId: u.id, replacements: [{ position: 4, ctoonId: s4.ctoonId }, { position: 7, ctoonId: spare.id }] })
-  bad(same)
-
-  const ok = await T.repairLockedDeck(db, { tournamentId: t.id, userId: u.id, replacements: [{ position: 4, ctoonId: spare.id }, { position: 7, ctoonId: spare2.id }] })
-  assert.deepEqual([ok.ok, ok.replaced], [true, 2])
-  const opt = await db.ogGtoonTournamentOptIn.findFirst({ where: { tournamentId: t.id, userId: u.id } })
-  assert.equal(opt.repairCount, 1)
-  assert.equal((await Live.loadLockedDeckForGame(u.id, opt.deckSnapshotJson)).valid, true)
-
-  // Mid-series: no repairs.
-  await db.ogGtoonTournament.update({ where: { id: t.id }, data: { status: 'BRACKET_ACTIVE' } })
-  const r = await db.ogGtoonTournamentRound.create({ data: { tournamentId: t.id, stage: 'BRACKET', roundNumber: 1 } })
-  await db.ogGtoonTournamentMatch.create({ data: { tournamentId: t.id, roundId: r.id, stage: 'BRACKET', roundNumber: 1, tableNumber: 1, playerAUserId: u.id, playerBUserId: other.id, status: 'IN_PROGRESS', gamesCounted: 1, winsA: 1 } })
-  await db.userCtoon.update({ where: { id: opt.deckSnapshotJson[0].userCtoonId }, data: { burnedAt: new Date() } })
-  const mid = await T.repairLockedDeck(db, { tournamentId: t.id, userId: u.id, replacements: [{ position: 0, ctoonId: spare.id }] })
-  assert.equal(mid.ok, false)
-  assert.match(mid.message, /middle of a series/)
+  // Deck repair no longer exists.
+  assert.equal(T.repairLockedDeck, undefined)
 })
 
 run('the cron entry point does everything in order: close opt-in, score unscored games, advance, remind, pay', async () => {

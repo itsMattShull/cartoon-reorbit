@@ -55,6 +55,7 @@ import { evaluatePackReward } from './ogGtoonsPackReward.js'
 import { clearLive, isPairingClosed, flagNeedsAdmin } from './ogGtoonTournamentLive.js'
 import { enqueueOgTournamentJob } from './queues.js'
 import { registerOgGtoonsTournament } from './ogGtoonsTournamentSocket.js'
+import { registerOgGtoonsAsync, startAsyncReconcile } from './ogGtoonsAsyncSocket.js'
 import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 
@@ -109,9 +110,10 @@ function scheduleLobbyBroadcast() {
   if (!lobbyIo || lobbyTimer) return
   lobbyTimer = setTimeout(() => {
     lobbyTimer = null
+    const queueCount = queue.length
     for (const [uid, entry] of lobby) {
       const users = availableLobbyUsers(uid)
-      for (const sid of entry.sockets) lobbyIo.local.to(sid).emit(EV('lobbyUsers'), { users })
+      for (const sid of entry.sockets) lobbyIo.local.to(sid).emit(EV('lobbyUsers'), { users, queueCount })
     }
   }, 150)
   lobbyTimer.unref?.()
@@ -755,6 +757,7 @@ async function reconcileTournamentGames(io) {
 let sweepTimer = null
 export function startOgGtoonsSweep(io) {
   if (sweepTimer) return
+  startAsyncReconcile(io, { EV })
   sweepTimer = setInterval(() => {
     try { sweep(io) } catch (err) { console.error('[ogGtoons] sweep failed:', err) }
   }, 60_000)
@@ -770,6 +773,12 @@ export function startOgGtoonsSweep(io) {
 export async function restoreOgGtoonsMatches(io) {
   const restored = await ogRedis.scanOgGtoonMatches()
   for (const [matchId, match] of restored.entries()) {
+    // Async tournament games live in the database, never in this mirror. One found here is a leftover that must not be
+    // resumed with phase clocks (and the auto-play they bring), so it is dropped.
+    if (match.noTimers || match.tournament?.async) {
+      ogRedis.delOgGtoonMatch(matchId).catch(() => {})
+      continue
+    }
     match.sockets = [new Set(), new Set()]
     match.graceTimers = {}
     match.ending = false
@@ -833,6 +842,10 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     auth, startMatch, matchByUser, queueByUser, removeFromQueue, userRoom, isPracticing, EV
   })
 
+  // Async + live tournament games. Deliberately separate: its own auth (no reattach to a casual match), its own events, and it
+  // never touches matchByUser, the sweep, the phase timers or the Redis mirror. See ogGtoonsAsyncSocket.js.
+  registerOgGtoonsAsync(io, socket, { resolveSocketUser, EV, userRoom })
+
   socket.on(EV('subscribe'), async () => {
     const user = await auth()
     if (!user) return
@@ -858,7 +871,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     lobby.set(user.id, entry)
     socket.data.ogGtoonsLobbyUserId = user.id
     // The newcomer gets their list right away; everyone else's refreshes on the debounce.
-    socket.emit(EV('lobbyUsers'), { users: availableLobbyUsers(user.id) })
+    socket.emit(EV('lobbyUsers'), { users: availableLobbyUsers(user.id), queueCount: queue.length })
     scheduleLobbyBroadcast()
   })
 

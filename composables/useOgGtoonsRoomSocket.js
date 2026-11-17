@@ -10,6 +10,8 @@ import { useOgGtoonsSocket } from './useOgGtoonsSocket'
 const lobbyState = ref(null)
 // Usernames on the Matchmaking tab who can be challenged right now (server-filtered; never includes you).
 const lobbyUsers = ref([])
+// How many players are waiting in the random-match queue right now (server-pushed with the lobby list).
+const queueCount = ref(0)
 // The latest thing that happened to a request you sent: { id, kind: 'declined'|'busy'|'expired', username, n }.
 // `n` changes on every event so a watcher fires even for two identical notices in a row.
 const challengeNotice = ref(null)
@@ -26,8 +28,11 @@ export function useOgGtoonsRoomSocket() {
       socket.emit('oggtoons:subscribe')
       if (wantsLobby) socket.emit('oggtoons:lobbyJoin') // a dropped connection forgets the lobby; rejoin it
     })
-    socket.on('disconnect', () => { lobbyUsers.value = [] })
-    socket.on('oggtoons:lobbyUsers', ({ users }) => { lobbyUsers.value = Array.isArray(users) ? users : [] })
+    socket.on('disconnect', () => { lobbyUsers.value = []; queueCount.value = 0 })
+    socket.on('oggtoons:lobbyUsers', ({ users, queueCount: qc }) => {
+      lobbyUsers.value = Array.isArray(users) ? users : []
+      queueCount.value = Number.isFinite(qc) ? qc : 0
+    })
     socket.on('oggtoons:lobbyState', state => { lobbyState.value = state })
     socket.on('oggtoons:queueJoined', () => {
       lobbyState.value = { ...(lobbyState.value || {}), inQueue: true }
@@ -64,6 +69,7 @@ export function useOgGtoonsRoomSocket() {
   function leaveLobby() {
     wantsLobby = false
     lobbyUsers.value = []
+    queueCount.value = 0
     socket.emit('oggtoons:lobbyLeave')
   }
 
@@ -102,7 +108,7 @@ export function useOgGtoonsRoomSocket() {
   })
 
   return {
-    socket, isConnected, lobbyState, lobbyUsers, challengeNotice,
+    socket, isConnected, lobbyState, lobbyUsers, queueCount, challengeNotice,
     joinLobby, leaveLobby, joinQueue, leaveQueue, sendChallenge, acceptChallenge, declineChallenge, cancelChallenge
   }
 }

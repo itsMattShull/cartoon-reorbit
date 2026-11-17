@@ -20,15 +20,22 @@ import { DateTime } from 'luxon'
 import { randomBytes } from 'node:crypto'
 import { sendDiscordDMByDiscordId, sendGuildChannelMessageById } from './discord.js'
 import { grantRewardInTx, enqueueCtoonJobs } from './achievements.js'
+import { armOgTournamentDeadline } from './queues.js'
+import { decideAndLock, closeTournamentGames, ensureNextGameInTx, lockPairing, restoreMatch, needsToAct } from './ogGtoonTournamentGames.js'
+import { goalCardFor } from './ogGtoonEngine.js'
+import {
+  gameStartedText, yourTurnText, deckProblemText, matchDecidedAwayText, roundOpenAsyncText, reminderAsyncText, gameUrl,
+  roundOpenLiveText, reminderLiveText, opponentReadyText, matchDecidedText, announcementText, tournamentCompleteText
+} from './ogGtoonTournamentMessages.js'
 import { grantCodePacks } from './codePackGrant.js'
-import { hasFlag, setFlag } from './cache.js'
+import { hasFlag, setFlag, claimFlag, clearFlag } from './cache.js'
 import {
   BEST_OF, WINS_NEEDED, formatFor, swissRoundsFor, compareStandings, seededShuffle, bracketSizeFor,
   buildBracketSeedPairs, bracketRoundLabel, pairSwissRound, pairKey, decideAtDeadline,
-  computeRecords, buildFinalPlacements, prizeRecipients, roundDueAt
+  computeRecords, buildFinalPlacements, prizeRecipients, roundDueAt, reminderApplies
 } from './tournamentCore.js'
 import {
-  ACTIVE_STATUSES, settleMatchFromGames, loadSeriesGames, clearStaleLive, isFresh, loadLockedDeckForGame
+  ACTIVE_STATUSES, settleMatchFromGames, loadSeriesGames, clearStaleLive, isFresh, loadLockedDeckForGame, lockMatchResult
 } from './ogGtoonTournamentLive.js'
 
 const CENTRAL_TZ = 'America/Chicago'
@@ -74,14 +81,16 @@ export function stageLabel(stage, roundNumber, bracketMatchCount = null) {
   return bracketMatchCount ? bracketRoundLabel(bracketMatchCount) : `Bracket Round ${roundNumber}`
 }
 
-async function dmUsers(db, items) {
+async function dmUsers(db, items, { onFail = null } = {}) {
   if (!items.length) return
   const ids = [...new Set(items.map(i => i.userId))]
   const users = await db.user.findMany({ where: { id: { in: ids } }, select: { id: true, discordId: true } })
   const discordById = new Map(users.map(u => [u.id, u.discordId]))
-  await runLimited(items, 3, async ({ userId, text }) => {
-    const discordId = discordById.get(userId)
-    if (discordId) await sendDiscordDMByDiscordId(discordId, text)
+  await runLimited(items, 3, async (item) => {
+    const discordId = discordById.get(item.userId)
+    const sent = discordId ? await sendDiscordDMByDiscordId(discordId, item.text) : false
+    // A failed send must not use up a once-only claim, or the player would never be told.
+    if (!sent && onFail) await onFail(item)
   })
 }
 
@@ -98,21 +107,23 @@ async function sendRoundOpenDMs(db, tournamentId, roundId) {
   })
   const label = stageLabel(round.stage, round.roundNumber, round.stage === 'BRACKET' ? matches.length : null)
   const link = getOgTournamentUrl(tournament.id)
-  const due = round.dueAt ? `\n• Finish by: ${formatCentral(round.dueAt)}` : ''
   const items = []
   for (const m of matches) {
     const mk = (me, opp) => ({
       userId: me.id,
-      text: [
-        `🏆 ${tournament.name} — ${label}`,
-        `You are paired with ${opp.username || 'your opponent'}.`,
-        `• Best of 3 (first to 2 wins). Both of you need to be online to play.${due}`,
-        `• Open your match and press Start next game: ${link}`
-      ].join('\n')
+      claimKey: `ogt-open-dm:${m.id}:${me.id}`,
+      text: m.asyncRules
+        ? roundOpenAsyncText({ tournamentName: tournament.name, label, oppUsername: opp.username || 'your opponent', dueText: round.dueAt ? formatCentral(round.dueAt) : 'the deadline', link })
+        : roundOpenLiveText({ tournamentName: tournament.name, label, oppUsername: opp.username || 'your opponent', dueText: round.dueAt ? formatCentral(round.dueAt) : null, link })
     })
     items.push(mk(m.playerA, m.playerB), mk(m.playerB, m.playerA))
   }
-  await dmUsers(db, items)
+  // Once per player per pairing, however many times this runs (a retried job, an admin recompute racing the cron).
+  const fresh = []
+  for (const item of items) {
+    if (await claimFlag(item.claimKey, 14 * 24 * 3600)) fresh.push(item)
+  }
+  await dmUsers(db, fresh, { onFail: (item) => clearFlag(item.claimKey) })
 }
 
 async function sendMatchDecidedDMs(db, match, tournament, reason) {
@@ -125,7 +136,10 @@ async function sendMatchDecidedDMs(db, match, tournament, reason) {
       : `${name.get(match.winnerUserId) || 'The winner'} advances with the win.`
   const items = [match.playerAUserId, match.playerBUserId].map(userId => ({
     userId,
-    text: `🏆 ${tournament.name}: your match ${name.get(match.playerAUserId)} vs ${name.get(match.playerBUserId)} was decided (${reason}). ${result}\n${getOgTournamentUrl(tournament.id)}`
+    text: matchDecidedText({
+      tournamentName: tournament.name, playerA: name.get(match.playerAUserId), playerB: name.get(match.playerBUserId),
+      reason, result, link: getOgTournamentUrl(tournament.id)
+    })
   }))
   await dmUsers(db, items)
 }
@@ -137,13 +151,11 @@ export async function sendOgTournamentAnnouncement(db, tournament) {
   const botToken = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || process.env.BOT_TOKEN
   if (!channelId || !botToken) return false
   const optInCount = await db.ogGtoonTournamentOptIn.count({ where: { tournamentId: tournament.id, isActive: true } })
-  const lines = [
-    `🏆 ${tournament.name} — OG gToons Tournament`,
-    `• Best of 3 · opt-in: ${formatCentral(tournament.optInStartAt)} → ${formatCentral(tournament.optInEndAt)} (${CENTRAL_TZ})`,
-    `• Current opt-ins: ${optInCount}`,
-    `• Lock in a deck and join: ${getOgTournamentUrl(tournament.id)}`
-  ]
-  return sendGuildChannelMessageById(channelId, lines.join('\n'), botToken)
+  const content = announcementText({
+    tournamentName: tournament.name, optInStart: formatCentral(tournament.optInStartAt), optInEnd: formatCentral(tournament.optInEndAt),
+    tz: CENTRAL_TZ, optInCount, link: getOgTournamentUrl(tournament.id)
+  })
+  return sendGuildChannelMessageById(channelId, content, botToken)
 }
 
 export async function processAnnouncements(db, now = new Date()) {
@@ -210,6 +222,13 @@ async function activePlayerIds(tx, tournamentId) {
   return optIns.map(o => o.userId)
 }
 
+/**
+ * Every pairing made from now on is played under the async + live rules, and is stamped so: the flag plus the round's ORIGINAL
+ * deadline (dueAt may later move by final-minute plays). Pairings made before this shipped carry asyncRules = false and finish
+ * under the older both-online rules.
+ */
+const asyncFields = (_tournament, round) => ({ asyncRules: true, baseDueAt: round.dueAt })
+
 async function createRound(tx, tournament, stage, roundNumber, now) {
   return tx.ogGtoonTournamentRound.create({
     data: {
@@ -245,7 +264,7 @@ async function createSwissRound(tx, tournament, roundNumber, now) {
   const rows = pairs.map(([a, b], i) => ({
     tournamentId: tournament.id, roundId: round.id, stage: 'SWISS', roundNumber, tableNumber: i + 1,
     playerAUserId: a, playerBUserId: b, status: 'PENDING', bestOf: BEST_OF, requiresWinner: false,
-    pairedAt: now, dueAt: round.dueAt
+    pairedAt: now, dueAt: round.dueAt, ...asyncFields(tournament, round)
   }))
   if (byeUserId) {
     rows.push({
@@ -271,7 +290,7 @@ async function createBracketRound(tx, tournament, roundNumber, pairs, seedMap, n
       rows.push({
         tournamentId: tournament.id, roundId: round.id, stage: 'BRACKET', roundNumber, tableNumber: table,
         playerAUserId: a, playerBUserId: b, status: 'PENDING', bestOf: BEST_OF, requiresWinner: true,
-        pairedAt: now, dueAt: round.dueAt, seedA, seedB
+        pairedAt: now, dueAt: round.dueAt, seedA, seedB, ...asyncFields(tournament, round)
       })
     } else if (a || b) {
       const w = a || b
@@ -454,7 +473,8 @@ async function stepBracket(tx, t, now, events) {
       tournamentId: t.id, roundId: round.id, stage: 'BRACKET', roundNumber: round.roundNumber,
       tableNumber: i / 2 + 1, playerAUserId: winners[i], playerBUserId: winners[i + 1],
       status: 'PENDING', bestOf: BEST_OF, requiresWinner: true, pairedAt: now, dueAt: round.dueAt,
-      seedA: seedByUser.get(winners[i]) || null, seedB: seedByUser.get(winners[i + 1]) || null
+      seedA: seedByUser.get(winners[i]) || null, seedB: seedByUser.get(winners[i + 1]) || null,
+      ...asyncFields(t, round)
     })
   }
   if (rows.length) await tx.ogGtoonTournamentMatch.createMany({ data: rows })
@@ -503,8 +523,9 @@ export async function advanceTournament(db, tournamentId, { now = new Date() } =
     const rows = await tx.$queryRaw`SELECT id FROM "OgGtoonTournament" WHERE id = ${tournamentId} FOR UPDATE`
     if (!rows.length) return
     for (let i = 0; i < 20; i += 1) {
-      const t = await tx.ogGtoonTournament.findUnique({ where: { id: tournamentId } })
-      if (!t) break
+      const row = await tx.ogGtoonTournament.findUnique({ where: { id: tournamentId } })
+      if (!row) break
+      const t = row
       let progressed = false
       if (t.status === 'SWISS_ACTIVE') progressed = await stepSwiss(tx, t, now, events)
       else if (t.status === 'BRACKET_ACTIVE') progressed = await stepBracket(tx, t, now, events)
@@ -516,9 +537,19 @@ export async function advanceTournament(db, tournamentId, { now = new Date() } =
   return events
 }
 
+/** Arms the exact-time deadline decision for every async pairing of a freshly opened round (the cron is the safety net). */
+export async function armRoundDeadlines(db, roundId, arm = armOgTournamentDeadline) {
+  const rows = await db.ogGtoonTournamentMatch.findMany({
+    where: { roundId, asyncRules: true, lockedAt: null, status: { in: ['PENDING', 'IN_PROGRESS'] }, dueAt: { not: null } },
+    select: { id: true, dueAt: true }
+  })
+  for (const r of rows) await arm(r.id, r.dueAt).catch(err => console.error('[ogTournament] could not arm deadline:', err?.message || err))
+}
+
 export async function sendEvents(db, events) {
   for (const e of events) {
     try {
+      if (e.type === 'ROUND_OPEN') await armRoundDeadlines(db, e.roundId)
       if (e.type === 'ROUND_OPEN') await sendRoundOpenDMs(db, e.tournamentId, e.roundId)
       if (e.type === 'COMPLETE') await announceComplete(db, e.tournamentId)
     } catch (err) {
@@ -534,10 +565,17 @@ async function announceComplete(db, tournamentId) {
   const botToken = process.env.DISCORD_ANNOUNCEMENTS_BOT_TOKEN || process.env.BOT_TOKEN
   if (!channelId || !botToken) return
   const top = Array.isArray(t.finalPlacementsJson) ? t.finalPlacementsJson.slice(0, 3) : []
-  const lines = [`🏆 ${t.name} is complete!`, `• Winner: ${t.winner?.username || 'TBD'}`]
-  if (top.length > 1) lines.push(`• Podium: ${top.map(p => `${p.place}. ${p.username}`).join(' · ')}`)
-  lines.push(`• Results: ${getOgTournamentUrl(t.id)}`)
-  await sendGuildChannelMessageById(channelId, lines.join('\n'), botToken)
+  // Tag the podium finishers: look up their Discord ids (anyone without one, or who left the server, is just named).
+  const users = top.length
+    ? await db.user.findMany({ where: { id: { in: top.map(p => p.userId).filter(Boolean) } }, select: { id: true, discordId: true, inGuild: true } })
+    : []
+  const userById = new Map(users.map(u => [u.id, u]))
+  const podium = top.map(p => {
+    const u = userById.get(p.userId)
+    return { place: p.place, username: p.username, discordId: u?.discordId && u.inGuild !== false ? u.discordId : null }
+  })
+  const { content, mentionIds } = tournamentCompleteText({ tournamentName: t.name, podium, link: getOgTournamentUrl(t.id) })
+  await sendGuildChannelMessageById(channelId, content, botToken, mentionIds)
 }
 
 /** Worker entry point: score the pairing that just finished (if given), advance, then notify. */
@@ -551,25 +589,8 @@ export async function advanceAndNotify(db, tournamentId, { matchId = null } = {}
 
 /* ── Results that don't come from played games ──────────────────────────────────────────── */
 
-/**
- * Decides a pairing without (or beyond) played games. A guarded updateMany, so it only ever lands on
- * a pairing nobody else has decided. `outcome` null = both players lose (Swiss double no-show).
- */
-export async function lockMatchResult(db, match, { outcome, resolution, winsA, winsB, note = null, now = new Date() }) {
-  const winnerUserId = outcome === 'A_WIN' ? match.playerAUserId : outcome === 'B_WIN' ? match.playerBUserId : null
-  const claimed = await db.ogGtoonTournamentMatch.updateMany({
-    where: { id: match.id, lockedAt: null },
-    data: {
-      status: 'COMPLETE', outcome, winnerUserId, resolution,
-      winsA: winsA ?? match.winsA, winsB: winsB ?? match.winsB,
-      needsAdmin: false, needsAdminReason: null, liveMatchId: null, liveStartedAt: null,
-      readyAAt: null, readyBAt: null,
-      ...(note ? { adminNotes: note } : {}),
-      lockedAt: now, completedAt: now
-    }
-  })
-  return claimed.count === 1
-}
+// lockMatchResult lives in ogGtoonTournamentLive.js (the socket server needs it too) and also closes a running async game.
+export { lockMatchResult }
 
 /** A player gives up their series. Refused while a game is live (leave that game instead). */
 export async function forfeitMatch(db, { tournamentId, matchId, userId, now = new Date() }) {
@@ -581,9 +602,12 @@ export async function forfeitMatch(db, { tournamentId, matchId, userId, now = ne
   const isB = match.playerBUserId === userId
   if (!isA && !isB) return { ok: false, code: 403, message: 'You are not a player in this match' }
   if (match.liveMatchId) return { ok: false, code: 400, message: 'A game is being played right now. Finish or leave it first.' }
+  // Under the async rules the games that were really played keep their real score (it feeds the game-win tiebreak); a forfeit
+  // before any game shows the usual 2-0.
+  const keepReal = match.asyncRules && match.gamesCounted > 0
   const done = await lockMatchResult(db, match, {
     outcome: isA ? 'B_WIN' : 'A_WIN', resolution: 'FORFEIT',
-    winsA: isA ? match.winsA : WINS_NEEDED, winsB: isB ? match.winsB : WINS_NEEDED,
+    winsA: isA ? match.winsA : (keepReal ? match.winsA : WINS_NEEDED), winsB: isB ? match.winsB : (keepReal ? match.winsB : WINS_NEEDED),
     note: 'Forfeited by a player', now
   })
   return done ? { ok: true } : { ok: false, code: 409, message: 'This match was just decided' }
@@ -596,8 +620,10 @@ export async function processDeadlines(db, now = new Date()) {
   const decided = []
   await clearStaleLive(db, now)
 
+  // Pairings under the async rules are decided by decideAndLock (below), never by the older both-online rules.
   const due = await db.ogGtoonTournamentMatch.findMany({
     where: {
+      asyncRules: false,
       lockedAt: null, status: { in: ['PENDING', 'IN_PROGRESS'] }, needsAdmin: false, liveMatchId: null,
       dueAt: { lte: now }, tournament: { status: { in: ACTIVE_STATUSES } }
     },
@@ -621,6 +647,28 @@ export async function processDeadlines(db, now = new Date()) {
     }
   }
 
+  // The async pairings whose (extended) deadline has passed: the same decision the exact-time job makes, in case that job was lost.
+  const dueAsync = await db.ogGtoonTournamentMatch.findMany({
+    where: {
+      asyncRules: true, lockedAt: null, status: { in: ['PENDING', 'IN_PROGRESS'] }, needsAdmin: false,
+      dueAt: { lte: now }, tournament: { status: { in: ACTIVE_STATUSES } }
+    },
+    select: { id: true, tournamentId: true }, take: 500
+  })
+  for (const m of dueAsync) {
+    const r = await decideAndLock(m.id, { db })
+    if (r.decided) { touched.add(m.tournamentId); decided.push({ matchId: m.id, reason: r.why }) }
+  }
+  // Re-arm the exact-time job for anything due soon (a Redis flush loses delayed jobs; arming is idempotent).
+  const soon = await db.ogGtoonTournamentMatch.findMany({
+    where: {
+      asyncRules: true, lockedAt: null, status: { in: ['PENDING', 'IN_PROGRESS'] }, needsAdmin: false,
+      dueAt: { gt: now, lte: new Date(now.getTime() + 20 * 60 * 1000) }, tournament: { status: { in: ACTIVE_STATUSES } }
+    },
+    select: { id: true, dueAt: true }, take: 500
+  })
+  for (const m of soon) await armOgTournamentDeadline(m.id, m.dueAt).catch(() => {})
+
   for (const d of decided) {
     try {
       const match = await db.ogGtoonTournamentMatch.findUnique({ where: { id: d.matchId }, include: { tournament: { select: { id: true, name: true } } } })
@@ -628,6 +676,26 @@ export async function processDeadlines(db, now = new Date()) {
     } catch (err) { console.error('[ogTournament] decided DM failed:', err?.message || err) }
   }
   return [...touched]
+}
+
+/**
+ * The exact-time job for one async pairing: decide it if its deadline has passed, otherwise (the deadline was extended by a play
+ * in the last minute, or an admin moved it) arm again for the new deadline. After a decision the players are told and the
+ * tournament advances at once instead of waiting for the next cron run.
+ */
+export async function runDeadlineJob(db, matchId, { arm = armOgTournamentDeadline } = {}) {
+  const r = await decideAndLock(matchId, { db })
+  if (r.reason === 'notDue' && r.dueAt) {
+    await arm(matchId, r.dueAt)
+    return r
+  }
+  if (!r.decided) return r
+  try {
+    const match = await db.ogGtoonTournamentMatch.findUnique({ where: { id: matchId }, include: { tournament: { select: { id: true, name: true } } } })
+    if (match) await sendMatchDecidedDMs(db, match, match.tournament, r.why)
+  } catch (err) { console.error('[ogTournament] decided DM failed:', err?.message || err) }
+  await advanceAndNotify(db, r.tournamentId)
+  return r
 }
 
 export async function processReminders(db, now = new Date()) {
@@ -648,10 +716,14 @@ export async function processReminders(db, now = new Date()) {
     for (const m of soon) {
       const claimed = await db.ogGtoonTournamentMatch.updateMany({ where: { id: m.id, [field]: null }, data: { [field]: now } })
       if (!claimed.count) continue
+      // The pairing was handed out with no more than this much time, so the pairing message already said it. Mark the
+      // reminder done (so it is not looked at again) without sending a second message within minutes of the first.
+      if (!reminderApplies(m.pairedAt, m.dueAt, hours)) continue
       const items = [[m.playerA, m.playerB], [m.playerB, m.playerA]].map(([me, opp]) => ({
         userId: me.id,
-        text: `⏰ ${m.tournament.name}: your match vs ${opp.username} is due in about ${label} (${formatCentral(m.dueAt)}). ` +
-          `Both of you need to be online to play. ${getOgTournamentUrl(m.tournament.id)}`
+        text: m.asyncRules
+          ? reminderAsyncText({ tournamentName: m.tournament.name, oppUsername: opp.username, label, dueText: formatCentral(m.dueAt), link: getOgTournamentUrl(m.tournament.id) })
+          : reminderLiveText({ tournamentName: m.tournament.name, oppUsername: opp.username, label, dueText: formatCentral(m.dueAt), link: getOgTournamentUrl(m.tournament.id) })
       }))
       await dmUsers(db, items).catch(() => {})
     }
@@ -773,6 +845,12 @@ export async function adminReopenMatch(db, { tournamentId, matchId }) {
       adminNotes: null, dueAt: new Date(Date.now() + (t.roundWindowHours || 72) * HOUR)
     }
   })
+  if (match.asyncRules) {
+    // A reopened pairing gets a fresh ORIGINAL deadline (new games may start against it) and a fresh extension count.
+    const reopened = await db.ogGtoonTournamentMatch.findUnique({ where: { id: matchId }, select: { dueAt: true } })
+    await db.ogGtoonTournamentMatch.update({ where: { id: matchId }, data: { baseDueAt: reopened.dueAt, extensions: 0, deckProblemSide: null } })
+    await armOgTournamentDeadline(matchId, reopened.dueAt).catch(() => {})
+  }
   await settleMatchFromGames(matchId)
   await recomputeRecords(db, tournamentId)
   return { ok: true }
@@ -787,6 +865,14 @@ export async function adminVoidGame(db, { tournamentId, matchId, gameId }) {
   if (!game || game.tournamentMatchId !== matchId) return { ok: false, code: 404, message: 'Game not found in this match' }
   await db.ogGtoonMatch.update({ where: { id: gameId }, data: { outcome: 'INCOMPLETE' } })
   await settleMatchFromGames(matchId)
+  // Under the async rules nobody is watching to start the replacement, so it is created here (a Start is sticky).
+  if (match.asyncRules) {
+    await db.$transaction(async (tx) => {
+      if (!(await lockPairing(tx, matchId))) return
+      const rows = await tx.$queryRaw`SELECT clock_timestamp() AS now`
+      await ensureNextGameInTx(tx, matchId, { now: new Date(rows[0].now) })
+    })
+  }
   return { ok: true }
 }
 
@@ -797,15 +883,23 @@ export async function adminExtendDeadline(db, { tournamentId, matchId, hours }) 
   if (!match || match.tournamentId !== tournamentId) return { ok: false, code: 404, message: 'Match not found' }
   if (match.lockedAt) return { ok: false, code: 400, message: 'This match is already decided' }
   const from = Math.max(Date.now(), match.dueAt ? match.dueAt.getTime() : 0)
+  const dueAt = new Date(from + h * HOUR)
   await db.ogGtoonTournamentMatch.update({
     where: { id: matchId },
-    data: { dueAt: new Date(from + h * HOUR), needsAdmin: false, needsAdminReason: null, reminder24SentAt: null, reminder4SentAt: null }
+    data: {
+      dueAt, needsAdmin: false, needsAdminReason: null, reminder24SentAt: null, reminder4SentAt: null,
+      // An admin extension moves the ORIGINAL deadline too (so a new game can start against it) and starts the extension count over.
+      ...(match.asyncRules ? { baseDueAt: dueAt, extensions: 0 } : {})
+    }
   })
+  if (match.asyncRules) await armOgTournamentDeadline(matchId, dueAt).catch(() => {})
   return { ok: true, hours: h }
 }
 
 export async function cancelTournament(db, tournamentId) {
   await db.ogGtoonTournament.update({ where: { id: tournamentId }, data: { status: 'CANCELLED', nextAnnouncementAt: null } })
+  // A running async game never counts once the tournament is cancelled.
+  await closeTournamentGames(tournamentId, { db })
 }
 
 /* ── Prizes ──────────────────────────────────────────────────────────────────────────────── */
@@ -992,67 +1086,10 @@ export async function prizeSupplyWarnings(db, bundle, recipientCount) {
   return warnings
 }
 
-/* ── Deck repair ─────────────────────────────────────────────────────────────────────────── */
-
-/**
- * Lets a player replace the cards of their LOCKED deck that are no longer valid (sold, traded,
- * burned, or handed to someone and back). Only the flagged slots can change, each with a
- * different card the player owns now, and only between series — never mid-series or mid-game.
- * Handing a flagged card back never clears the flag, so lending cards between games cannot be
- * "repaired" away; the card is simply replaced.
- */
-export async function repairLockedDeck(db, { tournamentId, userId, replacements, now = new Date() }) {
-  const t = await db.ogGtoonTournament.findUnique({ where: { id: tournamentId }, select: { status: true } })
-  if (!t || !['OPT_IN_CLOSED', ...ACTIVE_STATUSES].includes(t.status)) {
-    return { ok: false, code: 400, message: 'A deck can only be repaired once opt-in has closed and while the tournament is running. Before that, just lock in a different deck.' }
-  }
-  const optIn = await db.ogGtoonTournamentOptIn.findUnique({ where: { tournamentId_userId: { tournamentId, userId } } })
-  if (!optIn || !optIn.isActive || optIn.disqualified) return { ok: false, code: 403, message: 'You are not an active entrant' }
-
-  const open = await db.ogGtoonTournamentMatch.findFirst({
-    where: { tournamentId, lockedAt: null, status: { in: ['PENDING', 'IN_PROGRESS'] }, OR: [{ playerAUserId: userId }, { playerBUserId: userId }] }
-  })
-  if (open?.liveMatchId) return { ok: false, code: 400, message: 'You are in a game right now' }
-  if (open && open.gamesCounted > 0) return { ok: false, code: 400, message: 'Your deck cannot change in the middle of a series. Finish this series first.' }
-
-  const check = await loadLockedDeckForGame(userId, optIn.deckSnapshotJson, db)
-  const flagged = [...check.missing, ...check.moved]
-  if (!flagged.length) return { ok: false, code: 400, message: 'Your locked deck has no problems to repair' }
-
-  const list = Array.isArray(replacements) ? replacements : []
-  const byPos = new Map(list.map(r => [Number(r?.position), String(r?.ctoonId || '')]))
-  if (byPos.size !== flagged.length || !flagged.every(pos => byPos.get(pos))) {
-    return { ok: false, code: 400, message: 'Replace every flagged card, and only those', flagged }
-  }
-
-  const snapshot = optIn.deckSnapshotJson.map(s => ({ ...s }))
-  const keep = new Set(snapshot.filter(s => !flagged.includes(s.position)).map(s => s.ctoonId))
-  // Every copy in the old snapshot is off the table, flagged ones included: re-picking the very copy
-  // that was lent out would clear the flag, so a flagged slot needs a DIFFERENT copy.
-  const usedCopies = new Set(snapshot.map(s => s.userCtoonId))
-  const newIds = [...byPos.values()]
-  if (new Set(newIds).size !== newIds.length || newIds.some(id => keep.has(id))) {
-    return { ok: false, code: 400, message: 'A tournament deck needs 12 different cards' }
-  }
-  const ctoons = await db.ctoon.findMany({ where: { id: { in: newIds } }, select: { id: true, name: true, isOgGtoon: true } })
-  if (ctoons.length !== newIds.length || ctoons.some(c => !c.isOgGtoon)) return { ok: false, code: 400, message: 'Pick gToon cards' }
-  const copies = await db.userCtoon.findMany({
-    where: { userId, ctoonId: { in: newIds }, burnedAt: null }, select: { id: true, ctoonId: true }, orderBy: { createdAt: 'asc' }
-  })
-  const copyFor = new Map()
-  for (const c of copies) if (!copyFor.has(c.ctoonId) && !usedCopies.has(c.id)) copyFor.set(c.ctoonId, c.id)
-  for (const [pos, ctoonId] of byPos) {
-    const copyId = copyFor.get(ctoonId)
-    if (!copyId) return { ok: false, code: 400, message: `You do not own ${ctoons.find(c => c.id === ctoonId)?.name || 'that card'}` }
-    const slot = snapshot.find(s => s.position === pos)
-    Object.assign(slot, { ctoonId, userCtoonId: copyId, lockedAt: now.toISOString() })
-  }
-  await db.ogGtoonTournamentOptIn.update({
-    where: { id: optIn.id },
-    data: { deckSnapshotJson: snapshot, repairCount: { increment: 1 }, lastRepairedAt: now }
-  })
-  return { ok: true, replaced: flagged.length }
-}
+/* ── Locked decks never change ───────────────────────────────────────────────────────────── */
+// There is deliberately no deck repair: the 12 copies registered at opt-in are the deck for the whole tournament.
+// They are frozen against trades, auctions, hand-overs and burns (ogGtoonTournamentFreeze.js). A copy that still
+// gets out some other way (an admin action) flags the deck, that player cannot play and loses at the deadline.
 
 /* ── Ready-up DM (queued by the socket server) ───────────────────────────────────────────── */
 
@@ -1071,13 +1108,111 @@ export async function notifyOpponentReady(db, { tournamentMatchId, readyUserId }
   const me = m.playerAUserId === readyUserId ? m.playerA : m.playerB
   const opp = m.playerAUserId === readyUserId ? m.playerB : m.playerA
   const mine = m.playerAUserId === readyUserId ? m.readyAAt : m.readyBAt
-  if (!isFresh(mine)) return
+  // Under the async rules a Start never expires; the older rules let it go stale after 30 minutes.
+  if (!(m.asyncRules ? mine : isFresh(mine))) return
   await setFlag(flag, 30 * 60)
   await dmUsers(db, [{
     userId: opp.id,
-    text: `🎮 ${me.username} is ready to play your ${m.tournament.name} match and is waiting for you. ` +
-      `Open your match and press Start next game: ${getOgTournamentUrl(m.tournament.id)}`
+    text: opponentReadyText({ tournamentName: m.tournament.name, oppUsername: me.username, async: !!m.asyncRules, link: getOgTournamentUrl(m.tournament.id) })
   }])
+}
+
+/* ── Async games: DMs (queued by the socket server and the deadline job) ──────────────────────── */
+
+const gameLink = (gameId) => gameUrl(baseUrl(), gameId)
+
+async function pairingContext(db, tournamentMatchId) {
+  return db.ogGtoonTournamentMatch.findUnique({
+    where: { id: tournamentMatchId },
+    include: {
+      tournament: { select: { id: true, name: true } },
+      playerA: { select: { id: true, username: true } },
+      playerB: { select: { id: true, username: true } }
+    }
+  })
+}
+
+/** Both players: the link to a game that was just created, its goal cards, how it is decided, and the deadline. Once per player per game. */
+export async function sendGameStartedDMs(db, gameId) {
+  const game = await db.ogGtoonTournamentGame.findUnique({ where: { id: gameId } })
+  if (!game || game.status !== 'ACTIVE') return
+  const m = await pairingContext(db, game.tournamentMatchId)
+  if (!m || m.lockedAt) return
+  const match = restoreMatch(game.state)
+  const sides = [m.playerA, m.playerB]
+  const items = []
+  for (const [idx, me] of sides.entries()) {
+    const opp = sides[idx === 0 ? 1 : 0]
+    const goal = (i) => { const c = goalCardFor(match, i); return c ? { name: c.name, color: c.color } : null }
+    const claimKey = `ogt-game-dm:${gameId}:${me.id}`
+    if (!(await claimFlag(claimKey, 14 * 24 * 3600))) continue
+    items.push({
+      userId: me.id, claimKey,
+      text: gameStartedText({
+        tournamentName: m.tournament.name, label: match.tournament?.label || 'your match', gameNumber: game.gameNumber,
+        me: { username: me.username, goalColor: match.goalColor[idx], goalCard: goal(idx) },
+        opp: { username: opp.username, goalColor: match.goalColor[idx === 0 ? 1 : 0], goalCard: goal(idx === 0 ? 1 : 0) },
+        link: gameLink(gameId), dueText: m.dueAt ? formatCentral(m.dueAt) : 'the deadline', firstGame: game.gameNumber === 1
+      })
+    })
+  }
+  await dmUsers(db, items, { onFail: (item) => clearFlag(item.claimKey) })
+}
+
+/**
+ * "It's your move" for a player whose opponent just played. Sent a couple of minutes after the play (so live play never sends
+ * it) and only if it is still true then: the game is still running and that player still has something to do. At most one per
+ * player per pairing every 3 hours; a failed send does not use up the slot.
+ */
+export async function sendYourTurnDM(db, { gameId, userId }) {
+  const game = await db.ogGtoonTournamentGame.findUnique({ where: { id: gameId } })
+  if (!game || game.status !== 'ACTIVE') return
+  const m = await pairingContext(db, game.tournamentMatchId)
+  if (!m || m.lockedAt || !m.asyncRules) return
+  const match = restoreMatch(game.state)
+  const idx = match.players.indexOf(userId)
+  if (idx === -1 || !needsToAct(match, idx)) return
+  const claimKey = `ogt-turn-dm:${m.id}:${userId}`
+  if (!(await claimFlag(claimKey, 3 * 3600))) return
+  const opp = userId === m.playerAUserId ? m.playerB : m.playerA
+  await dmUsers(db, [{
+    userId, claimKey,
+    text: yourTurnText({ tournamentName: m.tournament.name, gameNumber: game.gameNumber, oppUsername: opp.username, link: gameLink(gameId), dueText: m.dueAt ? formatCentral(m.dueAt) : 'the deadline' })
+  }], { onFail: (item) => clearFlag(item.claimKey) })
+}
+
+/** A locked card left a collection and the next game cannot start: tell the offender what it costs, and the other player what to expect. */
+export async function sendDeckProblemDMs(db, tournamentMatchId) {
+  const m = await pairingContext(db, tournamentMatchId)
+  if (!m || m.lockedAt || !m.deckProblemSide) return
+  const side = m.deckProblemSide
+  const claimKey = `ogt-deck-dm:${m.id}:${side}`
+  if (!(await claimFlag(claimKey, 24 * 3600))) return
+  const dueText = m.dueAt ? formatCentral(m.dueAt) : 'the deadline'
+  const link = getOgTournamentUrl(m.tournament.id)
+  const items = []
+  for (const [who, me, opp] of [['A', m.playerA, m.playerB], ['B', m.playerB, m.playerA]]) {
+    const mine = side === 'BOTH' || side === who
+    items.push({ userId: me.id, text: deckProblemText({ tournamentName: m.tournament.name, mine, oppUsername: opp.username, link, dueText }) })
+  }
+  await dmUsers(db, items, { onFail: () => clearFlag(claimKey) })
+}
+
+/** The match was decided by the game that just ended: tell the player who was not on the board to see it. */
+export async function sendAwayDecidedDM(db, { matchId, exceptUserId }) {
+  const m = await pairingContext(db, matchId)
+  if (!m || !m.lockedAt) return
+  const items = []
+  for (const [me, opp] of [[m.playerA, m.playerB], [m.playerB, m.playerA]]) {
+    if (me.id === exceptUserId) continue
+    const claimKey = `ogt-dec-dm:${m.id}:${me.id}`
+    if (!(await claimFlag(claimKey, 14 * 24 * 3600))) continue
+    items.push({
+      userId: me.id, claimKey,
+      text: matchDecidedAwayText({ tournamentName: m.tournament.name, won: m.winnerUserId === me.id, oppUsername: opp.username, link: getOgTournamentUrl(m.tournament.id) })
+    })
+  }
+  await dmUsers(db, items, { onFail: (item) => clearFlag(item.claimKey) })
 }
 
 /* ── The cron entry point ────────────────────────────────────────────────────────────────── */
