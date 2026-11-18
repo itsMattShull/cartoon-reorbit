@@ -38,6 +38,7 @@ import { prisma as db } from '../prisma.js'
 import { buildWalkableSet, findPath, firstWalkableCell } from './myOrbitPathfinding.js'
 import { parseMyOrbitChatMessage, containsBannedWord } from './myOrbitChatFilter.js'
 import { getGlobalConfig } from './cmoon.js'
+import { isValidMyOrbitEmote } from '../../utils/myOrbitEmotes.js'
 
 const EV = (name) => `myorbit:${name}`
 const roomChannel = (roomId) => `myorbit:room:${roomId}`
@@ -48,6 +49,7 @@ const STEP_MS = 350 // ms per tile step while walking a path
 // here is "forfeited" by leaving, so there's no reason to hold the door open as long.
 const RECONNECT_GRACE_MS = 15_000
 const CHAT_RATE_LIMIT_MS = 1200 // minimum gap between one user's own chat messages
+const EMOTE_RATE_LIMIT_MS = 1500 // minimum gap between one user's own emotes
 
 const rooms = new Map()      // roomId -> room
 const roomByUser = new Map() // userId -> roomId (which room, if any, this user is currently in)
@@ -82,17 +84,32 @@ async function loadRoomDefinition(roomId) {
   }))
   return {
     id: room.id, name: room.name, gridWidth: room.gridWidth, gridHeight: room.gridHeight, capacity: room.capacity,
+    ambientSoundPath: room.ambientSoundPath,
     tiles, furniture, walkable: buildWalkableSet(tiles, furniture)
   }
 }
 
+// Fresh on every call, never cached — unlike the banned-word list, a mute/ban needs to take
+// effect on the very next chat/emote attempt, not up to BANNED_WORDS_TTL_MS later. Shared by the
+// 'chat' and 'emote' handlers so the exact same check never drifts between the two.
+async function loadModerationStatus(userId) {
+  return db.user.findUnique({ where: { id: userId }, select: { myOrbitBannedAt: true, myOrbitMutedUntil: true } })
+}
+
 function publicParticipant(p) {
-  return { userId: p.userId, username: p.username, ctoonAssetPath: p.ctoonAssetPath, x: p.x, y: p.y }
+  return {
+    userId: p.userId, username: p.username, ctoonAssetPath: p.ctoonAssetPath, x: p.x, y: p.y,
+    // Status flair (see the 'join' handler, where these are snapshotted once from the DB) — cmoon
+    // is null for a player with no current faction. Neither is re-queried on move/reconnect, same
+    // as ctoonAssetPath never is: a mid-session faction change simply shows on their next join.
+    cmoon: p.cmoon, isAdmin: p.isAdmin
+  }
 }
 
 function publicRoomState(room) {
   return {
     id: room.id, name: room.name, gridWidth: room.gridWidth, gridHeight: room.gridHeight, capacity: room.capacity,
+    ambientSoundPath: room.ambientSoundPath,
     tiles: room.tiles, furniture: room.furniture,
     participants: [...room.participants.values()].map(publicParticipant)
   }
@@ -154,9 +171,19 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     if (!config?.myOrbitEnabled) return socket.emit(EV('error'), { message: 'MyOrbit is currently disabled' })
 
     // MyOrbit-scoped ban (User.myOrbitBannedAt), deliberately separate from the site-wide ban
-    // checked by resolveSocketUser itself — see that field's own schema comment.
-    const moderation = await db.user.findUnique({ where: { id: me.id }, select: { myOrbitBannedAt: true } })
-    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    // checked by resolveSocketUser itself — see that field's own schema comment. isAdmin/cMoon
+    // are fetched in this same query (rather than a second one) purely for status flair — see
+    // where they're snapshotted onto the new participant object below.
+    const moderation = await db.user.findUnique({
+      where: { id: me.id },
+      select: { myOrbitBannedAt: true, isAdmin: true, cMoon: { select: { name: true, color: true, avatarPath: true } } }
+    })
+    // resolveSocketUser caches its {id, username} result for the life of the connection (see
+    // socket-server.js), so a socket can still pass the `me` check above after its account row
+    // was deleted mid-session — null here means exactly that, not "no ban on record", so it's
+    // treated as an auth failure rather than falling through to dereference isAdmin/cMoon below.
+    if (!moderation) return socket.emit(EV('error'), { message: 'Not authenticated' })
+    if (moderation.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
 
     // Room-hopping: leave whatever room this user was previously in first. Never double-membership.
     const previousRoomId = roomByUser.get(me.id)
@@ -177,6 +204,7 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
       room.gridWidth = definition.gridWidth
       room.gridHeight = definition.gridHeight
       room.capacity = definition.capacity
+      room.ambientSoundPath = definition.ambientSoundPath
       room.tiles = definition.tiles
       room.furniture = definition.furniture
       room.walkable = definition.walkable
@@ -219,7 +247,9 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
         userCtoonId, ctoonAssetPath: userCtoon.ctoon.assetPath,
         x: spawn.x, y: spawn.y,
         path: null, pathIndex: 0, moveTimer: null,
-        sockets: new Set([socket.id]), graceTimer: null, lastMessageAt: null
+        sockets: new Set([socket.id]), graceTimer: null, lastMessageAt: null, lastEmoteAt: null,
+        isAdmin: !!moderation.isAdmin,
+        cmoon: moderation.cMoon ? { name: moderation.cMoon.name, color: moderation.cMoon.color, iconPath: moderation.cMoon.avatarPath } : null
       }
       room.participants.set(me.id, participant)
 
@@ -312,10 +342,7 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     const participant = room?.participants.get(me.id)
     if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
 
-    const moderation = await db.user.findUnique({
-      where: { id: me.id },
-      select: { myOrbitBannedAt: true, myOrbitMutedUntil: true }
-    })
+    const moderation = await loadModerationStatus(me.id)
     if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
     if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
       return socket.emit(EV('error'), { message: 'You are muted' })
@@ -343,6 +370,32 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     // for them.
     const chatMessage = { id: randomUUID(), roomId, userId: me.id, username: me.username, message: parsed.message, createdAt: now }
     io.local.to(roomChannel(roomId)).emit(EV('chatMessage'), chatMessage)
+  }))
+
+  // A fixed, admin-independent set of emotes (utils/myOrbitEmotes.js) — purely cosmetic, never
+  // persisted, same ban/mute/rate-limit discipline as chat even though there's no free text here
+  // to filter: a muted player being quiet should mean quiet, not just "can't type," and a banned
+  // player obviously still can't interact with a room at all.
+  socket.on(EV('emote'), safe(socket, async ({ emoteKey } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return
+    const roomId = roomByUser.get(me.id)
+    const room = roomId ? rooms.get(roomId) : null
+    const participant = room?.participants.get(me.id)
+    if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
+
+    const moderation = await loadModerationStatus(me.id)
+    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
+      return socket.emit(EV('error'), { message: 'You are muted' })
+    }
+
+    const now = Date.now()
+    if (participant.lastEmoteAt && now - participant.lastEmoteAt < EMOTE_RATE_LIMIT_MS) return
+    if (!isValidMyOrbitEmote(emoteKey)) return
+
+    participant.lastEmoteAt = now
+    io.local.to(roomChannel(roomId)).emit(EV('emote'), { id: randomUUID(), roomId, userId: me.id, emoteKey, createdAt: now })
   }))
 
   // Read-only admin "spectate" — joins the room's broadcast channel (live chat, movement) WITHOUT

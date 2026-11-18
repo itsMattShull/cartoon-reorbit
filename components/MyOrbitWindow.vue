@@ -76,11 +76,19 @@
               ></button>
               <div
                 v-for="p in avatarTokens" :key="p.userId" class="mow-avatar-token"
-                :class="p.isMe ? 'mow-avatar-token-me' : ''"
+                :class="[p.isMe ? 'mow-avatar-token-me' : '', landedUsers[p.userId] ? 'mow-avatar-landed' : '']"
                 :style="{ left: p.left + 'px', top: p.top + 'px', zIndex: p.z }"
+                @transitionend="onAvatarTransitionEnd(p.userId, $event)"
               >
                 <div v-if="bubbles[p.userId]" class="mow-speech-bubble">{{ bubbles[p.userId].text }}</div>
-                <img :src="p.ctoonAssetPath" alt="" class="mow-avatar-img" />
+                <div class="mow-avatar-img-wrap">
+                  <span v-if="emoteIcons[p.userId]" class="mow-emote-pop">{{ emoteIcons[p.userId].icon }}</span>
+                  <img :src="p.ctoonAssetPath" alt="" class="mow-avatar-img" />
+                  <span v-if="p.cmoon" class="mow-flair mow-flair-cmoon" :style="{ borderColor: p.cmoon.color }" :title="p.cmoon.name">
+                    <img v-if="p.cmoon.iconPath" :src="p.cmoon.iconPath" alt="" />
+                  </span>
+                  <span v-if="p.isAdmin" class="mow-flair mow-flair-admin" title="Admin">👑</span>
+                </div>
                 <span class="mow-avatar-name">{{ p.username }}</span>
               </div>
             </div>
@@ -91,7 +99,14 @@
                 <strong>{{ m.username }}:</strong> {{ m.message }}
               </p>
             </div>
+            <div v-if="showEmotePicker" class="mow-emote-picker">
+              <button
+                v-for="e in MYORBIT_EMOTES" :key="e.key" type="button" class="mow-emote-btn"
+                :title="e.label" @click="onSendEmote(e.key)"
+              >{{ e.icon }}</button>
+            </div>
             <form class="mow-chat-form" @submit.prevent="onSendChat">
+              <button type="button" class="mow-emote-toggle" title="Emotes" @click="showEmotePicker = !showEmotePicker">😀</button>
               <input v-model="chatInput" maxlength="300" placeholder="Say something…" class="mow-chat-input" />
               <button type="submit" class="mow-chat-send" :disabled="!chatInput.trim()">Send</button>
             </form>
@@ -105,12 +120,15 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { TILE_WIDTH, TILE_HEIGHT, MYORBIT_LAYER, gridStageSize, tileScreenPosition, depthIndex, effectiveFootprint } from '~/utils/myOrbitIsometric'
+import { MYORBIT_EMOTES, myOrbitEmoteIcon } from '~/utils/myOrbitEmotes'
 import { useMyOrbitSocket } from '~/composables/useMyOrbitSocket'
+import { useBattleMusic } from '~/composables/useBattleMusic'
+import { useHapticSoundsPref } from '~/composables/useHapticSoundsPref'
 
 const { user } = useAuth()
 const {
-  roomState, lastError, currentRoomId, chatMessages,
-  joinRoom, leaveRoom, moveTo, sendChat
+  roomState, lastError, currentRoomId, chatMessages, lastEmoteEvent,
+  joinRoom, leaveRoom, moveTo, sendChat, sendEmote
 } = useMyOrbitSocket()
 
 // closed (nothing shown) -> minimized (small tab, room membership stays live) -> open (full window)
@@ -227,12 +245,28 @@ const avatarTokens = computed(() => {
     const pos = tileScreenPosition(p.x, p.y, stage.value)
     return {
       userId: p.userId, username: p.username, ctoonAssetPath: p.ctoonAssetPath,
+      cmoon: p.cmoon, isAdmin: p.isAdmin,
       isMe: p.userId === user.value?.id,
       left: pos.left + TILE_WIDTH / 4, top: pos.top - 28,
       z: depthIndex(p.x, p.y, 1, 1, MYORBIT_LAYER.AVATAR)
     }
   })
 })
+
+// A brief "landing bounce" the instant a glide finishes — transitionend fires once per animated
+// CSS property, so this is keyed on left/top specifically (ignoring any other property a future
+// style change might also transition) rather than firing on every stray transitionend bubble.
+const landedUsers = ref({})
+function onAvatarTransitionEnd(userId, e) {
+  if (e.propertyName !== 'left' && e.propertyName !== 'top') return
+  landedUsers.value = { ...landedUsers.value, [userId]: true }
+  setTimeout(() => {
+    if (!landedUsers.value[userId]) return
+    const next = { ...landedUsers.value }
+    delete next[userId]
+    landedUsers.value = next
+  }, 260)
+}
 
 // ── Chat speech bubbles — transient, keyed by sender, cleared on timeout or on a live retraction ──
 const bubbles = ref({})
@@ -268,6 +302,54 @@ function onSendChat() {
   sendChat(text)
   chatInput.value = ''
 }
+
+// ── Emotes — a one-shot pop over the sender's avatar, not a log (unlike chat's bubbles above) ──
+const showEmotePicker = ref(false)
+const emoteIcons = ref({})
+function onSendEmote(key) {
+  sendEmote(key)
+  showEmotePicker.value = false
+}
+watch(lastEmoteEvent, (evt) => {
+  if (!evt) return
+  const icon = myOrbitEmoteIcon(evt.emoteKey)
+  if (!icon) return
+  const id = evt.id
+  emoteIcons.value = { ...emoteIcons.value, [evt.userId]: { icon, id } }
+  setTimeout(() => {
+    if (emoteIcons.value[evt.userId]?.id !== id) return
+    const next = { ...emoteIcons.value }
+    delete next[evt.userId]
+    emoteIcons.value = next
+  }, 1800)
+})
+watch(currentRoomId, () => { emoteIcons.value = {}; showEmotePicker.value = false })
+
+// ── Room ambience — a looping track per room (MyOrbitRoom.ambientSoundPath), gated by the same
+// "Mute sounds" setting every other audio in the game respects. useBattleMusic() is NOT a
+// module-scoped singleton (see its own header comment) — this instance is fully independent of
+// any cMoon battle music that might also be playing elsewhere in the app.
+const ambience = useBattleMusic()
+const { enabled: soundsEnabled } = useHapticSoundsPref()
+// Tracked separately from roomState itself: `roomState` is reassigned to a brand-new object on
+// every participantJoined/Left/Moved broadcast (composables/useMyOrbitSocket.js's
+// mergeParticipants) — sent as often as every STEP_MS=350ms while anyone in the room is walking.
+// Watching a getter that returns a freshly-allocated array/object on each run re-fires on EVERY
+// one of those, and ambience.start() unconditionally restarts playback from 0 — this guard is
+// what actually stops the track from audibly stuttering on every move tick, independent of
+// exactly how often the watchers below end up re-running.
+let ambiencePlayingPath = null
+function syncAmbience() {
+  const path = roomState.value?.id && soundsEnabled.value ? roomState.value?.ambientSoundPath : null
+  if (path === ambiencePlayingPath) return
+  if (path) ambience.start(path)
+  else ambience.stop()
+  ambiencePlayingPath = path
+}
+watch(() => roomState.value?.id, syncAmbience)
+watch(() => roomState.value?.ambientSoundPath, syncAmbience)
+watch(soundsEnabled, syncAmbience)
+onBeforeUnmount(() => ambience.stop())
 
 // ── Maximize (fills the viewport, like maximizing a desktop window) ─────────────────────────
 const maximized = ref(false)
@@ -450,8 +532,71 @@ onBeforeUnmount(() => {
      change, and this transition is the entire animation — no per-frame JS. */
   transition: left 0.3s linear, top 0.3s linear;
 }
-.mow-avatar-img { width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4)); }
+.mow-avatar-img-wrap { position: relative; }
+.mow-avatar-img {
+  width: 28px; height: 28px; object-fit: contain; filter: drop-shadow(0 2px 2px rgba(0,0,0,0.4));
+  /* A continuous idle "breathing" bob so a standing avatar never reads as a dead, static image —
+     same convention CMoonBattlePopupHost.vue's own portrait breathe animation already follows. */
+  animation: mow-idle-bob 2.4s ease-in-out infinite;
+}
 .mow-avatar-token-me .mow-avatar-img { filter: drop-shadow(0 0 4px #facc15) drop-shadow(0 2px 2px rgba(0,0,0,0.4)); }
+@keyframes mow-idle-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+/* A brief, punchier bounce the instant a glide settles (see onAvatarTransitionEnd) — overrides
+   the idle bob for its own short duration, then idle bob simply resumes once the class is gone. */
+.mow-avatar-landed .mow-avatar-img { animation: mow-avatar-land-bounce 0.26s ease-out; }
+@keyframes mow-avatar-land-bounce {
+  0% { transform: scale(1, 1) translateY(-3px); }
+  50% { transform: scale(1.15, 0.85) translateY(0); }
+  100% { transform: scale(1, 1) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mow-avatar-img { animation: none; }
+  .mow-avatar-landed .mow-avatar-img { animation: none; }
+}
+/* Status flair — a small badge overlaid on the avatar image's own corner, never the avatar's own
+   footprint (see .mow-avatar-img-wrap, which gives these an absolute-positioning anchor that's
+   just the image, not the whole token including its name label below). */
+.mow-flair {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  line-height: 1;
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.mow-flair-cmoon { right: -3px; bottom: 6px; border: 1.5px solid #64748b; }
+.mow-flair-cmoon img { width: 100%; height: 100%; object-fit: cover; }
+.mow-flair-admin { left: -3px; top: -4px; }
+/* Emote pop — a transient, bigger icon than a flair badge, floating up off the avatar's corner
+   and fading out. Offset away from .mow-speech-bubble (which sits directly above the token) so
+   chatting and emoting at the same time don't visually collide. */
+.mow-emote-pop {
+  position: absolute;
+  top: -10px;
+  right: -8px;
+  font-size: 18px;
+  line-height: 1;
+  pointer-events: none;
+  animation: mow-emote-pop-kf 1.8s ease-out forwards;
+}
+@keyframes mow-emote-pop-kf {
+  0% { transform: translateY(4px) scale(0.6); opacity: 0; }
+  15% { transform: translateY(-2px) scale(1.15); opacity: 1; }
+  30% { transform: translateY(-4px) scale(1); opacity: 1; }
+  100% { transform: translateY(-22px) scale(1); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .mow-emote-pop { animation: none; opacity: 0; }
+}
 .mow-avatar-name {
   font-size: 9px;
   color: #fff;
@@ -484,7 +629,17 @@ onBeforeUnmount(() => {
 .mow-chat { border-top: 1px solid #e2e8f0; display: flex; flex-direction: column; }
 .mow-chat-log { max-height: 110px; overflow-y: auto; padding: 6px 10px; }
 .mow-chat-line { font-size: 11px; margin: 0 0 3px; word-break: break-word; }
+.mow-emote-picker { display: flex; gap: 2px; padding: 4px 10px; border-top: 1px solid #f1f5f9; flex-wrap: wrap; }
+.mow-emote-btn {
+  width: 30px; height: 30px; border-radius: 6px; border: none; background: #f1f5f9;
+  font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.mow-emote-btn:hover { background: #e2e8f0; }
 .mow-chat-form { display: flex; gap: 6px; padding: 6px 10px; border-top: 1px solid #f1f5f9; }
+.mow-emote-toggle {
+  flex-shrink: 0; width: 30px; height: 30px; border-radius: 6px; border: 1px solid #cbd5e1;
+  background: #fff; font-size: 15px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
 .mow-chat-input { flex: 1; min-width: 0; border: 1px solid #cbd5e1; border-radius: 6px; padding: 5px 8px; font-size: 12px; }
 .mow-chat-send {
   padding: 5px 12px;

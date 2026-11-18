@@ -8412,6 +8412,10 @@ model MyOrbitRoom {
   capacity   Int      @default(20)
   active     Boolean  @default(false)
   sortOrder  Int      @default(0)
+  // Looping ambience track (see server/api/admin/myorbit-rooms/[id]/sound.post.js) — purely
+  // cosmetic, started/stopped client-side on join/leave, same "null = nothing plays" convention
+  // every other optional media path in this schema already follows.
+  ambientSoundPath String?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

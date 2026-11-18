@@ -14,6 +14,11 @@ const currentRoomId = ref(null)
 // a bounded rolling window of recent messages, not a full history. Cleared on room change.
 const MAX_CHAT_MESSAGES = 200
 const chatMessages = ref([])
+// The single most recent emote broadcast to the room - a one-shot event, not a log (unlike
+// chat). A component renders it as a transient pop over the sender's avatar and discards it;
+// this ref only exists so a watcher can react to each new arrival even if two emotes land with
+// the exact same emoteKey back to back (a plain `watch` on a changed VALUE would miss that).
+const lastEmoteEvent = ref(null)
 let socket
 
 export function useMyOrbitSocket() {
@@ -47,6 +52,7 @@ export function useMyOrbitSocket() {
     socket.on('myorbit:messageDeleted', ({ messageId }) => {
       chatMessages.value = chatMessages.value.filter(m => m.id !== messageId)
     })
+    socket.on('myorbit:emote', (payload) => { lastEmoteEvent.value = payload })
     // Targeted at this user specifically (an admin ban's live kick) - distinct from myorbit:error:
     // the room membership is already gone server-side, so local state must be cleared too.
     socket.on('myorbit:kicked', (payload) => {
@@ -108,9 +114,12 @@ export function useMyOrbitSocket() {
     lastError.value = ''
     socket.emit('myorbit:chat', { message })
   }
+  function sendEmote(emoteKey) {
+    socket.emit('myorbit:emote', { emoteKey })
+  }
 
   return {
-    socket, roomState, lastError, isConnected, currentRoomId, chatMessages,
-    joinRoom, leaveRoom, getState, moveTo, sendChat
+    socket, roomState, lastError, isConnected, currentRoomId, chatMessages, lastEmoteEvent,
+    joinRoom, leaveRoom, getState, moveTo, sendChat, sendEmote
   }
 }

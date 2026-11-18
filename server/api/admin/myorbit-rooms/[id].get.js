@@ -26,6 +26,7 @@ export default defineEventHandler(async (event) => {
     capacity: room.capacity,
     active: room.active,
     sortOrder: room.sortOrder,
+    ambientSoundPath: room.ambientSoundPath,
     tiles: room.tiles.map(t => ({
       x: t.x, y: t.y, tileId: t.tileId,
       assetPath: t.tile.assetPath, walkable: t.tile.walkable
