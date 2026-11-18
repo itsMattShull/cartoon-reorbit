@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { buildWalkableSet, findPath, firstWalkableCell } from '../server/utils/myOrbitPathfinding.js'
+import { buildWalkableSet, findPath, firstWalkableCell, isAdjacent } from '../server/utils/myOrbitPathfinding.js'
 
 function openRoom(w, h) {
   const tiles = []
@@ -138,4 +138,28 @@ test('firstWalkableCell: scans in (y, then x) order', () => {
 
 test('firstWalkableCell: null when nothing is walkable', () => {
   assert.equal(firstWalkableCell(new Set(), 5, 5), null)
+})
+
+// ── isAdjacent ───────────────────────────────────────────────────────────
+
+test('isAdjacent: true for all 8 neighbors, including diagonals', () => {
+  const center = { x: 5, y: 5 }
+  for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]) {
+    assert.equal(isAdjacent(center, { x: center.x + dx, y: center.y + dy }), true, `offset (${dx},${dy})`)
+  }
+})
+
+test('isAdjacent: false for the SAME cell - sitting is "next to", never "on"', () => {
+  assert.equal(isAdjacent({ x: 3, y: 3 }, { x: 3, y: 3 }), false)
+})
+
+test('isAdjacent: false two or more cells away in any direction', () => {
+  assert.equal(isAdjacent({ x: 0, y: 0 }, { x: 2, y: 0 }), false)
+  assert.equal(isAdjacent({ x: 0, y: 0 }, { x: 0, y: 2 }), false)
+  assert.equal(isAdjacent({ x: 0, y: 0 }, { x: 2, y: 2 }), false)
+})
+
+test('isAdjacent: symmetric', () => {
+  const a = { x: 4, y: 4 }, b = { x: 5, y: 5 }
+  assert.equal(isAdjacent(a, b), isAdjacent(b, a))
 })

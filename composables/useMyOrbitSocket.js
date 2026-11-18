@@ -120,9 +120,15 @@ export function useMyOrbitSocket() {
   function inviteToRaid(targetUserId) {
     socket.emit('myorbit:inviteToRaid', { targetUserId })
   }
+  function sitAt(x, y) {
+    socket.emit('myorbit:sit', { x, y })
+  }
+  function setStatus(status) {
+    socket.emit('myorbit:setStatus', { status })
+  }
 
   return {
     socket, roomState, lastError, isConnected, currentRoomId, chatMessages, lastEmoteEvent,
-    joinRoom, leaveRoom, getState, moveTo, sendChat, sendEmote, inviteToRaid
+    joinRoom, leaveRoom, getState, moveTo, sendChat, sendEmote, inviteToRaid, sitAt, setStatus
   }
 }

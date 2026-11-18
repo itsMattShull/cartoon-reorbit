@@ -36,7 +36,7 @@ export default defineEventHandler(async (event) => {
     furniture: room.furniture.map(f => ({
       id: f.id, furnitureId: f.furnitureId, x: f.x, y: f.y, rotation: f.rotation,
       assetPath: f.furniture.assetPath, footprintW: f.furniture.footprintW, footprintH: f.furniture.footprintH,
-      blocksWalk: f.furniture.blocksWalk, zOffset: f.furniture.zOffset
+      blocksWalk: f.furniture.blocksWalk, zOffset: f.furniture.zOffset, sittable: f.furniture.sittable
     }))
   }
 })

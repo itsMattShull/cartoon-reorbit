@@ -22,7 +22,9 @@
 // correct, low-cost outcome, not a gap — continuing to report a now-disconnected client as still
 // present would be actively misleading. So room/participant state here is purely in-memory, the
 // same instance-local Map raids use for coordination, but deliberately with nothing mirrored
-// into Redis.
+// into Redis. The one exception is myOrbitPresence.js's tiny `userId -> {roomId, username}`
+// pointer — not room state at all, just a cross-process bridge so the separate Nitro/REST
+// process can answer "who's online and in which room" (see that file's own header).
 //
 // ── Room layout is reloaded on every join, never cached indefinitely ──────────────────────────
 // Unlike a raid's enemy/map definition (fixed for that raid's lifetime), an admin can be
@@ -35,11 +37,12 @@
 // just can't path out of a now-invalid tile until they rejoin and get placed on a valid one.
 import { randomUUID } from 'crypto'
 import { prisma as db } from '../prisma.js'
-import { buildWalkableSet, findPath, firstWalkableCell } from './myOrbitPathfinding.js'
-import { parseMyOrbitChatMessage, containsBannedWord } from './myOrbitChatFilter.js'
+import { buildWalkableSet, findPath, firstWalkableCell, isAdjacent } from './myOrbitPathfinding.js'
+import { parseMyOrbitChatMessage, containsBannedWord, parseMyOrbitStatus } from './myOrbitChatFilter.js'
 import { getGlobalConfig } from './cmoon.js'
 import { isValidMyOrbitEmote } from '../../utils/myOrbitEmotes.js'
 import { getActiveRaidForUser } from './cmoonRaidSocket.js'
+import { setUserPresence, clearUserPresence } from './myOrbitPresence.js'
 
 const EV = (name) => `myorbit:${name}`
 const roomChannel = (roomId) => `myorbit:room:${roomId}`
@@ -83,7 +86,8 @@ async function loadRoomDefinition(roomId) {
   const furniture = room.furniture.map(f => ({
     x: f.x, y: f.y, rotation: f.rotation, furnitureId: f.furnitureId,
     footprintW: f.furniture.footprintW, footprintH: f.furniture.footprintH,
-    blocksWalk: f.furniture.blocksWalk, zOffset: f.furniture.zOffset, assetPath: f.furniture.assetPath
+    blocksWalk: f.furniture.blocksWalk, zOffset: f.furniture.zOffset, assetPath: f.furniture.assetPath,
+    sittable: f.furniture.sittable
   }))
   return {
     id: room.id, name: room.name, gridWidth: room.gridWidth, gridHeight: room.gridHeight, capacity: room.capacity,
@@ -110,7 +114,7 @@ function publicParticipant(p) {
     // Status flair (see the 'join' handler, where these are snapshotted once from the DB) — cmoon
     // is null for a player with no current faction. Neither is re-queried on move/reconnect, same
     // as ctoonAssetPath never is: a mid-session faction change simply shows on their next join.
-    cmoon: p.cmoon, isAdmin: p.isAdmin
+    cmoon: p.cmoon, isAdmin: p.isAdmin, seated: !!p.seated, status: p.status || ''
   }
 }
 
@@ -143,6 +147,10 @@ function removeParticipant(io, roomId, userId) {
   if (p.graceTimer) { clearTimeout(p.graceTimer); p.graceTimer = null }
   room.participants.delete(userId)
   if (roomByUser.get(userId) === roomId) roomByUser.delete(userId)
+  // Best-effort, fire-and-forget: this player's live presence (see myOrbitPresence.js's own
+  // header on why it's a separate Redis mirror, not this file's in-memory Maps) must not block
+  // or fail the actual room departure, which every caller of this function needs synchronously.
+  clearUserPresence(userId).catch(e => console.error('[myOrbitPresence] clearUserPresence:', e))
   broadcastParticipants(io, room, 'participantLeft')
   if (room.participants.size === 0) rooms.delete(roomId)
 }
@@ -185,7 +193,7 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     // where they're snapshotted onto the new participant object below.
     const moderation = await db.user.findUnique({
       where: { id: me.id },
-      select: { myOrbitBannedAt: true, isAdmin: true, cMoon: { select: { id: true, name: true, color: true, avatarPath: true } } }
+      select: { myOrbitBannedAt: true, isAdmin: true, myOrbitStatus: true, cMoon: { select: { id: true, name: true, color: true, avatarPath: true } } }
     })
     // resolveSocketUser caches its {id, username} result for the life of the connection (see
     // socket-server.js), so a socket can still pass the `me` check above after its account row
@@ -260,7 +268,8 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
         path: null, pathIndex: 0, moveTimer: null,
         sockets: new Set([socket.id]), graceTimer: null, lastMessageAt: null, lastEmoteAt: null, lastInviteAt: null,
         isAdmin: !!moderation.isAdmin,
-        cmoon: moderation.cMoon ? { id: moderation.cMoon.id, name: moderation.cMoon.name, color: moderation.cMoon.color, iconPath: moderation.cMoon.avatarPath } : null
+        cmoon: moderation.cMoon ? { id: moderation.cMoon.id, name: moderation.cMoon.name, color: moderation.cMoon.color, iconPath: moderation.cMoon.avatarPath } : null,
+        status: moderation.myOrbitStatus || ''
       }
       room.participants.set(me.id, participant)
 
@@ -271,6 +280,10 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     roomByUser.set(me.id, roomId)
     socket.join(roomChannel(roomId))
     socket.data.myOrbitRoomId = roomId
+    // Best-effort, fire-and-forget — see myOrbitPresence.js's own header. Covers a fresh join, a
+    // reconnect, and a room switch (the previous room's own removeParticipant call above already
+    // cleared the old key; this one overwrites it with the new roomId).
+    setUserPresence(me.id, { roomId, username: me.username }).catch(e => console.error('[myOrbitPresence] setUserPresence:', e))
 
     socket.emit(EV('state'), publicRoomState(room))
     broadcastParticipants(io, room, 'participantJoined')
@@ -306,6 +319,14 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     const path = findPath(room.walkable, room.gridWidth, room.gridHeight, { x: participant.x, y: participant.y }, { x: destX, y: destY })
     if (!path) return socket.emit(EV('moveRejected'), { x: destX, y: destY })
 
+    // Walking away always stands a seated player back up (see myorbit:sit) - broadcast it even
+    // on a same-cell click (path.length<=1 below returns before the timer's own broadcasts would
+    // ever fire), so the room sees them stand immediately rather than staying "seated" forever.
+    if (participant.seated) {
+      participant.seated = false
+      broadcastParticipants(io, room, 'participantMoved')
+    }
+
     clearMovement(participant)
     if (path.length <= 1) return // already there - nothing to animate or broadcast
 
@@ -328,6 +349,64 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
         clearMovement(participant)
       }
     }, STEP_MS)
+  }))
+
+  // "Sit on furniture" — a pose/vibe flag only. Deliberately does NOT move the participant onto
+  // the furniture's own cell (which stays unwalkable per blocksWalk): they just need to be
+  // standing right next to a sittable piece already, exactly like any other interaction in this
+  // room would require. Standing back up happens via the 'move' handler above, the instant they
+  // walk anywhere (even back onto their own cell).
+  socket.on(EV('sit'), safe(socket, async ({ x, y } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return
+    const roomId = roomByUser.get(me.id)
+    const room = roomId ? rooms.get(roomId) : null
+    const participant = room?.participants.get(me.id)
+    if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
+
+    const seatX = Number(x)
+    const seatY = Number(y)
+    if (!Number.isInteger(seatX) || !Number.isInteger(seatY)) return
+    const seat = room.furniture.find(f => f.x === seatX && f.y === seatY && f.sittable)
+    if (!seat) return socket.emit(EV('error'), { message: 'Nothing to sit on there' })
+    if (!isAdjacent({ x: participant.x, y: participant.y }, { x: seatX, y: seatY })) {
+      return socket.emit(EV('error'), { message: 'Walk closer to sit there' })
+    }
+
+    participant.seated = true
+    broadcastParticipants(io, room, 'participantMoved')
+  }))
+
+  // Custom status line — a short, persisted blurb shown near the player's name (see
+  // User.myOrbitStatus's own schema comment). Same moderation discipline as chat: banned/muted
+  // players can't set one, and it's filtered through the same admin banned-word list before
+  // either the DB write or the live broadcast. Persisted (not just broadcast) so it survives a
+  // reconnect and the next time this player joins any room.
+  socket.on(EV('setStatus'), safe(socket, async ({ status } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return
+    const roomId = roomByUser.get(me.id)
+    const room = roomId ? rooms.get(roomId) : null
+    const participant = room?.participants.get(me.id)
+    if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
+
+    const moderation = await loadModerationStatus(me.id)
+    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
+      return socket.emit(EV('error'), { message: 'You are muted' })
+    }
+
+    const parsed = parseMyOrbitStatus(status)
+    if (!parsed.ok) return socket.emit(EV('error'), { message: 'That status is too long' })
+
+    const bannedWords = await getBannedWords()
+    if (containsBannedWord(parsed.status, bannedWords)) {
+      return socket.emit(EV('error'), { message: 'That status was blocked' })
+    }
+
+    participant.status = parsed.status
+    await db.user.update({ where: { id: me.id }, data: { myOrbitStatus: parsed.status || null } })
+    broadcastParticipants(io, room, 'participantMoved')
   }))
 
   socket.on(EV('leave'), safe(socket, async () => {
@@ -559,7 +638,15 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
 export function startMyOrbitSweep() {
   const interval = setInterval(() => {
     for (const [roomId, room] of rooms) {
-      if (room.participants.size === 0) rooms.delete(roomId)
+      if (room.participants.size === 0) { rooms.delete(roomId); continue }
+      // Keeps every still-present player's presence key (myOrbitPresence.js, TTL 120s) from
+      // expiring during a long, quiet stay — join/getState are the only other writers, and a
+      // player who neither reconnects nor re-fetches state for 2+ minutes would otherwise look
+      // "offline" to the who's-online panel/room counts while still genuinely in the room.
+      for (const participant of room.participants.values()) {
+        setUserPresence(participant.userId, { roomId, username: participant.username })
+          .catch(e => console.error('[myOrbitPresence] sweep refresh:', e))
+      }
     }
   }, 60_000)
   interval.unref?.()

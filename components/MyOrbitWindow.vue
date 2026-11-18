@@ -61,7 +61,21 @@
               <span class="mow-room-name">{{ r.name }}</span>
               <span v-if="r.isHomeTurf" class="mow-home-turf-badge" title="Your faction's room">🏠</span>
               <span v-if="r.isRaidDen" class="mow-raid-den-badge" title="Live raid spectating">⚔️</span>
+              <span v-if="r.onlineCount > 0" class="mow-online-count" :title="`${r.onlineCount} online now`">🟢 {{ r.onlineCount }}</span>
               <span class="mow-room-size">{{ r.gridWidth }}x{{ r.gridHeight }}</span>
+            </button>
+          </div>
+
+          <p class="mow-section-label">Online now</p>
+          <p v-if="!onlineUsers.length" class="mow-hint">Nobody's in MyOrbit right now.</p>
+          <div v-else class="mow-online-list">
+            <button
+              v-for="u in onlineUsers.filter(u => u.userId !== user?.id)" :key="u.userId" type="button"
+              class="mow-online-row" :disabled="!selectedCtoonId" @click="onJoin(u.roomId)"
+            >
+              <span class="mow-online-dot">🟢</span>
+              <span class="mow-online-name">{{ u.username }}</span>
+              <span class="mow-online-room">{{ roomNameById(u.roomId) }}</span>
             </button>
           </div>
         </div>
@@ -75,6 +89,13 @@
               <span v-if="isHomeTurf" class="mow-home-turf-badge" title="Your faction's room">🏠</span>
             </span>
             <button type="button" class="mow-leave-btn" @click="onLeave">Leave</button>
+          </div>
+          <div class="mow-status-row">
+            <input
+              v-model="statusInput" maxlength="40" placeholder="Set a status (e.g. 'trading cToons')…"
+              class="mow-status-input" @keyup.enter="onSetStatus"
+            />
+            <button type="button" class="mow-status-save" @click="onSetStatus">Set</button>
           </div>
           <div v-if="roomState?.isRaidDen" class="mow-raid-den">
             <template v-if="activeRaid">
@@ -104,9 +125,15 @@
                 class="mow-cell-hit" :style="{ left: cell.left + 'px', top: cell.top + 'px', width: TILE_WIDTH + 'px', height: TILE_HEIGHT + 'px', zIndex: 100000 + cell.x + cell.y }"
                 @click="moveTo(cell.x, cell.y)"
               ></button>
+              <button
+                v-for="f in furniturePieces.filter(f => f.sittable && f.blocksWalk)" :key="`sit-${f.x}-${f.y}`" type="button"
+                class="mow-cell-hit" title="Sit"
+                :style="{ left: f.left + 'px', top: f.top + 'px', width: TILE_WIDTH + 'px', height: TILE_HEIGHT + 'px', zIndex: 200000 + f.x + f.y }"
+                @click="sitAt(f.x, f.y)"
+              ></button>
               <div
                 v-for="p in avatarTokens" :key="p.userId" class="mow-avatar-token"
-                :class="[p.isMe ? 'mow-avatar-token-me' : '', landedUsers[p.userId] ? 'mow-avatar-landed' : '']"
+                :class="[p.isMe ? 'mow-avatar-token-me' : '', landedUsers[p.userId] ? 'mow-avatar-landed' : '', p.seated ? 'mow-avatar-seated' : '']"
                 :style="{ left: p.left + 'px', top: p.top + 'px', zIndex: p.z }"
                 @transitionend="onAvatarTransitionEnd(p.userId, $event)"
               >
@@ -123,7 +150,8 @@
                     :title="`Invite ${p.username} to your raid`" @click.stop="onInviteToRaid(p.userId)"
                   >{{ invitedUsers[p.userId] ? '✓' : '⚔️' }}</button>
                 </div>
-                <span class="mow-avatar-name">{{ p.username }}</span>
+                <span class="mow-avatar-name" :title="p.status">{{ p.username }}</span>
+                <span v-if="p.status" class="mow-avatar-status">{{ p.status }}</span>
               </div>
             </div>
           </div>
@@ -163,7 +191,7 @@ import { useCMoonRaidSocket } from '~/composables/useCMoonRaidSocket'
 const { user } = useAuth()
 const {
   roomState, lastError, currentRoomId, chatMessages, lastEmoteEvent,
-  joinRoom, leaveRoom, moveTo, sendChat, sendEmote, inviteToRaid
+  joinRoom, leaveRoom, moveTo, sendChat, sendEmote, inviteToRaid, sitAt, setStatus
 } = useMyOrbitSocket()
 const raidSocket = useCMoonRaidSocket()
 
@@ -176,6 +204,7 @@ const availableRooms = ref([])
 const roomsError = ref('')
 const myCtoons = ref([])
 const selectedCtoonId = ref(null)
+const onlineUsers = ref([])
 
 async function checkEnabled() {
   try {
@@ -204,6 +233,18 @@ async function loadRoomsAndAvatars() {
   }
 }
 
+async function loadOnlineUsers() {
+  try {
+    const res = await $fetch('/api/myorbit/online')
+    onlineUsers.value = res?.users || []
+  } catch {
+    // Best-effort - the room list itself still works without this.
+  }
+}
+function roomNameById(roomId) {
+  return availableRooms.value.find(r => r.id === roomId)?.name || 'a room'
+}
+
 // Fetched once the window is first opened, not on every layout mount — a logged-in visitor who
 // never opens MyOrbit shouldn't cost two extra requests on every single page load.
 let openedOnce = false
@@ -213,6 +254,23 @@ watch(uiState, (next) => {
     loadRoomsAndAvatars()
   }
 })
+
+// "Online now" panel only needs to stay fresh while it's actually visible (the room-list view,
+// with the window not closed) - polled rather than pushed since it's a cross-process read (see
+// server/utils/myOrbitPresence.js) with no existing socket event to piggyback on.
+let onlinePollTimer = null
+function syncOnlinePolling() {
+  const shouldPoll = uiState.value !== 'closed' && view.value === 'rooms'
+  if (shouldPoll && !onlinePollTimer) {
+    loadOnlineUsers()
+    onlinePollTimer = setInterval(loadOnlineUsers, 10_000)
+  } else if (!shouldPoll && onlinePollTimer) {
+    clearInterval(onlinePollTimer)
+    onlinePollTimer = null
+  }
+}
+watch([uiState, view], syncOnlinePolling)
+onBeforeUnmount(() => { if (onlinePollTimer) clearInterval(onlinePollTimer) })
 
 onMounted(() => { if (user.value) checkEnabled() })
 watch(() => user.value?.id, (id) => { if (id) checkEnabled() })
@@ -266,6 +324,7 @@ const furniturePieces = computed(() => {
     const pos = tileScreenPosition(f.x, f.y, stage.value)
     const { width, height } = effectiveFootprint(f.footprintW, f.footprintH, f.rotation)
     return {
+      x: f.x, y: f.y, sittable: f.sittable, blocksWalk: f.blocksWalk,
       left: pos.left, top: pos.top,
       renderWidth: width * TILE_WIDTH, renderHeight: height * TILE_HEIGHT + TILE_HEIGHT,
       assetPath: f.assetPath,
@@ -281,7 +340,7 @@ const avatarTokens = computed(() => {
     const pos = tileScreenPosition(p.x, p.y, stage.value)
     return {
       userId: p.userId, username: p.username, ctoonAssetPath: p.ctoonAssetPath,
-      cmoon: p.cmoon, isAdmin: p.isAdmin,
+      cmoon: p.cmoon, isAdmin: p.isAdmin, seated: !!p.seated, status: p.status || '',
       isMe: p.userId === user.value?.id,
       left: pos.left + TILE_WIDTH / 4, top: pos.top - 28,
       z: depthIndex(p.x, p.y, 1, 1, MYORBIT_LAYER.AVATAR)
@@ -342,6 +401,18 @@ const isHomeTurf = computed(() => {
   const mine = (roomState.value?.participants || []).find(p => p.userId === user.value?.id)
   return mine?.cmoon?.id === themeId
 })
+
+// ── Custom status line — seeded from my own participant row only when switching rooms (not on
+// every broadcast - this is a local edit buffer, overwriting it on the echo of my own save, or
+// on someone ELSE's move triggering a roomState refresh, would blow away a draft mid-typing).
+const statusInput = ref('')
+watch(() => roomState.value?.id, (id) => {
+  if (!id) return
+  statusInput.value = (roomState.value?.participants || []).find(p => p.userId === user.value?.id)?.status || ''
+})
+function onSetStatus() {
+  setStatus(statusInput.value.trim())
+}
 
 // ── Raid Den — polls the live "what raid boss fight is happening right now" summary while
 // standing in a room flagged isRaidDen. A plain REST poll, not a socket subscription: the raid's
@@ -610,6 +681,24 @@ onBeforeUnmount(() => {
 .mow-room-size { color: #64748b; font-size: 11px; }
 .mow-room-theme-icon { width: 14px; height: 14px; object-fit: contain; border-radius: 999px; flex-shrink: 0; }
 .mow-home-turf-badge, .mow-raid-den-badge { font-size: 10px; flex-shrink: 0; }
+.mow-online-count { font-size: 10px; flex-shrink: 0; color: #15803d; font-weight: 600; }
+.mow-online-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.mow-online-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #f1f5f9;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  text-align: left;
+}
+.mow-online-row:disabled { opacity: 0.5; cursor: not-allowed; }
+.mow-online-dot { font-size: 8px; flex-shrink: 0; }
+.mow-online-name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mow-online-room { color: #64748b; font-size: 10px; flex-shrink: 0; }
 
 /* "Squad up" invite banner — one-shot, dismissible, shown regardless of room list vs. in-room view. */
 .mow-invite-banner {
@@ -731,6 +820,10 @@ onBeforeUnmount(() => {
   50% { transform: scale(1.15, 0.85) translateY(0); }
   100% { transform: scale(1, 1) translateY(0); }
 }
+/* Seated — a pose flag only (see myorbit:sit's own comment): no new art, just drops the idle
+   bob and settles the token a little lower/smaller so it reads as "sitting" rather than
+   "standing still." Cleared instantly server-side the moment this player moves anywhere. */
+.mow-avatar-seated .mow-avatar-img { animation: none; transform: translateY(5px) scale(0.88); }
 @media (prefers-reduced-motion: reduce) {
   .mow-avatar-img { animation: none; }
   .mow-avatar-landed .mow-avatar-img { animation: none; }
@@ -786,6 +879,29 @@ onBeforeUnmount(() => {
   max-width: 70px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+.mow-avatar-status {
+  font-size: 8px;
+  color: #e2e8f0;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 0 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+.mow-status-row { display: flex; gap: 6px; padding: 4px 10px; border-bottom: 1px solid #e2e8f0; }
+.mow-status-input { flex: 1; min-width: 0; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 8px; font-size: 11px; }
+.mow-status-save {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
 }
 .mow-speech-bubble {
   position: absolute;

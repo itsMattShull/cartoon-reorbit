@@ -61,6 +61,7 @@ export function parseMyOrbitFurnitureBody(body, existing) {
   const zOffset = body?.zOffset === undefined
     ? (existing ? existing.zOffset : 0)
     : toNumber(body.zOffset)
+  const sittable = toBoolean(body?.sittable, existing ? !!existing.sittable : false)
 
   if (!name || name.length > MYORBIT_NAME_MAX_LENGTH) {
     return { ok: false, message: `Name is required (max ${MYORBIT_NAME_MAX_LENGTH} characters)` }
@@ -75,6 +76,14 @@ export function parseMyOrbitFurnitureBody(body, existing) {
   if (!Number.isInteger(zOffset) || zOffset < MYORBIT_Z_OFFSET_MIN || zOffset > MYORBIT_Z_OFFSET_MAX) {
     return { ok: false, message: `Z-offset must be a whole number between ${MYORBIT_Z_OFFSET_MIN} and ${MYORBIT_Z_OFFSET_MAX}` }
   }
+  if (sittable === null) return { ok: false, message: 'Sittable must be true or false' }
+  // A sit interaction only ever targets a furniture row's own anchor cell (see myorbit:sit in
+  // server/utils/myOrbitSocket.js and furniturePieces in MyOrbitWindow.vue) - a 2+-tile piece
+  // would only ever be sittable from one specific corner, silently confusing whoever placed it.
+  // Rejected outright here rather than left as a half-working admin footgun.
+  if (sittable && (footprintW !== 1 || footprintH !== 1)) {
+    return { ok: false, message: 'Sittable furniture must have a 1x1 footprint' }
+  }
 
-  return { ok: true, data: { name, footprintW, footprintH, blocksWalk, zOffset } }
+  return { ok: true, data: { name, footprintW, footprintH, blocksWalk, zOffset, sittable } }
 }
