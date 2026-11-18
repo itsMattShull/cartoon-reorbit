@@ -55,7 +55,8 @@ const STEP_MS = 350 // ms per tile step while walking a path
 const RECONNECT_GRACE_MS = 15_000
 const CHAT_RATE_LIMIT_MS = 1200 // minimum gap between one user's own chat messages
 const EMOTE_RATE_LIMIT_MS = 1500 // minimum gap between one user's own emotes
-const INVITE_RATE_LIMIT_MS = 5000 // minimum gap between one user's own raid invites
+const INVITE_RATE_LIMIT_MS = 5000 // minimum gap between one user's own raid/PvP invites or OG gToons nudges (shared cooldown across all three)
+const STATUS_RATE_LIMIT_MS = 3000 // minimum gap between one user's own status changes - this one hits the DB
 
 const rooms = new Map()      // roomId -> room
 const roomByUser = new Map() // userId -> roomId (which room, if any, this user is currently in)
@@ -267,7 +268,7 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
         userCtoonId, ctoonAssetPath: userCtoon.ctoon.assetPath,
         x: spawn.x, y: spawn.y,
         path: null, pathIndex: 0, moveTimer: null,
-        sockets: new Set([socket.id]), graceTimer: null, lastMessageAt: null, lastEmoteAt: null, lastInviteAt: null,
+        sockets: new Set([socket.id]), graceTimer: null, lastMessageAt: null, lastEmoteAt: null, lastInviteAt: null, lastStatusAt: null,
         isAdmin: !!moderation.isAdmin,
         cmoon: moderation.cMoon ? { id: moderation.cMoon.id, name: moderation.cMoon.name, color: moderation.cMoon.color, iconPath: moderation.cMoon.avatarPath } : null,
         status: moderation.myOrbitStatus || ''
@@ -365,6 +366,12 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     const participant = room?.participants.get(me.id)
     if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
 
+    const moderation = await loadModerationStatus(me.id)
+    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
+      return socket.emit(EV('error'), { message: 'You are muted' })
+    }
+
     const seatX = Number(x)
     const seatY = Number(y)
     if (!Number.isInteger(seatX) || !Number.isInteger(seatY)) return
@@ -391,6 +398,14 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     const participant = room?.participants.get(me.id)
     if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
 
+    // Checked AND claimed before the moderation await below, not after — see inviteToRaid's own
+    // comment on why (two calls fired back-to-back would otherwise both read the stale pre-write
+    // value and both pass). Also closes a lost-update race on the DB write further down: without
+    // this, two status submissions in quick succession could persist/broadcast out of order.
+    const now = Date.now()
+    if (participant.lastStatusAt && now - participant.lastStatusAt < STATUS_RATE_LIMIT_MS) return
+    participant.lastStatusAt = now
+
     const moderation = await loadModerationStatus(me.id)
     if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
     if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
@@ -398,7 +413,9 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     }
 
     const parsed = parseMyOrbitStatus(status)
-    if (!parsed.ok) return socket.emit(EV('error'), { message: 'That status is too long' })
+    if (!parsed.ok) {
+      return socket.emit(EV('error'), { message: parsed.reason === 'too_long' ? 'That status is too long' : 'Invalid status' })
+    }
 
     const bannedWords = await getBannedWords()
     if (containsBannedWord(parsed.status, bannedWords)) {
@@ -433,15 +450,19 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     const participant = room?.participants.get(me.id)
     if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
 
+    // Checked AND claimed before the moderation await below, not after — see inviteToRaid's own
+    // comment on why (two calls fired back-to-back would otherwise both read the stale pre-write
+    // value and both pass, bypassing the cooldown).
+    const now = Date.now()
+    if (participant.lastMessageAt && now - participant.lastMessageAt < CHAT_RATE_LIMIT_MS) {
+      return socket.emit(EV('error'), { message: 'Slow down a little' })
+    }
+    participant.lastMessageAt = now
+
     const moderation = await loadModerationStatus(me.id)
     if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
     if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
       return socket.emit(EV('error'), { message: 'You are muted' })
-    }
-
-    const now = Date.now()
-    if (participant.lastMessageAt && now - participant.lastMessageAt < CHAT_RATE_LIMIT_MS) {
-      return socket.emit(EV('error'), { message: 'Slow down a little' })
     }
 
     const parsed = parseMyOrbitChatMessage(message)
@@ -454,7 +475,6 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
       return socket.emit(EV('error'), { message: 'That message was blocked' })
     }
 
-    participant.lastMessageAt = now
     // roomId is included so a listener that can be subscribed to more than one room's channel
     // at once (AdminMyOrbitModeration.vue's spectate view) can tell which room a message
     // belongs to — an ordinary player is only ever in one room's channel, so this is a no-op
@@ -475,17 +495,20 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     const participant = room?.participants.get(me.id)
     if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
 
+    // Checked AND claimed before the moderation await below, not after — see inviteToRaid's own
+    // comment on why (two calls fired back-to-back would otherwise both read the stale pre-write
+    // value and both pass, bypassing the cooldown).
+    const now = Date.now()
+    if (participant.lastEmoteAt && now - participant.lastEmoteAt < EMOTE_RATE_LIMIT_MS) return
+    if (!isValidMyOrbitEmote(emoteKey)) return
+    participant.lastEmoteAt = now
+
     const moderation = await loadModerationStatus(me.id)
     if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
     if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
       return socket.emit(EV('error'), { message: 'You are muted' })
     }
 
-    const now = Date.now()
-    if (participant.lastEmoteAt && now - participant.lastEmoteAt < EMOTE_RATE_LIMIT_MS) return
-    if (!isValidMyOrbitEmote(emoteKey)) return
-
-    participant.lastEmoteAt = now
     io.local.to(roomChannel(roomId)).emit(EV('emote'), { id: randomUUID(), roomId, userId: me.id, emoteKey, createdAt: now })
   }))
 
@@ -516,11 +539,16 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     // attempt is an intentional, conservative tradeoff: a rejected attempt still costs a cooldown
     // rather than leaving the race open for correctness's sake.
     const now = Date.now()
-    if (participant.lastInviteAt && now - participant.lastInviteAt < INVITE_RATE_LIMIT_MS) return
+    if (participant.lastInviteAt && now - participant.lastInviteAt < INVITE_RATE_LIMIT_MS) {
+      return socket.emit(EV('error'), { message: 'Slow down a little' })
+    }
     participant.lastInviteAt = now
 
     const moderation = await loadModerationStatus(me.id)
     if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
+      return socket.emit(EV('error'), { message: 'You are muted' })
+    }
 
     const raid = getActiveRaidForUser(me.id)
     if (!raid) return socket.emit(EV('error'), { message: 'You are not in an active raid' })
@@ -553,11 +581,16 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     // See inviteToRaid's own comment above on why this is checked AND claimed before the
     // moderation await, not after.
     const now = Date.now()
-    if (participant.lastInviteAt && now - participant.lastInviteAt < INVITE_RATE_LIMIT_MS) return
+    if (participant.lastInviteAt && now - participant.lastInviteAt < INVITE_RATE_LIMIT_MS) {
+      return socket.emit(EV('error'), { message: 'Slow down a little' })
+    }
     participant.lastInviteAt = now
 
     const moderation = await loadModerationStatus(me.id)
     if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
+      return socket.emit(EV('error'), { message: 'You are muted' })
+    }
 
     const match = getActivePvpMatchForUser(me.id)
     if (!match) return socket.emit(EV('error'), { message: 'You are not in an active PvP match' })
@@ -588,11 +621,16 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     // See inviteToRaid's own comment above on why this is checked AND claimed before the
     // moderation await, not after.
     const now = Date.now()
-    if (participant.lastInviteAt && now - participant.lastInviteAt < INVITE_RATE_LIMIT_MS) return
+    if (participant.lastInviteAt && now - participant.lastInviteAt < INVITE_RATE_LIMIT_MS) {
+      return socket.emit(EV('error'), { message: 'Slow down a little' })
+    }
     participant.lastInviteAt = now
 
     const moderation = await loadModerationStatus(me.id)
     if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
+      return socket.emit(EV('error'), { message: 'You are muted' })
+    }
 
     io.local.to(`user:${targetUserId}`).emit('myorbit:ogGtoonsNudge', {
       fromUserId: me.id, fromUsername: participant.username,

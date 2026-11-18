@@ -84,6 +84,14 @@ export function parseMyOrbitFurnitureBody(body, existing) {
   if (sittable && (footprintW !== 1 || footprintH !== 1)) {
     return { ok: false, message: 'Sittable furniture must have a 1x1 footprint' }
   }
+  // The client only ever renders a sit hit-target on a BLOCKS-WALK cell (see MyOrbitWindow.vue's
+  // own furniturePieces.filter comment): a walk-through sittable piece's own tile is reachable by
+  // a plain move click instead, which would silently win the click over the sit action if both
+  // were offered on the same cell. Rather than leave that combination creatable-but-unusable here,
+  // it's rejected at the same layer the 1x1 rule already is.
+  if (sittable && !blocksWalk) {
+    return { ok: false, message: 'Sittable furniture must also block walking (otherwise there is no way to trigger sitting on it)' }
+  }
 
   return { ok: true, data: { name, footprintW, footprintH, blocksWalk, zOffset, sittable } }
 }

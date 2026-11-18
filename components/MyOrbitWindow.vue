@@ -142,7 +142,7 @@
                 @click="moveTo(cell.x, cell.y)"
               ></button>
               <button
-                v-for="f in furniturePieces.filter(f => f.sittable && f.blocksWalk)" :key="`sit-${f.x}-${f.y}`" type="button"
+                v-for="f in sittableFurniturePieces" :key="`sit-${f.x}-${f.y}`" type="button"
                 class="mow-cell-hit" title="Sit"
                 :style="{ left: f.left + 'px', top: f.top + 'px', width: TILE_WIDTH + 'px', height: TILE_HEIGHT + 'px', zIndex: 200000 + f.x + f.y }"
                 @click="sitAt(f.x, f.y)"
@@ -229,7 +229,15 @@ const {
   inviteToPvp, challengeOgGtoons, dismissPvpInvite, dismissOgGtoonsNudge
 } = useMyOrbitSocket()
 const raidSocket = useCMoonRaidSocket()
-const pvpSocket = useCMoonPvpSocket()
+// Deliberately NOT connected eagerly at setup, unlike raidSocket above — useCMoonRaidSocket()
+// is already connected for every page view anyway (CMoonBattlePopupHost.vue, mounted in the same
+// layout, calls it unconditionally too, so reusing it here is free). useCMoonPvpSocket() has no
+// such existing always-on caller, and MyOrbitWindow.vue itself is mounted for every visitor on
+// every page — calling it here unconditionally would open a brand new live PvP socket connection
+// for every single site visitor, including the vast majority who never touch cMoon PvP, just to
+// support one gate check. canInvitePvp below (its one and only use) connects it lazily on first
+// read instead, which in practice means "the first time an avatar's action menu is opened."
+let pvpSocket = null
 
 // closed (nothing shown) -> minimized (small tab, room membership stays live) -> open (full window)
 const uiState = ref('closed')
@@ -368,6 +376,13 @@ const furniturePieces = computed(() => {
     }
   })
 })
+// Hoisted out of the template (where it used to be a bare `.filter()` call): furniturePieces only
+// changes on room join, but the surrounding stage re-renders on every participantMoved broadcast
+// (as often as every 350ms while anyone walks) - computing a fresh filtered array + closure in
+// the template on every one of those re-renders was pure waste for furniture that hadn't changed.
+const sittableFurniturePieces = computed(() => {
+  return furniturePieces.value.filter(f => f.sittable && f.blocksWalk)
+})
 // CSS transition on left/top (see .mow-avatar-token below) is what turns each server-broadcast
 // position update into a glide rather than a teleport — no client-side animation code needed.
 const avatarTokens = computed(() => {
@@ -451,6 +466,7 @@ function onJoinInvitedRaid() {
 
 // ── Invite to PvP — same shape as the raid invite above, against useCMoonPvpSocket.js instead.
 const canInvitePvp = computed(() => {
+  if (!pvpSocket) pvpSocket = useCMoonPvpSocket()
   const match = pvpSocket.matchState.value
   return !!(match?.id && match.id === pvpSocket.currentMatchId.value && match.status === 'FORMING')
 })

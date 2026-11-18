@@ -79,6 +79,15 @@ test('furniture: sittable is rejected on anything bigger than a 1x1 footprint - 
   assert.equal(parseMyOrbitFurnitureBody({ name: 'A', sittable: false, footprintW: 3, footprintH: 2 }).ok, true)
 })
 
+test('furniture: sittable is rejected unless blocksWalk is also true - a walk-through tile has no way to trigger sitting on it', () => {
+  const result = parseMyOrbitFurnitureBody({ name: 'A', sittable: true, blocksWalk: false })
+  assert.equal(result.ok, false)
+  assert.match(result.message, /block/i)
+  assert.equal(parseMyOrbitFurnitureBody({ name: 'A', sittable: true, blocksWalk: true }).ok, true)
+  // Non-sittable furniture is unaffected by this rule.
+  assert.equal(parseMyOrbitFurnitureBody({ name: 'A', sittable: false, blocksWalk: false }).ok, true)
+})
+
 test('furniture: footprint must be a whole number within 1-10', () => {
   assert.equal(parseMyOrbitFurnitureBody({ name: 'A', footprintW: 0 }).ok, false)
   assert.equal(parseMyOrbitFurnitureBody({ name: 'A', footprintW: 11 }).ok, false)

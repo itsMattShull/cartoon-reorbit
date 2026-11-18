@@ -35,7 +35,8 @@ test('useMyOrbitSocket.js exposes sitAt, emitting myorbit:sit', () => {
 test('MyOrbitWindow.vue renders a seated CSS class and a click target only on sittable furniture', () => {
   const win = read('components/MyOrbitWindow.vue')
   assert.match(win, /mow-avatar-seated/)
-  assert.match(win, /furniturePieces\.filter\(f => f\.sittable && f\.blocksWalk\)/)
+  assert.match(win, /sittableFurniturePieces = computed\(/)
+  assert.match(win, /furniturePieces\.value\.filter\(f => f\.sittable && f\.blocksWalk\)/)
   assert.match(win, /sitAt\(f\.x, f\.y\)/)
 })
 
@@ -82,4 +83,61 @@ test('myOrbitPresence.js is imported by myOrbitSocket.js (write side) and both R
   assert.match(online, /listOnlinePresence/)
   const rooms = read('server/api/myorbit/rooms.get.js')
   assert.match(rooms, /roomOccupancyCounts/)
+})
+
+// ── Regression coverage for the full-PR adversarial review's confirmed findings ──────────────
+
+test('myorbit:sit checks ban/mute status before acting, same as every sibling interactive handler', () => {
+  const myOrbit = read('server/utils/myOrbitSocket.js')
+  const sitHandler = myOrbit.slice(myOrbit.indexOf("socket.on(EV('sit')"), myOrbit.indexOf("socket.on(EV('setStatus')"))
+  assert.match(sitHandler, /loadModerationStatus\(me\.id\)/)
+  assert.match(sitHandler, /myOrbitBannedAt/)
+  assert.match(sitHandler, /myOrbitMutedUntil/)
+})
+
+test('myorbit:setStatus is rate-limited (lastStatusAt), with the check claimed before the moderation await', () => {
+  const myOrbit = read('server/utils/myOrbitSocket.js')
+  assert.match(myOrbit, /STATUS_RATE_LIMIT_MS/)
+  assert.match(myOrbit, /lastStatusAt/)
+  const setStatusHandler = myOrbit.slice(myOrbit.indexOf("socket.on(EV('setStatus')"), myOrbit.indexOf("socket.on(EV('leave')"))
+  const claimIdx = setStatusHandler.indexOf('participant.lastStatusAt = now')
+  const awaitIdx = setStatusHandler.indexOf('await loadModerationStatus')
+  assert.ok(claimIdx > -1 && awaitIdx > -1 && claimIdx < awaitIdx, 'rate-limit must be claimed before the moderation await, not after')
+})
+
+test('myorbit:chat and myorbit:emote claim their rate-limit timestamp before the moderation await, not after', () => {
+  const myOrbit = read('server/utils/myOrbitSocket.js')
+  const chatHandler = myOrbit.slice(myOrbit.indexOf("socket.on(EV('chat')"), myOrbit.indexOf("socket.on(EV('emote')"))
+  const chatClaim = chatHandler.indexOf('participant.lastMessageAt = now')
+  const chatAwait = chatHandler.indexOf('await loadModerationStatus')
+  assert.ok(chatClaim > -1 && chatAwait > -1 && chatClaim < chatAwait)
+
+  const emoteHandler = myOrbit.slice(myOrbit.indexOf("socket.on(EV('emote')"), myOrbit.indexOf("// \"Squad up in-room\""))
+  const emoteClaim = emoteHandler.indexOf('participant.lastEmoteAt = now')
+  const emoteAwait = emoteHandler.indexOf('await loadModerationStatus')
+  assert.ok(emoteClaim > -1 && emoteAwait > -1 && emoteClaim < emoteAwait)
+})
+
+test('all three invite/nudge handlers check mute status (not just ban), and emit an explicit error on a rate-limit hit instead of a silent drop', () => {
+  const myOrbit = read('server/utils/myOrbitSocket.js')
+  for (const name of ['inviteToRaid', 'invitePvp', 'challengeOgGtoons']) {
+    const start = myOrbit.indexOf(`socket.on(EV('${name}')`)
+    assert.ok(start > -1, `${name} handler not found`)
+    const end = myOrbit.indexOf('}))', start) + 3
+    const handler = myOrbit.slice(start, end)
+    assert.match(handler, /myOrbitMutedUntil/, `${name} should check mute status`)
+    assert.match(handler, /INVITE_RATE_LIMIT_MS\) \{\s*\n\s*return socket\.emit\(EV\('error'\)/, `${name} should emit an error on rate-limit, not a silent return`)
+  }
+})
+
+test('MyOrbitWindow.vue connects useCMoonPvpSocket lazily (on first canInvitePvp read), not unconditionally for every page visitor', () => {
+  const win = read('components/MyOrbitWindow.vue')
+  assert.match(win, /let pvpSocket = null/)
+  assert.doesNotMatch(win, /const pvpSocket = useCMoonPvpSocket\(\)/)
+  assert.match(win, /if \(!pvpSocket\) pvpSocket = useCMoonPvpSocket\(\)/)
+})
+
+test('MyOrbitFurniture validator requires blocksWalk when sittable, so a created row is always reachable from the client', () => {
+  const assets = read('server/utils/myOrbitAssets.js')
+  assert.match(assets, /if \(sittable && !blocksWalk\)/)
 })
