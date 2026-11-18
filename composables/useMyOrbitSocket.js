@@ -19,6 +19,13 @@ const chatMessages = ref([])
 // this ref only exists so a watcher can react to each new arrival even if two emotes land with
 // the exact same emoteKey back to back (a plain `watch` on a changed VALUE would miss that).
 const lastEmoteEvent = ref(null)
+// "Invite to PvP" / "Challenge to OG gToons" notifications — delivered through THIS socket
+// (not useCMoonPvpSocket.js/useOgGtoonsRoomSocket.js) because MyOrbit's own connection is the one
+// guaranteed to be live wherever a player can receive one of these; see myorbit:invitePvp's own
+// comment in server/utils/myOrbitSocket.js for why. One-shot, latest-wins, same shape as
+// lastEmoteEvent above.
+const incomingPvpInvite = ref(null)
+const incomingOgGtoonsNudge = ref(null)
 let socket
 
 export function useMyOrbitSocket() {
@@ -78,6 +85,12 @@ export function useMyOrbitSocket() {
       if (!roomState.value) currentRoomId.value = null
     })
     socket.on('myorbit:moveRejected', () => { lastError.value = "You can't walk there." })
+    socket.on('myorbit:pvpInvite', (payload) => {
+      if (payload?.matchId) incomingPvpInvite.value = payload
+    })
+    socket.on('myorbit:ogGtoonsNudge', (payload) => {
+      if (payload?.fromUsername) incomingOgGtoonsNudge.value = payload
+    })
     // Sent instead of a plain error when a resync (getState) finds this client is no longer a
     // participant — most commonly a dropped connection that outlasted the server's reconnect
     // grace window. Unlike a generic error, the local state is now stale and must be cleared so
@@ -126,9 +139,23 @@ export function useMyOrbitSocket() {
   function setStatus(status) {
     socket.emit('myorbit:setStatus', { status })
   }
+  function inviteToPvp(targetUserId) {
+    socket.emit('myorbit:invitePvp', { targetUserId })
+  }
+  function challengeOgGtoons(targetUserId) {
+    socket.emit('myorbit:challengeOgGtoons', { targetUserId })
+  }
+  function dismissPvpInvite() {
+    incomingPvpInvite.value = null
+  }
+  function dismissOgGtoonsNudge() {
+    incomingOgGtoonsNudge.value = null
+  }
 
   return {
     socket, roomState, lastError, isConnected, currentRoomId, chatMessages, lastEmoteEvent,
-    joinRoom, leaveRoom, getState, moveTo, sendChat, sendEmote, inviteToRaid, sitAt, setStatus
+    incomingPvpInvite, incomingOgGtoonsNudge,
+    joinRoom, leaveRoom, getState, moveTo, sendChat, sendEmote, inviteToRaid, sitAt, setStatus,
+    inviteToPvp, challengeOgGtoons, dismissPvpInvite, dismissOgGtoonsNudge
   }
 }

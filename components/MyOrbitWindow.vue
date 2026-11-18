@@ -13,7 +13,7 @@
     >🧑‍🚀 MyOrbit{{ currentRoomId ? ' (in a room)' : '' }}</button>
 
     <!-- ── Open window ─────────────────────────────────────────────────────────────────────── -->
-    <div v-else ref="windowEl" class="mow-window" :class="{ 'mow-window-maximized': maximized }" :style="dragStyle">
+    <div v-else ref="windowEl" class="mow-window" :class="{ 'mow-window-maximized': maximized }" :style="dragStyle" @click="openActionMenuFor = null">
       <div class="mow-header" @pointerdown="onHeaderPointerDown">
         <span class="mow-title">MyOrbit</span>
         <div class="mow-header-btns">
@@ -32,6 +32,22 @@
           <div class="mow-invite-banner-btns">
             <button type="button" class="mow-invite-join-btn" @click="onJoinInvitedRaid">Join</button>
             <button type="button" class="mow-invite-dismiss-btn" @click="raidSocket.dismissInvite">✕</button>
+          </div>
+        </div>
+
+        <div v-if="incomingPvpInvite" class="mow-invite-banner">
+          <span>🛡️ <strong>{{ incomingPvpInvite.fromUsername }}</strong> invited you to a PvP match!</span>
+          <div class="mow-invite-banner-btns">
+            <button type="button" class="mow-invite-join-btn" @click="onJoinInvitedPvp">Join</button>
+            <button type="button" class="mow-invite-dismiss-btn" @click="dismissPvpInvite">✕</button>
+          </div>
+        </div>
+
+        <div v-if="incomingOgGtoonsNudge" class="mow-invite-banner">
+          <span>🃏 <strong>{{ incomingOgGtoonsNudge.fromUsername }}</strong> wants to play OG gToons with you!</span>
+          <div class="mow-invite-banner-btns">
+            <button type="button" class="mow-invite-join-btn" @click="onGoToOgGtoons">Go</button>
+            <button type="button" class="mow-invite-dismiss-btn" @click="dismissOgGtoonsNudge">✕</button>
           </div>
         </div>
 
@@ -145,10 +161,26 @@
                     <img v-if="p.cmoon.iconPath" :src="p.cmoon.iconPath" alt="" />
                   </span>
                   <span v-if="p.isAdmin" class="mow-flair mow-flair-admin" title="Admin">👑</span>
+                  <span v-if="wishlistMatchCounts[p.userId] > 0" class="mow-flair mow-flair-wishlist" :title="`${wishlistMatchCounts[p.userId]} item(s) on your wishlist`">🎁</span>
                   <button
-                    v-if="!p.isMe && canInviteToRaid" type="button" class="mow-invite-btn"
-                    :title="`Invite ${p.username} to your raid`" @click.stop="onInviteToRaid(p.userId)"
-                  >{{ invitedUsers[p.userId] ? '✓' : '⚔️' }}</button>
+                    v-if="!p.isMe" type="button" class="mow-menu-btn"
+                    :title="`${p.username} actions`" @click.stop="toggleActionMenu(p.userId)"
+                  >⋯</button>
+                  <div v-if="openActionMenuFor === p.userId" class="mow-action-menu" @click.stop>
+                    <button
+                      v-if="canInviteToRaid" type="button" class="mow-action-item"
+                      @click="onInviteToRaid(p.userId)"
+                    >⚔️ {{ invitedUsers[p.userId] ? 'Invited!' : 'Invite to Raid' }}</button>
+                    <button
+                      v-if="canInvitePvp" type="button" class="mow-action-item"
+                      @click="onInvitePvp(p.userId)"
+                    >🛡️ {{ invitedPvpUsers[p.userId] ? 'Invited!' : 'Invite to PvP' }}</button>
+                    <button type="button" class="mow-action-item" @click="onChallengeOgGtoons(p.userId)">
+                      🃏 {{ nudgedOgGtoonsUsers[p.userId] ? 'Sent!' : 'Challenge to OG gToons' }}
+                    </button>
+                    <button type="button" class="mow-action-item" @click="onTrade(p.username)">💱 Trade</button>
+                    <button type="button" class="mow-action-item" @click="onVisitCzone(p.username)">🏠 Visit cZone</button>
+                  </div>
                 </div>
                 <span class="mow-avatar-name" :title="p.status">{{ p.username }}</span>
                 <span v-if="p.status" class="mow-avatar-status">{{ p.status }}</span>
@@ -187,13 +219,17 @@ import { useMyOrbitSocket } from '~/composables/useMyOrbitSocket'
 import { useBattleMusic } from '~/composables/useBattleMusic'
 import { useHapticSoundsPref } from '~/composables/useHapticSoundsPref'
 import { useCMoonRaidSocket } from '~/composables/useCMoonRaidSocket'
+import { useCMoonPvpSocket } from '~/composables/useCMoonPvpSocket'
 
 const { user } = useAuth()
 const {
   roomState, lastError, currentRoomId, chatMessages, lastEmoteEvent,
-  joinRoom, leaveRoom, moveTo, sendChat, sendEmote, inviteToRaid, sitAt, setStatus
+  incomingPvpInvite, incomingOgGtoonsNudge,
+  joinRoom, leaveRoom, moveTo, sendChat, sendEmote, inviteToRaid, sitAt, setStatus,
+  inviteToPvp, challengeOgGtoons, dismissPvpInvite, dismissOgGtoonsNudge
 } = useMyOrbitSocket()
 const raidSocket = useCMoonRaidSocket()
+const pvpSocket = useCMoonPvpSocket()
 
 // closed (nothing shown) -> minimized (small tab, room membership stays live) -> open (full window)
 const uiState = ref('closed')
@@ -348,6 +384,26 @@ const avatarTokens = computed(() => {
   })
 })
 
+// ── Wishlist match hint — "they own N things on your wishlist" (see the new /api/myorbit/
+// wishlist-match/[userId] endpoint). Fetched once per newly-seen participant, never on every
+// move-tick re-render of avatarTokens (the room broadcasts a fresh participants array as often
+// as every 350ms while anyone walks - re-fetching on that cadence would hammer the DB for a
+// purely cosmetic hint). Cleared on room change since a stale count from a different room's
+// roster would be actively misleading.
+const wishlistMatchCounts = ref({})
+watch(() => (roomState.value?.participants || []).map(p => p.userId), (ids) => {
+  for (const id of ids) {
+    if (id === user.value?.id || id in wishlistMatchCounts.value) continue
+    // Claim the slot immediately (same object-spread convention as invitedUsers/emoteIcons
+    // elsewhere in this file) so a slow response can't cause a duplicate fetch for the same id.
+    wishlistMatchCounts.value = { ...wishlistMatchCounts.value, [id]: 0 }
+    $fetch(`/api/myorbit/wishlist-match/${id}`)
+      .then(res => { wishlistMatchCounts.value = { ...wishlistMatchCounts.value, [id]: res?.count || 0 } })
+      .catch(() => {})
+  }
+})
+watch(currentRoomId, () => { wishlistMatchCounts.value = {} })
+
 // A brief "landing bounce" the instant a glide finishes — transitionend fires once per animated
 // CSS property, so this is keyed on left/top specifically (ignoring any other property a future
 // style change might also transition) rather than firing on every stray transitionend bubble.
@@ -375,6 +431,7 @@ const canInviteToRaid = computed(() => {
 const invitedUsers = ref({})
 function onInviteToRaid(userId) {
   inviteToRaid(userId)
+  openActionMenuFor.value = null
   invitedUsers.value = { ...invitedUsers.value, [userId]: true }
   setTimeout(() => {
     const next = { ...invitedUsers.value }
@@ -391,6 +448,68 @@ function onJoinInvitedRaid() {
   raidSocket.dismissInvite()
   if (raidId) router.push(`/newsite/cmoon-raid/${raidId}`)
 }
+
+// ── Invite to PvP — same shape as the raid invite above, against useCMoonPvpSocket.js instead.
+const canInvitePvp = computed(() => {
+  const match = pvpSocket.matchState.value
+  return !!(match?.id && match.id === pvpSocket.currentMatchId.value && match.status === 'FORMING')
+})
+const invitedPvpUsers = ref({})
+function onInvitePvp(userId) {
+  inviteToPvp(userId)
+  openActionMenuFor.value = null
+  invitedPvpUsers.value = { ...invitedPvpUsers.value, [userId]: true }
+  setTimeout(() => {
+    const next = { ...invitedPvpUsers.value }
+    delete next[userId]
+    invitedPvpUsers.value = next
+  }, 1800)
+}
+function onJoinInvitedPvp() {
+  const matchId = incomingPvpInvite.value?.matchId
+  dismissPvpInvite()
+  if (matchId) router.push(`/newsite/cmoon-pvp/${matchId}`)
+}
+
+// ── Challenge to OG gToons — a pure social nudge + deep link, not a real challenge: OG gToons'
+// own direct-challenge system only lists players already on its Matchmaking tab (see
+// myorbit:challengeOgGtoons's own comment server-side), so there's nothing to auto-start here.
+const nudgedOgGtoonsUsers = ref({})
+function onChallengeOgGtoons(userId) {
+  challengeOgGtoons(userId)
+  openActionMenuFor.value = null
+  nudgedOgGtoonsUsers.value = { ...nudgedOgGtoonsUsers.value, [userId]: true }
+  setTimeout(() => {
+    const next = { ...nudgedOgGtoonsUsers.value }
+    delete next[userId]
+    nudgedOgGtoonsUsers.value = next
+  }, 1800)
+}
+function onGoToOgGtoons() {
+  dismissOgGtoonsNudge()
+  router.push('/newsite/gtoons-classic')
+}
+
+// ── Trade / Visit cZone — both already-existing site features; MyOrbit only bridges to them via
+// a plain navigation, same "don't reimplement the other feature's UI" discipline as the raid/PvP
+// invites above (which link to the existing raid/PvP pages rather than rendering combat here).
+function onTrade(username) {
+  openActionMenuFor.value = null
+  router.push({ path: '/newsite/trade', query: { username } })
+}
+function onVisitCzone(username) {
+  openActionMenuFor.value = null
+  router.push(`/newsite/czone/${encodeURIComponent(username)}`)
+}
+
+// ── Per-avatar action menu — replaces a single inline icon button now that there are several
+// possible actions (raid/PvP invite, OG gToons nudge, trade, visit cZone). One open at a time;
+// closes on room change (the referenced userId may no longer even be in the new room).
+const openActionMenuFor = ref(null)
+function toggleActionMenu(userId) {
+  openActionMenuFor.value = openActionMenuFor.value === userId ? null : userId
+}
+watch(currentRoomId, () => { openActionMenuFor.value = null })
 
 // ── Faction war rooms — purely cosmetic branding; "home turf" just means MY own current cMoon
 // matches this room's theme, never a join restriction (see MyOrbitRoom.themeCMoonId's own
@@ -734,10 +853,10 @@ onBeforeUnmount(() => {
   font-size: 11px;
   cursor: pointer;
 }
-/* Invite-to-raid action on another player's avatar — re-enables pointer events since the whole
-   token (.mow-avatar-token) deliberately sets pointer-events: none for the glide, see its own
-   comment. */
-.mow-invite-btn {
+.mow-flair-wishlist { right: -3px; top: -4px; border: 1.5px solid #f59e0b; font-size: 8px; }
+/* Per-avatar action menu toggle — re-enables pointer events since the whole token
+   (.mow-avatar-token) deliberately sets pointer-events: none for the glide, see its own comment. */
+.mow-menu-btn {
   position: absolute;
   left: -3px;
   bottom: 6px;
@@ -747,7 +866,8 @@ onBeforeUnmount(() => {
   border: none;
   background: #fff;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
-  font-size: 9px;
+  font-size: 10px;
+  font-weight: 700;
   line-height: 1;
   display: flex;
   align-items: center;
@@ -755,6 +875,36 @@ onBeforeUnmount(() => {
   cursor: pointer;
   pointer-events: auto;
 }
+.mow-action-menu {
+  position: absolute;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%);
+  margin-bottom: 4px;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  pointer-events: auto;
+  white-space: nowrap;
+  z-index: 10;
+}
+.mow-action-item {
+  display: block;
+  text-align: left;
+  padding: 5px 8px;
+  border: none;
+  background: transparent;
+  border-radius: 5px;
+  font-size: 11px;
+  color: #0f172a;
+  cursor: pointer;
+}
+.mow-action-item:hover { background: #f1f5f9; }
 
 .mow-room { display: flex; flex-direction: column; }
 .mow-room-toolbar {

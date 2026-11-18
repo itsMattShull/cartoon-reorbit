@@ -42,6 +42,7 @@ import { parseMyOrbitChatMessage, containsBannedWord, parseMyOrbitStatus } from 
 import { getGlobalConfig } from './cmoon.js'
 import { isValidMyOrbitEmote } from '../../utils/myOrbitEmotes.js'
 import { getActiveRaidForUser } from './cmoonRaidSocket.js'
+import { getActivePvpMatchForUser } from './cmoonPvpSocket.js'
 import { setUserPresence, clearUserPresence } from './myOrbitPresence.js'
 
 const EV = (name) => `myorbit:${name}`
@@ -507,18 +508,94 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
       return socket.emit(EV('error'), { message: 'That player is no longer in this room' })
     }
 
+    // Checked AND claimed before the moderation await below, not after: this participant object
+    // is now shared by three invite types (raid/PvP/OG gToons), so a check that only reads here
+    // and writes after an await lets two of them, fired back-to-back, both read the stale
+    // pre-write value and both pass — see this handler's sibling invitePvp/challengeOgGtoons for
+    // the same fix. Claiming the slot even when a later check (ban, no active raid) rejects the
+    // attempt is an intentional, conservative tradeoff: a rejected attempt still costs a cooldown
+    // rather than leaving the race open for correctness's sake.
+    const now = Date.now()
+    if (participant.lastInviteAt && now - participant.lastInviteAt < INVITE_RATE_LIMIT_MS) return
+    participant.lastInviteAt = now
+
     const moderation = await loadModerationStatus(me.id)
     if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
 
-    const now = Date.now()
-    if (participant.lastInviteAt && now - participant.lastInviteAt < INVITE_RATE_LIMIT_MS) return
     const raid = getActiveRaidForUser(me.id)
     if (!raid) return socket.emit(EV('error'), { message: 'You are not in an active raid' })
     if (raid.status !== 'FORMING') return socket.emit(EV('error'), { message: 'That raid is no longer accepting new joiners' })
 
-    participant.lastInviteAt = now
     io.local.to(`user:${targetUserId}`).emit('cmoonraid:invite', {
       raidId: raid.id, enemyName: raid.enemyName, fromUserId: me.id, fromUsername: participant.username,
+    })
+  }))
+
+  // "Invite to PvP" — same shape as inviteToRaid above, mirroring cMoon PvP's own join cutoff
+  // (FORMING only — see getActivePvpMatchForUser's own comment in cmoonPvpSocket.js). Delivered
+  // through THIS module's own `user:<id>` emit, not cmoonPvpSocket.js's — useCMoonPvpSocket.js is
+  // only connected while a player is actually on a PvP page, so a notification sent through ITS
+  // channel would silently vanish for a target who's sitting in MyOrbit and hasn't opened one.
+  // MyOrbit's own socket is always live wherever this feature is (see MyOrbitWindow.vue's layout
+  // mount), so that's the channel every MyOrbit-sourced social invite below uses instead.
+  socket.on(EV('invitePvp'), safe(socket, async ({ targetUserId } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return
+    if (typeof targetUserId !== 'string' || !targetUserId || targetUserId === me.id) return
+    const roomId = roomByUser.get(me.id)
+    const room = roomId ? rooms.get(roomId) : null
+    const participant = room?.participants.get(me.id)
+    if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
+    if (!room.participants.has(targetUserId)) {
+      return socket.emit(EV('error'), { message: 'That player is no longer in this room' })
+    }
+
+    // See inviteToRaid's own comment above on why this is checked AND claimed before the
+    // moderation await, not after.
+    const now = Date.now()
+    if (participant.lastInviteAt && now - participant.lastInviteAt < INVITE_RATE_LIMIT_MS) return
+    participant.lastInviteAt = now
+
+    const moderation = await loadModerationStatus(me.id)
+    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+
+    const match = getActivePvpMatchForUser(me.id)
+    if (!match) return socket.emit(EV('error'), { message: 'You are not in an active PvP match' })
+    if (match.status !== 'FORMING') return socket.emit(EV('error'), { message: 'That match is no longer accepting new joiners' })
+
+    io.local.to(`user:${targetUserId}`).emit('myorbit:pvpInvite', {
+      matchId: match.id, fromUserId: me.id, fromUsername: participant.username,
+    })
+  }))
+
+  // "Challenge to OG gToons" — unlike the raid/PvP invites above, this never requires the sender
+  // to already be in anything: OG gToons' own direct-challenge system (challengeSend) only lists
+  // players who have independently joined its Matchmaking tab (see that component's own comment),
+  // so there's no "already-open match" to pull someone into from here. This is purely a social
+  // nudge with a deep link — same "always-live MyOrbit channel" delivery as invitePvp above.
+  socket.on(EV('challengeOgGtoons'), safe(socket, async ({ targetUserId } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return
+    if (typeof targetUserId !== 'string' || !targetUserId || targetUserId === me.id) return
+    const roomId = roomByUser.get(me.id)
+    const room = roomId ? rooms.get(roomId) : null
+    const participant = room?.participants.get(me.id)
+    if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
+    if (!room.participants.has(targetUserId)) {
+      return socket.emit(EV('error'), { message: 'That player is no longer in this room' })
+    }
+
+    // See inviteToRaid's own comment above on why this is checked AND claimed before the
+    // moderation await, not after.
+    const now = Date.now()
+    if (participant.lastInviteAt && now - participant.lastInviteAt < INVITE_RATE_LIMIT_MS) return
+    participant.lastInviteAt = now
+
+    const moderation = await loadModerationStatus(me.id)
+    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+
+    io.local.to(`user:${targetUserId}`).emit('myorbit:ogGtoonsNudge', {
+      fromUserId: me.id, fromUsername: participant.username,
     })
   }))
 
