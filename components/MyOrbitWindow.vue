@@ -26,6 +26,15 @@
       <div class="mow-body">
         <p v-if="lastError" class="mow-error">{{ lastError }}</p>
 
+        <!-- ── "Squad up" — someone invited me into their raid from this (or another) room ──── -->
+        <div v-if="raidSocket.incomingInvite.value" class="mow-invite-banner">
+          <span>⚔️ <strong>{{ raidSocket.incomingInvite.value.fromUsername }}</strong> invited you to fight <strong>{{ raidSocket.incomingInvite.value.enemyName }}</strong>!</span>
+          <div class="mow-invite-banner-btns">
+            <button type="button" class="mow-invite-join-btn" @click="onJoinInvitedRaid">Join</button>
+            <button type="button" class="mow-invite-dismiss-btn" @click="raidSocket.dismissInvite">✕</button>
+          </div>
+        </div>
+
         <!-- ── Room list / avatar picker ─────────────────────────────────────────────────── -->
         <div v-if="view === 'rooms'" class="mow-rooms">
           <p v-if="roomsError" class="mow-error">{{ roomsError }}</p>
@@ -45,9 +54,13 @@
           <div v-else class="mow-room-list">
             <button
               v-for="r in availableRooms" :key="r.id" type="button" class="mow-room-row"
+              :style="r.theme ? { borderLeft: `3px solid ${r.theme.color}` } : {}"
               :disabled="!selectedCtoonId" @click="onJoin(r.id)"
             >
+              <img v-if="r.theme?.iconPath" :src="r.theme.iconPath" alt="" class="mow-room-theme-icon" />
               <span class="mow-room-name">{{ r.name }}</span>
+              <span v-if="r.isHomeTurf" class="mow-home-turf-badge" title="Your faction's room">🏠</span>
+              <span v-if="r.isRaidDen" class="mow-raid-den-badge" title="Live raid spectating">⚔️</span>
               <span class="mow-room-size">{{ r.gridWidth }}x{{ r.gridHeight }}</span>
             </button>
           </div>
@@ -55,9 +68,26 @@
 
         <!-- ── In a room: isometric canvas + chat ────────────────────────────────────────── -->
         <div v-else class="mow-room">
-          <div class="mow-room-toolbar">
-            <span class="mow-room-title">{{ roomState?.name || 'Loading…' }}</span>
+          <div class="mow-room-toolbar" :style="roomState?.theme ? { borderLeft: `3px solid ${roomState.theme.color}` } : {}">
+            <span class="mow-room-title">
+              <img v-if="roomState?.theme?.iconPath" :src="roomState.theme.iconPath" alt="" class="mow-room-theme-icon" />
+              {{ roomState?.name || 'Loading…' }}
+              <span v-if="isHomeTurf" class="mow-home-turf-badge" title="Your faction's room">🏠</span>
+            </span>
             <button type="button" class="mow-leave-btn" @click="onLeave">Leave</button>
+          </div>
+          <div v-if="roomState?.isRaidDen" class="mow-raid-den">
+            <template v-if="activeRaid">
+              <div class="mow-raid-den-head">
+                <img v-if="activeRaid.enemyImagePath" :src="activeRaid.enemyImagePath" alt="" class="mow-raid-den-portrait" />
+                <div class="mow-raid-den-info">
+                  <span class="mow-raid-den-name">{{ activeRaid.enemyName }} — Round {{ activeRaid.roundNumber }}</span>
+                  <div class="mow-raid-den-hpbar"><div class="mow-raid-den-hpfill" :style="{ width: raidHpPercent + '%' }"></div></div>
+                </div>
+              </div>
+              <p v-if="activeRaid.lastRoundSummary" class="mow-raid-den-log">{{ activeRaid.lastRoundSummary }}</p>
+            </template>
+            <p v-else class="mow-raid-den-idle">No raid in progress right now.</p>
           </div>
           <div class="mow-stage-wrap">
             <div v-if="roomState" class="mow-stage" :style="{ width: stage.width + 'px', height: stage.height + 'px' }">
@@ -88,6 +118,10 @@
                     <img v-if="p.cmoon.iconPath" :src="p.cmoon.iconPath" alt="" />
                   </span>
                   <span v-if="p.isAdmin" class="mow-flair mow-flair-admin" title="Admin">👑</span>
+                  <button
+                    v-if="!p.isMe && canInviteToRaid" type="button" class="mow-invite-btn"
+                    :title="`Invite ${p.username} to your raid`" @click.stop="onInviteToRaid(p.userId)"
+                  >{{ invitedUsers[p.userId] ? '✓' : '⚔️' }}</button>
                 </div>
                 <span class="mow-avatar-name">{{ p.username }}</span>
               </div>
@@ -124,12 +158,14 @@ import { MYORBIT_EMOTES, myOrbitEmoteIcon } from '~/utils/myOrbitEmotes'
 import { useMyOrbitSocket } from '~/composables/useMyOrbitSocket'
 import { useBattleMusic } from '~/composables/useBattleMusic'
 import { useHapticSoundsPref } from '~/composables/useHapticSoundsPref'
+import { useCMoonRaidSocket } from '~/composables/useCMoonRaidSocket'
 
 const { user } = useAuth()
 const {
   roomState, lastError, currentRoomId, chatMessages, lastEmoteEvent,
-  joinRoom, leaveRoom, moveTo, sendChat, sendEmote
+  joinRoom, leaveRoom, moveTo, sendChat, sendEmote, inviteToRaid
 } = useMyOrbitSocket()
+const raidSocket = useCMoonRaidSocket()
 
 // closed (nothing shown) -> minimized (small tab, room membership stays live) -> open (full window)
 const uiState = ref('closed')
@@ -267,6 +303,80 @@ function onAvatarTransitionEnd(userId, e) {
     landedUsers.value = next
   }, 260)
 }
+
+// ── "Squad up in-room" — invite another player standing here into my own currently-FORMING
+// raid (see myorbit:inviteToRaid in server/utils/myOrbitSocket.js). Only enabled while my own
+// cMoon-raid socket shows I'm genuinely the current/joined party of a still-forming raid — once
+// combat starts (status flips to IN_PROGRESS) the server rejects new joins anyway, so the button
+// hides rather than inviting into a raid the target could never actually enter.
+const canInviteToRaid = computed(() => {
+  const raid = raidSocket.raidState.value
+  return !!(raid?.id && raid.id === raidSocket.currentRaidId.value && raid.status === 'FORMING')
+})
+const invitedUsers = ref({})
+function onInviteToRaid(userId) {
+  inviteToRaid(userId)
+  invitedUsers.value = { ...invitedUsers.value, [userId]: true }
+  setTimeout(() => {
+    const next = { ...invitedUsers.value }
+    delete next[userId]
+    invitedUsers.value = next
+  }, 1800)
+}
+
+// Receiving an invite — a one-shot banner (see raidSocket.incomingInvite), not scoped to any
+// particular room: the inviter and I only needed to share a room at the moment they clicked.
+const router = useRouter()
+function onJoinInvitedRaid() {
+  const raidId = raidSocket.incomingInvite.value?.raidId
+  raidSocket.dismissInvite()
+  if (raidId) router.push(`/newsite/cmoon-raid/${raidId}`)
+}
+
+// ── Faction war rooms — purely cosmetic branding; "home turf" just means MY own current cMoon
+// matches this room's theme, never a join restriction (see MyOrbitRoom.themeCMoonId's own
+// schema comment: themed rooms stay open to everyone).
+const isHomeTurf = computed(() => {
+  const themeId = roomState.value?.theme?.id
+  if (!themeId) return false
+  const mine = (roomState.value?.participants || []).find(p => p.userId === user.value?.id)
+  return mine?.cmoon?.id === themeId
+})
+
+// ── Raid Den — polls the live "what raid boss fight is happening right now" summary while
+// standing in a room flagged isRaidDen. A plain REST poll, not a socket subscription: the raid's
+// own live state lives in cmoonRaidSocket.js's in-memory process (see that endpoint's own
+// comment on why Postgres can't serve this), and polling every few seconds is plenty for an
+// ambient "something's happening" spectator view — this isn't combat-critical timing.
+const activeRaid = ref(null)
+const raidHpPercent = computed(() => {
+  const r = activeRaid.value
+  if (!r || !r.maxHp) return 0
+  return Math.max(0, Math.min(100, Math.round((r.hpRemaining / r.maxHp) * 100)))
+})
+let raidDenPollTimer = null
+async function pollActiveRaid() {
+  try {
+    const res = await $fetch('/api/myorbit/active-raid')
+    activeRaid.value = res?.raid || null
+  } catch {
+    // Transient fetch failures just leave the last-known state on screen - this is a
+    // spectator convenience, not something worth surfacing an error for.
+  }
+}
+function syncRaidDenPolling() {
+  const shouldPoll = !!roomState.value?.isRaidDen
+  if (shouldPoll && !raidDenPollTimer) {
+    pollActiveRaid()
+    raidDenPollTimer = setInterval(pollActiveRaid, 7000)
+  } else if (!shouldPoll && raidDenPollTimer) {
+    clearInterval(raidDenPollTimer)
+    raidDenPollTimer = null
+    activeRaid.value = null
+  }
+}
+watch(() => roomState.value?.isRaidDen, syncRaidDenPolling)
+onBeforeUnmount(() => { if (raidDenPollTimer) clearInterval(raidDenPollTimer) })
 
 // ── Chat speech bubbles — transient, keyed by sender, cleared on timeout or on a live retraction ──
 const bubbles = ref({})
@@ -498,6 +608,64 @@ onBeforeUnmount(() => {
 .mow-room-row:disabled { opacity: 0.5; cursor: not-allowed; }
 .mow-room-name { font-weight: 600; }
 .mow-room-size { color: #64748b; font-size: 11px; }
+.mow-room-theme-icon { width: 14px; height: 14px; object-fit: contain; border-radius: 999px; flex-shrink: 0; }
+.mow-home-turf-badge, .mow-raid-den-badge { font-size: 10px; flex-shrink: 0; }
+
+/* "Squad up" invite banner — one-shot, dismissible, shown regardless of room list vs. in-room view. */
+.mow-invite-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 6px 10px 0;
+  padding: 6px 8px;
+  background: #fef3c7;
+  border: 1px solid #fbbf24;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #78350f;
+}
+.mow-invite-banner-btns { display: flex; gap: 4px; flex-shrink: 0; }
+.mow-invite-join-btn {
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: none;
+  background: #d97706;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.mow-invite-dismiss-btn {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: none;
+  background: rgba(0, 0, 0, 0.1);
+  font-size: 11px;
+  cursor: pointer;
+}
+/* Invite-to-raid action on another player's avatar — re-enables pointer events since the whole
+   token (.mow-avatar-token) deliberately sets pointer-events: none for the glide, see its own
+   comment. */
+.mow-invite-btn {
+  position: absolute;
+  left: -3px;
+  bottom: 6px;
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  border: none;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+  font-size: 9px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  pointer-events: auto;
+}
 
 .mow-room { display: flex; flex-direction: column; }
 .mow-room-toolbar {
@@ -507,7 +675,18 @@ onBeforeUnmount(() => {
   padding: 6px 10px;
   border-bottom: 1px solid #e2e8f0;
 }
-.mow-room-title { font-weight: 700; font-size: 12px; }
+.mow-room-title { font-weight: 700; font-size: 12px; display: flex; align-items: center; gap: 4px; }
+/* Raid Den — live spectator HP bar + round summary, shown above the stage while in a room
+   flagged MyOrbitRoom.isRaidDen (see pollActiveRaid/syncRaidDenPolling). */
+.mow-raid-den { padding: 6px 10px; border-bottom: 1px solid #e2e8f0; background: #fff7ed; }
+.mow-raid-den-head { display: flex; align-items: center; gap: 8px; }
+.mow-raid-den-portrait { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; }
+.mow-raid-den-info { flex: 1; min-width: 0; }
+.mow-raid-den-name { font-size: 11px; font-weight: 700; color: #7c2d12; }
+.mow-raid-den-hpbar { height: 6px; border-radius: 999px; background: #fed7aa; overflow: hidden; margin-top: 2px; }
+.mow-raid-den-hpfill { height: 100%; background: #dc2626; transition: width 0.4s ease-out; }
+.mow-raid-den-log { font-size: 10px; color: #78350f; margin: 4px 0 0; }
+.mow-raid-den-idle { font-size: 11px; color: #92400e; margin: 0; }
 .mow-leave-btn {
   padding: 3px 10px;
   border-radius: 999px;

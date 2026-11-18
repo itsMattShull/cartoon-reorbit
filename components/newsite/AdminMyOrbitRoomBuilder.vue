@@ -38,6 +38,8 @@
             <span class="px-1.5 py-0.5 rounded text-[10px] flex-shrink-0" :class="r.active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'">
               {{ r.active ? 'Active' : 'Inactive' }}
             </span>
+            <span v-if="r.isRaidDen" class="px-1.5 py-0.5 rounded text-[10px] flex-shrink-0 bg-amber-100 text-amber-700" title="Live raid spectating">Raid Den</span>
+            <span v-if="r.themeCMoonId" class="px-1.5 py-0.5 rounded text-[10px] flex-shrink-0 bg-purple-100 text-purple-700">{{ cmoonNameById(r.themeCMoonId) }}</span>
             <span class="text-gray-500 flex-shrink-0">{{ r.tileCount }} tiles · {{ r.furnitureCount }} furniture</span>
           </button>
         </div>
@@ -83,6 +85,17 @@
           <label class="flex items-center gap-2">
             <input type="checkbox" v-model="form.active" />
             <span class="text-[11px] font-medium">Active</span>
+          </label>
+          <div class="w-44">
+            <label class="block text-[11px] font-medium mb-1">Faction theme (optional)</label>
+            <select v-model="form.themeCMoonId" class="w-full border rounded px-2 py-1">
+              <option :value="null">None</option>
+              <option v-for="c in cmoonOptions" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </select>
+          </div>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" v-model="form.isRaidDen" />
+            <span class="text-[11px] font-medium" title="Shows a live HP bar for whatever raid boss fight is currently in progress, for spectating.">Raid Den</span>
           </label>
         </div>
         <p v-if="selectedId" class="text-[11px] text-gray-500">
@@ -227,6 +240,7 @@ const formError = ref('')
 // via its own multipart endpoint, same convention every other per-entity media path in this
 // admin console follows (e.g. AdminCMoonEnemies.vue's faction/member sound slots).
 const ambientSound = ref({ savedPath: '', pendingFile: null, uploading: false, error: '' })
+const cmoonOptions = ref([])
 
 const tilesLibrary = ref([])
 const furnitureLibrary = ref([])
@@ -246,7 +260,7 @@ const layoutError = ref('')
 const layoutStatus = ref('')
 
 function emptyForm() {
-  return { name: '', gridWidth: 10, gridHeight: 10, capacity: 20, active: false, sortOrder: 0 }
+  return { name: '', gridWidth: 10, gridHeight: 10, capacity: 20, active: false, sortOrder: 0, themeCMoonId: null, isRaidDen: false }
 }
 
 const stage = computed(() => form.value ? gridStageSize(form.value.gridWidth, form.value.gridHeight) : { width: 0, height: 0, offsetX: 0, offsetY: 0 })
@@ -290,15 +304,21 @@ const placementList = computed(() => placements.value.map(p => {
 
 async function loadLibraries() {
   try {
-    const [tilesRes, furnRes] = await Promise.all([
+    const [tilesRes, furnRes, cmoonRes] = await Promise.all([
       $fetch('/api/admin/myorbit-tiles'),
-      $fetch('/api/admin/myorbit-furniture')
+      $fetch('/api/admin/myorbit-furniture'),
+      $fetch('/api/admin/myorbit-rooms/cmoon-options')
     ])
     tilesLibrary.value = tilesRes?.tiles || []
     furnitureLibrary.value = furnRes?.furniture || []
+    cmoonOptions.value = cmoonRes?.cmoons || []
   } catch (e) {
     loadError.value = e?.data?.statusMessage || 'Failed to load tile/furniture libraries'
   }
+}
+
+function cmoonNameById(id) {
+  return cmoonOptions.value.find(c => c.id === id)?.name || 'Faction'
 }
 
 async function loadRooms() {
@@ -342,7 +362,10 @@ async function selectRoom(r) {
   try {
     const full = await $fetch(`/api/admin/myorbit-rooms/${r.id}`)
     selectedId.value = full.id
-    form.value = { name: full.name, gridWidth: full.gridWidth, gridHeight: full.gridHeight, capacity: full.capacity, active: full.active, sortOrder: full.sortOrder }
+    form.value = {
+      name: full.name, gridWidth: full.gridWidth, gridHeight: full.gridHeight, capacity: full.capacity,
+      active: full.active, sortOrder: full.sortOrder, themeCMoonId: full.themeCMoonId || null, isRaidDen: !!full.isRaidDen
+    }
     ambientSound.value = { savedPath: full.ambientSoundPath || '', pendingFile: null, uploading: false, error: '' }
     for (const t of full.tiles) {
       cells.value.set(`${t.x},${t.y}`, { tileId: t.tileId, assetPath: t.assetPath, walkable: t.walkable })

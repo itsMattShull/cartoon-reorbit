@@ -117,9 +117,12 @@ export function useMyOrbitSocket() {
   function sendEmote(emoteKey) {
     socket.emit('myorbit:emote', { emoteKey })
   }
+  function inviteToRaid(targetUserId) {
+    socket.emit('myorbit:inviteToRaid', { targetUserId })
+  }
 
   return {
     socket, roomState, lastError, isConnected, currentRoomId, chatMessages, lastEmoteEvent,
-    joinRoom, leaveRoom, getState, moveTo, sendChat, sendEmote
+    joinRoom, leaveRoom, getState, moveTo, sendChat, sendEmote, inviteToRaid
   }
 }

@@ -4826,6 +4826,7 @@ model CMoon {
   battleLosses         Int                       @default(0)
   enemyBattles         CMoonEnemyBattle[]
   enemyRaids           CMoonEnemyRaid[]
+  themedMyOrbitRooms   MyOrbitRoom[]
   // cMoon PvP — battleWins/battleLosses above are shared with cMoon Enemy Battles (both increment
   // the same running counts, see CMoonPvpMatch's own header comment), but a PvP match additionally
   // needs to know which two specific cMoons a match was BETWEEN (teammates-only mode locks each
@@ -8416,12 +8417,22 @@ model MyOrbitRoom {
   // cosmetic, started/stopped client-side on join/leave, same "null = nothing plays" convention
   // every other optional media path in this schema already follows.
   ambientSoundPath String?
+  // Optional faction branding (see feature doc: "faction war rooms") — purely cosmetic, open to
+  // every player regardless of their own cMoon. Null = no theme, render as a plain room.
+  themeCMoonId String?
+  theme        CMoon?  @relation(fields: [themeCMoonId], references: [id], onDelete: SetNull)
+  // Marks this room as the live raid-spectator room (see feature doc: "Raid Den") — the client
+  // polls GET /api/myorbit/active-raid while inside a room with this set. Not enforced unique;
+  // an admin could flag more than one room this way and each would show the same live state.
+  isRaidDen  Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   tiles      MyOrbitRoomTile[]
   furniture  MyOrbitRoomFurniture[]
   moderation MyOrbitModerationLog[]
+
+  @@index([themeCMoonId])
 }
 
 // One painted floor/wall cell. A cell with no row here is unwalkable void (outside the built

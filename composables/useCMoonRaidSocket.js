@@ -19,6 +19,11 @@ const lobbyViewer = ref({ inCMoon: true, currentRaidId: null })
 // serverNow - Date.now() at the last lobby push: join countdowns use the server's clock, so a
 // phone whose clock is off by a minute still sees the right seconds left.
 const lobbyClockOffsetMs = ref(0)
+// Most recent "squad up in-room" invite received from another player in a MyOrbit room (see
+// myorbit:inviteToRaid in server/utils/myOrbitSocket.js) — a one-shot notification, not a log,
+// same "latest wins" shape as useMyOrbitSocket.js's own lastEmoteEvent. Cleared by dismissInvite()
+// once the viewer has acted on it (joined or dismissed) so a stale invite can't pop up again.
+const incomingInvite = ref(null)
 let lobbySubscribers = 0
 let socket
 
@@ -102,6 +107,12 @@ export function useCMoonRaidSocket() {
     socket.on('cmoonraid:lobbyViewer', (payload) => {
       lobbyViewer.value = { inCMoon: payload?.inCMoon !== false, currentRaidId: payload?.currentRaidId || null }
     })
+    // Not namespaced cmoonraid:* on the wire — see myorbit:inviteToRaid's own comment in
+    // myOrbitSocket.js for why it's named plainly (it's about a raid, not about MyOrbit, even
+    // though it's sent FROM a MyOrbit handler).
+    socket.on('cmoonraid:invite', (payload) => {
+      if (payload?.raidId) incomingInvite.value = payload
+    })
   }
 
   function startRaid(enemyMemberId, { isPrivate = false } = {}) {
@@ -157,11 +168,14 @@ export function useCMoonRaidSocket() {
     lobbySubscribers = Math.max(0, lobbySubscribers - 1)
     if (lobbySubscribers === 0) socket.emit('cmoonraid:lobbyUnsubscribe')
   }
+  function dismissInvite() {
+    incomingInvite.value = null
+  }
 
   return {
     socket, raidState, lastRound, lastKicked, lastError, isConnected, currentRaidId,
-    lobbyRaids, lobbyLoaded, lobbyViewer, lobbyClockOffsetMs,
+    lobbyRaids, lobbyLoaded, lobbyViewer, lobbyClockOffsetMs, incomingInvite,
     startRaid, joinRaid, leaveRaid, getState, submitAction, subscribeLobby, unsubscribeLobby,
-    toggleKeepOpen, forceStartRaid, voteSpeedUp, cancelRaid,
+    toggleKeepOpen, forceStartRaid, voteSpeedUp, cancelRaid, dismissInvite,
   }
 }

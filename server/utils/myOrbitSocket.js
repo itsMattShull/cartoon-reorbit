@@ -39,6 +39,7 @@ import { buildWalkableSet, findPath, firstWalkableCell } from './myOrbitPathfind
 import { parseMyOrbitChatMessage, containsBannedWord } from './myOrbitChatFilter.js'
 import { getGlobalConfig } from './cmoon.js'
 import { isValidMyOrbitEmote } from '../../utils/myOrbitEmotes.js'
+import { getActiveRaidForUser } from './cmoonRaidSocket.js'
 
 const EV = (name) => `myorbit:${name}`
 const roomChannel = (roomId) => `myorbit:room:${roomId}`
@@ -50,6 +51,7 @@ const STEP_MS = 350 // ms per tile step while walking a path
 const RECONNECT_GRACE_MS = 15_000
 const CHAT_RATE_LIMIT_MS = 1200 // minimum gap between one user's own chat messages
 const EMOTE_RATE_LIMIT_MS = 1500 // minimum gap between one user's own emotes
+const INVITE_RATE_LIMIT_MS = 5000 // minimum gap between one user's own raid invites
 
 const rooms = new Map()      // roomId -> room
 const roomByUser = new Map() // userId -> roomId (which room, if any, this user is currently in)
@@ -72,7 +74,8 @@ async function loadRoomDefinition(roomId) {
     where: { id: roomId },
     include: {
       tiles: { include: { tile: true } },
-      furniture: { include: { furniture: true } }
+      furniture: { include: { furniture: true } },
+      theme: { select: { id: true, name: true, color: true, avatarPath: true } }
     }
   })
   if (!room || !room.active) return null
@@ -85,6 +88,11 @@ async function loadRoomDefinition(roomId) {
   return {
     id: room.id, name: room.name, gridWidth: room.gridWidth, gridHeight: room.gridHeight, capacity: room.capacity,
     ambientSoundPath: room.ambientSoundPath,
+    // Faction theming + the raid-den flag (see the "war rooms"/"Raid Den" features) — both purely
+    // cosmetic/informational for the client, same "null/false = nothing special" convention
+    // ambientSoundPath already follows.
+    theme: room.theme ? { id: room.theme.id, name: room.theme.name, color: room.theme.color, iconPath: room.theme.avatarPath } : null,
+    isRaidDen: room.isRaidDen,
     tiles, furniture, walkable: buildWalkableSet(tiles, furniture)
   }
 }
@@ -110,6 +118,7 @@ function publicRoomState(room) {
   return {
     id: room.id, name: room.name, gridWidth: room.gridWidth, gridHeight: room.gridHeight, capacity: room.capacity,
     ambientSoundPath: room.ambientSoundPath,
+    theme: room.theme, isRaidDen: room.isRaidDen,
     tiles: room.tiles, furniture: room.furniture,
     participants: [...room.participants.values()].map(publicParticipant)
   }
@@ -176,7 +185,7 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     // where they're snapshotted onto the new participant object below.
     const moderation = await db.user.findUnique({
       where: { id: me.id },
-      select: { myOrbitBannedAt: true, isAdmin: true, cMoon: { select: { name: true, color: true, avatarPath: true } } }
+      select: { myOrbitBannedAt: true, isAdmin: true, cMoon: { select: { id: true, name: true, color: true, avatarPath: true } } }
     })
     // resolveSocketUser caches its {id, username} result for the life of the connection (see
     // socket-server.js), so a socket can still pass the `me` check above after its account row
@@ -205,6 +214,8 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
       room.gridHeight = definition.gridHeight
       room.capacity = definition.capacity
       room.ambientSoundPath = definition.ambientSoundPath
+      room.theme = definition.theme
+      room.isRaidDen = definition.isRaidDen
       room.tiles = definition.tiles
       room.furniture = definition.furniture
       room.walkable = definition.walkable
@@ -247,9 +258,9 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
         userCtoonId, ctoonAssetPath: userCtoon.ctoon.assetPath,
         x: spawn.x, y: spawn.y,
         path: null, pathIndex: 0, moveTimer: null,
-        sockets: new Set([socket.id]), graceTimer: null, lastMessageAt: null, lastEmoteAt: null,
+        sockets: new Set([socket.id]), graceTimer: null, lastMessageAt: null, lastEmoteAt: null, lastInviteAt: null,
         isAdmin: !!moderation.isAdmin,
-        cmoon: moderation.cMoon ? { name: moderation.cMoon.name, color: moderation.cMoon.color, iconPath: moderation.cMoon.avatarPath } : null
+        cmoon: moderation.cMoon ? { id: moderation.cMoon.id, name: moderation.cMoon.name, color: moderation.cMoon.color, iconPath: moderation.cMoon.avatarPath } : null
       }
       room.participants.set(me.id, participant)
 
@@ -396,6 +407,40 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
 
     participant.lastEmoteAt = now
     io.local.to(roomChannel(roomId)).emit(EV('emote'), { id: randomUUID(), roomId, userId: me.id, emoteKey, createdAt: now })
+  }))
+
+  // "Squad up in-room" — invite another player standing in the SAME room straight into the
+  // inviter's own currently-forming raid, without either of them leaving MyOrbit first. The raid
+  // itself is validated against cmoonRaidSocket.js's own live state (see getActiveRaidForUser),
+  // never trusted from anything the client claims — a stale/forged raidId would otherwise let
+  // someone spam invite links to a raid they aren't even in. Delivered via the same `user:<id>`
+  // room every other targeted push in this codebase uses (adminKick above, cmoonraid:kicked),
+  // so it reaches the target wherever they're connected, not only inside this room/socket.
+  socket.on(EV('inviteToRaid'), safe(socket, async ({ targetUserId } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return
+    if (typeof targetUserId !== 'string' || !targetUserId || targetUserId === me.id) return
+    const roomId = roomByUser.get(me.id)
+    const room = roomId ? rooms.get(roomId) : null
+    const participant = room?.participants.get(me.id)
+    if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
+    if (!room.participants.has(targetUserId)) {
+      return socket.emit(EV('error'), { message: 'That player is no longer in this room' })
+    }
+
+    const moderation = await loadModerationStatus(me.id)
+    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+
+    const now = Date.now()
+    if (participant.lastInviteAt && now - participant.lastInviteAt < INVITE_RATE_LIMIT_MS) return
+    const raid = getActiveRaidForUser(me.id)
+    if (!raid) return socket.emit(EV('error'), { message: 'You are not in an active raid' })
+    if (raid.status !== 'FORMING') return socket.emit(EV('error'), { message: 'That raid is no longer accepting new joiners' })
+
+    participant.lastInviteAt = now
+    io.local.to(`user:${targetUserId}`).emit('cmoonraid:invite', {
+      raidId: raid.id, enemyName: raid.enemyName, fromUserId: me.id, fromUsername: participant.username,
+    })
   }))
 
   // Read-only admin "spectate" — joins the room's broadcast channel (live chat, movement) WITHOUT
