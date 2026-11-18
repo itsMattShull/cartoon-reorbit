@@ -223,7 +223,9 @@ export default defineEventHandler(async (event) => {
       } else if (gameName === 'OgGtoons') {
         // Same story: every ogGtoons* column carries a schema default (false — this feature is
         // still being rolled out), so an empty create() already leaves every switch off.
-        config = await db.gameConfig.create({ data: { gameName } })
+        // pointsPerWin is the exception: its schema default is 0, which would silently pay PvP winners
+        // nothing from the daily combat pool, so seed it with the same 100 prisma/seed.js uses.
+        config = await db.gameConfig.create({ data: { gameName, pointsPerWin: 100 } })
       } else {
         throw createError({
           statusCode: 400,
