@@ -7,7 +7,7 @@
 // server/utils/myOrbitSocket.js, which runs inside server/socket-server.js — a plain
 // `node server/socket-server.js` process that cannot resolve Nuxt/Vite's `@/` alias (see the
 // import-rules header comment in server/utils/notifications.js for the same constraint).
-import { effectiveFootprint, footprintFitsGrid, footprintsOverlap } from '../../utils/myOrbitIsometric.js'
+import { effectiveFootprint, footprintFitsGrid, footprintsOverlap } from '#utils/myOrbitIsometric.js'
 
 export const MYORBIT_ROOM_NAME_MAX_LENGTH = 80
 export const MYORBIT_GRID_MIN = 3

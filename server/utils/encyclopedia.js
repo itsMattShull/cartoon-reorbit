@@ -7,7 +7,7 @@ import { sanitizeEncyclopediaHtml } from './sanitizeEncyclopediaHtml.js'
 // Relative import of a root utils/ file, same convention server/utils/cmoon.js uses for
 // utils/cmoonEffectTypes.js — see that file's own comment. Keeps slugify/isValidSlug identical
 // between this server-side validator and the admin editor's live title→slug preview.
-import { slugify, isValidSlug, SLUG_MAX_LENGTH } from '../../utils/encyclopediaSlug.js'
+import { slugify, isValidSlug, SLUG_MAX_LENGTH } from '#utils/encyclopediaSlug.js'
 import { SORT_ORDER_MIN, SORT_ORDER_MAX, isValidSortOrder } from './sortOrder.js'
 
 export { slugify, isValidSlug, SLUG_MAX_LENGTH }

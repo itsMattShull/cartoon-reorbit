@@ -5,7 +5,7 @@
 // nearly every REST call and socket action for the feature, and a Redis/Postgres round-trip per
 // call would cost more than the query it replaces.
 import { prisma as db } from '../prisma.js'
-import { normalizeRevealTiming, REVEAL_TIMING_DEFAULTS } from '../../utils/ogGtoonReveal.js'
+import { normalizeRevealTiming, REVEAL_TIMING_DEFAULTS } from '#utils/ogGtoonReveal.js'
 
 const TTL_MS = 60_000
 

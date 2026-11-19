@@ -3,7 +3,7 @@
 // The Discord DM texts for OG gToons tournament pairings played under the async + live rules. Pure (no Discord, no Prisma) so the
 // wording can be tested: they must never say both players need to be online, never spoil a result (no cards or scores beyond the
 // two public goal cards), and always carry the link and what not moving costs.
-import { introScenario } from '../../utils/ogGtoonIntro.js'
+import { introScenario } from '#utils/ogGtoonIntro.js'
 
 /** The address of one game's board (pages/newsite/gtoons-classic/[id].vue). The one place that spells it out. */
 export const gameUrl = (baseUrl, gameId) => `${baseUrl}/newsite/gtoons-classic/${gameId}`

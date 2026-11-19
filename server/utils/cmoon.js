@@ -9,7 +9,7 @@ import { getChicagoDailyBoundary, getChicagoMorningWindowStart, getChicagoCalend
 import { COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
 import { EXCLUDED_SYSTEM_USER_ID } from './economyValuation.js'
 import { grantGuildRole, revokeGuildRole } from './discord.js'
-import { CMOON_EFFECT_TYPES } from '../../utils/cmoonEffectTypes.js'
+import { CMOON_EFFECT_TYPES } from '#utils/cmoonEffectTypes.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
 import { PLAYER_MAX_HP, combinePlayerMaxHp, pickEffectiveSpecialAttack, SPECIAL_ATTACK_SELECT } from './cmoonEnemyBattle.js'
 import { announceTeamPointsMilestones, announceCMoonWelcome } from './cmoonDiscordEvents.js'

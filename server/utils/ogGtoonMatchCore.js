@@ -28,8 +28,8 @@
 //   }
 // See ogGtoonEngine.js's header for the hand/slot rules.
 
-import { sanitizeGtoonCardStyle } from '../../utils/gtoonCardStyle.js'
-import { revealDurationMs } from '../../utils/ogGtoonReveal.js'
+import { sanitizeGtoonCardStyle } from '#utils/gtoonCardStyle.js'
+import { revealDurationMs } from '#utils/ogGtoonReveal.js'
 import { resolveFinalBoard, widenAllMatchingScope } from './ogGtoonEffects.js'
 import { powerDescriptionFor, describeEffects } from './ogGtoonPowerCatalog.js'
 import {

@@ -7,7 +7,7 @@
 // Relative import, NOT the `@/` alias: this module runs inside server/socket-server.js, a plain
 // `node server/socket-server.js` process that cannot resolve Nuxt/Vite's `@/` alias (see the
 // import-rules header comment in server/utils/notifications.js for the same constraint).
-import { effectiveFootprint } from '../../utils/myOrbitIsometric.js'
+import { effectiveFootprint } from '#utils/myOrbitIsometric.js'
 
 /**
  * Builds the set of walkable "x,y" cells for a room from its painted tiles and placed

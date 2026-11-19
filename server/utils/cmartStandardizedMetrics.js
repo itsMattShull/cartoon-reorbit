@@ -10,7 +10,7 @@
 // GlobalGameConfig.rarityDefaults already is: a Json? column merged with hardcoded fallback
 // defaults (see server/api/rarity-defaults.get.js for the sibling pattern).
 import { prisma } from '../prisma.js'
-import { STANDARDIZABLE_RARITIES, isStandardizableRarity } from '../../utils/cmartStandardizedRarities.js'
+import { STANDARDIZABLE_RARITIES, isStandardizableRarity } from '#utils/cmartStandardizedRarities.js'
 
 export { STANDARDIZABLE_RARITIES, isStandardizableRarity }
 

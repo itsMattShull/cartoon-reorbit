@@ -2,7 +2,7 @@
 // Fields every user-facing endpoint needs so the client can render an Original gToon as the round
 // "card" (components/GtoonCard.vue) instead of a flat image. Spread OG_GTOON_DISPLAY_SELECT into a
 // Prisma `select` for a Ctoon, then run the result through ogGtoonDisplay() to get response fields.
-import { sanitizeGtoonCardStyle } from '../../utils/gtoonCardStyle.js'
+import { sanitizeGtoonCardStyle } from '#utils/gtoonCardStyle.js'
 
 export const OG_GTOON_DISPLAY_SELECT = {
   isOgGtoon: true,
