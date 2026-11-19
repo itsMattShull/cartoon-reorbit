@@ -3,8 +3,8 @@
     <template v-for="n in 3" :key="n">
       <component
         v-if="imageSrc(n)"
-        :is="linkTag(n)"
-        v-bind="linkProps(n)"
+        :is="siteLink(configuredLink(n)).is"
+        v-bind="siteLink(configuredLink(n)).props"
         class="middle-sidebar-item"
       >
         <img :src="imageSrc(n)" :alt="'Middle sidebar image ' + n" class="middle-sidebar-img" />
@@ -39,20 +39,8 @@ function isWinballLink(n) {
   return /winball/i.test(link)
 }
 
-function linkTag(n) {
-  return configuredLink(n) ? 'a' : 'div'
-}
-
-function linkProps(n) {
-  const link = configuredLink(n)
-  if (!link) return {}
-  let target = '_self'
-  try {
-    const url = new URL(link, window.location.href)
-    target = url.origin === window.location.origin ? '_self' : '_blank'
-  } catch {}
-  return { href: link, target }
-}
+// Links to this site navigate in-app (no full page reload); see composables/useSiteLink.js.
+const siteLink = useSiteLink()
 </script>
 
 <style scoped>
