@@ -5,6 +5,7 @@ import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 import { PACK_ITEM_OWNER_SELECT, packItemFields, packOwnerFlags } from '~/server/utils/auctionItem'
 import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { parseListFilterQuery, matchesPriceAndEdition } from '~/server/utils/auctionListFilters'
 
 function normalizeListParam(value) {
   if (Array.isArray(value)) {
@@ -57,6 +58,7 @@ function applyAuctionFilters(items, filters) {
     if (requireBids && Number(item.bidCount ?? 0) < 1) return false
     if (cMoonFilter === '__none__' && item.cMoon) return false
     if (cMoonFilter && cMoonFilter !== '__none__' && item.cMoon?.id !== cMoonFilter) return false
+    if (!matchesPriceAndEdition(item, filters)) return false
     return true
   })
 }
@@ -207,6 +209,19 @@ export default defineEventHandler(async (event) => {
     (a.userCtoon?.auctions?.length ?? 0) === 0
   )
 
+  // "Owned" means the same thing on every Auction House tab: the viewer holds at least one
+  // copy of this cToon right now. Comparing the auctioned copy's owner to the viewer instead
+  // marked every live listing as owned (the seller still holds it until it closes), so the
+  // Unowned filter emptied this tab.
+  const listedCtoonIds = [...new Set(auctions.map(a => a.userCtoon?.ctoonId).filter(Boolean))]
+  const ownedRows = listedCtoonIds.length
+    ? await prisma.userCtoon.findMany({
+      where: { userId, ctoonId: { in: listedCtoonIds } },
+      select: { ctoonId: true }
+    })
+    : []
+  const ownedSet = new Set(ownedRows.map(r => r.ctoonId))
+
   const items = auctions.map(a => ({
     id:               a.id,
     status:           a.status,
@@ -240,7 +255,7 @@ export default defineEventHandler(async (event) => {
     winningBid:       a.bids[0]?.amount ?? null,
     winningBidder:    a.bids[0]?.user.username ?? null,
     bidCount:         a._count?.bids ?? 0,
-    isOwned:          a.userCtoon?.userId === userId,
+    isOwned:          ownedSet.has(a.userCtoon?.ctoonId),
     isOwner:          a.userCtoon?.userId === userId,
     hasActiveAuction: (a.userCtoon?.auctions?.length ?? 0) > 0,
     canRelist:        canRelistAuction(a),
@@ -259,7 +274,8 @@ export default defineEventHandler(async (event) => {
     hasBidsOnly,
     gtoonsOnly,
     cMoon: cMoonFilter,
-    type: typeof query.type === 'string' ? query.type.trim().toUpperCase() : ''
+    type: typeof query.type === 'string' ? query.type.trim().toUpperCase() : '',
+    ...parseListFilterQuery(query)
   })
 
   const sorted = sortMyAuctions(filtered, sort)

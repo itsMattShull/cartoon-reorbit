@@ -4,6 +4,7 @@ import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 import { PACK_ITEM_SELECT, packItemFields } from '~/server/utils/auctionItem'
+import { parseListFilterQuery, matchesPriceAndEdition } from '~/server/utils/auctionListFilters'
 
 function normalizeListParam(value) {
   if (Array.isArray(value)) {
@@ -56,6 +57,7 @@ function applyAuctionFilters(items, filters) {
     if (requireBids && Number(item.bidCount ?? 0) < 1) return false
     if (cMoonFilter === '__none__' && item.cMoon) return false
     if (cMoonFilter && cMoonFilter !== '__none__' && item.cMoon?.id !== cMoonFilter) return false
+    if (!matchesPriceAndEdition(item, filters)) return false
     return true
   })
 }
@@ -265,7 +267,8 @@ export default defineEventHandler(async (event) => {
     hasBidsOnly,
     gtoonsOnly,
     cMoon: cMoonFilter,
-    type: typeof query.type === 'string' ? query.type.trim().toUpperCase() : ''
+    type: typeof query.type === 'string' ? query.type.trim().toUpperCase() : '',
+    ...parseListFilterQuery(query)
   })
 
   const sorted = sortMyBids(filtered, effectiveSort, now)

@@ -3,6 +3,7 @@ import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 import { PACK_ITEM_SELECT, packItemFields } from '~/server/utils/auctionItem'
+import { parseListFilterQuery, priceRangeWhere } from '~/server/utils/auctionListFilters'
 
 function normalizeListParam(value) {
   if (Array.isArray(value)) {
@@ -157,7 +158,6 @@ export default defineEventHandler(async (event) => {
     ]
   }
   if (ctoonIdFilter) ctoonWhere.id = { in: ctoonIdFilter }
-  else if (ctoonIdExclude && ctoonIdExclude.length) ctoonWhere.id = { notIn: ctoonIdExclude }
   if (cMoonFilter === '__none__') ctoonWhere.cMoonId = null
   else if (cMoonFilter) ctoonWhere.cMoonId = cMoonFilter
 
@@ -165,6 +165,21 @@ export default defineEventHandler(async (event) => {
   if (featuredOnly) where.isFeatured = true
   if (hasBidsOnly) where.bids = { some: {} }
   if (typeFilter === 'PACK' || typeFilter === 'CTOON') where.kind = typeFilter
+
+  // Conditions that must keep pack auctions (no userCtoon) in the result, as the Current tab
+  // does. Putting them in ctoonWhere would require a userCtoon and silently drop every pack.
+  const and = []
+  if (ctoonIdExclude && ctoonIdExclude.length) {
+    // Unowned: a pack is never "owned" in the cToon sense, so it stays.
+    and.push({ OR: [{ userCtoonId: null }, { userCtoon: { ctoonId: { notIn: ctoonIdExclude } } }] })
+  }
+  const { priceMin, priceMax, excludeSecondEditions } = parseListFilterQuery(query)
+  if (excludeSecondEditions) {
+    and.push({ OR: [{ userCtoonId: null }, { userCtoon: { ctoon: { isSecondEdition: false } } }] })
+  }
+  const priceWhere = priceRangeWhere(priceMin, priceMax)
+  if (priceWhere) and.push(priceWhere)
+  if (and.length) where.AND = and
   // Only the name search is meaningful for a pack; if it is the ONLY cToon-side filter, match pack names too.
   const onlySearch = search && Object.keys(ctoonWhere).length === 1 && ctoonWhere.OR
   if (onlySearch && typeFilter !== 'CTOON') {
