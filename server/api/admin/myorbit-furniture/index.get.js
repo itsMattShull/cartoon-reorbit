@@ -19,6 +19,7 @@ export default defineEventHandler(async (event) => {
       footprintH: f.footprintH,
       blocksWalk: f.blocksWalk,
       zOffset: f.zOffset,
+      sittable: f.sittable,
       placementCount: f._count.placements
     }))
   }

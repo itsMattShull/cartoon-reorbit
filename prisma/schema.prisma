@@ -666,6 +666,11 @@ model User {
   // or sold after this is set, and the picker already has to fall back gracefully (to "no avatar
   // selected") when it no longer resolves, so a cascading/constrained relation would add nothing.
   myOrbitLastUserCtoonId String?
+  // A short free-text blurb shown near the player's name/avatar in a room (see feature doc
+  // "custom status line") — null/empty means no status shown. Filtered through the same
+  // banned-word list as chat (containsBannedWord) before it's ever saved, same moderation
+  // discipline as every other player-authored MyOrbit text.
+  myOrbitStatus          String?
   // Set when a player explicitly declines to pick a cMoon from the initial join modal (there is no
   // more time-based auto-assignment — see server/utils/cmoon.js). Only meaningful while cMoonId is
   // null; cleared back to false on a successful selectCMoonForUser. Lets the modal stop popping up
@@ -4826,6 +4831,7 @@ model CMoon {
   battleLosses         Int                       @default(0)
   enemyBattles         CMoonEnemyBattle[]
   enemyRaids           CMoonEnemyRaid[]
+  themedMyOrbitRooms   MyOrbitRoom[]
   // cMoon PvP — battleWins/battleLosses above are shared with cMoon Enemy Battles (both increment
   // the same running counts, see CMoonPvpMatch's own header comment), but a PvP match additionally
   // needs to know which two specific cMoons a match was BETWEEN (teammates-only mode locks each
@@ -8393,6 +8399,10 @@ model MyOrbitFurniture {
   footprintH Int      @default(1)
   blocksWalk Boolean  @default(true)
   zOffset    Int      @default(0)
+  // Whether a player can "sit" near this furniture (see feature doc "sit on furniture") — purely
+  // a pose/vibe flag, never changes blocksWalk or the walkable mask: sitting keeps the player at
+  // their current cell, adjacent to the furniture, rather than snapping onto its footprint.
+  sittable   Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -8412,12 +8422,26 @@ model MyOrbitRoom {
   capacity   Int      @default(20)
   active     Boolean  @default(false)
   sortOrder  Int      @default(0)
+  // Looping ambience track (see server/api/admin/myorbit-rooms/[id]/sound.post.js) — purely
+  // cosmetic, started/stopped client-side on join/leave, same "null = nothing plays" convention
+  // every other optional media path in this schema already follows.
+  ambientSoundPath String?
+  // Optional faction branding (see feature doc: "faction war rooms") — purely cosmetic, open to
+  // every player regardless of their own cMoon. Null = no theme, render as a plain room.
+  themeCMoonId String?
+  theme        CMoon?  @relation(fields: [themeCMoonId], references: [id], onDelete: SetNull)
+  // Marks this room as the live raid-spectator room (see feature doc: "Raid Den") — the client
+  // polls GET /api/myorbit/active-raid while inside a room with this set. Not enforced unique;
+  // an admin could flag more than one room this way and each would show the same live state.
+  isRaidDen  Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   tiles      MyOrbitRoomTile[]
   furniture  MyOrbitRoomFurniture[]
   moderation MyOrbitModerationLog[]
+
+  @@index([themeCMoonId])
 }
 
 // One painted floor/wall cell. A cell with no row here is unwalkable void (outside the built

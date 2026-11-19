@@ -38,6 +38,8 @@
             <span class="px-1.5 py-0.5 rounded text-[10px] flex-shrink-0" :class="r.active ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-600'">
               {{ r.active ? 'Active' : 'Inactive' }}
             </span>
+            <span v-if="r.isRaidDen" class="px-1.5 py-0.5 rounded text-[10px] flex-shrink-0 bg-amber-100 text-amber-700" title="Live raid spectating">Raid Den</span>
+            <span v-if="r.themeCMoonId" class="px-1.5 py-0.5 rounded text-[10px] flex-shrink-0 bg-purple-100 text-purple-700">{{ cmoonNameById(r.themeCMoonId) }}</span>
             <span class="text-gray-500 flex-shrink-0">{{ r.tileCount }} tiles · {{ r.furnitureCount }} furniture</span>
           </button>
         </div>
@@ -84,11 +86,42 @@
             <input type="checkbox" v-model="form.active" />
             <span class="text-[11px] font-medium">Active</span>
           </label>
+          <div class="w-44">
+            <label class="block text-[11px] font-medium mb-1">Faction theme (optional)</label>
+            <select v-model="form.themeCMoonId" class="w-full border rounded px-2 py-1">
+              <option :value="null">None</option>
+              <option v-for="c in cmoonOptions" :key="c.id" :value="c.id">{{ c.name }}</option>
+            </select>
+          </div>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" v-model="form.isRaidDen" />
+            <span class="text-[11px] font-medium" title="Shows a live HP bar for whatever raid boss fight is currently in progress, for spectating.">Raid Den</span>
+          </label>
         </div>
         <p v-if="selectedId" class="text-[11px] text-gray-500">
           Grid size can't be changed once a room exists — delete and recreate it to resize (this
           would orphan any painted cells/furniture outside the new bounds).
         </p>
+
+        <div v-if="selectedId" class="border rounded p-2 space-y-1">
+          <label class="block text-[11px] font-medium">Ambience (optional, MP3/OGG/WAV, max 3MB) — loops while a player is in this room</label>
+          <div class="flex items-center gap-2 flex-wrap">
+            <audio v-if="ambientSound.savedPath" :src="ambientSound.savedPath" controls class="h-8 flex-shrink-0" style="max-width: 220px;" />
+            <span v-else class="text-[10px] text-gray-400 flex-shrink-0">No ambience set</span>
+            <button
+              v-if="ambientSound.savedPath" type="button" class="text-red-600 hover:underline text-[11px]"
+              @click="removeAmbientSound"
+            >Remove</button>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <input type="file" accept="audio/mpeg,audio/ogg,audio/wav,.mp3,.ogg,.wav" class="text-[11px]" @change="onAmbientSoundFile" />
+            <button
+              type="button" class="px-2 py-1 text-[11px] font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+              :disabled="!ambientSound.pendingFile || ambientSound.uploading" @click="uploadAmbientSound"
+            >{{ ambientSound.uploading ? 'Uploading…' : 'Upload' }}</button>
+          </div>
+          <p v-if="ambientSound.error" class="text-red-600">{{ ambientSound.error }}</p>
+        </div>
 
         <button
           type="button" class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
@@ -203,6 +236,12 @@ const savingMeta = ref(false)
 const deleting = ref(false)
 const formError = ref('')
 
+// Kept separate from `form` (not sent through the plain-JSON metadata PUT) since it's uploaded
+// via its own multipart endpoint, same convention every other per-entity media path in this
+// admin console follows (e.g. AdminCMoonEnemies.vue's faction/member sound slots).
+const ambientSound = ref({ savedPath: '', pendingFile: null, uploading: false, error: '' })
+const cmoonOptions = ref([])
+
 const tilesLibrary = ref([])
 const furnitureLibrary = ref([])
 
@@ -221,7 +260,7 @@ const layoutError = ref('')
 const layoutStatus = ref('')
 
 function emptyForm() {
-  return { name: '', gridWidth: 10, gridHeight: 10, capacity: 20, active: false, sortOrder: 0 }
+  return { name: '', gridWidth: 10, gridHeight: 10, capacity: 20, active: false, sortOrder: 0, themeCMoonId: null, isRaidDen: false }
 }
 
 const stage = computed(() => form.value ? gridStageSize(form.value.gridWidth, form.value.gridHeight) : { width: 0, height: 0, offsetX: 0, offsetY: 0 })
@@ -265,15 +304,21 @@ const placementList = computed(() => placements.value.map(p => {
 
 async function loadLibraries() {
   try {
-    const [tilesRes, furnRes] = await Promise.all([
+    const [tilesRes, furnRes, cmoonRes] = await Promise.all([
       $fetch('/api/admin/myorbit-tiles'),
-      $fetch('/api/admin/myorbit-furniture')
+      $fetch('/api/admin/myorbit-furniture'),
+      $fetch('/api/admin/myorbit-rooms/cmoon-options')
     ])
     tilesLibrary.value = tilesRes?.tiles || []
     furnitureLibrary.value = furnRes?.furniture || []
+    cmoonOptions.value = cmoonRes?.cmoons || []
   } catch (e) {
     loadError.value = e?.data?.statusMessage || 'Failed to load tile/furniture libraries'
   }
+}
+
+function cmoonNameById(id) {
+  return cmoonOptions.value.find(c => c.id === id)?.name || 'Faction'
 }
 
 async function loadRooms() {
@@ -317,7 +362,11 @@ async function selectRoom(r) {
   try {
     const full = await $fetch(`/api/admin/myorbit-rooms/${r.id}`)
     selectedId.value = full.id
-    form.value = { name: full.name, gridWidth: full.gridWidth, gridHeight: full.gridHeight, capacity: full.capacity, active: full.active, sortOrder: full.sortOrder }
+    form.value = {
+      name: full.name, gridWidth: full.gridWidth, gridHeight: full.gridHeight, capacity: full.capacity,
+      active: full.active, sortOrder: full.sortOrder, themeCMoonId: full.themeCMoonId || null, isRaidDen: !!full.isRaidDen
+    }
+    ambientSound.value = { savedPath: full.ambientSoundPath || '', pendingFile: null, uploading: false, error: '' }
     for (const t of full.tiles) {
       cells.value.set(`${t.x},${t.y}`, { tileId: t.tileId, assetPath: t.assetPath, walkable: t.walkable })
     }
@@ -336,6 +385,51 @@ function newRoom() {
   formError.value = ''
   resetLayoutState()
   form.value = emptyForm()
+  ambientSound.value = { savedPath: '', pendingFile: null, uploading: false, error: '' }
+}
+
+function onAmbientSoundFile(ev) {
+  const f = ev.target.files?.[0] || null
+  ambientSound.value.error = ''
+  if (f && !/audio\/(mpeg|ogg|wav)/.test(f.type) && !/\.(mp3|ogg|wav)$/i.test(f.name)) {
+    ambientSound.value.error = 'Only MP3, OGG, or WAV audio is allowed.'
+    ev.target.value = ''
+    return
+  }
+  if (f && f.size > 3 * 1024 * 1024) {
+    ambientSound.value.error = 'Audio must be 3MB or smaller.'
+    ev.target.value = ''
+    return
+  }
+  ambientSound.value.pendingFile = f
+}
+
+async function uploadAmbientSound() {
+  if (!ambientSound.value.pendingFile || !selectedId.value) return
+  ambientSound.value.uploading = true
+  ambientSound.value.error = ''
+  try {
+    const fd = new FormData()
+    fd.append('audio', ambientSound.value.pendingFile)
+    const res = await $fetch(`/api/admin/myorbit-rooms/${selectedId.value}/sound`, { method: 'POST', body: fd })
+    ambientSound.value.savedPath = res.ambientSoundPath || ambientSound.value.savedPath
+    ambientSound.value.pendingFile = null
+  } catch (e) {
+    ambientSound.value.error = e?.data?.statusMessage || 'Upload failed.'
+  } finally {
+    ambientSound.value.uploading = false
+  }
+}
+
+async function removeAmbientSound() {
+  if (!selectedId.value) return
+  ambientSound.value.error = ''
+  try {
+    await $fetch(`/api/admin/myorbit-rooms/${selectedId.value}/sound`, { method: 'DELETE' })
+    ambientSound.value.savedPath = ''
+  } catch (e) {
+    ambientSound.value.error = e?.data?.statusMessage || 'Failed to remove sound.'
+  }
 }
 
 async function saveRoomMeta() {

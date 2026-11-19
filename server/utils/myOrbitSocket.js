@@ -22,7 +22,9 @@
 // correct, low-cost outcome, not a gap — continuing to report a now-disconnected client as still
 // present would be actively misleading. So room/participant state here is purely in-memory, the
 // same instance-local Map raids use for coordination, but deliberately with nothing mirrored
-// into Redis.
+// into Redis. The one exception is myOrbitPresence.js's tiny `userId -> {roomId, username}`
+// pointer — not room state at all, just a cross-process bridge so the separate Nitro/REST
+// process can answer "who's online and in which room" (see that file's own header).
 //
 // ── Room layout is reloaded on every join, never cached indefinitely ──────────────────────────
 // Unlike a raid's enemy/map definition (fixed for that raid's lifetime), an admin can be
@@ -35,9 +37,13 @@
 // just can't path out of a now-invalid tile until they rejoin and get placed on a valid one.
 import { randomUUID } from 'crypto'
 import { prisma as db } from '../prisma.js'
-import { buildWalkableSet, findPath, firstWalkableCell } from './myOrbitPathfinding.js'
-import { parseMyOrbitChatMessage, containsBannedWord } from './myOrbitChatFilter.js'
+import { buildWalkableSet, findPath, firstWalkableCell, isAdjacent } from './myOrbitPathfinding.js'
+import { parseMyOrbitChatMessage, containsBannedWord, parseMyOrbitStatus } from './myOrbitChatFilter.js'
 import { getGlobalConfig } from './cmoon.js'
+import { isValidMyOrbitEmote } from '../../utils/myOrbitEmotes.js'
+import { getActiveRaidForUser } from './cmoonRaidSocket.js'
+import { getActivePvpMatchForUser } from './cmoonPvpSocket.js'
+import { setUserPresence, clearUserPresence } from './myOrbitPresence.js'
 
 const EV = (name) => `myorbit:${name}`
 const roomChannel = (roomId) => `myorbit:room:${roomId}`
@@ -48,6 +54,9 @@ const STEP_MS = 350 // ms per tile step while walking a path
 // here is "forfeited" by leaving, so there's no reason to hold the door open as long.
 const RECONNECT_GRACE_MS = 15_000
 const CHAT_RATE_LIMIT_MS = 1200 // minimum gap between one user's own chat messages
+const EMOTE_RATE_LIMIT_MS = 1500 // minimum gap between one user's own emotes
+const INVITE_RATE_LIMIT_MS = 5000 // minimum gap between one user's own raid/PvP invites or OG gToons nudges (shared cooldown across all three)
+const STATUS_RATE_LIMIT_MS = 3000 // minimum gap between one user's own status changes - this one hits the DB
 
 const rooms = new Map()      // roomId -> room
 const roomByUser = new Map() // userId -> roomId (which room, if any, this user is currently in)
@@ -70,7 +79,8 @@ async function loadRoomDefinition(roomId) {
     where: { id: roomId },
     include: {
       tiles: { include: { tile: true } },
-      furniture: { include: { furniture: true } }
+      furniture: { include: { furniture: true } },
+      theme: { select: { id: true, name: true, color: true, avatarPath: true } }
     }
   })
   if (!room || !room.active) return null
@@ -78,21 +88,43 @@ async function loadRoomDefinition(roomId) {
   const furniture = room.furniture.map(f => ({
     x: f.x, y: f.y, rotation: f.rotation, furnitureId: f.furnitureId,
     footprintW: f.furniture.footprintW, footprintH: f.furniture.footprintH,
-    blocksWalk: f.furniture.blocksWalk, zOffset: f.furniture.zOffset, assetPath: f.furniture.assetPath
+    blocksWalk: f.furniture.blocksWalk, zOffset: f.furniture.zOffset, assetPath: f.furniture.assetPath,
+    sittable: f.furniture.sittable
   }))
   return {
     id: room.id, name: room.name, gridWidth: room.gridWidth, gridHeight: room.gridHeight, capacity: room.capacity,
+    ambientSoundPath: room.ambientSoundPath,
+    // Faction theming + the raid-den flag (see the "war rooms"/"Raid Den" features) — both purely
+    // cosmetic/informational for the client, same "null/false = nothing special" convention
+    // ambientSoundPath already follows.
+    theme: room.theme ? { id: room.theme.id, name: room.theme.name, color: room.theme.color, iconPath: room.theme.avatarPath } : null,
+    isRaidDen: room.isRaidDen,
     tiles, furniture, walkable: buildWalkableSet(tiles, furniture)
   }
 }
 
+// Fresh on every call, never cached — unlike the banned-word list, a mute/ban needs to take
+// effect on the very next chat/emote attempt, not up to BANNED_WORDS_TTL_MS later. Shared by the
+// 'chat' and 'emote' handlers so the exact same check never drifts between the two.
+async function loadModerationStatus(userId) {
+  return db.user.findUnique({ where: { id: userId }, select: { myOrbitBannedAt: true, myOrbitMutedUntil: true } })
+}
+
 function publicParticipant(p) {
-  return { userId: p.userId, username: p.username, ctoonAssetPath: p.ctoonAssetPath, x: p.x, y: p.y }
+  return {
+    userId: p.userId, username: p.username, ctoonAssetPath: p.ctoonAssetPath, x: p.x, y: p.y,
+    // Status flair (see the 'join' handler, where these are snapshotted once from the DB) — cmoon
+    // is null for a player with no current faction. Neither is re-queried on move/reconnect, same
+    // as ctoonAssetPath never is: a mid-session faction change simply shows on their next join.
+    cmoon: p.cmoon, isAdmin: p.isAdmin, seated: !!p.seated, status: p.status || ''
+  }
 }
 
 function publicRoomState(room) {
   return {
     id: room.id, name: room.name, gridWidth: room.gridWidth, gridHeight: room.gridHeight, capacity: room.capacity,
+    ambientSoundPath: room.ambientSoundPath,
+    theme: room.theme, isRaidDen: room.isRaidDen,
     tiles: room.tiles, furniture: room.furniture,
     participants: [...room.participants.values()].map(publicParticipant)
   }
@@ -117,6 +149,10 @@ function removeParticipant(io, roomId, userId) {
   if (p.graceTimer) { clearTimeout(p.graceTimer); p.graceTimer = null }
   room.participants.delete(userId)
   if (roomByUser.get(userId) === roomId) roomByUser.delete(userId)
+  // Best-effort, fire-and-forget: this player's live presence (see myOrbitPresence.js's own
+  // header on why it's a separate Redis mirror, not this file's in-memory Maps) must not block
+  // or fail the actual room departure, which every caller of this function needs synchronously.
+  clearUserPresence(userId).catch(e => console.error('[myOrbitPresence] clearUserPresence:', e))
   broadcastParticipants(io, room, 'participantLeft')
   if (room.participants.size === 0) rooms.delete(roomId)
 }
@@ -154,9 +190,19 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     if (!config?.myOrbitEnabled) return socket.emit(EV('error'), { message: 'MyOrbit is currently disabled' })
 
     // MyOrbit-scoped ban (User.myOrbitBannedAt), deliberately separate from the site-wide ban
-    // checked by resolveSocketUser itself — see that field's own schema comment.
-    const moderation = await db.user.findUnique({ where: { id: me.id }, select: { myOrbitBannedAt: true } })
-    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    // checked by resolveSocketUser itself — see that field's own schema comment. isAdmin/cMoon
+    // are fetched in this same query (rather than a second one) purely for status flair — see
+    // where they're snapshotted onto the new participant object below.
+    const moderation = await db.user.findUnique({
+      where: { id: me.id },
+      select: { myOrbitBannedAt: true, isAdmin: true, myOrbitStatus: true, cMoon: { select: { id: true, name: true, color: true, avatarPath: true } } }
+    })
+    // resolveSocketUser caches its {id, username} result for the life of the connection (see
+    // socket-server.js), so a socket can still pass the `me` check above after its account row
+    // was deleted mid-session — null here means exactly that, not "no ban on record", so it's
+    // treated as an auth failure rather than falling through to dereference isAdmin/cMoon below.
+    if (!moderation) return socket.emit(EV('error'), { message: 'Not authenticated' })
+    if (moderation.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
 
     // Room-hopping: leave whatever room this user was previously in first. Never double-membership.
     const previousRoomId = roomByUser.get(me.id)
@@ -177,6 +223,9 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
       room.gridWidth = definition.gridWidth
       room.gridHeight = definition.gridHeight
       room.capacity = definition.capacity
+      room.ambientSoundPath = definition.ambientSoundPath
+      room.theme = definition.theme
+      room.isRaidDen = definition.isRaidDen
       room.tiles = definition.tiles
       room.furniture = definition.furniture
       room.walkable = definition.walkable
@@ -219,7 +268,10 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
         userCtoonId, ctoonAssetPath: userCtoon.ctoon.assetPath,
         x: spawn.x, y: spawn.y,
         path: null, pathIndex: 0, moveTimer: null,
-        sockets: new Set([socket.id]), graceTimer: null, lastMessageAt: null
+        sockets: new Set([socket.id]), graceTimer: null, lastMessageAt: null, lastEmoteAt: null, lastInviteAt: null, lastStatusAt: null,
+        isAdmin: !!moderation.isAdmin,
+        cmoon: moderation.cMoon ? { id: moderation.cMoon.id, name: moderation.cMoon.name, color: moderation.cMoon.color, iconPath: moderation.cMoon.avatarPath } : null,
+        status: moderation.myOrbitStatus || ''
       }
       room.participants.set(me.id, participant)
 
@@ -230,6 +282,10 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     roomByUser.set(me.id, roomId)
     socket.join(roomChannel(roomId))
     socket.data.myOrbitRoomId = roomId
+    // Best-effort, fire-and-forget — see myOrbitPresence.js's own header. Covers a fresh join, a
+    // reconnect, and a room switch (the previous room's own removeParticipant call above already
+    // cleared the old key; this one overwrites it with the new roomId).
+    setUserPresence(me.id, { roomId, username: me.username }).catch(e => console.error('[myOrbitPresence] setUserPresence:', e))
 
     socket.emit(EV('state'), publicRoomState(room))
     broadcastParticipants(io, room, 'participantJoined')
@@ -265,6 +321,14 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     const path = findPath(room.walkable, room.gridWidth, room.gridHeight, { x: participant.x, y: participant.y }, { x: destX, y: destY })
     if (!path) return socket.emit(EV('moveRejected'), { x: destX, y: destY })
 
+    // Walking away always stands a seated player back up (see myorbit:sit) - broadcast it even
+    // on a same-cell click (path.length<=1 below returns before the timer's own broadcasts would
+    // ever fire), so the room sees them stand immediately rather than staying "seated" forever.
+    if (participant.seated) {
+      participant.seated = false
+      broadcastParticipants(io, room, 'participantMoved')
+    }
+
     clearMovement(participant)
     if (path.length <= 1) return // already there - nothing to animate or broadcast
 
@@ -287,6 +351,80 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
         clearMovement(participant)
       }
     }, STEP_MS)
+  }))
+
+  // "Sit on furniture" — a pose/vibe flag only. Deliberately does NOT move the participant onto
+  // the furniture's own cell (which stays unwalkable per blocksWalk): they just need to be
+  // standing right next to a sittable piece already, exactly like any other interaction in this
+  // room would require. Standing back up happens via the 'move' handler above, the instant they
+  // walk anywhere (even back onto their own cell).
+  socket.on(EV('sit'), safe(socket, async ({ x, y } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return
+    const roomId = roomByUser.get(me.id)
+    const room = roomId ? rooms.get(roomId) : null
+    const participant = room?.participants.get(me.id)
+    if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
+
+    const moderation = await loadModerationStatus(me.id)
+    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
+      return socket.emit(EV('error'), { message: 'You are muted' })
+    }
+
+    const seatX = Number(x)
+    const seatY = Number(y)
+    if (!Number.isInteger(seatX) || !Number.isInteger(seatY)) return
+    const seat = room.furniture.find(f => f.x === seatX && f.y === seatY && f.sittable)
+    if (!seat) return socket.emit(EV('error'), { message: 'Nothing to sit on there' })
+    if (!isAdjacent({ x: participant.x, y: participant.y }, { x: seatX, y: seatY })) {
+      return socket.emit(EV('error'), { message: 'Walk closer to sit there' })
+    }
+
+    participant.seated = true
+    broadcastParticipants(io, room, 'participantMoved')
+  }))
+
+  // Custom status line — a short, persisted blurb shown near the player's name (see
+  // User.myOrbitStatus's own schema comment). Same moderation discipline as chat: banned/muted
+  // players can't set one, and it's filtered through the same admin banned-word list before
+  // either the DB write or the live broadcast. Persisted (not just broadcast) so it survives a
+  // reconnect and the next time this player joins any room.
+  socket.on(EV('setStatus'), safe(socket, async ({ status } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return
+    const roomId = roomByUser.get(me.id)
+    const room = roomId ? rooms.get(roomId) : null
+    const participant = room?.participants.get(me.id)
+    if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
+
+    // Checked AND claimed before the moderation await below, not after — see inviteToRaid's own
+    // comment on why (two calls fired back-to-back would otherwise both read the stale pre-write
+    // value and both pass). Also closes a lost-update race on the DB write further down: without
+    // this, two status submissions in quick succession could persist/broadcast out of order.
+    const now = Date.now()
+    if (participant.lastStatusAt && now - participant.lastStatusAt < STATUS_RATE_LIMIT_MS) return
+    participant.lastStatusAt = now
+
+    const moderation = await loadModerationStatus(me.id)
+    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
+      return socket.emit(EV('error'), { message: 'You are muted' })
+    }
+
+    const parsed = parseMyOrbitStatus(status)
+    if (!parsed.ok) {
+      return socket.emit(EV('error'), { message: parsed.reason === 'too_long' ? 'That status is too long' : 'Invalid status' })
+    }
+
+    const bannedWords = await getBannedWords()
+    if (containsBannedWord(parsed.status, bannedWords)) {
+      return socket.emit(EV('error'), { message: 'That status was blocked' })
+    }
+
+    participant.status = parsed.status
+    await db.user.update({ where: { id: me.id }, data: { myOrbitStatus: parsed.status || null } })
+    broadcastParticipants(io, room, 'participantMoved')
   }))
 
   socket.on(EV('leave'), safe(socket, async () => {
@@ -312,18 +450,19 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     const participant = room?.participants.get(me.id)
     if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
 
-    const moderation = await db.user.findUnique({
-      where: { id: me.id },
-      select: { myOrbitBannedAt: true, myOrbitMutedUntil: true }
-    })
-    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
-    if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
-      return socket.emit(EV('error'), { message: 'You are muted' })
-    }
-
+    // Checked AND claimed before the moderation await below, not after — see inviteToRaid's own
+    // comment on why (two calls fired back-to-back would otherwise both read the stale pre-write
+    // value and both pass, bypassing the cooldown).
     const now = Date.now()
     if (participant.lastMessageAt && now - participant.lastMessageAt < CHAT_RATE_LIMIT_MS) {
       return socket.emit(EV('error'), { message: 'Slow down a little' })
+    }
+    participant.lastMessageAt = now
+
+    const moderation = await loadModerationStatus(me.id)
+    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
+      return socket.emit(EV('error'), { message: 'You are muted' })
     }
 
     const parsed = parseMyOrbitChatMessage(message)
@@ -336,13 +475,166 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
       return socket.emit(EV('error'), { message: 'That message was blocked' })
     }
 
-    participant.lastMessageAt = now
     // roomId is included so a listener that can be subscribed to more than one room's channel
     // at once (AdminMyOrbitModeration.vue's spectate view) can tell which room a message
     // belongs to — an ordinary player is only ever in one room's channel, so this is a no-op
     // for them.
     const chatMessage = { id: randomUUID(), roomId, userId: me.id, username: me.username, message: parsed.message, createdAt: now }
     io.local.to(roomChannel(roomId)).emit(EV('chatMessage'), chatMessage)
+  }))
+
+  // A fixed, admin-independent set of emotes (utils/myOrbitEmotes.js) — purely cosmetic, never
+  // persisted, same ban/mute/rate-limit discipline as chat even though there's no free text here
+  // to filter: a muted player being quiet should mean quiet, not just "can't type," and a banned
+  // player obviously still can't interact with a room at all.
+  socket.on(EV('emote'), safe(socket, async ({ emoteKey } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return
+    const roomId = roomByUser.get(me.id)
+    const room = roomId ? rooms.get(roomId) : null
+    const participant = room?.participants.get(me.id)
+    if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
+
+    // Checked AND claimed before the moderation await below, not after — see inviteToRaid's own
+    // comment on why (two calls fired back-to-back would otherwise both read the stale pre-write
+    // value and both pass, bypassing the cooldown).
+    const now = Date.now()
+    if (participant.lastEmoteAt && now - participant.lastEmoteAt < EMOTE_RATE_LIMIT_MS) return
+    if (!isValidMyOrbitEmote(emoteKey)) return
+    participant.lastEmoteAt = now
+
+    const moderation = await loadModerationStatus(me.id)
+    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
+      return socket.emit(EV('error'), { message: 'You are muted' })
+    }
+
+    io.local.to(roomChannel(roomId)).emit(EV('emote'), { id: randomUUID(), roomId, userId: me.id, emoteKey, createdAt: now })
+  }))
+
+  // "Squad up in-room" — invite another player standing in the SAME room straight into the
+  // inviter's own currently-forming raid, without either of them leaving MyOrbit first. The raid
+  // itself is validated against cmoonRaidSocket.js's own live state (see getActiveRaidForUser),
+  // never trusted from anything the client claims — a stale/forged raidId would otherwise let
+  // someone spam invite links to a raid they aren't even in. Delivered via the same `user:<id>`
+  // room every other targeted push in this codebase uses (adminKick above, cmoonraid:kicked),
+  // so it reaches the target wherever they're connected, not only inside this room/socket.
+  socket.on(EV('inviteToRaid'), safe(socket, async ({ targetUserId } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return
+    if (typeof targetUserId !== 'string' || !targetUserId || targetUserId === me.id) return
+    const roomId = roomByUser.get(me.id)
+    const room = roomId ? rooms.get(roomId) : null
+    const participant = room?.participants.get(me.id)
+    if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
+    if (!room.participants.has(targetUserId)) {
+      return socket.emit(EV('error'), { message: 'That player is no longer in this room' })
+    }
+
+    // Checked AND claimed before the moderation await below, not after: this participant object
+    // is now shared by three invite types (raid/PvP/OG gToons), so a check that only reads here
+    // and writes after an await lets two of them, fired back-to-back, both read the stale
+    // pre-write value and both pass — see this handler's sibling invitePvp/challengeOgGtoons for
+    // the same fix. Claiming the slot even when a later check (ban, no active raid) rejects the
+    // attempt is an intentional, conservative tradeoff: a rejected attempt still costs a cooldown
+    // rather than leaving the race open for correctness's sake.
+    const now = Date.now()
+    if (participant.lastInviteAt && now - participant.lastInviteAt < INVITE_RATE_LIMIT_MS) {
+      return socket.emit(EV('error'), { message: 'Slow down a little' })
+    }
+    participant.lastInviteAt = now
+
+    const moderation = await loadModerationStatus(me.id)
+    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
+      return socket.emit(EV('error'), { message: 'You are muted' })
+    }
+
+    const raid = getActiveRaidForUser(me.id)
+    if (!raid) return socket.emit(EV('error'), { message: 'You are not in an active raid' })
+    if (raid.status !== 'FORMING') return socket.emit(EV('error'), { message: 'That raid is no longer accepting new joiners' })
+
+    io.local.to(`user:${targetUserId}`).emit('cmoonraid:invite', {
+      raidId: raid.id, enemyName: raid.enemyName, fromUserId: me.id, fromUsername: participant.username,
+    })
+  }))
+
+  // "Invite to PvP" — same shape as inviteToRaid above, mirroring cMoon PvP's own join cutoff
+  // (FORMING only — see getActivePvpMatchForUser's own comment in cmoonPvpSocket.js). Delivered
+  // through THIS module's own `user:<id>` emit, not cmoonPvpSocket.js's — useCMoonPvpSocket.js is
+  // only connected while a player is actually on a PvP page, so a notification sent through ITS
+  // channel would silently vanish for a target who's sitting in MyOrbit and hasn't opened one.
+  // MyOrbit's own socket is always live wherever this feature is (see MyOrbitWindow.vue's layout
+  // mount), so that's the channel every MyOrbit-sourced social invite below uses instead.
+  socket.on(EV('invitePvp'), safe(socket, async ({ targetUserId } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return
+    if (typeof targetUserId !== 'string' || !targetUserId || targetUserId === me.id) return
+    const roomId = roomByUser.get(me.id)
+    const room = roomId ? rooms.get(roomId) : null
+    const participant = room?.participants.get(me.id)
+    if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
+    if (!room.participants.has(targetUserId)) {
+      return socket.emit(EV('error'), { message: 'That player is no longer in this room' })
+    }
+
+    // See inviteToRaid's own comment above on why this is checked AND claimed before the
+    // moderation await, not after.
+    const now = Date.now()
+    if (participant.lastInviteAt && now - participant.lastInviteAt < INVITE_RATE_LIMIT_MS) {
+      return socket.emit(EV('error'), { message: 'Slow down a little' })
+    }
+    participant.lastInviteAt = now
+
+    const moderation = await loadModerationStatus(me.id)
+    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
+      return socket.emit(EV('error'), { message: 'You are muted' })
+    }
+
+    const match = getActivePvpMatchForUser(me.id)
+    if (!match) return socket.emit(EV('error'), { message: 'You are not in an active PvP match' })
+    if (match.status !== 'FORMING') return socket.emit(EV('error'), { message: 'That match is no longer accepting new joiners' })
+
+    io.local.to(`user:${targetUserId}`).emit('myorbit:pvpInvite', {
+      matchId: match.id, fromUserId: me.id, fromUsername: participant.username,
+    })
+  }))
+
+  // "Challenge to OG gToons" — unlike the raid/PvP invites above, this never requires the sender
+  // to already be in anything: OG gToons' own direct-challenge system (challengeSend) only lists
+  // players who have independently joined its Matchmaking tab (see that component's own comment),
+  // so there's no "already-open match" to pull someone into from here. This is purely a social
+  // nudge with a deep link — same "always-live MyOrbit channel" delivery as invitePvp above.
+  socket.on(EV('challengeOgGtoons'), safe(socket, async ({ targetUserId } = {}) => {
+    const me = await resolveSocketUser(socket)
+    if (!me) return
+    if (typeof targetUserId !== 'string' || !targetUserId || targetUserId === me.id) return
+    const roomId = roomByUser.get(me.id)
+    const room = roomId ? rooms.get(roomId) : null
+    const participant = room?.participants.get(me.id)
+    if (!room || !participant) return socket.emit(EV('error'), { message: 'Join a room first' })
+    if (!room.participants.has(targetUserId)) {
+      return socket.emit(EV('error'), { message: 'That player is no longer in this room' })
+    }
+
+    // See inviteToRaid's own comment above on why this is checked AND claimed before the
+    // moderation await, not after.
+    const now = Date.now()
+    if (participant.lastInviteAt && now - participant.lastInviteAt < INVITE_RATE_LIMIT_MS) {
+      return socket.emit(EV('error'), { message: 'Slow down a little' })
+    }
+    participant.lastInviteAt = now
+
+    const moderation = await loadModerationStatus(me.id)
+    if (moderation?.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
+    if (moderation?.myOrbitMutedUntil && moderation.myOrbitMutedUntil > new Date()) {
+      return socket.emit(EV('error'), { message: 'You are muted' })
+    }
+
+    io.local.to(`user:${targetUserId}`).emit('myorbit:ogGtoonsNudge', {
+      fromUserId: me.id, fromUsername: participant.username,
+    })
   }))
 
   // Read-only admin "spectate" — joins the room's broadcast channel (live chat, movement) WITHOUT
@@ -461,7 +753,15 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
 export function startMyOrbitSweep() {
   const interval = setInterval(() => {
     for (const [roomId, room] of rooms) {
-      if (room.participants.size === 0) rooms.delete(roomId)
+      if (room.participants.size === 0) { rooms.delete(roomId); continue }
+      // Keeps every still-present player's presence key (myOrbitPresence.js, TTL 120s) from
+      // expiring during a long, quiet stay — join/getState are the only other writers, and a
+      // player who neither reconnects nor re-fetches state for 2+ minutes would otherwise look
+      // "offline" to the who's-online panel/room counts while still genuinely in the room.
+      for (const participant of room.participants.values()) {
+        setUserPresence(participant.userId, { roomId, username: participant.username })
+          .catch(e => console.error('[myOrbitPresence] sweep refresh:', e))
+      }
     }
   }, 60_000)
   interval.unref?.()

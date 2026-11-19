@@ -26,6 +26,9 @@ export default defineEventHandler(async (event) => {
     capacity: room.capacity,
     active: room.active,
     sortOrder: room.sortOrder,
+    ambientSoundPath: room.ambientSoundPath,
+    themeCMoonId: room.themeCMoonId,
+    isRaidDen: room.isRaidDen,
     tiles: room.tiles.map(t => ({
       x: t.x, y: t.y, tileId: t.tileId,
       assetPath: t.tile.assetPath, walkable: t.tile.walkable
@@ -33,7 +36,7 @@ export default defineEventHandler(async (event) => {
     furniture: room.furniture.map(f => ({
       id: f.id, furnitureId: f.furnitureId, x: f.x, y: f.y, rotation: f.rotation,
       assetPath: f.furniture.assetPath, footprintW: f.furniture.footprintW, footprintH: f.furniture.footprintH,
-      blocksWalk: f.furniture.blocksWalk, zOffset: f.furniture.zOffset
+      blocksWalk: f.furniture.blocksWalk, zOffset: f.furniture.zOffset, sittable: f.furniture.sittable
     }))
   }
 })
