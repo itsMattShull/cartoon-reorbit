@@ -32,6 +32,7 @@ Object.assign(aFilters.value, {
   featuredOnly:  false,
   hasBidsOnly:   false,
   gtoonsOnly:    false,
+  notGtoonsOnly: false,
   wishlistOnly:  false,
   selectedOwned: 'all',
 })

@@ -48,6 +48,7 @@ function applyAuctionFilters(items, filters) {
     }
     if (setFilter.length && !setFilter.includes(item.set)) return false
     if (requireGtoons && !item.isGtoon && !item.isOgGtoon) return false
+    if (filters.notGtoonsOnly && (item.isGtoon || item.isOgGtoon)) return false
     if (seriesFilter.length && !seriesFilter.includes(item.series)) return false
     if (rarityFilter.length && !rarityFilter.includes(item.rarity)) return false
     if (requireFeatured && !item.isFeatured) return false
@@ -132,6 +133,7 @@ export default defineEventHandler(async (event) => {
   const wishlistOnly = isTruthy(query.wishlist)
   const hasBidsOnly = isTruthy(query.hasBids)
   const gtoonsOnly = isTruthy(query.gtoon)
+  const notGtoonsOnly = isTruthy(query.notGtoon)
   const cMoonFilter = typeof query.cMoon === 'string' ? query.cMoon.trim() : ''
   const sortKey = typeof query.sort === 'string' ? query.sort : 'recentDesc'
   const validSorts = ['recentDesc', 'recentAsc', 'endOldest', 'endNewest', 'biggestBid', 'recentlyWon', 'recentlyLost']
@@ -266,6 +268,7 @@ export default defineEventHandler(async (event) => {
     wishlistSet,
     hasBidsOnly,
     gtoonsOnly,
+    notGtoonsOnly,
     cMoon: cMoonFilter,
     type: typeof query.type === 'string' ? query.type.trim().toUpperCase() : '',
     ...parseListFilterQuery(query)

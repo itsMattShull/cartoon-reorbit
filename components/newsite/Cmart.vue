@@ -766,6 +766,9 @@ const ctoons = computed(() => {
   if (aFilters.value.gtoonsOnly)
     list = list.filter(c => c.isGtoon || c.isOgGtoon)
 
+  if (aFilters.value.notGtoonsOnly)
+    list = list.filter(c => !c.isGtoon && !c.isOgGtoon)
+
   if (aFilters.value.wishlistOnly) {
     const wishSet = new Set(wishlistCtoonIds.value)
     list = list.filter(c => wishSet.has(c.id))

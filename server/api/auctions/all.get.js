@@ -89,6 +89,7 @@ export default defineEventHandler(async (event) => {
   const ownedFilter = typeof query.owned === 'string' ? query.owned : ''
   const featuredOnly = isTruthy(query.featured)
   const gtoonsOnly = isTruthy(query.gtoon)
+  const notGtoonsOnly = isTruthy(query.notGtoon)
   const wishlistOnly = isTruthy(query.wishlist)
   const hasBidsOnly = isTruthy(query.hasBids)
   // '__none__' means "cToons with no cMoon assigned"; any other non-empty value is a cMoon id.
@@ -176,6 +177,10 @@ export default defineEventHandler(async (event) => {
   const { priceMin, priceMax, excludeSecondEditions } = parseListFilterQuery(query)
   if (excludeSecondEditions) {
     and.push({ OR: [{ userCtoonId: null }, { userCtoon: { ctoon: { isSecondEdition: false } } }] })
+  }
+  if (notGtoonsOnly) {
+    // Packs are not gToons, so they stay (as on the Current tab).
+    and.push({ OR: [{ userCtoonId: null }, { userCtoon: { ctoon: { isGtoon: false, isOgGtoon: false } } }] })
   }
   const priceWhere = priceRangeWhere(priceMin, priceMax)
   if (priceWhere) and.push(priceWhere)

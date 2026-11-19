@@ -342,6 +342,7 @@ function buildFilterParams() {
   if (aFilters.value.wishlistOnly)                params.set('wishlist', '1')
   if (aFilters.value.hasBidsOnly)                 params.set('hasBids',  '1')
   if (aFilters.value.gtoonsOnly)                  params.set('gtoon',    '1')
+  if (aFilters.value.notGtoonsOnly)               params.set('notGtoon', '1')
   if (aFilters.value.itemType === 'pack')         params.set('type',     'PACK')
   else if (aFilters.value.itemType === 'ctoon')   params.set('type',     'CTOON')
   // Same rules as applyFilters() on the Current tab — see server/utils/auctionListFilters.js.
@@ -489,7 +490,8 @@ watch(
     () => filter.value.excludeSecondEditions,
     () => aFilters.value.featuredOnly, () => aFilters.value.wishlistOnly,
     () => aFilters.value.hasBidsOnly,
-    () => aFilters.value.gtoonsOnly,   () => aFilters.value.selectedOwned,
+    () => aFilters.value.gtoonsOnly,   () => aFilters.value.notGtoonsOnly,
+    () => aFilters.value.selectedOwned,
     () => aFilters.value.itemType,
   ],
   () => {
@@ -534,6 +536,8 @@ function applyFilters(items) {
     }
     if (aFilters.value.hasBidsOnly && Number(item.bidCount ?? 0) < 1)               return false
     if (aFilters.value.gtoonsOnly  && !item.isGtoon && !item.isOgGtoon)                              return false
+    // Packs are not gToons, so Not gToons keeps them.
+    if (aFilters.value.notGtoonsOnly && (item.isGtoon || item.isOgGtoon))                            return false
     const currentPrice = Number(item.highestBid > 0 ? item.highestBid : item.initialBid) || 0
     if (filter.value.priceMin !== '' && currentPrice < Number(filter.value.priceMin)) return false
     if (filter.value.priceMax !== '' && currentPrice > Number(filter.value.priceMax)) return false
@@ -607,7 +611,7 @@ const emptyMessage = computed(() => ({
 const hasActiveFilters = computed(() => !!(
   aFilters.value.itemType !== 'all' || filter.value.name || filter.value.rarities.length || filter.value.series || filter.value.set || filter.value.cMoon ||
   aFilters.value.featuredOnly || aFilters.value.wishlistOnly || aFilters.value.hasBidsOnly ||
-  aFilters.value.gtoonsOnly   || aFilters.value.selectedOwned !== 'all'
+  aFilters.value.gtoonsOnly   || aFilters.value.notGtoonsOnly || aFilters.value.selectedOwned !== 'all'
 ))
 
 // ── Actions ───────────────────────────────────────────────────────
