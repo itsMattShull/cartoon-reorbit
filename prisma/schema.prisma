@@ -800,6 +800,7 @@ model User {
   lockedPoints                LockedPoints[]
   notifications               Notification[]
   claims                      Claim[]
+  redeemAttemptLogs           RedeemAttemptLog[]
   visits                      Visit[]
   points                      UserPoints?
   ctoons                      UserCtoon[]
@@ -1138,6 +1139,7 @@ model ClaimCode {
   prerequisites         ClaimCodePrerequisite[]
   userBackgroundUnlocks UserBackground[]        @relation("UserBackgroundSourceCode")
   handicapHolds         HandicapRedeemHold[]
+  failedAttempts        RedeemAttemptLog[]
 }
 
 model Claim {
@@ -1150,6 +1152,36 @@ model Claim {
   code ClaimCode @relation(fields: [codeId], references: [id])
 
   @@unique([userId, codeId])
+}
+
+// One row per FAILED code redemption from POST /api/redeem (written by
+// server/utils/redeemAttemptLog.js), shown in the admin Codes → "Failed Attempts" tab. Successful
+// redemptions are already Claim rows, and a Handicap Redeems hold isn't a failure. The point is
+// spotting code leaks and automated claiming: who tried a real code before it went live
+// (NOT_STARTED), who is guessing (many INVALID), and how the request arrived (a browser sends
+// Origin / Referer / Sec-Fetch-Site; a script usually doesn't).
+model RedeemAttemptLog {
+  id           String   @id @default(uuid())
+  userId       String
+  codeText     String // exactly what was submitted, cut to 100 chars
+  codeId       String? // the ClaimCode that text matched, if any (null for INVALID)
+  reason       String // see REDEEM_FAILURE_REASONS in server/utils/redeemAttemptLog.js
+  statusCode   Int
+  message      String? // the error shown to the player, cut to 300 chars
+  ip           String? // encrypted with encryptIp(), same as LoginLog
+  userAgent    String?
+  origin       String?
+  referer      String?
+  secFetchSite String?
+  createdAt    DateTime @default(now())
+
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code ClaimCode? @relation(fields: [codeId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([codeId, createdAt])
+  @@index([reason, createdAt])
 }
 
 // An admin-flagged player (see server/api/admin/handicap-redeems/) whose code redemptions that
