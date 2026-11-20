@@ -77,6 +77,7 @@
               <span class="mow-room-name">{{ r.name }}</span>
               <span v-if="r.isHomeTurf" class="mow-home-turf-badge" title="Your faction's room">🏠</span>
               <span v-if="r.isRaidDen" class="mow-raid-den-badge" title="Live raid spectating">⚔️</span>
+              <span v-if="r.showLeaderboard" class="mow-raid-den-badge" title="Leaderboard plaque">🏆</span>
               <span v-if="r.onlineCount > 0" class="mow-online-count" :title="`${r.onlineCount} online now`">🟢 {{ r.onlineCount }}</span>
               <span class="mow-room-size">{{ r.gridWidth }}x{{ r.gridHeight }}</span>
             </button>
@@ -85,14 +86,35 @@
           <p class="mow-section-label">Online now</p>
           <p v-if="!onlineUsers.length" class="mow-hint">Nobody's in MyOrbit right now.</p>
           <div v-else class="mow-online-list">
-            <button
-              v-for="u in onlineUsers.filter(u => u.userId !== user?.id)" :key="u.userId" type="button"
-              class="mow-online-row" :disabled="!selectedCtoonId" @click="onJoin(u.roomId)"
-            >
-              <span class="mow-online-dot">🟢</span>
-              <span class="mow-online-name">{{ u.username }}</span>
-              <span class="mow-online-room">{{ roomNameById(u.roomId) }}</span>
-            </button>
+            <div v-for="u in onlineUsers.filter(u => u.userId !== user?.id)" :key="u.userId" class="mow-online-row">
+              <button
+                type="button" class="mow-online-join" :disabled="!selectedCtoonId" @click="onJoin(u.roomId)"
+              >
+                <span class="mow-online-dot">🟢</span>
+                <span class="mow-online-name">{{ u.username }}</span>
+                <span class="mow-online-room">{{ roomNameById(u.roomId) }}</span>
+              </button>
+              <button
+                type="button" class="mow-follow-star"
+                :title="followedUserIds.has(u.userId) ? 'Unfollow' : 'Follow — get notified next time they\'re online'"
+                @click="onToggleFollow(u.userId)"
+              >{{ followedUserIds.has(u.userId) ? '⭐' : '☆' }}</button>
+            </div>
+          </div>
+
+          <p class="mow-section-label">Following</p>
+          <p v-if="!followingUsers.length" class="mow-hint">Not following anyone yet — tap ☆ next to an online player to get notified next time they're online.</p>
+          <div v-else class="mow-online-list">
+            <div v-for="u in followingUsers" :key="u.userId" class="mow-online-row">
+              <button
+                type="button" class="mow-online-join" :disabled="!u.online || !selectedCtoonId" @click="onJoin(u.roomId)"
+              >
+                <span class="mow-online-dot">{{ u.online ? '🟢' : '⚪' }}</span>
+                <span class="mow-online-name">{{ u.username }}</span>
+                <span class="mow-online-room">{{ u.online ? roomNameById(u.roomId) : 'offline' }}</span>
+              </button>
+              <button type="button" class="mow-follow-star" title="Unfollow" @click="onToggleFollow(u.userId)">⭐</button>
+            </div>
           </div>
         </div>
 
@@ -125,6 +147,17 @@
               <p v-if="activeRaid.lastRoundSummary" class="mow-raid-den-log">{{ activeRaid.lastRoundSummary }}</p>
             </template>
             <p v-else class="mow-raid-den-idle">No raid in progress right now.</p>
+          </div>
+          <div v-if="roomState?.showLeaderboard" class="mow-leaderboard">
+            <p class="mow-leaderboard-title">🏆 This week</p>
+            <p v-if="!leaderboard?.topRaidDamage && !leaderboard?.topAuctionSale" class="mow-leaderboard-empty">Nothing to show yet this week.</p>
+            <p v-if="leaderboard?.topRaidDamage" class="mow-leaderboard-line">
+              ⚔️ Top raid damage: <strong>{{ leaderboard.topRaidDamage.username }}</strong> ({{ leaderboard.topRaidDamage.amount.toLocaleString() }})
+            </p>
+            <p v-if="leaderboard?.topAuctionSale" class="mow-leaderboard-line">
+              💰 Biggest sale: {{ leaderboard.topAuctionSale.itemName }} — {{ leaderboard.topAuctionSale.amount.toLocaleString() }} pts
+              <template v-if="leaderboard.topAuctionSale.username"> (won by <strong>{{ leaderboard.topAuctionSale.username }}</strong>)</template>
+            </p>
           </div>
           <div class="mow-stage-wrap">
             <div v-if="roomState" class="mow-stage" :style="{ width: stage.width + 'px', height: stage.height + 'px' }">
@@ -180,6 +213,9 @@
                     </button>
                     <button type="button" class="mow-action-item" @click="onTrade(p.username)">💱 Trade</button>
                     <button type="button" class="mow-action-item" @click="onVisitCzone(p.username)">🏠 Visit cZone</button>
+                    <button type="button" class="mow-action-item" @click="onToggleFollow(p.userId)">
+                      {{ followedUserIds.has(p.userId) ? '⭐ Unfollow' : '☆ Follow' }}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -254,6 +290,8 @@ const roomsError = ref('')
 const myCtoons = ref([])
 const selectedCtoonId = ref(null)
 const onlineUsers = ref([])
+const followingUsers = ref([])
+const followedUserIds = computed(() => new Set(followingUsers.value.map(u => u.userId)))
 
 async function checkEnabled() {
   try {
@@ -290,6 +328,38 @@ async function loadOnlineUsers() {
     // Best-effort - the room list itself still works without this.
   }
 }
+async function loadFollowing() {
+  try {
+    const res = await $fetch('/api/myorbit/following')
+    followingUsers.value = res?.users || []
+  } catch {
+    // Best-effort, same stance as loadOnlineUsers - the room list and online panel still work
+    // without this; only the Following section and the action-menu star go stale.
+  }
+}
+// Toggles a follow via the dedicated REST endpoints (not a socket event - following is a
+// standing subscription a player manages from either the room list or an avatar's own action
+// menu, not a live room interaction the way chat/emote/invite are). Re-fetches rather than
+// optimistically flipping followedUserIds locally, so a failed request can't leave the star
+// showing a state the server never actually wrote.
+// pendingFollowToggles guards against a rapid double-click re-reading the same stale
+// followedUserIds before the first request's loadFollowing() has resolved, which would otherwise
+// send the same HTTP method twice (e.g. two DELETEs) instead of toggling twice.
+const pendingFollowToggles = ref(new Set())
+async function onToggleFollow(targetUserId) {
+  openActionMenuFor.value = null // no-op when called from the online-list star, not a menu item
+  if (pendingFollowToggles.value.has(targetUserId)) return
+  pendingFollowToggles.value.add(targetUserId)
+  try {
+    const wasFollowing = followedUserIds.value.has(targetUserId)
+    await $fetch(`/api/myorbit/follow/${targetUserId}`, { method: wasFollowing ? 'DELETE' : 'POST' })
+    await loadFollowing()
+  } catch {
+    // Best-effort - a failed toggle just leaves the star showing its pre-click state.
+  } finally {
+    pendingFollowToggles.value.delete(targetUserId)
+  }
+}
 function roomNameById(roomId) {
   return availableRooms.value.find(r => r.id === roomId)?.name || 'a room'
 }
@@ -312,7 +382,8 @@ function syncOnlinePolling() {
   const shouldPoll = uiState.value !== 'closed' && view.value === 'rooms'
   if (shouldPoll && !onlinePollTimer) {
     loadOnlineUsers()
-    onlinePollTimer = setInterval(loadOnlineUsers, 10_000)
+    loadFollowing()
+    onlinePollTimer = setInterval(() => { loadOnlineUsers(); loadFollowing() }, 10_000)
   } else if (!shouldPoll && onlinePollTimer) {
     clearInterval(onlinePollTimer)
     onlinePollTimer = null
@@ -599,6 +670,34 @@ function syncRaidDenPolling() {
 watch(() => roomState.value?.isRaidDen, syncRaidDenPolling)
 onBeforeUnmount(() => { if (raidDenPollTimer) clearInterval(raidDenPollTimer) })
 
+// ── Leaderboard plaque — same polling shape as the Raid Den above, for a room flagged
+// showLeaderboard. The stat itself only changes "this week", and the endpoint already caches for
+// 60s server-side (server/api/myorbit/leaderboard.get.js), so this polls far less often than the
+// Raid Den's own live-combat cadence.
+const leaderboard = ref(null)
+let leaderboardPollTimer = null
+async function pollLeaderboard() {
+  try {
+    const res = await $fetch('/api/myorbit/leaderboard')
+    leaderboard.value = res || null
+  } catch {
+    // Same stance as pollActiveRaid - a cosmetic widget, not worth surfacing an error for.
+  }
+}
+function syncLeaderboardPolling() {
+  const shouldPoll = !!roomState.value?.showLeaderboard
+  if (shouldPoll && !leaderboardPollTimer) {
+    pollLeaderboard()
+    leaderboardPollTimer = setInterval(pollLeaderboard, 30_000)
+  } else if (!shouldPoll && leaderboardPollTimer) {
+    clearInterval(leaderboardPollTimer)
+    leaderboardPollTimer = null
+    leaderboard.value = null
+  }
+}
+watch(() => roomState.value?.showLeaderboard, syncLeaderboardPolling)
+onBeforeUnmount(() => { if (leaderboardPollTimer) clearInterval(leaderboardPollTimer) })
+
 // ── Chat speech bubbles — transient, keyed by sender, cleared on timeout or on a live retraction ──
 const bubbles = ref({})
 watch(chatMessages, (msgs) => {
@@ -833,10 +932,16 @@ onBeforeUnmount(() => {
 .mow-home-turf-badge, .mow-raid-den-badge { font-size: 10px; flex-shrink: 0; }
 .mow-online-count { font-size: 10px; flex-shrink: 0; color: #15803d; font-weight: 600; }
 .mow-online-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
-.mow-online-row {
+/* A row is now a plain div wrapping two buttons (the join target + the follow star) rather than
+   one big button - a <button> can't nest another <button>, and the star needs its own click
+   target independent of "join this room". */
+.mow-online-row { display: flex; align-items: center; gap: 4px; }
+.mow-online-join {
   display: flex;
   align-items: center;
   gap: 6px;
+  flex: 1;
+  min-width: 0;
   padding: 6px 8px;
   border-radius: 6px;
   background: #f1f5f9;
@@ -845,10 +950,21 @@ onBeforeUnmount(() => {
   font-size: 11px;
   text-align: left;
 }
-.mow-online-row:disabled { opacity: 0.5; cursor: not-allowed; }
+.mow-online-join:disabled { opacity: 0.5; cursor: not-allowed; }
 .mow-online-dot { font-size: 8px; flex-shrink: 0; }
 .mow-online-name { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mow-online-room { color: #64748b; font-size: 10px; flex-shrink: 0; }
+.mow-follow-star {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  border: none;
+  background: #f1f5f9;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
 
 /* "Squad up" invite banner — one-shot, dismissible, shown regardless of room list vs. in-room view. */
 .mow-invite-banner {
@@ -957,6 +1073,10 @@ onBeforeUnmount(() => {
 .mow-raid-den-hpfill { height: 100%; background: #dc2626; transition: width 0.4s ease-out; }
 .mow-raid-den-log { font-size: 10px; color: #78350f; margin: 4px 0 0; }
 .mow-raid-den-idle { font-size: 11px; color: #92400e; margin: 0; }
+.mow-leaderboard { padding: 6px 10px; border-bottom: 1px solid #e2e8f0; background: #eff6ff; }
+.mow-leaderboard-title { font-size: 10px; font-weight: 700; color: #1e40af; margin: 0 0 2px; text-transform: uppercase; letter-spacing: 0.02em; }
+.mow-leaderboard-line { font-size: 11px; color: #1e3a8a; margin: 2px 0 0; }
+.mow-leaderboard-empty { font-size: 11px; color: #64748b; margin: 0; }
 .mow-leave-btn {
   padding: 3px 10px;
   border-radius: 999px;

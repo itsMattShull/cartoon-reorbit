@@ -71,6 +71,9 @@ export function parseMyOrbitRoomBody(body, existing) {
     ? (existing ? existing.themeCMoonId : null)
     : (typeof body.themeCMoonId === 'string' && body.themeCMoonId ? body.themeCMoonId : null)
   const isRaidDen = toBoolean(body?.isRaidDen, existing ? !!existing.isRaidDen : false)
+  // Leaderboard plaque — same purely cosmetic/optional, not-enforced-unique stance as isRaidDen
+  // just above (see that field's own schema comment on MyOrbitRoom).
+  const showLeaderboard = toBoolean(body?.showLeaderboard, existing ? !!existing.showLeaderboard : false)
 
   if (!name || name.length > MYORBIT_ROOM_NAME_MAX_LENGTH) {
     return { ok: false, message: `Name is required (max ${MYORBIT_ROOM_NAME_MAX_LENGTH} characters)` }
@@ -89,8 +92,9 @@ export function parseMyOrbitRoomBody(body, existing) {
     return { ok: false, message: `Sort order must be a whole number between ${MYORBIT_SORT_ORDER_MIN} and ${MYORBIT_SORT_ORDER_MAX}` }
   }
   if (isRaidDen === null) return { ok: false, message: 'isRaidDen must be true or false' }
+  if (showLeaderboard === null) return { ok: false, message: 'showLeaderboard must be true or false' }
 
-  return { ok: true, data: { name, gridWidth, gridHeight, capacity, active, sortOrder, themeCMoonId, isRaidDen } }
+  return { ok: true, data: { name, gridWidth, gridHeight, capacity, active, sortOrder, themeCMoonId, isRaidDen, showLeaderboard } }
 }
 
 /**

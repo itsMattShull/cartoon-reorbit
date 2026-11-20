@@ -8,12 +8,28 @@ test('room: requires a non-empty name', () => {
   assert.equal(parseMyOrbitRoomBody({ name: '' }).ok, false)
 })
 
-test('room: defaults on create: 10x10, capacity 20, inactive, sortOrder 0, no theme, not a raid den', () => {
+test('room: defaults on create: 10x10, capacity 20, inactive, sortOrder 0, no theme, not a raid den, no leaderboard', () => {
   const result = parseMyOrbitRoomBody({ name: 'Lobby' })
   assert.deepEqual(result.data, {
     name: 'Lobby', gridWidth: 10, gridHeight: 10, capacity: 20, active: false, sortOrder: 0,
-    themeCMoonId: null, isRaidDen: false
+    themeCMoonId: null, isRaidDen: false, showLeaderboard: false
   })
+})
+
+test('room: showLeaderboard must be boolean; kept from the existing row when omitted on update', () => {
+  let result = parseMyOrbitRoomBody({ name: 'A', showLeaderboard: true })
+  assert.equal(result.ok, true)
+  assert.equal(result.data.showLeaderboard, true)
+
+  result = parseMyOrbitRoomBody({ name: 'A', showLeaderboard: 'not-a-boolean' })
+  assert.equal(result.ok, false)
+
+  const existing = {
+    name: 'Old', gridWidth: 5, gridHeight: 8, capacity: 12, active: true, sortOrder: 3,
+    themeCMoonId: null, isRaidDen: false, showLeaderboard: true
+  }
+  result = parseMyOrbitRoomBody({ capacity: 15 }, existing)
+  assert.equal(result.data.showLeaderboard, true)
 })
 
 test('room: themeCMoonId accepts a string or clears to null; isRaidDen must be boolean', () => {
@@ -56,13 +72,13 @@ test('room: capacity must be within 1-100', () => {
 })
 
 test('room: on update, an omitted field keeps the existing value', () => {
-  const existing = { name: 'Old', gridWidth: 5, gridHeight: 8, capacity: 12, active: true, sortOrder: 3, themeCMoonId: null, isRaidDen: false }
+  const existing = { name: 'Old', gridWidth: 5, gridHeight: 8, capacity: 12, active: true, sortOrder: 3, themeCMoonId: null, isRaidDen: false, showLeaderboard: false }
   const result = parseMyOrbitRoomBody({ capacity: 15 }, existing)
-  assert.deepEqual(result.data, { name: 'Old', gridWidth: 5, gridHeight: 8, capacity: 15, active: true, sortOrder: 3, themeCMoonId: null, isRaidDen: false })
+  assert.deepEqual(result.data, { name: 'Old', gridWidth: 5, gridHeight: 8, capacity: 15, active: true, sortOrder: 3, themeCMoonId: null, isRaidDen: false, showLeaderboard: false })
 })
 
 test('room: grid size is immutable once a room exists, even via a direct API call bypassing the admin UI\'s disabled fields', () => {
-  const existing = { name: 'Old', gridWidth: 5, gridHeight: 8, capacity: 12, active: true, sortOrder: 3, themeCMoonId: null, isRaidDen: false }
+  const existing = { name: 'Old', gridWidth: 5, gridHeight: 8, capacity: 12, active: true, sortOrder: 3, themeCMoonId: null, isRaidDen: false, showLeaderboard: false }
   let result = parseMyOrbitRoomBody({ gridWidth: 6 }, existing)
   assert.equal(result.ok, false)
   assert.match(result.message, /[Gg]rid width/)

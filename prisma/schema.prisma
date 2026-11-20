@@ -49,6 +49,13 @@ enum NotificationType {
   // AUCTION_WON/AUCTION_OUTBID convention, so it routes to /newsite/AuctionHouse/<id> with no
   // client changes. Gated on User.allowWishlistAuctionNotifications (default true).
   WISHLIST_AUCTION_LISTED
+  // A player this user follows in MyOrbit (MyOrbitFollow) came online — see
+  // notifyFollowedUserOnline in server/utils/notifications.js, called from
+  // server/utils/myOrbitSocket.js's join handler. No `contextType`: contextId here is the
+  // followed player's own username (not an id — see that function's own comment for why),
+  // routed by notificationRoute() (components/Onboarding.vue) to their cZone. No opt-out flag:
+  // following someone IS the notification opt-in.
+  FOLLOWED_USER_ONLINE
 }
 
 /// Where a sealed UserPack came from. Pack purchase limits and purchase analytics count PURCHASE rows
@@ -798,6 +805,8 @@ model User {
   ctoons                      UserCtoon[]
   friends                     Friend[]                        @relation("UserFriends")
   friendedBy                  Friend[]                        @relation("UserFriendOf")
+  myOrbitFollowing            MyOrbitFollow[]                 @relation("MyOrbitFollower")
+  myOrbitFollowedBy           MyOrbitFollow[]                 @relation("MyOrbitFollowed")
   favoriteCzones              FavoriteCzone[]                 @relation("CzoneFavoritedBy")
   favoritedByCzones           FavoriteCzone[]                 @relation("CzoneFavoritedOf")
   traderARooms                TradeRoom[]                     @relation("TraderA")
@@ -1090,6 +1099,26 @@ model Friend {
   friend User @relation("UserFriendOf", fields: [friendId], references: [id])
 
   @@unique([userId, friendId])
+}
+
+// A player following another player's MyOrbit presence — scoped to MyOrbit only, deliberately
+// its own model rather than a reuse of Friend above: Friend is one-directional with no accept
+// flow and no list/remove endpoints or UI anywhere in the app (only server/api/friends/add.post.js
+// exists), so giving its rows a new behavioral side effect (an online-notification subscription)
+// would silently change existing data nobody can currently see or undo. Following IS the
+// notification opt-in (see notifyFollowedUserOnline, server/utils/notifications.js) — there is no
+// separate allow* toggle the way allowWishlistAuctionNotifications gates a global subscription.
+model MyOrbitFollow {
+  id         String   @id @default(uuid())
+  followerId String
+  followedId String
+  createdAt  DateTime @default(now())
+
+  follower User @relation("MyOrbitFollower", fields: [followerId], references: [id])
+  followed User @relation("MyOrbitFollowed", fields: [followedId], references: [id])
+
+  @@unique([followerId, followedId])
+  @@index([followedId])
 }
 
 model ClaimCode {
@@ -8434,6 +8463,10 @@ model MyOrbitRoom {
   // polls GET /api/myorbit/active-raid while inside a room with this set. Not enforced unique;
   // an admin could flag more than one room this way and each would show the same live state.
   isRaidDen  Boolean  @default(false)
+  // Marks this room as showing the leaderboard plaque (see feature doc: "leaderboard plaque") —
+  // the client polls GET /api/myorbit/leaderboard while inside a room with this set. Same
+  // not-enforced-unique stance as isRaidDen: more than one room could show it.
+  showLeaderboard Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

@@ -17,6 +17,7 @@ export default defineEventHandler(async (event) => {
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
       select: {
         id: true, name: true, gridWidth: true, gridHeight: true, capacity: true, isRaidDen: true,
+        showLeaderboard: true,
         theme: { select: { id: true, name: true, color: true, avatarPath: true } }
       }
     }),
@@ -28,6 +29,7 @@ export default defineEventHandler(async (event) => {
     rooms: rooms.map(r => ({
       id: r.id, name: r.name, gridWidth: r.gridWidth, gridHeight: r.gridHeight, capacity: r.capacity,
       isRaidDen: r.isRaidDen,
+      showLeaderboard: r.showLeaderboard,
       theme: r.theme ? { id: r.theme.id, name: r.theme.name, color: r.theme.color, iconPath: r.theme.avatarPath } : null,
       // Purely cosmetic "this is your faction's room" badge — see feature doc "faction war
       // rooms": themed rooms are open to everyone, this just flags the viewer's own turf.
