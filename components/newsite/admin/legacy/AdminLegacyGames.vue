@@ -1951,7 +1951,7 @@
             </div>
             <div>
               <label class="block text-xs font-medium text-gray-700">Maximum Bet</label>
-              <p class="text-xs text-gray-500 mb-1">Multiple of 10, at least the min bet, and no more than the daily buy-in.</p>
+              <p class="text-xs text-gray-500 mb-1">Multiple of 10 and at least the min bet. Independent of the daily buy-in.</p>
               <input type="number" v-model.number="blackjackMaxBet" min="10" max="100000" step="10" class="border rounded-md px-2 py-1.5 text-sm w-full" />
             </div>
             <div>

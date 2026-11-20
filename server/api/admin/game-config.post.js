@@ -460,14 +460,12 @@ function validatePayload(payload) {
         throw createError({ statusCode: 400, statusMessage: `"${field}" must be true or false` })
       }
     }
-    // Cross-field rules the per-field ranges cannot express. Without these an admin can set a
-    // minimum above the maximum (no bet is ever legal) or a maximum above the whole daily
-    // budget (one hand can consume it).
+    // Cross-field rules the per-field ranges cannot express. Without this an admin can set a
+    // minimum above the maximum (no bet is ever legal). The max bet is deliberately NOT tied to
+    // the daily buy-in: a bet can never exceed the chips on hand anyway, so the buy-in already
+    // bounds what a single hand can risk.
     if (payload.blackjackMaxBet < payload.blackjackMinBet) {
       throw createError({ statusCode: 400, statusMessage: 'Max bet must be at least the min bet' })
-    }
-    if (payload.blackjackDailyBuyInLimit > 0 && payload.blackjackMaxBet > payload.blackjackDailyBuyInLimit) {
-      throw createError({ statusCode: 400, statusMessage: 'Max bet cannot exceed the daily buy-in limit' })
     }
     if (payload.blackjackMinBet % 10 !== 0 || payload.blackjackMaxBet % 10 !== 0) {
       throw createError({ statusCode: 400, statusMessage: 'Bets must be multiples of 10 so 3:2 and insurance pay whole points' })
