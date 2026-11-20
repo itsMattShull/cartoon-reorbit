@@ -121,6 +121,13 @@ export default defineNuxtConfig({
   },
 
   nitro: {
+    // Server code imports shared helpers from the root utils/ dir (e.g. server/utils/cmoon.js →
+    // ../../utils/cmoonEffectTypes.js). That dir is outside Nitro's srcDir (server/), so the dev
+    // preset leaves those imports external, and on Windows the rewritten path resolves to
+    // C:\utils\... ("Cannot find module"). Inline it, as production builds already do.
+    externals: {
+      inline: [fileURLToPath(new URL('./utils/', import.meta.url))]
+    },
     hooks: {
       compiled(nitro) {
         for (const name of sharpNativePackages) {
