@@ -39,6 +39,7 @@
               {{ r.active ? 'Active' : 'Inactive' }}
             </span>
             <span v-if="r.isRaidDen" class="px-1.5 py-0.5 rounded text-[10px] flex-shrink-0 bg-amber-100 text-amber-700" title="Live raid spectating">Raid Den</span>
+            <span v-if="r.showLeaderboard" class="px-1.5 py-0.5 rounded text-[10px] flex-shrink-0 bg-sky-100 text-sky-700" title="Shows the leaderboard plaque">Leaderboard</span>
             <span v-if="r.themeCMoonId" class="px-1.5 py-0.5 rounded text-[10px] flex-shrink-0 bg-purple-100 text-purple-700">{{ cmoonNameById(r.themeCMoonId) }}</span>
             <span class="text-gray-500 flex-shrink-0">{{ r.tileCount }} tiles · {{ r.furnitureCount }} furniture</span>
           </button>
@@ -96,6 +97,10 @@
           <label class="flex items-center gap-2">
             <input type="checkbox" v-model="form.isRaidDen" />
             <span class="text-[11px] font-medium" title="Shows a live HP bar for whatever raid boss fight is currently in progress, for spectating.">Raid Den</span>
+          </label>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" v-model="form.showLeaderboard" />
+            <span class="text-[11px] font-medium" title="Shows a plaque with this week's top raid damage dealer and biggest auction sale.">Leaderboard plaque</span>
           </label>
         </div>
         <p v-if="selectedId" class="text-[11px] text-gray-500">
@@ -260,7 +265,7 @@ const layoutError = ref('')
 const layoutStatus = ref('')
 
 function emptyForm() {
-  return { name: '', gridWidth: 10, gridHeight: 10, capacity: 20, active: false, sortOrder: 0, themeCMoonId: null, isRaidDen: false }
+  return { name: '', gridWidth: 10, gridHeight: 10, capacity: 20, active: false, sortOrder: 0, themeCMoonId: null, isRaidDen: false, showLeaderboard: false }
 }
 
 const stage = computed(() => form.value ? gridStageSize(form.value.gridWidth, form.value.gridHeight) : { width: 0, height: 0, offsetX: 0, offsetY: 0 })
@@ -364,7 +369,8 @@ async function selectRoom(r) {
     selectedId.value = full.id
     form.value = {
       name: full.name, gridWidth: full.gridWidth, gridHeight: full.gridHeight, capacity: full.capacity,
-      active: full.active, sortOrder: full.sortOrder, themeCMoonId: full.themeCMoonId || null, isRaidDen: !!full.isRaidDen
+      active: full.active, sortOrder: full.sortOrder, themeCMoonId: full.themeCMoonId || null, isRaidDen: !!full.isRaidDen,
+      showLeaderboard: !!full.showLeaderboard
     }
     ambientSound.value = { savedPath: full.ambientSoundPath || '', pendingFile: null, uploading: false, error: '' }
     for (const t of full.tiles) {

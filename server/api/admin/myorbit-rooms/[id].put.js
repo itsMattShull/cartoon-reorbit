@@ -28,8 +28,8 @@ export default defineEventHandler(async (event) => {
 
   await logAdminChange(db, {
     userId: me.id, area: 'MyOrbitRoom', key: `update:${id}`,
-    prevValue: { name: existing.name, gridWidth: existing.gridWidth, gridHeight: existing.gridHeight, capacity: existing.capacity, active: existing.active, themeCMoonId: existing.themeCMoonId, isRaidDen: existing.isRaidDen },
-    newValue: { name: updated.name, gridWidth: updated.gridWidth, gridHeight: updated.gridHeight, capacity: updated.capacity, active: updated.active, themeCMoonId: updated.themeCMoonId, isRaidDen: updated.isRaidDen }
+    prevValue: { name: existing.name, gridWidth: existing.gridWidth, gridHeight: existing.gridHeight, capacity: existing.capacity, active: existing.active, themeCMoonId: existing.themeCMoonId, isRaidDen: existing.isRaidDen, showLeaderboard: existing.showLeaderboard },
+    newValue: { name: updated.name, gridWidth: updated.gridWidth, gridHeight: updated.gridHeight, capacity: updated.capacity, active: updated.active, themeCMoonId: updated.themeCMoonId, isRaidDen: updated.isRaidDen, showLeaderboard: updated.showLeaderboard }
   })
 
   return { id: updated.id }

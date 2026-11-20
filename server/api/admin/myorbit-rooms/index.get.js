@@ -27,6 +27,7 @@ export default defineEventHandler(async (event) => {
       sortOrder: r.sortOrder,
       themeCMoonId: r.themeCMoonId,
       isRaidDen: r.isRaidDen,
+      showLeaderboard: r.showLeaderboard,
       tileCount: r._count.tiles,
       furnitureCount: r._count.furniture
     }))

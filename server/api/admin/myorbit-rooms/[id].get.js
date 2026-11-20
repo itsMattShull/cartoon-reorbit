@@ -29,6 +29,7 @@ export default defineEventHandler(async (event) => {
     ambientSoundPath: room.ambientSoundPath,
     themeCMoonId: room.themeCMoonId,
     isRaidDen: room.isRaidDen,
+    showLeaderboard: room.showLeaderboard,
     tiles: room.tiles.map(t => ({
       x: t.x, y: t.y, tileId: t.tileId,
       assetPath: t.tile.assetPath, walkable: t.tile.walkable

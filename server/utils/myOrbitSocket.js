@@ -44,6 +44,8 @@ import { isValidMyOrbitEmote } from '../../utils/myOrbitEmotes.js'
 import { getActiveRaidForUser } from './cmoonRaidSocket.js'
 import { getActivePvpMatchForUser } from './cmoonPvpSocket.js'
 import { setUserPresence, clearUserPresence } from './myOrbitPresence.js'
+import { notifyFollowedUserOnline } from './notifications.js'
+import { pushUserNotifications } from './realtimeNotify.js'
 
 const EV = (name) => `myorbit:${name}`
 const roomChannel = (roomId) => `myorbit:room:${roomId}`
@@ -99,6 +101,7 @@ async function loadRoomDefinition(roomId) {
     // ambientSoundPath already follows.
     theme: room.theme ? { id: room.theme.id, name: room.theme.name, color: room.theme.color, iconPath: room.theme.avatarPath } : null,
     isRaidDen: room.isRaidDen,
+    showLeaderboard: room.showLeaderboard,
     tiles, furniture, walkable: buildWalkableSet(tiles, furniture)
   }
 }
@@ -124,7 +127,7 @@ function publicRoomState(room) {
   return {
     id: room.id, name: room.name, gridWidth: room.gridWidth, gridHeight: room.gridHeight, capacity: room.capacity,
     ambientSoundPath: room.ambientSoundPath,
-    theme: room.theme, isRaidDen: room.isRaidDen,
+    theme: room.theme, isRaidDen: room.isRaidDen, showLeaderboard: room.showLeaderboard,
     tiles: room.tiles, furniture: room.furniture,
     participants: [...room.participants.values()].map(publicParticipant)
   }
@@ -204,12 +207,19 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
     if (!moderation) return socket.emit(EV('error'), { message: 'Not authenticated' })
     if (moderation.myOrbitBannedAt) return socket.emit(EV('error'), { message: 'You are banned from MyOrbit' })
 
-    // Room-hopping: leave whatever room this user was previously in first. Never double-membership.
+    // Captured BEFORE any room-hop/presence mutation below: true only if this user had NO room
+    // membership at all when this join arrived, i.e. they were offline in MyOrbit, not just
+    // switching rooms or reconnecting a second tab. socket-server.js runs as a single fork-mode
+    // instance (see ecosystem.config.cjs's own header comment), so this in-memory Map is
+    // authoritative here the same way it already is for the room-hop check just below it — unlike
+    // myOrbitPresence.js's Redis mirror, which exists only to cross the Nitro/socket process
+    // boundary and is deliberately best-effort/cosmetic, not something a notification should key
+    // off of.
+    const wasOnlineBefore = roomByUser.has(me.id)
+    // Captured here too (not derived later): room-hopping itself is deferred below, past every
+    // remaining failure return, specifically so a hop that then fails to join the NEW room never
+    // happens — see that block's own comment for why.
     const previousRoomId = roomByUser.get(me.id)
-    if (previousRoomId && previousRoomId !== roomId) {
-      socket.leave(roomChannel(previousRoomId))
-      removeParticipant(io, previousRoomId, me.id)
-    }
 
     const definition = await loadRoomDefinition(roomId)
     if (!definition) return socket.emit(EV('error'), { message: 'This room is not available' })
@@ -226,6 +236,7 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
       room.ambientSoundPath = definition.ambientSoundPath
       room.theme = definition.theme
       room.isRaidDen = definition.isRaidDen
+      room.showLeaderboard = definition.showLeaderboard
       room.tiles = definition.tiles
       room.furniture = definition.furniture
       room.walkable = definition.walkable
@@ -279,6 +290,23 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
       db.user.update({ where: { id: me.id }, data: { myOrbitLastUserCtoonId: userCtoonId } }).catch(() => {})
     }
 
+    // Room-hopping: leave whatever room this user was previously in, now that every check above
+    // (config, ban, room exists/active, capacity x2, cToon ownership, walkable floor) has passed
+    // and this join is actually going to succeed. Deliberately NOT done any earlier: this used to
+    // run immediately after the ban check, which meant any later failure (room full, no cToon
+    // selected, room disabled) left the player removed from their old room server-side — cleared
+    // from roomByUser/Redis presence, broadcast as having left — while their own client still
+    // believed they were standing in it, with no error-handling path that clears that belief
+    // either. A stray myorbit:move/chat from that stale client would then silently no-op forever
+    // (roomByUser.get(me.id) now undefined). It also fed a spurious "just came online" alert to
+    // this player's own followers on their next successful join, since wasOnlineBefore above
+    // would already read false from the premature clear. previousRoomId === roomId (reconnect/
+    // second tab joining a room already joined) is correctly a no-op here, same as before.
+    if (previousRoomId && previousRoomId !== roomId) {
+      socket.leave(roomChannel(previousRoomId))
+      removeParticipant(io, previousRoomId, me.id)
+    }
+
     roomByUser.set(me.id, roomId)
     socket.join(roomChannel(roomId))
     socket.data.myOrbitRoomId = roomId
@@ -289,6 +317,14 @@ export function registerMyOrbit(io, socket, resolveSocketUser) {
 
     socket.emit(EV('state'), publicRoomState(room))
     broadcastParticipants(io, room, 'participantJoined')
+
+    // Fire-and-forget, same stance as setUserPresence just above — a follower's alert is
+    // cosmetic/best-effort, never worth blocking or failing the join over.
+    if (!wasOnlineBefore) {
+      notifyFollowedUserOnline(db, { followedUserId: me.id, followedUsername: me.username })
+        .then(written => pushUserNotifications(io, written))
+        .catch(e => console.error('[myOrbitSocket] notifyFollowedUserOnline:', e))
+    }
   }))
 
   socket.on(EV('getState'), safe(socket, async ({ roomId } = {}) => {

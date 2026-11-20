@@ -141,3 +141,15 @@ test('MyOrbitFurniture validator requires blocksWalk when sittable, so a created
   const assets = read('server/utils/myOrbitAssets.js')
   assert.match(assets, /if \(sittable && !blocksWalk\)/)
 })
+
+test('MyOrbitWindow.vue renders avatar name/status labels as their own overlay, not inside the depth-stacked avatar token', () => {
+  const win = read('components/MyOrbitWindow.vue')
+  // The label must NOT live inside the avatar-token's own markup block (which shares floor/
+  // furniture's depth-ordered z-index and can get painted over by a tile in front of the avatar
+  // - see avatarTokens' own labelTop/labelZ comment).
+  const tokenBlock = win.slice(win.indexOf('class="mow-avatar-token"'), win.indexOf('mow-avatar-label'))
+  assert.doesNotMatch(tokenBlock, /mow-avatar-name/)
+  assert.match(win, /class="mow-avatar-label"/)
+  assert.match(win, /labelTop: pos\.top/)
+  assert.match(win, /labelZ: 300000 \+ p\.x \+ p\.y/)
+})
