@@ -3,9 +3,8 @@
 // Uploads the small pill-shaped button graphic shown on a themed cToon modal in place of the
 // plain "cWorld" text tile, and — if showButtonOnPages is on for this cMoon — in the button-pill
 // list on other cMoons' pages too. Was previously a full-width 800x200 banner (see the migration
-// that renamed CMoon.bannerImagePath to buttonImagePath); same normalize-then-store approach as
-// page-image.post.js (auto-orient, cover-crop to a fixed size, re-encode via sharp) rather than
-// trusting/storing the upload as-is.
+// that renamed CMoon.bannerImagePath to buttonImagePath). Normalizes before storing (auto-orient,
+// cover-crop to a fixed size, re-encode via sharp) rather than trusting/storing the upload as-is.
 import { defineEventHandler, readMultipartFormData, getRequestHeader, createError } from 'h3'
 import { mkdir, writeFile } from 'node:fs/promises'
 import sharp from 'sharp'

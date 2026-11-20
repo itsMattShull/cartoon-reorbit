@@ -69,6 +69,3 @@ const runtime = createDuelRuntime({
 
 export const registerPokemonBattle = runtime.register
 export const startPokemonBattleSweep = runtime.startSweep
-
-// Exposed for tests.
-export const __pokemonBattleTesting = runtime.__testing

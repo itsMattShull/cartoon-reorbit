@@ -390,14 +390,3 @@ export async function broadcastAutoBidSteps(prisma, auctionId, steps) {
     setTimeout(finish, 1500)
   })
 }
-
-export async function applyProxyAutoBidsAndBroadcast(prisma, auctionId, opts = {}) {
-  let result = { finalAuction: null, steps: [], outbids: [] }
-  await prisma.$transaction(async (tx) => {
-    result = await applyProxyAutoBids(tx, auctionId, opts)
-  })
-  if (result.steps?.length) {
-    await broadcastAutoBidSteps(prisma, auctionId, result.steps)
-  }
-  return result
-}

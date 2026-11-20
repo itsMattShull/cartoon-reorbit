@@ -381,12 +381,6 @@ export async function schedulePackToggle(packId, scheduledAt, scheduledOffAt) {
   else await removeDelayedJob(`pack-off-${id}`)
 }
 
-export async function cancelPackToggle(packId) {
-  const id = String(packId)
-  await removeDelayedJob(`pack-on-${id}`)
-  await removeDelayedJob(`pack-off-${id}`)
-}
-
 /** (Re)schedule the job that activates an AuctionOnly row at its startsAt. */
 export async function scheduleAuctionOnlyStart(auctionOnlyId, startsAt) {
   const id = String(auctionOnlyId)
@@ -394,19 +388,11 @@ export async function scheduleAuctionOnlyStart(auctionOnlyId, startsAt) {
   await replaceDelayedJob('auctionOnlyStart', `auction-only-${id}`, { auctionOnlyId: id }, startsAt)
 }
 
-export async function cancelAuctionOnlyStart(auctionOnlyId) {
-  await removeDelayedJob(`auction-only-${String(auctionOnlyId)}`)
-}
-
 /** (Re)schedule the job that posts an announcement to Discord at its scheduledAt. */
 export async function scheduleAnnouncementSend(announcementId, scheduledAt) {
   const id = String(announcementId)
   if (!scheduledAt) return removeDelayedJob(`announcement-${id}`)
   await replaceDelayedJob('announcementSend', `announcement-${id}`, { announcementId: id }, scheduledAt)
-}
-
-export async function cancelAnnouncementSend(announcementId) {
-  await removeDelayedJob(`announcement-${String(announcementId)}`)
 }
 
 /**
