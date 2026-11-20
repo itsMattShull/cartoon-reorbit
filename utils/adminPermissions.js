@@ -91,6 +91,7 @@ export const ADMIN_API_SEGMENT_PERMS = {
   'cheating-tool-apply-stream': ['cheatingTool'],
   'cheating-tool-report': ['cheatingTool'],
   'check-cheating': ['checkCheating', 'authLogs'],
+  'clash-games': ['gtoonsClashLogs', 'clashTournaments'],
   'clash-stats': ['analytics'],
   'cmart-metrics': ['globalSettings'],
   'cmoon-admins': ['cMoon'],
