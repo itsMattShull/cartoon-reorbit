@@ -844,12 +844,6 @@ async function getHolderSnapshot() {
   return cachedHolderSnapshot
 }
 
-// Mainly for tests/admin tooling — the 60s TTL alone keeps this fresh enough for the UI.
-export function invalidateHolderSnapshotCache() {
-  cachedHolderSnapshot = null
-  cachedHolderSnapshotAt = 0
-}
-
 // `userCreatedAt` is passed in (rather than re-queried) since the caller already has it from
 // the same User row it loaded for isMember/cMoonPoints.
 export async function getPendingScoringPreview(userId, cMoonId, userCreatedAt) {

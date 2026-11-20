@@ -60,6 +60,3 @@ export const startEdRpsSweep = runtime.startSweep
 // So server/utils/edRpsAiMatch.js can refuse to start a bot match under a user already mid-PvP-
 // match, and vice versa — the two modes share a player but not a match table row.
 export const hasLiveEdRpsMatch = runtime.hasLiveMatch
-
-// Exposed for tests.
-export const __edRpsTesting = { ...runtime.__testing, HANDS }
