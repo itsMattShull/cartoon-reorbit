@@ -1,7 +1,7 @@
 <template>
   <component
-    :is="linkTag"
-    v-bind="linkProps"
+    :is="link.is"
+    v-bind="link.props"
     class="winball-promo"
   >
     <img :src="bgSrc" alt="Bottom spotlight" class="winball-promo-bg" />
@@ -31,21 +31,9 @@ const isWinballLink = computed(() => {
 
 const showPrize = computed(() => isWinballLink.value)
 
-const linkTag = computed(() => {
-  if (!configuredLink.value) return 'div'
-  return 'a'
-})
-
-const linkProps = computed(() => {
-  if (!configuredLink.value) return {}
-  const link = configuredLink.value
-  let target = '_self'
-  try {
-    const url = new URL(link, window.location.href)
-    target = url.origin === window.location.origin ? '_self' : '_blank'
-  } catch {}
-  return { href: link, target }
-})
+// Links to this site navigate in-app (no full page reload); see composables/useSiteLink.js.
+const siteLink = useSiteLink()
+const link = computed(() => siteLink(configuredLink.value))
 </script>
 
 <style scoped>
