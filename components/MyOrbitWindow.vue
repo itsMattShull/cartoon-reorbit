@@ -182,6 +182,11 @@
                     <button type="button" class="mow-action-item" @click="onVisitCzone(p.username)">🏠 Visit cZone</button>
                   </div>
                 </div>
+              </div>
+              <div
+                v-for="p in avatarTokens" :key="`label-${p.userId}`" class="mow-avatar-label"
+                :style="{ left: p.left + 'px', top: p.labelTop + 'px', zIndex: p.labelZ }"
+              >
                 <span class="mow-avatar-name" :title="p.status">{{ p.username }}</span>
                 <span v-if="p.status" class="mow-avatar-status">{{ p.status }}</span>
               </div>
@@ -394,7 +399,17 @@ const avatarTokens = computed(() => {
       cmoon: p.cmoon, isAdmin: p.isAdmin, seated: !!p.seated, status: p.status || '',
       isMe: p.userId === user.value?.id,
       left: pos.left + TILE_WIDTH / 4, top: pos.top - 28,
-      z: depthIndex(p.x, p.y, 1, 1, MYORBIT_LAYER.AVATAR)
+      z: depthIndex(p.x, p.y, 1, 1, MYORBIT_LAYER.AVATAR),
+      // The name/status label renders as its own overlay (.mow-avatar-label below), not inside
+      // this token - the token's z above places it in the SAME depth-ordered stacking context as
+      // floor/furniture tiles, and the label text overflows below the avatar's own feet into
+      // whatever tile is directly in front (south) of it. That tile can have a numerically
+      // higher z than the avatar (depthIndex grows with row), painting over the label - visible
+      // in practice as the status line vanishing except right at a grid edge with no tile in
+      // front. The label instead uses the same always-on-top HUD z-tier as the cell-hit/sit
+      // buttons' own 100000+/200000+ scheme, one tier higher so it's never occluded.
+      labelTop: pos.top,
+      labelZ: 300000 + p.x + p.y
     }
   })
 })
@@ -964,6 +979,17 @@ onBeforeUnmount(() => {
   pointer-events: none;
   /* The glide: every position change the server broadcasts lands here as a plain left/top
      change, and this transition is the entire animation — no per-frame JS. */
+  transition: left 0.3s linear, top 0.3s linear;
+}
+/* Rendered as its own overlay, outside the token's own (depth-ordered) stacking context - see
+   avatarTokens' own labelTop/labelZ comment for why. */
+.mow-avatar-label {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 32px;
+  pointer-events: none;
   transition: left 0.3s linear, top 0.3s linear;
 }
 .mow-avatar-img-wrap { position: relative; }
