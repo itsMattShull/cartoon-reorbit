@@ -1,5 +1,4 @@
 import { defineEventHandler, readBody, createError } from 'h3'
-import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
 import { FLIP_SCRIPT, MIN_FLIP_INTERVAL_MS } from '@/server/utils/reorbitMemoryEngine'
 

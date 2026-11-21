@@ -2,8 +2,8 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { slotsForRound } from '../server/utils/ogGtoonEngine.js'
 import {
-  initHands, placeCard, revealPlacedCards, advanceRound, submitDiscard, resolveDiscardPhase, buildRevealSteps, runFinalBoardResolution,
-  publicMatchView, extendDeadlineForReveal, recordSwapChoice, resolveSwapPhase, checkMatchEnd
+  initHands, placeCard, revealPlacedCards, advanceRound, submitDiscard, resolveDiscardPhase, runFinalBoardResolution,
+  publicMatchView, extendDeadlineForReveal, recordSwapChoice, resolveSwapPhase
 } from '../server/utils/ogGtoonMatchCore.js'
 import {
   revealDurationMs, revealStepMs, normalizeRevealTiming, REVEAL_TIMING_DEFAULTS, REVEAL_TIMING_LIMITS,

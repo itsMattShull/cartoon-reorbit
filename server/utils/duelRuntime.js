@@ -758,7 +758,7 @@ export function createDuelRuntime(spec) {
     for (const [roomId, room] of rooms.entries()) {
       if (now - room.lastActivity > ROOM_IDLE_MS) destroyRoom(io, roomId)
     }
-    for (const [roomId, match] of matches.entries()) {
+    for (const match of matches.values()) {
       // Deliberately not gated on socket presence: a player who leaves an idle tab open keeps a
       // socket in the room forever, which is why Clash's equivalent sweep never fires.
       if (now - match.startedAt < MATCH_MAX_AGE_MS) continue

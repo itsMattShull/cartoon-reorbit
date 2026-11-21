@@ -384,7 +384,6 @@ async function disableAutoBid() {
 
 // ── Socket ────────────────────────────────────────────────────────
 function connectSocket() {
-  const { io } = window.socketIOClient ? window : {}
   // Use dynamic import so it doesn't break SSR
   import('socket.io-client').then(({ io: ioFn }) => {
     if (isUnmounted) return

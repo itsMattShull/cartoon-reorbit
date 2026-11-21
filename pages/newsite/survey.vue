@@ -149,7 +149,7 @@ const showsRef = ref(null)
 // Stable session ID for this page visit
 const sessionId = crypto.randomUUID()
 
-const { attachTo, detachFrom, stopCapture } = useBehavioralCapture(sessionId)
+const { attachTo, stopCapture } = useBehavioralCapture(sessionId)
 
 onMounted(async () => {
   await nextTick()

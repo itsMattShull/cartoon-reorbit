@@ -1,5 +1,5 @@
 // server/api/lottery.post.js
-import { defineEventHandler, getRequestHeader, createError, readBody } from 'h3'
+import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { createHash } from 'crypto'
 
@@ -62,7 +62,7 @@ export default defineEventHandler(async (event) => {
   // pass the check before any of them commits, letting a player exceed
   // countPerDay by firing purchases in parallel.
   let purchasesTodayAfter
-  const pointsAfterPurchase = await db.$transaction(async (tx) => {
+  await db.$transaction(async (tx) => {
     const incremented = await tx.lottoUser.updateMany({
       where: {
         userId: me.id,

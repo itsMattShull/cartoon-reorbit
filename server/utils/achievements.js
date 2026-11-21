@@ -32,8 +32,6 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
     return false
   }
 
-  const achKey = ach?.slug || ach?.id
-  // console.log('[achievements] evaluate: start', { userId, ach: achKey })
 
   // Points
   if (ach.pointsGte != null) {

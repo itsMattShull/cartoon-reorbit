@@ -435,7 +435,7 @@ function bankOnExit () {
 
 onMounted(async () => {
   reduceMotion.value = window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches || false
-  const s = await loadStatus()
+  await loadStatus()
   uiState.value = 'start'
 
   document.addEventListener('visibilitychange', onVisibility)

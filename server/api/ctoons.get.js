@@ -1,6 +1,6 @@
 import { defineEventHandler } from 'h3'
 import { prisma as db } from '@/server/prisma'
-import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { OG_GTOON_DISPLAY_SELECT } from '~/server/utils/ogGtoonDisplay'
 
 // Fetch on demand; no in-memory cache
 

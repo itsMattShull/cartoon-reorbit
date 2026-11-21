@@ -34,7 +34,7 @@
 // dodge that too, but only plain node's native subpath-imports resolution
 // (package.json "imports") also works when tests import this file directly
 // via `node --test`, outside any bundler.
-import { WORLD_W, WORLD_H, TICK_HZ, IN_LEFT, IN_RIGHT, IN_THRUST, simulate } from '#lib/asteroidSim.js'
+import { TICK_HZ, IN_LEFT, IN_RIGHT, IN_THRUST, simulate } from '#lib/asteroidSim.js'
 
 // A run is capped at 5 minutes of simulated time. This bounds the replay cost of a single
 // /end request (~130ms worst case, measured with every difficulty knob maxed) and gives the

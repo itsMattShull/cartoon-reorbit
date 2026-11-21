@@ -495,10 +495,6 @@ function rebalance (rarity, fixedId=null) {
 }
 
 /* rebalance only when totals are off */
-function rebalanceIfNeeded (rarity, fixedId=null) {
-  if (sumWeights(rarity) !== 100) rebalance(rarity,fixedId)
-}
-
 /* ------------- autocomplete -------------------- */
 const search          = ref('')
 const searchInput     = ref(null)

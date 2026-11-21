@@ -5,7 +5,7 @@ import path from 'path'
 import { defineEventHandler, createError } from 'h3'
 
 import { prisma } from '@/server/prisma'
-import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   const user = event.context.user

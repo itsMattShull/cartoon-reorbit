@@ -56,7 +56,6 @@ const LANES     = JSON.parse(fs.readFileSync(lanesPath, 'utf-8'))
  *  HTTP + Socket.IO bootstrap
  * ────────────────────────────────────────────────────────── */
 const PORT = process.env.SOCKET_PORT || 3001
-const SOCKET_PATH = process.env.SOCKET_PATH || '/socket.io'
 const httpServer = createServer()
 
 // Origins allowed to open a socket. This has to be an allow-list rather than '*' because the
@@ -2854,7 +2853,7 @@ async function boot() {
     }
 
     console.log(
-      `[Boot] Redis restore: ${battles.size} battle(s), ${pvpRoomsData.size} pvp room(s), ` +
+      `[Boot] Redis restore: ${pvpRoomsData.size} pvp room(s), ` +
       `${pveData.size} pve match(es), ${pvpData.size} pvp match(es)`
     )
   } catch (err) {

@@ -6,7 +6,7 @@ import {
   createError
 } from 'h3'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { join, dirname, extname, basename } from 'node:path'
+import { join, dirname, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { prisma as db } from '@/server/prisma'
 
@@ -61,7 +61,6 @@ export default defineEventHandler(async (event) => {
     : filePart.type === 'image/gif' ? '.gif'
     : '.jpg'
   )
-  const base = basename(filePart.filename || 'image', ext) || 'image'
   const tag = [label, pathKey].filter(Boolean).join('-')
   const filename = `${tag || 'scavenger'}-${Date.now()}${ext}`
 

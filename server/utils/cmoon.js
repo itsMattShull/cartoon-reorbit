@@ -254,11 +254,6 @@ async function getTopNScoreHolders({ table, column, direction, extraWhere }, ran
     ? prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff)
     : prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff, String(days))
 }
-async function findTopScoreHolder(game) {
-  const rows = await getTopNScoreHolders(game, 1)
-  return rows[0] || null
-}
-
 // Top N by win count for a duel-match game, one row per user — all-time by default, or only wins
 // from the last `days` days when weekly scoring is on (same toggle/shape as getTopNScoreHolders
 // above). Shape mirrors server/utils/duelLeaderboard.js's rankedRows (natural endings only),
@@ -299,11 +294,6 @@ async function getTopNWinsHolders({ table }, rankCutoff, days = null) {
     ? prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff)
     : prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff, String(days))
 }
-async function findTopWinsHolder(game) {
-  const rows = await getTopNWinsHolders(game, 1)
-  return rows[0] || null
-}
-
 // Top N of the public "Top Points" board (server/api/points-leaderboard.get.js),
 // membership/age-filtered later — ranking itself must reflect the real board, not just
 // cMoon members, or a small/inactive cMoon's top N would mean nothing. `rankCutoff` is

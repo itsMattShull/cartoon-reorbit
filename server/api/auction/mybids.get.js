@@ -2,7 +2,7 @@
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
-import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 import { PACK_ITEM_SELECT, packItemFields } from '~/server/utils/auctionItem'
 import { parseListFilterQuery, matchesPriceAndEdition } from '~/server/utils/auctionListFilters'
 

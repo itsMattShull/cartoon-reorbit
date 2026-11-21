@@ -17,7 +17,6 @@ import {
   FP,
   K_FRUIT,
   MAX_SAMPLE_GAP_TICKS,
-  MIN_SLICE_DIST2,
   COORD_MARGIN,
   MAX_LIVE_FRUIT
 } from '../lib/fruitSamuraiSim.js'

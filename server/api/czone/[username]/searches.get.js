@@ -3,7 +3,7 @@ import { defineEventHandler, createError, getQuery } from 'h3'
 import { DateTime } from 'luxon'
 import { prisma as db } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
-import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { OG_GTOON_DISPLAY_SELECT } from '~/server/utils/ogGtoonDisplay'
 
 // Cache active searches + prize pool for 30 minutes.  The prize pool for a
 // given search never changes mid-event, so all concurrent visitors share one
@@ -306,7 +306,6 @@ export default defineEventHandler(async (event) => {
     : []
 
   const now = new Date()
-  const searchIds = searches.map(s => s.id)
   const onceIds   = searches.filter(s => s.collectionType === 'ONCE').map(s => s.id)
   const customIds = searches.filter(s => s.collectionType === 'CUSTOM_PER_CTOON').map(s => s.id)
   const dailyLimitIds = searches

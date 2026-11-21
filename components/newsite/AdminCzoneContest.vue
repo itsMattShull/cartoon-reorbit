@@ -368,7 +368,6 @@
 
 <script setup>
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
-const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 // ── Contest list ─────────────────────────────────────────────────────────────
 const contests        = ref([])

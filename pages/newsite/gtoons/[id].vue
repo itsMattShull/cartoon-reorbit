@@ -458,7 +458,6 @@ function resetLocal() {
 }
 
 socket.on('phaseUpdate', state => {
-  const prevTurn = game.value?.turn ?? null
   game.value = state
   if (state.phase === 'select') {
     startTimer(state.selectEndsAt)

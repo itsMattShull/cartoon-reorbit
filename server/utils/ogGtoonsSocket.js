@@ -729,7 +729,7 @@ function sweep(io) {
     io.local.to(userRoom(c.toUserId)).emit(EV('challengeCancelled'), { id: c.id })
     io.local.to(userRoom(c.fromUserId)).emit(EV('challengeDeclined'), { id: c.id, toUsername: c.toUsername, reason: 'expired' })
   }
-  for (const [matchId, match] of matches.entries()) {
+  for (const match of matches.values()) {
     if (match.ending) continue
     if (now - match.startedAt < MATCH_MAX_AGE_MS) continue
     endMatch(io, match, { outcome: 'TIE', winnerUserId: null, player1Score: 0, player2Score: 0, endReason: 'sweep' })
@@ -876,7 +876,6 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
   })
 
   socket.on(EV('lobbyLeave'), async () => {
-    const userId = socket.data.ogGtoonsLobbyUserId
     const lobbyUserId = socket.data?.ogGtoonsLobbyUserId
     if (lobbyUserId) lobbyLeaveSocket(lobbyUserId, socket.id)
     socket.data.ogGtoonsLobbyUserId = null
@@ -1076,7 +1075,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
   socket.on(EV('swap'), async ({ cardIdx } = {}) => {
     const side = await liveSide()
     if (!side) return
-    const { user, match, idx } = side
+    const { match, idx } = side
     const check = checkSwap(match, idx)
     if (!check.ok) return reject(check)
     // The player picks which hand card takes slot 7 (made for them when only one is left).

@@ -3,7 +3,7 @@ import { createError, defineEventHandler, getQuery } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 import { isLockedCopy, isUnavailableToOthers } from '@/server/utils/lockRules'
-import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   const requesterId = event.context.userId

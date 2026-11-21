@@ -16,7 +16,7 @@
 //   showDismissed   '1' to include pairs an admin already reviewed and
 //                   dismissed (TouchTradeConfirmation) — hidden by default.
 //   page, limit     pagination over the group list (1..50, default 20).
-import { defineEventHandler, getQuery, createError, setHeader } from 'h3'
+import { defineEventHandler, getQuery, setHeader } from 'h3'
 import { prisma } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
 import { requireSuperAdmin } from '@/server/utils/adminAuth'
