@@ -802,9 +802,17 @@ let cachedHolderSnapshot = null
 let cachedHolderSnapshotAt = 0
 const HOLDER_SNAPSHOT_TTL_MS = 60_000
 
-async function getHolderSnapshot() {
+// Single-flight: every request that arrives while a rebuild is running waits on that one rebuild
+// instead of starting its own copy of the same all-time aggregates.
+let holderSnapshotInflight = null
+function getHolderSnapshot() {
+  if (cachedHolderSnapshot && (Date.now() - cachedHolderSnapshotAt) < HOLDER_SNAPSHOT_TTL_MS) return Promise.resolve(cachedHolderSnapshot)
+  holderSnapshotInflight ??= buildHolderSnapshot().finally(() => { holderSnapshotInflight = null })
+  return holderSnapshotInflight
+}
+
+async function buildHolderSnapshot() {
   const now = Date.now()
-  if (cachedHolderSnapshot && (now - cachedHolderSnapshotAt) < HOLDER_SNAPSHOT_TTL_MS) return cachedHolderSnapshot
 
   const config = await getGlobalConfig()
   if (!config?.cMoonEnabled) {

@@ -18,6 +18,12 @@ import { getRedis } from './redis.js'
 
 const PRESENCE_TTL = 120 // seconds - refreshed on every join/getState; a dead process's keys expire on their own
 
+// Short-lived in-process cache of the online list — see listOnlinePresence().
+const PRESENCE_LIST_TTL_MS = 5000
+let presenceList = null
+let presenceListAt = 0
+let presenceListInflight = null
+
 async function scanKeys(pattern) {
   const redis = getRedis()
   const keys = []
@@ -33,15 +39,30 @@ async function scanKeys(pattern) {
 export async function setUserPresence(userId, { roomId, username }) {
   const redis = getRedis()
   await redis.setex(`myorbit:presence:${userId}`, PRESENCE_TTL, JSON.stringify({ roomId, username }))
+  presenceList = null // a process that writes presence reads its own writes
 }
 
 export async function clearUserPresence(userId) {
   const redis = getRedis()
   await redis.del(`myorbit:presence:${userId}`)
+  presenceList = null
 }
 
-/** `[{ userId, roomId, username }, ...]` for every currently-online MyOrbit player. */
+// listOnlinePresence() is polled by every open MyOrbit window (/api/myorbit/online and /following,
+// every 10s each), and each call SCANs the entire Redis keyspace — not just presence keys — so its
+// cost grows with every other key in Redis. Presence is cosmetic and already up to PRESENCE_TTL
+// stale, so all callers in a process share one scan for a few seconds.
+
+/** `[{ userId, roomId, username }, ...]` for every currently-online MyOrbit player (cached ~5s). */
 export async function listOnlinePresence() {
+  if (presenceList && Date.now() - presenceListAt < PRESENCE_LIST_TTL_MS) return presenceList
+  presenceListInflight ??= scanOnlinePresence()
+    .then((list) => { presenceList = list; presenceListAt = Date.now(); return list })
+    .finally(() => { presenceListInflight = null })
+  return presenceListInflight
+}
+
+async function scanOnlinePresence() {
   const redis = getRedis()
   const keys = await scanKeys('myorbit:presence:*')
   if (!keys.length) return []

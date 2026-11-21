@@ -886,9 +886,14 @@ async function sendDueAnnouncements() {
     if (!ANNOUNCEMENTS_CHANNEL_ID) return
     const now = new Date()
     const claimCutoff = new Date(Date.now() - 10 *60 * 1000)
+    // A failed send releases its claim (sendingAt: null) so a later run retries it. Without this
+    // list the loop below would pick the same row straight back up and spin on it — DB queries and
+    // Discord calls with no pause — for as long as the failure lasted.
+    const failedIds = []
     while (true) {
       const due = await prisma.announcement.findMany({
         where: {
+          id: { notIn: failedIds },
           sentAt: null,
           scheduledAt: { lte: now },
           OR: [
@@ -935,6 +940,7 @@ async function sendDueAnnouncements() {
         const ok = await sendAnnouncementDiscordMessage(latest || row)
         if (!ok) {
           failedSends++
+          failedIds.push(row.id)
           await prisma.announcement.update({
             where: { id: row.id },
             data: {

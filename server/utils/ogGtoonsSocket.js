@@ -670,6 +670,9 @@ function handleLeave(io, { matchId, userId, socketId, immediate }) {
 /* ── Queue pairing ───────────────────────────────────────────────────────────────────────── */
 
 function removeFromQueue(userId) {
+  // Called for every disconnecting socket; most were never queued, so there is nothing to
+  // remove and no reason to rebuild and rebroadcast the lobby list.
+  if (!queueByUser.has(userId)) return
   const idx = queue.findIndex(e => e.userId === userId)
   if (idx !== -1) queue.splice(idx, 1)
   queueByUser.delete(userId)

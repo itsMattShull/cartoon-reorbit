@@ -148,6 +148,7 @@ const marblesState = {
   winner: null,
 }
 
+const MARBLES_MAX_RACE_MS = 5 * 60 * 1000
 let marblesWorld = null
 let marbleBodies = []     // parallel array to marblesState.marbles
 let marblesFinished = new Set()
@@ -520,7 +521,20 @@ function startMarblesPhysics() {
   })
 
   const FIXED_STEP = 1 / 60
+  const startedAt = Date.now()
   marblesPhysInterval = setInterval(() => {
+    // Hard stop. The end conditions below need every marble to finish or leave the track; one
+    // wedged on the track (or all of them leaving before any finishes) would otherwise keep this
+    // 60Hz simulation and the 20Hz broadcast running until the process restarts.
+    if (Date.now() - startedAt > MARBLES_MAX_RACE_MS) {
+      if (marblesState.phase === 'racing') {
+        marblesState.phase = 'finished'
+        io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+      }
+      stopMarblesPhysics()
+      return
+    }
+
     world.step(FIXED_STEP, FIXED_STEP, 6)
 
     if (marblesState.phase !== 'racing') return

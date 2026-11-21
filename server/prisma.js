@@ -68,6 +68,19 @@ function isSwapDay(date = new Date()) {
   return month === 4 && day === 1
 }
 
+// isSwapDay() runs Intl.DateTimeFormat.formatToParts, and the query extension below asks on every
+// single Prisma operation. The answer changes once a day, so reuse it for a minute.
+let swapDayCheckedAt = 0
+let swapDayCached = false
+function isSwapDayNow() {
+  const now = Date.now()
+  if (now - swapDayCheckedAt > 60_000) {
+    swapDayCached = isSwapDay()
+    swapDayCheckedAt = now
+  }
+  return swapDayCached
+}
+
 function hashStringToUint32(input) {
   let hash = 2166136261
   for (let i = 0; i < input.length; i++) {
@@ -220,7 +233,7 @@ function prismaClientFactory() {
       $allModels: {
         async $allOperations({ args, query }) {
           // Fast path: skip all overhead on non-swap days (99.7% of the time)
-          if (!isSwapDay()) return query(args)
+          if (!isSwapDayNow()) return query(args)
           const result = await query(args)
           const swapMap = await getAssetSwapMap(baseClient)
           return applyAssetSwap(result, swapMap)
