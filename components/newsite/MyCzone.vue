@@ -1643,6 +1643,16 @@ onMounted(() => {
   }
 })
 
+// cZone search request state. Declared here, before the immediate watcher below: that watcher
+// can run loadZone() -> cancelCzoneSearchLoad() synchronously during setup, and reading a `let`
+// before its declaration has executed throws "Cannot access '_searchLoadSeq' before
+// initialization" (blank cZone when navigating in already signed in).
+//  - _searchLoadSeq: bumped on every start/cancel; a response whose seq is stale is discarded.
+//  - _searchInFlight: lets a duplicate trigger (loadZone + the activeZone watcher) reuse the
+//    pending request instead of firing a second roll that would overwrite the first result.
+let _searchLoadSeq = 0
+let _searchInFlight = null // { username, promise }
+
 // Load once the user is available (may not be ready at mount time)
 watch(() => user.value?.username, async (loggedInUsername) => {
   if (loggedInUsername && !viewedUsername.value) {
@@ -2129,11 +2139,7 @@ function buildSearchItems(items) {
 
 // Every search request is a fresh server-side roll (and writes new appearance rows), so a
 // request must only ever be applied if it's still the latest one for the zone being viewed.
-//  - _searchLoadSeq: bumped on every start/cancel; a response whose seq is stale is discarded.
-//  - _searchInFlight: lets a duplicate trigger (loadZone + the activeZone watcher) reuse the
-//    pending request instead of firing a second roll that would overwrite the first result.
-let _searchLoadSeq = 0
-let _searchInFlight = null // { username, promise }
+// See _searchLoadSeq / _searchInFlight, declared above the immediate user watcher.
 
 function cancelCzoneSearchLoad() {
   _searchLoadSeq++
