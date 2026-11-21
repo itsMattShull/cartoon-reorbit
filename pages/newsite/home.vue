@@ -2,8 +2,8 @@
   <div class="home-images-grid">
     <template v-for="n in 4" :key="n">
       <component
-        :is="imageLink(n) ? 'a' : 'div'"
-        v-bind="imageLink(n) ? { href: imageLink(n), target: linkTarget(n) } : {}"
+        :is="siteLink(imageLink(n)).is"
+        v-bind="siteLink(imageLink(n)).props"
         class="home-image-cell"
       >
         <img v-if="imagePath(n)" :src="imagePath(n)" :alt="'Home image ' + n" class="home-image" />
@@ -45,16 +45,8 @@ function imageLink(n) {
   return cfg.value?.[`homeImage${n}Link`] || null
 }
 
-function linkTarget(n) {
-  const link = imageLink(n)
-  if (!link) return '_self'
-  try {
-    const url = new URL(link, window.location.href)
-    return url.origin === window.location.origin ? '_self' : '_blank'
-  } catch {
-    return '_self'
-  }
-}
+// Links to this site navigate in-app (no full page reload); see composables/useSiteLink.js.
+const siteLink = useSiteLink()
 </script>
 
 <style>
