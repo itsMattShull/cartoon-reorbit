@@ -139,6 +139,7 @@ export default defineEventHandler(async (event) => {
         wordleWinsGte: criteria?.wordleWinsGte ?? null,
         wordleCurrentStreakGte: criteria?.wordleCurrentStreakGte ?? null,
         flappyBestScoreGte: criteria?.flappyBestScoreGte ?? null,
+        ogGtoonsWinsGte: criteria?.ogGtoonsWinsGte ?? null,
         setsRequired: Array.isArray(criteria?.setsRequired) ? criteria.setsRequired.filter(Boolean) : [],
         userCreatedBefore: criteria?.userCreatedBefore ? new Date(criteria.userCreatedBefore) : null,
         requiredCtoons: {

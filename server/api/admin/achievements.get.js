@@ -60,6 +60,7 @@ export default defineEventHandler(async (event) => {
       wordleWinsGte: a.wordleWinsGte,
       wordleCurrentStreakGte: a.wordleCurrentStreakGte,
       flappyBestScoreGte: a.flappyBestScoreGte,
+      ogGtoonsWinsGte: a.ogGtoonsWinsGte,
       cMoonPointsGte: a.cMoonPointsGte,
       cMoonRankId: a.cMoonRankId,
       cMoonId: a.cMoonRank?.cMoonId || null,
