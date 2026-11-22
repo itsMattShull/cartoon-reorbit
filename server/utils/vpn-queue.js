@@ -94,11 +94,6 @@ export function enqueueVpnCheck(userId, encryptedIp) {
   startTimer()
 }
 
-/** Exposed for the backfill script to check queue depth. */
-export function queueLength() {
-  return queue.length
-}
-
 /**
  * Returns a snapshot of queue state for the admin status page.
  */

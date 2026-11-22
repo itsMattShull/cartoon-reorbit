@@ -4,7 +4,7 @@ import {
   handValue, isNatural, isBust, startHand, applyAction, legalActions,
   publicView, committedChips, describeCard, PHASE, OUTCOME,
   normalizeBlackjackConfig, maxBetForHeadroom, shuffledHandCards, dealerFrom,
-  blackjackPayout, cardRank, BET_INCREMENT, CARDS_PER_HAND, MAX_HAND_EXPOSURE
+  blackjackPayout, BET_INCREMENT, CARDS_PER_HAND, MAX_HAND_EXPOSURE
 } from '../server/utils/blackjackEngine.js'
 
 // Card integers: rank = card % 13 (0 = Ace, 9 = Ten, 10 = J, 11 = Q, 12 = K),

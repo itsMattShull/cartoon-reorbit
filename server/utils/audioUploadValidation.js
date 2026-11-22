@@ -30,7 +30,6 @@ const EXT_BY_TYPE = {
 }
 
 export const audioExtFor = (type) => EXT_BY_TYPE[type] || null
-export const ALLOWED_AUDIO_TYPES = Object.freeze(Object.keys(EXT_BY_TYPE))
 
 /**
  * True if an MPEG audio frame header starts at `off`.

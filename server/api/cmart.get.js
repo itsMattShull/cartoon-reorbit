@@ -1,5 +1,5 @@
 import { prisma } from '@/server/prisma'
-import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { OG_GTOON_DISPLAY_SELECT } from '~/server/utils/ogGtoonDisplay'
 
 const TIME_BASED_CAP = 999999999
 

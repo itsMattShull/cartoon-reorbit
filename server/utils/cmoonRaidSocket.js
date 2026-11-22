@@ -81,7 +81,7 @@ import { getActiveBossLoreRiddle } from './cmoonRiddle.js'
 import { notifyCMoonRaidLobbyOpened, notifyCMoonRaidKickedAfk } from './notifications.js'
 import { pushUserNotifications } from './realtimeNotify.js'
 import {
-  buildGrantableReward, isValidPlayerSubmittedAction, rollEnemyAction, rollEnemyRewards, PLAYER_MAX_HP,
+  buildGrantableReward, isValidPlayerSubmittedAction, rollEnemyAction, rollEnemyRewards,
   SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, mergeTauntPools,
   pickEffectiveSpecialAttack, SPECIAL_ATTACK_SELECT, pickWeightedSpecialAttack,
 } from './cmoonEnemyBattle.js'
@@ -1320,7 +1320,6 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
   for (const [uid, p] of raid.participants) if (p.pendingJoin) raid.participants.delete(uid)
   const participantIds = Array.from(raid.participants.keys())
   let grantable = null
-  let rewardsGranted = null
   if (outcome === 'WIN') {
     const rewardRows = await db.cMoonEnemyReward.findMany({
       where: { enemyMemberId: raid.enemyMemberId },

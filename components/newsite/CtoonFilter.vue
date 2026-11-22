@@ -169,10 +169,6 @@ const seriesList = computed(() =>
   [...new Set(ctoons.value.map(c => c.series).filter(Boolean))].sort()
 )
 
-const setList = computed(() =>
-  [...new Set(ctoons.value.map(c => c.set).filter(Boolean))].sort()
-)
-
 const filteredSetList = computed(() => {
   const src = filter.value.series
     ? ctoons.value.filter(c => c.series === filter.value.series)

@@ -1,7 +1,7 @@
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { redis } from '@/server/utils/redis'
-import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { OG_GTOON_DISPLAY_SELECT } from '~/server/utils/ogGtoonDisplay'
 
 // Search structure (prize pool, conditions, background/ctoon metadata) never
 // changes mid-event, so all visitors share one DB round-trip per 10 minutes.

@@ -126,10 +126,8 @@ definePageMeta({
 })
 
 import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
 import { navigateTo } from '#app'
 
-const router = useRouter()
 const { user, fetchSelf } = useAuth()
 
 const step = ref(1)

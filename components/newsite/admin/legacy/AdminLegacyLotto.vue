@@ -106,7 +106,7 @@
 
 <script setup>
 import { ref, onMounted, watch } from 'vue'
-import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
+import { TIME_BASED_CAP } from '~/utils/formatQuantity'
 
 const baseOdds = ref(1.0)
 const incrementRate = ref(0.02)

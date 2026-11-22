@@ -92,6 +92,3 @@ export async function ogtPrizeView(bundle) {
     packs: (bundle.packs || []).map(p => ({ packId: p.packId, quantity: p.quantity, name: pById.get(p.packId)?.name || 'Pack', imagePath: pById.get(p.packId)?.imagePath || null }))
   }
 }
-
-/** Statuses that show up as an "active" sub-tab. */
-export const OGT_ACTIVE_STATUSES = ['DRAFT', 'OPT_IN_OPEN', 'OPT_IN_CLOSED', 'SWISS_ACTIVE', 'BRACKET_ACTIVE']

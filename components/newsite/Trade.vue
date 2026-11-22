@@ -1932,7 +1932,6 @@ function countByRole(offer, role) { return offer.ctoons.filter(c => c.role === r
 // Packs travel as TYPE + QUANTITY ("2 x Starter Pack"); the server picks the copies. They are not valued by the estimate.
 const requestedPacks = ref([])   // [{ packId, name, imagePath, quantity }] — asked of the other player
 const offeredPacks = ref([])     // — mine
-const sumPacks = (list) => list.reduce((n, p) => n + p.quantity, 0)
 const packPayload = (list) => list.map(({ packId, quantity }) => ({ packId, quantity }))
 /** An offer's packs of one role, grouped by type: [{ packId, name, imagePath, quantity }]. */
 function packGroups(offer, role) {

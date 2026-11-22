@@ -43,8 +43,3 @@ export async function getSystemUserIds() {
 
   return inFlight
 }
-
-export function clearSystemUserIdsCache() {
-  cached = null
-  inFlight = null
-}

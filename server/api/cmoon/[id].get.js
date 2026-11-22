@@ -14,7 +14,7 @@ import { defineEventHandler, createError, setHeader } from 'h3'
 import { prisma as db } from '@/server/prisma'
 import { EXCLUDED_SYSTEM_USER_ID } from '@/server/utils/economyValuation'
 import { getPollResults, displayRankName, getGlobalConfig } from '@/server/utils/cmoon'
-import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { OG_GTOON_DISPLAY_SELECT } from '~/server/utils/ogGtoonDisplay'
 
 const FEATURED_CTOON_LIMIT = 12
 const LEADERBOARD_LIMIT = 15

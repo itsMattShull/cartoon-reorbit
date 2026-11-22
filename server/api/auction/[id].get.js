@@ -2,7 +2,7 @@ import { defineEventHandler, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
 import { findConcurrentFeaturedLead } from '@/server/utils/featuredEligibility'
-import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 import { PACK_ITEM_OWNER_SELECT, packItemFields, packOwnerFlags } from '~/server/utils/auctionItem'
 
 export default defineEventHandler(async (event) => {

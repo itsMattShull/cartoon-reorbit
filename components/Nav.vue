@@ -398,7 +398,6 @@ async function getGifDurationMs(url) {
       if (label === 0xF9) { // Graphic Control Extension
         const blockSize = bytes[i++] // should be 4
         if (blockSize === 4) {
-          const packed = bytes[i]     // not used
           const delayLo = bytes[i+1]
           const delayHi = bytes[i+2]
           lastDelay = (delayHi << 8) | delayLo // hundredths

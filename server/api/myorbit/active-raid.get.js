@@ -10,12 +10,12 @@
 // (at the end) — there is no per-round write while combat is in progress, so a Postgres query for
 // status='IN_PROGRESS' would never match anything live.
 import { defineEventHandler, createError } from 'h3'
-import { scanCMoonRaids } from '@/server/utils/cmoonRaidRedisState'
+import { scanCMoonRaidsCached } from '@/server/utils/cmoonRaidRedisState'
 
 export default defineEventHandler(async (event) => {
   if (!event.context.userId) throw createError({ statusCode: 401, statusMessage: 'Not authenticated' })
 
-  const raids = await scanCMoonRaids()
+  const raids = await scanCMoonRaidsCached()
   let active = null
   for (const raid of raids.values()) {
     if (raid.status !== 'IN_PROGRESS') continue

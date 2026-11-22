@@ -55,22 +55,12 @@ export const useAuth = () => {
 
       const request = (async () => {
       try {
-        if (opts.force) {
-          const me = await $fetch('/api/auth/me', {
-            credentials: 'include',
-            headers: {
-              ...(process.server ? useRequestHeaders(['cookie']) : {}),
-              'cache-control': 'no-store' // bypass any proxy/browser cache
-            }
-          })
-          user.value = me
-          fetchSelfLastFetchedAt.value = Date.now()
-          blockedRedirect.value = null
-          return me
-        }
         const me = await $fetch('/api/auth/me', {
           credentials: 'include',
-          headers: process.server ? useRequestHeaders(['cookie']) : undefined
+          headers: {
+            ...(process.server ? useRequestHeaders(['cookie']) : {}),
+            ...(opts.force ? { 'cache-control': 'no-store' } : {}) // force: bypass any proxy/browser cache
+          }
         })
         user.value = me
         fetchSelfLastFetchedAt.value = Date.now()

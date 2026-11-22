@@ -361,7 +361,7 @@ import BulkEditCtoonModal from '~/components/BulkEditCtoonModal.vue'
 import MakeSecondEditionModal from '~/components/MakeSecondEditionModal.vue'
 import GiveToOfficialModal from '~/components/GiveToOfficialModal.vue'
 import BatchAssignCMoonModal from '~/components/BatchAssignCMoonModal.vue'
-import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
+import { formatQuantity } from '~/utils/formatQuantity'
 
 /* Give to Official */
 const giveToOfficialTarget = ref(null)

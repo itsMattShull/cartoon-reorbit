@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
     if (dup && dup.id !== id) throw createError({ statusCode: 409, statusMessage: 'A preset with that name already exists' })
   }
 
-  const updated = await db.uiSoundPreset.update({ where: { id }, data: { name } })
+  await db.uiSoundPreset.update({ where: { id }, data: { name } })
 
   await logAdminChange(db, { userId: me.id, area: 'UiSoundPreset', key: `rename:${id}`, prevValue: preset.name, newValue: name })
 

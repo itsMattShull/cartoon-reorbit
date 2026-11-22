@@ -221,15 +221,7 @@ export default defineEventHandler(async (event) => {
     })
 
     /* delete old options & log count */
-    const { count: deletedCount } = await tx.packCtoonOption.deleteMany({ where: { packId } })
-
-    /* fetch names for logging */
-    const idList   = meta.ctoonOptions.map(o => o.ctoonId)
-    const nameRows = await tx.ctoon.findMany({
-      where: { id: { in: idList } },
-      select: { id: true, name: true }
-    })
-    const nameMap = Object.fromEntries(nameRows.map(r => [r.id, r.name]))
+    await tx.packCtoonOption.deleteMany({ where: { packId } })
 
     /* build & validate new options */
     const optionData = meta.ctoonOptions.map(o => {

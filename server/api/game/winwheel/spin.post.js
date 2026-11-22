@@ -5,7 +5,7 @@ import { mintQueue } from '../../../utils/queues'
 import { QueueEvents } from 'bullmq'
 import { redis } from '@/server/utils/redis'
 import { getChicagoMorningWindowStart } from '@/server/utils/dailyTaskWindows'
-import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { OG_GTOON_DISPLAY_SELECT } from '~/server/utils/ogGtoonDisplay'
 
 const redisConnection = {
   host: process.env.REDIS_HOST,

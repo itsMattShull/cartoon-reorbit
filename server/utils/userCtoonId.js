@@ -1,6 +1,5 @@
 import { prisma } from '@/server/prisma'
 import {
-  encodeUserCtoonId,
   isSyntheticUserCtoonId,
   parseUserCtoonToken,
   userCtoonRowKey,

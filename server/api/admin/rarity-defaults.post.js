@@ -28,7 +28,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const before = await db.globalGameConfig.findUnique({ where: { id: 'singleton' } })
-  const row = await db.globalGameConfig.upsert({
+  await db.globalGameConfig.upsert({
     where: { id: 'singleton' },
     create: { id: 'singleton', dailyPointLimit: 250, rarityDefaults: defaults },
     update: { rarityDefaults: defaults }

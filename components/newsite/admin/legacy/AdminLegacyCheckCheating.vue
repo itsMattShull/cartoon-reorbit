@@ -428,11 +428,6 @@ function addSource() {
   if (!sources.value.includes(v)) sources.value.push(v)
   sourceInput.value = ''
 }
-function addMany() {
-  const parts = sourceInput.value.split(',').map(s => s.trim()).filter(Boolean)
-  for (const p of parts) if (!sources.value.includes(p)) sources.value.push(p)
-  sourceInput.value = ''
-}
 function removeSource(i) { sources.value.splice(i,1) }
 
 async function runCheck() {
@@ -458,11 +453,6 @@ async function runCheck() {
   }
 }
 
-function openEnforce() {
-  enforceResult.value = null
-  enforceError.value = ''
-  showModal.value = true
-}
 function closeEnforce() {
   if (enforcing.value) return
   showModal.value = false

@@ -18,16 +18,6 @@ function buildDissolvedDiscordId(userId, discordId) {
   return `dissolved:${userId}:${safe}`
 }
 
-function rarityFloor(rarityRaw) {
-  const r = (rarityRaw || '').trim().toLowerCase()
-  if (r === 'common') return 25
-  if (r === 'uncommon') return 50
-  if (r === 'rare') return 100
-  if (r === 'very rare') return 187
-  if (r === 'crazy rare') return 312
-  return 50
-}
-
 async function progress(job, pct, step) {
   await job.updateProgress({ pct, step })
 }

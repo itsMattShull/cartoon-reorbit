@@ -74,12 +74,6 @@ export function packItemFields (a) {
   }
 }
 
-/** Display name of whatever an auction sells — for notifications, Discord, logs. */
-export function auctionItemName (a, fallback = null) {
-  if (isPackAuction(a)) return a.userPack?.pack?.name ?? 'Pack'
-  return a?.userCtoon?.ctoon?.name ?? fallback
-}
-
 /**
  * Ownership / re-list flags for a PACK auction, for "my auctions" style lists (needs PACK_ITEM_OWNER_SELECT).
  * An auction that closed without a winner never moved the pack, so whoever holds it NOW can put it straight back up —

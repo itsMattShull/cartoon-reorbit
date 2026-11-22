@@ -163,7 +163,6 @@ definePageMeta({ ssr: false, fitHeight: true })
 
 // ─── Shared world/physics constants — MUST stay in sync with server/utils/towerStackEngine.js ──
 const BASE_WIDTH = 100
-const BOARD_HALF_RANGE = 60
 const MIN_MOVE_INTERVAL_MS = 150
 
 // ─── Rendering-only constants (no server sync needed — purely visual) ──────────────────────────

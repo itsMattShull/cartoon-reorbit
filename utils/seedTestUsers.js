@@ -1,4 +1,4 @@
-// prisma/seedTestUsers.js
+// utils/seedTestUsers.js
 //
 // Dev-only seed: creates N test users (default 30) that look like players who went through the
 // real onboarding flow. For each user:
@@ -15,8 +15,8 @@
 // Not idempotent: each run adds N more users.
 //
 // Usage:
-//   node prisma/seedTestUsers.js            # 30 users
-//   node prisma/seedTestUsers.js --count 5
+//   node utils/seedTestUsers.js            # 30 users
+//   node utils/seedTestUsers.js --count 5
 
 import 'dotenv/config'
 import fs from 'node:fs'

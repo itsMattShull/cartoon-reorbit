@@ -79,20 +79,15 @@ export default defineEventHandler(async (event) => {
   // Ensure fresh tokens and up-to-date roles
   await refreshDiscordTokenAndRoles(prisma, user, config)
 
-  const [ctoonCount, uniqueCtoonRows, lockAgg, unreadNotifications, ownedBorders, ownedGlows] = await Promise.all([
-    prisma.userCtoon.count({
-      where: {
-        userId: user.id,
-        burnedAt: null
-      }
-    }),
-    prisma.userCtoon.groupBy({
-      by: ['ctoonId'],
-      where: {
-        userId: user.id,
-        burnedAt: null
-      }
-    }),
+  const [ctoonCountRows, lockAgg, unreadNotifications, ownedBorders, ownedGlows] = await Promise.all([
+    // Total and distinct owned cToons in one statement. This used to be a count plus a groupBy
+    // that shipped one row per distinct cToon back to Node only to read its length — on every
+    // page load and every internal auth re-fetch, growing with the user's collection.
+    prisma.$queryRaw`
+      SELECT COUNT(*)::int AS "total", COUNT(DISTINCT "ctoonId")::int AS "unique"
+      FROM "UserCtoon"
+      WHERE "userId" = ${user.id} AND "burnedAt" IS NULL
+    `,
     // Points committed to live auction bids and pending trade offers. UserPoints
     // .points is the GROSS balance — locks are an overlay that every spend path
     // subtracts at spend time — so without this the sidebar shows a number the
@@ -123,6 +118,8 @@ export default defineEventHandler(async (event) => {
     })
   ])
 
+  const ctoonCount = ctoonCountRows[0]?.total ?? 0
+  const uniqueCtoonCount = ctoonCountRows[0]?.unique ?? 0
   const lockedPoints = lockAgg._sum.amount || 0
   const grossPoints  = user.points?.points || 0
 
@@ -151,7 +148,7 @@ export default defineEventHandler(async (event) => {
       : adminScopeOf(user),
     active: user.active,
     ctoonCount,
-    uniqueCtoonCount: uniqueCtoonRows.length,
+    uniqueCtoonCount,
     isBooster: user.isBooster,
     additionalCzones: user.additionalCzones ?? 0,
     mainZoneIndex: user.mainZoneIndex ?? 0,

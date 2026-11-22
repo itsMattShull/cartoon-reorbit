@@ -254,11 +254,6 @@ async function getTopNScoreHolders({ table, column, direction, extraWhere }, ran
     ? prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff)
     : prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff, String(days))
 }
-async function findTopScoreHolder(game) {
-  const rows = await getTopNScoreHolders(game, 1)
-  return rows[0] || null
-}
-
 // Top N by win count for a duel-match game, one row per user — all-time by default, or only wins
 // from the last `days` days when weekly scoring is on (same toggle/shape as getTopNScoreHolders
 // above). Shape mirrors server/utils/duelLeaderboard.js's rankedRows (natural endings only),
@@ -299,11 +294,6 @@ async function getTopNWinsHolders({ table }, rankCutoff, days = null) {
     ? prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff)
     : prisma.$queryRawUnsafe(sql, EXCLUDED_SYSTEM_USER_ID, rankCutoff, String(days))
 }
-async function findTopWinsHolder(game) {
-  const rows = await getTopNWinsHolders(game, 1)
-  return rows[0] || null
-}
-
 // Top N of the public "Top Points" board (server/api/points-leaderboard.get.js),
 // membership/age-filtered later — ranking itself must reflect the real board, not just
 // cMoon members, or a small/inactive cMoon's top N would mean nothing. `rankCutoff` is
@@ -812,9 +802,17 @@ let cachedHolderSnapshot = null
 let cachedHolderSnapshotAt = 0
 const HOLDER_SNAPSHOT_TTL_MS = 60_000
 
-async function getHolderSnapshot() {
+// Single-flight: every request that arrives while a rebuild is running waits on that one rebuild
+// instead of starting its own copy of the same all-time aggregates.
+let holderSnapshotInflight = null
+function getHolderSnapshot() {
+  if (cachedHolderSnapshot && (Date.now() - cachedHolderSnapshotAt) < HOLDER_SNAPSHOT_TTL_MS) return Promise.resolve(cachedHolderSnapshot)
+  holderSnapshotInflight ??= buildHolderSnapshot().finally(() => { holderSnapshotInflight = null })
+  return holderSnapshotInflight
+}
+
+async function buildHolderSnapshot() {
   const now = Date.now()
-  if (cachedHolderSnapshot && (now - cachedHolderSnapshotAt) < HOLDER_SNAPSHOT_TTL_MS) return cachedHolderSnapshot
 
   const config = await getGlobalConfig()
   if (!config?.cMoonEnabled) {
@@ -842,12 +840,6 @@ async function getHolderSnapshot() {
   cachedHolderSnapshot = { resolvedConfig, activeScoreGames, activeWinGames, scoreTopN, winTopN, top10PointsHolders, top10CtoonsHolders, enemySlayerTopN }
   cachedHolderSnapshotAt = now
   return cachedHolderSnapshot
-}
-
-// Mainly for tests/admin tooling — the 60s TTL alone keeps this fresh enough for the UI.
-export function invalidateHolderSnapshotCache() {
-  cachedHolderSnapshot = null
-  cachedHolderSnapshotAt = 0
 }
 
 // `userCreatedAt` is passed in (rather than re-queried) since the caller already has it from

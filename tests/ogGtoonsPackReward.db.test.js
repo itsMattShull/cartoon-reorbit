@@ -2,7 +2,7 @@
 // right person, in the right window — and never lose or double a match. See server/utils/ogGtoonsPackReward.js.
 import { test, before, after } from 'node:test'
 import assert from 'node:assert/strict'
-import { skipUnlessDb, boot, mkUser, mkBarePack } from './helpers/dbKit.js'
+import { skipUnlessDb, boot, mkUser } from './helpers/dbKit.js'
 
 const run = skipUnlessDb ? test.skip : test
 let prisma, R

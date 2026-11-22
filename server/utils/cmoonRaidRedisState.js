@@ -16,6 +16,12 @@ import { getRedis } from './redis.js'
 
 const RAID_TTL = 3600 // 1 hour — a raid resolves in minutes; this only covers restart survival
 
+// Short-lived in-process cache of the full scan — see scanCMoonRaidsCached().
+const RAID_SCAN_TTL_MS = 3000
+let raidScan = null
+let raidScanAt = 0
+let raidScanInflight = null
+
 async function scanKeys(pattern) {
   const redis = getRedis()
   const keys = []
@@ -155,11 +161,23 @@ function serializeRaid(raid) {
 export async function setCMoonRaid(raidId, raid) {
   const redis = getRedis()
   await redis.setex(`cmoonraid:${raidId}`, RAID_TTL, JSON.stringify(serializeRaid(raid)))
+  raidScan = null // a process that writes raid state reads its own writes
 }
 
 export async function delCMoonRaid(raidId) {
   const redis = getRedis()
   await redis.del(`cmoonraid:${raidId}`)
+  raidScan = null
+}
+
+// For polled read-only callers (the Raid Den spectator endpoint): shares one scan between every
+// request in this process for a few seconds. Restore-on-boot must keep using scanCMoonRaids().
+export function scanCMoonRaidsCached() {
+  if (raidScan && Date.now() - raidScanAt < RAID_SCAN_TTL_MS) return Promise.resolve(raidScan)
+  raidScanInflight ??= scanCMoonRaids()
+    .then((raids) => { raidScan = raids; raidScanAt = Date.now(); return raids })
+    .finally(() => { raidScanInflight = null })
+  return raidScanInflight
 }
 
 export async function scanCMoonRaids() {

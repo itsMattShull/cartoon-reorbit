@@ -1,7 +1,7 @@
 // server/api/starters.get.js
 import { defineEventHandler } from 'h3'
 import { prisma } from '@/server/prisma'
-import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { OG_GTOON_DISPLAY_SELECT } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async () => {
   const sets = await prisma.starterSet.findMany({

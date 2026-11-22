@@ -35,7 +35,7 @@ import {
   computeRecords, buildFinalPlacements, prizeRecipients, roundDueAt, reminderApplies
 } from './tournamentCore.js'
 import {
-  ACTIVE_STATUSES, settleMatchFromGames, loadSeriesGames, clearStaleLive, isFresh, loadLockedDeckForGame, lockMatchResult
+  ACTIVE_STATUSES, settleMatchFromGames, loadSeriesGames, clearStaleLive, isFresh, lockMatchResult
 } from './ogGtoonTournamentLive.js'
 
 const CENTRAL_TZ = 'America/Chicago'
