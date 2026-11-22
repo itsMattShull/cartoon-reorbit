@@ -1,5 +1,5 @@
 // Looping battle-music helper shared by the solo battle popup (components/CMoonBattlePopupHost.vue)
-// and the raid page (pages/newsite/cmoon-raid/[id].vue) — factored out after the exact same
+// and the raid page (pages/cmoon-raid/[id].vue) — factored out after the exact same
 // start/stop/autoplay-retry logic was duplicated verbatim in both places. Each caller gets its OWN
 // instance (not a module-level singleton): solo and raid music are mutually exclusive by
 // construction (a player is never in both at once), but each caller owns its own stop-on-unmount

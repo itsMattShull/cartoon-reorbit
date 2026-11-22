@@ -63,7 +63,7 @@ const runtime = createDuelRuntime({
   announce: {
     emoji: '(!)',
     label: 'Pokemon: Fire, Water, Grass!',
-    url: 'https://www.cartoonreorbit.com/newsite/pokemonbattle'
+    url: 'https://www.cartoonreorbit.com/pokemonbattle'
   }
 })
 

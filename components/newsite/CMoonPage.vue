@@ -5,7 +5,7 @@
   <Teleport to="body">
     <div v-if="isAdminPreview" class="cmp-admin-preview-banner" role="status">
       <span>Admin preview — this is exactly what a new player sees. Nothing here was saved.</span>
-      <NuxtLink to="/newsite/admin/cMoon" class="cmp-admin-preview-exit">Exit preview</NuxtLink>
+      <NuxtLink to="/admin/cMoon" class="cmp-admin-preview-exit">Exit preview</NuxtLink>
     </div>
   </Teleport>
   <div class="cmp-wrap" :style="paletteStyle">
@@ -275,7 +275,7 @@
             <div v-else class="cmp-members">
               <NuxtLink
                 v-for="m in leaderboardRows" :key="m.username"
-                :to="`/newsite/czone/${m.username}`"
+                :to="`/czone/${m.username}`"
                 class="cmp-member"
               >
                 <img :src="`/avatars/${m.avatar || 'default.png'}`" class="cmp-member-avatar" alt="" />
@@ -291,7 +291,7 @@
           <div class="cmp-captains">
             <NuxtLink
               v-for="name in cmoon.captains" :key="name"
-              :to="`/newsite/czone/${name}`"
+              :to="`/czone/${name}`"
               class="cmp-captain-link"
             >{{ name }}</NuxtLink>
           </div>
@@ -346,7 +346,7 @@
             <div v-if="buttonPills.length" class="cmp-button-pills">
               <NuxtLink
                 v-for="b in buttonPills" :key="b.id"
-                :to="`/newsite/cmoon/${b.id}`"
+                :to="`/cmoon/${b.id}`"
                 class="cmp-button-pill-link"
               >
                 <img :src="b.buttonImagePath" :alt="`${b.name} cMoon`" class="cmp-button-pill-img" loading="lazy" />

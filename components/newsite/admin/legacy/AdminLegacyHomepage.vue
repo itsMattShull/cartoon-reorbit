@@ -590,17 +590,17 @@ import { ref, reactive, onMounted, onBeforeUnmount } from 'vue'
 import { NAV_SOUND_SLOTS } from '@/utils/navSoundSlots'
 
 const PAGE_LINKS = {
-  'my-cworld':   '/newsite/my-cworld',
-  'cmart':       '/newsite/cmart',
-  'games':       '/newsite/games',
-  'win-wheel':   '/newsite/winwheel',
-  'winball':     '/newsite/winball',
-  'lottery':     '/newsite/lottery',
-  'auctions':    '/newsite/AuctionHouse',
-  'gtoons-clash':'/newsite/gtoons-clash',
-  'news':        '/newsite/news',
-  'earn-points': '/newsite/earnpoints',
-  'tutorial':    '/newsite/tutorial'
+  'my-cworld':   '/my-cworld',
+  'cmart':       '/cmart',
+  'games':       '/games',
+  'win-wheel':   '/winwheel',
+  'winball':     '/winball',
+  'lottery':     '/lottery',
+  'auctions':    '/AuctionHouse',
+  'gtoons-clash':'/gtoons-clash',
+  'news':        '/news',
+  'earn-points': '/earnpoints',
+  'tutorial':    '/tutorial'
 }
 
 const activeTab = ref('Homepage')
@@ -926,8 +926,8 @@ const delayHours = ref(12)
 
 function detectPreset(link) {
   if (!link) return ''
-  // Treat old /newsite/auctions path as the auctions preset
-  if (link === '/newsite/auctions') return 'auctions'
+  // Treat old /auctions path as the auctions preset
+  if (link === '/auctions') return 'auctions'
   for (const [preset, path] of Object.entries(PAGE_LINKS)) {
     if (link === path) return preset
   }

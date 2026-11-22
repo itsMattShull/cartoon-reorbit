@@ -2,7 +2,7 @@
 // The logged-in user's cMoon selection state: what they're in (if anything), and whether the
 // join modal should pop up automatically (canChoose). There is no deadline/auto-assignment —
 // a user who explicitly opted out just stops seeing the automatic prompt (see cMoonOptedOut);
-// they can still join later via the "Join a cMoon" button on /newsite/cmoon-nav, which reopens
+// they can still join later via the "Join a cMoon" button on /cmoon-nav, which reopens
 // the same modal regardless of canChoose, once (if) cMoonRejoinAvailableAt has passed.
 import { defineEventHandler, createError } from 'h3'
 import { prisma as db } from '@/server/prisma'

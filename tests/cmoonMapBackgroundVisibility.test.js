@@ -13,8 +13,8 @@ import { readFileSync } from 'node:fs'
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 
 for (const [label, path] of [
-  ['raid page', 'pages/newsite/cmoon-raid/[id].vue'],
-  ['PvP page', 'pages/newsite/cmoon-pvp/[id].vue'],
+  ['raid page', 'pages/cmoon-raid/[id].vue'],
+  ['PvP page', 'pages/cmoon-pvp/[id].vue'],
 ]) {
   test(`${label}: the battle card no longer uses an opaque bg-white, and is a translucent flat scrim instead (never backdrop-filter)`, () => {
     const src = read(path)
@@ -22,7 +22,7 @@ for (const [label, path] of [
     assert.match(src, /class="cr-card rounded border p-4 space-y-3"/, `${label} should still carry cr-card plus its other utility classes`)
     assert.match(src, /\.cr-card\s*\{\s*\n\s*background:\s*rgba\(255,\s*255,\s*255,\s*0\.86\);\s*\n\s*\}/, `${label} should define a translucent .cr-card background`)
     // backdrop-filter: blur() on an always-on-screen element behind a continuously-animating
-    // backdrop recomposites every frame for the whole battle — see pages/newsite/blackjack.vue's
+    // backdrop recomposites every frame for the whole battle — see pages/blackjack.vue's
     // own .bj-sheet-overlay comment on why this codebase avoids it for exactly this reason.
     assert.doesNotMatch(src, /\.cr-card\s*\{[^}]*backdrop-filter/, `${label} should not use backdrop-filter on the always-on-screen battle card`)
   })

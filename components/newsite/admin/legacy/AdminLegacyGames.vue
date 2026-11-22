@@ -99,7 +99,7 @@
               These settings are shared by the current Winball page and the new Winball page.
             </p>
             <NuxtLink
-              to="/newsite/newwinball"
+              to="/newwinball"
               class="inline-flex items-center rounded-md bg-blue-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-blue-700"
             >
               Open New Winball

@@ -29,8 +29,8 @@ const host = read('components/CMoonBattlePopupHost.vue')
 const plugin = read('plugins/hapticSoundsPref.client.js')
 const pref = read('composables/useHapticSoundsPref.js')
 const clickSounds = read('composables/useClickSoundEffects.js')
-const raidPage = read('pages/newsite/cmoon-raid/[id].vue')
-const settingsPage = read('pages/newsite/settings.vue')
+const raidPage = read('pages/cmoon-raid/[id].vue')
+const settingsPage = read('pages/settings.vue')
 
 test('useCMoonBattlePopup resolves the shared "Mute sounds" preference once, inside its own setup-context body', () => {
   assert.match(popup, /const \{ enabled: soundsEnabled \} = useHapticSoundsPref\(\)/)

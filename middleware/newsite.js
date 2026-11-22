@@ -1,5 +1,5 @@
 // middleware/newsite.js
-// Gates all /newsite/* pages behind auth.
+// Gates every signed-in page behind auth.
 export default defineNuxtRouteMiddleware(async (to) => {
   // Require authentication
   const { user, fetchSelf, blockedRedirect } = useAuth()

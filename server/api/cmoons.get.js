@@ -1,6 +1,6 @@
 // server/api/cmoons.get.js
 // Public list of cMoons with live member counts, used by the selection UI, cZone, leaderboard,
-// (via ?view=nav) the /newsite/cmoon-nav quick-nav page, and (via ?view=buttons) the button-pill
+// (via ?view=nav) the /cmoon-nav quick-nav page, and (via ?view=buttons) the button-pill
 // list shown on other cMoons' pages. One in-process cache of the full unfiltered row set backs
 // every view — this is read on every visit to pages that show cMoon data, and member counts
 // don't need to be millisecond-fresh. Deliberately NOT separate cached endpoints per view: that
@@ -66,7 +66,7 @@ export default defineEventHandler(async (event) => {
     return { cMoonEnabled: true, cmoons }
   }
 
-  // ?view=nav: the /newsite/cmoon-nav quick-nav page — includes joinLocked cMoons that an admin
+  // ?view=nav: the /cmoon-nav quick-nav page — includes joinLocked cMoons that an admin
   // has opted into `showOnNav` (browsable, still not joinable). Default view: the join
   // flow/cZone/leaderboard list, unchanged — locked cMoons stay hidden here, see
   // CMoon.joinLocked in prisma/schema.prisma.

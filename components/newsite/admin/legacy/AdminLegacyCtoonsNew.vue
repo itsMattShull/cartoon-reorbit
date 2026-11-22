@@ -1230,7 +1230,7 @@ async function submitForm() {
     body: formData
   })
 
-  if (res.ok) router.push('/newsite/admin/ctoons')
+  if (res.ok) router.push('/admin/ctoons')
   else alert('Failed to create cToon')
 }
 </script>

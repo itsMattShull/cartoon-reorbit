@@ -1258,7 +1258,7 @@ export async function selectCMoonForUser(userId, cMoonId) {
 // User-initiated decline from the join modal — there is no more time-based auto-assignment, so
 // declining just stops the modal from popping up automatically again (see canChoose in
 // server/api/cmoon/status.get.js); the player can still join later via the "Join a cMoon" button
-// on /newsite/cmoon-nav, which reopens the same modal. Atomic for the same reason
+// on /cmoon-nav, which reopens the same modal. Atomic for the same reason
 // selectCMoonForUser is: `updateMany({ where: { cMoonId: null } })` is the guard, not a pre-read
 // check, so a concurrent opt-out can't race a concurrent join into a confusing half-state.
 export async function optOutOfCMoonSelection(userId) {

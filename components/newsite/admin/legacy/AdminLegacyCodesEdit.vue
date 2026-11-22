@@ -616,7 +616,7 @@ async function submitForm() {
       body: JSON.stringify(payload)
     })
     if (!res.ok) throw new Error(await res.text())
-    router.push('/newsite/admin/codes')
+    router.push('/admin/codes')
   } catch (e) {
     error.value = e.message || 'Failed to save'
   }

@@ -1651,7 +1651,7 @@ io.on('connection', socket => {
     // Deliberately NOT socket.join(roomId) / socket.data.roomId here. This handler runs on
     // the useClashSocket singleton (composables/useClashSocket.js) — a module-scoped socket
     // that outlives the ClashRooms.vue lobby list and stays connected for the rest of the
-    // browser session, including after the player navigates to /newsite/gtoons/[id] (which
+    // browser session, including after the player navigates to /gtoons/[id] (which
     // opens its own separate socket for the actual room page) and later away again.
     // Joining this socket to the room used to make handleClashLeave's `stillPresent` check
     // see the room as still occupied forever, since this socket never leaves — so an
@@ -1719,7 +1719,7 @@ io.on('connection', socket => {
       } else {
         const display = u?.discordId ? `<@${u.discordId}>` : (u?.username || 'Unknown')
         const payload = {
-          content: `🎮 ${display} created a gToons Clash **PvP** room and is looking for a match!  Head over here to play them: https://www.cartoonreorbit.com/newsite/gtoons`
+          content: `🎮 ${display} created a gToons Clash **PvP** room and is looking for a match!  Head over here to play them: https://www.cartoonreorbit.com/gtoons`
         }
         const res = await fetch(
           `https://discord.com/api/v10/channels/${channelId}/messages`,
@@ -2546,7 +2546,7 @@ setInterval(async () => {
       const baseUrl   = process.env.NODE_ENV === 'production'
         ? 'https://www.cartoonreorbit.com'
         : 'http://localhost:3000'
-      const auctionLink = `${baseUrl}/newsite/AuctionHouse/${auc.id}`
+      const auctionLink = `${baseUrl}/AuctionHouse/${auc.id}`
 
       // What is being sold: a cToon, or a sealed pack (no rarity / mint number / holiday flag).
       const isPack = auc.kind === 'PACK'

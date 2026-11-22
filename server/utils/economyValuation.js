@@ -1,5 +1,5 @@
 // server/utils/economyValuation.js
-// Shared valuation helpers for the Economy page (pages/newsite/economy.vue).
+// Shared valuation helpers for the Economy page (pages/economy.vue).
 import { prisma } from '../prisma.js'
 import { Prisma } from '@prisma/client'
 // Deferred/dynamic to avoid a hard circular import at module-eval time:

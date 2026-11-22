@@ -5,7 +5,7 @@
       <!-- 🡐 Back & Title -->
       <div class="flex items-center gap-3 mb-3">
         <NuxtLink
-          to="/newsite/admin/packs"
+          to="/admin/packs"
           class="text-blue-700 hover:underline text-xs"
         >
           ← Back to Packs
@@ -811,7 +811,7 @@ async function submit() {
   form.append('image', imageFile.value)
   try {
     await $fetch('/api/admin/packs', { method: 'POST', body: form })
-    router.push('/newsite/admin/packs')
+    router.push('/admin/packs')
   } catch (err) {
     console.error(err)
     alert('Failed to create pack')

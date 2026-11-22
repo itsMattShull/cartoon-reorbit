@@ -2,10 +2,10 @@
   <div class="mycworld">
     <div class="mcw-nav">
       <GreenButton @click="goToCzone">My cZone</GreenButton>
-      <GreenButton v-if="cMoonEnabled" @click="router.push('/newsite/cmoon-nav')">cMoons</GreenButton>
-      <GreenButton @click="$router.push('/newsite/MyCollection')">My Collection</GreenButton>
-      <GreenButton @click="$router.push('/newsite/allCtoons')">All cToons</GreenButton>
-      <GreenButton @click="$router.push('/newsite/myachievements')">Achievements</GreenButton>
+      <GreenButton v-if="cMoonEnabled" @click="router.push('/cmoon-nav')">cMoons</GreenButton>
+      <GreenButton @click="$router.push('/MyCollection')">My Collection</GreenButton>
+      <GreenButton @click="$router.push('/allCtoons')">All cToons</GreenButton>
+      <GreenButton @click="$router.push('/myachievements')">Achievements</GreenButton>
       <GreenButton @click="openWishlist">My Wishlist</GreenButton>
     </div>
     <div class="mcw-content">
@@ -27,7 +27,7 @@ function goToCzone() {
   showWishlist.value = false
   clearSidebarMiddle()
   if (user.value?.username) {
-    router.push(`/newsite/czone/${user.value.username}`)
+    router.push(`/czone/${user.value.username}`)
   }
 }
 

@@ -5,7 +5,7 @@
       <p class="text-gray-600">
         Build customizable cZone border/glow visuals — color, thickness, glow radius, transparency,
         and pulse speed. Assign one to a cMoon affinity level's border/glow slot from the
-        <NuxtLink to="/newsite/admin/cMoon" class="text-indigo-600 hover:underline">cMoons</NuxtLink> page.
+        <NuxtLink to="/admin/cMoon" class="text-indigo-600 hover:underline">cMoons</NuxtLink> page.
       </p>
 
       <p v-if="loadError" class="text-red-600">{{ loadError }}</p>

@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 /*
- * Shared with pages/newsite/newwinball.vue's own scoped copy (same font file, same family name —
+ * Shared with pages/newwinball.vue's own scoped copy (same font file, same family name —
  * duplicate @font-face declarations pointing at the same URL are deduped by the browser, so this
  * doesn't double-download there). Declared globally here so components/effects/TextCalloutEffect.vue
  * can use it too without a third copy. `font-display: swap` matters more here than it does for

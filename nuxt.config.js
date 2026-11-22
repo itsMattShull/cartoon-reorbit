@@ -68,7 +68,7 @@ export default defineNuxtConfig({
   },
 
   // ───────────────────────────────────────────────
-  // Old /admin/* URLs → the /newsite/admin console
+  // Old admin page names (e.g. /admin/achievement-logs) → their section in the /admin console
   // ───────────────────────────────────────────────
   routeRules: {
     ...OLD_ADMIN_ROUTE_RULES

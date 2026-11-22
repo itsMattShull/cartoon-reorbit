@@ -5,8 +5,8 @@
 // two public goal cards), and always carry the link and what not moving costs.
 import { introScenario } from '../../utils/ogGtoonIntro.js'
 
-/** The address of one game's board (pages/newsite/gtoons-classic/[id].vue). The one place that spells it out. */
-export const gameUrl = (baseUrl, gameId) => `${baseUrl}/newsite/gtoons-classic/${gameId}`
+/** The address of one game's board (pages/gtoons-classic/[id].vue). The one place that spells it out. */
+export const gameUrl = (baseUrl, gameId) => `${baseUrl}/gtoons-classic/${gameId}`
 
 const title = (c) => (c ? c.charAt(0) + c.slice(1).toLowerCase() : 'None')
 

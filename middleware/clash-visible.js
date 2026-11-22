@@ -5,7 +5,7 @@
 export default defineNuxtRouteMiddleware(async () => {
   try {
     const { hidden } = await $fetch('/api/game/clash/config')
-    if (hidden) return navigateTo('/newsite/home')
+    if (hidden) return navigateTo('/home')
   } catch {
     // Config unreachable: let the page load rather than locking players out of a live game.
   }

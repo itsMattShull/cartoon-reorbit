@@ -728,7 +728,7 @@ function openRound(io, raid) {
 //
 // The leader is deliberately EXCLUDED from both the numerator and the denominator — they already
 // have strictly more direct control (cmoonraid:forceStart starts instantly, no 5s wait), and the
-// client never shows them a vote button at all (see pages/newsite/cmoon-raid/[id].vue's own
+// client never shows them a vote button at all (see pages/cmoon-raid/[id].vue's own
 // `v-if="!isInitiator && ..."` on that button).
 function requiredSpeedVotes(raid) {
   const size = raid.participants.size

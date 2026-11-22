@@ -173,7 +173,7 @@ export function resolveAdminRoute (segments) {
     if (!section) continue
     const subPath = parts.slice(n)
     // Only sections that actually take a record id accept trailing segments.
-    // Otherwise `/newsite/admin/ctoons/junk/junk` would quietly render the
+    // Otherwise `/admin/ctoons/junk/junk` would quietly render the
     // cToons list, hiding a broken link instead of surfacing it.
     if (!subPath.length) return { section, subPath: [] }
     if (!section.acceptsSubPath) return null

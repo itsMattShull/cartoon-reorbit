@@ -26,7 +26,7 @@
         <NuxtLink
           v-for="item in group.items"
           :key="item.key"
-          :to="`/newsite/admin/${item.key}`"
+          :to="`/admin/${item.key}`"
           class="admin-rail-item"
           :class="{ 'admin-rail-item-active': item.key === activeKey, 'admin-rail-item-destructive': item.destructive }"
           @click="emitOpen(false)"
@@ -58,7 +58,7 @@
             <NuxtLink
               v-for="item in group.items"
               :key="item.key"
-              :to="`/newsite/admin/${item.key}`"
+              :to="`/admin/${item.key}`"
               class="admin-rail-item"
               :class="{ 'admin-rail-item-active': item.key === activeKey, 'admin-rail-item-destructive': item.destructive }"
               @click="emitOpen(false)"

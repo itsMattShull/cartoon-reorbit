@@ -63,7 +63,7 @@
 </template>
 
 <script setup>
-// "Click to view battle report" — opened from the RESOLVED block of pages/newsite/cmoon-pvp/
+// "Click to view battle report" — opened from the RESOLVED block of pages/cmoon-pvp/
 // [id].vue. Purely a read-only view over match.battleReport (see buildPvpBattleReport in
 // server/utils/cmoonPvpBattleReport.js) — no request of its own. Port of
 // CMoonRaidBattleReportModal.vue, simplified: no boss column (both sides are players), one

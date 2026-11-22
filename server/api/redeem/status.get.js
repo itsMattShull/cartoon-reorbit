@@ -1,4 +1,4 @@
-// Polled by pages/newsite/redeem.vue once it's shown "Redeeming…" for a specific code (see
+// Polled by pages/redeem.vue once it's shown "Redeeming…" for a specific code (see
 // server/utils/codeRedemption.js's handicap branch). Returns `{ redeeming: true }` while the
 // hold is still open, or the exact success shape a normal on-time redemption would have
 // returned once it's released — the client's existing reward-rendering code handles both the

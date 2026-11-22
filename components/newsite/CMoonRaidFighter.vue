@@ -34,7 +34,7 @@
 
 <script setup>
 // One raid fighter shown off with their team colors and rank — used on the raid screen
-// (pages/newsite/cmoon-raid/[id].vue) and in the Raid Boss Lobby. Raids are cross-cMoon, so this
+// (pages/cmoon-raid/[id].vue) and in the Raid Boss Lobby. Raids are cross-cMoon, so this
 // is how players see who they're fighting alongside: a sash in the fighter's cMoon color, their
 // cMoon's crest, and their rank as chevron insignia filled up to their tier on the global ladder.
 //

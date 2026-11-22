@@ -138,7 +138,7 @@ function startMatch() {
   socket.once('gameStart', state => {
     battleState.value = state
     starting.value = false
-    router.push('/newsite/gtoons/play')
+    router.push('/gtoons/play')
   })
 
   socket.once('joinError', (err) => {

@@ -1,6 +1,6 @@
 // server/api/admin/global-config/logo.post.js
 // Uploads the site-wide topbar logo (components/newsite/ReorbitLogo.vue), shown on every
-// /newsite/* page. Mirrors second-edition-overlay.post.js: stored and served as-is (no sharp
+// /* page. Mirrors second-edition-overlay.post.js: stored and served as-is (no sharp
 // resize/re-encode), so an uploaded animated GIF stays animated — the logo renders into a
 // fixed-size box with `object-fit: fill`, so unlike that overlay there's no natural-dimensions
 // bookkeeping needed here.

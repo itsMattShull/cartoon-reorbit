@@ -208,7 +208,7 @@ function close() {
 }
 function goToMatch(id) {
   emit('close', { navigating: true })
-  router.push(`/newsite/cmoon-pvp/${id}`)
+  router.push(`/cmoon-pvp/${id}`)
 }
 
 watch(() => props.open, (isOpen) => { isOpen ? subscribe() : unsubscribe() }, { immediate: true })

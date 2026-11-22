@@ -19,7 +19,7 @@ import { dirname, join } from 'node:path'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = join(here, '..')
-const PAGE = join(root, 'pages/newsite/blackjack.vue')
+const PAGE = join(root, 'pages/blackjack.vue')
 const API_DIR = join(root, 'server/api/game/blackjack')
 
 const source = readFileSync(PAGE, 'utf8')

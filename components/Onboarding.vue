@@ -333,9 +333,9 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 
-const czoneSearchPath = (id) => `/newsite/czonesearch/${id}`
+const czoneSearchPath = (id) => `/czonesearch/${id}`
 
-const czoneContestPath = (id) => `/newsite/czone-contest/${id}`
+const czoneContestPath = (id) => `/czone-contest/${id}`
 
 const isOpen = ref(false)
 const onboardingRef = ref(null)
@@ -449,32 +449,32 @@ const notificationRoute = (n) => {
   // open-redirect / `javascript:` sink; there is no such column, by design.
   if (!n) return null
   if (n.type === 'TRADE_OFFER_RECEIVED' || n.type === 'TRADE_OFFER_ACCEPTED') {
-    return '/newsite/trade'
+    return '/trade'
   }
   if (n.type === 'PVP_PACK_WON') {
     // A sealed pack won in an OG gToons match: straight to the Packs tab. Before the contextId fallback below, which
-    // would send an unknown typed notification to /newsite/AuctionHouse/<id>.
-    return '/newsite/MyCollection?tab=packs'
+    // would send an unknown typed notification to /AuctionHouse/<id>.
+    return '/MyCollection?tab=packs'
   }
   if (n.type === 'CMOON_RAID_BOSS_STARTED') {
     // Raids are cross-cMoon now: every raid alert opens the Raid Boss Lobby on the cMoons page,
     // which lists every open raid from any team (including older per-raid alerts, whose raid has
     // long since closed anyway). See components/newsite/CMoonRaidLobbyModal.vue.
-    return '/newsite/cmoon-nav?raidLobby=1'
+    return '/cmoon-nav?raidLobby=1'
   }
   if (n.type === 'CMOON_RAID_PREVIEW_STARTED') {
     if (!n.contextId) return null
-    return `/newsite/cmoon-raid-preview/${encodeURIComponent(n.contextId)}`
+    return `/cmoon-raid-preview/${encodeURIComponent(n.contextId)}`
   }
   if (n.type === 'FOLLOWED_USER_ONLINE') {
     // contextId here is the followed player's USERNAME, not an id — see
     // notifyFollowedUserOnline's own comment (server/utils/notifications.js) for why. Must be
     // handled before the generic contextId fallback below, which assumes an Auction id.
     if (!n.contextId) return null
-    return `/newsite/czone/${encodeURIComponent(n.contextId)}`
+    return `/czone/${encodeURIComponent(n.contextId)}`
   }
   if (!n.contextId) return null
-  return `/newsite/AuctionHouse/${encodeURIComponent(n.contextId)}`
+  return `/AuctionHouse/${encodeURIComponent(n.contextId)}`
 }
 
 const markRead = async (ids) => {

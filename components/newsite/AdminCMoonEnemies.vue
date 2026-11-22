@@ -6,9 +6,9 @@
         Build NPC factions that appear as a random site-wide battle popup. Each faction just groups
         its members for organization — HP, battle mode, cMoon points, and prizes are all set per
         member. Popup appearance rate and cooldown live on the
-        <NuxtLink to="/newsite/admin/cMoon" class="text-indigo-600 hover:underline">cMoons</NuxtLink> page;
+        <NuxtLink to="/admin/cMoon" class="text-indigo-600 hover:underline">cMoons</NuxtLink> page;
         results are recorded on the
-        <NuxtLink to="/newsite/admin/cMoonBattleLogs" class="text-indigo-600 hover:underline">cMoon Battle Logs</NuxtLink> page.
+        <NuxtLink to="/admin/cMoonBattleLogs" class="text-indigo-600 hover:underline">cMoon Battle Logs</NuxtLink> page.
       </p>
 
       <p v-if="loadError" class="text-red-600">{{ loadError }}</p>
@@ -377,7 +377,7 @@
             </select>
             <p class="text-[10px] text-gray-500 mt-1">
               Full-screen effect played the moment the battle popup first offers a member of this faction. Built in
-              <NuxtLink to="/newsite/admin/cMoonJoinEffects" class="text-indigo-600 hover:underline">Manage cMoon Join Effects</NuxtLink>.
+              <NuxtLink to="/admin/cMoonJoinEffects" class="text-indigo-600 hover:underline">Manage cMoon Join Effects</NuxtLink>.
             </p>
           </div>
 
@@ -402,7 +402,7 @@
             <p class="text-[10px] text-gray-500 mt-1">
               Every raid against a member of this faction uses this map, unless that specific boss has
               its own override map set below. Built in
-              <NuxtLink to="/newsite/admin/cMoonEnemyMaps" class="text-indigo-600 hover:underline">Manage cMoon Enemy Maps</NuxtLink>.
+              <NuxtLink to="/admin/cMoonEnemyMaps" class="text-indigo-600 hover:underline">Manage cMoon Enemy Maps</NuxtLink>.
             </p>
           </div>
 
@@ -717,7 +717,7 @@
               <p class="text-[10px] text-gray-500 mt-1">
                 Wins outright over the faction's own default map — whenever this boss is raided, this map
                 always shows up. Built in
-                <NuxtLink to="/newsite/admin/cMoonEnemyMaps" class="text-indigo-600 hover:underline">Manage cMoon Enemy Maps</NuxtLink>.
+                <NuxtLink to="/admin/cMoonEnemyMaps" class="text-indigo-600 hover:underline">Manage cMoon Enemy Maps</NuxtLink>.
               </p>
             </div>
           </div>
@@ -2450,7 +2450,7 @@ function startRaidPreview(m) {
     if (state?.id) {
       stopWatching()
       startingRaidPreviewId.value = ''
-      router.push(`/newsite/cmoon-raid-preview/${state.id}`)
+      router.push(`/cmoon-raid-preview/${state.id}`)
     } else if (err) {
       stopWatching()
       startingRaidPreviewId.value = ''

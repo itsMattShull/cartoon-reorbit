@@ -18,7 +18,7 @@ const MIN_MATCH = 3           // a valid match is exactly this many tiles
 const MAX_MATCH = 3           // chain is capped at this many tiles
 const MIN_MOVE_INTERVAL_MS = 100 // no human makes two matches faster than this
 
-// Scoring — kept in sync with the client (pages/newsite/reorbitmatch.vue).
+// Scoring — kept in sync with the client (pages/reorbitmatch.vue).
 const BASE_MATCH_POINTS = 30            // points for a single 3-match at 1x
 const DEFAULT_COMBO_WINDOW_MS = 3500    // fallback combo window; admin-configurable per game
 

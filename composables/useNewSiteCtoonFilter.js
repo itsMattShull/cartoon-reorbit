@@ -5,7 +5,7 @@
 // (v-show, not v-if). Pages that want a clean slate must reset from these
 // defaults on mount, or a value set on one page bleeds into the next.
 //
-// NOTE: pages/newsite/AuctionHouse/index.vue does not reset on mount, so any
+// NOTE: pages/AuctionHouse/index.vue does not reset on mount, so any
 // key added here can arrive there pre-set from another page.
 export const NEW_SITE_CTOON_FILTER_DEFAULTS = {
   name:            '',

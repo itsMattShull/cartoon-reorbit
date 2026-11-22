@@ -7,14 +7,14 @@
         <h1 class="text-base font-semibold">All cToons</h1>
         <div class="flex flex-wrap gap-2">
           <NuxtLink
-            to="/newsite/admin/ctoons/new"
+            to="/admin/ctoons/new"
             class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
           >
             Create cToon
           </NuxtLink>
 
           <NuxtLink
-            to="/newsite/admin/ctoonsBulkUpload"
+            to="/admin/ctoonsBulkUpload"
             class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
           >
             Bulk Upload cToons
@@ -179,7 +179,7 @@
               <td class="px-2 py-1.5 text-right">
                 <div class="flex flex-col items-end gap-1">
                   <NuxtLink
-                    :to="`/newsite/admin/ctoons/edit/${c.id}`"
+                    :to="`/admin/ctoons/edit/${c.id}`"
                     class="text-blue-600 hover:text-blue-800"
                   >Edit</NuxtLink>
                   <button
@@ -278,7 +278,7 @@
                 Give to Official
               </button>
               <NuxtLink
-                :to="`/newsite/admin/ctoons/edit/${c.id}`"
+                :to="`/admin/ctoons/edit/${c.id}`"
                 class="inline-block px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700 text-center"
               >
                 Edit

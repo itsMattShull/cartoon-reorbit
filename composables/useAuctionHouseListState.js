@@ -22,7 +22,7 @@ export const useAuctionHouseScrollAnchor = () => useState('auctionHouseScrollAnc
 }))
 
 // Set by AuctionHouse.vue right before it navigates to an auction's detail page, and consumed
-// (reset to false) by pages/newsite/AuctionHouse/index.vue's own setup. Lets that page tell
+// (reset to false) by pages/AuctionHouse/index.vue's own setup. Lets that page tell
 // "the user is returning from our own detail view" (keep whatever filter/sort they had) apart
 // from "arriving fresh from elsewhere in the site" (reset — see useNewSiteCtoonFilter.js: that
 // filter state is shared with My Collection and cMart, both of which reset it to their own

@@ -15,7 +15,7 @@
 // anything without one just plays the site-wide default.
 //
 // Playback uses the Web Audio API (AudioContext + decodeAudioData + BufferSource), mirroring
-// the existing pattern in pages/newsite/newwinball.vue, rather than a pool of HTMLAudioElements
+// the existing pattern in pages/newwinball.vue, rather than a pool of HTMLAudioElements
 // — a decoded AudioBuffer can be started many times concurrently with no pooling, no "reset
 // currentTime" dance, and no HTMLAudioElement-count ceiling on rapid repeat clicks. Buffers are
 // cached per resolved sound path (a handful of short clips at most — one per nav slot plus the
@@ -109,10 +109,9 @@ export function useClickSoundEffects() {
 
     document.addEventListener('click', async (event) => {
       if (!enabled.value) return
-      // /admin/* (layouts/admin.vue) never mounts this layout, but /newsite/admin/* does
-      // (see isAdminRoute in layouts/newsite-template.vue) — exclude both, admin tooling
-      // isn't in scope for this effect.
-      if (route.path.startsWith('/admin') || route.path.startsWith('/newsite/admin')) return
+      // The admin console shares this layout (see isAdminRoute in
+      // layouts/newsite-template.vue), but admin tooling isn't in scope for this effect.
+      if (route.path.startsWith('/admin')) return
       if (isGameRoute(route.path)) return
 
       const target = event.target?.closest?.(CLICKABLE_SELECTOR)

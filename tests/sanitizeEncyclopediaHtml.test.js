@@ -48,14 +48,14 @@ test('rejects javascript: and unknown schemes, including numeric-entity obfuscat
 
 test('accepts a relative link to another encyclopedia entry, and only that exact shape', () => {
   assert.equal(
-    sanitizeEncyclopediaHtml('<a href="/newsite/encyclopedia/some-entry">x</a>'),
-    '<a href="/newsite/encyclopedia/some-entry">x</a>',
+    sanitizeEncyclopediaHtml('<a href="/encyclopedia/some-entry">x</a>'),
+    '<a href="/encyclopedia/some-entry">x</a>',
   )
   // Anything else relative is rejected — this allowance is intentionally narrow.
-  assert.equal(sanitizeEncyclopediaHtml('<a href="/newsite/admin">x</a>'), '<a>x</a>')
+  assert.equal(sanitizeEncyclopediaHtml('<a href="/admin">x</a>'), '<a>x</a>')
   assert.equal(sanitizeEncyclopediaHtml('<a href="/">x</a>'), '<a>x</a>')
   assert.equal(sanitizeEncyclopediaHtml('<a href="//evil.com">x</a>'), '<a>x</a>')
-  assert.equal(sanitizeEncyclopediaHtml('<a href="/newsite/encyclopedia/../admin">x</a>'), '<a>x</a>')
+  assert.equal(sanitizeEncyclopediaHtml('<a href="/encyclopedia/../admin">x</a>'), '<a>x</a>')
 })
 
 test('malformed/unterminated markup can never become live output', () => {
