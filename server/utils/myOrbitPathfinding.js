@@ -52,6 +52,16 @@ function octileHeuristic(a, b) {
   return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy)
 }
 
+/** True iff `b` is one of `a`'s 8 grid neighbors (same rule as DIRECTIONS above) — used by
+ * "sit on furniture" to require the player stand right next to a sittable piece, without
+ * needing a full pathfind. Deliberately false for the SAME cell (a=b) — sitting is a "stand next
+ * to it" interaction, not "stand on it" (see MyOrbitFurniture.sittable's own schema comment). */
+export function isAdjacent(a, b) {
+  const dx = Math.abs(a.x - b.x)
+  const dy = Math.abs(a.y - b.y)
+  return dx <= 1 && dy <= 1 && (dx !== 0 || dy !== 0)
+}
+
 /**
  * A* over `walkable` (a Set of "x,y" strings, e.g. from buildWalkableSet above) within a
  * gridWidth x gridHeight grid. Returns the path as an array of `{x, y}` waypoints INCLUDING both

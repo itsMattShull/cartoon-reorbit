@@ -1,8 +1,6 @@
-import { refreshDiscordTokenAndRoles } from '../../utils/refreshDiscordTokenAndRoles.js'
 import jwt from 'jsonwebtoken'
 import { getCookie } from 'h3'
 import { useRuntimeConfig } from '#imports'
-import { prisma } from '@/server/prisma'
 
 export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)

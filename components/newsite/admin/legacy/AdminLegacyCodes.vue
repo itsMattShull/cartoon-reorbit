@@ -30,9 +30,18 @@
               :class="activeTab === 'claimed'
                 ? 'border-b-2 border-blue-600 text-blue-600'
                 : 'text-gray-600 hover:text-gray-800'"
-              class="px-3 py-1.5 text-xs"
+              class="px-3 py-1.5 text-xs mr-2"
             >
               Claimed Codes
+            </button>
+            <button
+              @click="activeTab = 'failed'"
+              :class="activeTab === 'failed'
+                ? 'border-b-2 border-blue-600 text-blue-600'
+                : 'text-gray-600 hover:text-gray-800'"
+              class="px-3 py-1.5 text-xs"
+            >
+              Failed Attempts
             </button>
           </nav>
         </div>
@@ -257,6 +266,122 @@
             </div>
           </div>
         </div>
+
+        <!-- Failed Attempts Tab -->
+        <div v-if="activeTab === 'failed'">
+          <p class="text-[11px] text-gray-600 mb-2">
+            Every failed redeem. <strong>Before start</strong> means the player submitted a real code before it went live, so
+            they had it early. <strong>No browser headers</strong> means the request didn't come from a normal page visit,
+            which usually means a script.
+          </p>
+          <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end mb-2">
+            <div class="flex-1 flex flex-col gap-1">
+              <label for="failedFilter" class="text-xs font-medium">Filter by username or code typed</label>
+              <input
+                id="failedFilter"
+                v-model="failedQuery"
+                type="text"
+                placeholder="Type a username or code..."
+                class="text-xs border rounded-md px-1.5 py-1"
+              />
+            </div>
+            <div class="w-full sm:w-60 flex flex-col gap-1">
+              <label for="failedReason" class="text-xs font-medium">Reason</label>
+              <select
+                id="failedReason"
+                v-model="failedReason"
+                class="text-xs border rounded-md px-1.5 py-1 bg-white"
+              >
+                <option value="">All reasons</option>
+                <option v-for="r in FAILURE_REASONS" :key="r" :value="r">{{ reasonLabel(r) }}</option>
+              </select>
+            </div>
+          </div>
+
+          <div v-if="failedError" class="text-red-600 mb-2 text-[11px]">{{ failedError.message }}</div>
+          <div v-else-if="failedLoading" class="text-gray-500 py-6 text-center">Loading…</div>
+          <div v-else>
+            <!-- Desktop Table -->
+            <div class="hidden lg:block overflow-x-auto">
+              <table v-if="failed.length" class="w-full text-xs">
+                <thead>
+                  <tr>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Attempted At</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">User</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Code Typed</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Reason</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Before Start</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">IP Tag</th>
+                    <th class="px-2 py-1.5 text-left text-[11px] font-semibold text-gray-600 bg-gray-100">Client</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y">
+                  <tr v-for="row in failed" :key="row.id" class="hover:bg-gray-50">
+                    <td class="px-2 py-1.5 whitespace-nowrap">{{ formatPrecise(row.createdAt) }}</td>
+                    <td class="px-2 py-1.5">{{ row.user?.username || '—' }}</td>
+                    <td class="px-2 py-1.5 max-w-[20ch] truncate" :title="row.codeText">{{ row.codeText || '(empty)' }}</td>
+                    <td class="px-2 py-1.5">
+                      <span :class="reasonClass(row.reason)" class="px-1.5 py-0.5 rounded text-[10px] font-semibold" :title="row.message">
+                        {{ reasonLabel(row.reason) }}
+                      </span>
+                    </td>
+                    <td class="px-2 py-1.5">
+                      <span v-if="row.secsBeforeStart != null" class="text-red-700 font-semibold">{{ formatDuration(row.secsBeforeStart) }}</span>
+                      <span v-else class="text-gray-400">—</span>
+                    </td>
+                    <td class="px-2 py-1.5 font-mono">{{ row.ipTag || '—' }}</td>
+                    <td class="px-2 py-1.5" :title="clientTitle(row)">
+                      <span v-if="isBrowserRequest(row)" class="text-gray-600">Browser</span>
+                      <span v-else class="text-amber-700 font-semibold">No browser headers</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+              <div v-if="!failed.length" class="text-gray-500 py-6 text-center">
+                No failed attempts found.
+              </div>
+            </div>
+
+            <!-- Mobile Cards -->
+            <div class="block lg:hidden grid grid-cols-1 gap-2">
+              <div
+                v-for="row in failed"
+                :key="row.id"
+                class="bg-white border rounded-lg shadow p-2 flex flex-col gap-0.5 text-[11px]"
+              >
+                <p><strong>Attempted At:</strong> {{ formatPrecise(row.createdAt) }}</p>
+                <p><strong>User:</strong> {{ row.user?.username || '—' }}</p>
+                <p class="break-all"><strong>Code Typed:</strong> {{ row.codeText || '(empty)' }}</p>
+                <p>
+                  <strong>Reason:</strong>
+                  <span :class="reasonClass(row.reason)" class="px-1.5 py-0.5 rounded text-[10px] font-semibold">{{ reasonLabel(row.reason) }}</span>
+                </p>
+                <p v-if="row.secsBeforeStart != null" class="text-red-700"><strong>Before Start:</strong> {{ formatDuration(row.secsBeforeStart) }}</p>
+                <p><strong>IP Tag:</strong> <span class="font-mono">{{ row.ipTag || '—' }}</span></p>
+                <p>
+                  <strong>Client:</strong>
+                  <span v-if="isBrowserRequest(row)">Browser</span>
+                  <span v-else class="text-amber-700 font-semibold">No browser headers</span>
+                </p>
+                <p class="text-gray-500 break-all">{{ row.userAgent || 'No user agent' }}</p>
+              </div>
+              <div v-if="!failed.length" class="text-gray-500 py-6 text-center">
+                No failed attempts found.
+              </div>
+            </div>
+          </div>
+
+          <!-- Failed Pagination -->
+          <div v-if="!failedLoading && failed.length" class="mt-3 flex items-center justify-between">
+            <div class="text-[11px] text-gray-600">
+              Page {{ failedPage }} of {{ failedTotalPages }} - Showing {{ failedShowingRange }}
+            </div>
+            <div class="space-x-1">
+              <button class="px-2 py-0.5 text-[11px] border rounded-md" :disabled="failedPage <= 1" @click="prevFailedPage">Prev</button>
+              <button class="px-2 py-0.5 text-[11px] border rounded-md" :disabled="failedPage >= failedTotalPages" @click="nextFailedPage">Next</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -288,8 +413,27 @@ const claimedError = ref(null)
 const claimedQuery = ref('')
 const claimedUserSuggestions = ref([])
 
+// Failed redeem attempts (server/api/admin/codes/failed-attempts.get.js)
+const FAILURE_REASONS = ['INVALID', 'NOT_STARTED', 'EXPIRED', 'PREREQ', 'FULL', 'ALREADY_REDEEMED', 'MISSING', 'ERROR']
+const failed = ref([])
+const failedTotal = ref(0)
+const failedPage = ref(1)
+const failedLimit = 100
+const failedLoading = ref(false)
+const failedError = ref(null)
+const failedQuery = ref('')
+const failedReason = ref('')
+
 const createdTotalPages = computed(() => Math.max(1, Math.ceil(createdTotal.value / createdLimit)))
 const claimedTotalPages = computed(() => Math.max(1, Math.ceil(claimedTotal.value / claimedLimit)))
+const failedTotalPages = computed(() => Math.max(1, Math.ceil(failedTotal.value / failedLimit)))
+
+const failedShowingRange = computed(() => {
+  if (!failedTotal.value) return '0-0 of 0'
+  const start = (failedPage.value - 1) * failedLimit + 1
+  const end = Math.min(failedPage.value * failedLimit, failedTotal.value)
+  return `${start}-${end} of ${failedTotal.value}`
+})
 
 const createdShowingRange = computed(() => {
   if (!createdTotal.value) return '0-0 of 0'
@@ -350,6 +494,89 @@ async function fetchClaimedCodes() {
   } finally {
     claimedLoading.value = false
   }
+}
+
+async function fetchFailedAttempts() {
+  failedLoading.value = true
+  failedError.value = null
+  try {
+    const res = await $fetch('/api/admin/codes/failed-attempts', {
+      query: {
+        page: failedPage.value,
+        limit: failedLimit,
+        q: failedQuery.value.trim() || undefined,
+        reason: failedReason.value || undefined
+      }
+    })
+    failed.value = res.items || []
+    failedTotal.value = res.total || 0
+    if (res.page) failedPage.value = res.page
+  } catch (err) {
+    failedError.value = err
+    failed.value = []
+    failedTotal.value = 0
+  } finally {
+    failedLoading.value = false
+  }
+}
+
+function nextFailedPage() {
+  if (failedPage.value >= failedTotalPages.value) return
+  failedPage.value += 1
+  fetchFailedAttempts()
+}
+
+function prevFailedPage() {
+  if (failedPage.value <= 1) return
+  failedPage.value -= 1
+  fetchFailedAttempts()
+}
+
+const REASON_LABELS = {
+  INVALID: 'Invalid code',
+  NOT_STARTED: 'Before start',
+  EXPIRED: 'Expired',
+  PREREQ: 'Missing prereqs',
+  FULL: 'Fully redeemed',
+  ALREADY_REDEEMED: 'Already redeemed',
+  MISSING: 'Empty',
+  ERROR: 'Error'
+}
+function reasonLabel(r) { return REASON_LABELS[r] || r }
+function reasonClass(r) {
+  if (r === 'NOT_STARTED') return 'bg-red-100 text-red-800'
+  if (r === 'INVALID') return 'bg-amber-100 text-amber-800'
+  if (r === 'ERROR') return 'bg-gray-200 text-gray-800'
+  return 'bg-gray-100 text-gray-700'
+}
+
+// Timing matters here (a script lands within milliseconds), so show seconds and milliseconds.
+function formatPrecise(iso) {
+  const d = new Date(iso)
+  return d.toLocaleString('en-US', {
+    timeZone: 'America/Chicago',
+    month: 'numeric', day: 'numeric', year: 'numeric',
+    hour: 'numeric', minute: '2-digit', second: '2-digit', hour12: true
+  }).replace(/ (AM|PM)$/, `.${String(d.getMilliseconds()).padStart(3, '0')} $1`) + ' CST'
+}
+function formatDuration(secs) {
+  if (secs < 60) return `${secs}s`
+  if (secs < 3600) return `${Math.round(secs / 60)}m`
+  if (secs < 86400) return `${Math.round(secs / 360) / 10}h`
+  return `${Math.round(secs / 8640) / 10}d`
+}
+
+// A normal page visit from a browser always sends Sec-Fetch-Site (and Origin on a POST).
+function isBrowserRequest(row) {
+  return Boolean(row.secFetchSite && row.origin)
+}
+function clientTitle(row) {
+  return [
+    `User agent: ${row.userAgent || '(none)'}`,
+    `Origin: ${row.origin || '(none)'}`,
+    `Referer: ${row.referer || '(none)'}`,
+    `Sec-Fetch-Site: ${row.secFetchSite || '(none)'}`
+  ].join('\n')
 }
 
 async function fetchClaimedUserSuggestions() {
@@ -476,9 +703,25 @@ watch(claimedQuery, () => {
   claimedSuggestDebounceId = setTimeout(fetchClaimedUserSuggestions, 200)
 })
 
+let failedFilterDebounceId = null
+watch(failedQuery, () => {
+  if (failedFilterDebounceId) clearTimeout(failedFilterDebounceId)
+  failedFilterDebounceId = setTimeout(() => {
+    failedPage.value = 1
+    fetchFailedAttempts()
+  }, 300)
+})
+
+watch(failedReason, () => {
+  failedPage.value = 1
+  fetchFailedAttempts()
+})
+
 watch(activeTab, (tab) => {
   if (tab === 'created' && !codes.value.length) fetchCreatedCodes()
   if (tab === 'claimed' && !claimed.value.length) fetchClaimedCodes()
+  // Always refetch: this tab is watched live while a code goes out.
+  if (tab === 'failed') fetchFailedAttempts()
 })
 
 onMounted(() => {
@@ -489,6 +732,7 @@ onBeforeUnmount(() => {
   if (claimedFilterDebounceId) clearTimeout(claimedFilterDebounceId)
   if (createdFilterDebounceId) clearTimeout(createdFilterDebounceId)
   if (claimedSuggestDebounceId) clearTimeout(claimedSuggestDebounceId)
+  if (failedFilterDebounceId) clearTimeout(failedFilterDebounceId)
 })
 </script>
 

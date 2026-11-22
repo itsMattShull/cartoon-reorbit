@@ -13,7 +13,8 @@ import {
   notifyCMoonRaidPreviewStarted,
   notifyPvpPackWon,
   notifyCMoonRaidKickedAfk,
-  notifyWishlistAuctionListed
+  notifyWishlistAuctionListed,
+  notifyFollowedUserOnline
 } from '../server/utils/notifications.js'
 
 // A stand-in for the Prisma client that records what it was asked to do. The
@@ -46,7 +47,8 @@ function fakeDb ({ user = { username: 'alice', banned: false }, throwOnWrite = f
 test('every helper is exported and callable', () => {
   for (const fn of [createNotification, notifyOutbid, notifyAuctionBid,
     notifyAuctionWon, notifyTradeOfferReceived, notifyTradeOfferAccepted, notifyCMoonRaidBossStarted,
-    notifyCMoonRaidPreviewStarted, notifyPvpPackWon, notifyCMoonRaidKickedAfk, notifyWishlistAuctionListed]) {
+    notifyCMoonRaidPreviewStarted, notifyPvpPackWon, notifyCMoonRaidKickedAfk, notifyWishlistAuctionListed,
+    notifyFollowedUserOnline]) {
     assert.equal(typeof fn, 'function')
   }
 })
@@ -60,6 +62,7 @@ test('the type set is closed and frozen', () => {
     'CMOON_RAID_BOSS_STARTED',
     'CMOON_RAID_KICKED_AFK',
     'CMOON_RAID_PREVIEW_STARTED',
+    'FOLLOWED_USER_ONLINE',
     'PVP_PACK_WON',
     'TRADE_OFFER_ACCEPTED',
     'TRADE_OFFER_RECEIVED',
@@ -394,6 +397,79 @@ test('wishlist auction broadcast requires an auctionId and a ctoonId, and never 
   try {
     assert.deepEqual(await notifyWishlistAuctionListed(wishlistDb({ throwOnLookup: true }), { auctionId: 'a1', ctoonId: 'c1' }), [])
     assert.deepEqual(await notifyWishlistAuctionListed(wishlistDb({ wishlisters: [{ userId: 'u1' }], throwOnQuery: true }), { auctionId: 'a1', ctoonId: 'c1' }), [])
+  } finally {
+    console.error = orig
+  }
+})
+
+// ── Followed-user-online broadcast ──────────────────────────────────────────────────────────────
+// Same shape as the wishlist broadcast above: the caller never already has the recipient set in
+// hand, so this looks followers up itself from MyOrbitFollow, then runs the same batched upsert.
+function followDb ({ followers = [], throwOnLookup = false, throwOnQuery = false } = {}) {
+  const calls = { lookups: [], writes: [] }
+  return {
+    calls,
+    myOrbitFollow: {
+      async findMany (args) {
+        calls.lookups.push(args)
+        if (throwOnLookup) throw new Error('db exploded')
+        return followers
+      }
+    },
+    async $queryRaw (strings, ...values) {
+      if (throwOnQuery) throw new Error('db exploded')
+      calls.writes.push({ sql: strings.join('?'), values })
+      const userIds = values.find(v => Array.isArray(v) && v.some(x => String(x).startsWith('u')))
+      return (userIds || []).map(userId => ({ userId }))
+    }
+  }
+}
+
+test('followed-user-online broadcast looks up followers by followedId', async () => {
+  const db = followDb({ followers: [{ followerId: 'u1' }, { followerId: 'u2' }] })
+  const written = await notifyFollowedUserOnline(db, { followedUserId: 'followed-1', followedUsername: 'Gloop' })
+  assert.equal(db.calls.lookups.length, 1)
+  assert.deepEqual(db.calls.lookups[0].where, { followedId: 'followed-1' })
+  assert.deepEqual(written, ['u1', 'u2'])
+  const { sql, values } = db.calls.writes[0]
+  assert.ok(values.includes('FOLLOWED_USER_ONLINE'))
+  assert.match(values.join(' | '), /Gloop/)
+  // contextId is the followed player's USERNAME, not an id - see the function's own comment.
+  assert.ok(values.includes('Gloop'))
+  assert.match(sql, /ON CONFLICT/)
+  assert.match(sql, /banned/)
+  assert.ok(values.includes('CartoonReOrbitOfficial'))
+  // No per-type opt-out column is referenced - following IS the opt-in.
+  assert.doesNotMatch(sql, /allowWishlistAuctionNotifications/)
+  assert.doesNotMatch(sql, /muteRaidNotifications/)
+})
+
+test('followed-user-online broadcast dedupes repeated followerIds from the lookup', async () => {
+  const db = followDb({ followers: [{ followerId: 'u1' }, { followerId: 'u1' }, { followerId: 'u2' }] })
+  await notifyFollowedUserOnline(db, { followedUserId: 'f1', followedUsername: 'Gloop' })
+  const { values } = db.calls.writes[0]
+  const idsArg = values.find(v => Array.isArray(v) && v.includes('u1'))
+  assert.equal(idsArg.length, 2)
+})
+
+test('followed-user-online broadcast does nothing when nobody follows this player', async () => {
+  const db = followDb({ followers: [] })
+  const written = await notifyFollowedUserOnline(db, { followedUserId: 'f1', followedUsername: 'Gloop' })
+  assert.deepEqual(written, [])
+  assert.equal(db.calls.writes.length, 0)
+})
+
+test('followed-user-online broadcast requires a followedUserId and followedUsername, and never throws', async () => {
+  const db = followDb({ followers: [{ followerId: 'u1' }] })
+  assert.deepEqual(await notifyFollowedUserOnline(db, { followedUsername: 'Gloop' }), [])
+  assert.deepEqual(await notifyFollowedUserOnline(db, { followedUserId: 'f1' }), [])
+  assert.equal(db.calls.lookups.length, 0)
+
+  const orig = console.error
+  console.error = () => {}
+  try {
+    assert.deepEqual(await notifyFollowedUserOnline(followDb({ throwOnLookup: true }), { followedUserId: 'f1', followedUsername: 'Gloop' }), [])
+    assert.deepEqual(await notifyFollowedUserOnline(followDb({ followers: [{ followerId: 'u1' }], throwOnQuery: true }), { followedUserId: 'f1', followedUsername: 'Gloop' }), [])
   } finally {
     console.error = orig
   }

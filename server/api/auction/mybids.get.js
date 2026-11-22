@@ -2,8 +2,9 @@
 import { defineEventHandler, getRequestHeader, getQuery, createError } from 'h3'
 import { prisma } from '@/server/prisma'
 import { encodeUserCtoonId } from '@/server/utils/userCtoonToken'
-import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 import { PACK_ITEM_SELECT, packItemFields } from '~/server/utils/auctionItem'
+import { parseListFilterQuery, matchesPriceAndEdition } from '~/server/utils/auctionListFilters'
 
 function normalizeListParam(value) {
   if (Array.isArray(value)) {
@@ -47,6 +48,7 @@ function applyAuctionFilters(items, filters) {
     }
     if (setFilter.length && !setFilter.includes(item.set)) return false
     if (requireGtoons && !item.isGtoon && !item.isOgGtoon) return false
+    if (filters.notGtoonsOnly && (item.isGtoon || item.isOgGtoon)) return false
     if (seriesFilter.length && !seriesFilter.includes(item.series)) return false
     if (rarityFilter.length && !rarityFilter.includes(item.rarity)) return false
     if (requireFeatured && !item.isFeatured) return false
@@ -56,6 +58,7 @@ function applyAuctionFilters(items, filters) {
     if (requireBids && Number(item.bidCount ?? 0) < 1) return false
     if (cMoonFilter === '__none__' && item.cMoon) return false
     if (cMoonFilter && cMoonFilter !== '__none__' && item.cMoon?.id !== cMoonFilter) return false
+    if (!matchesPriceAndEdition(item, filters)) return false
     return true
   })
 }
@@ -130,6 +133,7 @@ export default defineEventHandler(async (event) => {
   const wishlistOnly = isTruthy(query.wishlist)
   const hasBidsOnly = isTruthy(query.hasBids)
   const gtoonsOnly = isTruthy(query.gtoon)
+  const notGtoonsOnly = isTruthy(query.notGtoon)
   const cMoonFilter = typeof query.cMoon === 'string' ? query.cMoon.trim() : ''
   const sortKey = typeof query.sort === 'string' ? query.sort : 'recentDesc'
   const validSorts = ['recentDesc', 'recentAsc', 'endOldest', 'endNewest', 'biggestBid', 'recentlyWon', 'recentlyLost']
@@ -264,8 +268,10 @@ export default defineEventHandler(async (event) => {
     wishlistSet,
     hasBidsOnly,
     gtoonsOnly,
+    notGtoonsOnly,
     cMoon: cMoonFilter,
-    type: typeof query.type === 'string' ? query.type.trim().toUpperCase() : ''
+    type: typeof query.type === 'string' ? query.type.trim().toUpperCase() : '',
+    ...parseListFilterQuery(query)
   })
 
   const sorted = sortMyBids(filtered, effectiveSort, now)

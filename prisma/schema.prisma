@@ -49,6 +49,13 @@ enum NotificationType {
   // AUCTION_WON/AUCTION_OUTBID convention, so it routes to /newsite/AuctionHouse/<id> with no
   // client changes. Gated on User.allowWishlistAuctionNotifications (default true).
   WISHLIST_AUCTION_LISTED
+  // A player this user follows in MyOrbit (MyOrbitFollow) came online — see
+  // notifyFollowedUserOnline in server/utils/notifications.js, called from
+  // server/utils/myOrbitSocket.js's join handler. No `contextType`: contextId here is the
+  // followed player's own username (not an id — see that function's own comment for why),
+  // routed by notificationRoute() (components/Onboarding.vue) to their cZone. No opt-out flag:
+  // following someone IS the notification opt-in.
+  FOLLOWED_USER_ONLINE
 }
 
 /// Where a sealed UserPack came from. Pack purchase limits and purchase analytics count PURCHASE rows
@@ -666,6 +673,11 @@ model User {
   // or sold after this is set, and the picker already has to fall back gracefully (to "no avatar
   // selected") when it no longer resolves, so a cascading/constrained relation would add nothing.
   myOrbitLastUserCtoonId String?
+  // A short free-text blurb shown near the player's name/avatar in a room (see feature doc
+  // "custom status line") — null/empty means no status shown. Filtered through the same
+  // banned-word list as chat (containsBannedWord) before it's ever saved, same moderation
+  // discipline as every other player-authored MyOrbit text.
+  myOrbitStatus          String?
   // Set when a player explicitly declines to pick a cMoon from the initial join modal (there is no
   // more time-based auto-assignment — see server/utils/cmoon.js). Only meaningful while cMoonId is
   // null; cleared back to false on a successful selectCMoonForUser. Lets the modal stop popping up
@@ -788,11 +800,14 @@ model User {
   lockedPoints                LockedPoints[]
   notifications               Notification[]
   claims                      Claim[]
+  redeemAttemptLogs           RedeemAttemptLog[]
   visits                      Visit[]
   points                      UserPoints?
   ctoons                      UserCtoon[]
   friends                     Friend[]                        @relation("UserFriends")
   friendedBy                  Friend[]                        @relation("UserFriendOf")
+  myOrbitFollowing            MyOrbitFollow[]                 @relation("MyOrbitFollower")
+  myOrbitFollowedBy           MyOrbitFollow[]                 @relation("MyOrbitFollowed")
   favoriteCzones              FavoriteCzone[]                 @relation("CzoneFavoritedBy")
   favoritedByCzones           FavoriteCzone[]                 @relation("CzoneFavoritedOf")
   traderARooms                TradeRoom[]                     @relation("TraderA")
@@ -1087,6 +1102,26 @@ model Friend {
   @@unique([userId, friendId])
 }
 
+// A player following another player's MyOrbit presence — scoped to MyOrbit only, deliberately
+// its own model rather than a reuse of Friend above: Friend is one-directional with no accept
+// flow and no list/remove endpoints or UI anywhere in the app (only server/api/friends/add.post.js
+// exists), so giving its rows a new behavioral side effect (an online-notification subscription)
+// would silently change existing data nobody can currently see or undo. Following IS the
+// notification opt-in (see notifyFollowedUserOnline, server/utils/notifications.js) — there is no
+// separate allow* toggle the way allowWishlistAuctionNotifications gates a global subscription.
+model MyOrbitFollow {
+  id         String   @id @default(uuid())
+  followerId String
+  followedId String
+  createdAt  DateTime @default(now())
+
+  follower User @relation("MyOrbitFollower", fields: [followerId], references: [id])
+  followed User @relation("MyOrbitFollowed", fields: [followedId], references: [id])
+
+  @@unique([followerId, followedId])
+  @@index([followedId])
+}
+
 model ClaimCode {
   id             String    @id @default(uuid())
   code           String    @unique
@@ -1104,6 +1139,7 @@ model ClaimCode {
   prerequisites         ClaimCodePrerequisite[]
   userBackgroundUnlocks UserBackground[]        @relation("UserBackgroundSourceCode")
   handicapHolds         HandicapRedeemHold[]
+  failedAttempts        RedeemAttemptLog[]
 }
 
 model Claim {
@@ -1116,6 +1152,36 @@ model Claim {
   code ClaimCode @relation(fields: [codeId], references: [id])
 
   @@unique([userId, codeId])
+}
+
+// One row per FAILED code redemption from POST /api/redeem (written by
+// server/utils/redeemAttemptLog.js), shown in the admin Codes → "Failed Attempts" tab. Successful
+// redemptions are already Claim rows, and a Handicap Redeems hold isn't a failure. The point is
+// spotting code leaks and automated claiming: who tried a real code before it went live
+// (NOT_STARTED), who is guessing (many INVALID), and how the request arrived (a browser sends
+// Origin / Referer / Sec-Fetch-Site; a script usually doesn't).
+model RedeemAttemptLog {
+  id           String   @id @default(uuid())
+  userId       String
+  codeText     String // exactly what was submitted, cut to 100 chars
+  codeId       String? // the ClaimCode that text matched, if any (null for INVALID)
+  reason       String // see REDEEM_FAILURE_REASONS in server/utils/redeemAttemptLog.js
+  statusCode   Int
+  message      String? // the error shown to the player, cut to 300 chars
+  ip           String? // encrypted with encryptIp(), same as LoginLog
+  userAgent    String?
+  origin       String?
+  referer      String?
+  secFetchSite String?
+  createdAt    DateTime @default(now())
+
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  code ClaimCode? @relation(fields: [codeId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([userId, createdAt])
+  @@index([codeId, createdAt])
+  @@index([reason, createdAt])
 }
 
 // An admin-flagged player (see server/api/admin/handicap-redeems/) whose code redemptions that
@@ -2756,6 +2822,11 @@ model Bid {
 
   auction Auction @relation(fields: [auctionId], references: [id])
   user    User    @relation(fields: [userId], references: [id])
+
+  // Bid had no index at all, so every lookup scanned the whole (append-only) table.
+  @@index([auctionId, amount]) // an auction's bids / top bid: auction pages, lists, settlement
+  @@index([userId, auctionId]) // a user's bids: My Bids, dissolve/transfer workers
+  @@index([createdAt]) // daily activity roll-up
 }
 
 // ── Economy page ─────────────────────────────────────────────────
@@ -4469,6 +4540,11 @@ model Achievement {
   wordleWinsGte               Int? // total lifetime crown wins in Wordle
   wordleCurrentStreakGte      Int? // current consecutive-day crown streak
   flappyBestScoreGte          Int? // best Flappy Powerpuff score on a ranked run
+  // Lifetime OG gToons (the original 2002 game) PvP wins: OgGtoonMatch rows this user won, read from
+  // `outcome` exactly like the OG gToons leaderboard (see server/utils/ogGtoonWins.js). Random queue,
+  // challenges and tournament games all count; practice games against the bot, ties and INCOMPLETE
+  // (stale-swept / admin-voided) games do not.
+  ogGtoonsWinsGte             Int?
   setsRequired                String[] // complete ALL sets in this array
   userCreatedBefore           DateTime? // user must have signed up before this date (strictly earlier)
   discordRoleName             String?
@@ -4826,6 +4902,7 @@ model CMoon {
   battleLosses         Int                       @default(0)
   enemyBattles         CMoonEnemyBattle[]
   enemyRaids           CMoonEnemyRaid[]
+  themedMyOrbitRooms   MyOrbitRoom[]
   // cMoon PvP — battleWins/battleLosses above are shared with cMoon Enemy Battles (both increment
   // the same running counts, see CMoonPvpMatch's own header comment), but a PvP match additionally
   // needs to know which two specific cMoons a match was BETWEEN (teammates-only mode locks each
@@ -8393,6 +8470,10 @@ model MyOrbitFurniture {
   footprintH Int      @default(1)
   blocksWalk Boolean  @default(true)
   zOffset    Int      @default(0)
+  // Whether a player can "sit" near this furniture (see feature doc "sit on furniture") — purely
+  // a pose/vibe flag, never changes blocksWalk or the walkable mask: sitting keeps the player at
+  // their current cell, adjacent to the furniture, rather than snapping onto its footprint.
+  sittable   Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -8412,12 +8493,30 @@ model MyOrbitRoom {
   capacity   Int      @default(20)
   active     Boolean  @default(false)
   sortOrder  Int      @default(0)
+  // Looping ambience track (see server/api/admin/myorbit-rooms/[id]/sound.post.js) — purely
+  // cosmetic, started/stopped client-side on join/leave, same "null = nothing plays" convention
+  // every other optional media path in this schema already follows.
+  ambientSoundPath String?
+  // Optional faction branding (see feature doc: "faction war rooms") — purely cosmetic, open to
+  // every player regardless of their own cMoon. Null = no theme, render as a plain room.
+  themeCMoonId String?
+  theme        CMoon?  @relation(fields: [themeCMoonId], references: [id], onDelete: SetNull)
+  // Marks this room as the live raid-spectator room (see feature doc: "Raid Den") — the client
+  // polls GET /api/myorbit/active-raid while inside a room with this set. Not enforced unique;
+  // an admin could flag more than one room this way and each would show the same live state.
+  isRaidDen  Boolean  @default(false)
+  // Marks this room as showing the leaderboard plaque (see feature doc: "leaderboard plaque") —
+  // the client polls GET /api/myorbit/leaderboard while inside a room with this set. Same
+  // not-enforced-unique stance as isRaidDen: more than one room could show it.
+  showLeaderboard Boolean  @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
   tiles      MyOrbitRoomTile[]
   furniture  MyOrbitRoomFurniture[]
   moderation MyOrbitModerationLog[]
+
+  @@index([themeCMoonId])
 }
 
 // One painted floor/wall cell. A cell with no row here is unwalkable void (outside the built

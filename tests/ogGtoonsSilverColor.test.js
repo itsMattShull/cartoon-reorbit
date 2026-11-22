@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  pickGoalCardIdx, assignRandomGoals, goalCardFor, determineWinner, REAL_COLORS
+  pickGoalCardIdx, assignRandomGoals, goalCardFor, determineWinner
 } from '../server/utils/ogGtoonEngine.js'
 import {
   initHands, publicMatchView, enterColorPhase, submitColor, resolveColorPhase, autoSilverColor,

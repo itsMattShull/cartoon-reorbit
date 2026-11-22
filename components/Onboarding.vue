@@ -471,6 +471,13 @@ const notificationRoute = (n) => {
     if (!n.contextId) return null
     return `/newsite/cmoon-raid-preview/${encodeURIComponent(n.contextId)}`
   }
+  if (n.type === 'FOLLOWED_USER_ONLINE') {
+    // contextId here is the followed player's USERNAME, not an id — see
+    // notifyFollowedUserOnline's own comment (server/utils/notifications.js) for why. Must be
+    // handled before the generic contextId fallback below, which assumes an Auction id.
+    if (!n.contextId) return null
+    return `/newsite/czone/${encodeURIComponent(n.contextId)}`
+  }
   if (!n.contextId) return null
   return `/newsite/AuctionHouse/${encodeURIComponent(n.contextId)}`
 }

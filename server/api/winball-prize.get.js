@@ -1,12 +1,11 @@
 // server/api/winball-prize.get.js
-import { defineEventHandler, createError, getRequestURL, setResponseHeader } from 'h3'
+import { defineEventHandler, createError, setResponseHeader } from 'h3'
 import { prisma as db } from '@/server/prisma'
 
 function toAbsoluteUrl(event, path) {
   if (!path) return null
   if (/^https?:\/\//i.test(path)) return path
 
-  const reqUrl = getRequestURL(event)
   let base = 'https://www.cartoonreorbit.com'
 
   // if (reqUrl.origin.includes('localhost')) {

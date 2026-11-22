@@ -3,6 +3,7 @@ import { prisma } from '../../server/prisma.js'
 import { mintQueue } from '../../server/utils/queues.js'
 import { announceAchievement, assignDiscordRoleByName } from '../../server/utils/discord.js'
 import { getWordleWinCount, getWordleCurrentStreak } from '../../server/utils/wordle.js'
+import { getOgGtoonsWinCount } from '../../server/utils/ogGtoonWins.js'
 import { createMemoClient } from './memoClient.js'
 import { announceCMoonRankUp } from './cmoonDiscordEvents.js'
 import { maybeGrantCMoonPrestigeRank } from './cmoonPrestigeRankTiers.js'
@@ -32,8 +33,6 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
     return false
   }
 
-  const achKey = ach?.slug || ach?.id
-  // console.log('[achievements] evaluate: start', { userId, ach: achKey })
 
   // Points
   if (ach.pointsGte != null) {
@@ -172,6 +171,13 @@ export async function evaluateUserAgainstAchievement(client, userId, ach) {
       _max: { score: true }
     })
     if ((best._max.score ?? 0) < ach.flappyBestScoreGte) return false
+  }
+
+  // OG gToons PvP wins (lifetime). Same definition of a win as the OG gToons leaderboard — see
+  // server/utils/ogGtoonWins.js — so the count a player sees on their stats is the one checked here.
+  if (ach.ogGtoonsWinsGte != null) {
+    const wins = await getOgGtoonsWinCount(db, userId)
+    if (wins < ach.ogGtoonsWinsGte) return false
   }
 
   // Points contributed to the user's CURRENT cMoon. Only meaningful paired with

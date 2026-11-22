@@ -328,6 +328,17 @@ async function loadPvpEligibility({ userId, team, match = null, config }) {
   return { ok: true, user }
 }
 
+// Small public-shape lookup for other modules that need "is this user leading or in a live PvP
+// match, and which one" without reaching into this file's private matches/matchByUser maps — same
+// contract as cmoonRaidSocket.js's own getActiveRaidForUser (see that file's comment for the one
+// cross-module caller today: server/utils/myOrbitSocket.js's "Invite to PvP" handler).
+export function getActivePvpMatchForUser(userId) {
+  const matchId = matchByUser.get(userId)
+  const match = matchId ? matches.get(matchId) : null
+  if (!match || match.status === 'RESOLVED') return null
+  return { id: match.id, status: match.status }
+}
+
 /* ── Per-participant team/rank/special snapshot — same shape loadParticipantProfile in
  * cmoonRaidSocket.js builds, minus the cMoon requirement (a PvP player with no cMoon at all can
  * still fight when teammates-only is off — see this file's own header comment). */

@@ -6,7 +6,7 @@ import { prisma } from '@/server/prisma'
 import { computeMultiHash, bucketFromHash } from '@/server/utils/multiHash'
 import { readFile } from 'node:fs/promises'
 import { sendDiscordDMByDiscordId } from '@/server/utils/discord'
-import { sanitizePathSegment, assertInside } from '@/server/utils/imageUploadValidation'
+import { sanitizePathSegment } from '@/server/utils/imageUploadValidation'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const baseDir = process.env.NODE_ENV === 'production'

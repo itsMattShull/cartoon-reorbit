@@ -298,7 +298,7 @@
           ></div>
 
           <!-- ── cZone Search items (zone 0 only, visitor only) ── -->
-          <template v-if="!cz.buildMode && cz.activeZone === 0">
+          <template v-if="!cz.buildMode && cz.activeZone === 0 && !zoneLoading">
             <button
               v-for="item in czoneSearchItems"
               :key="item.key"
@@ -1643,6 +1643,16 @@ onMounted(() => {
   }
 })
 
+// cZone search request state. Declared here, before the immediate watcher below: that watcher
+// can run loadZone() -> cancelCzoneSearchLoad() synchronously during setup, and reading a `let`
+// before its declaration has executed throws "Cannot access '_searchLoadSeq' before
+// initialization" (blank cZone when navigating in already signed in).
+//  - _searchLoadSeq: bumped on every start/cancel; a response whose seq is stale is discarded.
+//  - _searchInFlight: lets a duplicate trigger (loadZone + the activeZone watcher) reuse the
+//    pending request instead of firing a second roll that would overwrite the first result.
+let _searchLoadSeq = 0
+let _searchInFlight = null // { username, promise }
+
 // Load once the user is available (may not be ready at mount time)
 watch(() => user.value?.username, async (loggedInUsername) => {
   if (loggedInUsername && !viewedUsername.value) {
@@ -1692,6 +1702,9 @@ async function loadZone(username, { keepActiveZone = false } = {}) {
   viewedUsername.value = target
   zoneLoading.value    = true
   isFavorited.value    = false
+  // Drop the previous zone's search toon (and any in-flight search request) right away so it
+  // can't linger over — or get applied to — the zone that's loading.
+  cancelCzoneSearchLoad()
   try {
     const data = await $fetch(`/api/czone/${target}`)
     cz.value.zones         = data.cZone.zones
@@ -1731,9 +1744,10 @@ async function loadZone(username, { keepActiveZone = false } = {}) {
 // Reload search items when switching to zone 0; clear them on other zones
 watch(() => cz.value.activeZone, (newZone) => {
   if (newZone === 0) {
+    // No-ops if loadZone() already has this exact search request in flight.
     loadCzoneSearchItems()
   } else {
-    czoneSearchItems.value = []
+    cancelCzoneSearchLoad()
   }
 })
 
@@ -2123,15 +2137,42 @@ function buildSearchItems(items) {
   }).filter(item => item.ctoonId && item.assetPath)
 }
 
-async function loadCzoneSearchItems() {
+// Every search request is a fresh server-side roll (and writes new appearance rows), so a
+// request must only ever be applied if it's still the latest one for the zone being viewed.
+// See _searchLoadSeq / _searchInFlight, declared above the immediate user watcher.
+
+function cancelCzoneSearchLoad() {
+  _searchLoadSeq++
+  _searchInFlight = null
   czoneSearchItems.value = []
-  if (!user.value?.id || !viewedUsername.value) return
-  if (user.value.username === viewedUsername.value) return
+}
+
+function loadCzoneSearchItems() {
+  const username = viewedUsername.value
+  // Search toons only render on zone 0 for visitors — don't spend a roll when they'd be hidden.
+  if (!user.value?.id || !username || user.value.username === username || cz.value.activeZone !== 0) {
+    cancelCzoneSearchLoad()
+    return Promise.resolve()
+  }
+  if (_searchInFlight?.username === username) return _searchInFlight.promise
+
+  const seq = ++_searchLoadSeq
+  czoneSearchItems.value = []
+  const promise = _fetchCzoneSearchItems(username, seq).finally(() => {
+    if (_searchInFlight?.promise === promise) _searchInFlight = null
+  })
+  _searchInFlight = { username, promise }
+  return promise
+}
+
+async function _fetchCzoneSearchItems(username, seq) {
   try {
     const tz  = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'
-    const res = await $fetch(`/api/czone/${viewedUsername.value}/searches`, {
+    const res = await $fetch(`/api/czone/${username}/searches`, {
       query: { tz, zoneIndex: 0 }
     })
+    // Superseded (zone changed, navigated away, switched zones) — discard this result.
+    if (seq !== _searchLoadSeq) return
     const items = Array.isArray(res?.items) ? res.items : []
 
     for (const item of items) {
@@ -2149,7 +2190,7 @@ async function loadCzoneSearchItems() {
     if (glitchTrigger) startGlitchEffect(glitchTrigger)
   } catch (err) {
     console.error('MyCzone: failed to load cZone search items', err)
-    czoneSearchItems.value = []
+    if (seq === _searchLoadSeq) czoneSearchItems.value = []
   }
 }
 

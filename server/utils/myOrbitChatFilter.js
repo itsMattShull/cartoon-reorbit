@@ -4,6 +4,7 @@
 // plain `node server/socket-server.js` process), so it never uses the `@/` alias either.
 
 export const MYORBIT_CHAT_MAX_LENGTH = 300
+export const MYORBIT_STATUS_MAX_LENGTH = 40
 
 /** Trims and validates a raw chat message. Returns `{ ok: true, message }` or
  * `{ ok: false, reason }` — `reason` is a short machine-readable code, not user-facing prose
@@ -14,6 +15,16 @@ export function parseMyOrbitChatMessage(raw) {
   if (!message) return { ok: false, reason: 'empty' }
   if (message.length > MYORBIT_CHAT_MAX_LENGTH) return { ok: false, reason: 'too_long' }
   return { ok: true, message }
+}
+
+/** Same shape as parseMyOrbitChatMessage, for the short status-line blurb shown near a player's
+ * name — EXCEPT an empty string is valid here (it means "clear my status"), where it's an error
+ * for chat. Returns `{ ok: true, status }` ('' allowed) or `{ ok: false, reason }`. */
+export function parseMyOrbitStatus(raw) {
+  if (typeof raw !== 'string') return { ok: false, reason: 'not_a_string' }
+  const status = raw.trim()
+  if (status.length > MYORBIT_STATUS_MAX_LENGTH) return { ok: false, reason: 'too_long' }
+  return { ok: true, status }
 }
 
 /**

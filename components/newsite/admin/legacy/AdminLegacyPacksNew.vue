@@ -510,7 +510,6 @@ function onFile(e) {
 }
 
 // 3️⃣ Rarity counts
-const rarities = ['Common','Uncommon','Rare','Very Rare','Crazy Rare']
 const countsByRarity = reactive({
   Common:      { count: 4, probabilityPercent: 100 },
   Uncommon:    { count: 2, probabilityPercent: 100 },

@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   validateBattleUpgradeBody, canPurchaseBattleUpgrade, sumBattleUpgradeStatTotals,
-  HP_AMOUNT_MIN, HP_AMOUNT_MAX, STAMINA_AMOUNT_MIN, STAMINA_AMOUNT_MAX, PRICE_MIN, PRICE_MAX,
+  HP_AMOUNT_MIN, HP_AMOUNT_MAX, STAMINA_AMOUNT_MAX, PRICE_MIN, PRICE_MAX,
   PURCHASE_LIMIT_MIN, PURCHASE_LIMIT_MAX,
 } from '../server/utils/cmoonBattleUpgradeValidation.js'
 

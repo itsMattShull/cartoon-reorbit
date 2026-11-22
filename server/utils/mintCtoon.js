@@ -76,19 +76,23 @@ export async function processMintJob(job, prisma) {
       }
     }
 
-    // Count existing user purchases for limit checks (first-owner only)
-    const existingRows = await prisma.$queryRaw`
-      SELECT COUNT(*)::int AS count
-      FROM (
-        SELECT DISTINCT ON ("userCtoonId") "userCtoonId", "userId"
-        FROM "CtoonOwnerLog"
-        WHERE "ctoonId" = ${ctoonId}
-          AND "userCtoonId" IS NOT NULL
-        ORDER BY "userCtoonId", "createdAt" ASC
-      ) first_logs
-      WHERE "userId" = ${userId}
-    `
-    const existing = existingRows[0]?.count ?? 0
+    // Count existing user purchases for limit checks (first-owner only). Sorts this cToon's whole
+    // ownership history, and only the two perUserLimit branches below read it — special mints
+    // (packs, codes, prizes), sales and time-based releases never do — so it runs on demand.
+    const countExistingPurchases = async () => {
+      const existingRows = await prisma.$queryRaw`
+        SELECT COUNT(*)::int AS count
+        FROM (
+          SELECT DISTINCT ON ("userCtoonId") "userCtoonId", "userId"
+          FROM "CtoonOwnerLog"
+          WHERE "ctoonId" = ${ctoonId}
+            AND "userCtoonId" IS NOT NULL
+          ORDER BY "userCtoonId", "createdAt" ASC
+        ) first_logs
+        WHERE "userId" = ${userId}
+      `
+      return existingRows[0]?.count ?? 0
+    }
 
     // Wallet balance check (available = total - active locks)
     const [wallet, activeLocks] = await Promise.all([
@@ -180,13 +184,13 @@ export async function processMintJob(job, prisma) {
         if (
           enforceLimit &&
           ctoon.perUserLimit !== null &&
-          existing >= ctoon.perUserLimit
+          (await countExistingPurchases()) >= ctoon.perUserLimit
         ) {
           throw new Error(
             `Purchase limit of ${ctoon.perUserLimit} within first 48h reached`
           )
         }
-      } else if (ctoon.perUserLimit !== null && existing >= ctoon.perUserLimit) {
+      } else if (ctoon.perUserLimit !== null && (await countExistingPurchases()) >= ctoon.perUserLimit) {
         // Fallback if no releaseDate
         throw new Error(`Purchase limit of ${ctoon.perUserLimit} reached`)
       }

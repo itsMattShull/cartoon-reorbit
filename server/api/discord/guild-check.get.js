@@ -13,7 +13,7 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig()
 
   // 2) Load the user and ensure they have a Discord link
-  const user = await prisma.user.findUnique({ where: { id: userId } })
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { discordId: true, inGuild: true } })
   if (!user || !user.discordId) {
     return { inGuild: false }
   }
@@ -30,11 +30,14 @@ export default defineEventHandler(async (event) => {
 
     inGuild = res.ok
 
-    // Persist membership status
-    await prisma.user.update({
-      where: { id: userId },
-      data: { inGuild }
-    })
+    // Persist membership status — only when it changed. /join-discord polls this every 5s, and
+    // an unconditional update rewrote the User row (and all its indexes) on every tick.
+    if (inGuild !== user.inGuild) {
+      await prisma.user.update({
+        where: { id: userId },
+        data: { inGuild }
+      })
+    }
   } catch (err) {
     console.error('Discord membership check failed:', err)
   }

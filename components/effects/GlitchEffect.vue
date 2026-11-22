@@ -80,7 +80,6 @@ onMounted(async () => {
   document.addEventListener('visibilitychange', onVisibilityChange)
 
   const jitterMs = Math.round(props.durationMs * 0.4)
-  const snowMs = props.durationMs - jitterMs
 
   after(jitterMs, async () => {
     phase.value = 'snow'

@@ -56,7 +56,6 @@ const LANES     = JSON.parse(fs.readFileSync(lanesPath, 'utf-8'))
  *  HTTP + Socket.IO bootstrap
  * ────────────────────────────────────────────────────────── */
 const PORT = process.env.SOCKET_PORT || 3001
-const SOCKET_PATH = process.env.SOCKET_PATH || '/socket.io'
 const httpServer = createServer()
 
 // Origins allowed to open a socket. This has to be an allow-list rather than '*' because the
@@ -149,6 +148,7 @@ const marblesState = {
   winner: null,
 }
 
+const MARBLES_MAX_RACE_MS = 5 * 60 * 1000
 let marblesWorld = null
 let marbleBodies = []     // parallel array to marblesState.marbles
 let marblesFinished = new Set()
@@ -521,7 +521,20 @@ function startMarblesPhysics() {
   })
 
   const FIXED_STEP = 1 / 60
+  const startedAt = Date.now()
   marblesPhysInterval = setInterval(() => {
+    // Hard stop. The end conditions below need every marble to finish or leave the track; one
+    // wedged on the track (or all of them leaving before any finishes) would otherwise keep this
+    // 60Hz simulation and the 20Hz broadcast running until the process restarts.
+    if (Date.now() - startedAt > MARBLES_MAX_RACE_MS) {
+      if (marblesState.phase === 'racing') {
+        marblesState.phase = 'finished'
+        io.to(MARBLES_ROOM).emit('marbles:state', marblesSnapshot())
+      }
+      stopMarblesPhysics()
+      return
+    }
+
     world.step(FIXED_STEP, FIXED_STEP, 6)
 
     if (marblesState.phase !== 'racing') return
@@ -2854,7 +2867,7 @@ async function boot() {
     }
 
     console.log(
-      `[Boot] Redis restore: ${battles.size} battle(s), ${pvpRoomsData.size} pvp room(s), ` +
+      `[Boot] Redis restore: ${pvpRoomsData.size} pvp room(s), ` +
       `${pveData.size} pve match(es), ${pvpData.size} pvp match(es)`
     )
   } catch (err) {

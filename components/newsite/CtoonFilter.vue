@@ -88,7 +88,8 @@
         <div class="cf-pill-row">
           <button v-if="showAuctionFilters" class="cf-pill" :class="{ active: aFilters.featuredOnly }" @click="aFilters.featuredOnly = !aFilters.featuredOnly">★ Feat.</button>
           <button v-if="showAuctionFilters" class="cf-pill" :class="{ active: aFilters.hasBidsOnly  }" @click="aFilters.hasBidsOnly  = !aFilters.hasBidsOnly" >Has Bids</button>
-          <button v-if="showCommonFilters"  class="cf-pill" :class="{ active: aFilters.gtoonsOnly   }" @click="aFilters.gtoonsOnly   = !aFilters.gtoonsOnly"  >gToons</button>
+          <button v-if="showCommonFilters"  class="cf-pill" :class="{ active: aFilters.gtoonsOnly   }" @click="toggleGtoons('gtoonsOnly')"   >gToons</button>
+          <button v-if="showCommonFilters"  class="cf-pill" :class="{ active: aFilters.notGtoonsOnly }" @click="toggleGtoons('notGtoonsOnly')">Not gToons</button>
           <button v-if="showCommonFilters"  class="cf-pill" :class="{ active: aFilters.wishlistOnly }" @click="aFilters.wishlistOnly = !aFilters.wishlistOnly">Wishlist</button>
         </div>
         <div v-if="showCommonFilters" class="cf-owned-row">
@@ -168,10 +169,6 @@ const seriesList = computed(() =>
   [...new Set(ctoons.value.map(c => c.series).filter(Boolean))].sort()
 )
 
-const setList = computed(() =>
-  [...new Set(ctoons.value.map(c => c.set).filter(Boolean))].sort()
-)
-
 const filteredSetList = computed(() => {
   const src = filter.value.series
     ? ctoons.value.filter(c => c.series === filter.value.series)
@@ -199,6 +196,14 @@ function toggleRarity(val) {
   else            filter.value.rarities = filter.value.rarities.filter(r => r !== val)
 }
 
+// gToons and Not gToons are opposites, so switching one on switches the other off.
+function toggleGtoons(key) {
+  const other = key === 'gtoonsOnly' ? 'notGtoonsOnly' : 'gtoonsOnly'
+  const next = !aFilters.value[key]
+  aFilters.value[key] = next
+  if (next) aFilters.value[other] = false
+}
+
 function clearFilters() {
   Object.assign(filter.value, newSiteCtoonFilterDefaults(), {
     // Clearing deliberately differs from the composable defaults: fall back to
@@ -211,6 +216,7 @@ function clearFilters() {
       featuredOnly:  false,
       hasBidsOnly:   false,
       gtoonsOnly:    false,
+      notGtoonsOnly: false,
       wishlistOnly:  false,
       selectedOwned: 'all',
     })

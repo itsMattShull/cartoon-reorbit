@@ -688,7 +688,7 @@ import abilityMeta from '~/data/abilities.json'
 import { useRouter } from 'vue-router'
 import SecondEditionFields from '~/components/admin/SecondEditionFields.vue'
 import OgGtoonLookEditor from '~/components/newsite/admin/legacy/OgGtoonLookEditor.vue'
-import { defaultGtoonCardStyle, sanitizeGtoonCardStyle } from '~/utils/gtoonCardStyle'
+import { defaultGtoonCardStyle } from '~/utils/gtoonCardStyle'
 import { STANDARDIZABLE_RARITIES } from '~/utils/cmartStandardizedRarities'
 
 const router = useRouter()

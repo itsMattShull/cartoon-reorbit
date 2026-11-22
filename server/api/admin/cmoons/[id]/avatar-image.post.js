@@ -1,11 +1,9 @@
 // server/api/admin/cmoons/[id]/avatar-image.post.js
 // Uploads (or replaces) a cMoon's small "avatar" — shown next to its colored name badge on
-// member cZones, sized/presented like a player avatar. Follows the stricter of this codebase's
-// two existing cMoon-image patterns: magic-byte sniffing restricted to static formats (an
-// animated avatar would be a bigger nuisance per-view than the poster art it's modeled on),
-// input pixel/time limits on sharp (image.post.js has these, page-image.post.js doesn't — this
-// keeps the safer pair), and path-containment checks (page-image.post.js's, image.post.js
-// predates them).
+// member cZones, sized/presented like a player avatar. Uses the stricter cMoon-image checks:
+// magic-byte sniffing restricted to static formats (an animated avatar would be a bigger
+// nuisance per-view than the poster art it's modeled on), input pixel/time limits on sharp
+// (as image.post.js has), and path-containment checks (which image.post.js predates).
 import { defineEventHandler, readMultipartFormData, getRequestHeader, createError } from 'h3'
 import { mkdir, writeFile, unlink } from 'node:fs/promises'
 import sharp from 'sharp'

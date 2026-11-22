@@ -163,7 +163,6 @@ function preloadImages(paths) {
     img.src = src
   }
 }
-function onImgLoad() {} // hook kept for future use; images are small enough not to need a skeleton swap
 
 function goToGamesHome() {
   navigateTo('/newsite/games')

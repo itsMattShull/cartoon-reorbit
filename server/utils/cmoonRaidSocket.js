@@ -81,7 +81,7 @@ import { getActiveBossLoreRiddle } from './cmoonRiddle.js'
 import { notifyCMoonRaidLobbyOpened, notifyCMoonRaidKickedAfk } from './notifications.js'
 import { pushUserNotifications } from './realtimeNotify.js'
 import {
-  buildGrantableReward, isValidPlayerSubmittedAction, rollEnemyAction, rollEnemyRewards, PLAYER_MAX_HP,
+  buildGrantableReward, isValidPlayerSubmittedAction, rollEnemyAction, rollEnemyRewards,
   SPECIAL_ACTION, PARALYZED_ACTION, HIT_STREAK_THRESHOLD, mergeTauntPools,
   pickEffectiveSpecialAttack, SPECIAL_ATTACK_SELECT, pickWeightedSpecialAttack,
 } from './cmoonEnemyBattle.js'
@@ -524,6 +524,18 @@ async function loadEligibility({ userId, enemyMember, reservedForRaidId = null }
     }
   }
   return { ok: true, user }
+}
+
+// Small public-shape lookup for other modules that need to know "is this user currently leading
+// or in a live raid, and which one" without reaching into this file's private raids/raidByUser
+// maps directly — see server/utils/myOrbitSocket.js's "Invite to Raid" handler, the one
+// cross-module caller today. Deliberately returns only display-safe fields, never the full raid
+// object (participants/rounds/etc. are this module's business alone).
+export function getActiveRaidForUser(userId) {
+  const raidId = raidByUser.get(userId)
+  const raid = raidId ? raids.get(raidId) : null
+  if (!raid || raid.status === 'RESOLVED') return null
+  return { id: raid.id, status: raid.status, enemyName: raid.enemyName }
 }
 
 /* ── Per-participant team/rank/special snapshot ──────────────────────────────────────────────
@@ -1308,7 +1320,6 @@ async function resolveCMoonRaidOutcome(io, raid, outcome) {
   for (const [uid, p] of raid.participants) if (p.pendingJoin) raid.participants.delete(uid)
   const participantIds = Array.from(raid.participants.keys())
   let grantable = null
-  let rewardsGranted = null
   if (outcome === 'WIN') {
     const rewardRows = await db.cMoonEnemyReward.findMany({
       where: { enemyMemberId: raid.enemyMemberId },

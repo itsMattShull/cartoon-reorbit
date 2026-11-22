@@ -1,7 +1,12 @@
 import { defineEventHandler } from 'h3'
 import { prisma as db } from '@/server/prisma'
+import { cachedJson } from '@/server/utils/cache'
 
-export default defineEventHandler(async () => {
+// Site-wide vanity totals on the public landing page — identical for every visitor and crawler,
+// and one of them counts the whole UserCtoon table — so compute them at most every 5 minutes.
+export default defineEventHandler(() => cachedJson('homepage:stats', 300, loadStats))
+
+async function loadStats() {
   const since = new Date()
   since.setDate(since.getDate() - 30)
 
@@ -29,4 +34,4 @@ export default defineEventHandler(async () => {
   ])
 
   return { users, activeUsers, ctoonsSold, activeAuctions, tradesAllTime }
-})
+}

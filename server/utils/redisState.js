@@ -8,7 +8,6 @@
  *
  * Key prefixes:
  *   pvproom:{id}       – PvP lobby room
- *   traderoom:{name}   – live trade room
  *   pvematch:{id}      – active clash PvE game
  *   pvpmatch:{id}      – active clash PvP game
  */
@@ -16,7 +15,6 @@
 import { getRedis } from './redis.js'
 
 const PVP_ROOM_TTL   = 1800  // 30 min
-const TRADE_TTL      = 1800  // 30 min
 const PVE_MATCH_TTL  = 7200  // 2 hours (active clash PvE game)
 const PVP_MATCH_TTL  = 7200  // 2 hours (active clash PvP game)
 
@@ -31,25 +29,6 @@ function serializePvpRoom(room) {
     usernames:     room.usernames,
     stakePoints:   room.stakePoints,
     lastActivity:  room.lastActivity,
-  }
-}
-
-function serializeTradeRoom(room) {
-  return {
-    traderA:      room.traderA,
-    traderB:      room.traderB,
-    spectators:   Array.from(room.spectators || []),  // Set → Array
-    offers:       room.offers,
-    confirmed:    room.confirmed,
-    finalized:    room.finalized,
-    lastActivity: room.lastActivity,
-  }
-}
-
-function deserializeTradeRoom(data) {
-  return {
-    ...data,
-    spectators: new Set(data.spectators || []),  // Array → Set
   }
 }
 
@@ -91,35 +70,6 @@ export async function scanPvpRooms() {
     try {
       const roomId = keys[i].slice('pvproom:'.length)
       results.set(roomId, JSON.parse(values[i]))
-    } catch { /* skip corrupt entries */ }
-  }
-  return results
-}
-
-// ── Trade Rooms ──────────────────────────────────────────────────────────────
-
-export async function setTradeRoom(roomName, room) {
-  const redis = getRedis()
-  await redis.setex(`traderoom:${roomName}`, TRADE_TTL, JSON.stringify(serializeTradeRoom(room)))
-}
-
-export async function delTradeRoom(roomName) {
-  const redis = getRedis()
-  await redis.del(`traderoom:${roomName}`)
-}
-
-export async function scanTradeRooms() {
-  const redis = getRedis()
-  const keys  = await scanKeys('traderoom:*')
-  const results = new Map()
-  if (!keys.length) return results
-
-  const values = await redis.mget(...keys)
-  for (let i = 0; i < keys.length; i++) {
-    if (!values[i]) continue
-    try {
-      const roomName = keys[i].slice('traderoom:'.length)
-      results.set(roomName, deserializeTradeRoom(JSON.parse(values[i])))
     } catch { /* skip corrupt entries */ }
   }
   return results

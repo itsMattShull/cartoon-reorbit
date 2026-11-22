@@ -4,7 +4,7 @@
 // with the job payloads buy.post.js and open-pack.get.js enqueue.
 import { test, before } from 'node:test'
 import assert from 'node:assert/strict'
-import { skipUnlessDb, boot, mkUser, mkCtoon, mkUserCtoon, pointsOf } from './helpers/dbKit.js'
+import { skipUnlessDb, boot, mkUser, mkCtoon, pointsOf } from './helpers/dbKit.js'
 
 const run = skipUnlessDb ? test.skip : test
 let prisma, processMintJob

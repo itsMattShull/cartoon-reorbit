@@ -16,11 +16,6 @@ export function cmoonPageFsPath(filename) {
   return join(cmoonPageUploadDir(), filename)
 }
 
-export function cmoonPagePublicPath(filename) {
-  return process.env.NODE_ENV === 'production'
-    ? `/images/cmoon-pages/${filename}`
-    : `/cmoon-pages/${filename}`
-}
 
 // Small pill-shaped button graphic shown in place of the plain "cWorld" text tile on a themed
 // cToon modal, and optionally on other cMoons' pages too — a separate, smaller asset from the

@@ -1,7 +1,6 @@
 // server/api/ctoos.get.js
 import {
   defineEventHandler,
-  readBody,
   getRequestHeader,
   createError
 } from 'h3'

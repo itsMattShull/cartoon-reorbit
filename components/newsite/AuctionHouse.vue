@@ -342,10 +342,20 @@ function buildFilterParams() {
   if (aFilters.value.wishlistOnly)                params.set('wishlist', '1')
   if (aFilters.value.hasBidsOnly)                 params.set('hasBids',  '1')
   if (aFilters.value.gtoonsOnly)                  params.set('gtoon',    '1')
+  if (aFilters.value.notGtoonsOnly)               params.set('notGtoon', '1')
   if (aFilters.value.itemType === 'pack')         params.set('type',     'PACK')
   else if (aFilters.value.itemType === 'ctoon')   params.set('type',     'CTOON')
+  // Same rules as applyFilters() on the Current tab — see server/utils/auctionListFilters.js.
+  if (filter.value.priceMin !== '' && filter.value.priceMin != null) params.set('priceMin', String(filter.value.priceMin))
+  if (filter.value.priceMax !== '' && filter.value.priceMax != null) params.set('priceMax', String(filter.value.priceMax))
+  if (filter.value.excludeSecondEditions)         params.set('excludeSecondEditions', '1')
   return params
 }
+
+// Each paginated tab can have several requests in flight while filters change (typing a name
+// fires one per keystroke). Only the newest response for a tab may land, or a slow, older
+// request can overwrite the results for the filters actually on screen.
+const loadSeq = { mine: 0, mybids: 0, all: 0 }
 
 function loadAuctions() {
   isLoading.value = true
@@ -365,6 +375,7 @@ function loadTrendingAuctions() {
 }
 
 function loadMyAuctions() {
+  const seq = ++loadSeq.mine
   isLoadingMy.value = true
   const params = buildFilterParams()
   params.set('page',  String(myPage.value))
@@ -372,14 +383,16 @@ function loadMyAuctions() {
   params.set('sort',  filter.value.sortField)
   return $fetch(`/api/my-auctions?${params.toString()}`)
     .then(data => {
+      if (seq !== loadSeq.mine) return
       myAuctions.value  = Array.isArray(data?.items) ? data.items : []
       myTotalPages.value = data?.totalPages ?? 1
       syncCmartCtoons()
     })
-    .finally(() => { isLoadingMy.value = false })
+    .finally(() => { if (seq === loadSeq.mine) isLoadingMy.value = false })
 }
 
 function loadMyBids() {
+  const seq = ++loadSeq.mybids
   isLoadingMyBids.value = true
   const params = buildFilterParams()
   params.set('page',  String(myBidsPage.value))
@@ -387,14 +400,16 @@ function loadMyBids() {
   params.set('sort',  filter.value.sortField)
   return $fetch(`/api/auction/mybids?${params.toString()}`)
     .then(data => {
+      if (seq !== loadSeq.mybids) return
       myBids.value           = Array.isArray(data?.items) ? data.items : []
       myBidsTotalPages.value = data?.totalPages ?? 1
       syncCmartCtoons()
     })
-    .finally(() => { isLoadingMyBids.value = false })
+    .finally(() => { if (seq === loadSeq.mybids) isLoadingMyBids.value = false })
 }
 
 function loadAllAuctions() {
+  const seq = ++loadSeq.all
   isLoadingAll.value = true
   const params = buildFilterParams()
   params.set('page',  String(allPage.value))
@@ -402,11 +417,12 @@ function loadAllAuctions() {
   params.set('sort',  filter.value.sortField)
   return $fetch(`/api/auctions/all?${params.toString()}`)
     .then(data => {
+      if (seq !== loadSeq.all) return
       allAuctions.value  = Array.isArray(data?.items) ? data.items : []
       allTotalPages.value = data?.totalPages ?? 1
       syncCmartCtoons()
     })
-    .finally(() => { isLoadingAll.value = false })
+    .finally(() => { if (seq === loadSeq.all) isLoadingAll.value = false })
 }
 
 async function loadWishlist() {
@@ -471,8 +487,11 @@ watch(
     () => filter.value.name, () => filter.value.rarities, () => filter.value.series, () => filter.value.set,
     () => filter.value.cMoon,
     () => filter.value.priceMin, () => filter.value.priceMax,
+    () => filter.value.excludeSecondEditions,
     () => aFilters.value.featuredOnly, () => aFilters.value.wishlistOnly,
-    () => aFilters.value.gtoonsOnly,   () => aFilters.value.selectedOwned,
+    () => aFilters.value.hasBidsOnly,
+    () => aFilters.value.gtoonsOnly,   () => aFilters.value.notGtoonsOnly,
+    () => aFilters.value.selectedOwned,
     () => aFilters.value.itemType,
   ],
   () => {
@@ -517,6 +536,8 @@ function applyFilters(items) {
     }
     if (aFilters.value.hasBidsOnly && Number(item.bidCount ?? 0) < 1)               return false
     if (aFilters.value.gtoonsOnly  && !item.isGtoon && !item.isOgGtoon)                              return false
+    // Packs are not gToons, so Not gToons keeps them.
+    if (aFilters.value.notGtoonsOnly && (item.isGtoon || item.isOgGtoon))                            return false
     const currentPrice = Number(item.highestBid > 0 ? item.highestBid : item.initialBid) || 0
     if (filter.value.priceMin !== '' && currentPrice < Number(filter.value.priceMin)) return false
     if (filter.value.priceMax !== '' && currentPrice > Number(filter.value.priceMax)) return false
@@ -590,7 +611,7 @@ const emptyMessage = computed(() => ({
 const hasActiveFilters = computed(() => !!(
   aFilters.value.itemType !== 'all' || filter.value.name || filter.value.rarities.length || filter.value.series || filter.value.set || filter.value.cMoon ||
   aFilters.value.featuredOnly || aFilters.value.wishlistOnly || aFilters.value.hasBidsOnly ||
-  aFilters.value.gtoonsOnly   || aFilters.value.selectedOwned !== 'all'
+  aFilters.value.gtoonsOnly   || aFilters.value.notGtoonsOnly || aFilters.value.selectedOwned !== 'all'
 ))
 
 // ── Actions ───────────────────────────────────────────────────────

@@ -664,6 +664,8 @@ function onClose() {
 // the first load, then again on each subsequent client-side route change below.
 function maybeCheck() {
   if (isAdminRoute.value) return
+  // Logged-out visitors can never be offered a battle; the request would only 401, on every navigation.
+  if (!user.value) return
   checkOnNavigate()
 }
 onMounted(maybeCheck)

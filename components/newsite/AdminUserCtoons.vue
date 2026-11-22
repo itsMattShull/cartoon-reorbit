@@ -177,7 +177,7 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { formatQuantity, TIME_BASED_CAP } from '~/utils/formatQuantity'
+import { formatQuantity } from '~/utils/formatQuantity'
 
 const take = 20
 const skip = ref(0)

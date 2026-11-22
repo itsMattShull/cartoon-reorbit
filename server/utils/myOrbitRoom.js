@@ -62,6 +62,18 @@ export function parseMyOrbitRoomBody(body, existing) {
   const sortOrder = body?.sortOrder === undefined
     ? (existing ? existing.sortOrder : 0)
     : toNumber(body.sortOrder)
+  // Faction theming ("war rooms") and the raid-spectator flag ("Raid Den") — both purely
+  // cosmetic/optional, so an empty string/null from the admin form's "no faction" option clears
+  // the field rather than erroring. Existence of a non-null themeCMoonId is left to the DB's own
+  // FK (onDelete: SetNull) at insert time, same division of labor parseMyOrbitRoomTiles already
+  // documents for tileId above — the admin UI only ever offers IDs from a live CMoon list anyway.
+  const themeCMoonId = body?.themeCMoonId === undefined
+    ? (existing ? existing.themeCMoonId : null)
+    : (typeof body.themeCMoonId === 'string' && body.themeCMoonId ? body.themeCMoonId : null)
+  const isRaidDen = toBoolean(body?.isRaidDen, existing ? !!existing.isRaidDen : false)
+  // Leaderboard plaque — same purely cosmetic/optional, not-enforced-unique stance as isRaidDen
+  // just above (see that field's own schema comment on MyOrbitRoom).
+  const showLeaderboard = toBoolean(body?.showLeaderboard, existing ? !!existing.showLeaderboard : false)
 
   if (!name || name.length > MYORBIT_ROOM_NAME_MAX_LENGTH) {
     return { ok: false, message: `Name is required (max ${MYORBIT_ROOM_NAME_MAX_LENGTH} characters)` }
@@ -79,8 +91,10 @@ export function parseMyOrbitRoomBody(body, existing) {
   if (!Number.isInteger(sortOrder) || sortOrder < MYORBIT_SORT_ORDER_MIN || sortOrder > MYORBIT_SORT_ORDER_MAX) {
     return { ok: false, message: `Sort order must be a whole number between ${MYORBIT_SORT_ORDER_MIN} and ${MYORBIT_SORT_ORDER_MAX}` }
   }
+  if (isRaidDen === null) return { ok: false, message: 'isRaidDen must be true or false' }
+  if (showLeaderboard === null) return { ok: false, message: 'showLeaderboard must be true or false' }
 
-  return { ok: true, data: { name, gridWidth, gridHeight, capacity, active, sortOrder } }
+  return { ok: true, data: { name, gridWidth, gridHeight, capacity, active, sortOrder, themeCMoonId, isRaidDen, showLeaderboard } }
 }
 
 /**

@@ -47,7 +47,7 @@ export {
   PARALYZED_ACTION, SPECIAL_ACTION,
 } from './cmoonEnemyBattle.js'
 import {
-  isAttack, isBlock, attackLands, rollHitDamage,
+  isAttack, isBlock, attackLands,
   PLAYER_MAX_HP, HEAL_ON_SUCCESSFUL_BLOCK, NORMAL_HIT_DAMAGE,
 } from './cmoonEnemyBattle.js'
 // Point-splitting is already a pure, ID-agnostic function — reused verbatim rather than forked

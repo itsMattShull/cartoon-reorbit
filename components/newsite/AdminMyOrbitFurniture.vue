@@ -29,6 +29,7 @@
             <span class="px-1.5 py-0.5 rounded text-[10px] flex-shrink-0" :class="f.blocksWalk ? 'bg-amber-100 text-amber-700' : 'bg-gray-200 text-gray-600'">
               {{ f.blocksWalk ? 'Blocks walk' : 'Walk-through' }}
             </span>
+            <span v-if="f.sittable" class="px-1.5 py-0.5 rounded text-[10px] flex-shrink-0 bg-purple-100 text-purple-700">Sittable</span>
             <span class="text-gray-500 flex-shrink-0">{{ f.placementCount }} placement(s)</span>
           </button>
         </div>
@@ -67,11 +68,17 @@
             <input type="checkbox" v-model="form.blocksWalk" />
             <span class="text-[11px] font-medium">Blocks walk</span>
           </label>
+          <label class="flex items-center gap-2">
+            <input type="checkbox" v-model="form.sittable" />
+            <span class="text-[11px] font-medium">Sittable</span>
+          </label>
         </div>
         <p class="text-[11px] text-gray-500">
           Z-offset nudges this item's rendered stacking order within its own tile's depth band
           (floor &lt; furniture &lt; avatars) — for tall items that should render in front of or
           behind an avatar standing one row off. Purely cosmetic, never affects pathfinding.
+          "Sittable" lets a player standing right next to a placed piece sit near it (a pose flag
+          only — they stay off its own tile, which keeps blocking walk the same as always).
         </p>
 
         <div class="flex gap-3 items-start">
@@ -120,7 +127,7 @@ const pendingFile = ref(null)
 const previewUrl = ref(null)
 
 function emptyForm() {
-  return { name: '', footprintW: 1, footprintH: 1, blocksWalk: true, zOffset: 0, assetPath: '' }
+  return { name: '', footprintW: 1, footprintH: 1, blocksWalk: true, zOffset: 0, sittable: false, assetPath: '' }
 }
 
 function clearPendingFile() {
@@ -191,6 +198,7 @@ async function saveFurniture() {
     fd.append('footprintH', String(form.value.footprintH))
     fd.append('blocksWalk', String(form.value.blocksWalk))
     fd.append('zOffset', String(form.value.zOffset))
+    fd.append('sittable', String(form.value.sittable))
     if (pendingFile.value) fd.append('image', pendingFile.value)
 
     if (selectedId.value) {

@@ -128,6 +128,11 @@
                 <p class="text-[10px] text-gray-500 mt-1">Current consecutive-day streak of earning the 👑.</p>
               </div>
               <div class="flex flex-col gap-1">
+                <label class="text-xs font-medium">OG gToons Wins ≥</label>
+                <input v-model.number="form.criteria.ogGtoonsWinsGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
+                <p class="text-[10px] text-gray-500 mt-1">Lifetime OG gToons wins against real players (queue, challenges and tournaments). Practice games against the bot don't count.</p>
+              </div>
+              <div class="flex flex-col gap-1">
                 <label class="text-xs font-medium">Flappy Powerpuff Best Score ≥</label>
                 <input v-model.number="form.criteria.flappyBestScoreGte" type="number" min="0" class="border rounded-md px-2 py-1.5 text-sm" />
                 <p class="text-[10px] text-gray-500 mt-1">
@@ -360,6 +365,7 @@ const emptyForm = () => ({
     wordleWinsGte: null,
     wordleCurrentStreakGte: null,
     flappyBestScoreGte: null,
+    ogGtoonsWinsGte: null,
     cMoonPointsGte: null,
     setsRequired: [],
     ctoonsRequired: [],
@@ -498,6 +504,7 @@ function startEdit(a) {
       wordleWinsGte: a.wordleWinsGte ?? null,
       wordleCurrentStreakGte: a.wordleCurrentStreakGte ?? null,
       flappyBestScoreGte: a.flappyBestScoreGte ?? null,
+      ogGtoonsWinsGte: a.ogGtoonsWinsGte ?? null,
       cMoonPointsGte: a.cMoonPointsGte ?? null,
       setsRequired: [...(a.setsRequired || [])],
       ctoonsRequired: (a.ctoonsRequired || []).map(r => ({ ctoonId: r.ctoonId, name: r.name, assetPath: r.assetPath || null })),

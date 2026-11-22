@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseMyOrbitChatMessage, containsBannedWord, MYORBIT_CHAT_MAX_LENGTH } from '../server/utils/myOrbitChatFilter.js'
+import { parseMyOrbitChatMessage, containsBannedWord, parseMyOrbitStatus, MYORBIT_CHAT_MAX_LENGTH, MYORBIT_STATUS_MAX_LENGTH } from '../server/utils/myOrbitChatFilter.js'
 
 test('parseMyOrbitChatMessage: trims whitespace', () => {
   const result = parseMyOrbitChatMessage('  hello there  ')
@@ -46,4 +46,30 @@ test('containsBannedWord: false for an empty message or empty list', () => {
 
 test('containsBannedWord: tolerates junk entries in the list without throwing', () => {
   assert.equal(containsBannedWord('hello world', [null, '', undefined, 42, 'world']), true)
+})
+
+// ── parseMyOrbitStatus ───────────────────────────────────────────────────
+
+test('parseMyOrbitStatus: trims whitespace', () => {
+  const result = parseMyOrbitStatus('  trading cToons  ')
+  assert.equal(result.ok, true)
+  assert.equal(result.status, 'trading cToons')
+})
+
+test('parseMyOrbitStatus: an empty string is VALID (clears the status) - unlike chat', () => {
+  assert.equal(parseMyOrbitStatus('').ok, true)
+  assert.equal(parseMyOrbitStatus('').status, '')
+  assert.equal(parseMyOrbitStatus('   ').ok, true)
+  assert.equal(parseMyOrbitStatus('   ').status, '')
+})
+
+test('parseMyOrbitStatus: rejects a non-string', () => {
+  assert.equal(parseMyOrbitStatus(undefined).ok, false)
+  assert.equal(parseMyOrbitStatus(null).ok, false)
+  assert.equal(parseMyOrbitStatus(42).ok, false)
+})
+
+test(`parseMyOrbitStatus: rejects a status over ${MYORBIT_STATUS_MAX_LENGTH} characters, accepts exactly the max`, () => {
+  assert.equal(parseMyOrbitStatus('x'.repeat(MYORBIT_STATUS_MAX_LENGTH + 1)).ok, false)
+  assert.equal(parseMyOrbitStatus('x'.repeat(MYORBIT_STATUS_MAX_LENGTH)).ok, true)
 })

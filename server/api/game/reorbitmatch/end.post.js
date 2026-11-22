@@ -7,7 +7,6 @@ import { COMBAT_POOL_GAME_NAMES } from '@/server/utils/gamePoints'
 
 const LOCK_TTL_MS = 15_000
 const MAX_BODY_BYTES = 256 * 1024 // 256 KB
-const MAX_MOVES_PER_SECOND = 10   // 1 move per 100ms max
 const MAX_MOVES = 5000            // absolute cap on replayed moves (DoS guard)
 
 function lockKey(userId) { return `reorbitmatch:lock:${userId}` }

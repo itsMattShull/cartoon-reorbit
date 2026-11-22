@@ -5,7 +5,7 @@ import { isLockedCopy } from '@/server/utils/lockRules'
 import { ensureEconomyDataFresh } from '@/server/utils/economyFreshness'
 import { getDailyReferenceValues, MAX_WORTH_CTOON_TYPES } from '@/server/utils/collectionWorth'
 import { MIN_SAMPLE_SIZE } from '@/server/utils/economyValuation'
-import { OG_GTOON_DISPLAY_SELECT, ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
+import { ogGtoonDisplay } from '~/server/utils/ogGtoonDisplay'
 
 export default defineEventHandler(async (event) => {
   // auth

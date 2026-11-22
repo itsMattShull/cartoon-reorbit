@@ -43,7 +43,8 @@ export const NOTIFICATION_TYPES = Object.freeze({
   CMOON_RAID_PREVIEW_STARTED: 'CMOON_RAID_PREVIEW_STARTED',
   PVP_PACK_WON: 'PVP_PACK_WON',
   CMOON_RAID_KICKED_AFK: 'CMOON_RAID_KICKED_AFK',
-  WISHLIST_AUCTION_LISTED: 'WISHLIST_AUCTION_LISTED'
+  WISHLIST_AUCTION_LISTED: 'WISHLIST_AUCTION_LISTED',
+  FOLLOWED_USER_ONLINE: 'FOLLOWED_USER_ONLINE'
 })
 
 // Mirrors the guard in server/utils/discord.js — the official account is a
@@ -435,6 +436,87 @@ export async function notifyWishlistAuctionListed (db, { auctionId, ctoonId, cto
       for (const r of rows || []) written.push(r.userId)
     } catch (err) {
       console.error('[notifications] wishlist auction broadcast failed:', err?.message || err)
+    }
+  }
+  return written
+}
+
+// Rows per batch for notifyFollowedUserOnline — same bounding reasoning as LOBBY_BATCH_SIZE/
+// WISHLIST_BATCH_SIZE above.
+const FOLLOW_BATCH_SIZE = 1000
+
+/**
+ * A player came online in MyOrbit (joined any room while not already present anywhere) — alert
+ * everyone following them (MyOrbitFollow.followedId = this user). Call from
+ * server/utils/myOrbitSocket.js's join handler, the only place that already knows the before/
+ * after presence transition (see server/utils/myOrbitPresence.js) — this function just writes
+ * the alert, same "take db as a parameter, no io" contract as every other notifier here.
+ *
+ * contextId is the followed player's own USERNAME, not their id — unlike every other typed
+ * notification in this file. Its click target (the followed player's cZone,
+ * pages/newsite/czone/[username].vue) is addressed by username, and notificationRoute()
+ * (components/Onboarding.vue) deliberately never does a DB round trip to resolve one at click
+ * time (see that function's own header comment on why routes are built from `type` alone).
+ * Reusing contextId for this avoids adding a third column just for one notification type. It
+ * still collapses correctly: a given followed player has exactly one current username to key on
+ * while this notification is unread, same guarantee every other contextId-keyed type above relies
+ * on.
+ *
+ * No per-type opt-out flag, unlike allowWishlistAuctionNotifications: following someone IS the
+ * subscription here, so unfollowing (deleting the MyOrbitFollow row) is the opt-out. Banned users
+ * and the official account are still filtered, same as every other notifier. The followed player
+ * themselves can never be their own follower — enforced where MyOrbitFollow rows are created
+ * (server/api/myorbit/follow/[userId].post.js), not re-checked here. Returns the userIds actually
+ * written (for the live push), or [] on failure/no followers — never throws.
+ */
+export async function notifyFollowedUserOnline (db, { followedUserId, followedUsername }) {
+  if (!db || !followedUserId || !followedUsername) return []
+
+  let followers
+  try {
+    followers = await db.myOrbitFollow.findMany({
+      where: { followedId: followedUserId },
+      select: { followerId: true }
+    })
+  } catch (err) {
+    console.error('[notifications] myOrbit follow lookup failed:', err?.message || err)
+    return []
+  }
+
+  const unique = [...new Set(followers.map(f => f.followerId))]
+  if (!unique.length) return []
+
+  const title = `${followedUsername} just came online in MyOrbit`
+  const body = 'Jump into their room to say hi.'
+  const written = []
+  for (let i = 0; i < unique.length; i += FOLLOW_BATCH_SIZE) {
+    const batch = unique.slice(i, i + FOLLOW_BATCH_SIZE)
+    const ids = batch.map(() => randomUUID())
+    try {
+      // Every parameter is cast explicitly: with Prisma 7's pg adapter raw parameters reach
+      // Postgres untyped (see the ::timestamp(3) comment in server/utils/cmoon.js).
+      const rows = await db.$queryRaw`
+        INSERT INTO "Notification" (
+          "id", "userId", "type", "title", "body", "contextType", "contextId",
+          "count", "createdAt", "updatedAt"
+        )
+        SELECT t."id", t."userId", ${NOTIFICATION_TYPES.FOLLOWED_USER_ONLINE}::"NotificationType",
+               ${title}::text, ${body}::text, NULL::"LockedContextType", ${followedUsername}::text, 1, NOW(), NOW()
+        FROM unnest(${ids}::text[], ${batch}::text[]) AS t("id", "userId")
+        JOIN "User" u ON u."id" = t."userId"
+        WHERE COALESCE(u."banned", false) = false AND u."username" IS DISTINCT FROM ${OFFICIAL_USERNAME}::text
+        ON CONFLICT ("userId", "type", "contextId") WHERE "readAt" IS NULL
+        DO UPDATE SET
+          "count"     = "Notification"."count" + 1,
+          "title"     = EXCLUDED."title",
+          "body"      = EXCLUDED."body",
+          "createdAt" = NOW(),
+          "updatedAt" = NOW()
+        RETURNING "userId"
+      `
+      for (const r of rows || []) written.push(r.userId)
+    } catch (err) {
+      console.error('[notifications] myOrbit follow broadcast failed:', err?.message || err)
     }
   }
   return written

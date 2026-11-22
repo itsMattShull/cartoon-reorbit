@@ -27,6 +27,3 @@
 // duelRuntime's assertSpec() checks each name against a real Prisma delegate at boot, so a
 // typo here fails at startup rather than at payout.
 export const DUEL_PAIR_SCOPE = ['EdRpsMatch', 'PokemonBattleMatch']
-
-/** The Prisma delegate name for a table, which is the model name with a lowercased initial. */
-export const delegateFor = (table) => table.charAt(0).toLowerCase() + table.slice(1)
