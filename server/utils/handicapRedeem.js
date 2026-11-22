@@ -11,9 +11,9 @@
 // hold is open (pages/newsite/redeem.vue) — identical in appearance to an ordinary slow request.
 import { prisma } from '../prisma.js'
 
-// "at least 3 people have minted that code" — counted as OTHER players' Claim rows for the same
-// code created strictly after this hold's own requestedAt (i.e. after the flagged player's own
-// attempt), never counting claims that happened earlier. A plain constant, not an admin setting:
+// "at least 3 people have minted that code" — counted as ALL Claim rows for the same code,
+// regardless of whether they happened before or after this hold was requested (see
+// claimsSinceHold below). A plain constant, not an admin setting:
 // nothing in the request asked for this to be tunable, and a stray mis-typed value here would
 // silently defeat the whole feature.
 export const HANDICAP_REQUIRED_RELEASE_CLAIMS = 3
@@ -24,7 +24,13 @@ export async function isUserHandicapped(userId) {
   return !!row
 }
 
-/** How many OTHER claims of this code have landed since a given hold was requested. */
-export async function claimsSinceHold(codeId, requestedAt) {
-  return prisma.claim.count({ where: { codeId, claimedAt: { gt: requestedAt } } })
+/**
+ * How many claims of this code exist in total. Deliberately NOT limited to claims made after the
+ * hold was requested: a code that already had 3+ redemptions before the flagged player's attempt
+ * should release immediately rather than waiting for 3 more. (A held player has no Claim row of
+ * their own yet, so this never counts them.) `requestedAt` is kept in the signature only so the
+ * callers don't change.
+ */
+export async function claimsSinceHold(codeId, _requestedAt) {
+  return prisma.claim.count({ where: { codeId } })
 }

@@ -379,6 +379,26 @@ export async function releaseEligibleHandicapHolds(codeId, code) {
 }
 
 /**
+ * Retry path for the flagged player's own redeem page (see server/api/redeem/status.get.js): if
+ * THIS user's hold on this code is still PENDING and enough other claims have landed since, release
+ * it now. The automatic release in redeemClaimCode only fires off someone else's successful claim,
+ * so a release that was missed or failed (mint error, race) would otherwise sit until yet another
+ * player claimed the code. Never throws — a hold that can't release yet just stays PENDING and the
+ * page's next retry tries again.
+ */
+export async function retryReleaseUserHold(userId, codeId, code) {
+  try {
+    const hold = await prisma.handicapRedeemHold.findUnique({ where: { userId_codeId: { userId, codeId } } })
+    if (!hold || hold.status !== 'PENDING') return
+    const othersCount = await claimsSinceHold(codeId, hold.requestedAt)
+    if (othersCount < HANDICAP_REQUIRED_RELEASE_CLAIMS) return
+    await releaseHold(hold, code)
+  } catch (err) {
+    console.error(`[handicapRedeem] retry release failed (user ${userId}, code ${codeId}):`, err?.statusMessage || err?.message || err)
+  }
+}
+
+/**
  * An admin's manual override: executes a specific still-PENDING hold right now, ignoring
  * HANDICAP_REQUIRED_RELEASE_CLAIMS entirely — e.g. because the code will realistically never get
  * 3 more redemptions (it's old, or near maxClaims). Throws (and leaves the hold untouched) if the

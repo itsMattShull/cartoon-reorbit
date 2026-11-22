@@ -2636,6 +2636,8 @@ model TradeOffer {
   ctoons         TradeOfferCtoon[]
   packs          TradeOfferPack[]
   ctoonOwnerLogs CtoonOwnerLog[]
+  /// Set once an admin has undone this (ACCEPTED) trade with the Trade Reversal tool.
+  reversal       TradeReversal?
 
   // incoming.get.js / outgoing.get.js filter on one party and sort by createdAt;
   // pending-trade lookups filter on status. Neither column was indexed.
@@ -2676,6 +2678,24 @@ model TradeOfferPack {
 
   @@unique([tradeOfferId, userPackId, role])
   @@index([userPackId])
+}
+
+/// An admin's undo of an ACCEPTED TradeOffer (admin "Trade Reversal" tool). One row per offer, ever: the unique
+/// tradeOfferId is what stops a trade being reversed twice, even by two admins clicking at the same moment. The offer
+/// itself keeps status ACCEPTED so trade counts, achievements and the trade logs are unchanged; this row is the record
+/// of the reversal. `summary` is the overview the admin was shown (what moved back, what was skipped and why, points).
+model TradeReversal {
+  id                     String   @id @default(uuid())
+  tradeOfferId           String   @unique
+  adminId                String
+  adminUsername          String? // snapshot, survives renames
+  includeFairMarketValue Boolean  @default(false)
+  summary                Json?
+  createdAt              DateTime @default(now())
+
+  tradeOffer TradeOffer @relation(fields: [tradeOfferId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
 }
 
 /// Are we offering this cToon, or requesting it?

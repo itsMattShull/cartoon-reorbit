@@ -55,6 +55,7 @@ export const ADMIN_SECTIONS = [
   S('deviceFingerprints', 'Browser Fingerprints', 'users', nu('AdminDeviceFingerprintLogs'), { sensitive: true, desc: 'Shows device data' }),
   S('vpn-queue', 'VPN Queue', 'users', nu('AdminVpnQueue')),
   S('initiateTrade', 'Initiate Trade', 'users', legacy('AdminLegacyInitiateTrade'), { sensitive: true, desc: 'Moves cToons between users' }),
+  S('tradeReversal', 'Trade Reversal', 'users', nu('AdminTradeReversal'), { sensitive: true, desc: 'Undo an accepted trade' }),
 
   // ── Content ─────────────────────────────────────────────────
   S('ctoons', 'Manage cToons', 'content', legacy('AdminLegacyCtoons'), { desc: 'Includes add and edit' }),

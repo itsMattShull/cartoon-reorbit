@@ -197,18 +197,37 @@ const balloons = ref([])
 // it takes (see server/utils/codeRedemption.js). Deliberately reuses the exact same `submitting`
 // state/button copy a normal request already shows: nothing on this page should look any
 // different for a redemption that's taking a while.
-const POLL_INTERVAL_MS = 4000
+// Each check also asks the server to retry releasing the hold (it releases once 3 other players
+// have claimed the code). Checks run at 5s, 10s and 30s after the redemption started, then keep
+// going every 30s so the button never gets stuck if the code is slow to be claimed by others.
+const POLL_DELAYS_MS = [5000, 10000, 30000]
+const POLL_REPEAT_MS = 30000
 let pollHandle = null
+let pollToken = 0
 function stopPolling() {
-  if (pollHandle) { clearInterval(pollHandle); pollHandle = null }
+  pollToken++
+  if (pollHandle) { clearTimeout(pollHandle); pollHandle = null }
 }
 function startPolling(submittedCode) {
   stopPolling()
-  pollHandle = setInterval(async () => {
+  const token = pollToken
+  const startedAt = Date.now()
+  let attempt = 0
+  const schedule = () => {
+    // Delays are measured from the start (5s, 10s, 30s), so the 2nd check fires 5s after the 1st
+    // and the 3rd 20s after the 2nd; later checks repeat every POLL_REPEAT_MS.
+    const target = attempt < POLL_DELAYS_MS.length ? startedAt + POLL_DELAYS_MS[attempt] : Date.now() + POLL_REPEAT_MS
+    pollHandle = setTimeout(check, Math.max(0, target - Date.now()))
+  }
+  const check = async () => {
+    pollHandle = null
+    attempt++
     try {
       const status = await $fetch('/api/redeem/status', { params: { code: submittedCode } })
-      if (!status?.redeeming) { stopPolling(); applySuccess(status) }
+      if (token !== pollToken) return
+      if (!status?.redeeming) { stopPolling(); applySuccess(status); return }
     } catch (err) {
+      if (token !== pollToken) return
       const statusCode = err?.statusCode || err?.response?.status
       // A 4xx here means retrying won't help — the session expired (401) or the hold is simply
       // gone (404) — so stop rather than leaving the button stuck on "Redeeming…" and polling
@@ -218,9 +237,12 @@ function startPolling(submittedCode) {
         stopPolling()
         submitting.value = false
         showToast(statusCode === 401 ? 'Please sign in again to see your redemption.' : 'Something went wrong — please try the code again.', 'error')
+        return
       }
     }
-  }, POLL_INTERVAL_MS)
+    schedule()
+  }
+  schedule()
 }
 onBeforeUnmount(stopPolling)
 
