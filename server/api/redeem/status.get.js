@@ -5,6 +5,7 @@
 // same way a plain POST /api/redeem response always has.
 import { defineEventHandler, getQuery, getRequestHeader, createError } from 'h3'
 import { prisma } from '@/server/prisma'
+import { retryReleaseUserHold } from '@/server/utils/codeRedemption'
 
 export default defineEventHandler(async (event) => {
   const cookie = getRequestHeader(event, 'cookie') || ''
@@ -18,6 +19,10 @@ export default defineEventHandler(async (event) => {
 
   const claimCode = await prisma.claimCode.findUnique({ where: { code }, select: { id: true } })
   if (!claimCode) throw createError({ statusCode: 404, statusMessage: 'Invalid code' })
+
+  // Each poll doubles as a retry: if the hold is still PENDING but 3 other players have now
+  // claimed this code, release it here rather than waiting for yet another claim to trigger it.
+  await retryReleaseUserHold(userId, claimCode.id, code)
 
   const hold = await prisma.handicapRedeemHold.findUnique({ where: { userId_codeId: { userId, codeId: claimCode.id } } })
   if (!hold) throw createError({ statusCode: 404, statusMessage: 'Nothing pending for this code' })
