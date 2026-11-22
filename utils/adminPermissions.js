@@ -15,7 +15,7 @@
 export const ADMIN_PERMISSION_KEYS = [
   'analytics', 'collectionAnalytics', 'setAnalytics', 'packAnalytics', 'cMoonEnemyAnalytics', 'checkUserMints', 'retention',
   'manageUsers', 'manageUserHp', 'manageCollection', 'cheatFinder', 'checkCheating', 'cheatingTool', 'handicapRedeems',
-  'suspiciousActivity', 'deviceFingerprints', 'vpn-queue', 'initiateTrade', 'myOrbitModeration',
+  'suspiciousActivity', 'deviceFingerprints', 'vpn-queue', 'initiateTrade', 'tradeReversal', 'myOrbitModeration',
   'ctoons', 'ctoonsBulkUpload', 'submittedCtoons', 'ctoonSuggestions', 'starterSets', 'packs',
   'backgrounds', 'czoneSearch', 'czoneContest', 'homepage', 'announcements', 'ads', 'tutorial',
   'certificate', 'encyclopedia', 'siteTheme', 'myOrbitTiles', 'myOrbitFurniture', 'myOrbitRooms',
@@ -227,6 +227,7 @@ export const ADMIN_API_SEGMENT_PERMS = {
   'touch-trades': [],
   tournaments: ['clashTournaments'],
   'trade-offers': ['initiateTrade'],
+  'trade-reversal': ['tradeReversal'],
   trades: ['tradeLogs'],
   'trades-requested': ['analytics'],
   tutorial: ['tutorial'],
@@ -361,7 +362,7 @@ export function adminScopeDenial (scope, rawPath, method = 'GET') {
 // list (prisma/migrations/20261018130000_sub_admin_permissions).
 export const STANDARD_SUB_ADMIN_WITHHELD = [
   'manageUsers', 'manageUserHp', 'initiateTrade', 'production', 'cheatingTool', 'checkCheating', 'codes',
-  'auctions', 'dissolveQueue', 'globalSettings', 'myOrbitModeration', 'handicapRedeems'
+  'auctions', 'dissolveQueue', 'globalSettings', 'myOrbitModeration', 'handicapRedeems', 'tradeReversal'
 ]
 
 export const ADMIN_PERMISSION_PRESETS = [
