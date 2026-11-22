@@ -16,7 +16,8 @@ export const TRANSFER_METHODS = [
   'Wishlist Trade',
   'Auction',
   'ACCOUNT_DISSOLVE',
-  'TRADE_AUDIT_REVOKE'
+  'TRADE_AUDIT_REVOKE',
+  'Trade Reversal'
 ]
 
 // SQL fragment excluding TRANSFER_METHODS rows, safe to inline into
