@@ -306,7 +306,6 @@ html.newsite-active [role="button"]:not([aria-disabled="true"]) {
         <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}">
           <MiddleSidebarImages v-show="!sidebarMiddleComponent" />
           <CmartSidebar        v-show="sidebarMiddleComponent === 'CmartSidebar'" />
-          <NewcmartSidebar     v-show="sidebarMiddleComponent === 'NewcmartSidebar'" />
           <AuctionHouseSidebar v-show="sidebarMiddleComponent === 'AuctionHouseSidebar'" />
           <MyCollectionSidebar v-show="sidebarMiddleComponent === 'MyCollectionSidebar'" />
           <AllCtoonsSidebar    v-show="sidebarMiddleComponent === 'AllCtoonsSidebar'" />
@@ -352,9 +351,7 @@ import { useClickSoundEffects } from '@/composables/useClickSoundEffects'
 import { useSiteTheme } from '@/composables/useSiteTheme'
 
 const route = useRoute()
-// Mirrors layouts/default.vue's own admin exclusion (`!route.path.startsWith('/admin')`) — the
-// newsite admin console lives under /newsite/admin/* and shares this layout with the rest of
-// /newsite, so it needs its own check rather than inheriting default.vue's.
+// The admin console lives under /newsite/admin/* and shares this layout with the rest of /newsite.
 const isAdminRoute = computed(() => route.path.startsWith('/newsite/admin'))
 // The OG gToons hub and match board don't show the floating "Daily" onboarding widget.
 const isOgGtoonsRoute = computed(() => route.path.startsWith('/newsite/gtoons-classic'))

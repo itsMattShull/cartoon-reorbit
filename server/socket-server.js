@@ -1719,7 +1719,7 @@ io.on('connection', socket => {
       } else {
         const display = u?.discordId ? `<@${u.discordId}>` : (u?.username || 'Unknown')
         const payload = {
-          content: `🎮 ${display} created a gToons Clash **PvP** room and is looking for a match!  Head over here to play them: https://www.cartoonreorbit.com/games/clash/rooms`
+          content: `🎮 ${display} created a gToons Clash **PvP** room and is looking for a match!  Head over here to play them: https://www.cartoonreorbit.com/newsite/gtoons`
         }
         const res = await fetch(
           `https://discord.com/api/v10/channels/${channelId}/messages`,
@@ -2546,7 +2546,7 @@ setInterval(async () => {
       const baseUrl   = process.env.NODE_ENV === 'production'
         ? 'https://www.cartoonreorbit.com'
         : 'http://localhost:3000'
-      const auctionLink = `${baseUrl}/auction/${auc.id}`
+      const auctionLink = `${baseUrl}/newsite/AuctionHouse/${auc.id}`
 
       // What is being sold: a cToon, or a sealed pack (no rarity / mint number / holiday flag).
       const isPack = auc.kind === 'PACK'

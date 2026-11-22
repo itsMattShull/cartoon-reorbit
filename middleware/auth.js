@@ -2,21 +2,8 @@
 export default defineNuxtRouteMiddleware(async (to) => {
   const { user, fetchSelf, blockedRedirect } = useAuth()
 
-  // Smart behavior on the public home
-  if (to.path === '/') {
-    try { await fetchSelf() } catch {}
-    // A banned/suspended account gets its notice page (with reason/until) instead of silently
-    // staying on '/' — see blockedRedirect's comment in composables/useAuth.js.
-    if (blockedRedirect.value) return navigateTo(blockedRedirect.value)
-    if (user.value?.active === false) return navigateTo('/join-discord?inactive=1')
-    if (user.value?.needsSetup) return navigateTo('/setup-username')
-    if (user.value) {
-      return navigateTo('/newsite/home')
-    }
-    return
-  }
-
-  // All non-home routes using this middleware require authentication
+  // Every route using this middleware requires authentication ('/' is handled by
+  // home-redirect.global.js)
   if (!user.value) {
     try { await fetchSelf() } catch {}
   }
@@ -30,9 +17,6 @@ export default defineNuxtRouteMiddleware(async (to) => {
   if (!user.value && to.path !== '/join-discord') return navigateTo(blockedRedirect.value || '/')
   if (!user.value) return
 
-  // Admin routes only need authentication; admin.js handles authorization
-  if (to.path.startsWith('/admin')) return
-
   // Inactive accounts are sent to join-discord with a notice
   if (user.value.active === false && to.path !== '/join-discord') {
     return navigateTo('/join-discord?inactive=1')
@@ -44,9 +28,5 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   if (!user.value.inGuild && to.path !== '/join-discord') {
     return navigateTo('/join-discord')
-  }
-
-  if (to.path === '/dashboard') {
-    return navigateTo('/newsite/home')
   }
 })

@@ -333,14 +333,9 @@
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 
-const route = useRoute()
-const isNewsite = computed(() => route.path.startsWith('/newsite'))
+const czoneSearchPath = (id) => `/newsite/czonesearch/${id}`
 
-const czoneSearchPath = (id) =>
-  isNewsite.value ? `/newsite/czonesearch/${id}` : `/czonesearch/${id}`
-
-const czoneContestPath = (id) =>
-  isNewsite.value ? `/newsite/czone-contest/${id}` : `/czone-contest/${id}`
+const czoneContestPath = (id) => `/newsite/czone-contest/${id}`
 
 const isOpen = ref(false)
 const onboardingRef = ref(null)

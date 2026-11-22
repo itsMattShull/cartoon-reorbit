@@ -61,7 +61,7 @@ function buildPairingMessage({ tournamentName, stageLabel, opponentName, bestOf,
     `You have been paired with ${opponentName} for ${stageLabel}.`
   ]
   lines.push(`• Best of: ${bestOf}`)
-  lines.push(`• Create a room or join them here: https://www.cartoonreorbit.com/games/clash/rooms`)
+  lines.push(`• Create a room or join them here: https://www.cartoonreorbit.com/newsite/gtoons`)
   return lines.join('\n')
 }
 

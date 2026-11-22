@@ -105,8 +105,7 @@ export default defineNuxtConfig({
 
     public: {
       discordInvite: process.env.DISCORD_INVITE,
-      socketPort: process.env.SOCKET_PORT || 3001,
-      viewNewDesign: process.env.VIEWNEWDESIGN || '0'
+      socketPort: process.env.SOCKET_PORT || 3001
     }
   },
 

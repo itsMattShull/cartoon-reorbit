@@ -28,7 +28,7 @@
           <div v-if="t.status === 'COMPLETE' && t.winnerUsername" class="mt-1">
             Winner:
             <NuxtLink
-              :to="`/czone/${t.winnerUsername}`"
+              :to="`/newsite/czone/${t.winnerUsername}`"
               class="text-indigo-300 hover:text-indigo-200 underline"
             >
               {{ t.winnerUsername }}

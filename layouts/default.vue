@@ -1,18 +1,13 @@
 <template>
   <div class="app-layout reorbit-theme">
     <slot />
-    <Onboarding v-if="showOnboarding" />
-    <CtoonInfoModal />
+    <Onboarding />
   </div>
 </template>
 
 <script setup>
 const route = useRoute()
 const siteName = 'Cartoon ReOrbit'
-
-const showOnboarding = computed(() => {
-  return !route.path.startsWith('/games/clash') && !route.path.startsWith('/admin')
-})
 
 useHead(() => {
   const metaTitle = route.meta.title
