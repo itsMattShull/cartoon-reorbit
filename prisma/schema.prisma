@@ -4540,6 +4540,11 @@ model Achievement {
   wordleWinsGte               Int? // total lifetime crown wins in Wordle
   wordleCurrentStreakGte      Int? // current consecutive-day crown streak
   flappyBestScoreGte          Int? // best Flappy Powerpuff score on a ranked run
+  // Lifetime OG gToons (the original 2002 game) PvP wins: OgGtoonMatch rows this user won, read from
+  // `outcome` exactly like the OG gToons leaderboard (see server/utils/ogGtoonWins.js). Random queue,
+  // challenges and tournament games all count; practice games against the bot, ties and INCOMPLETE
+  // (stale-swept / admin-voided) games do not.
+  ogGtoonsWinsGte             Int?
   setsRequired                String[] // complete ALL sets in this array
   userCreatedBefore           DateTime? // user must have signed up before this date (strictly earlier)
   discordRoleName             String?
