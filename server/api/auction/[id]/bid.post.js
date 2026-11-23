@@ -7,6 +7,7 @@ import { applyProxyAutoBids, incrementFor } from '@/server/utils/autoBid'
 import { scheduleAuctionClose } from '@/server/utils/queues'
 import { assertFeaturedEligibility, assertNoConcurrentFeaturedLead } from '@/server/utils/featuredEligibility'
 import { notifyOutbid, notifyAuctionBid } from '@/server/utils/notifications'
+import { assertCanBid } from '@/server/utils/tradeAuctionBan'
 
 const ANTI_SNIPE_MS = 60_000
 
@@ -51,6 +52,8 @@ export default defineEventHandler(async (event) => {
   if (pre.creatorId && pre.creatorId === userId) {
     throw createError({ statusCode: 403, statusMessage: 'Creators cannot bid on their own auctions' })
   }
+  // Admin "Ban Trades/Auctions": no bidding on an auction created by someone you are banned with.
+  await assertCanBid(db, userId, pre.creatorId)
 
   let finalAuction = pre
   let autoSteps    = []
@@ -98,6 +101,7 @@ export default defineEventHandler(async (event) => {
     if (fresh.creatorId && fresh.creatorId === userId) {
       throw createError({ statusCode: 403, statusMessage: 'Creators cannot bid on their own auctions' })
     }
+    await assertCanBid(tx, userId, fresh.creatorId)
 
     // Featured-auction eligibility. For Second Edition cToons this counts copies
     // across both editions (see server/utils/featuredEligibility.js).
