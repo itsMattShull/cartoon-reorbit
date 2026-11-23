@@ -141,7 +141,7 @@
               <ul v-else class="space-y-2 flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1">
                 <li v-for="n in activeNotificationList" :key="n.id">
                   <component
-                    :is="notificationRoute(n) ? 'NuxtLink' : 'div'"
+                    :is="notificationRoute(n) ? NuxtLinkComponent : 'div'"
                     v-bind="notificationRoute(n) ? { to: notificationRoute(n) } : {}"
                     class="ob-alert block rounded-lg border px-3 py-2 transition"
                     :class="n.readAt ? 'ob-alert-read border-white/10' : 'ob-alert-unread border-white/20'"
@@ -332,6 +332,11 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+
+// The alert rows pick between a link and a plain <div> at runtime (<component :is>). That only
+// works with the component itself: Nuxt never registers NuxtLink under its name, so passing the
+// string 'NuxtLink' rendered an inert <nuxtlink> tag and no alert was clickable.
+const NuxtLinkComponent = resolveComponent('NuxtLink')
 
 const czoneSearchPath = (id) => `/czonesearch/${id}`
 
