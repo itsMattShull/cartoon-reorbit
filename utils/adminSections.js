@@ -56,6 +56,7 @@ export const ADMIN_SECTIONS = [
   S('vpn-queue', 'VPN Queue', 'users', nu('AdminVpnQueue')),
   S('initiateTrade', 'Initiate Trade', 'users', legacy('AdminLegacyInitiateTrade'), { sensitive: true, desc: 'Moves cToons between users' }),
   S('tradeReversal', 'Trade Reversal', 'users', nu('AdminTradeReversal'), { sensitive: true, desc: 'Undo an accepted trade' }),
+  S('tradeAuctionBans', 'Ban Trades/Auctions', 'users', nu('AdminTradeAuctionBans'), { sensitive: true, desc: 'Stop two users trading or bidding with each other' }),
 
   // ── Content ─────────────────────────────────────────────────
   S('ctoons', 'Manage cToons', 'content', legacy('AdminLegacyCtoons'), { desc: 'Includes add and edit' }),

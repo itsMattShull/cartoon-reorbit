@@ -23,6 +23,7 @@ import {
 import { normalizePackWants, lockAndPickPacks } from '@/server/utils/userPackState'
 import { getClientRequestIP } from '@/server/utils/request-ip'
 import { encryptIp } from '@/server/utils/ip-encrypt'
+import { assertCanTrade } from '@/server/utils/tradeAuctionBan'
 
 export * from './tradeOfferRules'
 
@@ -137,6 +138,8 @@ export async function validateTradeOfferInputs ({
   if (recipient.id === initiatorId) {
     throw createError({ statusCode: 400, statusMessage: 'You cannot trade with yourself.' })
   }
+  // Admin "Ban Trades/Auctions": two banned users can't open or counter offers with each other.
+  await assertCanTrade(prisma, initiatorId, recipient.id)
 
   const allIds = [...resolvedOffered, ...resolvedRequested]
 
@@ -301,6 +304,9 @@ export async function createTradeOfferTx (tx, {
   initiatorIp = null,
   initiatorUserAgent = null
 }) {
+  // Re-checked inside the transaction so a ban created after the pre-flight checks still stops the offer.
+  await assertCanTrade(tx, initiatorId, recipientId)
+
   // Packs first (lock order: TradeOffer/Auction row -> UserPack rows -> UserPoints -> LockedPoints). Picks the oldest
   // available copies of each wanted type, locks them all in one sorted statement and re-checks under the lock, so the
   // offer can never hold a pack that is simultaneously in an auction, in another trade, or being opened.

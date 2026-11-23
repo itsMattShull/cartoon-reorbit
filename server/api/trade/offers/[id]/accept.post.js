@@ -7,6 +7,7 @@ import { prisma } from '@/server/prisma'
 import { frozenAmong, FROZEN_OWN_MESSAGE } from '@/server/utils/ogGtoonTournamentFreeze'
 import { notifyTradeOfferAccepted } from '@/server/utils/notifications'
 import { captureRequestMeta } from '@/server/utils/tradeOffer'
+import { assertCanTrade } from '@/server/utils/tradeAuctionBan'
 import { lockAndAssertOfferPacks, logPackOwners } from '@/server/utils/userPackState'
 
 export default defineEventHandler(async (event) => {
@@ -184,6 +185,10 @@ export default defineEventHandler(async (event) => {
         })
       }
     }
+
+    // Admin "Ban Trades/Auctions": creating a ban withdraws pending offers between the pair, but one accepted in the
+    // same moment would slip past that, so check again here, after the claim, where a refusal rolls the claim back.
+    await assertCanTrade(tx, offer.initiatorId, offer.recipientId)
 
     // Packs: lock + verify under the lock, BEFORE any points move (lock order: offer row -> UserPack rows -> UserPoints
     // -> LockedPoints). The offer is already ACCEPTED here, so it no longer counts as the pack's "pending trade".

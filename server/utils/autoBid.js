@@ -2,6 +2,7 @@
 import { io as createSocket } from 'socket.io-client'
 import { useRuntimeConfig } from '#imports'
 import { checkFeaturedEligibility } from '@/server/utils/featuredEligibility'
+import { bannedAmong } from '@/server/utils/tradeAuctionBan'
 
 /**
  * Public constant so API routes can use the same window everywhere.
@@ -60,6 +61,8 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
       highestBidderId: true,
       // 👇 needed so first auto-bid equals starting price (not increment from 0)
       initialBet: true, // If your column is named initialBid/initialPrice, rename accordingly
+      // 👇 needed to drop auto-bidders banned from this creator's auctions (admin "Ban Trades/Auctions")
+      creatorId: true,
       // 👇 needed to enforce the featured-auction bidding cap on proxy raises
       isFeatured: true,
       featuredOwnLimit: true,
@@ -90,6 +93,16 @@ export async function applyProxyAutoBids(tx, auctionId, opts = {}) {
     select: { userId: true, createdAt: true, maxAmount: true }
   })
   if (!auto.length) return { finalAuction: auc, steps }
+
+  // Admin "Ban Trades/Auctions": a ban turns off the pair's auto-bids on each other's auctions when it is created, but
+  // drop any that are still active here too, so a banned user's proxy can never bid on the creator's auction.
+  if (auc.creatorId) {
+    const banned = await bannedAmong(tx, auc.creatorId, auto.map(a => a.userId))
+    if (banned.size) {
+      auto = auto.filter(a => !banned.has(a.userId))
+      if (!auto.length) return { finalAuction: auc, steps }
+    }
+  }
 
   // Featured cap enforcement for proxy raises: a user who set an auto-bid while
   // eligible must not have their proxy keep bidding once they cross the featured

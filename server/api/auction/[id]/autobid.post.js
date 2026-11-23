@@ -6,6 +6,7 @@ import { prisma as db } from '@/server/prisma'
 import { applyProxyAutoBids } from '@/server/utils/autoBid'
 import { scheduleAuctionClose } from '@/server/utils/queues'
 import { assertFeaturedEligibility, assertNoConcurrentFeaturedLead } from '@/server/utils/featuredEligibility'
+import { assertCanBid } from '@/server/utils/tradeAuctionBan'
 
 const ANTI_SNIPE_MS = 60_000
 
@@ -58,6 +59,8 @@ export default defineEventHandler(async (event) => {
   if (auc.creatorId && auc.creatorId === userId) {
     throw createError({ statusCode: 403, statusMessage: 'Creators cannot set auto-bids on their own auctions' })
   }
+  // Admin "Ban Trades/Auctions": no auto-bid on an auction created by someone you are banned with.
+  await assertCanBid(db, userId, auc.creatorId)
 
   // --- Featured-auction eligibility (pre-upsert) ---
   // For Second Edition cToons this counts copies across both editions.
@@ -174,6 +177,7 @@ export default defineEventHandler(async (event) => {
     if (fresh.creatorId && fresh.creatorId === userId) {
       throw createError({ statusCode: 403, statusMessage: 'Creators cannot set auto-bids on their own auctions' })
     }
+    await assertCanBid(tx, userId, fresh.creatorId)
 
     // Featured-auction eligibility (re-checked inside txn). For Second Edition
     // cToons this counts copies across both editions.
