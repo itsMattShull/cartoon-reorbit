@@ -15,7 +15,7 @@
 export const ADMIN_PERMISSION_KEYS = [
   'analytics', 'collectionAnalytics', 'setAnalytics', 'packAnalytics', 'cMoonEnemyAnalytics', 'checkUserMints', 'retention',
   'manageUsers', 'manageUserHp', 'manageCollection', 'cheatFinder', 'checkCheating', 'cheatingTool', 'handicapRedeems',
-  'suspiciousActivity', 'deviceFingerprints', 'vpn-queue', 'initiateTrade', 'tradeReversal', 'myOrbitModeration',
+  'suspiciousActivity', 'deviceFingerprints', 'vpn-queue', 'initiateTrade', 'tradeReversal', 'tradeAuctionBans', 'myOrbitModeration',
   'ctoons', 'ctoonsBulkUpload', 'submittedCtoons', 'ctoonSuggestions', 'starterSets', 'packs',
   'backgrounds', 'czoneSearch', 'czoneContest', 'homepage', 'announcements', 'ads', 'tutorial',
   'certificate', 'encyclopedia', 'siteTheme', 'myOrbitTiles', 'myOrbitFurniture', 'myOrbitRooms',
@@ -226,6 +226,7 @@ export const ADMIN_API_SEGMENT_PERMS = {
   'tko-events': ['games'],
   'touch-trades': [],
   tournaments: ['clashTournaments'],
+  'trade-auction-bans': ['tradeAuctionBans'],
   'trade-offers': ['initiateTrade'],
   'trade-reversal': ['tradeReversal'],
   trades: ['tradeLogs'],
@@ -274,9 +275,9 @@ function usersAccess (rest) {
   const [a, b] = rest
   // Granting or removing admin/sub-admin access is never available to a sub-admin.
   if (b === 'admin-access' || b === 'make-admin' || b === 'remove-admin') return { type: 'full-only' }
-  // The user picker is shared with the cMoon award/assign dialogs and the Manage User HP
-  // tool's own autocomplete; account transfer is not.
-  if (a === 'search') return { type: 'perms', perms: ['manageUsers', 'cMoon', 'manageUserHp'] }
+  // The user picker is shared with the cMoon award/assign dialogs, the Manage User HP tool's own
+  // autocomplete and the Ban Trades/Auctions create modal; account transfer is not.
+  if (a === 'search') return { type: 'perms', perms: ['manageUsers', 'cMoon', 'manageUserHp', 'tradeAuctionBans'] }
   if (b === 'update-cmoon') return { type: 'perms', perms: ['manageUsers', 'cMoon'] }
   // "Manage User HP" (per-user get/set + mass raise/lower, for both HP and the Stamina section
   // on that same admin page) is its own dedicated admin tool — see the manageUserHp section in
@@ -362,7 +363,8 @@ export function adminScopeDenial (scope, rawPath, method = 'GET') {
 // list (prisma/migrations/20261018130000_sub_admin_permissions).
 export const STANDARD_SUB_ADMIN_WITHHELD = [
   'manageUsers', 'manageUserHp', 'initiateTrade', 'production', 'cheatingTool', 'checkCheating', 'codes',
-  'auctions', 'dissolveQueue', 'globalSettings', 'myOrbitModeration', 'handicapRedeems', 'tradeReversal'
+  'auctions', 'dissolveQueue', 'globalSettings', 'myOrbitModeration', 'handicapRedeems', 'tradeReversal',
+  'tradeAuctionBans'
 ]
 
 export const ADMIN_PERMISSION_PRESETS = [

@@ -896,6 +896,9 @@ model User {
   // Admin change logs (inverse)
   adminChangeLogs         AdminChangeLog[]
   targetedAdminChangeLogs AdminChangeLog[]     @relation("AdminChangeLogTarget")
+  // Admin "Ban Trades/Auctions" tool. A pair is stored once, in id order, so a ban can sit on either side.
+  tradeAuctionBansAsA     TradeAuctionBan[]    @relation("TradeAuctionBanUserA")
+  tradeAuctionBansAsB     TradeAuctionBan[]    @relation("TradeAuctionBanUserB")
   packLimitResetsReceived UserPackLimitReset[] @relation("UserPackLimitResetUser")
   packLimitResetsIssued   UserPackLimitReset[] @relation("UserPackLimitResetAdmin")
   lottoUser               LottoUser?
@@ -2695,6 +2698,27 @@ model TradeReversal {
 
   tradeOffer TradeOffer @relation(fields: [tradeOfferId], references: [id], onDelete: Cascade)
 
+  @@index([createdAt])
+}
+
+/// Admin "Ban Trades/Auctions" tool: two users who may not trade with each other or bid on each other's auctions,
+/// until an admin deletes the ban. The ban is symmetric, so the pair is stored once with userAId < userBId (see the
+/// CHECK constraint "TradeAuctionBan_pair_order_check" and server/utils/tradeAuctionBanRules.js orderBanPair); the
+/// unique pair is what stops the same two users being banned twice. Enforced in server/utils/tradeAuctionBan.js.
+model TradeAuctionBan {
+  id                String   @id @default(uuid())
+  userAId           String
+  userBId           String
+  reason            String?
+  createdById       String
+  createdByUsername String? // snapshot, survives renames
+  createdAt         DateTime @default(now())
+
+  userA User @relation("TradeAuctionBanUserA", fields: [userAId], references: [id], onDelete: Cascade)
+  userB User @relation("TradeAuctionBanUserB", fields: [userBId], references: [id], onDelete: Cascade)
+
+  @@unique([userAId, userBId])
+  @@index([userBId])
   @@index([createdAt])
 }
 
