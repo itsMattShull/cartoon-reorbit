@@ -15,7 +15,7 @@ export default defineEventHandler(async (event) => {
   assertSameOrigin(event)
 
   const body = await readBody(event)
-  const { percentages } = body || {}
+  const { percentages, useCodeRedeemAvgForFill } = body || {}
   if (!percentages || typeof percentages !== 'object') {
     throw createError({ statusCode: 400, statusMessage: 'Missing or invalid percentages payload' })
   }
@@ -31,12 +31,13 @@ export default defineEventHandler(async (event) => {
     }
     next[rarity] = value
   }
+  const nextUseCodeRedeemAvg = !!useCodeRedeemAvgForFill
 
   const before = await prisma.globalGameConfig.findUnique({ where: { id: 'singleton' } })
   await prisma.globalGameConfig.upsert({
     where: { id: 'singleton' },
-    create: { id: 'singleton', dailyPointLimit: 250, cmartStandardizedMetrics: next },
-    update: { cmartStandardizedMetrics: next }
+    create: { id: 'singleton', dailyPointLimit: 250, cmartStandardizedMetrics: next, cmartFillUsesCodeRedeemAvg: nextUseCodeRedeemAvg },
+    update: { cmartStandardizedMetrics: next, cmartFillUsesCodeRedeemAvg: nextUseCodeRedeemAvg }
   })
 
   try {
@@ -50,7 +51,17 @@ export default defineEventHandler(async (event) => {
         newValue: next
       })
     }
+    const prevUseCodeRedeemAvg = !!before?.cmartFillUsesCodeRedeemAvg
+    if (prevUseCodeRedeemAvg !== nextUseCodeRedeemAvg) {
+      await logAdminChange(prisma, {
+        userId: me.id,
+        area: 'GlobalGameConfig',
+        key: 'cmartFillUsesCodeRedeemAvg',
+        prevValue: prevUseCodeRedeemAvg,
+        newValue: nextUseCodeRedeemAvg
+      })
+    }
   } catch {}
 
-  return { success: true, percentages: next }
+  return { success: true, percentages: next, useCodeRedeemAvgForFill: nextUseCodeRedeemAvg }
 })

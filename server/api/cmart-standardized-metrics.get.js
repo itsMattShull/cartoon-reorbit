@@ -2,17 +2,20 @@
 // Powers the "Fill from Active Players" button on the Add/Edit cToon forms — no admin gate, same
 // precedent as rarity-defaults.get.js, since it's read-only, non-sensitive config.
 import { defineEventHandler } from 'h3'
-import { getStandardizedMetricPercentages } from '@/server/utils/cmartStandardizedMetrics'
-import { getActivePlayerCount, ACTIVE_PLAYER_WINDOW_DAYS } from '@/server/utils/activePlayers'
+import { getStandardizedMetricPercentages, getFillActivePlayerCount } from '@/server/utils/cmartStandardizedMetrics'
 
 export default defineEventHandler(async () => {
-  const [percentages, activePlayerCount] = await Promise.all([
+  const [percentages, fill] = await Promise.all([
     getStandardizedMetricPercentages(),
-    getActivePlayerCount()
+    getFillActivePlayerCount()
   ])
   return {
     percentages,
-    activePlayerCount,
-    windowDays: ACTIVE_PLAYER_WINDOW_DAYS
+    // Kept as `activePlayerCount`/`windowDays` for the Fill button's existing math/label — the
+    // number here is whichever source getFillActivePlayerCount() resolved to, not necessarily the
+    // true active-player count. `fillActivePlayerCountSource` says which one it is.
+    activePlayerCount: fill.count,
+    windowDays: fill.windowDays,
+    fillActivePlayerCountSource: fill.source
   }
 })

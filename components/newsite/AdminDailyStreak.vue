@@ -190,9 +190,11 @@ async function addReward() {
     rewardFormError.value = 'Day must be between 1 and 3650.'
     return
   }
+  const isCopyType = rewardForm.rewardType === 'CTOON' || rewardForm.rewardType === 'PACK'
+  const amountMax = isCopyType ? 20 : 100000
   const amount = Math.trunc(Number(rewardForm.amount))
-  if (!Number.isInteger(amount) || amount < 1 || amount > 100000) {
-    rewardFormError.value = 'Amount must be between 1 and 100000.'
+  if (!Number.isInteger(amount) || amount < 1 || amount > amountMax) {
+    rewardFormError.value = `Amount must be between 1 and ${amountMax}.`
     return
   }
   const body = { day, rewardType: rewardForm.rewardType, amount }

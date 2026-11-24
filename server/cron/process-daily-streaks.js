@@ -34,9 +34,9 @@ export async function runProcessDailyStreaks() {
     return
   }
   try {
-    const { processed, incremented, reset } = await processDailyStreaks()
-    console.log(`[process-daily-streaks] processed ${processed} user(s): ${incremented} incremented, ${reset} reset`)
-    return processed ? `Processed ${processed} user(s): ${incremented} incremented, ${reset} reset` : undefined
+    const { processed, incremented, reset, deferred } = await processDailyStreaks()
+    console.log(`[process-daily-streaks] processed ${processed} user(s): ${incremented} incremented, ${reset} reset, ${deferred} deferred to the morning resolution pass`)
+    return processed ? `Processed ${processed} user(s): ${incremented} incremented, ${reset} reset, ${deferred} deferred` : undefined
   } finally {
     await prisma.$queryRaw`
       UPDATE "GlobalGameConfig"

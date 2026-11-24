@@ -67,6 +67,8 @@ export const CRON_JOBS = [
     description: 'Queues the daily achievements check for every active user' },
   { name: 'processDailyStreaks', tier: TIER_CRITICAL, pattern: '5 20 * * *', tz: CHI, intervalSec: DAY, catchUpAfterSec: 30 * 3600,
     description: 'Advances or resets each player\'s Daily Streak and grants any milestone reward, just after the daily-task boundary' },
+  { name: 'resolvePendingDailyStreaks', tier: TIER_CRITICAL, pattern: '5 8 * * *', tz: CHI, intervalSec: DAY, catchUpAfterSec: 30 * 3600,
+    description: 'Finishes any Daily Streak verdict deferred overnight pending a Winwheel/Lotto task\'s own 8am deadline' },
 
   // ── maintenance ─────────────────────────────────────────────────────────────
   { name: 'syncGuildMembers', tier: TIER_MAINTENANCE, pattern: '0 0 * * *', intervalSec: DAY, catchUpAfterSec: 30 * 3600,

@@ -706,6 +706,17 @@ model User {
   // DailyStreakClaim table below is a separate idempotency backstop specifically for reward
   // grants, not for the increment/reset decision itself).
   dailyStreakLastBoundary   DateTime?
+  // Set by processDailyStreaks() to THIS evening boundary (never both this and
+  // dailyStreakLastBoundary advanced to the same boundary at once) when every EVENING-rooted
+  // task is already complete but an enabled Winwheel/Lotto task is not — that task's own real
+  // deadline is the NEXT morning boundary (8am), not the 8pm evening boundary the streak cron
+  // itself runs at, so the increment/reset verdict is deliberately deferred rather than decided
+  // early against a task whose window hasn't actually closed yet. resolvePendingDailyStreaks()
+  // (server/cron/resolve-pending-daily-streaks.js, ~8:05am) re-evaluates just the Winwheel/Lotto
+  // portion once their window has genuinely closed, finalizes dailyStreakCount/
+  // dailyStreakLastBoundary for this same boundary either way, and clears this back to null.
+  // Null the rest of the time — this is a transient per-boundary flag, not a history.
+  dailyStreakPendingBoundary DateTime?
   // Points contributed to the CURRENT cMoon's individual rank ladder: sum of this user's own
   // CMoonScoreLog rows (the same admin-configurable HIGH_SCORE/TOP10/DAILY_TASK categories that
   // build the team score — see runDailyCMoonScoring in server/utils/cmoon.js) since
@@ -2080,6 +2091,12 @@ model GlobalGameConfig {
   // same merge-with-hardcoded-defaults pattern as rarityDefaults above. See
   // server/utils/cmartStandardizedMetrics.js.
   cmartStandardizedMetrics       Json?
+  // When true, "Fill from Active Players" uses the average number of Claim rows per ClaimCode
+  // among codes that expired in the last cmartCodeRedeemAvgWindowDays days, instead of the
+  // trailing-14-day active-player count — an admin's hedge against that count reading inflated.
+  // Falls back to the active-player count whenever no code has expired in the window. See
+  // server/utils/cmartStandardizedMetrics.js.
+  cmartFillUsesCodeRedeemAvg     Boolean @default(false)
   achievementDiscordChannelId    String?
   czoneContestDiscordChannelId   String?
   devPrDiscordChannelId          String? // posts PR opened/merged notices for the dev branch
@@ -2567,6 +2584,12 @@ model GlobalGameConfig {
   // pattern's connection-affinity pitfall.
   dailyStreakCronClaimedAt             DateTime?
   dailyStreakCronClaimToken            String?
+  // Same lease-claim pair, same reasoning, for the separate ~8:05am resolvePendingDailyStreaks()
+  // cron (server/cron/resolve-pending-daily-streaks.js) that finalizes any User rows the evening
+  // cron deferred via dailyStreakPendingBoundary — a distinct pair so the two crons' leases can
+  // never collide with (or accidentally block) each other despite both touching this same row.
+  dailyStreakMorningCronClaimedAt      DateTime?
+  dailyStreakMorningCronClaimToken     String?
   createdAt                            DateTime  @default(now())
   updatedAt                            DateTime  @updatedAt
 }
