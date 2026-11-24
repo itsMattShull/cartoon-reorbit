@@ -129,6 +129,7 @@
                     class="owned-badge"
                     :class="originalOwnedSet.has(item.ctoon.id) ? 'owned-badge--owned' : 'owned-badge--unowned'"
                   >{{ originalOwnedSet.has(item.ctoon.id) ? 'Owned' : 'Unowned' }}</span>
+                  <span class="mint-badge">{{ mintLabel(item.ctoon.totalMinted, item.ctoon.quantity) }}</span>
                 </div>
               </template>
               <template #middle>
@@ -204,6 +205,7 @@
                 alt="Going fast"
                 class="going-fast-badge"
               />
+              <span class="mint-badge">{{ mintLabel(c.totalMinted, c.quantity) }}</span>
             </div>
           </template>
           <template #middle>
@@ -363,6 +365,7 @@
                 class="owned-badge"
                 :class="originalOwnedSet.has(c.id) ? 'owned-badge--owned' : 'owned-badge--unowned'"
               >{{ originalOwnedSet.has(c.id) ? 'Owned' : 'Unowned' }}</span>
+              <span class="mint-badge">{{ mintLabel(c.minted, c.quantity) }}</span>
             </div>
           </template>
           <template #middle>
@@ -399,6 +402,7 @@
 <script setup>
 import CtoonImage from '@/components/CtoonImage.vue'
 import PackOpenOverlay from '@/components/PackOpenOverlay.vue'
+import { formatQuantity, TIME_BASED_CAP } from '@/utils/formatQuantity'
 const RARITY_ORDER = {
   'common': 0, 'uncommon': 1, 'rare': 2, 'very rare': 3,
   'crazy rare': 4, 'prize only': 5, 'code only': 6, 'auction only': 7,
@@ -417,6 +421,22 @@ const RARITIES_MAP = {
 
 function rarityInfo(rarity) {
   return RARITIES_MAP[(rarity || '').toLowerCase()] || { label: '?', bg: '#aaaaaa', fg: '#fff' }
+}
+
+// "342 / 500" at a glance on the card itself, so checking a cToon's mint count/cap no longer
+// requires opening its info dialog (openInfo) one at a time — same formatQuantity wording
+// (Unlimited/???/N) the info dialog's own "Total" field already uses, just paired with the
+// current running count instead of shown alone.
+//
+// The regular grid and holiday feeds (/api/cmart, /api/holiday/active) already substitute
+// totalMinted for `quantity` once a Time-Based Limit cToon's mint window has closed but the
+// finalize job hasn't yet written the real cap (the raw TIME_BASED_CAP sentinel would otherwise
+// render as "???" to a shopper). The Sale showcase's data source (activeSaleCache.js) does not —
+// it was never displayed as text before this badge existed — so the same substitution is applied
+// defensively here rather than changing that shared cache's contract for its other callers.
+function mintLabel(totalMinted, quantity) {
+  const effectiveQuantity = quantity === TIME_BASED_CAP ? totalMinted : quantity
+  return `${Number(totalMinted || 0).toLocaleString()} / ${formatQuantity(effectiveQuantity)}`
 }
 
 const ctoonModal = useCtoonModal()
@@ -1682,6 +1702,29 @@ async function closeOverlay() {
   width: 34px;
   height: 34px;
   object-fit: contain;
+  pointer-events: none;
+}
+
+/* "342 / 500" mint count + cap, at a glance — same bottom corner on every card variant
+   (regular grid, sale showcase, holiday grid) so a shopper never has to open the info dialog
+   just to check these two numbers. Truncates rather than wraps: the rare "Unlimited" case is
+   the only label long enough to risk it, and a wrapped second line would grow the badge into
+   the artwork underneath it. */
+.mint-badge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  max-width: calc(100% - 8px);
+  font-size: 0.5rem;
+  font-weight: bold;
+  padding: 1px 4px;
+  border-radius: 3px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.85);
   pointer-events: none;
 }
 
