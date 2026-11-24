@@ -8,27 +8,6 @@ import { prisma } from '@/server/prisma'
 
 const CACHE_TTL_MS = 30 * 1000 // 30 seconds
 
-// Same sentinel/substitution cmart.get.js and ctoon/modal.get.js already apply to `quantity`:
-// a Time-Based Limit cToon stores TIME_BASED_CAP as a placeholder `quantity` while its mint
-// window is still open (truly unknown final count), then gets its real quantity written by the
-// mint-end finalize job once the window closes. If that job hasn't run yet, substitute
-// totalMinted so a consumer of this cache displays the actual running count instead of a raw
-// sentinel — but ONLY once the window has genuinely closed; while it's still open, the raw
-// sentinel is the correct "still unknown" signal and must be left alone (formatQuantity renders
-// it as "???").
-const TIME_BASED_CAP = 999999999
-function resolveSaleItemQuantity(ctoon) {
-  const windowClosed = ctoon.mintLimitType === 'timeBased' && ctoon.mintEndDate && new Date(ctoon.mintEndDate) <= new Date()
-  return (windowClosed && ctoon.quantity === TIME_BASED_CAP) ? ctoon.totalMinted : ctoon.quantity
-}
-function withResolvedQuantities(sale) {
-  if (!sale) return sale
-  return {
-    ...sale,
-    items: sale.items.map(item => ({ ...item, ctoon: { ...item.ctoon, quantity: resolveSaleItemQuantity(item.ctoon) } }))
-  }
-}
-
 // Lookahead window for the "featured" sale (active OR starting soon) shown
 // in the cMart showcase, so shoppers see a countdown before it goes live.
 export const FEATURED_LOOKAHEAD_MS = 24 * 60 * 60 * 1000 // 24 hours
@@ -101,8 +80,6 @@ export async function getActiveSale() {
               isGtoon: true,
               quantity: true,
               totalMinted: true,
-              mintLimitType: true,
-              mintEndDate: true,
               isSecondEdition: true,
               secondEditionOverlayX: true,
               secondEditionOverlayY: true,
@@ -114,7 +91,7 @@ export async function getActiveSale() {
     }
   })
 
-  const result = withResolvedQuantities(sale) || null
+  const result = sale || null
   setActiveSaleCache(result)
   return result
 }
@@ -158,8 +135,6 @@ export async function getFeaturedSale() {
               isGtoon: true,
               quantity: true,
               totalMinted: true,
-              mintLimitType: true,
-              mintEndDate: true,
               isSecondEdition: true,
               secondEditionOverlayX: true,
               secondEditionOverlayY: true,
@@ -171,7 +146,7 @@ export async function getFeaturedSale() {
     }
   })
 
-  const result = withResolvedQuantities(sale) || null
+  const result = sale || null
   setFeaturedSaleCache(result)
   return result
 }
