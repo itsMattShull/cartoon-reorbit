@@ -55,3 +55,15 @@ test('accepts numbers sent as multipart-style strings', () => {
   assert.equal(result.ok, true)
   assert.deepEqual(result.data, { day: 10, rewardType: 'POINTS', ctoonId: null, packId: null, amount: 250 })
 })
+
+test('CTOON/PACK amounts (a copy count, granted to every qualifying player) are capped far tighter than POINTS/CMOON_POINTS', () => {
+  // 21 copies is comfortably inside POINTS' own 100000 ceiling, so this only fails if the
+  // type-specific cap is actually being applied.
+  assert.equal(parseDailyStreakRewardBody({ day: 1, rewardType: 'CTOON', ctoonId: 'c1', amount: 21 }).ok, false)
+  assert.equal(parseDailyStreakRewardBody({ day: 1, rewardType: 'CTOON', ctoonId: 'c1', amount: 20 }).ok, true)
+  assert.equal(parseDailyStreakRewardBody({ day: 1, rewardType: 'PACK', packId: 'p1', amount: 21 }).ok, false)
+  assert.equal(parseDailyStreakRewardBody({ day: 1, rewardType: 'PACK', packId: 'p1', amount: 20 }).ok, true)
+  // POINTS/CMOON_POINTS are unaffected — still capped at 100000, not 20.
+  assert.equal(parseDailyStreakRewardBody({ day: 1, rewardType: 'POINTS', amount: 21 }).ok, true)
+  assert.equal(parseDailyStreakRewardBody({ day: 1, rewardType: 'CMOON_POINTS', amount: 21 }).ok, true)
+})

@@ -402,7 +402,7 @@
 <script setup>
 import CtoonImage from '@/components/CtoonImage.vue'
 import PackOpenOverlay from '@/components/PackOpenOverlay.vue'
-import { formatQuantity, TIME_BASED_CAP } from '@/utils/formatQuantity'
+import { formatQuantity } from '@/utils/formatQuantity'
 const RARITY_ORDER = {
   'common': 0, 'uncommon': 1, 'rare': 2, 'very rare': 3,
   'crazy rare': 4, 'prize only': 5, 'code only': 6, 'auction only': 7,
@@ -426,17 +426,13 @@ function rarityInfo(rarity) {
 // "342 / 500" at a glance on the card itself, so checking a cToon's mint count/cap no longer
 // requires opening its info dialog (openInfo) one at a time — same formatQuantity wording
 // (Unlimited/???/N) the info dialog's own "Total" field already uses, just paired with the
-// current running count instead of shown alone.
-//
-// The regular grid and holiday feeds (/api/cmart, /api/holiday/active) already substitute
-// totalMinted for `quantity` once a Time-Based Limit cToon's mint window has closed but the
-// finalize job hasn't yet written the real cap (the raw TIME_BASED_CAP sentinel would otherwise
-// render as "???" to a shopper). The Sale showcase's data source (activeSaleCache.js) does not —
-// it was never displayed as text before this badge existed — so the same substitution is applied
-// defensively here rather than changing that shared cache's contract for its other callers.
+// current running count instead of shown alone. `quantity` is already the fully-resolved value
+// by the time it reaches here (every source — /api/cmart, /api/holiday/active, and now
+// activeSaleCache.js's sale showcase data — substitutes totalMinted for the raw TIME_BASED_CAP
+// sentinel itself, only once a Time-Based Limit cToon's mint window has actually closed), so
+// this never needs to re-derive that here.
 function mintLabel(totalMinted, quantity) {
-  const effectiveQuantity = quantity === TIME_BASED_CAP ? totalMinted : quantity
-  return `${Number(totalMinted || 0).toLocaleString()} / ${formatQuantity(effectiveQuantity)}`
+  return `${Number(totalMinted || 0).toLocaleString()} / ${formatQuantity(quantity)}`
 }
 
 const ctoonModal = useCtoonModal()

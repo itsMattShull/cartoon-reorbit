@@ -239,6 +239,24 @@ run('with repeat enabled, a streak day past maxDay wraps around and re-grants an
   assert.equal(await pointsOf(prisma, userId), startingPoints + REWARD_POINTS)
 })
 
+run('a streak day past maxDay with repeat disabled still advances the counter, but writes no DailyStreakClaim row (nothing to protect)', async () => {
+  await prisma.globalGameConfig.update({ where: { id: 'singleton' }, data: { dailyStreakRepeatEnabled: false } })
+
+  const userId = await mkStreakUser({ dailyStreakCount: maxDay }) // streakDay = maxDay + 1, past maxDay, repeat off -> effectiveDay is null
+  const startingPoints = await pointsOf(prisma, userId)
+
+  await completeTasks(userId)
+  await processDailyStreaks(now)
+
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { dailyStreakCount: true, dailyStreakLastBoundary: true } })
+  assert.equal(user.dailyStreakCount, maxDay + 1)
+  assert.equal(user.dailyStreakLastBoundary?.getTime(), boundary.getTime())
+  assert.equal(await pointsOf(prisma, userId), startingPoints) // nothing to grant
+
+  const claim = await prisma.dailyStreakClaim.findUnique({ where: { userId_streakDay: { userId, streakDay: maxDay + 1 } } })
+  assert.equal(claim, null)
+})
+
 run('running processDailyStreaks twice for the same boundary never double-grants (the per-boundary stamp)', async () => {
   const userId = await mkStreakUser()
   const startingPoints = await pointsOf(prisma, userId)

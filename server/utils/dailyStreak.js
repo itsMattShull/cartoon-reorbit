@@ -25,7 +25,8 @@ const CANDIDATE_BATCH_SIZE = 2000
 /**
  * Grants every DailyStreakReward row configured at `effectiveDay` to one user, atomically, then
  * enqueues any cToon mint jobs (the one necessarily-post-commit step this function itself must
- * do). `effectiveDay` null means "nothing to grant" — still advances the streak count/boundary.
+ * do). `effectiveDay` null, or no rows configured for it, means "nothing to grant" — the counter
+ * still advances, with no DailyStreakClaim row written (see that branch's own comment).
  * Returns `{ advanced, cmoonPointsGranted }` — `advanced` is false if a concurrent run already
  * claimed this exact streakDay first (see the DailyStreakClaim unique constraint); the caller
  * batches `recomputeCMoonPointsForUsers` itself across every user `cmoonPointsGranted` names,
@@ -66,6 +67,19 @@ async function advanceOneUserStreak({ userId, cMoonId, streakDay, effectiveDay, 
   // OTHER reward row configured for the same day still grants normally (per product decision),
   // this just silently drops the cMoon-points portion rather than failing the whole day's grant.
   const grantCMoonPoints = cMoonId ? cmoonPointsRows : []
+
+  // Nothing configured for this day at all (no rows, or effectiveDay was null) — just advance the
+  // counter directly, with no DailyStreakClaim row. That row exists purely to make the ACTUAL
+  // reward grant below idempotent against a concurrent duplicate attempt (its own doc comment);
+  // with nothing to grant, there's nothing for it to protect, and inserting one anyway here would
+  // leave one permanent, otherwise-unread row per active player per day, forever, for a feature
+  // whose rewards are often configured on only a handful of milestone days. The counter bump
+  // itself needs no such protection either way — writing the same idempotent (streakDay, boundary)
+  // pair twice from two overlapping runs is harmless.
+  if (rewardRows.length === 0) {
+    await db.user.update({ where: { id: userId }, data: { dailyStreakCount: streakDay, dailyStreakLastBoundary: boundary } })
+    return { advanced: true, cmoonPointsGranted: false }
+  }
 
   let txResult
   try {
