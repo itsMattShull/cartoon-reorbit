@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
         const payload = jwt.verify(token, config.jwtSecret)
         userId = payload.sub
         event.context.userId = userId // make it available to downstream handlers
-        return sendRedirect(event, '/newsite/home', 302)
+        return sendRedirect(event, '/home', 302)
       } catch {
         const params = new URLSearchParams({
           client_id: config.discord.clientId,
@@ -40,7 +40,7 @@ export default defineEventHandler(async (event) => {
       return sendRedirect(event, discordAuthUrl, 302)
     }
   } else {
-    return sendRedirect(event, '/newsite/home', 302)
+    return sendRedirect(event, '/home', 302)
   }
 
   // if (!userId) {

@@ -7,7 +7,7 @@
 
         <!-- Create New Holiday Event -->
         <NuxtLink
-          to="/newsite/admin/holidayEvents/new"
+          to="/admin/holidayEvents/new"
           class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
         >
           + Create Holiday Event
@@ -48,7 +48,7 @@
                   <td class="px-2 py-1.5 text-center">{{ countPool(e) }}</td>
                   <td class="px-2 py-1.5">
                     <NuxtLink
-                      :to="`/newsite/admin/holidayEvents/edit/${e.id}`"
+                      :to="`/admin/holidayEvents/edit/${e.id}`"
                       class="px-3 py-1 text-xs border rounded-md hover:bg-gray-50"
                     >
                       Edit
@@ -74,7 +74,7 @@
                 <p class="text-[11px] text-gray-600"><span class="text-gray-500">Pool:</span> {{ countPool(e) }}</p>
               </div>
               <NuxtLink
-                :to="`/newsite/admin/holidayEvents/edit/${e.id}`"
+                :to="`/admin/holidayEvents/edit/${e.id}`"
                 class="mt-2 block text-center px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
               >
                 Edit

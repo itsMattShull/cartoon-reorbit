@@ -173,7 +173,7 @@ async function live (urlPath, cookie, { method = 'GET', timeoutMs = 30000 } = {}
   try {
     const res = await fetch(BASE + urlPath, { method, headers: cookie ? { cookie } : {}, redirect: 'manual', signal: AbortSignal.timeout(timeoutMs) })
     const text = await res.text().catch(() => '')
-    return { status: res.status, text }
+    return { status: res.status, text, location: res.headers.get('location') || '' }
   } catch (e) {
     return { status: 0, text: e?.name === 'TimeoutError' ? `timed out after ${timeoutMs}ms` : String(e?.cause?.code || e?.message || e) }
   }
@@ -295,18 +295,37 @@ async function sweepReads ({ player, admin }) {
 // ── 2. PAGES ─────────────────────────────────────────────────────────────────
 async function sweepPages ({ player, admin }) {
   heading('2. PAGES — server-render every page')
+  // An account with no cToons is "not set up yet" and gets bounced to /setup-username from every
+  // page, which would make each check below pass on a redirect without rendering anything.
+  await topUpCtoons(player, 1)
+  await topUpCtoons(admin, 1)
+  // Where a signed-in, set-up account must never be sent: it means the page did not render.
+  const BOUNCED = /^\/(setup-username|join-discord)?(\?|$)/
+  // Pages that are themselves the bounce target redirect a healthy account away by design.
+  const REDIRECTS_BY_DESIGN = new Set(['/', '/setup-username', '/join-discord'])
   const files = walk('pages').map(posix).filter(f => f.endsWith('.vue'))
   const jobs = []
   for (const file of files) {
     const segs = file.replace(/^pages\//, '').replace(/\.vue$/, '').split('/').filter(s => s !== 'index')
     const { url } = await buildUrl(segs)
-    jobs.push({ url: url === '/' ? '/' : url, isAdmin: url.startsWith('/newsite/admin') })
+    jobs.push({ url: url === '/' ? '/' : url, isAdmin: url.startsWith('/admin') })
   }
   await pool(jobs, 3, async (j) => {
     const r = await live(j.url, j.isAdmin ? admin.cookie : player.cookie, { timeoutMs: 120000 })
     if (r.status === 0) record('pages', `page ${j.url}`, 'fail', r.text)
     else if (r.status >= 500) record('pages', `page ${j.url}`, 'fail', `${r.status} ${r.text.replace(/\s+/g, ' ').slice(0, 200)}`)
-    else record('pages', `page ${j.url}`, 'pass', String(r.status))
+    else if (r.status >= 300 && r.status < 400) {
+      const to = r.location.replace(/^https?:\/\/[^/]+/, '')
+      // The dev server answers a page whose name matches a folder in public/ with a redirect to
+      // the same path plus a slash, and renders the page there; follow that one hop.
+      if (to === `${j.url}/`) {
+        const again = await live(to, j.isAdmin ? admin.cookie : player.cookie, { timeoutMs: 120000 })
+        if (again.status === 200) record('pages', `page ${j.url}`, 'pass', '200 (after the dev server\'s trailing-slash hop)')
+        else record('pages', `page ${j.url}`, 'fail', `${again.status} ${again.location || again.text.replace(/\s+/g, ' ').slice(0, 160)}`)
+      } else if (to === j.url) record('pages', `page ${j.url}`, 'fail', 'redirects to itself (a redirect loop)')
+      else if (BOUNCED.test(to) && !REDIRECTS_BY_DESIGN.has(j.url)) record('pages', `page ${j.url}`, 'fail', `redirected to ${to} instead of rendering`)
+      else record('pages', `page ${j.url}`, 'pass', `${r.status} -> ${to}`)
+    } else record('pages', `page ${j.url}`, 'pass', String(r.status))
   })
   sectionTally('pages')
 }

@@ -6,7 +6,7 @@
 import { defineEventHandler } from 'h3'
 import { requireAdmin } from '@/server/utils/requireAdmin'
 import { getActivePlayerCount, getActivePlayerPointsStats, ACTIVE_PLAYER_WINDOW_DAYS } from '@/server/utils/activePlayers'
-import { STANDARDIZABLE_RARITIES, getStandardizedMetricPercentages, computeStandardizedQuantity } from '@/server/utils/cmartStandardizedMetrics'
+import { STANDARDIZABLE_RARITIES, getStandardizedMetricPercentages, computeStandardizedQuantity, getFillActivePlayerCount } from '@/server/utils/cmartStandardizedMetrics'
 
 export default defineEventHandler(async (event) => {
   await requireAdmin(event)
@@ -16,11 +16,12 @@ export default defineEventHandler(async (event) => {
     getActivePlayerPointsStats(),
     getStandardizedMetricPercentages()
   ])
+  const fill = await getFillActivePlayerCount(activePlayerCount)
 
   const preview = STANDARDIZABLE_RARITIES.map(rarity => ({
     rarity,
     percentage: percentages[rarity],
-    computedQuantity: computeStandardizedQuantity(rarity, activePlayerCount, percentages)
+    computedQuantity: computeStandardizedQuantity(rarity, fill.count, percentages)
   }))
 
   return {
@@ -29,6 +30,13 @@ export default defineEventHandler(async (event) => {
     avgPointsPerPlayer: pointsStats.avgPoints,
     medianPointsPerPlayer: pointsStats.medianPoints,
     percentages,
-    preview
+    preview,
+    fillActivePlayerCount: fill.count,
+    fillActivePlayerCountSource: fill.source,
+    fillActivePlayerCountWindowDays: fill.windowDays,
+    useCodeRedeemAvgForFill: fill.useCodeRedeemAvg,
+    avgCodeRedeemCount: fill.avgCodeRedeemCount,
+    codeRedeemSampleSize: fill.codeRedeemSampleSize,
+    codeRedeemWindowDays: fill.codeRedeemWindowDays
   }
 })

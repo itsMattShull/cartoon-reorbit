@@ -412,7 +412,7 @@
           <h2 class="text-xs font-semibold text-gray-800 mb-1">Standardized Mint Quantities</h2>
           <p class="text-[10px] text-gray-500 mb-2">
             Powers the "Fill from Active Players" button on the Add/Edit cToon forms: clicking it
-            fills Total/Initial Quantity with <strong>active players × the percentage below</strong>
+            fills Total/Initial Quantity with <strong>the count below × the percentage below</strong>
             for that rarity. The fields stay freely editable afterward — nothing here is enforced
             automatically.
           </p>
@@ -439,8 +439,31 @@
               </div>
             </div>
 
+            <!-- Active-player count source toggle -->
+            <div class="border rounded-lg p-3 mb-3 bg-gray-50">
+              <label class="flex items-start gap-2 cursor-pointer">
+                <input type="checkbox" class="mt-0.5" v-model="useCodeRedeemAvgForFill" />
+                <span class="text-xs">
+                  <span class="font-medium text-gray-800">Use average code redeems instead of active players</span>
+                  <span class="block text-[11px] text-gray-500 mt-0.5">
+                    If the Active Players count above reads inflated, fill quantities can instead be based on the
+                    average number of redemptions per code among codes that expired in the last {{ metrics.codeRedeemWindowDays }} days.
+                    Falls back to Active Players automatically whenever no code has expired that recently.
+                  </span>
+                  <span class="block text-[11px] mt-1 font-medium" :class="metrics.avgCodeRedeemCount != null ? 'text-gray-700' : 'text-amber-600'">
+                    <template v-if="metrics.avgCodeRedeemCount != null">
+                      Average: {{ formatMetricNumber(metrics.avgCodeRedeemCount) }} redeems across {{ metrics.codeRedeemSampleSize }} code{{ metrics.codeRedeemSampleSize === 1 ? '' : 's' }} expired in the last {{ metrics.codeRedeemWindowDays }} days
+                    </template>
+                    <template v-else>
+                      No codes have expired in the last {{ metrics.codeRedeemWindowDays }} days — falling back to Active Players
+                    </template>
+                  </span>
+                </span>
+              </label>
+            </div>
+
             <p class="text-xs text-gray-600 mb-2">
-              The button fills in <strong>active players × percentage</strong>, rounded, minimum 1.
+              The button fills in <strong>{{ effectiveFillSource === 'codeRedeemAvg' ? 'average code redeems' : 'active players' }} × percentage</strong>, rounded, minimum 1.
             </p>
 
             <!-- Desktop table -->
@@ -630,7 +653,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { STANDARDIZABLE_RARITIES as metricRarityOrder } from '~/utils/cmartStandardizedRarities'
 
 const activeTab = ref('Global Points')
@@ -931,6 +954,18 @@ const metricsLoading = ref(true)
 const metricsLoadError = ref('')
 const metrics = ref(null)
 const metricPercentages = reactive({})
+const useCodeRedeemAvgForFill = ref(false)
+
+// What "Fill from Active Players" actually multiplies by right now, reacting live to the toggle
+// above (before it's even saved) the same way the percentage inputs already do — falls back to
+// Active Players whenever no code has expired recently enough to have an average.
+const effectiveFillSource = computed(() => (
+  useCodeRedeemAvgForFill.value && metrics.value?.avgCodeRedeemCount != null
+) ? 'codeRedeemAvg' : 'activePlayers')
+const effectiveFillCount = computed(() => {
+  if (!metrics.value) return null
+  return effectiveFillSource.value === 'codeRedeemAvg' ? metrics.value.avgCodeRedeemCount : metrics.value.activePlayerCount
+})
 
 function formatMetricNumber(n) {
   if (n == null || Number.isNaN(n)) return '—'
@@ -938,10 +973,10 @@ function formatMetricNumber(n) {
 }
 
 function previewMetricQuantity(rarity) {
-  if (!metrics.value) return null
+  if (effectiveFillCount.value == null) return null
   const pct = Number(metricPercentages[rarity])
   if (!Number.isFinite(pct)) return null
-  return Math.max(1, Math.round(metrics.value.activePlayerCount * pct / 100))
+  return Math.max(1, Math.round(effectiveFillCount.value * pct / 100))
 }
 
 async function loadMetrics() {
@@ -951,6 +986,7 @@ async function loadMetrics() {
     const res = await $fetch('/api/admin/cmart-metrics')
     metrics.value = res
     for (const r of metricRarityOrder) metricPercentages[r] = res.percentages?.[r] ?? 0
+    useCodeRedeemAvgForFill.value = !!res.useCodeRedeemAvgForFill
   } catch (e) {
     metricsLoadError.value = e?.data?.statusMessage || 'Failed to load cMart metrics.'
   } finally {
@@ -963,9 +999,10 @@ async function saveMetrics() {
   try {
     const res = await $fetch('/api/admin/cmart-metrics', {
       method: 'POST',
-      body: { percentages: { ...metricPercentages } }
+      body: { percentages: { ...metricPercentages }, useCodeRedeemAvgForFill: useCodeRedeemAvgForFill.value }
     })
     for (const r of metricRarityOrder) metricPercentages[r] = res.percentages?.[r] ?? metricPercentages[r]
+    useCodeRedeemAvgForFill.value = !!res.useCodeRedeemAvgForFill
     toast.value = { type: 'ok', msg: 'cMart metrics saved.' }
   } catch (e) {
     console.error(e); toast.value = { type: 'error', msg: e?.data?.statusMessage || e?.statusMessage || 'Save failed' }

@@ -3,7 +3,7 @@
 // Run with:  node scripts/make-blackjack-table.mjs
 //
 // The table is drawn rather than photographed so it matches the cast: flat colour, one hard
-// ink outline, no gradients finer than the characters carry. pages/newsite/blackjack.vue
+// ink outline, no gradients finer than the characters carry. pages/blackjack.vue
 // positions the hands and the cast against measurements taken from the output of this script
 // — the felt's depth and the tabletop's far edge — so if you change the geometry here, re-run
 // the measurements before trusting the page's percentages.

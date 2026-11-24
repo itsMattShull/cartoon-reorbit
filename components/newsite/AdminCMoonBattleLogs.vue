@@ -7,7 +7,7 @@
         </div>
         <p class="text-[11px] text-gray-500 mb-2">
           Every cMoon Enemy Battle, one row per attempt. Manage the enemies themselves on the
-          <NuxtLink to="/newsite/admin/cMoonEnemies" class="text-indigo-600 hover:underline">Manage cMoon Enemies</NuxtLink> page.
+          <NuxtLink to="/admin/cMoonEnemies" class="text-indigo-600 hover:underline">Manage cMoon Enemies</NuxtLink> page.
         </p>
 
         <!-- FILTER BAR -->

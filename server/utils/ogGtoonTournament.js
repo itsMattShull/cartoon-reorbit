@@ -47,12 +47,12 @@ function baseUrl() {
 }
 /**
  * The tournament's own page (opt in/out, your next opponent, standings, and the Start next game button). Every Discord
- * message about a tournament links here — keep it in step with pages/newsite/gtoons-classic/tournaments/[tid].vue.
- * (Links sent before this page existed, `/newsite/gtoons-classic?tab=tournaments&t=<id>`, still work: the Tournaments
+ * message about a tournament links here — keep it in step with pages/gtoons-classic/tournaments/[tid].vue.
+ * (Links sent before this page existed, `/gtoons-classic?tab=tournaments&t=<id>`, still work: the Tournaments
  * tab forwards them.)
  */
 export function getOgTournamentUrl(tournamentId) {
-  return `${baseUrl()}/newsite/gtoons-classic/tournaments/${tournamentId}`
+  return `${baseUrl()}/gtoons-classic/tournaments/${tournamentId}`
 }
 export function formatCentral(date) {
   const dt = DateTime.fromJSDate(new Date(date)).setZone(CENTRAL_TZ)

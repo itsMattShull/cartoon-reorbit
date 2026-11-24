@@ -1,5 +1,5 @@
 // Serializes an All cToons filter + tab into a router query object,
-// matching the shape pages/newsite/allCtoons.vue reads back on mount.
+// matching the shape pages/allCtoons.vue reads back on mount.
 export function filterToQuery(filter, tab) {
   const query = {}
   if (filter.name)                    query.name      = filter.name

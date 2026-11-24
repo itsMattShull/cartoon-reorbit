@@ -5,7 +5,7 @@
       <p class="text-gray-600">
         Build custom full-screen effects (background color, an uploaded image that scales up,
         an optional caption) as an alternative to the built-in effects. Assign one to a cMoon
-        from the <NuxtLink to="/newsite/admin/cMoon" class="text-indigo-600 hover:underline">cMoons</NuxtLink> page.
+        from the <NuxtLink to="/admin/cMoon" class="text-indigo-600 hover:underline">cMoons</NuxtLink> page.
       </p>
 
       <p v-if="loadError" class="text-red-600">{{ loadError }}</p>

@@ -306,7 +306,6 @@ html.newsite-active [role="button"]:not([aria-disabled="true"]) {
         <div class="sidebar-middle" :style="isMobile ? { width: 'auto', alignSelf: 'stretch', height: 'auto', marginTop: 'var(--sidebar-middle-mt)', marginBottom: 'var(--sidebar-middle-mb)' } : {}">
           <MiddleSidebarImages v-show="!sidebarMiddleComponent" />
           <CmartSidebar        v-show="sidebarMiddleComponent === 'CmartSidebar'" />
-          <NewcmartSidebar     v-show="sidebarMiddleComponent === 'NewcmartSidebar'" />
           <AuctionHouseSidebar v-show="sidebarMiddleComponent === 'AuctionHouseSidebar'" />
           <MyCollectionSidebar v-show="sidebarMiddleComponent === 'MyCollectionSidebar'" />
           <AllCtoonsSidebar    v-show="sidebarMiddleComponent === 'AllCtoonsSidebar'" />
@@ -352,12 +351,10 @@ import { useClickSoundEffects } from '@/composables/useClickSoundEffects'
 import { useSiteTheme } from '@/composables/useSiteTheme'
 
 const route = useRoute()
-// Mirrors layouts/default.vue's own admin exclusion (`!route.path.startsWith('/admin')`) — the
-// newsite admin console lives under /newsite/admin/* and shares this layout with the rest of
-// /newsite, so it needs its own check rather than inheriting default.vue's.
-const isAdminRoute = computed(() => route.path.startsWith('/newsite/admin'))
+// The admin console lives under /admin/* and shares this layout with the rest of the site.
+const isAdminRoute = computed(() => route.path.startsWith('/admin'))
 // The OG gToons hub and match board don't show the floating "Daily" onboarding widget.
-const isOgGtoonsRoute = computed(() => route.path.startsWith('/newsite/gtoons-classic'))
+const isOgGtoonsRoute = computed(() => route.path.startsWith('/gtoons-classic'))
 const { isOpen: ctoonModalIsOpen } = useCtoonModal()
 const {
   isOpen:  auctionModalIsOpen,
@@ -447,9 +444,9 @@ const gridRows = computed(() => {
 // than a 768p laptop's viewport, so fitting height means never rendering at full
 // size there — but a handful of pages genuinely cannot tolerate a scrolling
 // page and are better off small. Two verified reasons, not hypotheticals:
-// pages/newsite/blackjack.vue measures document overflow and shrinks its table
+// pages/blackjack.vue measures document overflow and shrinks its table
 // to absorb it (a deliberately-overflowing page would collapse the table to its
-// 300px floor), and pages/newsite/flappypowerpuff.vue pins `body` on every game
+// 300px floor), and pages/flappypowerpuff.vue pins `body` on every game
 // start to defeat pull-to-refresh, which would strand the bottom of a scrolling
 // playfield off-screen. Timed canvas games also just play badly when the
 // playfield can scroll out from under the player.
@@ -541,7 +538,7 @@ const scaleStyle = computed(() => {
   // layer-promoted — and dropping it conditionally would make the container a
   // containing block for `position: fixed` descendants at some window widths
   // but not others. Several places already depend on the current, consistent
-  // behaviour (pages/newsite/edrps.vue teleports its overlay to body for
+  // behaviour (pages/edrps.vue teleports its overlay to body for
   // exactly this reason), and a containing block that flips on viewport width
   // produces bugs that only reproduce at specific window sizes. `fluidLayout`
   // above is the explicit, per-route way to opt out.

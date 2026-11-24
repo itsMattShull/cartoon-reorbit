@@ -21,11 +21,11 @@ export const ADMIN_PERMISSION_KEYS = [
   'certificate', 'encyclopedia', 'siteTheme', 'myOrbitTiles', 'myOrbitFurniture', 'myOrbitRooms',
   'manageSales', 'codes', 'auctions', 'dissolveQueue',
   'games', 'cMoon', 'cMoonJoinEffects', 'czoneEffects', 'cmoonChangeRequests', 'manageNavigation',
-  'cMoonEnemies', 'cMoonEnemyMaps', 'cMoonPvp', 'cMoonBattleUpgrades', 'cMoonRiddles', 'cMoonHunts', 'lotto', 'clashTournaments', 'ogGtoonTournaments',
+  'cMoonEnemies', 'cMoonEnemyMaps', 'cMoonPvp', 'cMoonBattleUpgrades', 'cMoonRiddles', 'cMoonHunts', 'lotto', 'dailyStreak', 'clashTournaments', 'ogGtoonTournaments',
   'scavenger', 'achievements', 'holidayEvents',
   'errorLogs', 'cronRunLogs', 'queueMonitor', 'authLogs', 'tradeLogs', 'auctionLogs',
   'ctoonOwnerLogs', 'czoneSearchLogs', 'pointLogs', 'cmoonPointLogs', 'cMoonBattleLogs',
-  'achievementLogs', 'gtoonsClashLogs', 'edRpsLogs', 'pokemonBattleLogs',
+  'achievementLogs', 'gtoonsClashLogs', 'ogGtoonsLogs', 'edRpsLogs', 'pokemonBattleLogs',
   'lottoLogs', 'winWheelLogs', 'scavengerLogs', 'adminChanges',
   'globalSettings', 'production'
 ]
@@ -117,6 +117,8 @@ export const ADMIN_API_SEGMENT_PERMS = {
   'cmoon-prestige-rank-tiers': ['cMoon'],
   'cmoon-pvp-rewards': ['cMoonPvp'],
   'cmoon-pvp-settings': ['cMoonPvp'],
+  'daily-streak-rewards': ['dailyStreak'],
+  'daily-streak-settings': ['dailyStreak'],
   'cmoon-pvp-tournaments': ['cMoonPvp'],
   'cmoon-rank-tiers': ['cMoon'],
   'cmoon-riddles': ['cMoonRiddles'],
@@ -185,6 +187,7 @@ export const ADMIN_API_SEGMENT_PERMS = {
   // Its own first segment on purpose: under `oggtoons/` a tournament admin would need the cToons
   // tool, and a cToons admin would get tournament and prize powers.
   'og-tournaments': ['ogGtoonTournaments'],
+  'og-gtoons-logs': ['ogGtoonsLogs'],
   'pack-analytics': ['packAnalytics'],
   'pack-analytics-detail': ['setAnalytics', 'packAnalytics'],
   packs: ['packs'],
@@ -390,7 +393,7 @@ export const ADMIN_PERMISSION_PRESETS = [
     id: 'events',
     label: 'Event manager',
     perms: ['games', 'cMoon', 'cMoonJoinEffects', 'czoneEffects', 'cmoonChangeRequests', 'manageNavigation',
-      'cMoonEnemies', 'cMoonEnemyMaps', 'cMoonPvp', 'cMoonBattleUpgrades', 'cMoonRiddles', 'cMoonHunts', 'lotto', 'clashTournaments', 'ogGtoonTournaments', 'scavenger',
+      'cMoonEnemies', 'cMoonEnemyMaps', 'cMoonPvp', 'cMoonBattleUpgrades', 'cMoonRiddles', 'cMoonHunts', 'lotto', 'dailyStreak', 'clashTournaments', 'ogGtoonTournaments', 'scavenger',
       'achievements', 'holidayEvents', 'achievementLogs', 'lottoLogs', 'winWheelLogs', 'scavengerLogs',
       'cMoonBattleLogs', 'cMoonEnemyAnalytics']
   },
@@ -399,7 +402,7 @@ export const ADMIN_PERMISSION_PRESETS = [
     label: 'Log viewer (no sensitive logs)',
     perms: ['analytics', 'errorLogs', 'cronRunLogs', 'queueMonitor', 'tradeLogs', 'auctionLogs',
       'ctoonOwnerLogs', 'czoneSearchLogs', 'pointLogs', 'cmoonPointLogs', 'cMoonBattleLogs',
-      'achievementLogs', 'gtoonsClashLogs', 'edRpsLogs', 'pokemonBattleLogs',
+      'achievementLogs', 'gtoonsClashLogs', 'ogGtoonsLogs', 'edRpsLogs', 'pokemonBattleLogs',
       'lottoLogs', 'winWheelLogs', 'scavengerLogs']
   }
 ]

@@ -40,7 +40,7 @@
         </div>
 
         <NuxtLink
-          :to="`/newsite/tournaments/${t.id}`"
+          :to="`/tournaments/${t.id}`"
           class="mt-auto inline-flex items-center justify-center px-3 py-2 rounded bg-indigo-600 text-white text-sm hover:bg-indigo-700"
         >
           View tournament

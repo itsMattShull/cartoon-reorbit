@@ -74,7 +74,23 @@
             <div v-else-if="dailyError" class="text-sm text-white/55">
               Sign in to view your daily activities.
             </div>
-            <ul v-else class="space-y-3 flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1">
+            <template v-else>
+              <div v-if="streakData" class="flex items-center justify-between gap-2 mb-2 px-0.5">
+                <span class="text-sm text-white/85">🔥 <strong>{{ streakData.streakCount }}</strong> day streak</span>
+                <button
+                  type="button" class="flex-shrink-0 text-[11px] font-semibold text-[#3399CC] hover:underline"
+                  @click="showStreakModal = true"
+                >View rewards</button>
+              </div>
+              <DailyStreakRewardsModal
+                v-if="showStreakModal && streakData"
+                :streak-count="streakData.streakCount"
+                :max-day="streakData.maxDay"
+                :repeat-enabled="streakData.repeatEnabled"
+                :milestones="streakData.milestones"
+                @close="showStreakModal = false"
+              />
+              <ul class="space-y-3 flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1">
               <li v-for="item in items" :key="item.id" class="flex items-start gap-3">
                 <span
                   :class="[
@@ -115,7 +131,8 @@
                 </span>
                 <p class="text-sm text-white/85">{{ item.text }}</p>
               </li>
-            </ul>
+              </ul>
+            </template>
           </div>
           <div v-else-if="activeTab === 'alerts' || activeTab === 'raidboss'" class="flex-1 min-h-0 flex flex-col">
             <div v-if="alertsPending && !alertsLoaded" class="space-y-3 animate-pulse">
@@ -141,7 +158,7 @@
               <ul v-else class="space-y-2 flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1">
                 <li v-for="n in activeNotificationList" :key="n.id">
                   <component
-                    :is="notificationRoute(n) ? 'NuxtLink' : 'div'"
+                    :is="notificationRoute(n) ? NuxtLinkComponent : 'div'"
                     v-bind="notificationRoute(n) ? { to: notificationRoute(n) } : {}"
                     class="ob-alert block rounded-lg border px-3 py-2 transition"
                     :class="n.readAt ? 'ob-alert-read border-white/10' : 'ob-alert-unread border-white/20'"
@@ -332,15 +349,16 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import DailyStreakRewardsModal from '@/components/newsite/DailyStreakRewardsModal.vue'
 
-const route = useRoute()
-const isNewsite = computed(() => route.path.startsWith('/newsite'))
+// The alert rows pick between a link and a plain <div> at runtime (<component :is>). That only
+// works with the component itself: Nuxt never registers NuxtLink under its name, so passing the
+// string 'NuxtLink' rendered an inert <nuxtlink> tag and no alert was clickable.
+const NuxtLinkComponent = resolveComponent('NuxtLink')
 
-const czoneSearchPath = (id) =>
-  isNewsite.value ? `/newsite/czonesearch/${id}` : `/czonesearch/${id}`
+const czoneSearchPath = (id) => `/czonesearch/${id}`
 
-const czoneContestPath = (id) =>
-  isNewsite.value ? `/newsite/czone-contest/${id}` : `/czone-contest/${id}`
+const czoneContestPath = (id) => `/czone-contest/${id}`
 
 const isOpen = ref(false)
 const onboardingRef = ref(null)
@@ -372,6 +390,8 @@ const dailyError = ref(null)
 const eventsData = ref(null)
 const eventsPending = ref(false)
 const eventsError = ref(null)
+const streakData = ref(null)
+const showStreakModal = ref(false)
 
 const fetchDaily = async () => {
   dailyPending.value = true
@@ -382,6 +402,16 @@ const fetchDaily = async () => {
     dailyError.value = err
   } finally {
     dailyPending.value = false
+  }
+}
+
+// Best-effort, separate from dailyError/dailyPending above: a failed streak fetch shouldn't
+// block the daily checklist itself from rendering - it just leaves the 🔥 row/modal absent.
+const fetchStreak = async () => {
+  try {
+    streakData.value = await $fetch('/api/daily-streak/status', { credentials: 'include' })
+  } catch {
+    streakData.value = null
   }
 }
 
@@ -431,6 +461,7 @@ watch([isOpen, activeTab], ([nextOpen, nextTab], [prevOpen]) => {
   if (!nextOpen) return
   if (nextTab === 'daily') {
     fetchDaily()
+    fetchStreak()
   } else if (nextTab === 'alerts' || nextTab === 'raidboss') {
     // Opening the tab deliberately does NOT mark anything read — a stray tap on
     // a phone would otherwise wipe the only signal that something happened.
@@ -454,32 +485,32 @@ const notificationRoute = (n) => {
   // open-redirect / `javascript:` sink; there is no such column, by design.
   if (!n) return null
   if (n.type === 'TRADE_OFFER_RECEIVED' || n.type === 'TRADE_OFFER_ACCEPTED') {
-    return '/newsite/trade'
+    return '/trade'
   }
   if (n.type === 'PVP_PACK_WON') {
     // A sealed pack won in an OG gToons match: straight to the Packs tab. Before the contextId fallback below, which
-    // would send an unknown typed notification to /newsite/AuctionHouse/<id>.
-    return '/newsite/MyCollection?tab=packs'
+    // would send an unknown typed notification to /AuctionHouse/<id>.
+    return '/MyCollection?tab=packs'
   }
   if (n.type === 'CMOON_RAID_BOSS_STARTED') {
     // Raids are cross-cMoon now: every raid alert opens the Raid Boss Lobby on the cMoons page,
     // which lists every open raid from any team (including older per-raid alerts, whose raid has
     // long since closed anyway). See components/newsite/CMoonRaidLobbyModal.vue.
-    return '/newsite/cmoon-nav?raidLobby=1'
+    return '/cmoon-nav?raidLobby=1'
   }
   if (n.type === 'CMOON_RAID_PREVIEW_STARTED') {
     if (!n.contextId) return null
-    return `/newsite/cmoon-raid-preview/${encodeURIComponent(n.contextId)}`
+    return `/cmoon-raid-preview/${encodeURIComponent(n.contextId)}`
   }
   if (n.type === 'FOLLOWED_USER_ONLINE') {
     // contextId here is the followed player's USERNAME, not an id — see
     // notifyFollowedUserOnline's own comment (server/utils/notifications.js) for why. Must be
     // handled before the generic contextId fallback below, which assumes an Auction id.
     if (!n.contextId) return null
-    return `/newsite/czone/${encodeURIComponent(n.contextId)}`
+    return `/czone/${encodeURIComponent(n.contextId)}`
   }
   if (!n.contextId) return null
-  return `/newsite/AuctionHouse/${encodeURIComponent(n.contextId)}`
+  return `/AuctionHouse/${encodeURIComponent(n.contextId)}`
 }
 
 const markRead = async (ids) => {

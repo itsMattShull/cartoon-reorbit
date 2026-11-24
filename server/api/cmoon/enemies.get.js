@@ -1,5 +1,5 @@
 // server/api/cmoon/enemies.get.js
-// Backs the player-facing enemy roster/compendium page (pages/newsite/cmoon-enemies.vue) — a
+// Backs the player-facing enemy roster/compendium page (pages/cmoon-enemies.vue) — a
 // browsable "who's out there" list grouped by faction, gated per-viewer by the same
 // minPriorDefeats lock consider.post.js's own candidate query already enforces (see that column's
 // own schema comment), so this never reveals more than the ordinary popup roll would eventually

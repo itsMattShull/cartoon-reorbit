@@ -45,7 +45,7 @@
               class="tr-row"
             >
               <span class="tr-col-user">
-                <NuxtLink :to="`/newsite/czone/${offer.initiator.username}`" class="tr-link">{{ offer.initiator.username }}</NuxtLink>
+                <NuxtLink :to="`/czone/${offer.initiator.username}`" class="tr-link">{{ offer.initiator.username }}</NuxtLink>
               </span>
               <span class="tr-col-pts">{{ Number(offer.pointsOffered).toLocaleString() }}</span>
               <span class="tr-col-ct tr-col-off">{{ countByRole(offer, 'OFFERED') }}<span v-if="packCountByRole(offer, 'OFFERED')" class="tr-pk-count" :title="`${packCountByRole(offer, 'OFFERED')} sealed pack(s)`"> +{{ packCountByRole(offer, 'OFFERED') }}pk</span></span>
@@ -82,7 +82,7 @@
               class="tr-row"
             >
               <span class="tr-col-user">
-                <NuxtLink :to="`/newsite/czone/${offer.recipient.username}`" class="tr-link">{{ offer.recipient.username }}</NuxtLink>
+                <NuxtLink :to="`/czone/${offer.recipient.username}`" class="tr-link">{{ offer.recipient.username }}</NuxtLink>
               </span>
               <span class="tr-col-pts">{{ Number(offer.pointsOffered).toLocaleString() }}</span>
               <span class="tr-col-ct tr-col-off">{{ countByRole(offer, 'OFFERED') }}<span v-if="packCountByRole(offer, 'OFFERED')" class="tr-pk-count" :title="`${packCountByRole(offer, 'OFFERED')} sealed pack(s)`"> +{{ packCountByRole(offer, 'OFFERED') }}pk</span></span>
@@ -565,9 +565,9 @@
             <div class="tm-head-info">
               <div class="tm-head-title">
                 Trade:
-                <NuxtLink :to="`/newsite/czone/${currentOffer.initiator.username}`" class="tm-link">{{ currentOffer.initiator.username }}</NuxtLink>
+                <NuxtLink :to="`/czone/${currentOffer.initiator.username}`" class="tm-link">{{ currentOffer.initiator.username }}</NuxtLink>
                 →
-                <NuxtLink :to="`/newsite/czone/${currentOffer.recipient.username}`" class="tm-link">{{ currentOffer.recipient.username }}</NuxtLink>
+                <NuxtLink :to="`/czone/${currentOffer.recipient.username}`" class="tm-link">{{ currentOffer.recipient.username }}</NuxtLink>
               </div>
               <div class="tm-head-meta">
                 <span>Points: {{ Number(currentOffer.pointsOffered).toLocaleString() }}</span>

@@ -63,3 +63,35 @@ export async function getActivePlayerPointsStats() {
     medianPoints: Math.round(rows?.[0]?.medianPoints || 0)
   }
 }
+
+// An admin-facing alternative to the lastActivity-based count above, for whoever thinks it reads
+// inflated: the average number of Claim rows per ClaimCode, among codes whose expiresAt fell in
+// the last CODE_REDEEM_AVG_WINDOW_DAYS days. A code's claims are already final by the time it
+// expires, so this reads as a trailing measure of real engagement — distinct from "active" in the
+// lastActivity sense, but a plausible stand-in a `cmartFillUsesCodeRedeemAvg`-style toggle can use.
+export const CODE_REDEEM_AVG_WINDOW_DAYS = 7
+
+/**
+ * { avgRedeemCount, codeCount } for codes that expired in the last windowDays days. avgRedeemCount
+ * is null (not 0) when no code expired in that window, so callers can tell "no data" apart from
+ * "codes expired but nobody claimed them."
+ */
+export async function getAvgCodeRedeemCountFromExpiredCodes(windowDays = CODE_REDEEM_AVG_WINDOW_DAYS) {
+  const rows = await prisma.$queryRaw`
+    SELECT AVG(per_code."claimCount")::float AS "avgRedeemCount", COUNT(*)::int AS "codeCount"
+    FROM (
+      SELECT cc.id, COUNT(cl.id) AS "claimCount"
+      FROM "ClaimCode" cc
+      LEFT JOIN "Claim" cl ON cl."codeId" = cc.id
+      WHERE cc."expiresAt" IS NOT NULL
+        AND cc."expiresAt" >= NOW() - make_interval(days => ${windowDays}::int)
+        AND cc."expiresAt" <= NOW()
+      GROUP BY cc.id
+    ) per_code
+  `
+  const codeCount = Number(rows?.[0]?.codeCount || 0)
+  return {
+    avgRedeemCount: codeCount > 0 ? Math.round(rows[0].avgRedeemCount) : null,
+    codeCount
+  }
+}

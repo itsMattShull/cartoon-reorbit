@@ -138,7 +138,7 @@ function continueAfterAscend() {
   const prestigedResult = result.value
   const picked = pickedCMoon.value
   const goToCMoon = () => {
-    router.push(`/newsite/cmoon/${prestigedResult.cMoonId}`)
+    router.push(`/cmoon/${prestigedResult.cMoonId}`)
     const prizes = prestigedResult?.prizes || []
     if (prizes.length) {
       openRewardModal({

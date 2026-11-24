@@ -938,7 +938,7 @@ async function uploadAll() {
   uploading.value = false
   if (allSuccess) {
     showToast('All cToons uploaded successfully!', 'success')
-    setTimeout(() => router.push('/newsite/admin/ctoons'), 1000)
+    setTimeout(() => router.push('/admin/ctoons'), 1000)
   }
 }
 </script>

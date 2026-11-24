@@ -7,7 +7,7 @@
 
         <!-- Create New Pack button -->
         <NuxtLink
-          to="/newsite/admin/packs/new"
+          to="/admin/packs/new"
           class="inline-flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
         >
           <!-- Plus icon -->
@@ -81,7 +81,7 @@
                   <td class="px-2 py-1.5 whitespace-nowrap">{{ formatDate(pack.createdAt) }}</td>
                   <td class="px-2 py-1.5">
                     <NuxtLink
-                      :to="`/newsite/admin/packs/edit/${pack.id}`"
+                      :to="`/admin/packs/edit/${pack.id}`"
                       class="inline-flex items-center gap-1 px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
                     >
                       Edit
@@ -131,7 +131,7 @@
                   </div>
                   <!-- Edit Button -->
                   <NuxtLink
-                    :to="`/newsite/admin/packs/edit/${pack.id}`"
+                    :to="`/admin/packs/edit/${pack.id}`"
                     class="mt-2 inline-flex items-center justify-center px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
                   >
                     Edit

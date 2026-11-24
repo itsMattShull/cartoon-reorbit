@@ -19,7 +19,7 @@
         <p class="text-[11px] text-gray-500 mb-2">
           How often players take an enemy the popup offers them, and how often they finish a solo battle once they start it.
           Individual fights are on the
-          <NuxtLink to="/newsite/admin/cMoonBattleLogs" class="text-indigo-600 hover:underline">cMoon Battle Logs</NuxtLink> page.
+          <NuxtLink to="/admin/cMoonBattleLogs" class="text-indigo-600 hover:underline">cMoon Battle Logs</NuxtLink> page.
         </p>
 
         <p v-if="error" class="text-red-600 mb-2">{{ error }}</p>

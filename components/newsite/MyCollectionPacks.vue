@@ -51,8 +51,8 @@
         <p class="mcp-empty-title">No packs yet</p>
         <p class="mcp-empty-sub">
           Sealed packs show up here when you win them or redeem a code.
-          <NuxtLink to="/newsite/cmart" class="mcp-link">Visit cMart</NuxtLink> ·
-          <NuxtLink to="/newsite/redeem" class="mcp-link">Redeem a code</NuxtLink>
+          <NuxtLink to="/cmart" class="mcp-link">Visit cMart</NuxtLink> ·
+          <NuxtLink to="/redeem" class="mcp-link">Redeem a code</NuxtLink>
         </p>
       </div>
 

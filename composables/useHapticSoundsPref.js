@@ -3,7 +3,7 @@
 // Per-browser on/off switch for the site-wide click sound effect (see
 // composables/useClickSoundEffects.js) — and, since settings.vue's "Mute sounds" row now covers
 // both, also for cMoon battle sound effects/music, solo (composables/useCMoonBattlePopup.js) and
-// raid (pages/newsite/cmoon-raid/[id].vue) alike. Deliberately localStorage-backed rather than an
+// raid (pages/cmoon-raid/[id].vue) alike. Deliberately localStorage-backed rather than an
 // account preference (like User.allowAuctionNotifications) — this needs to work for logged-out
 // visitors too, since the click sound plays sitewide regardless of auth state, and it's a
 // device/session preference (someone may want it off on a shared kiosk, on at home) rather than
@@ -21,7 +21,7 @@ const STORAGE_KEY = 'cr_haptic_sounds_enabled_v1'
 
 export function useHapticSoundsPref() {
   // Default true so SSR assumes sound-on; hydrate() corrects it from localStorage before the app
-  // mounts (see plugins/hapticSoundsPref.client.js). pages/newsite/settings.vue's own checkbox
+  // mounts (see plugins/hapticSoundsPref.client.js). pages/settings.vue's own checkbox
   // binds `:checked` to the inverse of this ref — correcting pre-mount rather than on-mount (the
   // "SSR renders a default, client corrects on mount" shape composables/useIsNarrow.js uses)
   // doesn't risk a hydration mismatch there either: Vue always re-applies an <input>'s `checked`

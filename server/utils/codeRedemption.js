@@ -133,7 +133,7 @@ export async function redeemClaimCode(userId, code, { bypassHandicap = false } =
   // A flagged player (see server/utils/handicapRedeem.js) redeeming a code that mints at least
   // one cToon never reaches the transaction below — instead of their actual reward, they get
   // `{ redeeming: true }`, same as every other in-progress request looks from the client's own
-  // point of view (pages/newsite/redeem.vue just shows "Redeeming…"). A code with no cToon award
+  // point of view (pages/redeem.vue just shows "Redeeming…"). A code with no cToon award
   // is let through normally: "3 people have minted that code" can never become true for a
   // points/background-only code, so holding those would lock the player out of them forever.
   if (ctoonAwards.length > 0 && !bypassHandicap) {

@@ -120,7 +120,7 @@ export default defineEventHandler(async (event) => {
           content: `<@${me.discordId}> has created a new auction!`,
           embeds: [{
             title: `${packInfo?.pack?.name ?? 'Pack'} (sealed pack)`,
-            url: `${baseUrl}/newsite/AuctionHouse/${auction.id}`,
+            url: `${baseUrl}/AuctionHouse/${auction.id}`,
             description: [`**Starting Bid:** ${bet} pts`, `**Duration:** ${formatAuctionDuration(totalMinutes)}`].join('\n'),
             ...(imageUrl ? { image: { url: imageUrl } } : {})
           }]

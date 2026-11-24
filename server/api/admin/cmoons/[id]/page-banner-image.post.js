@@ -1,7 +1,7 @@
 // server/api/admin/cmoons/[id]/page-banner-image.post.js
 //
 // Uploads the wide masthead banner shown at the top of this cMoon's own page
-// (/newsite/cmoon/[id]) — distinct from the small button (button-image.post.js, shown on cToon ID
+// (/cmoon/[id]) — distinct from the small button (button-image.post.js, shown on cToon ID
 // cards and other cMoons' pages) and from the 800x600 pageImagePath (no longer displayed). Same
 // normalize-then-store approach as the other cMoon image endpoints.
 //

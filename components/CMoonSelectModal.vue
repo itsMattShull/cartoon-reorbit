@@ -109,7 +109,7 @@ async function checkStatus() {
   }
 }
 
-// Force-open from the "Join a cMoon" button on /newsite/cmoon-nav — for a player who opted out
+// Force-open from the "Join a cMoon" button on /cmoon-nav — for a player who opted out
 // (or otherwise has no cMoon) and wants back in. Bypasses canChoose entirely, since being here
 // means they're asking on purpose; loads the real (non-preview) cmoons list and reuses the exact
 // same confirm()/select flow as the automatic prompt.
@@ -194,7 +194,7 @@ async function confirm() {
     const chosenId = choice.value
     closePreview()
     const goToCMoon = () => {
-      router.push(`/newsite/cmoon/${chosenId}?adminPreview=1`)
+      router.push(`/cmoon/${chosenId}?adminPreview=1`)
       const prizes = picked?.prizeCtoons || []
       if (prizes.length) {
         openRewardModal({
@@ -223,7 +223,7 @@ async function confirm() {
     // change anyway, and gating a route change behind a "you got a prize" dismiss click only
     // slows down a flow that already feels instant today.
     const goToCMoon = () => {
-      router.push(`/newsite/cmoon/${chosenId}`)
+      router.push(`/cmoon/${chosenId}`)
       const prizes = res?.prizes || []
       if (prizes.length) {
         openRewardModal({

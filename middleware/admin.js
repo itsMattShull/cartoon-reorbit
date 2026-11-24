@@ -20,7 +20,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   // Sub-admins only get the admin console. The legacy /admin/* pages predate per-tool
   // permissions, so they stay full-admin only.
-  if (!isFullAdmin.value && !to.path.startsWith('/newsite/admin')) {
-    return navigateTo('/newsite/admin')
+  if (!isFullAdmin.value && !to.path.startsWith('/admin')) {
+    return navigateTo('/admin')
   }
 })

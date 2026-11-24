@@ -2,28 +2,28 @@
   <div class="gameshome-wrap">
     <div class="gh-nav">
       <GreenButton :active="true">Games Home</GreenButton>
-      <NuxtLink to="/newsite/leaderboards" class="gh-nav-link">
+      <NuxtLink to="/leaderboards" class="gh-nav-link">
         <GreenButton>Leaderboards</GreenButton>
       </NuxtLink>
     </div>
     <div class="gameshome" :style="gridStyle">
-      <NuxtLink v-if="!isHidden('gtoonsclassic')" to="/newsite/gtoons-classic" class="quadrant quadrant--gtoonsclassic">
+      <NuxtLink v-if="!isHidden('gtoonsclassic')" to="/gtoons-classic" class="quadrant quadrant--gtoonsclassic">
         <img v-if="tiles.gtoonsclassic" :src="tiles.gtoonsclassic" alt="gToons" class="tile-img" />
         <span v-else>gToons</span>
       </NuxtLink>
-      <NuxtLink to="/newsite/newwinball" class="quadrant quadrant--shop">
+      <NuxtLink to="/newwinball" class="quadrant quadrant--shop">
         <img v-if="tiles.winball" :src="tiles.winball" alt="Winball" class="tile-img" />
         <span v-else>Winball</span>
       </NuxtLink>
-      <NuxtLink to="/newsite/lottery" class="quadrant quadrant--collection">
+      <NuxtLink to="/lottery" class="quadrant quadrant--collection">
         <img v-if="tiles.lotto" :src="tiles.lotto" alt="Lotto" class="tile-img" />
         <span v-else>Lotto</span>
       </NuxtLink>
-      <NuxtLink to="/newsite/winwheel" class="quadrant quadrant--games">
+      <NuxtLink to="/winwheel" class="quadrant quadrant--games">
         <img v-if="tiles.winwheel" :src="tiles.winwheel" alt="Win Wheel" class="tile-img" />
         <span v-else>Win Wheel</span>
       </NuxtLink>
-      <NuxtLink v-if="!isHidden('clash')" to="/newsite/gtoons" class="quadrant quadrant--profile">
+      <NuxtLink v-if="!isHidden('clash')" to="/gtoons" class="quadrant quadrant--profile">
         <img v-if="tiles.clash" :src="tiles.clash" alt="gToons Clash" class="tile-img" />
         <span v-else>gToons Clash</span>
       </NuxtLink>
@@ -36,43 +36,43 @@
         <img v-if="tiles.tko" :src="tiles.tko" alt="TKO" class="tile-img" />
         <span v-else>TKO</span>
       </a>
-      <NuxtLink to="/newsite/reorbitmatch" class="quadrant quadrant--reorbit">
+      <NuxtLink to="/reorbitmatch" class="quadrant quadrant--reorbit">
         <img v-if="tiles.reorbitmatch" :src="tiles.reorbitmatch" alt="ReOrbit Match" class="tile-img" />
         <span v-else>ReOrbit Match</span>
       </NuxtLink>
-      <NuxtLink to="/newsite/tower" class="quadrant quadrant--tower">
+      <NuxtLink to="/tower" class="quadrant quadrant--tower">
         <img v-if="tiles.tower" :src="tiles.tower" alt="Tower Stack" class="tile-img" />
         <span v-else>Tower Stack</span>
       </NuxtLink>
-      <NuxtLink to="/newsite/reorbitmemory" class="quadrant quadrant--reorbitmemory">
+      <NuxtLink to="/reorbitmemory" class="quadrant quadrant--reorbitmemory">
         <img v-if="tiles.reorbitmemory" :src="tiles.reorbitmemory" alt="ReOrbit Memory" class="tile-img" />
         <span v-else>ReOrbit Memory</span>
       </NuxtLink>
-      <NuxtLink to="/newsite/guessctoon" class="quadrant quadrant--guessctoon">
+      <NuxtLink to="/guessctoon" class="quadrant quadrant--guessctoon">
         <img v-if="tiles.guessctoon" :src="tiles.guessctoon" alt="Guess that cToon!" class="tile-img" />
         <span v-else>Guess that cToon!</span>
       </NuxtLink>
-      <NuxtLink to="/newsite/asteroid" class="quadrant quadrant--asteroid">
+      <NuxtLink to="/asteroid" class="quadrant quadrant--asteroid">
         <img v-if="tiles.asteroid" :src="tiles.asteroid" alt="Operation A.S.T.E.R.O.I.D." class="tile-img" />
         <span v-else>Operation A.S.T.E.R.O.I.D.</span>
       </NuxtLink>
-      <NuxtLink to="/newsite/flappypowerpuff" class="quadrant quadrant--flappy">
+      <NuxtLink to="/flappypowerpuff" class="quadrant quadrant--flappy">
         <img v-if="tiles.flappy" :src="tiles.flappy" alt="Flappy Powerpuff!" class="tile-img" />
         <span v-else>Flappy Powerpuff!</span>
       </NuxtLink>
-      <NuxtLink to="/newsite/blackjack" class="quadrant quadrant--blackjack">
+      <NuxtLink to="/blackjack" class="quadrant quadrant--blackjack">
         <img v-if="tiles.blackjack" :src="tiles.blackjack" alt="ReOrbit Blackjack" class="tile-img" />
         <span v-else>ReOrbit Blackjack</span>
       </NuxtLink>
-      <NuxtLink to="/newsite/edrps" class="quadrant quadrant--edrps">
+      <NuxtLink to="/edrps" class="quadrant quadrant--edrps">
         <img v-if="tiles.edrps" :src="tiles.edrps" alt="Ed, Edd n Eddy RPS" class="tile-img" />
         <span v-else>Ed, Edd n Eddy RPS</span>
       </NuxtLink>
-      <NuxtLink to="/newsite/fruitsamurai" class="quadrant quadrant--fruitsamurai">
+      <NuxtLink to="/fruitsamurai" class="quadrant quadrant--fruitsamurai">
         <img v-if="tiles.fruitsamurai" :src="tiles.fruitsamurai" alt="Fruit Samurai" class="tile-img" />
         <span v-else>Fruit Samurai</span>
       </NuxtLink>
-      <NuxtLink v-if="!isHidden('pokemonbattle')" to="/newsite/pokemonbattle" class="quadrant quadrant--pokemonbattle">
+      <NuxtLink v-if="!isHidden('pokemonbattle')" to="/pokemonbattle" class="quadrant quadrant--pokemonbattle">
         <img v-if="tiles.pokemonbattle" :src="tiles.pokemonbattle" alt="Pokemon: Fire, Water, Grass!" class="tile-img" />
         <span v-else>Pokemon: Fire, Water, Grass!</span>
       </NuxtLink>

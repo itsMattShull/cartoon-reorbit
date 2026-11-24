@@ -19,7 +19,7 @@
 <script setup>
 // One-time, two-sided "squaring off" intro — nothing else in this game needs this (raid is always
 // "party vs one shared boss", never two symmetric sides), so this is new rather than reused. Shown
-// once when a PvP match's combat starts (see pages/newsite/cmoon-pvp/[id].vue's own trigger),
+// once when a PvP match's combat starts (see pages/cmoon-pvp/[id].vue's own trigger),
 // self-dismissing after a few seconds so the caller never needs its own timer.
 import { ref, watch, onBeforeUnmount } from 'vue'
 import { isSafeCMoonColor } from '~/utils/cmoonColor'

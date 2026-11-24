@@ -16,7 +16,7 @@
           <div class="skel skel-stat" />
         </template>
         <template v-else>
-          <NuxtLink :to="`/newsite/czone/${user.username}`" class="user-info-username" ref="usernameEl">{{ user.username }}</NuxtLink>
+          <NuxtLink :to="`/czone/${user.username}`" class="user-info-username" ref="usernameEl">{{ user.username }}</NuxtLink>
           <!-- Locked rides the existing points line rather than getting a line of
                its own. This box is a fixed 85px with overflow:hidden, and its
                current five rows already measure ~90px — the daily-reset row is

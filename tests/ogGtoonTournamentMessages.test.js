@@ -5,7 +5,7 @@ import {
   roundOpenLiveText, reminderLiveText, opponentReadyText, matchDecidedText, announcementText, tournamentCompleteText
 } from '../server/utils/ogGtoonTournamentMessages.js'
 
-const link = 'https://www.cartoonreorbit.com/newsite/gtoons-classic/game-1'
+const link = 'https://www.cartoonreorbit.com/gtoons-classic/game-1'
 const base = {
   tournamentName: 'First gtoon Tournament!', label: 'Swiss Round 3', gameNumber: 1, link, dueText: 'Nov 17, 2026 8:12 PM CST',
   me: { username: 'Ann', goalColor: 'RED', goalCard: { name: 'Dexter', color: 'RED' } },
@@ -63,8 +63,8 @@ test('reminder and decided texts carry the link', () => {
 test('a game link points at the board page, which exists', async () => {
   const { gameUrl } = await import('../server/utils/ogGtoonTournamentMessages.js')
   const { existsSync } = await import('node:fs')
-  assert.equal(gameUrl('https://x.test', 'abc'), 'https://x.test/newsite/gtoons-classic/abc')
-  assert.ok(existsSync(new URL('../pages/newsite/gtoons-classic/[id].vue', import.meta.url)), 'the page the link points at must exist')
+  assert.equal(gameUrl('https://x.test', 'abc'), 'https://x.test/gtoons-classic/abc')
+  assert.ok(existsSync(new URL('../pages/gtoons-classic/[id].vue', import.meta.url)), 'the page the link points at must exist')
 })
 
 test('the DMs are laid out as a header, bullet points and the link on its own line', () => {

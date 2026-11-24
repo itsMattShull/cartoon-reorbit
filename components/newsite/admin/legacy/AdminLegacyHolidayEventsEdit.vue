@@ -5,7 +5,7 @@
     <div class="px-2 py-2">
     <!-- Back & Title -->
     <div class="flex items-center gap-2 mb-3">
-      <NuxtLink to="/newsite/admin/holidayEvents" class="text-xs text-blue-700 hover:underline focus-visible:outline-blue-700">
+      <NuxtLink to="/admin/holidayEvents" class="text-xs text-blue-700 hover:underline focus-visible:outline-blue-700">
         ← Back to Holiday Events
       </NuxtLink>
       <h1 class="text-base font-semibold">Edit Holiday Event</h1>
@@ -394,7 +394,7 @@ async function submit() {
       body: payload,
       credentials: 'include'
     })
-    router.push('/newsite/admin/holidayEvents')
+    router.push('/admin/holidayEvents')
   } catch (err) {
     console.error(err)
     alert('Failed to save changes')

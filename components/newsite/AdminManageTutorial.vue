@@ -4,7 +4,7 @@
 
       <div class="flex items-center justify-between flex-wrap gap-2">
         <h1 class="text-base font-semibold">Manage Tutorial (How to Play)</h1>
-        <a href="/newsite/tutorial" target="_blank" rel="noopener noreferrer"
+        <a href="/tutorial" target="_blank" rel="noopener noreferrer"
            class="px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50">
           Preview page ↗
         </a>

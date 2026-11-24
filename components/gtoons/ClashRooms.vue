@@ -146,7 +146,7 @@ const joinTitle = (r) => {
 function joinRoom(id) {
   const r = rooms.value.find(x => x.id === id)
   if (!r || joinDisabled(r)) return
-  router.push(`/newsite/gtoons/${id}`)
+  router.push(`/gtoons/${id}`)
 }
 
 function requestRooms() {
@@ -195,7 +195,7 @@ function confirmCreateRoom() {
   })
 
   showStakeModal.value = false
-  router.push(`/newsite/gtoons/${roomId}`)
+  router.push(`/gtoons/${roomId}`)
 }
 
 onMounted(async () => {

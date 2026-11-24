@@ -280,7 +280,7 @@
                   <img v-if="rewardBanner.image" :src="rewardBanner.image" :alt="rewardBanner.text" width="48" height="48" class="h-12 w-12 object-contain" />
                   <span class="font-semibold">{{ rewardBanner.text }}</span>
                 </div>
-                <NuxtLink to="/newsite/MyCollection?tab=packs" class="mt-1 inline-block min-h-[44px] leading-[44px] text-green-300 underline">Open it in Collection → Packs</NuxtLink>
+                <NuxtLink to="/MyCollection?tab=packs" class="mt-1 inline-block min-h-[44px] leading-[44px] text-green-300 underline">Open it in Collection → Packs</NuxtLink>
               </template>
               <template v-else>{{ rewardBanner.text }}</template>
             </div>

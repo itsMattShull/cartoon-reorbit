@@ -734,7 +734,7 @@
             <li>Trade offers rejected: {{ dissolveSummary.tradeOffersRejected }}</li>
           </ul>
           <p class="text-xs mt-2">
-            <NuxtLink to="/newsite/admin/dissolveQueue" class="underline font-medium text-emerald-800">View Dissolve Queue →</NuxtLink>
+            <NuxtLink to="/admin/dissolveQueue" class="underline font-medium text-emerald-800">View Dissolve Queue →</NuxtLink>
           </p>
         </div>
 
@@ -787,7 +787,7 @@ const route = useRoute()
 const router = useRouter()
 function viewCollection(u) {
   if (!u?.username) return
-  router.push({ path: '/newsite/admin/manageCollection', query: { username: u.username } })
+  router.push({ path: '/admin/manageCollection', query: { username: u.username } })
 }
 import AdminTransferModal from '@/components/newsite/AdminTransferModal.vue'
 import AdminSubAdminModal from '@/components/newsite/AdminSubAdminModal.vue'

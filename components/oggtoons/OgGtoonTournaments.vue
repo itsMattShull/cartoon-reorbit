@@ -1,6 +1,6 @@
 <!-- components/oggtoons/OgGtoonTournaments.vue -->
 <!-- The Tournaments tab of the OG gToons hub: every tournament as a card that links to its OWN page
-     (/newsite/gtoons-classic/tournaments/<id>) — that page has opt in/out, your next match, Start next game, standings
+     (/gtoons-classic/tournaments/<id>) — that page has opt in/out, your next match, Start next game, standings
      and prizes. Running ones come first; finished ones are listed under "Past". The card says what you can do right now
      ("Opt-in is open — enter", "Your match is ready"), so nothing needs hunting for. -->
 <template>
@@ -65,7 +65,7 @@ const loading = ref(true)
 const loadError = ref('')
 let timer = null
 
-const pageFor = (id) => `/newsite/gtoons-classic/tournaments/${id}`
+const pageFor = (id) => `/gtoons-classic/tournaments/${id}`
 
 const ACTIVE = new Set(['DRAFT', 'OPT_IN_OPEN', 'OPT_IN_CLOSED', 'SWISS_ACTIVE', 'BRACKET_ACTIVE'])
 // Needs-your-action first, then open-for-entry, then by start time.

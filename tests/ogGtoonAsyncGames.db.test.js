@@ -642,7 +642,7 @@ run('DM: both players get the game link, their goal cards and how it is decided,
     for (const u of [a, b]) {
       const [text] = textsTo(dms, u)
       assert.ok(text, `${u.username} was messaged`)
-      assert.ok(text.includes(`/newsite/gtoons-classic/${game.gameId}`), 'the link goes straight to this game')
+      assert.ok(text.includes(`/gtoons-classic/${game.gameId}`), 'the link goes straight to this game')
       assert.match(text, /Game 1 is ready/)
       assert.match(text, /Your goal:\*\* .*\(\w+\)/)
       assert.match(text, /color(s)? revealed|No colors revealed/)

@@ -1,5 +1,5 @@
 // Server-only Flappy Powerpuff game engine. Never import this from pages/ or components/.
-// The pure physics below is duplicated (by hand) in pages/newsite/flappypowerpuff.vue so the
+// The pure physics below is duplicated (by hand) in pages/flappypowerpuff.vue so the
 // client can render the same motion; the anti-cheat constants and thresholds in this file are
 // deliberately NOT shared, because shipping them in the client bundle would tell a bot exactly
 // which limits to stay under.

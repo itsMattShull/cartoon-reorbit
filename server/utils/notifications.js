@@ -193,7 +193,7 @@ export async function notifyAuctionWon (db, { userId, auctionId, ctoonName, amou
  * A trade offer landed in your incoming list.
  *
  * `contextId` is the SENDER's id, not the offer's. There is no per-offer page to
- * deep-link to — every trade notification opens /newsite/trade — so using the
+ * deep-link to — every trade notification opens /trade — so using the
  * sender collapses a flood of offers from one account into a single row instead
  * of one row per offer. Nothing rate-limits offer creation and a 1-point offer
  * is free to send, so without this the hub is an unbounded, attacker-writable
@@ -307,7 +307,7 @@ export async function notifyCMoonRaidLobbyOpened (db, { userIds, enemyName, init
 /**
  * Another admin started a consequence-free raid boss preview (server/utils/cmoonRaidPreviewSocket.js)
  * and this recipient (every OTHER admin) can join it. `contextId` is the in-memory preview raid id
- * — notificationRoute() (components/Onboarding.vue) opens /newsite/cmoon-raid-preview/{contextId}.
+ * — notificationRoute() (components/Onboarding.vue) opens /cmoon-raid-preview/{contextId}.
  * No `contextType`, same reasoning as notifyCMoonRaidBossStarted above.
  */
 export async function notifyCMoonRaidPreviewStarted (db, { userId, raidId, enemyName, startedByUsername }) {
@@ -454,7 +454,7 @@ const FOLLOW_BATCH_SIZE = 1000
  *
  * contextId is the followed player's own USERNAME, not their id — unlike every other typed
  * notification in this file. Its click target (the followed player's cZone,
- * pages/newsite/czone/[username].vue) is addressed by username, and notificationRoute()
+ * pages/czone/[username].vue) is addressed by username, and notificationRoute()
  * (components/Onboarding.vue) deliberately never does a DB round trip to resolve one at click
  * time (see that function's own header comment on why routes are built from `type` alone).
  * Reusing contextId for this avoids adding a third column just for one notification type. It

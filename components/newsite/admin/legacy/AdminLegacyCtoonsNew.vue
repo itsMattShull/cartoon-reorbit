@@ -150,7 +150,7 @@
 
             <div v-if="mintLimitType === 'defined' && isStandardizableRarity" class="flex items-center justify-between gap-2">
               <p class="text-[11px] text-gray-500">
-                Fills Total/Initial Quantity below from {{ cmartMetricsInfo?.activePlayerCount ?? '…' }} players active in the last {{ windowDays }} days × the Common/Uncommon/Rare/etc percentage set on Admin &gt; cMart Metrics. Still editable afterward.
+                Fills Total/Initial Quantity below from {{ cmartMetricsInfo?.activePlayerCount ?? '…' }} {{ fillSourceLabel }} × the Common/Uncommon/Rare/etc percentage set on Admin &gt; cMart Metrics. Still editable afterward.
               </p>
               <button
                 type="button"
@@ -942,6 +942,9 @@ watch(abilityKey, () => { abilityParam.value = null })
 // Added rarityOptions array
 const rarityOptions = ['Common', 'Uncommon', 'Rare', 'Very Rare', 'Crazy Rare', 'Prize Only', 'Code Only', 'Auction Only']
 const isStandardizableRarity = computed(() => STANDARDIZABLE_RARITIES.includes(rarity.value))
+const fillSourceLabel = computed(() => cmartMetricsInfo.value?.fillActivePlayerCountSource === 'codeRedeemAvg'
+  ? `average code redeems on codes expired in the last ${windowDays.value} days`
+  : `players active in the last ${windowDays.value} days`)
 
 function fillFromActivePlayers() {
   if (!cmartMetricsInfo.value) return
@@ -1230,7 +1233,7 @@ async function submitForm() {
     body: formData
   })
 
-  if (res.ok) router.push('/newsite/admin/ctoons')
+  if (res.ok) router.push('/admin/ctoons')
   else alert('Failed to create cToon')
 }
 </script>

@@ -1,4 +1,4 @@
-// Checked once by pages/newsite/redeem.vue on mount, so a flagged player who left the "Redeeming…"
+// Checked once by pages/redeem.vue on mount, so a flagged player who left the "Redeeming…"
 // state and came back (reload, new tab, next day) resumes polling the right code instead of
 // just seeing a blank redeem form with no explanation. Deliberately reports only a still-PENDING
 // hold — once a hold COMPLETES, this reports nothing pending (the reward is already sitting in

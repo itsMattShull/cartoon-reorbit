@@ -36,8 +36,8 @@ enum NotificationType {
   CMOON_RAID_PREVIEW_STARTED
   // A sealed pack was awarded for winning an OG gToons PvP match (server/utils/ogGtoonsPackReward.js).
   // Deliberately carries NO contextType/contextId: those columns are the AUCTION/TRADE enum, and the
-  // drawer routes any typed notification with a contextId to /newsite/AuctionHouse/<id>. The client
-  // maps this type straight to /newsite/MyCollection?tab=packs instead.
+  // drawer routes any typed notification with a contextId to /AuctionHouse/<id>. The client
+  // maps this type straight to /MyCollection?tab=packs instead.
   PVP_PACK_WON
   // This player was auto-kicked from a raid for going AFK (auto-moved) 4 consecutive rounds — see
   // the AFK-kick block in closeRound, server/utils/cmoonRaidSocket.js. No contextId: the raid is
@@ -46,7 +46,7 @@ enum NotificationType {
   // A cToon on this user's wishlist (WishlistItem) was just listed in a new auction — see
   // notifyWishlistAuctionListed in server/utils/notifications.js, called from
   // server/api/auctions.post.js. contextId is the Auction id, contextType AUCTION, same
-  // AUCTION_WON/AUCTION_OUTBID convention, so it routes to /newsite/AuctionHouse/<id> with no
+  // AUCTION_WON/AUCTION_OUTBID convention, so it routes to /AuctionHouse/<id> with no
   // client changes. Gated on User.allowWishlistAuctionNotifications (default true).
   WISHLIST_AUCTION_LISTED
   // A player this user follows in MyOrbit (MyOrbitFollow) came online — see
@@ -84,6 +84,10 @@ enum PackSource {
   // capture is NOT a win (see CMoonEnemyBattleOutcome.CAPTURED's own schema comment), so its pack
   // grants shouldn't read as if they came from defeating the enemy.
   CMOON_ENEMY_CAPTURE
+  // A PACK-type DailyStreakReward row, granted by processDailyStreaks (server/utils/
+  // dailyStreak.js) on reaching a configured streak-day milestone — see Admin > Manage Daily
+  // Streak.
+  DAILY_STREAK
 }
 
 /// What an Auction row is selling. Exactly one of Auction.userCtoonId / Auction.userPackId is set,
@@ -430,6 +434,7 @@ model Ctoon {
   cMoonEnemyRewards          CMoonEnemyReward[]
   cMoonEnemyCaptureRewards   CMoonEnemyCaptureReward[]
   cMoonPvpRewards            CMoonPvpReward[]
+  dailyStreakRewards         DailyStreakReward[]
   cMoonPrestigeRankTiers     CMoonPrestigeRankTier[]
   imageHash                  CtoonImageHash?
   userSuggestions            CtoonUserSuggestion[]
@@ -681,7 +686,7 @@ model User {
   // Set when a player explicitly declines to pick a cMoon from the initial join modal (there is no
   // more time-based auto-assignment — see server/utils/cmoon.js). Only meaningful while cMoonId is
   // null; cleared back to false on a successful selectCMoonForUser. Lets the modal stop popping up
-  // automatically (see canChoose in server/api/cmoon/status.get.js) while /newsite/cmoon-nav still
+  // automatically (see canChoose in server/api/cmoon/status.get.js) while /cmoon-nav still
   // offers a "Join a cMoon" button that reopens the same modal on demand.
   cMoonOptedOut          Boolean         @default(false)
   // When cMoonOptedOut was last set true — the anchor for the admin-configurable rejoin cooldown
@@ -691,6 +696,27 @@ model User {
   // Set once the daily Discord sync grants this user's cMoon role, so the job
   // only touches never-synced members instead of re-checking everyone daily.
   cMoonRoleGrantedAt     DateTime?
+  // Daily Streak (see server/utils/dailyStreak.js) — consecutive calendar days this player has
+  // completed EVERY enabled daily task (server/api/onboarding/daily.get.js's own 6 checks, same
+  // "limit 0 = not a real task" skip rule). Reset to 0 the first day any enabled task is missed.
+  dailyStreakCount          Int       @default(0)
+  // The getChicagoDailyBoundary() instant processDailyStreaks() last evaluated for this user —
+  // lets the nightly job tell "already processed for today's boundary" apart from "needs
+  // processing" idempotently, without a separate claim table for this per-user step (the
+  // DailyStreakClaim table below is a separate idempotency backstop specifically for reward
+  // grants, not for the increment/reset decision itself).
+  dailyStreakLastBoundary   DateTime?
+  // Set by processDailyStreaks() to THIS evening boundary (never both this and
+  // dailyStreakLastBoundary advanced to the same boundary at once) when every EVENING-rooted
+  // task is already complete but an enabled Winwheel/Lotto task is not — that task's own real
+  // deadline is the NEXT morning boundary (8am), not the 8pm evening boundary the streak cron
+  // itself runs at, so the increment/reset verdict is deliberately deferred rather than decided
+  // early against a task whose window hasn't actually closed yet. resolvePendingDailyStreaks()
+  // (server/cron/resolve-pending-daily-streaks.js, ~8:05am) re-evaluates just the Winwheel/Lotto
+  // portion once their window has genuinely closed, finalizes dailyStreakCount/
+  // dailyStreakLastBoundary for this same boundary either way, and clears this back to null.
+  // Null the rest of the time — this is a transient per-boundary flag, not a history.
+  dailyStreakPendingBoundary DateTime?
   // Points contributed to the CURRENT cMoon's individual rank ladder: sum of this user's own
   // CMoonScoreLog rows (the same admin-configurable HIGH_SCORE/TOP10/DAILY_TASK categories that
   // build the team score — see runDailyCMoonScoring in server/utils/cmoon.js) since
@@ -808,6 +834,7 @@ model User {
   friendedBy                  Friend[]                        @relation("UserFriendOf")
   myOrbitFollowing            MyOrbitFollow[]                 @relation("MyOrbitFollower")
   myOrbitFollowedBy           MyOrbitFollow[]                 @relation("MyOrbitFollowed")
+  dailyStreakClaims           DailyStreakClaim[]
   favoriteCzones              FavoriteCzone[]                 @relation("CzoneFavoritedBy")
   favoritedByCzones           FavoriteCzone[]                 @relation("CzoneFavoritedOf")
   traderARooms                TradeRoom[]                     @relation("TraderA")
@@ -1125,6 +1152,52 @@ model MyOrbitFollow {
   @@index([followedId])
 }
 
+enum DailyStreakRewardType {
+  CTOON
+  PACK
+  POINTS
+  CMOON_POINTS
+}
+
+// One reward row an admin configured for a Daily Streak milestone day (see Admin > Manage Daily
+// Streak, server/utils/dailyStreak.js). No uniqueness on `day` — a single day can carry several
+// reward rows (e.g. a pack AND points), all granted together, same multi-row-per-trigger shape
+// CMoonEnemyReward already uses per enemy member. Unlike that model, there's no dropChancePercent
+// here: every row configured for a day a player reaches always grants, nothing is rolled.
+model DailyStreakReward {
+  id         String                @id @default(uuid())
+  day        Int                   // the streak-day milestone this row grants on (1-based)
+  rewardType DailyStreakRewardType
+  ctoonId    String?
+  packId     String?
+  // Points / cMoon-points amount, OR cToon/pack copy count — same per-type meaning
+  // CMoonEnemyReward.quantity already uses, see parseDailyStreakRewardBody.
+  amount     Int?
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  ctoon Ctoon? @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  pack  Pack?  @relation(fields: [packId], references: [id], onDelete: Restrict)
+
+  @@index([day])
+}
+
+// Idempotency + audit log for processDailyStreaks()'s reward grants — the unique constraint is
+// the real backstop against a double-grant (a cron overlap slipping past the GlobalGameConfig
+// lease, or any future manual re-run), not just a display convenience. `streakDay` is the raw
+// cumulative streak count at grant time (e.g. 28 on a repeat cycle), never the modded/effective
+// day a reward actually matched — see resolveDailyStreakEffectiveDay.
+model DailyStreakClaim {
+  id        String   @id @default(uuid())
+  userId    String
+  streakDay Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, streakDay])
+}
+
 model ClaimCode {
   id             String    @id @default(uuid())
   code           String    @unique
@@ -1378,6 +1451,7 @@ model Pack {
   cMoonEnemyRewards      CMoonEnemyReward[]
   cMoonEnemyCaptureRewards CMoonEnemyCaptureReward[]
   cMoonPvpRewards        CMoonPvpReward[]
+  dailyStreakRewards     DailyStreakReward[]
   cMoonDispersalOptions  CMoonDispersalOption[]
   cMoonPrestigeRankTiers CMoonPrestigeRankTier[]
   cMoonDispersalClaims   CMoonDispersalClaim[]
@@ -2017,6 +2091,12 @@ model GlobalGameConfig {
   // same merge-with-hardcoded-defaults pattern as rarityDefaults above. See
   // server/utils/cmartStandardizedMetrics.js.
   cmartStandardizedMetrics       Json?
+  // When true, "Fill from Active Players" uses the average number of Claim rows per ClaimCode
+  // among codes that expired in the last cmartCodeRedeemAvgWindowDays days, instead of the
+  // trailing-14-day active-player count — an admin's hedge against that count reading inflated.
+  // Falls back to the active-player count whenever no code has expired in the window. See
+  // server/utils/cmartStandardizedMetrics.js.
+  cmartFillUsesCodeRedeemAvg     Boolean @default(false)
   achievementDiscordChannelId    String?
   czoneContestDiscordChannelId   String?
   devPrDiscordChannelId          String? // posts PR opened/merged notices for the dev branch
@@ -2490,6 +2570,26 @@ model GlobalGameConfig {
   // room join, same "don't just hide the button" stance every other major feature's kill switch
   // in this file takes.
   myOrbitEnabled                       Boolean   @default(false)
+  // Daily Streak (see server/utils/dailyStreak.js / Admin > Manage Daily Streak). Off by
+  // default: with no DailyStreakReward rows configured, the highest milestone day is undefined,
+  // so the cycle math has nothing to repeat on until an admin actually sets rewards up.
+  // When false, a streak keeps counting past the highest configured day but simply stops
+  // granting further rewards; when true, the whole schedule repeats, cycling on the highest
+  // configured day as the window length (see resolveDailyStreakEffectiveDay).
+  dailyStreakRepeatEnabled              Boolean   @default(false)
+  // Lease-claim pair for the once-daily processDailyStreaks() cron, same opaque-token-guarded
+  // UPDATE pattern as cMoonDailyTaskCronClaimedAt/cMoonDailyTaskCronClaimToken above (see that
+  // field's own comment for the full reasoning) — a plain column pair rather than a Postgres
+  // advisory lock, since this job also writes many User rows per run and a lease never has that
+  // pattern's connection-affinity pitfall.
+  dailyStreakCronClaimedAt             DateTime?
+  dailyStreakCronClaimToken            String?
+  // Same lease-claim pair, same reasoning, for the separate ~8:05am resolvePendingDailyStreaks()
+  // cron (server/cron/resolve-pending-daily-streaks.js) that finalizes any User rows the evening
+  // cron deferred via dailyStreakPendingBoundary — a distinct pair so the two crons' leases can
+  // never collide with (or accidentally block) each other despite both touching this same row.
+  dailyStreakMorningCronClaimedAt      DateTime?
+  dailyStreakMorningCronClaimToken     String?
   createdAt                            DateTime  @default(now())
   updatedAt                            DateTime  @updatedAt
 }
@@ -4842,14 +4942,14 @@ model CMoon {
   // blocked server-side in selectCMoonForUser (server/utils/cmoon.js)
   // — so it can't be joined by players on their own. Admins can still place a player into it
   // directly (POST /api/admin/users/[id]/update-cmoon, unaffected by this flag), cToons can still
-  // be display-assigned to it, and its own /newsite/cmoon/[id] page and member-facing features
+  // be display-assigned to it, and its own /cmoon/[id] page and member-facing features
   // (points, ranks, role sync) work exactly like any other cMoon. Named `joinLocked` rather than
   // `locked` to avoid reading like the unrelated per-copy UserCtoon.lockedByUserId concept in
   // server/utils/lockRules.js. Independent of `showOnNav` below — a locked cMoon can still be
   // opted into the cMoons quick-nav (browsable, still not joinable).
   joinLocked Boolean @default(false)
 
-  // Whether this cMoon shows as a clickable circle on the /newsite/cmoon-nav "cMoons" quick-nav
+  // Whether this cMoon shows as a clickable circle on the /cmoon-nav "cMoons" quick-nav
   // page — a display toggle independent of `joinLocked` above (a locked cMoon can still be shown
   // here; visiting still isn't joining). Defaults to true for newly-created cMoons. The migration
   // that added this column backfilled it to `NOT joinLocked` for pre-existing rows, so an
@@ -4860,14 +4960,14 @@ model CMoon {
   // Whether this cMoon is a valid PRESTIGE destination — see prestigeUser in
   // server/utils/cmoonPrestige.js. A prestiging player can only pick from cMoons with this true
   // (and joinLocked false — prestige respects joinLocked exactly like a normal join, it is never
-  // a bypass). Otherwise this cMoon works exactly like any other: its own /newsite/cmoon/[id]
+  // a bypass). Otherwise this cMoon works exactly like any other: its own /cmoon/[id]
   // page, joinLocked/showOnNav, prize cToons, rank ladder — all unchanged by this flag, which only
   // ever gates "can a prestiging player land here" and the epic shimmer treatment current members
   // get in Raid Battles (CMoonRaidFighter.vue). Independent of joinLocked/showOnNav, same as every
   // other display/eligibility toggle on this model.
   isPrestigeCMoon Boolean @default(false)
 
-  // Public "cMoon page" content (/newsite/cmoon/[id]) — a display/catalog feature, independent
+  // Public "cMoon page" content (/cmoon/[id]) — a display/catalog feature, independent
   // of the cMoonEnabled faction-join flag above. pageImagePath is exactly 800x600, matching CZone.
   // No longer rendered on the redesigned cMoon page (superseded by pageBannerImagePath +
   // featuredCtoons below) — left in place rather than migrated away since it's a harmless,
@@ -6723,7 +6823,7 @@ model BlackjackSession {
 // Admin-authored wiki-style reference pages, reachable from the top nav (Encyclopedia) and
 // searchable by title. Body content is sanitized HTML — see server/utils/sanitizeEncyclopediaHtml.js
 // for the allowlist, which additionally permits an <a> whose href is a relative link to another
-// entry's own page (/newsite/encyclopedia/{slug}), on top of the same http/https/mailto scheme
+// entry's own page (/encyclopedia/{slug}), on top of the same http/https/mailto scheme
 // allowance server/utils/sanitizeTutorialHtml.js uses for the Tutorial page this is styled after.
 // A dead cross-entry link (the target entry was later deleted or deactivated) is a normal,
 // accepted outcome of storing links as plain hrefs in prose rather than a real FK — the entry
@@ -7906,7 +8006,7 @@ model CMoonEnemyRaid {
   endedAt          DateTime?
   // When true, this raid is never listed in the site-wide Raid Boss Lobby (buildRaidLobby skips
   // it) and never triggers notifyRaidLobbyOpened/announceCMoonRaidBoss — it only reaches other
-  // players via its own URL (/newsite/cmoon-raid/<id>), shared by whoever started it. Joining is
+  // players via its own URL (/cmoon-raid/<id>), shared by whoever started it. Joining is
   // otherwise unchanged: any eligible player who has the link can still join, from any cMoon,
   // same as a public raid — this only controls DISCOVERABILITY, not who may join.
   isPrivate        Boolean                @default(false)

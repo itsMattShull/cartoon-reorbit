@@ -114,7 +114,7 @@
               <div v-if="showCMoonTheme" class="ctic-tile ctic-tile-wide">
                 <div class="ctic-label">cMoon</div>
                 <NuxtLink
-                  :to="`/newsite/cmoon/${ctoon.cMoon.id}`"
+                  :to="`/cmoon/${ctoon.cMoon.id}`"
                   class="ctic-value ctic-value--link ctic-value--wrap"
                   :aria-label="`View the ${ctoon.cMoon.name} cMoon page`"
                   @click="close"
@@ -160,7 +160,7 @@
                 <div class="ctic-label">Set</div>
                 <NuxtLink
                   v-if="ctoon.set"
-                  :to="{ path: '/newsite/allCtoons', query: setLinkQuery }"
+                  :to="{ path: '/allCtoons', query: setLinkQuery }"
                   class="ctic-value ctic-value--link"
                   :aria-label="`View all cToons in the ${ctoon.set} set`"
                   @click="goToFiltered('set', ctoon.set, $event)"
@@ -171,7 +171,7 @@
                 <div class="ctic-label">Series</div>
                 <NuxtLink
                   v-if="ctoon.series"
-                  :to="{ path: '/newsite/allCtoons', query: seriesLinkQuery }"
+                  :to="{ path: '/allCtoons', query: seriesLinkQuery }"
                   class="ctic-value ctic-value--link"
                   :aria-label="`View all cToons in the ${ctoon.series} series`"
                   @click="goToFiltered('series', ctoon.series, $event)"
@@ -361,12 +361,12 @@
                 <span v-if="!owner.isHolidayItem">Mint #{{ owner.mintNumber ?? 'N/A' }}</span>
                 <span v-else>&nbsp;</span>
               </span>
-              <NuxtLink :to="`/newsite/czone/${owner.username}`" class="ctic-owner-link">
+              <NuxtLink :to="`/czone/${owner.username}`" class="ctic-owner-link">
                 {{ owner.username }}
               </NuxtLink>
               <NuxtLink
                 v-if="owner.isTradeListItem"
-                :to="{ path: '/newsite/trade', query: { username: owner.username, userCtoonId: owner.userCtoonId } }"
+                :to="{ path: '/trade', query: { username: owner.username, userCtoonId: owner.userCtoonId } }"
                 class="ctic-tradeable-badge"
               >
                 Tradeable
@@ -465,7 +465,7 @@
           <div class="ctic-foot-right">
             <NuxtLink
               v-if="isAdmin && ctoon.id"
-              :to="`/newsite/admin/ctoons/edit/${ctoon.id}`"
+              :to="`/admin/ctoons/edit/${ctoon.id}`"
               class="ctic-edit-btn"
             >
               Edit cToon
@@ -515,7 +515,7 @@
                   class="ctic-displayed-in-row"
                 >
                   <NuxtLink
-                    :to="{ path: `/newsite/czone/${item.username}`, query: { highlightZone: item.zoneIdx, highlightItem: item.itemIdx } }"
+                    :to="{ path: `/czone/${item.username}`, query: { highlightZone: item.zoneIdx, highlightItem: item.itemIdx } }"
                     class="ctic-owner-link"
                     @click="close"
                   >
@@ -532,7 +532,7 @@
       <!-- ── "Wishlisted by" overlay — same shape as "Displayed in cZones" above (layered on
            top rather than a separate tab, same click-the-number-to-pop-a-list ask). Clicking a
            username here closes the infocard and opens a new trade with that player pre-selected,
-           same /newsite/trade?username= deep link the Owners tab already uses elsewhere in this
+           same /trade?username= deep link the Owners tab already uses elsewhere in this
            file. Only usernames ever reach the client (server/api/ctoon/[id]/wishlisted-by.get.js)
            — never a WishlistItem id or that player's own offeredPoints figure. -->
       <div v-if="showWishlistedBy" class="ctic-displayed-in-overlay" @click.self="closeWishlistedBy">
@@ -557,7 +557,7 @@
                   class="ctic-displayed-in-row"
                 >
                   <NuxtLink
-                    :to="{ path: '/newsite/trade', query: { username: item.username } }"
+                    :to="{ path: '/trade', query: { username: item.username } }"
                     class="ctic-owner-link"
                     :aria-label="`Start a trade with ${item.username}`"
                     @click="close"
@@ -663,7 +663,7 @@ function goToFiltered(type, value, event) {
   // grid updates immediately. Prevent NuxtLink's own navigation here so we
   // don't fire a second, redundant router call racing the page's own
   // filter -> URL watcher.
-  if (route.path === '/newsite/allCtoons') {
+  if (route.path === '/allCtoons') {
     event?.preventDefault()
     Object.assign(useAllCtoonsFilter().value, buildFilterLinkTarget(type, value))
     useAllCtoonsTab().value = type === 'series' ? 'AllSeries' : 'AllSets'
