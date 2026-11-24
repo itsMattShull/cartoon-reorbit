@@ -84,6 +84,10 @@ enum PackSource {
   // capture is NOT a win (see CMoonEnemyBattleOutcome.CAPTURED's own schema comment), so its pack
   // grants shouldn't read as if they came from defeating the enemy.
   CMOON_ENEMY_CAPTURE
+  // A PACK-type DailyStreakReward row, granted by processDailyStreaks (server/utils/
+  // dailyStreak.js) on reaching a configured streak-day milestone — see Admin > Manage Daily
+  // Streak.
+  DAILY_STREAK
 }
 
 /// What an Auction row is selling. Exactly one of Auction.userCtoonId / Auction.userPackId is set,
@@ -430,6 +434,7 @@ model Ctoon {
   cMoonEnemyRewards          CMoonEnemyReward[]
   cMoonEnemyCaptureRewards   CMoonEnemyCaptureReward[]
   cMoonPvpRewards            CMoonPvpReward[]
+  dailyStreakRewards         DailyStreakReward[]
   cMoonPrestigeRankTiers     CMoonPrestigeRankTier[]
   imageHash                  CtoonImageHash?
   userSuggestions            CtoonUserSuggestion[]
@@ -691,6 +696,16 @@ model User {
   // Set once the daily Discord sync grants this user's cMoon role, so the job
   // only touches never-synced members instead of re-checking everyone daily.
   cMoonRoleGrantedAt     DateTime?
+  // Daily Streak (see server/utils/dailyStreak.js) — consecutive calendar days this player has
+  // completed EVERY enabled daily task (server/api/onboarding/daily.get.js's own 6 checks, same
+  // "limit 0 = not a real task" skip rule). Reset to 0 the first day any enabled task is missed.
+  dailyStreakCount          Int       @default(0)
+  // The getChicagoDailyBoundary() instant processDailyStreaks() last evaluated for this user —
+  // lets the nightly job tell "already processed for today's boundary" apart from "needs
+  // processing" idempotently, without a separate claim table for this per-user step (the
+  // DailyStreakClaim table below is a separate idempotency backstop specifically for reward
+  // grants, not for the increment/reset decision itself).
+  dailyStreakLastBoundary   DateTime?
   // Points contributed to the CURRENT cMoon's individual rank ladder: sum of this user's own
   // CMoonScoreLog rows (the same admin-configurable HIGH_SCORE/TOP10/DAILY_TASK categories that
   // build the team score — see runDailyCMoonScoring in server/utils/cmoon.js) since
@@ -808,6 +823,7 @@ model User {
   friendedBy                  Friend[]                        @relation("UserFriendOf")
   myOrbitFollowing            MyOrbitFollow[]                 @relation("MyOrbitFollower")
   myOrbitFollowedBy           MyOrbitFollow[]                 @relation("MyOrbitFollowed")
+  dailyStreakClaims           DailyStreakClaim[]
   favoriteCzones              FavoriteCzone[]                 @relation("CzoneFavoritedBy")
   favoritedByCzones           FavoriteCzone[]                 @relation("CzoneFavoritedOf")
   traderARooms                TradeRoom[]                     @relation("TraderA")
@@ -1125,6 +1141,52 @@ model MyOrbitFollow {
   @@index([followedId])
 }
 
+enum DailyStreakRewardType {
+  CTOON
+  PACK
+  POINTS
+  CMOON_POINTS
+}
+
+// One reward row an admin configured for a Daily Streak milestone day (see Admin > Manage Daily
+// Streak, server/utils/dailyStreak.js). No uniqueness on `day` — a single day can carry several
+// reward rows (e.g. a pack AND points), all granted together, same multi-row-per-trigger shape
+// CMoonEnemyReward already uses per enemy member. Unlike that model, there's no dropChancePercent
+// here: every row configured for a day a player reaches always grants, nothing is rolled.
+model DailyStreakReward {
+  id         String                @id @default(uuid())
+  day        Int                   // the streak-day milestone this row grants on (1-based)
+  rewardType DailyStreakRewardType
+  ctoonId    String?
+  packId     String?
+  // Points / cMoon-points amount, OR cToon/pack copy count — same per-type meaning
+  // CMoonEnemyReward.quantity already uses, see parseDailyStreakRewardBody.
+  amount     Int?
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  ctoon Ctoon? @relation(fields: [ctoonId], references: [id], onDelete: Restrict)
+  pack  Pack?  @relation(fields: [packId], references: [id], onDelete: Restrict)
+
+  @@index([day])
+}
+
+// Idempotency + audit log for processDailyStreaks()'s reward grants — the unique constraint is
+// the real backstop against a double-grant (a cron overlap slipping past the GlobalGameConfig
+// lease, or any future manual re-run), not just a display convenience. `streakDay` is the raw
+// cumulative streak count at grant time (e.g. 28 on a repeat cycle), never the modded/effective
+// day a reward actually matched — see resolveDailyStreakEffectiveDay.
+model DailyStreakClaim {
+  id        String   @id @default(uuid())
+  userId    String
+  streakDay Int
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, streakDay])
+}
+
 model ClaimCode {
   id             String    @id @default(uuid())
   code           String    @unique
@@ -1378,6 +1440,7 @@ model Pack {
   cMoonEnemyRewards      CMoonEnemyReward[]
   cMoonEnemyCaptureRewards CMoonEnemyCaptureReward[]
   cMoonPvpRewards        CMoonPvpReward[]
+  dailyStreakRewards     DailyStreakReward[]
   cMoonDispersalOptions  CMoonDispersalOption[]
   cMoonPrestigeRankTiers CMoonPrestigeRankTier[]
   cMoonDispersalClaims   CMoonDispersalClaim[]
@@ -2490,6 +2553,20 @@ model GlobalGameConfig {
   // room join, same "don't just hide the button" stance every other major feature's kill switch
   // in this file takes.
   myOrbitEnabled                       Boolean   @default(false)
+  // Daily Streak (see server/utils/dailyStreak.js / Admin > Manage Daily Streak). Off by
+  // default: with no DailyStreakReward rows configured, the highest milestone day is undefined,
+  // so the cycle math has nothing to repeat on until an admin actually sets rewards up.
+  // When false, a streak keeps counting past the highest configured day but simply stops
+  // granting further rewards; when true, the whole schedule repeats, cycling on the highest
+  // configured day as the window length (see resolveDailyStreakEffectiveDay).
+  dailyStreakRepeatEnabled              Boolean   @default(false)
+  // Lease-claim pair for the once-daily processDailyStreaks() cron, same opaque-token-guarded
+  // UPDATE pattern as cMoonDailyTaskCronClaimedAt/cMoonDailyTaskCronClaimToken above (see that
+  // field's own comment for the full reasoning) — a plain column pair rather than a Postgres
+  // advisory lock, since this job also writes many User rows per run and a lease never has that
+  // pattern's connection-affinity pitfall.
+  dailyStreakCronClaimedAt             DateTime?
+  dailyStreakCronClaimToken            String?
   createdAt                            DateTime  @default(now())
   updatedAt                            DateTime  @updatedAt
 }

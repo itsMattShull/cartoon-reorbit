@@ -37,6 +37,7 @@ import { USER_TABLE_BULK_WRITE_LOCK_KEY } from '../utils/dbLocks.js'
 import { pruneCronLogs } from './runLogger.js'
 import { runCMoonPointsAggregate } from './cmoon-points-aggregate.js'
 import { runRecordDailyTaskCompletions } from './record-daily-task-completions.js'
+import { runProcessDailyStreaks } from './process-daily-streaks.js'
 import { checkAndRunCMoonDailyScoring } from './cmoon-daily-score.js'
 import { reconcileHolidayRedemptions } from './reconcile-holiday-redemptions.js'
 
@@ -1130,6 +1131,7 @@ export const JOB_HANDLERS = {
   checkAndPostWeeklyCMoonRecap,
   reconcileHolidayRedemptions,
   enqueueAchievementsDaily,
+  processDailyStreaks: runProcessDailyStreaks,
   runCMoonPointsAggregate,
   syncGuildMembers,
   recordDailyActivity,

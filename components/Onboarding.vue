@@ -74,7 +74,23 @@
             <div v-else-if="dailyError" class="text-sm text-white/55">
               Sign in to view your daily activities.
             </div>
-            <ul v-else class="space-y-3 flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1">
+            <template v-else>
+              <div v-if="streakData" class="flex items-center justify-between gap-2 mb-2 px-0.5">
+                <span class="text-sm text-white/85">🔥 <strong>{{ streakData.streakCount }}</strong> day streak</span>
+                <button
+                  type="button" class="flex-shrink-0 text-[11px] font-semibold text-[#3399CC] hover:underline"
+                  @click="showStreakModal = true"
+                >View rewards</button>
+              </div>
+              <DailyStreakRewardsModal
+                v-if="showStreakModal && streakData"
+                :streak-count="streakData.streakCount"
+                :max-day="streakData.maxDay"
+                :repeat-enabled="streakData.repeatEnabled"
+                :milestones="streakData.milestones"
+                @close="showStreakModal = false"
+              />
+              <ul class="space-y-3 flex-1 min-h-0 overflow-y-auto overscroll-contain pr-1">
               <li v-for="item in items" :key="item.id" class="flex items-start gap-3">
                 <span
                   :class="[
@@ -115,7 +131,8 @@
                 </span>
                 <p class="text-sm text-white/85">{{ item.text }}</p>
               </li>
-            </ul>
+              </ul>
+            </template>
           </div>
           <div v-else-if="activeTab === 'alerts' || activeTab === 'raidboss'" class="flex-1 min-h-0 flex flex-col">
             <div v-if="alertsPending && !alertsLoaded" class="space-y-3 animate-pulse">
@@ -332,6 +349,7 @@
 
 <script setup>
 import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import DailyStreakRewardsModal from '@/components/newsite/DailyStreakRewardsModal.vue'
 
 const route = useRoute()
 const isNewsite = computed(() => route.path.startsWith('/newsite'))
@@ -372,6 +390,8 @@ const dailyError = ref(null)
 const eventsData = ref(null)
 const eventsPending = ref(false)
 const eventsError = ref(null)
+const streakData = ref(null)
+const showStreakModal = ref(false)
 
 const fetchDaily = async () => {
   dailyPending.value = true
@@ -382,6 +402,16 @@ const fetchDaily = async () => {
     dailyError.value = err
   } finally {
     dailyPending.value = false
+  }
+}
+
+// Best-effort, separate from dailyError/dailyPending above: a failed streak fetch shouldn't
+// block the daily checklist itself from rendering - it just leaves the 🔥 row/modal absent.
+const fetchStreak = async () => {
+  try {
+    streakData.value = await $fetch('/api/daily-streak/status', { credentials: 'include' })
+  } catch {
+    streakData.value = null
   }
 }
 
@@ -431,6 +461,7 @@ watch([isOpen, activeTab], ([nextOpen, nextTab], [prevOpen]) => {
   if (!nextOpen) return
   if (nextTab === 'daily') {
     fetchDaily()
+    fetchStreak()
   } else if (nextTab === 'alerts' || nextTab === 'raidboss') {
     // Opening the tab deliberately does NOT mark anything read — a stray tap on
     // a phone would otherwise wipe the only signal that something happened.

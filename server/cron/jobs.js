@@ -65,6 +65,8 @@ export const CRON_JOBS = [
     description: 'Recomputes cMoon points and queues achievement checks for whoever changed' },
   { name: 'enqueueAchievementsDaily', tier: TIER_CRITICAL, pattern: '0 3 * * *', tz: CHI, intervalSec: DAY, catchUpAfterSec: 30 * 3600,
     description: 'Queues the daily achievements check for every active user' },
+  { name: 'processDailyStreaks', tier: TIER_CRITICAL, pattern: '5 20 * * *', tz: CHI, intervalSec: DAY, catchUpAfterSec: 30 * 3600,
+    description: 'Advances or resets each player\'s Daily Streak and grants any milestone reward, just after the daily-task boundary' },
 
   // ── maintenance ─────────────────────────────────────────────────────────────
   { name: 'syncGuildMembers', tier: TIER_MAINTENANCE, pattern: '0 0 * * *', intervalSec: DAY, catchUpAfterSec: 30 * 3600,
