@@ -2091,6 +2091,12 @@ model GlobalGameConfig {
   // same merge-with-hardcoded-defaults pattern as rarityDefaults above. See
   // server/utils/cmartStandardizedMetrics.js.
   cmartStandardizedMetrics       Json?
+  // When true, "Fill from Active Players" uses the average number of Claim rows per ClaimCode
+  // among codes that expired in the last cmartCodeRedeemAvgWindowDays days, instead of the
+  // trailing-14-day active-player count — an admin's hedge against that count reading inflated.
+  // Falls back to the active-player count whenever no code has expired in the window. See
+  // server/utils/cmartStandardizedMetrics.js.
+  cmartFillUsesCodeRedeemAvg     Boolean @default(false)
   achievementDiscordChannelId    String?
   czoneContestDiscordChannelId   String?
   devPrDiscordChannelId          String? // posts PR opened/merged notices for the dev branch

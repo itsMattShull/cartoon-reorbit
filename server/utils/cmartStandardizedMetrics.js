@@ -11,6 +11,12 @@
 // defaults (see server/api/rarity-defaults.get.js for the sibling pattern).
 import { prisma } from '../prisma.js'
 import { STANDARDIZABLE_RARITIES, isStandardizableRarity } from '../../utils/cmartStandardizedRarities.js'
+import {
+  getActivePlayerCount,
+  getAvgCodeRedeemCountFromExpiredCodes,
+  ACTIVE_PLAYER_WINDOW_DAYS,
+  CODE_REDEEM_AVG_WINDOW_DAYS
+} from './activePlayers.js'
 
 export { STANDARDIZABLE_RARITIES, isStandardizableRarity }
 
@@ -43,4 +49,43 @@ export function computeStandardizedQuantity(rarity, activePlayerCount, percentag
   const percent = Number(percentages?.[rarity])
   if (!Number.isFinite(percent)) return null
   return Math.max(1, Math.round((Number(activePlayerCount) || 0) * percent / 100))
+}
+
+/**
+ * The count "Fill from Active Players" actually multiplies by, plus enough detail for callers to
+ * explain the number: either the trailing-14-day active-player count, or — when an admin has
+ * flagged the active-player count as reading inflated and flipped `cmartFillUsesCodeRedeemAvg` on
+ * — the average Claim count per ClaimCode among codes that expired in the last
+ * CODE_REDEEM_AVG_WINDOW_DAYS days. Falls back to the active-player count whenever no code has
+ * expired in that window, since a null average would otherwise zero out every mint suggestion.
+ *
+ * @param {number|null} [knownActivePlayerCount] - pass this when the caller already fetched
+ *   getActivePlayerCount() for its own purposes (e.g. the admin metrics page's stat tile), so this
+ *   doesn't run that query a second time.
+ */
+export async function getFillActivePlayerCount(knownActivePlayerCount = null) {
+  const [activePlayerCount, config] = await Promise.all([
+    knownActivePlayerCount != null ? knownActivePlayerCount : getActivePlayerCount(),
+    prisma.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { cmartFillUsesCodeRedeemAvg: true } })
+  ])
+  const useCodeRedeemAvg = !!config?.cmartFillUsesCodeRedeemAvg
+
+  let avgCodeRedeemCount = null
+  let codeRedeemSampleSize = 0
+  if (useCodeRedeemAvg) {
+    const result = await getAvgCodeRedeemCountFromExpiredCodes()
+    avgCodeRedeemCount = result.avgRedeemCount
+    codeRedeemSampleSize = result.codeCount
+  }
+
+  const usingCodeRedeemAvg = useCodeRedeemAvg && avgCodeRedeemCount != null
+  return {
+    count: usingCodeRedeemAvg ? avgCodeRedeemCount : activePlayerCount,
+    source: usingCodeRedeemAvg ? 'codeRedeemAvg' : 'activePlayers',
+    windowDays: usingCodeRedeemAvg ? CODE_REDEEM_AVG_WINDOW_DAYS : ACTIVE_PLAYER_WINDOW_DAYS,
+    useCodeRedeemAvg,
+    avgCodeRedeemCount,
+    codeRedeemSampleSize,
+    codeRedeemWindowDays: CODE_REDEEM_AVG_WINDOW_DAYS
+  }
 }

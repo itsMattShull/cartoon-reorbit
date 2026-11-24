@@ -194,7 +194,7 @@
 
             <div v-if="mintLimitType === 'defined' && isStandardizableRarity" class="flex items-center justify-between gap-2">
               <p class="text-[11px] text-gray-500">
-                Fills Total/Initial Quantity above from {{ cmartMetricsInfo?.activePlayerCount ?? '…' }} players active in the last {{ windowDays }} days × the Common/Uncommon/Rare/etc percentage set on Admin &gt; cMart Metrics. Still editable afterward.
+                Fills Total/Initial Quantity above from {{ cmartMetricsInfo?.activePlayerCount ?? '…' }} {{ fillSourceLabel }} × the Common/Uncommon/Rare/etc percentage set on Admin &gt; cMart Metrics. Still editable afterward.
               </p>
               <button
                 type="button"
@@ -706,6 +706,9 @@ const windowDays = ref(14)
 // Code-Only cToon even if its rarity was later changed away from "Code Only".
 const ctoonCodeOnly = ref(false)
 const isStandardizableRarity = computed(() => STANDARDIZABLE_RARITIES.includes(rarity.value) && !ctoonCodeOnly.value)
+const fillSourceLabel = computed(() => cmartMetricsInfo.value?.fillActivePlayerCountSource === 'codeRedeemAvg'
+  ? `average code redeems on codes expired in the last ${windowDays.value} days`
+  : `players active in the last ${windowDays.value} days`)
 
 function fillFromActivePlayers() {
   if (!cmartMetricsInfo.value) return
