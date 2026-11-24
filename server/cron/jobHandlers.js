@@ -32,6 +32,7 @@ import { reconcilePackRewards } from '../utils/ogGtoonsPackReward.js'
 import { moveSealedPacks } from '../utils/userPackTransfer.js'
 import { logAuctionOnlyError } from '../utils/auctionOnlyErrorLog.js'
 import { activateAuctionOnlyRow, AUCTION_ONLY_ROW_INCLUDE } from '../utils/auctionOnlyActivate.js'
+import { runFeaturedAuctionSchedule } from '../utils/featuredAuctionSchedule.js'
 import { logCronError } from '../utils/cronErrorLog.js'
 import { USER_TABLE_BULK_WRITE_LOCK_KEY } from '../utils/dbLocks.js'
 import { pruneCronLogs } from './runLogger.js'
@@ -1114,8 +1115,15 @@ async function runReconcileOgGtoonsPackRewards() {
   return checked ? `Evaluated ${checked} unchecked match${checked === 1 ? '' : 'es'}: ${JSON.stringify(counts)}` : undefined
 }
 
+// Featured auction schedule — see server/utils/featuredAuctionSchedule.js. The scheduler passes
+// job.data to every handler, so this wrapper keeps it from landing in the `now` parameter.
+async function runFeaturedAuctionScheduleNow() {
+  return runFeaturedAuctionSchedule(new Date())
+}
+
 export const JOB_HANDLERS = {
   startDueAuctions,
+  runFeaturedAuctionSchedule: runFeaturedAuctionScheduleNow,
   reconcileOgGtoonsPackRewards: runReconcileOgGtoonsPackRewards,
   requeueOverdueDissolveLaunches: runRequeueOverdueDissolveLaunches,
   reconcileDissolveQueueOwnership: runReconcileDissolveQueueOwnership,
