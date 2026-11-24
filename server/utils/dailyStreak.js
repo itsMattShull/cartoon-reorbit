@@ -4,13 +4,21 @@
 // admin-configured rewards (DailyStreakReward) at chosen streak-day milestones that optionally
 // repeat once the highest configured day is passed (Admin > Manage Daily Streak).
 //
+// Two-phase evaluation, because the six daily tasks don't all reset on the same clock
+// (dailyTaskWindows.js's own header comment): processDailyStreaks (~8pm) decides the four
+// evening-rooted tasks immediately and, if they're all in, EITHER resolves the whole day right
+// away (Winwheel/Lotto already done, or disabled) OR defers the verdict (User.
+// dailyStreakPendingBoundary) when an enabled one of those two isn't done yet — their real
+// deadline is 8am tomorrow, not tonight. resolvePendingDailyStreaks (~8:05am) finishes every
+// deferred verdict once that window has genuinely closed.
+//
 // Relative imports only, NOT the `@/` alias: called from server/cron/process-daily-streaks.js, a
 // plain `node` entrypoint that cannot resolve Nuxt/Vite's `@/` alias — same constraint
 // notifications.js's own header comment explains, and the same reason achievements.js (reused
 // here for grantRewardInTx) is itself already written this way.
 import { prisma as db } from '../prisma.js'
-import { getChicagoDailyBoundary } from './dailyTaskWindows.js'
-import { computeDailyTaskStatus, allEnabledDailyTasksComplete } from './dailyTaskStatus.js'
+import { getChicagoDailyBoundary, getChicagoMorningWindowStart } from './dailyTaskWindows.js'
+import { computeDailyTaskStatus, allEnabledEveningTasksComplete, allEnabledMorningTasksComplete } from './dailyTaskStatus.js'
 import { resolveDailyStreakEffectiveDay } from './dailyStreakCycle.js'
 import { grantRewardInTx, enqueueCtoonJobs } from './achievements.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
@@ -77,7 +85,7 @@ async function advanceOneUserStreak({ userId, cMoonId, streakDay, effectiveDay, 
   // itself needs no such protection either way — writing the same idempotent (streakDay, boundary)
   // pair twice from two overlapping runs is harmless.
   if (rewardRows.length === 0) {
-    await db.user.update({ where: { id: userId }, data: { dailyStreakCount: streakDay, dailyStreakLastBoundary: boundary } })
+    await db.user.update({ where: { id: userId }, data: { dailyStreakCount: streakDay, dailyStreakLastBoundary: boundary, dailyStreakPendingBoundary: null } })
     return { advanced: true, cmoonPointsGranted: false }
   }
 
@@ -107,7 +115,7 @@ async function advanceOneUserStreak({ userId, cMoonId, streakDay, effectiveDay, 
 
       await tx.user.update({
         where: { id: userId },
-        data: { dailyStreakCount: streakDay, dailyStreakLastBoundary: boundary }
+        data: { dailyStreakCount: streakDay, dailyStreakLastBoundary: boundary, dailyStreakPendingBoundary: null }
       })
 
       return { ...granted, cmoonPointsGranted }
@@ -123,11 +131,15 @@ async function advanceOneUserStreak({ userId, cMoonId, streakDay, effectiveDay, 
 
 /**
  * Once-daily rollup: for every user who could plausibly need it, decide whether they completed
- * every enabled daily task for the window that just closed (the Chicago 8pm boundary just
- * passed) — if so, advance their streak and grant whatever that day's effective milestone
- * carries; if not, reset their streak to 0. Idempotent per (user, boundary) via
- * User.dailyStreakLastBoundary, and per (user, streakDay) via DailyStreakClaim for the reward
- * grant specifically — safe to re-run.
+ * every enabled EVENING-rooted daily task for the window that just closed (the Chicago 8pm
+ * boundary just passed). A miss there is a definite reset — those tasks' own deadline already
+ * passed. A player who cleared every evening task but still has an enabled Winwheel/Lotto task
+ * outstanding is NOT reset yet: that task's real deadline is 8am tomorrow, not tonight, so the
+ * verdict is deferred (User.dailyStreakPendingBoundary) for resolvePendingDailyStreaks (below) to
+ * finish once that window has actually closed. Only once both groups are confirmed complete does
+ * this advance the streak and grant whatever that day's effective milestone carries. Idempotent
+ * per (user, boundary) via User.dailyStreakLastBoundary, and per (user, streakDay) via
+ * DailyStreakClaim for the reward grant specifically — safe to re-run.
  */
 export async function processDailyStreaks(asOf = new Date()) {
   // `boundary` is the 8pm boundary that JUST passed — the one this run is processing. The task
@@ -168,31 +180,51 @@ export async function processDailyStreaks(asOf = new Date()) {
   let processed = 0
   let incremented = 0
   let reset = 0
+  let deferred = 0
   const cmoonRecomputeUserIds = []
 
   for (let i = 0; i < candidateIds.length; i += CANDIDATE_BATCH_SIZE) {
     const batchIds = candidateIds.slice(i, i + CANDIDATE_BATCH_SIZE)
     const users = await db.user.findMany({
       where: { id: { in: batchIds } },
-      select: { id: true, cMoonId: true, dailyStreakCount: true, dailyStreakLastBoundary: true }
+      select: { id: true, cMoonId: true, dailyStreakCount: true, dailyStreakLastBoundary: true, dailyStreakPendingBoundary: true }
     })
 
     for (const user of users) {
       // Already processed for this exact boundary (a prior run, or this run after a retry) -
       // skip without even recomputing task status.
       if (user.dailyStreakLastBoundary && user.dailyStreakLastBoundary.getTime() === boundary.getTime()) continue
+      // Already deferred to resolvePendingDailyStreaks for this exact boundary (ditto) - nothing
+      // more for THIS pass to do; the 8am job owns finishing it from here.
+      if (user.dailyStreakPendingBoundary && user.dailyStreakPendingBoundary.getTime() === boundary.getTime()) continue
+
+      // A pending flag for an OLDER boundary means resolvePendingDailyStreaks never got to finish
+      // THAT day's verdict (its own lease/catch-up missed it entirely, well past its own recovery
+      // window). There's no way to re-check a Winwheel/Lotto window that's long since rolled past,
+      // and silently evaluating tonight fresh off the still-unadvanced counter would hand that
+      // never-verified day a free pass. Treat it conservatively as a miss instead - exactly like
+      // any other reset - before tonight's own evaluation proceeds from a clean 0.
+      const priorStreakCount = user.dailyStreakPendingBoundary ? 0 : user.dailyStreakCount
 
       const { status, config: taskConfig } = await computeDailyTaskStatus(db, user.id, { asOf: justBeforeBoundary, windowEnd: boundary })
-      const allComplete = allEnabledDailyTasksComplete({ status, config: taskConfig })
       processed++
 
-      if (!allComplete) {
-        await db.user.update({ where: { id: user.id }, data: { dailyStreakCount: 0, dailyStreakLastBoundary: boundary } })
+      if (!allEnabledEveningTasksComplete({ status, config: taskConfig })) {
+        await db.user.update({ where: { id: user.id }, data: { dailyStreakCount: 0, dailyStreakLastBoundary: boundary, dailyStreakPendingBoundary: null } })
         reset++
         continue
       }
 
-      const streakDay = user.dailyStreakCount + 1
+      if (!allEnabledMorningTasksComplete({ status, config: taskConfig })) {
+        // Evening tasks are all in, but an enabled Winwheel/Lotto task isn't done yet and its
+        // window doesn't close until 8am tomorrow - defer rather than resetting a player who
+        // still has time left on the live checklist's own terms.
+        await db.user.update({ where: { id: user.id }, data: { dailyStreakCount: priorStreakCount, dailyStreakPendingBoundary: boundary } })
+        deferred++
+        continue
+      }
+
+      const streakDay = priorStreakCount + 1
       const effectiveDay = resolveDailyStreakEffectiveDay(streakDay, maxDay, repeatEnabled)
       const { advanced, cmoonPointsGranted } = await advanceOneUserStreak({ userId: user.id, cMoonId: user.cMoonId, streakDay, effectiveDay, boundary })
       if (advanced) incremented++
@@ -205,5 +237,81 @@ export async function processDailyStreaks(asOf = new Date()) {
   // this is a real SQL aggregate scan per call, not a free operation to repeat per user.
   if (cmoonRecomputeUserIds.length) await recomputeCMoonPointsForUsers(cmoonRecomputeUserIds)
 
-  return { processed, incremented, reset, boundary }
+  return { processed, incremented, reset, deferred, boundary }
+}
+
+/**
+ * Follow-up pass (~8:05am Chicago, server/cron/resolve-pending-daily-streaks.js) that finishes
+ * every verdict processDailyStreaks deferred last night: re-evaluates JUST the Winwheel/Lotto
+ * portion for the morning window that has now genuinely closed, then advances or resets exactly
+ * as processDailyStreaks itself would have — stamping the SAME evening boundary those deferred
+ * users are still waiting on (not this morning boundary), so the streak reads as having been
+ * decided for that evening either way.
+ */
+export async function resolvePendingDailyStreaks(asOf = new Date()) {
+  // The morning boundary that JUST closed, and the evening boundary that fell inside the window
+  // it closes (yesterday 8pm, the most recent evening boundary at-or-before an instant just
+  // inside this now-closed window) — the exact evening boundary last night's processDailyStreaks
+  // run would have deferred these users under.
+  const morningBoundary = getChicagoMorningWindowStart(asOf)
+  const justBeforeMorningBoundary = new Date(morningBoundary.getTime() - 1)
+  const eveningBoundary = getChicagoDailyBoundary(justBeforeMorningBoundary)
+
+  const [config, maxDayAgg] = await Promise.all([
+    db.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { dailyStreakRepeatEnabled: true } }),
+    db.dailyStreakReward.aggregate({ _max: { day: true } })
+  ])
+  const repeatEnabled = !!config?.dailyStreakRepeatEnabled
+  const maxDay = maxDayAgg._max.day || 0
+
+  const pendingIds = (await db.user.findMany({
+    where: { dailyStreakPendingBoundary: eveningBoundary },
+    select: { id: true }
+  })).map(u => u.id)
+
+  let processed = 0
+  let incremented = 0
+  let reset = 0
+  const cmoonRecomputeUserIds = []
+
+  // Same id-batching as processDailyStreaks' own candidate loop, for the same reason — this set
+  // can grow as large as the active playerbase if Winwheel/Lotto completion habitually lags.
+  for (let i = 0; i < pendingIds.length; i += CANDIDATE_BATCH_SIZE) {
+    const batchIds = pendingIds.slice(i, i + CANDIDATE_BATCH_SIZE)
+    const pendingUsers = await db.user.findMany({
+      where: { id: { in: batchIds } },
+      select: { id: true, cMoonId: true, dailyStreakCount: true }
+    })
+
+    for (const user of pendingUsers) {
+      // `windowEnd: morningBoundary` bounds the EVENING-rooted queries to the same ~12h span this
+      // closed morning window sits inside ([eveningBoundary, morningBoundary)) — not because this
+      // caller reads those fields (it only checks allEnabledMorningTasksComplete below, since the
+      // evening half was already decided and stamped last night), but because leaving them
+      // unbounded would scan an ever-widening window on a late catch-up run for a result nothing
+      // uses.
+      const { status, config: taskConfig } = await computeDailyTaskStatus(db, user.id, {
+        asOf: justBeforeMorningBoundary,
+        windowEnd: morningBoundary,
+        morningWindowEnd: morningBoundary
+      })
+      processed++
+
+      if (!allEnabledMorningTasksComplete({ status, config: taskConfig })) {
+        await db.user.update({ where: { id: user.id }, data: { dailyStreakCount: 0, dailyStreakLastBoundary: eveningBoundary, dailyStreakPendingBoundary: null } })
+        reset++
+        continue
+      }
+
+      const streakDay = user.dailyStreakCount + 1
+      const effectiveDay = resolveDailyStreakEffectiveDay(streakDay, maxDay, repeatEnabled)
+      const { advanced, cmoonPointsGranted } = await advanceOneUserStreak({ userId: user.id, cMoonId: user.cMoonId, streakDay, effectiveDay, boundary: eveningBoundary })
+      if (advanced) incremented++
+      if (cmoonPointsGranted) cmoonRecomputeUserIds.push(user.id)
+    }
+  }
+
+  if (cmoonRecomputeUserIds.length) await recomputeCMoonPointsForUsers(cmoonRecomputeUserIds)
+
+  return { processed, incremented, reset, eveningBoundary }
 }

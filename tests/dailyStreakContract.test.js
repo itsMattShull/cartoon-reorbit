@@ -29,14 +29,40 @@ test('schema has DailyStreakReward, DailyStreakClaim, the User/GlobalGameConfig 
 
 // ── Shared task-completion logic + streak math ──────────────────────────────────────────────
 
-test('dailyStreak.js reuses computeDailyTaskStatus/allEnabledDailyTasksComplete rather than re-deriving task completion', () => {
+test('dailyStreak.js reuses computeDailyTaskStatus/the split evening+morning completeness checks rather than re-deriving task completion', () => {
   const dailyStreak = read('server/utils/dailyStreak.js')
   assert.match(dailyStreak, /from '\.\/dailyTaskStatus\.js'/)
   assert.match(dailyStreak, /computeDailyTaskStatus\(db, user\.id, \{ asOf: justBeforeBoundary, windowEnd: boundary \}\)/)
-  assert.match(dailyStreak, /allEnabledDailyTasksComplete\(\{ status, config: taskConfig \}\)/)
+  assert.match(dailyStreak, /allEnabledEveningTasksComplete\(\{ status, config: taskConfig \}\)/)
+  assert.match(dailyStreak, /allEnabledMorningTasksComplete\(\{ status, config: taskConfig \}\)/)
   // Relative imports only — this module is reachable from server/cron/process-daily-streaks.js,
   // a plain `node` entrypoint that cannot resolve the `@/` Nuxt alias.
   assert.doesNotMatch(dailyStreak, /from '@\//)
+})
+
+test('an evening-complete-but-morning-incomplete player is deferred (dailyStreakPendingBoundary), never reset early', () => {
+  const dailyStreak = read('server/utils/dailyStreak.js')
+  assert.match(dailyStreak, /if \(!allEnabledEveningTasksComplete\(\{ status, config: taskConfig \}\)\) \{[\s\S]*?dailyStreakCount: 0/)
+  assert.match(dailyStreak, /if \(!allEnabledMorningTasksComplete\(\{ status, config: taskConfig \}\)\) \{[\s\S]*?dailyStreakPendingBoundary: boundary/)
+  // Every path that finally decides a streakDay (advance OR reset) must clear the flag again.
+  const clears = (dailyStreak.match(/dailyStreakPendingBoundary: null/g) || []).length
+  assert.ok(clears >= 3, `expected the pending flag to be cleared on every resolving path (found ${clears})`)
+})
+
+test('resolvePendingDailyStreaks resolves the closed morning window via morningWindowEnd, stamping the ORIGINAL evening boundary', () => {
+  const dailyStreak = read('server/utils/dailyStreak.js')
+  assert.match(dailyStreak, /export async function resolvePendingDailyStreaks/)
+  assert.match(dailyStreak, /morningWindowEnd: morningBoundary/)
+  assert.match(dailyStreak, /dailyStreakPendingBoundary: eveningBoundary/)
+  assert.match(dailyStreak, /boundary: eveningBoundary/) // advanceOneUserStreak's own `boundary` param, not the morning one
+})
+
+test('computeDailyTaskStatus resolves Lotto from the immutable LottoLog, not the live counter, whenever morningWindowEnd is given', () => {
+  const taskStatus = read('server/utils/dailyTaskStatus.js')
+  assert.match(taskStatus, /morningWindowEnd = null/)
+  assert.match(taskStatus, /db\.lottoLog\.count\(\{ where: \{ userId, createdAt: morningCreatedAt \} \}\)/)
+  assert.match(taskStatus, /export function allEnabledEveningTasksComplete/)
+  assert.match(taskStatus, /export function allEnabledMorningTasksComplete/)
 })
 
 test('a PACK reward grants with packSource DAILY_STREAK, and a CMOON_POINTS reward is skipped (not the whole day) when the user has no cMoon', () => {
@@ -61,6 +87,25 @@ test('the nightly cron is registered in jobs.js, just after the Chicago 8pm dail
   const handlers = read('server/cron/jobHandlers.js')
   assert.match(handlers, /import \{ runProcessDailyStreaks \} from '\.\/process-daily-streaks\.js'/)
   assert.match(handlers, /processDailyStreaks: runProcessDailyStreaks,/)
+})
+
+test('the morning resolution cron is registered just after the 8am task boundary, with its own lease columns, and wired in jobHandlers.js', () => {
+  const jobs = read('server/cron/jobs.js')
+  assert.match(jobs, /\{ name: 'resolvePendingDailyStreaks', tier: TIER_CRITICAL, pattern: '5 8 \* \* \*', tz: CHI/)
+  const handlers = read('server/cron/jobHandlers.js')
+  assert.match(handlers, /import \{ runResolvePendingDailyStreaks \} from '\.\/resolve-pending-daily-streaks\.js'/)
+  assert.match(handlers, /resolvePendingDailyStreaks: runResolvePendingDailyStreaks,/)
+
+  const cron = read('server/cron/resolve-pending-daily-streaks.js')
+  assert.match(cron, /"dailyStreakMorningCronClaimedAt" = NOW\(\), "dailyStreakMorningCronClaimToken" = \$\{token\}/)
+  assert.match(cron, /resolvePendingDailyStreaks\(\)/)
+  assert.match(cron, /finally \{/)
+  assert.match(cron, /"dailyStreakMorningCronClaimedAt" = NULL, "dailyStreakMorningCronClaimToken" = NULL/)
+
+  const schema = read('prisma/schema.prisma')
+  assert.match(schema, /dailyStreakPendingBoundary DateTime\?/)
+  assert.match(schema, /dailyStreakMorningCronClaimedAt\s+DateTime\?/)
+  assert.match(schema, /dailyStreakMorningCronClaimToken\s+String\?/)
 })
 
 test('the cron claims a GlobalGameConfig lease (not an advisory lock) and always releases it', () => {

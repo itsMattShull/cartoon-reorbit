@@ -1,7 +1,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { resolveDailyStreakEffectiveDay } from '../server/utils/dailyStreakCycle.js'
-import { allEnabledDailyTasksComplete } from '../server/utils/dailyTaskStatus.js'
+import { allEnabledDailyTasksComplete, allEnabledEveningTasksComplete, allEnabledMorningTasksComplete } from '../server/utils/dailyTaskStatus.js'
 
 // ── resolveDailyStreakEffectiveDay ──────────────────────────────────────────────────────────
 
@@ -76,4 +76,33 @@ test('daily login is never skippable, even with every optional task disabled', (
   const config = { ...baseConfig, czoneVisitMaxPerDay: 0, dailyPointLimit: 0, tkoDailyPointLimit: 0, winwheelMaxDailySpins: 0, lottoCountPerDay: 0 }
   assert.equal(allEnabledDailyTasksComplete({ status: { ...allDone, dailyLoginComplete: false }, config }), false)
   assert.equal(allEnabledDailyTasksComplete({ status: allDone, config }), true)
+})
+
+// ── allEnabledEveningTasksComplete / allEnabledMorningTasksComplete ─────────────────────────────
+// The split that lets server/utils/dailyStreak.js defer a verdict on just the morning-rooted
+// tasks (Winwheel/Lotto) instead of resetting a streak before their own 8am deadline.
+
+test('evening check ignores Winwheel/Lotto entirely, in either direction', () => {
+  assert.equal(allEnabledEveningTasksComplete({ status: { ...allDone, winwheelComplete: false, lottoComplete: false }, config: baseConfig }), true)
+  assert.equal(allEnabledMorningTasksComplete({ status: { ...allDone, winwheelComplete: false, lottoComplete: false }, config: baseConfig }), false)
+})
+
+test('evening check still requires daily login and every enabled evening-rooted task', () => {
+  assert.equal(allEnabledEveningTasksComplete({ status: { ...allDone, dailyLoginComplete: false }, config: baseConfig }), false)
+  for (const key of ['czoneVisitComplete', 'gamePointsComplete', 'tkoPointsComplete']) {
+    assert.equal(allEnabledEveningTasksComplete({ status: { ...allDone, [key]: false }, config: baseConfig }), false, `expected false when ${key} is incomplete`)
+  }
+})
+
+test('morning check is vacuously true when both Winwheel and Lotto are disabled, and ignores evening tasks', () => {
+  const config = { ...baseConfig, winwheelMaxDailySpins: 0, lottoCountPerDay: 0 }
+  assert.equal(allEnabledMorningTasksComplete({ status: { ...allDone, winwheelComplete: false, lottoComplete: false }, config }), true)
+  assert.equal(allEnabledMorningTasksComplete({ status: { ...allDone, dailyLoginComplete: false, czoneVisitComplete: false }, config: baseConfig }), true)
+})
+
+test('allEnabledDailyTasksComplete is exactly the AND of both halves', () => {
+  const status = { ...allDone, winwheelComplete: false }
+  assert.equal(allEnabledEveningTasksComplete({ status, config: baseConfig }), true)
+  assert.equal(allEnabledMorningTasksComplete({ status, config: baseConfig }), false)
+  assert.equal(allEnabledDailyTasksComplete({ status, config: baseConfig }), false)
 })
