@@ -18,7 +18,7 @@
 // here for grantRewardInTx) is itself already written this way.
 import { prisma as db } from '../prisma.js'
 import { getChicagoDailyBoundary, getChicagoMorningWindowStart } from './dailyTaskWindows.js'
-import { computeDailyTaskStatus, allEnabledEveningTasksComplete, allEnabledMorningTasksComplete } from './dailyTaskStatus.js'
+import { computeBatchDailyTaskCompleteness, computeBatchMorningCompleteness, fetchTaskConfig } from './dailyTaskStatus.js'
 import { resolveDailyStreakEffectiveDay } from './dailyStreakCycle.js'
 import { grantRewardInTx, enqueueCtoonJobs } from './achievements.js'
 import { recomputeCMoonPointsForUsers } from '../cron/cmoon-points-aggregate.js'
@@ -151,9 +151,13 @@ export async function processDailyStreaks(asOf = new Date()) {
   const justBeforeBoundary = new Date(boundary.getTime() - 1)
   const windowStart = getChicagoDailyBoundary(justBeforeBoundary)
 
-  const [config, maxDayAgg] = await Promise.all([
+  const [config, maxDayAgg, taskConfig] = await Promise.all([
     db.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { dailyStreakRepeatEnabled: true } }),
-    db.dailyStreakReward.aggregate({ _max: { day: true } })
+    db.dailyStreakReward.aggregate({ _max: { day: true } }),
+    // Fetched ONCE for the whole run (not per batch) — see computeBatchDailyTaskCompleteness's
+    // own comment on why a per-batch fetch would risk an admin's mid-run config edit applying to
+    // some batches but not others in the same cron tick.
+    fetchTaskConfig(db)
   ])
   const repeatEnabled = !!config?.dailyStreakRepeatEnabled
   const maxDay = maxDayAgg._max.day || 0
@@ -190,45 +194,80 @@ export async function processDailyStreaks(asOf = new Date()) {
       select: { id: true, cMoonId: true, dailyStreakCount: true, dailyStreakLastBoundary: true, dailyStreakPendingBoundary: true }
     })
 
-    for (const user of users) {
-      // Already processed for this exact boundary (a prior run, or this run after a retry) -
-      // skip without even recomputing task status.
-      if (user.dailyStreakLastBoundary && user.dailyStreakLastBoundary.getTime() === boundary.getTime()) continue
-      // Already deferred to resolvePendingDailyStreaks for this exact boundary (ditto) - nothing
-      // more for THIS pass to do; the 8am job owns finishing it from here.
-      if (user.dailyStreakPendingBoundary && user.dailyStreakPendingBoundary.getTime() === boundary.getTime()) continue
+    // Filter out anyone already settled for TONIGHT'S boundary (a prior run, or this run after a
+    // retry) before even asking which tasks they've completed — same skip this batch used to do
+    // per user, just ahead of the one shared query below instead of around thousands of separate
+    // per-user ones.
+    const toEvaluate = users.filter(u =>
+      !(u.dailyStreakLastBoundary && u.dailyStreakLastBoundary.getTime() === boundary.getTime()) &&
+      !(u.dailyStreakPendingBoundary && u.dailyStreakPendingBoundary.getTime() === boundary.getTime())
+    )
+    if (!toEvaluate.length) continue
 
+    // ONE set-based query covering every user in this batch, mirroring server/utils/cmoon.js's
+    // own daily-task cron (recordDailyTaskCompletions) — never a per-user round trip to decide
+    // who qualifies. See computeBatchDailyTaskCompleteness's own header comment.
+    const completeness = await computeBatchDailyTaskCompleteness(db, toEvaluate.map(u => u.id), {
+      dailyWindowStart: windowStart, windowEnd: boundary, morningWindowStart: getChicagoMorningWindowStart(justBeforeBoundary), config: taskConfig
+    })
+    processed += toEvaluate.length
+
+    const resetIds = []
+    const deferIds = [] // normal defer: dailyStreakCount already holds the right value, untouched
+    const staleDeferIds = [] // stale pending from an earlier, never-resolved night: reset to 0 too
+    const advanceCandidates = []
+
+    for (const user of toEvaluate) {
       // A pending flag for an OLDER boundary means resolvePendingDailyStreaks never got to finish
       // THAT day's verdict (its own lease/catch-up missed it entirely, well past its own recovery
       // window). There's no way to re-check a Winwheel/Lotto window that's long since rolled past,
       // and silently evaluating tonight fresh off the still-unadvanced counter would hand that
       // never-verified day a free pass. Treat it conservatively as a miss instead - exactly like
       // any other reset - before tonight's own evaluation proceeds from a clean 0.
-      const priorStreakCount = user.dailyStreakPendingBoundary ? 0 : user.dailyStreakCount
+      const isStalePending = !!user.dailyStreakPendingBoundary
+      const priorStreakCount = isStalePending ? 0 : user.dailyStreakCount
+      const { eveningComplete, morningComplete } = completeness.get(user.id) || { eveningComplete: false, morningComplete: false }
 
-      const { status, config: taskConfig } = await computeDailyTaskStatus(db, user.id, { asOf: justBeforeBoundary, windowEnd: boundary })
-      processed++
-
-      if (!allEnabledEveningTasksComplete({ status, config: taskConfig })) {
-        await db.user.update({ where: { id: user.id }, data: { dailyStreakCount: 0, dailyStreakLastBoundary: boundary, dailyStreakPendingBoundary: null } })
-        reset++
+      if (!eveningComplete) {
+        resetIds.push(user.id)
         continue
       }
-
-      if (!allEnabledMorningTasksComplete({ status, config: taskConfig })) {
+      if (!morningComplete) {
         // Evening tasks are all in, but an enabled Winwheel/Lotto task isn't done yet and its
         // window doesn't close until 8am tomorrow - defer rather than resetting a player who
         // still has time left on the live checklist's own terms.
-        await db.user.update({ where: { id: user.id }, data: { dailyStreakCount: priorStreakCount, dailyStreakPendingBoundary: boundary } })
-        deferred++
+        ;(isStalePending ? staleDeferIds : deferIds).push(user.id)
         continue
       }
+      advanceCandidates.push({ userId: user.id, cMoonId: user.cMoonId, priorStreakCount })
+    }
 
+    // Bulk writes for the reset/defer outcomes — these never need a transaction or per-user
+    // branching (nothing is granted), so one UPDATE per outcome covers the whole batch instead of
+    // one per user.
+    if (resetIds.length) {
+      await db.user.updateMany({ where: { id: { in: resetIds } }, data: { dailyStreakCount: 0, dailyStreakLastBoundary: boundary, dailyStreakPendingBoundary: null } })
+      reset += resetIds.length
+    }
+    if (deferIds.length) {
+      await db.user.updateMany({ where: { id: { in: deferIds } }, data: { dailyStreakPendingBoundary: boundary } })
+      deferred += deferIds.length
+    }
+    if (staleDeferIds.length) {
+      await db.user.updateMany({ where: { id: { in: staleDeferIds } }, data: { dailyStreakCount: 0, dailyStreakPendingBoundary: boundary } })
+      deferred += staleDeferIds.length
+    }
+
+    // The reward grant itself is inherently per-user (different reward types, a mint-queue side
+    // effect per cToon reward, the cMoon-points no-cMoon skip, DailyStreakClaim's own
+    // idempotency) — unlike the classification above, there's no set-based equivalent for this
+    // part, same as recordDailyTaskCompletions's own award step isn't a single UPDATE either.
+    for (const { userId, cMoonId, priorStreakCount } of advanceCandidates) {
       const streakDay = priorStreakCount + 1
       const effectiveDay = resolveDailyStreakEffectiveDay(streakDay, maxDay, repeatEnabled)
-      const { advanced, cmoonPointsGranted } = await advanceOneUserStreak({ userId: user.id, cMoonId: user.cMoonId, streakDay, effectiveDay, boundary })
+      const { advanced, cmoonPointsGranted } = await advanceOneUserStreak({ userId, cMoonId, streakDay, effectiveDay, boundary })
       if (advanced) incremented++
-      if (cmoonPointsGranted) cmoonRecomputeUserIds.push(user.id)
+      if (cmoonPointsGranted) cmoonRecomputeUserIds.push(userId)
     }
   }
 
@@ -256,10 +295,16 @@ export async function resolvePendingDailyStreaks(asOf = new Date()) {
   const morningBoundary = getChicagoMorningWindowStart(asOf)
   const justBeforeMorningBoundary = new Date(morningBoundary.getTime() - 1)
   const eveningBoundary = getChicagoDailyBoundary(justBeforeMorningBoundary)
+  // The start of the now-closed window itself — the PREVIOUS morning boundary (one Chicago day
+  // before `morningBoundary`), i.e. what getChicagoMorningWindowStart(justBeforeMorningBoundary)
+  // resolves to, same as computeDailyTaskStatus's own internal computation from that same asOf.
+  const morningWindowStart = getChicagoMorningWindowStart(justBeforeMorningBoundary)
 
-  const [config, maxDayAgg] = await Promise.all([
+  const [config, maxDayAgg, taskConfig] = await Promise.all([
     db.globalGameConfig.findUnique({ where: { id: 'singleton' }, select: { dailyStreakRepeatEnabled: true } }),
-    db.dailyStreakReward.aggregate({ _max: { day: true } })
+    db.dailyStreakReward.aggregate({ _max: { day: true } }),
+    // Fetched ONCE for the whole run — see processDailyStreaks' own comment on why.
+    fetchTaskConfig(db)
   ])
   const repeatEnabled = !!config?.dailyStreakRepeatEnabled
   const maxDay = maxDayAgg._max.day || 0
@@ -282,32 +327,41 @@ export async function resolvePendingDailyStreaks(asOf = new Date()) {
       where: { id: { in: batchIds } },
       select: { id: true, cMoonId: true, dailyStreakCount: true }
     })
+    if (!pendingUsers.length) continue
 
+    // ONE set-based query covering every pending user in this batch — same reasoning as
+    // processDailyStreaks' own batch check (see computeBatchMorningCompleteness's header comment).
+    const morningCompleteness = await computeBatchMorningCompleteness(db, pendingUsers.map(u => u.id), {
+      morningWindowStart,
+      morningWindowEnd: morningBoundary,
+      config: taskConfig
+    })
+    processed += pendingUsers.length
+
+    const resetIds = []
+    const advanceCandidates = []
     for (const user of pendingUsers) {
-      // `windowEnd: morningBoundary` bounds the EVENING-rooted queries to the same ~12h span this
-      // closed morning window sits inside ([eveningBoundary, morningBoundary)) — not because this
-      // caller reads those fields (it only checks allEnabledMorningTasksComplete below, since the
-      // evening half was already decided and stamped last night), but because leaving them
-      // unbounded would scan an ever-widening window on a late catch-up run for a result nothing
-      // uses.
-      const { status, config: taskConfig } = await computeDailyTaskStatus(db, user.id, {
-        asOf: justBeforeMorningBoundary,
-        windowEnd: morningBoundary,
-        morningWindowEnd: morningBoundary
-      })
-      processed++
-
-      if (!allEnabledMorningTasksComplete({ status, config: taskConfig })) {
-        await db.user.update({ where: { id: user.id }, data: { dailyStreakCount: 0, dailyStreakLastBoundary: eveningBoundary, dailyStreakPendingBoundary: null } })
-        reset++
+      const morningComplete = morningCompleteness.get(user.id) ?? false
+      if (!morningComplete) {
+        resetIds.push(user.id)
         continue
       }
+      advanceCandidates.push({ userId: user.id, cMoonId: user.cMoonId, priorStreakCount: user.dailyStreakCount })
+    }
 
-      const streakDay = user.dailyStreakCount + 1
+    if (resetIds.length) {
+      await db.user.updateMany({ where: { id: { in: resetIds } }, data: { dailyStreakCount: 0, dailyStreakLastBoundary: eveningBoundary, dailyStreakPendingBoundary: null } })
+      reset += resetIds.length
+    }
+
+    // The reward grant itself is inherently per-user — see processDailyStreaks' own comment on
+    // why this part has no set-based equivalent.
+    for (const { userId, cMoonId, priorStreakCount } of advanceCandidates) {
+      const streakDay = priorStreakCount + 1
       const effectiveDay = resolveDailyStreakEffectiveDay(streakDay, maxDay, repeatEnabled)
-      const { advanced, cmoonPointsGranted } = await advanceOneUserStreak({ userId: user.id, cMoonId: user.cMoonId, streakDay, effectiveDay, boundary: eveningBoundary })
+      const { advanced, cmoonPointsGranted } = await advanceOneUserStreak({ userId, cMoonId, streakDay, effectiveDay, boundary: eveningBoundary })
       if (advanced) incremented++
-      if (cmoonPointsGranted) cmoonRecomputeUserIds.push(user.id)
+      if (cmoonPointsGranted) cmoonRecomputeUserIds.push(userId)
     }
   }
 

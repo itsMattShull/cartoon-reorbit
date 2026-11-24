@@ -29,12 +29,14 @@ test('schema has DailyStreakReward, DailyStreakClaim, the User/GlobalGameConfig 
 
 // ── Shared task-completion logic + streak math ──────────────────────────────────────────────
 
-test('dailyStreak.js reuses computeDailyTaskStatus/the split evening+morning completeness checks rather than re-deriving task completion', () => {
+test('dailyStreak.js checks completeness via ONE set-based query per batch (computeBatchDailyTaskCompleteness), never a per-user loop over computeDailyTaskStatus', () => {
   const dailyStreak = read('server/utils/dailyStreak.js')
   assert.match(dailyStreak, /from '\.\/dailyTaskStatus\.js'/)
-  assert.match(dailyStreak, /computeDailyTaskStatus\(db, user\.id, \{ asOf: justBeforeBoundary, windowEnd: boundary \}\)/)
-  assert.match(dailyStreak, /allEnabledEveningTasksComplete\(\{ status, config: taskConfig \}\)/)
-  assert.match(dailyStreak, /allEnabledMorningTasksComplete\(\{ status, config: taskConfig \}\)/)
+  assert.match(dailyStreak, /computeBatchDailyTaskCompleteness\(db, toEvaluate\.map\(u => u\.id\), \{/)
+  assert.match(dailyStreak, /computeBatchMorningCompleteness\(db, pendingUsers\.map\(u => u\.id\), \{/)
+  // Never a per-user Prisma round trip to decide who qualifies — see server/utils/cmoon.js's
+  // own recordDailyTaskCompletions for the pattern this mirrors (and why).
+  assert.doesNotMatch(dailyStreak, /computeDailyTaskStatus\(/)
   // Relative imports only — this module is reachable from server/cron/process-daily-streaks.js,
   // a plain `node` entrypoint that cannot resolve the `@/` Nuxt alias.
   assert.doesNotMatch(dailyStreak, /from '@\//)
@@ -42,11 +44,20 @@ test('dailyStreak.js reuses computeDailyTaskStatus/the split evening+morning com
 
 test('an evening-complete-but-morning-incomplete player is deferred (dailyStreakPendingBoundary), never reset early', () => {
   const dailyStreak = read('server/utils/dailyStreak.js')
-  assert.match(dailyStreak, /if \(!allEnabledEveningTasksComplete\(\{ status, config: taskConfig \}\)\) \{[\s\S]*?dailyStreakCount: 0/)
-  assert.match(dailyStreak, /if \(!allEnabledMorningTasksComplete\(\{ status, config: taskConfig \}\)\) \{[\s\S]*?dailyStreakPendingBoundary: boundary/)
+  assert.match(dailyStreak, /if \(!eveningComplete\) \{\s*\n\s*resetIds\.push/)
+  assert.match(dailyStreak, /if \(!morningComplete\) \{[\s\S]*?\(isStalePending \? staleDeferIds : deferIds\)\.push/)
+  assert.match(dailyStreak, /dailyStreakPendingBoundary: boundary \} \}\)/) // the deferIds bulk update
   // Every path that finally decides a streakDay (advance OR reset) must clear the flag again.
   const clears = (dailyStreak.match(/dailyStreakPendingBoundary: null/g) || []).length
   assert.ok(clears >= 3, `expected the pending flag to be cleared on every resolving path (found ${clears})`)
+})
+
+test('reset and defer outcomes are bulk updateMany calls, not one UPDATE per user — only the reward grant itself loops per user', () => {
+  const dailyStreak = read('server/utils/dailyStreak.js')
+  assert.match(dailyStreak, /db\.user\.updateMany\(\{ where: \{ id: \{ in: resetIds \} \}/)
+  assert.match(dailyStreak, /db\.user\.updateMany\(\{ where: \{ id: \{ in: deferIds \} \}/)
+  assert.match(dailyStreak, /db\.user\.updateMany\(\{ where: \{ id: \{ in: staleDeferIds \} \}/)
+  assert.match(dailyStreak, /for \(const \{ userId, cMoonId, priorStreakCount \} of advanceCandidates\)/)
 })
 
 test('resolvePendingDailyStreaks resolves the closed morning window via morningWindowEnd, stamping the ORIGINAL evening boundary', () => {
