@@ -269,7 +269,7 @@ function openHistory(ctoonId) {
   historyCtoonId.value = ctoonId
 }
 
-// Sort + exclusion state, shared with pages/newsite/economy.vue for URL sync.
+// Sort + exclusion state, shared with pages/economy.vue for URL sync.
 const filter = useEconomyFilter()
 const filtersOpen = ref(false)
 

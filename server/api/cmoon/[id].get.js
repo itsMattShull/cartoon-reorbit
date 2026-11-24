@@ -1,7 +1,7 @@
 // server/api/cmoon/[id].get.js
 // Public "cMoon page" data — a display/catalog feature, independent of the
 // cMoonEnabled faction-join flag. Requires a logged-in session only (not
-// admin), matching the rest of /newsite. Explicit `select` throughout, never
+// admin), matching the rest of the site. Explicit `select` throughout, never
 // a bare `include`, since CMoon also has `members`/`captains` relations that
 // pull full User rows (Discord tokens, email, ban status) — this endpoint
 // must never be able to leak those.

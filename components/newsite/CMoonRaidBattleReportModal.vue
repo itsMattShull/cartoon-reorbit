@@ -73,7 +73,7 @@
 </template>
 
 <script setup>
-// "Click to view battle report" — opened from the RESOLVED block of pages/newsite/cmoon-raid/
+// "Click to view battle report" — opened from the RESOLVED block of pages/cmoon-raid/
 // [id].vue. Purely a read-only view over raid.battleReport (see buildRaidBattleReport in
 // server/utils/cmoonRaidBattleReport.js, attached server-side once a raid resolves) — no request
 // of its own.

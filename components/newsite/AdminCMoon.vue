@@ -126,7 +126,7 @@
             Clicking "Not now" costs nothing — it doesn't start this cooldown, so the next
             navigation rolls fresh. Has no effect while Enemy Battles is disabled above. Manage the
             enemies themselves on the
-            <NuxtLink to="/newsite/admin/cMoonEnemies" class="text-indigo-600 hover:underline">Manage cMoon Enemies</NuxtLink> page.
+            <NuxtLink to="/admin/cMoonEnemies" class="text-indigo-600 hover:underline">Manage cMoon Enemies</NuxtLink> page.
           </p>
           <p v-if="battlePopupError" class="text-[11px] text-red-600 mt-1">{{ battlePopupError }}</p>
 
@@ -170,7 +170,7 @@
             Every player's starting/max HP for a cMoon Enemy Battle (solo or raid), before any
             per-rank bonus set on the Rank Ladder below. Each round deals at most one hit either
             way, so keep this in line with enemy HP on the
-            <NuxtLink to="/newsite/admin/cMoonEnemies" class="text-indigo-600 hover:underline">Manage cMoon Enemies</NuxtLink> page.
+            <NuxtLink to="/admin/cMoonEnemies" class="text-indigo-600 hover:underline">Manage cMoon Enemies</NuxtLink> page.
           </p>
           <p v-if="defaultHpError" class="text-[11px] text-red-600 mt-1">{{ defaultHpError }}</p>
 
@@ -966,7 +966,7 @@
             </div>
             <div class="text-[11px] text-gray-600 break-words">
               cToons displayed: {{ c.displayedCtoonCount }}
-              <NuxtLink :to="`/newsite/cmoon/${c.id}`" class="text-indigo-600 hover:underline ml-1">View cMoon page</NuxtLink>
+              <NuxtLink :to="`/cmoon/${c.id}`" class="text-indigo-600 hover:underline ml-1">View cMoon page</NuxtLink>
             </div>
             <p v-if="c.memberCount > 0" class="text-[11px] text-gray-600 mt-1">
               Reassign members before this cMoon can be deleted.
@@ -1198,7 +1198,7 @@
               <p class="text-[11px] text-gray-500 mt-1">
                 This team's own players can charge and fire this attack after landing 3 consecutive hits in a
                 cMoon Enemy Battle. Built in
-                <NuxtLink to="/newsite/admin/cMoonEnemies" class="text-indigo-600 hover:underline">Manage cMoon Enemies</NuxtLink>.
+                <NuxtLink to="/admin/cMoonEnemies" class="text-indigo-600 hover:underline">Manage cMoon Enemies</NuxtLink>.
               </p>
             </div>
             <div>
@@ -1219,7 +1219,7 @@
               </select>
               <p class="text-[11px] text-gray-600 mt-1">
                 Or use a custom join effect built in
-                <NuxtLink to="/newsite/admin/cMoonJoinEffects" class="text-indigo-600 hover:underline">Manage cMoon Join Effects</NuxtLink>
+                <NuxtLink to="/admin/cMoonJoinEffects" class="text-indigo-600 hover:underline">Manage cMoon Join Effects</NuxtLink>
                 instead — the two are mutually exclusive.
               </p>
               <select
@@ -1325,7 +1325,7 @@
                 @click="uploadPageBannerImage"
               >{{ pageBannerImageUploading ? 'Uploading…' : 'Upload banner' }}</button>
               <p v-if="pageBannerImageError" class="text-[11px] text-red-600 mt-1">{{ pageBannerImageError }}</p>
-              <NuxtLink :to="`/newsite/cmoon/${editId}`" class="block text-[11px] text-indigo-600 hover:underline mt-2">View cMoon page</NuxtLink>
+              <NuxtLink :to="`/cmoon/${editId}`" class="block text-[11px] text-indigo-600 hover:underline mt-2">View cMoon page</NuxtLink>
             </template>
           </div>
 
@@ -1739,7 +1739,7 @@
           <p class="text-[11px] text-gray-500 -mt-1">
             Border and glow are separate, permanent unlocks — a member can earn both, but can only display one on
             their cZone at a time. Effects are styled independently of this cMoon's color — manage them on the
-            <NuxtLink to="/newsite/admin/czoneEffects" class="text-indigo-600 hover:underline">cZone Effects</NuxtLink> page.
+            <NuxtLink to="/admin/czoneEffects" class="text-indigo-600 hover:underline">cZone Effects</NuxtLink> page.
           </p>
 
           <div>

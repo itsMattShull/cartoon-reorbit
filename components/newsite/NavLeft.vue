@@ -1,15 +1,15 @@
 <template>
   <div class="nav-left">
-    <NuxtLink to="/newsite/home" data-nav-sound="home">
+    <NuxtLink to="/home" data-nav-sound="home">
       <BlueButton :style="{ height: buttonHeight }">ReOrbit Home</BlueButton>
     </NuxtLink>
-    <NuxtLink v-if="isAdmin" to="/newsite/admin" data-nav-sound="admin">
+    <NuxtLink v-if="isAdmin" to="/admin" data-nav-sound="admin">
       <BlueButton :style="{ height: buttonHeight }">Admin</BlueButton>
     </NuxtLink>
-    <NuxtLink v-if="isMobile" to="/newsite/settings" class="nav-link" data-nav-sound="settings">
+    <NuxtLink v-if="isMobile" to="/settings" class="nav-link" data-nav-sound="settings">
       <BlueButton :style="{ height: buttonHeight }">Settings</BlueButton>
     </NuxtLink>
-    <NuxtLink v-if="isMobile" to="/newsite/redeem" class="nav-link" data-nav-sound="redeem">
+    <NuxtLink v-if="isMobile" to="/redeem" class="nav-link" data-nav-sound="redeem">
       <BlueButton :style="{ height: buttonHeight }">Redeem</BlueButton>
     </NuxtLink>
     <GreenButton :style="{ height: buttonHeight }" data-nav-sound="logout" @click="logout">Logout</GreenButton>

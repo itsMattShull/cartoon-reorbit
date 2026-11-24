@@ -76,7 +76,7 @@
 <script setup>
 // The Raid Boss Lobby (cross-cMoon raids): every open raid from any cMoon, live, named after
 // whoever started it. Opened from the cMoons page's "Raid boss lobby" button, or via
-// /newsite/cmoon-nav?raidLobby=1 (where raid notifications link — see notificationRoute in
+// /cmoon-nav?raidLobby=1 (where raid notifications link — see notificationRoute in
 // components/Onboarding.vue). The list is pushed by the socket server (cmoonraid:lobby) while
 // this is open; joining goes through the same cmoonraid:join the raid page uses, which re-checks
 // every eligibility rule server-side, then hands off to the raid page.
@@ -193,7 +193,7 @@ function close() {
 // clear ?raidLobby=1 — that second navigation would cancel this push (newest navigation wins).
 function goToRaid(id) {
   emit('close', { navigating: true })
-  router.push(`/newsite/cmoon-raid/${id}`)
+  router.push(`/cmoon-raid/${id}`)
 }
 
 watch(() => props.open, (isOpen) => { isOpen ? subscribe() : unsubscribe() }, { immediate: true })

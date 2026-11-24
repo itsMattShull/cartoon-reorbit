@@ -8,7 +8,7 @@
 // endpoints need on their own: checking who's flagged, and the release-eligibility math.
 //
 // The flagged player is never told. The redeem page just shows "Redeeming..." for as long as the
-// hold is open (pages/newsite/redeem.vue) — identical in appearance to an ordinary slow request.
+// hold is open (pages/redeem.vue) — identical in appearance to an ordinary slow request.
 import { prisma } from '../prisma.js'
 
 // "at least 3 people have minted that code" — counted as ALL Claim rows for the same code,

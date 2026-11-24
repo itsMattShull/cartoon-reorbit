@@ -1,6 +1,6 @@
 // Sort/exclusion state for the Economy page, shared between
 // components/newsite/Economy.vue (which renders and applies it) and
-// pages/newsite/economy.vue (which syncs it to the URL), matching how
+// pages/economy.vue (which syncs it to the URL), matching how
 // useAllCtoonsFilter / useNewSiteCtoonFilter are used by their pages.
 //
 // Sort tokens carry their own direction (nameAsc / releaseDesc / ...) instead of

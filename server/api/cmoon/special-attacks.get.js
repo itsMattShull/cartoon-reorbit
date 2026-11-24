@@ -1,7 +1,7 @@
 // server/api/cmoon/special-attacks.get.js
 // Lists every CMoonSpecialAttack an admin has opted into player choice (playerChoice: true — see
 // that column's own schema comment), for the "Choose cMoon Special Attack" picker on the settings
-// page (pages/newsite/settings.vue). Public battle fields only (name/description/effect/amount/
+// page (pages/settings.vue). Public battle fields only (name/description/effect/amount/
 // sound) — nothing here reveals anything the solo/raid battle UIs don't already show once a
 // player has it equipped.
 import { defineEventHandler, createError } from 'h3'

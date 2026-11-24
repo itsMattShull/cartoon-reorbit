@@ -75,7 +75,7 @@
               <!-- No amount-entry UI here on purpose — the only valid next bid at
                    any moment is the exact number above (server enforces this).
                    Bidding for more than the minimum happens on the full page. -->
-              <NuxtLink :to="`/newsite/AuctionHouse/${item.id}`" class="feat-view-link">
+              <NuxtLink :to="`/AuctionHouse/${item.id}`" class="feat-view-link">
                 View full auction / bid more →
               </NuxtLink>
             </div>

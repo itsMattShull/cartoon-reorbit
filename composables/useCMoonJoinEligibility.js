@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 
 // Shared "should the Join a cMoon CTA show, and if not why" logic — used by both
-// components/newsite/CMoonNav.vue and pages/newsite/settings.vue so the eligibility rule
+// components/newsite/CMoonNav.vue and pages/settings.vue so the eligibility rule
 // (cMoons enabled + no current cMoon + not in an opt-out rejoin cooldown) lives in exactly one
 // place rather than drifting between two copies.
 const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })

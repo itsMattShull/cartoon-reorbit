@@ -33,7 +33,7 @@
         <OrangeButton v-if="isOwnZone" @click="toggleBuild">
           {{ cz.buildMode ? 'Exit Build' : 'Build' }}
         </OrangeButton>
-        <NuxtLink v-else-if="viewedUsername" :to="`/newsite/trade?username=${encodeURIComponent(viewedUsername)}`" style="text-decoration:none;display:contents;">
+        <NuxtLink v-else-if="viewedUsername" :to="`/trade?username=${encodeURIComponent(viewedUsername)}`" style="text-decoration:none;display:contents;">
           <OrangeButton>Trade</OrangeButton>
         </NuxtLink>
         <template v-if="!isOwnZone && viewedUsername">
@@ -185,7 +185,7 @@
                 <span v-if="lastOnlineText && viewedOwner.cMoon"> · </span>
                 <NuxtLink
                   v-if="viewedOwner.cMoon"
-                  :to="`/newsite/cmoon/${viewedOwner.cMoon.id}`"
+                  :to="`/cmoon/${viewedOwner.cMoon.id}`"
                   class="cz-owner-cmoon-link"
                 >
                   <img
@@ -1406,7 +1406,7 @@ async function executeWishlistTrade(item) {
 
 function goToTradeWithCtoon(item) {
   closeTradeListModal()
-  router.push(`/newsite/trade?username=${encodeURIComponent(viewedUsername.value)}&userCtoonId=${encodeURIComponent(item.userCtoonId)}`)
+  router.push(`/trade?username=${encodeURIComponent(viewedUsername.value)}&userCtoonId=${encodeURIComponent(item.userCtoonId)}`)
 }
 
 // ── Highlight jump (from CtoonInfoCard.vue's "Displayed in cZones" list) ──────
@@ -1498,7 +1498,7 @@ function closeFavoritesModal() {
 
 function goToFavoritedCzone(username) {
   closeFavoritesModal()
-  router.push(`/newsite/czone/${encodeURIComponent(username)}`)
+  router.push(`/czone/${encodeURIComponent(username)}`)
 }
 
 async function removeFavorite(username) {
@@ -1582,7 +1582,7 @@ function onCzoneSearchKeydown(e) {
 
 function goToSearchedCzone(username) {
   closeCzoneSearchModal()
-  router.push(`/newsite/czone/${encodeURIComponent(username)}`)
+  router.push(`/czone/${encodeURIComponent(username)}`)
 }
 
 const currentZone = computed(() => cz.value.zones?.[cz.value.activeZone] ?? { background: '', toons: [] })
@@ -1660,7 +1660,7 @@ watch(() => user.value?.username, async (loggedInUsername) => {
   }
 }, { immediate: true })
 
-// Support URL navigation changes (e.g. when navigate() pushes a new /newsite/czone/:username)
+// Support URL navigation changes (e.g. when navigate() pushes a new /czone/:username)
 watch(() => route.params.username, async (paramUsername) => {
   const target = paramUsername || user.value?.username
   if (target && target !== viewedUsername.value) await loadZone(target)
@@ -1756,7 +1756,7 @@ async function navigate(type) {
   if (!from) return
   try {
     const { username } = await $fetch(`/api/czone/${from}/${type}`)
-    router.push(`/newsite/czone/${username}`)
+    router.push(`/czone/${username}`)
   } catch (e) {
     console.error('MyCzone: navigate failed', e)
   }
@@ -1764,7 +1764,7 @@ async function navigate(type) {
 
 function goToMyCzone() {
   if (user.value?.username) {
-    router.push(`/newsite/czone/${user.value.username}`)
+    router.push(`/czone/${user.value.username}`)
   }
 }
 
@@ -1825,7 +1825,7 @@ function toCanvasCoords(cx, cy) {
   // in its own `transform: scale()`, so the two differ whenever the shell is
   // scaled down, and dividing by the wrong one drops every toon short of where
   // it was actually released — by 1/shellScale, growing with distance from the
-  // transform origin. Same reasoning as pages/newsite/fruitsamurai.vue.
+  // transform origin. Same reasoning as pages/fruitsamurai.vue.
   const s = r.width > 0 ? r.width / CANVAS_W : (scale.value || 1)
   return { x: (cx - r.left) / s, y: (cy - r.top) / s }
 }

@@ -204,7 +204,7 @@ test('the throw UI does not depend on emoji glyphs', () => {
   // Emoji are a font, not a guarantee. The game shipped with ✊/✋/✌️ and they rendered as
   // nothing in a real match on a device without the coverage — the throws were invisible.
   // Everything load-bearing in the match UI is an image or a CSS shape now.
-  const page = read('pages/newsite/edrps.vue')
+  const page = read('pages/edrps.vue')
   const templateEnd = page.indexOf('</template>')
   const template = page.slice(0, templateEnd)
   const emoji = template.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu) || []
@@ -224,7 +224,7 @@ test('the round-result beat is shared by both sides', () => {
     'the server does not use the shared round-break constant'
   )
   assert.ok(
-    read('pages/newsite/edrps.vue').includes('ROUND_BREAK_MS'),
+    read('pages/edrps.vue').includes('ROUND_BREAK_MS'),
     'the page does not use the shared round-break constant'
   )
 })

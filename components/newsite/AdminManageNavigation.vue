@@ -3,7 +3,7 @@
     <div class="px-2 py-2 space-y-4">
       <div class="flex items-center justify-between flex-wrap gap-2">
         <h1 class="text-base font-semibold">Manage Navigation</h1>
-        <NuxtLink to="/newsite/cmoon-nav" target="_blank" class="px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50">
+        <NuxtLink to="/cmoon-nav" target="_blank" class="px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50">
           View cMoon nav page ↗
         </NuxtLink>
       </div>

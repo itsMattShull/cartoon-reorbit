@@ -27,13 +27,13 @@
         role="menu"
         :style="panelStyle"
       >
-        <NuxtLink to="/newsite/economy" class="nav-encyclopedia-dropdown-item" data-nav-sound="toononomics" role="menuitem" @click="close">
+        <NuxtLink to="/economy" class="nav-encyclopedia-dropdown-item" data-nav-sound="toononomics" role="menuitem" @click="close">
           Toononomics
         </NuxtLink>
-        <NuxtLink to="/newsite/encyclopedia" class="nav-encyclopedia-dropdown-item" data-nav-sound="lore" role="menuitem" @click="close">
+        <NuxtLink to="/encyclopedia" class="nav-encyclopedia-dropdown-item" data-nav-sound="lore" role="menuitem" @click="close">
           Lore
         </NuxtLink>
-        <NuxtLink to="/newsite/tutorial" class="nav-encyclopedia-dropdown-item" data-nav-sound="tutorial" role="menuitem" @click="close">
+        <NuxtLink to="/tutorial" class="nav-encyclopedia-dropdown-item" data-nav-sound="tutorial" role="menuitem" @click="close">
           Tutorial
         </NuxtLink>
       </div>

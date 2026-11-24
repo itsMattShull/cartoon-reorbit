@@ -69,7 +69,7 @@
           const data = await res.json()
           if (data.inGuild) {
             if (checkInterval) clearInterval(checkInterval)
-            router.push('/newsite/home')
+            router.push('/home')
           }
         }
       } catch (err) {

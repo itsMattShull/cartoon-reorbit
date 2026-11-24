@@ -9,7 +9,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const read = p => readFileSync(join(root, p), 'utf8')
 
 const ENTRY = 'assets/css/tailwind.css'
-const ADMIN_PAGE = 'pages/newsite/admin/[...path].vue'
+const ADMIN_PAGE = 'pages/admin/[...path].vue'
 
 // The newsite layout sets `color: #ffffff` on html/body, so any text that does
 // not name its own colour inherits white. On a light surface — a `bg-white`

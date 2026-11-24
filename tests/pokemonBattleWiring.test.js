@@ -184,7 +184,7 @@ test('every player-visible string is renderable in the Futura face', () => {
 /* ── AI ────────────────────────────────────────────────────────────────────────────────── */
 
 test('the AI cannot see the current round and never reports to the server', () => {
-  const page = read('pages/newsite/pokemonbattle.vue')
+  const page = read('pages/pokemonbattle.vue')
   const section = page.slice(page.indexOf('/* ── Single player'), page.indexOf('/* ── Keyboard'))
   assert.ok(section.length > 200, 'could not locate the single-player section')
 
@@ -413,7 +413,7 @@ test('switching the game off takes it off the site, not just off the Games page'
     'joinRoom is not gated -- a room made before the game went off would still be joinable')
 
   // The page renders its own closed state rather than trusting the tile to be hidden.
-  const page = read('pages/newsite/pokemonbattle.vue')
+  const page = read('pages/pokemonbattle.vue')
   assert.ok(page.includes('v-if="!enabled"'), 'the game page has no closed state')
   assert.ok(page.includes('if (enabled.value) connectSocket()'),
     'a switched-off game still opens a socket')
@@ -440,7 +440,7 @@ test('the battle UI depends on no emoji glyph', () => {
   // Emoji are a font, not a guarantee. The RPS game shipped with hand emoji that rendered as
   // nothing on a real device -- the throws were invisible. Everything load-bearing here is an
   // image or a CSS shape, including the mute button.
-  const page = read('pages/newsite/pokemonbattle.vue')
+  const page = read('pages/pokemonbattle.vue')
   const template = page.slice(0, page.indexOf('</template>'))
   const emoji = template.match(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu) || []
   assert.deepEqual(emoji, [], `the template contains emoji (${emoji.join(' ')}) -- use art or a CSS shape`)
@@ -451,7 +451,7 @@ test('the lobby can reach the socket without a click it cannot make', () => {
   // only caller of connectSocket() was that button's own click handler. The socket could
   // therefore never open, and the lobby sat on "Connecting..." forever. The room list was
   // permanently empty for the same reason.
-  const page = read('pages/newsite/pokemonbattle.vue')
+  const page = read('pages/pokemonbattle.vue')
   const mounted = page.slice(page.indexOf('onMounted('), page.indexOf('onBeforeUnmount('))
   assert.ok(mounted.includes('connectSocket()'),
     'nothing connects the socket on mount, so a lobby gated on `connected` can never enable itself')
@@ -469,7 +469,7 @@ test('every uploadable asset slot is actually consumed by the game', () => {
   // than a missing feature, because it looks like a working one.
   const endpoint = read('server/api/admin/pokemonbattle-asset.post.js')
   const audio = read('server/api/admin/pokemonbattle-audio.post.js')
-  const page = read('pages/newsite/pokemonbattle.vue')
+  const page = read('pages/pokemonbattle.vue')
 
   const imageSlots = [...(/const SLOTS = \{([\s\S]*?)\n\}/.exec(endpoint)?.[1] || '')
     .matchAll(/^\s*'?([a-z-]+)'?:/gm)].map(m => m[1])
@@ -502,7 +502,7 @@ test('the menu backdrop stays legible under any uploaded image', () => {
   // The title, chips and notes sit directly on an admin-supplied image that is as likely to be
   // bright as dark, so the scrim is what guarantees the text survives. Worst case is a pure
   // white upload; the alpha is computed rather than eyeballed.
-  const page = read('pages/newsite/pokemonbattle.vue')
+  const page = read('pages/pokemonbattle.vue')
   const scrim = Number(/const MENU_SCRIM = ([\d.]+)/.exec(page)?.[1])
   assert.ok(Number.isFinite(scrim), 'the menu scrim constant is gone')
 
@@ -524,7 +524,7 @@ test('the battlefield is sized from width, never from height', () => {
   // a 0px sliver. Deriving width from height instead overflows: at a 2.14 ratio a 280px-tall
   // stage wants a 600px-wide field, which a 375px phone crops via `overflow: hidden` rather
   // than scrolling. Width is the only dimension that is definite in every context.
-  const page = read('pages/newsite/pokemonbattle.vue')
+  const page = read('pages/pokemonbattle.vue')
   const rule = /\.pfwg-field \{([\s\S]*?)\}/.exec(page)?.[1]
   assert.ok(rule, 'could not find the .pfwg-field rule')
   // Anchored so `max-width` / `max-height` are not mistaken for the real properties -- the
@@ -545,7 +545,7 @@ test('the battlefield is sized from width, never from height', () => {
 test('the page never renders admin-supplied text as HTML', () => {
   // Trainer names are admin-supplied and reach every visitor, including logged-out ones. The
   // natural way to bold a name inside a battle line is exactly the edit that would add v-html.
-  const page = read('pages/newsite/pokemonbattle.vue')
+  const page = read('pages/pokemonbattle.vue')
   assert.ok(!page.includes('v-html'), 'the battle page uses v-html')
   assert.ok(!read('components/newsite/AdminPokemonBattleLogs.vue').includes('v-html'),
     'the admin log uses v-html')

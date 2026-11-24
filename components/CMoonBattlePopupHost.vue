@@ -181,12 +181,12 @@
 const RANK_LABELS = { GOON: 'Goon', ENFORCER: 'Enforcer', UNDERBOSS: 'Underboss', FINAL_BOSS: 'Final Boss' }
 
 const route = useRoute()
-const isAdminRoute = computed(() => route.path.startsWith('/newsite/admin'))
+const isAdminRoute = computed(() => route.path.startsWith('/admin'))
 // Only used for the player's own username in the CAPTURED result title ("{you} captured {enemy}!").
 const { user } = useAuth()
 
 // Settings page's "Mute sounds" row (composables/useHapticSoundsPref.js) — shared `useState`,
-// same pattern pages/newsite/cmoon-raid/[id].vue already uses for its own battle music.
+// same pattern pages/cmoon-raid/[id].vue already uses for its own battle music.
 // plugins/hapticSoundsPref.client.js hydrates this from localStorage before the app ever mounts,
 // so `soundsEnabled.value` is already correct by the time this component's own setup() runs —
 // including for checkOnNavigate's very first appear sound below, the earliest sound this popup
@@ -430,7 +430,7 @@ watch(phase, (p) => {
 // ── Impact feedback: a brief shake on any round with a landed hit, a bigger one on a critical —
 // see rollHitDamage's own comment server-side for what counts as a crit. Respects
 // prefers-reduced-motion via the .cbp-shake/.cbp-shake-crit rules' own media query, same
-// discipline pages/newsite/asteroid.vue's canvas shake already follows for its impact feedback.
+// discipline pages/asteroid.vue's canvas shake already follows for its impact feedback.
 const shaking = ref(false)
 const shakeCrit = ref(false)
 let shakeTimer = null
@@ -604,7 +604,7 @@ watch(phase, (p) => {
 // Toggling "Mute sounds" mid-fight (e.g. from another tab, or the Settings page itself) should
 // take effect immediately rather than waiting for the next phase change — the watch above only
 // re-evaluates on a phase TRANSITION, and a battle already in FIGHT never has another one until
-// it resolves. Mirrors pages/newsite/cmoon-raid/[id].vue's identical watch for raid battle music.
+// it resolves. Mirrors pages/cmoon-raid/[id].vue's identical watch for raid battle music.
 watch(soundsEnabled, (on) => {
   if (phase.value !== 'FIGHT') return
   if (on) battleMusic.start(battle.value?.enemy?.faction?.battleMusicPath)
@@ -632,7 +632,7 @@ async function onFight() {
     const stopWatching = watch([raidSocket.raidState, raidSocket.lastError], ([state, err]) => {
       if (state?.id) {
         stopWatching()
-        router.push(`/newsite/cmoon-raid/${state.id}`)
+        router.push(`/cmoon-raid/${state.id}`)
       } else if (err) {
         stopWatching()
         // The popup is already closed at this point — a raid-start failure (feature disabled,
@@ -1190,7 +1190,7 @@ watch(() => route.path, maybeCheck)
 }
 
 /* Impact feedback on a landed hit — a quick horizontal shake, bigger for a critical. Disabled
-   under prefers-reduced-motion, same accessibility stance pages/newsite/asteroid.vue's own
+   under prefers-reduced-motion, same accessibility stance pages/asteroid.vue's own
    (JS-driven) screen shake takes. */
 @keyframes cbp-shake-kf {
   10%, 90% { transform: translateX(-1px); }

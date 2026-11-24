@@ -174,7 +174,7 @@ test('received-offer notifications collapse on the sender, not the offer', async
   // Nothing rate-limits trade offers and a 1-point offer is free to send, so
   // keying on the offer id would let one hostile account mint unbounded
   // permanent rows in a victim's hub. There is no per-offer page to link to
-  // anyway — every trade notification opens /newsite/trade.
+  // anyway — every trade notification opens /trade.
   const db = fakeDb()
   await notifyTradeOfferReceived(db, {
     userId: 'victim', fromUserId: 'attacker-id', fromUsername: 'mallory'

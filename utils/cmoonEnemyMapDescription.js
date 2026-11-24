@@ -2,7 +2,7 @@
 //
 // Turns a resolved cMoon Enemy Map (see server/utils/cmoonEnemyMap.js) into a list of plain-
 // language sentences describing whichever of its effects are actually on — shared by both
-// pages/newsite/cmoon-raid/[id].vue and pages/newsite/cmoon-pvp/[id].vue so the "I Understand"
+// pages/cmoon-raid/[id].vue and pages/cmoon-pvp/[id].vue so the "I Understand"
 // map-info modal reads identically in either context, rather than two independently drifting
 // copies of the same copy.
 

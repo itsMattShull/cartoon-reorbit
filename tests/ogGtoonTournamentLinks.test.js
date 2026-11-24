@@ -8,12 +8,12 @@ import { readFileSync, existsSync } from 'node:fs'
 const read = (p) => readFileSync(new URL(`../${p}`, import.meta.url), 'utf8')
 const TOURNAMENT = 'server/utils/ogGtoonTournament.js'
 
-test('getOgTournamentUrl points at /newsite/gtoons-classic/tournaments/<id>, and that page exists', () => {
+test('getOgTournamentUrl points at /gtoons-classic/tournaments/<id>, and that page exists', () => {
   const src = read(TOURNAMENT)
   const m = src.match(/export function getOgTournamentUrl\(tournamentId\) \{\s*return `([^`]+)`/)
   assert.ok(m, 'getOgTournamentUrl not found')
-  assert.equal(m[1], '${baseUrl()}/newsite/gtoons-classic/tournaments/${tournamentId}')
-  assert.ok(existsSync(new URL('../pages/newsite/gtoons-classic/tournaments/[tid].vue', import.meta.url)), 'the page the link points at must exist')
+  assert.equal(m[1], '${baseUrl()}/gtoons-classic/tournaments/${tournamentId}')
+  assert.ok(existsSync(new URL('../pages/gtoons-classic/tournaments/[tid].vue', import.meta.url)), 'the page the link points at must exist')
 })
 
 test('no tournament message builds its own URL: they all go through getOgTournamentUrl', () => {
@@ -32,15 +32,15 @@ test('a link sent before the tournament page existed still lands somewhere usefu
 
 test('every hub tab is addressable: the URL follows the tab and the tab follows the URL', () => {
   // The behaviour itself is tested against a real router in tests/hubTabUrl.test.js; this checks the hub actually uses it.
-  const hub = read('pages/newsite/gtoons-classic/index.vue')
+  const hub = read('pages/gtoons-classic/index.vue')
   assert.match(hub, /import \{ syncTabWithUrl \} from '@\/utils\/hubTabUrl'/)
   assert.match(hub, /syncTabWithUrl\(\{ route, router, activeTab, ready,/)
   for (const id of ['decks', 'matchmaking', 'leaderboard', 'meta', 'tournaments']) assert.match(hub, new RegExp(`id: '${id}'`))
 })
 
 test('the tournament page takes players to the board when a game starts', () => {
-  const page = read('pages/newsite/gtoons-classic/tournaments/[tid].vue')
+  const page = read('pages/gtoons-classic/tournaments/[tid].vue')
   assert.match(page, /watch\(currentMatchId/)
-  assert.match(page, /router\.push\(`\/newsite\/gtoons-classic\/\$\{id\}`\)/)
+  assert.match(page, /router\.push\(`\/gtoons-classic\/\$\{id\}`\)/)
   assert.match(page, /OgGtoonTournamentPanel/)
 })

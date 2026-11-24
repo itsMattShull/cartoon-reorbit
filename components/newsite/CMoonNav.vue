@@ -3,7 +3,7 @@
     <div class="cmn-header">
       <button type="button" class="cmn-back" @click="goBack">← Back</button>
       <h1 class="cmn-title">cMoons</h1>
-      <NuxtLink to="/newsite/cmoon-enemies" class="cmn-roster-link">Enemy Roster</NuxtLink>
+      <NuxtLink to="/cmoon-enemies" class="cmn-roster-link">Enemy Roster</NuxtLink>
       <button v-if="showJoinCta" type="button" class="cmn-join-btn" @click="requestOpen">
         Join a cMoon
       </button>
@@ -48,7 +48,7 @@
         <div v-else class="cmn-grid">
           <NuxtLink
             v-for="c in cmoons" :key="c.id"
-            :to="`/newsite/cmoon/${c.id}`"
+            :to="`/cmoon/${c.id}`"
             class="cmn-tile"
           >
             <span class="cmn-circle">
@@ -171,13 +171,13 @@ const cmoons = ref([])
 // opted out of the join modal or just never saw it (feature disabled, logged out, etc.), AND not
 // currently sitting out an admin-configured rejoin cooldown (see cooldownText below). Clicking it
 // force-reopens the same globally-mounted CMoonSelectModal.vue via the shared composable. The
-// same eligibility rule also backs the "Join a cMoon" button on pages/newsite/settings.vue — see
+// same eligibility rule also backs the "Join a cMoon" button on pages/settings.vue — see
 // composables/useCMoonJoinEligibility.js for the shared logic.
 const { showJoinCta, cooldownText, refresh: refreshJoinEligibility } = useCMoonJoinEligibility()
 const { requestOpen } = useCMoonJoinModal()
 
 function goBack() {
-  router.push('/newsite/MycWorld')
+  router.push('/MycWorld')
 }
 
 // ── Raid Boss Lobby (cross-cMoon raids) ──────────────────────────────────────────────────────
@@ -336,11 +336,11 @@ const spiralStrokeWidth = (spiral.pitch * 0.52).toFixed(2)
 
 <style scoped>
 /* No independent height/overflow here — the page opts into mainContentScrollY (see
-   pages/newsite/cmoon-nav.vue's own comment), which makes the ancestor .main-content the real
+   pages/cmoon-nav.vue's own comment), which makes the ancestor .main-content the real
    scroll container. This used to be `height: 100%; overflow-y: auto`, its own SECOND scroll box
    nested inside that one — harmless while the console was short enough to never need to scroll,
    but the season section below made the page tall enough that content was getting clipped inside
-   this shorter inner box instead of reaching the outer scrollbar. Same fix pages/newsite/
+   this shorter inner box instead of reaching the outer scrollbar. Same fix pages/
    tutorial.vue's own .tutorial rule documents for the identical nested-scroll trap. */
 .cmn-page {
   --cmn-accent: #7ec8ff;
@@ -765,7 +765,7 @@ const spiralStrokeWidth = (spiral.pitch * 0.52).toFixed(2)
   color: rgba(255, 255, 255, 0.75);
 }
 
-/* Same hand-written prose rhythm as .tutorial-prose (pages/newsite/tutorial.vue) — this blurb is
+/* Same hand-written prose rhythm as .tutorial-prose (pages/tutorial.vue) — this blurb is
    explicitly meant to share that page's aesthetic. No @tailwindcss/typography plugin in this app. */
 .cmn-season-blurb {
   font-size: 0.95rem;

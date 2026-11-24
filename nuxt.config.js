@@ -68,7 +68,7 @@ export default defineNuxtConfig({
   },
 
   // ───────────────────────────────────────────────
-  // Old /admin/* URLs → the /newsite/admin console
+  // Old admin page names (e.g. /admin/achievement-logs) → their section in the /admin console
   // ───────────────────────────────────────────────
   routeRules: {
     ...OLD_ADMIN_ROUTE_RULES
@@ -105,8 +105,7 @@ export default defineNuxtConfig({
 
     public: {
       discordInvite: process.env.DISCORD_INVITE,
-      socketPort: process.env.SOCKET_PORT || 3001,
-      viewNewDesign: process.env.VIEWNEWDESIGN || '0'
+      socketPort: process.env.SOCKET_PORT || 3001
     }
   },
 

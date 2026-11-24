@@ -212,7 +212,7 @@ test('the scope middleware, grant endpoint, and legacy-page block are wired', ()
 
   const legacy = read('middleware/admin.js')
   assert.match(legacy, /isFullAdmin/)
-  assert.match(legacy, /navigateTo\('\/newsite\/admin'\)/)
+  assert.match(legacy, /navigateTo\('\/admin'\)/)
 
   for (const f of ['server/api/admin/users/[id]/make-admin.post.js', 'server/api/admin/users/[id]/remove-admin.post.js']) {
     const src = read(f)

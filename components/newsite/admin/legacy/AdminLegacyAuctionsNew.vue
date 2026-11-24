@@ -401,7 +401,7 @@ async function send(mode) {
       const mintedNote = data.minted > 0 ? ` (minted ${data.minted} new)` : ''
       alert(`Created ${data.count} of ${data.requested} requested auction(s)${mintedNote}.`)
     }
-    await navigateTo('/newsite/admin/auctions')
+    await navigateTo('/admin/auctions')
   } catch (e) {
     console.error(e)
     error.value = e.message

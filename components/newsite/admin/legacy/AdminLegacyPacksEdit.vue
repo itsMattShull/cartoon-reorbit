@@ -6,7 +6,7 @@
       <!-- 🡐 Back & title -->
       <div class="flex items-center gap-3 mb-3">
         <NuxtLink
-          to="/newsite/admin/packs"
+          to="/admin/packs"
           class="text-blue-700 hover:underline text-xs"
         >
           ← Back to Packs
@@ -642,7 +642,7 @@ async function submit () {
       body: form,
       credentials:'include'
     })
-    router.push('/newsite/admin/packs')
+    router.push('/admin/packs')
   } catch (err) {
     console.error(err)
     alert('Failed to save pack')

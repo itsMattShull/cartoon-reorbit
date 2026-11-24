@@ -138,7 +138,7 @@
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-1.5 flex-wrap">
                   <a
-                    :href="`/newsite/admin/manageUsers?q=${user.username}`"
+                    :href="`/admin/manageUsers?q=${user.username}`"
                     target="_blank"
                     class="font-semibold text-indigo-700 hover:underline"
                   >{{ user.username || '(no username)' }}</a>
@@ -258,7 +258,7 @@
                   <a
                     v-for="p in user.context.topTradePartners"
                     :key="p.userId"
-                    :href="`/newsite/admin/manageUsers?q=${p.username}`"
+                    :href="`/admin/manageUsers?q=${p.username}`"
                     target="_blank"
                     class="inline-flex items-center gap-1 text-[11px] bg-white border rounded-md px-2 py-1 hover:bg-indigo-50 text-indigo-700"
                   >
@@ -275,7 +275,7 @@
                   <a
                     v-for="s in user.context.topAuctionSellers"
                     :key="s.userId"
-                    :href="`/newsite/admin/manageUsers?q=${s.username}`"
+                    :href="`/admin/manageUsers?q=${s.username}`"
                     target="_blank"
                     class="inline-flex items-center gap-1 text-[11px] bg-white border rounded-md px-2 py-1 hover:bg-indigo-50 text-indigo-700"
                   >
@@ -295,7 +295,7 @@
                     class="flex items-center gap-2 text-[11px]"
                   >
                     <a
-                      :href="`/newsite/admin/manageUsers?q=${s.username}`"
+                      :href="`/admin/manageUsers?q=${s.username}`"
                       target="_blank"
                       class="text-indigo-700 hover:underline font-medium"
                     >{{ s.username || '(unknown)' }}</a>

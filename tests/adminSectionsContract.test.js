@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync, existsSync } from 'node:fs'
+import { readFileSync, existsSync, readdirSync } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -63,7 +63,7 @@ test('nav tree exposes every non-hidden section exactly once', () => {
   assert.deepEqual([...inNav].sort(), [...expected].sort())
 })
 
-test('bare /newsite/admin resolves to the default section', () => {
+test('bare /admin resolves to the default section', () => {
   const r = resolveAdminRoute([])
   assert.equal(r.section.key, 'analytics')
   assert.deepEqual(r.subPath, [])
@@ -96,7 +96,7 @@ test('prototype keys cannot resolve to a section', () => {
 // and Discord links working, so a target that stopped resolving would turn a
 // redirect into a 404 at exactly the moment someone follows an old link.
 
-const CONSOLE = '/newsite/admin'
+const CONSOLE = '/admin'
 
 // What resolveAdminRoute wants for a redirect target, with a sample id standing
 // in for the `/**` remainder.
@@ -120,20 +120,27 @@ test('redirects that carry an id only target sections that accept one', () => {
   }
 })
 
-test('old /admin URLs all redirect, with a catch-all for removed pages', () => {
-  assert.equal(OLD_ADMIN_REDIRECTS['/admin'], CONSOLE)
-  assert.equal(OLD_ADMIN_REDIRECTS['/admin/**'], CONSOLE)
+test('old /admin redirects never shadow the console, which now lives at /admin', () => {
+  // No rule for the console root, and no catch-all: either would swallow the console itself.
+  assert.equal(OLD_ADMIN_REDIRECTS['/admin'], undefined)
+  assert.equal(OLD_ADMIN_REDIRECTS['/admin/**'], undefined)
+  assert.ok(Object.keys(OLD_ADMIN_REDIRECTS).length > 0)
+  for (const [from, to] of Object.entries(OLD_ADMIN_REDIRECTS)) {
+    assert.notEqual(from, to, `${from} redirects to itself`)
+    const oldName = from.slice('/admin/'.length).replace(/\/\*\*$/, '')
+    assert.equal(resolveAdminRoute([oldName]), null, `${from} shadows a console section`)
+  }
   for (const [from, rule] of Object.entries(OLD_ADMIN_ROUTE_RULES)) {
-    assert.ok(from === '/admin' || from.startsWith('/admin/'), `${from} is not an old admin path`)
+    assert.ok(from.startsWith('/admin/'), `${from} is not an old admin path`)
     assert.equal(rule.redirect.to, OLD_ADMIN_REDIRECTS[from])
   }
 })
 
 test('the old admin pages and layout are really gone', () => {
-  assert.ok(!existsSync(join(root, 'pages/admin')), 'pages/admin should not exist; /admin/* redirects to the console')
-  assert.ok(!existsSync(join(root, 'layouts/admin.vue')), 'layouts/admin.vue was only used by pages/admin')
+  assert.deepEqual(readdirSync(join(root, 'pages/admin')), ['[...path].vue'], 'pages/admin should hold only the console page')
+  assert.ok(!existsSync(join(root, 'layouts/admin.vue')), 'layouts/admin.vue was only used by the old admin pages')
 })
 
 test('the legacy nav offers a way into the new console', () => {
-  assert.match(read('components/Nav.vue'), /\/newsite\/admin/)
+  assert.match(read('components/Nav.vue'), /\/admin/)
 })

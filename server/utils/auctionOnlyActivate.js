@@ -54,7 +54,7 @@ export async function sendAuctionOnlyDiscordAnnouncement(result, isHolidayItem =
         : `http://localhost:${process.env.SOCKET_PORT || 3000}`)
 
     const { name, rarity, assetPath } = result.ctoon || {}
-    const auctionLink = `${baseUrl}/auction/${result.auctionId}`
+    const auctionLink = `${baseUrl}/AuctionHouse/${result.auctionId}`
     const rawImageUrl = assetPath ? (assetPath.startsWith('http') ? assetPath : `${baseUrl}${assetPath}`) : null
     const imageUrl = rawImageUrl ? encodeURI(rawImageUrl) : null
 

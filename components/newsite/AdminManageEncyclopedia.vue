@@ -3,7 +3,7 @@
     <div class="px-2 py-2 space-y-4">
       <div class="flex items-center justify-between flex-wrap gap-2">
         <h1 class="text-base font-semibold">Manage Encyclopedia</h1>
-        <NuxtLink to="/newsite/encyclopedia" target="_blank" class="px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50">
+        <NuxtLink to="/encyclopedia" target="_blank" class="px-3 py-1.5 text-xs font-semibold rounded-md border hover:bg-gray-50">
           View page ↗
         </NuxtLink>
       </div>
@@ -24,7 +24,7 @@
           </div>
           <div class="min-w-0 flex-1">
             <div class="font-semibold break-words">{{ e.title }}<span v-if="!e.active" class="ml-2 text-[10px] font-normal text-gray-500">(inactive)</span></div>
-            <div class="text-[11px] text-gray-600">/newsite/encyclopedia/{{ e.slug }}</div>
+            <div class="text-[11px] text-gray-600">/encyclopedia/{{ e.slug }}</div>
           </div>
           <div class="flex items-center gap-3 flex-shrink-0">
             <button type="button" class="text-indigo-600 hover:underline" @click="startEdit(e)">Edit</button>
@@ -48,7 +48,7 @@
 
         <div>
           <label class="block text-xs font-medium mb-1">
-            Slug (URL) — /newsite/encyclopedia/<span class="font-mono">{{ form.slug || '…' }}</span>
+            Slug (URL) — /encyclopedia/<span class="font-mono">{{ form.slug || '…' }}</span>
           </label>
           <input v-model="form.slug" maxlength="96" class="w-full border rounded px-2 py-1 font-mono" placeholder="the-great-ctoon-war" @input="slugTouched = true" />
           <p v-if="form.id" class="text-[11px] text-gray-500 mt-1">Changing this breaks any existing links pointing at the old slug.</p>
@@ -189,7 +189,7 @@ function setExternalLink() {
 
 function setEntryLink() {
   if (!linkTargetSlug.value) return
-  editor.value.chain().focus().extendMarkRange('link').setLink({ href: `/newsite/encyclopedia/${linkTargetSlug.value}` }).run()
+  editor.value.chain().focus().extendMarkRange('link').setLink({ href: `/encyclopedia/${linkTargetSlug.value}` }).run()
   linkTargetSlug.value = ''
 }
 

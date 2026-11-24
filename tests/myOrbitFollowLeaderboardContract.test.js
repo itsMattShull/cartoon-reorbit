@@ -48,9 +48,9 @@ test('Onboarding.vue routes FOLLOWED_USER_ONLINE to the followed player\'s cZone
   const followedIdx = routeFn.indexOf("n.type === 'FOLLOWED_USER_ONLINE'")
   // The real fallback return, not the earlier PVP_PACK_WON branch's own comment mentioning the
   // same path as an example of what it's avoiding.
-  const fallbackIdx = routeFn.indexOf('return `/newsite/AuctionHouse/')
+  const fallbackIdx = routeFn.indexOf('return `/AuctionHouse/')
   assert.ok(followedIdx > -1 && fallbackIdx > -1 && followedIdx < fallbackIdx)
-  assert.match(routeFn, /\/newsite\/czone\/\$\{encodeURIComponent\(n\.contextId\)\}/)
+  assert.match(routeFn, /\/czone\/\$\{encodeURIComponent\(n\.contextId\)\}/)
 })
 
 test('REST endpoints exist for follow/unfollow/following, and follow is idempotent (upsert, not create)', () => {

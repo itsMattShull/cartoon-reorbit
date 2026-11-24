@@ -1,7 +1,7 @@
 <template>
   <div class="leaderboards">
     <div class="lb-nav">
-      <NuxtLink to="/newsite/games" class="lb-nav-link">
+      <NuxtLink to="/games" class="lb-nav-link">
         <GreenButton>Games Home</GreenButton>
       </NuxtLink>
       <GreenButton :active="true">Leaderboards</GreenButton>
@@ -26,7 +26,7 @@
             <span class="lb-rank">{{ row.rank }}</span>
             <span class="lb-cmoon-swatch" :style="{ background: safeCMoonColor(row.color) }"></span>
             <div class="lb-user-col">
-              <NuxtLink :to="`/newsite/cmoon/${row.id}`" class="lb-username">{{ row.name }}</NuxtLink>
+              <NuxtLink :to="`/cmoon/${row.id}`" class="lb-username">{{ row.name }}</NuxtLink>
               <span class="lb-cmoon-members">
                 {{ row.memberCount }} member{{ row.memberCount === 1 ? '' : 's' }}
                 <span class="lb-cmoon-battles">· {{ row.soloWins || 0 }}-{{ row.soloLosses || 0 }} vs enemies · {{ row.raidWins || 0 }}-{{ row.raidLosses || 0 }} vs raid bosses</span>
@@ -46,7 +46,7 @@
             <span class="lb-rank">{{ row.rank }}</span>
             <span class="lb-cmoon-swatch" :style="{ background: safeCMoonColor(row.color) }"></span>
             <div class="lb-user-col">
-              <NuxtLink :to="`/newsite/cmoon/${row.id}`" class="lb-username">{{ row.name }}</NuxtLink>
+              <NuxtLink :to="`/cmoon/${row.id}`" class="lb-username">{{ row.name }}</NuxtLink>
               <span class="lb-cmoon-members">{{ row.raidBossesDefeated }} raid bosses (separate count)</span>
             </div>
             <span class="lb-value">{{ row.enemiesDefeated.toLocaleString() }}</span>
@@ -63,7 +63,7 @@
             <span class="lb-rank">{{ row.rank }}</span>
             <img class="lb-avatar" :src="`/avatars/${row.avatar || 'default.png'}`" alt="" />
             <div class="lb-user-col">
-              <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
+              <NuxtLink :to="`/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
               <span class="lb-cmoon-members">
                 {{ row.enemiesDefeated }} solo win{{ row.enemiesDefeated === 1 ? '' : 's' }} · {{ row.raidBossesDefeated }} raid bosses (separate count)
                 <span v-if="cMoonForRow(row)" class="lb-cmoon" :style="cMoonPillStyle(cMoonForRow(row).color)">{{ cMoonForRow(row).name }}</span>
@@ -87,7 +87,7 @@
             <span class="lb-rank">{{ row.rank }}</span>
             <img class="lb-avatar" :src="`/avatars/${row.avatar || 'default.png'}`" alt="" />
             <div class="lb-user-col">
-              <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
+              <NuxtLink :to="`/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
               <span class="lb-cmoon-members">
                 {{ row.enemiesDefeated }} solo win{{ row.enemiesDefeated === 1 ? '' : 's' }} · {{ row.raidBossesDefeated }} raid bosses (separate count)
                 <span v-if="cMoonForRow(row)" class="lb-cmoon" :style="cMoonPillStyle(cMoonForRow(row).color)">{{ cMoonForRow(row).name }}</span>
@@ -109,7 +109,7 @@
               <span class="lb-rank">{{ ci + 1 }}</span>
               <img class="lb-avatar" :src="`/avatars/${row.avatar || 'default.png'}`" alt="" />
               <div class="lb-user-col">
-                <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
+                <NuxtLink :to="`/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
                 <span v-if="row.rankName" class="cmoon-rank-badge">{{ row.rankName }}</span>
               </div>
               <span class="lb-value">{{ row.points.toLocaleString() }}</span>
@@ -136,7 +136,7 @@
               <span class="lb-rank">{{ row.rank }}</span>
               <img class="lb-avatar" :src="`/avatars/${row.avatar || 'default.png'}`" alt="" />
               <div class="lb-user-col">
-                <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
+                <NuxtLink :to="`/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
                 <span v-if="cMoonForRow(row)" class="lb-cmoon" :style="cMoonPillStyle(cMoonForRow(row).color)">{{ cMoonForRow(row).name }}</span>
               </div>
               <span class="lb-value">{{ board.formatValue(row) }}</span>
@@ -175,7 +175,7 @@
               <span class="lb-rank">{{ row.rank }}</span>
               <img class="lb-avatar" :src="`/avatars/${row.avatar || 'default.png'}`" alt="" />
               <div class="lb-user-col">
-                <NuxtLink :to="`/newsite/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
+                <NuxtLink :to="`/czone/${row.username}`" class="lb-username">{{ row.username }}</NuxtLink>
                 <span v-if="cMoonForRow(row)" class="lb-cmoon" :style="cMoonPillStyle(cMoonForRow(row).color)">{{ cMoonForRow(row).name }}</span>
               </div>
               <span class="lb-value">{{ board.formatValue(row) }}</span>

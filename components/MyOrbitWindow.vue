@@ -547,7 +547,7 @@ const router = useRouter()
 function onJoinInvitedRaid() {
   const raidId = raidSocket.incomingInvite.value?.raidId
   raidSocket.dismissInvite()
-  if (raidId) router.push(`/newsite/cmoon-raid/${raidId}`)
+  if (raidId) router.push(`/cmoon-raid/${raidId}`)
 }
 
 // ── Invite to PvP — same shape as the raid invite above, against useCMoonPvpSocket.js instead.
@@ -570,7 +570,7 @@ function onInvitePvp(userId) {
 function onJoinInvitedPvp() {
   const matchId = incomingPvpInvite.value?.matchId
   dismissPvpInvite()
-  if (matchId) router.push(`/newsite/cmoon-pvp/${matchId}`)
+  if (matchId) router.push(`/cmoon-pvp/${matchId}`)
 }
 
 // ── Challenge to OG gToons — a pure social nudge + deep link, not a real challenge: OG gToons'
@@ -589,7 +589,7 @@ function onChallengeOgGtoons(userId) {
 }
 function onGoToOgGtoons() {
   dismissOgGtoonsNudge()
-  router.push('/newsite/gtoons-classic')
+  router.push('/gtoons-classic')
 }
 
 // ── Trade / Visit cZone — both already-existing site features; MyOrbit only bridges to them via
@@ -597,11 +597,11 @@ function onGoToOgGtoons() {
 // invites above (which link to the existing raid/PvP pages rather than rendering combat here).
 function onTrade(username) {
   openActionMenuFor.value = null
-  router.push({ path: '/newsite/trade', query: { username } })
+  router.push({ path: '/trade', query: { username } })
 }
 function onVisitCzone(username) {
   openActionMenuFor.value = null
-  router.push(`/newsite/czone/${encodeURIComponent(username)}`)
+  router.push(`/czone/${encodeURIComponent(username)}`)
 }
 
 // ── Per-avatar action menu — replaces a single inline icon button now that there are several

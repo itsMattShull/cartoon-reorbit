@@ -6,7 +6,7 @@
         <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
           <h1 class="text-base font-semibold">Claim Codes Admin</h1>
           <NuxtLink
-            to="/newsite/admin/codes/new"
+            to="/admin/codes/new"
             class="px-3 py-1.5 text-xs font-semibold rounded-md bg-blue-600 text-white hover:bg-blue-700"
           >
             Create New Code
@@ -116,7 +116,7 @@
                     <td class="px-2 py-1.5 text-right">{{ redeemedCount(c) }} / {{ c.maxClaims }}</td>
                     <td class="px-2 py-1.5 text-right">
                       <NuxtLink
-                        :to="`/newsite/admin/codes/edit?code=${encodeURIComponent(c.code)}`"
+                        :to="`/admin/codes/edit?code=${encodeURIComponent(c.code)}`"
                         class="px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
                       >
                         Edit
@@ -158,7 +158,7 @@
                   <p><strong>Redeemed:</strong> {{ redeemedCount(c) }} / {{ c.maxClaims }}</p>
                 </div>
                 <NuxtLink
-                  :to="`/newsite/admin/codes/edit?code=${encodeURIComponent(c.code)}`"
+                  :to="`/admin/codes/edit?code=${encodeURIComponent(c.code)}`"
                   class="self-end px-2 py-1 text-[11px] border rounded-md hover:bg-gray-50"
                 >
                   Edit

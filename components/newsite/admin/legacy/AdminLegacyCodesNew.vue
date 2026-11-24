@@ -631,7 +631,7 @@ async function submitForm() {
       const err = await res.json()
       throw new Error(err.message || 'Failed to create code')
     }
-    router.push('/newsite/admin/codes')
+    router.push('/admin/codes')
   } catch (e) {
     console.error(e)
     error.value = e.message

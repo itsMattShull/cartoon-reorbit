@@ -98,7 +98,7 @@ test('pack preview reads the owner-scoped endpoint, not the cMart-only one', () 
   assert.match(preview, /role="dialog"/)
 })
 
-const redeem = read('pages/newsite/redeem.vue')
+const redeem = read('pages/redeem.vue')
 
 test('Redeem page: pack tiles show ×N, open through the shared overlay, and always point at My Collection > Packs', () => {
   assert.match(redeem, /<PackOpenOverlay/)
@@ -213,8 +213,8 @@ test('OG match-end card: pack banner is announced, tells the winner why there wa
 test('a PvP pack notification opens My Collection > Packs, not the auction fallback route', () => {
   const route = onboarding.slice(onboarding.indexOf('const notificationRoute'))
   assert.ok(route.indexOf("n.type === 'PVP_PACK_WON'") > -1)
-  assert.ok(route.indexOf("n.type === 'PVP_PACK_WON'") < route.indexOf('/newsite/AuctionHouse/'))
-  assert.match(route, /\/newsite\/MyCollection\?tab=packs/)
+  assert.ok(route.indexOf("n.type === 'PVP_PACK_WON'") < route.indexOf('/AuctionHouse/'))
+  assert.match(route, /\/MyCollection\?tab=packs/)
 })
 
 test('admin reward settings: pack + limit are all-or-nothing in the UI, inputs carry explicit text colours, and the Save button respects validation', () => {

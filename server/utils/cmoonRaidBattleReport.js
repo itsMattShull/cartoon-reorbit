@@ -1,6 +1,6 @@
 // server/utils/cmoonRaidBattleReport.js
 // Pure, DB-free aggregation of a RESOLVED raid's CMoonEnemyRaid.roundLog into the "Click to view
-// battle report" leaderboard shown on the raid end screen (pages/newsite/cmoon-raid/[id].vue).
+// battle report" leaderboard shown on the raid end screen (pages/cmoon-raid/[id].vue).
 // No Prisma/BullMQ imports here, on purpose — same unit-testable-without-a-DB discipline as
 // cmoonEnemyBattle.js/cmoonEnemyRaid.js/cmoonRaidBalance.js.
 //

@@ -143,7 +143,7 @@ import {
 export const JOIN_WINDOW_SECONDS = 60
 // An alive participant who hasn't acted by this auto-acts. Lowered from 20 to 15 so a stalling
 // player can't drag a round out as long — see the visible round countdown in
-// pages/newsite/cmoon-raid/[id].vue, which now actually shows this ticking down.
+// pages/cmoon-raid/[id].vue, which now actually shows this ticking down.
 export const ROUND_TIMEOUT_SECONDS = 15
 // Only the hardcoded fallback/default now — live code reads each raid's own
 // raid.maxParticipants (snapshotted from CMoonEnemyMember.maxParticipants, 1-8, at raid creation)

@@ -3,7 +3,7 @@
 //
 // Written directly into public/avatars (NOT the uploadStorage.js CDN-split convention used by
 // Background/cMoon uploads) so it's served at the same `/avatars/<filename>` URL the existing
-// free-for-all avatar files use — server/api/avatars.get.js and pages/newsite/settings.vue's
+// free-for-all avatar files use — server/api/avatars.get.js and pages/settings.vue's
 // <img :src="`/avatars/${img}`"> both assume every avatar lives under that one path. Validation
 // mirrors server/api/admin/cmoons/[id]/image.post.js: content-length pre-check, magic-byte
 // sniffing (never the client-declared mime type), re-encoded through sharp, server-generated

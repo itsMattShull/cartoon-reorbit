@@ -470,7 +470,7 @@ async function submitAll() {
   submitting.value = false
   if (allOk) {
     showToast('All cToons submitted! You\'ll be notified on Discord when reviewed.', 'success')
-    setTimeout(() => router.push('/newsite/home'), 2000)
+    setTimeout(() => router.push('/home'), 2000)
   }
 }
 

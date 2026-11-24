@@ -1,25 +1,25 @@
 <template>
   <div class="nav-right">
-    <NuxtLink to="/newsite/MycWorld" class="nav-link" data-nav-sound="my-cworld">
+    <NuxtLink to="/MycWorld" class="nav-link" data-nav-sound="my-cworld">
       <BlueButton :style="{ height: buttonHeight }">My cWorld</BlueButton>
     </NuxtLink>
-    <NuxtLink to="/newsite/cmart" class="nav-link" data-nav-sound="cmart">
+    <NuxtLink to="/cmart" class="nav-link" data-nav-sound="cmart">
       <BlueButton :style="{ height: buttonHeight }">cMart</BlueButton>
     </NuxtLink>
-    <NuxtLink to="/newsite/AuctionHouse" class="nav-link" data-nav-sound="auctions">
+    <NuxtLink to="/AuctionHouse" class="nav-link" data-nav-sound="auctions">
       <BlueButton :style="{ height: buttonHeight }">Auctions</BlueButton>
     </NuxtLink>
-    <NuxtLink to="/newsite/trade" class="nav-link" data-nav-sound="trades">
+    <NuxtLink to="/trade" class="nav-link" data-nav-sound="trades">
       <BlueButton :style="{ height: buttonHeight }">Trades</BlueButton>
     </NuxtLink>
-    <NuxtLink to="/newsite/Games" class="nav-link" data-nav-sound="games">
+    <NuxtLink to="/Games" class="nav-link" data-nav-sound="games">
       <BlueButton :style="{ height: buttonHeight }">Games</BlueButton>
     </NuxtLink>
     <NavEncyclopediaDropdown :button-height="buttonHeight" />
-    <NuxtLink v-if="!isMobile" to="/newsite/redeem" class="nav-link" data-nav-sound="redeem">
+    <NuxtLink v-if="!isMobile" to="/redeem" class="nav-link" data-nav-sound="redeem">
       <BlueButton :style="{ height: buttonHeight }">Redeem</BlueButton>
     </NuxtLink>
-    <NuxtLink v-if="!isMobile" to="/newsite/settings" class="nav-link" data-nav-sound="settings">
+    <NuxtLink v-if="!isMobile" to="/settings" class="nav-link" data-nav-sound="settings">
       <BlueButton :style="{ height: buttonHeight }">Settings</BlueButton>
     </NuxtLink>
   </div>

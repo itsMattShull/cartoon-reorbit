@@ -50,7 +50,7 @@ const runtime = createDuelRuntime({
   announce: {
     emoji: '✊✋✌️',
     label: 'Ed, Edd n Eddy RPS',
-    url: 'https://www.cartoonreorbit.com/newsite/edrps'
+    url: 'https://www.cartoonreorbit.com/edrps'
   }
 })
 

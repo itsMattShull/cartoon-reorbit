@@ -1,5 +1,5 @@
 <template>
-  <NuxtLink to="/newsite/home" class="reorbit-logo">
+  <NuxtLink to="/home" class="reorbit-logo">
     <img :src="logoPath" alt="Reorbit Logo" />
   </NuxtLink>
 </template>

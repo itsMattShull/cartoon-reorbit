@@ -470,8 +470,8 @@ export async function sendTradeOfferDM ({
   if (!recipientDiscordId || !process.env.BOT_TOKEN) return
   const BOT_TOKEN = process.env.BOT_TOKEN
   const baseUrl = process.env.NODE_ENV === 'production'
-    ? 'https://www.cartoonreorbit.com/newsite/trade'
-    : 'http://localhost:3000/newsite/trade'
+    ? 'https://www.cartoonreorbit.com/trade'
+    : 'http://localhost:3000/trade'
 
   const dmChannel = await $fetch('https://discord.com/api/v10/users/@me/channels', {
     method: 'POST',

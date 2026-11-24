@@ -1,5 +1,5 @@
 <template>
-  <NuxtLink v-if="!hasPromoUrl" to="/newsite/home" class="orbit-spot">
+  <NuxtLink v-if="!hasPromoUrl" to="/home" class="orbit-spot">
     <img v-if="currentSrc" :src="currentSrc" alt="" />
   </NuxtLink>
   <a v-else :href="currentUrl" target="_blank" rel="noopener noreferrer" class="orbit-spot">

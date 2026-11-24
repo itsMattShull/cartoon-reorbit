@@ -221,10 +221,10 @@ function toggleDismissForm(key) {
 }
 
 function collectionLink(u) {
-  return { path: '/newsite/admin/manageCollection', query: { username: u.username || '' } }
+  return { path: '/admin/manageCollection', query: { username: u.username || '' } }
 }
 function usersLink(u) {
-  return { path: '/newsite/admin/manageUsers', query: { username: u.username || '' } }
+  return { path: '/admin/manageUsers', query: { username: u.username || '' } }
 }
 
 async function fetchGroups() {

@@ -49,13 +49,13 @@ test('MyOrbitWindow.vue only enables the PvP invite action while the viewer is i
 
 test('MyOrbitWindow.vue links Trade/Visit cZone to the EXISTING pages, never reimplementing them', () => {
   const win = read('components/MyOrbitWindow.vue')
-  assert.match(win, /path: '\/newsite\/trade', query: \{ username \}/)
-  assert.match(win, /\/newsite\/czone\/\$\{encodeURIComponent\(username\)\}/)
+  assert.match(win, /path: '\/trade', query: \{ username \}/)
+  assert.match(win, /\/czone\/\$\{encodeURIComponent\(username\)\}/)
 })
 
 test('MyOrbitWindow.vue deep-links the OG gToons nudge to the real matchmaking page', () => {
   const win = read('components/MyOrbitWindow.vue')
-  assert.match(win, /\/newsite\/gtoons-classic/)
+  assert.match(win, /\/gtoons-classic/)
 })
 
 test('GET /api/myorbit/wishlist-match/[userId] reuses pendingTradeGuardWhere and isLockedCopy rather than reimplementing lock logic', () => {

@@ -221,7 +221,7 @@ const returningFromDetail = useAuctionHouseReturningFromDetail()
 
 function goToAuction(id) {
   returningFromDetail.value = true
-  router.push(`/newsite/AuctionHouse/${id}`)
+  router.push(`/AuctionHouse/${id}`)
 }
 
 const TABS = [

@@ -1,10 +1,14 @@
-// Where the original /admin/* URLs now live. The old pages were removed once the
-// /newsite/admin console covered them; these keep bookmarks and links in Discord
-// working. Consumed by nuxt.config.js as routeRules, so they apply to full page
-// loads — nothing inside the app links to /admin/* anymore.
+// Where the original /admin/* page URLs now live. The old pages were removed once the
+// admin console covered them, and the console has since taken over /admin itself; these
+// keep bookmarks and links in Discord working. Consumed by nuxt.config.js as routeRules,
+// so they apply to full page loads — nothing inside the app links to the old names.
+//
+// The console owns /admin now, so an old name that is also a console section (e.g.
+// /admin/packs) is left alone: the console's own page wins and no rule is emitted.
 //
 // A `/**` suffix on both sides carries the remainder through (an id or username);
 // Nitro keeps the query string on any redirect (e.g. /admin/edit-code?code=ABC).
+import { resolveAdminRoute } from './adminSections.js'
 
 const STATIC = {
   'achievement-logs': 'achievementLogs',
@@ -66,14 +70,19 @@ const WITH_PARAM = {
   'edit-holidayevent': 'holidayEvents/edit'
 }
 
-const CONSOLE = '/newsite/admin'
+const CONSOLE = '/admin'
+
+// An old name the console itself now answers to must not redirect (it would shadow the
+// section, or loop when old and new names match).
+const isConsoleSection = (name) => Boolean(resolveAdminRoute([name]))
 
 export const OLD_ADMIN_REDIRECTS = {
-  '/admin': CONSOLE,
-  ...Object.fromEntries(Object.entries(STATIC).map(([old, key]) => [`/admin/${old}`, `${CONSOLE}/${key}`])),
-  ...Object.fromEntries(Object.entries(WITH_PARAM).map(([old, key]) => [`/admin/${old}/**`, `${CONSOLE}/${key}/**`])),
-  // Anything else under /admin (e.g. the removed monster pages) lands on the console home.
-  '/admin/**': CONSOLE
+  ...Object.fromEntries(Object.entries(STATIC)
+    .filter(([old]) => !isConsoleSection(old))
+    .map(([old, key]) => [`/admin/${old}`, `${CONSOLE}/${key}`])),
+  ...Object.fromEntries(Object.entries(WITH_PARAM)
+    .filter(([old]) => !isConsoleSection(old))
+    .map(([old, key]) => [`/admin/${old}/**`, `${CONSOLE}/${key}/**`]))
 }
 
 /** Nitro routeRules form: { '/admin/foo': { redirect: { to, statusCode } } } */

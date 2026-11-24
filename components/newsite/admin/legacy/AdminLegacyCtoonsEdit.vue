@@ -1291,7 +1291,7 @@ async function submitForm(){
     })
     if (!res.ok) return displayToast('Update failed')
     displayToast('Updated','success')
-    router.push('/newsite/admin/ctoons')
+    router.push('/admin/ctoons')
     return
   }
 
@@ -1362,6 +1362,6 @@ async function submitForm(){
 
   if (!res.ok) return displayToast('Update failed')
   displayToast('Updated','success')
-  router.push('/newsite/admin/ctoons')
+  router.push('/admin/ctoons')
 }
 </script>
