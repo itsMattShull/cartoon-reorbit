@@ -8,29 +8,36 @@
         the pot and a tie refunds both. Practice games against the bot stake nothing and are not listed.
       </p>
 
-      <!-- Filters -->
-      <div class="mb-2 flex flex-wrap items-end gap-2">
+      <!-- Filters: stacked full-width on phones, one row from sm up -->
+      <div class="mb-2 flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-2">
         <input
           v-model="username"
           type="text"
+          inputmode="search"
+          autocapitalize="off"
+          autocomplete="off"
           placeholder="Exact username…"
-          class="flex-1 min-w-[180px] border border-gray-300 rounded px-1.5 py-0.5 text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+          class="w-full sm:flex-1 sm:min-w-[180px] border border-gray-300 rounded px-2 py-1.5 sm:px-1.5 sm:py-0.5 text-sm sm:text-xs focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
           @keyup.enter="reload"
         />
-        <div class="flex items-center">
-          <label for="ogFromDate" class="mr-1 text-[11px] font-medium">From</label>
-          <input id="ogFromDate" v-model="fromDate" type="date" class="border rounded px-1.5 py-0.5 text-xs" @change="reload" />
+        <div class="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+          <label class="flex flex-col sm:flex-row sm:items-center text-[11px] font-medium">
+            <span class="mb-0.5 sm:mb-0 sm:mr-1">From</span>
+            <input v-model="fromDate" type="date" class="w-full border rounded px-2 py-1.5 sm:px-1.5 sm:py-0.5 text-sm sm:text-xs" @change="reload" />
+          </label>
+          <label class="flex flex-col sm:flex-row sm:items-center text-[11px] font-medium">
+            <span class="mb-0.5 sm:mb-0 sm:mr-1">To</span>
+            <input v-model="toDate" type="date" class="w-full border rounded px-2 py-1.5 sm:px-1.5 sm:py-0.5 text-sm sm:text-xs" @change="reload" />
+          </label>
         </div>
-        <div class="flex items-center">
-          <label for="ogToDate" class="mr-1 text-[11px] font-medium">To</label>
-          <input id="ogToDate" v-model="toDate" type="date" class="border rounded px-1.5 py-0.5 text-xs" @change="reload" />
+        <div class="flex gap-2">
+          <button class="flex-1 sm:flex-none px-3 py-1.5 sm:px-2 sm:py-0.5 border rounded bg-white text-sm sm:text-[11px]" @click="reload">Search</button>
+          <button
+            v-if="username || fromDate || toDate"
+            class="flex-1 sm:flex-none px-3 py-1.5 sm:px-2 sm:py-0.5 border rounded bg-white text-sm sm:text-[11px]"
+            @click="clearFilters"
+          >Clear</button>
         </div>
-        <button class="px-2 py-0.5 border rounded bg-white text-[11px]" @click="reload">Search</button>
-        <button
-          v-if="username || fromDate || toDate"
-          class="px-2 py-0.5 border rounded bg-white text-[11px]"
-          @click="clearFilters"
-        >Clear</button>
       </div>
 
       <div class="mb-2 text-[11px] text-gray-600">
@@ -42,20 +49,39 @@
       <div v-else-if="matches.length === 0" class="text-gray-500">No results.</div>
 
       <div v-else>
-        <!-- Card view (sm/md) -->
-        <div class="lg:hidden space-y-2">
+        <!-- Card view (below lg): one card per game, two columns from sm up -->
+        <div class="lg:hidden grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div
             v-for="m in matches"
             :key="m.id"
-            class="p-2 border rounded shadow bg-white text-[11px] space-y-0.5"
+            class="og-log-card p-3 border rounded-lg shadow-sm bg-white text-sm space-y-2"
           >
-            <p><strong>When:</strong> {{ formatDate(m.endedAt || m.startedAt) }}</p>
-            <p><strong>Players:</strong> {{ name(m.player1) }} vs {{ name(m.player2) }}</p>
-            <p><strong>Winner:</strong> {{ winnerLabel(m) }}</p>
-            <p><strong>Result:</strong> {{ m.result }}</p>
-            <p><strong>Staked:</strong> {{ stakeLabel(m) }}</p>
-            <p><strong>Final score:</strong> {{ m.score }}</p>
-            <p><strong>Type:</strong> {{ m.type }}</p>
+            <div class="flex items-center justify-between gap-2 text-[11px] text-gray-500">
+              <span>{{ formatDate(m.endedAt || m.startedAt) }}</span>
+              <span class="px-1.5 py-0.5 rounded bg-gray-100 text-gray-700">{{ m.type }}</span>
+            </div>
+
+            <!-- Players and final score -->
+            <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
+              <div class="min-w-0">
+                <p class="truncate" :class="m.outcome === 'PLAYER1' ? 'font-bold text-green-700' : ''">{{ name(m.player1) }}</p>
+                <p class="text-[11px] text-gray-500">Player 1</p>
+              </div>
+              <p class="text-lg font-bold tabular-nums whitespace-nowrap">{{ m.player1Score }}<span class="mx-1 text-gray-400">-</span>{{ m.player2Score }}</p>
+              <div class="min-w-0 text-right">
+                <p class="truncate" :class="m.outcome === 'PLAYER2' ? 'font-bold text-green-700' : ''">{{ name(m.player2) }}</p>
+                <p class="text-[11px] text-gray-500">Player 2</p>
+              </div>
+            </div>
+
+            <dl class="grid grid-cols-2 gap-x-2 gap-y-1 text-[12px] border-t pt-2">
+              <dt class="text-gray-500">Winner</dt>
+              <dd class="text-right font-medium truncate">{{ winnerLabel(m) }}</dd>
+              <dt class="text-gray-500">Result</dt>
+              <dd class="text-right">{{ m.result }}</dd>
+              <dt class="text-gray-500">Staked</dt>
+              <dd class="text-right">{{ stakeLabel(m) }}</dd>
+            </dl>
           </div>
         </div>
 
@@ -90,15 +116,15 @@
         </div>
 
         <!-- Pagination (server-side) -->
-        <div class="mt-2 flex items-center gap-2">
+        <div class="mt-2 flex items-center justify-between sm:justify-start gap-2">
           <button
-            class="px-2 py-0.5 border rounded bg-white disabled:opacity-40"
+            class="px-4 py-1.5 sm:px-2 sm:py-0.5 border rounded bg-white disabled:opacity-40"
             :disabled="page <= 1 || loading"
             @click="go(page - 1)"
           >Prev</button>
           <span class="text-[11px]">Page {{ page }} of {{ totalPages }}</span>
           <button
-            class="px-2 py-0.5 border rounded bg-white disabled:opacity-40"
+            class="px-4 py-1.5 sm:px-2 sm:py-0.5 border rounded bg-white disabled:opacity-40"
             :disabled="page >= totalPages || loading"
             @click="go(page + 1)"
           >Next</button>
