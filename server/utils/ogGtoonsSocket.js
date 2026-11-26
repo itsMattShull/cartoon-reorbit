@@ -54,6 +54,7 @@ import { getOgGtoonsConfig, peekRevealTiming } from './ogGtoonsConfig.js'
 import { evaluatePackReward } from './ogGtoonsPackReward.js'
 import { clearLive, isPairingClosed, flagNeedsAdmin } from './ogGtoonTournamentLive.js'
 import { enqueueOgTournamentJob } from './queues.js'
+import { createMatchQueue } from './ogGtoonsQueue.js'
 import { registerOgGtoonsTournament } from './ogGtoonsTournamentSocket.js'
 import { registerOgGtoonsAsync, startAsyncReconcile } from './ogGtoonsAsyncSocket.js'
 import { awardCappedGamePoints, COMBAT_POOL_GAME_NAMES } from './gamePoints.js'
@@ -74,8 +75,13 @@ const secureRng = () => randomInt(0, 0x100000000) / 0x100000000
 const userRoom = (userId) => `oggtoons:user:${userId}`
 
 /* ── In-memory state (single-process — see header) ──────────────────────────────────────── */
-const queue = []                 // [{ userId, username, deckId, socketId, stake, joinedAt }]
-const queueByUser = new Map()    // userId -> queue entry
+// One entry per user ({ userId, username, deckId, socket, stake, joinedAt }); see ogGtoonsQueue.js for why.
+const queue = createMatchQueue()
+// Users whose match is being set up right now. startMatch awaits (config, deck check, stake debit) between a pair being
+// chosen and matchByUser being set; without this reservation a player could join the queue or accept a challenge in that
+// gap and end up in two games. Always read together with matchByUser — see inMatchOrStarting().
+const startingUsers = new Set()
+const inMatchOrStarting = (userId) => matchByUser.has(userId) || startingUsers.has(userId)
 const challenges = new Map()     // challengeId -> { id, fromUserId, fromUsername, toUserId, toUsername, deckId, stake, createdAt }
 const challengesByUser = new Map() // userId -> Set(challengeId) (both sent and received, for cleanup)
 const matches = new Map()        // matchId -> match
@@ -90,8 +96,8 @@ let lobbyTimer = null
 
 /** Why this user can't be offered a challenge right now, or null when they can. */
 function busyReason(userId) {
-  if (matchByUser.has(userId) || isPracticing(userId)) return 'in a match'
-  if (queueByUser.has(userId)) return 'searching for a match'
+  if (inMatchOrStarting(userId) || isPracticing(userId)) return 'in a match'
+  if (queue.has(userId)) return 'searching for a match'
   if (challengesByUser.get(userId)?.size) return 'already handling a match request'
   return null
 }
@@ -110,7 +116,7 @@ function scheduleLobbyBroadcast() {
   if (!lobbyIo || lobbyTimer) return
   lobbyTimer = setTimeout(() => {
     lobbyTimer = null
-    const queueCount = queue.length
+    const queueCount = queue.size
     for (const [uid, entry] of lobby) {
       const users = availableLobbyUsers(uid)
       for (const sid of entry.sockets) lobbyIo.local.to(sid).emit(EV('lobbyUsers'), { users, queueCount })
@@ -166,7 +172,30 @@ function destroyMatch(matchId) {
 
 /* ── Starting a match ────────────────────────────────────────────────────────────────────── */
 
-async function startMatch(io, a, b, { isChallenge, tournament = null, matchId: forcedMatchId = null }) {
+/**
+ * The one door every match (random queue, challenge, tournament) goes through. Both players are reserved
+ * SYNCHRONOUSLY, before the first await, and released only once matchByUser holds the match (or the start
+ * failed), so there is never a moment where a player in the middle of starting looks free. A player who is
+ * already in (or starting) a match, or the same user on both sides, is refused rather than put in a second game.
+ */
+async function startMatch(io, a, b, opts) {
+  if (a.userId === b.userId || inMatchOrStarting(a.userId) || inMatchOrStarting(b.userId)) {
+    for (const p of [a, b]) {
+      p.socket.emit(EV('error'), { code: 'inMatch', message: 'One of you is already in a match.' })
+    }
+    return null
+  }
+  startingUsers.add(a.userId)
+  startingUsers.add(b.userId)
+  try {
+    return await beginMatch(io, a, b, opts)
+  } finally {
+    startingUsers.delete(a.userId)
+    startingUsers.delete(b.userId)
+  }
+}
+
+async function beginMatch(io, a, b, { isChallenge, tournament = null, matchId: forcedMatchId = null }) {
   // a, b: { userId, username, deckId, socket, stake }
   // Checked here, not just at queueJoin/challengeSend, because "Live Matches" (gameEnabled) is
   // independent of "Matchmaking" (matchmakingEnabled) — an admin can close live play while still
@@ -672,24 +701,28 @@ function handleLeave(io, { matchId, userId, socketId, immediate }) {
 function removeFromQueue(userId) {
   // Called for every disconnecting socket; most were never queued, so there is nothing to
   // remove and no reason to rebuild and rebroadcast the lobby list.
-  if (!queueByUser.has(userId)) return
-  const idx = queue.findIndex(e => e.userId === userId)
-  if (idx !== -1) queue.splice(idx, 1)
-  queueByUser.delete(userId)
-  scheduleLobbyBroadcast()
+  if (queue.remove(userId)) scheduleLobbyBroadcast()
 }
 
+/** Pairs waiting players until fewer than two usable ones remain. */
 async function tryPairQueue(io) {
-  if (queue.length < 2) return
-  const a = queue[0]
-  const b = queue[1]
-  removeFromQueue(a.userId)
-  removeFromQueue(b.userId)
-  const match = await startMatch(io, a, b, { isChallenge: false })
-  if (!match) {
-    // Either deck went stale or a stake mismatch happened between join and pairing — nothing
-    // was debited, so just drop both back into "not queued" and let them re-join.
-    return
+  for (;;) {
+    // An entry whose socket has gone, or whose owner is somehow already in a game, must never be paired:
+    // it is dropped and the player told they are no longer searching.
+    const pair = queue.takePair(
+      e => e.socket?.connected !== false && !inMatchOrStarting(e.userId),
+      e => io.local.to(userRoom(e.userId)).emit(EV('queueLeft'))
+    )
+    if (!pair) return
+    scheduleLobbyBroadcast()
+    const [a, b] = pair
+    const match = await startMatch(io, a, b, { isChallenge: false })
+    if (!match) {
+      // Either deck went stale or a stake mismatch happened between join and pairing — nothing
+      // was debited, so both are out of the queue. Tell their clients, or the "Searching…" state would
+      // stay on while the server no longer has them queued.
+      for (const p of pair) io.local.to(userRoom(p.userId)).emit(EV('queueLeft'))
+    }
   }
 }
 
@@ -723,8 +756,10 @@ function dropChallengesFor(io, userId) {
 
 function sweep(io) {
   const now = Date.now()
-  for (let i = queue.length - 1; i >= 0; i--) {
-    if (now - queue[i].joinedAt > QUEUE_STALE_MS) removeFromQueue(queue[i].userId)
+  const expired = queue.removeOlderThan(now - QUEUE_STALE_MS)
+  if (expired.length) {
+    scheduleLobbyBroadcast()
+    for (const e of expired) io.local.to(userRoom(e.userId)).emit(EV('queueLeft'))
   }
   for (const c of [...challenges.values()]) {
     if (now - c.createdAt <= CHALLENGE_STALE_MS) continue
@@ -842,7 +877,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
 
   // Tournament ready-up / start. Lives in its own file; it borrows the runtime's internals here.
   registerOgGtoonsTournament(io, socket, {
-    auth, startMatch, matchByUser, queueByUser, removeFromQueue, userRoom, isPracticing, EV
+    auth, startMatch, matchByUser: { has: inMatchOrStarting }, queueByUser: queue, removeFromQueue, userRoom, isPracticing, EV
   })
 
   // Async + live tournament games. Deliberately separate: its own auth (no reattach to a casual match), its own events, and it
@@ -857,7 +892,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     const sent = [...challenges.values()].filter(c => c.fromUserId === user.id)
       .map(c => ({ id: c.id, toUsername: c.toUsername, stake: c.stake, createdAt: c.createdAt }))
     socket.emit(EV('lobbyState'), {
-      inQueue: queueByUser.has(user.id),
+      inQueue: queue.has(user.id),
       inMatch: matchByUser.has(user.id),
       incomingChallenges: incoming,
       sentChallenges: sent
@@ -874,7 +909,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     lobby.set(user.id, entry)
     socket.data.ogGtoonsLobbyUserId = user.id
     // The newcomer gets their list right away; everyone else's refreshes on the debounce.
-    socket.emit(EV('lobbyUsers'), { users: availableLobbyUsers(user.id), queueCount: queue.length })
+    socket.emit(EV('lobbyUsers'), { users: availableLobbyUsers(user.id), queueCount: queue.size })
     scheduleLobbyBroadcast()
   })
 
@@ -891,12 +926,18 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     if (!matchmakingEnabled) {
       return socket.emit(EV('error'), { code: 'matchmakingDisabled', message: 'gToons matchmaking is currently unavailable.' })
     }
-    if (matchByUser.has(user.id) || isPracticing(user.id)) {
-      return socket.emit(EV('error'), { code: 'inMatch', message: 'You are already in a match.' })
+    const refuseIfBusy = () => {
+      if (inMatchOrStarting(user.id) || isPracticing(user.id)) {
+        socket.emit(EV('error'), { code: 'inMatch', message: 'You are already in a match.' })
+        return true
+      }
+      if (queue.has(user.id)) {
+        socket.emit(EV('error'), { code: 'inQueue', message: 'You are already in the queue.' })
+        return true
+      }
+      return false
     }
-    if (queueByUser.has(user.id)) {
-      return socket.emit(EV('error'), { code: 'inQueue', message: 'You are already in the queue.' })
-    }
+    if (refuseIfBusy()) return
     const stakeAmt = Math.max(0, Math.floor(Number(stake) || 0))
     if (stakeAmt > 0) {
       const pts = await db.userPoints.findUnique({ where: { userId: user.id } })
@@ -908,9 +949,10 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     if (!deck) {
       return socket.emit(EV('error'), { code: 'badDeck', message: 'That deck is not a valid 12-card gToons deck.' })
     }
-    const entry = { userId: user.id, username: user.username, deckId, socket, stake: stakeAmt, joinedAt: Date.now() }
-    queue.push(entry)
-    queueByUser.set(user.id, entry)
+    // The awaits above are a window in which this same user's other join (double click, a second tab) or a
+    // match starting for them can complete. Look again, with nothing between this check and the add.
+    if (refuseIfBusy()) return
+    queue.add({ userId: user.id, username: user.username, deckId, socket, stake: stakeAmt, joinedAt: Date.now() })
     scheduleLobbyBroadcast()
     socket.emit(EV('queueJoined'))
     await tryPairQueue(io)
@@ -930,7 +972,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     if (!matchmakingEnabled) {
       return socket.emit(EV('error'), { code: 'matchmakingDisabled', message: 'gToons matchmaking is currently unavailable.' })
     }
-    if (matchByUser.has(user.id) || isPracticing(user.id)) {
+    if (inMatchOrStarting(user.id) || isPracticing(user.id)) {
       return socket.emit(EV('error'), { code: 'inMatch', message: 'You are already in a match.' })
     }
     if (typeof targetUsername !== 'string' || !targetUsername.trim()) {
@@ -985,7 +1027,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     if (!challenge || challenge.toUserId !== user.id) {
       return socket.emit(EV('error'), { code: 'badChallenge', message: 'That challenge is no longer available.' })
     }
-    if (matchByUser.has(user.id) || matchByUser.has(challenge.fromUserId) || isPracticing(user.id) || isPracticing(challenge.fromUserId)) {
+    if (inMatchOrStarting(user.id) || inMatchOrStarting(challenge.fromUserId) || isPracticing(user.id) || isPracticing(challenge.fromUserId)) {
       untrackChallenge(challenge)
       return socket.emit(EV('error'), { code: 'inMatch', message: 'One of you is already in a match.' })
     }
@@ -1002,7 +1044,7 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
     untrackChallenge(challenge)
     // Accepting is a choice of THIS match over any random search either player had going.
     for (const uid of [challenge.fromUserId, user.id]) {
-      if (!queueByUser.has(uid)) continue
+      if (!queue.has(uid)) continue
       removeFromQueue(uid)
       io.local.to(userRoom(uid)).emit(EV('queueLeft'))
     }
@@ -1179,6 +1221,6 @@ export function registerOgGtoons(io, socket, resolveSocketUser) {
 }
 
 // Lets practice mode refuse to start while the user is in a live PvP match or the queue.
-registerPvpProbe((userId) => matchByUser.has(userId) || queueByUser.has(userId))
+registerPvpProbe((userId) => inMatchOrStarting(userId) || queue.has(userId))
 // Practice / tutorial matches take a player out of the lobby's challengeable list, too.
 onPresenceChange(scheduleLobbyBroadcast)
