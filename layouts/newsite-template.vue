@@ -353,7 +353,7 @@ html.newsite-active [role="button"]:not([aria-disabled="true"]) {
 import { computeSiteScale, scaleMarginBottom, MOBILE_QUERY } from '~/utils/siteScale'
 import { useClickSoundEffects } from '@/composables/useClickSoundEffects'
 import { useSiteTheme } from '@/composables/useSiteTheme'
-import { resolveSnowEnabled, isSnowRoute, SNOW_PREF_KEY } from '~/utils/snow'
+import { resolveSnowEnabled, isSnowRoute } from '~/utils/snow'
 
 const route = useRoute()
 // The admin console lives under /admin/* and shares this layout with the rest of the site.
@@ -362,17 +362,19 @@ const isAdminRoute = computed(() => route.path.startsWith('/admin'))
 const isOgGtoonsRoute = computed(() => route.path.startsWith('/gtoons-classic'))
 const { isOpen: ctoonModalIsOpen } = useCtoonModal()
 
-// December snow. Decided on the client only (the visitor's local date, plus an optional
-// localStorage override — see utils/snow.js) so SSR output is identical for everyone and never
-// hydration-mismatches. Re-evaluated on every navigation so a tab left open across New Year's
-// Eve stops snowing, and so the per-route exclusions (admin, games, gToons) apply immediately.
-const snowSeasonOn = ref(false)
-const refreshSnowSeason = () => {
-  let pref = null
-  try { pref = localStorage.getItem(SNOW_PREF_KEY) } catch { /* storage blocked: follow the calendar */ }
-  snowSeasonOn.value = resolveSnowEnabled(pref)
-}
-const snowEnabled = computed(() => snowSeasonOn.value && isSnowRoute(route.path))
+// December snow. Decided on the client only (the visitor's local date, plus their saved choice —
+// see utils/snow.js and composables/useSnowPref.js) so SSR output is identical for everyone and
+// never hydration-mismatches. The date is re-read on every navigation so a tab left open across
+// New Year's Eve stops snowing; the saved choice is a shared ref, so the Settings page switch
+// takes effect immediately.
+const { pref: snowPref, hydrate: hydrateSnowPref } = useSnowPref()
+const snowNow = ref(null)
+const refreshSnowSeason = () => { snowNow.value = new Date() }
+const snowEnabled = computed(() =>
+  snowNow.value !== null &&
+  resolveSnowEnabled(snowPref.value, snowNow.value) &&
+  isSnowRoute(route.path)
+)
 watch(() => route.path, refreshSnowSeason)
 const {
   isOpen:  auctionModalIsOpen,
@@ -522,6 +524,7 @@ onMounted(() => {
   // branch, so applying a `mobile` value any earlier would be a hydration
   // mismatch on every narrow load.
   applyMobile(mql)
+  hydrateSnowPref()
   refreshSnowSeason()
   mql.addEventListener('change', applyMobile)
   window.addEventListener('resize', computeLayout)

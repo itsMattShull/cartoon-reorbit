@@ -136,6 +136,26 @@
             </div>
             <p class="settings-status">Saved on this device only.</p>
 
+            <!-- Only offered while the snow is actually around (December). -->
+            <template v-if="snowRelevant">
+              <div class="settings-row settings-row-haptic">
+                <div>
+                  <h2 class="settings-row-title">Turn off snow</h2>
+                  <p class="settings-row-desc">Stops the December snowfall and the snow that settles on the page.</p>
+                </div>
+
+                <div class="toggle-wrap">
+                  <label class="toggle-label">
+                    <input type="checkbox" class="sr-only" :checked="snowPref === 'off'" @change="onToggleSnow" />
+                    <div :class="['toggle-track', snowPref === 'off' ? 'toggle-on' : 'toggle-off']">
+                      <div :class="['toggle-knob', snowPref === 'off' ? 'toggle-knob-on' : '']"></div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+              <p class="settings-status">Saved on this device only.</p>
+            </template>
+
             <div class="settings-row">
               <div>
                 <h2 class="settings-row-title">cMoon Special Attack</h2>
@@ -389,6 +409,13 @@ const { enabled: hapticSoundsEnabled, setEnabled: setHapticSoundsEnabled } = use
 // effect, unaware of what this one row happens to call itself).
 function onToggleHapticSounds(event) {
   setHapticSoundsEnabled(!event.target.checked)
+}
+
+// December snow switch. The layout hydrates this from localStorage on mount; the row only renders
+// while snow is relevant (December), and changes apply live because the layout watches the same ref.
+const { pref: snowPref, relevant: snowRelevant, setOff: setSnowOff } = useSnowPref()
+function onToggleSnow(event) {
+  setSnowOff(event.target.checked)
 }
 
 const allow   = ref(true)
